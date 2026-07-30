@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { closeToolSheet } from './toolSheet'
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
@@ -98,8 +99,7 @@ test('manages a discovered Gemini model from Model Lab through the live Chat pic
 
     await card.getByLabel('Use Gemini Field as default model').click()
     await expect(card.getByLabel('Use Gemini Field as default model')).toHaveAttribute('aria-pressed', 'true')
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
 
     const picker = page.getByLabel('Choose model profile')

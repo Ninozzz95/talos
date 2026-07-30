@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { geminiCompletionFulfill } from './completionMock'
+import { closeToolSheet } from './toolSheet'
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
@@ -24,8 +25,7 @@ async function configureGemini(page: Page): Promise<void> {
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
     await page.getByLabel('Default chat model').click()
     await page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]').click()
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
 }
 
@@ -140,8 +140,7 @@ test('persists contextual chat sessions through reload, rename, switch and activ
     await page.getByLabel('Chat name').fill('Primary evidence')
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(page.getByTestId('talos-chats-row').filter({ hasText: 'Primary evidence' })).toBeVisible()
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    await closeToolSheet(page)
     await expect(page.getByTestId('talos-mobile-header-title')).toHaveText('Primary evidence')
 
     await page.reload()
@@ -155,8 +154,7 @@ test('persists contextual chat sessions through reload, rename, switch and activ
     await expect(page.getByRole('heading', { name: 'Delete chat?' })).toBeVisible()
     await page.getByRole('button', { name: 'Delete', exact: true }).click()
     await expect(page.getByTestId('talos-chats-row')).toHaveCount(1)
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    await closeToolSheet(page)
     await expect(page.getByTestId('talos-mobile-header-title')).toHaveText(secondTitle)
     await expect(page.getByText('Secondary thread is isolated.', { exact: true })).toBeVisible()
 

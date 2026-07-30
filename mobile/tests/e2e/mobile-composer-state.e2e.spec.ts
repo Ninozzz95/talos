@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { closeToolSheet } from './toolSheet'
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
@@ -30,8 +31,7 @@ async function configureReasoningModel(page: Page): Promise<void> {
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
     await page.getByLabel('Default chat model').click()
     await page.locator('[data-testid="talos-themed-select-item"][data-value="openai:gpt-e2e-reasoner"]').click()
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
 }
 
