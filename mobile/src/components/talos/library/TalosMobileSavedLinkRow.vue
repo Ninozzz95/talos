@@ -7,9 +7,17 @@ withDefaults(defineProps<{
     savedAtLabel: string
     copyTestId?: string
     browserTestId?: string
+    /**
+     * The site's own favicon, captured when the link was saved and read from
+     * disk. Absent for anything saved before capture existed, for a dead site,
+     * or for a phone that was offline — and absence must look deliberate, so
+     * the Globe stays as the mark rather than a broken image.
+     */
+    faviconUrl?: string | null
 }>(), {
     copyTestId: undefined,
     browserTestId: undefined,
+    faviconUrl: null,
 })
 
 const emit = defineEmits<{
@@ -30,7 +38,14 @@ const emit = defineEmits<{
             :aria-label="`Open the saved copy of ${row.title}`"
             @click="emit('openCopy')"
         >
-            <Globe class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+            <img
+                v-if="faviconUrl"
+                data-testid="talos-library-link-favicon"
+                :src="faviconUrl"
+                alt=""
+                class="size-4 shrink-0 rounded-sm object-contain"
+            >
+            <Globe v-else class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
             <span class="min-w-0 flex-1">
                 <span class="line-clamp-2 block text-sm font-medium text-[var(--talos-text)]">{{ row.title }}</span>
                 <span class="mt-0.5 flex items-center gap-1.5 text-2xs text-[var(--talos-muted)]">

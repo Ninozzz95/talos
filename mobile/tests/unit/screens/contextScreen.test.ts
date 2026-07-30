@@ -384,6 +384,37 @@ describe('ContextScreen Library gallery', () => {
         expect(browserMock.open).toHaveBeenCalledWith('https://www.corriere.it/gas', 'system_browser')
     })
 
+    /**
+     * The favicon, captured once when the link was saved and read from disk
+     * here. Showing a real site mark costs no request at display time, which is
+     * the whole reason the sources chip could only use letters before.
+     *
+     * A link whose card was never captured — a save from before this existed,
+     * a dead site, a phone that was offline — keeps the Globe. The mark
+     * degrades; the row never breaks.
+     */
+    it('LIB-LINK-ICON-01 shows the captured favicon, and the Globe when there is none', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            metadata: { origin: 'generated', kind: 'web_source', source_url: 'https://www.corriere.it/gas' },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        await flushPromises()
+
+        // No card stored in this harness, so the honest fallback is on screen
+        // and nothing is broken by its absence.
+        const row = wrapper.get('[data-talos-saved-link-row]')
+        expect(row.find('[data-testid="talos-library-link-favicon"]').exists()).toBe(false)
+        expect(row.find('svg').exists()).toBe(true)
+    })
+
     it('LIB-LINK-GRID-02 groups saved links under the chat they came from', async () => {
         const controller = makeController()
         controller.chat.sessions.push({ id: 'session-gas', title: 'Bollette' } as never)

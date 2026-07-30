@@ -2408,6 +2408,16 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         const archive = createTalosWebSourceArchive({
                             source,
                             save: (input) => attachments.saveGenerated(input, sendIdentity.sessionId),
+                            // Favicon, title and preview for what was just
+                            // saved — captured once here so showing a source
+                            // later costs no request at all. Fire-and-forget by
+                            // contract: the reply the user is waiting for never
+                            // queues behind a slow site.
+                            captureCards: (urls) => {
+                                void import('@/services/sourceCardService')
+                                    .then((module) => module.captureTalosSourceCards(urls))
+                                    .catch(() => undefined)
+                            },
                         })
                         webSourceArchive.current = archive
                         return {
