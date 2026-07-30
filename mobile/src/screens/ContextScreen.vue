@@ -18,6 +18,7 @@ import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLib
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
 import TalosMobileLibraryFileTile from '@/components/talos/library/TalosMobileLibraryFileTile.vue'
 import TalosMobileLibrarySectionHeading from '@/components/talos/library/TalosMobileLibrarySectionHeading.vue'
+import TalosMobileImageViewer from '@/components/talos/library/TalosMobileImageViewer.vue'
 import TalosMobileSavedLinkTile from '@/components/talos/library/TalosMobileSavedLinkTile.vue'
 import { groupTalosLibraryByChat, type TalosLibrarySort } from '@/lib/libraryGrouping'
 import { useTalosSourceCardIcons } from '@/composables/useTalosSourceCardIcons'
@@ -777,7 +778,7 @@ onMounted(async () => {
                     :date-label="sectionDateLabel(section.latestAt)"
                 />
 
-                <div v-if="viewMode === 'grid'" class="grid grid-cols-2 gap-3" role="list">
+                <div v-if="viewMode === 'grid'" class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6" role="list">
                     <TalosMobileSavedLinkTile
                         v-for="row in section.items"
                         :key="row.url"
@@ -823,7 +824,7 @@ onMounted(async () => {
 
             <!-- GRID: the tile opens; the same explicit More contract as list
                  carries attach/save/delete without hover-only behavior. -->
-            <div v-if="viewMode === 'grid'" class="grid grid-cols-2 gap-3" role="list" :aria-label="t('library.libraryFiles')">
+            <div v-if="viewMode === 'grid'" class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6" role="list" :aria-label="t('library.libraryFiles')">
                 <template v-for="entry in section.items" :key="entry.key">
                     <TalosMobileLibraryFileTile
                         v-if="entry.kind === 'file'"
@@ -905,25 +906,27 @@ onMounted(async () => {
 
     <!-- Image lightbox -->
     <Teleport to="body">
-        <div v-if="lightboxUrl" data-testid="talos-library-lightbox" role="dialog" aria-modal="true" :aria-label="t('library.imagePreview')" tabindex="-1" class="fixed inset-0 z-[95] flex flex-col bg-black/90 outline-none" @keydown.escape="closeLightbox">
-            <div class="flex items-center justify-end gap-1 p-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-white">
-                <button v-if="lightboxFile && !isSelected(lightboxFile.id)" type="button" :aria-label="t('library.attachNamedToMessage', { name: lightboxFile.display_name })" :disabled="actionBusy" class="talos-pressable flex size-12 items-center justify-center rounded-full bg-white/15" @click="attachFromOverlay(lightboxFile)"><Paperclip class="size-5" aria-hidden="true" /></button>
-                <button
-                    v-if="lightboxFile && lightboxFile.status === 'available'"
-                    type="button"
-                    :data-testid="`talos-library-save-overlay-${lightboxFile.id}`"
-                    :aria-label="t('library.saveNamedToDevice', { name: lightboxFile.display_name })"
-                    :disabled="savingFileId !== null"
-                    class="talos-pressable flex size-12 items-center justify-center rounded-full bg-white/15 disabled:opacity-50"
-                    @click="saveFileToDevice(lightboxFile)"
-                ><Download class="size-5" aria-hidden="true" /></button>
-                <button v-if="lightboxFile" type="button" :aria-label="t('library.deleteNamed', { name: lightboxFile.display_name })" class="talos-pressable flex size-12 items-center justify-center rounded-full bg-white/15" @click="deleteFromLightbox"><Trash2 class="size-5" aria-hidden="true" /></button>
-                <button type="button" :aria-label="t('chat.closePreview')" class="talos-pressable flex size-12 items-center justify-center rounded-full bg-white/15" @click="closeLightbox"><X class="size-5" aria-hidden="true" /></button>
-            </div>
-            <div class="flex min-h-0 flex-1 items-center justify-center p-4" @click="closeLightbox">
-                <img :src="lightboxUrl" :alt="t('library.previewAlt')" class="max-h-full max-w-full object-contain" />
-            </div>
-        </div>
+        <!--
+            One viewer, mounted here and in the chat's own library. Owner
+            2026-07-30: the two used to be written separately and had different
+            buttons — Attach and Delete existed here and not there. They cannot
+            drift again, because there is only one of them.
+        -->
+        <TalosMobileImageViewer
+            v-if="lightboxUrl && lightboxFile"
+            :src="lightboxUrl"
+            :name="lightboxFile.display_name"
+            :can-attach="!isSelected(lightboxFile.id)"
+            :can-save="lightboxFile.status === 'available'"
+            can-delete
+            :busy="actionBusy"
+            :saving="savingFileId !== null"
+            :save-test-id="`talos-library-save-overlay-${lightboxFile.id}`"
+            @attach="attachFromOverlay(lightboxFile)"
+            @save="saveFileToDevice(lightboxFile)"
+            @delete="deleteFromLightbox"
+            @close="closeLightbox"
+        />
     </Teleport>
 
     <!-- Document text viewer -->
