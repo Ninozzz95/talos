@@ -178,7 +178,11 @@ test('LIB-ALL-LINK-E2E-01 carries a typoed web request through provider, Tavily,
     await page.getByLabel('Choose grounding context').click()
     await expect(page).toHaveURL(/\/context$/)
     await expect(page.getByTestId('talos-library-type-all')).toHaveAttribute('aria-pressed', 'true')
-    const links = page.getByTestId('talos-library-links')
+    // Owner 2026-07-30: in All, links and files now share ONE section per chat.
+    // The separate links list that used to hold them is gone, and with it the
+    // box this scoped to. Same promise, asserted against the screen body — the
+    // links have to BE there, which is what the test was ever about.
+    const links = page.getByTestId('mobile-screen-body')
     await expect(links.locator('[data-talos-saved-link-row]')).toHaveCount(2)
     await expect(links).toContainText('Caf\u00e9 Alpha Luxury Italia')
     await expect(links).toContainText('reuters.com')
