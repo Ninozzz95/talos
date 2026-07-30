@@ -50,6 +50,13 @@ describe('the reasoning state on the model pill', () => {
         const icon = wrapper.get('[data-testid="talos-composer-reasoning-icon"]')
         // Themed, not a grey glyph: it is the one thing left on a phone.
         expect(icon.classes().join(' ')).toContain('talos-accent')
+        /**
+         * Owner 2026-07-30: the first cut used BrainCircuit while the reasoning
+         * block in the thread had used plain Brain since it was written. One
+         * meaning wearing two icons is how a product stops looking designed —
+         * and at 14px the circuit version is a smudge, not a brain.
+         */
+        expect(icon.classes()).toContain('lucide-brain')
 
         const words = wrapper.get('[data-testid="talos-composer-reasoning-label"]')
         expect(words.classes()).toContain('hidden')

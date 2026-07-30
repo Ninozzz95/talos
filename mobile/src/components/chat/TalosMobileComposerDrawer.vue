@@ -6,7 +6,7 @@
  * quiet action rows. Loaded lazily by the composer only in drawer mode.
  */
 import {
-    BrainCircuit, Camera as CameraIcon, Database, FlaskConical, Globe2, Images, Paperclip, Sparkles,
+    Brain, Camera as CameraIcon, Database, FlaskConical, Globe2, Images, Paperclip, Sparkles,
 } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
@@ -158,7 +158,7 @@ function effortLabel(level: string): string {
                     @click="emit('selectThinking', !thinking)"
                 >
                     <span class="flex size-9 items-center justify-center rounded-full bg-[var(--talos-active)]">
-                        <BrainCircuit class="size-4" aria-hidden="true" />
+                        <Brain class="size-4" aria-hidden="true" />
                     </span>
                     <span class="min-w-0 flex-1 text-sm">{{ $t('chat.extendedThinking') }}</span>
                     <span

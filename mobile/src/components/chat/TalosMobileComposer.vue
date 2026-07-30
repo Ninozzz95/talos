@@ -3,6 +3,7 @@ import { computed, defineAsyncComponent, nextTick, ref, watch, type ComponentPub
 import { useTalosI18n } from '@/i18n'
 import { createTalosSendGate } from '@/lib/chat/sendGate'
 import { Loader2, ArrowUp,
+    Brain,
     BrainCircuit,
     Database,
     Gauge,
@@ -793,7 +794,7 @@ watch(() => props.prompt, () => {
                     {{ selectedProfile?.display_name ?? $t('chat.chooseModel') }}
                 </span>
                 <template v-if="reasoningActive">
-                    <BrainCircuit
+                    <Brain
                         data-testid="talos-composer-reasoning-icon"
                         class="size-3.5 shrink-0 text-[var(--talos-accent)]"
                         aria-hidden="true"
