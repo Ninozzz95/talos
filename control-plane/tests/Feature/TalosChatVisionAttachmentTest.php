@@ -41,7 +41,7 @@ final class TalosChatVisionAttachmentTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Storage::fake('local');
+        $this->useIsolatedLocalStorage();
         $this->user = $this->authenticateTalosUser();
         config(['services.avm_validator.url' => 'http://validator.test']);
     }
