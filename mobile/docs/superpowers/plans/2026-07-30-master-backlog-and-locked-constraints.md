@@ -78,7 +78,26 @@ dei file in arrivo e l'impronta percettiva); impianto **A — libretto tipizzato
 | F4 | registro visibile + undo (chiude il debito T8) | 🔜 |
 | F5 | analisi documenti e dati | 🔜 |
 | F6 | MCP / verso l'esterno | ⏸ decisione owner |
-| F7–F8 | dispositivo in lettura/scrittura (Shizuku) | ⏸ GO esplicito owner |
+| F7–F8 | dispositivo in lettura/scrittura (Shizuku) | 🟢 **GO DATO 2026-07-30** |
+
+**Vincolo owner 2026-07-30 su tutta la famiglia C:** «va analizzato super
+attentamente, bisogna analizzare tutta la documentazione android termux shizuku
+tutte le operazioni max potencial no compromise, dobbiamo anche autorizzare
+terminale bash da shizuku».
+
+Conseguenze registrate:
+- La ricerca preliminare deve coprire **Android + Termux + Shizuku**, non solo
+  Shizuku. Termux non era mai stato nominato in nessun documento precedente.
+- Il catalogo deve elencare **tutte** le operazioni possibili, non un
+  sottoinsieme prudente.
+- **Terminale bash via Shizuku è autorizzato.** Questo cambia il documento di
+  visione Shizuku da "archiviato, non aprire senza GO" a materiale di lavoro
+  della fase F7–F8, e va conciliato con la regola D0 (Play limita Accessibility
+  e VPN) e con i 7 livelli di rischio già progettati in F3.
+- Un terminale è la capability con il livello di rischio più alto dell'intero
+  catalogo: la progettazione deve dire come si concilia con «tool tipizzati, mai
+  `runShell`», che era una decisione presa. Se la si ribalta, va ribaltata
+  esplicitamente e non per omissione.
 
 ### D. Modelli locali (M1–M8b)
 Centro modelli: repository HuggingFace per scaricare modelli in locale, ispezione
@@ -110,7 +129,21 @@ vecchi. **R-1, lo stato serializzabile, va fatta per prima.**
 | F-12 | **Blocchi di ragionamento espandibili** (N4.5) — catturare il reasoning dall'output dei 4 provider | oggi solo lato input |
 | F-13 | **Dropdown modelli-per-provider** nel Model Lab e quick-select composer (FV2-06.0) | contratto congelato |
 | F-14 | **Chat temporanea** non persistita + libreria di prompt di benvenuto (N2) | |
-| F-15 | **#27 TALOS self-knowledge** — TALOS conosce sé stesso e il suo creatore | memoria canonica da desktop main |
+
+*(La voce «#27 TALOS self-knowledge» che stava qui è stata spostata: è la stessa
+cosa che l'owner ha chiesto come **E2**, e tenerla in due posti l'avrebbe fatta
+costruire due volte.)*
+
+### E2. Self-memory — TALOS conosce sé stesso (owner 2026-07-30)
+Ingest di **tutta** la documentazione di architettura e di **tutte** le funzioni
+di TALOS dentro la funzione memoria che già esiste, così che dalla chat si possa
+chiedere qualunque cosa sul prodotto e sull'architettura. Requisito dell'owner:
+«deve essere super completa tecnica e dettagliata».
+Include il #27 originale: TALOS sa di essere stato creato da un uomo solo,
+l'ing. Antonio Rizzo (Ninozz95); la memoria canonica di prodotto è AVM desktop
+main, mai reinventata.
+L'owner osserva che potrebbe essere relativamente semplice, perché il motore di
+memoria è già costruito: il lavoro è l'ingest e la copertura, non il meccanismo.
 
 ### G. Debito tecnico registrato (25 voci)
 **Sicurezza** — S4 i file della Libreria sono in chiaro sul disco mentre il DB è
@@ -141,39 +174,88 @@ P8 `feature-parity.json` dichiara ancora `planned` roba spedita.
 la presenza delle schede è uno `stat` per estensione invece di una sola lettura
 di cartella.
 
-### H. Bloccati (non dipendono da me)
-| Item | Perché | Sblocca |
-|---|---|---|
-| Firma release + verifica su device | toolchain Android/ADB assente sull'host | owner/host |
-| Inferenza locale (Forge/Zethos) | toolchain Rust/NDK assente | Codex/host |
-| Connettori esterni + sync desktop↔mobile | P6 non autorizzato | owner + Codex |
-| Affidabilità browsing (PROD-CRITICAL) | WAL+busy_timeout, poi Playwright | Codex |
-| Allineamento stile desktop | freeze desktop `5dd0c0be` | owner |
+### H. Le chiavi che tiene l'owner (non sono fasi, sono permessi e strumenti)
+| # | Chiave | Cosa sblocca | Stato 2026-07-30 |
+|---|---|---|---|
+| 1 | **SDK Android + chiave di firma** | APK distribuibile e verifica su telefono FISICO (oggi ADB non parte, `0xC0000135`) | ⛔ **non sbloccata** |
+| 2 | **Catena Rust + NDK** | Tutta la famiglia D, modelli locali | ✅ **SBLOCCATA dall'owner** — da installare |
+| 3 | **Autorizzazione P6** | Connettori (Gmail, calendario, email) + sync desktop↔mobile | ⛔ **non sbloccata** |
+| 4 | Servizio cloud opzionale *(spostato qui da J)* | Carichi lunghi migrati fuori dal telefono, in abbonamento | ⛔ decisione con la distribuzione |
+| — | Affidabilità browsing | PROD-CRITICAL, ma è lane di **Codex** | non è dell'owner |
+| — | Allineamento stile desktop | congelato dal freeze `5dd0c0be` | finestra desktop chiusa |
 
-### I. Programma grande — Claude Functional-Parity v2
-Piattaforma agentica, 11 slice (0 audit → 10 multi-agente). Sanzionato **dopo**
-il completamento funzionale mobile. Lo Slice 0 (audit e baseline) è precondizione
-obbligatoria: nessuna migrazione ampia prima.
+**Conseguenza della chiave 1 non sbloccata, da ripetere a ogni consegna:** ogni
+APK è di debug e non è distribuibile, e **ogni verifica è in simulazione, mai su
+un telefono fisico**. Va detto all'owner ogni volta, non dato per sottinteso.
 
-### J. Memorizzati, da NON costruire ora
+### I. Piattaforma agentica = **la piattaforma di coding locale (K)**
+**Decisione owner 2026-07-30: I e K sono la stessa cosa, unite.** L'owner aveva
+chiesto K come famiglia nuova («piattaforma di coding in locale, analisi Claude
+Code e ChatGPT, completissima»); le slice 1–5 del programma di parità SONO Claude
+Code — incarico osservabile, registro strumenti, permessi prima di scrivere,
+esecuzione isolata, intelligenza sul repository. Tenerle separate significava
+progettare due volte lo stesso motore.
+
+Le 11 slice, in una riga ciascuna: *0* mappa di cosa esiste (precondizione
+obbligatoria, nessuna migrazione ampia prima) · *1* gli incarichi diventano
+oggetti osservabili, fermabili e riprendibili · *2* registro strumenti con schemi
+versionati e validati · *3* permessi, approvazioni, scrittura su disco con
+annullamento · *4* isolamento dell'esecuzione · *5* intelligenza sul codice
+(ricerca, struttura, modifiche a tre vie) · *6* ricerca con citazioni verificate ·
+*7* generazione file · *8* artefatti interattivi · *9* connettori · *10* più
+agenti insieme.
+
+**Dipendenza reale, scoperta riordinando:** una piattaforma di coding locale deve
+leggere e scrivere file veri ed eseguire comandi, cioè ha bisogno del terminale
+bash via Shizuku — che l'owner ha appena messo in **C**. La catena è
+**C → I/K**, e la scaletta dell'owner già la rispetta.
+
+Il lavoro di analisi richiesto («analisi Claude Code e ChatGPT, completissima»)
+diventa la ricerca preliminare della slice 0.
+
+### J. Congelati per decisione esplicita dell'owner
 - **"TALOS automatic"** — router che cambia modello secondo la complessità del
-  task. Idea dell'owner, da analizzare alla perfezione perché potrebbe rompere
-  tutto. Memorizzata, non aperta.
-- **Agente operativo Android (Shizuku)** — documento di visione archiviato, non
-  si apre senza GO.
+  task. «Memorizzalo ma non lo facciamo adesso»: potrebbe rompere tutto e va
+  analizzato alla perfezione.
 - **Supermemory self-host** — dopo la v7.
-- **Servizio cloud opzionale** — da predisporre con la distribuzione, per i
-  carichi lunghi.
+
+*(Shizuku è uscito da qui: il GO è arrivato, vive in **C**. Il servizio cloud è
+uscito da qui: è una chiave dell'owner, vive in **H**.)*
 
 ---
 
-## PARTE 3 — Scaletta
+## PARTE 3 — Scaletta, **bloccata dall'owner 2026-07-30**
 
-**Da riordinare con l'owner.** Nessun ordine è deciso in questo documento se non
-i due vincoli di dipendenza reali:
+| Ordine | Famiglia | Nota dell'owner |
+|---|---|---|
+| **1** | **A** — i due difetti r11 | fuori scaletta di fatto: sono miei, si chiudono comunque |
+| **2** | **F** — le richieste FE | «molti di questi sono già stati fatti ma tu verifica per correttezza» |
+| **3** | **B** — libretto d'origine dei file | disegno già approvato fino alla parte 1 di 2 |
+| **4** | **C** — tool + dispositivo | «super attentamente… android termux shizuku… max potencial no compromise… autorizzare terminale bash» |
+| **5** | **D** — modelli locali | chiave 2 (Rust+NDK) sbloccata dall'owner |
+| **6** | **E** — Deep Research | R-1 (stato serializzabile) va per prima |
+| **7** | **E2** — self-memory | nuova, assorbe il vecchio #27 |
+| **8** | **G** — debito tecnico | 27 voci |
+| **9** | **H** — le chiavi dell'owner | non è una fase: è ciò che sblocca lui |
+| **10** | **I = K** — piattaforma agentica / coding locale | unite per decisione dell'owner |
+| **11** | **J** — congelati | 2 voci, ferme per sua scelta |
+
+**Le uniche dipendenze tecniche** (tutto il resto è preferenza, e la preferenza
+è espressa qui una volta invece che a ogni blocco):
 - F1 (ricerca web) sblocca F2, F5 e il contenuto pieno di Deep Research.
 - F3 e F4 vanno insieme: la scrittura locale senza registro visibile è la cosa
   che l'owner ha sempre rifiutato.
+- C → I/K: la piattaforma di coding ha bisogno del terminale e dell'accesso al
+  dispositivo che vivono in C.
+- D richiede la chiave 2 installata.
 
-Tutto il resto è preferenza dell'owner, e questo documento serve a esprimerla una
-volta invece che a ogni blocco.
+---
+
+## PARTE 4 — Dubbi da chiudere
+
+L'owner (2026-07-30): «voglio altre domande specifiche su tutte le fasi, tante,
+chiudiamo ogni dubbio prima di andare avanti e memorizzale fisicamente».
+
+Le domande e le risposte vivono in
+`docs/superpowers/decisions/2026-07-30-phase-questions-and-answers.md`, una riga
+per decisione, scritta **quando la risposta arriva** e mai riassunta a memoria.
