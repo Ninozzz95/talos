@@ -11,8 +11,21 @@
     </queries>
 
 
+    <!--
+        I-11 — reaching a local model server (Ollama, LM Studio) on the user's
+        own network. From Android 17 that access is gated behind a runtime
+        permission the user grants and can revoke; on earlier versions the
+        access is open and this declaration is simply inert.
+
+        It is NOT a way around the app's own rule in
+        src/lib/network/localEndpointPolicy.ts, which still refuses cleartext to
+        anything that is not a private IP literal or loopback.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+
     <application
         android:allowBackup="false"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"

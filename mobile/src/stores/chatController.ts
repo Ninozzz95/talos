@@ -19,6 +19,8 @@ import {
 } from '@/lib/tools/toolLabels'
 import type { TalosAgentToolEnabled, TalosAgentToolId } from '@/lib/tools/toolControls'
 import { talosLibrarySearchTerms } from '@/lib/librarySearchText'
+import { talosClassifyProviderEndpoint } from '@/lib/network/localEndpointPolicy'
+import { TalosUiError } from '@/i18n/uiErrors'
 import {
     TALOS_EMPTY_TOOL_AUTHORIZATIONS,
     digestTalosToolAuthorizationInput,
@@ -3391,6 +3393,26 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     }
 
     async function saveEndpoint(provider: TalosMobileProviderId, endpoint: string): Promise<void> {
+        /**
+         * I-11. Ollama speaks plain HTTP on the user's own machine, so TALOS
+         * has to permit cleartext — and Android only lets it be permitted for
+         * everything at once, because the network security config matches host
+         * NAMES and has no form for a private range. The narrowing lives here.
+         *
+         * It is in the controller rather than the settings form because a guard
+         * that only exists in one screen is a guard the next caller walks
+         * around. TALOS is distributed: this protects other people's phones.
+         */
+        const verdict = talosClassifyProviderEndpoint(endpoint)
+        if (!verdict.allowed) {
+            // A code alone would reproduce the defect this fixes — an endpoint
+            // refused with nothing that tells the user what to type instead.
+            const key = verdict.reason.replace(/_(.)/g, (_, letter: string) => letter.toUpperCase())
+            throw new TalosUiError(
+                `TALOS_ENDPOINT_${verdict.reason.toUpperCase()}`,
+                `models.endpointRefused.${key}`,
+            )
+        }
         await deps.setEndpoint(provider, endpoint)
         endpoints[provider] = endpoint
         await refreshProvider(provider)
