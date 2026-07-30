@@ -501,6 +501,56 @@ describe('ChatScreen (functional, local-first)', () => {
      * The direction of that lie is the dangerous one — you would believe your
      * documents were in play and trust an answer that never saw them.
      */
+    /**
+     * Owner 2026-07-30: «il pulsante chat temporanea non sa attivare nessun
+     * feedback». A mode you cannot see is a mode you forget you are in — and
+     * forgetting THIS one means typing something into a chat you believe is
+     * kept, or trusting a kept chat to vanish.
+     */
+    it('wears the mode before a single word is typed', async () => {
+        const controller = makeController()
+        controller.chat.activeSession.value = { id: 'tmp-abc', title: 'Temporanea' }
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { attachTo: document.body })
+        await flushPromises()
+
+        expect(wrapper.find('[data-testid="talos-temporary-chat-badge"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-temporary-welcome"]').exists()).toBe(true)
+        expect(wrapper.get('[data-testid="talos-empty-brand"]').attributes('data-temporary')).toBe('true')
+        // And the offer to convert is gone: it is already converted.
+        expect(wrapper.find('[data-testid="talos-make-temporary"]').exists()).toBe(false)
+    })
+
+    /**
+     * The offer had to reach every New chat button. A menu on New chat would
+     * have taxed the most frequent action in the app with an extra tap; an
+     * empty ordinary chat is where every one of those buttons lands, and the
+     * only moment when converting costs nothing.
+     */
+    it('offers the temporary mode in any empty ordinary chat', async () => {
+        const controller = makeController()
+        controller.chat.activeSession.value = { id: 'chat-1', title: 'Nuova chat' }
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-make-temporary"]').trigger('click')
+
+        expect(controller.sessionLifecycle.newSession).toHaveBeenCalledWith({ ephemeral: true })
+    })
+
+    it('withdraws the offer once the chat has something in it', async () => {
+        const controller = makeController([
+            { id: 'user-1', role: 'user', content: 'ciao', created_at: '', state: 'persisted' },
+        ])
+        controller.chat.activeSession.value = { id: 'chat-1', title: 'Normale' }
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { attachTo: document.body })
+        await flushPromises()
+
+        expect(wrapper.find('[data-testid="talos-make-temporary"]').exists()).toBe(false)
+    })
+
     it('does not advertise the Library in a chat that is not sending it', async () => {
         const controller = makeController([
             { id: 'user-1', role: 'user', content: 'un segreto', created_at: '', state: 'persisted' },
