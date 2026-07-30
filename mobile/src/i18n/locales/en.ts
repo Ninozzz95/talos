@@ -448,6 +448,8 @@ export const TALOS_EN_MESSAGES = {
         newChat: 'New chat',
         temporaryChat: 'Temporary chat',
         temporaryChatNotice: 'Not saved on this phone.',
+        temporaryWelcome: 'Nothing here will be kept',
+        makeTemporary: 'Make this temporary',
         temporaryChatProviderNotice: 'Your provider still receives it and keeps it under its own rules.',
         chatOptions: 'Chat options',
         addToChat: 'Add to chat',

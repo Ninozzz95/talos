@@ -520,6 +520,23 @@ async function attachOpened(file: TalosLocalVaultFile): Promise<void> {
     }
 }
 
+/**
+ * Owner 2026-07-30: Delete did nothing here while it worked in the Library.
+ *
+ * The confirm dialog is z-85 and the image viewer is z-95, so the question was
+ * being asked BEHIND the picture — opened, unseen, waiting for an answer that
+ * could not be given. The Library never hit it because it closes its viewer
+ * first, and I had kept mine open.
+ *
+ * So the viewer closes first here too, which is also the honest order: you are
+ * being asked about a file, not about the thing you are looking at.
+ */
+function requestDeleteOpened(): void {
+    const file = opened.value
+    closeFile()
+    deleteTarget.value = file
+}
+
 async function confirmDeleteOpened(): Promise<void> {
     const file = deleteTarget.value
     if (!file || deleteBusy.value) return
@@ -786,7 +803,7 @@ const mediaScope = computed(() => {
                         :saving="savingFileId !== null"
                         @attach="attachOpened(opened)"
                         @save="saveFileToDevice(opened)"
-                        @delete="deleteTarget = opened"
+                        @delete="requestDeleteOpened"
                         @close="closeFile"
                     />
                     <pre

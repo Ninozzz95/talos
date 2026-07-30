@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { EyeOff } from '@lucide/vue'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowDown, AlertTriangle, CheckCircle2, Circle, Globe2, X } from '@lucide/vue'
@@ -98,6 +99,18 @@ const browserStatus = ref('')
 const activeSessionId = computed(() => chat.activeSession.value?.id ?? null)
 /** F-14: this chat is not being written down, and says so. */
 const isTemporaryChat = computed(() => talosIsEphemeralSessionId(activeSessionId.value ?? ''))
+
+/**
+ * Turn this empty chat into a temporary one.
+ *
+ * It starts a NEW temporary session rather than converting the current one:
+ * "temporary" is decided by the session's id, and an id cannot be changed under
+ * a session that already exists. The chat being left behind is empty, so
+ * nothing is lost — which is exactly why the offer only appears while it is.
+ */
+async function makeTemporary(): Promise<void> {
+    await controller.sessionLifecycle.newSession({ ephemeral: true })
+}
 const libraryTurnOverride = ref<TalosLibraryTurnOverride | null>(null)
 const sessionLibraryContextPolicy = computed(() =>
     parseTalosSessionLibraryContextPolicy(
@@ -692,11 +705,29 @@ onBeforeUnmount(() => {
                     class="flex flex-1 flex-col items-center px-4 text-center"
                     :class="[
                         composerExpanded ? 'justify-start py-3' : 'justify-center py-10',
-                        motionSceneActive ? 'bg-[radial-gradient(ellipse_at_center,var(--talos-background)_35%,transparent_78%)]' : '',
+                        motionSceneActive && !isTemporaryChat ? 'bg-[radial-gradient(ellipse_at_center,var(--talos-background)_35%,transparent_78%)]' : '',
+                        isTemporaryChat ? 'bg-[radial-gradient(ellipse_at_center,color-mix(in_oklab,var(--talos-accent)_10%,transparent)_0%,transparent_70%)]' : '',
                     ]"
                     :data-composer-expanded="String(composerExpanded)"
                     data-testid="talos-empty-brand"
+                    :data-temporary="String(isTemporaryChat)"
                 >
+                    <!--
+                        Owner 2026-07-30: the temporary chat gave no sign of
+                        itself. A mode you cannot see is a mode you forget you
+                        are in — and forgetting THIS one means typing something
+                        into a chat you believe is being kept, or believing a
+                        kept chat will vanish. The eye and the tinted field are
+                        that sign, before the first word is typed.
+                    -->
+                    <span
+                        v-if="isTemporaryChat"
+                        data-testid="talos-temporary-chat-badge"
+                        class="mb-4 inline-flex items-center gap-2 rounded-full border border-dashed border-[var(--talos-accent)]/60 bg-[var(--talos-accent)]/10 px-3 py-1.5 text-2xs font-medium text-[var(--talos-accent)]"
+                    >
+                        <EyeOff class="size-3.5" aria-hidden="true" />
+                        {{ t('chat.temporaryChat') }}
+                    </span>
                     <span
                         class="talos-short-logo talos-chat-brand-logo"
                         :class="{ 'talos-short-logo-hero': !composerExpanded }"
@@ -708,7 +739,33 @@ onBeforeUnmount(() => {
                         class="talos-orbitron-brand font-semibold text-[var(--talos-text)]"
                         :class="composerExpanded ? 'mt-1 text-2xl' : 'mt-2 text-4xl sm:text-5xl'"
                     >TALOS</span>
-                    <TalosWelcomeTitle />
+                    <TalosWelcomeTitle v-if="!isTemporaryChat" />
+                    <p
+                        v-else
+                        data-testid="talos-temporary-welcome"
+                        class="talos-welcome-title mt-2 text-[var(--talos-muted)]"
+                    >{{ t('chat.temporaryWelcome') }}</p>
+
+                    <!--
+                        Owner 2026-07-30: the temporary mode had to be reachable
+                        from every New chat button, "tipo una specie di FAB".
+                        A menu on New chat would have taxed the app's most
+                        frequent action with an extra tap; this offer appears in
+                        any EMPTY ordinary chat instead — which is precisely
+                        where every New chat button lands, and precisely while
+                        converting is still free because nothing has been said.
+                        Ignore it and you already have your new chat.
+                    -->
+                    <button
+                        v-if="!isTemporaryChat && !composerExpanded"
+                        type="button"
+                        data-testid="talos-make-temporary"
+                        class="talos-pressable mt-5 inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)]/80 px-4 text-xs text-[var(--talos-muted)] backdrop-blur transition-colors duration-150 hover:text-[var(--talos-text)]"
+                        @click="makeTemporary"
+                    >
+                        <EyeOff class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                        {{ t('chat.makeTemporary') }}
+                    </button>
 
                     <!-- F2-T6 first-run setup: REAL progress only, dismissible. -->
                     <section
