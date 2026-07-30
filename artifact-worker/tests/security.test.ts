@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { glob, readFile } from 'node:fs/promises'
 
 import { describe, expect, it } from 'vitest'
@@ -7,8 +8,31 @@ import { generateArtifact } from '../src/generateArtifact.js'
 import { validateArtifact } from '../src/validation/artifactValidator.js'
 
 const rootUrl = new URL('../', import.meta.url)
+const repositoryDockerignoreUrl = new URL('../../.dockerignore', import.meta.url)
 
 describe('artifact worker security boundaries', () => {
+  it.skipIf(!existsSync(repositoryDockerignoreUrl))(
+    'admits only the pinned artifact-worker vendor tarball through the root build context',
+    async () => {
+      const repositoryDockerignore = await readFile(repositoryDockerignoreUrl, 'utf8')
+      const rules = repositoryDockerignore.split(/\r?\n/)
+      const expectedRules = [
+        '**/vendor/',
+        '!artifact-worker/vendor/',
+        'artifact-worker/vendor/*',
+        '!artifact-worker/vendor/xlsx-0.20.3.tgz',
+      ]
+      const indexes = expectedRules.map((rule) => rules.indexOf(rule))
+
+      expect(indexes).not.toContain(-1)
+      expect(indexes).toEqual([...indexes].sort((left, right) => left - right))
+      expect(rules.filter((rule) => rule.startsWith('!artifact-worker/vendor'))).toEqual([
+        '!artifact-worker/vendor/',
+        '!artifact-worker/vendor/xlsx-0.20.3.tgz',
+      ])
+    },
+  )
+
   it('pins a tested, non-root, shell-free container runtime and a bounded build context', async () => {
     const dockerfile = await readFile(new URL('../Dockerfile', import.meta.url), 'utf8')
     const dockerignore = await readFile(
