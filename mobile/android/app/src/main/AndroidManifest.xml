@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- F5.1 #29 root cause (Android 11+ package visibility): without this
          declaration SpeechRecognizer cannot bind the RecognitionService and
@@ -291,4 +292,21 @@
     -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!--
+        Two permissions TALOS never asked for, removed.
+
+        `ioninappbrowser-android` declares ACCESS_FINE_LOCATION and
+        ACCESS_COARSE_LOCATION, and manifest merging put them in the APK — they
+        appeared in r13 and were absent in r12, found by dumping the permissions
+        of both rather than by reading anything.
+
+        TALOS does not use location anywhere. A distributed app that declares
+        fine location it never reads is asking to be distrusted, and the owner's
+        rule is explicit: GPS only with the user's say-so. If location is ever
+        genuinely wanted, it gets asked for on purpose — not inherited from a
+        library that happened to want it.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" tools:node="remove" />
 </manifest>
