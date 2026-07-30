@@ -35,12 +35,39 @@ Dalle segnalazioni raccolte (issue GitHub, estensioni di terze parti):
    è finito sulla stampa come problema di privacy.
    ⇒ la nostra seconda riga di avviso è esattamente questo, al contrario.
 
+## DECISIONI BLOCCATE DALL'OWNER (2026-07-30)
+
+**D-30 — Il timer di auto-cancellazione è CONFIGURABILE e OPT-IN.**
+Spento di partenza. L'utente lo accende e sceglie lui la durata. Nessuna
+cancellazione parte perché l'abbiamo deciso noi.
+
+*Perché è una regola e non un'impostazione:* il precedente esiste già. Claude
+Code cancellava i transcript dopo trenta giorni al riavvio senza averlo detto, ed
+è finito sulla stampa come problema di privacy — non perché la scelta tecnica
+fosse sbagliata, ma perché era **silenziosa**. Cancellare roba dell'utente senza
+che lui l'abbia chiesto è un danno di reputazione anche quando è corretta.
+
+**D-31 — La giuntura L3: chat temporanea + modello locale.**
+Da tenere presente quando si apre la famiglia D (modelli locali), NON un
+cantiere a sé.
+
+Oggi la seconda riga dell'avviso dice «il tuo fornitore la riceve comunque».
+Con un modello che gira DENTRO il telefono quella riga **sparisce**, perché non
+c'è nessun fornitore. È l'unica configurazione al mondo in cui «questa non la
+vede nessuno» è vera fino in fondo.
+
+ChatGPT e Claude non potranno mai offrirla — non per scelta, ma perché **loro
+sono il server**. È l'unico punto in cui la loro architettura li batte, e per
+noi non è lavoro nuovo: la chat temporanea è fatta, i modelli locali sono in
+scaletta. È una giuntura, non un cantiere.
+
 ## Candidati per il one-up, non ancora costruiti
 
 Non aperti senza GO dell'owner; elencati perché la ricerca li ha resi ovvi.
 
-- **L1 parity** — auto-cancellazione a tempo per le chat NORMALI (30/60/90 gg,
-  o mai). È l'unica riga in cui ChatGPT ci batte.
+- **L1 parity** — auto-cancellazione a tempo per le chat NORMALI. È l'unica riga
+  in cui ChatGPT ci batte. Vincolata da D-30: **opt-in, spenta di partenza,
+  durata scelta dall'utente**.
 - **L2 one-up** — convertire una temporanea in salvata anche DOPO che si è
   parlato: oggi l'offerta esiste solo a chat vuota perché "temporanea" è decisa
   dall'id. Servirebbe travasare i messaggi dalla memoria al disco su richiesta
