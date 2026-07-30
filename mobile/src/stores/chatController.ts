@@ -1102,7 +1102,15 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             ...resolvedLibraryPolicy,
             // The global legacy switch remains the live, fail-closed master.
             // Chat/turn policy can narrow it, never silently bypass it.
-            enabled: libraryMasterEnabled && resolvedLibraryPolicy.enabled,
+            //
+            // F-14: and a temporary chat narrows it to nothing. Suppressing the
+            // message writes alone would not make the chat temporary — a
+            // conversation that never lands on disk but pulls the Library into
+            // its prompt has still told the model what is in your documents,
+            // and the answer it produces is shaped by them.
+            enabled: libraryMasterEnabled
+                && resolvedLibraryPolicy.enabled
+                && !talosIsEphemeralSessionId(identity.sessionId),
             included_file_ids: Object.freeze([...resolvedLibraryPolicy.included_file_ids]),
             excluded_file_ids: Object.freeze([...resolvedLibraryPolicy.excluded_file_ids]),
         })
@@ -1302,8 +1310,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     async function prepareControllerSend(
         context: TalosChatSendPreparationContext<TalosChatControllerSendRuntime>,
     ) {
+        // F-14: a temporary chat neither reads memory nor writes it. Reading it
+        // would leak what TALOS knows about you into a conversation you asked
+        // to be forgotten; writing it would leave the conversation's residue in
+        // the one place that DOES survive. Either alone makes the word false.
+        const ephemeral = talosIsEphemeralSessionId(context.identity.sessionId)
         const [memorySelection, library] = await Promise.all([
-            selectMemoryForSend(context.identity.sessionId, context.signal),
+            ephemeral ? [] : selectMemoryForSend(context.identity.sessionId, context.signal),
             selectLibraryForSend(
                 context.text,
                 context.identity.sessionId,
