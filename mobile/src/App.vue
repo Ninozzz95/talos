@@ -670,6 +670,8 @@ onBeforeUnmount(async () => {
                 :read-text="chatController.attachments.hydrateText"
                 :read-bytes="chatController.attachments.previewBytes"
                 :set-shared="chatController.attachments.setVaultFileShared"
+                :attach-file="chatController.attachments.attachExisting"
+                :delete-file="chatController.attachments.deleteVaultFile"
                 :set-session-library-context-policy="chatController.chat.setSessionLibraryContextPolicy"
                 @close="mediaPanelOpen = false"
                 @open="mediaPanelOpen = false"

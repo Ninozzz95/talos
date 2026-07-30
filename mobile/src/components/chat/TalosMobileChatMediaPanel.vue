@@ -6,6 +6,9 @@ import { Check, Download, Eye, Globe2, LockKeyhole, Sparkles, Upload, X } from '
 import TalosMobileLibraryActionsMenu from '@/components/talos/library/TalosMobileLibraryActionsMenu.vue'
 import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLibraryFileRow.vue'
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
+import TalosMobileImageViewer from '@/components/talos/library/TalosMobileImageViewer.vue'
+import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
+import { Button } from '@/components/ui/button'
 import { useTalosSourceCardIcons } from '@/composables/useTalosSourceCardIcons'
 import TalosThemedSelect, { type TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
@@ -74,6 +77,14 @@ const props = defineProps<{
     /** Raw bytes, for handing a binary file to another app. */
     readBytes: (fileId: string) => Promise<Uint8Array | null>
     setShared: (fileId: string, shared: boolean) => Promise<void>
+    /**
+     * Owner 2026-07-30: opening a picture here used to offer fewer buttons than
+     * opening the same picture in the Library. The viewer is shared now, so the
+     * panel needs the two capabilities it was missing rather than two buttons
+     * that do nothing.
+     */
+    attachFile: (file: TalosLocalVaultFile) => Promise<boolean>
+    deleteFile: (fileId: string) => Promise<void>
     setSessionLibraryContextPolicy: (
         sessionId: string,
         patch: TalosSessionLibraryContextPolicyPatch,
@@ -87,6 +98,13 @@ const root = ref<HTMLElement | null>(null)
 const entered = ref(false)
 const failure = ref<string | null>(null)
 const savingFileId = ref<string | null>(null)
+// Owner 2026-07-30: the same four controls as the Library, which means the two
+// capabilities this panel never had. Delete asks first, with the same dialog
+// the Library uses — a destructive button that skips the question here and asks
+// there would be a second kind of divergence.
+const attachBusy = ref(false)
+const deleteTarget = ref<TalosLocalVaultFile | null>(null)
+const deleteBusy = ref(false)
 const toasts = useTalosMobileToasts()
 const { t, locale } = useTalosI18n()
 const tab = ref<TalosLibrarySurfaceTab>('all')
@@ -487,6 +505,37 @@ function closeFile(): void {
     opened.value = null
 }
 
+async function attachOpened(file: TalosLocalVaultFile): Promise<void> {
+    if (attachBusy.value || file.status !== 'available') return
+    attachBusy.value = true
+    try {
+        if (await props.attachFile(file)) {
+            toasts.push({ message: t('library.attachReady', { name: file.display_name }) })
+            closeFile()
+        }
+    } catch {
+        failure.value = t('library.attachFailed', { name: file.display_name })
+    } finally {
+        attachBusy.value = false
+    }
+}
+
+async function confirmDeleteOpened(): Promise<void> {
+    const file = deleteTarget.value
+    if (!file || deleteBusy.value) return
+    deleteBusy.value = true
+    try {
+        await props.deleteFile(file.id)
+        toasts.push({ message: t('library.fileDeleted', { name: file.display_name }) })
+        deleteTarget.value = null
+        closeFile()
+    } catch {
+        failure.value = t('library.deleteFailed', { name: file.display_name })
+    } finally {
+        deleteBusy.value = false
+    }
+}
+
 onBeforeUnmount(closeFile)
 
 const TABS = computed<Array<{ value: typeof tab.value; label: string; ariaLabel: string }>>(() => [
@@ -718,12 +767,28 @@ const mediaScope = computed(() => {
                     <p v-if="openingFailed" class="py-8 text-center text-xs text-[var(--talos-muted)]">
                         {{ $t('library.readFileFailed') }}
                     </p>
-                    <img
+                    <!--
+                        A picture opens in the SHARED viewer, so the buttons are
+                        the Library's buttons — owner 2026-07-30, who found this
+                        panel offering fewer of them. Text documents keep the
+                        panel's own body below; the viewer is for images.
+                    -->
+                    <TalosMobileImageViewer
                         v-else-if="openedUrl"
                         :src="openedUrl"
-                        :alt="opened.display_name"
-                        class="mx-auto max-h-full max-w-full object-contain"
-                    >
+                        :name="opened.display_name"
+                        test-id="talos-chat-media-image-viewer"
+                        save-test-id="talos-chat-media-viewer-save"
+                        :can-attach="!attachedFileIds.includes(opened.id)"
+                        :can-save="opened.status === 'available'"
+                        can-delete
+                        :busy="attachBusy"
+                        :saving="savingFileId !== null"
+                        @attach="attachOpened(opened)"
+                        @save="saveFileToDevice(opened)"
+                        @delete="deleteTarget = opened"
+                        @close="closeFile"
+                    />
                     <pre
                         v-else-if="openedText !== null"
                         class="whitespace-pre-wrap break-words text-2xs leading-5 text-[var(--talos-text)] [overflow-wrap:anywhere]"
@@ -731,6 +796,23 @@ const mediaScope = computed(() => {
                     <p v-else class="py-8 text-center text-xs text-[var(--talos-muted)]">{{ $t('library.opening') }}</p>
                 </div>
             </div>
+
+            <!--
+                The same question the Library asks, asked here. A destructive
+                button that skips it on one surface and asks on the other is a
+                second kind of divergence, not a shortcut.
+            -->
+            <TalosMobileConfirmDialog
+                v-if="deleteTarget"
+                :title="$t('library.deleteFileTitle')"
+                :description="$t('library.deleteFileDescription', { name: deleteTarget.display_name })"
+                @close="deleteBusy ? undefined : deleteTarget = null"
+            >
+                <template #footer>
+                    <Button type="button" variant="outline" :disabled="deleteBusy" class="min-h-12" @click="deleteTarget = null">{{ $t('common.cancel') }}</Button>
+                    <Button type="button" data-testid="talos-chat-media-delete-confirm" :disabled="deleteBusy" class="min-h-12 bg-[var(--talos-danger)] text-white" @click="confirmDeleteOpened">{{ $t('library.deleteFile') }}</Button>
+                </template>
+            </TalosMobileConfirmDialog>
         </section>
     </Teleport>
 </template>
