@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowDown, AlertTriangle, CheckCircle2, Circle, Globe2, X } from '@lucide/vue'
 import { useRouter } from 'vue-router'
@@ -95,6 +96,8 @@ const browserError = ref<string | null>(null)
 const browserBusy = ref(false)
 const browserStatus = ref('')
 const activeSessionId = computed(() => chat.activeSession.value?.id ?? null)
+/** F-14: this chat is not being written down, and says so. */
+const isTemporaryChat = computed(() => talosIsEphemeralSessionId(activeSessionId.value ?? ''))
 const libraryTurnOverride = ref<TalosLibraryTurnOverride | null>(null)
 const sessionLibraryContextPolicy = computed(() =>
     parseTalosSessionLibraryContextPolicy(
@@ -738,9 +741,29 @@ onBeforeUnmount(() => {
                     </section>
                 </div>
 
+                <!--
+                    F-14, and the line nobody else writes.
+                    The research is blunt: "incognito" in 2026 mostly means "we
+                    still have it, we just do not show it to you" — ChatGPT and
+                    Claude retain temporary chats for a stated window, and a
+                    court ordered OpenAI to preserve all of them. TALOS is
+                    local-first, so the FIRST line here is literally true. The
+                    second is the honest half everyone else omits, because for
+                    them admitting it would admit the first line is false.
+                -->
+                <template v-else>
+                <p
+                    v-if="isTemporaryChat"
+                    data-testid="talos-temporary-chat-notice"
+                    role="note"
+                    class="mx-3 mb-2 rounded-xl border border-dashed border-[var(--talos-border)] px-3 py-2 text-2xs leading-4 text-[var(--talos-muted)]"
+                >
+                    <span class="font-medium text-[var(--talos-text)]">{{ t('chat.temporaryChatNotice') }}</span>
+                    {{ t('chat.temporaryChatProviderNotice') }}
+                </p>
+
                 <!-- Conversation -->
                 <TalosMobileMessageList
-                    v-else
                     :messages="chat.messages"
                     :sending="chat.state.sending"
                     :model-labels="modelLabels"
@@ -753,6 +776,7 @@ onBeforeUnmount(() => {
                     @retry="retryAssistantMessage"
                     @save-to-library="saveMessageToLibrary"
                 />
+                </template>
             </div>
         </div>
 

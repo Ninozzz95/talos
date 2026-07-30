@@ -223,6 +223,18 @@ function sidebarNewChat(): void {
     })
 }
 
+/**
+ * F-14. The same act as New chat with one thing taken away, so it lives beside
+ * it rather than in a settings screen you have to remember to switch back.
+ */
+function sidebarTemporaryChat(): void {
+    sidebarOpen.value = false
+    lifecycleAction(t('chat.temporaryChat'), async () => {
+        await chatController.sessionLifecycle.newSession({ ephemeral: true })
+        if (isStation.value) await navigate('chat')
+    })
+}
+
 function sidebarSelect(sessionId: string): void {
     sidebarOpen.value = false
     void talosLightImpact()
@@ -707,6 +719,7 @@ onBeforeUnmount(async () => {
                 :busy="sessionBusy"
                 :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
                 @new-chat="sidebarNewChat"
+                @temporary-chat="sidebarTemporaryChat"
                 @select="sidebarSelect"
                 @rename="sidebarRename"
                 :cleanup-plan-for="cleanupPlanFor"
@@ -740,6 +753,7 @@ onBeforeUnmount(async () => {
                         :hide-menu="tabletLayout.isTablet.value"
                         @open-menu="sidebarOpen = true"
                         @new-chat="sidebarNewChat"
+                @temporary-chat="sidebarTemporaryChat"
                         @rename="immersiveRename"
                         :cleanup-plan="activeCleanupPlan"
                         :session-busy="sessionBusy"
@@ -755,6 +769,7 @@ onBeforeUnmount(async () => {
                         :hide-menu="tabletLayout.isTablet.value"
                         @open-menu="sidebarOpen = true"
                         @new-chat="sidebarNewChat"
+                @temporary-chat="sidebarTemporaryChat"
                         @rename="immersiveRename"
                         :cleanup-plan="activeCleanupPlan"
                         @delete="immersiveDelete"

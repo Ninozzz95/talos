@@ -449,6 +449,9 @@ export const TALOS_IT_MESSAGES = {
     },
     chat: {
         newChat: 'Nuova chat',
+        temporaryChat: 'Chat temporanea',
+        temporaryChatNotice: 'Non salvata su questo telefono.',
+        temporaryChatProviderNotice: 'Il tuo fornitore la riceve comunque e la conserva secondo le sue regole.',
         chatOptions: 'Opzioni chat',
         addToChat: 'Aggiungi alla chat',
         messagePlaceholder: 'Scrivi a TALOS',

@@ -467,6 +467,44 @@ describe('ChatScreen (functional, local-first)', () => {
         expect(controller.attachments.discardAll).toHaveBeenCalledTimes(1)
     })
 
+    /**
+     * F-14. The notice is the visible half of the promise, and the assertion
+     * that the CONVERSATION is still there is the regression guard.
+     *
+     * The first cut placed the notice between the setup block's `v-if` and the
+     * message list's `v-else`, which silently broke the chain: the conversation
+     * would have vanished in exactly the chats that show this notice. It
+     * typechecks, it is valid HTML, and no existing test covered it.
+     */
+    it('tells a temporary chat what it is — without eating the conversation', async () => {
+        const controller = makeController([
+            { id: 'user-1', role: 'user', content: 'un segreto', created_at: '', state: 'persisted' },
+        ])
+        controller.chat.activeSession.value = { id: 'tmp-abc', title: 'Chat temporanea' }
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { attachTo: document.body })
+        await flushPromises()
+
+        const notice = wrapper.get('[data-testid="talos-temporary-chat-notice"]')
+        // Both halves. The second is the one nobody else writes.
+        expect(notice.text()).toContain('Not saved on this phone')
+        expect(notice.text()).toContain('provider still receives it')
+        expect(wrapper.findComponent(TalosMobileMessageList).exists()).toBe(true)
+    })
+
+    it('says nothing of the sort in an ordinary chat', async () => {
+        const controller = makeController([
+            { id: 'user-1', role: 'user', content: 'ciao', created_at: '', state: 'persisted' },
+        ])
+        controller.chat.activeSession.value = { id: 'chat-1', title: 'Normale' }
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { attachTo: document.body })
+        await flushPromises()
+
+        expect(wrapper.find('[data-testid="talos-temporary-chat-notice"]').exists()).toBe(false)
+        expect(wrapper.findComponent(TalosMobileMessageList).exists()).toBe(true)
+    })
+
     it('routes new, select, rename, and delete session actions to the controller', async () => {
         const controller = makeController()
         controller.chat.sessions.push({ id: 'chat-1', title: 'Architecture notes' })

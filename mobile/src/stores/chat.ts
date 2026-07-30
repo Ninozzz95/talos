@@ -236,7 +236,11 @@ export interface ChatStore<Runtime = undefined> {
     readonly state: Readonly<ChatState>
     initialize(): Promise<void>
     retryPersistence(): Promise<void>
-    createSession(title?: string, modelProfileId?: string | null): Promise<TalosLocalChatSession>
+    createSession(
+        title?: string,
+        modelProfileId?: string | null,
+        options?: { ephemeral?: boolean },
+    ): Promise<TalosLocalChatSession>
     selectSession(sessionId: string): Promise<void>
     /** Defect #4: prepend the page above the oldest message; returns how many. */
     loadOlderMessages(): Promise<number>

@@ -694,7 +694,7 @@ const realDeps: ChatControllerDeps = {
 // R2-7 — orchestrated session actions (draft flush + attachment revocation +
 // scope re-activation), registered by the persistent ChatScreen.
 export interface TalosSessionOrchestrator {
-    newSession(): Promise<void>
+    newSession(options?: { ephemeral?: boolean }): Promise<void>
     selectSession(sessionId: string): Promise<void>
     renameSession(sessionId: string, title: string): Promise<void>
     deleteSession(sessionId: string): Promise<void>
@@ -774,7 +774,7 @@ export interface ChatController {
     removeKey(provider: TalosMobileProviderId): Promise<void>
     saveEndpoint(provider: TalosMobileProviderId, endpoint: string): Promise<void>
     removeEndpoint(provider: TalosMobileProviderId): Promise<void>
-    newSession(): Promise<void>
+    newSession(options?: { ephemeral?: boolean }): Promise<void>
     selectSession(sessionId: string): Promise<void>
     renameSession(sessionId: string, title: string): Promise<void>
     deleteSession(sessionId: string): Promise<void>
@@ -3699,9 +3699,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         })
     }
 
-    async function newSession(): Promise<void> {
+    async function newSession(options: { ephemeral?: boolean } = {}): Promise<void> {
         clearPromptEnhancement()
-        await chat.createSession(deps.translate('chat.newChat'), selectedModelId.value)
+        await chat.createSession(
+            deps.translate(options.ephemeral ? 'chat.temporaryChat' : 'chat.newChat'),
+            selectedModelId.value,
+            { ephemeral: options.ephemeral },
+        )
     }
 
     async function selectSession(sessionId: string): Promise<void> {
@@ -3753,7 +3757,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     const sessionLifecycle: TalosSessionLifecycle = {
         register(value) { sessionOrchestrator = value },
         unregister(value) { if (sessionOrchestrator === value) sessionOrchestrator = null },
-        newSession: () => (sessionOrchestrator ?? { newSession }).newSession(),
+        newSession: (options) => (sessionOrchestrator ?? { newSession }).newSession(options),
         selectSession: (sessionId) => sessionOrchestrator
             ? sessionOrchestrator.selectSession(sessionId)
             : selectSession(sessionId),
