@@ -6,19 +6,20 @@ import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
 import { useTalosVaultThumbnails } from '@/composables/useTalosVaultThumbnails'
 import {
     AlertTriangle, CheckCircle2, Database, FileText, FolderPlus,
-    Download, EllipsisVertical, ExternalLink, LayoutGrid, List, LoaderCircle, Paperclip, RefreshCw, Search, Sparkles, Trash2, Upload, X,
+    ArrowDownUp, Download, EllipsisVertical, ExternalLink, LayoutGrid, List, LoaderCircle, Paperclip, RefreshCw, Search, Trash2, Upload, X,
     Check,
     CheckSquare,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
-import TalosMobileLibraryFileGlyph from '@/components/talos/library/TalosMobileLibraryFileGlyph.vue'
 import TalosMobileLibraryActionsMenu from '@/components/talos/library/TalosMobileLibraryActionsMenu.vue'
 import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLibraryFileRow.vue'
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
+import TalosMobileLibraryFileTile from '@/components/talos/library/TalosMobileLibraryFileTile.vue'
+import TalosMobileLibrarySectionHeading from '@/components/talos/library/TalosMobileLibrarySectionHeading.vue'
 import TalosMobileSavedLinkTile from '@/components/talos/library/TalosMobileSavedLinkTile.vue'
-import { groupTalosLibraryByChat } from '@/lib/libraryGrouping'
+import { groupTalosLibraryByChat, type TalosLibrarySort } from '@/lib/libraryGrouping'
 import { useTalosSourceCardIcons } from '@/composables/useTalosSourceCardIcons'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 import { talosNeedsExternalOpen } from '@/lib/documents/openable'
@@ -75,7 +76,24 @@ const viewMode = computed({
     set: (value) => { void settings.setShell({ library_view: value }) },
 })
 const typeFilter = ref<TalosLibrarySurfaceTab>('all')
-const groupByChat = ref(true) // owner 2026-07-25: grouped by origin chat by default
+/**
+ * Owner 2026-07-25 turned grouping on; it was a plain `ref`, so it came back off
+ * at every visit — debt P6. It lives in shell preferences now, next to the sort
+ * that arrived with it, rather than being the switch that forgets.
+ */
+const groupByChat = computed({
+    get: () => settings.state.shell.library_group_by_chat,
+    set: (value) => { void settings.setShell({ library_group_by_chat: value }) },
+})
+const sortOrder = computed<TalosLibrarySort>({
+    get: () => settings.state.shell.library_sort,
+    set: (value) => { void settings.setShell({ library_sort: value }) },
+})
+const sortOptions = computed<Array<{ value: TalosLibrarySort; label: string }>>(() => [
+    { value: 'recent', label: t('library.sortRecent') },
+    { value: 'oldest', label: t('library.sortOldest') },
+    { value: 'name', label: t('library.sortName') },
+])
 const query = ref('')
 const menuOpen = ref(false)
 const typeTabs = computed<Array<{ value: typeof typeFilter.value; label: string }>>(() => [
@@ -108,11 +126,6 @@ function originChat(file: TalosLocalVaultFile): string | null {
     return controller.chat.sessions.find((session) => session.id === id)?.title ?? null
 }
 
-const grouped = computed(() => groupTalosLibraryByChat(
-    filteredFiles.value,
-    originChat,
-    t('library.notFromChat'),
-).map((section) => ({ title: section.title, files: section.items })))
 
 /**
  * The same source dossiers as one address each: a page read three times is one
@@ -467,9 +480,60 @@ const { icons: sourceIcons } = useTalosSourceCardIcons(
     { backfill: true },
 )
 
-const groupedLinkRows = computed(() => (groupByChat.value
-    ? groupTalosLibraryByChat(renderedLinkRows.value, linkOriginChat, t('library.notFromChat'))
-    : [{ title: '', items: renderedLinkRows.value }]))
+/**
+ * Owner 2026-07-30: in `All`, files and links belong to the SAME section — «tutto
+ * mescolato per chat». They were two branches, which is why grouping and the
+ * grid reached one and not the other; one list of entries is what makes a single
+ * loop possible, and a single loop is what makes it impossible to fix one and
+ * forget the other again.
+ *
+ * The tile stays two components on purpose: a file tile carries multi-select, an
+ * actions menu, a context pill and a generated badge that a link has no meaning
+ * for. What is shared is the GRID and the SECTION, not the cell.
+ */
+type TalosLibraryEntry =
+    | { kind: 'file'; key: string; at: string | null; file: TalosLocalVaultFile }
+    | { kind: 'link'; key: string; at: string | null; row: TalosSavedLinkRow }
+
+const libraryEntries = computed<TalosLibraryEntry[]>(() => {
+    const entries: TalosLibraryEntry[] = filteredFiles.value.map((file) => ({
+        kind: 'file',
+        key: `file:${file.id}`,
+        at: file.updated_at ?? file.created_at ?? null,
+        file,
+    }))
+    // Only `All` aggregates. A type chip means the user asked for one kind.
+    if (typeFilter.value !== 'all') return entries
+    for (const row of renderedLinkRows.value) {
+        entries.push({ kind: 'link', key: `link:${row.url}`, at: row.savedAt ?? null, row })
+    }
+    return entries
+})
+
+function entryChat(entry: TalosLibraryEntry): string | null {
+    return entry.kind === 'file' ? originChat(entry.file) : linkOriginChat(entry.row)
+}
+
+const groupedEntries = computed(() => groupTalosLibraryByChat(
+    libraryEntries.value,
+    // Not grouping still goes through here, so the sort applies either way; one
+    // section with an empty heading is the honest shape of "ungrouped".
+    groupByChat.value ? entryChat : () => '',
+    t('library.notFromChat'),
+    { timeOf: (entry) => entry.at, sort: sortOrder.value },
+))
+
+const groupedLinkRows = computed(() => groupTalosLibraryByChat(
+    renderedLinkRows.value,
+    groupByChat.value ? linkOriginChat : () => '',
+    t('library.notFromChat'),
+    { timeOf: (row) => row.savedAt ?? null, sort: sortOrder.value },
+))
+
+/** A section heading shows the chat and when it was last touched (D-17). */
+function sectionDateLabel(latestAt: string | null): string | null {
+    return latestAt ? formatModified(latestAt) : null
+}
 const hasVisibleLibraryItems = computed(() => (
     (typeFilter.value !== 'links' && filteredFiles.value.length > 0)
     || renderedLinkRows.value.length > 0
@@ -597,6 +661,29 @@ onMounted(async () => {
                     <button type="button" role="menuitemradio" :aria-checked="viewMode === 'grid'" data-testid="talos-library-view-grid" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'grid'; menuOpen = false"><LayoutGrid class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.grid') }} <CheckCircle2 v-if="viewMode === 'grid'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
                     <button type="button" role="menuitemradio" :aria-checked="viewMode === 'list'" data-testid="talos-library-view-list" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'list'; menuOpen = false"><List class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.list') }} <CheckCircle2 v-if="viewMode === 'list'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
                     <button type="button" role="menuitemcheckbox" :aria-checked="groupByChat" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="groupByChat = !groupByChat; menuOpen = false"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.groupByChat') }} <CheckCircle2 v-if="groupByChat" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
+                    <!--
+                        Owner 2026-07-30 asked for the date beside the chat name
+                        and, in the same breath, for a way to sort by it. Both
+                        answer to the same field, which is why the heading shows
+                        the section's most recent item rather than its creation
+                        date. Three entries: sorting by type would duplicate the
+                        chips that are already on screen.
+                    -->
+                    <div role="separator" class="my-1 h-px bg-[var(--talos-border)]" />
+                    <button
+                        v-for="option in sortOptions"
+                        :key="option.value"
+                        type="button"
+                        role="menuitemradio"
+                        :aria-checked="sortOrder === option.value"
+                        :data-testid="`talos-library-sort-${option.value}`"
+                        class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm"
+                        @click="sortOrder = option.value; menuOpen = false"
+                    >
+                        <ArrowDownUp class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                        {{ option.label }}
+                        <CheckCircle2 v-if="sortOrder === option.value" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                    </button>
                 </div>
                 </Transition>
             </div>
@@ -655,27 +742,12 @@ onMounted(async () => {
             <Button type="button" size="icon" variant="ghost" class="min-h-12 min-w-12" :aria-label="t('library.retryLibrary')" @click="attachments.refreshVault()"><RefreshCw class="size-4" aria-hidden="true" /></Button>
         </div>
 
-        <!-- `All` is an aggregate surface: semantic links remain rows and the
-             existing file branch below remains tiles/list items. -->
-        <ul
-            v-if="typeFilter === 'all' && renderedLinkRows.length > 0"
-            data-testid="talos-library-links"
-            class="flex flex-col gap-2"
-            :class="{ 'mb-4': filteredFiles.length > 0 }"
-            :aria-label="t('library.savedLinks')"
-        >
-            <TalosMobileSavedLinkRow
-                v-for="row in renderedLinkRows"
-                :key="row.url"
-                :row="row"
-                :saved-at-label="formatModified(row.savedAt)"
-                :favicon-url="sourceIcons[row.url] ?? null"
-                browser-test-id="talos-library-link-open"
-                @open-copy="openSavedCopy(row.fileId)"
-                @open-browser="openLink(row.url)"
-            />
-        </ul>
-
+        <!--
+            Owner 2026-07-30: the standalone link list that used to sit here is
+            gone. It rendered BEFORE the branch chain, as a plain ungrouped list,
+            which is exactly why `All` never got the grouping or the grid while
+            the `Links` chip did. Links are entries in the one section loop now.
+        -->
         <div v-if="attachments.vaultLoading.value && attachments.vaultFiles.length === 0" role="status" class="flex items-center gap-2 py-8 text-sm text-[var(--talos-muted)]">
             <LoaderCircle class="size-4 motion-safe:animate-spin" aria-hidden="true" /> {{ t('library.loadingLibrary') }}
         </div>
@@ -699,7 +771,11 @@ onMounted(async () => {
         -->
         <div v-else-if="typeFilter === 'links'" data-testid="talos-library-links" :aria-label="t('library.savedLinks')">
             <template v-for="section in groupedLinkRows" :key="section.title || 'all'">
-                <h2 v-if="groupByChat" class="mb-2 mt-4 truncate text-xs font-semibold text-[var(--talos-muted)]">{{ section.title }}</h2>
+                <TalosMobileLibrarySectionHeading
+                    v-if="groupByChat"
+                    :title="section.title"
+                    :date-label="sectionDateLabel(section.latestAt)"
+                />
 
                 <div v-if="viewMode === 'grid'" class="grid grid-cols-2 gap-3" role="list">
                     <TalosMobileSavedLinkTile
@@ -713,7 +789,7 @@ onMounted(async () => {
                     />
                 </div>
 
-                <ul v-else class="flex flex-col gap-2">
+                <div v-else role="list" class="flex flex-col gap-2">
                     <TalosMobileSavedLinkRow
                         v-for="row in section.items"
                         :key="row.url"
@@ -724,93 +800,103 @@ onMounted(async () => {
                         @open-copy="openSavedCopy(row.fileId)"
                         @open-browser="openLink(row.url)"
                     />
-                </ul>
+                </div>
             </template>
         </div>
 
-        <!-- Grouped-by-chat wraps whichever view is active. -->
-        <template v-else v-for="section in (groupByChat ? grouped : [{ title: '', files: filteredFiles }])" :key="section.title || 'all'">
-            <h2 v-if="groupByChat" class="mb-2 mt-4 truncate text-xs font-semibold text-[var(--talos-muted)]">{{ section.title }}</h2>
+        <!--
+            One loop for both kinds. In `All` a section holds that chat's files
+            AND its links (owner 2026-07-30, «tutto mescolato per chat»); under a
+            type chip it holds only files, because a chip means the user asked
+            for one kind. The cells stay two components — a file tile carries
+            multi-select, an actions menu, a context pill and a generated badge
+            that a link has no meaning for — but the grid and the section around
+            them are shared, which is what stops one branch being fixed and the
+            other forgotten.
+        -->
+        <template v-else v-for="section in groupedEntries" :key="section.title || 'all'">
+            <TalosMobileLibrarySectionHeading
+                v-if="groupByChat"
+                :title="section.title"
+                :date-label="sectionDateLabel(section.latestAt)"
+            />
 
             <!-- GRID: the tile opens; the same explicit More contract as list
                  carries attach/save/delete without hover-only behavior. -->
             <div v-if="viewMode === 'grid'" class="grid grid-cols-2 gap-3" role="list" :aria-label="t('library.libraryFiles')">
-                <div v-for="file in section.files" :key="file.id" role="listitem" :data-vault-file-id="file.id" class="relative aspect-square overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]">
-                    <button type="button" class="talos-pressable absolute inset-0 flex flex-col text-left" :aria-label="t(bulk.active.value ? 'library.selectNamed' : 'library.openNamed', { name: file.display_name })" :aria-pressed="bulk.active.value ? bulk.isSelected(file.id) : undefined" @click="tapFile(file)">
-                        <TalosMobileLibraryFileGlyph
-                            v-if="isImage(file)"
-                            :file="file"
-                            :thumbnail-url="thumbs[file.id] ?? null"
-                            variant="grid"
-                        />
-                        <template v-else>
-                            <span class="line-clamp-3 px-3 pt-3 text-sm font-medium text-[var(--talos-text)]">{{ file.display_name }}</span>
-                            <span class="mt-auto size-16 p-3">
-                                <TalosMobileLibraryFileGlyph :file="file" variant="grid" />
-                            </span>
-                        </template>
-                    </button>
-                    <span v-if="bulk.active.value" class="pointer-events-none absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-full border-2" :class="bulk.isSelected(file.id) ? 'border-[var(--talos-accent)] bg-[var(--talos-accent)] text-[var(--talos-on-accent,#000)]' : 'border-white/80 bg-black/35'">
-                        <Check v-if="bulk.isSelected(file.id)" class="size-4" aria-hidden="true" />
-                    </span>
-                    <span v-if="bulk.isSelected(file.id)" class="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-inset ring-[var(--talos-accent)]" aria-hidden="true" />
-                    <span v-if="parseVaultOrigin(file.metadata) === 'generated'" class="pointer-events-none absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-3xs font-medium text-white"><Sparkles class="size-3" aria-hidden="true" /> {{ t('library.generatedShort') }}</span>
-                    <div
-                        v-if="!bulk.active.value"
-                        class="absolute bottom-1 right-1 z-[2] [&_[data-talos-library-actions-trigger]]:bg-black/60 [&_[data-talos-library-actions-trigger]]:text-white"
-                    >
-                        <TalosMobileLibraryActionsMenu
-                            :label="t('library.fileActionsFor', { name: file.display_name })"
-                            :test-id="`talos-library-actions-${file.id}`"
-                            :items="fileActions(file)"
-                            @select="(action, checked) => onFileAction(file, action, checked)"
-                        />
-                    </div>
-                    <span
-                        :data-testid="`talos-library-context-state-${file.id}`"
-                        class="pointer-events-none absolute bottom-1 left-1 z-[2] max-w-[calc(100%-3.5rem)] truncate rounded-full bg-black/60 px-2 py-1 text-3xs font-medium text-white"
-                    >
-                        {{ globalFileContextLabel(file) }}
-                    </span>
-                </div>
+                <template v-for="entry in section.items" :key="entry.key">
+                    <TalosMobileLibraryFileTile
+                        v-if="entry.kind === 'file'"
+                        :file="entry.file"
+                        :thumbnail-url="thumbs[entry.file.id] ?? null"
+                        :is-image="isImage(entry.file)"
+                        :selecting="bulk.active.value"
+                        :selected="bulk.isSelected(entry.file.id)"
+                        :generated="parseVaultOrigin(entry.file.metadata) === 'generated'"
+                        :context-label="globalFileContextLabel(entry.file)"
+                        :actions-label="t('library.fileActionsFor', { name: entry.file.display_name })"
+                        :actions="fileActions(entry.file)"
+                        :tap-label="t(bulk.active.value ? 'library.selectNamed' : 'library.openNamed', { name: entry.file.display_name })"
+                        @tap="tapFile(entry.file)"
+                        @action="(action, checked) => onFileAction(entry.file, action, checked)"
+                    />
+                    <TalosMobileSavedLinkTile
+                        v-else
+                        :row="entry.row"
+                        :saved-at-label="formatModified(entry.row.savedAt)"
+                        :favicon-url="sourceIcons[entry.row.url] ?? null"
+                        @open-copy="openSavedCopy(entry.row.fileId)"
+                        @open-browser="openLink(entry.row.url)"
+                    />
+                </template>
             </div>
 
             <!-- LIST -->
             <div v-else class="space-y-1" role="list" :aria-label="t('library.libraryFiles')">
-                <TalosMobileLibraryFileRow
-                    v-for="file in section.files"
-                    :key="file.id"
-                    :data-vault-file-id="file.id"
-                    :file="file"
-                    :thumbnail-url="thumbs[file.id] ?? null"
-                    :selection-mode="bulk.active.value"
-                    :selected="bulk.isSelected(file.id)"
-                    :open-label="t(bulk.active.value ? 'library.selectNamed' : 'library.openNamed', { name: file.display_name })"
-                    @open="tapFile(file)"
+                <template v-for="entry in section.items" :key="entry.key">
+                    <TalosMobileSavedLinkRow
+                        v-if="entry.kind === 'link'"
+                        :row="entry.row"
+                        :saved-at-label="formatModified(entry.row.savedAt)"
+                        :favicon-url="sourceIcons[entry.row.url] ?? null"
+                        browser-test-id="talos-library-link-open"
+                        @open-copy="openSavedCopy(entry.row.fileId)"
+                        @open-browser="openLink(entry.row.url)"
+                    />
+                    <TalosMobileLibraryFileRow
+                        v-else
+                        :data-vault-file-id="entry.file.id"
+                        :file="entry.file"
+                        :thumbnail-url="thumbs[entry.file.id] ?? null"
+                        :selection-mode="bulk.active.value"
+                        :selected="bulk.isSelected(entry.file.id)"
+                        :open-label="t(bulk.active.value ? 'library.selectNamed' : 'library.openNamed', { name: entry.file.display_name })"
+                        @open="tapFile(entry.file)"
                 >
                     <template #meta>
-                            <span v-if="parseVaultOrigin(file.metadata) === 'generated'" class="text-[var(--talos-accent)]">{{ t('library.generated') }}</span>
-                            <span v-else>{{ t('library.modified', { date: formatModified(file.updated_at) }) }}</span>
-                            <span v-if="!groupByChat && originChat(file)" class="truncate">· {{ originChat(file) }}</span>
+                            <span v-if="parseVaultOrigin(entry.file.metadata) === 'generated'" class="text-[var(--talos-accent)]">{{ t('library.generated') }}</span>
+                            <span v-else>{{ t('library.modified', { date: formatModified(entry.file.updated_at) }) }}</span>
+                            <span v-if="!groupByChat && originChat(entry.file)" class="truncate">· {{ originChat(entry.file) }}</span>
                     </template>
                     <template #details>
                         <span
-                            :data-testid="`talos-library-context-state-${file.id}`"
+                            :data-testid="`talos-library-context-state-${entry.file.id}`"
                             class="mt-0.5 block text-2xs leading-4 text-[var(--talos-muted)]"
                         >
-                            {{ t('library.contextState', { state: globalFileContextLabel(file) }) }}
+                            {{ t('library.contextState', { state: globalFileContextLabel(entry.file) }) }}
                         </span>
                     </template>
                     <template #actions>
                         <TalosMobileLibraryActionsMenu
                             v-if="!bulk.active.value"
-                            :label="t('library.fileActionsFor', { name: file.display_name })"
-                            :test-id="`talos-library-actions-${file.id}`"
-                            :items="fileActions(file)"
-                            @select="(action, checked) => onFileAction(file, action, checked)"
+                            :label="t('library.fileActionsFor', { name: entry.file.display_name })"
+                            :test-id="`talos-library-actions-${entry.file.id}`"
+                            :items="fileActions(entry.file)"
+                            @select="(action, checked) => onFileAction(entry.file, action, checked)"
                         />
                     </template>
-                </TalosMobileLibraryFileRow>
+                    </TalosMobileLibraryFileRow>
+                </template>
             </div>
         </template>
 

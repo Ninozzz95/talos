@@ -30,8 +30,12 @@ describe('groupTalosLibraryByChat', () => {
         )
 
         expect(grouped).toEqual([
-            { title: 'Research', items: [{ id: 'a', chat: 'Research' }, { id: 'c', chat: 'Research' }] },
-            { title: 'Invoices', items: [{ id: 'b', chat: 'Invoices' }] },
+            {
+                title: 'Research',
+                latestAt: null,
+                items: [{ id: 'a', chat: 'Research' }, { id: 'c', chat: 'Research' }],
+            },
+            { title: 'Invoices', latestAt: null, items: [{ id: 'b', chat: 'Invoices' }] },
         ])
     })
 
@@ -66,5 +70,133 @@ describe('groupTalosLibraryByChat', () => {
         // the count proves nothing was dropped on the way.
         expect(grouped).toHaveLength(1)
         expect(grouped[0]?.items).toHaveLength(2)
+    })
+})
+
+/**
+ * Owner 2026-07-30, answering a question with a request that was not among the
+ * options: «ottima trovata mettiamo nel menu a puntini un filtro per ordinare in
+ * base alla data (più recente etc)» — and, on the heading itself, «non
+ * dimenticare la data accanto alla chat».
+ *
+ * D-17 settled WHICH date: the most recent item in the section. It is the date
+ * that moves when the section changes, and it is the key the new sort orders by
+ * — showing a creation date while sorting by "most recent" would put a section
+ * labelled March at the top and look broken.
+ */
+const TIMES: Record<string, string> = {
+    a: '2026-07-10T09:00:00.000Z',
+    b: '2026-07-28T09:00:00.000Z',
+    c: '2026-07-20T09:00:00.000Z',
+    d: '2026-07-02T09:00:00.000Z',
+}
+const ITEMS = [
+    { id: 'a', chat: 'Ricerche' },
+    { id: 'b', chat: 'Fatture' },
+    { id: 'c', chat: 'Ricerche' },
+    { id: 'd', chat: 'Fatture' },
+]
+const timeOf = (item: { id: string }) => TIMES[item.id] ?? null
+
+describe('a section carries its own date', () => {
+    it('dates a section by its most recent item, not its first', () => {
+        const grouped = groupTalosLibraryByChat(ITEMS, (item) => item.chat, 'Altro', { timeOf })
+
+        // Ricerche holds the 10th and the 20th; the 20th is what the heading says.
+        expect(grouped.find((s) => s.title === 'Ricerche')?.latestAt).toBe(TIMES.c)
+        expect(grouped.find((s) => s.title === 'Fatture')?.latestAt).toBe(TIMES.b)
+    })
+
+    it('has no date when nothing in the section has one', () => {
+        const grouped = groupTalosLibraryByChat(
+            [{ id: 'x', chat: 'Vuota' }],
+            (item) => item.chat,
+            'Altro',
+            { timeOf: () => null },
+        )
+
+        // Null rather than today: a heading that invents a date is worse than a
+        // heading without one.
+        expect(grouped[0]?.latestAt).toBeNull()
+    })
+
+    it('ignores a time it cannot read instead of dating the section by it', () => {
+        const grouped = groupTalosLibraryByChat(
+            [{ id: 'good', chat: 'C' }, { id: 'bad', chat: 'C' }],
+            (item) => item.chat,
+            'Altro',
+            { timeOf: (item) => (item.id === 'good' ? TIMES.a! : 'not a date') },
+        )
+
+        expect(grouped[0]?.latestAt).toBe(TIMES.a)
+    })
+})
+
+describe('ordering the sections', () => {
+    it('puts the most recently touched chat first, and its newest item first', () => {
+        const grouped = groupTalosLibraryByChat(ITEMS, (item) => item.chat, 'Altro', {
+            timeOf,
+            sort: 'recent',
+        })
+
+        expect(grouped.map((s) => s.title)).toEqual(['Fatture', 'Ricerche'])
+        expect(grouped[0]?.items.map((i) => i.id)).toEqual(['b', 'd'])
+        expect(grouped[1]?.items.map((i) => i.id)).toEqual(['c', 'a'])
+    })
+
+    it('turns the whole thing around for oldest-first', () => {
+        const grouped = groupTalosLibraryByChat(ITEMS, (item) => item.chat, 'Altro', {
+            timeOf,
+            sort: 'oldest',
+        })
+
+        expect(grouped.map((s) => s.title)).toEqual(['Ricerche', 'Fatture'])
+        expect(grouped[0]?.items.map((i) => i.id)).toEqual(['a', 'c'])
+    })
+
+    /**
+     * Sorting by name orders the HEADINGS. Inside one, newest still comes first:
+     * whoever picked A-Z was organising the chats, not asking for their oldest
+     * file to be the first thing they see.
+     */
+    it('orders headings alphabetically while keeping newest first inside', () => {
+        const grouped = groupTalosLibraryByChat(ITEMS, (item) => item.chat, 'Altro', {
+            timeOf,
+            sort: 'name',
+        })
+
+        expect(grouped.map((s) => s.title)).toEqual(['Fatture', 'Ricerche'])
+        expect(grouped[0]?.items.map((i) => i.id)).toEqual(['b', 'd'])
+    })
+
+    it('sorts names the way a reader would, accents and case included', () => {
+        const grouped = groupTalosLibraryByChat(
+            [{ id: 'a', chat: 'zebra' }, { id: 'b', chat: 'Èlite' }, { id: 'c', chat: 'alfa' }],
+            (item) => item.chat,
+            'Altro',
+            { sort: 'name' },
+        )
+
+        expect(grouped.map((s) => s.title)).toEqual(['alfa', 'Èlite', 'zebra'])
+    })
+
+    it('leaves a dateless section at the end rather than at the top', () => {
+        const grouped = groupTalosLibraryByChat(
+            [{ id: 'a', chat: 'Datata' }, { id: 'x', chat: 'Senza' }],
+            (item) => item.chat,
+            'Altro',
+            { timeOf: (item) => (item.id === 'a' ? TIMES.a! : null), sort: 'recent' },
+        )
+
+        // "Unknown" is not "newest". Sorting it to the top would put the least
+        // informative heading where the eye lands first.
+        expect(grouped.map((s) => s.title)).toEqual(['Datata', 'Senza'])
+    })
+
+    it('keeps the arrival order when no sort is asked for', () => {
+        const grouped = groupTalosLibraryByChat(ITEMS, (item) => item.chat, 'Altro', { timeOf })
+
+        expect(grouped.map((s) => s.title)).toEqual(['Ricerche', 'Fatture'])
+        expect(grouped[0]?.items.map((i) => i.id)).toEqual(['a', 'c'])
     })
 })
