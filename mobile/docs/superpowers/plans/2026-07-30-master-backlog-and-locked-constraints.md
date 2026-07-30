@@ -213,6 +213,30 @@ bash via Shizuku — che l'owner ha appena messo in **C**. La catena è
 Il lavoro di analisi richiesto («analisi Claude Code e ChatGPT, completissima»)
 diventa la ricerca preliminare della slice 0.
 
+### Decisioni bloccate sulla chat temporanea (2026-07-30/31)
+
+Dalla ricognizione competitor richiesta dall'owner. Dettaglio in
+`decisions/2026-07-30-temporary-chat-competitors.md`.
+
+**D-30 — Il timer di auto-cancellazione sarà CONFIGURABILE e OPT-IN.**
+Spento di partenza, durata scelta dall'utente, mai avviato da noi. È una regola
+e non un'impostazione perché il precedente esiste: Claude Code cancellava i
+transcript dopo 30 giorni al riavvio senza averlo detto, ed è finito sulla
+stampa come problema di privacy — non per la scelta tecnica, ma perché era
+silenziosa.
+⇒ vive in **F** quando si aprirà (parità con ChatGPT, l'unica riga dove ci batte).
+
+**D-31 — La giuntura L3: chat temporanea + modello locale.**
+Da tenere presente quando si apre **D**, NON un cantiere a sé.
+Oggi l'avviso dice «il tuo fornitore la riceve comunque»; con un modello che
+gira dentro il telefono quella riga **sparisce**. È l'unica configurazione al
+mondo in cui «questa non la vede nessuno» è vera fino in fondo, e ChatGPT e
+Claude non potranno mai offrirla perché **loro sono il server**.
+Non è lavoro nuovo: la chat temporanea è fatta, i modelli locali sono in
+scaletta. Una giuntura, non un cantiere.
+⇒ **quando si progetta D, questa riga va letta prima**, perché cambia quanto
+vale quel lavoro.
+
 ### J. Congelati per decisione esplicita dell'owner
 - **"TALOS automatic"** — router che cambia modello secondo la complessità del
   task. «Memorizzalo ma non lo facciamo adesso»: potrebbe rompere tutto e va
