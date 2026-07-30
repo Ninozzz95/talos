@@ -315,6 +315,32 @@ function effortLabel(level: string): string {
     const key = `chat.effort${level.charAt(0).toUpperCase()}${level.slice(1)}`
     return t(key)
 }
+
+/**
+ * Owner 2026-07-26: on a phone the model pill shows a themed brain instead of
+ * the word "reasoning"; from a tablet up it can show the words too.
+ *
+ * The same shape the Library chip beside it already uses — icon always, words
+ * from `md:` (768px, exactly TALOS_TABLET_WIDTH_MEDIA_QUERY, so the breakpoint
+ * cannot drift from the app's own idea of a tablet).
+ *
+ * The accessible name is the part that was already wrong. An `aria-label`
+ * REPLACES an element's text, so the reasoning state was never announced even
+ * while it was visible; hiding it from the eye as well would make it invisible
+ * twice. It goes into the name now, and the name still leads with the model,
+ * because the model is what the button is for.
+ */
+const reasoningActive = computed(() => Boolean(
+    selectedProfile.value && (props.thinking || props.selectedEffort !== 'off'),
+))
+const reasoningLabel = computed(() => (
+    props.thinking ? t('chat.thinking') : effortLabel(props.selectedEffort)
+))
+const modelChipLabel = computed(() => {
+    const name = selectedProfile.value?.display_name ?? t('chat.chooseModel')
+    const base = `${t('chat.chooseModelProfile')}: ${name}`
+    return reasoningActive.value ? `${base} · ${reasoningLabel.value}` : base
+})
 const rightActionDisabled = computed(() => {
     if (rightAction.value === 'send') return !canSubmit.value
     if (rightAction.value === 'mic') return !props.dictationSupported
@@ -749,7 +775,7 @@ watch(() => props.prompt, () => {
                 ref="modelTrigger"
                 type="button"
                 data-testid="talos-composer-model-chip"
-                :aria-label="$t('chat.chooseModelProfile')"
+                :aria-label="modelChipLabel"
                 :title="modelTitle"
                 aria-haspopup="dialog"
                 :aria-expanded="modelPickerOpen"
@@ -764,9 +790,17 @@ watch(() => props.prompt, () => {
                 <span class="truncate text-sm font-medium text-[var(--talos-text,var(--foreground))]">
                     {{ selectedProfile?.display_name ?? $t('chat.chooseModel') }}
                 </span>
-                <span v-if="selectedProfile && (thinking || selectedEffort !== 'off')" class="shrink-0 text-xs text-[var(--talos-muted,var(--muted-foreground))]">
-                    {{ thinking ? $t('chat.thinking') : effortLabel(selectedEffort) }}
-                </span>
+                <template v-if="reasoningActive">
+                    <BrainCircuit
+                        data-testid="talos-composer-reasoning-icon"
+                        class="size-3.5 shrink-0 text-[var(--talos-accent)]"
+                        aria-hidden="true"
+                    />
+                    <span
+                        data-testid="talos-composer-reasoning-label"
+                        class="hidden shrink-0 text-xs text-[var(--talos-muted,var(--muted-foreground))] md:inline"
+                    >{{ reasoningLabel }}</span>
+                </template>
             </button>
             <button
                 v-if="showLibraryChip"
