@@ -142,7 +142,31 @@ function forGeminiDialect(node: unknown): unknown {
     const out: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(node)) {
         if (key === 'const') {
-            out.enum = [value]
+            /**
+             * Owner 2026-07-30, live on the wire, the same bug one layer down:
+             *
+             *   Invalid value at '…enum[0]' (TYPE_STRING), 1
+             *
+             * Gemini's `enum` accepts STRINGS only. Rewriting every `const` to a
+             * one-value enum fixed the string discriminators and broke the
+             * numeric ones — `document_create` types a heading level as
+             * `z.union([z.literal(1), z.literal(2), z.literal(3)])`, and each
+             * became `enum: [1]`, which kills the whole call.
+             *
+             * A non-string literal keeps its meaning through `type` instead. The
+             * exact value is lost, which is the honest trade: Gemini has nowhere
+             * to put it, and saying "an integer" is true where `enum: [1]` was
+             * simply refused.
+             */
+            if (typeof value === 'string') {
+                out.enum = [value]
+            } else if (typeof value === 'number') {
+                out.type = Number.isInteger(value) ? 'integer' : 'number'
+            } else if (typeof value === 'boolean') {
+                out.type = 'boolean'
+            }
+            // null and anything else: no faithful representation exists, so the
+            // key is dropped rather than turned into something untrue.
             continue
         }
         if (key === 'oneOf') {
