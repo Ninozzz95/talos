@@ -72,6 +72,57 @@ describe('the schema Gemini is willing to read', () => {
         expect(found).toEqual([])
     })
 
+    /**
+     * The same bug, one layer deeper, and the owner hit it live on 2026-07-30:
+     *
+     *   Invalid value at '…function_declarations[10]…enum[0]' (TYPE_STRING), 1
+     *   Invalid value at '…enum[0]' (TYPE_STRING), 2
+     *   Invalid value at '…enum[0]' (TYPE_STRING), 3
+     *
+     * `document_create` types a report heading level as
+     * `z.union([z.literal(1), z.literal(2), z.literal(3)])`. Each literal became
+     * `const: 1`, which the earlier fix rewrote to `enum: [1]` — and Gemini's
+     * enum accepts STRINGS only, so a numeric member is rejected and the whole
+     * call dies. The first fix taught the code to remove `const`; it did not
+     * teach it that Gemini's enum is string-typed.
+     *
+     * A one-value numeric literal carries the same meaning with `type` alone, so
+     * that is what it becomes — no enum, no lie about the value.
+     */
+    const NUMERIC_LITERAL_TOOL = defineTalosTool({
+        name: 'document_create',
+        title: 'Create a document',
+        description: 'A tool whose schema unions numeric literals, like a heading level.',
+        action: 'write',
+        input: z.object({
+            lvl: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+        }),
+        run: async () => ({ ok: true, content: '' }),
+    })
+
+    it('never emits a numeric enum, which Gemini refuses as TYPE_STRING', () => {
+        const declared = talosToolsForGemini([NUMERIC_LITERAL_TOOL as never])
+        everyKey(declared, (key, value) => {
+            if (key !== 'enum') return
+            expect(Array.isArray(value)).toBe(true)
+            for (const member of value as unknown[]) {
+                expect(typeof member).toBe('string')
+            }
+        })
+    })
+
+    it('keeps the heading level usable by declaring it an integer', () => {
+        // Dropping the constraint entirely would let the model send lvl: 9.
+        // `type: integer` is the honest survivor: Gemini accepts it, and it
+        // still says the field is a whole number.
+        const declared = talosToolsForGemini([NUMERIC_LITERAL_TOOL as never])
+        const types = new Set<unknown>()
+        everyKey(declared, (key, value) => {
+            if (key === 'type') types.add(value)
+        })
+        expect([...types]).toContain('integer')
+    })
+
     it('leaves the other providers untouched', async () => {
         // Only Gemini's dialect is this narrow. Rewriting for everyone would be
         // a lie about what the schema says.
