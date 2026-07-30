@@ -135,7 +135,7 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
             })
             requireHttpSuccess({ provider: 'gemini', operation: 'list_models', status: response.status, data: response.data })
             const parsed = listSchema.safeParse(response.data)
-            if (!parsed.success) throw malformedProviderResponse('gemini', 'list_models')
+            if (!parsed.success) throw malformedProviderResponse('gemini', 'list_models', { received: response.data, issues: parsed.error.issues })
             models.push(...parsed.data.models.map((model) => {
                 const methods = model.supportedGenerationMethods ?? model.supportedActions ?? []
                 return {
@@ -156,10 +156,10 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
                 }
             }))
             if (!parsed.data.nextPageToken) return { provider: 'gemini', models }
-            if (parsed.data.nextPageToken === pageToken) throw malformedProviderResponse('gemini', 'list_models')
+            if (parsed.data.nextPageToken === pageToken) throw malformedProviderResponse('gemini', 'list_models', { received: response.data, note: 'pagination token unchanged' })
             pageToken = parsed.data.nextPageToken
         }
-        throw malformedProviderResponse('gemini', 'list_models')
+        throw malformedProviderResponse('gemini', 'list_models', { note: 'model list never terminated within the page budget' })
     },
     async complete(input, credential, transport) {
         const apiKey = requireProviderApiKey('gemini', 'complete', credential)
@@ -173,7 +173,7 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
         })
         requireHttpSuccess({ provider: 'gemini', operation: 'complete', status: response.status, data: response.data })
         const parsed = completionSchema.safeParse(response.data)
-        if (!parsed.success) throw malformedProviderResponse('gemini', 'complete')
+        if (!parsed.success) throw malformedProviderResponse('gemini', 'complete', { received: response.data, issues: parsed.error.issues })
         const candidate = parsed.data.candidates[0]!
         // SF-MAJOR: the buffered path had no thought filter while the streaming
         // one did. The moment thoughts are requested, this path would join them
@@ -185,7 +185,7 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
         const toolCalls = accumulator.calls()
         // A turn that only calls a function carries no text. Refusing it as
         // malformed is how the loop would die before its first round.
-        if (!text && toolCalls.length === 0) throw malformedProviderResponse('gemini', 'complete')
+        if (!text && toolCalls.length === 0) throw malformedProviderResponse('gemini', 'complete', { received: response.data, note: 'no text and no tool calls' })
         return {
             text,
             model: parsed.data.modelVersion ?? input.model.id,
@@ -226,7 +226,7 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
             onReasoning: handlers.onReasoning,
         })
         const calls = toolCalls.calls()
-        if (!stream.text && calls.length === 0) throw malformedProviderResponse('gemini', 'complete')
+        if (!stream.text && calls.length === 0) throw malformedProviderResponse('gemini', 'complete', { received: { text: stream.text, calls: calls.length }, note: 'stream ended with no text and no tool calls' })
         return {
             text: stream.text,
             model: input.model.id,

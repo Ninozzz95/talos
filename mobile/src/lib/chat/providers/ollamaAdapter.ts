@@ -118,7 +118,7 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
         })
         requireHttpSuccess({ provider: 'ollama', operation: 'list_models', status: response.status, data: response.data })
         const parsed = listSchema.safeParse(response.data)
-        if (!parsed.success) throw malformedProviderResponse('ollama', 'list_models')
+        if (!parsed.success) throw malformedProviderResponse('ollama', 'list_models', { received: response.data, issues: parsed.error.issues })
         return {
             provider: 'ollama',
             models: parsed.data.models.map((model) => ({
@@ -144,12 +144,12 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
         })
         requireHttpSuccess({ provider: 'ollama', operation: 'complete', status: response.status, data: response.data })
         const parsed = completionSchema.safeParse(response.data)
-        if (!parsed.success) throw malformedProviderResponse('ollama', 'complete')
+        if (!parsed.success) throw malformedProviderResponse('ollama', 'complete', { received: response.data, issues: parsed.error.issues })
         const toolCalls = parseOllamaToolCalls(parsed.data.message)
         // A tool-calling turn has an EMPTY content, which this used to treat as
         // a malformed response.
         if (!parsed.data.message.content && toolCalls.length === 0) {
-            throw malformedProviderResponse('ollama', 'complete')
+            throw malformedProviderResponse('ollama', 'complete', { received: response.data, note: 'no message content and no tool calls' })
         }
         return {
             text: parsed.data.message.content,
@@ -190,7 +190,7 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
         // Ids are positional for Ollama, so they must be assigned once over the
         // whole stream rather than per line — otherwise every call is `-0`.
         const calls = collected.map((call, index) => ({ ...call, id: `${call.name}-${index}` }))
-        if (!stream.text && calls.length === 0) throw malformedProviderResponse('ollama', 'complete')
+        if (!stream.text && calls.length === 0) throw malformedProviderResponse('ollama', 'complete', { received: { text: stream.text, calls: calls.length }, note: 'stream ended with no text and no tool calls' })
         return {
             text: stream.text,
             model: input.model.id,

@@ -208,7 +208,7 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
             })
             requireHttpSuccess({ provider: config.provider, operation: 'list_models', status: response.status, data: response.data })
             const parsed = listSchema.safeParse(response.data)
-            if (!parsed.success) throw malformedProviderResponse(config.provider, 'list_models')
+            if (!parsed.success) throw malformedProviderResponse(config.provider, 'list_models', { received: response.data, issues: parsed.error.issues })
             return {
                 provider: config.provider,
                 models: parsed.data.data.map((model) => normalizeModel(config, model)),
@@ -227,13 +227,13 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
             })
             requireHttpSuccess({ provider: config.provider, operation: 'complete', status: response.status, data: response.data })
             const parsed = completionSchema.safeParse(response.data)
-            if (!parsed.success) throw malformedProviderResponse(config.provider, 'complete')
+            if (!parsed.success) throw malformedProviderResponse(config.provider, 'complete', { received: response.data, issues: parsed.error.issues })
             const choice = parsed.data.choices[0]!
             const text = contentText(choice.message.content ?? '')
             const toolCalls = parseOpenAiToolCalls(choice.message)
             // A tool-calling turn legitimately has NO text: refusing it as
             // malformed would break the loop before it started.
-            if (!text && toolCalls.length === 0) throw malformedProviderResponse(config.provider, 'complete')
+            if (!text && toolCalls.length === 0) throw malformedProviderResponse(config.provider, 'complete', { received: response.data, note: 'no text and no tool calls' })
             return {
                 text,
                 model: parsed.data.model ?? input.model.id,
@@ -277,7 +277,7 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 onReasoning: handlers.onReasoning,
             })
             const calls = toolCalls.calls()
-            if (!stream.text && calls.length === 0) throw malformedProviderResponse(config.provider, 'complete')
+            if (!stream.text && calls.length === 0) throw malformedProviderResponse(config.provider, 'complete', { received: { text: stream.text, calls: calls.length }, note: 'stream ended with no text and no tool calls' })
             return {
                 text: stream.text,
                 model: input.model.id,
