@@ -4,6 +4,11 @@ import { Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileChatOptionsMenu from '@/components/shell/TalosMobileChatOptionsMenu.vue'
 
+// Owner 2026-07-30: the non-immersive bar was too tall. 3rem (48px) is the
+// floor rather than a taste — the controls inside are min-h-11 (44px), the
+// smallest a touch target may be before taps start missing. Anything shorter
+// would have to shrink them, and a slimmer header is not worth a button you
+// have to aim at.
 // F1-T3 (D5): app-level header — hamburger opens the full-width sidebar,
 // centered session title. RIGHT = the 3-dot chat options (owner 2026-07-24:
 // "i 3 puntini anche nell'header versione non immersive") — the SAME menu the
@@ -42,7 +47,7 @@ const emit = defineEmits<{
          Claude). A very-low downward shadow dissolves into the content. -->
     <header
         data-testid="talos-mobile-header"
-        class="relative z-10 flex h-[calc(3.75rem+env(safe-area-inset-top))] shrink-0 items-center gap-2 bg-[var(--talos-header)]/92 px-3 pt-[env(safe-area-inset-top)] shadow-[0_8px_16px_-14px_rgba(0,0,0,0.55)] backdrop-blur"
+        class="relative z-10 flex h-[calc(3rem+env(safe-area-inset-top))] shrink-0 items-center gap-2 bg-[var(--talos-header)]/92 px-3 pt-[env(safe-area-inset-top)] shadow-[0_8px_16px_-14px_rgba(0,0,0,0.55)] backdrop-blur"
     >
         <Button
             v-if="!hideMenu"
