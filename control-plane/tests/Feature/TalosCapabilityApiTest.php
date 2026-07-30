@@ -22,6 +22,7 @@ final class TalosCapabilityApiTest extends TestCase
 
     public function test_capability_response_is_strict_versioned_and_distinguishes_current_from_planned_work(): void
     {
+        config(['services.talos.browser.worker_url' => 'http://127.0.0.1:3100']);
         $user = $this->authenticateTalosUser();
         $this->healthyProfile($user);
 
@@ -58,6 +59,23 @@ final class TalosCapabilityApiTest extends TestCase
         self::assertNotEmpty($records->get('models.local_runtime')['evidence']);
         self::assertArrayNotHasKey('subject', $response->json('data'));
         self::assertStringNotContainsString($user->email, $response->getContent());
+    }
+
+    public function test_browser_hmi_capability_is_blocked_without_configured_worker(): void
+    {
+        config(['services.talos.browser.worker_url' => null]);
+        $user = $this->authenticateTalosUser();
+        $this->healthyProfile($user);
+
+        $response = $this->getJson('/api/talos/capabilities')
+            ->assertOk();
+
+        $browser = collect($response->json('data.capabilities'))
+            ->firstWhere('id', 'browser.hmi');
+
+        self::assertSame('blocked', $browser['state']);
+        self::assertStringContainsString('browser worker', $browser['reason']);
+        self::assertContains('config:TALOS_BROWSER_WORKER_URL', $browser['evidence']);
     }
 
     public function test_endpoint_uses_only_the_authenticated_users_effective_state(): void

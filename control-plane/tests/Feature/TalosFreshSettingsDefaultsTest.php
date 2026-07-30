@@ -24,6 +24,10 @@ final class TalosFreshSettingsDefaultsTest extends TestCase
             'theme' => 'calm',
             'theme_motion_v6' => $expectedMotion,
             'ui_scale' => 1.0,
+            'prompt_cache' => [
+                'mode' => 'automatic',
+                'ttl' => null,
+            ],
             'chat_layout' => [
                 'message_scale' => 1.0,
                 'composer_mode' => 'full',

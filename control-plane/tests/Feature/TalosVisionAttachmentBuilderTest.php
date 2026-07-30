@@ -23,7 +23,7 @@ final class TalosVisionAttachmentBuilderTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Storage::fake('local');
+        $this->useIsolatedLocalStorage();
         $this->user = User::factory()->create();
     }
 
