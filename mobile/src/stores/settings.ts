@@ -10,6 +10,7 @@
 import { reactive, readonly } from 'vue'
 import { Preferences } from '@capacitor/preferences'
 import type { TalosSearchSourceId } from '@/lib/search/searchSources'
+import type { TalosLibrarySort } from '@/lib/libraryGrouping'
 import { TALOS_DEFAULT_CHAT_LAYOUT, sanitizeTalosChatLayout } from '@/lib/talosChatLayout'
 
 /** Owner 2026-07-25: "di default large font size e small chat font size". */
@@ -129,6 +130,15 @@ export interface TalosMobileShellPreferences {
     library_autosave_generated: boolean
     /** Owner 2026-07-25: remembered Library view (grid gallery / list). */
     library_view: 'grid' | 'list'
+    /**
+     * Owner 2026-07-30. Grouping by origin chat was a plain `ref`, so it reset
+     * on every visit — debt P6, and the reason a preference the owner set in
+     * July never survived a single reopen. It is remembered now, and the sort
+     * that arrived with it is remembered in the same place rather than becoming
+     * a second switch that forgets.
+     */
+    library_group_by_chat: boolean
+    library_sort: TalosLibrarySort
     /** Interface text size only; message prose has independent bubble_scale. */
     ui_font_scale: TalosFontScale
     /**
@@ -176,6 +186,9 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
      */
     library_autosave_generated: true,
     library_view: 'list',
+    // Owner 2026-07-25 set grouping on; it just never survived a reopen.
+    library_group_by_chat: true,
+    library_sort: 'recent',
     ui_font_scale: TALOS_DEFAULT_FONT_SCALE,
     streaming_animation: 'typewriter',
     debug_diagnostics: false,
@@ -210,6 +223,14 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         // Re-review 2026-07-25: this hardcoded 'grid' as the fallback, so the
         // documented 'list' default never shipped.
         library_view: record.library_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.library_view,
+        library_group_by_chat: typeof record.library_group_by_chat === 'boolean'
+            ? record.library_group_by_chat
+            : DEFAULT_SHELL_PREFERENCES.library_group_by_chat,
+        // An unrecognised sort falls back rather than reaching the grouping,
+        // where it would silently mean "no sort at all".
+        library_sort: record.library_sort === 'oldest' || record.library_sort === 'name'
+            ? record.library_sort
+            : DEFAULT_SHELL_PREFERENCES.library_sort,
         ui_font_scale: parseTalosFontScale(record.ui_font_scale),
         streaming_animation: record.streaming_animation === 'fade' ? 'fade' : 'typewriter',
         // Fail closed: anything unrecognised is OFF, so a corrupt preference

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { Globe } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import { useTalosSourceCardIcons } from '@/composables/useTalosSourceCardIcons'
 import type { TalosMobileWebSource } from '@/stores/chat'
@@ -107,7 +108,24 @@ async function openSource(source: TalosMobileWebSource): Promise<void> {
                         :aria-label="$t('chat.openSource', { title: source.title || siteOf(source) })"
                         @click="openSource(source)"
                     >
-                    <p class="truncate text-xs text-[var(--talos-text)]">{{ source.title || siteOf(source) }}</p>
+                    <p class="flex min-w-0 items-center gap-1.5 text-xs text-[var(--talos-text)]">
+                        <!--
+                            Owner 2026-07-30: the drawer was left with letters
+                            while the chip in front of it got real marks. The
+                            bytes are the same ones, already on disk, so showing
+                            them here costs nothing and their absence in a panel
+                            opened FROM the marks read as broken.
+                        -->
+                        <img
+                            v-if="icons[source.url]"
+                            data-testid="talos-source-drawer-favicon"
+                            :src="icons[source.url]"
+                            alt=""
+                            class="size-4 shrink-0 rounded-sm object-contain"
+                        >
+                        <Globe v-else class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                        <span class="min-w-0 flex-1 truncate">{{ source.title || siteOf(source) }}</span>
+                    </p>
                     <p class="mt-0.5 truncate text-2xs text-[var(--talos-muted)]">{{ siteOf(source) }}</p>
                     <!-- D7 all the way to the surface: a page that declares no
                          date says so, rather than leaving a blank the reader

@@ -616,8 +616,9 @@ const mediaScope = computed(() => {
                     {{ $t('library.emptyChatBody') }}
                 </p>
 
-                <ul
+                <div
                     v-else-if="tab === 'links'"
+                    role="list"
                     data-testid="talos-chat-media-links"
                     class="flex flex-col gap-2"
                     :aria-label="$t('library.savedLinksInChat')"
@@ -633,7 +634,7 @@ const mediaScope = computed(() => {
                         @open-copy="openSavedCopy(row.fileId)"
                         @open-browser="openLink(row.url)"
                     />
-                </ul>
+                </div>
 
                 <div v-else class="space-y-1" role="list" data-testid="talos-chat-media-grid">
                     <TalosMobileLibraryFileRow

@@ -1,4 +1,16 @@
 <script setup lang="ts">
+/**
+ * A saved link as a list row.
+ *
+ * The root is a `div` with `role="listitem"`, not an `li`: owner 2026-07-30
+ * asked for files and links in ONE list, and a file row is not an `li` — an `li`
+ * among divs, or a div inside a `ul`, is invalid either way. The role carries
+ * the meaning to assistive tech, which is what the element was for.
+ *
+ * (The explanation lives here rather than above the root element because a
+ * comment there makes this a multi-root component, and a fragment has no
+ * attributes of its own — which is exactly how LINK-PARITY-01 caught it.)
+ */
 import { ExternalLink, Globe } from '@lucide/vue'
 import type { TalosSavedLinkRow } from '@/lib/vaultLibrary'
 
@@ -27,7 +39,8 @@ const emit = defineEmits<{
 </script>
 
 <template>
-    <li
+    <div
+        role="listitem"
         data-talos-saved-link-row
         class="flex min-w-0 items-center gap-1 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] pr-1"
     >
@@ -64,5 +77,5 @@ const emit = defineEmits<{
         >
             <ExternalLink class="size-4" aria-hidden="true" />
         </button>
-    </li>
+    </div>
 </template>
