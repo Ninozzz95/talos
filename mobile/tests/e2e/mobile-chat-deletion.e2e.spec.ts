@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { closeToolSheet } from './toolSheet'
 
 /**
  * Owner 2026-07-26: "quando cancelli una chat non ti cancella i relativi
@@ -53,10 +54,7 @@ async function configureGemini(page: Page): Promise<void> {
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
     await page.getByLabel('Default chat model').click()
     await page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]').click()
-    while (await page.locator(SHEET).count() > 0) {
-        await page.locator('[data-testid="talos-sheet-back"]').click()
-        await page.waitForTimeout(320)
-    }
+    await closeToolSheet(page)
 }
 
 async function sendMessage(page: Page, text: string): Promise<void> {

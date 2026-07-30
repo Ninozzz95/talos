@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { openAiCompletionFulfill, type FulfillPayload } from './completionMock'
+import { closeToolSheet } from './toolSheet'
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
@@ -50,10 +51,7 @@ async function setToolPermission(page: Page, kind: 'write' | 'outbound'): Promis
 }
 
 async function closeSettings(page: Page): Promise<void> {
-    for (let index = 0; index < 2 && await page.locator(SHEET).count() > 0; index += 1) {
-        await page.getByTestId('talos-sheet-back').click()
-        await page.waitForTimeout(320)
-    }
+    await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
 }
 

@@ -1,6 +1,7 @@
 import { expect, test, type FileChooser, type Locator, type Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { openAiCompletionFulfill } from './completionMock'
+import { closeToolSheet } from './toolSheet'
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
@@ -50,8 +51,7 @@ async function configureVisionModel(page: Page): Promise<Array<Record<string, un
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
     await page.getByLabel('Default chat model').click()
     await page.locator('[data-testid="talos-themed-select-item"][data-value="openai:gpt-e2e-vision"]').click()
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
     return completions
 }
@@ -147,8 +147,7 @@ test('sends text and image evidence, downloads device copies, reuses Vault files
     await page.getByLabel('Library context mode').click()
     await page.locator('[data-testid="talos-themed-select-item"][data-value="broad_compat_v1"]').click()
     await expect(page.getByTestId('talos-library-mode-chooser')).toHaveAttribute('data-policy-source', 'global')
-    if (await page.locator(SHEET).count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
-    if (await page.locator(SHEET).count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
 
     // Owner 2026-07-28: the scoped media Library and the global Library are one
@@ -303,8 +302,7 @@ test('sends text and image evidence, downloads device copies, reuses Vault files
 
     await globalActions.click()
     await page.getByRole('menuitem', { name: 'Attach release-brief.txt to message' }).click()
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
     await expect(page.getByTestId('talos-mobile-attachment-tray')).toContainText('release-brief.txt')
     await page.getByLabel('Remove release-brief.txt').click()
@@ -320,8 +318,7 @@ test('sends text and image evidence, downloads device copies, reuses Vault files
     await expect(vault).not.toContainText('release-brief.txt')
     await expect(vault).toContainText('reference.png')
 
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
-    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
     await page.reload()
     const historicalAttachments = page.getByRole('list', { name: 'Attached files' })
