@@ -18,11 +18,17 @@ export interface TalosFilesystemPort {
         recursive?: boolean
     }): Promise<unknown>
     deleteFile(options: { path: string; directory?: Directory }): Promise<unknown>
+    /** Presence without reading: card capture asks before any network call. */
+    stat(options: { path: string; directory?: Directory }): Promise<unknown>
 }
 
 export interface TalosAttachmentFileStore {
     copyToPrivate(file: TalosPickedFile, fileId: string): Promise<TalosPrivateFileCopy>
     readPrivate(privateUri: string): Promise<Uint8Array>
+    /** Source cards: write already-encoded bytes under the cards prefix. */
+    writePrivateBytes(privateUri: string, base64: string): Promise<void>
+    /** Source cards: is it already stored? Asked before any network call. */
+    existsPrivate(privateUri: string): Promise<boolean>
     deletePrivate(privateUri: string): Promise<void>
 }
 
@@ -69,8 +75,20 @@ async function decodeData(data: string | Blob): Promise<Uint8Array> {
     return new Uint8Array(await data.arrayBuffer())
 }
 
+/**
+ * Source card bytes — a favicon and a preview keyed by URL — live beside the
+ * attachments rather than among them: they are not files the user added, and
+ * mixing them would make the attachment area untrue.
+ */
+const CARD_PREFIX = 'talos-vault/cards/'
+
 function assertPrivateUri(value: string): string {
-    if (!value.startsWith(PRIVATE_PREFIX) || value.includes('..') || value.includes('\\')) {
+    // Widened to a second prefix, and the traversal checks deliberately stay
+    // outside that choice: a card path is derived from a URL a stranger
+    // controls, so accepting one more directory must not accept a way out of
+    // it. `startsWith` alone would let `talos-vault/cardsX/` through.
+    const allowed = value.startsWith(PRIVATE_PREFIX) || value.startsWith(CARD_PREFIX)
+    if (!allowed || value.includes('..') || value.includes('\\')) {
         throw new Error('TALOS_ATTACHMENT_PRIVATE_URI_INVALID')
     }
     return value
@@ -133,6 +151,34 @@ export function createAttachmentFileStore(
                 path: assertPrivateUri(privateUri),
                 directory: Directory.Data,
             })).data)
+        },
+        /** Write already-encoded bytes: a captured favicon or preview. */
+        async writePrivateBytes(privateUri, base64) {
+            const target = assertPrivateUri(privateUri)
+            await filesystem.mkdir({
+                path: CARD_PREFIX.slice(0, -1),
+                directory: Directory.Data,
+                recursive: true,
+            }).catch(() => undefined)
+            await filesystem.writeFile({
+                path: target,
+                data: base64,
+                directory: Directory.Data,
+                recursive: true,
+            })
+        },
+        /**
+         * Is it already there? Card capture asks this before any network call,
+         * so a site found in a second search costs nothing.
+         */
+        async existsPrivate(privateUri) {
+            const target = assertPrivateUri(privateUri)
+            try {
+                await filesystem.stat({ path: target, directory: Directory.Data })
+                return true
+            } catch {
+                return false
+            }
         },
         deletePrivate,
     }
