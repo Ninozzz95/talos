@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
-import { Check, Download, EllipsisVertical, Images, MessageSquarePlus, Pencil, Trash2, X } from '@lucide/vue'
+import { Check, Download, EllipsisVertical, EyeOff, Images, MessageSquarePlus, Pencil, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
@@ -35,6 +35,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
     newChat: []
+    temporaryChat: []
     rename: [title: string]
     delete: [{ deleteMedia: boolean }]
     export: []
@@ -119,6 +120,14 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
             >
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('newChat')">
                     <MessageSquarePlus class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.newChat') }}
+                </button>
+                <!--
+                    F-14. Beside New chat, because it is the same act with one
+                    thing taken away — not a mode hidden in settings that you
+                    have to remember to turn off again.
+                -->
+                <button type="button" role="menuitem" data-testid="talos-chat-options-temporary" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('temporaryChat')">
+                    <EyeOff class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.temporaryChat') }}
                 </button>
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="openRename">
                     <Pencil class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.renameChat') }}
