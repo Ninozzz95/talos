@@ -554,6 +554,7 @@ export const TALOS_EN_MESSAGES = {
         },
         attachFile: 'Attach a file',
         attach: 'Attach',
+        pickPhotos: 'Photos',
         browseOn: 'Browsing on',
         browseWeb: 'Browse the web',
         improvePrompt: 'Improve prompt',

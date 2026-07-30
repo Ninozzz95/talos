@@ -275,4 +275,20 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- F5.3: explicit — the mic permission dialog can never depend on manifest merging. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!--
+        F-6, the camera. Explicit for the same reason the mic is: a permission
+        dialog must never depend on manifest merging.
+
+        NOTHING is declared for reading photos. Choosing pictures goes through
+        Android's Photo Picker, which hands over the chosen items and asks for
+        no storage permission at all — so the app never holds the right to read
+        the whole gallery, and there is no permission here to be audited,
+        justified, or abused later.
+
+        The camera is declared as NOT required so the app still installs on a
+        device without one; the drawer entry simply returns nothing there.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>
