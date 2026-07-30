@@ -55,6 +55,8 @@ import ChatScreen from '@/screens/ChatScreen.vue'
 
 interface FakeMessage { id: string; role: 'user' | 'assistant' | 'system'; content: string; created_at: string; state: string; model_profile_id?: string | null; run_id?: string | null; metadata?: Record<string, unknown> }
 
+let registered: { newSession?: (options?: unknown) => Promise<void> } | null = null
+
 function makeController(messages: FakeMessage[] = []) {
     const sessions = reactive<Array<{ id: string; title: string; metadata?: Record<string, unknown> }>>([])
     const drafts = new Map<string, string>()
@@ -139,10 +141,28 @@ function makeController(messages: FakeMessage[] = []) {
         init: vi.fn().mockResolvedValue(undefined),
         newSession: vi.fn().mockResolvedValue(undefined),
         // R2-7: ChatScreen registers its orchestrator on mount.
+        /**
+         * Owner 2026-07-31: this fake is why "Rendila temporanea" shipped broken
+         * twice.
+         *
+         * `register` threw the orchestrator away and `newSession` resolved on
+         * its own, so every test exercised a path the app does not have. The
+         * real lifecycle DELEGATES to whatever the screen registered — and the
+         * screen's orchestrator was dropping the options. A fake that skips the
+         * middle cannot see a bug that lives in the middle.
+         *
+         * It delegates now, exactly as the real one does.
+         */
         sessionLifecycle: {
-            register: vi.fn(),
-            unregister: vi.fn(),
-            newSession: vi.fn().mockResolvedValue(undefined),
+            register: vi.fn((next: { newSession?: (options?: unknown) => Promise<void> }) => {
+                registered = next
+            }),
+            unregister: vi.fn(() => { registered = null }),
+            newSession: vi.fn((options?: unknown) => (
+                registered?.newSession
+                    ? registered.newSession(options)
+                    : Promise.resolve()
+            )),
             selectSession: vi.fn().mockResolvedValue(undefined),
             renameSession: vi.fn().mockResolvedValue(undefined),
             deleteSession: vi.fn().mockResolvedValue(undefined),
@@ -554,7 +574,33 @@ describe('ChatScreen (functional, local-first)', () => {
 
         await wrapper.get('[data-testid="talos-make-temporary"]').trigger('click')
 
-        expect(controller.sessionLifecycle.newSession).toHaveBeenCalledWith({ ephemeral: true })
+        /**
+         * Owner 2026-07-31, after this shipped broken TWICE: assert the OUTCOME,
+         * not the call.
+         *
+         * The previous version of this test mocked the controller and checked
+         * that `newSession` was called with `{ ephemeral: true }` — which it
+         * was, and the feature was still broken, because the orchestrator sits
+         * BETWEEN the screen and the controller and declared no parameters. The
+         * option was dropped one frame after being chosen, and a test looking at
+         * the call could never see it.
+         *
+         * So this goes through the real orchestrator the screen registers, and
+         * asks what the controller was actually asked to do at the far end.
+         */
+        expect(controller.newSession).toHaveBeenCalledWith({ ephemeral: true })
+    })
+
+    it('carries the ordinary case through the same path, so the guard is not vacuous', async () => {
+        const controller = makeController()
+        controller.chat.activeSession.value = { id: 'tmp-abc', title: 'Temporanea' }
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-make-permanent"]').trigger('click')
+
+        expect(controller.newSession).toHaveBeenCalledWith(undefined)
     })
 
     it('withdraws the offer once the chat has something in it', async () => {

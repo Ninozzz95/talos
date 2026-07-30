@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Eye, EyeOff } from '@lucide/vue'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
+import { talosTemporaryWelcome } from '@/lib/chat/temporaryWelcome'
 import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowDown, AlertTriangle, CheckCircle2, Circle, Globe2, X } from '@lucide/vue'
 import { useRouter } from 'vue-router'
@@ -48,7 +49,7 @@ const TalosMobileBrowserActivity = defineAsyncComponent(
 const emit = defineEmits<{ export: [] }>()
 
 const router = useRouter()
-const { t } = useTalosI18n()
+const { t, locale } = useTalosI18n()
 const controller = useChatController()
 const settings = useSettingsStore()
 const {
@@ -111,6 +112,16 @@ const isTemporaryChat = computed(() => talosIsEphemeralSessionId(activeSessionId
 async function makeTemporary(): Promise<void> {
     await controller.sessionLifecycle.newSession({ ephemeral: true })
 }
+
+/**
+ * Owner 2026-07-31: the welcome had to be ABOUT incognito, and had to be a set
+ * — the ordinary one cycles, and one fixed sentence reads like a warning label
+ * rather than the app talking. Seeded by the session, so it is stable inside a
+ * chat and different between chats.
+ */
+const temporaryWelcome = computed(
+    () => talosTemporaryWelcome(activeSessionId.value, locale.value),
+)
 
 /** The way back. Same shape, same reason it is only offered while empty. */
 async function makePermanent(): Promise<void> {
@@ -380,11 +391,23 @@ defineExpose({ newSession, selectSession, renameSession, deleteSession, sessionA
 // every surface (Chats page, tablet panel, sidebar) flows through it.
 // Errors PROPAGATE: each caller keeps its own error UX (dialog vs toast).
 const orchestrator = {
-    async newSession(): Promise<void> {
+    /**
+     * Owner 2026-07-31, twice: "Rendila temporanea" made a new ORDINARY chat on
+     * every press, and the button never changed.
+     *
+     * This was why. The orchestrator is registered on the controller, so every
+     * surface flows through it — and it declared no parameters, so `{ ephemeral:
+     * true }` was dropped here, silently, one frame after being chosen. The
+     * feature was never reaching the store at all.
+     *
+     * Options are forwarded now. And a test that mocks the controller cannot
+     * see this: the one below asserts the resulting SESSION, not the call.
+     */
+    async newSession(options?: { ephemeral?: boolean }): Promise<void> {
         controller.clearPromptEnhancement()
         await draft.flush()
         await attachments.discardAll()
-        await controller.newSession()
+        await controller.newSession(options)
         await draft.activateScope(activeSessionId.value ?? 'new')
     },
     async selectSession(sessionId: string): Promise<void> {
@@ -749,7 +772,7 @@ onBeforeUnmount(() => {
                         <p
                             data-testid="talos-temporary-welcome"
                             class="talos-welcome-title mt-2"
-                        >{{ t('chat.temporaryWelcome') }}</p>
+                        >{{ temporaryWelcome }}</p>
                         <p class="mt-1 max-w-[28rem] text-xs leading-5 text-[var(--talos-muted)]">
                             {{ t('chat.temporaryWelcomeSub') }}
                         </p>
