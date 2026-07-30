@@ -1,4 +1,5 @@
 import { computed, reactive, readonly, ref, type ComputedRef, type Ref } from 'vue'
+import type { TalosPickedFile } from '@/services/nativeFilePicker'
 import type { TalosTranslate } from '@/i18n/contracts'
 import { TALOS_MOBILE_ATTACHMENT_LIMITS } from '@/lib/chat/attachmentContracts'
 import type {
@@ -52,6 +53,8 @@ export interface TalosMobileAttachmentsController {
     initialize(): Promise<void>
     refreshVault(): Promise<void>
     selectFiles(): Promise<void>
+    takePhoto(): Promise<void>
+    pickPhotos(): Promise<void>
     /** Save a chat-generated artifact into the Library (origin='generated'). */
     saveGenerated(
         input: TalosGeneratedTextInput,
@@ -214,12 +217,20 @@ export function useTalosMobileAttachments(
         }
     }
 
-    async function selectFiles(): Promise<void> {
+    /**
+     * Everything that happens AFTER a picker hands over files.
+     *
+     * F-6 added two more ways to choose a file — the camera and the photo
+     * picker — and each needed exactly this. Extracted rather than copied,
+     * because a second ingestion path is how two surfaces end up validating,
+     * naming and failing differently for the same picture.
+     */
+    async function addPickedFiles(pick: () => Promise<TalosPickedFile[]>): Promise<void> {
         if (selecting.value) return
         selecting.value = true
         error.value = null
         try {
-            const pickedFiles = await options.picker.pickFiles()
+            const pickedFiles = await pick()
             if (pickedFiles.length === 0 || !validateAddition(pickedFiles)) return
             const jobs = pickedFiles.map((pickedFile) => {
                 const draft: TalosMobileAttachmentDraft = {
@@ -247,6 +258,29 @@ export function useTalosMobileAttachments(
         } finally {
             selecting.value = false
         }
+    }
+
+    function selectFiles(): Promise<void> {
+        return addPickedFiles(() => options.picker.pickFiles())
+    }
+
+    /** F-6: straight to the camera. */
+    function takePhoto(): Promise<void> {
+        return addPickedFiles(async () => {
+            const { createTalosNativeCamera } = await import('@/services/nativeCamera')
+            return createTalosNativeCamera().takePhoto()
+        })
+    }
+
+    /**
+     * F-6: Android's Photo Picker — the chosen pictures only, and no storage
+     * permission asked for or held.
+     */
+    function pickPhotos(): Promise<void> {
+        return addPickedFiles(async () => {
+            const { createTalosNativeCamera } = await import('@/services/nativeCamera')
+            return createTalosNativeCamera().pickPhotos()
+        })
     }
 
     async function settleGenerated(result: TalosVaultTrayItem, retainGrant = false): Promise<TalosVaultTrayItem> {
@@ -508,6 +542,8 @@ export function useTalosMobileAttachments(
         initialize,
         refreshVault,
         selectFiles,
+        takePhoto,
+        pickPhotos,
         saveGenerated,
         saveGeneratedBinary,
         previewUrl,

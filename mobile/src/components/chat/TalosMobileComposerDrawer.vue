@@ -6,7 +6,7 @@
  * quiet action rows. Loaded lazily by the composer only in drawer mode.
  */
 import {
-    BrainCircuit, Database, FlaskConical, Globe2, Paperclip, Sparkles,
+    BrainCircuit, Camera as CameraIcon, Database, FlaskConical, Globe2, Images, Paperclip, Sparkles,
 } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
@@ -27,6 +27,8 @@ const props = defineProps<{
 const emit = defineEmits<{
     close: []
     attach: []
+    takePhoto: []
+    pickPhotos: []
     openContext: []
     openModelLab: []
     toggleBrowse: [enabled: boolean]
@@ -36,7 +38,9 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useTalosI18n()
-function single(action: 'attach' | 'openContext' | 'openModelLab' | 'enhancePrompt'): void {
+function single(
+    action: 'attach' | 'takePhoto' | 'pickPhotos' | 'openContext' | 'openModelLab' | 'enhancePrompt',
+): void {
     emit(action as never)
     emit('close')
 }
@@ -64,6 +68,39 @@ function effortLabel(level: string): string {
                             <Paperclip class="size-5" aria-hidden="true" />
                         </span>
                         {{ $t('chat.attach') }}
+                    </button>
+                    <!--
+                        F-6. Camera and Photos sit beside Attach because they are
+                        the two things people reach for most and the document
+                        picker serves neither well.
+                        Photos is NOT a duplicate of Attach: it goes through
+                        Android's Photo Picker, which hands over the chosen
+                        pictures and needs no storage permission at all — the app
+                        never gains the right to read the whole gallery.
+                    -->
+                    <button
+                        type="button"
+                        data-testid="talos-drawer-take-photo"
+                        :disabled="!attachmentsAvailable"
+                        class="talos-pressable flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 text-sm text-[var(--talos-text)] disabled:opacity-50"
+                        @click="single('takePhoto')"
+                    >
+                        <span class="flex size-12 items-center justify-center rounded-full bg-[var(--talos-active)]">
+                            <CameraIcon class="size-5" aria-hidden="true" />
+                        </span>
+                        {{ $t('chat.takePhoto') }}
+                    </button>
+                    <button
+                        type="button"
+                        data-testid="talos-drawer-pick-photos"
+                        :disabled="!attachmentsAvailable"
+                        class="talos-pressable flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 text-sm text-[var(--talos-text)] disabled:opacity-50"
+                        @click="single('pickPhotos')"
+                    >
+                        <span class="flex size-12 items-center justify-center rounded-full bg-[var(--talos-active)]">
+                            <Images class="size-5" aria-hidden="true" />
+                        </span>
+                        {{ $t('chat.pickPhotos') }}
                     </button>
                     <button
                         type="button"

@@ -135,6 +135,8 @@ const emit = defineEmits<{
     selectEffort: [level: TalosMobileEffortLevel]
     selectThinking: [enabled: boolean]
     attach: []
+    takePhoto: []
+    pickPhotos: []
     removeAttachment: [itemId: string]
     dismissAttachmentError: []
     openContext: []
@@ -979,6 +981,8 @@ watch(() => props.prompt, () => {
             :context-available="contextAvailable"
             @close="toolDrawerOpen = false"
             @attach="emit('attach')"
+            @take-photo="emit('takePhoto')"
+            @pick-photos="emit('pickPhotos')"
             @open-context="emit('openContext')"
             @open-model-lab="emit('openModelLab')"
             @toggle-browse="emit('toggleBrowse', $event)"

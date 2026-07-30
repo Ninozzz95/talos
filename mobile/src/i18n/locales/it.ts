@@ -557,6 +557,7 @@ export const TALOS_IT_MESSAGES = {
         },
         attachFile: 'Allega un file',
         attach: 'Allega',
+        pickPhotos: 'Foto',
         browseOn: 'Navigazione attiva',
         browseWeb: 'Naviga sul web',
         improvePrompt: 'Migliora prompt',
