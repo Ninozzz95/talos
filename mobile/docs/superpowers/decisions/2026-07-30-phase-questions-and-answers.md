@@ -122,6 +122,24 @@ lo stesso problema rimandato.
 Effetto: la documentazione smette di degradarsi in silenzio e comincia a
 lamentarsi.
 
+### Terzo giro di conferme
+
+| # | Domanda | Risposta | Data |
+|---|---|---|---|
+| D-26 | Quanto spazio possono prendersi i modelli locali? | **Chiede ogni volta**, nessun tetto complessivo — *scelta dell'owner CONTRO la mia raccomandazione, che era un tetto* | 2026-07-30 |
+| D-27 | Scaricare modelli sotto rete mobile? | **Solo Wi-Fi**, con deroga esplicita e il peso mostrato prima | 2026-07-30 |
+| D-28 | Quanto a fondo verifica Deep Research? | **Verifica tutto**, dichiarando il tempo previsto prima di partire | 2026-07-30 |
+| D-29 | Cosa può fare il modello su un'installazione nuova? | **Solo osservare.** Scrittura, dispositivo e terminale spenti; ogni potere si accende a mano leggendo cosa comporta | 2026-07-30 |
+
+**Mitigazione registrata su D-26.** L'obiezione alla scelta "chiede ogni volta"
+era che dieci sì di fila riempiono il telefono lo stesso, e un telefono pieno non
+dà un errore chiaro: si comporta male e nessuno collega la lentezza all'app che
+ha riempito il disco tre settimane prima. L'owner ha scelto comunque, ed è sua
+facoltà. Mitigazione accettata **dentro** la sua scelta, non contro:
+a ogni scaricamento si mostra lo spazio libero residuo, e se l'operazione porta
+il telefono sotto una soglia di sicurezza lo si dice **prima**, non dopo.
+Nessun tetto: solo il numero sotto gli occhi nel momento in cui si decide.
+
 ---
 
 ## Proposte mie — CONSIGLIATE, in attesa del sì dell'owner
