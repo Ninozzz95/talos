@@ -45,6 +45,16 @@ export interface TalosWebSourceArchive {
 interface TalosWebSourceArchiveOptions {
     source: TalosSearchSourceId
     save(input: TalosWebSourceArchiveSaveInput): Promise<unknown>
+    /**
+     * Capture the source cards — favicon, title, preview — for URLs that were
+     * just stored. Called AFTER a successful save and deliberately not awaited:
+     * a link the user asked to keep is kept whether or not its favicon arrives,
+     * and the reply he is waiting for must not queue behind a slow site.
+     *
+     * Optional so a caller with no network boundary — the web build, and every
+     * existing test — simply has no cards.
+     */
+    captureCards?(urls: readonly string[]): void
 }
 
 const MAX_URL_CHARS = 4_096
@@ -174,6 +184,22 @@ export function createTalosWebSourceArchive(
         citations.set(source.url, source)
     }
 
+    /**
+     * Ask for cards, and never let the asking matter.
+     *
+     * A capture port that throws on the spot — no network, no boundary on this
+     * platform — must not turn a stored link into a failed one. The favicon is
+     * decoration; the link is what the user asked for.
+     */
+    function requestCards(urls: readonly string[]): void {
+        if (!options.captureCards || urls.length === 0) return
+        try {
+            options.captureCards(urls)
+        } catch {
+            // Best-effort by construction.
+        }
+    }
+
     async function rememberSearch(
         query: string,
         results: readonly TalosSearchResult[],
@@ -232,6 +258,9 @@ export function createTalosWebSourceArchive(
                 sourceUrl: null,
                 sourceLinks: entries.map(({ url, title }) => ({ url, title })),
             })
+            // Only now: cards for links that were never stored would leave
+            // bytes on the device belonging to nothing.
+            requestCards(entries.map((entry) => entry.url))
             return {
                 policy: 'stored',
                 saved: entries.length,
@@ -274,6 +303,7 @@ export function createTalosWebSourceArchive(
                 page.text,
             ].filter(Boolean).join('\n'),
         })
+        requestCards([url])
         cite({
             url,
             title,
