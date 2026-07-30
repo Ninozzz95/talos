@@ -45,7 +45,7 @@ function mountComposer(overrides: Record<string, unknown> = {}) {
 
 describe('the reasoning state on the model pill', () => {
     it('shows a themed brain, and keeps the words for a tablet', () => {
-        const wrapper = mountComposer()
+        const wrapper = mountComposer({ thinking: true })
 
         const icon = wrapper.get('[data-testid="talos-composer-reasoning-icon"]')
         // Themed, not a grey glyph: it is the one thing left on a phone.
@@ -61,7 +61,7 @@ describe('the reasoning state on the model pill', () => {
         const words = wrapper.get('[data-testid="talos-composer-reasoning-label"]')
         expect(words.classes()).toContain('hidden')
         expect(words.classes()).toContain('md:inline')
-        expect(words.text()).toBe('High')
+        expect(words.text()).toBe('Thinking')
     })
 
     it('says "thinking" rather than an effort level when thinking is on', () => {
@@ -87,6 +87,26 @@ describe('the reasoning state on the model pill', () => {
         expect(chipOf(off)).not.toContain('High')
         // The model is still the subject of the button; reasoning is an addition.
         expect(chipOf(on)).toContain('Claude Opus')
+    })
+
+    /**
+     * Owner 2026-07-30: «l'icona cervello non si disattiva se ragionamento
+     * esteso viene disattivato».
+     *
+     * The cause was inherited, not introduced: `effort` defaults to 'high' and
+     * rarely returns to 'off', so a condition of "thinking OR effort" was true
+     * almost always and the light never went out. A light that never goes out
+     * is not an indicator. The icon follows the switch the user flips; the
+     * words still report the effort, which is a real dial of its own.
+     */
+    it('puts the brain out when extended thinking is switched off', () => {
+        const on = mountComposer({ thinking: true, selectedEffort: 'high' })
+        expect(on.find('[data-testid="talos-composer-reasoning-icon"]').exists()).toBe(true)
+
+        const off = mountComposer({ thinking: false, selectedEffort: 'high' })
+        expect(off.find('[data-testid="talos-composer-reasoning-icon"]').exists()).toBe(false)
+        // The effort is still worth reading on a tablet — it just is not a brain.
+        expect(off.get('[data-testid="talos-composer-reasoning-label"]').text()).toBe('High')
     })
 
     it('shows nothing at all when reasoning is off', () => {

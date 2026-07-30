@@ -522,6 +522,24 @@ describe('ChatScreen (functional, local-first)', () => {
     })
 
     /**
+     * Owner 2026-07-30: the offer had no way back. A switch you can only flip
+     * one way is a trap — you try the mode to see what it is and cannot undo
+     * it. Same rule as its twin: only while the chat is empty, because that is
+     * the only moment when leaving costs nothing.
+     */
+    it('offers the way back out of a temporary chat', async () => {
+        const controller = makeController()
+        controller.chat.activeSession.value = { id: 'tmp-abc', title: 'Temporanea' }
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-make-permanent"]').trigger('click')
+
+        expect(controller.sessionLifecycle.newSession).toHaveBeenCalledWith()
+    })
+
+    /**
      * The offer had to reach every New chat button. A menu on New chat would
      * have taxed the most frequent action in the app with an extra tap; an
      * empty ordinary chat is where every one of those buttons lands, and the

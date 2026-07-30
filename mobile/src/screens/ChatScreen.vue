@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { EyeOff } from '@lucide/vue'
+import { Eye, EyeOff } from '@lucide/vue'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowDown, AlertTriangle, CheckCircle2, Circle, Globe2, X } from '@lucide/vue'
@@ -110,6 +110,11 @@ const isTemporaryChat = computed(() => talosIsEphemeralSessionId(activeSessionId
  */
 async function makeTemporary(): Promise<void> {
     await controller.sessionLifecycle.newSession({ ephemeral: true })
+}
+
+/** The way back. Same shape, same reason it is only offered while empty. */
+async function makePermanent(): Promise<void> {
+    await controller.sessionLifecycle.newSession()
 }
 const libraryTurnOverride = ref<TalosLibraryTurnOverride | null>(null)
 const sessionLibraryContextPolicy = computed(() =>
@@ -740,11 +745,15 @@ onBeforeUnmount(() => {
                         :class="composerExpanded ? 'mt-1 text-2xl' : 'mt-2 text-4xl sm:text-5xl'"
                     >TALOS</span>
                     <TalosWelcomeTitle v-if="!isTemporaryChat" />
-                    <p
-                        v-else
-                        data-testid="talos-temporary-welcome"
-                        class="talos-welcome-title mt-2 text-[var(--talos-muted)]"
-                    >{{ t('chat.temporaryWelcome') }}</p>
+                    <template v-else>
+                        <p
+                            data-testid="talos-temporary-welcome"
+                            class="talos-welcome-title mt-2"
+                        >{{ t('chat.temporaryWelcome') }}</p>
+                        <p class="mt-1 max-w-[28rem] text-xs leading-5 text-[var(--talos-muted)]">
+                            {{ t('chat.temporaryWelcomeSub') }}
+                        </p>
+                    </template>
 
                     <!--
                         Owner 2026-07-30: the temporary mode had to be reachable
@@ -765,6 +774,23 @@ onBeforeUnmount(() => {
                     >
                         <EyeOff class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
                         {{ t('chat.makeTemporary') }}
+                    </button>
+                    <!--
+                        Owner 2026-07-30: the offer had no way back. A switch you
+                        can only flip one way is a trap — you try the mode to see
+                        what it is and cannot undo it. Same rule as its twin: it
+                        exists only while the chat is empty, because that is the
+                        only moment when leaving costs nothing.
+                    -->
+                    <button
+                        v-if="isTemporaryChat && !composerExpanded"
+                        type="button"
+                        data-testid="talos-make-permanent"
+                        class="talos-pressable mt-5 inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)]/80 px-4 text-xs text-[var(--talos-muted)] backdrop-blur transition-colors duration-150 hover:text-[var(--talos-text)]"
+                        @click="makePermanent"
+                    >
+                        <Eye class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                        {{ t('chat.makePermanent') }}
                     </button>
 
                     <!-- F2-T6 first-run setup: REAL progress only, dismissible. -->

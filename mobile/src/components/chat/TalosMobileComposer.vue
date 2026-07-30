@@ -333,7 +333,21 @@ function effortLabel(level: string): string {
  * twice. It goes into the name now, and the name still leads with the model,
  * because the model is what the button is for.
  */
-const reasoningActive = computed(() => Boolean(
+/**
+ * Owner 2026-07-30: the brain would not go out when extended thinking was
+ * switched off.
+ *
+ * The cause was inherited, not introduced: `effort` defaults to 'high' and is
+ * rarely set back to 'off', so a condition of "thinking OR effort is on" was
+ * true almost always. The old text version hid it — it simply swapped the word
+ * "Ragionamento" for "Alto" and looked busy either way.
+ *
+ * So the ICON means the switch the user flips, and nothing else. The words
+ * still report the effort, because that dial is real too — but a light that
+ * never goes out is not an indicator, it is decoration.
+ */
+const reasoningActive = computed(() => Boolean(selectedProfile.value && props.thinking))
+const reasoningWordsActive = computed(() => Boolean(
     selectedProfile.value && (props.thinking || props.selectedEffort !== 'off'),
 ))
 const reasoningLabel = computed(() => (
@@ -342,7 +356,7 @@ const reasoningLabel = computed(() => (
 const modelChipLabel = computed(() => {
     const name = selectedProfile.value?.display_name ?? t('chat.chooseModel')
     const base = `${t('chat.chooseModelProfile')}: ${name}`
-    return reasoningActive.value ? `${base} · ${reasoningLabel.value}` : base
+    return reasoningWordsActive.value ? `${base} · ${reasoningLabel.value}` : base
 })
 const rightActionDisabled = computed(() => {
     if (rightAction.value === 'send') return !canSubmit.value
@@ -562,7 +576,7 @@ watch(() => props.prompt, () => {
         ref="composerRoot"
         data-testid="talos-mobile-composer"
         :data-talos-motion-intent="composerMotionIntent ?? undefined"
-        class="relative mx-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] rounded-2xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--card))]/95 p-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] backdrop-blur"
+        class="relative mx-3 mb-[max(1.125rem,calc(env(safe-area-inset-bottom)+0.375rem))] rounded-2xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--card))]/95 p-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] backdrop-blur"
         :aria-label="$t('chat.composer')"
         @animationend="clearComposerLayoutMotion"
     >
@@ -793,8 +807,9 @@ watch(() => props.prompt, () => {
                 <span class="truncate text-sm font-medium text-[var(--talos-text,var(--foreground))]">
                     {{ selectedProfile?.display_name ?? $t('chat.chooseModel') }}
                 </span>
-                <template v-if="reasoningActive">
+                <template v-if="reasoningWordsActive">
                     <Brain
+                        v-if="reasoningActive"
                         data-testid="talos-composer-reasoning-icon"
                         class="size-3.5 shrink-0 text-[var(--talos-accent)]"
                         aria-hidden="true"
