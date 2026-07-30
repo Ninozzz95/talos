@@ -1,4 +1,5 @@
 import { reactive, readonly, ref, type Ref } from 'vue'
+import { talosEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import type { TalosTranslate } from '@/i18n/contracts'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import type {
@@ -583,16 +584,28 @@ export function createChatStore<Runtime = undefined>(
         state.loadingOlderMessages = false
     }
 
+    /**
+     * F-14: `ephemeral` marks the new chat temporary, and the mark lives in the
+     * id it is given — so the router keeps every write for it in memory without
+     * anything here having to remember that it did.
+     *
+     * Note what happens below WITHOUT extra code: the refreshed session list
+     * comes from the durable side only, so a temporary chat is not found in it
+     * and `created` is used instead. It becomes the chat you are in, and appears
+     * in no history. That is exactly the behaviour asked for, and it falls out
+     * of the routing rather than being arranged.
+     */
     async function createSession(
         title = NEW_CHAT_TITLE,
         modelProfileId: string | null = null,
+        options: { ephemeral?: boolean } = {},
     ): Promise<TalosLocalChatSession> {
         const revision = ++navigationRevision
         resetPaging()
         requirePersistence()
         try {
             const created = await repository.createSession({
-                id: makeId(),
+                id: options.ephemeral ? talosEphemeralSessionId(makeId()) : makeId(),
                 title,
                 active_model_profile_id: modelProfileId,
                 created_at: now(),

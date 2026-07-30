@@ -58,6 +58,8 @@ import { clampMobileEffort, mobileEffortLadderFromLevels, type TalosMobileEffort
 import { talosMobileModelProfileIsCallable, TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
 import { cloneJsonObject, type TalosChatRepository } from '@/repositories/chatRepository'
 import { createLazyChatRepository } from '@/repositories/lazyChatRepository'
+import { createTalosEphemeralRoutingRepository } from '@/repositories/ephemeralRoutingRepository'
+import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import {
     clearProviderEndpoint as realClearEndpoint,
     getProviderEndpoint as realGetEndpoint,
@@ -220,9 +222,28 @@ function boundedTalosLibraryAnswerScore(score: number): number {
     return Math.round(Math.min(score, 999) * 1_000) / 1_000
 }
 
-const productionChatRepository = createLazyChatRepository(async () => {
-    const { createProductionChatRepository } = await import('@/repositories/productionChatRepository')
-    return createProductionChatRepository()
+/**
+ * F-14: a temporary chat has no disk in front of it.
+ *
+ * The router sits here, at the ONE place the production repository is built, so
+ * every caller downstream is routed without knowing it exists. Which repository
+ * a write lands in is decided by the session id — `talosIsEphemeralSessionId` is
+ * a pure function, so there is no registry that can fall out of step with the
+ * sessions it describes.
+ *
+ * Both halves stay lazy: the in-memory side costs nothing until a temporary
+ * chat is actually started, and most installs will never start one.
+ */
+const productionChatRepository = createTalosEphemeralRoutingRepository({
+    durable: createLazyChatRepository(async () => {
+        const { createProductionChatRepository } = await import('@/repositories/productionChatRepository')
+        return createProductionChatRepository()
+    }),
+    ephemeral: createLazyChatRepository(async () => {
+        const { createMemoryChatRepository } = await import('@/repositories/memoryChatRepository')
+        return createMemoryChatRepository()
+    }),
+    isEphemeral: talosIsEphemeralSessionId,
 })
 
 let productionVaultServicePromise: Promise<TalosVaultService> | null = null
