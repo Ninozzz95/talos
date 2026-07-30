@@ -17,6 +17,8 @@ import TalosMobileLibraryFileGlyph from '@/components/talos/library/TalosMobileL
 import TalosMobileLibraryActionsMenu from '@/components/talos/library/TalosMobileLibraryActionsMenu.vue'
 import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLibraryFileRow.vue'
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
+import TalosMobileSavedLinkTile from '@/components/talos/library/TalosMobileSavedLinkTile.vue'
+import { groupTalosLibraryByChat } from '@/lib/libraryGrouping'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 import { talosNeedsExternalOpen } from '@/lib/documents/openable'
 import { useChatController } from '@/stores/chatController'
@@ -24,6 +26,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import {
     filterTalosSavedLinkRows,
+    type TalosSavedLinkRow,
     filterLibraryFiles,
     isTalosLibraryFileShared,
     matchesTalosLibrarySurfaceTab,
@@ -104,14 +107,11 @@ function originChat(file: TalosLocalVaultFile): string | null {
     return controller.chat.sessions.find((session) => session.id === id)?.title ?? null
 }
 
-const grouped = computed(() => {
-    const groups = new Map<string, TalosLocalVaultFile[]>()
-    for (const file of filteredFiles.value) {
-        const key = originChat(file) ?? t('library.notFromChat')
-        ;(groups.get(key) ?? groups.set(key, []).get(key)!).push(file)
-    }
-    return [...groups.entries()].map(([title, files]) => ({ title, files }))
-})
+const grouped = computed(() => groupTalosLibraryByChat(
+    filteredFiles.value,
+    originChat,
+    t('library.notFromChat'),
+).map((section) => ({ title: section.title, files: section.items })))
 
 /**
  * The same source dossiers as one address each: a page read three times is one
@@ -445,6 +445,21 @@ function bulkDeleteDescription(): string {
 
 const visibleIds = computed(() => filteredFiles.value.map((file) => file.id))
 const renderedLinkRows = computed(() => (bulk.active.value ? [] : linkRows.value))
+
+/**
+ * Owner 2026-07-30: saved links were never grouped, because the grouping lives
+ * in the file branch and links render in one of their own. A link's chat is the
+ * chat of the dossier that holds it, which is the same answer the file surface
+ * gives for the same page.
+ */
+function linkOriginChat(row: TalosSavedLinkRow): string | null {
+    const file = attachments.vaultFiles.find((entry) => entry.id === row.fileId)
+    return file ? originChat(file) : null
+}
+
+const groupedLinkRows = computed(() => (groupByChat.value
+    ? groupTalosLibraryByChat(renderedLinkRows.value, linkOriginChat, t('library.notFromChat'))
+    : [{ title: '', items: renderedLinkRows.value }]))
 const hasVisibleLibraryItems = computed(() => (
     (typeFilter.value !== 'links' && filteredFiles.value.length > 0)
     || renderedLinkRows.value.length > 0
@@ -663,17 +678,42 @@ onMounted(async () => {
         </div>
 
         <!-- LINKS: one row per saved result/page address, its dossier one tap away. -->
-        <ul v-else-if="typeFilter === 'links'" data-testid="talos-library-links" class="flex flex-col gap-2" :aria-label="t('library.savedLinks')">
-            <TalosMobileSavedLinkRow
-                v-for="row in renderedLinkRows"
-                :key="row.url"
-                :row="row"
-                :saved-at-label="formatModified(row.savedAt)"
-                browser-test-id="talos-library-link-open"
-                @open-copy="openSavedCopy(row.fileId)"
-                @open-browser="openLink(row.url)"
-            />
-        </ul>
+        <!--
+            LINKS. Grouped by chat and switchable between grid and list, the same
+            as files — owner 2026-07-30, where neither reached them because this
+            branch never saw the code that does it. The grouping is genuinely
+            shared (libraryGrouping.ts); the tile is not, because a file tile
+            carries multi-select, an actions menu and a context pill that a link
+            has no meaning for.
+        -->
+        <div v-else-if="typeFilter === 'links'" data-testid="talos-library-links" :aria-label="t('library.savedLinks')">
+            <template v-for="section in groupedLinkRows" :key="section.title || 'all'">
+                <h2 v-if="groupByChat" class="mb-2 mt-4 truncate text-xs font-semibold text-[var(--talos-muted)]">{{ section.title }}</h2>
+
+                <div v-if="viewMode === 'grid'" class="grid grid-cols-2 gap-3" role="list">
+                    <TalosMobileSavedLinkTile
+                        v-for="row in section.items"
+                        :key="row.url"
+                        :row="row"
+                        :saved-at-label="formatModified(row.savedAt)"
+                        @open-copy="openSavedCopy(row.fileId)"
+                        @open-browser="openLink(row.url)"
+                    />
+                </div>
+
+                <ul v-else class="flex flex-col gap-2">
+                    <TalosMobileSavedLinkRow
+                        v-for="row in section.items"
+                        :key="row.url"
+                        :row="row"
+                        :saved-at-label="formatModified(row.savedAt)"
+                        browser-test-id="talos-library-link-open"
+                        @open-copy="openSavedCopy(row.fileId)"
+                        @open-browser="openLink(row.url)"
+                    />
+                </ul>
+            </template>
+        </div>
 
         <!-- Grouped-by-chat wraps whichever view is active. -->
         <template v-else v-for="section in (groupByChat ? grouped : [{ title: '', files: filteredFiles }])" :key="section.title || 'all'">

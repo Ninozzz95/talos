@@ -342,6 +342,72 @@ describe('ContextScreen Library gallery', () => {
         expect(browserMock.open).toHaveBeenCalledWith('https://www.corriere.it/gas', 'system_browser')
     })
 
+    /**
+     * Owner 2026-07-30: "nella libreria c'è ancora il bug che i link non
+     * vengono raggruppati per nome e data chat e non vengono displayati in
+     * layout griglia".
+     *
+     * He was right, and it was never a regression: links render in a branch of
+     * their own, while the grouping and the grid/list switch both live in the
+     * file branch. Choosing "grid" while looking at links did nothing at all,
+     * because the grid code was not even reached.
+     *
+     * The grouping is now shared; the tile is not. A file tile carries
+     * multi-select, an actions menu, a context-state pill and a generated
+     * badge — a link has no meaning for any of them, so one template serving
+     * both would be made of `v-if` and would be worse, not better.
+     */
+    it('LIB-LINK-GRID-01 shows saved links as tiles when the grid view is chosen', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            metadata: { origin: 'generated', kind: 'web_source', source_url: 'https://www.corriere.it/gas' },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        await wrapper.get('[aria-label="Library options"]').trigger('click')
+        await wrapper.get('[data-testid="talos-library-view-grid"]').trigger('click')
+
+        // The tile exists, and carries the page title and its host.
+        const tile = wrapper.get('[data-testid="talos-library-link-tile-vault-source"]')
+        expect(tile.text()).toContain('Il prezzo del gas')
+        expect(tile.text()).toContain('corriere.it')
+        // Tapping the tile opens the page in the user's own browser, exactly as
+        // the row does — the view changed, the contract did not.
+        await tile.get('[data-testid="talos-library-link-open"]').trigger('click')
+        await flushPromises()
+        expect(browserMock.open).toHaveBeenCalledWith('https://www.corriere.it/gas', 'system_browser')
+    })
+
+    it('LIB-LINK-GRID-02 groups saved links under the chat they came from', async () => {
+        const controller = makeController()
+        controller.chat.sessions.push({ id: 'session-gas', title: 'Bollette' } as never)
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            metadata: {
+                origin: 'generated',
+                kind: 'web_source',
+                source_url: 'https://www.corriere.it/gas',
+                origin_session_id: 'session-gas',
+            },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+
+        // The heading names the chat, the same way the file surface does.
+        expect(wrapper.get('[data-testid="talos-library-links"]').text()).toContain('Bollette')
+    })
+
     it('LIB-ALL-LINK-01 includes a web source in All as a link, never as a Markdown file', async () => {
         const controller = makeController()
         controller.attachments.vaultFiles.push({
