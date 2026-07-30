@@ -14,6 +14,7 @@ services:
     networks:
       - default
       - ocr-app
+      - artifact-app
     environment:
       - APP_URL=${APP_URL:-http://localhost:8088}
       - DB_DATABASE=/app/control-plane/storage/app/talos/database.sqlite
@@ -25,6 +26,12 @@ services:
       - TALOS_BROWSER_ACTION_PUBLIC_KEY_B64=
       - TALOS_BROWSER_ACTION_KEY_ID=${TALOS_BROWSER_ACTION_KEY_ID:?TALOS_BROWSER_ACTION_KEY_ID is required}
       - TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true
+      - TALOS_ARTIFACT_WORKER_URL=http://artifact-worker:3200
+      - TALOS_ARTIFACT_WORKER_TOKEN=${TALOS_ARTIFACT_WORKER_TOKEN:?TALOS_ARTIFACT_WORKER_TOKEN is required}
+      - TALOS_ARTIFACT_CONNECT_TIMEOUT_SECONDS=${TALOS_ARTIFACT_CONNECT_TIMEOUT_SECONDS:-3}
+      - TALOS_ARTIFACT_REQUEST_TIMEOUT_SECONDS=${TALOS_ARTIFACT_REQUEST_TIMEOUT_SECONDS:-130}
+      - TALOS_ARTIFACT_MAX_RESPONSE_BYTES=${TALOS_ARTIFACT_MAX_RESPONSE_BYTES:-35000000}
+      - TALOS_ARTIFACT_STALE_AFTER_SECONDS=${TALOS_ARTIFACT_STALE_AFTER_SECONDS:-180}
       - TALOS_WEB_SEARCH_PROVIDER=${TALOS_WEB_SEARCH_PROVIDER:-unavailable}
       - TALOS_SEARXNG_URL=${TALOS_SEARXNG_URL:-http://searxng:8080}
       - TALOS_BROWSER_SEARCH_ENABLED=${TALOS_BROWSER_SEARCH_ENABLED:-false}
@@ -51,6 +58,8 @@ services:
         condition: service_healthy
       browser-worker:
         condition: service_healthy
+      artifact-worker:
+        condition: service_healthy
       clamav:
         condition: service_healthy
       tika:
@@ -74,6 +83,7 @@ services:
     networks:
       - default
       - ocr-app
+      - artifact-app
     environment:
       - APP_URL=${APP_URL:-http://localhost:8088}
       - DB_DATABASE=/app/control-plane/storage/app/talos/database.sqlite
@@ -85,6 +95,12 @@ services:
       - TALOS_BROWSER_ACTION_PUBLIC_KEY_B64=
       - TALOS_BROWSER_ACTION_KEY_ID=${TALOS_BROWSER_ACTION_KEY_ID:?TALOS_BROWSER_ACTION_KEY_ID is required}
       - TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true
+      - TALOS_ARTIFACT_WORKER_URL=http://artifact-worker:3200
+      - TALOS_ARTIFACT_WORKER_TOKEN=${TALOS_ARTIFACT_WORKER_TOKEN:?TALOS_ARTIFACT_WORKER_TOKEN is required}
+      - TALOS_ARTIFACT_CONNECT_TIMEOUT_SECONDS=${TALOS_ARTIFACT_CONNECT_TIMEOUT_SECONDS:-3}
+      - TALOS_ARTIFACT_REQUEST_TIMEOUT_SECONDS=${TALOS_ARTIFACT_REQUEST_TIMEOUT_SECONDS:-130}
+      - TALOS_ARTIFACT_MAX_RESPONSE_BYTES=${TALOS_ARTIFACT_MAX_RESPONSE_BYTES:-35000000}
+      - TALOS_ARTIFACT_STALE_AFTER_SECONDS=${TALOS_ARTIFACT_STALE_AFTER_SECONDS:-180}
       - TALOS_WEB_SEARCH_PROVIDER=${TALOS_WEB_SEARCH_PROVIDER:-unavailable}
       - TALOS_SEARXNG_URL=${TALOS_SEARXNG_URL:-http://searxng:8080}
       - TALOS_BROWSER_SEARCH_ENABLED=${TALOS_BROWSER_SEARCH_ENABLED:-false}
@@ -112,6 +128,8 @@ services:
       validator:
         condition: service_healthy
       browser-worker:
+        condition: service_healthy
+      artifact-worker:
         condition: service_healthy
       clamav:
         condition: service_healthy
@@ -155,6 +173,41 @@ services:
       TALOS_BROWSER_MCP_ALLOWED_HOSTS: ${TALOS_BROWSER_MCP_ALLOWED_HOSTS:-browser-worker,localhost,127.0.0.1,::1}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/ready',{headers:{'x-talos-worker-token':process.env.TALOS_BROWSER_WORKER_TOKEN}}).then(async r => { const p = await r.json(); process.exit(r.ok && p?.data?.protocols?.worker === 'talos.browser.worker.v2' && p?.data?.protocols?.hmi === 'talos_browser_hmi_runtime_v2.1.0' ? 0 : 1) }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  artifact-worker:
+    build:
+      context: .
+      dockerfile: artifact-worker/Dockerfile
+    expose:
+      - "3200"
+    networks:
+      - artifact-app
+    environment:
+      ARTIFACT_WORKER_HOST: 0.0.0.0
+      ARTIFACT_WORKER_PORT: 3200
+      ARTIFACT_WORKER_TOKEN: ${TALOS_ARTIFACT_WORKER_TOKEN:?TALOS_ARTIFACT_WORKER_TOKEN is required}
+      ARTIFACT_WORKER_TEMP_DIR: /tmp/talos-artifact-worker
+      ARTIFACT_WORKER_BODY_LIMIT_BYTES: ${TALOS_ARTIFACT_WORKER_BODY_LIMIT_BYTES:-4000000}
+      ARTIFACT_WORKER_HANDLER_TIMEOUT_MS: ${TALOS_ARTIFACT_WORKER_HANDLER_TIMEOUT_MS:-125000}
+      ARTIFACT_WORKER_MAX_CONCURRENT_GENERATIONS: ${TALOS_ARTIFACT_WORKER_MAX_CONCURRENT_GENERATIONS:-2}
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: "1g"
+    memswap_limit: "1g"
+    init: true
+    healthcheck:
+      test: ["CMD", "/nodejs/bin/node", "-e", "fetch('http://127.0.0.1:3200/ready',{headers:{authorization:'Bearer '+process.env.ARTIFACT_WORKER_TOKEN}}).then(async r=>{const p=await r.json();process.exit(r.ok&&p?.contract==='talos.artifact.readiness.v1'&&p?.status==='ready'&&p?.protocol_version===1?0:1)}).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -398,3 +451,5 @@ networks:
   ocr-private:
     internal: true
   ocr-egress:
+  artifact-app:
+    internal: true

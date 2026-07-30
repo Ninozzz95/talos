@@ -331,6 +331,13 @@ ensure_env() {
     echo "Generated the internal browser-worker credential in .env"
   fi
 
+  local artifact_token
+  artifact_token="$(env_value TALOS_ARTIFACT_WORKER_TOKEN || true)"
+  if [[ ! "$artifact_token" =~ ^[a-f0-9]{64}$ ]]; then
+    set_env_value .env TALOS_ARTIFACT_WORKER_TOKEN "$(random_hex_32)"
+    echo "Generated the internal artifact-worker credential in .env"
+  fi
+
   local searxng_secret
   searxng_secret="$(env_value TALOS_SEARXNG_SECRET || true)"
   if [[ ! "$searxng_secret" =~ ^[a-f0-9]{64}$ ]]; then
@@ -429,7 +436,7 @@ ensure_native_dependencies() {
   fi
 
   local package
-  for package in validator browser-worker control-plane; do
+  for package in validator browser-worker artifact-worker control-plane; do
     if dependency_needs_install "$ROOT_DIR/$package/package-lock.json" "$ROOT_DIR/$package/node_modules/.package-lock.json" "$markers/$package-npm"; then
       print_step "Installing locked $package dependencies"
       "$npm" --prefix "$ROOT_DIR/$package" ci
@@ -536,7 +543,7 @@ wait_for_ready() {
   if ocr_is_enabled; then
     ocr_services+=(ocr-worker ocr-runtime ocr-model-fetch)
   fi
-  compose logs --tail=120 talos validator browser-worker clamav tika "${ocr_services[@]}" || true
+  compose logs --tail=120 talos validator browser-worker artifact-worker clamav tika "${ocr_services[@]}" || true
   echo "Run: ./talos doctor" >&2
   return 1
 }
@@ -657,6 +664,7 @@ doctor() {
       && [ -f "$ROOT_DIR/control-plane/vendor/autoload.php" ] \
       && [ -f "$ROOT_DIR/validator/node_modules/.package-lock.json" ] \
       && [ -f "$ROOT_DIR/browser-worker/node_modules/.package-lock.json" ] \
+      && [ -f "$ROOT_DIR/artifact-worker/node_modules/.package-lock.json" ] \
       && [ -f "$ROOT_DIR/control-plane/node_modules/.package-lock.json" ]; then
       if "$ROOT_DIR/.tools/bin/npm.cmd" --prefix "$ROOT_DIR/browser-worker" run doctor:runtime >/dev/null 2>&1; then
         echo "native dependencies OK   installed"
@@ -733,9 +741,9 @@ case "$cmd" in
     reconcile_stale_search_service
     reconcile_stale_ocr_services
     if ocr_is_enabled; then
-      print_step "Building and starting TALOS, queue, validator, browser worker, ClamAV, Tika, OCR worker, and DeepSeek OCR-2 runtime"
+      print_step "Building and starting TALOS, queue, validator, browser worker, artifact worker, ClamAV, Tika, OCR worker, and DeepSeek OCR-2 runtime"
     else
-      print_step "Building and starting TALOS, queue, validator, browser worker, ClamAV, and Tika"
+      print_step "Building and starting TALOS, queue, validator, browser worker, artifact worker, ClamAV, and Tika"
     fi
     compose up -d --build
     print_step "Checking readiness"

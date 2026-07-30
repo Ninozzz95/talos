@@ -12,6 +12,7 @@ import {
 
 test('development stack routes ephemeral browser credentials only to their owning processes', () => {
     const token = 'a'.repeat(64)
+    const artifactToken = 'c'.repeat(64)
     const actionKeypair = {
         keyId: 'dev-browser-action-key',
         privateKeyBase64: 'private-key-material',
@@ -19,6 +20,7 @@ test('development stack routes ephemeral browser credentials only to their ownin
     }
     const config = createDevStackConfig({
         token,
+        artifactToken,
         actionKeypair,
         inheritedEnv: {
             APP_ENV: 'local',
@@ -26,6 +28,9 @@ test('development stack routes ephemeral browser credentials only to their ownin
             TALOS_BROWSER_ACTION_KEY_ID: 'stale-key-id',
             TALOS_BROWSER_ACTION_PRIVATE_KEY_B64: 'stale-private-key',
             TALOS_BROWSER_ACTION_PUBLIC_KEY_B64: 'stale-public-key',
+            TALOS_ARTIFACT_WORKER_TOKEN: 'stale-client-token',
+            ARTIFACT_WORKER_TOKEN: 'stale-server-token',
+            OPENAI_API_KEY: 'provider-secret-must-not-reach-artifact-worker',
         },
         fileExists: () => true,
         readGitCommonDirectory: () => null,
@@ -37,11 +42,15 @@ test('development stack routes ephemeral browser credentials only to their ownin
         'queue',
         'vite',
         'browser',
+        'artifact',
     ])
     assert.equal(config.sharedEnv.AVM_VALIDATOR_URL, 'http://127.0.0.1:3000')
     assert.equal(config.sharedEnv.TALOS_VALIDATOR_HEALTH_URL, 'http://127.0.0.1:3000/health')
     assert.equal(config.sharedEnv.TALOS_BROWSER_WORKER_URL, 'http://127.0.0.1:3100')
+    assert.equal(config.sharedEnv.TALOS_ARTIFACT_WORKER_URL, 'http://127.0.0.1:3200')
     assert.equal(config.sharedEnv.TALOS_BROWSER_WORKER_TOKEN, undefined)
+    assert.equal(config.sharedEnv.TALOS_ARTIFACT_WORKER_TOKEN, undefined)
+    assert.equal(config.sharedEnv.ARTIFACT_WORKER_TOKEN, undefined)
     assert.equal(config.sharedEnv.TALOS_BROWSER_ACTION_KEY_ID, undefined)
     assert.equal(config.sharedEnv.TALOS_BROWSER_ACTION_PRIVATE_KEY_B64, undefined)
     assert.equal(config.sharedEnv.TALOS_BROWSER_ACTION_PUBLIC_KEY_B64, undefined)
@@ -52,6 +61,10 @@ test('development stack routes ephemeral browser credentials only to their ownin
     assert.equal(server.env.TALOS_BROWSER_WORKER_TOKEN, token)
     assert.equal(queue.env.TALOS_BROWSER_WORKER_TOKEN, token)
     assert.equal(vite.env.TALOS_BROWSER_WORKER_TOKEN, undefined)
+    assert.equal(server.env.TALOS_ARTIFACT_WORKER_TOKEN, artifactToken)
+    assert.equal(queue.env.TALOS_ARTIFACT_WORKER_TOKEN, artifactToken)
+    assert.equal(vite.env.TALOS_ARTIFACT_WORKER_TOKEN, undefined)
+    assert.equal(vite.env.ARTIFACT_WORKER_TOKEN, undefined)
     assert.equal(server.env.TALOS_BROWSER_ACTION_PRIVATE_KEY_B64, actionKeypair.privateKeyBase64)
     assert.equal(server.env.TALOS_BROWSER_ACTION_PUBLIC_KEY_B64, undefined)
     assert.equal(server.env.TALOS_BROWSER_ACTION_KEY_ID, actionKeypair.keyId)
@@ -67,6 +80,8 @@ test('development stack routes ephemeral browser credentials only to their ownin
     assert.equal(browser.env.TALOS_BROWSER_ACTION_PUBLIC_KEY_B64, actionKeypair.publicKeyBase64)
     assert.equal(browser.env.TALOS_BROWSER_ACTION_PRIVATE_KEY_B64, undefined)
     assert.equal(browser.env.TALOS_BROWSER_ACTION_KEY_ID, actionKeypair.keyId)
+    assert.equal(browser.env.TALOS_ARTIFACT_WORKER_TOKEN, undefined)
+    assert.equal(browser.env.ARTIFACT_WORKER_TOKEN, undefined)
     assert.equal(browser.env.HOST, '127.0.0.1')
     assert.equal(browser.env.PORT, '3100')
     assert.match(browser.command, /browser-worker/)
@@ -83,6 +98,17 @@ test('development stack routes ephemeral browser credentials only to their ownin
     assert.equal(validator.env.TALOS_BROWSER_ACTION_KEY_ID, undefined)
     assert.equal(validator.env.TALOS_BROWSER_ACTION_PRIVATE_KEY_B64, undefined)
     assert.equal(validator.env.TALOS_BROWSER_ACTION_PUBLIC_KEY_B64, undefined)
+    assert.equal(validator.env.TALOS_ARTIFACT_WORKER_TOKEN, undefined)
+    assert.equal(validator.env.ARTIFACT_WORKER_TOKEN, undefined)
+
+    const artifact = config.commands.find((command) => command.name === 'artifact')
+    assert.match(artifact.command, /artifact-worker/)
+    assert.equal(artifact.env.ARTIFACT_WORKER_TOKEN, artifactToken)
+    assert.equal(artifact.env.TALOS_ARTIFACT_WORKER_TOKEN, undefined)
+    assert.equal(artifact.env.TALOS_BROWSER_WORKER_TOKEN, undefined)
+    assert.equal(artifact.env.OPENAI_API_KEY, undefined)
+    assert.equal(artifact.env.ARTIFACT_WORKER_HOST, '127.0.0.1')
+    assert.equal(artifact.env.ARTIFACT_WORKER_PORT, '3200')
 })
 
 test('development stack falls back to PATH runtimes when repo-local tools are absent', () => {
@@ -130,6 +156,7 @@ test('development stack reuses the primary checkout toolchain from a linked work
     const vite = config.commands.find((command) => command.name === 'vite')
     const validator = config.commands.find((command) => command.name === 'validator')
     const browser = config.commands.find((command) => command.name === 'browser')
+    const artifact = config.commands.find((command) => command.name === 'artifact')
 
     assert.match(server.command, /^"C:\\primary\\\.tools\\bin\\php\.cmd" artisan serve/u)
     assert.match(vite.command, /^"C:\\primary\\\.tools\\bin\\npm\.cmd" run dev/u)
@@ -137,6 +164,7 @@ test('development stack reuses the primary checkout toolchain from a linked work
     assert.equal(validator.env.TALOS_PHP_ROOT, path.win32.join(primaryTools, 'php'))
     assert.match(validator.command, /C:\\worktrees\\desktop-parity\\validator/u)
     assert.match(browser.command, /C:\\worktrees\\desktop-parity\\browser-worker/u)
+    assert.match(artifact.command, /C:\\worktrees\\desktop-parity\\artifact-worker/u)
     assert.equal(config.workspaceRoot, workspaceRoot)
 })
 

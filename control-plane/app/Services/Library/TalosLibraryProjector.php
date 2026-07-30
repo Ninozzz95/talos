@@ -23,6 +23,7 @@ final class TalosLibraryProjector
         'research_report',
         'binary_bundle',
         'evidence_report',
+        'generated_document',
         'web_fetch',
         'web_search_result',
     ];
@@ -128,6 +129,9 @@ final class TalosLibraryProjector
         }
 
         $metadata = is_array($document->metadata) ? $document->metadata : [];
+        if (($metadata['binary_artifact'] ?? false) === true) {
+            return null;
+        }
         $sourceUrl = $this->sourceUrlFromMetadata($metadata);
         $isLink = $sourceUrl !== null || in_array($document->document_type, ['web_source', 'link'], true);
         $run = $document->run()->first();
