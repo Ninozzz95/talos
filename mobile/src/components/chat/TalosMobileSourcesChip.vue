@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
+import { useTalosSourceCardIcons } from '@/composables/useTalosSourceCardIcons'
 import type { TalosMobileWebSource } from '@/stores/chat'
 
 /**
@@ -11,10 +12,13 @@ import type { TalosMobileWebSource } from '@/stores/chat'
  * ever read. A chip that lists the whole chat is decoration; a chip that lists
  * what this reply used is a citation.
  *
- * The site marks are letters, not favicons, on purpose: fetching a favicon means
- * a request to a third party (or to an icon service) for every source, which
- * would quietly break the one thing this feature promises — that only the query
- * leaves the device.
+ * Owner 2026-07-30: the marks are the sites' own favicons now, with the letter
+ * behind them. The original objection stands and is the reason this reads from
+ * disk and never fetches — a favicon requested when a chat is OPENED is a
+ * request to every cited site every time, which would break the one thing this
+ * feature promises, that only the query leaves the device. The bytes come from
+ * the card captured when the link was saved; a source without one keeps its
+ * letter, and the Library's backfill is what eventually gives old chats theirs.
  */
 const props = defineProps<{
     sources: readonly TalosMobileWebSource[]
@@ -31,10 +35,14 @@ function siteOf(source: TalosMobileWebSource): string {
     }
 }
 
+// Read-only: no `backfill`, so opening a chat reaches for nothing.
+const { icons } = useTalosSourceCardIcons(computed(() => props.sources.map((source) => source.url)))
+
 /** Up to three marks, like the overlapping icons in the reference. */
 const marks = computed(() => props.sources.slice(0, 3).map((source) => ({
     key: source.url,
     letter: siteOf(source).charAt(0).toUpperCase(),
+    icon: icons.value[source.url] ?? null,
 })))
 
 const extra = computed(() => Math.max(0, props.sources.length - marks.value.length))
@@ -66,8 +74,17 @@ async function openSource(source: TalosMobileWebSource): Promise<void> {
                 <span
                     v-for="mark in marks"
                     :key="mark.key"
-                    class="flex size-5 items-center justify-center rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] text-3xs text-[var(--talos-text)]"
-                >{{ mark.letter }}</span>
+                    class="flex size-5 items-center justify-center overflow-hidden rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] text-3xs text-[var(--talos-text)]"
+                >
+                    <img
+                        v-if="mark.icon"
+                        data-testid="talos-source-favicon"
+                        :src="mark.icon"
+                        alt=""
+                        class="size-3.5 object-contain"
+                    >
+                    <template v-else>{{ mark.letter }}</template>
+                </span>
                 <span
                     v-if="extra"
                     class="flex size-5 items-center justify-center rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] text-3xs text-[var(--talos-muted)]"

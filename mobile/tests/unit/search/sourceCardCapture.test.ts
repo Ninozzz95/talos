@@ -13,6 +13,9 @@ import { createTalosSourceCardCapture } from '@/lib/search/sourceCardCapture'
  * affect the save. A link the user asked to keep is kept whether or not its
  * favicon could be fetched, so nothing in this file is allowed to throw.
  */
+const NOW = Date.parse('2026-07-30T12:00:00.000Z')
+const DAY = 24 * 60 * 60 * 1000
+
 function ports(overrides: Record<string, unknown> = {}) {
     return {
         readPage: vi.fn(async () => ({
@@ -32,7 +35,9 @@ function ports(overrides: Record<string, unknown> = {}) {
         })),
         shrink: vi.fn(async (base64: string) => ({ base64, contentType: 'image/webp' })),
         exists: vi.fn(async () => false),
+        read: vi.fn(async () => new TextEncoder().encode(String(NOW))),
         write: vi.fn(async () => {}),
+        now: vi.fn(() => NOW),
         ...overrides,
     }
 }
@@ -107,7 +112,10 @@ describe('createTalosSourceCardCapture', () => {
         expect(card?.title).toBe('A post')
         expect(card?.iconPath).toBeNull()
         expect(card?.previewPath).toBeNull()
-        expect(seams.write).not.toHaveBeenCalled()
+        // Nothing but the record of the failure itself, which is the point of
+        // the mark: no card was stored, so no card must be claimed.
+        expect(seams.write.mock.calls.map(([path]) => path))
+            .toEqual([expect.stringMatching(/-miss\.txt$/)])
     })
 
     /**
@@ -132,5 +140,133 @@ describe('createTalosSourceCardCapture', () => {
         const capture = createTalosSourceCardCapture(ports() as never)
 
         await expect(capture.capture('not a url')).resolves.toBeNull()
+    })
+})
+
+/**
+ * "Already have it" is one question with one answer, asked by capture before it
+ * fetches and by the backfill before it spends its budget. It lives here, once,
+ * so the two can never disagree about what counts as settled.
+ */
+describe('knowing a url is settled', () => {
+    /**
+     * A favicon usually arrives as `.ico` or `.png`, and the stored extension
+     * follows the content type. Looking only for `.png` — which is what the
+     * first cut of the guard did — means every `.ico` site is re-fetched on
+     * every pass forever, having stored a perfectly good icon each time.
+     */
+    it('finds an icon whatever image type the site served it as', async () => {
+        for (const extension of ['png', 'ico', 'jpg', 'webp', 'gif']) {
+            const seams = ports({
+                exists: vi.fn(async (path: string) => path.endsWith(`-icon.${extension}`)),
+            })
+            const capture = createTalosSourceCardCapture(seams as never)
+
+            await expect(capture.settled('https://example.org/post')).resolves.toBe(true)
+        }
+    })
+
+    it('is not settled by a preview alone, because the icon is what is shown', async () => {
+        const seams = ports({
+            exists: vi.fn(async (path: string) => path.includes('-preview.')),
+        })
+        const capture = createTalosSourceCardCapture(seams as never)
+
+        await expect(capture.settled('https://example.org/post')).resolves.toBe(false)
+    })
+})
+
+/**
+ * The negative half of the index.
+ *
+ * Without it, every link whose site is dead — or was merely unreachable while
+ * the phone was offline — is a page fetch on every single Library open, forever.
+ * With a permanent mark instead, the phone that happened to be in a lift when a
+ * link was saved never gets that favicon at all. So the mark carries the time it
+ * was made and stops counting after a week.
+ */
+describe('remembering that a capture failed', () => {
+    it('marks a url whose page could not be read', async () => {
+        const seams = ports({
+            readPage: vi.fn(async () => { throw new Error('TALOS_WEB_URL_BLOCKED:address') }),
+        })
+        const capture = createTalosSourceCardCapture(seams as never)
+
+        await capture.capture('https://example.org/post')
+
+        const mark = seams.write.mock.calls.find(([path]) => String(path).endsWith('-miss.txt'))
+        expect(mark).toBeTruthy()
+        expect(atob(String(mark?.[1]))).toBe(String(NOW))
+    })
+
+    it('marks a url whose page was fine but whose icon was not', async () => {
+        const seams = ports({
+            readImage: vi.fn(async () => { throw new Error('TALOS_WEB_NOT_AN_IMAGE') }),
+        })
+        const capture = createTalosSourceCardCapture(seams as never)
+
+        await capture.capture('https://example.org/post')
+
+        expect(seams.write.mock.calls.some(([path]) => String(path).endsWith('-miss.txt'))).toBe(true)
+    })
+
+    it('does not mark a url whose icon it stored', async () => {
+        const seams = ports()
+        const capture = createTalosSourceCardCapture(seams as never)
+
+        await capture.capture('https://example.org/post')
+
+        expect(seams.write.mock.calls.some(([path]) => String(path).endsWith('-miss.txt'))).toBe(false)
+    })
+
+    it('does not fetch again while the mark is fresh', async () => {
+        const seams = ports({
+            exists: vi.fn(async (path: string) => path.endsWith('-miss.txt')),
+            read: vi.fn(async () => new TextEncoder().encode(String(NOW - 2 * DAY))),
+        })
+        const capture = createTalosSourceCardCapture(seams as never)
+
+        await expect(capture.settled('https://example.org/post')).resolves.toBe(true)
+        await capture.capture('https://example.org/post')
+        expect(seams.readPage).not.toHaveBeenCalled()
+    })
+
+    it('tries again once the mark is old enough', async () => {
+        const seams = ports({
+            exists: vi.fn(async (path: string) => path.endsWith('-miss.txt')),
+            read: vi.fn(async () => new TextEncoder().encode(String(NOW - 8 * DAY))),
+        })
+        const capture = createTalosSourceCardCapture(seams as never)
+
+        await expect(capture.settled('https://example.org/post')).resolves.toBe(false)
+        await capture.capture('https://example.org/post')
+        expect(seams.readPage).toHaveBeenCalledOnce()
+    })
+
+    it('treats a mark it cannot read as no mark at all', async () => {
+        for (const read of [
+            vi.fn(async () => { throw new Error('gone') }),
+            vi.fn(async () => new TextEncoder().encode('not a number')),
+            vi.fn(async () => new Uint8Array()),
+        ]) {
+            const seams = ports({
+                exists: vi.fn(async (path: string) => path.endsWith('-miss.txt')),
+                read,
+            })
+            const capture = createTalosSourceCardCapture(seams as never)
+
+            await expect(capture.settled('https://example.org/post')).resolves.toBe(false)
+        }
+    })
+
+    /** A mark is a courtesy to the network, never a reason to lose a link. */
+    it('does not fail a capture because the mark could not be written', async () => {
+        const seams = ports({
+            readPage: vi.fn(async () => { throw new Error('TALOS_WEB_URL_BLOCKED:address') }),
+            write: vi.fn(async () => { throw new Error('TALOS_ATTACHMENT_UNAVAILABLE') }),
+        })
+        const capture = createTalosSourceCardCapture(seams as never)
+
+        await expect(capture.capture('https://example.org/post')).resolves.toBeNull()
     })
 })

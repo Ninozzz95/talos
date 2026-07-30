@@ -458,9 +458,14 @@ function linkOriginChat(row: TalosSavedLinkRow): string | null {
     return file ? originChat(file) : null
 }
 
-// Favicons captured when each link was saved, read from disk. Nothing is
-// fetched to show them, which is what made real site marks acceptable here.
-const { icons: sourceIcons } = useTalosSourceCardIcons(renderedLinkRows)
+// Favicons captured when each link was saved, read from disk — and fetched
+// here, for the links saved before capture existed. This is the screen that
+// backfills them: it is about the links themselves, it is opened deliberately,
+// and leaving it abandons the pass.
+const { icons: sourceIcons } = useTalosSourceCardIcons(
+    computed(() => renderedLinkRows.value.map((row) => row.url)),
+    { backfill: true },
+)
 
 const groupedLinkRows = computed(() => (groupByChat.value
     ? groupTalosLibraryByChat(renderedLinkRows.value, linkOriginChat, t('library.notFromChat'))
@@ -664,6 +669,7 @@ onMounted(async () => {
                 :key="row.url"
                 :row="row"
                 :saved-at-label="formatModified(row.savedAt)"
+                :favicon-url="sourceIcons[row.url] ?? null"
                 browser-test-id="talos-library-link-open"
                 @open-copy="openSavedCopy(row.fileId)"
                 @open-browser="openLink(row.url)"
