@@ -79,7 +79,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             })
             requireHttpSuccess({ provider: 'anthropic', operation: 'list_models', status: response.status, data: response.data })
             const parsed = listSchema.safeParse(response.data)
-            if (!parsed.success) throw malformedProviderResponse('anthropic', 'list_models')
+            if (!parsed.success) throw malformedProviderResponse('anthropic', 'list_models', { received: response.data, issues: parsed.error.issues })
             models.push(...parsed.data.data.map((model) => ({
                 id: model.id,
                 provider: 'anthropic' as const,
@@ -94,10 +94,10 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
                 createdAt: model.created_at ?? null,
             })))
             if (!parsed.data.has_more) return { provider: 'anthropic', models }
-            if (!parsed.data.last_id || parsed.data.last_id === afterId) throw malformedProviderResponse('anthropic', 'list_models')
+            if (!parsed.data.last_id || parsed.data.last_id === afterId) throw malformedProviderResponse('anthropic', 'list_models', { received: response.data, note: 'pagination cursor missing or unchanged' })
             afterId = parsed.data.last_id
         }
-        throw malformedProviderResponse('anthropic', 'list_models')
+        throw malformedProviderResponse('anthropic', 'list_models', { note: 'model list never terminated within the page budget' })
     },
     async complete(input, credential, transport) {
         const apiKey = requireProviderApiKey('anthropic', 'complete', credential)
@@ -138,7 +138,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
         }
         requireHttpSuccess({ provider: 'anthropic', operation: 'complete', status: response.status, data: response.data })
         const parsed = completionSchema.safeParse(response.data)
-        if (!parsed.success) throw malformedProviderResponse('anthropic', 'complete')
+        if (!parsed.success) throw malformedProviderResponse('anthropic', 'complete', { received: response.data, issues: parsed.error.issues })
         const text = parsed.data.content
             .filter((part) => part.type === 'text')
             .map((part) => part.text ?? '')
@@ -146,7 +146,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
         const toolCalls = parseAnthropicToolCalls(parsed.data.content)
         // A turn that only requests tools carries no text — refusing it as
         // malformed would break the loop before it began.
-        if (!text && toolCalls.length === 0) throw malformedProviderResponse('anthropic', 'complete')
+        if (!text && toolCalls.length === 0) throw malformedProviderResponse('anthropic', 'complete', { received: response.data, note: 'no text and no tool calls' })
         return {
             text,
             model: parsed.data.model ?? input.model.id,
@@ -248,7 +248,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
         }
         const { stream, toolCalls, usage: streamedUsage } = result
         const calls = toolCalls.calls()
-        if (!stream.text && calls.length === 0) throw malformedProviderResponse('anthropic', 'complete')
+        if (!stream.text && calls.length === 0) throw malformedProviderResponse('anthropic', 'complete', { received: { text: stream.text, calls: calls.length }, note: 'stream ended with no text and no tool calls' })
         return {
             text: stream.text,
             model: input.model.id,

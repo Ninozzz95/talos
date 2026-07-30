@@ -1,6 +1,12 @@
 import type { TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
 import type { TalosMessageParameters } from '@/i18n/contracts'
 import type { TalosMobileProviderCredential } from '@/lib/chat/providerContracts'
+import { talosLogDeviceIssue } from '@/lib/talosDeviceLog'
+import {
+    talosDescribeSchemaIssues,
+    talosDescribeShape,
+    type TalosSchemaIssue,
+} from '@/lib/diagnostics/shapeCapture'
 
 export type TalosMobileProviderOperation = 'list_models' | 'complete' | 'probe'
 
@@ -67,6 +73,13 @@ export function requireHttpSuccess(args: {
 }): void {
     if (args.status >= 200 && args.status < 300) return
     const externalMessage = providerErrorMessage(args.data, '')
+    // The status and the shape of the body, never the body. A provider that
+    // starts refusing calls should be visible in the Doctor without the user
+    // having to reproduce it while someone watches.
+    talosLogDeviceIssue(
+        'TALOS_PROVIDER_HTTP',
+        `${args.provider}/${args.operation} status=${args.status} body=${talosDescribeShape(args.data)}`,
+    )
     throw new TalosMobileProviderError({
         provider: args.provider,
         operation: args.operation,
@@ -79,10 +92,41 @@ export function requireHttpSuccess(args: {
     })
 }
 
+/**
+ * Owner 2026-07-30, his own session export: "anthropic ha restituito una
+ * risposta chat non valida." The message is true and useless — it says the
+ * response was not understood and discards WHAT was not understood, so the one
+ * report meant to settle the question could not answer it and the transcript
+ * had to arrive separately before anything could be diagnosed.
+ *
+ * The evidence now travels: the shape of what arrived, and which rule it broke.
+ * Neither carries a value, so this records itself for every user by default
+ * rather than hiding behind a debug switch nobody turns on before they already
+ * have the problem.
+ */
+export interface TalosMalformedEvidence {
+    /** The payload whose SHAPE is recorded. Its contents never travel. */
+    readonly received?: unknown
+    /** Zod's own issues; only path and code are used, never the message. */
+    readonly issues?: readonly TalosSchemaIssue[]
+    /** Why this counted as malformed when the schema itself was satisfied. */
+    readonly note?: string
+}
+
 export function malformedProviderResponse(
     provider: TalosMobileProviderId,
     operation: TalosMobileProviderOperation,
+    evidence: TalosMalformedEvidence = {},
 ): TalosMobileProviderError {
+    talosLogDeviceIssue(
+        'TALOS_PROVIDER_MALFORMED',
+        [
+            `${provider}/${operation}`,
+            evidence.note ? `note=${evidence.note}` : '',
+            `got=${talosDescribeShape(evidence.received)}`,
+            evidence.issues ? `broke=${talosDescribeSchemaIssues(evidence.issues)}` : '',
+        ].filter(Boolean).join(' '),
+    )
     return new TalosMobileProviderError({
         provider,
         operation,

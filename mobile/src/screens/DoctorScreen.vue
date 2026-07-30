@@ -447,7 +447,10 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                             data-testid="talos-doctor-issue"
                             class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-2 font-mono text-2xs leading-4 text-[var(--talos-muted)]"
                         >
-                            {{ issue.at.slice(11, 19) }} · {{ issue.tag }} · {{ issue.detail }}
+                            <!-- The repeat count is the difference between "it
+                                 happened" and "it is happening thirty times a
+                                 minute", and that is usually the diagnosis. -->
+                            {{ issue.at.slice(11, 19) }} · {{ issue.tag }}<template v-if="issue.count > 1"> · ×{{ issue.count }}</template> · {{ issue.detail }}
                         </li>
                     </ul>
                 </section>
