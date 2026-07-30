@@ -1,4 +1,8 @@
 import { createTalosSourceCardCapture } from '@/lib/search/sourceCardCapture'
+import {
+    createTalosSourceCardQueue,
+    type TalosSourceCardQueueReport,
+} from '@/lib/search/sourceCardQueue'
 import { readTalosSafeWebImage, readTalosSafeWebPage } from '@/services/safeWebRead'
 import { createAttachmentFileStore } from '@/services/attachmentFileStore'
 import { talosLogDeviceIssue } from '@/lib/talosDeviceLog'
@@ -13,7 +17,16 @@ import { talosLogDeviceIssue } from '@/lib/talosDeviceLog'
  */
 
 const MAX_PREVIEW_EDGE = 320
-const MAX_CONCURRENT = 2
+
+/**
+ * How many links one backfill pass may fetch.
+ *
+ * A Library with three hundred saved links must not fetch three hundred pages
+ * because someone opened a screen. The rest is not lost: the next open picks up
+ * where this one stopped, and what a pass left behind is written to the device
+ * log rather than silently dropped.
+ */
+const BACKFILL_BUDGET = 12
 
 /**
  * Re-encode a preview small.
@@ -65,53 +78,115 @@ const capture = createTalosSourceCardCapture({
     readImage: (url) => readTalosSafeWebImage(url),
     shrink: shrinkImage,
     exists: (path) => fileStore().existsPrivate(path),
+    read: (path) => fileStore().readPrivate(path),
     write: (path, base64) => fileStore().writePrivateBytes(path, base64),
+    now: () => Date.now(),
+})
+
+const queue = createTalosSourceCardQueue({
+    settled: (url) => capture.settled(url),
+    capture: (url) => capture.capture(url),
+    log: talosLogDeviceIssue,
 })
 
 /**
  * Capture cards for URLs that were just saved.
  *
  * Fire-and-forget by contract: the caller has already stored the link and is
- * not waiting. Sequential in pairs rather than all at once — ten results would
- * otherwise mean twenty simultaneous requests from a phone, which is rude to
- * the sites and pointless for the user, who is reading the answer.
+ * not waiting. No budget — these are the handful of results of one search, and
+ * the user just asked for them.
  */
 export function captureTalosSourceCards(urls: readonly string[]): void {
-    void (async () => {
-        for (let index = 0; index < urls.length; index += MAX_CONCURRENT) {
-            await Promise.all(
-                urls.slice(index, index + MAX_CONCURRENT).map((url) => capture.capture(url)),
-            )
-        }
-    })().catch((error) => {
-        talosLogDeviceIssue('TALOS_SOURCE_CARD_BATCH', String(error).slice(0, 200))
-    })
+    void queue.run(urls).then(
+        (report) => forget(report.attempted),
+        (error) => talosLogDeviceIssue('TALOS_SOURCE_CARD_BATCH', String(error).slice(0, 200)),
+    )
 }
 
-/** The stored card images for a URL, or nulls when it has none. */
-export async function readTalosSourceCardImages(url: string): Promise<{
-    icon: string | null
-    preview: string | null
-}> {
-    const { talosSourceCardPath } = await import('@/lib/search/sourceCardStore')
-    async function read(kind: 'icon' | 'preview'): Promise<string | null> {
-        // The extension is part of the path, so each candidate type is a
-        // separate file to look for. Icons are usually png or ico; a preview is
-        // always the webp this module wrote.
-        const types = kind === 'preview'
-            ? ['image/webp']
-            : ['image/png', 'image/x-icon', 'image/jpeg', 'image/webp', 'image/gif']
-        for (const type of types) {
-            try {
-                const path = await talosSourceCardPath(url, kind, type)
-                if (!await fileStore().existsPrivate(path)) continue
-                const bytes = await fileStore().readPrivate(path)
-                return URL.createObjectURL(new Blob([bytes as BlobPart], { type }))
-            } catch {
-                // Try the next candidate; a missing card is not an error.
-            }
-        }
-        return null
+/**
+ * Capture the cards of links saved before any of this existed.
+ *
+ * The same runner as the save path, with the two things the Library needs: a
+ * budget, because it is handed every link the user ever saved, and a signal,
+ * because leaving the screen must abandon the pass rather than finish it into
+ * nowhere.
+ */
+export async function backfillTalosSourceCards(
+    urls: readonly string[],
+    signal?: AbortSignal,
+): Promise<TalosSourceCardQueueReport> {
+    const report = await queue.run(urls, { budget: BACKFILL_BUDGET, signal })
+    forget(report.attempted)
+    return report
+}
+
+/**
+ * What the disk already answered.
+ *
+ * A sources chip is mounted per message, so one chat asks for the same site's
+ * favicon once per message that cites it — and every miss costs a probe of each
+ * candidate extension. The bytes are cached rather than an object URL so the
+ * lifetime stays where it belongs: each component makes its own URL and revokes
+ * it, which is what stops a long-lived Library from holding every icon it ever
+ * showed. Bounded, because a card is bytes and this is a phone.
+ */
+const cards = new Map<string, Blob | null>()
+const MAX_REMEMBERED_CARDS = 300
+
+function remember(key: string, value: Blob | null): void {
+    if (cards.size >= MAX_REMEMBERED_CARDS) {
+        const oldest = cards.keys().next().value
+        if (oldest !== undefined) cards.delete(oldest)
     }
-    return { icon: await read('icon'), preview: await read('preview') }
+    cards.set(key, value)
+}
+
+/**
+ * Forget what a capture may have changed.
+ *
+ * The cache remembers absence, which is the whole point — but a pass that just
+ * fetched a card would otherwise be invisible behind its own "no card" answer,
+ * and the Library would show Globes for icons sitting on disk until the app was
+ * restarted. Every path that writes cards ends here.
+ */
+function forget(urls: readonly string[]): void {
+    for (const url of urls) {
+        cards.delete(`icon:${url}`)
+        cards.delete(`preview:${url}`)
+    }
+}
+
+/**
+ * The bytes of a stored card image, or null when there are none.
+ *
+ * One kind per call rather than both: every candidate type is a separate file
+ * to look for, so asking for a preview nobody is about to show doubles the disk
+ * probing of a Library that is only rendering favicons.
+ */
+export async function readTalosSourceCardImage(
+    url: string,
+    kind: 'icon' | 'preview',
+): Promise<Blob | null> {
+    const key = `${kind}:${url}`
+    const remembered = cards.get(key)
+    if (remembered !== undefined) return remembered
+
+    const { talosSourceCardPath, talosSourceCardTypes } = await import('@/lib/search/sourceCardStore')
+    // The extension is part of the path, so each candidate type is a separate
+    // file to look for — the same set the settled check uses, from the same
+    // place, so a card that counts as present is a card that can be read.
+    for (const type of talosSourceCardTypes(kind)) {
+        try {
+            const path = await talosSourceCardPath(url, kind, type)
+            if (!await fileStore().existsPrivate(path)) continue
+            const bytes = await fileStore().readPrivate(path)
+            const blob = new Blob([bytes as BlobPart], { type })
+            remember(key, blob)
+            return blob
+        } catch {
+            // Try the next candidate; a missing card is not an error.
+        }
+    }
+    remember(key, null)
+    return null
 }

@@ -62,9 +62,52 @@ and grid/list apply to both. Grid tile: favicon + title + preview when present,
 letter fallback otherwise. SourcesChip: favicon replaces the letter, same
 save-time bytes, zero display-time network.
 
-### Slice 6 — retroactive backfill
+### Slice 6 — retroactive backfill  ← DONE
 Best-effort pass on Library open for links lacking a card. Bounded concurrency,
 cancellable, never re-fetches a card it already has, logs what it skipped.
+
+**Web research checkpoint (2026-07-30, before implementation).**
+
+| Query | What it changed here |
+|---|---|
+| idempotent background backfill, negative caching, permanent vs transient failures | Split the failure kinds. A pass that only knows "no card" cannot tell *never tried* from *this site has no favicon*, so a dead link is a page fetch on every Library open forever. Added the miss mark. |
+| browser favicon cache: failed fetch, negative cache, retry interval | Browsers keep favicons in a dedicated store, refreshed on their own schedule (days), not per page view — and negative entries EXPIRE. So the mark carries its timestamp and stops counting after 7 days, instead of being a permanent tombstone that would rob an offline phone of that favicon forever. |
+| AbortController + Vue scope disposal | The pass takes an `AbortSignal`, checked between items and before starting; the composable aborts on unmount. Leaving the Library abandons the pass rather than finishing it into a component that is gone. |
+| requestIdleCallback in Android WebView | Available (Blink), timeout strongly recommended. NOT adopted: the pass is already async, budgeted and abortable, so idle scheduling would add a second timing mechanism for no gain. Recorded so the decision is a decision. |
+
+**Built:** `src/lib/search/sourceCardQueue.ts` — one runner for the save path and
+the backfill, since they are the same job with different numbers. Concurrency 2,
+budget (12 for the backfill), dedupe, cancellation, and a report naming the urls
+it attempted. The device-log line carries counts only — which pages a user saved
+is not device-log material, and that log is readable from the Doctor export.
+
+**Negative index:** `<digest>-miss.txt` holds the attempt time. `settled(url)` is
+one function — an icon, or a recent mark — so capture and the backfill can never
+disagree about what counts as done.
+
+**Two defects found and fixed while wiring this:**
+1. The settled check looked only for `-icon.png`, so every site serving an `.ico`
+   favicon was re-fetched on every pass forever, having stored a perfectly good
+   icon each time. The candidate type list is now in one place.
+2. The writer canonicalised the url before hashing and the readers did not, so a
+   link stored as `https://example.org` looked for a card written under
+   `https://example.org/` and never found it. Canonicalisation moved into
+   `digest()`, which both sides go through.
+
+**Also landed:** the sources chip shows the captured favicon behind its letter —
+READ-ONLY, no backfill. Opening a months-old chat must not reach out to every
+site it cited, which is the beacon the letters existed to avoid. One card store,
+so old chats gain marks as the Library fills those cards in.
+
+**Honest cost:** the backfill makes requests to sites the user visited in the
+past, at a moment they did not choose. Direct to the site, never a proxy, ≤12
+per Library open, once per url ever. Stated rather than hidden.
+
+**Known ceiling, not a defect:** presence is `stat` per candidate extension, so a
+very large Library probes proportionally. A single `readdir` of the cards
+directory would make it one call regardless of size. Not built: it needs a new
+guarded store method, and the in-memory card cache already removes the
+per-component multiplier that made this visible.
 
 ## Invariants (no compromise = no hidden cost)
 

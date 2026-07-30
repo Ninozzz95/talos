@@ -6,6 +6,7 @@ import { Check, Download, Eye, Globe2, LockKeyhole, Sparkles, Upload, X } from '
 import TalosMobileLibraryActionsMenu from '@/components/talos/library/TalosMobileLibraryActionsMenu.vue'
 import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLibraryFileRow.vue'
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
+import { useTalosSourceCardIcons } from '@/composables/useTalosSourceCardIcons'
 import TalosThemedSelect, { type TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
@@ -194,6 +195,13 @@ const visible = computed(() => mine.value.filter(
 ))
 
 const sourceLinkRows = computed(() => talosSavedLinkRows(mine.value))
+
+// Read-only, like the sources chip and unlike the Library: this panel belongs to
+// a chat, and opening a chat must not reach out to the sites it cited. The cards
+// the Library backfills show up here for free.
+const { icons: sourceIcons } = useTalosSourceCardIcons(
+    computed(() => sourceLinkRows.value.map((row) => row.url)),
+)
 
 const { thumbs } = useTalosVaultThumbnails(visible, props.previewUrl)
 
@@ -619,6 +627,7 @@ const mediaScope = computed(() => {
                         :key="row.url"
                         :row="row"
                         :saved-at-label="formatSavedAt(row.savedAt)"
+                        :favicon-url="sourceIcons[row.url] ?? null"
                         copy-test-id="talos-chat-media-link-copy"
                         browser-test-id="talos-chat-media-link-open"
                         @open-copy="openSavedCopy(row.fileId)"

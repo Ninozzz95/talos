@@ -1,5 +1,10 @@
 import { talosUnfurlPage } from '@/lib/search/unfurl'
-import { talosSourceCardPath, type TalosSourceCardKind } from '@/lib/search/sourceCardStore'
+import {
+    talosSourceCardMissPath,
+    talosSourceCardPath,
+    talosSourceCardTypes,
+    type TalosSourceCardKind,
+} from '@/lib/search/sourceCardStore'
 import { talosLogDeviceIssue } from '@/lib/talosDeviceLog'
 
 /**
@@ -36,12 +41,27 @@ export interface TalosSourceCardPorts {
     /** Re-encode small. Also what strips whatever the original file carried. */
     shrink(base64: string, contentType: string): Promise<{ base64: string; contentType: string }>
     exists(path: string): Promise<boolean>
+    read(path: string): Promise<Uint8Array>
     write(path: string, base64: string): Promise<void>
+    now(): number
 }
 
 export interface TalosSourceCardCapture {
     capture(url: string): Promise<TalosSourceCard | null>
+    /** Whether this url needs no work: it has an icon, or a recent failed try. */
+    settled(url: string): Promise<boolean>
 }
+
+/**
+ * How long a failed attempt is believed.
+ *
+ * A week is short enough that a phone which happened to be offline gets its
+ * favicon back on the next open a week later, and long enough that a site with
+ * no favicon at all is not re-fetched every time the Library is opened. It is
+ * the same shape as a browser's own favicon store, which keeps failures out of
+ * the way for days rather than retrying them per page view.
+ */
+const RETRY_AFTER_A_MISS_MS = 7 * 24 * 60 * 60 * 1000
 
 export function createTalosSourceCardCapture(
     ports: TalosSourceCardPorts,
@@ -74,18 +94,60 @@ export function createTalosSourceCardCapture(
         }
     }
 
-    return {
-        async capture(url) {
-            try {
-                // Canonical first: everything downstream keys on it, and a URL
-                // that will not parse has no card and no path.
-                const canonical = new URL(url).toString()
+    /**
+     * A failed try, written down. Never allowed to fail the capture with it: a
+     * mark is a courtesy to the network, not a reason to lose anything.
+     */
+    async function markMissed(canonical: string): Promise<void> {
+        try {
+            await ports.write(await talosSourceCardMissPath(canonical), btoa(String(ports.now())))
+        } catch {
+            // Then the next pass tries again, which is the safe direction.
+        }
+    }
 
-                // A card already on disk is the index. Nothing is re-fetched.
-                const settled = await ports.exists(
-                    await talosSourceCardPath(canonical, 'icon', 'image/png'),
-                )
-                if (settled) return null
+    async function missIsRecent(canonical: string): Promise<boolean> {
+        const path = await talosSourceCardMissPath(canonical)
+        if (!await ports.exists(path)) return false
+        const at = Number.parseInt(new TextDecoder().decode(await ports.read(path)).trim(), 10)
+        if (!Number.isFinite(at)) return false
+        const age = ports.now() - at
+        // A negative age is a mark from the future — a clock that moved — and
+        // believing it would hide the site for a week for no reason.
+        return age >= 0 && age < RETRY_AFTER_A_MISS_MS
+    }
+
+    /**
+     * The presence of a file IS the index, so this is the whole state machine:
+     * an icon means done, a recent mark means recently tried, anything else
+     * means there is work. Both halves are asked here, once, so capture and the
+     * backfill can never disagree about what counts as settled.
+     */
+    async function settled(url: string): Promise<boolean> {
+        try {
+            const canonical = new URL(url).toString()
+            if (await missIsRecent(canonical)) return true
+            for (const type of talosSourceCardTypes('icon')) {
+                if (await ports.exists(await talosSourceCardPath(canonical, 'icon', type))) return true
+            }
+            return false
+        } catch {
+            // A store that cannot answer must not make everything look done.
+            return false
+        }
+    }
+
+    return {
+        settled,
+
+        async capture(url) {
+            // Canonical first, and outside the try, so the failure path can
+            // still write the mark. A URL that will not parse has no path at
+            // all, and stays null.
+            let canonical: string | null = null
+            try {
+                canonical = new URL(url).toString()
+                if (await settled(canonical)) return null
 
                 const page = await ports.readPage(canonical)
                 const fields = talosUnfurlPage(page.url || canonical, page.body)
@@ -94,6 +156,10 @@ export function createTalosSourceCardCapture(
                 const previewPath = fields.imageUrl
                     ? await storeImage(canonical, fields.imageUrl, 'preview')
                     : null
+
+                // The icon is what the Library shows, so a page read that
+                // yielded none is a miss even though nothing threw.
+                if (!iconPath) await markMissed(canonical)
 
                 return {
                     url: canonical,
@@ -107,6 +173,7 @@ export function createTalosSourceCardCapture(
                 // refuses is worth seeing in the Doctor, and this is the
                 // instrument that makes an unpredicted failure describe itself.
                 talosLogDeviceIssue('TALOS_SOURCE_CARD', String(error).slice(0, 200))
+                if (canonical) await markMissed(canonical)
                 return null
             }
         },

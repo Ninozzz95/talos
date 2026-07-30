@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { talosSourceCardPath } from '@/lib/search/sourceCardStore'
+import { talosSourceCardMissPath, talosSourceCardPath } from '@/lib/search/sourceCardStore'
 
 /**
  * Slice 4 of the Library source cards, decided by what slice 3 found: a saved
@@ -32,6 +32,36 @@ describe('talosSourceCardPath', () => {
         const preview = await talosSourceCardPath('https://example.org/a', 'preview', 'image/png')
 
         expect(icon).not.toBe(preview)
+    })
+
+    /**
+     * The writer had canonicalised before hashing and the readers had not, so a
+     * link stored as `https://example.org` looked for a card written under
+     * `https://example.org/` and never found it — every such site would have
+     * been re-fetched forever while its perfectly good icon sat on disk.
+     * Canonicalising HERE is the only version of this that cannot drift: there
+     * is one function, so there is one answer.
+     */
+    it('gives one address written two ways one card', async () => {
+        const bare = await talosSourceCardPath('https://example.org', 'icon', 'image/png')
+        const slashed = await talosSourceCardPath('https://example.org/', 'icon', 'image/png')
+        const cased = await talosSourceCardPath('https://EXAMPLE.org/', 'icon', 'image/png')
+
+        expect(bare).toBe(slashed)
+        expect(cased).toBe(slashed)
+    })
+
+    it('has no path at all for something that is not an address', async () => {
+        await expect(talosSourceCardPath('not a url', 'icon', 'image/png')).rejects.toThrow()
+        await expect(talosSourceCardMissPath('not a url')).rejects.toThrow()
+    })
+
+    it('keeps the record of a failure apart from the card itself', async () => {
+        const miss = await talosSourceCardMissPath('https://example.org/a')
+        const icon = await talosSourceCardPath('https://example.org/a', 'icon', 'image/png')
+
+        expect(miss).toMatch(/^talos-vault\/cards\/[0-9a-f]{32}-miss\.txt$/)
+        expect(miss.slice(0, 50)).toBe(icon.slice(0, 50))
     })
 
     it('gives different URLs different paths', async () => {
