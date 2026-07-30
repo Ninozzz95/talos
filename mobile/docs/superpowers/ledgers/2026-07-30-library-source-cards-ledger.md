@@ -109,6 +109,35 @@ directory would make it one call regardless of size. Not built: it needs a new
 guarded store method, and the in-memory card cache already removes the
 per-component multiplier that made this visible.
 
+**Also known, deferred:** deleting a saved link does NOT delete its card. Cards
+are keyed by URL and shared between links, so deletion needs its own design.
+Backlogged, not silently ignored.
+
+## Gate & APK
+
+`781be8f` slice 6 + sources chip · `63ec566` the e2e sheet race.
+
+2541 unit (2510 → 2541), typecheck, parity clean.
+
+The e2e gate was fixed as its own commit before the APK, because it was the
+instrument saying the APK is valid. Every full run had been failing one or two
+specs — a different one each time, each green alone — and it was always the SAME
+line, copy-pasted 48 times: `if (sheet.count() > 0) { back.click(); wait(320) }`,
+a check-then-act race against the sheet's own leave transition. Before: failures
+in essentially every run. After: three consecutive runs without it, two of them
+79/79. The third failed a different spec on a different signature (element not
+found at 22s, not a 60s detach) which passes 15/15 alone — residual, recorded,
+not claimed as fixed.
+
+**APK r11** `TALOS-mobile-2026-07-30-r11.apk`, 43.7 MB, JDK 21 at
+`AVM/.tools/jdk/jdk-21.0.11+10` (JDK 17 is not enough: `@capacitor/filesystem`
+8.1.2 declares `jvmToolchain(21)`). Verified INSIDE the archive, not in the
+build directory: `TALOS_SOURCE_CARD_BACKFILL`, `talos-source-favicon`,
+`talos-library-link-favicon`, `-miss.txt` and `talos-vault/cards/` are all
+present in the bundled JS.
+
+Not claimed: no favicon has been fetched on a device. The manual gate is open.
+
 ## Invariants (no compromise = no hidden cost)
 
 - Zero display-time network. Everything is captured at save/backfill time and
