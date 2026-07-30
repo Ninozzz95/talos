@@ -109,9 +109,20 @@ const effectiveLibraryContextPolicy = computed(() => resolveTalosLibraryContextP
     session_policy: sessionLibraryContextPolicy.value,
     turn_override: libraryTurnOverride.value,
 }))
+/**
+ * Owner 2026-07-30, on the composer pill: it has to agree with what the send
+ * actually does. F-14 suppresses the Library for a temporary chat inside the
+ * controller, and this computed did not know — so the pill went on saying
+ * "Broad · 12 sources" while the model was being sent none of them.
+ *
+ * The direction of that lie is the bad one: you would believe your documents
+ * were in play and trust an answer that never saw them. The pill reads Off now,
+ * and the notice above the thread says why.
+ */
 const effectiveLibraryContextEnabled = computed(() => (
     settings.state.shell.library_context_enabled === true
     && effectiveLibraryContextPolicy.value.enabled
+    && !isTemporaryChat.value
 ))
 const libraryTurnFiles = computed(() => attachments.vaultFiles.filter((file) => (
     file.status === 'available'

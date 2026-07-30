@@ -492,6 +492,41 @@ describe('ChatScreen (functional, local-first)', () => {
         expect(wrapper.findComponent(TalosMobileMessageList).exists()).toBe(true)
     })
 
+    /**
+     * Owner 2026-07-30 asked whether the composer pill had kept up with the
+     * recent work. It had not: F-14 suppressed the Library inside the
+     * controller and this computed did not know, so the pill went on
+     * advertising "Broad · N sources" while the model was sent none of them.
+     *
+     * The direction of that lie is the dangerous one — you would believe your
+     * documents were in play and trust an answer that never saw them.
+     */
+    it('does not advertise the Library in a chat that is not sending it', async () => {
+        const controller = makeController([
+            { id: 'user-1', role: 'user', content: 'un segreto', created_at: '', state: 'persisted' },
+        ])
+        controller.chat.activeSession.value = { id: 'tmp-abc', title: 'Chat temporanea' }
+        mockState.settings.state.shell.library_context_enabled = true
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { attachTo: document.body })
+        await flushPromises()
+
+        expect(wrapper.getComponent(TalosMobileComposer).props('libraryContextEnabled')).toBe(false)
+    })
+
+    it('still advertises it in an ordinary chat, so the guard is not just off', async () => {
+        const controller = makeController([
+            { id: 'user-1', role: 'user', content: 'ciao', created_at: '', state: 'persisted' },
+        ])
+        controller.chat.activeSession.value = { id: 'chat-1', title: 'Normale' }
+        mockState.settings.state.shell.library_context_enabled = true
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { attachTo: document.body })
+        await flushPromises()
+
+        expect(wrapper.getComponent(TalosMobileComposer).props('libraryContextEnabled')).toBe(true)
+    })
+
     it('says nothing of the sort in an ordinary chat', async () => {
         const controller = makeController([
             { id: 'user-1', role: 'user', content: 'ciao', created_at: '', state: 'persisted' },
