@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    I-11 — why this file permits cleartext, and what actually stops it.
+
+    Ollama and LM Studio run on the user's own machine and speak plain HTTP.
+    Android has refused cleartext by default since Android 9, so a perfectly
+    valid endpoint typed into Settings was rejected by the platform before a
+    byte moved, with an error that explained nothing to anyone.
+
+    The narrow fix would be to permit cleartext only for private address ranges.
+    Android does not offer it: `<domain>` matches host NAMES, and the current
+    documentation has no IP-literal or CIDR form. The choice is genuinely
+    all-or-nothing, so the narrowing lives in the app instead —
+    `src/lib/network/localEndpointPolicy.ts` accepts cleartext only to an IP
+    literal inside RFC 1918 or loopback, and refuses every host NAME however
+    local it sounds, because a name is resolved later and can answer with a
+    public address.
+
+    TALOS is distributed. This flag is not weakening one developer's phone, it
+    is weakening everyone's, so the app-level rule is a tested contract rather
+    than a comment: see tests/unit/lib/localEndpointPolicy.test.ts.
+
+    The platform is not out of the picture either. From Android 17, reaching a
+    local network address requires the ACCESS_LOCAL_NETWORK runtime permission,
+    which the user grants and can revoke at any time — an OS-level gate this
+    file cannot override.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <!--
+                System CAs only. User-installed certificates are deliberately
+                NOT trusted: a distributed app should not honour a certificate
+                someone was talked into installing.
+            -->
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -959,6 +959,12 @@ export const TALOS_EN_MESSAGES = {
         refreshProvider: 'Refresh {provider} models',
         resetProviderEndpoint: 'Reset {provider} endpoint',
         resetEndpoint: 'Reset endpoint',
+        endpointRefused: {
+            malformed: 'That is not a complete address. It needs to start with http:// or https://.',
+            scheme: 'Only http:// and https:// addresses can be used here.',
+            credentials: 'Remove the username and password from the address — a key belongs in the key field, not in the URL.',
+            cleartextPublic: 'An http:// address is only accepted for a machine on your own network, written as a number like http://192.168.1.20:11434. For anything else use https://.',
+        },
         providerOperationFailed: 'The provider operation failed.',
         providerRequestFailed: 'The provider request failed.',
         providerKeyRequired: 'Add your {provider} API key before continuing.',

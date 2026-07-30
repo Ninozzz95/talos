@@ -962,6 +962,12 @@ export const TALOS_IT_MESSAGES = {
         refreshProvider: 'Aggiorna modelli {provider}',
         resetProviderEndpoint: 'Ripristina endpoint {provider}',
         resetEndpoint: 'Ripristina endpoint',
+        endpointRefused: {
+            malformed: 'Non è un indirizzo completo. Deve iniziare con http:// o https://.',
+            scheme: 'Qui si possono usare solo indirizzi http:// e https://.',
+            credentials: 'Togli nome utente e password dall\'indirizzo — la chiave va nel campo apposito, non nell\'URL.',
+            cleartextPublic: 'Un indirizzo http:// è accettato solo per una macchina della tua rete, scritta come numero: ad esempio http://192.168.1.20:11434. Per tutto il resto serve https://.',
+        },
         providerOperationFailed: 'Operazione del provider non riuscita.',
         providerRequestFailed: 'Richiesta al provider non riuscita.',
         providerKeyRequired: 'Aggiungi la chiave API {provider} prima di continuare.',

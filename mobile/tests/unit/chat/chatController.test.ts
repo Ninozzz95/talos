@@ -3735,6 +3735,47 @@ describe('chatController', () => {
         expect(JSON.stringify(providerCalls[0]?.data)).toContain('OMNIROUTE renewal is March 2027')
     }, 20_000)
 
+    /**
+     * I-11. Permitting cleartext is a manifest switch and it is all-or-nothing:
+     * Android's network security config matches host NAMES, so "private ranges
+     * only" cannot be written there. The narrowing therefore has to hold in the
+     * app — and TALOS is distributed, so this rule protects other people's
+     * phones, not one developer's.
+     *
+     * It belongs here rather than in the settings panel: the panel is one
+     * caller, and a guard that only lives in a form is a guard the next caller
+     * walks around.
+     */
+    it('I-11 refuses a cleartext endpoint that is not on the local network', async () => {
+        const { deps } = makeDeps()
+        const setEndpoint = vi.fn(deps.setEndpoint)
+        deps.setEndpoint = setEndpoint
+        const controller = createChatController(deps)
+        await controller.init()
+
+        // The Ollama case: a private literal, which is the whole point.
+        await expect(controller.saveEndpoint('ollama', 'http://192.168.1.20:11434'))
+            .resolves.toBeUndefined()
+        expect(setEndpoint).toHaveBeenCalledWith('ollama', 'http://192.168.1.20:11434')
+
+        // A name is refused however local it sounds: it is resolved later, by
+        // someone else, and can answer with a public address.
+        await expect(controller.saveEndpoint('ollama', 'http://ollama.lan:11434'))
+            .rejects.toThrow(/TALOS_ENDPOINT_CLEARTEXT_PUBLIC/)
+        // A public address in the clear, refused outright.
+        await expect(controller.saveEndpoint('openai', 'http://93.184.216.34/v1'))
+            .rejects.toThrow(/TALOS_ENDPOINT_CLEARTEXT_PUBLIC/)
+        // Credentials in the URL leak into logs, diagnostics and redirects.
+        await expect(controller.saveEndpoint('openai', 'https://user:pass@api.example.com'))
+            .rejects.toThrow(/TALOS_ENDPOINT_CREDENTIALS/)
+        // And nothing is stored for any of the refusals.
+        expect(setEndpoint).toHaveBeenCalledTimes(1)
+
+        // HTTPS anywhere stays fine.
+        await expect(controller.saveEndpoint('openai', 'https://api.example.com/v1'))
+            .resolves.toBeUndefined()
+    }, 20_000)
+
     it('P1-CTX-ASK-03 honors persistent consent, revocation, and denial without body drift', async () => {
         const { deps, store, settings, request, chatRepository } = makeDeps()
         store.set('anthropic', 'sk-ant')
