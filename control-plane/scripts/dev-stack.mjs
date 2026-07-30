@@ -3,7 +3,6 @@ import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import concurrently from 'concurrently'
 import { generateBrowserActionKeypair } from './browser-action-keypair.mjs'
 import {
     acquireDevStackLease,
@@ -99,6 +98,7 @@ function quoted(value) {
 
 export function createDevStackConfig({
     token = randomBytes(32).toString('hex'),
+    artifactToken = randomBytes(32).toString('hex'),
     actionKeypair = generateBrowserActionKeypair(),
     inheritedEnv = process.env,
     platform = process.platform,
@@ -122,6 +122,7 @@ export function createDevStackConfig({
     const caBundle = phpRoot ? paths.join(phpRoot, 'extras', 'ssl', 'cacert.pem') : null
     const hasLocalPhpRuntime = localPhpRuntime !== null
     const hasLocalCaBundle = caBundle !== null && fileExists(caBundle)
+    const artifactWorker = path.join(workspaceRoot, 'artifact-worker')
     const browserWorker = path.join(workspaceRoot, 'browser-worker')
     const validator = path.join(workspaceRoot, 'validator')
     const sanitizedInheritedEnv = { ...inheritedEnv }
@@ -130,14 +131,23 @@ export function createDevStackConfig({
         'TALOS_BROWSER_ACTION_KEY_ID',
         'TALOS_BROWSER_ACTION_PRIVATE_KEY_B64',
         'TALOS_BROWSER_ACTION_PUBLIC_KEY_B64',
+        'TALOS_ARTIFACT_WORKER_TOKEN',
+        'ARTIFACT_WORKER_TOKEN',
     ]) {
         delete sanitizedInheritedEnv[name]
+    }
+    const artifactInheritedEnv = { ...sanitizedInheritedEnv }
+    for (const name of Object.keys(artifactInheritedEnv)) {
+        if (/(?:API_KEY|TOKEN|SECRET|PASSWORD|PRIVATE_KEY)/iu.test(name)) {
+            delete artifactInheritedEnv[name]
+        }
     }
     const sharedEnv = {
         ...sanitizedInheritedEnv,
         AVM_VALIDATOR_URL: 'http://127.0.0.1:3000',
         TALOS_VALIDATOR_HEALTH_URL: 'http://127.0.0.1:3000/health',
         TALOS_BROWSER_WORKER_URL: 'http://127.0.0.1:3100',
+        TALOS_ARTIFACT_WORKER_URL: 'http://127.0.0.1:3200',
         PHP_BIN: hasLocalPhpRuntime && localPhpRuntime ? localPhpRuntime : 'php',
         ...(hasLocalCaBundle ? {
             TALOS_PHP_ROOT: phpRoot,
@@ -150,6 +160,7 @@ export function createDevStackConfig({
         TALOS_BROWSER_WORKER_TOKEN: token,
         TALOS_BROWSER_ACTION_KEY_ID: actionKeypair.keyId,
         TALOS_BROWSER_ACTION_PRIVATE_KEY_B64: actionKeypair.privateKeyBase64,
+        TALOS_ARTIFACT_WORKER_TOKEN: artifactToken,
     }
     const browserWorkerEnv = {
         ...sharedEnv,
@@ -195,6 +206,16 @@ export function createDevStackConfig({
                     PORT: '3100',
                 },
             },
+            {
+                name: 'artifact',
+                command: `${npm} --prefix ${quoted(artifactWorker)} run dev`,
+                env: {
+                    ...artifactInheritedEnv,
+                    ARTIFACT_WORKER_HOST: '127.0.0.1',
+                    ARTIFACT_WORKER_PORT: '3200',
+                    ARTIFACT_WORKER_TOKEN: artifactToken,
+                },
+            },
         ],
     }
 }
@@ -205,7 +226,7 @@ export async function runDevStack({
     assertCanStart = assertBrowserWorkerCanStart,
     acquireLease = acquireDevStackLease,
     releaseLease = releaseDevStackLease,
-    runCommands = concurrently,
+    runCommands,
 } = {}) {
     const expectedUrl = config.sharedEnv.TALOS_BROWSER_WORKER_URL
     const ownership = await inspectOwnership({
@@ -219,9 +240,10 @@ export async function runDevStack({
     })
 
     try {
-        const { result } = runCommands(config.commands, {
+        const concurrentRunner = runCommands ?? (await import('concurrently')).default
+        const { result } = concurrentRunner(config.commands, {
             prefix: 'name',
-            prefixColors: ['#86efac', '#93c5fd', '#c4b5fd', '#fdba74', '#67e8f9'],
+            prefixColors: ['#86efac', '#93c5fd', '#c4b5fd', '#fdba74', '#67e8f9', '#f9a8d4'],
             killOthersOn: ['failure'],
             cwd: path.resolve(scriptDirectory, '..'),
         })

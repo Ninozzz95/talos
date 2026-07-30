@@ -3,6 +3,11 @@
 vendor/
 node_modules/
 
+artifact-worker/dist/
+!artifact-worker/vendor/
+artifact-worker/vendor/*
+!artifact-worker/vendor/xlsx-0.20.3.tgz
+
 core/vendor/
 validator/node_modules/
 control-plane/vendor/

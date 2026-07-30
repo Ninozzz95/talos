@@ -66,6 +66,14 @@ return [
             'legacy_writes_enabled' => env('TALOS_BROWSER_LEGACY_WRITES_ENABLED', true),
             'test_fixture_origin' => env('TALOS_BROWSER_TEST_FIXTURE_ORIGIN'),
         ],
+        'artifact' => [
+            'worker_url' => env('TALOS_ARTIFACT_WORKER_URL'),
+            'worker_token' => env('TALOS_ARTIFACT_WORKER_TOKEN'),
+            'connect_timeout_seconds' => (int) env('TALOS_ARTIFACT_CONNECT_TIMEOUT_SECONDS', 3),
+            'request_timeout_seconds' => (int) env('TALOS_ARTIFACT_REQUEST_TIMEOUT_SECONDS', 130),
+            'max_response_bytes' => (int) env('TALOS_ARTIFACT_MAX_RESPONSE_BYTES', 35_000_000),
+            'stale_after_seconds' => (int) env('TALOS_ARTIFACT_STALE_AFTER_SECONDS', 180),
+        ],
         'web' => [
             'search' => [
                 'provider' => env('TALOS_WEB_SEARCH_PROVIDER', 'unavailable'),

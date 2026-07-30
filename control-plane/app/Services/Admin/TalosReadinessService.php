@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Admin;
 
+use App\Services\Artifacts\ArtifactWorkerClient;
 use App\Services\FileIngestion\TalosFilePipelineHealth;
 use App\Services\Talos\Browser\TalosBrowserWorkerProtocol;
 use Illuminate\Database\Migrations\Migrator;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Schema;
 final class TalosReadinessService
 {
     public function __construct(
+        private readonly ArtifactWorkerClient $artifactWorker,
         private readonly TalosFilePipelineHealth $filePipelineHealth,
         private readonly Migrator $migrator,
     ) {}
@@ -32,6 +34,7 @@ final class TalosReadinessService
             ...$this->filePipelineHealth->checks(),
             'validator' => $this->validatorCheck(),
             'browser_worker' => $this->browserWorkerCheck(),
+            'artifact_worker' => $this->artifactWorkerCheck(),
         ];
 
         $ready = ! collect($checks)->contains(
@@ -209,6 +212,30 @@ final class TalosReadinessService
         }
 
         return $this->check('healthy', $readinessUrl);
+    }
+
+    /**
+     * @return array{status: string, detail: string}
+     */
+    private function artifactWorkerCheck(): array
+    {
+        try {
+            $readiness = $this->artifactWorker->readiness();
+        } catch (\Throwable $exception) {
+            return $this->check(
+                'failed',
+                'artifact worker readiness failed: '.$exception->getMessage(),
+            );
+        }
+
+        if ($readiness->status !== 'ready') {
+            return $this->check('failed', 'artifact worker readiness returned degraded status.');
+        }
+
+        return $this->check(
+            'healthy',
+            "artifact worker {$readiness->workerVersion} protocol {$readiness->protocolVersion} is ready.",
+        );
     }
 
     /**
