@@ -20,10 +20,12 @@ import type { TalosSavedLinkRow } from '@/lib/vaultLibrary'
  * saved and read from disk here, so showing a real favicon costs no request at
  * display time.
  */
-defineProps<{
+withDefaults(defineProps<{
     row: TalosSavedLinkRow
     savedAtLabel: string
-}>()
+    /** Captured at save time; absent means the Globe, which is not a failure. */
+    faviconUrl?: string | null
+}>(), { faviconUrl: null })
 
 const emit = defineEmits<{
     openCopy: []
@@ -44,7 +46,14 @@ const emit = defineEmits<{
             :aria-label="`Open the saved copy of ${row.title}`"
             @click="emit('openCopy')"
         >
-            <Globe class="size-6 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+            <img
+                v-if="faviconUrl"
+                data-testid="talos-library-link-favicon"
+                :src="faviconUrl"
+                alt=""
+                class="size-6 shrink-0 rounded object-contain"
+            >
+            <Globe v-else class="size-6 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
             <span class="line-clamp-3 text-sm font-medium text-[var(--talos-text)]">{{ row.title }}</span>
             <span class="mt-auto flex w-full min-w-0 flex-col text-2xs text-[var(--talos-muted)]">
                 <span class="truncate">{{ row.host }}</span>

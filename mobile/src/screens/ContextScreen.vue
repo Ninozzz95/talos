@@ -19,6 +19,7 @@ import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLib
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
 import TalosMobileSavedLinkTile from '@/components/talos/library/TalosMobileSavedLinkTile.vue'
 import { groupTalosLibraryByChat } from '@/lib/libraryGrouping'
+import { useTalosSourceCardIcons } from '@/composables/useTalosSourceCardIcons'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 import { talosNeedsExternalOpen } from '@/lib/documents/openable'
 import { useChatController } from '@/stores/chatController'
@@ -457,6 +458,10 @@ function linkOriginChat(row: TalosSavedLinkRow): string | null {
     return file ? originChat(file) : null
 }
 
+// Favicons captured when each link was saved, read from disk. Nothing is
+// fetched to show them, which is what made real site marks acceptable here.
+const { icons: sourceIcons } = useTalosSourceCardIcons(renderedLinkRows)
+
 const groupedLinkRows = computed(() => (groupByChat.value
     ? groupTalosLibraryByChat(renderedLinkRows.value, linkOriginChat, t('library.notFromChat'))
     : [{ title: '', items: renderedLinkRows.value }]))
@@ -696,6 +701,7 @@ onMounted(async () => {
                         :key="row.url"
                         :row="row"
                         :saved-at-label="formatModified(row.savedAt)"
+                        :favicon-url="sourceIcons[row.url] ?? null"
                         @open-copy="openSavedCopy(row.fileId)"
                         @open-browser="openLink(row.url)"
                     />
@@ -707,6 +713,7 @@ onMounted(async () => {
                         :key="row.url"
                         :row="row"
                         :saved-at-label="formatModified(row.savedAt)"
+                        :favicon-url="sourceIcons[row.url] ?? null"
                         browser-test-id="talos-library-link-open"
                         @open-copy="openSavedCopy(row.fileId)"
                         @open-browser="openLink(row.url)"
