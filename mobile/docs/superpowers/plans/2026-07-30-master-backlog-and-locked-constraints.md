@@ -239,6 +239,23 @@ uscito da qui: è una chiave dell'owner, vive in **H**.)*
 | **9** | **H** — le chiavi dell'owner | non è una fase: è ciò che sblocca lui |
 | **10** | **I = K** — piattaforma agentica / coding locale | unite per decisione dell'owner |
 | **11** | **J** — congelati | 2 voci, ferme per sua scelta |
+| **12** | **L** — allineamento desktop + architettura cloud di sincronizzazione | «ultimissimi passi… ma questo è lontano, non blocchiamo per adesso» |
+
+### L — gli ultimissimi passi (owner 2026-07-30)
+
+**L1 — Allineare la versione desktop.** L'owner: «penso che lo farai tu, in
+maniera perfetta».
+⚠️ Nota di realtà da portare avanti: oggi il desktop è **congelato**
+(`5dd0c0be`) e la parità viaggia come ticket-mirror verso Codex, non come lavoro
+mio diretto. Se l'owner vuole che lo faccia io, è un **cambio di lane** e va
+comunicato a Codex. Segnalato, non bloccante.
+
+**L2 — Architettura cloud per sincronizzare desktop e mobile**, incluse tutte le
+sessioni attive, tramite login.
+Non parte da zero: il wizard account esiste già local-first con OAuth
+predisposto (N1, fatto), e il servizio cloud opzionale è già una chiave in H.
+Il pezzo mancante vero è **il login e la sessione condivisa**, che dipende da
+**P6** — non autorizzato. Da riprendere quando P6 si sblocca.
 
 **Le uniche dipendenze tecniche** (tutto il resto è preferenza, e la preferenza
 è espressa qui una volta invece che a ogni blocco):
