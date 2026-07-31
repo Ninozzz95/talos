@@ -14,6 +14,7 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     { id: 'library_list', group: 'library', actions: ['read'] },
     { id: 'library_search', group: 'library', actions: ['read'] },
     { id: 'library_read', group: 'library', actions: ['read'] },
+    { id: 'library_file_origin', group: 'library', actions: ['read'] },
     { id: 'notes_list', group: 'personal', actions: ['read'] },
     { id: 'tasks_list', group: 'personal', actions: ['read'] },
     { id: 'memory_search', group: 'personal', actions: ['read'] },

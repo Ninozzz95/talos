@@ -109,7 +109,7 @@ describe('read-only tool set', () => {
     it('every tool in the set is a READ — the first set cannot damage anything', () => {
         const tools = createTalosReadTools(sources())
         expect(tools.map((tool) => tool.name)).toEqual([
-            'library_list', 'library_search', 'library_read',
+            'library_list', 'library_search', 'library_read', 'library_file_origin',
             'notes_list', 'tasks_list', 'memory_search', 'time_now',
         ])
         expect(tools.every((tool) => tool.action === 'read')).toBe(true)

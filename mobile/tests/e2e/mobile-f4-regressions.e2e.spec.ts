@@ -1,6 +1,16 @@
 import { expect, test, type Page } from '@playwright/test'
+import { TALOS_PROVIDER_IMMERSIVE_STATE, TALOS_PROVIDER_STATE } from './chatFixtures'
 import { geminiCompletionFulfill } from './completionMock'
 import { closeToolSheet } from './toolSheet'
+
+/**
+ * The provider is configured ONCE for the whole suite (provider.setup.ts) and
+ * inherited here. Driving the Settings journey in every test cost about two
+ * minutes of the ten, and not one of these tests is about it — owner
+ * 2026-07-31: «quasi 10 minuti per e2e».
+ */
+test.use({ storageState: TALOS_PROVIDER_STATE })
+
 
 // F4 owner regressions: #19 pasted links must survive into the visible
 // message; #20 the prompt enhancer must be actionable with a prompt present.
@@ -15,21 +25,6 @@ function geminiResponse(text: string) {
     }
 }
 
-async function configureGemini(page: Page): Promise<void> {
-    await page.goto('/')
-    await page.locator(MENU).click()
-    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
-    await expect(page.locator(SHEET)).toBeVisible()
-    await page.locator('[data-settings-tab="models"]').click()
-    if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
-    await page.getByLabel('Google Gemini API key').fill('e2e-f4-key')
-    await page.getByLabel('Save Google Gemini key').click()
-    await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
-    await page.getByLabel('Default chat model').click()
-    await page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]').click()
-    await closeToolSheet(page)
-    await expect(page.locator(SHEET)).toHaveCount(0)
-}
 
 function mockProvider(page: Page): Promise<void> {
     return page.route('https://generativelanguage.googleapis.com/**', async (route) => {
@@ -100,7 +95,7 @@ function mockProviderWithReasoning(page: Page): Promise<void> {
 
 test('#19 a pasted URL survives into the sent message text', async ({ page }) => {
     await mockProvider(page)
-    await configureGemini(page)
+    await page.goto('/')
 
     const composer = page.getByLabel('Message TALOS')
     const text = 'Guarda questo link https://example.com/articolo?id=42 e dimmi cosa ne pensi'
@@ -120,27 +115,11 @@ test('#19 a pasted URL survives into the sent message text', async ({ page }) =>
 // The device runs the REAL defaults (immersive header) — reproduce there, not
 // in the classic-seeded shell the other journeys use.
 test.describe('#22 rename/delete on the immersive shell', () => {
-    test.use({
-        storageState: {
-            cookies: [],
-            origins: [{
-                origin: 'http://127.0.0.1:4173',
-                localStorage: [{
-                    name: 'CapacitorStorage.talos.mobile.settings',
-                    value: JSON.stringify({
-                        defaults_v3: true,
-                        presentation_v2: true,
-                        shell: { immersive_header: true, composer_drawer: false },
-                        onboarding: { intro_version: 2, intro_outcome: 'completed', setup_dismissed: true },
-                    }),
-                }],
-            }],
-        },
-    })
+    test.use({ storageState: TALOS_PROVIDER_IMMERSIVE_STATE })
 
     test('renames and deletes the active chat from the 3-dot menu', async ({ page }) => {
         await mockProvider(page)
-        await configureGemini(page)
+        await page.goto('/')
 
         const composer = page.getByLabel('Message TALOS')
         await composer.fill('Ciao, prima chat')
@@ -198,7 +177,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
             const reply = 'Ricevuto, uso il contesto.'
             await route.fulfill(geminiCompletionFulfill(request.url(), JSON.stringify(geminiResponse(reply)), reply))
         })
-        await configureGemini(page)
+        await page.goto('/')
 
         // Create a memory from the station.
         await page.locator(MENU).click()
@@ -270,7 +249,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
     test('#16 exports the chat from the 3-dot menu with desktop-parity artifacts', async ({ page }) => {
         await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
         await mockProvider(page)
-        await configureGemini(page)
+        await page.goto('/')
 
         const composer = page.getByLabel('Message TALOS')
         await composer.fill('Chat da esportare')
@@ -306,7 +285,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
 
     test('persisted reasoning row opens its drawer, survives reload, and matches the export', async ({ page }) => {
         await mockProviderWithReasoning(page)
-        await configureGemini(page)
+        await page.goto('/')
 
         const composer = page.getByLabel('Message TALOS')
         await composer.fill('Verifica il reasoning persistito')
@@ -352,7 +331,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
 
     test('#23/F5.1 hold-dropdown archives a chat and restores it from Archived', async ({ page }) => {
         await mockProvider(page)
-        await configureGemini(page)
+        await page.goto('/')
 
         const composer = page.getByLabel('Message TALOS')
         await composer.fill('Chat da archiviare')
@@ -400,7 +379,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
 
     test('renames and deletes a chat from the Chats page rows', async ({ page }) => {
         await mockProvider(page)
-        await configureGemini(page)
+        await page.goto('/')
 
         const composer = page.getByLabel('Message TALOS')
         await composer.fill('Ciao, chat da lista')
@@ -442,7 +421,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
 
 test('font size and chat message size remain independent in both directions and after reload', async ({ page }) => {
     await mockProvider(page)
-    await configureGemini(page)
+    await page.goto('/')
 
     const composer = page.getByLabel('Message TALOS')
     await composer.fill('Verifica che i due controlli tipografici siano indipendenti')
@@ -513,7 +492,7 @@ test('font size and chat message size remain independent in both directions and 
 
 test('#20 the enhancer control is actionable once a prompt exists', async ({ page }) => {
     await mockProvider(page)
-    await configureGemini(page)
+    await page.goto('/')
 
     const composer = page.getByLabel('Message TALOS')
     await composer.fill('Migliora questo prompt per favore')

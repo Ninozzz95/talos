@@ -41,6 +41,22 @@ export interface TalosToolSources {
         /** Present for a file there is nothing to READ in, only to look at. */
         image?: { base64: string; mediaType: string }
     } | null>
+    /**
+     * Where one file came from — the second door of famiglia B.
+     *
+     * Metadata only: never the prompt reference. The record points at a message
+     * in a conversation, and handing a model an id it cannot resolve gives it
+     * noise and gives the user a thread they did not ask to exist.
+     */
+    readFileOrigin(id: string): Promise<{
+        name: string
+        origin: 'uploaded' | 'generated' | 'downloaded' | 'unknown'
+        model: string | null
+        provider: string | null
+        createdAt: string | null
+        originSessionTitle: string | null
+        sourceUrl: string | null
+    } | null>
     listNotes(): Promise<Array<{ title: string; content: string; updated_at: string }>>
     listTasks(): Promise<Array<{ title: string; status: string; priority: string }>>
     searchMemories(query: string): Promise<Array<{ title: string; content: string }>>
@@ -407,6 +423,53 @@ export function createTalosReadTools(sources: TalosToolSources): TalosToolDefini
         },
     })
 
+    /**
+     * Owner's standing rule: every feature has TWO doors — the station and the
+     * tool. The origin card is the station; this is the other one, so a model in
+     * ANOTHER chat can be asked "who made this?" and can answer.
+     *
+     * In the `library` group deliberately: incognito withdraws the whole group,
+     * and tracing a file back to a conversation is precisely what an anonymous
+     * chat must not be able to do.
+     */
+    const libraryFileOrigin = defineTalosTool({
+        name: 'library_file_origin',
+        title: 'Where a Library file came from',
+        description: 'Report where one Library file came from: whether a model generated it or the user brought it in, which model and provider made it, when, and which chat it came from. Use it when the user asks who or what made a file, or whether a file is AI-generated. Ids come from library_list or library_search.',
+        action: 'read',
+        input: z.object({
+            id: z.string().min(1).describe('The file id from library_list or library_search.'),
+        }),
+        async run(input) {
+            const record = await sources.readFileOrigin(input.id)
+            if (!record) return { ok: false, content: `No Library file has the id "${input.id}".` }
+
+            const lines = [`name: ${takeCodePoints(record.name, 200)}`]
+            if (record.origin === 'unknown') {
+                // An honest answer IS an answer. Not a failure, and not a
+                // sentence invented to fill the silence.
+                lines.push('origin: not recorded')
+                lines.push('This file predates the origin record, or it was made in a chat that keeps none.')
+            } else {
+                lines.push(`origin: ${record.origin}`)
+                if (record.origin === 'generated') {
+                    lines.push(`made by: ${record.model ?? 'an unrecorded model'}`)
+                    lines.push(`provider: ${record.provider ?? 'not recorded'}`)
+                }
+                if (record.createdAt) lines.push(`created: ${takeCodePoints(record.createdAt, 40)}`)
+                if (record.originSessionTitle) {
+                    lines.push(`from chat: ${takeCodePoints(record.originSessionTitle, 160)}`)
+                }
+                if (record.sourceUrl) lines.push(`source: ${takeCodePoints(record.sourceUrl, 400)}`)
+            }
+            return {
+                ok: true,
+                content: lines.join('\n'),
+                evidence: { id: input.id, origin: record.origin },
+            }
+        },
+    })
+
     const notesList = defineTalosTool({
         name: 'notes_list',
         title: 'List notes',
@@ -477,6 +540,7 @@ export function createTalosReadTools(sources: TalosToolSources): TalosToolDefini
         libraryList,
         librarySearch,
         libraryRead,
+        libraryFileOrigin,
         notesList,
         tasksList,
         memorySearch,

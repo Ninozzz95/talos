@@ -1,5 +1,14 @@
 import { expect, test, type Page } from '@playwright/test'
-import { closeToolSheet } from './toolSheet'
+import { TALOS_PROVIDER_STATE } from './chatFixtures'
+
+/**
+ * The provider is configured ONCE for the whole suite (provider.setup.ts) and
+ * inherited here. Driving the Settings journey in every test cost about two
+ * minutes of the ten, and not one of these tests is about it — owner
+ * 2026-07-31: «quasi 10 minuti per e2e».
+ */
+test.use({ storageState: TALOS_PROVIDER_STATE })
+
 
 /**
  * Owner 2026-07-31, on video: he pressed «Modalità incognito», the incognito
@@ -42,22 +51,6 @@ async function mockProvider(page: Page): Promise<void> {
     })
 }
 
-async function configureGemini(page: Page): Promise<void> {
-    await page.goto('/')
-    await page.locator(MENU).click()
-    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
-    await expect(page.locator(SHEET)).toBeVisible()
-    await page.locator('[data-settings-tab="models"]').click()
-    if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') {
-        await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
-    }
-    await page.getByLabel('Google Gemini API key').fill('e2e-incognito-key')
-    await page.getByLabel('Save Google Gemini key').click()
-    await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
-    await page.getByLabel('Default chat model').click()
-    await page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]').click()
-    await closeToolSheet(page)
-}
 
 async function sendMessage(page: Page, text: string): Promise<void> {
     const composer = page.getByLabel('Message TALOS')
@@ -94,7 +87,7 @@ async function historySettlesAt(page: Page, count: number): Promise<void> {
 
 test('entering incognito leaves you in incognito, and stays there', async ({ page }) => {
     await mockProvider(page)
-    await configureGemini(page)
+    await page.goto('/')
     await sendMessage(page, 'Sei capace di generazione immagini?')
 
     // The blank chat the owner was in when he pressed it.
@@ -126,7 +119,7 @@ test('entering incognito leaves you in incognito, and stays there', async ({ pag
  */
 test('the chat menu stops offering incognito once the conversation has started', async ({ page }) => {
     await mockProvider(page)
-    await configureGemini(page)
+    await page.goto('/')
 
     // On a chat with nothing in it, both doors are there.
     await expect(page.getByTestId('talos-make-temporary')).toBeVisible()
@@ -154,7 +147,7 @@ test('the chat menu stops offering incognito once the conversation has started',
  */
 test('the welcome pill is a door into incognito, and it holds', async ({ page }) => {
     await mockProvider(page)
-    await configureGemini(page)
+    await page.goto('/')
     await sendMessage(page, 'Una conversazione che voglio tenere')
 
     await chooseFromChatMenu(page, 'New chat')
@@ -171,7 +164,7 @@ test('the welcome pill is a door into incognito, and it holds', async ({ page })
 /** The way back, by the same rule: incognito goes, whatever is in it. */
 test('leaving incognito takes the incognito chat with it', async ({ page }) => {
     await mockProvider(page)
-    await configureGemini(page)
+    await page.goto('/')
     await sendMessage(page, 'Prima conversazione')
 
     // Incognito is reachable only from a chat with nothing in it, so that is

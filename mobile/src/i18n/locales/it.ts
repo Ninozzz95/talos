@@ -769,6 +769,7 @@ export const TALOS_IT_MESSAGES = {
         libraryList: 'Esplorazione della Libreria',
         librarySearch: 'Ricerca nella Libreria',
         libraryRead: 'Lettura di un documento',
+        libraryFileOrigin: 'Controllo da dove viene un file',
         notesList: 'Consultazione delle note',
         tasksList: 'Consultazione delle attività',
         memorySearch: 'Ricerca nella memoria',
@@ -792,6 +793,10 @@ export const TALOS_IT_MESSAGES = {
         libraryRead: {
             title: 'Leggi un documento della Libreria',
             description: 'Legge il contenuto del file selezionato nella Libreria e lo restituisce al modello.',
+        },
+        libraryFileOrigin: {
+            title: 'Controllare da dove viene un file',
+            description: 'Dice quale modello ha fatto un file della Libreria, quando, e da quale chat viene.',
         },
         notesList: {
             title: 'Consulta le note',

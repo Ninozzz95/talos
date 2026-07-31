@@ -1,5 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
-import { closeToolSheet } from './toolSheet'
+import { configureChatProvider } from './chatFixtures'
+
+/**
+ * This spec seeds a THIRD shell — the shipped default, immersive AND drawer
+ * composer — and `storageState` is one blob that cannot be merged, so it
+ * configures its own provider rather than earning a saved state for one test.
+ */
+
 
 // R3-12 — the playwright default storageState seeds the CLASSIC shell, so the
 // SHIPPED default (owner #15: immersive chrome + drawer composer) was the
@@ -59,25 +66,11 @@ function mockProvider(page: Page): Promise<void> {
     })
 }
 
-async function configureGemini(page: Page): Promise<void> {
-    await page.goto('/')
-    await page.locator(MENU).click()
-    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
-    await expect(page.locator(SHEET)).toBeVisible()
-    await page.locator('[data-settings-tab="models"]').click()
-    if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
-    await page.getByLabel('Google Gemini API key').fill('e2e-shipped-key')
-    await page.getByLabel('Save Google Gemini key').click()
-    await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
-    await page.getByLabel('Default chat model').click()
-    await page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]').click()
-    await closeToolSheet(page)
-    await expect(page.locator(SHEET)).toHaveCount(0)
-}
 
 test('sends a message end-to-end on the immersive + drawer-composer default', async ({ page }) => {
     await mockProvider(page)
-    await configureGemini(page)
+    await page.goto('/')
+    await configureChatProvider(page)
 
     // Immersive chrome is the shipped chrome (no classic header bar).
     await expect(page.locator('[data-testid="talos-mobile-immersive-chrome"]')).toBeVisible()

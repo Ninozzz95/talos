@@ -3,6 +3,7 @@ import {
     type TalosLibraryListEntry,
     type TalosToolSources,
 } from '@/lib/tools/readTools'
+import { parseTalosFileProvenance } from '@/lib/files/provenance'
 import { createTalosWebTools, type TalosWebToolSources } from '@/lib/search/webTools'
 import { createTalosDocumentTools, type TalosDocumentToolSources } from '@/lib/documents/documentTools'
 import { createTalosImageTools, type TalosImageToolSources } from '@/lib/images/imageTools'
@@ -262,6 +263,38 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             const text = await deps.readVaultFileText(id)
             requireLibraryEnabled()
             return text === null ? null : { name: summary.display_name, text }
+        },
+        /**
+         * The second door of famiglia B, over the same Library the other tools
+         * see: bounded by the global switch, by the per-file opt-out, and by the
+         * incognito withdrawal of the whole `library` group.
+         *
+         * The prompt reference is deliberately dropped on the way out. The
+         * record keeps it so a person can find their way back; a model asking
+         * about a file has no use for an id it cannot resolve, and every field
+         * handed over is a field that can be repeated somewhere else.
+         */
+        async readFileOrigin(id) {
+            const summaries = await librarySummaries()
+            const summary = summaries.find((entry) => entry.id === id)
+            if (!summary) return null
+            const metadata = summary.metadata as {
+                provenance?: unknown
+                origin_session_id?: string | null
+            }
+            const record = parseTalosFileProvenance(metadata.provenance)
+            const sessionId = record?.originSessionId ?? metadata.origin_session_id ?? null
+            const titles = deps.sessionTitles ? await deps.sessionTitles() : new Map<string, string>()
+            requireLibraryEnabled()
+            return {
+                name: summary.display_name,
+                origin: record?.origin ?? 'unknown',
+                model: record?.model ?? null,
+                provider: record?.provider ?? null,
+                createdAt: record?.createdAt ?? null,
+                originSessionTitle: sessionId ? titles.get(sessionId) ?? null : null,
+                sourceUrl: record?.sourceUrl ?? null,
+            }
         },
         async listNotes() {
             return (await deps.repository.listNotes()).map((note) => ({
