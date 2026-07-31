@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
     TALOS_DOWNLOAD_CHECKPOINT_BYTES,
     TALOS_DOWNLOAD_CHECKPOINT_MS,
@@ -252,4 +254,53 @@ describe('knowing when to stop', () => {
         expect(state.consecutiveFailures).toBe(0)
         expect(state.haveBytes).toBe(1 * GIB + 8 * MIB)
     })
+})
+
+/**
+ * The shared table — the reason two implementations of one rule cannot drift.
+ *
+ * The download loop must run natively (the WebView is suspended in the
+ * background, which is why the job exists), so the same policy exists in Java.
+ * Neither copy owns the rules: `downloadPolicy.cases.json` does, and both test
+ * suites execute it. A difference between them fails here or in
+ * `TalosModelDownloadPolicyTest`, instead of waiting to be found on a phone.
+ */
+describe('the shared case table, run by this implementation', () => {
+    const cases = JSON.parse(
+        readFileSync(resolve(process.cwd(), 'src/lib/models/downloadPolicy.cases.json'), 'utf8'),
+    ) as {
+        constants: Record<string, number>
+        steps: Array<{ name: string; state: TalosDownloadState; nowMs: number; expect: Record<string, unknown> }>
+        outcomes: Array<{
+            name: string
+            state: TalosDownloadState
+            outcome: Parameters<typeof talosApplyDownloadOutcome>[1]
+            nowMs: number
+            expectStep?: Record<string, unknown>
+            expectState?: Record<string, unknown>
+        }>
+    }
+
+    /** The constants are part of the contract, not an implementation detail. */
+    it('agrees with the table about the numbers themselves', () => {
+        expect(cases.constants.checkpointMs).toBe(TALOS_DOWNLOAD_CHECKPOINT_MS)
+        expect(cases.constants.checkpointBytes).toBe(TALOS_DOWNLOAD_CHECKPOINT_BYTES)
+        expect(cases.constants.stallMs).toBe(TALOS_DOWNLOAD_STALL_MS)
+    })
+
+    it.each(0 === cases.steps.length ? [] : cases.steps.map((c) => [c.name, c] as const))(
+        'step: %s',
+        (_name, testCase) => {
+            expect(talosNextDownloadStep(testCase.state, testCase.nowMs)).toMatchObject(testCase.expect)
+        },
+    )
+
+    it.each(cases.outcomes.map((c) => [c.name, c] as const))(
+        'outcome: %s',
+        (_name, testCase) => {
+            const result = talosApplyDownloadOutcome(testCase.state, testCase.outcome, testCase.nowMs)
+            if (testCase.expectStep) expect(result.step).toMatchObject(testCase.expectStep)
+            if (testCase.expectState) expect(result.state).toMatchObject(testCase.expectState)
+        },
+    )
 })
