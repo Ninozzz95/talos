@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'

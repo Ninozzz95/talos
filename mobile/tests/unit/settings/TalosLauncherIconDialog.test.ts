@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TalosLauncherIconDialog from '@/components/talos/settings/TalosLauncherIconDialog.vue'

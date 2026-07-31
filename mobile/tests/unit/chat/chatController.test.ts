@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 import { createChatController, type ChatControllerDeps } from '@/stores/chatController'

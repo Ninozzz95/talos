@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it, vi } from 'vitest'
 import { buildTalosReportDefinition } from '@/lib/documents/reportBuilder'
 import { generateTalosDocument, verifyTalosDocument } from '@/lib/documents/documentGenerator'
