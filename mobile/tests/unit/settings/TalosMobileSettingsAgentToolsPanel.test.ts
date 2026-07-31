@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -18,6 +18,10 @@ const enabled = {
     generate_image: true,
     library_export: true,
     library_context_policy_update: false,
+    local_models_search: true,
+    local_model_inspect: true,
+    local_model_download: true,
+    local_models_status: true,
 }
 
 const settings = vi.hoisted(() => ({
@@ -77,8 +81,8 @@ describe('TalosMobileSettingsAgentToolsPanel', () => {
     it('AGENT-TOOLS-07 renders every real tool with persistent accessible switches', async () => {
         const wrapper = mount(TalosMobileSettingsAgentToolsPanel)
 
-        expect(wrapper.findAll('[data-agent-tool]')).toHaveLength(14)
-        expect(wrapper.text()).toContain('13 of 14 enabled')
+        expect(wrapper.findAll('[data-agent-tool]')).toHaveLength(18)
+        expect(wrapper.text()).toContain('17 of 18 enabled')
         /**
          * Found by an adversarial review, 2026-07-31: a tool was added to the
          * catalog with no strings, and this test still passed because it only
@@ -134,7 +138,7 @@ describe('TalosMobileSettingsAgentToolsPanel', () => {
         await flushPromises()
 
         expect((toggle.element as HTMLInputElement).checked).toBe(true)
-        expect(wrapper.text()).toContain('13 of 14 enabled')
+        expect(wrapper.text()).toContain('17 of 18 enabled')
         expect(wrapper.get('[data-testid="agent-tools-save-error"]').attributes('role')).toBe('alert')
         expect(wrapper.get('[data-testid="agent-tools-save-error"]').text())
             .toBe('Could not save Search the Library. The previous setting is still active.')

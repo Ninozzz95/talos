@@ -8,6 +8,7 @@ import { createTalosDocumentTools } from '@/lib/documents/documentTools'
 import { createTalosImageTools } from '@/lib/images/imageTools'
 import { createTalosLibraryExportTools } from '@/lib/tools/libraryExportTools'
 import { createTalosLibraryContextPolicyTools } from '@/lib/tools/libraryContextPolicyTools'
+import { createTalosLocalModelTools } from '@/lib/models/modelTools'
 import {
     talosToolRequiredActions,
     talosToolsForAnthropic,
@@ -63,6 +64,10 @@ function everyExecutableTool() {
             read: vi.fn(),
             replace: vi.fn(),
         } as never),
+        // The second door onto the on-device models. It takes no sources: it
+        // drives the same store the Model Lab section drives, which is what
+        // makes a download started from chat land in both places.
+        ...createTalosLocalModelTools(),
     ]
 }
 
@@ -99,7 +104,7 @@ describe('Agent Tools control registry', () => {
         expect(parsed.web_search).toBe(true)
         expect(parsed).not.toHaveProperty('future_shell')
         expect(parsed.library_context_policy_update).toBe(false)
-        expect(Object.keys(parsed)).toHaveLength(14)
+        expect(Object.keys(parsed)).toHaveLength(18)
         expect(isTalosAgentToolEnabled('library_search', parsed)).toBe(false)
         expect(isTalosAgentToolEnabled('future_shell', parsed)).toBe(false)
     })
@@ -130,20 +135,22 @@ describe('Agent Tools control registry', () => {
         }))
 
         /**
-         * Re-pinned 2026-07-31 for ONE addition: `library_file_origin`.
+         * Re-pinned 2026-07-31, twice: first for `library_file_origin`, then
+         * for the four `local_model*` tools — the second door onto the
+         * on-device models.
          *
-         * Proven, not assumed. Excluding the new tool reproduced all four
-         * previous digests byte for byte, so nothing about the pre-existing
-         * contracts moved — which is the only question this guard exists to
-         * answer, and the reason the four are pinned separately.
+         * Proven both times, not assumed. Excluding the new tools reproduced
+         * all four previous digests byte for byte, so nothing about the
+         * pre-existing contracts moved — which is the only question this guard
+         * exists to answer, and the reason the four are pinned separately.
          */
         expect(digestOf(controlPlane))
-            .toBe('e6fc45a4d31527e4a0ef668d2be76c0368fff7c63514b67677ceabfab5141ce3')
+            .toBe('294015f453d5a35d76e67d812e2327b59075c2af373c60054e88a930c2245880')
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('ea66cad2d68cd38a1f63e1d9f4cdfe9e1df3715c949047976c1b8bb98121908e')
+            .toBe('7480371ad59c82d2a16ea385e045792160bd81f839817bbb523869ab82976664')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('45411ccdbb0ce19497c534e9644de27d7c5307f7c47a6b45f1127c7cfc2af3b1')
+            .toBe('60eb99b60b91ed7ff76d963de99a8cc6a49da88a5de42b7292c03f7d15050f19')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('e4d1b8f4dd8d7237c2f7414ed98b01b144a2e3f2cfce3d5c7d038a64bcc2e872')
+            .toBe('de95709138c78e03c73089b5e09890b922ce08cb69ff71d96a87431aa330c098')
     })
 })

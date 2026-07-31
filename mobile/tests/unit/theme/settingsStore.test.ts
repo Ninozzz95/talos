@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -363,7 +363,7 @@ describe('useSettingsStore', () => {
         expect(store.state.agent_tools.library_search).toBe(false)
         expect(store.state.agent_tools).not.toHaveProperty('future_shell')
         expect(store.state.agent_tools.library_context_policy_update).toBe(false)
-        expect(Object.keys(store.state.agent_tools)).toHaveLength(14)
+        expect(Object.keys(store.state.agent_tools)).toHaveLength(18)
 
         await store.setAgentToolEnabled('library_search', true)
 

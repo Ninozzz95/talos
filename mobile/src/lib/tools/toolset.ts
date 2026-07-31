@@ -15,6 +15,7 @@ import {
     createTalosLibraryContextPolicyTools,
     type TalosLibraryContextPolicyToolSources,
 } from '@/lib/tools/libraryContextPolicyTools'
+import { createTalosLocalModelTools } from '@/lib/models/modelTools'
 import type { TalosToolAuditRow } from '@/lib/tools/executor'
 import type { TalosToolConsentRequest } from '@/lib/tools/executor'
 import { decideTalosToolPermission, type TalosToolPermissions } from '@/lib/tools/permissionTypes'
@@ -354,8 +355,17 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
     const policyTools = deps.libraryContextPolicy
         ? createTalosLibraryContextPolicyTools(deps.libraryContextPolicy, { now })
         : []
+    /**
+     * The second door onto the on-device models.
+     *
+     * Unconditional, unlike its neighbours: nothing has to be wired in, because
+     * it drives the SAME store the Model Lab section drives. That is what makes
+     * a download started from chat appear in the section, in the progress bar
+     * and in the notification — one of everything, and no seam to get wrong.
+     */
+    const modelTools = createTalosLocalModelTools()
     return {
-        tools: [...all, ...libraryExports, ...policyTools],
+        tools: [...all, ...libraryExports, ...policyTools, ...modelTools],
         isEnabled,
         offer(permissions, enabledTools) {
             // Evaluated per send, like the permissions: the toolset is memoised,
@@ -368,6 +378,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...all,
                 ...libraryExports,
                 ...policyTools,
+                ...modelTools,
                 ...(web ? createTalosWebTools(web) : []),
                 ...(documents ? createTalosDocumentTools(documents) : []),
                 ...(images ? createTalosImageTools(images) : []),
