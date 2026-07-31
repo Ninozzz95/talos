@@ -10,6 +10,7 @@ import {
     talosNewDownload,
     type TalosDownloadState,
 } from '@/lib/models/downloadPolicy'
+import { TALOS_STORAGE_RESERVE_BYTES } from '@/lib/models/fit'
 
 /**
  * Slice 3 — every decision a 4 GB download makes, with no I/O anywhere.
@@ -286,6 +287,16 @@ describe('the shared case table, run by this implementation', () => {
         expect(cases.constants.checkpointMs).toBe(TALOS_DOWNLOAD_CHECKPOINT_MS)
         expect(cases.constants.checkpointBytes).toBe(TALOS_DOWNLOAD_CHECKPOINT_BYTES)
         expect(cases.constants.stallMs).toBe(TALOS_DOWNLOAD_STALL_MS)
+    })
+
+    /**
+     * The fit gate answers "will it fit" before the download starts and the
+     * native transfer plan answers it again before a byte moves. Two answers to
+     * one question is a bug waiting for a user with an awkward amount of free
+     * space, so the number lives in the table and both halves read it.
+     */
+    it('reserves the same storage as the half of the app that downloads', () => {
+        expect(cases.constants.storageReserveBytes).toBe(TALOS_STORAGE_RESERVE_BYTES)
     })
 
     it.each(0 === cases.steps.length ? [] : cases.steps.map((c) => [c.name, c] as const))(

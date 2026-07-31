@@ -82,8 +82,18 @@ export interface TalosModelFit {
     maxContext: number
 }
 
-/** Storage kept free so the encrypted database and its journal have room. */
-const STORAGE_RESERVE = 1024 * MIB
+/**
+ * Storage kept free so the encrypted database and its journal have room — and
+ * so the phone can still take a photo after a four-gigabyte download.
+ *
+ * Exported because the native transfer plan reserves the SAME number, and very
+ * nearly did not: it kept 256 MiB while this kept 1 GiB, so a user with 700 MiB
+ * of slack would have been told the model does not fit by this gate and had it
+ * downloaded anyway by the job. `downloadPolicy.cases.json` holds the number and
+ * both suites assert it.
+ */
+export const TALOS_STORAGE_RESERVE_BYTES = 1024 * MIB
+const STORAGE_RESERVE = TALOS_STORAGE_RESERVE_BYTES
 /** llama.cpp's own scratch, plus what the app costs while it runs. */
 const COMPUTE_OVERHEAD = 320 * MIB
 const RUNTIME_OVERHEAD = 64 * MIB
