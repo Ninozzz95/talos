@@ -25,7 +25,16 @@ export interface TalosFileOriginCard {
     readonly title: string
     /** Facts under it, already ordered and already localised. Never empty. */
     readonly lines: readonly string[]
-    /** The chat it came from, when it still exists — the card links to it. */
+    /**
+     * The chat it came from, ONLY while that chat still exists — the card
+     * offers to open it, and an offer that cannot be honoured is worse than no
+     * offer. Found by an adversarial review 2026-07-31: gated on the id alone,
+     * the button outlived the chat, and tapping it closed the viewer, navigated
+     * nowhere and flagged the whole chat store as persistence-failed.
+     *
+     * Resolved from the title, which is itself resolved from the live session
+     * list: if we cannot name the chat, we cannot open it.
+     */
     readonly originSessionId: string | null
     readonly kind: TalosFileOrigin | 'unknown'
 }
@@ -63,16 +72,34 @@ export function talosFileOriginCard(input: {
         }
     }
 
+    /**
+     * Values are composed AFTER translation, never interpolated into it.
+     *
+     * Found by an adversarial review 2026-07-31, and proven by running it: the
+     * app sets vue-i18n's `escapeParameter`, so an interpolated value has its
+     * `/` `'` `<` `>` `&` turned into HTML entities — and this card renders as
+     * TEXT, so the entities are shown to the reader. Every OpenRouter model id
+     * contains a slash (`anthropic/claude-sonnet-4.5`), and Italian chat titles
+     * routinely contain an apostrophe, so the two lines a reader most wants
+     * were the two that came out mangled.
+     *
+     * Escaping is right for a message that might be rendered as markup and
+     * wrong for one that never is. Composing outside `t()` sidesteps the whole
+     * question instead of turning the protection off globally.
+     */
     const lines: string[] = []
     const made = readableDate(record.createdAt, locale)
-    if (made) lines.push(t('library.originMadeOn', { date: made }))
-    if (record.modelVersion) lines.push(t('library.originVersion', { version: record.modelVersion }))
-    if (record.sourceUrl) lines.push(record.sourceUrl)
+    if (made) lines.push(`${t('library.originMadeOn')} ${made}`)
+    if (record.modelVersion) lines.push(`${t('library.originVersion')} ${record.modelVersion}`)
+    if (record.sourceUrl) lines.push(`${t('library.originSource')} ${record.sourceUrl}`)
     if (input.originSessionTitle) {
-        lines.push(t('library.originFromChat', { title: input.originSessionTitle }))
+        lines.push(`${t('library.originFromChat')} “${input.originSessionTitle}”`)
     }
     // Never empty: a section with a heading and nothing under it reads as broken.
     if (lines.length === 0) lines.push(t('library.originNoDetail'))
+
+    // Only a chat we could NAME is a chat we can open.
+    const openableSessionId = input.originSessionTitle ? record.originSessionId : null
 
     if (record.origin !== 'generated') {
         return {
@@ -80,7 +107,7 @@ export function talosFileOriginCard(input: {
                 ? t('library.originDownloaded')
                 : t('library.originUploaded'),
             lines,
-            originSessionId: record.originSessionId,
+            originSessionId: openableSessionId,
             kind: record.origin,
         }
     }
@@ -91,11 +118,8 @@ export function talosFileOriginCard(input: {
      * checkable — two providers serve models with the same name.
      */
     const title = record.model
-        ? t('library.originMadeBy', {
-            model: record.model,
-            provider: record.provider ?? t('library.originProviderUnknown'),
-        })
+        ? `${t('library.originMadeBy')} ${record.model} · ${record.provider ?? t('library.originProviderUnknown')}`
         : t('library.originMadeByUnknownModel')
 
-    return { title, lines, originSessionId: record.originSessionId, kind: 'generated' }
+    return { title, lines, originSessionId: openableSessionId, kind: 'generated' }
 }

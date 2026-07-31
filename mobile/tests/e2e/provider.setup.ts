@@ -35,7 +35,10 @@ setup('a provider on the classic shell', async ({ page }) => {
     await page.goto('/')
     await configureChatProvider(page, 'e2e-shared-key')
     // Proven ready before it is saved: a state captured mid-journey would hand
-    // every test a half-configured app and blame them for it.
+    // every test a half-configured app and blame them for it. `toBeEnabled`
+    // alone was not that proof — it passes with the Settings sheet still
+    // covering the composer — so the sheet is checked gone as well.
+    await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toHaveCount(0)
     await expect(page.getByLabel('Message TALOS')).toBeEnabled()
     await page.context().storageState({ path: TALOS_PROVIDER_STATE })
 })
@@ -47,6 +50,7 @@ setup.describe('immersive shell', () => {
         await mockChatProvider(page)
         await page.goto('/')
         await configureChatProvider(page, 'e2e-shared-key')
+        await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toHaveCount(0)
         await expect(page.getByLabel('Message TALOS')).toBeEnabled()
         await page.context().storageState({ path: TALOS_PROVIDER_IMMERSIVE_STATE })
     })

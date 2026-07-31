@@ -112,3 +112,47 @@ describe('deleting a chat you are not in', () => {
         expect(store.sessions.map((session) => session.id)).not.toContain(here.id)
     })
 })
+
+/**
+ * Where a delete LANDS you — both found by an adversarial review, 2026-07-31.
+ *
+ * The repository nominates the most recently updated survivor, which is the
+ * right answer only while every chat is visible. Since a chat enters the
+ * history when it has something in it, the nominee can be a chat the history
+ * cannot show: the header names a conversation that appears in no list and
+ * cannot be selected, deleted or archived.
+ *
+ * And deleting the incognito chat you are IN nominated through the memory side
+ * while the lookup read the durable list, so the answer was always "nowhere" —
+ * an empty screen, with the stored active chat still pointing somewhere else.
+ */
+describe('where a delete puts you', () => {
+    it('does not land you in a chat the history cannot show', async () => {
+        const { store } = harness()
+        await store.initialize()
+        const kept = await store.createSession('Vecchia')
+        await store.send('ciao', null)
+        const doomed = await store.createSession('Da cancellare')
+        await store.send('anche qui', null)
+        // Opened, never used — the most recent row, so the natural nominee.
+        await store.createSession('Nuova chat')
+        await store.selectSession(doomed.id)
+
+        await store.deleteSession(doomed.id)
+
+        expect(store.activeSession.value?.id).toBe(kept.id)
+        expect(store.history.map((session) => session.id)).toContain(kept.id)
+    })
+
+    it('leaves you somewhere real after deleting the incognito chat you are in', async () => {
+        const { store } = harness()
+        await store.initialize()
+        const kept = await store.createSession('Vecchia')
+        await store.send('ciao', null)
+        const incognito = await store.createSession('Incognito', null, { ephemeral: true })
+
+        await store.deleteSession(incognito.id)
+
+        expect(store.activeSession.value?.id).toBe(kept.id)
+    })
+})

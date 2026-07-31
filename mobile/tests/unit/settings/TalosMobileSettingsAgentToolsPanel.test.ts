@@ -79,6 +79,14 @@ describe('TalosMobileSettingsAgentToolsPanel', () => {
 
         expect(wrapper.findAll('[data-agent-tool]')).toHaveLength(14)
         expect(wrapper.text()).toContain('13 of 14 enabled')
+        /**
+         * Found by an adversarial review, 2026-07-31: a tool was added to the
+         * catalog with no strings, and this test still passed because it only
+         * counted rows. The user would have read
+         * `agentTools.tools.library_file_origin.title` in bold, in both
+         * languages. Counting rows is not reading them.
+         */
+        expect(wrapper.text()).not.toContain('agentTools.tools.')
 
         const search = wrapper.get('[data-agent-tool="library_search"]')
         const toggle = search.get('input[role="switch"]')

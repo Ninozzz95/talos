@@ -605,6 +605,31 @@ export function createChatStore<Runtime = undefined>(
         () => sessions.filter((session) => session.has_messages !== false),
     )
 
+    /**
+     * Replace a listed session, KEEPING what the replacement was never told.
+     *
+     * Found by an adversarial review, 2026-07-31. Only `listSessions` reports
+     * `has_messages`; every other repository method hands back a session object
+     * without it. Writing one of those straight into the list erased the flag,
+     * and `undefined` reads as "show it" — so an untouched chat popped into the
+     * history the moment its per-chat Library setting changed, from the menu or
+     * from the model's own policy tool.
+     *
+     * The filter deliberately still fails toward SHOWING: between a blank chat
+     * that lingers and a real conversation that vanishes, only one of those is
+     * survivable. This function is what stops the blank one lingering, and it
+     * exists so the next write-back cannot reintroduce the same hole by simply
+     * assigning.
+     */
+    function replaceListedSession(sessionId: string, next: TalosLocalChatSession): void {
+        const index = sessions.findIndex((session) => session.id === sessionId)
+        if (index < 0) return
+        const known = sessions[index]!.has_messages
+        sessions[index] = next.has_messages === undefined && known !== undefined
+            ? { ...next, has_messages: known }
+            : next
+    }
+
     // R2-9: appendMessage bumps ONLY the session's updated_at in the DB —
     // mirror that locally instead of a full-table round-trip on EVERY user
     // and assistant append (it was two listSessions per exchange).
@@ -774,7 +799,31 @@ export function createChatStore<Runtime = undefined>(
                 return
             }
             const available = await repository.listSessions()
-            const next = available.find((session) => session.id === nextId) ?? null
+            /**
+             * Where the delete LANDS you. Two defects, both found by an
+             * adversarial review 2026-07-31, and one line answers both.
+             *
+             * The repository nominates the most recently updated survivor,
+             * which was the right answer while every chat was visible. Now that
+             * a chat enters the history only when it has something in it, the
+             * nominee can be a chat no list can show: the header names a
+             * conversation that appears nowhere and cannot be selected, deleted
+             * or archived. So a nominee the history cannot show is passed over.
+             *
+             * And deleting the incognito chat you are IN nominates through the
+             * memory side while this lookup reads the durable list, so the
+             * answer was always "nowhere" — an empty screen. A nomination that
+             * resolves to nothing now falls through to the same rule.
+             *
+             * `available` is ordered most-recent-first, so the fallbacks pick
+             * the freshest, and the last one exists so that a device where
+             * every chat is blank still lands somewhere rather than nowhere.
+             */
+            const nominated = available.find((session) => session.id === nextId) ?? null
+            const next = nominated?.has_messages !== false
+                ? nominated ?? available.find((session) => session.has_messages !== false)
+                    ?? available[0] ?? null
+                : available.find((session) => session.has_messages !== false) ?? nominated
             const nextRows = next
                 ? await repository.listMessages(next.id, { limit: TALOS_MESSAGE_PAGE_SIZE })
                 : []
@@ -909,8 +958,7 @@ export function createChatStore<Runtime = undefined>(
                     ...current.metadata,
                     library_context_policy: candidate,
                 })
-                const index = sessions.findIndex((session) => session.id === sessionId)
-                if (index >= 0) sessions[index] = updated
+                replaceListedSession(sessionId, updated)
                 if (activeSession.value?.id === sessionId) activeSession.value = updated
                 return candidate
             } catch (error) {

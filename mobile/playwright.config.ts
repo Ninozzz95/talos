@@ -44,18 +44,22 @@ export default defineConfig({
         baseURL: 'http://127.0.0.1:4173',
         viewport: { width: 375, height: 812 },
         /**
-         * Owner 2026-07-31: «quasi 10 minuti per e2e».
+         * NOT reduced motion, and the reason is worth keeping.
          *
-         * The boot logo holds for 1500ms and dissolves over 500 more, on EVERY
-         * `goto('/')` — and there are sixty of them. Two minutes of the ten were
-         * spent watching an animation that only five tests are about. Under
-         * reduced motion the same overlay holds 450ms, which is the app's own
-         * behaviour rather than a test-only shortcut.
+         * It was set here for speed on 2026-07-31, on the theory that sixty
+         * boot animations were costing two minutes of the ten. An adversarial
+         * review proved otherwise on two counts: `reducedMotion` is not a `use`
+         * option in Playwright 1.61 — it was silently ignored, so the animation
+         * never stopped playing and the measured 10.4→2.5 came entirely from
+         * four workers and the shared provider state. And once written
+         * correctly, under `contextOptions`, it would have SILENCED the
+         * progressive reveal: the mock delivers a reply in one frame, so the
+         * client-side pacing is the only thing in the whole suite that makes
+         * text grow. The back-to-bottom pill defect would have stopped being
+         * tested by the test named after it.
          *
-         * The specs that exist to check motion set `no-preference` explicitly,
-         * so what they assert is what a person with animations on would see.
+         * A saving that was never real is not worth a coverage hole that is.
          */
-        reducedMotion: 'reduce',
         // F2-T6: pre-seed the versioned intro as seen so existing journeys are
         // not intercepted by the first-run modal. Intro/onboarding journeys
         // override this with an EMPTY storageState to exercise the real flow.

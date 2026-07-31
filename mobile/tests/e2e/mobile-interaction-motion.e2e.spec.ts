@@ -1,13 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
 
-/**
- * These specs are ABOUT motion, so they opt out of the suite-wide reduced-motion
- * default (2026-07-31, for speed). What they assert has to be what a person with
- * animations switched on would actually see — one of them checks the reduced
- * path on purpose and sets it locally.
- */
-test.use({ reducedMotion: 'no-preference' })
-
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'

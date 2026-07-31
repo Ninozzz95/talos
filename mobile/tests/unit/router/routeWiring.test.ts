@@ -1,6 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+/**
+ * This file resolves ten real screens and takes about seven seconds against
+ * Vitest's five-second default. It has been passing on timing luck; an
+ * adversarial review 2026-07-31 caught it failing intermittently once the suite
+ * got faster and crowded more work into the same window. Stated, not gambled.
+ */
+vi.setConfig({ testTimeout: 30_000 })
 import {
     preloadTalosMobileRoutes,
     TALOS_MOBILE_ROUTES,

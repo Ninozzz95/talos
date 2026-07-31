@@ -238,6 +238,22 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
         'session-alpha',
     ])
 
+    /**
+     * Reported by the REAL driver, not just the in-memory double.
+     *
+     * Found by an adversarial review 2026-07-31: `has_messages` decides whether
+     * a chat appears in the user's history, and it was asserted only against
+     * the fake. A driver answering `"1"` or a lower-cased column would have
+     * emptied the history of every conversation on the device, and this file —
+     * which exists so that column typos fail the build — would have stayed
+     * green.
+     */
+    const flags = new Map((await repository.listSessions()).map(
+        (session) => [session.id, session.has_messages],
+    ))
+    expect(flags.get('session-alpha')).toBe(true)
+    expect(flags.get('session-beta')).toBe(false)
+
     expect(await repository.loadComposerDraft(alpha.id)).toBe('')
     await repository.saveComposerDraft(alpha.id, 'Draft for alpha')
     await repository.saveComposerDraft(beta.id, 'Draft for beta')

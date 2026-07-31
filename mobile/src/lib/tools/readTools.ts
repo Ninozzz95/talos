@@ -453,8 +453,14 @@ export function createTalosReadTools(sources: TalosToolSources): TalosToolDefini
             } else {
                 lines.push(`origin: ${record.origin}`)
                 if (record.origin === 'generated') {
-                    lines.push(`made by: ${record.model ?? 'an unrecorded model'}`)
-                    lines.push(`provider: ${record.provider ?? 'not recorded'}`)
+                    // Bounded and whitespace-collapsed like every sibling field.
+                    // A model id is user-supplied (Model Lab accepts a manual
+                    // one) and this output is a newline-delimited record the
+                    // model is told to read as fact — an id containing a
+                    // newline could forge an `origin:` or `from chat:` line
+                    // about a file it does not describe.
+                    lines.push(`made by: ${record.model ? takeCodePoints(record.model, 120) : 'an unrecorded model'}`)
+                    lines.push(`provider: ${record.provider ? takeCodePoints(record.provider, 60) : 'not recorded'}`)
                 }
                 if (record.createdAt) lines.push(`created: ${takeCodePoints(record.createdAt, 40)}`)
                 if (record.originSessionTitle) {

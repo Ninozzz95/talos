@@ -47,7 +47,7 @@ async function closeSettings(page: Page): Promise<void> {
     await expect(sheet).toBeHidden()
 }
 
-test.use({ locale: 'en-US', reducedMotion: 'reduce' })
+test.use({ locale: 'en-US', contextOptions: { reducedMotion: 'reduce' } })
 
 test('WELCOME-E2E-01/02/03 keeps a localized Christmas title stable on phone, reload and tablet', async ({ page }) => {
     await page.clock.setFixedTime(new Date(2026, 11, 25, 10, 0, 0))

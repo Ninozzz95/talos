@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { Download, Paperclip, Trash2, X } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
+import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 import TalosMobileFileOriginCard from '@/components/talos/library/TalosMobileFileOriginCard.vue'
 import type { TalosFileOriginCard } from '@/lib/files/originCard'
 
@@ -64,10 +66,24 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useTalosI18n()
+
+/**
+ * It has always CLAIMED to be a modal — `role="dialog"`, `aria-modal`, an
+ * Escape handler — and never behaved like one: nothing focused it, so Escape
+ * closed nothing, and the surface behind stayed reachable by keyboard and by
+ * TalkBack. Found by an adversarial review 2026-07-31, and it matters more now
+ * that the origin card puts a NAVIGATION action in here: it sat after every
+ * element of the Library in traversal order.
+ *
+ * The same composable the media panel and the confirm dialogs already use.
+ */
+const root = ref<HTMLElement | null>(null)
+const { trapTab } = useTalosModalSurface(root)
 </script>
 
 <template>
     <div
+        ref="root"
         :data-testid="props.testId"
         role="dialog"
         aria-modal="true"
@@ -75,6 +91,7 @@ const { t } = useTalosI18n()
         tabindex="-1"
         class="fixed inset-0 z-[95] flex flex-col bg-black/90 outline-none"
         @keydown.escape="emit('close')"
+        @keydown="trapTab"
     >
         <div class="flex items-center justify-end gap-1 p-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-white">
             <button
@@ -115,8 +132,19 @@ const { t } = useTalosI18n()
         <div class="flex min-h-0 flex-1 items-center justify-center p-4" @click="emit('close')">
             <img :src="src" :alt="t('library.previewAlt')" class="max-h-full max-w-full object-contain">
         </div>
-        <!-- Under the picture, never over it: a photograph is what you came for. -->
-        <div v-if="props.origin" class="px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <!--
+            Under the picture, never over it: a photograph is what you came for.
+
+            Bounded and scrollable, because it is a flex child of a full-screen
+            column with nothing else able to give. Unbounded it took a fifth of a
+            360x640 portrait screen from the photo, and in landscape — reachable
+            on every device, the manifest pins no orientation — it pushed its own
+            button off the bottom of a container that cannot scroll.
+        -->
+        <div
+            v-if="props.origin"
+            class="min-h-0 max-h-[40%] shrink overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+        >
             <TalosMobileFileOriginCard
                 :card="props.origin"
                 :can-open-chat="props.canOpenOriginChat"

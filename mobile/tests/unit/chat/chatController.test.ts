@@ -1386,7 +1386,7 @@ describe('chatController', () => {
 
             expect(createGeneratedBinary).toHaveBeenCalledWith(
                 expect.objectContaining({ name: `${'i'.repeat(47)}.png` }),
-                expect.objectContaining({ toolName: 'generate_image' }),
+                expect.objectContaining({ sessionId: expect.any(String), toolName: 'generate_image' }),
             )
         } finally {
             vi.unstubAllGlobals()
@@ -1697,7 +1697,7 @@ describe('chatController', () => {
                     mediaType: 'image/png',
                     bytes: new Uint8Array([1, 2, 3]),
                 }),
-                expect.objectContaining({ toolName: 'generate_image' }),
+                expect.objectContaining({ sessionId: expect.any(String), toolName: 'generate_image' }),
             )
             const chatRequests = request.mock.calls
                 .map(([call]) => call)
@@ -4370,7 +4370,7 @@ describe('chatController', () => {
                     { url: 'https://example.com/luxury', title: 'Luxury Italia' },
                     { url: 'https://concierge.example/offerta', title: 'Concierge Italia' },
                 ],
-            }), expect.objectContaining({ toolName: 'web_search' }))
+            }), expect.objectContaining({ sessionId: expect.any(String), toolName: 'web_search' }))
             expect(controller.attachments.vaultFiles).toEqual([
                 expect.objectContaining({ id: 'search-dossier-1' }),
             ])
