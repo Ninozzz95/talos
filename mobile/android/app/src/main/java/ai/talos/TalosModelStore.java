@@ -20,19 +20,20 @@ import java.util.List;
  * leave a truncated file where the finished one belongs, and a truncated GGUF
  * does not crash — it loads and answers, badly, and nobody can tell.
  *
- * The bytes and the hash state always agree. Bytes are flushed before the
- * checkpoint is written, so a kill in between leaves more bytes on disk than
- * the hash covers; those are thrown away rather than counted. It costs at most
- * a checkpoint interval of transfer and buys the guarantee that a resumed
- * download can still prove what it downloaded.
+ * The space is claimed before the transfer starts, so it cannot be lost at 90%
+ * to something else on the phone. That has a consequence which governs this
+ * whole class: A RESERVED FILE IS ALREADY ITS FULL LENGTH. `length()` therefore
+ * says nothing about how much has been downloaded, and the sidecar is the only
+ * record of that — see `resume()`.
  *
  * And a file path from the Hub is treated as what it is: a string chosen by
  * whoever published the repository, which anyone in the world may do. `../` in
  * a filename is how an app that trusts its server writes wherever it likes on
  * someone's phone.
  *
- * No Android APIs — so the rules above are provable on the JVM, in the ordinary
- * gate, without a device.
+ * No Android APIs — the rules above are provable on the JVM, in the ordinary
+ * gate, without a device. Reserving space is the one thing that genuinely needs
+ * the platform, so it arrives as an interface.
  */
 public final class TalosModelStore {
 
@@ -48,10 +49,25 @@ public final class TalosModelStore {
         this.root = root;
     }
 
+    /**
+     * Claiming the space up front.
+     *
+     * On Android this is `StorageManager.allocateBytes`, which the platform
+     * implements with `posix_fallocate` and falls back to `ftruncate` where the
+     * filesystem cannot do better. An interface because that is the one part of
+     * this class a JVM test cannot exercise honestly — and because the honest
+     * fallback matters: on exFAT the reservation is sparse and therefore not
+     * really a reservation, which is survivable only because models live in
+     * app-private storage, which is not exFAT.
+     */
+    public interface Reservation {
+        void reserve(RandomAccessFile file, long totalBytes) throws IOException;
+    }
+
     /** What a resume is allowed to believe: bytes, and a hash state or nothing. */
     public static final class Resume {
         public final long haveBytes;
-        /** Null means re-read the file to hash it — slow, but never wrong. */
+        /** Null means re-read what is there to hash it — slow, but never wrong. */
         public final String hashState;
 
         Resume(long haveBytes, String hashState) {
@@ -83,31 +99,47 @@ public final class TalosModelStore {
         }
 
         /**
-         * Reconcile what is on disk with what was last written down.
+         * Claim the whole file before asking for a single byte.
          *
-         * The one invariant worth the whole class: on return, the bytes in the
-         * partial file are exactly the bytes the returned hash state covers.
+         * Checking free space and hoping is what produces a download that dies
+         * at 90%: the space was there at the start and something else took it
+         * during the hours in between. This makes the shortfall a refusal the
+         * user can act on — free two gigabytes, or take a smaller quantisation.
+         */
+        public void prepare(long totalBytes, Reservation reservation) throws IOException {
+            partial.getParentFile().mkdirs();
+            try (RandomAccessFile handle = new RandomAccessFile(partial, "rw")) {
+                if (handle.length() < totalBytes) reservation.reserve(handle, totalBytes);
+                handle.getFD().sync();
+            }
+        }
+
+        /**
+         * How much of the reserved file is actually downloaded.
+         *
+         * THE SIDECAR IS THE ONLY ANSWER. The file is its full length from the
+         * moment the space is claimed, so reading progress off `length()` would
+         * report a fresh, empty, four-gigabyte reservation as a finished
+         * download — and the hash would then be computed over four gigabytes of
+         * zeroes and fail, if anyone were even asking it to.
+         *
+         * With no readable sidecar, the honest answer is zero. The file stays:
+         * it is the reservation, and throwing it away would give the space back
+         * to whatever is competing for it.
          */
         public Resume resume() {
             if (!partial.isFile()) {
                 sidecar.delete();
                 return new Resume(0, null);
             }
-            long onDisk = partial.length();
             String[] recorded = readSidecar();
-            if (recorded == null) return new Resume(onDisk, null);
+            if (recorded == null) return new Resume(0, null);
 
             long checkpointed = Long.parseLong(recorded[0]);
-            if (checkpointed > onDisk) {
-                // The filesystem lost a write the checkpoint counted. The state
-                // is ahead of reality, so it is worthless — re-read instead.
-                return new Resume(onDisk, null);
-            }
-            if (checkpointed < onDisk) {
-                // Bytes arrived after the last checkpoint and were never hashed.
-                // Dropping them keeps the two in step; keeping them would produce
-                // a hash that is quietly wrong about a file that is quietly fine.
-                if (!truncateTo(checkpointed)) return new Resume(0, null);
+            if (checkpointed > partial.length()) {
+                // The reservation shrank under us, so the record describes bytes
+                // that are not there. Start over rather than hash a hole.
+                return new Resume(0, null);
             }
             return new Resume(checkpointed, recorded[1]);
         }
@@ -115,10 +147,13 @@ public final class TalosModelStore {
         /**
          * Record a durable point. THE CALLER MUST HAVE fsync'd THE DATA FIRST —
          * a checkpoint that outruns the bytes it describes is the one failure
-         * `resume()` cannot repair without re-reading the file.
+         * `resume()` cannot repair.
          *
          * Written to a neighbour and renamed, never edited in place: this write
-         * happens every few seconds for hours, and a torn one costs the download.
+         * happens every few seconds for hours, and a torn one costs the whole
+         * download. It also has to survive the Task Manager, which kills the
+         * process outright and never calls `onStopJob` — so nothing may live
+         * only in memory, waiting for a shutdown hook that will not run.
          */
         public void checkpoint(long haveBytes, String hashState) {
             String body = MAGIC + "\n"
@@ -136,8 +171,18 @@ public final class TalosModelStore {
             }
         }
 
-        /** Publish the file under its real name, atomically, and clear the notes. */
-        public void finish() throws IOException {
+        /**
+         * Publish under the real name, atomically, and clear the notes.
+         *
+         * The truncation is not housekeeping: a reservation may hand back more
+         * room than was asked for, and a model file one byte longer than the
+         * repository says is a model file that fails its own hash.
+         */
+        public void finish(long totalBytes) throws IOException {
+            try (RandomAccessFile handle = new RandomAccessFile(partial, "rw")) {
+                if (handle.length() != totalBytes) handle.setLength(totalBytes);
+                handle.getFD().sync();
+            }
             finished.getParentFile().mkdirs();
             Files.move(partial.toPath(), finished.toPath(),
                     StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
@@ -172,16 +217,6 @@ public final class TalosModelStore {
                 return null;
             }
         }
-
-        private boolean truncateTo(long length) {
-            try (RandomAccessFile handle = new RandomAccessFile(partial, "rw")) {
-                handle.setLength(length);
-                handle.getFD().sync();
-                return true;
-            } catch (IOException failed) {
-                return false;
-            }
-        }
     }
 
     public Slot slot(String repo, String revision, String path) {
@@ -192,9 +227,10 @@ public final class TalosModelStore {
     /**
      * Downloads nobody is watching any more.
      *
-     * A phone that lost four gigabytes to an abandoned attempt shows the user a
-     * number going down and nothing to point at. Naming them is what lets the
-     * storage screen tell the truth.
+     * These matter more here than anywhere else: because the space is claimed
+     * up front, an attempt abandoned after ten seconds still holds the whole
+     * four gigabytes. A phone losing that much to something invisible shows the
+     * user a number going down and nothing to point at.
      */
     public List<Leftover> leftovers() {
         List<Leftover> found = new ArrayList<>();
