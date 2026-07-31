@@ -183,7 +183,18 @@ test('leaving incognito takes the incognito chat with it', async ({ page }) => {
 
     // The switch now reads the other way — that is how you know where you are.
     await chooseFromChatMenu(page, 'Normal mode')
-    await expect(page.getByTestId('talos-temporary-chat-badge')).toHaveCount(0)
+
+    // …and it asks first, because leaving destroys what is in it. Owner
+    // 2026-07-31 watched that happen with no warning and reported it as a bug.
+    await expect(page.getByText('Leave incognito mode?', { exact: true })).toBeVisible()
+    // Still in it while the question stands: the private message is on screen.
+    await expect(page.getByText('Qualcosa di privato', { exact: true })).toBeVisible()
+    await page.getByTestId('talos-leave-incognito-confirm').click()
+
+    // Out, and into an ordinary chat with nothing in it — so the welcome offers
+    // the way back IN, not the way back out.
+    await expect(page.getByTestId('talos-make-temporary')).toBeVisible()
+    await expect(page.getByTestId('talos-make-permanent')).toHaveCount(0)
 
     // One: the conversation it was opened from. The incognito chat is gone, and
     // the ordinary chat you have just been put into has nothing in it yet, so
