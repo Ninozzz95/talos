@@ -136,7 +136,7 @@ public final class TalosTransferSession {
                 new TalosTransferRunner.Host() {
                     @Override
                     public TalosTransferRunner.Resolved resolve() throws IOException {
-                        return resolveOn(network, request);
+                        return resolveOn(context, network, request);
                     }
 
                     @Override
@@ -167,15 +167,15 @@ public final class TalosTransferSession {
      * signature is about to expire, and the expiry is the single most common
      * thing that happens during a download this size.
      *
-     * ANONYMOUS. No token is read here and none is carried in the job's extras
-     * — extras are persisted by the system in the clear, and this app will be
-     * distributed, so a credential must never be somewhere a backup can reach.
-     * Gated repositories therefore cannot be fetched in the background yet;
-     * that needs a native secret store and is named as owed work rather than
-     * half-built here.
+     * The token is FETCHED HERE, from the app's own Keystore, and never carried
+     * in the job's extras — the system persists those in the clear and this app
+     * will be distributed, so a credential must not sit anywhere a backup can
+     * reach. It is also not held in memory between resolves: the job may live
+     * for hours, and a token that exists only for the length of one request is
+     * a token a heap dump cannot find.
      */
-    private static TalosTransferRunner.Resolved resolveOn(Network network, Request request)
-            throws IOException {
+    private static TalosTransferRunner.Resolved resolveOn(
+            Context context, Network network, Request request) throws IOException {
         String address = "https://huggingface.co/" + request.repo + "/resolve/"
                 + encode(request.revision) + "/" + encodePath(request.path);
         URL url = new URL(address);
@@ -187,6 +187,14 @@ public final class TalosTransferSession {
             connection.setConnectTimeout(15_000);
             connection.setReadTimeout(15_000);
             connection.setRequestMethod("HEAD");
+
+            // Absent is the ordinary case and not a failure: most repositories
+            // are public. It is still worth having for an open one — anonymous
+            // Hub limits are per IP, and a carrier puts thousands of subscribers
+            // behind a single address, so without a token a user is throttled
+            // for traffic that was never theirs.
+            String token = TalosSecretReader.providerKey(context, "huggingface");
+            if (token != null) connection.setRequestProperty("Authorization", "Bearer " + token);
 
             int status = connection.getResponseCode();
             String location = connection.getHeaderField("Location");
