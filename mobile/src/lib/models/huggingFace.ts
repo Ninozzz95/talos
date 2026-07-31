@@ -140,9 +140,31 @@ export interface TalosHuggingFaceClientOptions {
     token?: string
 }
 
+export interface TalosHuggingFaceModel {
+    id: string
+    downloads: number
+    likes: number
+    /**
+     * Known from the search, so a gate is not discovered after someone has
+     * picked a model, read a fit calculation and pressed download.
+     *
+     * The licence can be accepted only in a browser — an in-app checkbox would
+     * be a false record of a legal agreement.
+     */
+    gated: boolean
+    updatedAt: string | null
+}
+
 export interface TalosHuggingFaceClient {
+    searchModels(query: string, limit?: number): Promise<TalosHuggingFaceModel[]>
+    listGgufFiles(repo: string, revision: string): Promise<string[]>
     pathsInfo(repo: string, revision: string, paths: readonly string[]): Promise<TalosHuggingFaceFile[]>
     resolveDownload(repo: string, revision: string, path: string): Promise<TalosHuggingFaceDownload>
+    /**
+     * The first bytes of a file, so its header can be read before four
+     * gigabytes are committed to.
+     */
+    readHead(repo: string, revision: string, path: string, bytes: number): Promise<ArrayBuffer>
 }
 
 export function talosCreateHuggingFaceClient(
@@ -177,6 +199,65 @@ export function talosCreateHuggingFaceClient(
     }
 
     return {
+        /**
+         * Find models that could actually run here.
+         *
+         * Filtered to GGUF at the Hub rather than locally: the unfiltered list
+         * is overwhelmingly PyTorch checkpoints nothing on a phone can open,
+         * and a search that returns twenty results the user cannot use reads as
+         * a broken search.
+         */
+        async searchModels(query, limit = 20) {
+            const parameters = new URLSearchParams({
+                search: query,
+                filter: 'gguf',
+                sort: 'downloads',
+                direction: '-1',
+                limit: String(limit),
+            })
+            const response = await options.fetch(`${HUB}/api/models?${parameters}`, {
+                headers: headers(),
+            })
+            const refusal = refuse(response, query)
+            if (refusal) throw refusal
+
+            const rows = await response.json() as Array<Record<string, unknown>>
+            return rows.map((row) => ({
+                id: String(row.id ?? row.modelId ?? ''),
+                downloads: Number(row.downloads ?? 0),
+                likes: Number(row.likes ?? 0),
+                // The Hub answers `"auto"` or `"manual"` when a gate exists and
+                // OMITS the field otherwise, so absent means open. Reading it
+                // the cautious way round would mark nearly every model gated
+                // and hide the catalogue; a gate that slips through is named at
+                // `/resolve/`, with the page where the licence can be accepted.
+                gated: row.gated !== undefined && row.gated !== null && row.gated !== false,
+                updatedAt: typeof row.lastModified === 'string' ? row.lastModified : null,
+            })).filter((model) => model.id !== '')
+        },
+
+        /**
+         * Every GGUF in the repository, including the ones in subfolders.
+         *
+         * Recursive on purpose: quantisations are routinely published one
+         * folder down, and a listing that stops at the top level shows a
+         * repository as empty when it holds a dozen usable files.
+         */
+        async listGgufFiles(repo, revision) {
+            const response = await options.fetch(
+                `${HUB}/api/models/${repo}/tree/${revision}?recursive=true`,
+                { headers: headers() },
+            )
+            const refusal = refuse(response, repo)
+            if (refusal) throw refusal
+
+            const rows = await response.json() as Array<Record<string, unknown>>
+            return rows
+                .filter((row) => row.type === 'file')
+                .map((row) => String(row.path ?? ''))
+                .filter((path) => path.toLowerCase().endsWith('.gguf'))
+        },
+
         /**
          * One request for the whole download contract: size, sha256, the pinned
          * commit and the malware verdict, for up to 2000 paths.
@@ -240,6 +321,26 @@ export function talosCreateHuggingFaceClient(
                 : null
 
             return { url, livesForSeconds }
+        },
+
+        /**
+         * Read the first bytes of a file, to learn what it is before committing
+         * to four gigabytes of it.
+         *
+         * The Range goes on the CDN address and NEVER on `/resolve/`. Measured:
+         * a resolve carrying a Range has that exact range embedded in the
+         * CloudFront policy, and every later request answers
+         * `403 Auth failed: invalid range` — so the obvious implementation
+         * works for the header and then breaks every resume.
+         */
+        async readHead(repo, revision, path, bytes) {
+            const { url } = await this.resolveDownload(repo, revision, path)
+            const response = await options.fetch(url, {
+                headers: new Headers({ range: `bytes=0-${bytes - 1}` }),
+            })
+            const refusal = refuse(response, repo)
+            if (refusal) throw refusal
+            return await response.arrayBuffer()
         },
     }
 }
