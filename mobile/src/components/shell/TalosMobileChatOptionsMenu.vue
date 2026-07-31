@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
-import { Check, Download, EllipsisVertical, EyeOff, Images, MessageSquarePlus, Pencil, Trash2, X } from '@lucide/vue'
+import { Check, Download, EllipsisVertical, Eye, EyeOff, Images, MessageSquarePlus, Pencil, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
@@ -17,6 +17,8 @@ const props = withDefaults(defineProps<{
     busy: boolean
     /** Pill styling on the immersive chrome; plain ghost in the solid header. */
     pill?: boolean
+    /** The chat being shown is incognito, so the switch reads the other way. */
+    incognito?: boolean
     /**
      * False before a chat exists — sessions are created lazily, so this is the
      * state of a fresh install and of "deleted the last chat". The entry used to
@@ -26,6 +28,7 @@ const props = withDefaults(defineProps<{
     /** What this chat would take from the Library (owner 2026-07-26). */
     cleanupPlan?: TalosSessionCleanupPlan
 }>(), {
+    incognito: false,
     pill: false,
     canOpenMedia: true,
     // Empty means "nothing to offer": the checkbox stays hidden, which is the
@@ -36,6 +39,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
     newChat: []
     temporaryChat: []
+    normalMode: []
     rename: [title: string]
     delete: [{ deleteMedia: boolean }]
     export: []
@@ -126,8 +130,16 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                     thing taken away — not a mode hidden in settings that you
                     have to remember to turn off again.
                 -->
-                <button type="button" role="menuitem" data-testid="talos-chat-options-temporary" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('temporaryChat')">
-                    <EyeOff class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.temporaryChat') }}
+                <!--
+                    Owner 2026-07-31: one switch that reflects the state, not
+                    two buttons that ignore each other. In an ordinary chat it
+                    opens incognito; inside incognito it reads "Modalità
+                    normale" and takes you out. Pressing it always changes what
+                    it says, which is the whole of what a switch owes you.
+                -->
+                <button type="button" role="menuitem" data-testid="talos-chat-options-temporary" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; incognito ? emit('normalMode') : emit('temporaryChat')">
+                    <component :is="incognito ? Eye : EyeOff" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                    {{ incognito ? $t('chat.normalMode') : $t('chat.temporaryChat') }}
                 </button>
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="openRename">
                     <Pencil class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.renameChat') }}

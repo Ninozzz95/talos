@@ -53,3 +53,28 @@ describe('every shell that shows the chat menu passes its events on', () => {
         }
     })
 })
+
+/**
+ * Owner 2026-07-31: «il pulsante che ho premuto dovrà cambiare in modalità
+ * normale». A switch owes you one thing — that pressing it changes what it
+ * says. That only works if the STATE reaches the menu, which means through the
+ * same two shells that swallowed the event the first time.
+ */
+describe('the incognito switch reflects the chat it is in', () => {
+    it.each(SHELLS)('%s passes the state down and the way back up', (path) => {
+        const shell = read(path)
+
+        expect(shell).toContain(':incognito="incognito"')
+        expect(shell).toContain("@normal-mode=\"emit('normalMode')\"")
+        expect(shell).toContain('normalMode: []')
+    })
+
+    it('the menu itself reads the other way when it is already incognito', () => {
+        const menu = read('src/components/shell/TalosMobileChatOptionsMenu.vue')
+
+        expect(menu).toContain("chat.normalMode")
+        expect(menu).toContain("chat.temporaryChat")
+        // The same control, not a second button bolted beside the first.
+        expect(menu.match(/data-testid="talos-chat-options-temporary"/g)).toHaveLength(1)
+    })
+})
