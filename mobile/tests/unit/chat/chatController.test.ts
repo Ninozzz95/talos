@@ -601,11 +601,15 @@ describe('chatController', () => {
             'allow_once',
         )
 
+        // Famiglia B: the save carries WHICH model made it, not just where.
         expect(createGenerated).toHaveBeenCalledWith({
             name: 'Q2.md',
             mediaType: 'text/markdown',
             text: 'Verified.',
-        }, controller.chat.activeSession.value?.id)
+        }, expect.objectContaining({
+            sessionId: controller.chat.activeSession.value?.id,
+            toolName: 'document_create',
+        }))
         expect(controller.pendingToolAuthorizations.value).toEqual([])
     }, 15_000)
 
@@ -1382,7 +1386,7 @@ describe('chatController', () => {
 
             expect(createGeneratedBinary).toHaveBeenCalledWith(
                 expect.objectContaining({ name: `${'i'.repeat(47)}.png` }),
-                expect.any(String),
+                expect.objectContaining({ toolName: 'generate_image' }),
             )
         } finally {
             vi.unstubAllGlobals()
@@ -1693,7 +1697,7 @@ describe('chatController', () => {
                     mediaType: 'image/png',
                     bytes: new Uint8Array([1, 2, 3]),
                 }),
-                expect.any(String),
+                expect.objectContaining({ toolName: 'generate_image' }),
             )
             const chatRequests = request.mock.calls
                 .map(([call]) => call)
@@ -4366,7 +4370,7 @@ describe('chatController', () => {
                     { url: 'https://example.com/luxury', title: 'Luxury Italia' },
                     { url: 'https://concierge.example/offerta', title: 'Concierge Italia' },
                 ],
-            }), expect.any(String))
+            }), expect.objectContaining({ toolName: 'web_search' }))
             expect(controller.attachments.vaultFiles).toEqual([
                 expect.objectContaining({ id: 'search-dossier-1' }),
             ])

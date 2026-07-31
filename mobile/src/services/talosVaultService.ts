@@ -21,6 +21,25 @@ export interface TalosProvenanceInput {
     toolName?: string | null
 }
 
+/**
+ * Where a generated file came from: the chat, and what made it.
+ *
+ * `model` and `provider` are REQUIRED — nullable, but required. A caller that
+ * does not know has to say so in writing, and a layer that forgets to pass them
+ * on does not compile. That is deliberate: the facts live in the chat
+ * controller, four layers above the write, and "four layers above" is exactly
+ * where `{ ephemeral: true }` was silently dropped twice this week. A test can
+ * only catch that after someone writes the test; the compiler catches it now.
+ *
+ * `sessionId` stays optional because ABSENT and NULL mean different things to
+ * the caller below: absent means "use the chat I am in", null means "none".
+ */
+export interface TalosGeneratedOrigin extends TalosProvenanceInput {
+    sessionId?: string | null
+    model: string | null
+    provider: string | null
+}
+
 export interface TalosVaultTrayItem {
     file: TalosLocalVaultFile
     grant: TalosLocalFileAuthorityGrant
@@ -50,7 +69,7 @@ export interface TalosVaultService {
     ingest(file: TalosPickedFile, originSessionId?: string | null): Promise<TalosVaultTrayItem>
     /** Owner 2026-07-24: persist a chat-generated artifact into the Library as a
      *  reusable document (origin='generated', searchable via extracted text). */
-    createGenerated(input: TalosGeneratedTextInput, originSessionId?: string | null): Promise<TalosVaultTrayItem>
+    createGenerated(input: TalosGeneratedTextInput, origin: TalosGeneratedOrigin): Promise<TalosVaultTrayItem>
     /**
      * A generated file whose content is BYTES, not text.
      *
@@ -62,7 +81,7 @@ export interface TalosVaultService {
      */
     createGeneratedBinary(
         input: { name: string; mediaType: string; bytes: Uint8Array },
-        originSessionId?: string | null,
+        origin: TalosGeneratedOrigin,
     ): Promise<TalosVaultTrayItem>
     /** Owner 2026-07-25: raw bytes of an available file for in-Library preview
      *  (image thumbnails / open). Null if unavailable. */
@@ -321,7 +340,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
         ingest: (pickedFile, originSessionId = null) => ingestFile(pickedFile, 'uploaded', originSessionId),
         async createGenerated(
             { name, mediaType, text, kind, sourceUrl, sourceLinks },
-            originSessionId = null,
+            origin,
         ) {
             // A chat-generated document flows through the SAME ingestion pipeline
             // (private copy + analysis → searchable extracted text + sha256), only
@@ -332,9 +351,9 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                 declaredMediaType: mediaType,
                 sizeBytes: bytes.byteLength,
                 source: { kind: 'web-blob', blob: new Blob([bytes], { type: mediaType }) },
-            }, 'generated', originSessionId, kind, sourceUrl ?? null, sourceLinks ?? [])
+            }, 'generated', origin.sessionId ?? null, kind, sourceUrl ?? null, sourceLinks ?? [], origin)
         },
-        async createGeneratedBinary({ name, mediaType, bytes }, originSessionId = null) {
+        async createGeneratedBinary({ name, mediaType, bytes }, origin) {
             // The same ingestion pipeline: private copy, analysis, sha256. Only
             // the source differs — real bytes rather than an encoded string.
             return ingestFile({
@@ -342,7 +361,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                 declaredMediaType: mediaType,
                 sizeBytes: bytes.byteLength,
                 source: { kind: 'web-blob', blob: new Blob([bytes as BlobPart], { type: mediaType }) },
-            }, 'generated', originSessionId)
+            }, 'generated', origin.sessionId ?? null, undefined, null, [], origin)
         },
         createGrant,
         async readFileText(fileId) {

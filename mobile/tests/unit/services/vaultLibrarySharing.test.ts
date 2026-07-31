@@ -51,7 +51,7 @@ describe('per-document sharing switch', () => {
         const { repository, vault } = service()
         const created = await vault.createGenerated(
             { name: 'Report.md', mediaType: 'text/markdown', text: 'totale 2196' },
-            'session-1',
+            { sessionId: 'session-1', model: null, provider: null },
         )
 
         await vault.setFileShared(created.file.id, false)
@@ -69,7 +69,7 @@ describe('per-document sharing switch', () => {
         const { repository, vault } = service()
         const created = await vault.createGenerated(
             { name: 'Report.md', mediaType: 'text/markdown', text: 'x' },
-            'session-1',
+            { sessionId: 'session-1', model: null, provider: null },
         )
         await vault.setFileShared(created.file.id, false)
         await vault.setFileShared(created.file.id, true)

@@ -54,7 +54,7 @@ describe('a file made in a temporary chat', () => {
 
         await vault.createGeneratedBinary(
             { name: 'foto.png', mediaType: 'image/png', bytes: new Uint8Array([1]) },
-            'tmp-abc',
+            { sessionId: 'tmp-abc', model: 'gemini-live', provider: 'gemini' },
         )
 
         const metadata = written.at(-1) ?? {}
@@ -67,7 +67,7 @@ describe('a file made in a temporary chat', () => {
 
         await vault.createGeneratedBinary(
             { name: 'foto.png', mediaType: 'image/png', bytes: new Uint8Array([1]) },
-            'chat-7',
+            { sessionId: 'chat-7', model: 'gemini-live', provider: 'gemini' },
         )
 
         const metadata = written.at(-1) ?? {}
