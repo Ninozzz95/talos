@@ -144,6 +144,30 @@ test('entering incognito from a chat with content does not destroy it', async ({
     await expect(page.getByText('Understood.', { exact: true }).first()).toBeVisible()
 })
 
+/**
+ * The second door, on the welcome itself — owner 2026-07-31: «la pill modalità
+ * incognito sotto la scritta welcome è sparita e non doveva sparire».
+ *
+ * It is a door, so it gets the same test as the other one. A control that
+ * reaches the right function and is then undone a frame later is exactly the
+ * defect this file exists for.
+ */
+test('the welcome pill is a door into incognito, and it holds', async ({ page }) => {
+    await mockProvider(page)
+    await configureGemini(page)
+    await sendMessage(page, 'Una conversazione che voglio tenere')
+
+    await chooseFromChatMenu(page, 'New chat')
+    await page.getByTestId('talos-make-temporary').click()
+
+    await expect(page.getByTestId('talos-temporary-chat-badge')).toBeVisible()
+    await historySettlesAt(page, 1)
+    await expect(page.getByTestId('talos-temporary-chat-badge')).toBeVisible()
+    // Inside incognito the same pill reads the other way, and is the way out.
+    await expect(page.getByTestId('talos-make-temporary')).toHaveCount(0)
+    await expect(page.getByTestId('talos-make-permanent')).toBeVisible()
+})
+
 /** The way back, by the same rule: incognito goes, whatever is in it. */
 test('leaving incognito takes the incognito chat with it', async ({ page }) => {
     await mockProvider(page)

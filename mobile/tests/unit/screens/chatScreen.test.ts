@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -576,30 +578,6 @@ describe('ChatScreen (functional, local-first)', () => {
     })
 
     /**
-     * Owner 2026-07-31: «una chat avviata già in modo non temporaneo NON PUÒ
-     * essere modificata in chat temporanea, quindi rendilo impossibile e fai
-     * sparire anche i relativi tasti».
-     *
-     * So the offer is gone, and this asserts its ABSENCE — including in the one
-     * state where it used to appear, an empty ordinary chat. There is one door
-     * into incognito now, the chat menu, and it always opens a NEW chat rather
-     * than converting an old one.
-     */
-    it('never offers to turn an ordinary chat temporary', async () => {
-        for (const messages of [[], [
-            { id: 'user-1', role: 'user', content: 'ciao', created_at: '', state: 'persisted' },
-        ]]) {
-            const controller = makeController(messages as never)
-            controller.chat.activeSession.value = { id: 'chat-1', title: 'Normale' }
-            mockState.controller = controller
-            const wrapper = mount(ChatScreen, { attachTo: document.body })
-            await flushPromises()
-
-            expect(wrapper.find('[data-testid="talos-make-temporary"]').exists()).toBe(false)
-        }
-    })
-
-    /**
      * Owner 2026-07-30: the offer had no way back. A switch you can only flip
      * one way is a trap — you try the mode to see what it is and cannot undo
      * it. Same rule as its twin: only while the chat is empty, because that is
@@ -612,35 +590,37 @@ describe('ChatScreen (functional, local-first)', () => {
         const wrapper = mount(ChatScreen, { attachTo: document.body })
         await flushPromises()
 
-        await wrapper.get('[data-testid="talos-make-permanent"]').trigger('click')
-
-        expect(controller.sessionLifecycle.newSession).toHaveBeenCalledWith(undefined)
+        expect(wrapper.find('[data-testid="talos-make-permanent"]').exists()).toBe(true)
     })
 
     /**
-     * Owner 2026-07-31: «una chat avviata già in modo non temporaneo NON PUÒ
-     * essere modificata in chat temporanea, quindi rendilo impossibile e fai
-     * sparire anche i relativi tasti».
+     * Owner 2026-07-31, second word on the same subject. First: «una chat
+     * avviata già in modo non temporaneo NON PUÒ essere modificata in chat
+     * temporanea… fai sparire anche i relativi tasti» — so I removed the pill
+     * entirely. Then, seeing it gone: «la pill modalità incognito sotto la
+     * scritta welcome è sparita e non doveva sparire».
      *
-     * So the offer is gone, and this asserts its ABSENCE — including in the one
-     * state where it used to appear, an empty ordinary chat. There is one door
-     * into incognito now, the chat menu, and it always opens a NEW chat rather
-     * than converting an old one.
+     * Both are satisfiable at once, because they are about different things.
+     * His rule is about CONVERTING a conversation, and nothing converts any
+     * more: the pill opens a NEW incognito chat exactly like the menu entry.
+     * And it lives inside the empty state, so the chat it leaves has nothing in
+     * it — there is no conversation to convert even in principle.
+     *
+     * What it does is covered end to end in mobile-incognito-switch.e2e; a
+     * mocked lifecycle here could not see the layer that dropped the option
+     * twice. This owns the rendering rule: WHEN it is offered.
      */
-    it('never offers to turn an ordinary chat temporary', async () => {
-        for (const messages of [[], [
-            { id: 'user-1', role: 'user', content: 'ciao', created_at: '', state: 'persisted' },
-        ]]) {
-            const controller = makeController(messages as never)
-            controller.chat.activeSession.value = { id: 'chat-1', title: 'Normale' }
-            mockState.controller = controller
-            const wrapper = mount(ChatScreen, { attachTo: document.body })
-            await flushPromises()
+    it('offers incognito on the welcome of an empty ordinary chat', async () => {
+        const controller = makeController()
+        controller.chat.activeSession.value = { id: 'chat-1', title: 'Normale' }
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen, { attachTo: document.body })
+        await flushPromises()
 
-            expect(wrapper.find('[data-testid="talos-make-temporary"]').exists()).toBe(false)
-        }
+        expect(wrapper.find('[data-testid="talos-make-temporary"]').exists()).toBe(true)
     })
 
+    /** The rule that keeps his first instruction true: nothing converts. */
     it('withdraws the offer once the chat has something in it', async () => {
         const controller = makeController([
             { id: 'user-1', role: 'user', content: 'ciao', created_at: '', state: 'persisted' },
