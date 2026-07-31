@@ -20,6 +20,13 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     generate_image: true,
     library_export: true,
     library_context_policy_update: false,
+    // The second door onto the on-device models. Searching and inspecting reach
+    // the Hub, so the outbound policy already decides whether they are offered
+    // at all; downloading asks separately, every single time.
+    local_models_search: true,
+    local_model_inspect: true,
+    local_model_download: true,
+    local_models_status: true,
 })
 
 export type TalosAgentToolId = keyof typeof TALOS_DEFAULT_AGENT_TOOL_ENABLED

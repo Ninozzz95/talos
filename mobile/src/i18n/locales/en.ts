@@ -777,6 +777,10 @@ export const TALOS_EN_MESSAGES = {
         generateImage: 'Generating an image',
         libraryExport: 'Saving a file to your device',
         libraryContextPolicyUpdate: 'Changing Library context policy',
+        localModelsSearch: 'Looking for models this phone can run',
+        localModelInspect: 'Checking whether a model fits this phone',
+        localModelDownload: 'Downloading a model to this phone',
+        localModelsStatus: 'Checking on a model download',
     },
     toolConsent: {
         libraryList: {
@@ -834,6 +838,22 @@ export const TALOS_EN_MESSAGES = {
         libraryContextPolicyUpdate: {
             title: 'Change Library context policy',
             description: 'Apply the displayed Library policy change to the device, this chat, or this response. This action always requires a separate confirmation.',
+        },
+        localModelsSearch: {
+            title: 'Search Hugging Face for models',
+            description: 'Send your search words to huggingface.co and list models that could run on this phone.',
+        },
+        localModelInspect: {
+            title: 'Check whether a model fits this phone',
+            description: 'Read the first part of the model file from the network to work out whether it will run here, and how fast.',
+        },
+        localModelDownload: {
+            title: 'Download a model to this phone',
+            description: 'Download the chosen model onto this device. This can take gigabytes of storage and, on mobile data, of your allowance. This action asks every time.',
+        },
+        localModelsStatus: {
+            title: 'Check on a model download',
+            description: 'Report what is downloading right now and how far it has got. Reads this device only.',
         },
     },
     export: {
@@ -1399,6 +1419,7 @@ export const TALOS_EN_MESSAGES = {
             personal: 'Personal',
             web: 'Web',
             create: 'Create',
+            models: 'Models on this phone',
         },
         actions: {
             read: 'Read',
@@ -1420,6 +1441,10 @@ export const TALOS_EN_MESSAGES = {
             generate_image: { title: 'Generate an image', description: 'Ask the configured image provider to create and save an image.' },
             library_export: { title: 'Save a Library file', description: 'Save a user-selected Library file to device storage.' },
             library_context_policy_update: { title: 'Manage Library context policy', description: 'Let the agent propose confirmed global, chat, or single-response Library policy changes.' },
+            local_models_search: { title: 'Find models for this phone', description: 'Send your words to huggingface.co and list models that could run here.' },
+            local_model_inspect: { title: 'Check a model against this phone', description: 'Read a model header from the network and work out whether it runs here, and how fast.' },
+            local_model_download: { title: 'Download a model', description: 'Download a model onto this device. Asks you every time, however large.' },
+            local_models_status: { title: 'Check on a download', description: 'Report what is downloading and how far it has got. This device only.' },
         },
     },
     lock: {

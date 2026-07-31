@@ -28,6 +28,10 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     generate_image: 'Generating an image',
     library_export: 'Saving a file to your device',
     library_context_policy_update: 'Changing Library context policy',
+    local_models_search: 'Looking for models this phone can run',
+    local_model_inspect: 'Checking whether a model fits this phone',
+    local_model_download: 'Downloading a model to this phone',
+    local_models_status: 'Checking on a model download',
 }
 
 export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
@@ -45,6 +49,10 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     generate_image: 'toolActivity.generateImage',
     library_export: 'toolActivity.libraryExport',
     library_context_policy_update: 'toolActivity.libraryContextPolicyUpdate',
+    local_models_search: 'toolActivity.localModelsSearch',
+    local_model_inspect: 'toolActivity.localModelInspect',
+    local_model_download: 'toolActivity.localModelDownload',
+    local_models_status: 'toolActivity.localModelsStatus',
 }
 
 export interface TalosToolConsentCopy {
@@ -108,6 +116,22 @@ export const TALOS_TOOL_CONSENT_KEYS: Record<string, TalosToolConsentCopy> = {
     library_context_policy_update: {
         title: 'toolConsent.libraryContextPolicyUpdate.title',
         description: 'toolConsent.libraryContextPolicyUpdate.description',
+    },
+    local_models_search: {
+        title: 'toolConsent.localModelsSearch.title',
+        description: 'toolConsent.localModelsSearch.description',
+    },
+    local_model_inspect: {
+        title: 'toolConsent.localModelInspect.title',
+        description: 'toolConsent.localModelInspect.description',
+    },
+    local_model_download: {
+        title: 'toolConsent.localModelDownload.title',
+        description: 'toolConsent.localModelDownload.description',
+    },
+    local_models_status: {
+        title: 'toolConsent.localModelsStatus.title',
+        description: 'toolConsent.localModelsStatus.description',
     },
 }
 

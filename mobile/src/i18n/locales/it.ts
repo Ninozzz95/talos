@@ -780,6 +780,10 @@ export const TALOS_IT_MESSAGES = {
         generateImage: 'Generazione di un’immagine',
         libraryExport: 'Salvataggio di un file sul dispositivo',
         libraryContextPolicyUpdate: 'Modifica della policy Libreria',
+        localModelsSearch: 'Cerco modelli che questo telefono può far girare',
+        localModelInspect: 'Controllo se un modello ci sta su questo telefono',
+        localModelDownload: 'Scarico un modello su questo telefono',
+        localModelsStatus: 'Controllo un download in corso',
     },
     toolConsent: {
         libraryList: {
@@ -837,6 +841,22 @@ export const TALOS_IT_MESSAGES = {
         libraryContextPolicyUpdate: {
             title: 'Modifica la policy Libreria',
             description: 'Applica la modifica mostrata alla policy Libreria del dispositivo, di questa chat o di questa risposta. Questa azione richiede sempre una conferma separata.',
+        },
+        localModelsSearch: {
+            title: 'Cerca modelli su Hugging Face',
+            description: 'Manda le tue parole di ricerca a huggingface.co ed elenca i modelli che potrebbero girare su questo telefono.',
+        },
+        localModelInspect: {
+            title: 'Controlla se un modello ci sta su questo telefono',
+            description: 'Legge dalla rete la prima parte del file del modello per capire se gira qui, e quanto veloce.',
+        },
+        localModelDownload: {
+            title: 'Scarica un modello su questo telefono',
+            description: 'Scarica il modello scelto su questo dispositivo. Può costare gigabyte di spazio e, su rete mobile, del tuo traffico. Questa azione chiede ogni volta.',
+        },
+        localModelsStatus: {
+            title: 'Controlla un download in corso',
+            description: 'Riporta cosa si sta scaricando adesso e a che punto è. Legge solo questo dispositivo.',
         },
     },
     export: {
@@ -1397,6 +1417,7 @@ export const TALOS_IT_MESSAGES = {
             personal: 'Personali',
             web: 'Web',
             create: 'Creazione',
+            models: 'Modelli su questo telefono',
         },
         actions: {
             read: 'Lettura',
@@ -1418,6 +1439,10 @@ export const TALOS_IT_MESSAGES = {
             generate_image: { title: 'Genera un’immagine', description: 'Chiede al provider configurato di creare e salvare un’immagine.' },
             library_export: { title: 'Salva un file della Libreria', description: 'Salva nella memoria del dispositivo un file scelto dalla Libreria.' },
             library_context_policy_update: { title: 'Gestisci la policy Libreria', description: 'Consente all’agente di proporre modifiche confermate alla policy Libreria globale, della chat o della singola risposta.' },
+            local_models_search: { title: 'Trova modelli per questo telefono', description: 'Manda le tue parole a huggingface.co ed elenca i modelli che potrebbero girare qui.' },
+            local_model_inspect: { title: 'Controlla un modello su questo telefono', description: 'Legge dalla rete l’intestazione di un modello e capisce se gira qui, e quanto veloce.' },
+            local_model_download: { title: 'Scarica un modello', description: 'Scarica un modello su questo dispositivo. Chiede sempre, qualunque sia la taglia.' },
+            local_models_status: { title: 'Controlla un download', description: 'Riporta cosa si sta scaricando e a che punto è. Solo questo dispositivo.' },
         },
     },
     lock: {
