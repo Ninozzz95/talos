@@ -25,6 +25,10 @@ public class MainActivity extends BridgeActivity {
         // Arbitrary model-selected page reads use DNS-pinned public addresses
         // and per-hop redirect validation, never unrestricted Capacitor HTTP.
         registerPlugin(TalosSafeWebPlugin.class);
+        // Downloading a model. It cannot be done from JavaScript at all: Android
+        // suspends a backgrounded WebView, and a 4 GB transfer spends most of
+        // its hours there.
+        registerPlugin(TalosModelTransferPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
