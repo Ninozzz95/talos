@@ -185,9 +185,9 @@ test('leaving incognito takes the incognito chat with it', async ({ page }) => {
     await chooseFromChatMenu(page, 'Normal mode')
     await expect(page.getByTestId('talos-temporary-chat-badge')).toHaveCount(0)
 
-    // Two: the conversation it was opened from, and the ordinary chat you have
-    // just been put into. The incognito one is in neither — it was never in the
-    // history, and leaving took it away.
-    await historySettlesAt(page, 2)
+    // One: the conversation it was opened from. The incognito chat is gone, and
+    // the ordinary chat you have just been put into has nothing in it yet, so
+    // it is not in the history either (owner 2026-07-31).
+    await historySettlesAt(page, 1)
     await expect(page.getByText('Qualcosa di privato', { exact: true })).toHaveCount(0)
 })

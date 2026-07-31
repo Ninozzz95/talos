@@ -24,6 +24,14 @@ function makeController() {
     return {
         chat: {
             sessions,
+            /**
+             * The history the screen shows, DERIVED here exactly as the store
+             * derives it — a fake that returns its own fixed list could not see
+             * a screen reading the wrong one.
+             */
+            get history() {
+                return sessions.filter((session) => (session as { has_messages?: boolean }).has_messages !== false)
+            },
             activeSession: ref<{ id: string } | null>({ id: 's2' }),
             setSessionArchived: vi.fn().mockImplementation(async (id: string, archived: boolean) => {
                 const session = sessions.find((candidate) => candidate.id === id)

@@ -345,14 +345,26 @@ export function createSqliteChatRepository(
 
     return {
         initialize,
+        /**
+         * The complete list, each row saying whether it has anything in it.
+         *
+         * EXISTS rather than a join or a count: SQLite stops at the first row it
+         * finds, so this costs one index seek per session and never materialises
+         * a message.
+         */
         async listSessions() {
             const rows = await (await db()).query(
-                `SELECT id, title, surface, mode, persistence_mode, active_model_profile_id,
-                        metadata_json, created_at, updated_at
-                 FROM talos_chat_sessions
-                 ORDER BY updated_at DESC, created_at DESC, id DESC`,
+                `SELECT s.id, s.title, s.surface, s.mode, s.persistence_mode,
+                        s.active_model_profile_id, s.metadata_json, s.created_at, s.updated_at,
+                        EXISTS (SELECT 1 FROM talos_chat_messages m WHERE m.session_id = s.id)
+                            AS has_messages
+                 FROM talos_chat_sessions s
+                 ORDER BY s.updated_at DESC, s.created_at DESC, s.id DESC`,
             )
-            return rows.map(parseSession)
+            return rows.map((row) => ({
+                ...parseSession(row),
+                has_messages: row.has_messages === 1 || row.has_messages === true,
+            }))
         },
         getActiveSessionId: () => activeSessionId(),
         async createSession(input: CreateChatSessionInput) {

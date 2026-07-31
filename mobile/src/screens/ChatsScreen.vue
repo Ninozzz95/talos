@@ -37,7 +37,7 @@ const { t } = useTalosI18n()
 const controller = useChatController()
 
 const query = ref('')
-const ordered = computed(() => orderChatSessions(controller.chat.sessions))
+const ordered = computed(() => orderChatSessions(controller.chat.history))
 const filtered = computed(() => {
     const needle = query.value.trim().toLowerCase()
     if (!needle) return ordered.value
@@ -45,7 +45,7 @@ const filtered = computed(() => {
 })
 const archived = computed(() => {
     const needle = query.value.trim().toLowerCase()
-    const entries = archivedChatSessions(controller.chat.sessions)
+    const entries = archivedChatSessions(controller.chat.history)
     if (!needle) return entries
     return entries.filter((session) => sessionTitle(session).toLocaleLowerCase().includes(needle))
 })
@@ -267,7 +267,7 @@ async function confirmBulkDelete(): Promise<void> {
         bulkDeleteMedia.value = false
         // Whatever survived stays selected; the rest must not linger as a count
         // of rows the user can no longer see.
-        bulk.reconcile(controller.chat.sessions.map((session) => session.id))
+        bulk.reconcile(controller.chat.history.map((session) => session.id))
     } finally {
         actionBusy.value = false
     }

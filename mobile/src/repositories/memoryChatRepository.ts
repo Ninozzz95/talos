@@ -133,7 +133,10 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
     return {
         async initialize() {},
         async listSessions() {
-            return [...sessions.values()].sort(byMostRecent).map(copySession)
+            return [...sessions.values()].sort(byMostRecent).map((session) => ({
+                ...copySession(session),
+                has_messages: (messages.get(session.id) ?? []).length > 0,
+            }))
         },
         async getActiveSessionId() {
             return activeSessionId

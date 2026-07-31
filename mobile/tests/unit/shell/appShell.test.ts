@@ -89,7 +89,12 @@ function makeController() {
         chat: {
             messages: reactive([]),
             sessionBrowserActivities: reactive([]),
-            sessions: reactive([]),
+            sessions: reactive([] as Array<Record<string, unknown>>),
+            /** Derived like the store's, so the shell cannot read a stale copy. */
+            get history() {
+                return (this.sessions as Array<{ has_messages?: boolean }>)
+                    .filter((session) => session.has_messages !== false)
+            },
             activeSession: ref(null),
             state: reactive({ sending: false, persistenceStatus: 'ready', persistenceError: null }),
             retryPersistence: vi.fn().mockResolvedValue(undefined),
