@@ -176,7 +176,11 @@ test('operates slash commands at 360px without overflow, and every row runs', as
     await page.getByLabel('Open menu').click()
     // F3-T3 (owner #12): phones surface the count on the Chats entry; the
     // session list lives in the dedicated Chats page.
-    await expect(page.locator('[data-testid="talos-sidebar-chats-entry"]')).toContainText('1')
+    //
+    // Zero, and that is the point: `/new` opened a chat and nothing has been
+    // written in it, so there is nothing in the history yet (owner 2026-07-31,
+    // «una chat entra nella cronologia solo quando ha dentro qualcosa»).
+    await expect(page.locator('[data-testid="talos-sidebar-chats-entry"]')).toContainText('0')
 
     const horizontalOverflow = await page.evaluate(() => (
         document.documentElement.scrollWidth - document.documentElement.clientWidth

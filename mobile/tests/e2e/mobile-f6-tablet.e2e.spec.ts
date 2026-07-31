@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { startChatWithContent } from './chatFixtures'
 
 // F6 — tablet split view (Claude pattern, owner's screenshot): persistent left
 // chat panel + draggable divider + chat content on the right. Width persisted
@@ -121,12 +122,18 @@ test('panel hamburger opens the tools drawer; new chat from the panel stays in p
     await page.locator(`${PANEL} [data-testid="talos-chats-new"]`).click()
     await expect(page.locator('[data-talos-route]')).toHaveAttribute('data-talos-route', 'chat')
     await expect(page.getByLabel('Message TALOS')).toBeVisible()
-    await expect(page.locator(`${PANEL} [data-testid="talos-chats-row"]`).first()).toBeVisible()
+    // The panel is still the panel — and it holds no row yet, because a chat
+    // enters the history when it has something in it (owner 2026-07-31).
+    await expect(page.locator(`${PANEL} [data-testid="talos-chats-new"]`)).toBeVisible()
+    await expect(page.locator(`${PANEL} [data-testid="talos-chats-row"]`)).toHaveCount(0)
 })
 
 test('selecting a chat in the panel closes an open station sheet', async ({ page }) => {
     await page.goto('/')
-    await page.locator(`${PANEL} [data-testid="talos-chats-new"]`).click()
+    // A chat has to have something in it to be in the panel at all, so this
+    // puts something in it rather than asserting on a list that is empty by
+    // design (owner 2026-07-31).
+    await startChatWithContent(page, 'Una conversazione da riaprire')
     await expect(page.locator(`${PANEL} [data-testid="talos-chats-row"]`).first()).toBeVisible()
     // Open a station sheet via the tools drawer.
     await page.locator('[aria-label="Open menu"]').click()

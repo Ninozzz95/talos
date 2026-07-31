@@ -14,6 +14,24 @@ export interface TalosLocalChatSession {
     metadata: Record<string, unknown>
     created_at: string
     updated_at: string
+    /**
+     * Whether this chat has anything in it. Reported by `listSessions` only.
+     *
+     * Owner 2026-07-31, approved: «una chat entra nella cronologia solo quando
+     * ha dentro qualcosa» — his list had six «Nuova chat» in it, one per chat
+     * opened and not used.
+     *
+     * REPORTED rather than filtered. Filtering inside `listSessions` was the
+     * first attempt and it was wrong: it changed what "the sessions" means for
+     * everything that reads them — the active chat restored at boot, the
+     * replacement nominated after a delete, the owner lookups in the controller
+     * — and 29 tests said so. The list stays complete and the HISTORY is a view
+     * over it, because those are two different things.
+     *
+     * Undefined means "not asked": a session handed back by `createSession` or
+     * `renameSession` makes no claim either way.
+     */
+    has_messages?: boolean
 }
 
 export interface TalosLocalChatMessage {

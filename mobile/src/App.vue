@@ -758,7 +758,7 @@ onBeforeUnmount(async () => {
             <TalosMobileSidebar
                 v-if="sidebarEverOpened"
                 v-model:open="sidebarOpen"
-                :sessions="chatController.chat.sessions"
+                :sessions="chatController.chat.history"
                 :active-session-id="chatController.chat.activeSession.value?.id ?? null"
                 :busy="sessionBusy"
                 :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"

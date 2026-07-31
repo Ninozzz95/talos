@@ -1,4 +1,4 @@
-import { reactive, readonly, ref, type Ref } from 'vue'
+import { computed, reactive, readonly, ref, type Ref } from 'vue'
 import { talosEphemeralSessionId, talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import type { TalosTranslate } from '@/i18n/contracts'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
@@ -232,6 +232,15 @@ export interface ChatStore<Runtime = undefined> {
     readonly messages: readonly TalosMobileMessageView[]
     readonly sessionBrowserActivities: readonly TalosMobileBrowserActivityView[]
     readonly sessions: readonly TalosLocalChatSession[]
+    /**
+     * The history the user is shown: chats with something in them.
+     *
+     * A view over `sessions`, never a replacement for it — everything that has
+     * to find a chat (boot restoration, the replacement after a delete, the
+     * controller's owner lookups) reads the complete list, and only the
+     * surfaces that DISPLAY a history read this one.
+     */
+    readonly history: readonly TalosLocalChatSession[]
     readonly activeSession: Readonly<Ref<TalosLocalChatSession | null>>
     readonly state: Readonly<ChatState>
     initialize(): Promise<void>
@@ -583,13 +592,27 @@ export function createChatStore<Runtime = undefined>(
         activeSession.value = available.find((session) => session.id === active?.id) ?? null
     }
 
+    /**
+     * The history: the chats that have something in them.
+     *
+     * Owner 2026-07-31, approved. `sessions` remains everything there is —
+     * boot restoration, delete nomination and the controller's owner lookups
+     * all need the complete set — and this is the view the user is shown. The
+     * two used to be the same object, which is why six chats he had opened and
+     * not used were sitting in his list.
+     */
+    const history = computed(
+        () => sessions.filter((session) => session.has_messages !== false),
+    )
+
     // R2-9: appendMessage bumps ONLY the session's updated_at in the DB —
     // mirror that locally instead of a full-table round-trip on EVERY user
     // and assistant append (it was two listSessions per exchange).
     function bumpSessionRecency(sessionId: string, updatedAt: string): void {
         const index = sessions.findIndex((session) => session.id === sessionId)
         if (index < 0) return
-        const updated = { ...sessions[index], updated_at: updatedAt }
+        // The first message is also the moment this chat ENTERS the history.
+        const updated = { ...sessions[index], updated_at: updatedAt, has_messages: true }
         sessions.splice(index, 1)
         // listSessions orders by updated_at DESC — the freshest bump leads.
         sessions.unshift(updated)
@@ -1404,6 +1427,9 @@ export function createChatStore<Runtime = undefined>(
         messages: readonly(messages),
         sessionBrowserActivities: readonly(sessionBrowserActivities),
         sessions: readonly(sessions),
+        // A getter, so callers read it exactly like `sessions` and the
+        // computed is still tracked wherever it is read.
+        get history() { return history.value },
         activeSession: readonly(activeSession),
         state: readonly(state),
         initialize,
