@@ -157,6 +157,21 @@ const temporaryWelcome = computed(
 async function makePermanent(): Promise<void> {
     await switchMode(false)
 }
+
+/**
+ * The way in, from the welcome itself.
+ *
+ * Owner 2026-07-31, after I had removed it on his earlier instruction: «la pill
+ * modalità incognito sotto la scritta welcome è sparita e non doveva sparire».
+ * Both instructions hold at once, because they are about different acts. His
+ * rule was about CONVERTING a conversation — and nothing converts: this opens a
+ * NEW incognito chat, exactly as the menu entry does. It also lives inside the
+ * empty state, so the chat being left has nothing in it; there is no
+ * conversation to convert even in principle.
+ */
+async function makeAnonymous(): Promise<void> {
+    await switchMode(true)
+}
 const libraryTurnOverride = ref<TalosLibraryTurnOverride | null>(null)
 const sessionLibraryContextPolicy = computed(() =>
     parseTalosSessionLibraryContextPolicy(
@@ -809,34 +824,38 @@ onBeforeUnmount(() => {
                     </template>
 
                     <!--
-                        Owner 2026-07-31: «una chat avviata già in modo non
-                        temporaneo NON PUÒ essere modificata in chat temporanea».
-                        The offer that used to sit here is gone, and with it the
-                        only way an ordinary chat could become anonymous.
+                        The switch, on the welcome itself, in both directions —
+                        the same control the chat menu carries, where the eye
+                        already is.
 
-                        There is one door into incognito now — the chat menu —
-                        and it always OPENS a new chat rather than converting an
-                        old one. Two doors meant two sets of rules about what
-                        happens to what you already wrote; one door means the
-                        answer is always the same: nothing, because there is
-                        nothing yet.
-                    -->
-                    <!--
-                        Owner 2026-07-30: the offer had no way back. A switch you
-                        can only flip one way is a trap — you try the mode to see
-                        what it is and cannot undo it. Same rule as its twin: it
-                        exists only while the chat is empty, because that is the
-                        only moment when leaving costs nothing.
+                        Owner 2026-07-31, twice on this pill. First: «una chat
+                        avviata già in modo non temporaneo NON PUÒ essere
+                        modificata in chat temporanea… fai sparire anche i
+                        relativi tasti», so I removed it. Then, seeing it gone:
+                        «la pill modalità incognito sotto la scritta welcome è
+                        sparita e non doveva sparire».
+
+                        Both hold, because they are about different acts. His
+                        rule is about CONVERTING a conversation, and nothing
+                        converts any more — this OPENS a new chat, exactly like
+                        the menu. And it sits inside the empty state, so the chat
+                        it leaves has nothing in it: there is no conversation to
+                        convert even in principle, which is also why it never
+                        appears once you have started writing.
+
+                        Owner 2026-07-30, on the way back: a switch you can only
+                        flip one way is a trap — you try the mode to see what it
+                        is and cannot undo it.
                     -->
                     <button
-                        v-if="isTemporaryChat && !composerExpanded"
+                        v-if="!composerExpanded"
                         type="button"
-                        data-testid="talos-make-permanent"
+                        :data-testid="isTemporaryChat ? 'talos-make-permanent' : 'talos-make-temporary'"
                         class="talos-pressable mt-5 inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)]/80 px-4 text-xs text-[var(--talos-muted)] backdrop-blur transition-colors duration-150 hover:text-[var(--talos-text)]"
-                        @click="makePermanent"
+                        @click="isTemporaryChat ? makePermanent() : makeAnonymous()"
                     >
-                        <Eye class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                        {{ t('chat.makePermanent') }}
+                        <component :is="isTemporaryChat ? Eye : EyeOff" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                        {{ isTemporaryChat ? t('chat.makePermanent') : t('chat.temporaryChat') }}
                     </button>
 
                     <!-- F2-T6 first-run setup: REAL progress only, dismissible. -->
