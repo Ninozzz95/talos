@@ -262,6 +262,33 @@
             android:name="ai.talos.TalosRunService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!--
+            Downloading a model. TWO hosts on purpose, and neither is
+            TalosRunService: from Android 15 a dataSync service has a six-hour
+            daily budget SHARED across the app, so a 4 GB download sharing the
+            run service would spend it and crash the thing that keeps long
+            answers alive.
+
+            The job is the modern path (API 34+, no budget at all). The service
+            is the fallback for 26-33, where user-initiated transfer jobs do not
+            exist yet.
+        -->
+        <service
+            android:name="ai.talos.TalosModelTransferJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <service
+            android:name="ai.talos.TalosModelTransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- The Stop button on the download bar. Not exported: nothing outside
+             this app may pause a user's download. -->
+        <receiver
+            android:name="ai.talos.TalosTransferControl"
+            android:exported="false" />
 </application>
 
     <!-- Permissions -->
@@ -274,6 +301,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The download that must not be cut short. From Android 15 a dataSync
+         foreground service is killed after six hours a day, which a 4 GB model
+         on a slow link genuinely reaches; a user-initiated data transfer job
+         has no such cap. It can only be scheduled while the app is visible,
+         and returns RESULT_FAILURE rather than throwing when it is not. -->
+    <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
     <!-- F5.3: explicit — the mic permission dialog can never depend on manifest merging. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
