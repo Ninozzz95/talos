@@ -1088,9 +1088,32 @@ export function createChatStore<Runtime = undefined>(
         let streamed = ''
         let reasoned = ''
         try {
-            const owner = (await repository.listSessions()).find(
-                (session) => session.id === input.identity.sessionId,
-            )
+            /**
+             * The chat you are IN counts, even when no history lists it.
+             *
+             * Found by an adversarial review 2026-07-31 as an unverified lead,
+             * and it was real. Incognito deliberately keeps the create and web
+             * tools — drawing a picture reveals nothing about you — and both are
+             * `write`/`outbound`, so the permission gate can ask, and an answer
+             * produces a checkpoint that has to be resumed here.
+             *
+             * This resolved the owner from the DURABLE list, where a temporary
+             * chat is never present: that absence is the feature, not evidence
+             * it is gone — the same confusion that produced three defects this
+             * week. So the approval failed with "session not found",
+             * `complete()` was never called, and the user saw a tap on "allow"
+             * do nothing at all.
+             *
+             * The active session is checked first, which is also the only place
+             * a temporary chat can be found: it exists exactly while you are in
+             * it.
+             */
+            const active = activeSession.value
+            const owner = active?.id === input.identity.sessionId
+                ? active
+                : (await repository.listSessions()).find(
+                    (session) => session.id === input.identity.sessionId,
+                )
             if (!owner) {
                 state.lastError = CHAT_SESSION_NOT_FOUND
                 return false
