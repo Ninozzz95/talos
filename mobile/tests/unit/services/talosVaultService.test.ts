@@ -92,7 +92,7 @@ describe('createTalosVaultService', () => {
 
         const item = await service.createGenerated({
             name: 'talos-markdown.md', mediaType: 'text/markdown', text: '# Report\nbody',
-        })
+        }, { model: null, provider: null })
 
         expect(capturedSourceKind).toBe('web-blob') // built from text, no file picker
         expect(item.file).toMatchObject({
@@ -132,7 +132,7 @@ describe('createTalosVaultService', () => {
                 { url: 'https://example.com/a', title: 'A' },
                 { url: 'https://example.org/b', title: 'B' },
             ],
-        }, 'session-web')
+        }, { sessionId: 'session-web', model: null, provider: null })
 
         expect(item.file.status).toBe('available')
         expect(item.file.metadata).toMatchObject({

@@ -542,10 +542,33 @@ function saveMessageToLibrary(messageId: string): void {
     const message = messageById(messageId)
     if (!message || message.role !== 'assistant' || message.content.trim() === '') return
     void runMessageAction(async () => {
+        /**
+         * Famiglia B — the one save that knows the WHOLE story.
+         *
+         * The reply carries the profile that wrote it, and the message before
+         * it is the prompt that asked for it. So this is the first place where
+         * the origin record can be complete: which model, on which provider,
+         * answering which turn. Elsewhere the prompt id is not yet reachable and
+         * the record says null rather than guessing.
+         *
+         * The prompt is REFERENCED, never copied (P-05): a copy would be a
+         * second body of personal text to delete twice and forget twice, while a
+         * reference dies with the chat — which is what deleting a conversation
+         * is supposed to mean.
+         */
+        const index = chat.messages.findIndex((candidate) => candidate.id === messageId)
+        const prompt = chat.messages.slice(0, Math.max(index, 0)).reverse()
+            .find((candidate) => candidate.role === 'user') ?? null
+        const profile = controller.profiles.value
+            .find((candidate) => candidate.id === message.model_profile_id) ?? null
         const file = await attachments.saveGenerated({
             name: deriveLibraryFilename(message.content),
             mediaType: 'text/markdown',
             text: message.content,
+        }, {
+            model: profile?.model ?? null,
+            provider: profile?.provider ?? null,
+            promptMessageId: prompt?.id ?? null,
         })
         toasts.push({ message: t('chat.savedNamedLibrary', { name: file.display_name }), durationMs: 6000 })
     })

@@ -51,7 +51,7 @@ describe('a document TALOS made and already verified', () => {
         }
         const { service } = harness(analysisClient)
 
-        const saved = await service.createGeneratedBinary(REPORT, 'session-1')
+        const saved = await service.createGeneratedBinary(REPORT, { sessionId: 'session-1', model: null, provider: null })
 
         expect(saved.file.status).toBe('available')
         expect(saved.file.display_name).toBe('Report Annuale 2025.pdf')
@@ -64,7 +64,7 @@ describe('a document TALOS made and already verified', () => {
         }
         const { service } = harness(analysisClient)
 
-        const saved = await service.createGeneratedBinary(REPORT, 'session-1')
+        const saved = await service.createGeneratedBinary(REPORT, { sessionId: 'session-1', model: null, provider: null })
 
         expect(saved.file.extracted_text).toBe('')
         // Recorded on the row, so the Library can say the document is not
@@ -82,7 +82,7 @@ describe('a document TALOS made and already verified', () => {
         }
         const { service } = harness(analysisClient)
 
-        const saved = await service.createGeneratedBinary(REPORT, 'session-1')
+        const saved = await service.createGeneratedBinary(REPORT, { sessionId: 'session-1', model: null, provider: null })
 
         expect(saved.file.sha256).toMatch(/^[0-9a-f]{64}$/)
     })

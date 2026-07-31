@@ -261,9 +261,12 @@ describe('useTalosMobileAttachments', () => {
             vault: service,
         })
 
-        const file = await attachments.saveGenerated({ name: 'summary.md', mediaType: 'text/markdown', text: 'hello' })
+        const file = await attachments.saveGenerated({ name: 'summary.md', mediaType: 'text/markdown', text: 'hello' }, { model: null, provider: null })
 
-        expect(service.createGenerated).toHaveBeenCalledWith({ name: 'summary.md', mediaType: 'text/markdown', text: 'hello' }, null)
+        expect(service.createGenerated).toHaveBeenCalledWith(
+            { name: 'summary.md', mediaType: 'text/markdown', text: 'hello' },
+            { sessionId: null, model: null, provider: null },
+        )
         expect(service.revokeGrant).toHaveBeenCalledWith('grant-gen') // not attached → no lingering grant
         expect(file.id).toBe('gen-1')
         expect(attachments.vaultFiles.map((candidate) => candidate.id)).toContain('gen-1')
@@ -292,9 +295,12 @@ describe('useTalosMobileAttachments', () => {
             sourceLinks: [{ url: 'https://example.com/a', title: 'A' }],
         }
 
-        await attachments.saveGenerated(input)
+        await attachments.saveGenerated(input, { model: null, provider: null })
 
-        expect(service.createGenerated).toHaveBeenCalledWith(input, 'session-web')
+        expect(service.createGenerated).toHaveBeenCalledWith(
+            input,
+            { sessionId: 'session-web', model: null, provider: null },
+        )
         expect(service.revokeGrant).toHaveBeenCalledWith('grant-search')
     })
 
@@ -322,20 +328,20 @@ describe('useTalosMobileAttachments', () => {
             name: 'owner.md',
             mediaType: 'text/markdown',
             text: 'owner',
-        }, 'captured-owner-chat')
+        }, { sessionId: 'captured-owner-chat', model: 'claude-opus-5', provider: 'anthropic' })
         await attachments.saveGeneratedBinary({
             name: 'owner.pdf',
             mediaType: 'application/pdf',
             bytes: new Uint8Array([1, 2, 3, 4]),
-        }, false, 'captured-owner-chat')
+        }, false, { sessionId: 'captured-owner-chat', model: 'claude-opus-5', provider: 'anthropic' })
 
         expect(service.createGenerated).toHaveBeenCalledWith(
             expect.objectContaining({ name: 'owner.md' }),
-            'captured-owner-chat',
+            expect.objectContaining({ sessionId: 'captured-owner-chat', model: 'claude-opus-5' }),
         )
         expect(service.createGeneratedBinary).toHaveBeenCalledWith(
             expect.objectContaining({ name: 'owner.pdf' }),
-            'captured-owner-chat',
+            expect.objectContaining({ sessionId: 'captured-owner-chat', model: 'claude-opus-5' }),
         )
     })
 
@@ -372,7 +378,7 @@ describe('useTalosMobileAttachments', () => {
             name: 'astronaut.png',
             mediaType: 'image/png',
             bytes: new Uint8Array([1, 2, 3]),
-        }, true)
+        }, true, { model: null, provider: null })
 
         expect(result).toEqual({
             file: inline,
@@ -388,12 +394,14 @@ describe('useTalosMobileAttachments', () => {
             name: 'report.pdf',
             mediaType: 'application/pdf',
             bytes: new Uint8Array([1, 2, 3, 4]),
-        })
+        }, false, { model: null, provider: null })
         expect(service.revokeGrant).toHaveBeenCalledWith('grant-library')
+        // The session is still resolved from where you are when the caller does
+        // not name one — it just travels inside the origin bag now.
         expect(service.createGeneratedBinary).toHaveBeenNthCalledWith(
             1,
             expect.objectContaining({ name: 'astronaut.png' }),
-            'chat-image',
+            expect.objectContaining({ sessionId: 'chat-image' }),
         )
     })
 

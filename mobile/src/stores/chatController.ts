@@ -136,6 +136,7 @@ import {
     talosMemoryDisclosure,
 } from '@/lib/chat/memoryContext'
 import { useTalosMobileToasts } from '@/stores/toasts'
+import type { TalosGeneratedOrigin } from '@/services/talosVaultService'
 import {
     TALOS_DEFAULT_COMPOSER_DEFAULTS,
     useSettingsStore,
@@ -1052,6 +1053,34 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     })
     const effortLadder = computed(() => mobileEffortLadderFromLevels(selectedProfile.value?.effort_levels))
 
+    /**
+     * Which model made a file, resolved from the profile that was answering.
+     *
+     * Famiglia B. The Library shows a file long after the chat that produced it,
+     * and "made by TALOS" is not an answer to "made by what?". The profile knows
+     * the provider and the model; nothing below this layer does, which is why
+     * `TalosGeneratedOrigin` requires them and the compiler found all seven call
+     * sites that were quietly passing a bare session id.
+     *
+     * `promptMessageId` is deliberately absent for now: the send identity does
+     * not carry the id of the user turn, and inventing one from "the last user
+     * message" would be a guess written down as a fact. It is the next piece of
+     * famiglia B, not a null pretending to be a value.
+     */
+    function generatedOrigin(
+        sessionId: string | null,
+        modelProfileId: string | null,
+        extra: { toolName?: string | null } = {},
+    ): TalosGeneratedOrigin {
+        const profile = profiles.value.find((candidate) => candidate.id === modelProfileId) ?? null
+        return {
+            sessionId,
+            model: profile?.model ?? null,
+            provider: profile?.provider ?? null,
+            ...extra,
+        }
+    }
+
     const toasts = useTalosMobileToasts()
     function captureControllerSendRuntime(
         identity: Readonly<TalosChatSendIdentity>,
@@ -1781,7 +1810,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 continue
             }
             try {
-                const file = await attachments.saveGenerated(block, checkpoint.session_id)
+                const file = await attachments.saveGenerated(block, generatedOrigin(
+                    checkpoint.session_id, checkpoint.send_identity.modelProfileId, { toolName: 'document_create' },
+                ))
                 saved.push(file.display_name)
                 toasts.push({
                     message: deps.translate('chat.savedNamedLibrary', {
@@ -2399,7 +2430,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                     name: `${stem}.${extension}`,
                                     mediaType: image.mediaType,
                                     bytes,
-                                }, true, sendIdentity.sessionId)
+                                }, true, generatedOrigin(
+                                    sendIdentity.sessionId, sendIdentity.modelProfileId,
+                                    { toolName: 'generate_image' },
+                                ))
                                 return {
                                     id: saved.file.id,
                                     name: saved.file.display_name,
@@ -2433,7 +2467,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                 name: document.fileName,
                                 mediaType: document.mediaType,
                                 bytes: document.bytes,
-                            }, false, sendIdentity.sessionId)
+                            }, false, generatedOrigin(
+                                sendIdentity.sessionId, sendIdentity.modelProfileId,
+                                { toolName: 'document_create' },
+                            ))
                             return { id: saved.id }
                         },
                     }),
@@ -2455,7 +2492,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         // synchronous URL-claim boundary.
                         const archive = createTalosWebSourceArchive({
                             source,
-                            save: (input) => attachments.saveGenerated(input, sendIdentity.sessionId),
+                            save: (input) => attachments.saveGenerated(
+                                input,
+                                generatedOrigin(sendIdentity.sessionId, sendIdentity.modelProfileId, { toolName: 'web_search' }),
+                            ),
                             // Favicon, title and preview for what was just
                             // saved — captured once here so showing a source
                             // later costs no request at all. Fire-and-forget by
@@ -3037,7 +3077,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     })
                     continue
                 }
-                void attachments.saveGenerated(block, sendIdentity.sessionId)
+                void attachments.saveGenerated(
+                    block,
+                    generatedOrigin(sendIdentity.sessionId, sendIdentity.modelProfileId),
+                )
                     .then((file) => toasts.push({
                         message: deps.translate('chat.savedNamedLibrary', {
                             name: file.display_name,

@@ -9,6 +9,7 @@ import type {
 } from '@/repositories/chatRepository'
 import type { TalosNativeFilePicker } from '@/services/nativeFilePicker'
 import type {
+    TalosGeneratedOrigin,
     TalosGeneratedTextInput,
     TalosVaultService,
     TalosVaultTrayItem,
@@ -55,21 +56,27 @@ export interface TalosMobileAttachmentsController {
     selectFiles(): Promise<void>
     takePhoto(): Promise<void>
     pickPhotos(): Promise<void>
-    /** Save a chat-generated artifact into the Library (origin='generated'). */
+    /**
+     * Save a chat-generated artifact into the Library (origin='generated').
+     *
+     * The origin bag carries what only the caller knows — which model made it,
+     * on which provider, answering which message — and `model`/`provider` are
+     * required so a layer cannot quietly drop them (famiglia B).
+     */
     saveGenerated(
         input: TalosGeneratedTextInput,
-        originSessionId?: string | null,
+        origin: TalosGeneratedOrigin,
     ): Promise<TalosLocalVaultFile>
     /** F2: a generated file that is bytes (xlsx, pdf, docx, pptx). */
     saveGeneratedBinary(
         input: { name: string; mediaType: string; bytes: Uint8Array },
-        forMessage?: false,
-        originSessionId?: string | null,
+        forMessage: false,
+        origin: TalosGeneratedOrigin,
     ): Promise<TalosLocalVaultFile>
     saveGeneratedBinary(
         input: { name: string; mediaType: string; bytes: Uint8Array },
         forMessage: true,
-        originSessionId?: string | null,
+        origin: TalosGeneratedOrigin,
     ): Promise<{ file: TalosLocalVaultFile; attachment: AppendChatAttachmentInput }>
     /** Object URL for a file's bytes (image thumbnail / open). Caller revokes it. */
     previewUrl(fileId: string): Promise<string | null>
@@ -293,13 +300,18 @@ export function useTalosMobileAttachments(
         return explicit === undefined ? (options.currentSessionId?.() ?? null) : explicit
     }
 
+    /** Absent sessionId means "the chat I am in"; null means "none at all". */
+    function resolvedOrigin(origin: TalosGeneratedOrigin): TalosGeneratedOrigin {
+        return { ...origin, sessionId: generatedOriginSessionId(origin.sessionId) }
+    }
+
     async function saveGenerated(
         input: TalosGeneratedTextInput,
-        originSessionId?: string | null,
+        origin: TalosGeneratedOrigin,
     ): Promise<TalosLocalVaultFile> {
         vaultError.value = null
         const result = await settleGenerated(
-            await options.vault.createGenerated(input, generatedOriginSessionId(originSessionId)),
+            await options.vault.createGenerated(input, resolvedOrigin(origin)),
         )
         // Saved to the Library, not attached to a message → drop the pre-minted
         // grant; attaching it later from the Library mints its own.
@@ -316,28 +328,25 @@ export function useTalosMobileAttachments(
      */
     function saveGeneratedBinary(
         input: { name: string; mediaType: string; bytes: Uint8Array },
-        forMessage?: false,
-        originSessionId?: string | null,
+        forMessage: false,
+        origin: TalosGeneratedOrigin,
     ): Promise<TalosLocalVaultFile>
     function saveGeneratedBinary(
         input: { name: string; mediaType: string; bytes: Uint8Array },
         forMessage: true,
-        originSessionId?: string | null,
+        origin: TalosGeneratedOrigin,
     ): Promise<{ file: TalosLocalVaultFile; attachment: AppendChatAttachmentInput }>
     async function saveGeneratedBinary(
         input: { name: string; mediaType: string; bytes: Uint8Array },
-        forMessage = false,
-        originSessionId?: string | null,
+        forMessage: boolean,
+        origin: TalosGeneratedOrigin,
     ): Promise<TalosLocalVaultFile | {
         file: TalosLocalVaultFile
         attachment: AppendChatAttachmentInput
     }> {
         vaultError.value = null
         const result = await settleGenerated(
-            await options.vault.createGeneratedBinary(
-                input,
-                generatedOriginSessionId(originSessionId),
-            ),
+            await options.vault.createGeneratedBinary(input, resolvedOrigin(origin)),
             forMessage,
         )
         return forMessage ? {

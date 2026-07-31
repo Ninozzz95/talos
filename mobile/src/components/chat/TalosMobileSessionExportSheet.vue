@@ -166,6 +166,12 @@ async function saveToLibrary(): Promise<void> {
             name: lastArtifact.fileName,
             mediaType: lastArtifact.contentType,
             text: lastArtifact.content,
+        }, {
+            // A transcript the USER asked for, not something a model made. No
+            // model is named because none is responsible for it, and naming one
+            // would be a false history in a file that is handed to people.
+            model: null,
+            provider: null,
         })
         savedToLibrary.value = true
     } catch (cause) {
