@@ -9,6 +9,7 @@ import { talosGroupGgufFiles, type TalosGgufSet } from '@/lib/models/ggufSet'
 import { TALOS_GGUF_FIRST_READ_BYTES, talosReadGgufHeader } from '@/lib/models/gguf'
 import { talosModelFit, type TalosModelFit } from '@/lib/models/fit'
 import { talosMeasureDevice, type TalosMeasuredDevice } from '@/services/deviceCapacity'
+import { clearProviderKey, getProviderKey, setProviderKey } from '@/services/secureKeyStore'
 import {
     talosModelTransferLeftovers,
     talosModelTransferStatus,
@@ -35,6 +36,15 @@ import {
 /** A sane starting point on a phone; the counter-offer moves it. */
 export const TALOS_DEFAULT_LOCAL_CONTEXT = 4096
 
+/**
+ * The Hugging Face token sits with the provider keys, in the same Keystore.
+ *
+ * The same namespace on purpose: it IS a provider credential, and a second
+ * secret store beside a working one is two things to audit and two to get
+ * wrong. The native download job reads this exact entry.
+ */
+export const TALOS_HUGGING_FACE_PROVIDER = 'huggingface'
+
 export type TalosSetExamination =
     | { state: 'unread' }
     | { state: 'reading' }
@@ -54,6 +64,8 @@ export interface TalosLocalModelsState {
     repo: { id: string; revision: string; sets: TalosLocalModelSet[]; loading: boolean } | null
     device: TalosMeasuredDevice | null
     context: number
+    /** Whether one exists — never the token itself, which stays in the Keystore. */
+    hasToken: boolean
     transfer: {
         active: boolean
         modelName: string | null
@@ -74,6 +86,7 @@ const state = reactive<TalosLocalModelsState>({
     repo: null,
     device: null,
     context: TALOS_DEFAULT_LOCAL_CONTEXT,
+    hasToken: false,
     transfer: {
         active: false,
         modelName: null,
@@ -89,19 +102,53 @@ const state = reactive<TalosLocalModelsState>({
 export const talosLocalModels = readonly(state)
 
 let client: TalosHuggingFaceClient | null = null
+let transportInUse: typeof globalThis.fetch | null = null
 
 /**
  * @param transport injected so the whole store is provable without a network.
  *     The default is the WebView's own `fetch`, which reaches the Hub directly:
  *     it reflects any origin, so no proxy of ours ever sees a user's traffic.
  */
-export function talosInitLocalModels(transport: typeof globalThis.fetch = globalThis.fetch): void {
-    client = talosCreateHuggingFaceClient({ fetch: transport })
+export function talosInitLocalModels(
+    transport: typeof globalThis.fetch = globalThis.fetch,
+    token?: string,
+): void {
+    transportInUse = transport
+    client = talosCreateHuggingFaceClient(token ? { fetch: transport, token } : { fetch: transport })
 }
 
 function requireClient(): TalosHuggingFaceClient {
     if (client === null) talosInitLocalModels()
     return client!
+}
+
+/**
+ * A Hugging Face token, in the same Keystore the provider keys live in.
+ *
+ * Worth having even for someone who only wants open models: anonymous Hub
+ * limits are per IP ADDRESS, and a mobile carrier puts thousands of subscribers
+ * behind one, so without a token a user gets throttled for traffic that was
+ * never theirs. It also unlocks repositories whose licence they have accepted.
+ *
+ * The value never reaches this store's state — only whether one exists. The
+ * native download job reads it straight from the Keystore for the length of a
+ * single request; it is never put in the job's extras, which Android persists
+ * in the clear.
+ */
+export async function talosRefreshHuggingFaceToken(): Promise<void> {
+    const token = await getProviderKey(TALOS_HUGGING_FACE_PROVIDER).catch(() => null)
+    state.hasToken = token !== null
+    talosInitLocalModels(transportInUse ?? globalThis.fetch, token ?? undefined)
+}
+
+export async function talosSetHuggingFaceToken(token: string): Promise<void> {
+    await setProviderKey(TALOS_HUGGING_FACE_PROVIDER, token)
+    await talosRefreshHuggingFaceToken()
+}
+
+export async function talosForgetHuggingFaceToken(): Promise<void> {
+    await clearProviderKey(TALOS_HUGGING_FACE_PROVIDER)
+    await talosRefreshHuggingFaceToken()
 }
 
 function describe(failure: unknown): string {

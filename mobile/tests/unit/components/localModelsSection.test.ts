@@ -20,6 +20,8 @@ const store = vi.hoisted(() => ({
     close: vi.fn(),
     open: vi.fn(async () => undefined),
     search: vi.fn(async () => undefined),
+    saveToken: vi.fn(async () => undefined),
+    forgetToken: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/stores/localModels', () => ({
@@ -33,6 +35,9 @@ vi.mock('@/stores/localModels', () => ({
     talosRefreshTransfer: vi.fn(async () => undefined),
     talosRefreshDeviceCapacity: vi.fn(async () => undefined),
     talosRefreshLeftovers: vi.fn(async () => undefined),
+    talosRefreshHuggingFaceToken: vi.fn(async () => undefined),
+    talosSetHuggingFaceToken: store.saveToken,
+    talosForgetHuggingFaceToken: store.forgetToken,
 }))
 
 import TalosMobileLocalModels from '@/components/talos/models/TalosMobileLocalModels.vue'
@@ -86,6 +91,7 @@ function baseState(over: Record<string, unknown> = {}) {
             androidSdk: 36,
         },
         context: 4096,
+        hasToken: false,
         transfer: {
             active: false, modelName: null, haveBytes: 0, totalBytes: 0,
             runner: null, networkBound: true, failure: null,
@@ -98,6 +104,8 @@ function baseState(over: Record<string, unknown> = {}) {
 beforeEach(() => {
     store.examine.mockClear()
     store.download.mockClear().mockResolvedValue({ ok: true })
+    store.saveToken.mockClear()
+    store.forgetToken.mockClear()
     store.state = baseState() as never
 })
 
@@ -126,6 +134,51 @@ describe('what the phone is', () => {
 
         expect(wrapper.find('[data-testid="talos-models-device"]').exists()).toBe(false)
         expect(wrapper.text()).toContain('has not been measured')
+    })
+})
+
+describe('the Hugging Face token', () => {
+    /**
+     * The field is a password field and the draft is cleared the moment the
+     * value reaches the Keystore. A token left in a bound input is a token in a
+     * component's state — and in every snapshot, screenshot and heap dump of it.
+     */
+    it('takes the token and does not keep it', async () => {
+        const wrapper = await screen()
+
+        await wrapper.get('[data-testid="talos-models-token-input"]').setValue('hf_secret')
+        await wrapper.get('[data-testid="talos-models-token-save"]').trigger('click')
+        await flushPromises()
+
+        expect(store.saveToken).toHaveBeenCalledWith('hf_secret')
+        expect((wrapper.get('[data-testid="talos-models-token-input"]').element as HTMLInputElement).value)
+            .toBe('')
+        expect(wrapper.get('[data-testid="talos-models-token-input"]').attributes('type'))
+            .toBe('password')
+    })
+
+    /**
+     * With a token saved, the screen says so and shows nothing back. There is
+     * nothing to show: the store carries `hasToken`, a boolean, and the value
+     * itself never leaves the Keystore — which is the property worth asserting,
+     * because a state field holding it would make every screenshot a leak.
+     */
+    it('reports that a token exists without ever holding one', async () => {
+        store.state = baseState({ hasToken: true }) as never
+        const wrapper = await screen()
+
+        const panel = wrapper.get('[data-testid="talos-models-token"]')
+        expect(panel.text()).toContain('secure store')
+        expect(Object.keys(store.state)).not.toContain('token')
+        expect((wrapper.get('[data-testid="talos-models-token-input"]').element as HTMLInputElement).value)
+            .toBe('')
+        expect(wrapper.find('[data-testid="talos-models-token-forget"]').exists()).toBe(true)
+    })
+
+    it('offers nothing to forget when there is no token', async () => {
+        const wrapper = await screen()
+
+        expect(wrapper.find('[data-testid="talos-models-token-forget"]').exists()).toBe(false)
     })
 })
 

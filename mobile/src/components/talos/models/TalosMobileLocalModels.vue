@@ -30,6 +30,9 @@ import {
     talosRefreshTransfer,
     talosRefreshDeviceCapacity,
     talosRefreshLeftovers,
+    talosRefreshHuggingFaceToken,
+    talosSetHuggingFaceToken,
+    talosForgetHuggingFaceToken,
 } from '@/stores/localModels'
 import { talosFitVerdict, talosFormatBytes, talosSetWarnings } from '@/lib/models/presentation'
 
@@ -49,6 +52,7 @@ onMounted(async () => {
         talosRefreshDeviceCapacity(),
         talosRefreshTransfer(),
         talosRefreshLeftovers(),
+        talosRefreshHuggingFaceToken(),
     ])
     poller = setInterval(() => { void talosRefreshTransfer() }, 1000)
 })
@@ -90,6 +94,17 @@ async function start(key: string, label: string): Promise<void> {
             ? t('localModels.alreadyRunning')
             : `${t('localModels.refused')} ${result.reason}`
     }
+}
+
+const tokenDraft = ref('')
+
+async function saveToken(): Promise<void> {
+    const value = tokenDraft.value.trim()
+    if (value === '') return
+    await talosSetHuggingFaceToken(value)
+    // Out of the field the moment it is in the Keystore: a token left in a
+    // bound input is a token in a component's state and in any snapshot of it.
+    tokenDraft.value = ''
 }
 
 const progressPercent = computed(() => {
@@ -187,6 +202,48 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
         <p v-if="refused" role="alert" data-testid="talos-models-refused" class="text-xs text-[var(--talos-danger,#dc5b5b)]">
             {{ refused }}
         </p>
+
+        <!-- The token. Optional, and worth having even for open models: the
+             anonymous limit is per IP, and a carrier puts thousands of people
+             behind one address. -->
+        <details v-if="!store.repo" data-testid="talos-models-token" class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3">
+            <summary class="flex min-h-10 cursor-pointer items-center justify-between gap-2 text-sm font-semibold text-[var(--talos-text)]">
+                {{ t('localModels.tokenTitle') }}
+                <span v-if="store.hasToken" class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                    {{ t('localModels.tokenSaved') }}
+                </span>
+            </summary>
+            <p class="mt-2 text-2xs leading-4 text-[var(--talos-muted)]">{{ t('localModels.tokenWhy') }}</p>
+            <div class="mt-2 flex gap-2">
+                <input
+                    v-model="tokenDraft"
+                    type="password"
+                    autocomplete="off"
+                    data-testid="talos-models-token-input"
+                    :aria-label="t('localModels.tokenTitle')"
+                    :placeholder="t('localModels.tokenPlaceholder')"
+                    class="min-h-11 flex-1 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                >
+                <Button
+                    type="button"
+                    data-testid="talos-models-token-save"
+                    :disabled="tokenDraft.trim() === ''"
+                    class="talos-pressable min-h-11 rounded-full border border-[var(--talos-border)] px-3 text-sm text-[var(--talos-text)] disabled:opacity-50"
+                    @click="saveToken()"
+                >
+                    {{ t('localModels.tokenSave') }}
+                </Button>
+            </div>
+            <button
+                v-if="store.hasToken"
+                type="button"
+                data-testid="talos-models-token-forget"
+                class="talos-pressable mt-2 min-h-10 text-2xs text-[var(--talos-muted)] underline"
+                @click="talosForgetHuggingFaceToken()"
+            >
+                {{ t('localModels.tokenForget') }}
+            </button>
+        </details>
 
         <!-- Searching the Hub. -->
         <form v-if="!store.repo" class="flex gap-2" @submit.prevent="search">
