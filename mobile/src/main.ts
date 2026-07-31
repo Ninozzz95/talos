@@ -1,19 +1,45 @@
-import { createApp } from 'vue'
+﻿import { createApp } from 'vue'
 import './style.css'
+/**
+ * Latin and latin-ext ONLY, per weight — never a whole family.
+ *
+ * `@font-face` blocks are render-blocking CSS whether or not the font file is
+ * ever fetched, and the full-family imports were shipping Cyrillic, Greek and
+ * Vietnamese subsets: 38 KB of the initial stylesheet, a quarter of the entire
+ * budget, for scripts this app does not speak. It ships English and Italian,
+ * both of which live in `latin` (Italian's accents are all inside
+ * U+00C0–U+00FF), with `latin-ext` covering names from the rest of Europe.
+ *
+ * The honest cost: text pasted in Russian or Greek renders in the phone's own
+ * font rather than the theme's. Android has those scripts, so nobody loses a
+ * character — and the trade buys ~23 KB off first paint on the cheap phone this
+ * whole product exists for.
+ *
+ * `instrument-sans`, `sora` and `orbitron` publish no further subsets, so their
+ * plain weight files already are exactly this.
+ */
 import '@fontsource/instrument-sans/400.css'
 import '@fontsource/instrument-sans/500.css'
 import '@fontsource/instrument-sans/600.css'
-import '@fontsource/jetbrains-mono/400.css'
-import '@fontsource/jetbrains-mono/500.css'
-import '@fontsource/manrope/400.css'
-import '@fontsource/manrope/500.css'
-import '@fontsource/manrope/600.css'
+import '@fontsource/jetbrains-mono/latin-400.css'
+import '@fontsource/jetbrains-mono/latin-ext-400.css'
+import '@fontsource/jetbrains-mono/latin-500.css'
+import '@fontsource/jetbrains-mono/latin-ext-500.css'
+import '@fontsource/manrope/latin-400.css'
+import '@fontsource/manrope/latin-ext-400.css'
+import '@fontsource/manrope/latin-500.css'
+import '@fontsource/manrope/latin-ext-500.css'
+import '@fontsource/manrope/latin-600.css'
+import '@fontsource/manrope/latin-ext-600.css'
 import '@fontsource/sora/400.css'
 import '@fontsource/sora/500.css'
 import '@fontsource/sora/600.css'
-import '@fontsource/source-serif-4/400.css'
-import '@fontsource/source-serif-4/500.css'
-import '@fontsource/source-serif-4/600.css'
+import '@fontsource/source-serif-4/latin-400.css'
+import '@fontsource/source-serif-4/latin-ext-400.css'
+import '@fontsource/source-serif-4/latin-500.css'
+import '@fontsource/source-serif-4/latin-ext-500.css'
+import '@fontsource/source-serif-4/latin-600.css'
+import '@fontsource/source-serif-4/latin-ext-600.css'
 import '@fontsource/orbitron/600.css'
 import '@/css/talos-motion-v6-simple.css'
 import '@/css/talos-motion-v6-complex.css'
