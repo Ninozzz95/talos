@@ -60,6 +60,7 @@ import { cloneJsonObject, type TalosChatRepository } from '@/repositories/chatRe
 import { createLazyChatRepository } from '@/repositories/lazyChatRepository'
 import { createTalosEphemeralRoutingRepository } from '@/repositories/ephemeralRoutingRepository'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
+import { talosAnonymousAgentTools } from '@/lib/chat/anonymousTools'
 import {
     clearProviderEndpoint as realClearEndpoint,
     getProviderEndpoint as realGetEndpoint,
@@ -1132,7 +1133,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 || sessionLibraryPolicy !== null
                 || turnPolicy !== null,
             toolPermissions: Object.freeze(toolPermissions),
-            agentTools: Object.freeze({ ...deps.settings.state.agent_tools }),
+            /**
+             * Owner 2026-07-31: a temporary chat is Chrome's incognito — the
+             * tools that could say who you are are not offered, and the ones
+             * that reveal nothing keep working.
+             *
+             * This is the half that suppressing the context injection could not
+             * cover: a chat that will not volunteer your Library but hands it
+             * over the moment the model ASKS is not anonymous, it just needs
+             * one more sentence.
+             */
+            agentTools: talosAnonymousAgentTools(
+                Object.freeze({ ...deps.settings.state.agent_tools }),
+                talosIsEphemeralSessionId(identity.sessionId),
+            ),
             search: Object.freeze({
                 source: deps.settings.state.search?.source ?? null,
                 endpoint: deps.settings.state.search?.endpoint ?? null,

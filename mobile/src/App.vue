@@ -230,7 +230,16 @@ function sidebarNewChat(): void {
 function sidebarTemporaryChat(): void {
     sidebarOpen.value = false
     lifecycleAction(t('chat.temporaryChat'), async () => {
+        // Owner 2026-07-31: leaving an EMPTY chat behind on every press littered
+        // the list. If the one being left has nothing in it, it is replaced
+        // rather than abandoned — a chat with content is of course kept.
+        const leaving = chatController.chat.messages.length === 0
+            ? chatController.chat.activeSession.value?.id ?? null
+            : null
         await chatController.sessionLifecycle.newSession({ ephemeral: true })
+        if (leaving && leaving !== chatController.chat.activeSession.value?.id) {
+            await chatController.deleteSession(leaving).catch(() => undefined)
+        }
         if (isStation.value) await navigate('chat')
     })
 }

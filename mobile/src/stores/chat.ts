@@ -1,5 +1,5 @@
 import { reactive, readonly, ref, type Ref } from 'vue'
-import { talosEphemeralSessionId } from '@/lib/chat/ephemeralSession'
+import { talosEphemeralSessionId, talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import type { TalosTranslate } from '@/i18n/contracts'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import type {
@@ -565,8 +565,22 @@ export function createChatStore<Runtime = undefined>(
     async function refreshSessionList(): Promise<void> {
         const available = await repository.listSessions()
         sessions.splice(0, sessions.length, ...available)
-        const activeId = activeSession.value?.id
-        activeSession.value = available.find((session) => session.id === activeId) ?? null
+        const active = activeSession.value
+        /**
+         * Owner 2026-07-31, and the reason a temporary chat behaved like a
+         * ghost.
+         *
+         * This list comes from the DURABLE side by design — a temporary chat
+         * must not appear in the history — so it can never contain the session
+         * the user is actually in. The old line then concluded there was no
+         * active session at all, and did it after EVERY message: the chat you
+         * were typing into stopped being the chat you were in.
+         *
+         * A temporary session is kept because absence from this list is its
+         * defining property, not evidence that it is gone.
+         */
+        if (active && talosIsEphemeralSessionId(active.id)) return
+        activeSession.value = available.find((session) => session.id === active?.id) ?? null
     }
 
     // R2-9: appendMessage bumps ONLY the session's updated_at in the DB —
