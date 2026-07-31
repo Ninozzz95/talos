@@ -373,19 +373,23 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
 
     // Owner 2026-07-24: New Chat now lives inside the header 3-dot options menu
     // (shared with the immersive chrome), not as a standalone button.
-    async function newChatFromOptions(wrapper: ReturnType<typeof mount>): Promise<void> {
-        // The entries are disabled while a session action is in flight (owner
-        // 2026-07-31: a swallowed press is indistinguishable from a broken
-        // button), so a REFUSED press leaves the menu open — and pressing the
-        // ⋮ again would close it rather than open it.
+    /** The open menu's New chat entry, without pressing it. */
+    async function openNewChatItem(wrapper: ReturnType<typeof mount>): Promise<HTMLElement> {
+        // The entries disable themselves while a session action is in flight
+        // (owner 2026-07-31: a swallowed press is indistinguishable from a
+        // broken button), so a REFUSED press leaves the menu open — and
+        // pressing the ⋮ again would close it rather than open it.
         const opener = wrapper.get('[aria-haspopup="menu"]')
         if (opener.attributes('aria-expanded') !== 'true') {
             await opener.trigger('click')
             await flushPromises()
         }
-        const item = [...document.body.querySelectorAll('[role="menuitem"]')]
+        return [...document.body.querySelectorAll('[role="menuitem"]')]
             .find((el) => el.textContent?.trim() === 'New chat') as HTMLElement
-        item.click()
+    }
+
+    async function newChatFromOptions(wrapper: ReturnType<typeof mount>): Promise<void> {
+        (await openNewChatItem(wrapper)).click()
         await flushPromises()
     }
 
@@ -413,8 +417,22 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         const wrapper = mount(App, { global: { plugins: [makeRouter()] }, attachTo: document.body })
         await flushPromises()
 
-        await newChatFromOptions(wrapper)   // starts the (deferred) action → busy
-        await newChatFromOptions(wrapper)   // guard must refuse this one
+        /**
+         * Two presses in the SAME tick, before Vue can render anything as
+         * disabled. That is the defect the guard exists for — R2-SF-M2, a tap
+         * landing between the first press and the re-render — and it is the
+         * only way to reach the guard now that the entry also disables itself.
+         *
+         * An adversarial review 2026-07-31 caught the previous version of this
+         * test proving nothing: it awaited between the presses, so the DOM
+         * refused the second one and the guard was never asked. Remove the
+         * `if (shellActionBusy.value) return` and this fails; remove only the
+         * `disabled` and it still passes.
+         */
+        const item = await openNewChatItem(wrapper)
+        item.click()
+        item.click()
+        await flushPromises()
         expect(controller.newSession).toHaveBeenCalledTimes(1)
 
         release()

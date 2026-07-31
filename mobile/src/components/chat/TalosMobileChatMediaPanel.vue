@@ -201,6 +201,8 @@ const { trapTab } = useTalosModalSurface(root)
  * no link at all.
  */
 const { cardFor } = useTalosFileOrigin()
+/** Computed, so an open viewer does not rebuild an Intl formatter every render. */
+const openedOrigin = computed(() => cardFor(opened.value))
 // Back closes the viewer first, then the gallery — one gesture per layer, the
 // way the Library's own lightbox behaves.
 useTalosOverlayBack(() => { if (opened.value) closeFile(); else emit('close') })
@@ -812,7 +814,7 @@ const mediaScope = computed(() => {
                         can-delete
                         :busy="attachBusy"
                         :saving="savingFileId !== null"
-                        :origin="cardFor(opened)"
+                        :origin="openedOrigin"
                         @attach="attachOpened(opened)"
                         @save="saveFileToDevice(opened)"
                         @delete="requestDeleteOpened"

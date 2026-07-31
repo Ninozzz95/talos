@@ -139,8 +139,28 @@ const docOrigin = computed(() => cardFor(docView.value))
  * the Library, because selecting alone would look like nothing happened.
  */
 async function openOriginChat(sessionId: string): Promise<void> {
+    /**
+     * The card only offers this for a chat it could NAME, so the id is live at
+     * render time — but a chat can be deleted from another surface between the
+     * render and the thumb. Selecting a session that is gone throws AND marks
+     * the whole chat store as persistence-failed, so an unhandled rejection
+     * here would turn a stale button into a broken app.
+     */
+    // Leave the viewer FIRST: it is a full-screen overlay, and the error below
+    // renders underneath it — so reporting a failure without closing it looks
+    // exactly like the button doing nothing.
     lightboxFile.value = null
     docView.value = null
+    /**
+     * Asked before it is attempted, not caught afterwards. `selectSession`
+     * marks the whole chat store as persistence-failed on its way out, which
+     * would disable "New chat" app-wide and claim local storage is unavailable
+     * — a disproportionate answer to a chat someone deleted in another tab.
+     */
+    if (!controller.chat.sessions.some((session) => session.id === sessionId)) {
+        openError.value = t('library.originChatGone')
+        return
+    }
     await controller.sessionLifecycle.selectSession(sessionId)
     await router.push({ name: 'chat' })
 }

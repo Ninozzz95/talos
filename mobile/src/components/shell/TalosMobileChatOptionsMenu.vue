@@ -64,7 +64,13 @@ const emit = defineEmits<{
 const optionsOpen = ref(false)
 const renameOpen = ref(false)
 const deleteOpen = ref(false)
-const leaveIncognitoOpen = ref(false)
+/**
+ * WHICH exit is waiting on the question — because more than one destroys the
+ * conversation. Found by an adversarial review 2026-07-31: the guard covered
+ * «Modalità normale» while «Nuova chat», one row above in the same menu, threw
+ * the incognito conversation away just as permanently and said nothing.
+ */
+const pendingExit = ref<'normalMode' | 'newChat' | null>(null)
 
 /**
  * Leaving incognito destroys the conversation, and that is the promise it was
@@ -76,15 +82,36 @@ const leaveIncognitoOpen = ref(false)
  * something to lose. `canGoIncognito` is false exactly when the chat has
  * something in it, so an empty incognito chat still leaves in one tap.
  */
+function leavesSomethingBehind(): boolean {
+    // `canGoIncognito` is false exactly when the chat has something in it.
+    return props.incognito && !props.canGoIncognito
+}
+
 function pressSwitch(): void {
-    if (props.incognito && !props.canGoIncognito) {
-        optionsOpen.value = false
-        leaveIncognitoOpen.value = true
+    optionsOpen.value = false
+    if (leavesSomethingBehind()) {
+        pendingExit.value = 'normalMode'
         return
     }
-    optionsOpen.value = false
     if (props.incognito) emit('normalMode')
     else emit('temporaryChat')
+}
+
+/** The other exit, and it costs the same. */
+function pressNewChat(): void {
+    optionsOpen.value = false
+    if (leavesSomethingBehind()) {
+        pendingExit.value = 'newChat'
+        return
+    }
+    emit('newChat')
+}
+
+function confirmExit(): void {
+    const exit = pendingExit.value
+    pendingExit.value = null
+    if (exit === 'newChat') emit('newChat')
+    else if (exit === 'normalMode') emit('normalMode')
 }
 const renameValue = ref('')
 const renameInput = ref<HTMLInputElement | null>(null)
@@ -94,7 +121,12 @@ async function toggleOptions(): Promise<void> {
     optionsOpen.value = !optionsOpen.value
     if (optionsOpen.value) {
         await nextTick()
-        optionsMenu.value?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+        // The first entry is the one that gets disabled while a session action
+        // runs, and `.focus()` on a disabled button is a silent no-op — so the
+        // menu opened with focus nowhere. Focus what can actually take it.
+        optionsMenu.value
+            ?.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')
+            ?.focus()
     }
 }
 
@@ -164,7 +196,7 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                     guard — no toast, no spinner, nothing. That reads exactly
                     like "premo e non succede niente". It says so now instead.
                 -->
-                <button type="button" role="menuitem" data-testid="talos-chat-options-new" :disabled="props.busy" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)] disabled:opacity-50" @click="optionsOpen = false; emit('newChat')">
+                <button type="button" role="menuitem" data-testid="talos-chat-options-new" :disabled="props.busy" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)] disabled:opacity-50" @click="pressNewChat">
                     <MessageSquarePlus class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.newChat') }}
                 </button>
                 <!--
@@ -224,20 +256,23 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
         </TalosMobileConfirmDialog>
 
         <TalosMobileConfirmDialog
-            v-if="leaveIncognitoOpen"
+            v-if="pendingExit"
             :title="$t('chat.leaveIncognitoTitle')"
             :description="$t('chat.leaveIncognitoBody')"
-            @close="leaveIncognitoOpen = false"
+            @close="pendingExit = null"
         >
             <template #footer>
-                <Button type="button" variant="ghost" @click="leaveIncognitoOpen = false">
+                <!-- 44px, on the one gate protecting an unrecoverable
+                     conversation: the shared Button defaults to 32. -->
+                <Button type="button" variant="ghost" class="min-h-12" @click="pendingExit = null">
                     <X class="size-4" aria-hidden="true" /> {{ $t('common.cancel') }}
                 </Button>
                 <Button
                     type="button"
                     data-testid="talos-leave-incognito-confirm"
+                    class="min-h-12"
                     :disabled="props.busy"
-                    @click="leaveIncognitoOpen = false; emit('normalMode')"
+                    @click="confirmExit"
                 >
                     <Eye class="size-4" aria-hidden="true" /> {{ $t('chat.leaveIncognitoConfirm') }}
                 </Button>

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { talosFileOriginCard } from '@/lib/files/originCard'
 import type { TalosFileProvenance } from '@/lib/files/provenance'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { talosTestT } from '../../helpers/talosTestI18n'
 
 /**
@@ -97,11 +99,20 @@ describe('a file a model made', () => {
         expect(card.originSessionId).toBe('chat-7')
     })
 
-    /** A deleted chat leaves the file standing; the card simply says less. */
-    it('says nothing about a chat that is gone', () => {
+    /**
+     * A deleted chat leaves the file standing; the card simply says less.
+     *
+     * And it must not keep OFFERING to open it — found by an adversarial
+     * review, 2026-07-31. The button was gated on the id alone, so it outlived
+     * the chat: tapping it closed the viewer, navigated nowhere, and flagged the
+     * whole chat store as persistence-failed. If we cannot name the chat, we
+     * cannot open it either.
+     */
+    it('says nothing about a chat that is gone, and does not offer to open it', () => {
         const card = CARD(GENERATED, null)
 
         expect(card.lines.join(' ')).not.toContain('chat-7')
+        expect(card.originSessionId).toBeNull()
     })
 
     /**
@@ -129,5 +140,55 @@ describe('the other origins', () => {
 
         expect(card.title).toContain('Downloaded')
         expect(card.lines.join(' ')).toContain('https://example.org/a')
+    })
+})
+
+/**
+ * Found by an adversarial review, 2026-07-31, and proven by running it: the app
+ * sets vue-i18n's `escapeParameter`, so an interpolated value has its `/` and
+ * `'` turned into HTML entities — and this card renders as TEXT, so the reader
+ * sees the entities. Every OpenRouter model id contains a slash, and Italian
+ * chat titles routinely contain an apostrophe.
+ */
+describe('what a reader actually sees', () => {
+    it('shows an OpenRouter model id with its slash, not an entity', () => {
+        const card = CARD({ ...GENERATED, model: 'anthropic/claude-sonnet-4.5', provider: 'openrouter' })
+
+        expect(card.title).toContain('anthropic/claude-sonnet-4.5')
+        expect(card.title).not.toContain('&#')
+        expect(card.title).not.toContain('&amp;')
+    })
+
+    it('shows a chat title with an apostrophe as written', () => {
+        const card = CARD(GENERATED, "Com'è fatto il bilancio 2026")
+
+        expect(card.lines.join(' ')).toContain("Com'è fatto il bilancio 2026")
+        expect(card.lines.join(' ')).not.toContain('&#')
+    })
+
+    it('shows a URL with its own characters intact', () => {
+        const card = CARD({ ...GENERATED, origin: 'downloaded', sourceUrl: 'https://example.org/a?b=1&c=2' })
+
+        expect(card.lines.join(' ')).toContain('https://example.org/a?b=1&c=2')
+        expect(card.lines.join(' ')).not.toContain('&amp;')
+    })
+})
+
+/**
+ * The guard that BITES, because the test double above does not escape and so
+ * could never have caught the original defect on its own.
+ *
+ * The rule is structural: these strings take no parameters at all. Re-adding a
+ * `{placeholder}` to one of them is what reintroduces the escaping, and it
+ * fails here the moment it is written.
+ */
+describe('the origin strings take no parameters', () => {
+    it.each(['it', 'en'])('%s', (locale) => {
+        const source = readFileSync(resolve(process.cwd(), `src/i18n/locales/${locale}.ts`), 'utf8')
+        const offenders = [...source.matchAll(/^\s+(origin[A-Za-z]*): '([^']*)',$/gm)]
+            .filter(([, , value]) => value!.includes('{'))
+            .map(([, key]) => key)
+
+        expect(offenders).toEqual([])
     })
 })

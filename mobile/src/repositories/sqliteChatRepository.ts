@@ -85,6 +85,19 @@ function oneOf<T extends string>(value: string, values: readonly T[]): T {
     return value as T
 }
 
+/**
+ * Read a driver's answer to an `EXISTS` column, failing toward YES.
+ *
+ * Every driver we ship returns 1/0, but a driver that answered with a boolean,
+ * a string or a bigint would have been read as "this chat has nothing in it" —
+ * and that value HIDES the chat. The two failure directions are not equal: a
+ * blank chat that lingers is untidy, a real conversation that vanishes from the
+ * user's history is not survivable. So only the explicit falses mean no.
+ */
+function reportedTrue(value: unknown): boolean {
+    return value !== null && value !== undefined && value !== false && String(value) !== '0'
+}
+
 function parseSession(row: TalosSqlRow): TalosLocalChatSession {
     return {
         id: requiredString(row, 'id'),
@@ -363,7 +376,7 @@ export function createSqliteChatRepository(
             )
             return rows.map((row) => ({
                 ...parseSession(row),
-                has_messages: row.has_messages === 1 || row.has_messages === true,
+                has_messages: reportedTrue(row.has_messages),
             }))
         },
         getActiveSessionId: () => activeSessionId(),

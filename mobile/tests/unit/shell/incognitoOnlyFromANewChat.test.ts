@@ -159,3 +159,39 @@ describe('both shells carry the state down', () => {
         expect(source).toContain(':can-go-incognito="canGoIncognito"')
     })
 })
+
+/**
+ * Found by an adversarial review, 2026-07-31: the question guarded ONE exit.
+ * «Nuova chat», one row above in the same menu, threw the incognito
+ * conversation away just as permanently and said nothing at all.
+ */
+describe('the other way out of incognito', () => {
+    it('asks before New chat discards an incognito conversation', async () => {
+        const wrapper = await openMenu({ incognito: true, canGoIncognito: false })
+
+        await wrapper.get('[data-testid="talos-chat-options-new"]').trigger('click')
+
+        expect(wrapper.emitted('newChat')).toBeUndefined()
+        expect(inBody('talos-leave-incognito-confirm')).not.toBeNull()
+    })
+
+    it('starts the new chat once the question is answered', async () => {
+        const wrapper = await openMenu({ incognito: true, canGoIncognito: false })
+        await wrapper.get('[data-testid="talos-chat-options-new"]').trigger('click')
+
+        inBody('talos-leave-incognito-confirm')!.click()
+        await nextTick()
+
+        expect(wrapper.emitted('newChat')).toHaveLength(1)
+        expect(wrapper.emitted('normalMode')).toBeUndefined()
+    })
+
+    it('does not ask in an ordinary chat, where nothing is lost', async () => {
+        const wrapper = await openMenu({ incognito: false, canGoIncognito: false })
+
+        await wrapper.get('[data-testid="talos-chat-options-new"]').trigger('click')
+
+        expect(wrapper.emitted('newChat')).toHaveLength(1)
+        expect(inBody('talos-leave-incognito-confirm')).toBeNull()
+    })
+})

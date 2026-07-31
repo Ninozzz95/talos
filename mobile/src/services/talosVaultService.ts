@@ -241,6 +241,57 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
          */
         const anonymous = originSessionId !== null && talosIsEphemeralSessionId(originSessionId)
         const keptSessionId = anonymous ? null : originSessionId
+
+        /**
+         * The origin metadata, built ONCE for every path that writes it.
+         *
+         * Found by an adversarial review, 2026-07-31: the rescue path below —
+         * the one that keeps a generated file whose analysis failed — wrote its
+         * own copy of this bag, and the anonymity rule lived only in the copy
+         * beside it. A picture drawn in an incognito chat on a phone where
+         * extraction timed out kept `tmp-…` on disk forever, while the chat it
+         * named was destroyed on exit exactly as promised. The same copy also
+         * dropped the whole provenance record for ORDINARY chats, so the
+         * feature disappeared precisely on the devices slow enough to lose it.
+         *
+         * One builder, so a rule applied here is applied everywhere. This
+         * codebase keeps re-learning the same lesson: a thing written twice
+         * will diverge, and the copy that diverges is never the one you are
+         * looking at.
+         */
+        function originMetadata(extras: Record<string, unknown>): Record<string, unknown> {
+            return {
+                origin,
+                origin_session_id: keptSessionId,
+                kind,
+                // Famiglia B. The typed record lives beside the loose keys
+                // rather than replacing them: the old ones are read by code
+                // written before this existed, and breaking them to be tidy
+                // would be a migration nobody asked for.
+                // No record at all when anonymous: a half-filled one still says
+                // "a model made this, in a session", and the whole point is that
+                // nothing traces back.
+                ...(anonymous ? {} : { provenance: {
+                    schema: 1 as const,
+                    origin: sourceUrl ? 'downloaded' : origin,
+                    createdAt: options.now?.() ?? new Date().toISOString(),
+                    model: provenance.model ?? null,
+                    provider: provenance.provider ?? null,
+                    modelVersion: provenance.modelVersion ?? null,
+                    originSessionId: keptSessionId,
+                    promptMessageId: provenance.promptMessageId ?? null,
+                    toolName: provenance.toolName ?? null,
+                    sourceUrl,
+                    perceptualHash: null,
+                    seal: null,
+                } }),
+                ...(sourceUrl ? { source_url: sourceUrl } : {}),
+                ...(sourceLinks.length
+                    ? { source_links: sourceLinks.map((link) => ({ ...link })) }
+                    : {}),
+                ...extras,
+            }
+        }
         try {
             const copy = await options.fileStore.copyToPrivate(pickedFile, fileId)
             privateUri = copy.privateUri
@@ -256,35 +307,10 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                 sha256: analysis.sha256,
                 extracted_text: analysis.extractedText,
                 failure_code: null,
-                metadata: {
-                    extension: analysis.extension, page_count: analysis.pageCount,
-                    origin, origin_session_id: keptSessionId, kind,
-                    // Famiglia B. The typed record lives beside the loose keys
-                    // rather than replacing them: the old ones are read by code
-                    // written before this existed, and breaking them to be tidy
-                    // would be a migration nobody asked for.
-                    // No record at all when anonymous: a half-filled one
-                    // still says "a model made this, in a session", and the
-                    // whole point is that nothing traces back.
-                    ...(anonymous ? {} : { provenance: {
-                        schema: 1 as const,
-                        origin: sourceUrl ? 'downloaded' : origin,
-                        createdAt: options.now?.() ?? new Date().toISOString(),
-                        model: provenance.model ?? null,
-                        provider: provenance.provider ?? null,
-                        modelVersion: provenance.modelVersion ?? null,
-                        originSessionId,
-                        promptMessageId: provenance.promptMessageId ?? null,
-                        toolName: provenance.toolName ?? null,
-                        sourceUrl,
-                        perceptualHash: null,
-                        seal: null,
-                    } }),
-                    ...(sourceUrl ? { source_url: sourceUrl } : {}),
-                    ...(sourceLinks.length
-                        ? { source_links: sourceLinks.map((link) => ({ ...link })) }
-                        : {}),
-                },
+                metadata: originMetadata({
+                    extension: analysis.extension,
+                    page_count: analysis.pageCount,
+                }),
             })
             const grant = await createGrant(file.id)
             return { file, grant }
@@ -313,21 +339,14 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                     sha256: await sha256Hex(copiedBytes),
                     extracted_text: '',
                     failure_code: null,
-                    metadata: {
+                    metadata: originMetadata({
                         extension: extensionOf(pickedFile.name),
                         page_count: null,
-                        origin,
-                        origin_session_id: originSessionId,
-                        kind,
-                        ...(sourceUrl ? { source_url: sourceUrl } : {}),
-                        ...(sourceLinks.length
-                            ? { source_links: sourceLinks.map((link) => ({ ...link })) }
-                            : {}),
                         // Recorded, so the Library can say the document is not
                         // searchable rather than returning nothing for every
                         // query and looking broken.
                         analysis_failed: failureCode(error),
-                    },
+                    }),
                 })
                 const grant = await createGrant(file.id)
                 return { file, grant }
@@ -458,10 +477,25 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                         sha256: analysis.sha256,
                         extracted_text: analysis.extractedText,
                         failure_code: null,
+                        /**
+                         * MERGED, never replaced. Found by an adversarial
+                         * review 2026-07-31: this wrote a four-key bag and
+                         * dropped everything else — including `library_shared`,
+                         * whose ABSENCE means shared. A file the user had
+                         * withdrawn from the model would have come back into
+                         * its reach, and a generated file would have been
+                         * relabelled `uploaded` and so become injectable.
+                         *
+                         * Unreachable today, because a pending row always has an
+                         * empty `private_uri` and is failed rather than
+                         * reconciled. Fixed anyway: `setFileShared` twenty lines
+                         * below explains at length why merging is mandatory, and
+                         * this sat under that comment not doing it.
+                         */
                         metadata: {
-                            extension: analysis.extension, page_count: analysis.pageCount, origin: 'uploaded',
-                            // Preserve provenance stamped at ingest time.
-                            origin_session_id: (file.metadata as { origin_session_id?: string | null }).origin_session_id ?? null,
+                            ...file.metadata,
+                            extension: analysis.extension,
+                            page_count: analysis.pageCount,
                         },
                     })
                 } catch (error) {

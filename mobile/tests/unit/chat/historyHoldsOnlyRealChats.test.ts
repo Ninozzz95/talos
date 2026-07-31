@@ -77,6 +77,26 @@ describe('what the history holds', () => {
     })
 
     /**
+     * Found by an adversarial review, 2026-07-31, and it was mine.
+     *
+     * A write-back into the list handed over a session object that carried no
+     * `has_messages` at all — the repository only reports it from
+     * `listSessions` — and the filter read "not asked" as "show it". So an
+     * untouched chat popped into the history the moment its per-chat Library
+     * setting was changed, from the menu or by the model's own policy tool.
+     * Which is the six-blank-chats symptom the feature exists to remove.
+     */
+    it('does not re-enter the history when its Library setting is changed', async () => {
+        const { store } = harness()
+        await store.initialize()
+        const empty = await store.createSession('Nuova chat')
+
+        await store.setSessionLibraryContextPolicy(empty.id, { mode: 'off' } as never, 0)
+
+        expect(store.history).toHaveLength(0)
+    })
+
+    /**
      * The defining property of an empty chat is now the same as a temporary
      * one's: absent from the list. So the rule that keeps you where you are has
      * to cover both, or every message would move you.

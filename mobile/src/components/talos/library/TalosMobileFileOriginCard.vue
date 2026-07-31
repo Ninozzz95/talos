@@ -32,22 +32,29 @@ const { t } = useTalosI18n()
     <section
         data-testid="talos-file-origin-card"
         :data-origin-kind="props.card.kind"
-        :aria-label="t('library.originTitle')"
-        class="rounded-xl border px-3 py-2 text-left"
+        aria-labelledby="talos-file-origin-heading"
+        class="overflow-hidden rounded-xl border px-3 py-2 text-left"
         :class="props.onDark
             ? 'border-white/15 bg-black/50 text-white backdrop-blur'
-            : 'border-[var(--talos-border)] bg-[var(--talos-card)] text-[var(--talos-text)]'"
+            : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-text)]'"
     >
-        <p class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide"
+        <p id="talos-file-origin-heading"
+           class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide"
            :class="props.onDark ? 'text-white/60' : 'text-[var(--talos-muted)]'">
-            <Info class="size-3.5" aria-hidden="true" />
+            <Info class="size-3.5 shrink-0" aria-hidden="true" />
             {{ t('library.originTitle') }}
         </p>
-        <p data-testid="talos-file-origin-title" class="mt-1 text-sm font-medium">{{ props.card.title }}</p>
+        <!--
+            A model id, a chat title and a URL all arrive from outside and none
+            of them promises a break opportunity. Without this an OpenRouter id
+            or a long query string runs off the card — and inside the full-screen
+            viewer there is nothing to scroll to reach it.
+        -->
+        <p data-testid="talos-file-origin-title" class="mt-1 break-words text-sm font-medium">{{ props.card.title }}</p>
         <p
             v-for="(line, index) in props.card.lines"
             :key="index"
-            class="text-xs leading-5"
+            class="break-words text-xs leading-5 [overflow-wrap:anywhere]"
             :class="props.onDark ? 'text-white/70' : 'text-[var(--talos-muted)]'"
         >{{ line }}</p>
         <button

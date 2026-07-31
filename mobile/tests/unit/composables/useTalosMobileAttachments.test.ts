@@ -337,11 +337,15 @@ describe('useTalosMobileAttachments', () => {
 
         expect(service.createGenerated).toHaveBeenCalledWith(
             expect.objectContaining({ name: 'owner.md' }),
-            expect.objectContaining({ sessionId: 'captured-owner-chat', model: 'claude-opus-5' }),
+            expect.objectContaining({
+                sessionId: 'captured-owner-chat', model: 'claude-opus-5', provider: 'anthropic',
+            }),
         )
         expect(service.createGeneratedBinary).toHaveBeenCalledWith(
             expect.objectContaining({ name: 'owner.pdf' }),
-            expect.objectContaining({ sessionId: 'captured-owner-chat', model: 'claude-opus-5' }),
+            expect.objectContaining({
+                sessionId: 'captured-owner-chat', model: 'claude-opus-5', provider: 'anthropic',
+            }),
         )
     })
 
