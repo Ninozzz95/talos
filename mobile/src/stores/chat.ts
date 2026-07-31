@@ -722,8 +722,34 @@ export function createChatStore<Runtime = undefined>(
     async function deleteSession(sessionId: string): Promise<void> {
         const revision = ++navigationRevision
         requirePersistence()
+        /**
+         * Owner 2026-07-31, on video: he pressed «Modalità incognito», the
+         * incognito chat rendered for one frame, and the app threw him back
+         * into the conversation he had open before.
+         *
+         * This was it, and it is not about incognito. Deleting a session makes
+         * the durable side nominate a replacement whenever the row IT holds as
+         * active is the one that went. While you are in a temporary chat it
+         * still holds the PREVIOUS one — a temporary chat is never written
+         * there — so cleaning up the blank chat the switch replaced nominated
+         * some other conversation, and the line below obeyed, dragging its
+         * messages onto the screen with it.
+         *
+         * Deleting a chat you are not in is not navigation. The nomination is
+         * only followed when the chat on screen is the one being deleted,
+         * because that is the only case where staying is impossible.
+         */
+        const staying = activeSession.value
+        const screenSurvives = staying !== null && staying.id !== sessionId
         try {
             const nextId = await repository.deleteSession(sessionId)
+            if (screenSurvives) {
+                const remaining = await repository.listSessions()
+                if (revision !== navigationRevision) return
+                sessions.splice(0, sessions.length, ...remaining)
+                state.lastError = null
+                return
+            }
             const available = await repository.listSessions()
             const next = available.find((session) => session.id === nextId) ?? null
             const nextRows = next

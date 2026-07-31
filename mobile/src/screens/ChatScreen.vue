@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Eye, EyeOff } from '@lucide/vue'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
+import { talosChatDiscardedByModeSwitch } from '@/lib/chat/modeSwitch'
 import { talosTemporaryWelcome } from '@/lib/chat/temporaryWelcome'
 import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowDown, AlertTriangle, CheckCircle2, Circle, Globe2, X } from '@lucide/vue'
@@ -126,15 +127,18 @@ async function switchMode(ephemeral: boolean): Promise<void> {
 
 async function switchModeOrThrow(ephemeral: boolean): Promise<void> {
     const leaving = activeSessionId.value
+    // Read BEFORE the switch: afterwards this array belongs to the new chat.
+    const leavingWasEmpty = chat.messages.length === 0
     await controller.sessionLifecycle.newSession(ephemeral ? { ephemeral: true } : undefined)
-    // The chat being left is empty — that is the only condition under which
-    // either button is offered — so it is REPLACED, not abandoned. Leaving it
-    // behind littered the list with a blank chat per press, which is what the
-    // owner hit: two taps, two orphans. Deleted after the new one exists, so
-    // there is never a moment with no chat at all.
-    if (leaving && leaving !== activeSessionId.value) {
-        await controller.deleteSession(leaving).catch(() => undefined)
-    }
+    // One rule, shared with the chat menu (see modeSwitch.ts). This copy used
+    // to assert in a comment that the chat being left was always empty and
+    // delete it unconditionally — true of where the button sits, not of the
+    // code, and the menu offers the same act from a chat full of work.
+    const discarded = talosChatDiscardedByModeSwitch({
+        leaving, arrived: activeSessionId.value, leavingWasEmpty,
+    })
+    // Deleted AFTER the new chat exists, so there is never a moment with none.
+    if (discarded) await controller.deleteSession(discarded).catch(() => undefined)
 }
 
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
+import { talosChatDiscardedByModeSwitch } from '@/lib/chat/modeSwitch'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
@@ -239,33 +240,31 @@ const activeChatIsIncognito = computed(
  * the same single rule in both directions, so there is never a question about
  * what happened to what you already wrote.
  */
+/**
+ * Both directions of the switch, and the fate of the chat left behind decided
+ * by ONE rule (see modeSwitch.ts) rather than by which button was pressed.
+ */
+async function switchChatMode(ephemeral: boolean): Promise<void> {
+    const leaving = chatController.chat.activeSession.value?.id ?? null
+    // Read BEFORE the switch: afterwards this array belongs to the new chat.
+    const leavingWasEmpty = chatController.chat.messages.length === 0
+    await chatController.sessionLifecycle.newSession(ephemeral ? { ephemeral: true } : undefined)
+    const discarded = talosChatDiscardedByModeSwitch({
+        leaving, arrived: chatController.chat.activeSession.value?.id ?? null, leavingWasEmpty,
+    })
+    // Deleted AFTER the new chat exists, so there is never a moment with none.
+    if (discarded) await chatController.deleteSession(discarded).catch(() => undefined)
+    if (isStation.value) await navigate('chat')
+}
+
 function sidebarNormalMode(): void {
     sidebarOpen.value = false
-    lifecycleAction(t('chat.normalMode'), async () => {
-        const leaving = chatController.chat.activeSession.value?.id ?? null
-        await chatController.sessionLifecycle.newSession()
-        if (leaving && leaving !== chatController.chat.activeSession.value?.id) {
-            await chatController.deleteSession(leaving).catch(() => undefined)
-        }
-        if (isStation.value) await navigate('chat')
-    })
+    lifecycleAction(t('chat.normalMode'), () => switchChatMode(false))
 }
 
 function sidebarTemporaryChat(): void {
     sidebarOpen.value = false
-    lifecycleAction(t('chat.temporaryChat'), async () => {
-        // Owner 2026-07-31: leaving an EMPTY chat behind on every press littered
-        // the list. If the one being left has nothing in it, it is replaced
-        // rather than abandoned — a chat with content is of course kept.
-        const leaving = chatController.chat.messages.length === 0
-            ? chatController.chat.activeSession.value?.id ?? null
-            : null
-        await chatController.sessionLifecycle.newSession({ ephemeral: true })
-        if (leaving && leaving !== chatController.chat.activeSession.value?.id) {
-            await chatController.deleteSession(leaving).catch(() => undefined)
-        }
-        if (isStation.value) await navigate('chat')
-    })
+    lifecycleAction(t('chat.temporaryChat'), () => switchChatMode(true))
 }
 
 function sidebarSelect(sessionId: string): void {
