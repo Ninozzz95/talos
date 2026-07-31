@@ -21,10 +21,10 @@ import java.nio.file.Files;
  * Where four gigabytes live while they are arriving, and what a resumed
  * download is allowed to believe about them.
  *
- * The rule this file mostly exists to hold: the bytes on disk and the hash
- * state must agree, always, no matter where the process was killed. If they
- * ever disagree the download finishes and fails a hash check on a file that is
- * perfectly good — or worse, passes one on a file that is not.
+ * The whole file turns on one consequence of claiming space up front: a
+ * reserved file is already its full length. Its size therefore says nothing
+ * about how much has been downloaded, and anything that reads progress off the
+ * file size will call an empty reservation a finished model.
  */
 public class TalosModelStoreTest {
 
@@ -34,8 +34,12 @@ public class TalosModelStoreTest {
     private static final String REPO = "unsloth/Qwen3-4B-GGUF";
     private static final String REVISION = "main";
     private static final String PATH = "Qwen3-4B-Q4_K_M.gguf";
+    private static final long TOTAL = 4L * 1024 * 1024 * 1024;
 
     private TalosModelStore store;
+
+    /** Stands in for `StorageManager.allocateBytes`, which grows the file. */
+    private final TalosModelStore.Reservation reservation = (file, totalBytes) -> file.setLength(totalBytes);
 
     @Before
     public void setUp() {
@@ -69,7 +73,7 @@ public class TalosModelStoreTest {
         assertTrue(slot.partial.exists());
         assertFalse("the partial must not be the final name", slot.partial.equals(slot.finished));
 
-        slot.finish();
+        slot.finish(4096L);
 
         assertTrue(slot.finished.exists());
         assertFalse("the partial is gone once it is whole", slot.partial.exists());
@@ -85,85 +89,91 @@ public class TalosModelStoreTest {
         assertNull(resume.hashState);
     }
 
+    /**
+     * THE test this class exists for.
+     *
+     * The space is claimed before the first byte is requested, so the file is
+     * four gigabytes long while holding nothing. Anything that reads progress
+     * off the file size calls that a finished download — and then hashes four
+     * gigabytes of zeroes, or worse, does not hash at all and hands the user a
+     * model made of nothing.
+     */
+    @Test
+    public void neverMistakesReservedSpaceForDownloadedBytes() throws Exception {
+        TalosModelStore.Slot slot = slot();
+        slot.prepare(TOTAL, reservation);
+
+        assertEquals("the reservation is real", TOTAL, slot.partial.length());
+        assertEquals("and none of it is progress", 0L, slot.resume().haveBytes);
+    }
+
     @Test
     public void resumesFromTheCheckpointItWroteDown() throws Exception {
         TalosModelStore.Slot slot = slot();
-        writeBytes(slot.partial, 60_000);
-        slot.checkpoint(60_000L, "a-hash-state");
+        slot.prepare(TOTAL, reservation);
+        slot.checkpoint(1_500_000_000L, "a-hash-state");
 
         TalosModelStore.Resume resume = store.slot(REPO, REVISION, PATH).resume();
 
-        assertEquals(60_000L, resume.haveBytes);
+        assertEquals(1_500_000_000L, resume.haveBytes);
         assertEquals("a-hash-state", resume.hashState);
     }
 
     /**
-     * THE reconciliation rule. Bytes are flushed before the checkpoint is
-     * written, so a kill in between leaves MORE bytes on disk than the hash
-     * state accounts for. Those extra bytes have not been hashed, and there is
-     * no way to hash them without re-reading — so they are thrown away.
-     *
-     * Bounded by the checkpoint interval: at most a few seconds of transfer,
-     * paid to keep the two in step. Keeping them instead would produce a hash
-     * that is quietly wrong about a file that is quietly fine.
+     * The sidecar is the only record of progress, so an unreadable one means
+     * the honest answer is zero. The reservation itself is kept: throwing it
+     * away hands the space back to whatever else on the phone wants it, which
+     * is the failure the reservation existed to prevent.
      */
     @Test
-    public void throwsAwayBytesTheHashStateDoesNotCover() throws Exception {
+    public void keepsTheReservationButTrustsNothingWhenTheSidecarIsUnreadable() throws Exception {
         TalosModelStore.Slot slot = slot();
-        writeBytes(slot.partial, 60_000);
-        slot.checkpoint(60_000L, "a-hash-state");
-        // The process kept downloading, then died before the next checkpoint.
-        writeBytes(slot.partial, 61_500);
-
-        TalosModelStore.Resume resume = store.slot(REPO, REVISION, PATH).resume();
-
-        assertEquals("resumes at the checkpoint, not at the file length", 60_000L, resume.haveBytes);
-        assertEquals("a-hash-state", resume.hashState);
-        assertEquals("and the uncovered bytes are actually gone", 60_000L, slot.partial.length());
-    }
-
-    /**
-     * The other direction: fewer bytes than the checkpoint claims. That is the
-     * filesystem losing a write, so the hash state is ahead of reality and
-     * cannot be trusted at all. Refuse it and re-read — a slow start beats a
-     * confident wrong answer.
-     */
-    @Test
-    public void refusesAHashStateThatRanAheadOfTheBytes() throws Exception {
-        TalosModelStore.Slot slot = slot();
-        writeBytes(slot.partial, 60_000);
-        slot.checkpoint(60_000L, "a-hash-state");
-        writeBytes(slot.partial, 50_000);
-
-        TalosModelStore.Resume resume = store.slot(REPO, REVISION, PATH).resume();
-
-        assertEquals(50_000L, resume.haveBytes);
-        assertNull("the state is ahead of the bytes, so it is worthless", resume.hashState);
-    }
-
-    /** A sidecar half-written by a kill must not be read as if it were whole. */
-    @Test
-    public void refusesASidecarItCannotRead() throws Exception {
-        TalosModelStore.Slot slot = slot();
-        writeBytes(slot.partial, 60_000);
-        slot.checkpoint(60_000L, "a-hash-state");
+        slot.prepare(TOTAL, reservation);
+        slot.checkpoint(1_500_000_000L, "a-hash-state");
         Files.write(slot.sidecar.toPath(), "{\"haveBytes\":60".getBytes(StandardCharsets.UTF_8));
 
         TalosModelStore.Resume resume = store.slot(REPO, REVISION, PATH).resume();
 
-        assertEquals(60_000L, resume.haveBytes);
+        assertEquals(0L, resume.haveBytes);
         assertNull(resume.hashState);
+        assertEquals("the claimed space is still ours", TOTAL, slot.partial.length());
+    }
+
+    /** A record describing bytes past the end of the file describes a hole. */
+    @Test
+    public void refusesACheckpointThatRanPastTheFile() throws Exception {
+        TalosModelStore.Slot slot = slot();
+        writeBytes(slot.partial, 50_000);
+        slot.checkpoint(60_000L, "a-hash-state");
+
+        TalosModelStore.Resume resume = store.slot(REPO, REVISION, PATH).resume();
+
+        assertEquals(0L, resume.haveBytes);
+        assertNull(resume.hashState);
+    }
+
+    /** Claiming space twice must not throw away what is already downloaded. */
+    @Test
+    public void preparingAgainLeavesAnInterruptedDownloadAlone() throws Exception {
+        TalosModelStore.Slot slot = slot();
+        slot.prepare(TOTAL, reservation);
+        slot.checkpoint(900_000_000L, "state");
+
+        store.slot(REPO, REVISION, PATH).prepare(TOTAL, reservation);
+
+        assertEquals(900_000_000L, store.slot(REPO, REVISION, PATH).resume().haveBytes);
     }
 
     /**
      * Checkpointing is the one write that must survive being interrupted: it is
-     * written every few seconds for hours. A torn sidecar costs the whole
-     * download, so it is replaced atomically and never edited in place.
+     * written every few seconds for hours, and the Task Manager kills the
+     * process outright without ever calling `onStopJob`. A torn sidecar costs
+     * the whole download, so it is replaced atomically and never edited.
      */
     @Test
     public void leavesNoTornSidecarBehind() throws Exception {
         TalosModelStore.Slot slot = slot();
-        writeBytes(slot.partial, 60_000);
+        slot.prepare(TOTAL, reservation);
         slot.checkpoint(60_000L, "first");
         slot.checkpoint(60_000L, "second");
 
@@ -172,6 +182,21 @@ public class TalosModelStoreTest {
 
         assertEquals("no half-written sidecar may be left lying around", 0, strays.length);
         assertEquals("second", store.slot(REPO, REVISION, PATH).resume().hashState);
+    }
+
+    /**
+     * A reservation may hand back more room than was asked for. A model file
+     * one byte longer than the repository says is a model file that fails its
+     * own hash — after the download, when it is far too late to be useful.
+     */
+    @Test
+    public void publishesExactlyTheLengthTheRepositoryPromised() throws Exception {
+        TalosModelStore.Slot slot = slot();
+        slot.prepare(20_000L, (file, total) -> file.setLength(total + 4096));
+
+        slot.finish(20_000L);
+
+        assertEquals(20_000L, slot.finished.length());
     }
 
     /**
@@ -224,31 +249,33 @@ public class TalosModelStoreTest {
     }
 
     /**
-     * A download abandoned months ago is invisible: the user sees free space
-     * disappear and has nothing to point at. Naming the leftovers is what makes
-     * the storage screen able to tell the truth.
+     * Leftovers matter more here than anywhere else: because the space is
+     * claimed up front, an attempt abandoned after ten seconds still holds the
+     * whole four gigabytes. The user sees free space disappear and has nothing
+     * to point at, so the storage screen has to be able to name it.
      */
     @Test
     public void namesTheLeftoversOfAbandonedDownloads() throws Exception {
         TalosModelStore.Slot abandoned = slot();
-        writeBytes(abandoned.partial, 128_000);
-        abandoned.checkpoint(128_000L, "state");
+        abandoned.prepare(128_000L, reservation);
+        abandoned.checkpoint(64_000L, "state");
 
         TalosModelStore.Slot done = store.slot(REPO, REVISION, "other.gguf");
         writeBytes(done.partial, 2048);
-        done.finish();
+        done.finish(2048L);
 
         java.util.List<TalosModelStore.Leftover> leftovers = store.leftovers();
 
         assertEquals(1, leftovers.size());
-        assertEquals(128_000L, leftovers.get(0).bytes);
+        assertEquals("what it actually costs the phone, not what was downloaded",
+                128_000L, leftovers.get(0).bytes);
         assertTrue(leftovers.get(0).path.endsWith(TalosModelStore.PARTIAL_SUFFIX));
     }
 
     @Test
-    public void discardingRemovesEveryTraceOfTheAttempt() throws Exception {
+    public void discardingGivesBackEveryByteItClaimed() throws Exception {
         TalosModelStore.Slot slot = slot();
-        writeBytes(slot.partial, 4096);
+        slot.prepare(128_000L, reservation);
         slot.checkpoint(4096L, "state");
 
         slot.discard();

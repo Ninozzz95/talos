@@ -33,11 +33,13 @@ public final class TalosTransferPlan {
     public static final long STORAGE_RESERVE_BYTES = 1024L * MIB;
 
     /**
-     * `setRequiresStorageNotLow` reads like exactly the right constraint and is
-     * a trap: a four-gigabyte download makes storage low by definition, so the
-     * job is cancelled by its own effect and the user sees a download that
-     * stops near the end for no stated reason. The check below is the guard,
-     * taken once, up front, where it can be explained.
+     * `setRequiresStorageNotLow` is permitted on these jobs and reads like
+     * exactly the right constraint. It is a trap: a four-gigabyte download
+     * makes storage low by definition, so the job is stopped by its own effect
+     * and the user sees a download that dies near the end for no stated reason.
+     *
+     * The space check below is the guard instead — taken once, up front, where
+     * it can be explained and acted on.
      */
     public static final boolean REQUIRES_STORAGE_NOT_LOW = false;
 
@@ -93,11 +95,15 @@ public final class TalosTransferPlan {
      * reach. A user-initiated data transfer job has none, so wherever one
      * exists, it wins.
      *
-     * Neither can be started from the background: Android 12 closed that door
-     * for foreground services and 14 for user-initiated jobs. Pretending
-     * otherwise throws at the moment of starting, in front of the user. So a
-     * resume that fires while the app is not visible asks the system for time
-     * instead, and is promoted the next time the app is opened.
+     * Neither can be started from the background, and they fail differently:
+     * a foreground service throws `ForegroundServiceStartNotAllowedException`,
+     * while `JobScheduler.schedule` quietly returns `RESULT_FAILURE`. The quiet
+     * one is worse — an app that ignores the return value shows a download that
+     * simply never starts. Having an activity in the Recents list does NOT
+     * count as visible for this.
+     *
+     * So a resume that fires while the app is not visible asks the system for
+     * time instead, and is promoted the next time the app is opened.
      */
     public static Runner runner(int sdkInt, boolean appVisible) {
         if (!appVisible) return Runner.DEFERRED_JOB;
