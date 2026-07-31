@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive, ref } from 'vue'
@@ -162,7 +162,7 @@ describe('SettingsScreen (functional)', () => {
         const tablist = wrapper.get('[aria-label="Model Lab sections"]')
         const tabs = tablist.findAll('[role="tab"]')
 
-        expect(tabs.map((tab) => tab.text())).toEqual(['Providers', 'Catalog'])
+        expect(tabs.map((tab) => tab.text())).toEqual(['Providers', 'Catalog', 'On device'])
         expect(wrapper.find('[aria-label="Search model catalog"]').exists()).toBe(false)
         expect(wrapper.get('[data-model-lab-section="providers"]').classes())
             .toContain('talos-motion-tab-panel')
@@ -175,6 +175,30 @@ describe('SettingsScreen (functional)', () => {
         expect(wrapper.get('[data-model-lab-section="catalog"]').classes())
             .toContain('talos-motion-tab-panel')
         expect(wrapper.get('[aria-label="Search model catalog"]').exists()).toBe(true)
+    })
+
+    /**
+     * The download centre lives HERE, as a section, rather than as a station of
+     * its own — owner 2026-07-31, on economising the surfaces that already
+     * exist. The Model Lab is where someone decides which model answers them,
+     * and a second destination would split one question across two places.
+     *
+     * This is the seam: the component is proved on its own, and this is what
+     * says it is actually reachable.
+     */
+    it('carries the on-device download centre as its third section', async () => {
+        routeState.query = { tab: 'models' }
+        const wrapper = mount(SettingsScreen)
+        const tabs = wrapper.get('[aria-label="Model Lab sections"]').findAll('[role="tab"]')
+
+        await tabs[2]!.trigger('mousedown', { button: 0, ctrlKey: false })
+        await vi.dynamicImportSettled()
+        await flushPromises()
+
+        expect(tabs[2]!.attributes('data-state')).toBe('active')
+        expect(wrapper.get('[data-model-lab-section="on-device"]').classes())
+            .toContain('talos-motion-tab-panel')
+        expect(wrapper.get('[data-testid="talos-models-section"]').exists()).toBe(true)
     })
 
     it('opens a functional Browser panel from the exact settings deep link', () => {

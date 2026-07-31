@@ -173,6 +173,11 @@ export async function talosOpenModelRepo(id: string, revision = 'main'): Promise
     }
 }
 
+/** Back to the results. Not `open('')`, which would ask the Hub for nothing. */
+export function talosCloseModelRepo(): void {
+    state.repo = null
+}
+
 /**
  * Read the model's own header and answer the only question that matters.
  *

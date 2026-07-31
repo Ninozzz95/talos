@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Bot, Boxes, KeyRound, SlidersHorizontal } from '@lucide/vue'
+import { Bot, Boxes, Cpu, KeyRound, SlidersHorizontal } from '@lucide/vue'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import TalosMobileProviderRuntimePanel from '@/components/talos/models/TalosMobileProviderRuntimePanel.vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
@@ -10,12 +10,18 @@ import { useChatController } from '@/stores/chatController'
 
 const controller = useChatController()
 const { t } = useTalosI18n()
-const activeTab = ref<'providers' | 'catalog'>('providers')
+const activeTab = ref<'providers' | 'catalog' | 'onDevice'>('providers')
 const TalosMobileModelCatalog = defineAsyncComponent(
     () => import('@/components/talos/models/TalosMobileModelCatalog.vue'),
 )
 const TalosMobileModelAdvancedOptions = defineAsyncComponent(
     () => import('@/components/talos/models/TalosMobileModelAdvancedOptions.vue'),
+)
+// Async like its siblings: the download centre pulls in the Hub client, the
+// GGUF reader and the fit arithmetic, and none of that belongs in the bundle
+// someone loads to pick a provider key.
+const TalosMobileLocalModels = defineAsyncComponent(
+    () => import('@/components/talos/models/TalosMobileLocalModels.vue'),
 )
 const modelItems = computed(() => controller.profiles.value
     .map((profile) => ({
@@ -55,6 +61,11 @@ onMounted(() => { void controller.init() })
                 <TabsTrigger value="catalog" :class="tabClass">
                     <Boxes class="size-4" aria-hidden="true" /> {{ t('models.catalog') }}
                 </TabsTrigger>
+                <!-- Models that run here, with nothing leaving the phone. Beside
+                     the provider tabs on purpose: it is the same decision. -->
+                <TabsTrigger value="onDevice" :class="tabClass">
+                    <Cpu class="size-4" aria-hidden="true" /> {{ t('models.onDevice') }}
+                </TabsTrigger>
             </TabsList>
 
             <TabsContent
@@ -79,6 +90,14 @@ onMounted(() => { void controller.init() })
                 class="talos-motion-tab-panel mt-4 min-w-0 outline-none"
             >
                 <TalosMobileModelCatalog />
+            </TabsContent>
+
+            <TabsContent
+                value="onDevice"
+                data-model-lab-section="on-device"
+                class="talos-motion-tab-panel mt-4 min-w-0 outline-none"
+            >
+                <TalosMobileLocalModels />
             </TabsContent>
         </TabsRoot>
     </div>
