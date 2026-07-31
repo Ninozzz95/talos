@@ -55,18 +55,38 @@ public class TalosModelTransferPlugin extends Plugin {
 
         String repo = call.getString("repo");
         String revision = call.getString("revision", "main");
-        String path = call.getString("path");
-        String modelName = call.getString("modelName", path);
-        Long totalBytes = call.getLong("totalBytes");
-        String sha256 = call.getString("sha256");
+        // A SET of files, because a large GGUF is published in pieces and any
+        // subset of them is not a smaller model — it is nothing.
+        com.getcapacitor.JSArray files = call.getArray("files");
 
-        if (repo == null || path == null || totalBytes == null || totalBytes <= 0) {
-            call.reject("repo, path and totalBytes are required");
+        if (repo == null || files == null || files.length() == 0) {
+            call.reject("repo and a non-empty files array are required");
             return;
         }
 
+        String[] paths = new String[files.length()];
+        long[] sizes = new long[files.length()];
+        String[] hashes = new String[files.length()];
+        try {
+            for (int index = 0; index < files.length(); index += 1) {
+                JSObject file = JSObject.fromJSONObject(files.getJSONObject(index));
+                paths[index] = file.getString("path");
+                Long size = file.getLong("bytes");
+                if (paths[index] == null || size == null || size <= 0) {
+                    call.reject("every file needs a path and a positive byte count");
+                    return;
+                }
+                sizes[index] = size;
+                hashes[index] = file.getString("sha256");
+            }
+        } catch (org.json.JSONException malformed) {
+            call.reject("files must be objects with path, bytes and sha256");
+            return;
+        }
+
+        String modelName = call.getString("modelName", paths[0]);
         TalosTransferSession.Request request = new TalosTransferSession.Request(
-                repo, revision, path, modelName, totalBytes, sha256);
+                repo, revision, paths, sizes, hashes, modelName);
 
         // Visible, because this call came from a WebView that is only running
         // while the app is in front. Having an activity in Recents does not
@@ -116,7 +136,8 @@ public class TalosModelTransferPlugin extends Plugin {
         result.put("active", active != null);
         if (active != null) {
             result.put("repo", active.repo);
-            result.put("path", active.path);
+            result.put("path", active.paths[0]);
+            result.put("parts", active.paths.length);
             result.put("modelName", active.modelName);
         }
         result.put("haveBytes", TalosTransferSession.haveBytes());

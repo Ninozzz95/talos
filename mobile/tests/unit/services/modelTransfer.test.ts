@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * The bridge between the download centre and the only thing that can actually
@@ -54,9 +54,10 @@ beforeEach(() => {
 
 const REQUEST = {
     repo: 'unsloth/Qwen3-4B-GGUF',
-    path: 'Qwen3-4B-Q4_K_M.gguf',
-    totalBytes: 2_500_000_000,
-    sha256: 'a'.repeat(64),
+    // A SET, because a large GGUF is published in pieces and any subset of them
+    // is not a smaller model. Passing only the first with the set total is what
+    // made the job download one shard and then delete it.
+    files: [{ path: 'Qwen3-4B-Q4_K_M.gguf', bytes: 2_500_000_000, sha256: 'a'.repeat(64) }],
 }
 
 describe('starting a model transfer', () => {
@@ -69,10 +70,8 @@ describe('starting a model transfer', () => {
         expect(bridge.start).toHaveBeenCalledWith({
             repo: REQUEST.repo,
             revision: 'main',
-            path: REQUEST.path,
-            modelName: REQUEST.path,
-            totalBytes: REQUEST.totalBytes,
-            sha256: REQUEST.sha256,
+            files: [{ path: 'Qwen3-4B-Q4_K_M.gguf', bytes: 2_500_000_000, sha256: 'a'.repeat(64) }],
+            modelName: 'Qwen3-4B-Q4_K_M.gguf',
         })
     })
 

@@ -1,4 +1,4 @@
-import { reactive, readonly } from 'vue'
+﻿import { reactive, readonly } from 'vue'
 import {
     talosCreateHuggingFaceClient,
     type TalosHuggingFaceClient,
@@ -10,6 +10,7 @@ import { TALOS_GGUF_FIRST_READ_BYTES, talosReadGgufHeader } from '@/lib/models/g
 import { talosModelFit, type TalosModelFit } from '@/lib/models/fit'
 import { talosMeasureDevice, type TalosMeasuredDevice } from '@/services/deviceCapacity'
 import { clearProviderKey, getProviderKey, setProviderKey } from '@/services/secureKeyStore'
+import { talosCreateHubTransport } from '@/services/hubTransport'
 import {
     talosModelTransferLeftovers,
     talosModelTransferStatus,
@@ -106,11 +107,15 @@ let transportInUse: typeof globalThis.fetch | null = null
 
 /**
  * @param transport injected so the whole store is provable without a network.
- *     The default is the WebView's own `fetch`, which reaches the Hub directly:
- *     it reflects any origin, so no proxy of ours ever sees a user's traffic.
+ *     The DEFAULT is the native transport, and that is the fix for a defect the
+ *     whole unit suite certified as working: with the WebView's own `fetch`,
+ *     `redirect: 'manual'` yields an opaque-redirect response — status 0, no
+ *     headers — so the signed CDN address could never be read and the fit
+ *     verdict failed on every model on every device. It is the default rather
+ *     than something wired at boot precisely so nobody has to remember it.
  */
 export function talosInitLocalModels(
-    transport: typeof globalThis.fetch = globalThis.fetch,
+    transport: typeof globalThis.fetch = talosCreateHubTransport(),
     token?: string,
 ): void {
     transportInUse = transport
@@ -138,7 +143,7 @@ function requireClient(): TalosHuggingFaceClient {
 export async function talosRefreshHuggingFaceToken(): Promise<void> {
     const token = await getProviderKey(TALOS_HUGGING_FACE_PROVIDER).catch(() => null)
     state.hasToken = token !== null
-    talosInitLocalModels(transportInUse ?? globalThis.fetch, token ?? undefined)
+    talosInitLocalModels(transportInUse ?? talosCreateHubTransport(), token ?? undefined)
 }
 
 export async function talosSetHuggingFaceToken(token: string): Promise<void> {
@@ -310,12 +315,19 @@ export async function talosDownloadSet(
     const started = await talosStartModelTransfer({
         repo: repo.id,
         revision: repo.revision,
-        path: set.paths[0]!,
+        // EVERY piece, each with its own length and its own hash. Handing over
+        // only the first with the set's total is what made the job download one
+        // shard, ask past its end, read the 416 as "the file changed" and delete
+        // everything it had downloaded — found by an adversarial review on
+        // 2026-08-01, in the same code that had just learned a set is one model.
+        files: set.paths.map((path, index) => ({
+            path,
+            bytes: set.sizes[index] ?? 0,
+            // Null is honest and the screen says so: this repository publishes
+            // no hash for that piece, so it is one we cannot prove.
+            sha256: set.sha256[index] ?? null,
+        })),
         modelName: modelName ?? `${repo.id.split('/').pop()} ${set.label}`,
-        totalBytes: set.totalBytes,
-        // Null is honest and the screen says so: this repository publishes no
-        // hash for this file, so it is the one download we cannot prove.
-        sha256: set.sha256[0] ?? null,
     })
 
     if (!started.ok) {

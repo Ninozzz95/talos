@@ -160,7 +160,17 @@ public final class TalosModelDownloadPolicy {
         if (status == 403) {
             state.url = null;
             state.urlDeadlineMs = Long.MIN_VALUE;
-            state.consecutiveFailures = 0;
+            // The failure count is NOT cleared here.
+            //
+            // It was, and an adversarial review found what that costs: a 403
+            // that keeps coming — a gated repo, a revoked token, a signature the
+            // server will not issue — reset the count on every attempt and
+            // returned RESOLVE, which the runner takes without sleeping. That is
+            // an unbounded request loop at full speed against the Hub, on a
+            // phone, with no way out. Arriving BYTES clear the count; a status
+            // that merely looks recoverable does not.
+            state.consecutiveFailures += 1;
+            if (state.consecutiveFailures >= MAX_FAILURES) return Step.giveUp("forbidden");
             return Step.of(Kind.RESOLVE);
         }
         if (status == 416) {
@@ -173,12 +183,21 @@ public final class TalosModelDownloadPolicy {
         if (status == 429) {
             state.url = null;
             state.urlDeadlineMs = Long.MIN_VALUE;
+            // Counted, so the wait actually grows.
+            //
+            // It was not, and the backoff was therefore computed from a number
+            // that never moved: a fixed two seconds, forever, which is a client
+            // doubling its own request rate against the very limiter it is
+            // supposed to be respecting — and never reaching MAX_FAILURES to
+            // stop. Found by an adversarial review, 2026-08-01.
+            state.consecutiveFailures += 1;
+            if (state.consecutiveFailures >= MAX_FAILURES) return Step.giveUp("rate-limited");
             // The Hub sends no Retry-After; when it reported nothing at all,
             // wait a bounded amount rather than inventing a number that
             // pretends to be its answer.
             long seconds = retryAfterSeconds != null
                     ? retryAfterSeconds
-                    : Math.min(60L, backoffSeconds(state.consecutiveFailures + 1));
+                    : Math.min(60L, backoffSeconds(state.consecutiveFailures));
             return Step.wait(seconds, "rate-limited");
         }
         if (status == 404 || status == 410) return Step.giveUp("gone");

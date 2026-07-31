@@ -86,7 +86,32 @@
       "outcome": { "kind": "status", "status": 403 },
       "nowMs": 1000000,
       "expectStep": { "kind": "resolve" },
-      "expectState": { "haveBytes": 3221225472, "consecutiveFailures": 0, "url": null }
+      "expectState": { "haveBytes": 3221225472, "consecutiveFailures": 1, "url": null }
+    },
+    {
+      "name": "a 403 that never stops is not a signature expiring — it stops",
+      "_why": "The count used to be RESET here, so a gated repo or a revoked token produced an unbounded request loop at full speed with no sleep and no way out. Arriving BYTES clear the count; a status that merely looks recoverable does not.",
+      "state": { "totalBytes": 4294967296, "haveBytes": 3221225472, "url": "https://cdn/x", "urlDeadlineMs": 4600000, "consecutiveFailures": 7, "lastProgressAtMs": 1000000, "lastCheckpointAtMs": 1000000, "bytesSinceCheckpoint": 0 },
+      "outcome": { "kind": "status", "status": 403 },
+      "nowMs": 1000000,
+      "expectStep": { "kind": "give-up", "reason": "forbidden" },
+      "expectState": { "consecutiveFailures": 8 }
+    },
+    {
+      "name": "429 counts, so the wait actually grows",
+      "_why": "The backoff was computed from a count that never moved: two seconds forever, a client doubling its own rate against the limiter it was meant to respect, never reaching MAX_FAILURES.",
+      "state": { "totalBytes": 4294967296, "haveBytes": 1073741824, "url": "https://cdn/x", "urlDeadlineMs": 4600000, "consecutiveFailures": 2, "lastProgressAtMs": 1000000, "lastCheckpointAtMs": 1000000, "bytesSinceCheckpoint": 0 },
+      "outcome": { "kind": "status", "status": 429 },
+      "nowMs": 1000000,
+      "expectStep": { "kind": "wait", "seconds": 8, "reason": "rate-limited" },
+      "expectState": { "consecutiveFailures": 3 }
+    },
+    {
+      "name": "and a rate limit that never lifts stops rather than hammering forever",
+      "state": { "totalBytes": 4294967296, "haveBytes": 1073741824, "url": "https://cdn/x", "urlDeadlineMs": 4600000, "consecutiveFailures": 7, "lastProgressAtMs": 1000000, "lastCheckpointAtMs": 1000000, "bytesSinceCheckpoint": 0 },
+      "outcome": { "kind": "status", "status": 429 },
+      "nowMs": 1000000,
+      "expectStep": { "kind": "give-up", "reason": "rate-limited" }
     },
     {
       "name": "416 means the file changed upstream — never resume into it",

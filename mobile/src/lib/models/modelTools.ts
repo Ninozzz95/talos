@@ -213,6 +213,9 @@ export function createTalosLocalModelTools(): TalosToolDefinition<never>[] {
                     return { ok: false, code: 'no-such-file', content: 'That repository has no such model file.' }
                 }
 
+                // By key, so the store hands the WHOLE set to the job — the tool
+                // never passes a single path, which is what made a split model
+                // download one shard and then delete it.
                 const result = await talosDownloadSet(input.file)
                 if (!result.ok) {
                     return {
