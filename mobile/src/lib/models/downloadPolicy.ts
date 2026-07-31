@@ -70,7 +70,11 @@ export type TalosDownloadStep =
     | { kind: 'wait'; seconds: number; reason: 'rate-limited' | 'backoff' }
     | { kind: 'stall'; sinceMs: number }
     | { kind: 'verify' }
-    | { kind: 'give-up'; reason: 'file-changed' | 'unreachable' | 'gone' }
+    // `forbidden` and `rate-limited` are the two that arrive after repetition
+    // rather than at once: a 403 or a 429 that keeps coming used to loop
+    // forever, so both now count towards the same ceiling as a transport
+    // failure and stop with a name the screen can explain.
+    | { kind: 'give-up'; reason: 'file-changed' | 'unreachable' | 'gone' | 'forbidden' | 'rate-limited' }
 
 export type TalosDownloadOutcome =
     | { kind: 'bytes'; count: number }
@@ -162,7 +166,17 @@ export function talosApplyDownloadOutcome(
          * a download fail at 85% for everyone on mobile data.
          */
         if (outcome.status === 403) {
-            const next = { ...state, url: null, urlDeadlineMs: null, consecutiveFailures: 0 }
+            // The failure count is NOT cleared. It was, and a 403 that keeps
+            // coming — a gated repo, a revoked token — then reset the count on
+            // every attempt and returned `resolve`, which the loop takes without
+            // sleeping: an unbounded request loop at full speed with no way out.
+            // Arriving BYTES clear the count; a status that merely looks
+            // recoverable does not. Found by an adversarial review, 2026-08-01.
+            const failures = state.consecutiveFailures + 1
+            const next = { ...state, url: null, urlDeadlineMs: null, consecutiveFailures: failures }
+            if (failures >= TALOS_DOWNLOAD_MAX_FAILURES) {
+                return { state: next, step: { kind: 'give-up', reason: 'forbidden' } }
+            }
             return { state: next, step: { kind: 'resolve' } }
         }
         /**
@@ -176,15 +190,24 @@ export function talosApplyDownloadOutcome(
             return { state: next, step: { kind: 'give-up', reason: 'file-changed' } }
         }
         if (outcome.status === 429) {
+            // Counted, so the wait actually grows. It was not, so the backoff
+            // came from a number that never moved: two seconds forever, a client
+            // doubling its own rate against the limiter it was meant to be
+            // respecting, and never reaching the failure ceiling that stops it.
+            const failures = state.consecutiveFailures + 1
+            const next = { ...state, url: null, urlDeadlineMs: null, consecutiveFailures: failures }
+            if (failures >= TALOS_DOWNLOAD_MAX_FAILURES) {
+                return { state: next, step: { kind: 'give-up', reason: 'rate-limited' } }
+            }
             const reported = outcome.retryAfterSeconds ?? null
             return {
-                state: { ...state, url: null, urlDeadlineMs: null },
+                state: next,
                 step: {
                     kind: 'wait',
                     // The Hub sends no `Retry-After`; when it reported nothing
                     // at all, wait a bounded amount rather than inventing a
                     // number that pretends to be its answer.
-                    seconds: reported ?? Math.min(60, backoffSeconds(state.consecutiveFailures + 1)),
+                    seconds: reported ?? Math.min(60, backoffSeconds(failures)),
                     reason: 'rate-limited',
                 },
             }

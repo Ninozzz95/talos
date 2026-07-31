@@ -17,10 +17,8 @@ interface TalosModelTransferPlugin {
     start(options: {
         repo: string
         revision: string
-        path: string
+        files: Array<{ path: string; bytes: number; sha256: string | null }>
         modelName: string
-        totalBytes: number
-        sha256: string | null
     }): Promise<{ runner: string; networkBound: boolean }>
     stop(): Promise<void>
     status(): Promise<{
@@ -72,28 +70,30 @@ export function talosTransfersAreSupported(): boolean {
 /**
  * Begin, or explain.
  *
- * `sha256` is the Hub's `lfs.oid` and is what makes this download different
- * from every competitor's: the finished file is proved, not assumed. Passing
- * null is allowed for repositories that do not publish one, and the download
- * centre must say plainly that such a file cannot be verified.
+ * Takes the whole SET of files, because a large GGUF is published in pieces and
+ * any subset of them is not a smaller model — it is nothing. Passing only the
+ * first with the set's total byte count is what made the job download one shard,
+ * ask for a window past its end, read the 416 as "the file changed" and delete
+ * every byte it had downloaded.
+ *
+ * `sha256` is the Hub's `lfs.oid` and is what makes this download different from
+ * every competitor's: each finished piece is proved, not assumed. Null is
+ * allowed for repositories that publish none, and the centre says so plainly.
  */
 export async function talosStartModelTransfer(request: {
     repo: string
     revision?: string
-    path: string
+    files: ReadonlyArray<{ path: string; bytes: number; sha256: string | null }>
     modelName?: string
-    totalBytes: number
-    sha256: string | null
 }): Promise<{ ok: true; started: TalosTransferStart } | { ok: false; reason: string }> {
     if (!talosTransfersAreSupported()) return { ok: false, reason: 'unsupported' }
+    if (request.files.length === 0) return { ok: false, reason: 'no-files' }
     try {
         const started = await plugin.start({
             repo: request.repo,
             revision: request.revision ?? 'main',
-            path: request.path,
-            modelName: request.modelName ?? request.path,
-            totalBytes: request.totalBytes,
-            sha256: request.sha256,
+            files: request.files.map((file) => ({ ...file })),
+            modelName: request.modelName ?? request.files[0]!.path,
         })
         return {
             ok: true,

@@ -304,7 +304,19 @@ public final class TalosTransferRunner {
         }
     }
 
-    /** @return false when the loop must end. */
+    /**
+     * Wait, and say whether the loop may continue.
+     *
+     * THE CONTRACT: false is returned only after `onFinished` has been called.
+     *
+     * It did not hold, and an adversarial review found the cost. Stopping while
+     * the loop sat in a backoff — a pause is where a slow link spends most of
+     * its life — returned false without telling anyone, so `drive()` returned
+     * silently: the foreground service was never stopped, `jobFinished` was
+     * never called, and the session stayed marked active forever. The next
+     * download refused with "one at a time" against a transfer that had ended
+     * minutes earlier, and the only cure was force-stopping the app.
+     */
     private boolean pause(TalosModelDownloadPolicy.Step step) {
         if (step.kind == TalosModelDownloadPolicy.Kind.GIVE_UP) {
             host.onFinished(step.reason);
@@ -312,11 +324,15 @@ public final class TalosTransferRunner {
         }
         long until = SystemClock.elapsedRealtime() + step.seconds * 1000L;
         while (SystemClock.elapsedRealtime() < until) {
-            if (host.stopRequested()) return false;
+            if (host.stopRequested()) {
+                host.onFinished("stopped");
+                return false;
+            }
             try {
                 Thread.sleep(250L);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
+                host.onFinished("stopped");
                 return false;
             }
         }

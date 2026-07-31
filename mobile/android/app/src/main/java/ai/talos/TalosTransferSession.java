@@ -26,23 +26,43 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class TalosTransferSession {
 
-    /** What to fetch. Never a token — see `resolve` below. */
+    /**
+     * What to fetch: a SET of files, not one.
+     *
+     * A large GGUF is published in pieces — `…-00001-of-00003.gguf` and its
+     * siblings are one model, and any two of the three are nothing. This used to
+     * carry a single path with the byte count of the whole set, so the job
+     * downloaded the first shard, asked for a window past its end, got a 416,
+     * read that as "the file changed upstream" and DELETED EVERY BYTE it had
+     * downloaded. Gigabytes of someone's data allowance, spent to arrive at an
+     * empty folder. Found by an adversarial review, 2026-08-01 — in the same
+     * commit that had just taught the interface to treat a set as one model.
+     *
+     * Never a token; see `resolve` below.
+     */
     public static final class Request {
         public final String repo;
         public final String revision;
-        public final String path;
+        public final String[] paths;
+        /** Each piece's own length. The job asks for one file at a time. */
+        public final long[] sizes;
+        /** Each piece's own sha256, or null where the repository published none. */
+        public final String[] hashes;
         public final String modelName;
+        /** The sum, which is what the phone must find room for and the bar shows. */
         public final long totalBytes;
-        public final String sha256;
 
-        public Request(String repo, String revision, String path, String modelName,
-                long totalBytes, String sha256) {
+        public Request(String repo, String revision, String[] paths, long[] sizes,
+                String[] hashes, String modelName) {
             this.repo = repo;
             this.revision = revision;
-            this.path = path;
+            this.paths = paths;
+            this.sizes = sizes;
+            this.hashes = hashes;
             this.modelName = modelName;
-            this.totalBytes = totalBytes;
-            this.sha256 = sha256;
+            long sum = 0;
+            for (long size : sizes) sum += size;
+            this.totalBytes = sum;
         }
     }
 
@@ -55,6 +75,11 @@ public final class TalosTransferSession {
 
     public static void begin(Request request) {
         active = request;
+        // Reset, or the download centre shows the PREVIOUS transfer's byte count
+        // against this model's total until the first chunk lands — a bar that
+        // starts at 61% of the wrong thing.
+        lastHave = 0;
+        lastTotal = request.totalBytes;
         STOPPING.set(false);
     }
 
@@ -72,6 +97,20 @@ public final class TalosTransferSession {
 
     public static void end() {
         active = null;
+        lastHave = 0;
+        lastTotal = 0;
+        STOPPING.set(false);
+    }
+
+    /**
+     * Ready to be picked up again, with the request left in place.
+     *
+     * The system stopping a job is not the user cancelling one: `onStopJob`
+     * returns true to ask for the job back, and the request has to still be
+     * here when it comes. Clearing the stop flag without clearing the request
+     * is the difference between resuming and abandoning.
+     */
+    public static void clearStopRequest() {
         STOPPING.set(false);
     }
 
@@ -113,50 +152,85 @@ public final class TalosTransferSession {
      */
     public static void run(Context context, Request request, Network network, Report report) {
         TalosModelStore store = new TalosModelStore(rootFor(context));
-        TalosModelStore.Slot slot;
-        try {
-            slot = store.slot(request.repo, request.revision, request.path);
-        } catch (IllegalArgumentException hostile) {
-            // A path from a repository anyone in the world can publish to.
-            report.finished("bad-path");
-            return;
-        }
-
         TalosTransferProgress progress = new TalosTransferProgress();
         lastTotal = request.totalBytes;
 
-        try {
-            slot.prepare(request.totalBytes, new TalosStorageReservation(context));
-        } catch (IOException noRoom) {
-            report.finished("no-space");
-            return;
+        // One piece at a time, in order, with the bar reporting the WHOLE set:
+        // the user chose a model, not a file, and a bar that restarts at zero
+        // three times is a bar that is lying about what is happening.
+        long done = 0;
+        for (int index = 0; index < request.paths.length; index += 1) {
+            final long already = done;
+            final long size = request.sizes[index];
+
+            TalosModelStore.Slot slot;
+            try {
+                slot = store.slot(request.repo, request.revision, request.paths[index]);
+            } catch (IllegalArgumentException hostile) {
+                // A path from a repository anyone in the world can publish to.
+                report.finished("bad-path");
+                return;
+            }
+
+            // A piece already whole is skipped, which is what makes a set of
+            // three survive being interrupted between two of them.
+            if (slot.finished.isFile() && slot.finished.length() == size) {
+                done += size;
+                lastHave = done;
+                report.progress(done, request.totalBytes, progress);
+                continue;
+            }
+
+            try {
+                slot.prepare(size, new TalosStorageReservation(context));
+            } catch (IOException noRoom) {
+                report.finished("no-space");
+                return;
+            }
+
+            final String path = request.paths[index];
+            final String[] failure = { null };
+            final boolean[] ended = { false };
+
+            new TalosTransferRunner(slot, size, request.hashes[index], network,
+                    new TalosTransferRunner.Host() {
+                        @Override
+                        public TalosTransferRunner.Resolved resolve() throws IOException {
+                            return resolveOn(context, network, request, path);
+                        }
+
+                        @Override
+                        public void onProgress(long haveBytes, long totalBytes) {
+                            lastHave = already + haveBytes;
+                            lastTotal = request.totalBytes;
+                            progress.sample(lastHave, SystemClock.elapsedRealtime());
+                            report.progress(lastHave, request.totalBytes, progress);
+                        }
+
+                        @Override
+                        public void onFinished(String reason) {
+                            // Swallowed on purpose: only the LAST piece may end
+                            // the transfer. Reporting here would tell the host
+                            // the download was over after the first shard.
+                            ended[0] = true;
+                            failure[0] = reason;
+                        }
+
+                        @Override
+                        public boolean stopRequested() {
+                            return STOPPING.get();
+                        }
+                    }).run();
+
+            if (!ended[0] || failure[0] != null) {
+                report.finished(failure[0] != null ? failure[0] : "interrupted");
+                return;
+            }
+            done += size;
         }
 
-        new TalosTransferRunner(slot, request.totalBytes, request.sha256, network,
-                new TalosTransferRunner.Host() {
-                    @Override
-                    public TalosTransferRunner.Resolved resolve() throws IOException {
-                        return resolveOn(context, network, request);
-                    }
-
-                    @Override
-                    public void onProgress(long haveBytes, long totalBytes) {
-                        lastHave = haveBytes;
-                        lastTotal = totalBytes;
-                        progress.sample(haveBytes, SystemClock.elapsedRealtime());
-                        report.progress(haveBytes, totalBytes, progress);
-                    }
-
-                    @Override
-                    public void onFinished(String reason) {
-                        report.finished(reason);
-                    }
-
-                    @Override
-                    public boolean stopRequested() {
-                        return STOPPING.get();
-                    }
-                }).run();
+        lastHave = request.totalBytes;
+        report.finished(null);
     }
 
     /**
@@ -175,9 +249,9 @@ public final class TalosTransferSession {
      * a token a heap dump cannot find.
      */
     private static TalosTransferRunner.Resolved resolveOn(
-            Context context, Network network, Request request) throws IOException {
+            Context context, Network network, Request request, String path) throws IOException {
         String address = "https://huggingface.co/" + request.repo + "/resolve/"
-                + encode(request.revision) + "/" + encodePath(request.path);
+                + encode(request.revision) + "/" + encodePath(path);
         URL url = new URL(address);
         HttpURLConnection connection = (HttpURLConnection) (network == null
                 ? url.openConnection()

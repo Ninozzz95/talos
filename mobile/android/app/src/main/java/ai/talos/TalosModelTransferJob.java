@@ -78,8 +78,21 @@ public class TalosModelTransferJob extends JobService {
                         if (manager != null) {
                             manager.notify(TalosTransferNotification.NOTIFICATION_ID, ended);
                         }
+
+                        // "stopped" is the system taking the job away — thermal
+                        // pressure, a constraint no longer met, a better moment
+                        // to retry — and `onStopJob` returns true to ask for it
+                        // back. So the REQUEST MUST SURVIVE.
+                        //
+                        // It did not: `end()` ran on every path, so the
+                        // rescheduled `onStartJob` found no active request and
+                        // returned false. The job promised to resume and then
+                        // abandoned the download on its first interruption,
+                        // which on a phone is a matter of minutes. Found by an
+                        // adversarial review, 2026-08-01.
                         boolean retry = "stopped".equals(reason);
-                        TalosTransferSession.end();
+                        if (!retry) TalosTransferSession.end();
+                        else TalosTransferSession.clearStopRequest();
                         jobFinished(params, retry);
                     }
                 }), "talos-transfer");

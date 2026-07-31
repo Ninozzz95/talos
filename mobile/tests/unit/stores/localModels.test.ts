@@ -27,6 +27,23 @@ const bridge = vi.hoisted(() => ({
     stop: vi.fn(async () => undefined),
     status: vi.fn(async () => ({ active: false, modelName: null, haveBytes: 0, totalBytes: 0 })),
     leftovers: vi.fn(async () => ({ items: [], totalBytes: 0 })),
+    // Returns a transport that reaches nothing: the tests that care about the
+    // network always inject their own, and this one only has to be identifiable.
+    hubTransport: vi.fn(() => (async () => new Response('{}')) as typeof globalThis.fetch),
+    getKey: vi.fn(async () => null),
+    setKey: vi.fn(async () => undefined),
+    clearKey: vi.fn(async () => undefined),
+}))
+
+vi.mock('@/services/hubTransport', () => ({
+    talosCreateHubTransport: bridge.hubTransport,
+    talosDecodeHubBody: (value: unknown) => value,
+}))
+
+vi.mock('@/services/secureKeyStore', () => ({
+    getProviderKey: bridge.getKey,
+    setProviderKey: bridge.setKey,
+    clearProviderKey: bridge.clearKey,
 }))
 
 vi.mock('@/services/deviceCapacity', () => ({
@@ -121,6 +138,8 @@ beforeEach(() => {
     bridge.status.mockClear().mockResolvedValue({
         active: false, modelName: null, haveBytes: 0, totalBytes: 0,
     })
+    bridge.hubTransport.mockClear()
+    bridge.getKey.mockClear().mockResolvedValue(null)
 })
 
 async function openedRepo() {
@@ -130,6 +149,40 @@ async function openedRepo() {
     await store.talosOpenModelRepo('unsloth/Qwen3-4B-GGUF')
     return store
 }
+
+describe('how it reaches the Hub', () => {
+    /**
+     * The defect the whole suite once certified as working: with the WebView's
+     * own `fetch`, `redirect: 'manual'` yields an opaque-redirect response —
+     * status 0, no headers — so the signed CDN address could never be read and
+     * every fit verdict on every device failed with "unreadable transport".
+     *
+     * The cure is that the native transport is the DEFAULT, not something wired
+     * at boot that a future caller could forget. This asserts exactly that: ask
+     * for a client with no transport and the native one is what gets built.
+     */
+    it('builds the transport that can see a redirect, and never the raw fetch', async () => {
+        const store = await import('@/stores/localModels')
+
+        // No argument at all — the path a forgetful caller takes.
+        store.talosInitLocalModels()
+
+        expect(bridge.hubTransport).toHaveBeenCalled()
+    })
+
+    /**
+     * And the same on the path that runs after a token is saved, which rebuilds
+     * the client and is the easiest place to reintroduce the raw fetch.
+     */
+    it('keeps the native transport when the client is rebuilt for a token', async () => {
+        const store = await import('@/stores/localModels')
+        bridge.hubTransport.mockClear()
+
+        await store.talosRefreshHuggingFaceToken()
+
+        expect(bridge.hubTransport).toHaveBeenCalled()
+    })
+})
 
 describe('finding and opening a repository', () => {
     it('turns a repository into the models it holds, not the files it contains', async () => {
@@ -247,15 +300,26 @@ describe('examining a model before committing to it', () => {
 })
 
 describe('starting a download', () => {
-    it('hands the native side the whole set size and the hash to prove it', async () => {
+    /**
+     * EVERY piece, each with its own length and its own hash.
+     *
+     * This asserted the set's TOTAL against a single path, and that is exactly
+     * the bug it was blessing: the job downloaded shard one, asked for a window
+     * past its end, read the 416 as "the file changed upstream" and deleted
+     * every byte. Found by an adversarial review on 2026-08-01 — in the code
+     * that had just learned to treat a split model as one model.
+     */
+    it('hands the native side every piece of the set, with its own hash', async () => {
         const store = await openedRepo()
         const set = store.talosLocalModels.repo!.sets[1]!
 
         expect(await store.talosDownloadSet(set.paths[0]!)).toEqual({ ok: true })
         expect(bridge.start).toHaveBeenCalledWith(expect.objectContaining({
             repo: 'unsloth/Qwen3-4B-GGUF',
-            totalBytes: 6_000_000_000,
-            sha256: 'b'.repeat(64),
+            files: [
+                { path: 'model-Q8_0-00001-of-00002.gguf', bytes: 3_000_000_000, sha256: 'b'.repeat(64) },
+                { path: 'model-Q8_0-00002-of-00002.gguf', bytes: 3_000_000_000, sha256: 'c'.repeat(64) },
+            ],
         }))
     })
 

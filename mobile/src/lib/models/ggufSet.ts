@@ -20,6 +20,15 @@ export interface TalosGgufSet {
     quantisation: string | null
     /** In shard order. The first is the one whose header is worth reading. */
     paths: string[]
+    /**
+     * Each piece's own length, in the same order.
+     *
+     * The download job needs these and not just the sum: it fetches one file at
+     * a time, and asking for `totalBytes` of the first shard is what made it run
+     * past the end of that file, take the 416 as "this changed upstream" and
+     * delete everything it had downloaded.
+     */
+    sizes: number[]
     totalBytes: number
     /**
      * Every piece's sha256, in the same order.
@@ -76,6 +85,7 @@ export function talosGroupGgufFiles(files: readonly TalosHuggingFaceFile[]): Tal
             label: parsed?.quantisation ?? name.replace(/\.gguf$/i, ''),
             quantisation: parsed?.quantisation ?? null,
             paths: ordered.map((file) => file.path),
+            sizes: ordered.map((file) => file.sizeBytes),
             // The sum, because that is what the phone has to find room for. The
             // size of one shard is not a smaller model, it is a broken one.
             totalBytes: ordered.reduce((sum, file) => sum + file.sizeBytes, 0),

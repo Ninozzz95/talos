@@ -121,6 +121,25 @@ describe('the answers that are not failures', () => {
 
         expect(step.kind).toBe('resolve')
         expect(state.haveBytes).toBe(3 * GIB)
+        // It counts, though. This assertion used to demand zero, and that is
+        // what let a 403 which never stops — a gated repo, a revoked token —
+        // loop at full speed forever with no sleep: found by an adversarial
+        // review on 2026-08-01, and the test was holding the bug in place.
+        // Arriving BYTES are what clear the count; see the case below.
+        expect(state.consecutiveFailures).toBe(1)
+    })
+
+    /**
+     * And it is bytes, not a hopeful-looking status, that mean the link works.
+     * One 403 followed by real progress must leave nothing behind.
+     */
+    it('lets arriving bytes clear what a 403 counted', () => {
+        const expired = talosApplyDownloadOutcome(
+            running({ haveBytes: 3 * GIB }), { kind: 'status', status: 403 }, T0)
+
+        const { state } = talosApplyDownloadOutcome(
+            expired.state, { kind: 'bytes', count: 1 * MIB }, T0)
+
         expect(state.consecutiveFailures).toBe(0)
     })
 

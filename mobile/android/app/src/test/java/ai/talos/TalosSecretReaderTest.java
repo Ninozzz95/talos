@@ -98,6 +98,54 @@ public class TalosSecretReaderTest {
         assertNull("empty iv", TalosSecretReader.splitCiphertext("aXY"));
     }
 
+    /**
+     * The store writes JSON. `SecureStorage.set` stringifies and `get` parses,
+     * so JavaScript round-trips cleanly and nothing looks wrong from there —
+     * but reading it natively without unwrapping sent
+     * `Authorization: Bearer "hf_xxx"` to the Hub, quotes included.
+     *
+     * Found by an adversarial review on 2026-08-01. The pins beside this test
+     * covered the prefix, the file and the cipher, and never the ENCODING: they
+     * guarded everything except the thing that was broken.
+     */
+    @Test
+    public void unwrapsTheJsonTheStoreActuallyWrote() {
+        assertEquals("hf_abc123", TalosSecretReader.unwrapJson("\"hf_abc123\""));
+    }
+
+    @Test
+    public void leavesAValueThatWasNeverWrappedAlone() {
+        assertEquals("hf_abc123", TalosSecretReader.unwrapJson("hf_abc123"));
+    }
+
+    /** A quote inside the value survives; JSON escaped it on the way in. */
+    @Test
+    public void unescapesWhatJsonEscaped() {
+        assertEquals("a\"b", TalosSecretReader.unwrapJson("\"a\\\"b\""));
+        assertEquals("a\\b", TalosSecretReader.unwrapJson("\"a\\\\b\""));
+    }
+
+    /** An empty token is no token, wrapped or not. */
+    @Test
+    public void treatsAnEmptyValueAsAbsent() {
+        assertNull(TalosSecretReader.unwrapJson("\"\""));
+        assertNull(TalosSecretReader.unwrapJson(""));
+        assertNull(TalosSecretReader.unwrapJson(null));
+    }
+
+    /**
+     * And the encoding itself is pinned now, so a library that stops
+     * stringifying fails here rather than in the field.
+     */
+    @Test
+    public void pinsThatTheStoreStillWritesJson() throws Exception {
+        String source = read(LIBRARY.resolve("dist/esm/base.js"));
+
+        assertTrue("the library no longer JSON-encodes what it stores",
+                source.contains("JSON.stringify"));
+        assertTrue("nor decodes it on the way back", source.contains("JSON.parse"));
+    }
+
     @Test
     public void splitsAWellFormedEntry() {
         String[] parts = TalosSecretReader.splitCiphertext("Y2lwaGVyaXY");

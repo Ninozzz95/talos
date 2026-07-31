@@ -67,6 +67,32 @@ public final class TalosSecretReader {
     }
 
     /**
+     * The store writes JSON, so a string arrives wrapped in quotes.
+     *
+     * `SecureStorage.set` does `JSON.stringify` before handing the value down
+     * (dist/esm/base.js) and `get` does `JSON.parse` on the way back, so the
+     * JavaScript side round-trips cleanly and nothing looks wrong from there.
+     * Reading it natively without unwrapping produced
+     * `Authorization: Bearer "hf_xxx"` — quotes included — which the Hub rejects
+     * on every authenticated request, silently turning a token nobody could see
+     * was broken into a rate limit nobody could explain.
+     *
+     * Found by an adversarial review, 2026-08-01. The guard beside it pinned the
+     * key prefix and the cipher and never the ENCODING — it missed the one
+     * property that actually breaks.
+     */
+    static String unwrapJson(String stored) {
+        if (stored == null) return null;
+        String value = stored;
+        if (value.length() >= 2 && value.charAt(0) == '"' && value.charAt(value.length() - 1) == '"') {
+            value = value.substring(1, value.length() - 1)
+                    .replace("\\\"", "\"")
+                    .replace("\\\\", "\\");
+        }
+        return value.isEmpty() ? null : value;
+    }
+
+    /**
      * The token, or null.
      *
      * Null is an ordinary answer, not a failure: most repositories are public
@@ -91,8 +117,7 @@ public final class TalosSecretReader {
 
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.DECRYPT_MODE, entry.getSecretKey(), new GCMParameterSpec(TAG_BITS, iv));
-            String value = new String(cipher.doFinal(data), "UTF-8");
-            return value.isEmpty() ? null : value;
+            return unwrapJson(new String(cipher.doFinal(data), "UTF-8"));
         } catch (Exception unreadable) {
             // A locked, wiped or re-keyed Keystore reads as "no token". Throwing
             // here would turn a public download into a crash.
