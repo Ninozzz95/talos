@@ -1,104 +1,304 @@
-# Modelli locali da Hugging Face — ricerca e piano
+# Modelli locali da Hugging Face — piano, seconda stesura
 
 Data: 2026-07-31
-Ordine: priorità assoluta subito dopo la fase B (owner, `phase-order-change`).
-Stato: ricerca fatta, piano proposto. Nessuna riga scritta ancora.
+Ordine: priorità assoluta subito dopo la fase B.
+Base: dieci agenti in parallelo (otto ricognizioni + due critici), con **sonde
+vere** contro l'API e il CDN di Hugging Face il 31 luglio 2026.
+
+La prima stesura è stata riscritta, non ritoccata: due sue affermazioni erano
+sbagliate e la scelta di trasporto era già spesa.
 
 ---
 
-## 1 · La documentazione, ridotta a ciò che ci serve
+## 0 · Dove la prima stesura sbagliava
 
-**Scaricare un file.** `https://huggingface.co/{repo}/resolve/{revision}/{file}`
-è una GET normale che redirige al CDN. Accetta `Range`, quindi **il ripristino
-di un download interrotto è HTTP standard**, non una libreria. Non ci serve
-`huggingface_hub` (è Python) — ci serve il contratto, e il contratto è banale.
+**Il one-up che avevo scelto era già occupato.** Avevo scritto che nessuno
+risponde a «gira sul mio telefono?». **PocketPal lo fa già**, con matematica
+GGUF vera. Il one-up sta altrove — §7.
 
-**Elencare.** `GET /api/models?filter=gguf&search=…` per cercare,
-`GET /api/models/{repo}/tree/{revision}` per i file di un repo. Un repo GGUF
-contiene **molte quantizzazioni dello stesso modello**: scaricarne uno solo non è
-un'ottimizzazione, è l'unico comportamento corretto su un telefono.
+**«LM Studio Mobile» su Android non esiste.** Premessa mia, presa da un
+risultato di ricerca, sbagliata.
 
-**Modelli chiusi (gated).** Token `Bearer`, accettazione della licenza per
-modello, quasi sempre approvata in pochi secondi. Il token è dell'utente.
-Vincolo D0: **nessuna chiave nell'APK** — il token sta dove stanno le chiavi dei
-provider, cifrato, e la funzione senza token deve funzionare lo stesso sui
-modelli aperti.
+**Il trasporto era già speso.** `TalosRunService` è dichiarato `dataSync` e da
+Android 15 quel tipo ha **sei ore al giorno condivise da tutta l'app**. Un
+download lì dentro spenderebbe il budget della chat — e il servizio non aveva
+`onTimeout`, quindi il superamento era un crash. Difetto **vivo**, corretto
+separatamente (commit `98eea5e`) prima di qualunque lavoro sul download.
 
-**Quantizzazioni.** Consenso 2026: `Q4_K_M` è il punto di equilibrio sotto gli
-8 GB di RAM (~4,5 GB per un 7B), `Q5_K_M` sopra. E la regola che conta:
-*prendi la quantizzazione più alta che entra, lasciando spazio alla KV cache e
-al contesto* — più **un modello più grande a quantizzazione più bassa batte quasi
-sempre un modello piccolo a quantizzazione alta**.
+---
 
-## 2 · Cosa fanno i competitor — il pavimento della parità
+## 1 · Il contratto di rete, misurato e non dedotto
 
-PocketPal, LM Studio Mobile, SmolChat, ChatterUI fanno tutti la stessa cosa:
-cerchi su HF, vedi una lista di file, ne scegli uno, si scarica, lo gestisci.
-PocketPal arriva anche ai modelli chiusi col token.
+**Il redirect è Xet-bridge ovunque nel 2026.** `GET /{repo}/resolve/{rev}/{file}`
+risponde `302` verso `us.aws.cdn.hf.co/xet-bridge-us/…` con una firma
+CloudFront. Il vecchio percorso `cdn-lfs*` non è comparso una sola volta.
 
-**Il difetto che condividono tutti**: ti mostrano un elenco di nomi di file —
-`…Q4_K_M.gguf`, `…Q5_K_M.gguf`, `…Q8_0.gguf` — e ti lasciano indovinare. La
-domanda vera non è «quale file voglio», è **«questo gira sul mio telefono?»**, e
-nessuno di loro la risponde. La guida più diffusa la risponde con una regola del
-pollice su una tabella di RAM.
+**Il `Range` sulla richiesta di resolve avvelena l'URL firmato.** Se la resolve
+porta un `Range`, la Policy incorpora `"ByteRange":{"ExpectedHeader":"bytes=0-15"}`
+e l'URL diventa **monouso per quell'esatto intervallo**: qualunque altro range
+risponde `403 Auth failed: invalid range`. Se la resolve è **nuda**, l'URL
+firmato accetta range arbitrari e paralleli. Quindi: **resolve nuda → conserva
+l'URL del CDN → applica il `Range` al CDN**, mai alla resolve.
 
-## 3 · I vincoli Android, che decidono la forma
+**L'URL firmato dura 3600 secondi.** Misurato. Aritmetica: 4,0 GB a 1 MB/s
+richiedono 4295 s. **Non può finire su un solo URL.** Un `403` a metà stream
+significa «ri-risolvi», non «fallito»: nuova resolve nuda, `Range: bytes={haveBytes}-`,
+si continua. E ri-risolvere in anticipo a T+50 min.
 
-- **WorkManager con foreground worker** è la via raccomandata per download
-  lunghi; `DownloadManager` non sa riportare un progresso granulare.
-- **Android 16**: i worker lunghi con foreground service consumano la quota di
-  job dell'app — potrebbe servire un foreground service diretto.
-- **Scoped storage**: cartella privata dell'app, nessun permesso da chiedere.
-- **Capacitor**: un download da 4 GB **non può passare dalla WebView**. Serve un
-  plugin nativo. È il pezzo che decide il calendario, non l'API di HF.
+**L'hash vero è `lfs.oid`, non l'ETag.** L'ETag del CDN è l'hash Merkle di Xet.
+Il `x-linked-etag` della 302 è il sha256 e coincide con `lfs.oid`. Verificare
+contro l'ETag è **peggio di non verificare**, perché riporta successo.
 
-## 4 · Il one-up — dove li superiamo, e perché possiamo
+**`POST /api/models/{repo}/paths-info/{rev}` con `{"paths":[…],"expand":true}`**
+restituisce in una chiamata: dimensione, `lfs.oid`, `xetHash`, commit e
+`securityFileStatus` (verdetto antimalware). È l'intero contratto di download in
+un oggetto verificabile. CORS lo consente dalla WebView.
 
-**L3 — «gira sul MIO telefono?», risposta misurata.**
-TALOS ha già specificata la scoperta hardware VIVA con callback termico e il
-benchmark che arbitra fra motore nativo e WebGPU (M1-M8b,
-`talos-model-catalogue-spec`). Quindi la regola del pollice degli altri per noi è
-**calcolabile**: RAM reale, spazio libero reale, margine termico reale, meno la
-KV cache del contesto che l'utente usa davvero. Il catalogo non mostra un elenco
-di file: **ordina le quantizzazioni per questo telefono e dice quale striscerà**.
-Nessuno può copiarlo senza avere un client nativo che misura il dispositivo.
+**Il 429 non ha `Retry-After`.** Ha un corpo HTML da 52 KB e l'unico dato
+utilizzabile è `t=` nell'header `ratelimit` (secondi al reset). Due conseguenze:
+`res.json()` su un 429 lancia un errore di parsing e l'app direbbe «risposta
+malformata» invece di «limite raggiunto, 254 s»; e i limiti anonimi sono **per
+IP**, con i carrier dietro CGNAT. **Il token HF non è un vezzo per i modelli
+chiusi: è l'isolamento dai limiti**, e va offerto anche per i modelli aperti.
 
-**L2 — un download che sopravvive al telefono.** Ripristino per `Range` **più
-verifica sha256 contro l'hash dichiarato da HF**. Un file da 4 GB troncato non
-deve mai diventare in silenzio un modello che produce spazzatura: è il modo in
-cui questi errori si manifestano, e il modo in cui nessuno se ne accorge.
+**I modelli chiusi**: metadati ed elenco file sono pubblici, solo `/resolve/` è
+bloccato con un 401 riconoscibile. E **l'accettazione della licenza si può fare
+solo nel browser** — un checkbox in-app sarebbe un falso.
 
-**L2 — due porte** (regola dell'owner su tutte le funzioni): il centro modelli
-**e** un tool, così in chat puoi dire «voglio un modello che funzioni offline» e
-lui propone, spiega il costo in spazio, e scarica con la tua approvazione.
-Nessun competitor ha la porta della chat.
+**Tutto ciò che serve al verdetto sta nei primi 1.144 byte del GGUF**, leggibili
+con un `Range`. Il chat template invece sta molto più avanti (byte ~7,8 M nel
+file misurato). `general.file_type` è l'autorità sulla quantizzazione, **non il
+nome del file**. `@huggingface/gguf` fa già questo parsing in TypeScript.
 
-**Vincoli portati dentro**: niente elenco cablato nell'APK
-(`app-distributed-nothing-static`) — catalogo remoto firmato con ripiego onesto;
-nessuna chiave nell'APK (D0); e il centro modelli è una **stazione**, quindi
-segue le stesse regole di ogni altra stazione.
+**`filter=gguf` da solo restituisce anche modelli di immagini, embedding e
+pornografia**: il tag dice solo «il repo contiene un .gguf».
 
-## 5 · Le fette, in ordine, ognuna verificabile
+---
 
-1. **Il client HF, puro.** Ricerca, elenco file di un repo, parsing dei nomi in
-   `{modello, quantizzazione, byte}`. Nessuna rete nei test, nessun permesso.
-2. **La matematica del «ci entra?».** Pura: byte del file + KV cache stimata dal
-   contesto → verdetto contro RAM/spazio misurati. È il one-up, ed è la fetta
-   più testabile di tutte.
-3. **Il plugin nativo di download.** Foreground worker, `Range`, ripresa,
-   progresso, cancellazione, sha256 alla fine. Il pezzo lungo.
-4. **La stazione.** Catalogo, verdetti per questo telefono, gestione dello
-   spazio, cancellazione.
-5. **Il tool.** La seconda porta.
-6. **Il token per i modelli chiusi.** Dove stanno le chiavi, con la licenza
-   accettata su HF dall'utente.
+## 2 · Il motore di trasporto
 
-Le fette 1 e 2 non hanno bisogno di niente: né chiavi, né plugin, né rete.
-Si parte da lì.
+**API 34+: User-Initiated Data Transfer job** (`RUN_USER_INITIATED_JOBS`).
+Nessun tetto di sei ore, nessuna dichiarazione di foreground service da
+giustificare in Play Console. Nessuna libreria Jetpack lo incapsula: va scritto.
+Due spigoli duri: lo «Stop» del Task Manager e la pressione di memoria uccidono
+il processo **senza `onStopJob`**.
 
-## 6 · Su ultracode
+**API 26-33: foreground service `dataSync` dedicato** — budget proprio, tipo
+proprio, canale di notifica proprio, id proprio. **Non** `TalosRunService`.
 
-La **ricerca** di questa fase si divide bene. La **costruzione** no: è una
-catena — scoperta → download → verifica → storage → catalogo → motore — e venti
-agenti su una catena producono conflitti, non velocità. Ultracode serve alla
-piattaforma agentica, che è **larga**; qui servirebbe solo a fare rumore.
+**La rete si lega, non si assume.** `JobParameters.getNetwork()` e ogni socket
+aperto tramite `network.getSocketFactory()`, DNS incluso. Un socket legato a una
+rete **muore con quella rete** invece di migrare: è ciò che impedisce a un
+passaggio Wi-Fi→cellulare di spendere il piano dati in silenzio. In galleria non
+arriva un errore: arriva un socket che **pende** — serve un cane da guardia sui
+byte in arrivo (8 s a zero → stato con un nome).
+
+**Il checkpoint va sul TEMPO, non sui byte.** Finestre da 128 MiB su un link che
+sfarfalla producono **progresso netto zero**: la barra torna indietro e il
+download non finisce mai su un tragitto pendolare. `fdatasync` + sidecar
+sostituito atomicamente **ogni 5 s o ogni 8 MiB, quello che viene prima**.
+La finestra di *resolve* resta grande (128-256 MiB): resolve e checkpoint non
+sono lo stesso confine.
+
+**Lo spazio si prenota, non si controlla.** `getAllocatableBytes` +
+`allocateBytes`, poi `posix_fallocate` così `ENOSPC` esce al secondo zero e non
+al 94%. **Mai `setRequiresStorageNotLow(true)`**: è un blocco che il download
+infligge a sé stesso, e il dossier lo raccomandava in tre punti prima che il
+critico lo smontasse.
+
+**Ogni durata su `SystemClock.elapsedRealtime()`**, mai sull'orologio a muro: il
+telefono con l'ora sbagliata è sproporzionatamente il telefono economico che
+questa funzione serve. La scadenza dell'URL si deriva dall'header `date:` della
+risposta contro `Expires`, una volta, e diventa una scadenza monotona.
+
+**Lo sha256 si trasmette in streaming** su 4,68 GB, mai con `mmap`. Lo stato
+dell'hash **sopravvive alla morte del processo**, così non serve una seconda
+lettura completa.
+
+**I killer degli OEM.** Xiaomi, Samsung, Huawei uccidono senza `onStopJob`,
+ripetutamente, quasi allo stesso punto. I codici di uscita non li identificano:
+si riconosce il **motivo ricorrente** (`getHistoricalProcessExitReasons`, N
+uccisioni, schermo spento entro pochi secondi, nessun evento termico). Dopo il
+secondo, **si dice**, invece di riprovare all'infinito.
+
+---
+
+## 3 · Il download center, sezione per sezione
+
+1. **Questo telefono** — una riga: *11,2 GB liberi · 6,0 GB di RAM utilizzabile ·
+   Wi-Fi*. È la cornice a cui ogni rifiuto successivo si riferisce.
+2. **In corso** — al massimo una riga attiva: nome, quantizzazione, barra
+   determinata, *61% · 2,41 GB di 4,07 GB · 4,2 MB/s · circa 6 min · Wi-Fi*,
+   Pausa e Annulla come pulsanti, e «parte 2 di 3» se il modello è diviso.
+3. **In coda** — posizione, dimensione, «inizia fra circa 12 min», riordinabile.
+4. **In pausa / serve te** — il cesto onesto: in pausa da te, spazio finito, in
+   attesa del Wi-Fi, **limite di frequenza con conto alla rovescia vivo**, file
+   cambiato a monte, verifica fallita. Una frase, e l'azione che la risolve.
+5. **Su questo telefono** — installati: dimensione, ultimo uso, tok/s
+   **misurati** o «stimati» se non lo sono, Elimina.
+6. **Spazio** — una barra impilata (modelli · libreria · database · resto) che
+   somma all'ingombro vero dell'app, l'accesso a `ACTION_MANAGE_STORAGE`, e i
+   file parziali orfani con dimensione ed età.
+7. **Trova un modello** — catalogo TALOS (remoto, **firmato**, in cache), ricerca
+   HF, import da URL. Ogni scheda porta il verdetto calcolato dall'header:
+   *4,07 GB di file · 1,2 GB di cache a 8k · ci stanno nei tuoi 6,0 GB con 1,1
+   GB di margine* — e quando non ci sta, **a quale contesto ci starebbe**.
+
+Impostazioni in linea: «Scarica su rete mobile» (spenta, con la dimensione
+ripetuta quando la accendi) e «Tieni liberi 1,5 GB», modificabile e **spiegato**.
+
+**Il pavimento libero non è cortesia**: esiste perché il database cifrato e il
+suo journal stanno sulla stessa partizione. E si mostra **lo stato dopo**:
+«ti resteranno 1,6 GB» — il numero che interessa davvero, che nessun competitor
+mostra.
+
+**Nessuno stato può essere una rotella indeterminata.** Regola da far rispettare
+in review: ogni stato ha un nome in italiano, da quanto tempo ci si trova,
+un'azione possibile, e o una barra determinata o un conto alla rovescia.
+
+---
+
+## 4 · L'aritmetica del verdetto
+
+Dal solo header GGUF, prima di scaricare un byte:
+
+```
+A = KV(n_ctx) + compute + overhead + runtime      (richiesta incomprimibile)
+R = M_avail − M_threshold − A − 256 MiB           (RAM per tenere i pesi residenti)
+D = max(0, W − R)                                 (deficit riletto da storage per token)
+```
+
+Cancelli, primo che scatta vince: spazio insufficiente · ABI non supportata ·
+`A > 0,45 × RAM` · `R ≤ 0` · già ucciso per memoria su questa configurazione.
+
+Bande: **COMODO** · **STRETTO** («gira; una app fotocamera in background può
+sfrattarlo») · **STRISCERÀ** (con i tok/s previsti **e il termine dominante** —
+banda, paginazione da storage, o contesto) · **NON GIRERÀ**.
+
+**L'inversione che trasforma un rifiuto in un consiglio**: il contesto è la
+variabile libera, quindi si calcola `n_ctx_max` e si propone quello invece di
+dire no.
+
+Il compute buffer **non ha una forma chiusa pubblicata**: si dice, e il numero
+si prende da una prova nativa a vuoto — non si inventa.
+
+`getMemoryClass()` è il **tetto sbagliato**: limita solo l'heap Dalvik, e
+llama.cpp alloca nativamente.
+
+---
+
+## 5 · Lo strato prodotto che gli otto sweep avevano saltato
+
+I due critici hanno trovato che la ricognizione era eccellente sul filo e sul
+metallo e **muta sul prodotto**. Va progettato:
+
+- **La vita del modello dopo l'installazione.** Identità = `(repo, revision,
+  file, sha256)`, registrata **sulla conversazione**, non un nome. Aggiornare =
+  installa accanto → prova → passa → cancella il vecchio, **mai in place**.
+- **`docs/feature-parity.json` ha già `models_runtime: blocked`** con clausole
+  che questo piano non soddisfa. Da riconciliare **prima** di affettare.
+- **Passare da locale a cloud a metà chat** deve dire il costo **prima**: «questa
+  chat è 61k token, questo modello ne tiene 8k».
+- **Cancellare un modello orfana le conversazioni.** Serve uno stato
+  `unavailable`, l'anteprima che **conta e nomina** le chat legate, e una chat
+  orfana che resta leggibile e non inviabile — **mai un ripiego silenzioso su un
+  altro modello**.
+- **Il modello dei provider non ha posto per «locale»**: `requiresSecret`
+  booleano va sostituito da `readiness: 'secret' | 'endpoint' | 'artifact'`.
+- **Il primo caricamento è indisegnato**, ed è dove vivono i guasti
+  interessanti: prova obbligatoria (carica → 8 token → stop naturale → scarica)
+  prima che un modello diventi selezionabile.
+- **L'esperienza offline** — il motivo per cui la funzione esiste — non ha
+  disegno. Serve un contratto OFFLINE-READY: tutto ciò che serve a caricare e far
+  girare (template, BOS/EOS, architettura, tetto di contesto, licenza) scritto in
+  un manifest **accanto al .gguf**, e **nessuna chiamata di rete** al momento
+  dell'inferenza. Provato con un test che revoca la rete a livello di sistema.
+- **Fermare una generazione locale**: `cancel({generationId})` nel contratto del
+  plugin **dalla prima riga**.
+- **Il PIN richiude il database dopo 5 minuti**: un download di 40 minuti finisce
+  dentro un database chiuso. La verità sta sul **filesystem**, il database è un
+  indice derivato ricostruito allo sblocco. E la notifica **non mette il nome del
+  modello sulla schermata di blocco**.
+- **Il telefono su cui non ci sta niente** è uno schermo vero, che dice cosa il
+  telefono **può** fare.
+- **Come si testa**: la policy di download in una classe pura senza I/O, un
+  generatore di GGUF finti da 64 KB, un server di replay con i codici registrati
+  (403 legato al range, scadenza a metà stream), e **un** test strumentato che
+  uccide il processo a metà.
+
+---
+
+## 6 · Sicurezza e licenze
+
+- **Un GGUF ostile è RCE dentro llama.cpp** — quattro CVE nominate in 14 mesi, e
+  upstream **rifiuta esplicitamente questo modello di minaccia**. Validazione
+  dell'header prima di passarlo al nativo: fattibile, verificata sui byte veri.
+- **HF regala un verdetto antimalware per file** (`securityFileStatus`): si può
+  bloccare su quello. Non è una garanzia, è un dato in più.
+- **Niente pinning del certificato**: l'host del CDN varia, una allowlist esatta
+  si rompe in produzione.
+- **Il token**: OAuth pubblico con PKCE, scope `gated-repos`. Nessuna chiave
+  nell'APK. La licenza si accetta **solo** su huggingface.co.
+- **Llama 4 non è concesso in licenza a uno sviluppatore domiciliato in UE.**
+- **AI Act, art. 50, dal 2 agosto 2026**: «pesi aperti in locale» **non è una
+  difesa**.
+- La policy contenuti IA del Play Store pretende una segnalazione in-app che
+  **collide** con la direttiva «niente censura» — una ragione in più per la
+  direzione GitHub/F-Droid.
+
+---
+
+## 7 · Il one-up vero
+
+Su nove app esaminate a livello di codice (PocketPal, SmolChat, ChatterUI, AI
+Edge Gallery, MNN Chat, Locally, LLM Hub, Cactus, OfflineLLM), **nessuna**:
+
+1. **verifica un hash crittografico del file finito** — lo stato dell'arte è
+   controllare 4 byte magici;
+2. rifiuta di esporre un file parziale sotto il nome finale;
+3. legge lo **stato termico** — mai, in nessun punto;
+4. tiene una **riserva di spazio** (PocketPal accetta `richiesto ≤ libero`);
+5. **firma il catalogo** — nessuno verifica una firma prima di lasciare che un
+   documento di rete decida cosa gira sul telefono;
+6. **rimisura e ri-ordina** in base a ciò che questo telefono ha davvero fatto;
+7. **spiega** perché un modello è consigliato e un altro no;
+8. espone la funzione come **tool chiamabile dalla chat** — nessuna seconda porta
+   in tutta la categoria;
+9. **fissa una revisione e la verifica**;
+10. valida l'header GGUF prima del nativo, nonostante le CVE;
+11. gestisce deliberatamente il tetto di 6 ore di Android 15;
+12. ricade su un altro registro quando uno è irraggiungibile;
+13. riconcilia «quanto occupa TALOS» con quello che dicono le Impostazioni.
+
+Sono tredici righe, tutte alla nostra portata, e **la prima da sola** è
+sufficiente: un modello troncato non crasha, produce spazzatura plausibile.
+
+---
+
+## 8 · Le fette
+
+1. **Client HF puro** — ricerca, `paths-info`, parsing GGUF via `Range`.
+   Nessuna rete nei test, nessun permesso.
+2. **L'aritmetica del verdetto** — pura, testabile, è il §4.
+3. **La policy di download** — classe pura senza I/O: quale range, quando
+   ri-risolvere, come leggere un 403 contro un 416, quando smettere.
+4. **Il plugin nativo** — UIDT + fallback, con i test di cui al §5.
+5. **La stazione** — il §3.
+6. **Il primo caricamento e il contratto offline** — il §5.
+7. **La seconda porta** — dopo la migrazione dei livelli di rischio, o con un
+   `always_ask` per tool; **mai** `allow_for_session` per 4 GB.
+
+Le fette 1, 2 e 3 non hanno bisogno di niente: né chiavi, né plugin, né rete.
+
+---
+
+## 9 · Decisioni che servono all'owner
+
+1. **Rollback di un aggiornamento**: tenere il file vecchio (4 GB di disco) o
+   riscaricarlo (4 GB di dati)? Entrambe oneste; non decidere no.
+2. **Primo avvio senza chiavi**: offrire un modello piccolo come percorso
+   senza-chiave? Se sì, solo Wi-Fi, dimensione dichiarata, saltabile in un tocco.
+3. **Generazione locale in background**: continua con una notifica, o si mette in
+   pausa al token corrente?
+4. **Llama 4**: escluderlo dal catalogo per la licenza UE, o mostrarlo con
+   l'avvertenza?
