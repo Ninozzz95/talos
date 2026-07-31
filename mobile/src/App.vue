@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
@@ -227,6 +228,29 @@ function sidebarNewChat(): void {
  * F-14. The same act as New chat with one thing taken away, so it lives beside
  * it rather than in a settings screen you have to remember to switch back.
  */
+/** The switch reads the other way inside incognito, so the shells need to know. */
+const activeChatIsIncognito = computed(
+    () => talosIsEphemeralSessionId(chatController.chat.activeSession.value?.id ?? ''),
+)
+
+/**
+ * Owner 2026-07-31: the button you press must change into its opposite. Leaving
+ * incognito opens an ORDINARY chat rather than converting the one you are in —
+ * the same single rule in both directions, so there is never a question about
+ * what happened to what you already wrote.
+ */
+function sidebarNormalMode(): void {
+    sidebarOpen.value = false
+    lifecycleAction(t('chat.normalMode'), async () => {
+        const leaving = chatController.chat.activeSession.value?.id ?? null
+        await chatController.sessionLifecycle.newSession()
+        if (leaving && leaving !== chatController.chat.activeSession.value?.id) {
+            await chatController.deleteSession(leaving).catch(() => undefined)
+        }
+        if (isStation.value) await navigate('chat')
+    })
+}
+
 function sidebarTemporaryChat(): void {
     sidebarOpen.value = false
     lifecycleAction(t('chat.temporaryChat'), async () => {
@@ -731,6 +755,8 @@ onBeforeUnmount(async () => {
                 :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
                 @new-chat="sidebarNewChat"
                 @temporary-chat="sidebarTemporaryChat"
+                @normal-mode="sidebarNormalMode"
+                :incognito="activeChatIsIncognito"
                 @select="sidebarSelect"
                 @rename="sidebarRename"
                 :cleanup-plan-for="cleanupPlanFor"
@@ -765,6 +791,8 @@ onBeforeUnmount(async () => {
                         @open-menu="sidebarOpen = true"
                         @new-chat="sidebarNewChat"
                 @temporary-chat="sidebarTemporaryChat"
+                @normal-mode="sidebarNormalMode"
+                :incognito="activeChatIsIncognito"
                         @rename="immersiveRename"
                         :cleanup-plan="activeCleanupPlan"
                         :session-busy="sessionBusy"
@@ -781,6 +809,8 @@ onBeforeUnmount(async () => {
                         @open-menu="sidebarOpen = true"
                         @new-chat="sidebarNewChat"
                 @temporary-chat="sidebarTemporaryChat"
+                @normal-mode="sidebarNormalMode"
+                :incognito="activeChatIsIncognito"
                         @rename="immersiveRename"
                         :cleanup-plan="activeCleanupPlan"
                         @delete="immersiveDelete"

@@ -14,6 +14,8 @@ import TalosMobileChatOptionsMenu from '@/components/shell/TalosMobileChatOption
 // "i 3 puntini anche nell'header versione non immersive") — the SAME menu the
 // immersive chrome uses, so both shells behave identically.
 defineProps<{
+    /** The chat on screen is incognito; the menu switch reads the other way. */
+    incognito?: boolean
     title: string
     creatingSession: boolean
     /**
@@ -34,6 +36,7 @@ const emit = defineEmits<{
     openMenu: []
     newChat: []
     temporaryChat: []
+    normalMode: []
     rename: [title: string]
     delete: [{ deleteMedia: boolean }]
     export: []
@@ -90,12 +93,14 @@ const emit = defineEmits<{
              lives inside it, so the tablet-panel case just hides the whole
              menu (the panel owns those actions). -->
         <TalosMobileChatOptionsMenu
+            :incognito="incognito"
             :cleanup-plan="cleanupPlan"
             v-if="!hideMenu"
             :active-title="title"
             :busy="sessionBusy ?? creatingSession"
             @new-chat="emit('newChat')"
                 @temporary-chat="emit('temporaryChat')"
+                @normal-mode="emit('normalMode')"
             @rename="emit('rename', $event)"
             @delete="(choice) => emit('delete', choice)"
             :can-open-media="canOpenMedia"

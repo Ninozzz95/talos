@@ -9,6 +9,8 @@ import TalosMobileChatOptionsMenu from '@/components/shell/TalosMobileChatOption
 // hamburger (sidebar). RIGHT = 3-dot chat options (New / Rename / Export /
 // Delete) — shared with the classic header via TalosMobileChatOptionsMenu.
 defineProps<{
+    /** The chat on screen is incognito; the menu switch reads the other way. */
+    incognito?: boolean
     activeTitle: string
     busy: boolean
     /** F6 — tablet split view: the panel owns the hamburger, hide ours. */
@@ -23,6 +25,7 @@ const emit = defineEmits<{
     openMenu: []
     newChat: []
     temporaryChat: []
+    normalMode: []
     rename: [title: string]
     delete: [{ deleteMedia: boolean }]
     export: []
@@ -53,12 +56,14 @@ const emit = defineEmits<{
             <span v-else aria-hidden="true" />
 
             <TalosMobileChatOptionsMenu
+            :incognito="incognito"
             :cleanup-plan="cleanupPlan"
                 :active-title="activeTitle"
                 :busy="busy"
                 pill
                 @new-chat="emit('newChat')"
                 @temporary-chat="emit('temporaryChat')"
+                @normal-mode="emit('normalMode')"
                 @rename="emit('rename', $event)"
                 @delete="(choice) => emit('delete', choice)"
                 :can-open-media="canOpenMedia"
