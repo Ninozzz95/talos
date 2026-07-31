@@ -69,6 +69,47 @@ public class TalosRunService extends Service {
         return START_NOT_STICKY;
     }
 
+    /**
+     * Android 15+ gives a `dataSync` service a SIX-HOUR budget per day, and
+     * calls this when it runs out. An app that does not stop itself within a
+     * few seconds is killed with `ForegroundServiceDidNotStopInTimeException` —
+     * a crash, not a warning.
+     *
+     * This service was written before that rule and had no override at all, on
+     * a build targeting SDK 36. Found on 2026-07-31 by a review that was
+     * looking at something else entirely: the six-hour budget is SHARED, so a
+     * future model download on this path would spend it and crash the app on
+     * the way out.
+     *
+     * Stopping is the only correct answer — the budget is gone and no amount of
+     * asking gets it back. The work itself is not cancelled here: its state
+     * lives on disk and the WebView keeps running while the app is in front.
+     * What is lost is the guarantee that it survives being backgrounded, and
+     * that is exactly what the notification was claiming, so the notification
+     * goes with it rather than lying for the rest of the day.
+     */
+    @Override
+    public void onTimeout(int startId, int fgsType) {
+        stopKeeper();
+    }
+
+    /** API 34's single-argument form; kept so the behaviour is not version-shaped. */
+    @Override
+    public void onTimeout(int startId) {
+        stopKeeper();
+    }
+
+    private void stopKeeper() {
+        try {
+            // minSdk is 26, so the constant form is always available.
+            stopForeground(STOP_FOREGROUND_REMOVE);
+        } catch (Exception ignored) {
+            // Stopping must happen regardless; a failure here must not prevent
+            // stopSelf() below, which is the part that avoids the crash.
+        }
+        stopSelf();
+    }
+
     static void ensureChannel(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         final NotificationManager manager = context.getSystemService(NotificationManager.class);
