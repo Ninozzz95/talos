@@ -116,32 +116,32 @@ test('entering incognito leaves you in incognito, and stays there', async ({ pag
 })
 
 /**
- * The chat menu offers incognito from ANY chat, so this is one tap away at all
- * times. The rule that decides what is thrown away used to be written three
- * times over, and the copy behind this path checked nothing at all.
+ * Owner 2026-07-31: «la possibilità di aprire una nuova chat in incognito quando
+ * sei in una normale, dai puntini in alto a destra, deve sparire. La lasciamo
+ * esclusivamente quando si inizia una nuova chat».
+ *
+ * It always opened a NEW chat, so it was never destructive — but it read as an
+ * offer to make THIS conversation anonymous, and sat one tap away in every chat
+ * he had. Offered only where it means what it says.
  */
-test('entering incognito from a chat with content does not destroy it', async ({ page }) => {
+test('the chat menu stops offering incognito once the conversation has started', async ({ page }) => {
     await mockProvider(page)
     await configureGemini(page)
+
+    // On a chat with nothing in it, both doors are there.
+    await expect(page.getByTestId('talos-make-temporary')).toBeVisible()
+    await page.getByRole('button', { name: 'Chat options' }).click()
+    await expect(page.getByRole('menuitem', { name: 'Incognito mode', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+
     await sendMessage(page, 'Una conversazione che voglio tenere')
 
-    await chooseFromChatMenu(page, 'Incognito mode')
-    await expect(page.getByTestId('talos-temporary-chat-badge')).toBeVisible()
-
-    // Nothing was replaced, so the conversation is still there — and still the
-    // only one, because incognito never joins the history.
-    await historySettlesAt(page, 1)
-    await expect(page.getByTestId('talos-temporary-chat-badge')).toBeVisible()
-
-    // Not merely counted: reachable, with what was written in it. The reply is
-    // the proof — a row shows its title whether or not the messages survived.
-    await page.locator(MENU).click()
-    await page.locator(SIDEBAR).getByTestId('talos-sidebar-chats-entry').click()
-    const row = page.locator('[data-testid="talos-chats-row"]')
-    await expect(row).toHaveCount(1)
-    await expect(row.first()).toContainText('Una conversazione che voglio tenere')
-    await row.first().click()
-    await expect(page.getByText('Understood.', { exact: true }).first()).toBeVisible()
+    // Now neither is, and the rest of the menu is untouched.
+    await expect(page.getByTestId('talos-make-temporary')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Chat options' }).click()
+    await expect(page.getByRole('menuitem', { name: 'Incognito mode', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('menuitem', { name: 'New chat', exact: true })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Delete chat', exact: true })).toBeVisible()
 })
 
 /**
@@ -174,6 +174,9 @@ test('leaving incognito takes the incognito chat with it', async ({ page }) => {
     await configureGemini(page)
     await sendMessage(page, 'Prima conversazione')
 
+    // Incognito is reachable only from a chat with nothing in it, so that is
+    // where this starts — the same route the owner's thumb now has.
+    await chooseFromChatMenu(page, 'New chat')
     await chooseFromChatMenu(page, 'Incognito mode')
     await expect(page.getByTestId('talos-temporary-chat-badge')).toBeVisible()
     await sendMessage(page, 'Qualcosa di privato')

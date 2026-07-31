@@ -235,6 +235,16 @@ const activeChatIsIncognito = computed(
 )
 
 /**
+ * Owner 2026-07-31: «la possibilità di aprire una nuova chat in incognito
+ * quando sei in una normale, dai puntini in alto a destra, deve sparire. La
+ * lasciamo esclusivamente quando si inizia una nuova chat».
+ *
+ * The same condition the welcome pill already lives under, so the two doors
+ * appear and disappear together instead of disagreeing about when they exist.
+ */
+const activeChatIsEmpty = computed(() => chatController.chat.messages.length === 0)
+
+/**
  * Owner 2026-07-31: the button you press must change into its opposite. Leaving
  * incognito opens an ORDINARY chat rather than converting the one you are in —
  * the same single rule in both directions, so there is never a question about
@@ -756,6 +766,7 @@ onBeforeUnmount(async () => {
                 @temporary-chat="sidebarTemporaryChat"
                 @normal-mode="sidebarNormalMode"
                 :incognito="activeChatIsIncognito"
+                :can-go-incognito="activeChatIsEmpty"
                 @select="sidebarSelect"
                 @rename="sidebarRename"
                 :cleanup-plan-for="cleanupPlanFor"
@@ -792,6 +803,7 @@ onBeforeUnmount(async () => {
                 @temporary-chat="sidebarTemporaryChat"
                 @normal-mode="sidebarNormalMode"
                 :incognito="activeChatIsIncognito"
+                :can-go-incognito="activeChatIsEmpty"
                         @rename="immersiveRename"
                         :cleanup-plan="activeCleanupPlan"
                         :session-busy="sessionBusy"
@@ -810,6 +822,7 @@ onBeforeUnmount(async () => {
                 @temporary-chat="sidebarTemporaryChat"
                 @normal-mode="sidebarNormalMode"
                 :incognito="activeChatIsIncognito"
+                :can-go-incognito="activeChatIsEmpty"
                         @rename="immersiveRename"
                         :cleanup-plan="activeCleanupPlan"
                         @delete="immersiveDelete"

@@ -11,6 +11,8 @@ import TalosMobileChatOptionsMenu from '@/components/shell/TalosMobileChatOption
 defineProps<{
     /** The chat on screen is incognito; the menu switch reads the other way. */
     incognito?: boolean
+    /** The chat has nothing in it yet, so incognito may be offered (2026-07-31). */
+    canGoIncognito: boolean
     activeTitle: string
     busy: boolean
     /** F6 — tablet split view: the panel owns the hamburger, hide ours. */
@@ -57,6 +59,7 @@ const emit = defineEmits<{
 
             <TalosMobileChatOptionsMenu
             :incognito="incognito"
+            :can-go-incognito="canGoIncognito"
             :cleanup-plan="cleanupPlan"
                 :active-title="activeTitle"
                 :busy="busy"

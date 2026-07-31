@@ -16,6 +16,8 @@ import TalosMobileChatOptionsMenu from '@/components/shell/TalosMobileChatOption
 defineProps<{
     /** The chat on screen is incognito; the menu switch reads the other way. */
     incognito?: boolean
+    /** The chat has nothing in it yet, so incognito may be offered (2026-07-31). */
+    canGoIncognito: boolean
     title: string
     creatingSession: boolean
     /**
@@ -94,6 +96,7 @@ const emit = defineEmits<{
              menu (the panel owns those actions). -->
         <TalosMobileChatOptionsMenu
             :incognito="incognito"
+                :can-go-incognito="canGoIncognito"
             :cleanup-plan="cleanupPlan"
             v-if="!hideMenu"
             :active-title="title"

@@ -20,6 +20,20 @@ const props = withDefaults(defineProps<{
     /** The chat being shown is incognito, so the switch reads the other way. */
     incognito?: boolean
     /**
+     * This chat has nothing in it yet, so incognito may be offered.
+     *
+     * Owner 2026-07-31: «la possibilità di aprire una nuova chat in incognito
+     * quando sei in una normale, dai puntini in alto a destra, deve sparire. La
+     * lasciamo esclusivamente quando si inizia una nuova chat». The entry always
+     * opened a NEW chat, so it was never destructive — but it read as an offer
+     * to make THIS conversation anonymous, and sat one tap away in every chat.
+     *
+     * Required, with no default, so the compiler makes every shell answer the
+     * question. A default would let a shell forget and silently keep offering
+     * it, which is the exact defect being removed.
+     */
+    canGoIncognito: boolean
+    /**
      * False before a chat exists — sessions are created lazily, so this is the
      * state of a fresh install and of "deleted the last chat". The entry used to
      * render anyway and do nothing at all when tapped.
@@ -137,7 +151,7 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                     normale" and takes you out. Pressing it always changes what
                     it says, which is the whole of what a switch owes you.
                 -->
-                <button type="button" role="menuitem" data-testid="talos-chat-options-temporary" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; incognito ? emit('normalMode') : emit('temporaryChat')">
+                <button v-if="incognito || props.canGoIncognito" type="button" role="menuitem" data-testid="talos-chat-options-temporary" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; incognito ? emit('normalMode') : emit('temporaryChat')">
                     <component :is="incognito ? Eye : EyeOff" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
                     {{ incognito ? $t('chat.normalMode') : $t('chat.temporaryChat') }}
                 </button>
