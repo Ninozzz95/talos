@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createTalosChatSendIdentity } from '@/lib/chat/sendSnapshot'
 import { createMemoryChatRepository } from '@/repositories/memoryChatRepository'
+import { createTalosEphemeralRoutingRepository } from '@/repositories/ephemeralRoutingRepository'
+import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import {
     createChatStore,
     type ChatCompletion,
@@ -179,5 +181,58 @@ describe('durable owner-bound chat continuation', () => {
         await expect(continuation).resolves.toBe(true)
         expect(complete).toHaveBeenCalledTimes(2)
         expect(store.state.sending).toBe(false)
+    })
+})
+
+/**
+ * Found by an adversarial review, 2026-07-31, as an unverified lead — and it
+ * was real.
+ *
+ * Incognito deliberately KEEPS the create and web tools: drawing a picture and
+ * searching the web reveal nothing about you. Both are `write`/`outbound`, so
+ * the permission gate can ask, and an answer produces a checkpoint that has to
+ * be resumed.
+ *
+ * The resume resolved its owner from the DURABLE session list, and a temporary
+ * chat is never in it — by design, that absence IS the feature. So the resume
+ * failed with "session not found", `complete()` was never called, and the
+ * approval was dropped. On screen: you tap "allow", and nothing happens. The
+ * exact shape the owner has reported three times.
+ */
+describe('resuming an approval inside an incognito chat', () => {
+    it('finds the chat it is in, even though no history lists it', async () => {
+        const now = clock()
+        const makeId = ids()
+        const repository = createTalosEphemeralRoutingRepository({
+            durable: createMemoryChatRepository({ now }),
+            ephemeral: createMemoryChatRepository({ now }),
+            isEphemeral: talosIsEphemeralSessionId,
+        })
+        const complete = vi.fn<ChatCompletion<{ snapshot: string }>>(
+            async () => ({ text: 'Ecco l’immagine.' }),
+        )
+        const store = createChatStore(complete, {
+            repository, translate: talosTestT('en'), makeId, now,
+        })
+        await store.initialize()
+        const incognito = await store.createSession('Incognito', 'gemini:live', { ephemeral: true })
+
+        const resumed = await store.continueFromCheckpoint({
+            identity: createTalosChatSendIdentity({
+                sendId: 'send-incognito',
+                sessionId: incognito.id,
+                sessionTitle: incognito.title,
+                surface: incognito.surface,
+                modelProfileId: 'gemini:live',
+                acceptedAt: '2026-07-31T12:00:00.000Z',
+            }),
+            runtime: { snapshot: 'captured' },
+            checkpoint_id: 'checkpoint-incognito',
+            checkpoint: { phase: 'before_model' },
+        })
+
+        expect(resumed).toBe(true)
+        expect(complete).toHaveBeenCalledTimes(1)
+        expect(store.messages.at(-1)?.content).toBe('Ecco l’immagine.')
     })
 })
