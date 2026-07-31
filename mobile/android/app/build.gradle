@@ -43,6 +43,11 @@ dependencies {
     implementation "com.squareup.okhttp3:okhttp:5.4.0"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
+    // Test-only: the download policy is proved against the SAME case table
+    // the TypeScript side runs, and that table is JSON. Android ships a
+    // stub org.json that throws in unit tests, so the real one is needed
+    // here — and only here; nothing of this reaches the APK.
+    testImplementation "org.json:json:20240303"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
