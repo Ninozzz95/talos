@@ -1,5 +1,14 @@
 import { expect, test, type Page } from '@playwright/test'
-import { closeToolSheet } from './toolSheet'
+import { TALOS_PROVIDER_STATE } from './chatFixtures'
+
+/**
+ * The provider is configured ONCE for the whole suite (provider.setup.ts) and
+ * inherited here. Driving the Settings journey in every test cost about two
+ * minutes of the ten, and not one of these tests is about it — owner
+ * 2026-07-31: «quasi 10 minuti per e2e».
+ */
+test.use({ storageState: TALOS_PROVIDER_STATE })
+
 
 /**
  * Owner 2026-07-26: "quando cancelli una chat non ti cancella i relativi
@@ -40,22 +49,6 @@ async function mockProvider(page: Page): Promise<void> {
     })
 }
 
-async function configureGemini(page: Page): Promise<void> {
-    await page.goto('/')
-    await page.locator(MENU).click()
-    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
-    await expect(page.locator(SHEET)).toBeVisible()
-    await page.locator('[data-settings-tab="models"]').click()
-    if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') {
-        await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
-    }
-    await page.getByLabel('Google Gemini API key').fill('e2e-delete-key')
-    await page.getByLabel('Save Google Gemini key').click()
-    await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
-    await page.getByLabel('Default chat model').click()
-    await page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]').click()
-    await closeToolSheet(page)
-}
 
 async function sendMessage(page: Page, text: string): Promise<void> {
     const composer = page.getByLabel('Message TALOS')
@@ -102,7 +95,7 @@ test('the delete confirmation is never a trap, whatever the shell is doing', asy
 
 test('deleting a chat asks about its files only when it has some', async ({ page }) => {
     await mockProvider(page)
-    await configureGemini(page)
+    await page.goto('/')
     await sendMessage(page, 'Una chat senza documenti')
 
     await page.locator('[aria-label="Chat options"]').click()
@@ -118,7 +111,7 @@ test('deleting a chat asks about its files only when it has some', async ({ page
 
 test('several chats go in one pass from the selection mode', async ({ page }) => {
     await mockProvider(page)
-    await configureGemini(page)
+    await page.goto('/')
 
     await sendMessage(page, 'Prima conversazione')
     await page.locator('[aria-label="Chat options"]').click()
@@ -149,7 +142,7 @@ test('several chats go in one pass from the selection mode', async ({ page }) =>
 
 test('leaving the selection mode restores the ordinary row actions', async ({ page }) => {
     await mockProvider(page)
-    await configureGemini(page)
+    await page.goto('/')
     await sendMessage(page, 'Chat da tenere')
 
     await openChatsPage(page)

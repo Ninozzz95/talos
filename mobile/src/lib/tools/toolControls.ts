@@ -9,6 +9,7 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     library_list: true,
     library_search: true,
     library_read: true,
+    library_file_origin: true,
     notes_list: true,
     tasks_list: true,
     memory_search: true,

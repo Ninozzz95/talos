@@ -10,6 +10,34 @@ import { closeToolSheet } from './toolSheet'
  * has something in it, so a test that needs a chat in a list has to put
  * something in it — clicking "New chat" is no longer enough, and should not be.
  */
+/**
+ * Where the once-configured provider state is saved (see provider.setup.ts).
+ *
+ * It lives HERE, in a plain module, because Playwright refuses to let one test
+ * file import another — and a spec that imported the setup would be silently
+ * dropped from the run rather than told off.
+ */
+export const TALOS_PROVIDER_STATE = 'tests/e2e/.auth/provider.json'
+/** The same, on the immersive shell — `storageState` is one blob, never merged. */
+export const TALOS_PROVIDER_IMMERSIVE_STATE = 'tests/e2e/.auth/provider-immersive.json'
+
+/** The shell those journeys seed for themselves; the setup starts from it. */
+export const TALOS_IMMERSIVE_SEED = {
+    cookies: [],
+    origins: [{
+        origin: 'http://127.0.0.1:4173',
+        localStorage: [{
+            name: 'CapacitorStorage.talos.mobile.settings',
+            value: JSON.stringify({
+                defaults_v3: true,
+                presentation_v2: true,
+                shell: { immersive_header: true, composer_drawer: false },
+                onboarding: { intro_version: 2, intro_outcome: 'completed', setup_dismissed: true },
+            }),
+        }],
+    }],
+}
+
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'

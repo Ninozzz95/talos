@@ -766,6 +766,7 @@ export const TALOS_EN_MESSAGES = {
         libraryList: 'Browsing your Library',
         librarySearch: 'Searching your Library',
         libraryRead: 'Reading a document',
+        libraryFileOrigin: 'Checking where a file came from',
         notesList: 'Looking at your notes',
         tasksList: 'Looking at your tasks',
         memorySearch: 'Checking what it remembers',
@@ -789,6 +790,10 @@ export const TALOS_EN_MESSAGES = {
         libraryRead: {
             title: 'Read a Library document',
             description: 'Read the content of the selected Library file and return it to the model.',
+        },
+        libraryFileOrigin: {
+            title: 'Check where a file came from',
+            description: 'Report which model made one Library file, when, and which chat it came from.',
         },
         notesList: {
             title: 'View your notes',

@@ -1,6 +1,16 @@
 import { expect, test, type Page } from '@playwright/test'
+import { TALOS_PROVIDER_STATE } from './chatFixtures'
 import { geminiCompletionFulfill } from './completionMock'
 import { closeToolSheet } from './toolSheet'
+
+/**
+ * The provider is configured ONCE for the whole suite (provider.setup.ts) and
+ * inherited here. Driving the Settings journey in every test cost about two
+ * minutes of the ten, and not one of these tests is about it — owner
+ * 2026-07-31: «quasi 10 minuti per e2e».
+ */
+test.use({ storageState: TALOS_PROVIDER_STATE })
+
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
@@ -22,21 +32,6 @@ function firstUserText(body: GeminiRequestBody): string {
     return body.contents?.[0]?.parts?.[0]?.text ?? ''
 }
 
-async function configureGemini(page: Page): Promise<void> {
-    await page.goto('/')
-    await page.locator(MENU).click()
-    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
-    await expect(page.locator(SHEET)).toBeVisible()
-    await page.locator('[data-settings-tab="models"]').click()
-    if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
-    await page.getByLabel('Google Gemini API key').fill('e2e-enhancer-gemini-key')
-    await page.getByLabel('Save Google Gemini key').click()
-    await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
-    await page.getByLabel('Default chat model').click()
-    await page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]').click()
-    await closeToolSheet(page)
-    await expect(page.locator(SHEET)).toHaveCount(0)
-}
 
 test('uses the selected model to preview cancel insert replace and finally send', async ({ page }) => {
     const enhancementBodies: GeminiRequestBody[] = []
@@ -87,7 +82,7 @@ test('uses the selected model to preview cancel insert replace and finally send'
         ))
     })
 
-    await configureGemini(page)
+    await page.goto('/')
 
     const composer = page.getByLabel('Message TALOS')
     const original = 'Draft a concise launch note for the mobile release.'
@@ -116,6 +111,11 @@ test('uses the selected model to preview cancel insert replace and finally send'
     const replaced = `Enhanced 3: ${inserted}`
     await expect(composer).toHaveValue(replaced)
 
+    // Check-then-act, and it bit: pressing Enter before the app can send does
+    // nothing at all, and under four workers the model was sometimes still
+    // resolving. Every other spec waits for this; this one did not, which is
+    // why it was the only test that flaked when the suite went parallel.
+    await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
     await composer.press('Enter')
     await expect(page.getByText('Provider accepted the final enhanced prompt.', { exact: true })).toBeVisible()
     await expect(page.getByTestId('talos-mobile-message-list').getByText(replaced, { exact: true }))
@@ -227,7 +227,7 @@ test('preserves the draft on malformed provider output and reload', async ({ pag
         })
     })
 
-    await configureGemini(page)
+    await page.goto('/')
 
     const composer = page.getByLabel('Message TALOS')
     const draft = 'Preserve this exact draft after malformed enhancement output.'

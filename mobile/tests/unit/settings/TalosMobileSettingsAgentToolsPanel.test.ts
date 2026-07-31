@@ -7,6 +7,7 @@ const enabled = {
     library_list: true,
     library_search: true,
     library_read: true,
+    library_file_origin: true,
     notes_list: true,
     tasks_list: true,
     memory_search: true,
@@ -76,8 +77,8 @@ describe('TalosMobileSettingsAgentToolsPanel', () => {
     it('AGENT-TOOLS-07 renders every real tool with persistent accessible switches', async () => {
         const wrapper = mount(TalosMobileSettingsAgentToolsPanel)
 
-        expect(wrapper.findAll('[data-agent-tool]')).toHaveLength(13)
-        expect(wrapper.text()).toContain('12 of 13 enabled')
+        expect(wrapper.findAll('[data-agent-tool]')).toHaveLength(14)
+        expect(wrapper.text()).toContain('13 of 14 enabled')
 
         const search = wrapper.get('[data-agent-tool="library_search"]')
         const toggle = search.get('input[role="switch"]')
@@ -125,7 +126,7 @@ describe('TalosMobileSettingsAgentToolsPanel', () => {
         await flushPromises()
 
         expect((toggle.element as HTMLInputElement).checked).toBe(true)
-        expect(wrapper.text()).toContain('12 of 13 enabled')
+        expect(wrapper.text()).toContain('13 of 14 enabled')
         expect(wrapper.get('[data-testid="agent-tools-save-error"]').attributes('role')).toBe('alert')
         expect(wrapper.get('[data-testid="agent-tools-save-error"]').text())
             .toBe('Could not save Search the Library. The previous setting is still active.')

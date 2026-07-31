@@ -32,8 +32,8 @@ test('AGENT-TOOLS-09 switches and enabled count survive reload', async ({ page }
 
     const panel = page.getByTestId('talos-settings-agent-tools')
     await expect(panel).toBeVisible()
-    await expect(panel.locator('[data-agent-tool]')).toHaveCount(13)
-    await expect(panel).toContainText('12 of 13 enabled')
+    await expect(panel.locator('[data-agent-tool]')).toHaveCount(14)
+    await expect(panel).toContainText('13 of 14 enabled')
 
     // R8-D adds one dedicated, confirmation-gated policy mutation capability.
     // It is intentionally disabled by default; the twelve established tools
@@ -48,7 +48,7 @@ test('AGENT-TOOLS-09 switches and enabled count survive reload', async ({ page }
     await expect(librarySearch).toBeChecked()
     await librarySearchRow.click()
     await expect(librarySearch).not.toBeChecked()
-    await expect(panel).toContainText('11 of 13 enabled')
+    await expect(panel).toContainText('12 of 14 enabled')
 
     await page.reload()
     await page.locator('[data-settings-tab="agent_tools"]').click()
@@ -58,5 +58,5 @@ test('AGENT-TOOLS-09 switches and enabled count survive reload', async ({ page }
     await expect(reloadedPanel.locator(
         '[data-agent-tool="library_context_policy_update"] input[role="switch"]',
     )).not.toBeChecked()
-    await expect(reloadedPanel).toContainText('11 of 13 enabled')
+    await expect(reloadedPanel).toContainText('12 of 14 enabled')
 })

@@ -17,6 +17,7 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     library_list: 'Browsing your Library',
     library_search: 'Searching your Library',
     library_read: 'Reading a document',
+    library_file_origin: 'Checking where a file came from',
     notes_list: 'Looking at your notes',
     tasks_list: 'Looking at your tasks',
     memory_search: 'Checking what it remembers',
@@ -33,6 +34,7 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     library_list: 'toolActivity.libraryList',
     library_search: 'toolActivity.librarySearch',
     library_read: 'toolActivity.libraryRead',
+    library_file_origin: 'toolActivity.libraryFileOrigin',
     notes_list: 'toolActivity.notesList',
     tasks_list: 'toolActivity.tasksList',
     memory_search: 'toolActivity.memorySearch',
@@ -62,6 +64,10 @@ export const TALOS_TOOL_CONSENT_KEYS: Record<string, TalosToolConsentCopy> = {
     library_read: {
         title: 'toolConsent.libraryRead.title',
         description: 'toolConsent.libraryRead.description',
+    },
+    library_file_origin: {
+        title: 'toolConsent.libraryFileOrigin.title',
+        description: 'toolConsent.libraryFileOrigin.description',
     },
     notes_list: {
         title: 'toolConsent.notesList.title',
@@ -150,6 +156,7 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     library_list: 'library',
     library_search: 'library',
     library_read: 'library',
+    library_file_origin: 'library',
     notes_list: 'note',
     tasks_list: 'task',
     memory_search: 'memory',

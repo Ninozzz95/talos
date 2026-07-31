@@ -7,6 +7,7 @@ import TalosMobileLibraryActionsMenu from '@/components/talos/library/TalosMobil
 import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLibraryFileRow.vue'
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
 import TalosMobileImageViewer from '@/components/talos/library/TalosMobileImageViewer.vue'
+import { useTalosFileOrigin } from '@/composables/useTalosFileOrigin'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import { Button } from '@/components/ui/button'
 import { useTalosSourceCardIcons } from '@/composables/useTalosSourceCardIcons'
@@ -190,6 +191,16 @@ async function setContextMode(value: string): Promise<void> {
 // the focus call inside the composable was a no-op, the opener went inert, and
 // focus fell to <body> — outside the dialog, for keyboard and TalkBack users.
 const { trapTab } = useTalosModalSurface(root)
+/**
+ * Owner decision P-07. The same builder the Library uses: the viewer is already
+ * written once so its controls cannot drift, and this is the other half — the
+ * CARD cannot say one thing here and something else there.
+ *
+ * No "open the chat it came from" on this surface: you are already in a chat,
+ * and a link that sometimes points at the chat you are looking at is worse than
+ * no link at all.
+ */
+const { cardFor } = useTalosFileOrigin()
 // Back closes the viewer first, then the gallery — one gesture per layer, the
 // way the Library's own lightbox behaves.
 useTalosOverlayBack(() => { if (opened.value) closeFile(); else emit('close') })
@@ -801,6 +812,7 @@ const mediaScope = computed(() => {
                         can-delete
                         :busy="attachBusy"
                         :saving="savingFileId !== null"
+                        :origin="cardFor(opened)"
                         @attach="attachOpened(opened)"
                         @save="saveFileToDevice(opened)"
                         @delete="requestDeleteOpened"

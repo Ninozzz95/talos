@@ -19,12 +19,15 @@ import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSaved
 import TalosMobileLibraryFileTile from '@/components/talos/library/TalosMobileLibraryFileTile.vue'
 import TalosMobileLibrarySectionHeading from '@/components/talos/library/TalosMobileLibrarySectionHeading.vue'
 import TalosMobileImageViewer from '@/components/talos/library/TalosMobileImageViewer.vue'
+import TalosMobileFileOriginCard from '@/components/talos/library/TalosMobileFileOriginCard.vue'
+import { useTalosFileOrigin } from '@/composables/useTalosFileOrigin'
 import TalosMobileSavedLinkTile from '@/components/talos/library/TalosMobileSavedLinkTile.vue'
 import { groupTalosLibraryByChat, type TalosLibrarySort } from '@/lib/libraryGrouping'
 import { useTalosSourceCardIcons } from '@/composables/useTalosSourceCardIcons'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 import { talosNeedsExternalOpen } from '@/lib/documents/openable'
 import { useChatController } from '@/stores/chatController'
+import { useRouter } from 'vue-router'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import {
@@ -43,6 +46,7 @@ import { useTalosMobileToasts } from '@/stores/toasts'
 import type { TalosLibraryContextMode } from '@/lib/chat/libraryPolicy'
 
 const controller = useChatController()
+const router = useRouter()
 const { t, locale } = useTalosI18n()
 const settings = useSettingsStore()
 const toasts = useTalosMobileToasts()
@@ -119,6 +123,27 @@ const filteredFiles = computed(() => {
         origin: 'all',
     })
 })
+
+/**
+ * Owner decision P-07: where a file came from, on the file itself. Built by the
+ * shared composable so the Library and a chat's gallery cannot say different
+ * things about the same file.
+ */
+const { cardFor } = useTalosFileOrigin()
+const lightboxOrigin = computed(() => cardFor(lightboxFile.value))
+const docOrigin = computed(() => cardFor(docView.value))
+
+/**
+ * A file outlives the chat that made it, so the card offers the way back — and
+ * the way back has to actually arrive somewhere. It selects the chat AND leaves
+ * the Library, because selecting alone would look like nothing happened.
+ */
+async function openOriginChat(sessionId: string): Promise<void> {
+    lightboxFile.value = null
+    docView.value = null
+    await controller.sessionLifecycle.selectSession(sessionId)
+    await router.push({ name: 'chat' })
+}
 
 // Provenance: resolve the origin chat title for grouping + the per-file subtitle.
 function originChat(file: TalosLocalVaultFile): string | null {
@@ -922,6 +947,9 @@ onMounted(async () => {
             :busy="actionBusy"
             :saving="savingFileId !== null"
             :save-test-id="`talos-library-save-overlay-${lightboxFile.id}`"
+            :origin="lightboxOrigin"
+            can-open-origin-chat
+            @open-origin-chat="openOriginChat"
             @attach="attachFromOverlay(lightboxFile)"
             @save="saveFileToDevice(lightboxFile)"
             @delete="deleteFromLightbox"
@@ -950,6 +978,13 @@ onMounted(async () => {
                 <button type="button" :aria-label="t('common.close')" class="talos-pressable flex size-12 items-center justify-center rounded-full" @click="docView = null"><X class="size-5" aria-hidden="true" /></button>
             </header>
             <div class="min-h-0 flex-1 overflow-auto p-4">
+                <TalosMobileFileOriginCard
+                    v-if="docOrigin"
+                    :card="docOrigin"
+                    can-open-chat
+                    class="mb-3"
+                    @open-chat="openOriginChat"
+                />
                 <pre v-if="docText" class="whitespace-pre-wrap break-words font-sans text-sm leading-6">{{ docText }}</pre>
                 <p v-else class="text-sm text-[var(--talos-muted)]">{{ t('library.noPreviewText') }}</p>
             </div>

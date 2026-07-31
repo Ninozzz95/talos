@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Download, Paperclip, Trash2, X } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
+import TalosMobileFileOriginCard from '@/components/talos/library/TalosMobileFileOriginCard.vue'
+import type { TalosFileOriginCard } from '@/lib/files/originCard'
 
 /**
  * Looking at one image, full screen — everywhere.
@@ -31,6 +33,16 @@ const props = withDefaults(defineProps<{
     saving?: boolean
     testId?: string
     saveTestId?: string
+    /**
+     * Where this picture came from (owner decision P-07, famiglia B).
+     *
+     * It lives HERE rather than in each caller for the same reason the buttons
+     * do: the Library and a chat's own gallery are the same viewer, and a card
+     * added to one and forgotten in the other is exactly the drift the owner
+     * has already complained about twice.
+     */
+    origin?: TalosFileOriginCard | null
+    canOpenOriginChat?: boolean
 }>(), {
     canAttach: false,
     canSave: false,
@@ -39,6 +51,8 @@ const props = withDefaults(defineProps<{
     saving: false,
     testId: 'talos-library-lightbox',
     saveTestId: undefined,
+    origin: null,
+    canOpenOriginChat: false,
 })
 
 const emit = defineEmits<{
@@ -46,6 +60,7 @@ const emit = defineEmits<{
     save: []
     delete: []
     close: []
+    openOriginChat: [sessionId: string]
 }>()
 
 const { t } = useTalosI18n()
@@ -99,6 +114,15 @@ const { t } = useTalosI18n()
         <!-- Tapping the picture closes it, the way every gallery on a phone does. -->
         <div class="flex min-h-0 flex-1 items-center justify-center p-4" @click="emit('close')">
             <img :src="src" :alt="t('library.previewAlt')" class="max-h-full max-w-full object-contain">
+        </div>
+        <!-- Under the picture, never over it: a photograph is what you came for. -->
+        <div v-if="props.origin" class="px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <TalosMobileFileOriginCard
+                :card="props.origin"
+                :can-open-chat="props.canOpenOriginChat"
+                on-dark
+                @open-chat="(sessionId) => emit('openOriginChat', sessionId)"
+            />
         </div>
     </div>
 </template>

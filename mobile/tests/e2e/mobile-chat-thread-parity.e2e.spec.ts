@@ -1,6 +1,15 @@
 import { expect, test, type Page } from '@playwright/test'
+import { TALOS_PROVIDER_STATE } from './chatFixtures'
 import { geminiCompletionFulfill } from './completionMock'
-import { closeToolSheet } from './toolSheet'
+
+/**
+ * The provider is configured ONCE for the whole suite (provider.setup.ts) and
+ * inherited here. Driving the Settings journey in every test cost about two
+ * minutes of the ten, and not one of these tests is about it — owner
+ * 2026-07-31: «quasi 10 minuti per e2e».
+ */
+test.use({ storageState: TALOS_PROVIDER_STATE })
+
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
@@ -34,21 +43,6 @@ function geminiResponse(text: string) {
     }
 }
 
-async function configureGemini(page: Page): Promise<void> {
-    await page.goto('/')
-    await page.locator(MENU).click()
-    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
-    await expect(page.locator(SHEET)).toBeVisible()
-    await page.locator('[data-settings-tab="models"]').click()
-    if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
-    await page.getByLabel('Google Gemini API key').fill('e2e-thread-parity-key')
-    await page.getByLabel('Save Google Gemini key').click()
-    await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
-    await page.getByLabel('Default chat model').click()
-    await page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]').click()
-    await closeToolSheet(page)
-    await expect(page.locator(SHEET)).toHaveCount(0)
-}
 
 async function send(page: Page, prompt: string): Promise<void> {
     const composer = page.getByLabel('Message TALOS')
@@ -121,7 +115,7 @@ test('renders and operates a durable safe thread through the final mobile UI', a
         ))
     })
 
-    await configureGemini(page)
+    await page.goto('/')
     await send(page, initialPrompt)
 
     const firstAssistant = page.locator('article[data-message-kind="assistant"]').first()
