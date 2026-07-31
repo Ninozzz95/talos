@@ -292,13 +292,46 @@ Le fette 1, 2 e 3 non hanno bisogno di niente: né chiavi, né plugin, né rete.
 
 ---
 
-## 9 · Decisioni che servono all'owner
+## 9 · Decisioni prese dall'owner (2026-07-31)
 
-1. **Rollback di un aggiornamento**: tenere il file vecchio (4 GB di disco) o
-   riscaricarlo (4 GB di dati)? Entrambe oneste; non decidere no.
-2. **Primo avvio senza chiavi**: offrire un modello piccolo come percorso
-   senza-chiave? Se sì, solo Wi-Fi, dimensione dichiarata, saltabile in un tocco.
-3. **Generazione locale in background**: continua con una notifica, o si mette in
-   pausa al token corrente?
-4. **Llama 4**: escluderlo dal catalogo per la licenza UE, o mostrarlo con
-   l'avvertenza?
+**1 · Rollback di un aggiornamento — tieni il vecchio, poi chiedi.**
+Il file precedente resta finché il nuovo non ha risposto bene alcune volte; poi
+si propone di liberarlo **con il numero in chiaro** («il modello vecchio occupa
+4,07 GB — lo libero?»). Mai accumulare in silenzio, mai cancellare in silenzio.
+
+**2 · Primo avvio senza chiavi — offrire un modello piccolo, mai automatico.**
+Un tocco per saltare, dimensione dichiarata prima di iniziare, **solo Wi-Fi**.
+È l'unico momento in cui TALOS può dire «questa app è tua e basta».
+
+**3 · Generazione locale in background — continua, con la notifica.**
+Una risposta congelata a metà frase si legge come un guasto. Due paletti: si
+ferma da sola quando il telefono è troppo caldo, e resta un'impostazione
+spegnibile. **Aggiunta dell'owner**: la notifica deve avere la **barra di
+avanzamento**, «come fanno le app serie».
+→ e da qui nasce un lavoro a sé: **il sistema di notifiche va rivisto e superato
+sotto ogni aspetto, DOPO Hugging Face** (§10).
+
+**4 · Llama 4 — fuori dal catalogo, non bloccato.**
+Non lo consigliamo in un paese dove non è licenziato: è responsabilità
+editoriale nostra. Ma non lo blocchiamo se lo cerchi tu su Hugging Face, con la
+nota sulla licenza in chiaro. *Quello che consigliamo* e *quello che
+permettiamo* sono due cose diverse.
+
+---
+
+## 10 · In coda dopo questa fase: il sistema di notifiche
+
+Owner 2026-07-31, insieme alla decisione 3: «da rivedere il sistema di
+notifiche, dobbiamo one-upparlo da tutti i punti di vista, dopo HF».
+
+Non è una rifinitura del download: è **tutta la superficie notifiche dell'app**.
+Oggi ne esiste una sola, `TalosRunService`, senza barra di avanzamento, senza
+azioni, senza raggruppamento, con le stringhe in inglese cablate nel nativo e
+irraggiungibili dal bundle di traduzione.
+
+Da guardare quando si apre, con la stessa ricerca-e-one-up delle altre fasi:
+avanzamento determinato, azioni inline (pausa, annulla, apri), canali separati
+per genere di lavoro, raggruppamento quando i lavori sono più d'uno, **cosa
+appare su una schermata di blocco in un'app protetta da PIN**, localizzazione di
+una notifica pubblicata dopo la morte del processo, e il silenzio come
+impostazione seria e non come ripiego.
