@@ -300,3 +300,30 @@ chiudiamo ogni dubbio prima di andare avanti e memorizzale fisicamente».
 Le domande e le risposte vivono in
 `docs/superpowers/decisions/2026-07-30-phase-questions-and-answers.md`, una riga
 per decisione, scritta **quando la risposta arriva** e mai riassunta a memoria.
+
+---
+
+## MODIFICA D'ORDINE — owner 2026-07-31 (vincolante, sostituisce la scaletta sopra)
+
+L'owner, testuale: «il blocco C va rimandato a quando faremo la piattaforma
+agentica cioè sostanzialmente la nostra versione di Codex o Claude Code; invece
+la fase subito successiva alla fase B che stai facendo adesso sarà lo
+scaricamento dei modelli in locale da Hugging Face — questa deve essere
+un'altra priorità assoluta».
+
+Quindi:
+
+1. **B — libretto d'origine dei file** ← in corso
+2. **MODELLI LOCALI — scaricamento da Hugging Face** ← priorità assoluta, subito dopo B
+3. …il resto della scaletta invariato
+4. **C — tool, Termux, Shizuku, terminale bash** → NON è più una fase a sé:
+   viaggia con **I = K**, la piattaforma agentica (la nostra versione di Codex /
+   Claude Code). Ha senso: il terminale e l'accesso al dispositivo sono ciò che
+   quella piattaforma usa, e costruirli prima significherebbe costruirli senza
+   il consumatore che ne definisce la forma.
+
+Il centro modelli locali ha già la sua specifica congelata (M1-M8b,
+`talos-model-catalogue-spec` in memoria): motore nativo llama.cpp + WebGPU
+arbitrati dal benchmark, scoperta hardware viva, catalogo remoto firmato. Lo
+scaricamento da Hugging Face è la porta d'ingresso di quel centro, non un pezzo
+nuovo.
