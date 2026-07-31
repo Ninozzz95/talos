@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, it, expect, beforeEach } from 'vitest'
 import { parseTalosMobileDesignTokens } from '@talos-mobile/design-tokens'
 import { applyTalosMobileDesignTokens } from '@/theme/applyDesignTokens'

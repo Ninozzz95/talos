@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { TALOS_DEFAULT_MOBILE_BROWSER_PREFERENCES } from '@/lib/browser/browserContracts'

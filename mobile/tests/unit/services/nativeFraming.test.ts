@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Controllable platform + plugin spies. We test the REAL service decision logic

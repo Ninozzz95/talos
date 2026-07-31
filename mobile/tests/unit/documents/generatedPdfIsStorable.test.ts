@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest'
 import { generateTalosDocument } from '@/lib/documents/documentGenerator'
 import { analyzeTalosMobileAttachment } from '@/lib/chat/attachmentAnalysis'
