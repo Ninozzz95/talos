@@ -33,6 +33,7 @@ defineProps<{
 const emit = defineEmits<{
     openMenu: []
     newChat: []
+    temporaryChat: []
     rename: [title: string]
     delete: [{ deleteMedia: boolean }]
     export: []
@@ -94,6 +95,7 @@ const emit = defineEmits<{
             :active-title="title"
             :busy="sessionBusy ?? creatingSession"
             @new-chat="emit('newChat')"
+                @temporary-chat="emit('temporaryChat')"
             @rename="emit('rename', $event)"
             @delete="(choice) => emit('delete', choice)"
             :can-open-media="canOpenMedia"

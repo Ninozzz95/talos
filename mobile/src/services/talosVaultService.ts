@@ -3,6 +3,7 @@ import type {
     TalosLocalFileAuthorityGrant,
     TalosLocalVaultFile,
 } from '@/repositories/chatRepository'
+import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import type { TalosMobileInputPart } from '@/lib/chat/attachmentContracts'
 import type {
     TalosAttachmentAnalysisClient,
@@ -10,6 +11,15 @@ import type {
 import { talosLogDeviceIssue } from '@/lib/talosDeviceLog'
 import type { TalosAttachmentFileStore } from '@/services/attachmentFileStore'
 import type { TalosPickedFile } from '@/services/nativeFilePicker'
+
+/** What only the caller knows about a file's origin (famiglia B). */
+export interface TalosProvenanceInput {
+    model?: string | null
+    provider?: string | null
+    modelVersion?: string | null
+    promptMessageId?: string | null
+    toolName?: string | null
+}
 
 export interface TalosVaultTrayItem {
     file: TalosLocalVaultFile
@@ -168,6 +178,15 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
          */
         sourceUrl: string | null = null,
         sourceLinks: readonly TalosGeneratedSourceLink[] = [],
+        /**
+         * Famiglia B: what the CALLER knows and this function cannot — which
+         * model made it, and which message carried the prompt.
+         *
+         * One optional bag rather than four more positional parameters: the
+         * knowledge lives in the chat controller and only there, and threading
+         * it through every layer would make every layer know about models.
+         */
+        provenance: TalosProvenanceInput = {},
     ): Promise<TalosVaultTrayItem> {
         const fileId = idFactory()
         await options.repository.createVaultFile({
@@ -187,6 +206,22 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
         // Held outside the try: the degraded path below still has to fingerprint
         // exactly the bytes that were written.
         let copiedBytes: Uint8Array | null = null
+        /**
+         * Owner 2026-07-31: «spegnere il libretto in modalità incognito, e tutto
+         * quello che creeremo in futuro che potrà identificare la persona».
+         *
+         * A file OUTLIVES the chat that made it — it is kept in the Library on
+         * purpose. So a file made in a temporary chat must not carry that chat
+         * with it: the session id would be a thread back to a conversation the
+         * user was promised had vanished, and a record would point at a prompt
+         * that no longer exists.
+         *
+         * The `origin_session_id` line is OLDER than this feature and was
+         * leaking the same way. Closed here too, rather than left as the tidy
+         * version's blind spot.
+         */
+        const anonymous = originSessionId !== null && talosIsEphemeralSessionId(originSessionId)
+        const keptSessionId = anonymous ? null : originSessionId
         try {
             const copy = await options.fileStore.copyToPrivate(pickedFile, fileId)
             privateUri = copy.privateUri
@@ -204,7 +239,28 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                 failure_code: null,
                 metadata: {
                     extension: analysis.extension, page_count: analysis.pageCount,
-                    origin, origin_session_id: originSessionId, kind,
+                    origin, origin_session_id: keptSessionId, kind,
+                    // Famiglia B. The typed record lives beside the loose keys
+                    // rather than replacing them: the old ones are read by code
+                    // written before this existed, and breaking them to be tidy
+                    // would be a migration nobody asked for.
+                    // No record at all when anonymous: a half-filled one
+                    // still says "a model made this, in a session", and the
+                    // whole point is that nothing traces back.
+                    ...(anonymous ? {} : { provenance: {
+                        schema: 1 as const,
+                        origin: sourceUrl ? 'downloaded' : origin,
+                        createdAt: options.now?.() ?? new Date().toISOString(),
+                        model: provenance.model ?? null,
+                        provider: provenance.provider ?? null,
+                        modelVersion: provenance.modelVersion ?? null,
+                        originSessionId,
+                        promptMessageId: provenance.promptMessageId ?? null,
+                        toolName: provenance.toolName ?? null,
+                        sourceUrl,
+                        perceptualHash: null,
+                        seal: null,
+                    } }),
                     ...(sourceUrl ? { source_url: sourceUrl } : {}),
                     ...(sourceLinks.length
                         ? { source_links: sourceLinks.map((link) => ({ ...link })) }

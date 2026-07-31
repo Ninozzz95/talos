@@ -56,6 +56,7 @@ import ChatScreen from '@/screens/ChatScreen.vue'
 interface FakeMessage { id: string; role: 'user' | 'assistant' | 'system'; content: string; created_at: string; state: string; model_profile_id?: string | null; run_id?: string | null; metadata?: Record<string, unknown> }
 
 let registered: { newSession?: (options?: unknown) => Promise<void> } | null = null
+let sessionCounter = 0
 
 function makeController(messages: FakeMessage[] = []) {
     const sessions = reactive<Array<{ id: string; title: string; metadata?: Record<string, unknown> }>>([])
@@ -139,7 +140,19 @@ function makeController(messages: FakeMessage[] = []) {
         setThinking: vi.fn(),
         setBrowseMode,
         init: vi.fn().mockResolvedValue(undefined),
-        newSession: vi.fn().mockResolvedValue(undefined),
+        /**
+         * Owner 2026-07-31: pressing the two mode buttons left one empty chat
+         * behind per press. A fake that resolves and does nothing cannot show
+         * that — so these MODEL the store: creating swaps the active session
+         * and appends it, deleting removes it. The test below then counts what
+         * is LEFT, which is the thing the owner actually saw.
+         */
+        newSession: vi.fn(async (options?: { ephemeral?: boolean }) => {
+            const id = `${options?.ephemeral ? 'tmp-' : ''}made-${++sessionCounter}`
+            const made = { id, title: 'Nuova chat' }
+            chatState.sessions.push(made)
+            chatState.activeSession.value = made
+        }),
         // R2-7: ChatScreen registers its orchestrator on mount.
         /**
          * Owner 2026-07-31: this fake is why "Rendila temporanea" shipped broken
@@ -169,7 +182,10 @@ function makeController(messages: FakeMessage[] = []) {
         },
         selectSession: vi.fn().mockResolvedValue(undefined),
         renameSession: vi.fn().mockResolvedValue(undefined),
-        deleteSession: vi.fn().mockResolvedValue(undefined),
+        deleteSession: vi.fn(async (id: string) => {
+            const at = chatState.sessions.findIndex((session) => session.id === id)
+            if (at >= 0) chatState.sessions.splice(at, 1)
+        }),
         resendMessage: vi.fn().mockResolvedValue(undefined),
         retryAssistantMessage: vi.fn().mockResolvedValue(undefined),
         refreshConfiguredProviders: vi.fn().mockResolvedValue(undefined),
@@ -556,42 +572,40 @@ describe('ChatScreen (functional, local-first)', () => {
 
         await wrapper.get('[data-testid="talos-make-permanent"]').trigger('click')
 
-        expect(controller.sessionLifecycle.newSession).toHaveBeenCalledWith()
+        expect(controller.sessionLifecycle.newSession).toHaveBeenCalledWith(undefined)
     })
 
     /**
-     * The offer had to reach every New chat button. A menu on New chat would
-     * have taxed the most frequent action in the app with an extra tap; an
-     * empty ordinary chat is where every one of those buttons lands, and the
-     * only moment when converting costs nothing.
+     * Owner 2026-07-31: «una chat avviata già in modo non temporaneo NON PUÒ
+     * essere modificata in chat temporanea, quindi rendilo impossibile e fai
+     * sparire anche i relativi tasti».
+     *
+     * So the offer is gone, and this asserts its ABSENCE — including in the one
+     * state where it used to appear, an empty ordinary chat. There is one door
+     * into incognito now, the chat menu, and it always opens a NEW chat rather
+     * than converting an old one.
      */
-    it('offers the temporary mode in any empty ordinary chat', async () => {
-        const controller = makeController()
-        controller.chat.activeSession.value = { id: 'chat-1', title: 'Nuova chat' }
-        mockState.controller = controller
-        const wrapper = mount(ChatScreen, { attachTo: document.body })
-        await flushPromises()
+    it('never offers to turn an ordinary chat temporary', async () => {
+        for (const messages of [[], [
+            { id: 'user-1', role: 'user', content: 'ciao', created_at: '', state: 'persisted' },
+        ]]) {
+            const controller = makeController(messages as never)
+            controller.chat.activeSession.value = { id: 'chat-1', title: 'Normale' }
+            mockState.controller = controller
+            const wrapper = mount(ChatScreen, { attachTo: document.body })
+            await flushPromises()
 
-        await wrapper.get('[data-testid="talos-make-temporary"]').trigger('click')
-
-        /**
-         * Owner 2026-07-31, after this shipped broken TWICE: assert the OUTCOME,
-         * not the call.
-         *
-         * The previous version of this test mocked the controller and checked
-         * that `newSession` was called with `{ ephemeral: true }` — which it
-         * was, and the feature was still broken, because the orchestrator sits
-         * BETWEEN the screen and the controller and declared no parameters. The
-         * option was dropped one frame after being chosen, and a test looking at
-         * the call could never see it.
-         *
-         * So this goes through the real orchestrator the screen registers, and
-         * asks what the controller was actually asked to do at the far end.
-         */
-        expect(controller.newSession).toHaveBeenCalledWith({ ephemeral: true })
+            expect(wrapper.find('[data-testid="talos-make-temporary"]').exists()).toBe(false)
+        }
     })
 
-    it('carries the ordinary case through the same path, so the guard is not vacuous', async () => {
+    /**
+     * Owner 2026-07-30: the offer had no way back. A switch you can only flip
+     * one way is a trap — you try the mode to see what it is and cannot undo
+     * it. Same rule as its twin: only while the chat is empty, because that is
+     * the only moment when leaving costs nothing.
+     */
+    it('offers the way back out of a temporary chat', async () => {
         const controller = makeController()
         controller.chat.activeSession.value = { id: 'tmp-abc', title: 'Temporanea' }
         mockState.controller = controller
@@ -600,7 +614,31 @@ describe('ChatScreen (functional, local-first)', () => {
 
         await wrapper.get('[data-testid="talos-make-permanent"]').trigger('click')
 
-        expect(controller.newSession).toHaveBeenCalledWith(undefined)
+        expect(controller.sessionLifecycle.newSession).toHaveBeenCalledWith(undefined)
+    })
+
+    /**
+     * Owner 2026-07-31: «una chat avviata già in modo non temporaneo NON PUÒ
+     * essere modificata in chat temporanea, quindi rendilo impossibile e fai
+     * sparire anche i relativi tasti».
+     *
+     * So the offer is gone, and this asserts its ABSENCE — including in the one
+     * state where it used to appear, an empty ordinary chat. There is one door
+     * into incognito now, the chat menu, and it always opens a NEW chat rather
+     * than converting an old one.
+     */
+    it('never offers to turn an ordinary chat temporary', async () => {
+        for (const messages of [[], [
+            { id: 'user-1', role: 'user', content: 'ciao', created_at: '', state: 'persisted' },
+        ]]) {
+            const controller = makeController(messages as never)
+            controller.chat.activeSession.value = { id: 'chat-1', title: 'Normale' }
+            mockState.controller = controller
+            const wrapper = mount(ChatScreen, { attachTo: document.body })
+            await flushPromises()
+
+            expect(wrapper.find('[data-testid="talos-make-temporary"]').exists()).toBe(false)
+        }
     })
 
     it('withdraws the offer once the chat has something in it', async () => {

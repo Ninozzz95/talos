@@ -451,7 +451,6 @@ export const TALOS_EN_MESSAGES = {
         temporaryWelcome: 'Nobody sees this one',
         temporaryWelcomeSub: 'Not written down, not remembered, gone when you leave.',
         makePermanent: 'Keep this one after all',
-        makeTemporary: 'Make this temporary',
         temporaryChatProviderNotice: 'Your provider still receives it and keeps it under its own rules.',
         chatOptions: 'Chat options',
         addToChat: 'Add to chat',

@@ -109,9 +109,35 @@ const isTemporaryChat = computed(() => talosIsEphemeralSessionId(activeSessionId
  * a session that already exists. The chat being left behind is empty, so
  * nothing is lost — which is exactly why the offer only appears while it is.
  */
-async function makeTemporary(): Promise<void> {
-    await controller.sessionLifecycle.newSession({ ephemeral: true })
+/**
+ * Bound straight to a click, so it must never reject: an unhandled rejection in
+ * an event handler is a Vue warning in development and nothing at all in
+ * production — the user taps, something fails, and the app says so to no one.
+ * A failure here becomes the same visible error every other action uses.
+ */
+async function switchMode(ephemeral: boolean): Promise<void> {
+    try {
+        await switchModeOrThrow(ephemeral)
+    } catch (cause) {
+        // The same surface every other failed session action already uses.
+        toasts.push({ message: cause instanceof Error ? cause.message : String(cause) })
+    }
 }
+
+async function switchModeOrThrow(ephemeral: boolean): Promise<void> {
+    const leaving = activeSessionId.value
+    await controller.sessionLifecycle.newSession(ephemeral ? { ephemeral: true } : undefined)
+    // The chat being left is empty — that is the only condition under which
+    // either button is offered — so it is REPLACED, not abandoned. Leaving it
+    // behind littered the list with a blank chat per press, which is what the
+    // owner hit: two taps, two orphans. Deleted after the new one exists, so
+    // there is never a moment with no chat at all.
+    if (leaving && leaving !== activeSessionId.value) {
+        await controller.deleteSession(leaving).catch(() => undefined)
+    }
+}
+
+
 
 /**
  * Owner 2026-07-31: the welcome had to be ABOUT incognito, and had to be a set
@@ -123,9 +149,9 @@ const temporaryWelcome = computed(
     () => talosTemporaryWelcome(activeSessionId.value, locale.value),
 )
 
-/** The way back. Same shape, same reason it is only offered while empty. */
+/** The way back. Same shape, same replacement, same reason it is only offered while empty. */
 async function makePermanent(): Promise<void> {
-    await controller.sessionLifecycle.newSession()
+    await switchMode(false)
 }
 const libraryTurnOverride = ref<TalosLibraryTurnOverride | null>(null)
 const sessionLibraryContextPolicy = computed(() =>
@@ -779,25 +805,18 @@ onBeforeUnmount(() => {
                     </template>
 
                     <!--
-                        Owner 2026-07-30: the temporary mode had to be reachable
-                        from every New chat button, "tipo una specie di FAB".
-                        A menu on New chat would have taxed the app's most
-                        frequent action with an extra tap; this offer appears in
-                        any EMPTY ordinary chat instead — which is precisely
-                        where every New chat button lands, and precisely while
-                        converting is still free because nothing has been said.
-                        Ignore it and you already have your new chat.
+                        Owner 2026-07-31: «una chat avviata già in modo non
+                        temporaneo NON PUÒ essere modificata in chat temporanea».
+                        The offer that used to sit here is gone, and with it the
+                        only way an ordinary chat could become anonymous.
+
+                        There is one door into incognito now — the chat menu —
+                        and it always OPENS a new chat rather than converting an
+                        old one. Two doors meant two sets of rules about what
+                        happens to what you already wrote; one door means the
+                        answer is always the same: nothing, because there is
+                        nothing yet.
                     -->
-                    <button
-                        v-if="!isTemporaryChat && !composerExpanded"
-                        type="button"
-                        data-testid="talos-make-temporary"
-                        class="talos-pressable mt-5 inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)]/80 px-4 text-xs text-[var(--talos-muted)] backdrop-blur transition-colors duration-150 hover:text-[var(--talos-text)]"
-                        @click="makeTemporary"
-                    >
-                        <EyeOff class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                        {{ t('chat.makeTemporary') }}
-                    </button>
                     <!--
                         Owner 2026-07-30: the offer had no way back. A switch you
                         can only flip one way is a trap — you try the mode to see
