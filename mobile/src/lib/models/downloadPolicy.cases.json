@@ -12,9 +12,16 @@
     "on a phone to be discovered.",
     "",
     "Byte values are written out in full rather than as expressions, because Java",
-    "and TypeScript must read exactly the same numbers."
+    "and TypeScript must read exactly the same numbers.",
+    "",
+    "`storageReserveBytes` is here for the same reason and was very nearly the",
+    "fourth divergence: the fit gate in fit.ts kept 1 GiB free, the native",
+    "transfer plan kept 256 MiB, and a user with 700 MiB of slack would have been",
+    "told the model does not fit by one half and had it downloaded by the other.",
+    "There is only ever one answer to 'will it fit', so there is only one number."
   ],
   "constants": {
+    "storageReserveBytes": 1073741824,
     "windowBytes": 134217728,
     "checkpointMs": 5000,
     "checkpointBytes": 8388608,
