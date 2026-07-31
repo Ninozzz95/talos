@@ -374,8 +374,15 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
     // Owner 2026-07-24: New Chat now lives inside the header 3-dot options menu
     // (shared with the immersive chrome), not as a standalone button.
     async function newChatFromOptions(wrapper: ReturnType<typeof mount>): Promise<void> {
-        await wrapper.get('[aria-label="Chat options"]').trigger('click')
-        await flushPromises()
+        // The entries are disabled while a session action is in flight (owner
+        // 2026-07-31: a swallowed press is indistinguishable from a broken
+        // button), so a REFUSED press leaves the menu open — and pressing the
+        // ⋮ again would close it rather than open it.
+        const opener = wrapper.get('[aria-haspopup="menu"]')
+        if (opener.attributes('aria-expanded') !== 'true') {
+            await opener.trigger('click')
+            await flushPromises()
+        }
         const item = [...document.body.querySelectorAll('[role="menuitem"]')]
             .find((el) => el.textContent?.trim() === 'New chat') as HTMLElement
         item.click()

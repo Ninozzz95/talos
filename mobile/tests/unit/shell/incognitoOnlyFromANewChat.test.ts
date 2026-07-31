@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import TalosMobileChatOptionsMenu from '@/components/shell/TalosMobileChatOptionsMenu.vue'
@@ -20,11 +21,32 @@ import { createTalosI18n } from '@/i18n'
  * The way OUT is not conditioned on anything. A switch you can only flip one
  * way is a trap, and inside incognito there is always something to leave.
  */
-async function menu(props: { incognito: boolean; canGoIncognito: boolean }) {
+async function menu(props: { incognito: boolean; canGoIncognito: boolean; busy?: boolean }) {
     return mount(TalosMobileChatOptionsMenu, {
         props: { activeTitle: 'Chat', busy: false, ...props },
         global: { plugins: [await createTalosI18n()] },
     })
+}
+
+async function openMenu(props: { incognito: boolean; canGoIncognito: boolean; busy?: boolean }) {
+    const wrapper = await menu(props)
+    await wrapper.get('[aria-haspopup="menu"]').trigger('click')
+    mounted.push(wrapper)
+    return wrapper
+}
+
+/**
+ * The confirm dialog TELEPORTS to <body> — it is the device-proven pattern,
+ * because reka-ui dialogs never appeared on the owner's WebView. So it is not
+ * inside the wrapper's tree and has to be looked for where it actually is.
+ */
+const mounted: Array<{ unmount(): void }> = []
+afterEach(() => {
+    while (mounted.length) mounted.pop()!.unmount()
+})
+
+function inBody(testId: string): HTMLElement | null {
+    return document.body.querySelector(`[data-testid="${testId}"]`)
 }
 
 async function openItems(props: { incognito: boolean; canGoIncognito: boolean }): Promise<string[]> {
@@ -53,6 +75,71 @@ describe('the incognito entry in the chat menu', () => {
         const items = await openItems({ incognito: true, canGoIncognito: false })
 
         expect(items.some((item) => item.includes('normale') || item.includes('normal'))).toBe(true)
+    })
+})
+
+/**
+ * Owner 2026-07-31, reporting it as a defect: «se inizio una conversazione in
+ * incognito e dopo vado alla modalità normale, tutta la conversazione
+ * precedente si cancella».
+ *
+ * It is not a defect — it is the promise the chat was opened on. But being
+ * right is not the same as being kind: it is irreversible, it is one tap away,
+ * and nothing warned him. So it asks, and only when there is something to lose.
+ */
+describe('leaving incognito', () => {
+    it('asks first when the incognito chat has something in it', async () => {
+        const wrapper = await openMenu({ incognito: true, canGoIncognito: false })
+
+        await wrapper.get('[data-testid="talos-chat-options-temporary"]').trigger('click')
+
+        // Nothing has happened yet — the question is on screen instead.
+        expect(wrapper.emitted('normalMode')).toBeUndefined()
+        expect(inBody('talos-leave-incognito-confirm')).not.toBeNull()
+    })
+
+    it('leaves once the question is answered', async () => {
+        const wrapper = await openMenu({ incognito: true, canGoIncognito: false })
+        await wrapper.get('[data-testid="talos-chat-options-temporary"]').trigger('click')
+
+        inBody('talos-leave-incognito-confirm')!.click()
+        await nextTick()
+
+        expect(wrapper.emitted('normalMode')).toHaveLength(1)
+    })
+
+    /** An empty incognito chat has nothing to lose, so it does not nag. */
+    it('does not ask when there is nothing in it', async () => {
+        const wrapper = await openMenu({ incognito: true, canGoIncognito: true })
+
+        await wrapper.get('[data-testid="talos-chat-options-temporary"]').trigger('click')
+
+        expect(wrapper.emitted('normalMode')).toHaveLength(1)
+        expect(inBody('talos-leave-incognito-confirm')).toBeNull()
+    })
+})
+
+/**
+ * Owner 2026-07-31: a press that lands while another session action is still
+ * running is DROPPED by the shell guard — silently, with no toast and no
+ * spinner. That is indistinguishable from a broken button, and he has reported
+ * "premo e non succede niente" three times about this area.
+ */
+describe('while a session action is running', () => {
+    it('shows the entries as unavailable instead of swallowing the press', async () => {
+        const wrapper = await openMenu({ incognito: false, canGoIncognito: true, busy: true })
+
+        for (const id of ['talos-chat-options-new', 'talos-chat-options-temporary']) {
+            expect(wrapper.get(`[data-testid="${id}"]`).attributes('disabled')).toBeDefined()
+        }
+    })
+
+    it('leaves them usable when nothing is running', async () => {
+        const wrapper = await openMenu({ incognito: false, canGoIncognito: true })
+
+        for (const id of ['talos-chat-options-new', 'talos-chat-options-temporary']) {
+            expect(wrapper.get(`[data-testid="${id}"]`).attributes('disabled')).toBeUndefined()
+        }
     })
 })
 

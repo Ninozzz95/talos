@@ -64,6 +64,28 @@ const emit = defineEmits<{
 const optionsOpen = ref(false)
 const renameOpen = ref(false)
 const deleteOpen = ref(false)
+const leaveIncognitoOpen = ref(false)
+
+/**
+ * Leaving incognito destroys the conversation, and that is the promise it was
+ * opened on — «non scritta, non ricordata, sparisce quando esci».
+ *
+ * Owner 2026-07-31 saw it happen and reported it as a defect. It is not, but
+ * being right is not the same as being kind: it is irreversible, it is one tap
+ * away, and nothing warned him. So it asks first — but only when there is
+ * something to lose. `canGoIncognito` is false exactly when the chat has
+ * something in it, so an empty incognito chat still leaves in one tap.
+ */
+function pressSwitch(): void {
+    if (props.incognito && !props.canGoIncognito) {
+        optionsOpen.value = false
+        leaveIncognitoOpen.value = true
+        return
+    }
+    optionsOpen.value = false
+    if (props.incognito) emit('normalMode')
+    else emit('temporaryChat')
+}
 const renameValue = ref('')
 const renameInput = ref<HTMLInputElement | null>(null)
 const optionsMenu = ref<HTMLElement | null>(null)
@@ -136,7 +158,13 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                 :aria-label="$t('chat.chatOptions')"
                 class="absolute right-0 top-full z-30 mt-2 w-48 origin-top-right rounded-xl border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.12)]"
             >
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('newChat')">
+                <!--
+                    Owner 2026-07-31: a press that lands while another session
+                    action is still running is DROPPED, silently, by the shell
+                    guard — no toast, no spinner, nothing. That reads exactly
+                    like "premo e non succede niente". It says so now instead.
+                -->
+                <button type="button" role="menuitem" data-testid="talos-chat-options-new" :disabled="props.busy" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)] disabled:opacity-50" @click="optionsOpen = false; emit('newChat')">
                     <MessageSquarePlus class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.newChat') }}
                 </button>
                 <!--
@@ -151,7 +179,7 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                     normale" and takes you out. Pressing it always changes what
                     it says, which is the whole of what a switch owes you.
                 -->
-                <button v-if="incognito || props.canGoIncognito" type="button" role="menuitem" data-testid="talos-chat-options-temporary" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; incognito ? emit('normalMode') : emit('temporaryChat')">
+                <button v-if="incognito || props.canGoIncognito" type="button" role="menuitem" data-testid="talos-chat-options-temporary" :disabled="props.busy" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)] disabled:opacity-50" @click="pressSwitch">
                     <component :is="incognito ? Eye : EyeOff" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
                     {{ incognito ? $t('chat.normalMode') : $t('chat.temporaryChat') }}
                 </button>
@@ -191,6 +219,27 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                 <Button type="button" variant="ghost" @click="renameOpen = false"><X class="size-4" aria-hidden="true" /> {{ $t('common.cancel') }}</Button>
                 <Button type="button" :disabled="!renameValue.trim() || props.busy" @click="submitRename">
                     <Check class="size-4" aria-hidden="true" /> {{ $t('common.save') }}
+                </Button>
+            </template>
+        </TalosMobileConfirmDialog>
+
+        <TalosMobileConfirmDialog
+            v-if="leaveIncognitoOpen"
+            :title="$t('chat.leaveIncognitoTitle')"
+            :description="$t('chat.leaveIncognitoBody')"
+            @close="leaveIncognitoOpen = false"
+        >
+            <template #footer>
+                <Button type="button" variant="ghost" @click="leaveIncognitoOpen = false">
+                    <X class="size-4" aria-hidden="true" /> {{ $t('common.cancel') }}
+                </Button>
+                <Button
+                    type="button"
+                    data-testid="talos-leave-incognito-confirm"
+                    :disabled="props.busy"
+                    @click="leaveIncognitoOpen = false; emit('normalMode')"
+                >
+                    <Eye class="size-4" aria-hidden="true" /> {{ $t('chat.leaveIncognitoConfirm') }}
                 </Button>
             </template>
         </TalosMobileConfirmDialog>
