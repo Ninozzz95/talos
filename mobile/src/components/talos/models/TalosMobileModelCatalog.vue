@@ -16,7 +16,7 @@ const busyProfile = ref<string | null>(null)
 const error = ref('')
 const displayDrafts = reactive<Record<string, string>>({})
 const providerItems = TALOS_MOBILE_PROVIDERS
-    .filter((provider) => provider.id !== 'unknown')
+    .filter((provider) => provider.id !== 'unknown' && provider.configurable)
     .map((provider) => ({ value: provider.id, label: provider.label }))
 
 watch(() => controller.profiles.value, (profiles) => {

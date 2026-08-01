@@ -197,6 +197,9 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
     return {
         provider: config.provider,
         requiresSecret: true,
+        // OpenAI, DeepSeek and OpenRouter each publish a fixed base URL, baked
+        // in below. The key is the only thing that is not already known.
+        requiresEndpoint: false,
         async listModels(credential: TalosMobileProviderCredential, transport: TalosMobileHttpTransport): Promise<TalosMobileProviderCatalog> {
             const apiKey = requireProviderApiKey(config.provider, 'list_models', credential)
             const baseUrl = compatibleBaseUrl(config, credential, 'list_models')

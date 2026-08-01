@@ -98,6 +98,10 @@ async function run(
 export const localAdapter: TalosMobileProviderAdapter = {
     provider: 'local',
     requiresSecret: false,
+    // Neither of the two things a provider is normally asked for. This pair is
+    // load-bearing: while `requiresEndpoint` was inferred from `requiresSecret`,
+    // the catalogue below was never once requested.
+    requiresEndpoint: false,
 
     /**
      * The catalogue is the disk.

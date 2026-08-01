@@ -109,6 +109,9 @@ function ollamaCompletionData(input: TalosMobileCompletionInput, stream: boolean
 export const ollamaAdapter: TalosMobileProviderAdapter = {
     provider: 'ollama',
     requiresSecret: false,
+    // The one provider that genuinely needs an address: it is a server the user
+    // runs, and nobody but them knows where it is listening.
+    requiresEndpoint: true,
     async listModels(credential, transport) {
         const endpoint = normalizeHttpEndpoint('ollama', 'list_models', credential.endpoint)
         const response = await transport.request({

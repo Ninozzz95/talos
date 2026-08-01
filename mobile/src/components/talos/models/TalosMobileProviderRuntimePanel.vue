@@ -11,7 +11,9 @@ import { useChatController } from '@/stores/chatController'
 const controller = useChatController()
 const { t } = useTalosI18n()
 const providers = TALOS_MOBILE_PROVIDERS.filter(
-    (provider): provider is typeof provider & { id: TalosMobileProviderId } => provider.id !== 'unknown',
+    // Only providers with something to configure. local is in the list so
+    // the runtime knows it exists, and has no settings row to draw.
+    (provider): provider is typeof provider & { id: TalosMobileProviderId } => provider.id !== 'unknown' && provider.configurable,
 )
 const endpointProviders = new Set<TalosMobileProviderId>(['openai', 'deepseek', 'openrouter', 'ollama'])
 const keyDrafts = reactive<Partial<Record<TalosMobileProviderId, string>>>({})
