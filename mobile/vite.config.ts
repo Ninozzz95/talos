@@ -38,6 +38,24 @@ export default defineConfig({
 
         __TALOS_BUILD_ID__: JSON.stringify(talosBuildId()),
 
+        // Vue's three production flags, which were never set — so the build was
+        // shipping support for things this app does not do.
+        //
+        // Checked before switching them off rather than assumed: of 115 `.vue`
+        // components, 106 use `<script setup>`, ZERO declare `export default {}`,
+        // and no `defineComponent` call carries `data`/`methods`/`computed`/
+        // `watch`. The Options API is not used anywhere, so compiling support
+        // for it into the entry chunk is weight for a feature nobody calls.
+        //
+        // Without these defined, the flags stay `true` in the bundled runtime
+        // and the dead branches survive tree-shaking, because a bundler cannot
+        // drop a branch on a value it has not been told.
+        __VUE_OPTIONS_API__: false,
+
+        __VUE_PROD_DEVTOOLS__: false,
+
+        __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
+
     },
 
     plugins: [
