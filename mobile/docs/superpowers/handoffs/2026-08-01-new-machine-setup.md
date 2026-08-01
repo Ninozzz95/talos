@@ -9,24 +9,26 @@ così se qualcosa non torna sai dove sei.
 
 Se salti questo capitolo, sul computer nuovo non trovi il lavoro.
 
-### 0.1 · I commit non sono sul remoto
+### 0.1 · I commit devono essere sul remoto — FATTO il 2026-08-01
 
-Al momento della scrittura: **148 commit non spinti** sul ramo
-`lane/kimi-mobile`, di cui 22 dell'ultima sessione (tutto Hugging Face, il
-motore locale, il catalogo firmato, la schermata Locale).
+Quando questo file è stato scritto c'erano **149 commit che esistevano solo su
+quel disco**: 22 dell'ultima sessione (Hugging Face, il motore locale, il
+catalogo firmato, la schermata Locale) e 127 di prima. Sono stati spinti, e il
+ramo è stato rinominato — vedi sotto.
+
+Rifallo comunque prima di spegnere, ogni volta, perché è l'unica perdita
+irreversibile possibile:
 
 ```bash
 cd C:/Users/ninox/Desktop/AVM-lanes/kimi
-git status                      # deve essere pulito
+git status                              # deve essere pulito
 git log --oneline @{u}..HEAD | wc -l    # quanti ne mancano al remoto
-git push origin lane/kimi-mobile
-```
-
-Verifica che sia andata:
-
-```bash
+git push origin lane/talos-mobile
 git log --oneline @{u}..HEAD | wc -l    # deve dire 0
 ```
+
+L'ultima riga è la verifica, e non è una formalità: il comando che riesce e il
+remoto che ha davvero i commit sono due fatti diversi.
 
 ### 0.2 · La memoria dell'assistente NON è nel repository
 
@@ -55,15 +57,19 @@ I documenti di progetto (spec, piani, questo file, il mockup di riferimento)
 ```bash
 git clone https://github.com/Ninozzz95/agent-virtual-machine.git AVM
 cd AVM
-git checkout lane/kimi-mobile
+git checkout lane/talos-mobile
 ```
+
+> **Il ramo si chiamava lane/kimi-mobile** fino al 2026-08-01 — dal nome
+> dell'agente a cui la corsia era stata assegnata a luglio, non del prodotto.
+> Rinominato in lane/talos-mobile; il vecchio nome non esiste più sul remoto.
 
 > **Attenzione al worktree.** Sul vecchio computer il lavoro mobile vive in un
 > *worktree* separato (`AVM-lanes/kimi`) mentre `AVM` è il ramo principale. Sul
-> nuovo puoi semplicemente lavorare nel clone con `lane/kimi-mobile` sopra: il
+> nuovo puoi semplicemente lavorare nel clone con `lane/talos-mobile` sopra: il
 > worktree era un espediente per far lavorare due agenti insieme, non un
 > requisito. Se vuoi rifarlo:
-> `git worktree add ../AVM-lanes/kimi lane/kimi-mobile`.
+> `git worktree add ../AVM-lanes/kimi lane/talos-mobile`.
 
 ---
 
