@@ -2559,17 +2559,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     sendRuntime.agentTools,
                 )
                 : []
-            // TEMPORANEO — strumentazione per un difetto aperto: il modello
-            // rifiuta una ricerca web dicendo che il permesso outbound la nega,
-            // e non è ancora stabilito se lo strumento gli sia arrivato. Questa
-            // riga risponde alla domanda invece di continuare a dedurla. Va
-            // tolta, o resa una riga della Diagnostica, appena il difetto è
-            // chiuso.
-            console.info('[TALOS-DIAG] offerti:', offeredTools.map((tool: { name: string }) => tool.name).join(',')
-                || '(nessuno)',
-            '| supporta strumenti:', modelSupportsTools,
-            '| outbound:', sendRuntime.toolPermissions.outbound,
-            '| fonte ricerca:', sendRuntime.search.source)
+            // The instrumentation that lived here is gone, and it earned its
+            // keep: printing which tools were actually offered is what ended a
+            // day of deduction in one line — `web_search` WAS offered, so the
+            // fault was downstream of the gate, not in it. If this question
+            // ever needs asking again it belongs in Diagnostica, where the user
+            // can see the answer too, rather than in a console line that only
+            // helps whoever has the cable.
 
             /**
              * Owner 2026-07-26: asking for a PDF produced the PDF *and* a
