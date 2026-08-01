@@ -83,7 +83,7 @@ public class TalosModelStoreTest {
 
     @Test
     public void aFreshSlotResumesFromNothing() {
-        TalosModelStore.Resume resume = slot().resume();
+        TalosModelStore.Resume resume = slot().resume(TOTAL);
 
         assertEquals(0L, resume.haveBytes);
         assertNull(resume.hashState);
@@ -104,16 +104,16 @@ public class TalosModelStoreTest {
         slot.prepare(TOTAL, reservation);
 
         assertEquals("the reservation is real", TOTAL, slot.partial.length());
-        assertEquals("and none of it is progress", 0L, slot.resume().haveBytes);
+        assertEquals("and none of it is progress", 0L, slot.resume(TOTAL).haveBytes);
     }
 
     @Test
     public void resumesFromTheCheckpointItWroteDown() throws Exception {
         TalosModelStore.Slot slot = slot();
         slot.prepare(TOTAL, reservation);
-        slot.checkpoint(1_500_000_000L, "a-hash-state");
+        slot.checkpoint(TOTAL, 1_500_000_000L, "a-hash-state");
 
-        TalosModelStore.Resume resume = store.slot(REPO, REVISION, PATH).resume();
+        TalosModelStore.Resume resume = store.slot(REPO, REVISION, PATH).resume(TOTAL);
 
         assertEquals(1_500_000_000L, resume.haveBytes);
         assertEquals("a-hash-state", resume.hashState);
@@ -129,14 +129,49 @@ public class TalosModelStoreTest {
     public void keepsTheReservationButTrustsNothingWhenTheSidecarIsUnreadable() throws Exception {
         TalosModelStore.Slot slot = slot();
         slot.prepare(TOTAL, reservation);
-        slot.checkpoint(1_500_000_000L, "a-hash-state");
+        slot.checkpoint(TOTAL, 1_500_000_000L, "a-hash-state");
         Files.write(slot.sidecar.toPath(), "{\"haveBytes\":60".getBytes(StandardCharsets.UTF_8));
 
-        TalosModelStore.Resume resume = store.slot(REPO, REVISION, PATH).resume();
+        TalosModelStore.Resume resume = store.slot(REPO, REVISION, PATH).resume(TOTAL);
 
         assertEquals(0L, resume.haveBytes);
         assertNull(resume.hashState);
         assertEquals("the claimed space is still ours", TOTAL, slot.partial.length());
+    }
+
+    /**
+     * A note about a file of a different length is a note about a different
+     * file.
+     *
+     * The sidecar used to be trusted on nothing but its own say-so, so a note
+     * left by an attempt at another revision of the same path would be read as
+     * progress against the new one — and the hash then computed across a
+     * mixture of two files. Found by an adversarial review, 2026-08-01.
+     * Refusing costs one re-download; trusting produces a proof of nothing.
+     */
+    @Test
+    public void refusesASidecarWrittenAboutADifferentFile() throws Exception {
+        TalosModelStore.Slot slot = slot();
+        slot.prepare(TOTAL, reservation);
+        slot.checkpoint(TOTAL, 1_500_000_000L, "a-hash-state");
+
+        // The same path at another revision: a file of a different length.
+        // The partial does not shrink, so nothing on disk gives this away —
+        // only the length the caller is asking to resume FOR.
+        TalosModelStore.Resume resume = store.slot(REPO, REVISION, PATH).resume(TOTAL / 2);
+
+        assertEquals(0L, resume.haveBytes);
+        assertNull(resume.hashState);
+    }
+
+    /** And the note is still good for the file it was actually written about. */
+    @Test
+    public void acceptsTheSidecarForTheFileItDescribes() throws Exception {
+        TalosModelStore.Slot slot = slot();
+        slot.prepare(TOTAL, reservation);
+        slot.checkpoint(TOTAL, 1_500_000_000L, "a-hash-state");
+
+        assertEquals(1_500_000_000L, store.slot(REPO, REVISION, PATH).resume(TOTAL).haveBytes);
     }
 
     /** A record describing bytes past the end of the file describes a hole. */
@@ -144,9 +179,9 @@ public class TalosModelStoreTest {
     public void refusesACheckpointThatRanPastTheFile() throws Exception {
         TalosModelStore.Slot slot = slot();
         writeBytes(slot.partial, 50_000);
-        slot.checkpoint(60_000L, "a-hash-state");
+        slot.checkpoint(TOTAL, 60_000L, "a-hash-state");
 
-        TalosModelStore.Resume resume = store.slot(REPO, REVISION, PATH).resume();
+        TalosModelStore.Resume resume = store.slot(REPO, REVISION, PATH).resume(TOTAL);
 
         assertEquals(0L, resume.haveBytes);
         assertNull(resume.hashState);
@@ -157,11 +192,11 @@ public class TalosModelStoreTest {
     public void preparingAgainLeavesAnInterruptedDownloadAlone() throws Exception {
         TalosModelStore.Slot slot = slot();
         slot.prepare(TOTAL, reservation);
-        slot.checkpoint(900_000_000L, "state");
+        slot.checkpoint(TOTAL, 900_000_000L, "state");
 
         store.slot(REPO, REVISION, PATH).prepare(TOTAL, reservation);
 
-        assertEquals(900_000_000L, store.slot(REPO, REVISION, PATH).resume().haveBytes);
+        assertEquals(900_000_000L, store.slot(REPO, REVISION, PATH).resume(TOTAL).haveBytes);
     }
 
     /**
@@ -174,14 +209,14 @@ public class TalosModelStoreTest {
     public void leavesNoTornSidecarBehind() throws Exception {
         TalosModelStore.Slot slot = slot();
         slot.prepare(TOTAL, reservation);
-        slot.checkpoint(60_000L, "first");
-        slot.checkpoint(60_000L, "second");
+        slot.checkpoint(TOTAL, 60_000L, "first");
+        slot.checkpoint(TOTAL, 60_000L, "second");
 
         File[] strays = slot.sidecar.getParentFile().listFiles(
                 (dir, name) -> name.endsWith(".tmp") || name.endsWith(".new"));
 
         assertEquals("no half-written sidecar may be left lying around", 0, strays.length);
-        assertEquals("second", store.slot(REPO, REVISION, PATH).resume().hashState);
+        assertEquals("second", store.slot(REPO, REVISION, PATH).resume(TOTAL).hashState);
     }
 
     /**
@@ -258,7 +293,7 @@ public class TalosModelStoreTest {
     public void namesTheLeftoversOfAbandonedDownloads() throws Exception {
         TalosModelStore.Slot abandoned = slot();
         abandoned.prepare(128_000L, reservation);
-        abandoned.checkpoint(64_000L, "state");
+        abandoned.checkpoint(128_000L, 64_000L, "state");
 
         TalosModelStore.Slot done = store.slot(REPO, REVISION, "other.gguf");
         writeBytes(done.partial, 2048);
@@ -276,7 +311,7 @@ public class TalosModelStoreTest {
     public void discardingGivesBackEveryByteItClaimed() throws Exception {
         TalosModelStore.Slot slot = slot();
         slot.prepare(128_000L, reservation);
-        slot.checkpoint(4096L, "state");
+        slot.checkpoint(TOTAL, 4096L, "state");
 
         slot.discard();
 

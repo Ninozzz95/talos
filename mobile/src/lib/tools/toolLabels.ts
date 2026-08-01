@@ -1,4 +1,4 @@
-import type { TalosTranslate } from '@/i18n/contracts'
+﻿import type { TalosTranslate } from '@/i18n/contracts'
 
 /**
  * What a running tool is called, in the user's words.
@@ -191,6 +191,11 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     generate_image: 'image',
     library_export: 'download',
     library_context_policy_update: 'library',
+    // Searching and inspecting reach the network; downloading is a download.
+    local_models_search: 'web',
+    local_model_inspect: 'web',
+    local_model_download: 'download',
+    local_models_status: 'tool',
 }
 
 /** An unknown tool gets the generic mark rather than another tool's. */

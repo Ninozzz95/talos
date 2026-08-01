@@ -12,6 +12,7 @@ import { createTalosReadTools } from '@/lib/tools/readTools'
 import { createTalosWebTools } from '@/lib/search/webTools'
 import { createTalosDocumentTools } from '@/lib/documents/documentTools'
 import { createTalosImageTools } from '@/lib/images/imageTools'
+import { createTalosLocalModelTools } from '@/lib/models/modelTools'
 import { createTalosLibraryExportTools } from '@/lib/tools/libraryExportTools'
 import { createTalosLibraryContextPolicyTools } from '@/lib/tools/libraryContextPolicyTools'
 import { talosTestT } from '../../helpers/talosTestI18n'
@@ -69,7 +70,12 @@ function everyToolName(): string[] {
         read: vi.fn(),
         replace: vi.fn(),
     } as never)
-    return [...read, ...web, ...documents, ...images, ...exports, ...policy]
+    // And the MODEL tools were missing in their turn, so the same guard went
+    // vacuous again for the four newest tools — none of which had an icon. The
+    // lesson keeps arriving in the same shape: a guard that enumerates by hand
+    // goes stale the next time somebody adds a tool.
+    const models = createTalosLocalModelTools()
+    return [...read, ...web, ...documents, ...images, ...exports, ...policy, ...models]
         .map((tool) => tool.name)
 }
 
