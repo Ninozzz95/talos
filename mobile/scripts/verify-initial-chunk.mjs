@@ -36,7 +36,37 @@ import { resolve } from 'node:path'
 // if somebody imports an entire framework, which is the accident this exists to
 // catch. The real reduction is fewer one-off utility values, and that is a
 // design-system pass on the FE backlog, not a build-gate change.
-const DEFAULT_MAXIMUM_BYTES = 560_000
+// Owner 2026-08-01: 560,000 → 600,000, and again only after opening it. The gate
+// had 1,333 bytes of room, which is not a budget — it is a tripwire under the
+// next feature, whatever that feature happens to be.
+//
+// Asked the bundler rather than guessing (Rollup's per-module `renderedLength`;
+// attributing bytes by reading the sourcemap line-by-line was tried first and
+// was wrong, giving 101 KB to a 12 KB file). The entry graph is, pre-minify:
+// @vue/runtime-core 152 KB, chatController 117 KB, tailwind-merge 102 KB,
+// TalosMobileComposer 50 KB, @vue/reactivity 46 KB, vue-router 41 KB,
+// ChatScreen 41 KB. It is the chat, the framework, and the class merger.
+//
+// Two things were checked before concluding there was nothing free left:
+//
+// - Vue's production flags were never defined, so the runtime carried Options
+//   API support this app never uses — 115 components, 106 `<script setup>`,
+//   zero `export default {}`. Defining them saved 4,700 bytes for no risk, and
+//   that saving is already inside the number below.
+// - `tailwind-merge` looked like 47 KB of removable weight until the call sites
+//   were read. All fifteen are `cn('base classes', props.class)` — the pattern
+//   that lets a caller OVERRIDE a component's defaults. Resolving `p-4` against
+//   a caller's `p-6` is precisely what it is for; drop it and both survive and
+//   CSS source order decides. It stays.
+//
+// So the honest reduction left is not a build flag: it is debt A2, the 1,412-line
+// `chatController.ts`, which the debt register already names. Splitting it is a
+// refactor with its own risk and its own review, not something to smuggle into a
+// budget change.
+//
+// 600,000 leaves ~7.7%. If a single feature ever eats that, it is not a budget
+// problem — it is a feature that belongs behind a dynamic import.
+const DEFAULT_MAXIMUM_BYTES = 600_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {
