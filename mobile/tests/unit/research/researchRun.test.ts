@@ -1,0 +1,161 @@
+import { describe, expect, it } from 'vitest'
+import {
+    talosResearchApply,
+    talosResearchIdempotencyKey,
+    talosResearchNextStep,
+    talosResearchRecover,
+    talosResearchReplay,
+    talosResearchSpent,
+    type TalosResearchEvent,
+} from '@/lib/research/researchRun'
+
+const T0 = '2026-08-02T00:00:00.000Z'
+const T1 = '2026-08-02T00:00:10.000Z'
+const T2 = '2026-08-02T00:00:20.000Z'
+const T3 = '2026-08-02T00:00:30.000Z'
+
+const started: TalosResearchEvent = {
+    kind: 'run_started',
+    at: T0,
+    id: 'run-1',
+    sessionId: 'chat-9',
+    question: 'quale tablet conviene',
+    depth: 'deep',
+    engine: 'device',
+}
+
+const approved: TalosResearchEvent = {
+    kind: 'plan_approved',
+    at: T0,
+    branches: [{ id: 'b1', question: 'prezzi attuali', estimate: { tokens: 9000, searches: 3, pages: 5 } }],
+}
+
+function search(stepId: string, at: string): TalosResearchEvent {
+    return { kind: 'step_started', at, stepId, branchId: 'b1', stepKind: 'search' }
+}
+
+function finished(stepId: string, at: string, searches = 1, tokens = 1200): TalosResearchEvent {
+    return { kind: 'step_finished', at, stepId, spend: { tokens, searches, pages: 0 }, resultRef: `vault:${stepId}` }
+}
+
+describe('a research run that is killed and picked up again', () => {
+    it('is the same state however many times its history is replayed', () => {
+        const journal = [started, approved, search('s1', T1), finished('s1', T2)]
+
+        // Determinism is not a nicety here: the state is not stored, it is
+        // DERIVED, so a replay that drifted would quietly change what the run
+        // believes it has already paid for.
+        expect(talosResearchReplay(journal)).toEqual(talosResearchReplay(journal))
+    })
+
+    /**
+     * THE test this design exists for.
+     *
+     * The process is killed between a search finishing and anything else
+     * happening. On the way back up the run must not offer that search again:
+     * it was paid for. Stopping a Deep Research run on ChatGPT means starting
+     * over from nothing — that is the behaviour this refuses.
+     */
+    it('never offers a step that already finished, however the process died', () => {
+        const run = talosResearchReplay([started, approved, search('s1', T1), finished('s1', T2)])!
+
+        const recovered = talosResearchRecover(run, T3)
+
+        expect(recovered.steps[0].state).toBe('done')
+        expect(talosResearchNextStep(recovered)).toBeNull()
+        expect(talosResearchSpent(recovered)).toEqual({ tokens: 1200, searches: 1, pages: 0 })
+    })
+
+    it('offers again the step that was still running, and says it is a retry', () => {
+        // Started and never finished: nobody knows whether the provider answered.
+        const run = talosResearchReplay([started, approved, search('s1', T1)])!
+
+        const recovered = talosResearchRecover(run, T2)
+        const next = talosResearchNextStep(recovered)
+
+        expect(recovered.steps[0].state).toBe('interrupted')
+        expect(next?.id).toBe('s1')
+        // The count is evidence of what happened, and it must NOT change the
+        // step's name — see the key below.
+        expect(next?.attempts).toBe(1)
+    })
+
+    it('calls a retried step by the same name, so a provider can deduplicate it', () => {
+        const first = talosResearchIdempotencyKey('run-1', 's1')
+        const afterRetry = talosResearchIdempotencyKey('run-1', 's1')
+
+        // Deliberately NOT run+step+attempt, which is what the durable-execution
+        // literature recommends. There the key separates attempts so the second
+        // one runs; here the user pays per search out of their own pocket, so
+        // two attempts at one logical step must be recognisable as the same
+        // thing. Documented as a divergence, not an oversight.
+        expect(afterRetry).toBe(first)
+        expect(talosResearchIdempotencyKey('run-1', 's2')).not.toBe(first)
+        expect(talosResearchIdempotencyKey('run-2', 's1')).not.toBe(first)
+    })
+
+    /**
+     * Journals get duplicates. A row is appended, the process dies before the
+     * acknowledgement, and the write is replayed on the next boot. Counting
+     * that twice would report money the user never spent — and the number is
+     * shown to them, so it has to be true.
+     */
+    it('does not charge twice for a step whose completion was recorded twice', () => {
+        const once = talosResearchReplay([started, approved, search('s1', T1), finished('s1', T2)])!
+        const twice = talosResearchReplay([
+            started, approved, search('s1', T1), finished('s1', T2), finished('s1', T3),
+        ])!
+
+        expect(talosResearchSpent(twice)).toEqual(talosResearchSpent(once))
+        expect(twice.steps).toHaveLength(1)
+    })
+
+    it('refuses to restart a run that has already spent money', () => {
+        const run = talosResearchReplay([started, approved, search('s1', T1), finished('s1', T2), started])!
+
+        // A repeated `run_started` — the shape a duplicated first write takes —
+        // must not wipe the plan and the receipts.
+        expect(run.steps).toHaveLength(1)
+        expect(talosResearchSpent(run).tokens).toBe(1200)
+    })
+
+    it('ignores a step that finished after the run was already done', () => {
+        const run = talosResearchReplay([
+            started, approved, search('s1', T1), finished('s1', T2), finished('s1', T3),
+        ])!
+
+        const late = talosResearchApply(run, { kind: 'step_failed', at: T3, stepId: 's1', error: 'timeout' })
+
+        // It finished. A late failure for the same step is noise from a retry
+        // that lost the race, not a reason to throw away a paid-for result.
+        expect(late?.steps[0].state).toBe('done')
+        expect(late?.steps[0].resultRef).toBe('vault:s1')
+    })
+
+    it('survives a history it cannot make sense of instead of refusing to load', () => {
+        // A step event with no matching step: the run must still replay. A
+        // journal that will not load is a run whose paid work is lost, which is
+        // worse than an event quietly ignored.
+        const run = talosResearchReplay([started, approved, finished('ghost', T1)])
+
+        expect(run).not.toBeNull()
+        expect(run?.steps).toHaveLength(0)
+    })
+
+    it('offers nothing once the run is cancelled, whatever is left pending', () => {
+        const run = talosResearchReplay([
+            started, approved, search('s1', T1), { kind: 'run_cancelled', at: T2 },
+        ])!
+
+        expect(talosResearchNextStep(talosResearchRecover(run, T3))).toBeNull()
+    })
+
+    it('carries where it is running, because that is what lets it move', () => {
+        // R1b: a state that serialises is a state that can migrate to a server.
+        // The field is part of the journal from the first event, so a run does
+        // not have to be re-planned to change engine.
+        const run = talosResearchReplay([{ ...started, engine: 'cloud' }])!
+
+        expect(run.engine).toBe('cloud')
+    })
+})
