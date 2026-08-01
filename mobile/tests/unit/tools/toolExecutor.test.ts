@@ -86,7 +86,17 @@ const consent = vi.fn(async () => true)
 
 function deps(overrides: Record<string, unknown> = {}) {
     return {
-        permissions: TALOS_DEFAULT_TOOL_PERMISSIONS,
+        /**
+         * One of each, stated rather than inherited.
+         *
+         * These tests are about the GATE, so they need all three states present
+         * at once — allow, ask, deny. They used to get that mix for free from
+         * the product default, which coupled them to a product decision they
+         * are not about: when the owner moved every default to `ask` on
+         * 2026-08-01 they broke, having asserted the old decision without ever
+         * naming it. Written out, they test the gate and nothing else.
+         */
+        permissions: { read: 'allow' as const, write: 'ask' as const, outbound: 'deny' as const },
         isToolEnabled: () => true,
         requestConsent: consent,
         audit,
@@ -102,13 +112,32 @@ beforeEach(() => {
 
 describe('tool permissions', () => {
     it('defaults are the owner decision, not a convenience', () => {
-        expect(TALOS_DEFAULT_TOOL_PERMISSIONS).toEqual({ read: 'allow', write: 'ask', outbound: 'deny' })
+        // Re-pinned 2026-08-01, owner's decision: everything asks. The previous
+        // split — read free, write asks, outbound refused — was chosen before
+        // the authorization card existed, and `deny` proved to be the wrong
+        // shape for a default because nothing downstream could tell it apart
+        // from a considered "never".
+        expect(TALOS_DEFAULT_TOOL_PERMISSIONS).toEqual({ read: 'ask', write: 'ask', outbound: 'ask' })
     })
 
-    it('an unknown or corrupt preference falls back to the SAFEST option, never the loosest', () => {
-        expect(decideTalosToolPermission('write', { read: 'allow', write: 'banana' as never, outbound: 'deny' }))
-            .toBe('ask')
-        expect(decideTalosToolPermission('outbound', {} as never)).toBe('deny')
+    /**
+     * Written against the PRINCIPLE, not against today's values.
+     *
+     * It used to assert `deny` for a missing outbound preference, which was
+     * the default at the time — so the day the default moved, a test guarding
+     * "never fall back to the loosest" failed for a reason that had nothing to
+     * do with looseness. The risk it exists to catch is a corrupt value being
+     * read as permission; that is `allow`, and it is what is asserted.
+     */
+    it('an unknown or corrupt preference falls back to the default, and never to allow', () => {
+        for (const action of ['read', 'write', 'outbound'] as const) {
+            expect(decideTalosToolPermission(action, { [action]: 'banana' } as never))
+                .toBe(TALOS_DEFAULT_TOOL_PERMISSIONS[action])
+            expect(decideTalosToolPermission(action, {} as never))
+                .toBe(TALOS_DEFAULT_TOOL_PERMISSIONS[action])
+            expect(decideTalosToolPermission(action, { [action]: 'banana' } as never))
+                .not.toBe('allow')
+        }
     })
 })
 

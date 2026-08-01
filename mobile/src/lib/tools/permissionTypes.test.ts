@@ -8,91 +8,82 @@ import {
 } from '@/lib/tools/permissionTypes'
 
 /**
- * The rule that turns an inherited refusal into a question.
+ * The rule that keeps a default from freezing into a decision.
  *
  * Every test here stands for a way the defect it fixes actually appeared, or a
  * way the fix could become a new defect of its own.
  */
 describe('talosEffectiveToolPermissions', () => {
-    const stored = (outbound: TalosToolPermissions['outbound']): TalosToolPermissions => ({
-        read: 'allow',
-        write: 'ask',
-        outbound,
-    })
-
-    it('leaves everything alone when no search source is configured', () => {
-        const effective = talosEffectiveToolPermissions({
-            stored: stored('deny'),
-            chosen: [],
-            searchConfigured: false,
-        })
-        expect(effective.outbound).toBe('deny')
+    const stored = (patch: Partial<TalosToolPermissions>): TalosToolPermissions => ({
+        ...TALOS_DEFAULT_TOOL_PERMISSIONS,
+        ...patch,
     })
 
     /**
-     * The defect itself: key saved, panel says ready, model has no tool. With a
-     * source configured the inherited refusal becomes a question — which is what
-     * makes the authorization card appear at all.
+     * The owner's decision of 2026-08-01, pinned. Everything asks, because the
+     * card that does the asking now exists — and because `deny` is
+     * indistinguishable from a considered "never", so it is the wrong shape for
+     * a default. If this line changes, the tests below change meaning.
      */
-    it('turns an INHERITED refusal into a question once a source is configured', () => {
-        const effective = talosEffectiveToolPermissions({
-            stored: stored('deny'),
-            chosen: [],
-            searchConfigured: true,
+    it('documents that every action asks by default', () => {
+        expect(TALOS_DEFAULT_TOOL_PERMISSIONS).toEqual({
+            read: 'ask',
+            write: 'ask',
+            outbound: 'ask',
         })
-        expect(effective.outbound).toBe('ask')
     })
 
     /**
-     * The other half, and the one that matters more: a refusal the user CHOSE
-     * is not a default to be revised. If this ever passes as 'ask', the word
+     * The defect itself. Settings persists all three whether or not the screen
+     * was ever opened, so the old defaults are sitting on every existing device.
+     * Without this, changing a default would only reach people who installed the
+     * app afterwards.
+     */
+    it('gives an unchosen value the default of today, not the one it was installed with', () => {
+        const effective = talosEffectiveToolPermissions({
+            stored: { read: 'allow', write: 'ask', outbound: 'deny' },
+            chosen: [],
+        })
+        expect(effective).toEqual({ read: 'ask', write: 'ask', outbound: 'ask' })
+    })
+
+    /**
+     * The other half, and the one that matters more: a value the user CHOSE is
+     * not a default to be revised. If this ever passes as 'ask', the word
      * "never" has been taken away from them.
      */
-    it('never revises a refusal the user chose', () => {
+    it('never revises a value the user chose', () => {
         const effective = talosEffectiveToolPermissions({
-            stored: stored('deny'),
-            chosen: ['outbound'],
-            searchConfigured: true,
+            stored: { read: 'allow', write: 'allow', outbound: 'deny' },
+            chosen: ['outbound', 'read'],
         })
         expect(effective.outbound).toBe('deny')
-    })
-
-    it('does not touch a permission that is already allow or ask', () => {
-        expect(talosEffectiveToolPermissions({
-            stored: stored('allow'),
-            chosen: [],
-            searchConfigured: true,
-        }).outbound).toBe('allow')
-
-        expect(talosEffectiveToolPermissions({
-            stored: stored('ask'),
-            chosen: [],
-            searchConfigured: true,
-        }).outbound).toBe('ask')
-    })
-
-    it('leaves read and write exactly as they were', () => {
-        const effective = talosEffectiveToolPermissions({
-            stored: stored('deny'),
-            chosen: [],
-            searchConfigured: true,
-        })
         expect(effective.read).toBe('allow')
+        // `write` was never chosen, so it follows today's default.
         expect(effective.write).toBe('ask')
     })
 
-    it('returns the same object when nothing changes, so callers can compare cheaply', () => {
-        const source = stored('allow')
-        expect(talosEffectiveToolPermissions({
-            stored: source,
-            chosen: [],
-            searchConfigured: true,
-        })).toBe(source)
+    it('leaves a value that already matches the default exactly as it is', () => {
+        const source = stored({})
+        expect(talosEffectiveToolPermissions({ stored: source, chosen: [] })).toBe(source)
     })
 
-    /** The default is what makes the promotion necessary; if it changes, this test says so. */
-    it('documents that outbound is refused by default', () => {
-        expect(TALOS_DEFAULT_TOOL_PERMISSIONS.outbound).toBe('deny')
+    it('returns the same object when nothing changes, so callers can compare cheaply', () => {
+        const source = stored({ outbound: 'allow' })
+        expect(talosEffectiveToolPermissions({ stored: source, chosen: ['outbound'] })).toBe(source)
+    })
+
+    /**
+     * A chosen value that happens to equal the default must still be left
+     * alone — otherwise "chosen" would quietly stop meaning anything the day
+     * the default moved onto it.
+     */
+    it('treats a chosen value equal to the default as chosen, not as inherited', () => {
+        const effective = talosEffectiveToolPermissions({
+            stored: stored({ outbound: 'ask' }),
+            chosen: ['outbound'],
+        })
+        expect(effective.outbound).toBe('ask')
     })
 })
 
@@ -111,9 +102,9 @@ describe('parseTalosChosenToolActions', () => {
 
     /**
      * Missing state means "nothing chosen yet", which is the state every
-     * existing installation is in — and the one where the promotion applies.
+     * existing installation is in — and the one where today's default applies.
      * Reading it as anything else would silently exempt everyone already using
-     * the app from the fix.
+     * the app from the change.
      */
     it('reads absent or malformed state as nothing chosen', () => {
         expect(parseTalosChosenToolActions(undefined)).toEqual([])

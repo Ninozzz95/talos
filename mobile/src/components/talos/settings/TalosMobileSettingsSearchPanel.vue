@@ -47,6 +47,10 @@ const outbound = computed(() => settings.effectiveToolPermissions().outbound)
             <p class="mt-1 text-xs text-[var(--talos-muted)]">
                 <span v-if="outbound === 'allow'">{{ t('search.permissionAllow') }}</span>
                 <span v-else-if="outbound === 'ask'">{{ t('search.permissionAsk') }}</span>
+                <!-- Only reachable when the user CHOSE to refuse: the default
+                     asks, and an unchosen value is never `deny`. So "you
+                     refused" is now literally true, which it was not when this
+                     line was first written on a fresh install. -->
                 <span v-else>{{ t('search.permissionDeny') }}</span>
             </p>
             <p class="mt-1 text-xs text-[var(--talos-muted)]">
