@@ -13,8 +13,31 @@ import { resolve } from 'node:path'
 // counted — 131 KB of it — so the gate could stay green while first paint got
 // slower. Both are budgeted now, and gzip transfer is reported beside raw bytes
 // because that is what a phone actually downloads.
+// Owner 2026-08-01: the CSS ceiling moves from 150,000 to 220,000, and it moves
+// only after looking inside — which is the condition the owner set the last
+// time, and the reason this comment is longer than the number.
+//
+// What is in there, measured rather than guessed: 199,104 bytes, of which
+// `@layer utilities` is 144,235 — 72% — spread over 1,760 distinct utility
+// classes. Sampling them finds `md:grid-cols-4`,
+// `data-[state=closed]:slide-out-to-bottom`, `hover:bg-muted-foreground/10`:
+// ours, and used. @font-face costs 7 KB and every keyframe together 2 KB. There
+// is no dead weight to remove; the ceiling was set when the sheet was ~131 KB
+// and six screens have shipped since.
+//
+// And the number means less here than the same number would on the web. TALOS
+// is served from the device, so this file is never downloaded — the 30 KB it
+// gzips to travels nowhere. What it actually costs is the time to parse it,
+// which on the phones this app targets is tens of milliseconds. The budget is
+// worth keeping because unnoticed growth is worth catching; the specific figure
+// was borrowed from a delivery model this app does not use.
+//
+// 220,000 leaves about 10% of room — a few more screens — and still fails loudly
+// if somebody imports an entire framework, which is the accident this exists to
+// catch. The real reduction is fewer one-off utility values, and that is a
+// design-system pass on the FE backlog, not a build-gate change.
 const DEFAULT_MAXIMUM_BYTES = 560_000
-const DEFAULT_MAXIMUM_CSS_BYTES = 150_000
+const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {
         suffix: 'src/repositories/productionChatRepository.ts',
@@ -262,9 +285,16 @@ try {
             exceeded = true
         }
         if (initialCssBytes > maximumCss) {
+            // The old message said only that a number was too big, which sent
+            // the last reader on half an hour of digging to find out WHAT was
+            // too big. It costs nothing to say where to look, so it says it.
             fail(
                 'TALOS_INITIAL_CSS_BUDGET_EXCEEDED',
-                `${initialCssBytes} CSS bytes exceeds ${maximumCss} bytes`,
+                `${initialCssBytes} CSS bytes exceeds ${maximumCss} bytes `
+                + `(${initialCssGzipBytes} gzipped). Before raising the ceiling, look inside: `
+                + 'almost all of it is `@layer utilities`, so the question is whether the new '
+                + 'weight is utilities the app really uses or something imported whole. '
+                + 'Open the initial sheet in dist/assets and measure the top-level blocks.',
             )
             exceeded = true
         }
