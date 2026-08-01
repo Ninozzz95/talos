@@ -345,3 +345,37 @@ export function talosResearchNextStep(run: TalosResearchRun): TalosResearchStep 
         ?? run.steps.find((step) => step.state === 'pending')
         ?? null
 }
+
+/**
+ * The name a branch's step answers to. Derived, never invented.
+ *
+ * A step id that came from a counter or a random source would be a new name on
+ * every attempt, and a new name is a step nobody can recognise as already done
+ * — which is how a resumed run pays twice for the same search.
+ */
+export function talosResearchStepIdFor(branchId: string, kind: TalosResearchStepKind): string {
+    return `${branchId}:${kind}`
+}
+
+/**
+ * What still has to happen, from the PLAN rather than from the journal.
+ *
+ * The two answer different questions and both are needed. The journal records
+ * what did happen; only the plan knows what was supposed to. A run that was
+ * killed before its third branch ever started has nothing in the journal about
+ * that branch — the work is missing, not recorded as missing — so asking the
+ * journal alone would call the run finished.
+ *
+ * A branch is outstanding when its step is absent, interrupted or failed. Done
+ * is done: it is never offered again, whatever else happened afterwards.
+ */
+export function talosResearchWorkLeft(
+    run: TalosResearchRun,
+    kind: TalosResearchStepKind = 'search',
+): readonly TalosResearchBranch[] {
+    if (run.status === 'cancelled' || run.status === 'done' || run.status === 'failed') return []
+    return run.plan.filter((branch) => {
+        const step = run.steps.find((candidate) => candidate.id === talosResearchStepIdFor(branch.id, kind))
+        return !step || step.state !== 'done'
+    })
+}
