@@ -13,6 +13,8 @@ import org.json.JSONObject;
 import java.io.File;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -31,7 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <h3>Why the tokens are polled and not pushed</h3>
  *
- * Generation runs on its own thread and this asks "what have you got so far?"
+ * Generation runs on the worker and a watcher asks "what have you got so far?"
  * on a timer. It reads like the lazier design and it is the correct one here: a
  * callback per token would cross the JNI boundary and then the Capacitor
  * bridge — two hops, at forty to a hundred and fifty tokens a second — to
@@ -55,6 +57,8 @@ public class TalosLlamaPlugin extends Plugin {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final AtomicReference<TalosLlamaEngine> openEngine = new AtomicReference<>(null);
     private final AtomicReference<String> openPath = new AtomicReference<>(null);
+    /** True from the moment a generation is accepted until it has finished. */
+    private final AtomicBoolean generating = new AtomicBoolean(false);
 
     @PluginMethod
     public void available(PluginCall call) {
@@ -141,27 +145,69 @@ public class TalosLlamaPlugin extends Plugin {
                 ? Boolean.TRUE.equals(call.getBoolean("stopAtEndOfGeneration"))
                 : true;
 
-        worker.execute(() -> {
-            Thread generation = new Thread(
-                    () -> engine.generateBlocking(prompt, maxTokens, stopAtEnd),
-                    "talos-llama-chat");
-            generation.start();
+        // One generation at a time, refused rather than queued.
+        //
+        // llama.cpp allows many contexts and one thread each; it does not allow
+        // two decodes on the SAME context, and this plugin deliberately holds
+        // one model. Queueing would be worse than refusing: the second caller
+        // would wait minutes behind the first with nothing to show, and the
+        // interface has no way to say so. `TALOS_LLAMA_BUSY` is something a
+        // caller can act on.
+        if (!generating.compareAndSet(false, true)) {
+            call.reject("TALOS_LLAMA_BUSY");
+            return;
+        }
 
-            int sent = 0;
-            try {
-                while (generation.isAlive()) {
-                    sent = emitDelta(engine, sent);
-                    Thread.sleep(POLL_INTERVAL_MS);
+        worker.execute(() -> {
+            // THE DECODE RUNS HERE, on the thread that owns the engine.
+            //
+            // It used to run on a thread of its own while this one polled it,
+            // and that had a hole with teeth: if the poll loop was interrupted,
+            // `join()` was skipped, this task returned, and the next task on the
+            // worker — an `open`, which begins by closing what is loaded — freed
+            // the context out from under a decode still running on the orphan.
+            // A use-after-free that would land as a crash report from someone
+            // else's phone.
+            //
+            // The reference implementation in llama.cpp's own Android example
+            // does the same thing: a dispatcher of parallelism one, with load,
+            // generation and unload all on it — its `cleanUp()` even blocks on
+            // that queue rather than racing the generation it wants to stop.
+            // Watching is the only thing left outside, because watching touches
+            // no context: it reads text that was already published, under the
+            // lock that published it.
+            final AtomicBoolean done = new AtomicBoolean(false);
+            final AtomicInteger sent = new AtomicInteger(0);
+            Thread watcher = new Thread(() -> {
+                while (!done.get()) {
+                    sent.set(emitDelta(engine, sent.get()));
+                    try {
+                        Thread.sleep(POLL_INTERVAL_MS);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
                 }
-                generation.join();
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
+            }, "talos-llama-watch");
+            watcher.start();
+
+            try {
+                engine.generateBlocking(prompt, maxTokens, stopAtEnd);
+            } finally {
+                done.set(true);
+                watcher.interrupt();
+                try {
+                    watcher.join(1_000L);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+                // One last read AFTER the generation has finished. The final
+                // tokens land between the last poll and the end, and dropping
+                // them would clip a word or two off every answer — a defect that
+                // reads as the model being strange rather than as us losing text.
+                emitDelta(engine, sent.get());
+                generating.set(false);
             }
-            // One last read AFTER the thread has finished. The final tokens land
-            // between the last poll and the end, and dropping them would clip a
-            // word or two off every answer — a defect that reads as the model
-            // being strange rather than as us losing text.
-            emitDelta(engine, sent);
 
             JSObject result = new JSObject();
             result.put("text", engine.textSoFar());
