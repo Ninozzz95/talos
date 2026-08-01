@@ -1319,6 +1319,8 @@ export const TALOS_IT_MESSAGES = {
         reasonTruncated: 'L’intestazione è più grande di quanto questa build vada a prendere.',
         reasonNoDevice: 'Questo telefono non è ancora stato misurato.',
         recheck: 'Ricontrolla',
+        engineReady: 'Motore locale a bordo · backend: {backends}',
+        engineMissing: 'Motore locale non incluso in questa build: i modelli si possono scaricare ma non eseguire.',
         ramFree: 'memoria libera',
         storageFree: 'spazio libero',
     },

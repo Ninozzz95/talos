@@ -1321,6 +1321,8 @@ export const TALOS_EN_MESSAGES = {
         reasonTruncated: 'The header is larger than this build will fetch.',
         reasonNoDevice: 'This phone has not been measured yet.',
         recheck: 'Check again',
+        engineReady: 'Local engine on board · backends: {backends}',
+        engineMissing: 'No local engine in this build: models can be downloaded but not run.',
         ramFree: 'free memory',
         storageFree: 'free space',
     },

@@ -1,0 +1,207 @@
+package ai.talos;
+
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+
+import java.io.File;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
+
+/**
+ * The local engine, reachable from the app.
+ *
+ * Until now llama.cpp ran only inside an instrumented test: it could generate,
+ * and nothing in TALOS could ask it to. This is the doorway — and it is a
+ * doorway, not a second engine. Which backend earns the right to run stays in
+ * {@link TalosBackendChoice}, what counts as a measurement stays in
+ * {@link TalosBenchmarkHarness}, and the running itself stays in
+ * {@link TalosLlamaEngine}. This class therefore never calls
+ * {@link TalosLlamaNative} for anything an engine already exposes: a plugin
+ * that reached past it would be the fourth place reading the same rules its own
+ * way, which is exactly the shape of the defect this project spent a day
+ * removing.
+ *
+ * <h3>Why the tokens are polled and not pushed</h3>
+ *
+ * Generation runs on its own thread and this asks "what have you got so far?"
+ * on a timer. It reads like the lazier design and it is the correct one here: a
+ * callback per token would cross the JNI boundary and then the Capacitor
+ * bridge — two hops, at forty to a hundred and fifty tokens a second — to
+ * deliver text the interface repaints at sixty frames anyway. Polling costs one
+ * crossing per frame instead of one per token. The benchmark harness already
+ * reads its token counter the same way, for the same reason.
+ *
+ * <h3>One model at a time</h3>
+ *
+ * Deliberate, not a simplification. A 4 GB model on a phone with 4 GB free is
+ * the normal case rather than the extreme one, and two loaded at once is how an
+ * app gets killed by the low-memory reaper mid-sentence. Opening a second model
+ * closes the first.
+ */
+@CapacitorPlugin(name = "TalosLlama")
+public class TalosLlamaPlugin extends Plugin {
+
+    /** How often the generating thread is asked what it has produced. */
+    private static final long POLL_INTERVAL_MS = 90L;
+
+    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final AtomicReference<TalosLlamaEngine> openEngine = new AtomicReference<>(null);
+    private final AtomicReference<String> openPath = new AtomicReference<>(null);
+
+    @PluginMethod
+    public void available(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("available", TalosLlamaNative.AVAILABLE);
+        // The registered ggml backends, verbatim. The interface may show them;
+        // nothing here concludes anything from them — that is the arbiter's job.
+        result.put("backends", TalosLlamaEngine.backends(getContext()));
+        result.put("loadedPath", openPath.get());
+        call.resolve(result);
+    }
+
+    /**
+     * Opens a model, closing whichever one was open.
+     *
+     * Rejects rather than resolving with an empty handle: "it did not open" is
+     * an outcome the caller has to handle, and an object that is half a session
+     * is how a failure survives past the point where it happened.
+     */
+    @PluginMethod
+    public void open(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null || path.isEmpty()) {
+            call.reject("TALOS_LLAMA_PATH_REQUIRED");
+            return;
+        }
+        if (!new File(path).isFile()) {
+            // Named, because a missing model file is the commonest failure here
+            // and the one an opaque error explains worst.
+            call.reject("TALOS_LLAMA_MODEL_MISSING");
+            return;
+        }
+        if (!TalosLlamaNative.AVAILABLE) {
+            call.reject("TALOS_LLAMA_UNAVAILABLE");
+            return;
+        }
+
+        final int threads = call.getInt("threads", 4);
+        final int contextTokens = call.getInt("contextTokens", 4096);
+        final int gpuLayers = call.getInt("gpuLayers", 0);
+
+        worker.execute(() -> {
+            closeOpenModel();
+            TalosLlamaEngine engine = TalosLlamaEngine.open(
+                    getContext(), path, threads, contextTokens, gpuLayers);
+            if (engine == null) {
+                call.reject("TALOS_LLAMA_OPEN_FAILED");
+                return;
+            }
+            openEngine.set(engine);
+            openPath.set(path);
+            JSObject result = new JSObject();
+            result.put("contextTokens", engine.contextTokens());
+            call.resolve(result);
+        });
+    }
+
+    /**
+     * Generates, emitting the answer as it grows.
+     *
+     * The listener receives only what is NEW since the last emission. Sending
+     * the whole answer every tick would be quadratic in the length of the
+     * reply — harmless for a haiku and ruinous for the long answers this app
+     * exists to produce.
+     */
+    @PluginMethod
+    public void generate(PluginCall call) {
+        TalosLlamaEngine engine = openEngine.get();
+        if (engine == null) {
+            call.reject("TALOS_LLAMA_NO_MODEL");
+            return;
+        }
+        String prompt = call.getString("prompt");
+        if (prompt == null) {
+            call.reject("TALOS_LLAMA_PROMPT_REQUIRED");
+            return;
+        }
+        final int maxTokens = call.getInt("maxTokens", 512);
+        // Chat wants the model to stop when it has finished speaking; the
+        // benchmark wants it to carry on regardless. Same engine, opposite
+        // needs, so the caller says which of the two it is instead of one of
+        // them quietly getting the other's behaviour.
+        final boolean stopAtEnd = call.getData().has("stopAtEndOfGeneration")
+                ? Boolean.TRUE.equals(call.getBoolean("stopAtEndOfGeneration"))
+                : true;
+
+        worker.execute(() -> {
+            Thread generation = new Thread(
+                    () -> engine.generateBlocking(prompt, maxTokens, stopAtEnd),
+                    "talos-llama-chat");
+            generation.start();
+
+            int sent = 0;
+            try {
+                while (generation.isAlive()) {
+                    sent = emitDelta(engine, sent);
+                    Thread.sleep(POLL_INTERVAL_MS);
+                }
+                generation.join();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            // One last read AFTER the thread has finished. The final tokens land
+            // between the last poll and the end, and dropping them would clip a
+            // word or two off every answer — a defect that reads as the model
+            // being strange rather than as us losing text.
+            emitDelta(engine, sent);
+
+            JSObject result = new JSObject();
+            result.put("text", engine.textSoFar());
+            result.put("tokens", engine.tokensProduced());
+            call.resolve(result);
+        });
+    }
+
+    /** Emits what is new since `sent`, and returns the new watermark. */
+    private int emitDelta(TalosLlamaEngine engine, int sent) {
+        String text = engine.textSoFar();
+        if (text == null || text.length() <= sent) return sent;
+        JSObject event = new JSObject();
+        event.put("delta", text.substring(sent));
+        notifyListeners("token", event);
+        return text.length();
+    }
+
+    /** Stops the current generation. What was produced so far still stands. */
+    @PluginMethod
+    public void cancel(PluginCall call) {
+        TalosLlamaEngine engine = openEngine.get();
+        if (engine != null) engine.cancel();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void close(PluginCall call) {
+        worker.execute(() -> {
+            closeOpenModel();
+            call.resolve();
+        });
+    }
+
+    private void closeOpenModel() {
+        TalosLlamaEngine engine = openEngine.getAndSet(null);
+        openPath.set(null);
+        if (engine != null) engine.close();
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        // Gigabytes do not free themselves when the activity goes away.
+        closeOpenModel();
+        worker.shutdownNow();
+    }
+}

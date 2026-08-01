@@ -36,6 +36,7 @@ import {
     talosForgetHuggingFaceToken,
 } from '@/stores/localModels'
 import { talosDiscardModelTransfer } from '@/services/modelTransfer'
+import { talosLocalEngineStatus, type TalosLocalEngineStatus } from '@/services/localEngine'
 import type { TalosCatalogueRecommendation } from '@/lib/models/catalogue'
 import { talosGroupModelsByProvider, talosProviderOptions } from '@/lib/models/providerGrouping'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
@@ -102,6 +103,20 @@ const device = computed(() => {
             (measured.availableRamBytes / Math.max(1, measured.totalRamBytes)) * 100))),
     }
 })
+
+/**
+ * Whether the engine that would RUN these models is actually on board.
+ *
+ * The strip above measures the phone; this measures the app. They are different
+ * questions and the screen was only asking one of them — it could say a model
+ * fits and run comfortably at eleven tokens a second while carrying no engine
+ * able to run anything, which is a promise made by arithmetic alone.
+ *
+ * Asked once on mount. It cannot change while the screen is open: the native
+ * library is either in the APK or it is not.
+ */
+const engine = ref<TalosLocalEngineStatus | null>(null)
+onMounted(async () => { engine.value = await talosLocalEngineStatus() })
 
 /** One catalogue row, worked out once rather than four times per render. */
 function rowOf(item: Readonly<TalosCatalogueRecommendation>) {
@@ -321,6 +336,20 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             <div class="h-1 overflow-hidden rounded-full bg-[var(--talos-active)]">
                 <div class="h-full rounded-full bg-[var(--talos-accent)]" :style="{ width: `${device.share}%` }" />
             </div>
+
+            <!-- The engine, beside the phone it would run on. Until now this
+                 strip answered "does it fit" and left "can we run it at all"
+                 unasked, which is how a screen ends up promising eleven tokens a
+                 second while carrying nothing able to produce one. -->
+            <p
+                v-if="engine"
+                data-testid="talos-local-engine-status"
+                class="mt-2 font-mono text-3xs text-[var(--talos-muted)]"
+            >
+                {{ engine.available
+                    ? t('localModels.engineReady', { backends: engine.backends || '—' })
+                    : t('localModels.engineMissing') }}
+            </p>
         </div>
 
         <!-- Measuring. A skeleton rather than an empty screen: the list is
