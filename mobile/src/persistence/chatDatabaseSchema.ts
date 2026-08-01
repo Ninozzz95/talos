@@ -1,7 +1,7 @@
 import type { capSQLiteVersionUpgrade } from '@capacitor-community/sqlite'
 
 export const TALOS_CHAT_DATABASE_NAME = 'talos_mobile'
-export const TALOS_CHAT_DATABASE_VERSION = 4
+export const TALOS_CHAT_DATABASE_VERSION = 5
 
 const VERSION_1_STATEMENTS = [
     `CREATE TABLE IF NOT EXISTS talos_chat_sessions (
@@ -202,6 +202,52 @@ const VERSION_4_STATEMENTS = [
         ON talos_notes(updated_at DESC, id);`,
 ] as const
 
+/**
+ * A research run, and everything that happened during it.
+ *
+ * Two tables and only one of them is the truth. `talos_research_events` is an
+ * append-only journal: it is never updated and never deleted from, and the
+ * state of a run is what you get by replaying it. `talos_research_runs` is a
+ * projection of that journal kept only so the station can list runs without
+ * reading every event of every one of them.
+ *
+ * Written this way because of what the journal has to survive. On a phone the
+ * process is killed as a matter of course — Doze, the six-hour foreground
+ * budget, an OEM that reclaims memory whenever it likes — and a row updated in
+ * place tells you only what it believed at the end. The journal tells you that
+ * a search FINISHED before the process died, which is the difference between
+ * paying for it once and paying for it twice.
+ *
+ * `UNIQUE (run_id, seq)` is the whole guard against a double append. A write
+ * acknowledged after the process died is replayed on the next boot, and without
+ * the constraint the same step would be counted twice — in a spend figure shown
+ * to the user, who is paying for it.
+ */
+const VERSION_5_STATEMENTS = [
+    `CREATE TABLE IF NOT EXISTS talos_research_runs (
+        id TEXT PRIMARY KEY NOT NULL,
+        session_id TEXT NOT NULL,
+        question TEXT NOT NULL CHECK (length(question) BETWEEN 1 AND 4000),
+        depth TEXT NOT NULL CHECK (depth IN ('quick', 'deep', 'exhaustive')),
+        engine TEXT NOT NULL DEFAULT 'device' CHECK (engine IN ('device', 'cloud')),
+        status TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS talos_research_runs_updated_idx
+        ON talos_research_runs(updated_at DESC, id DESC);`,
+    `CREATE TABLE IF NOT EXISTS talos_research_events (
+        run_id TEXT NOT NULL,
+        seq INTEGER NOT NULL CHECK (seq >= 0),
+        kind TEXT NOT NULL,
+        at TEXT NOT NULL,
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        UNIQUE (run_id, seq)
+    );`,
+    `CREATE INDEX IF NOT EXISTS talos_research_events_run_idx
+        ON talos_research_events(run_id, seq);`,
+] as const
+
 export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = Object.freeze([
     Object.freeze({
         toVersion: 1,
@@ -218,5 +264,9 @@ export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = 
     Object.freeze({
         toVersion: 4,
         statements: [...VERSION_4_STATEMENTS],
+    }),
+    Object.freeze({
+        toVersion: 5,
+        statements: [...VERSION_5_STATEMENTS],
     }),
 ])

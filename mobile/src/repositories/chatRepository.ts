@@ -291,6 +291,36 @@ export interface CreateNoteInput {
     created_at: string
 }
 
+
+/**
+ * One entry of a research run's journal, as it sits on disk.
+ *
+ * `seq` is assigned by the caller, not by the database, and that is deliberate:
+ * the writer knows how many entries it has already appended, so a write that
+ * was acknowledged after the process died collides with `UNIQUE (run_id, seq)`
+ * instead of being counted a second time. An autoincrement would happily give
+ * the duplicate a new number and report money that was never spent.
+ */
+export interface TalosResearchJournalEntry {
+    run_id: string
+    seq: number
+    kind: string
+    at: string
+    payload_json: string
+}
+
+/** The row the station lists. Derived from the journal, never the truth. */
+export interface TalosResearchRunRow {
+    id: string
+    session_id: string
+    question: string
+    depth: string
+    engine: string
+    status: string
+    started_at: string
+    updated_at: string
+}
+
 export interface TalosChatRepository {
     initialize(): Promise<void>
     listSessions(): Promise<TalosLocalChatSession[]>
@@ -373,6 +403,20 @@ export interface TalosChatRepository {
     deleteTask(taskId: string): Promise<void>
     createNote(input: CreateNoteInput): Promise<TalosLocalNote>
     listNotes(): Promise<TalosLocalNote[]>
+    /**
+     * Appends one entry to a run's journal, or refuses.
+     *
+     * Returns false when that `seq` is already there — a duplicate, not an
+     * error. The caller is a process that may have died between writing and
+     * learning that it wrote, so the second attempt is expected behaviour and
+     * must be silent, not fatal.
+     */
+    appendResearchEvent(entry: TalosResearchJournalEntry): Promise<boolean>
+    /** The whole journal of one run, in the order it happened. */
+    readResearchJournal(runId: string): Promise<TalosResearchJournalEntry[]>
+    /** Keeps the listing row in step with the journal that produced it. */
+    upsertResearchRun(row: TalosResearchRunRow): Promise<void>
+    listResearchRuns(): Promise<TalosResearchRunRow[]>
     deleteNote(noteId: string): Promise<void>
     createMemory(input: CreateMemoryInput): Promise<TalosLocalMemory>
     upsertMemory(input: CreateMemoryInput): Promise<TalosLocalMemory>

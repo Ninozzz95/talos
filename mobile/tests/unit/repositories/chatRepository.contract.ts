@@ -458,4 +458,76 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
     expect(older.some((message) => newest.some((row) => row.id === message.id))).toBe(false)
     const everything = await repository.listMessages(pagingSession.id)
     expect(everything).toHaveLength(6)
+
+    // --- The research journal ---
+    //
+    // Exercised through the shared contract on purpose: the in-memory
+    // implementation is what the tests run against and SQLite is what ships, so
+    // any difference between them is a bug that only ever appears on a phone.
+    // Everything below is asserted against BOTH.
+    const runId = 'research-run-1'
+    expect(await repository.appendResearchEvent({
+        run_id: runId,
+        seq: 0,
+        kind: 'run_started',
+        at: '2026-08-02T00:00:00.000Z',
+        payload_json: JSON.stringify({ question: 'quale tablet conviene' }),
+    })).toBe(true)
+    expect(await repository.appendResearchEvent({
+        run_id: runId,
+        seq: 1,
+        kind: 'step_finished',
+        at: '2026-08-02T00:00:10.000Z',
+        payload_json: JSON.stringify({ stepId: 's1', spend: { tokens: 1200, searches: 1, pages: 0 } }),
+    })).toBe(true)
+
+    // THE assertion this table exists for. A write acknowledged after the
+    // process died is replayed on the next boot; counting it twice would report
+    // a search the user never paid for.
+    expect(await repository.appendResearchEvent({
+        run_id: runId,
+        seq: 1,
+        kind: 'step_finished',
+        at: '2026-08-02T00:00:11.000Z',
+        payload_json: JSON.stringify({ stepId: 's1', spend: { tokens: 1200, searches: 1, pages: 0 } }),
+    })).toBe(false)
+
+    const journal = await repository.readResearchJournal(runId)
+    expect(journal.map((entry) => entry.seq)).toEqual([0, 1])
+    expect(journal[1]!.at).toBe('2026-08-02T00:00:10.000Z')
+    // The first write wins: the journal records what happened, and a later
+    // duplicate must not rewrite the time it happened at.
+    expect(JSON.parse(journal[1]!.payload_json).stepId).toBe('s1')
+
+    // A journal nobody has written to is empty, not missing: a run that has not
+    // started yet must not read as a failure.
+    expect(await repository.readResearchJournal('research-run-absent')).toEqual([])
+
+    await repository.upsertResearchRun({
+        id: runId,
+        session_id: alpha.id,
+        question: 'quale tablet conviene',
+        depth: 'deep',
+        engine: 'device',
+        status: 'collecting',
+        started_at: '2026-08-02T00:00:00.000Z',
+        updated_at: '2026-08-02T00:00:10.000Z',
+    })
+    await repository.upsertResearchRun({
+        id: runId,
+        session_id: alpha.id,
+        question: 'quale tablet conviene',
+        depth: 'deep',
+        // The engine can change mid-run: that is R1b, and a listing row that
+        // could not follow it would make the migration invisible.
+        engine: 'cloud',
+        status: 'done',
+        started_at: '2026-08-02T00:00:00.000Z',
+        updated_at: '2026-08-02T00:00:20.000Z',
+    })
+    const runs = await repository.listResearchRuns()
+    expect(runs).toHaveLength(1)
+    expect(runs[0]).toMatchObject({ id: runId, status: 'done', engine: 'cloud' })
+    // The journal is untouched by the projection: two rows, still.
+    expect(await repository.readResearchJournal(runId)).toHaveLength(2)
 }
