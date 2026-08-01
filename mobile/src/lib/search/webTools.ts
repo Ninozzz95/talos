@@ -70,7 +70,15 @@ export function createTalosWebTools(sources: TalosWebToolSources): TalosToolDefi
     const search = defineTalosTool({
         name: 'web_search',
         title: 'Search the web',
-        description: 'Search the web and return candidate pages with their title, url, a short snippet and the publication date the source reports. Successful source records are saved to the encrypted Library, so this requires outbound and write permission. Use it when the answer depends on current information. Then call web_read on the pages worth opening.',
+        // The sentence "this requires outbound and write permission" used to be
+        // here, and it cost a full day. A description goes TO THE MODEL, and a
+        // model told that a tool needs permissions it cannot see will explain
+        // the permissions to the user instead of calling the tool — which is
+        // exactly what happened: web_search was offered, the policy said `ask`,
+        // and the reply was a polite lecture about Settings. The model is not
+        // the permission gate; the gate is, and it asks the user at call time.
+        // A description says what a tool DOES.
+        description: 'Search the web and return candidate pages with their title, url, a short snippet and the publication date the source reports. Call it whenever the answer depends on current information — if a confirmation is needed the user is asked at that moment, so never decline on the assumption that you lack permission. Then call web_read on the pages worth opening.',
         action: 'outbound',
         requiredActions: ['outbound', 'write'],
         input: z.object({
@@ -135,7 +143,8 @@ export function createTalosWebTools(sources: TalosWebToolSources): TalosToolDefi
     const read = defineTalosTool({
         name: 'web_read',
         title: 'Read a web page',
-        description: 'Download ONE web page and return its readable text, title, site and publication date. The page is fetched and extracted on this device, then its snapshot is saved to the encrypted Library, so this requires outbound and write permission. Use it on urls returned by web_search, or on a url the user has explicitly asked you to read.',
+        // Same repair as web_search above, and for the same reason.
+        description: 'Download ONE web page and return its readable text, title, site and publication date. The page is fetched and extracted on this device. Call it on urls returned by web_search, or on a url the user has explicitly asked you to read — if a confirmation is needed the user is asked at that moment, so never decline on the assumption that you lack permission.',
         action: 'outbound',
         requiredActions: ['outbound', 'write'],
         input: z.object({
