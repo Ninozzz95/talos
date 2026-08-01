@@ -11,6 +11,11 @@ import { talosModelFit, type TalosModelFit } from '@/lib/models/fit'
 import { talosMeasureDevice, type TalosMeasuredDevice } from '@/services/deviceCapacity'
 import { clearProviderKey, getProviderKey, setProviderKey } from '@/services/secureKeyStore'
 import { talosCreateHubTransport } from '@/services/hubTransport'
+import { talosLoadModelCatalogue } from '@/services/modelCatalogue'
+import {
+    talosRecommendFromCatalogue,
+    type TalosCatalogueRecommendation,
+} from '@/lib/models/catalogue'
 import {
     talosModelTransferLeftovers,
     talosModelTransferStatus,
@@ -86,6 +91,22 @@ export interface TalosLocalModelsState {
     context: number
     /** Whether one exists — never the token itself, which stays in the Keystore. */
     hasToken: boolean
+    /**
+     * The showcase, and what it means for THIS phone.
+     *
+     * The screen IS this list: the section opens with what the device can run,
+     * already ranked, and free search on the Hub is the door underneath. That
+     * is only possible because the catalogue carries `ram_working_bytes`, so a
+     * verdict costs no network at all.
+     */
+    catalogue: {
+        state: 'idle' | 'measuring' | 'ready' | 'absent'
+        ageDays: number | null
+        fromCache: boolean
+        refusal: string | null
+        recommended: TalosCatalogueRecommendation[]
+        rejected: TalosCatalogueRecommendation[]
+    }
     transfer: {
         active: boolean
         modelName: string | null
@@ -107,6 +128,14 @@ const state = reactive<TalosLocalModelsState>({
     device: null,
     context: TALOS_DEFAULT_LOCAL_CONTEXT,
     hasToken: false,
+    catalogue: {
+        state: 'idle',
+        ageDays: null,
+        fromCache: false,
+        refusal: null,
+        recommended: [],
+        rejected: [],
+    },
     transfer: {
         active: false,
         modelName: null,
@@ -208,6 +237,43 @@ export async function talosRefreshDeviceCapacity(): Promise<void> {
  */
 let searchGeneration = 0
 let repoGeneration = 0
+
+/**
+ * Measure the phone, then answer it — in that order, and without the network.
+ *
+ * This is the screen's opening move, not a background nicety: the section shows
+ * a list the moment it can, and the list means nothing until the device it is
+ * about has been measured. The catalogue carries the working memory of every
+ * model, so the ranking costs no request at all once the document is cached.
+ */
+export async function talosLoadLocalCatalogue(): Promise<void> {
+    state.catalogue.state = 'measuring'
+    state.catalogue.refusal = null
+
+    await talosRefreshDeviceCapacity()
+    const loaded = await talosLoadModelCatalogue()
+
+    if (loaded.state !== 'ready') {
+        state.catalogue.state = 'absent'
+        // `unconfigured` is not a failure and must not read like one: this
+        // build simply has no host and no key yet.
+        state.catalogue.refusal = loaded.state === 'refused' ? loaded.reason : null
+        state.catalogue.recommended = []
+        state.catalogue.rejected = []
+        return
+    }
+
+    const device = state.device
+    const ranked = device ? talosRecommendFromCatalogue(loaded.catalogue.entries, device) : []
+
+    state.catalogue.state = 'ready'
+    state.catalogue.ageDays = loaded.ageDays
+    state.catalogue.fromCache = loaded.fromCache
+    state.catalogue.recommended = ranked.filter((row) => row.fits)
+    // What does not fit STAYS on screen, with its reason. A model that vanishes
+    // teaches nobody anything about their phone.
+    state.catalogue.rejected = ranked.filter((row) => !row.fits)
+}
 
 export async function talosSearchLocalModels(query: string): Promise<void> {
     const generation = ++searchGeneration

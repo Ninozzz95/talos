@@ -109,6 +109,36 @@ export interface TalosSetWarnings {
 }
 
 /**
+ * The two or three characters that stand for a model in a list.
+ *
+ * A tile of initials rather than a logo: the publishers are dozens and change,
+ * so any set of images we shipped would be a set that ages — the same reason
+ * there is no list of publishers in this app. Derived from the family name, so
+ * `gemma-3n` reads `G3n` and `qwen3` reads `Q3`.
+ */
+export function talosModelInitials(family: string): string {
+    // The dot is kept while splitting, so `llama-3.2` keeps its version in one
+    // piece — separating it gave `L3`, which loses the half that distinguishes
+    // one release from the next.
+    const words = family.replace(/[^A-Za-z0-9.]+/g, ' ').trim().split(' ').filter(Boolean)
+    if (words.length === 0) return '··'
+
+    const head = words[0]!
+    const letter = head.replace(/[^A-Za-z]/, '')[0]?.toUpperCase() ?? head[0]!.toUpperCase()
+    const second = words[1] ?? ''
+
+    // A second word that starts with a digit is the version — `3n`, `3.2`.
+    // Anything else is prose, and prose in a three-character tile reads as an
+    // accident, so the digits of the whole name are used instead.
+    const version = /^\d/.test(second)
+        ? second.replace(/\./g, '')
+        : (head.replace(/\D/g, '') || family.replace(/\D/g, ''))
+
+    const mark = `${letter}${version}`.slice(0, 3)
+    return mark === '' ? '··' : mark
+}
+
+/**
  * An internal slug turned into something a person can act on.
  *
  * These were rendered VERBATIM as the whole error text, in both languages: the

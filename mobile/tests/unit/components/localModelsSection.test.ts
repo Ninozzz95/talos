@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
@@ -21,6 +21,7 @@ const store = vi.hoisted(() => ({
     open: vi.fn(async () => undefined),
     search: vi.fn(async () => undefined),
     saveToken: vi.fn(async () => undefined),
+    loadCatalogue: vi.fn(async () => undefined),
     forgetToken: vi.fn(async () => undefined),
 }))
 
@@ -36,6 +37,7 @@ vi.mock('@/stores/localModels', () => ({
     talosRefreshDeviceCapacity: vi.fn(async () => undefined),
     talosRefreshLeftovers: vi.fn(async () => undefined),
     talosRefreshHuggingFaceToken: vi.fn(async () => undefined),
+    talosLoadLocalCatalogue: store.loadCatalogue,
     talosSetHuggingFaceToken: store.saveToken,
     talosForgetHuggingFaceToken: store.forgetToken,
 }))
@@ -93,6 +95,10 @@ function baseState(over: Record<string, unknown> = {}) {
         },
         context: 4096,
         hasToken: false,
+        catalogue: {
+            state: 'ready', ageDays: null, fromCache: false, refusal: null,
+            recommended: [], rejected: [],
+        },
         transfer: {
             active: false, modelName: null, haveBytes: 0, totalBytes: 0,
             runner: null, networkBound: true, failure: null,
@@ -112,6 +118,20 @@ beforeEach(() => {
 
 async function screen() {
     const wrapper = mount(TalosMobileLocalModels)
+    await flushPromises()
+    return wrapper
+}
+
+/**
+ * The search door, opened.
+ *
+ * Free search is no longer the screen — the catalogue list is — so anything
+ * about searching has to open the secondary door first, exactly as a reader
+ * would.
+ */
+async function searchScreen() {
+    const wrapper = await screen()
+    await wrapper.get('[data-testid="talos-models-open-search"]').trigger('click')
     await flushPromises()
     return wrapper
 }
@@ -145,7 +165,7 @@ describe('the Hugging Face token', () => {
      * component's state — and in every snapshot, screenshot and heap dump of it.
      */
     it('takes the token and does not keep it', async () => {
-        const wrapper = await screen()
+        const wrapper = await searchScreen()
 
         await wrapper.get('[data-testid="talos-models-token-input"]').setValue('hf_secret')
         await wrapper.get('[data-testid="talos-models-token-save"]').trigger('click')
@@ -166,7 +186,7 @@ describe('the Hugging Face token', () => {
      */
     it('reports that a token exists without ever holding one', async () => {
         store.state = baseState({ hasToken: true }) as never
-        const wrapper = await screen()
+        const wrapper = await searchScreen()
 
         const panel = wrapper.get('[data-testid="talos-models-token"]')
         expect(panel.text()).toContain('secure store')
