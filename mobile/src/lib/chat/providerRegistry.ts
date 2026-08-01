@@ -63,6 +63,10 @@ export const TALOS_MOBILE_PROVIDER_ADAPTERS: Readonly<Record<TalosMobileProvider
     gemini: lazyAdapter('gemini', true, async () => (await import('@/lib/chat/providers/geminiAdapter')).geminiAdapter),
     openrouter: lazyAdapter('openrouter', true, async () => (await loadOpenAiCompatible()).openRouterAdapter),
     ollama: lazyAdapter('ollama', false, async () => (await import('@/lib/chat/providers/ollamaAdapter')).ollamaAdapter),
+    // Lazy like the rest, and for a sharper reason: this one pulls in the
+    // bridge to the native engine, which has no business in the entry chunk of
+    // a session that may never open a local model.
+    local: lazyAdapter('local', false, async () => (await import('@/lib/chat/providers/localAdapter')).localAdapter),
 })
 
 export function providerAdapterFor(provider: TalosMobileProviderId | string): TalosMobileProviderAdapter {

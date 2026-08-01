@@ -65,6 +65,24 @@ export const TALOS_MOBILE_PROVIDERS: readonly TalosMobileProviderView[] = Object
     },
 ])
 
+/**
+ * `local` is deliberately absent from the list above, and the absence is a
+ * decision rather than an omission.
+ *
+ * This list feeds the Provider tab, which is a list of things to CONFIGURE: a
+ * key, an endpoint, a timeout, a discovery result. Adding the on-device engine
+ * to it crashed the panel — `Cannot read properties of undefined (reading
+ * 'status')` — because it has no runtime row, and it has no runtime row because
+ * there is nothing to configure. Nothing to authenticate to, nothing to reach,
+ * nothing that can time out.
+ *
+ * The tests that caught it were right and the change was wrong. Its home is the
+ * Locale tab, where the models that run here already live, and its adapter is
+ * registered like every other so the picker, the send path and the receipts
+ * treat it as an equal. Being a provider and being a thing with a settings row
+ * turn out to be different questions, and this list only answers the second.
+ */
+
 const UNKNOWN_PROVIDER: TalosMobileProviderView = Object.freeze({
     id: 'unknown',
     label: 'Unknown provider',

@@ -4,6 +4,7 @@ import { CircleHelp } from '@lucide/vue'
 import anthropicLogo from '@/assets/providers/anthropic.svg'
 import deepseekLogo from '@/assets/providers/deepseek.svg'
 import geminiLogo from '@/assets/providers/gemini.svg'
+import localLogo from '@/assets/providers/local.svg'
 import ollamaLogo from '@/assets/providers/ollama.svg'
 import openaiLogo from '@/assets/providers/openai.svg'
 import openrouterLogo from '@/assets/providers/openrouter.svg'
@@ -19,6 +20,7 @@ const providerLogos: Record<TalosMobileProviderId, string> = {
     anthropic: anthropicLogo,
     deepseek: deepseekLogo,
     gemini: geminiLogo,
+    local: localLogo,
     ollama: ollamaLogo,
     openai: openaiLogo,
     openrouter: openrouterLogo,

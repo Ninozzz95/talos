@@ -2,6 +2,17 @@ export type TalosMobileProviderId =
     | 'anthropic'
     | 'deepseek'
     | 'gemini'
+    /**
+     * The engine on this device. A provider like any other on purpose: the
+     * model picker, the send path, the tool gate and the receipts all work
+     * because everything that answers a message answers through one contract.
+     * A local engine wired in beside that contract would be a second send path,
+     * and every feature would then have to be written twice.
+     *
+     * It is the one provider with no key and no endpoint, because there is
+     * nothing to reach.
+     */
+    | 'local'
     | 'ollama'
     | 'openai'
     | 'openrouter'
