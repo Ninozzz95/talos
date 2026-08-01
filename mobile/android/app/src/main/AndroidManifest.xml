@@ -307,6 +307,16 @@
          has no such cap. It can only be scheduled while the app is visible,
          and returns RESULT_FAILURE rather than throwing when it is not. -->
     <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
+    <!-- Required BY THE SCHEDULER, not by us: a job with a connectivity
+         constraint is refused without it, and refused by throwing. The download
+         asks for "unmetered or the user said go ahead", which is a connectivity
+         constraint, so `JobScheduler.schedule` raised a SecurityException that
+         crossed the Capacitor bridge as a fatal exception and killed the app on
+         the first tap of Scarica — on 2026-08-02, the first time a real
+         download was attempted on a real device. Everything else about the
+         transfer was already right; this one line is what stood between forty
+         commits and a model actually arriving. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- F5.3: explicit — the mic permission dialog can never depend on manifest merging. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
