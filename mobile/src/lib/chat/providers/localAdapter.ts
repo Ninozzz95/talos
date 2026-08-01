@@ -1,0 +1,147 @@
+import type {
+    TalosMobileCompletionInput,
+    TalosMobileCompletionResult,
+    TalosMobileProviderAdapter,
+    TalosMobileProviderCatalog,
+    TalosProviderStreamHandlers,
+} from '@/lib/chat/providerContracts'
+import {
+    talosLocalEngineChatPrompt,
+    talosLocalEngineGenerate,
+    talosLocalEngineOpen,
+    talosLocalEngineStatus,
+    talosLocalInstalledModels,
+} from '@/services/localEngine'
+
+/**
+ * The engine on this device, answering through the same contract as everyone
+ * else.
+ *
+ * That is the whole design decision. A local runtime bolted in beside the send
+ * path would have been simpler to write and would have created a second one:
+ * two places that assemble a conversation, two that stream, two that record a
+ * receipt, and every future feature written twice. Made an adapter, it inherits
+ * the model picker, the abort signal, the persistence and the audit trail
+ * without any of them knowing it is special.
+ *
+ * What it does NOT inherit is a network, and that shows in three places: there
+ * is no key, no endpoint, and the transport argument is ignored. Nothing here
+ * can reach anything, which is the property the app promises about local models
+ * and the one place where "unused parameter" is the point rather than an
+ * oversight.
+ */
+
+/** Long enough for a real answer; a phone is not the place for an unbounded one. */
+const MAX_TOKENS = 1024
+
+/**
+ * Turns the conversation into what the engine expects.
+ *
+ * Tool turns are dropped rather than translated. A GGUF chat template knows
+ * `system`, `user` and `assistant` and nothing else, so a tool result rendered
+ * through it would arrive as an unlabelled block of text in the middle of the
+ * conversation — worse than absent, because the model would read it as
+ * something the user said.
+ */
+function conversationOf(input: TalosMobileCompletionInput): Array<{ role: string, content: string }> {
+    const turns: Array<{ role: string, content: string }> = []
+    if (input.system) turns.push({ role: 'system', content: input.system })
+    for (const turn of input.turns) {
+        // Only the two roles a GGUF template knows how to punctuate. The
+        // compiler confirms `tool` is the only other one a turn can carry, and
+        // it is exactly the one that must not be rendered.
+        if (turn.role !== 'user' && turn.role !== 'assistant') continue
+        const content = typeof turn.content === 'string' ? turn.content : ''
+        if (content === '') continue
+        turns.push({ role: turn.role, content })
+    }
+    return turns
+}
+
+/**
+ * Makes sure the requested model is the one in memory.
+ *
+ * The engine holds one at a time, deliberately — two multi-gigabyte models on a
+ * phone is how an app is killed mid-sentence. So switching models is opening
+ * another, and asking first avoids paying a reload for a message that is
+ * already on the right one.
+ */
+async function ensureLoaded(path: string): Promise<void> {
+    const status = await talosLocalEngineStatus()
+    if (!status.available) throw new Error('TALOS_LOCAL_ENGINE_UNAVAILABLE')
+    if (status.loadedPath === path) return
+    await talosLocalEngineOpen(path)
+}
+
+async function run(
+    input: TalosMobileCompletionInput,
+    onChunk?: (text: string) => void,
+): Promise<TalosMobileCompletionResult> {
+    await ensureLoaded(input.model.id)
+    const prompt = await talosLocalEngineChatPrompt(conversationOf(input))
+    const generation = await talosLocalEngineGenerate(
+        prompt,
+        (delta) => { onChunk?.(delta) },
+        { maxTokens: MAX_TOKENS, stopAtEndOfGeneration: true },
+    )
+    return {
+        text: generation.text,
+        model: input.model.id,
+        finishReason: 'stop',
+        // Only what was actually counted. A local run has no billing and no
+        // prompt-token figure to report, and inventing one would put a number
+        // in the receipt that means nothing.
+        usage: { completion_tokens: generation.tokens },
+    }
+}
+
+export const localAdapter: TalosMobileProviderAdapter = {
+    provider: 'local',
+    requiresSecret: false,
+
+    /**
+     * The catalogue is the disk.
+     *
+     * There is no remote list to fetch and no version to be behind: what can be
+     * run is what has finished downloading, asked of the device every time.
+     */
+    async listModels(): Promise<TalosMobileProviderCatalog> {
+        const files = await talosLocalInstalledModels()
+        return {
+            provider: 'local',
+            models: files.map((file) => ({
+                // The path is the identity. Two models can share a filename
+                // across repositories, and a name that collides would load the
+                // wrong weights without anything looking wrong.
+                id: file.path,
+                provider: 'local' as const,
+                displayName: file.name.replace(/\.gguf$/i, ''),
+                chatCompatibility: 'unknown' as const,
+                supportedParameters: [],
+                // Text in, text out. Stated rather than left empty: a GGUF run
+                // through this engine has no image path, and a picker that
+                // implied otherwise would let someone attach a photo to a model
+                // that will silently ignore it.
+                inputModalities: ['text'],
+                outputModalities: ['text'],
+            })),
+        }
+    },
+
+    async complete(input): Promise<TalosMobileCompletionResult> {
+        return run(input)
+    },
+
+    async streamComplete(
+        input,
+        _credential,
+        handlers: TalosProviderStreamHandlers,
+    ): Promise<TalosMobileCompletionResult> {
+        // The abort signal is honoured by not starting rather than by tearing
+        // down a load already in flight: cancelling mid-load leaves gigabytes
+        // half-mapped, and the engine's own cancel covers the part that matters,
+        // which is the generation.
+        if (handlers.signal?.aborted) throw new Error('TALOS_LOCAL_ABORTED')
+        return run(input, handlers.onChunk)
+    },
+}
