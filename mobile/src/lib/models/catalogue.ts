@@ -33,7 +33,10 @@ export interface TalosCatalogueEntry {
     fileBytes: number
     sha256: string
     download: { kind: string; repo: string; file: string }
-    runtime: string[]
+    // Readonly throughout: the store hands this out frozen and nothing here
+    // mutates it, so the type says what is actually true rather than inviting
+    // a caller to try.
+    runtime: readonly string[]
     contextTokens: number
     /**
      * What generating actually costs, INCLUDING the KV cache at a typical
@@ -44,8 +47,8 @@ export interface TalosCatalogueEntry {
      */
     ramWorkingBytes: number
     /** Measurements taken on named hardware. Never a promise about this phone. */
-    referenceSpeed: Array<{ soc: string; engine: string; tokensPerSecond: number }>
-    tags: string[]
+    referenceSpeed: ReadonlyArray<{ soc: string; engine: string; tokensPerSecond: number }>
+    tags: readonly string[]
     addedAt: string | null
     popularity: number
 }
@@ -71,7 +74,17 @@ export type TalosCatalogueResult =
 /** The only schema this build knows how to read. */
 export const TALOS_CATALOGUE_SCHEMA = 1
 
-/** Verifies the document against a key this app already trusts. */
+/**
+ * Verifies the document against a key this app already trusts.
+ *
+ * The signature is DETACHED, which departs deliberately from the sketch in the
+ * spec: that drew it inside the document, and a document cannot sign itself
+ * without a canonical form. You would have to agree, byte for byte and forever,
+ * on key order and whitespace and number formatting — and any disagreement
+ * reads as a forged catalogue rather than as a formatting difference. Serving
+ * `catalogue.json.sig` beside `catalogue.json` signs exactly the bytes that
+ * were fetched, and has nothing left to argue about.
+ */
 export type TalosCatalogueVerifier = (body: string, signature: string) => boolean
 
 function text(value: unknown): string | null {
@@ -142,6 +155,7 @@ function entryOf(raw: Record<string, unknown>): TalosCatalogueEntry | null {
  */
 export function talosReadCatalogue(
     raw: string,
+    signature: string | null,
     verifier: TalosCatalogueVerifier | null,
 ): TalosCatalogueResult {
     let document: Record<string, unknown>
@@ -154,9 +168,8 @@ export function talosReadCatalogue(
         return { ok: false, reason: 'malformed' }
     }
 
-    const signature = text(document.signature)
-    if (!signature) return { ok: false, reason: 'unsigned' }
-    if (!verifier || !verifier(raw, signature)) return { ok: false, reason: 'unverified' }
+    if (!text(signature)) return { ok: false, reason: 'unsigned' }
+    if (!verifier || !verifier(raw, signature!)) return { ok: false, reason: 'unverified' }
 
     // Only after the signature. A version check on unverified bytes is a
     // decision taken on the network's say-so.

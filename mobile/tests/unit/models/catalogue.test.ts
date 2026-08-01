@@ -52,12 +52,13 @@ function document(over: Record<string, unknown> = {}): string {
     })
 }
 
+const SIG = 'a-detached-signature'
 const accepts = () => true
 const rejects = () => false
 
 describe('the signature, which comes first', () => {
     it('reads a document that verifies', () => {
-        const result = talosReadCatalogue(document(), accepts)
+        const result = talosReadCatalogue(document(), SIG, accepts)
 
         expect(result.ok).toBe(true)
         if (!result.ok) return
@@ -66,13 +67,13 @@ describe('the signature, which comes first', () => {
     })
 
     it('refuses a document nobody signed', () => {
-        const result = talosReadCatalogue(document({ signature: undefined }), accepts)
+        const result = talosReadCatalogue(document(), null, accepts)
 
         expect(result).toEqual({ ok: false, reason: 'unsigned' })
     })
 
     it('refuses a signature that does not check out', () => {
-        expect(talosReadCatalogue(document(), rejects)).toEqual({ ok: false, reason: 'unverified' })
+        expect(talosReadCatalogue(document(), SIG, rejects)).toEqual({ ok: false, reason: 'unverified' })
     })
 
     /**
@@ -81,7 +82,7 @@ describe('the signature, which comes first', () => {
      * requirement at all.
      */
     it('fails closed when there is nothing to verify with', () => {
-        expect(talosReadCatalogue(document(), null)).toEqual({ ok: false, reason: 'unverified' })
+        expect(talosReadCatalogue(document(), SIG, null)).toEqual({ ok: false, reason: 'unverified' })
     })
 
     /**
@@ -92,20 +93,20 @@ describe('the signature, which comes first', () => {
     it('checks the signature before it reads the schema version', () => {
         const verify = vi.fn(() => false)
 
-        const result = talosReadCatalogue(document({ schema_version: 99 }), verify)
+        const result = talosReadCatalogue(document({ schema_version: 99 }), SIG, verify)
 
         expect(verify).toHaveBeenCalled()
         expect(result).toEqual({ ok: false, reason: 'unverified' })
     })
 
     it('refuses a schema it was not written against', () => {
-        expect(talosReadCatalogue(document({ schema_version: 99 }), accepts))
+        expect(talosReadCatalogue(document({ schema_version: 99 }), SIG, accepts))
             .toEqual({ ok: false, reason: 'unsupported-schema' })
     })
 
     it('refuses something that is not a document at all', () => {
-        expect(talosReadCatalogue('not json', accepts)).toEqual({ ok: false, reason: 'malformed' })
-        expect(talosReadCatalogue('[]', accepts)).toEqual({ ok: false, reason: 'malformed' })
+        expect(talosReadCatalogue('not json', SIG, accepts)).toEqual({ ok: false, reason: 'malformed' })
+        expect(talosReadCatalogue('[]', SIG, accepts)).toEqual({ ok: false, reason: 'malformed' })
     })
 })
 
@@ -117,7 +118,7 @@ describe('the rows', () => {
     it('drops a row that cannot be judged, and says how many', () => {
         const result = talosReadCatalogue(document({
             models: [entry(), entry({ ram_working_bytes: undefined }), entry({ sha256: undefined })],
-        }), accepts)
+        }), SIG, accepts)
 
         expect(result.ok).toBe(true)
         if (!result.ok) return
@@ -133,7 +134,7 @@ describe('the rows', () => {
     it('keeps the rest of a signed document when one row is wrong', () => {
         const result = talosReadCatalogue(document({
             models: [entry({ id: 'bad', file_bytes: undefined }), entry({ id: 'good' })],
-        }), accepts)
+        }), SIG, accepts)
 
         expect(result.ok).toBe(true)
         if (!result.ok) return
@@ -141,7 +142,7 @@ describe('the rows', () => {
     })
 
     it('keeps reference speeds as measurements on named hardware', () => {
-        const result = talosReadCatalogue(document(), accepts)
+        const result = talosReadCatalogue(document(), SIG, accepts)
 
         expect(result.ok).toBe(true)
         if (!result.ok) return
@@ -153,7 +154,7 @@ describe('the rows', () => {
     it('discards a reference speed that names no hardware', () => {
         const result = talosReadCatalogue(document({
             models: [entry({ reference_speed: [{ engine: 'llamacpp', tokens_per_second: 40 }] })],
-        }), accepts)
+        }), SIG, accepts)
 
         expect(result.ok).toBe(true)
         if (!result.ok) return
@@ -203,7 +204,7 @@ describe('what to put in front of this phone', () => {
                 entry({ id: 'huge', ram_working_bytes: 20 * GIB, file_bytes: 18 * GIB }),
                 entry({ id: 'big', ram_working_bytes: 4 * GIB, file_bytes: 3 * GIB }),
             ],
-        }), accepts)
+        }), SIG, accepts)
         if (!result.ok) throw new Error('fixture failed to parse')
         return result.catalogue.entries
     }

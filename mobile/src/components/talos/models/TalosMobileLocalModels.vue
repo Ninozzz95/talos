@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 /**
  * The download centre — the "On device" section of the Model Lab.
  *
@@ -29,19 +29,21 @@ import {
     talosDownloadSet,
     talosStopLocalDownload,
     talosRefreshTransfer,
-    talosRefreshDeviceCapacity,
     talosRefreshLeftovers,
     talosRefreshHuggingFaceToken,
+    talosLoadLocalCatalogue,
     talosSetHuggingFaceToken,
     talosForgetHuggingFaceToken,
 } from '@/stores/localModels'
 import { talosDiscardModelTransfer } from '@/services/modelTransfer'
+import type { TalosCatalogueRecommendation } from '@/lib/models/catalogue'
 import { talosGroupModelsByProvider, talosProviderOptions } from '@/lib/models/providerGrouping'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import {
     talosFailureKey,
     talosFitVerdict,
     talosFormatBytes,
+    talosModelInitials,
     talosRetryAfterSeconds,
     talosSetWarnings,
 } from '@/lib/models/presentation'
@@ -72,13 +74,53 @@ onMounted(async () => {
     // heat all move, and a fit answer from an hour ago is about a different
     // phone.
     await Promise.all([
-        talosRefreshDeviceCapacity(),
+        // The opening move: measure, then show the list. Everything else on
+        // this screen is about a device, so nothing is worth showing until the
+        // device has been looked at.
+        talosLoadLocalCatalogue(),
         talosRefreshTransfer(),
         talosRefreshLeftovers(),
         talosRefreshHuggingFaceToken(),
     ])
     if (!mounted) stopPolling()
 })
+
+/** The device strip: what every verdict below is an answer about. */
+const device = computed(() => {
+    const measured = store.device
+    if (!measured) return null
+    return {
+        name: measured.deviceModel,
+        ram: talosFormatBytes(measured.availableRamBytes),
+        storage: talosFormatBytes(measured.freeStorageBytes),
+        bandwidth: measured.memoryBandwidthBytesPerSecond === null
+            ? null
+            : `${Math.round(measured.memoryBandwidthBytesPerSecond / 1024 ** 3)} GB/s`,
+        thermal: measured.thermal,
+        // How much of the phone's memory is free, for the strip's own bar.
+        share: Math.max(0, Math.min(100, Math.round(
+            (measured.availableRamBytes / Math.max(1, measured.totalRamBytes)) * 100))),
+    }
+})
+
+/** One catalogue row, worked out once rather than four times per render. */
+function rowOf(item: Readonly<TalosCatalogueRecommendation>) {
+    return {
+        key: item.entry.id,
+        initials: talosModelInitials(item.entry.family),
+        entry: item.entry,
+        size: talosFormatBytes(item.entry.fileBytes),
+        working: talosFormatBytes(item.entry.ramWorkingBytes),
+        missing: talosFormatBytes(Math.abs(item.headroomBytes)),
+        fits: item.fits,
+        speed: item.entry.referenceSpeed[0]?.tokensPerSecond ?? null,
+    }
+}
+
+const recommended = computed(() => store.catalogue.recommended.map(rowOf))
+const rejected = computed(() => store.catalogue.rejected.map(rowOf))
+/** The search door opens only when asked for: the list is the screen. */
+const searching = ref(false)
 
 function stopPolling(): void {
     if (poller !== null) clearInterval(poller)
@@ -90,17 +132,6 @@ onUnmounted(() => {
     stopPolling()
 })
 
-const deviceLine = computed(() => {
-    const device = store.device
-    if (!device) return null
-    // Composed here rather than through t(): `escapeParameter` would turn a
-    // device model containing an apostrophe into an entity.
-    return [
-        device.deviceModel,
-        `${talosFormatBytes(device.availableRamBytes)} ${t('localModels.ramFree')}`,
-        `${talosFormatBytes(device.freeStorageBytes)} ${t('localModels.storageFree')}`,
-    ].join(' · ')
-})
 
 async function search(): Promise<void> {
     refused.value = null
@@ -248,17 +279,161 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
     >
         <p class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('localModels.intro') }}</p>
 
-        <!-- What this phone is, in its own words. The fit answers below are
-             only as honest as this line. -->
-        <p
-            v-if="deviceLine"
+        <!-- The device strip. Every verdict below is an answer ABOUT this, so
+             it stays at the top rather than hiding in a settings panel: the
+             reader can see what the answers were computed from. -->
+        <div
+            v-if="device"
             data-testid="talos-models-device"
-            class="flex items-center gap-1.5 text-2xs text-[var(--talos-muted)]"
+            class="flex flex-col gap-2 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3"
         >
-            <Cpu class="size-3 shrink-0" aria-hidden="true" />
-            {{ deviceLine }}
-        </p>
+            <div class="flex items-center justify-between gap-2">
+                <span class="flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold text-[var(--talos-text)]">
+                    <Cpu class="size-3.5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                    {{ device.name }}
+                </span>
+                <span
+                    v-if="device.thermal"
+                    class="shrink-0 font-mono text-3xs uppercase tracking-wider"
+                    :class="device.thermal === 'none' || device.thermal === 'light'
+                        ? 'text-[var(--talos-accent)]'
+                        : 'text-[var(--talos-warning,#c08a3e)]'"
+                >{{ t(`localModels.thermal_${device.thermal}`) }}</span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2">
+                <div class="flex flex-col">
+                    <b class="font-mono text-sm font-semibold tabular-nums text-[var(--talos-text)]">{{ device.ram }}</b>
+                    <span class="text-3xs text-[var(--talos-muted)]">{{ t('localModels.ramFree') }}</span>
+                </div>
+                <div class="flex flex-col">
+                    <b class="font-mono text-sm font-semibold tabular-nums text-[var(--talos-text)]">{{ device.storage }}</b>
+                    <span class="text-3xs text-[var(--talos-muted)]">{{ t('localModels.storageFree') }}</span>
+                </div>
+                <div class="flex flex-col">
+                    <b class="font-mono text-sm font-semibold tabular-nums text-[var(--talos-text)]">
+                        {{ device.bandwidth ?? '—' }}
+                    </b>
+                    <span class="text-3xs text-[var(--talos-muted)]">{{ t('localModels.bandwidthMeasured') }}</span>
+                </div>
+            </div>
+
+            <div class="h-1 overflow-hidden rounded-full bg-[var(--talos-active)]">
+                <div class="h-full rounded-full bg-[var(--talos-accent)]" :style="{ width: `${device.share}%` }" />
+            </div>
+        </div>
+
+        <!-- Measuring. A skeleton rather than an empty screen: the list is
+             coming, and saying so is different from showing nothing. -->
+        <div
+            v-else-if="store.catalogue.state === 'measuring'"
+            data-testid="talos-models-measuring"
+            class="flex flex-col items-center gap-2 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-6 text-center"
+        >
+            <span class="size-8 animate-spin rounded-full border-2 border-[var(--talos-active)] border-t-[var(--talos-accent)]" aria-hidden="true" />
+            <b class="text-sm font-semibold text-[var(--talos-text)]">{{ t('localModels.measuring') }}</b>
+            <span class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.measuringWhat') }}</span>
+        </div>
+
         <p v-else class="text-xs text-[var(--talos-muted)]">{{ t('localModels.noDevice') }}</p>
+
+        <!-- THE LIST. The screen is this, not a search box: the reader arrives
+             and the models are already there, ranked for the phone above. -->
+        <template v-if="store.catalogue.state === 'ready' && !store.repo">
+            <div v-if="recommended.length" class="flex items-baseline justify-between gap-2 px-1">
+                <h5 class="text-xs font-bold uppercase tracking-wider text-[var(--talos-text)]">
+                    {{ t('localModels.recommendedHere') }}
+                </h5>
+                <span class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ recommended.length }}</span>
+            </div>
+
+            <article
+                v-for="(row, index) in recommended"
+                :key="row.key"
+                data-testid="talos-models-catalogue-row"
+                class="grid grid-cols-[2.375rem_1fr] gap-3 rounded-2xl border bg-[var(--talos-panel)]/70 p-3"
+                :class="index === 0 ? 'border-[var(--talos-accent)]/45' : 'border-[var(--talos-border)]'"
+            >
+                <span class="grid size-9.5 place-items-center rounded-xl border border-[var(--talos-accent)]/25 bg-[var(--talos-accent)]/10 font-mono text-xs font-bold text-[var(--talos-accent)]">
+                    {{ row.initials }}
+                </span>
+                <div class="flex min-w-0 flex-col gap-1.5">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <b class="text-sm font-semibold text-[var(--talos-text)]">{{ row.entry.displayName }}</b>
+                        <span
+                            v-if="index === 0"
+                            data-testid="talos-models-recommended-badge"
+                            class="rounded-full bg-[var(--talos-accent)] px-2 py-0.5 font-mono text-3xs font-bold uppercase tracking-wider text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+                        >{{ t('localModels.recommended') }}</span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1.5 font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
+                        <span>{{ row.entry.publisher }}</span><span class="opacity-40">·</span>
+                        <span>{{ row.entry.quantisation }}</span><span class="opacity-40">·</span>
+                        <span>{{ row.size }}</span><span class="opacity-40">·</span>
+                        <span>{{ row.entry.contextTokens }}</span>
+                    </div>
+                    <p class="text-2xs leading-snug text-[var(--talos-muted)]">{{ row.entry.family }}</p>
+                    <p class="flex items-center gap-1.5 text-2xs font-semibold text-[var(--talos-success,#4c9a6a)]">
+                        <span class="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
+                        {{ t('localModels.bandComfortable') }}
+                        <span class="font-mono text-3xs font-medium tabular-nums text-[var(--talos-muted)]">
+                            <template v-if="row.speed">~{{ row.speed }} t/s · </template>{{ row.working }}
+                        </span>
+                    </p>
+                </div>
+            </article>
+
+            <!-- What does not fit STAYS, with its numbers. A model that
+                 vanishes teaches nobody anything about their phone. -->
+            <div v-if="rejected.length" class="flex items-baseline justify-between gap-2 px-1 pt-1">
+                <h5 class="text-xs font-bold uppercase tracking-wider text-[var(--talos-text)]">
+                    {{ t('localModels.notHere') }}
+                </h5>
+                <span class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ rejected.length }}</span>
+            </div>
+
+            <article
+                v-for="row in rejected"
+                :key="row.key"
+                data-testid="talos-models-catalogue-rejected"
+                class="grid grid-cols-[2.375rem_1fr] gap-3 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3"
+            >
+                <span class="grid size-9.5 place-items-center rounded-xl border border-[var(--talos-muted)]/20 bg-[var(--talos-muted)]/10 font-mono text-xs font-bold text-[var(--talos-muted)]">
+                    {{ row.initials }}
+                </span>
+                <div class="flex min-w-0 flex-col gap-1.5">
+                    <b class="text-sm font-semibold text-[var(--talos-text)]">{{ row.entry.displayName }}</b>
+                    <div class="flex flex-wrap items-center gap-1.5 font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
+                        <span>{{ row.entry.publisher }}</span><span class="opacity-40">·</span>
+                        <span>{{ row.entry.quantisation }}</span><span class="opacity-40">·</span>
+                        <span>{{ row.size }}</span>
+                    </div>
+                    <p class="flex items-center gap-1.5 text-2xs font-semibold text-[var(--talos-danger,#dc5b5b)]">
+                        <span class="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
+                        {{ t('localModels.bandWontRun') }}
+                        <span class="font-mono text-3xs font-medium tabular-nums text-[var(--talos-muted)]">
+                            {{ t('localModels.shortBy', { size: row.missing }) }}
+                        </span>
+                    </p>
+                </div>
+            </article>
+        </template>
+
+        <!-- The secondary door. Free search on the Hub is for somebody who
+             already knows what they want; it does not open the screen. -->
+        <button
+            v-if="!store.repo && !searching"
+            type="button"
+            data-testid="talos-models-open-search"
+            class="talos-pressable flex items-center gap-2.5 rounded-2xl border border-dashed border-[var(--talos-border)] p-3 text-left"
+            @click="searching = true"
+        >
+            <Search class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+            <span class="flex flex-col">
+                <b class="text-xs font-semibold text-[var(--talos-text)]">{{ t('localModels.searchLabel') }}</b>
+                <span class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.searchWhy') }}</span>
+            </span>
+        </button>
 
         <!-- A download in flight, with the bar the native side is driving.
              Shown while it is active OR paused: hiding it on pause erased every
@@ -341,7 +516,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
         <!-- The token. Optional, and worth having even for open models: the
              anonymous limit is per IP, and a carrier puts thousands of people
              behind one address. -->
-        <details v-if="!store.repo" data-testid="talos-models-token" class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3">
+        <details v-if="!store.repo && searching" data-testid="talos-models-token" class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3">
             <summary class="flex min-h-10 cursor-pointer items-center justify-between gap-2 text-sm font-semibold text-[var(--talos-text)]">
                 {{ t('localModels.tokenTitle') }}
                 <!-- A word, not a sentence: this is a badge pill at 10px with
@@ -387,7 +562,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
         </details>
 
         <!-- Searching the Hub. -->
-        <form v-if="!store.repo" class="flex gap-2" @submit.prevent="search">
+        <form v-if="!store.repo && searching" class="flex gap-2" @submit.prevent="search">
             <input
                 v-model="query"
                 data-testid="talos-models-query"

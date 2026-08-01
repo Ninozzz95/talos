@@ -1,5 +1,10 @@
-﻿import { describe, expect, it } from 'vitest'
-import { talosFitVerdict, talosFormatBytes, talosSetWarnings } from '@/lib/models/presentation'
+import { describe, expect, it } from 'vitest'
+import {
+    talosFitVerdict,
+    talosFormatBytes,
+    talosModelInitials,
+    talosSetWarnings,
+} from '@/lib/models/presentation'
 import type { TalosModelFit } from '@/lib/models/fit'
 // Aliased so the Italian locale cannot shadow vitest's own `it`.
 import { TALOS_EN_MESSAGES as english } from '@/i18n/locales/en'
@@ -129,6 +134,31 @@ describe('the strings that must never interpolate', () => {
 
     it('is the same set of keys in both languages', () => {
         expect(Object.keys(italian.localModels).sort()).toEqual(Object.keys(english.localModels).sort())
+    })
+})
+
+/**
+ * A tile of initials rather than a logo. The publishers are dozens and they
+ * change, so any set of images shipped in the APK would be a set that ages —
+ * the same reason there is no list of publishers anywhere in this app.
+ */
+describe('the mark that stands for a model', () => {
+    it('reads a family name the way a person would abbreviate it', () => {
+        expect(talosModelInitials('gemma-3n')).toBe('G3n')
+        expect(talosModelInitials('qwen3')).toBe('Q3')
+        expect(talosModelInitials('llama-3.2')).toBe('L32')
+    })
+
+    it('copes with a name that has no digits at all', () => {
+        expect(talosModelInitials('mistral')).toBe('M')
+    })
+
+    /** Never empty, and never longer than the tile it has to sit in. */
+    it('always produces something that fits', () => {
+        expect(talosModelInitials('')).toBe('··')
+        expect(talosModelInitials('---')).toBe('··')
+        expect(talosModelInitials('some-extremely-long-family-name-2026').length)
+            .toBeLessThanOrEqual(3)
     })
 })
 
