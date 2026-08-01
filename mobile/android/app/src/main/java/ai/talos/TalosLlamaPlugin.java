@@ -1,10 +1,14 @@
 package ai.talos;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.File;
 import java.util.concurrent.ExecutorService;
@@ -174,6 +178,79 @@ public class TalosLlamaPlugin extends Plugin {
         event.put("delta", text.substring(sent));
         notifyListeners("token", event);
         return text.length();
+    }
+
+    /**
+     * The models on this device that can actually be opened.
+     *
+     * Asked of the disk every time rather than remembered. A model can be
+     * deleted by the system reclaiming space, or by the user through Android's
+     * own storage screen, and a cached list would keep offering something that
+     * is no longer there — which fails at the worst moment, halfway into
+     * loading, instead of at the moment of choosing.
+     */
+    @PluginMethod
+    public void installed(PluginCall call) {
+        // The SAME root the downloader writes to. Asking for `getFilesDir()`
+        // instead would compile, run, and return an empty list forever — the
+        // failure would look like "no models downloaded" rather than like
+        // looking in the wrong drawer.
+        TalosModelStore store = new TalosModelStore(TalosTransferSession.rootFor(getContext()));
+        JSArray models = new JSArray();
+        for (TalosModelStore.Leftover entry : store.finished()) {
+            JSObject row = new JSObject();
+            row.put("path", entry.path);
+            row.put("bytes", entry.bytes);
+            row.put("name", new File(entry.path).getName());
+            models.put(row);
+        }
+        JSObject result = new JSObject();
+        result.put("models", models);
+        call.resolve(result);
+    }
+
+    /**
+     * Turns a conversation into the prompt this model expects.
+     *
+     * Kept as its own call rather than folded into `generate` so the caller can
+     * see what will be sent — and because a refusal ("this GGUF declares no
+     * template") has to be answerable before a generation starts, not halfway
+     * through one.
+     */
+    @PluginMethod
+    public void chatPrompt(PluginCall call) {
+        TalosLlamaEngine engine = openEngine.get();
+        if (engine == null) {
+            call.reject("TALOS_LLAMA_NO_MODEL");
+            return;
+        }
+        JSArray turns = call.getArray("turns");
+        if (turns == null || turns.length() == 0) {
+            call.reject("TALOS_LLAMA_TURNS_REQUIRED");
+            return;
+        }
+        String[] roles = new String[turns.length()];
+        String[] contents = new String[turns.length()];
+        try {
+            for (int index = 0; index < turns.length(); index += 1) {
+                JSONObject turn = turns.getJSONObject(index);
+                roles[index] = turn.optString("role", "user");
+                contents[index] = turn.optString("content", "");
+            }
+        } catch (JSONException malformed) {
+            call.reject("TALOS_LLAMA_TURNS_INVALID");
+            return;
+        }
+        String prompt = engine.chatPrompt(roles, contents);
+        if (prompt == null || prompt.isEmpty()) {
+            // Named, so the interface can say WHY instead of producing a worse
+            // answer that looks like the model's fault.
+            call.reject("TALOS_LLAMA_NO_CHAT_TEMPLATE");
+            return;
+        }
+        JSObject result = new JSObject();
+        result.put("prompt", prompt);
+        call.resolve(result);
     }
 
     /** Stops the current generation. What was produced so far still stands. */

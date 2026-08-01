@@ -44,6 +44,10 @@ interface TalosLlamaPlugin {
         maxTokens?: number
         stopAtEndOfGeneration?: boolean
     }): Promise<TalosLocalEngineGeneration>
+    installed(): Promise<{ models: Array<{ path: string, bytes: number, name: string }> }>
+    chatPrompt(options: {
+        turns: ReadonlyArray<{ role: string, content: string }>
+    }): Promise<{ prompt: string }>
     cancel(): Promise<void>
     close(): Promise<void>
     addListener(
@@ -75,6 +79,48 @@ export async function talosLocalEngineOpen(
     options: { threads?: number, contextTokens?: number, gpuLayers?: number } = {},
 ): Promise<TalosLocalEngineOpenResult> {
     return plugin.open({ path, ...options })
+}
+
+export interface TalosLocalModelFile {
+    path: string
+    bytes: number
+    name: string
+}
+
+/**
+ * The models on this device that can actually be opened.
+ *
+ * Read from the disk on every call, never remembered. Android reclaims storage
+ * without asking, and the user can delete a file from the system's own storage
+ * screen; a cached list would go on offering something that is gone, and fail
+ * halfway into loading it rather than at the moment of choosing.
+ */
+export async function talosLocalInstalledModels(): Promise<TalosLocalModelFile[]> {
+    try {
+        const { models } = await plugin.installed()
+        return Array.isArray(models) ? models : []
+    } catch {
+        return []
+    }
+}
+
+/**
+ * The conversation, punctuated the way THIS model expects.
+ *
+ * Deliberately not built in TypeScript. Every model family marks turns
+ * differently and the marks live inside the GGUF; writing "User: … Assistant: …"
+ * here would work in the sense of producing output, and would quietly cost
+ * quality on every answer — a defect that reads as the model being weak and
+ * sends people to download a different one.
+ *
+ * Rejects with `TALOS_LLAMA_NO_CHAT_TEMPLATE` when the file declares none. That
+ * is a refusal to be shown, not a case to paper over.
+ */
+export async function talosLocalEngineChatPrompt(
+    turns: ReadonlyArray<{ role: string, content: string }>,
+): Promise<string> {
+    const { prompt } = await plugin.chatPrompt({ turns })
+    return prompt
 }
 
 export async function talosLocalEngineClose(): Promise<void> {

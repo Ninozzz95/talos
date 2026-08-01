@@ -77,6 +77,15 @@ final class TalosLlamaNative {
      */
     static native String nativeTextSoFar(long handle);
 
+    /**
+     * Formatta una conversazione col template che il GGUF si porta dentro.
+     *
+     * Stringa vuota se il file non ne dichiara uno. È un esito, non un guasto
+     * da nascondere: comporre un formato «ragionevole» a mano è ciò che rende
+     * un modello locale apparentemente scadente.
+     */
+    static native String nativeApplyChatTemplate(long handle, String[] roles, String[] contents);
+
     static native void nativeCancel(long handle);
 
     static native int nativeContextTokens(long handle);

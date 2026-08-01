@@ -208,6 +208,71 @@ Java_ai_talos_TalosLlamaNative_nativeTokensProduced(JNIEnv *, jclass, jlong hand
 }
 
 /**
+ * Formatta una conversazione col template DEL MODELLO.
+ *
+ * Non è rifinitura: ogni famiglia di modelli è stata addestrata su una
+ * punteggiatura di ruoli sua — `<|im_start|>`, `[INST]`, `<|start_header_id|>` —
+ * e darle quella sbagliata non produce un errore, produce risposte peggiori.
+ * Il difetto si presenta come «questo modello locale è scarso», che è il modo
+ * più costoso in cui un difetto possa presentarsi, perché manda a cambiare
+ * modello invece che a cambiare prompt.
+ *
+ * Il template sta dentro il GGUF: lo chiediamo al modello invece di indovinarlo.
+ * Se il file non ne porta uno, restituiamo stringa vuota e lo dice il chiamante:
+ * inventare un formato «ragionevole» sarebbe esattamente l'errore descritto qui
+ * sopra, commesso di proposito.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlong handle,
+                                                       jobjectArray roles, jobjectArray contents) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr) return env->NewStringUTF("");
+
+    const char * tmpl = llama_model_chat_template(session->model, nullptr);
+    if (tmpl == nullptr) {
+        TALOS_LOGE("il GGUF non porta un template di chat");
+        return env->NewStringUTF("");
+    }
+
+    const jsize count = env->GetArrayLength(roles);
+    if (count != env->GetArrayLength(contents) || count <= 0) return env->NewStringUTF("");
+
+    // Le stringhe restano vive finché llama_chat_apply_template legge i loro
+    // puntatori: liberarle prima sarebbe memoria già restituita.
+    std::vector<std::string> held;
+    std::vector<llama_chat_message> messages;
+    held.reserve((size_t) count * 2);
+    messages.reserve((size_t) count);
+    for (jsize index = 0; index < count; index += 1) {
+        auto role = (jstring) env->GetObjectArrayElement(roles, index);
+        auto content = (jstring) env->GetObjectArrayElement(contents, index);
+        held.push_back(jstring_to_utf8(env, role));
+        held.push_back(jstring_to_utf8(env, content));
+        messages.push_back({ held[held.size() - 2].c_str(), held[held.size() - 1].c_str() });
+        env->DeleteLocalRef(role);
+        env->DeleteLocalRef(content);
+    }
+
+    // La documentazione consiglia il doppio dei caratteri totali; se non basta
+    // la funzione dice quanto serve, e si rialloca invece di troncare.
+    size_t wanted = 0;
+    for (const std::string & piece : held) wanted += piece.size();
+    std::vector<char> buffer(wanted * 2 + 512);
+    int32_t written = llama_chat_apply_template(
+            tmpl, messages.data(), messages.size(), true, buffer.data(), (int32_t) buffer.size());
+    if (written > (int32_t) buffer.size()) {
+        buffer.resize((size_t) written + 1);
+        written = llama_chat_apply_template(
+                tmpl, messages.data(), messages.size(), true, buffer.data(), (int32_t) buffer.size());
+    }
+    if (written < 0) {
+        TALOS_LOGE("template di chat non applicabile");
+        return env->NewStringUTF("");
+    }
+    return env->NewStringUTF(std::string(buffer.data(), (size_t) written).c_str());
+}
+
+/**
  * Il testo prodotto finora. Interrogabile mentre la generazione è in corso: è
  * così che la chat mostra le parole mentre arrivano.
  */
