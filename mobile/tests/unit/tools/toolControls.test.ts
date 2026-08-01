@@ -146,11 +146,25 @@ describe('Agent Tools control registry', () => {
          */
         expect(digestOf(controlPlane))
             .toBe('294015f453d5a35d76e67d812e2327b59075c2af373c60054e88a930c2245880')
+        /**
+         * Re-pinned 2026-08-01 for the three DIALECT digests only — the control
+         * plane above did not move, which is the proof that nothing structural
+         * changed: only two descriptions did.
+         *
+         * Why they changed is worth keeping. `web_search` and `web_read` used to
+         * end their description with "so this requires outbound and write
+         * permission". A description is sent TO THE MODEL, and a model told that
+         * a tool needs permissions it cannot inspect will explain the
+         * permissions to the user instead of calling the tool. That is exactly
+         * what it did: the tool was offered, the policy said `ask`, and the
+         * answer was a polite lecture about Settings. The model is not the
+         * permission gate — the gate is, and it asks the user at call time.
+         */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('7480371ad59c82d2a16ea385e045792160bd81f839817bbb523869ab82976664')
+            .toBe('e89cf710899a1ab23ee907fa54ddb9e5e6789f9a566855db2d4e803461699f36')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('60eb99b60b91ed7ff76d963de99a8cc6a49da88a5de42b7292c03f7d15050f19')
+            .toBe('da58cb6344a626596a0e48e9f10d5bebfb28a4b88fc963cdeeeb044145e6461a')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('de95709138c78e03c73089b5e09890b922ce08cb69ff71d96a87431aa330c098')
+            .toBe('3798b8e3b7f73d1dc1697fe18f986a7945dbc7de5f51d40135499eeab5c2c8a4')
     })
 })
