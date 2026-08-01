@@ -73,7 +73,10 @@ function sources(overrides: Record<string, unknown> = {}) {
 
 function deps() {
     return {
-        permissions: TALOS_DEFAULT_TOOL_PERMISSIONS,
+        // Questo test esercita il CORPO dello strumento, non il cancello: i
+        // permessi vanno detti, non ereditati da un predefinito che dal
+        // 2026-08-01 chiede.
+        permissions: { read: 'allow' as const, write: 'allow' as const, outbound: 'allow' as const },
         isToolEnabled: () => true,
         requestConsent: vi.fn(async () => { throw new Error('a read tool must never ask') }),
         audit: vi.fn(async () => {}),

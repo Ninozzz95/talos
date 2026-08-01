@@ -733,7 +733,6 @@ export function useSettingsStore(): SettingsStore {
             return talosEffectiveToolPermissions({
                 stored: state.tools,
                 chosen: state.tools_chosen,
-                searchConfigured: state.search.source !== null,
             })
         },
         async hydrate() {

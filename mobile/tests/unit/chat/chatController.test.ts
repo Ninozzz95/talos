@@ -176,6 +176,18 @@ function makeDeps() {
             write: 'ask' as const,
             outbound: 'deny' as const,
         },
+        /**
+         * These three are STATED, not inherited — which is what the fixture
+         * always meant and never said.
+         *
+         * Without this the rule that keeps defaults current would read them as
+         * leftovers of an older default and replace them with today's, and the
+         * whole file would be testing a permission mix it did not choose. That
+         * is not a workaround: it is the same distinction the rule exists to
+         * make, and a fixture is as entitled to make a deliberate choice as a
+         * user is.
+         */
+        tools_chosen: ['read', 'write', 'outbound'] as const,
         agent_tools: {
             library_list: true,
             library_search: true,

@@ -11,11 +11,25 @@ export type TalosToolPermission = 'allow' | 'ask' | 'deny'
 
 export type TalosToolPermissions = Record<TalosToolAction, TalosToolPermission>
 
-/** Owner 2026-07-25: read is free, write asks, anything outbound is refused. */
+/**
+ * Owner 2026-08-01: **everything asks.**
+ *
+ * Replaces the 2026-07-25 split (read free, write asks, outbound refused). That
+ * arrangement was decided before there was anything to ask WITH: the
+ * authorization card — Deny / Allow this time / Always allow — now exists, and a
+ * refusal that never asks is only the right default when there is no way to put
+ * the question. `deny` also turned out to be the wrong shape for a default at
+ * all: it is indistinguishable from a considered "never", so nothing downstream
+ * could tell an opinion from an absence.
+ *
+ * `ask` cannot leak anything — that is what makes it safe as a floor. And it is
+ * asked once per tool: "Always allow" writes a revocable grant, so the cost is
+ * one question, not one per message.
+ */
 export const TALOS_DEFAULT_TOOL_PERMISSIONS: TalosToolPermissions = {
-    read: 'allow',
+    read: 'ask',
     write: 'ask',
-    outbound: 'deny',
+    outbound: 'ask',
 }
 
 /** Anything unrecognised resolves to the SAFEST setting for that class. */
@@ -48,31 +62,36 @@ export function parseTalosChosenToolActions(value: unknown): readonly TalosToolA
 }
 
 /**
- * The permissions that actually apply, once configuration is taken into account.
+ * The permissions that actually apply.
  *
- * One rule, and it exists because of a real defect: after saving a search key
- * the panel said «Pronto: il modello può cercare sul web» while the model had
- * no such tool, because `outbound` defaults to `deny` and deny is a hard
- * refusal that never asks. The user had configured a search source — an
- * unmistakable statement of intent — and got a polite refusal naming none of
- * the reasons.
+ * One rule: **a value nobody chose is the default of TODAY, not the default of
+ * the day the app was installed.**
  *
- * So: **configuring a search source turns an INHERITED refusal into a
- * question.** Not into permission — into a question, answered by the
- * authorization card with «Deny / Allow this time / Always allow». Nothing is
- * sent anywhere until the user says so.
+ * It sounds like a technicality and it is the whole defect. Settings persists
+ * all three permissions whether or not the user ever opened the screen, so a
+ * default becomes a stored value the first time anything is saved — and from
+ * then on it is frozen. When the default changed on 2026-08-01, every existing
+ * device would have gone on enforcing the old one forever, and the change would
+ * have applied only to people who installed the app afterwards. A default that
+ * cannot be revised is not a default; it is a decision taken on the user's
+ * behalf and then hidden from them.
  *
- * What it deliberately does NOT do is revise a refusal the user CHOSE. Someone
+ * What it deliberately does NOT do is revise a value the user CHOSE. Someone
  * who set "never allow" on purpose means it, and an app that quietly promotes
- * that to a prompt has taken the word "never" away from them.
+ * that has taken the word "never" away from them. That is what `chosen` is for,
+ * and it is why touching a permission records the fact.
  */
 export function talosEffectiveToolPermissions(input: {
     readonly stored: TalosToolPermissions
     readonly chosen: readonly TalosToolAction[]
-    readonly searchConfigured: boolean
 }): TalosToolPermissions {
-    const promote = input.searchConfigured
-        && input.stored.outbound === 'deny'
-        && !input.chosen.includes('outbound')
-    return promote ? { ...input.stored, outbound: 'ask' } : input.stored
+    let changed = false
+    const effective = { ...input.stored }
+    for (const action of TALOS_TOOL_ACTIONS) {
+        if (input.chosen.includes(action)) continue
+        if (effective[action] === TALOS_DEFAULT_TOOL_PERMISSIONS[action]) continue
+        effective[action] = TALOS_DEFAULT_TOOL_PERMISSIONS[action]
+        changed = true
+    }
+    return changed ? effective : input.stored
 }
