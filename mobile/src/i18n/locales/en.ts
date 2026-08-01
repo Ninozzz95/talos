@@ -1428,7 +1428,7 @@ export const TALOS_EN_MESSAGES = {
         tabs: {
             models: { label: 'Models', description: 'Provider keys, profiles and the default chat model.' },
             ai_defaults: { label: 'AI Defaults', description: 'Utility, research and vision routing preferences.' },
-            search: { label: 'Search', description: 'Search provider and research extraction budgets.', gate: 'The local search worker is not installed in this mobile milestone.' },
+            search: { label: 'Search', description: 'Which service answers a web search, and its key.' },
             browser: { label: 'Browser', description: 'Manual browsing, interaction policy and trusted-node evidence controls.' },
             integrations: { label: 'Integrations', description: 'External connectors and provider integrations.', gate: 'Mobile connector services are not installed yet.' },
             email: { label: 'Email', description: 'Email triage, drafts and policy-gated sending.', gate: 'No authorized mobile email connector is configured.' },
@@ -1555,6 +1555,13 @@ export const TALOS_EN_MESSAGES = {
         keyNeeded: 'A key is still needed. Web search stays off until it is set.',
         addressNeeded: 'The instance address is still needed. Web search stays off until it is set.',
         ready: 'Ready — the model can search the web, and only the query leaves this device.',
+        readyWillAsk: 'Ready — the first search will ask your permission to let the query leave this device, and you can grant it once or for good.',
+        permissionTitle: 'Permission to let the query leave',
+        permissionAllow: 'Granted — searches run without asking.',
+        permissionAsk: 'TALOS will ask on the first search, and you can grant it once or for good.',
+        permissionDeny: 'Refused by you — while that stands no search runs, even with the key saved.',
+        permissionWhere: 'Changed in AI Defaults, alongside the other two permissions that are read with it.',
+        blockedByPermission: 'The key is saved, but below you chose “Never allow” for sending data off the device: search will not run while that stands.',
     },
     doctor: {
         title: 'Doctor',

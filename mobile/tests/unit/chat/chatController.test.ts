@@ -19,6 +19,10 @@ import {
     applyTalosLibraryContextPolicyPatch,
 } from '@/lib/chat/libraryPolicy'
 import { parseTalosToolAuthorizationCheckpoint } from '@/lib/tools/toolAuthorizationCheckpoint'
+import {
+    TALOS_DEFAULT_TOOL_PERMISSIONS,
+    talosEffectiveToolPermissions,
+} from '@/lib/tools/permissionTypes'
 
 const webSearchRuntime = vi.hoisted(() => ({
     runTalosSearch: vi.fn(),
@@ -247,6 +251,19 @@ function makeDeps() {
                 tool,
                 settingsState.tool_authorizations.revision,
             )
+        }),
+        // The fake answers this the way the real store does, by running the same
+        // rule — not by handing back the stored value. A double that skips the
+        // rule would let every test here pass against a store that never
+        // learned it, which is the shape of a test that guards nothing.
+        effectiveToolPermissions: () => talosEffectiveToolPermissions({
+            stored: {
+                read: settingsState.tools?.read ?? TALOS_DEFAULT_TOOL_PERMISSIONS.read,
+                write: settingsState.tools?.write ?? TALOS_DEFAULT_TOOL_PERMISSIONS.write,
+                outbound: settingsState.tools?.outbound ?? TALOS_DEFAULT_TOOL_PERMISSIONS.outbound,
+            },
+            chosen: settingsState.tools_chosen ?? [],
+            searchConfigured: settingsState.search?.source != null,
         }),
     }
     const deps: ChatControllerDeps = {

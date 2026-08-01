@@ -1426,7 +1426,7 @@ export const TALOS_IT_MESSAGES = {
         tabs: {
             models: { label: 'Modelli', description: 'Chiavi provider, profili e modello chat predefinito.' },
             ai_defaults: { label: 'Predefiniti AI', description: 'Preferenze di instradamento per utilità, ricerca e visione.' },
-            search: { label: 'Ricerca', description: 'Provider di ricerca e budget di estrazione.', gate: 'Il worker di ricerca locale non è installato in questa versione mobile.' },
+            search: { label: 'Ricerca', description: 'Quale servizio risponde a una ricerca web, e la sua chiave.' },
             browser: { label: 'Browser', description: 'Navigazione manuale, policy di interazione e controlli delle prove del nodo attendibile.' },
             integrations: { label: 'Integrazioni', description: 'Connettori esterni e integrazioni provider.', gate: 'I servizi connettore mobile non sono ancora installati.' },
             email: { label: 'Email', description: 'Triage email, bozze e invio controllato da policy.', gate: 'Non è configurato alcun connettore email mobile autorizzato.' },
@@ -1553,6 +1553,13 @@ export const TALOS_IT_MESSAGES = {
         keyNeeded: 'Serve ancora una chiave. La ricerca web resta disattivata finché non viene impostata.',
         addressNeeded: 'Serve ancora l’indirizzo dell’istanza. La ricerca web resta disattivata finché non viene impostato.',
         ready: 'Pronto: il modello può cercare sul web e soltanto la query lascia questo dispositivo.',
+        readyWillAsk: 'Pronto: alla prima ricerca TALOS ti chiederà il permesso di far uscire la query da questo dispositivo, e potrai concederlo una volta sola o per sempre.',
+        permissionTitle: 'Permesso di far uscire la query',
+        permissionAllow: 'Concesso: le ricerche partono senza chiedere.',
+        permissionAsk: 'TALOS chiederà il permesso alla prima ricerca, e potrai concederlo una volta sola o per sempre.',
+        permissionDeny: 'Negato da te: finché resta così nessuna ricerca parte, anche con la chiave salvata.',
+        permissionWhere: 'Si cambia in Predefiniti AI, insieme agli altri due permessi che si leggono con questo.',
+        blockedByPermission: 'La chiave è salvata, ma qui sotto hai scelto «Non consentire mai» per l’invio di dati fuori dal dispositivo: finché resta così la ricerca non parte.',
     },
     doctor: {
         title: 'Diagnostica',

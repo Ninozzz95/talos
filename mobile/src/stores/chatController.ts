@@ -674,6 +674,15 @@ export interface ChatControllerDeps {
             actions: readonly TalosToolAction[],
         ): Promise<void>
         revokeToolAuthorization(tool: TalosAgentToolId): Promise<void>
+        /**
+         * The permissions in force, which are not always the ones stored.
+         *
+         * Declared here rather than read off `state.tools` so a fake settings
+         * object in a test has to answer the same question the real one does —
+         * otherwise the tests would pass against a store that never learned the
+         * rule.
+         */
+        effectiveToolPermissions(): TalosToolPermissions
     }
 }
 
@@ -1106,10 +1115,16 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         const providerEndpoints = Object.fromEntries(
             PROVIDER_IDS.map((provider) => [provider, endpoints[provider] ?? null]),
         ) as Record<TalosMobileProviderId, string | null>
+        // What is IN FORCE, not what is stored. The two differ when a search
+        // source has been configured and the refusal to send data off the
+        // device was inherited rather than chosen: then it becomes a question
+        // the authorization card asks, instead of a silent no that made the
+        // settings panel say «ready» while the model had no such tool.
+        const inForce = deps.settings.effectiveToolPermissions()
         const toolPermissions: TalosToolPermissions = {
-            read: deps.settings.state.tools?.read ?? TALOS_DEFAULT_TOOL_PERMISSIONS.read,
-            write: deps.settings.state.tools?.write ?? TALOS_DEFAULT_TOOL_PERMISSIONS.write,
-            outbound: deps.settings.state.tools?.outbound ?? TALOS_DEFAULT_TOOL_PERMISSIONS.outbound,
+            read: inForce?.read ?? TALOS_DEFAULT_TOOL_PERMISSIONS.read,
+            write: inForce?.write ?? TALOS_DEFAULT_TOOL_PERMISSIONS.write,
+            outbound: inForce?.outbound ?? TALOS_DEFAULT_TOOL_PERMISSIONS.outbound,
         }
         const libraryMasterEnabled
             = deps.settings.state.shell?.library_context_enabled === true

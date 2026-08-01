@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import TalosThemedSelect, { type TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useSettingsStore, type TalosUtilityModelMode } from '@/stores/settings'
-import TalosMobileSearchSourcePanel from '@/components/talos/settings/TalosMobileSearchSourcePanel.vue'
 import { TALOS_TONE_PRESETS, isTalosToneId } from '@/lib/tone'
 import {
     TALOS_LIBRARY_CONTEXT_MODES,
@@ -259,9 +258,13 @@ function setShellFlag(key: 'library_context_enabled' | 'library_autosave_generat
             >
         </label>
 
-        <!-- F1: the web tools exist only once a source is chosen (D3), so this
-             sits directly above the permissions that govern them. -->
-        <TalosMobileSearchSourcePanel />
+        <!-- The search source used to sit here. It moved to Settings → Search,
+             which is where the settings hub already had an entry for it and
+             where its neighbours (Browser, Integrations) live: a service with
+             an address and a key is a connection, not a default. What stays in
+             this screen is the SEARCH MODEL MODE above — which model answers a
+             search-shaped question — because that is a default and not a
+             connection. Owner, 2026-08-01. -->
 
         <!-- Owner 2026-07-25: what the model may do on its own. -->
         <section class="pt-4" data-testid="talos-tool-permissions">

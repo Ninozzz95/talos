@@ -79,7 +79,11 @@ describe('TalosMobileSettingsCenter', () => {
     it('keeps every remaining runtime-dependent category visible and explicitly gated', async () => {
         const wrapper = mountCenter()
         // F2-T6: 'account' left this list — it is now a real local panel.
-        const gated = ['search', 'integrations', 'email', 'reminders', 'system']
+        // 'search' left this list on 2026-08-01. It had been announcing "not
+        // installed in this build" for as long as web search had been working,
+        // while the configuration that made it work lived under AI Defaults —
+        // so the one entry named Search was the one that said no.
+        const gated = ['integrations', 'email', 'reminders', 'system']
 
         for (const id of gated) {
             await activateTab(wrapper, id)
@@ -88,6 +92,23 @@ describe('TalosMobileSettingsCenter', () => {
             expect(panel.text()).toContain('Not available yet')
             expect(panel.findAll('button:not([disabled])')).toHaveLength(0)
         }
+    })
+
+    /**
+     * The repair for the defect above, asserted at the far end: the Search
+     * entry now renders the real thing. If this ever goes back to a capability
+     * placeholder, the app is once again denying the existence of a feature it
+     * ships.
+     */
+    it('renders Search as a real settings surface, with the source picker inside it', async () => {
+        const wrapper = mountCenter()
+
+        await activateTab(wrapper, 'search')
+
+        expect(wrapper.find('[data-capability="search"]').exists()).toBe(false)
+        expect(wrapper.get('[data-testid="talos-settings-search"]').exists()).toBe(true)
+        expect(wrapper.get('[data-testid="talos-search-source"]').exists()).toBe(true)
+        expect(wrapper.get('[data-testid="talos-search-permission-pointer"]').exists()).toBe(true)
     })
 
     it('renders Browser as a real settings surface instead of a gated placeholder', async () => {

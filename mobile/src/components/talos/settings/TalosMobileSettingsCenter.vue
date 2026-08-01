@@ -16,6 +16,7 @@ import TalosMobileSettingsBrowserPanel from './TalosMobileSettingsBrowserPanel.v
 import TalosMobileSettingsAccountPanel from './TalosMobileSettingsAccountPanel.vue'
 import TalosMobileSettingsAgentToolsPanel from './TalosMobileSettingsAgentToolsPanel.vue'
 import TalosMobileSettingsCapabilityPanel from './TalosMobileSettingsCapabilityPanel.vue'
+import TalosMobileSettingsSearchPanel from './TalosMobileSettingsSearchPanel.vue'
 import {
     TALOS_MOBILE_SETTINGS_ACCOUNT_TAB,
     TALOS_MOBILE_SETTINGS_GROUPS,
@@ -165,6 +166,7 @@ const ICONS: Record<TalosMobileSettingsTabId, Component> = {
 const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
     models: TalosMobileSettingsModelsPanel,
     ai_defaults: TalosMobileSettingsAiDefaultsPanel,
+    search: TalosMobileSettingsSearchPanel,
     appearance: TalosMobileSettingsAppearancePanel,
     language: TalosMobileSettingsLanguagePanel,
     privacy: TalosMobileSettingsPrivacyPanel,

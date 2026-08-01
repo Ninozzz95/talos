@@ -66,7 +66,10 @@ describe('TALOS mobile settings registry', () => {
         // F2-T6: Account became a REAL local panel (replay intro + app lock).
         // Privacy is mobile-only (see MOBILE_ONLY) and is a real local panel:
         // it reads live device state rather than gating on a missing service.
+        // 2026-08-01: Search joined them, and it had been the odd one out —
+        // gated on a worker it never needed, while the source picker and its
+        // key sat under AI Defaults doing the job.
         expect(available.map((tab) => tab.id))
-            .toEqual(['models', 'ai_defaults', 'browser', 'appearance', 'language', 'privacy', 'account', 'agent_tools'])
+            .toEqual(['models', 'ai_defaults', 'search', 'browser', 'appearance', 'language', 'privacy', 'account', 'agent_tools'])
     })
 })
