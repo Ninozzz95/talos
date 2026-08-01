@@ -54,6 +54,53 @@ public class TalosLlamaEngineDeviceTest {
                 backends != null && !backends.isEmpty());
     }
 
+    /**
+     * Un prompt più lungo della batch, che è la crepa che ha ucciso l'app.
+     *
+     * `n_ctx` e `n_batch` sono due tetti diversi: il contesto qui è 2048, la
+     * batch che il motore usa dentro è 512. Un prompt che sta comodamente nel
+     * primo e sfonda la seconda veniva consegnato a `llama_decode` in un colpo
+     * solo, e llama.cpp in quel caso non restituisce un errore — chiama
+     * `abort()`. Il processo dell'applicazione se ne andava con lui.
+     *
+     * Non era un caso limite: il prompt di sistema di TALOS misura 649 token
+     * misurati sul dispositivo, quindi OGNI invio in chat crashava. Nessun test
+     * sulla JVM poteva vederlo, perché è llama.cpp vero a decidere di abortire.
+     *
+     * Questo test non asserisce il testo: un modello piccolo dice quel che
+     * vuole. Asserisce che la generazione TORNA — cioè che il processo è ancora
+     * vivo per rispondere. Contro il codice di prima, il segnale non è rosso: è
+     * l'intero strumento di test che muore, e va letto come tale.
+     */
+    @Test
+    public void survivesAPromptLongerThanOneBatch() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File file = model(context);
+        Assume.assumeTrue(
+                "modello di prova assente: spingilo in " + (file == null ? "?" : file.getAbsolutePath()),
+                file != null && file.isFile());
+
+        TalosLlamaEngine engine = TalosLlamaEngine.open(context, file.getAbsolutePath(), 4, 2048, 0);
+        assertNotNull("il modello non si è aperto — guarda logcat, tag TalosLlama", engine);
+
+        try {
+            // Ogni ripetizione è almeno un token, quindi il conto sta sopra i
+            // 512 della batch qualunque sia il vocabolario, e sotto i 2048 del
+            // contesto. Il margine è voluto: il test deve provare la batch, non
+            // inciampare nel contesto e passare per il motivo sbagliato.
+            StringBuilder longPrompt = new StringBuilder(6_000);
+            for (int index = 0; index < 900; index += 1) longPrompt.append("parola ");
+
+            String answer = engine.generateBlocking(longPrompt.toString(), 8, false);
+
+            assertNotNull("la generazione non è tornata: il prompt oltre la batch è di nuovo fatale",
+                    answer);
+            Log.i(TAG, "prompt lungo superato, token prodotti: " + engine.tokensProduced());
+        } finally {
+            engine.close();
+        }
+    }
+
     @Test
     public void generatesTokensOnThisPhone() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();

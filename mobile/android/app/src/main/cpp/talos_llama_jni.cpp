@@ -15,6 +15,7 @@
 #include <jni.h>
 #include <android/log.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstring>
 #include <mutex>
@@ -170,6 +171,10 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
     // 0 significa "quello con cui il modello è stato addestrato": la scelta
     // giusta quando il chiamante non ha motivo di imporne un'altra.
     ctx_params.n_ctx           = contextTokens > 0 ? (uint32_t) contextTokens : 0;
+    // Non è il tetto di quanto prompt si può mandare — è la dimensione dei
+    // pezzi in cui `nativeGenerate` lo taglia. Tenerla piccola tiene piccoli i
+    // buffer di calcolo su un telefono; era pericolosa solo finché qualcuno
+    // consegnava il prompt intero in una volta.
     ctx_params.n_batch         = 512;
     ctx_params.n_threads       = threads > 0 ? threads : 4;
     ctx_params.n_threads_batch = ctx_params.n_threads;
@@ -343,7 +348,44 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
     }
     const int limit = maxTokens > 0 ? maxTokens : 64;
 
-    llama_batch batch = llama_batch_get_one(tokens.data(), (int32_t) tokens.size());
+    /**
+     * IL PROMPT ENTRA A PEZZI. Questa è la riga che valeva l'applicazione.
+     *
+     * `n_ctx` e `n_batch` sono due tetti diversi e il codice ne controllava uno
+     * solo. Il contesto qui è 4096, la batch 512: un prompt di 1200 token sta
+     * comodamente nel contesto, e passarlo a `llama_decode` in un colpo solo
+     * viola la batch. llama.cpp in quel caso non restituisce un errore —
+     * chiama `abort()`, e con lui se ne va il processo dell'applicazione.
+     *
+     * Il prompt di sistema di TALOS supera i 512 token da solo, quindi non era
+     * un caso limite: OGNI invio in chat uccideva l'app, in modo deterministico,
+     * e il tombstone diceva `ggml_abort` dentro `llama_decode` senza dire perché
+     * (il messaggio di ggml va su stderr, che su Android non esiste).
+     *
+     * A pezzi invece che rifiutando: un prompt che sta nel contesto DEVE poter
+     * essere elaborato, e spezzarlo è esattamente ciò che fa llama.cpp a monte.
+     * I logit servono solo dopo l'ultimo pezzo, ed è ciò che `llama_batch_get_one`
+     * già fa da sé quando non gli si chiede altro.
+     */
+    const int slice = (int) llama_n_batch(session->ctx);
+    if (slice <= 0) {
+        TALOS_LOGE("batch di dimensione non valida");
+        return nullptr;
+    }
+    for (int fed = 0; fed < wanted; ) {
+        if (session->cancelled.load(std::memory_order_relaxed)) {
+            return env->NewStringUTF("");
+        }
+        const int chunk = std::min(slice, wanted - fed);
+        llama_batch head = llama_batch_get_one(tokens.data() + fed, (int32_t) chunk);
+        if (llama_decode(session->ctx, head) != 0) {
+            TALOS_LOGE("decode del prompt fallito a %d/%d token", fed, wanted);
+            return nullptr;
+        }
+        fed += chunk;
+    }
+    TALOS_LOGI("prompt: %d token in pezzi da %d, contesto %d", wanted, slice, budget);
+
     std::string answer;
     char piece[256];
     // La batch successiva punta a QUESTA variabile, non a una locale del giro:
@@ -353,13 +395,6 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
 
     for (int produced = 0; produced < limit; ) {
         if (session->cancelled.load(std::memory_order_relaxed)) break;
-        // Il contesto è un tetto duro: superarlo non è un degrado, è un errore.
-        if (wanted + produced + batch.n_tokens > budget) break;
-
-        if (llama_decode(session->ctx, batch) != 0) {
-            TALOS_LOGE("decode fallito dopo %d token", produced);
-            return nullptr;
-        }
 
         sampled = llama_sampler_sample(session->sampler, session->ctx, -1);
         // Durante una MISURA la fine-generazione non ferma niente, e non è una
@@ -385,7 +420,16 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         // contatore non deve mai vedere un token che non esiste ancora.
         session->produced.store(produced, std::memory_order_relaxed);
 
-        batch = llama_batch_get_one(&sampled, 1);
+        // Il contesto è un tetto duro: superarlo non è un degrado, è un errore.
+        // Controllato PRIMA di dare in pasto il token appena campionato, perché
+        // è quella decodifica a occupare la casella successiva.
+        if (wanted + produced + 1 > budget) break;
+
+        llama_batch next = llama_batch_get_one(&sampled, 1);
+        if (llama_decode(session->ctx, next) != 0) {
+            TALOS_LOGE("decode fallito dopo %d token", produced);
+            return nullptr;
+        }
     }
 
     return env->NewStringUTF(answer.c_str());
