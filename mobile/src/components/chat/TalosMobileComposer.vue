@@ -62,6 +62,7 @@ const props = withDefaults(defineProps<{
     loadingModels?: boolean
     loadingRoutes?: boolean
     refreshingModels?: boolean
+    discoveryProblems?: ReadonlyArray<{ message: string, detail?: string | null }>
     attachments?: readonly TalosMobileAttachmentDraft[]
     attachmentBusy?: boolean
     attachmentError?: string | null
@@ -1020,6 +1021,7 @@ watch(() => props.prompt, () => {
             :loading-models="loadingModels"
             :loading-routes="loadingRoutes"
             :refreshing-models="refreshingModels"
+            :discovery-problems="discoveryProblems"
             @close="closeModelPicker"
             @select-model-profile="selectModelProfile"
             @select-model-routing-profile="selectRoutingProfile"

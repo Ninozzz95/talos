@@ -299,12 +299,79 @@ public class TalosModelStoreTest {
         writeBytes(done.partial, 2048);
         done.finish(2048L);
 
-        java.util.List<TalosModelStore.Leftover> leftovers = store.leftovers();
+        java.util.List<TalosModelStore.Leftover> leftovers = store.leftovers().entries;
 
         assertEquals(1, leftovers.size());
         assertEquals("what it actually costs the phone, not what was downloaded",
                 128_000L, leftovers.get(0).bytes);
         assertTrue(leftovers.get(0).path.endsWith(TalosModelStore.PARTIAL_SUFFIX));
+    }
+
+    /**
+     * A store nobody has downloaded into is EMPTY, and must not look broken.
+     *
+     * The other half of the pair below. If "I have not looked yet" were
+     * reported as a failure, every fresh install would open with an error about
+     * a folder that is simply not there yet.
+     */
+    @Test
+    public void aStoreNothingHasBeenDownloadedIntoIsEmptyAndNotBroken() {
+        TalosModelStore empty = new TalosModelStore(new File(folder.getRoot(), "never-used"));
+
+        TalosModelStore.Listing listing = empty.finished();
+
+        assertTrue("nothing downloaded means no models", listing.entries.isEmpty());
+        assertTrue("and it is a complete answer, not a failed one", listing.complete());
+    }
+
+    /**
+     * THE test this change exists for.
+     *
+     * `File.listFiles()` answers null to "not a directory", to "permission
+     * denied" and to an I/O error alike, and the code that consumed it treated
+     * null as an empty list. So a folder the app could not open travelled all
+     * the way to the model picker as "no models downloaded" — the opposite
+     * advice from the one the user needed. It cost three rounds of debugging on
+     * a real tablet on 2026-08-01, with a two-gigabyte model sitting in the
+     * folder the whole time.
+     *
+     * A plain file where the models folder belongs is the same failure through
+     * the same channel, and it is the one that can be provoked identically on
+     * every machine: no chmod, no root, no platform differences. What is
+     * asserted is that the walk SAYS SO — with a cause — rather than answering
+     * "empty" and letting the interface invent an explanation.
+     */
+    @Test
+    public void aFolderItCannotReadIsSaidOutLoud() throws Exception {
+        File root = folder.newFolder("blocked");
+        // "models" exists but is not a directory: unreadable, definitively.
+        assertTrue(new File(root, "models").createNewFile());
+        TalosModelStore blocked = new TalosModelStore(root);
+
+        TalosModelStore.Listing listing = blocked.finished();
+
+        assertTrue("nothing could be listed", listing.entries.isEmpty());
+        assertFalse("and that emptiness is NOT an answer", listing.complete());
+        assertEquals(1, listing.unreadable.size());
+        assertTrue("the path has to be nameable to be fixable",
+                listing.unreadable.get(0).path.contains("models"));
+        assertNotNull("a cause, or the message is as useless as the silence was",
+                listing.unreadable.get(0).reason);
+        assertFalse("the cause must not be empty", listing.unreadable.get(0).reason.isEmpty());
+        // No stack trace: this string is shown to a person.
+        assertFalse(listing.unreadable.get(0).reason.contains("\n"));
+    }
+
+    /** The leftovers walk is the same walk, so it owes the same honesty. */
+    @Test
+    public void theLeftoversWalkIsEquallyHonestAboutWhatItCouldNotRead() throws Exception {
+        File root = folder.newFolder("blocked-leftovers");
+        assertTrue(new File(root, "models").createNewFile());
+
+        TalosModelStore.Listing listing = new TalosModelStore(root).leftovers();
+
+        assertFalse("a storage total computed over a folder it could not open is a lie",
+                listing.complete());
     }
 
     @Test
@@ -317,6 +384,6 @@ public class TalosModelStoreTest {
 
         assertFalse(slot.partial.exists());
         assertFalse(slot.sidecar.exists());
-        assertEquals(0, store.leftovers().size());
+        assertEquals(0, store.leftovers().entries.size());
     }
 }

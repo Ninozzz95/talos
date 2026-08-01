@@ -151,6 +151,43 @@ describe('TalosMobileComposerModelPicker', () => {
         expect(view.emitted('requestClose')).toHaveLength(1)
     })
 
+    /**
+     * An empty list has two causes and they need opposite advice.
+     *
+     * "No models available, add one in the Model Lab" is right when discovery
+     * SUCCEEDED and found nothing, and wrong — confidently, in the user's face —
+     * when discovery failed. On 2026-08-01 that sentence was shown on a tablet
+     * with a two-gigabyte model sitting in a folder the app could not open, and
+     * it sent the search in the wrong direction for three rounds.
+     */
+    it('says why the list is empty instead of advising a download that will not help', () => {
+        const view = mountPicker({
+            modelProfiles: [],
+            discoveryProblems: [{
+                message: 'TALOS cannot read the local models folder.',
+                detail: '/storage/emulated/0/Android/data/ai.talos/files/models',
+            }],
+        })
+
+        const shown = view.findAll('[data-testid="talos-model-discovery-problem"]')
+        expect(shown).toHaveLength(1)
+        expect(shown[0].text()).toContain('cannot read the local models folder')
+        // The path arrives readable. It used to be interpolated into the
+        // sentence, where HTML escaping turned every slash into `&#x2F;` and
+        // handed the user a correct diagnosis they could not read.
+        const detail = view.get('[data-testid="talos-model-discovery-detail"]')
+        expect(detail.text()).toBe('/storage/emulated/0/Android/data/ai.talos/files/models')
+        expect(detail.text()).not.toContain('&#x2F;')
+        expect(view.text()).not.toContain('open Model Lab to add one')
+    })
+
+    it('still gives the ordinary hint when discovery succeeded and found nothing', () => {
+        const view = mountPicker({ modelProfiles: [], discoveryProblems: [] })
+
+        expect(view.findAll('[data-testid="talos-model-discovery-problem"]')).toHaveLength(0)
+        expect(view.text()).toContain('open Model Lab to add one')
+    })
+
     it('keeps Refresh and Model Lab commands outside the listbox', async () => {
         const view = mountPicker()
         const listbox = view.get('[role="listbox"]')

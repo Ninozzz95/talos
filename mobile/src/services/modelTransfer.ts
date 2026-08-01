@@ -29,7 +29,21 @@ interface TalosModelTransferPlugin {
         haveBytes: number
         totalBytes: number
     }>
-    leftovers(): Promise<{ items: Array<{ path: string; bytes: number }>; totalBytes: number }>
+    leftovers(): Promise<{
+        items: Array<{ path: string; bytes: number }>
+        totalBytes: number
+        /**
+         * Folders the walk could not open. Present because the native side now
+         * reports it and a boundary that drops it would hide the same failure
+         * the models list used to hide: `totalBytes` is offered as space that
+         * can be reclaimed, and a folder that refused to open makes it an
+         * understatement.
+         *
+         * Typed but not yet shown — the storage line still presents the total
+         * without the caveat. Recorded as owed rather than silently lost.
+         */
+        unreadable?: Array<{ path: string; reason: string }>
+    }>
     discard(options: { path: string }): Promise<void>
 }
 

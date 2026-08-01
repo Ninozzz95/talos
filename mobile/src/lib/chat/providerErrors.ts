@@ -185,3 +185,21 @@ export function normalizeHttpEndpoint(
     }
     return url.toString().replace(/\/$/, '')
 }
+
+/**
+ * The single piece of evidence an error refers to — a path, a URL — for showing
+ * BESIDE the translated sentence rather than inside it.
+ *
+ * Inside is where it was, and interpolated parameters are HTML-escaped so that
+ * a value from outside can never smuggle markup into a translated string. A
+ * filesystem path through that escaping reads `&#x2F;storage&#x2F;…`, which is
+ * what a user was actually shown on 2026-08-01: the right diagnosis, unreadable.
+ * Returned raw here, and the interface renders it as text, never as markup.
+ */
+export function talosProviderErrorDetail(error: unknown): string | null {
+    if (!(error instanceof TalosMobileProviderError)) return null
+    const parameters = error.uiMessageParameters
+    if (!parameters) return null
+    const candidate = parameters.path ?? parameters.endpoint ?? parameters.url
+    return typeof candidate === 'string' && candidate !== '' ? candidate : null
+}

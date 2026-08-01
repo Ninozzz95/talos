@@ -44,7 +44,10 @@ interface TalosLlamaPlugin {
         maxTokens?: number
         stopAtEndOfGeneration?: boolean
     }): Promise<TalosLocalEngineGeneration>
-    installed(): Promise<{ models: Array<{ path: string, bytes: number, name: string }> }>
+    installed(): Promise<{
+        models: Array<{ path: string, bytes: number, name: string }>
+        unreadable?: Array<{ path: string, reason: string }>
+    }>
     chatPrompt(options: {
         turns: ReadonlyArray<{ role: string, content: string }>
     }): Promise<{ prompt: string }>
@@ -87,6 +90,21 @@ export interface TalosLocalModelFile {
     name: string
 }
 
+/** A folder the walk could not open, and the cause it reported. */
+export interface TalosLocalModelUnreadable {
+    path: string
+    reason: string
+}
+
+export interface TalosLocalModelListing {
+    models: TalosLocalModelFile[]
+    /**
+     * Empty when the answer is complete. Anything in here means the list above
+     * is a PARTIAL answer, and "no models" must not be said on its own.
+     */
+    unreadable: TalosLocalModelUnreadable[]
+}
+
 /**
  * The models on this device that can actually be opened.
  *
@@ -94,13 +112,20 @@ export interface TalosLocalModelFile {
  * without asking, and the user can delete a file from the system's own storage
  * screen; a cached list would go on offering something that is gone, and fail
  * halfway into loading it rather than at the moment of choosing.
+ *
+ * Returns what it found AND what it could not look at. This used to be an array
+ * with `catch { return [] }` around it, which turned three different situations
+ * — nothing downloaded, a folder that refused to open, and the bridge itself
+ * failing — into one sentence in the model picker: "no models". On a tablet
+ * holding a two-gigabyte model that sentence sent the search in the wrong
+ * direction for three rounds. A failure that reaches the user as an empty list
+ * is a failure that has been hidden, not handled.
  */
-export async function talosLocalInstalledModels(): Promise<TalosLocalModelFile[]> {
-    try {
-        const { models } = await plugin.installed()
-        return Array.isArray(models) ? models : []
-    } catch {
-        return []
+export async function talosLocalInstalledModels(): Promise<TalosLocalModelListing> {
+    const { models, unreadable } = await plugin.installed()
+    return {
+        models: Array.isArray(models) ? models : [],
+        unreadable: Array.isArray(unreadable) ? unreadable : [],
     }
 }
 

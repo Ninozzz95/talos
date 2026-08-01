@@ -1018,6 +1018,7 @@ export const TALOS_IT_MESSAGES = {
         providerAdapterMismatch: 'L’adapter del provider non corrisponde a {provider}.',
         providerStreamingUnsupported: 'Lo streaming non è supportato per {provider}.',
         providerUnsupported: 'Provider non supportato: {provider}.',
+        localModelsUnreadable: 'TALOS non riesce a leggere la cartella dei modelli locali, quindi non può sapere se ce ne sono. Scaricarne un altro non serve.',
         invalidPreferences: 'TALOS ha rifiutato preferenze di Model Lab non valide.',
         selectedMissing: 'Il modello selezionato non esiste più.',
         displayNameTooLong: 'I nomi visualizzati dei modelli supportano al massimo {count} caratteri.',
