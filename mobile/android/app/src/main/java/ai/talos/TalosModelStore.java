@@ -274,6 +274,40 @@ public final class TalosModelStore {
     }
 
     /**
+     * The models that finished arriving — the ones that can actually be run.
+     *
+     * The mirror of {@link #leftovers()}, and needed for the same reason it was:
+     * the store knew what had been abandoned and nothing knew what had SUCCEEDED,
+     * so the engine had no way to be told which files it may open. A download
+     * centre that can fetch a model and then cannot list it has completed half a
+     * journey.
+     *
+     * "Finished" is defined by exclusion rather than by a manifest: a file that
+     * is neither a partial nor a sidecar is one whose transfer ran to the end,
+     * because {@link Slot#finish} renames into place only after the hash agrees.
+     * A separate index of completed models would be a second truth to keep in
+     * step with the disk, and the disk always wins that argument.
+     */
+    public List<Leftover> finished() {
+        List<Leftover> found = new ArrayList<>();
+        collectFinished(new File(root, "models"), found);
+        return found;
+    }
+
+    private void collectFinished(File directory, List<Leftover> into) {
+        File[] entries = directory.listFiles();
+        if (entries == null) return;
+        for (File entry : entries) {
+            if (entry.isDirectory()) {
+                collectFinished(entry, into);
+            } else if (!entry.getName().endsWith(PARTIAL_SUFFIX)
+                    && !entry.getName().endsWith(SIDECAR_SUFFIX)) {
+                into.add(new Leftover(entry.getAbsolutePath(), entry.length()));
+            }
+        }
+    }
+
+    /**
      * Turn a string chosen by a stranger into a path that cannot leave its own
      * folder.
      *

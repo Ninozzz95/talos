@@ -111,6 +111,20 @@ public final class TalosLlamaEngine implements AutoCloseable {
         return TalosLlamaNative.nativeTokensProduced(handle);
     }
 
+    /**
+     * A conversation, punctuated the way THIS model was trained to expect.
+     *
+     * Empty when the GGUF declares no template, and the caller must treat that
+     * as a refusal rather than fall back to something plausible. Every model
+     * family marks turns differently, and the wrong marks do not raise an
+     * error — they lower the quality of every answer, which surfaces as "this
+     * local model is poor" and sends someone to change the model instead of the
+     * prompt.
+     */
+    public String chatPrompt(String[] roles, String[] contents) {
+        return TalosLlamaNative.nativeApplyChatTemplate(handle, roles, contents);
+    }
+
     /** Stops the current generation. What was produced so far still stands. */
     public void cancel() {
         TalosLlamaNative.nativeCancel(handle);
