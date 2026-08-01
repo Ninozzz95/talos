@@ -1061,6 +1061,71 @@ export function createSqliteChatRepository(
             })
             return note
         },
+        async appendResearchEvent(entry) {
+            // The refusal is the UNIQUE (run_id, seq) constraint doing its job,
+            // not an exception to swallow blindly: only a collision on THAT
+            // pair is a duplicate, and anything else must still be a failure.
+            const existing = await (await db()).query(
+                'SELECT seq FROM talos_research_events WHERE run_id = ? AND seq = ? LIMIT 1',
+                [entry.run_id, entry.seq],
+            )
+            if (existing.length > 0) return false
+            await (await db()).run(
+                `INSERT INTO talos_research_events (run_id, seq, kind, at, payload_json)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [entry.run_id, entry.seq, entry.kind, entry.at, entry.payload_json],
+            )
+            return true
+        },
+        async readResearchJournal(runId) {
+            const rows = await (await db()).query(
+                `SELECT run_id, seq, kind, at, payload_json
+                 FROM talos_research_events WHERE run_id = ? ORDER BY seq ASC`,
+                [runId],
+            )
+            return rows.map((row) => {
+                const entry = row as TalosSqlRow
+                return {
+                    run_id: String(entry.run_id),
+                    seq: Number(entry.seq),
+                    kind: String(entry.kind),
+                    at: String(entry.at),
+                    payload_json: String(entry.payload_json ?? '{}'),
+                }
+            })
+        },
+        async upsertResearchRun(row) {
+            await (await db()).run(
+                `INSERT INTO talos_research_runs
+                    (id, session_id, question, depth, engine, status, started_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    engine = excluded.engine,
+                    updated_at = excluded.updated_at`,
+                [row.id, row.session_id, row.question, row.depth, row.engine,
+                    row.status, row.started_at, row.updated_at],
+            )
+        },
+        async listResearchRuns() {
+            const rows = await (await db()).query(
+                `SELECT id, session_id, question, depth, engine, status, started_at, updated_at
+                 FROM talos_research_runs ORDER BY updated_at DESC, id DESC`,
+            )
+            return rows.map((row) => {
+                const entry = row as TalosSqlRow
+                return {
+                    id: String(entry.id),
+                    session_id: String(entry.session_id),
+                    question: String(entry.question),
+                    depth: String(entry.depth),
+                    engine: String(entry.engine),
+                    status: String(entry.status),
+                    started_at: String(entry.started_at),
+                    updated_at: String(entry.updated_at),
+                }
+            })
+        },
         async listNotes() {
             const rows = await (await db()).query(
                 `SELECT id, title, content, trust_level, created_at, updated_at

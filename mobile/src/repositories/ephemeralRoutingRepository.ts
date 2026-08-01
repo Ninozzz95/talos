@@ -102,6 +102,25 @@ const ROUTES: Readonly<Record<keyof TalosChatRepository, Rule>> = {
     listTasks: 'durable',
     setTaskStatus: 'durable',
     deleteTask: 'durable',
+    /**
+     * The research journal is `durable`, and that is a decision with a cost.
+     *
+     * The ephemeral twin is an in-memory object: routing the journal there
+     * would mean a run vanishes exactly when the process is killed, which is
+     * the one thing R-1 exists to prevent. So it stays on disk.
+     *
+     * The consequence, said out loud rather than buried: a research run started
+     * from a TEMPORARY chat would leave its journal behind, and that
+     * contradicts what "temporary" means to the person who chose it. Nothing
+     * leaks today — no surface can start a run yet — but before Deep Research
+     * is wired to the chat, the owner has to decide which of the two promises
+     * wins: refuse research inside a temporary chat, or say plainly that this
+     * one thing outlives it.
+     */
+    appendResearchEvent: 'durable',
+    readResearchJournal: 'durable',
+    upsertResearchRun: 'durable',
+    listResearchRuns: 'durable',
     createNote: 'durable',
     listNotes: 'durable',
     deleteNote: 'durable',

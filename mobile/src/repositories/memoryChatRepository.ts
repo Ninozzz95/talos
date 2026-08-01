@@ -28,6 +28,8 @@ import {
     type TalosLocalToolActivity,
     type TalosLocalFileAuthorityGrant,
     type TalosLocalMemory,
+    type TalosResearchJournalEntry,
+    type TalosResearchRunRow,
     type TalosLocalNote,
     type TalosLocalTask,
     type TalosMemoryStatus,
@@ -88,6 +90,8 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
     const toolActivities = new Map<string, TalosLocalToolActivity>()
     const memories = new Map<string, TalosLocalMemory>()
     const tasks = new Map<string, TalosLocalTask>()
+    const researchJournals = new Map<string, TalosResearchJournalEntry[]>()
+    const researchRuns = new Map<string, TalosResearchRunRow>()
     const notes = new Map<string, TalosLocalNote>()
     let activeSessionId: string | null = null
     const now = options.now ?? (() => new Date().toISOString())
@@ -481,6 +485,27 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             }
             notes.set(note.id, note)
             return { ...note }
+        },
+        async appendResearchEvent(entry) {
+            const journal = researchJournals.get(entry.run_id) ?? []
+            // Refused, not thrown: a duplicate is what a process that died
+            // between writing and hearing back produces on its next boot.
+            if (journal.some((existing) => existing.seq === entry.seq)) return false
+            journal.push({ ...entry })
+            journal.sort((left, right) => left.seq - right.seq)
+            researchJournals.set(entry.run_id, journal)
+            return true
+        },
+        async readResearchJournal(runId) {
+            return (researchJournals.get(runId) ?? []).map((entry) => ({ ...entry }))
+        },
+        async upsertResearchRun(row) {
+            researchRuns.set(row.id, { ...row })
+        },
+        async listResearchRuns() {
+            return [...researchRuns.values()]
+                .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.id.localeCompare(left.id))
+                .map((row) => ({ ...row }))
         },
         async listNotes() {
             return [...notes.values()]
