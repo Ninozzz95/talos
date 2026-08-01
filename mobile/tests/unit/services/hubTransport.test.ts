@@ -89,17 +89,60 @@ describe('seeing the redirect', () => {
     })
 })
 
-describe('the bytes', () => {
+/**
+ * These are written against the plugin's ACTUAL branches, copied out of
+ * `HttpRequestHandler.readData` in @capacitor/android:
+ *
+ *   if (contentType contains application/json)  -> parseJSON(...)   // an OBJECT
+ *   else switch (responseType) {
+ *     ARRAY_BUFFER, BLOB -> readStreamAsBase64(...)                 // a STRING
+ *     default            -> readStreamAsString(...)                 // a STRING
+ *   }
+ *
+ * The first branch is the one that broke r22 on a real phone, and the reason
+ * these tests exist in this shape: I had assumed `arraybuffer` always produced
+ * base64, written the assumption into a comment, and then tested the
+ * assumption. Eleven tests passed while every Hub search died with "transport".
+ */
+describe('the body, as the plugin actually returns it', () => {
     /**
-     * With `responseType: 'arraybuffer'` the Android plugin hands over BASE64
-     * in a string — the option names what the caller wanted, not what crosses
-     * the bridge. Getting this wrong does not throw: it yields a GGUF header of
-     * the wrong bytes, which the parser rejects as "not a GGUF", blaming the
-     * model for the transport.
+     * THE branch that broke it. A JSON content type IGNORES `responseType` and
+     * returns a PARSED OBJECT — which decoded to zero bytes, so `.json()` threw
+     * on an empty body and the store reported `transport`.
      */
-    it('decodes the base64 the native layer actually sends', () => {
+    it('carries a parsed JSON object back as the text it came from', async () => {
+        plugin.request.mockResolvedValue({
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            data: [{ id: 'unsloth/Qwen3-4B-GGUF', downloads: 900 }],
+            url: '',
+        })
+        const transport = talosCreateHubTransport()
+
+        const parsed = await (await transport('https://huggingface.co/api/models?search=qwen')).json()
+
+        expect(parsed).toEqual([{ id: 'unsloth/Qwen3-4B-GGUF', downloads: 900 }])
+    })
+
+    /** And an object arriving without a JSON content type is handled the same. */
+    it('does not try to base64-decode an object', () => {
+        expect(talosDecodeHubBody({ a: 1 })).toBe('{"a":1}')
+    })
+
+    /** A JSON content type never arrives base64, whatever was asked for. */
+    it('treats a JSON string as text, not as base64', () => {
+        expect(talosDecodeHubBody('{"a":1}', true)).toBe('{"a":1}')
+    })
+
+    /**
+     * The other branch, which was right: a non-JSON body requested as bytes
+     * does arrive base64. Getting this wrong does not throw — it yields a GGUF
+     * header of the wrong bytes, which the parser rejects as "not a GGUF",
+     * blaming the model for the transport.
+     */
+    it('decodes the base64 the plugin sends for real bytes', () => {
         // "GGUF" as base64.
-        const decoded = new Uint8Array(talosDecodeHubBody('R0dVRg=='))
+        const decoded = new Uint8Array(talosDecodeHubBody('R0dVRg==') as ArrayBuffer)
 
         expect([...decoded]).toEqual([0x47, 0x47, 0x55, 0x46])
     })
@@ -107,23 +150,28 @@ describe('the bytes', () => {
     it('passes an ArrayBuffer through untouched', () => {
         const source = new Uint8Array([1, 2, 3]).buffer
 
-        expect([...new Uint8Array(talosDecodeHubBody(source))]).toEqual([1, 2, 3])
+        expect([...new Uint8Array(talosDecodeHubBody(source) as ArrayBuffer)]).toEqual([1, 2, 3])
     })
 
     it('copies a view without dragging its whole backing buffer along', () => {
         const view = new Uint8Array([9, 8, 7, 6, 5]).subarray(1, 4)
 
-        expect([...new Uint8Array(talosDecodeHubBody(view))]).toEqual([8, 7, 6])
+        expect([...new Uint8Array(talosDecodeHubBody(view) as ArrayBuffer)]).toEqual([8, 7, 6])
     })
 
-    it('treats nothing as no bytes rather than throwing', () => {
-        expect(talosDecodeHubBody('').byteLength).toBe(0)
-        expect(talosDecodeHubBody(null).byteLength).toBe(0)
-        expect(talosDecodeHubBody(undefined).byteLength).toBe(0)
+    it('treats nothing as no body rather than throwing', () => {
+        expect(talosDecodeHubBody('')).toBeNull()
+        expect(talosDecodeHubBody(null)).toBeNull()
+        expect(talosDecodeHubBody(undefined)).toBeNull()
     })
 
-    it('carries a real body through to the caller', async () => {
-        plugin.request.mockResolvedValue({ status: 200, headers: {}, data: 'R0dVRg==', url: '' })
+    it('carries real bytes through to the caller', async () => {
+        plugin.request.mockResolvedValue({
+            status: 200,
+            headers: { 'Content-Type': 'application/octet-stream' },
+            data: 'R0dVRg==',
+            url: '',
+        })
         const transport = talosCreateHubTransport()
 
         const bytes = await (await transport('https://cdn/x')).arrayBuffer()

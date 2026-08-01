@@ -1,4 +1,4 @@
-import { Capacitor, CapacitorHttp } from '@capacitor/core'
+﻿import { Capacitor, CapacitorHttp } from '@capacitor/core'
 
 /**
  * How the Hugging Face client actually reaches the network on a phone.
@@ -41,22 +41,47 @@ function headersOf(raw: unknown): Headers {
 }
 
 /**
- * Bytes back from the native layer.
+ * Whatever the native layer handed over, turned back into a body.
  *
- * With `responseType: 'arraybuffer'` the Android plugin hands over BASE64 in a
- * string, not an ArrayBuffer — the name describes what the caller wanted, not
- * what crosses the bridge. Getting this wrong does not throw: it produces a
- * GGUF header made of the wrong bytes, which the parser then rejects as "not a
- * GGUF", blaming the model for the transport.
+ * Written against the plugin's ACTUAL branches, read out of
+ * `HttpRequestHandler.readData` rather than assumed:
+ *
+ *   if (contentType contains application/json)  -> parseJSON(...)   // an OBJECT
+ *   else switch (responseType) {
+ *     ARRAY_BUFFER, BLOB -> readStreamAsBase64(...)                 // a STRING
+ *     default            -> readStreamAsString(...)                 // a STRING
+ *   }
+ *
+ * The first branch is the one that matters and the one I got wrong: a JSON
+ * content type IGNORES `responseType` entirely and returns a parsed object. I
+ * had assumed asking for `arraybuffer` always produced base64, wrote that
+ * assumption into a comment, and tested the assumption — so eleven tests passed
+ * while every Hub search on the phone died with "transport": the object decoded
+ * to zero bytes and `.json()` threw on an empty body.
+ *
+ * Same shape as the defect this file was created to fix. The lesson is the
+ * same one: read the thing, do not model it.
  */
-export function talosDecodeHubBody(data: unknown): ArrayBuffer {
+export function talosDecodeHubBody(data: unknown, isJson = false): BodyInit | null {
+    if (data === null || data === undefined) return null
     if (data instanceof ArrayBuffer) return data
     if (ArrayBuffer.isView(data)) {
         const view = data as ArrayBufferView
         return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer
     }
-    if (typeof data !== 'string' || data === '') return new ArrayBuffer(0)
-    const binary = atob(data)
+    // Already parsed by the plugin: hand it back as the text it came from, so
+    // the caller's own `.json()` sees exactly what the server sent.
+    if (typeof data === 'object') return JSON.stringify(data)
+    if (typeof data !== 'string') return null
+    if (data === '') return null
+    // A JSON content type never arrives base64, whatever was asked for.
+    if (isJson) return data
+    return base64ToBytes(data)
+}
+
+/** Only reached for a non-JSON body that was requested as bytes. */
+function base64ToBytes(value: string): ArrayBuffer {
+    const binary = atob(value)
     const bytes = new Uint8Array(binary.length)
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
     return bytes.buffer
@@ -78,16 +103,16 @@ export function talosCreateHubTransport(
 
         const url = typeof input === 'string' ? input : input.toString()
         const method = (init?.method ?? 'GET').toUpperCase()
-        const headers: Record<string, string> = {}
-        new Headers(init?.headers).forEach((value, name) => { headers[name] = value })
+        const sent: Record<string, string> = {}
+        new Headers(init?.headers).forEach((value, name) => { sent[name] = value })
 
-        // Binary for everything: the Hub answers JSON to the API and bytes to
-        // the CDN, and one path that always decodes correctly beats two that
-        // each work half the time.
+        // `arraybuffer` is asked for so the CDN's bytes arrive intact; the
+        // plugin overrides it for a JSON content type and hands back a parsed
+        // object instead, which `talosDecodeHubBody` is written around.
         const response = await native.request({
             url,
             method,
-            headers,
+            headers: sent,
             data: init?.body === undefined || init.body === null ? undefined : String(init.body),
             // THE point of this file. Without it the plugin follows the 302 and
             // the signed address is never visible.
@@ -95,12 +120,14 @@ export function talosCreateHubTransport(
             responseType: 'arraybuffer',
         })
 
-        const body = talosDecodeHubBody(response.data)
+        const headers = headersOf(response.headers)
+        const isJson = (headers.get('content-type') ?? '').includes('json')
+        const body = talosDecodeHubBody(response.data, isJson)
         // A 204 or 304 must carry no body, and `Response` throws if given one.
         const empty = response.status === 204 || response.status === 304
-        return new Response(empty || body.byteLength === 0 ? null : body, {
+        return new Response(empty ? null : body, {
             status: response.status,
-            headers: headersOf(response.headers),
+            headers,
         })
     }) as Fetch
 }
