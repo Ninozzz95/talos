@@ -67,6 +67,16 @@ final class TalosLlamaNative {
     /** Token prodotti finora. Interrogabile da un altro thread durante la generazione. */
     static native int nativeTokensProduced(long handle);
 
+    /**
+     * Il testo prodotto finora, interrogabile mentre la generazione è in corso.
+     *
+     * È il gemello del contatore qui sopra, e la ragione è la stessa: chi
+     * guarda interroga. Il contatore serve a MISURARE, questo a MOSTRARE — una
+     * chat che scrive la risposta solo quando è finita non è una chat, è
+     * un'attesa con un risultato in fondo.
+     */
+    static native String nativeTextSoFar(long handle);
+
     static native void nativeCancel(long handle);
 
     static native int nativeContextTokens(long handle);

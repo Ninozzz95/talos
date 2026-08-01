@@ -32,6 +32,11 @@ public class MainActivity extends BridgeActivity {
         // "Will this model run on THIS phone" — asked of the phone, live, rather
         // than of a table of chip names that is wrong for anything newer than it.
         registerPlugin(TalosDeviceCapacityPlugin.class);
+        // And then actually running it. llama.cpp lives on the other side of
+        // JNI, which JavaScript cannot reach; without this line the engine is
+        // compiled into the APK, proven by an instrumented test, and unable to
+        // answer a single message.
+        registerPlugin(TalosLlamaPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -96,6 +96,40 @@ public final class TalosLlamaEngine implements AutoCloseable {
     }
 
     /**
+     * What has been produced so far, askable while generation is running.
+     *
+     * This is what a chat draws. The token COUNT beside it is what the harness
+     * measures; they are deliberately separate, because one is for the user's
+     * eyes and the other for a verdict, and conflating them would let a
+     * cosmetic change move a measurement.
+     */
+    public String textSoFar() {
+        return TalosLlamaNative.nativeTextSoFar(handle);
+    }
+
+    public int tokensProduced() {
+        return TalosLlamaNative.nativeTokensProduced(handle);
+    }
+
+    /** Stops the current generation. What was produced so far still stands. */
+    public void cancel() {
+        TalosLlamaNative.nativeCancel(handle);
+    }
+
+    /**
+     * Generates on the CALLING thread and returns the whole answer.
+     *
+     * The blocking shape is on purpose: whoever wants the text as it grows
+     * polls {@link #textSoFar()} from another thread, which is the same
+     * arrangement {@link #run} already uses to sample its measurement windows.
+     * Handing out a callback per token would put the JNI boundary in the
+     * hot path for no gain.
+     */
+    public String generateBlocking(String prompt, int maxTokens, boolean stopAtEndOfGeneration) {
+        return TalosLlamaNative.nativeGenerate(handle, prompt, maxTokens, stopAtEndOfGeneration);
+    }
+
+    /**
      * Genera, e misura mentre genera.
      *
      * @return il testo e le finestre, oppure null se la generazione è fallita.

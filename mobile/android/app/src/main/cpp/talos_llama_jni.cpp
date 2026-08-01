@@ -39,6 +39,22 @@ struct talos_session {
     // Letti dal thread del campionatore mentre la generazione gira sull'altro.
     std::atomic<int>  produced{0};
     std::atomic<bool> cancelled{false};
+
+    /**
+     * Il testo prodotto finora, e il lucchetto che lo rende leggibile da fuori.
+     *
+     * Una chat deve mostrare le parole mentre arrivano, non alla fine. Il
+     * conteggio atomico bastava a MISURARE — quante ne sono uscite — ma non a
+     * mostrarle. Stessa forma però: chi guarda INTERROGA, invece di ricevere
+     * una callback per token attraverso il confine JNI.
+     *
+     * Il lucchetto non è pedanteria: senza, un thread appende a una
+     * `std::string` mentre un altro la legge, e quella è memoria letta mentre
+     * viene riallocata — un guasto che si manifesta una volta su mille e
+     * sempre sul telefono di qualcun altro.
+     */
+    std::mutex  text_lock;
+    std::string text;
 };
 
 std::once_flag g_init_once;
@@ -191,6 +207,18 @@ Java_ai_talos_TalosLlamaNative_nativeTokensProduced(JNIEnv *, jclass, jlong hand
     return session == nullptr ? 0 : session->produced.load(std::memory_order_relaxed);
 }
 
+/**
+ * Il testo prodotto finora. Interrogabile mentre la generazione è in corso: è
+ * così che la chat mostra le parole mentre arrivano.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeTextSoFar(JNIEnv * env, jclass, jlong handle) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr) return env->NewStringUTF("");
+    std::lock_guard<std::mutex> guard(session->text_lock);
+    return env->NewStringUTF(session->text.c_str());
+}
+
 JNIEXPORT void JNICALL
 Java_ai_talos_TalosLlamaNative_nativeCancel(JNIEnv *, jclass, jlong handle) {
     talos_session * session = as_session(handle);
@@ -219,6 +247,12 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
 
     session->produced.store(0, std::memory_order_relaxed);
     session->cancelled.store(false, std::memory_order_relaxed);
+    {
+        // Azzerato QUI e non a fine generazione: chi guarda deve vedere la
+        // risposta nuova crescere da zero, non la coda di quella prima.
+        std::lock_guard<std::mutex> guard(session->text_lock);
+        session->text.clear();
+    }
     // Ogni prova parte da zero: un contesto che si porta dietro la precedente
     // misurerebbe una cosa diversa a ogni giro.
     llama_memory_clear(llama_get_memory(session->ctx), true);
@@ -276,6 +310,10 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
             return nullptr;
         }
         answer.append(piece, (size_t) written);
+        {
+            std::lock_guard<std::mutex> guard(session->text_lock);
+            session->text.append(piece, (size_t) written);
+        }
 
         produced += 1;
         // Pubblicato DOPO che il testo è nell'accumulatore: chi interroga il
