@@ -35,6 +35,9 @@ import {
 } from '@/lib/talosFontScale'
 import {
     TALOS_DEFAULT_TOOL_PERMISSIONS,
+    TALOS_TOOL_ACTIONS,
+    parseTalosChosenToolActions,
+    talosEffectiveToolPermissions,
     type TalosToolAction,
     type TalosToolPermission,
     type TalosToolPermissions,
@@ -398,6 +401,15 @@ function parseVoicePreferences(value: unknown): TalosMobileVoicePreferences {
 export interface TalosMobileSettingsState {
     /** Owner 2026-07-25: tool permissions per ACTION TYPE, user-configured. */
     tools: TalosToolPermissions
+    /**
+     * Which of those the user actually DECIDED, rather than inherited.
+     *
+     * Kept apart from `tools` because `tools` cannot express it: it is always
+     * fully populated, so a default and a choice look identical there. The
+     * difference is what lets a configured search source turn an inherited
+     * refusal into a question without ever revising a refusal someone meant.
+     */
+    tools_chosen: readonly TalosToolAction[]
     /** Per-tool eligibility. Action permissions remain an additional gate. */
     agent_tools: TalosAgentToolEnabled
     /** Exact, revocable device grants for tools whose action policy is `ask`. */
@@ -541,6 +553,7 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         onboarding: parseOnboarding(value.onboarding),
         security: parseSecurityPreferences(value.security),
         tools: parseToolPermissions(value.tools),
+        tools_chosen: parseTalosChosenToolActions(value.tools_chosen),
         agent_tools: parseTalosAgentToolEnabled(value.agent_tools),
         tool_authorizations: parseTalosToolAuthorizationGrants(value.tool_authorizations),
         search: parseSearchPreferences(value.search),
@@ -563,6 +576,8 @@ export const DEFAULT_SETTINGS_STATE: TalosMobileSettingsState = parseTalosMobile
 
 export interface SettingsStore {
     readonly state: Readonly<TalosMobileSettingsState>
+    /** What is in force, as opposed to what is stored. See the implementation. */
+    effectiveToolPermissions(): TalosToolPermissions
     hydrate(): Promise<void>
     setChatLayout(patch: Partial<TalosChatLayoutPreferences>): Promise<void>
     setShell(patch: Partial<TalosMobileShellPreferences>): Promise<void>
@@ -620,6 +635,7 @@ export function useSettingsStore(): SettingsStore {
                 onboarding: next.onboarding,
                 security: next.security,
                 tools: next.tools,
+                tools_chosen: next.tools_chosen,
                 agent_tools: next.agent_tools,
                 tool_authorizations: next.tool_authorizations,
                 search: next.search,
@@ -703,6 +719,23 @@ export function useSettingsStore(): SettingsStore {
 
     singleton = {
         state: readonly(state) as Readonly<TalosMobileSettingsState>,
+        /**
+         * The permissions that actually apply — the ones every gate must read.
+         *
+         * `state.tools` is what is stored; this is what is in force. They differ
+         * in exactly one case, documented in `talosEffectiveToolPermissions`:
+         * with a search source configured, an INHERITED refusal to send data off
+         * the device becomes a question instead of a silent no. Reading
+         * `state.tools` directly where a decision is made is how the defect this
+         * repairs came back.
+         */
+        effectiveToolPermissions(): TalosToolPermissions {
+            return talosEffectiveToolPermissions({
+                stored: state.tools,
+                chosen: state.tools_chosen,
+                searchConfigured: state.search.source !== null,
+            })
+        },
         async hydrate() {
             const { value } = await talosBridgeCall('TALOS_SETTINGS_HYDRATE',
                 () => Preferences.get({ key: TALOS_MOBILE_SETTINGS_KEY }))
@@ -722,6 +755,11 @@ export function useSettingsStore(): SettingsStore {
             // to its defaults. A user who set "never read my things" got
             // "always allow" back after one restart — a silent escalation.
             state.tools = parsed.tools
+            // Same reason, and the consequence is worse here: forget this line
+            // and every restart erases the fact that the user CHOSE their
+            // refusal, so the app would start promoting it to a question again
+            // — the exact escalation the comment above was written about.
+            state.tools_chosen = parsed.tools_chosen
             state.agent_tools = parsed.agent_tools
             state.tool_authorizations = parsed.tool_authorizations
             // Rehydrated for the same reason `tools` is: a choice that vanishes
@@ -778,8 +816,23 @@ export function useSettingsStore(): SettingsStore {
             }))
         },
         setToolPermissions(patch) {
+            // Touching a permission is choosing it. From here on the app must
+            // not revise it, whatever it is configured elsewhere.
+            const chosen = [...state.tools_chosen]
+            for (const action of TALOS_TOOL_ACTIONS) {
+                const value = patch?.[action]
+                if (
+                    (value === 'allow' || value === 'ask' || value === 'deny')
+                    && !chosen.includes(action)
+                ) {
+                    chosen.push(action)
+                }
+            }
             return commit(() => ({
-                overrides: { tools: parseToolPermissions({ ...state.tools, ...patch }) },
+                overrides: {
+                    tools: parseToolPermissions({ ...state.tools, ...patch }),
+                    tools_chosen: chosen,
+                },
             }))
         },
         async setAgentToolEnabled(tool, enabled) {

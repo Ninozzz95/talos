@@ -25,7 +25,14 @@ export type TalosMobileSettingsTab = {
 export const TALOS_MOBILE_SETTINGS_TABS: readonly TalosMobileSettingsTab[] = Object.freeze([
     { id: 'models', label: 'Models', description: 'Provider keys, profiles and the default chat model.', availability: 'available' },
     { id: 'ai_defaults', label: 'AI Defaults', description: 'Utility, research and vision routing preferences.', availability: 'available' },
-    { id: 'search', label: 'Search', description: 'Search provider and research extraction budgets.', availability: 'gated', gateReason: 'The local search worker is not installed in this mobile milestone.' },
+    // Was `gated`, with the reason "the local search worker is not installed".
+    // That stopped being true the day web search shipped, and the entry went on
+    // announcing its own absence while the working configuration lived under AI
+    // Defaults — so the one place named Search was the one place that said no.
+    // The description no longer promises research extraction budgets either:
+    // those genuinely are not here, and a description is not the place to ship
+    // an intention.
+    { id: 'search', label: 'Search', description: 'Which service answers a web search, and its key.', availability: 'available' },
     { id: 'browser', label: 'Browser', description: 'Manual browsing, interaction policy and trusted-node evidence controls.', availability: 'available' },
     { id: 'integrations', label: 'Integrations', description: 'External connectors and provider integrations.', availability: 'gated', gateReason: 'Mobile connector services are not installed yet.' },
     { id: 'email', label: 'Email', description: 'Email triage, drafts and policy-gated sending.', availability: 'gated', gateReason: 'No authorized mobile email connector is configured.' },

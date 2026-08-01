@@ -107,13 +107,26 @@ async function clearSource(): Promise<void> {
     feedback.value = null
 }
 
-/** What the model will actually be offered, said plainly. */
+/**
+ * What the model will actually be offered, said plainly.
+ *
+ * The last three lines are a repair. This used to end at «ready», which
+ * announced that the model could search the web — while the action policy
+ * refused to send anything off the device and the tool was never offered at
+ * all. The user configured a key, read a confirmation, asked for a search, and
+ * got a polite refusal that named neither the permission nor where to change
+ * it. A readiness message that does not consult the gate it depends on is not a
+ * status: it is a guess printed in the same font as a fact.
+ */
 const readiness = computed(() => {
     if (!source.value) return t('search.noSource')
     if (source.value.needsKey && !hasKey.value) return t('search.keyNeeded')
     if (source.value.needsEndpoint && !settings.state.search.endpoint) {
         return t('search.addressNeeded')
     }
+    const outbound = settings.effectiveToolPermissions().outbound
+    if (outbound === 'deny') return t('search.blockedByPermission')
+    if (outbound === 'ask') return t('search.readyWillAsk')
     return t('search.ready')
 })
 </script>
