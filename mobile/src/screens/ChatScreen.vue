@@ -211,6 +211,20 @@ const modelLabels = computed(() => Object.fromEntries(
     profiles.value.map((profile) => [profile.id, profile.display_name]),
 ))
 const refreshingModels = computed(() => Object.values(catalogs).some((catalog) => catalog.status === 'loading'))
+/**
+ * The reasons the model list may be incomplete, already in the user's language.
+ *
+ * Only failures — a provider with no key saved is not a problem to report, it
+ * is a provider the user has not set up. Deduplicated because two providers
+ * failing the same way should say it once.
+ */
+const discoveryProblems = computed(() => {
+    const seen = new Set<string>()
+    return Object.values(catalogs)
+        .filter((catalog) => catalog.status === 'error' && catalog.error)
+        .map((catalog) => ({ message: catalog.error as string, detail: catalog.errorDetail }))
+        .filter((problem) => !seen.has(problem.message) && seen.add(problem.message))
+})
 const attachmentBusy = computed(() => attachments.selecting.value)
 const attachmentError = computed(() => attachments.error.value)
 const composerExpanded = computed(() => (
@@ -1004,6 +1018,7 @@ onBeforeUnmount(() => {
                 :can-send="canSend"
                 :sending="chat.state.sending"
                 :refreshing-models="refreshingModels"
+                :discovery-problems="discoveryProblems"
                 :send-disabled-reason="sendDisabledReason"
                 :enhancing-prompt="enhancingPrompt"
                 :prompt-enhancement="promptEnhancement"

@@ -248,6 +248,49 @@ public final class TalosModelStore {
         return new Slot(new File(directory, safe(path)));
     }
 
+    /** Something the walk could not read, and the reason it could not. */
+    public static final class Unreadable {
+        public final String path;
+        /** The exception's name and message — a cause, never a stack trace. */
+        public final String reason;
+
+        Unreadable(String path, String reason) {
+            this.path = path;
+            this.reason = reason;
+        }
+    }
+
+    /**
+     * What a walk of the store found, AND what it could not look at.
+     *
+     * The second half is the whole point of this type. `File.listFiles()`
+     * returns null both for "this is not a directory" and for "you may not read
+     * this", and the code that consumed it treated null as an empty list — so a
+     * folder the app could not open was reported, all the way up to the model
+     * picker, as "no models downloaded". Two opposite situations, one sentence:
+     * one means "go and download something", the other means "something is
+     * wrong and downloading again will not help".
+     *
+     * Returning both together rather than throwing is deliberate. One
+     * unreadable folder must not hide the models in the folders beside it: the
+     * user should still be able to run what is runnable, and still be told that
+     * part of the answer is missing.
+     */
+    public static final class Listing {
+        public final List<Leftover> entries;
+        public final List<Unreadable> unreadable;
+
+        Listing(List<Leftover> entries, List<Unreadable> unreadable) {
+            this.entries = entries;
+            this.unreadable = unreadable;
+        }
+
+        /** True when the walk is a complete answer rather than a partial one. */
+        public boolean complete() {
+            return unreadable.isEmpty();
+        }
+    }
+
     /**
      * Downloads nobody is watching any more.
      *
@@ -256,21 +299,8 @@ public final class TalosModelStore {
      * four gigabytes. A phone losing that much to something invisible shows the
      * user a number going down and nothing to point at.
      */
-    public List<Leftover> leftovers() {
-        List<Leftover> found = new ArrayList<>();
-        collect(new File(root, "models"), found);
-        return found;
-    }
-
-    private void collect(File directory, List<Leftover> into) {
-        File[] entries = directory.listFiles();
-        if (entries == null) return;
-        for (File entry : entries) {
-            if (entry.isDirectory()) collect(entry, into);
-            else if (entry.getName().endsWith(PARTIAL_SUFFIX)) {
-                into.add(new Leftover(entry.getAbsolutePath(), entry.length()));
-            }
-        }
+    public Listing leftovers() {
+        return walk((name) -> name.endsWith(PARTIAL_SUFFIX));
     }
 
     /**
@@ -288,23 +318,63 @@ public final class TalosModelStore {
      * A separate index of completed models would be a second truth to keep in
      * step with the disk, and the disk always wins that argument.
      */
-    public List<Leftover> finished() {
-        List<Leftover> found = new ArrayList<>();
-        collectFinished(new File(root, "models"), found);
-        return found;
+    public Listing finished() {
+        return walk((name) -> !name.endsWith(PARTIAL_SUFFIX) && !name.endsWith(SIDECAR_SUFFIX));
     }
 
-    private void collectFinished(File directory, List<Leftover> into) {
-        File[] entries = directory.listFiles();
-        if (entries == null) return;
-        for (File entry : entries) {
-            if (entry.isDirectory()) {
-                collectFinished(entry, into);
-            } else if (!entry.getName().endsWith(PARTIAL_SUFFIX)
-                    && !entry.getName().endsWith(SIDECAR_SUFFIX)) {
-                into.add(new Leftover(entry.getAbsolutePath(), entry.length()));
+    /** Which filenames a walk keeps. The two walks differ by nothing else. */
+    private interface Keep {
+        boolean test(String fileName);
+    }
+
+    private Listing walk(Keep keep) {
+        Listing listing = new Listing(new ArrayList<>(), new ArrayList<>());
+        descend(new File(root, "models").toPath(), keep, listing);
+        return listing;
+    }
+
+    /**
+     * `java.nio` rather than `File.listFiles()`, for the one reason that
+     * matters here: it THROWS, with a cause. `listFiles()` answers null to
+     * "not a directory", to "permission denied" and to an I/O error alike, and
+     * a caller cannot tell any of them from an empty folder. `AccessDeniedException`
+     * and `NotDirectoryException` say which it was, and that sentence is what
+     * eventually reaches the user.
+     */
+    private void descend(java.nio.file.Path directory, Keep keep, Listing into) {
+        try (java.nio.file.DirectoryStream<java.nio.file.Path> stream =
+                     Files.newDirectoryStream(directory)) {
+            for (java.nio.file.Path entry : stream) {
+                if (Files.isDirectory(entry)) {
+                    descend(entry, keep, into);
+                    continue;
+                }
+                java.nio.file.Path name = entry.getFileName();
+                if (name == null || !keep.test(name.toString())) continue;
+                try {
+                    into.entries.add(new Leftover(entry.toAbsolutePath().toString(), Files.size(entry)));
+                } catch (IOException unmeasurable) {
+                    // A file that cannot even be measured is not a model that
+                    // can be opened, and pretending it is zero bytes would put
+                    // it in the picker to fail later, at the worst moment.
+                    into.unreadable.add(new Unreadable(entry.toString(), describe(unmeasurable)));
+                }
             }
+        } catch (java.nio.file.NoSuchFileException absent) {
+            // Nothing was ever downloaded. That is emptiness, not failure, and
+            // calling it a failure would make every fresh install look broken.
+        } catch (IOException | RuntimeException failed) {
+            into.unreadable.add(new Unreadable(directory.toString(), describe(failed)));
         }
+    }
+
+    /** The cause in one line: enough to act on, never a stack trace. */
+    private static String describe(Throwable failure) {
+        String message = failure.getMessage();
+        String kind = failure.getClass().getSimpleName();
+        if (message == null || message.isEmpty()) return kind;
+        String trimmed = message.length() > 200 ? message.substring(0, 200) : message;
+        return kind + ": " + trimmed;
     }
 
     /**

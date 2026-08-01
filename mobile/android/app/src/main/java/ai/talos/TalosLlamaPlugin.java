@@ -242,8 +242,9 @@ public class TalosLlamaPlugin extends Plugin {
         // failure would look like "no models downloaded" rather than like
         // looking in the wrong drawer.
         TalosModelStore store = new TalosModelStore(TalosTransferSession.rootFor(getContext()));
+        TalosModelStore.Listing listing = store.finished();
         JSArray models = new JSArray();
-        for (TalosModelStore.Leftover entry : store.finished()) {
+        for (TalosModelStore.Leftover entry : listing.entries) {
             JSObject row = new JSObject();
             row.put("path", entry.path);
             row.put("bytes", entry.bytes);
@@ -252,7 +253,26 @@ public class TalosLlamaPlugin extends Plugin {
         }
         JSObject result = new JSObject();
         result.put("models", models);
+        // What the walk could NOT look at, carried alongside what it found.
+        //
+        // Without this the caller receives an empty list and has no way to know
+        // whether the phone holds no models or whether a folder refused to open
+        // — and it used to say the first thing while the second was true. One
+        // sends the user to download something; the other means downloading
+        // again will change nothing.
+        result.put("unreadable", unreadableOf(listing));
         call.resolve(result);
+    }
+
+    private static JSArray unreadableOf(TalosModelStore.Listing listing) {
+        JSArray refused = new JSArray();
+        for (TalosModelStore.Unreadable entry : listing.unreadable) {
+            JSObject row = new JSObject();
+            row.put("path", entry.path);
+            row.put("reason", entry.reason);
+            refused.put(row);
+        }
+        return refused;
     }
 
     /**

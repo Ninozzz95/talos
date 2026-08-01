@@ -22,6 +22,18 @@ const props = withDefaults(defineProps<{
     loadingModels?: boolean
     loadingRoutes?: boolean
     refreshingModels?: boolean
+    /**
+     * Why the list may be short: one already-translated sentence per provider
+     * that failed to answer.
+     *
+     * Without it this panel had one empty state for every reason — 'no models
+     * available, add one in the Model Lab' — and said it just as loudly when
+     * discovery had FAILED. On a tablet holding a two-gigabyte model in a
+     * folder the app could not open, that sentence sent the search in the
+     * wrong direction for three rounds. Advice given confidently for the
+     * wrong situation is worse than no advice.
+     */
+    discoveryProblems?: ReadonlyArray<{ message: string, detail?: string | null }>
 }>(), {
     routingProfiles: () => [],
     selectedModelProfileId: null,
@@ -29,6 +41,7 @@ const props = withDefaults(defineProps<{
     loadingModels: false,
     loadingRoutes: false,
     refreshingModels: false,
+    discoveryProblems: () => [],
 })
 
 const emit = defineEmits<{
@@ -259,12 +272,39 @@ function onListKeydown(event: KeyboardEvent): void {
                 >
                     {{ $t('chat.loadingProfiles') }}
                 </p>
-                <p
-                    v-else-if="!visibleProfiles.length"
-                    class="px-2 py-2 text-xs leading-5 text-[var(--talos-muted,var(--muted-foreground))]"
-                >
-                    {{ $t('chat.noComposerModels') }}
-                </p>
+                <template v-else-if="!visibleProfiles.length">
+                    <!-- A failure is reported as a failure. The generic hint is
+                         only right when discovery actually succeeded and found
+                         nothing. -->
+                    <div
+                        v-for="problem in discoveryProblems"
+                        :key="problem.message"
+                        role="alert"
+                        data-testid="talos-model-discovery-problem"
+                        class="px-2 py-2 text-xs leading-5 text-[var(--talos-danger,var(--destructive))]"
+                    >
+                        <p>{{ problem.message }}</p>
+                        <!-- The evidence, on its own line and in monospace. It
+                             is kept out of the sentence because interpolated
+                             parameters are HTML-escaped, and a path through that
+                             escaping reads `&#x2F;storage&#x2F;…` — which is
+                             what a user was actually shown before this. Rendered
+                             as text, never as markup. -->
+                        <p
+                            v-if="problem.detail"
+                            data-testid="talos-model-discovery-detail"
+                            class="mt-1 break-all font-mono text-2xs text-[var(--talos-muted,var(--muted-foreground))]"
+                        >
+                            {{ problem.detail }}
+                        </p>
+                    </div>
+                    <p
+                        v-if="!discoveryProblems.length"
+                        class="px-2 py-2 text-xs leading-5 text-[var(--talos-muted,var(--muted-foreground))]"
+                    >
+                        {{ $t('chat.noComposerModels') }}
+                    </p>
+                </template>
                 <label v-if="visibleProfiles.length > 6" class="relative mb-1 block px-1">
                     <Search class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--talos-muted,var(--muted-foreground))]" aria-hidden="true" />
                     <input

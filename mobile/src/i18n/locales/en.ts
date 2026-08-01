@@ -1015,6 +1015,10 @@ export const TALOS_EN_MESSAGES = {
         providerAdapterMismatch: 'The provider adapter does not match {provider}.',
         providerStreamingUnsupported: 'Streaming is not supported for {provider}.',
         providerUnsupported: 'Unsupported provider: {provider}.',
+        // Never "no models": the folder exists and refused to open, so
+        // downloading another one changes nothing. The path is in the message
+        // because a folder nobody can name is a folder nobody can fix.
+        localModelsUnreadable: 'TALOS cannot read the local models folder, so it cannot tell whether any models are there. Downloading another one will not help.',
         invalidPreferences: 'TALOS rejected invalid Model Lab preferences.',
         selectedMissing: 'The selected model no longer exists.',
         displayNameTooLong: 'Model display names support at most {count} characters.',

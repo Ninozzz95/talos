@@ -26,6 +26,7 @@ defineProps<{
     loadingModels?: boolean
     loadingRoutes?: boolean
     refreshingModels?: boolean
+    discoveryProblems?: ReadonlyArray<{ message: string, detail?: string | null }>
 }>()
 
 const emit = defineEmits<{
@@ -49,6 +50,7 @@ const emit = defineEmits<{
             :loading-models="loadingModels"
             :loading-routes="loadingRoutes"
             :refreshing-models="refreshingModels"
+            :discovery-problems="discoveryProblems"
             @select-model-profile="emit('selectModelProfile', $event)"
             @select-model-routing-profile="emit('selectModelRoutingProfile', $event)"
             @request-close="emit('close')"

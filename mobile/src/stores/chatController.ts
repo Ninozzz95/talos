@@ -38,7 +38,7 @@ import {
     type TalosToolAuthorizationRecoveryView,
 } from '@/lib/tools/toolAuthorizationCheckpoint'
 import type { TalosMobilePromptEnhancementResult } from '@/lib/chat/promptEnhancement'
-import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
+import { talosProviderErrorDetail, TalosMobileProviderError } from '@/lib/chat/providerErrors'
 import type {
     TalosMobileProviderCatalog,
     TalosMobileProviderModel,
@@ -317,6 +317,18 @@ export interface ProviderCatalogState {
     status: ProviderCatalogStatus
     models: TalosMobileProviderModel[]
     error: string | null
+    /**
+     * The one piece of evidence the message refers to — a path, usually — kept
+     * OUT of the sentence on purpose.
+     *
+     * Interpolated parameters are HTML-escaped (`escapeParameter`, so a value
+     * from the outside can never smuggle markup into a translated string), and a
+     * filesystem path put through that comes out as `&#x2F;storage&#x2F;…`. It
+     * was shown to a user in exactly that state on 2026-08-01: a correct
+     * diagnosis nobody could read. Carried beside the sentence instead, it stays
+     * legible, and the interface can give it the monospace it deserves.
+     */
+    errorDetail: string | null
     updatedAt: string | null
     configured: boolean
 }
@@ -843,6 +855,7 @@ function initialCatalogs(): Record<TalosMobileProviderId, ProviderCatalogState> 
             status: 'idle',
             models: [],
             error: null,
+            errorDetail: null,
             updatedAt: null,
             configured: false,
         }
@@ -3321,11 +3334,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         if (!state.configured) {
             state.status = 'idle'
             state.error = null
+            state.errorDetail = null
             return null
         }
 
         state.status = 'loading'
         state.error = null
+        state.errorDetail = null
         try {
             const catalog = await adapter.listModels({ apiKey, endpoint, timeoutMs }, deps.transport)
             state.models = [...catalog.models]
@@ -3336,6 +3351,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         } catch (error) {
             state.status = 'error'
             state.error = safeProviderMessage(error, apiKey, deps.translate)
+            // Never through `translate`: the escaping that keeps parameters from
+            // smuggling markup would turn a path into `&#x2F;storage&#x2F;…`.
+            state.errorDetail = talosProviderErrorDetail(error)
             throw error
         }
     }
@@ -3570,6 +3588,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         state.configured = false
         state.status = 'idle'
         state.error = null
+        state.errorDetail = null
         state.models = []
         state.updatedAt = null
         ensureSelection()

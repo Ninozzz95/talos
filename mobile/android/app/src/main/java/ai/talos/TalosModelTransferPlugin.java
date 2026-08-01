@@ -157,11 +157,11 @@ public class TalosModelTransferPlugin extends Plugin {
     public void leftovers(PluginCall call) {
         TalosModelStore store = new TalosModelStore(
                 TalosTransferSession.rootFor(getContext()));
-        List<TalosModelStore.Leftover> found = store.leftovers();
+        TalosModelStore.Listing listing = store.leftovers();
 
         com.getcapacitor.JSArray items = new com.getcapacitor.JSArray();
         long total = 0;
-        for (TalosModelStore.Leftover leftover : found) {
+        for (TalosModelStore.Leftover leftover : listing.entries) {
             JSObject item = new JSObject();
             item.put("path", leftover.path);
             item.put("bytes", leftover.bytes);
@@ -169,9 +169,23 @@ public class TalosModelTransferPlugin extends Plugin {
             total += leftover.bytes;
         }
 
+        com.getcapacitor.JSArray refused = new com.getcapacitor.JSArray();
+        for (TalosModelStore.Unreadable entry : listing.unreadable) {
+            JSObject row = new JSObject();
+            row.put("path", entry.path);
+            row.put("reason", entry.reason);
+            refused.put(row);
+        }
+
         JSObject result = new JSObject();
         result.put("items", items);
         result.put("totalBytes", total);
+        // The storage screen reports this total as space it can give back. A
+        // folder that refused to open makes that number an understatement, and
+        // a number presented as complete when it is not is worse than no number
+        // at all: the user frees two gigabytes, sees three still missing, and
+        // has nothing to point at.
+        result.put("unreadable", refused);
         call.resolve(result);
     }
 

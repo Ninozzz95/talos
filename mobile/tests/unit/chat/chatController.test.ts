@@ -49,7 +49,10 @@ const localEngine = vi.hoisted(() => ({
     // nothing reports, and because a model here would silently change every
     // other test in this file: with one local model on disk and no keys saved,
     // the app can send — correct behaviour, and not what those tests are about.
-    talosLocalInstalledModels: vi.fn(async (): Promise<Array<{ path: string, name: string, bytes: number }>> => []),
+    talosLocalInstalledModels: vi.fn(async (): Promise<{
+        models: Array<{ path: string, name: string, bytes: number }>
+        unreadable: Array<{ path: string, reason: string }>
+    }> => ({ models: [], unreadable: [] })),
     talosLocalEngineOpen: vi.fn(async () => undefined),
     talosLocalEngineChatPrompt: vi.fn(async () => 'prompt'),
     talosLocalEngineGenerate: vi.fn(async () => ({ text: 'ciao', tokens: 2 })),
@@ -2426,9 +2429,12 @@ describe('chatController', () => {
     it('discovers a provider that needs neither a key nor an address', async () => {
         const { deps } = makeDeps()
         const controller = createChatController(deps)
-        localEngine.talosLocalInstalledModels.mockResolvedValueOnce([
-            { path: '/models/local-test/smollm2-135m.gguf', name: 'smollm2-135m.gguf', bytes: 270_885_952 },
-        ])
+        localEngine.talosLocalInstalledModels.mockResolvedValueOnce({
+            models: [
+                { path: '/models/local-test/smollm2-135m.gguf', name: 'smollm2-135m.gguf', bytes: 270_885_952 },
+            ],
+            unreadable: [],
+        })
 
         // Deliberately no secret and no endpoint stored for `local`: needing
         // nothing is the whole point, and saving either would hide the defect.

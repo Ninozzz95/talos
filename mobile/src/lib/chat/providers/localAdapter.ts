@@ -1,3 +1,4 @@
+import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
 import type {
     TalosMobileCompletionInput,
     TalosMobileCompletionResult,
@@ -110,7 +111,29 @@ export const localAdapter: TalosMobileProviderAdapter = {
      * run is what has finished downloading, asked of the device every time.
      */
     async listModels(): Promise<TalosMobileProviderCatalog> {
-        const files = await talosLocalInstalledModels()
+        const { models: files, unreadable } = await talosLocalInstalledModels()
+        // Nothing found AND something refused to open is not an empty disk.
+        //
+        // Said as an error rather than as an empty catalogue because the advice
+        // is opposite: an empty disk means "download a model", and this means
+        // "downloading another one will change nothing". The path travels with
+        // it, because a folder nobody can name is a folder nobody can fix.
+        //
+        // Only when the list is empty. A folder that refuses to open beside
+        // three that opened must not hide those three — the user can still run
+        // what is runnable.
+        if (files.length === 0 && unreadable.length > 0) {
+            throw new TalosMobileProviderError({
+                provider: 'local',
+                operation: 'list_models',
+                message: 'TALOS_LOCAL_MODELS_UNREADABLE',
+                uiMessageKey: 'models.localModelsUnreadable',
+                uiMessageParameters: {
+                    path: unreadable[0].path,
+                    reason: unreadable[0].reason,
+                },
+            })
+        }
         return {
             provider: 'local',
             models: files.map((file) => ({
