@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive, ref } from 'vue'
@@ -162,7 +162,7 @@ describe('SettingsScreen (functional)', () => {
         const tablist = wrapper.get('[aria-label="Model Lab sections"]')
         const tabs = tablist.findAll('[role="tab"]')
 
-        expect(tabs.map((tab) => tab.text())).toEqual(['Providers', 'Catalog', 'On device'])
+        expect(tabs.map((tab) => tab.text())).toEqual(['Providers', 'Catalog', 'Local'])
         expect(wrapper.find('[aria-label="Search model catalog"]').exists()).toBe(false)
         expect(wrapper.get('[data-model-lab-section="providers"]').classes())
             .toContain('talos-motion-tab-panel')

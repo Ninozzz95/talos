@@ -36,6 +36,8 @@ import {
     talosForgetHuggingFaceToken,
 } from '@/stores/localModels'
 import { talosDiscardModelTransfer } from '@/services/modelTransfer'
+import { talosGroupModelsByProvider, talosProviderOptions } from '@/lib/models/providerGrouping'
+import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import {
     talosFailureKey,
     talosFitVerdict,
@@ -159,6 +161,27 @@ function explain(reason: string): string {
 }
 
 const tokenDraft = ref('')
+
+/**
+ * Grouped by whoever published the GGUF.
+ *
+ * On this screen every row is a stranger's upload, and the people who quantise
+ * models are a small recognisable set — `unsloth`, `bartowski` and the rest —
+ * so "who made this one" is most of what a reader uses to judge it. The same
+ * shape the Catalog tab already uses for remote providers, so the two halves of
+ * the Model Lab read alike.
+ *
+ * The publishers are DERIVED from the results, never a list in the app: who
+ * publishes GGUF changes every few months, and a list compiled into an APK is
+ * wrong by the time somebody installs it.
+ */
+const providerFilter = ref('')
+
+const providerGroups = computed(() => talosGroupModelsByProvider(store.results))
+const providerItems = computed(() => talosProviderOptions(providerGroups.value))
+const visibleGroups = computed(() => providerFilter.value === ''
+    ? providerGroups.value
+    : providerGroups.value.filter((group) => group.provider === providerFilter.value))
 
 /**
  * What was paused, so it can be started again.
@@ -390,10 +413,36 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             {{ store.searchFailure }}
         </p>
 
-        <!-- Search results. -->
-        <ul v-else-if="!store.repo && store.results.length" class="flex flex-col gap-2">
-            <li v-for="model in store.results" :key="model.id">
+        <!-- Search results, under the organisation that published them. -->
+        <template v-else-if="!store.repo && store.results.length">
+            <!-- The same control the Catalog tab uses for remote providers, so
+                 the two halves of the Model Lab read alike. Its options are
+                 derived from the results — there is no list of publishers in
+                 this app, because that list would age. -->
+            <TalosThemedSelect
+                v-model="providerFilter"
+                data-testid="talos-models-provider-filter"
+                :items="providerItems"
+                :aria-label="t('localModels.filterProvider')"
+                :none-label="t('localModels.allProviders')"
+            />
+
+            <section
+                v-for="group in visibleGroups"
+                :key="group.provider"
+                data-testid="talos-models-provider-group"
+                class="flex flex-col gap-2"
+            >
+                <h5 class="flex items-baseline justify-between gap-2 px-1">
+                    <span class="truncate text-xs font-semibold text-[var(--talos-text)]">{{ group.provider }}</span>
+                    <span class="shrink-0 text-3xs text-[var(--talos-muted)]">
+                        {{ t('localModels.providerCount', { count: group.models.length }) }}
+                    </span>
+                </h5>
+
                 <button
+                    v-for="model in group.models"
+                    :key="model.id"
                     type="button"
                     data-testid="talos-models-result"
                     :aria-label="`${t('localModels.open')} ${model.id}`"
@@ -411,8 +460,8 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                         >{{ t('localModels.gated') }}</span>
                     </span>
                 </button>
-            </li>
-        </ul>
+            </section>
+        </template>
 
         <p
             v-else-if="!store.repo && store.query.trim() !== '' && !store.searching"
