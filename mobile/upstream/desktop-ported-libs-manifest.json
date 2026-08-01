@@ -6,7 +6,7 @@
   "files": [
     {
       "mobile_path": "mobile/src/lib/talosChatLayout.ts",
-      "sha256": "221891216546ceb1ddbe0f073b6ecd32daa9a71795ebc41cf24437e8b7044be9",
+      "sha256": "56c38e5922c243b80975738c6747db08fe35bceaf7228ebf4577ad39a67f5686",
       "desktop_source": "talosChatLayout.ts",
       "reconciliation": "DIVERGED from frozen desktop revision 76a0aa9 on purpose (owner, 2026-07-26 and 2026-07-28): mobile adds an \"Extra small\" chat text step below Small, holds the four rem sizes in TALOS_CHAT_TEXT_SCALE_REM, and renders message prose independently from the interface --talos-ui-scale so Appearance Font size and Chat message size are separate controls. Mobile also labels the steps Small/Default/Large where desktop says Compact/Balanced/Expanded, and the desktop schema carries composer_mode/advanced_rail_expanded while mobile carries message_style. KX-DESK-01 records the earlier desktop fourth-step follow-up; this mobile independence fix does not edit the desktop lane."
     },
