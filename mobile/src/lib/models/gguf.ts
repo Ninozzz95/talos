@@ -286,6 +286,22 @@ export function talosReadGgufHeader(bytes: ArrayBuffer, fileBytes: number): Talo
         // older architectures that genuinely have no separate figure.
         const kvHeads = Number(fields.get(`${architecture}.attention.head_count_kv`) ?? heads)
 
+        /**
+         * The head dimension, from the model's own word where it gives one.
+         *
+         * `embedding_length / head_count` is only true when the head dimension
+         * is tied to the hidden size, and a growing number of architectures
+         * decouple them — Qwen3, DeepSeek and Gemma all publish
+         * `attention.key_length`, and for those the derived figure is simply
+         * wrong. It feeds the KV cache calculation, so it decides whether a
+         * model is offered at all: a phone that could hold it is told it cannot,
+         * or worse. Found by an adversarial review, 2026-08-01.
+         */
+        const declaredHeadDim = Number(fields.get(`${architecture}.attention.key_length`))
+        const headDim = Number.isFinite(declaredHeadDim) && declaredHeadDim > 0
+            ? declaredHeadDim
+            : Math.floor(embedding / heads)
+
         const missing: string[] = []
         if (!architecture) missing.push('general.architecture')
         if (!Number.isFinite(layers) || layers <= 0) missing.push('block_count')
@@ -310,7 +326,7 @@ export function talosReadGgufHeader(bytes: ArrayBuffer, fileBytes: number): Talo
                     weightBytes: Math.max(0, fileBytes - dataOffset),
                     layers,
                     kvHeads,
-                    headDim: Math.floor(embedding / heads),
+                    headDim,
                     trainedContext,
                     // f16 unless the file says otherwise; quantising the KV
                     // cache is a runtime choice, not something the model states.

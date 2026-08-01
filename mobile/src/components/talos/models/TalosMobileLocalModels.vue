@@ -25,6 +25,7 @@ import {
     talosOpenModelRepo,
     talosCloseModelRepo,
     talosExamineSet,
+    talosSetLocalContext,
     talosDownloadSet,
     talosStopLocalDownload,
     talosRefreshTransfer,
@@ -34,7 +35,14 @@ import {
     talosSetHuggingFaceToken,
     talosForgetHuggingFaceToken,
 } from '@/stores/localModels'
-import { talosFitVerdict, talosFormatBytes, talosSetWarnings } from '@/lib/models/presentation'
+import { talosDiscardModelTransfer } from '@/services/modelTransfer'
+import {
+    talosFailureKey,
+    talosFitVerdict,
+    talosFormatBytes,
+    talosRetryAfterSeconds,
+    talosSetWarnings,
+} from '@/lib/models/presentation'
 
 const { t } = useTalosI18n()
 
@@ -44,7 +52,20 @@ let poller: ReturnType<typeof setInterval> | null = null
 
 const store = talosLocalModels
 
+// The bar is driven by the native side, which keeps running when this screen
+// does not. Polling only while it is on screen costs nothing and stops cleanly.
+let mounted = true
+
 onMounted(async () => {
+    // Started BEFORE the probes, not after them.
+    //
+    // It was created after four awaits, so a section unmounted while they were
+    // still resolving ran its cleanup against a null timer — and then the
+    // interval was created anyway, with nothing left to clear it: a 1 Hz call
+    // into the native layer for the rest of the process's life, once per visit.
+    // Found by an adversarial review, 2026-08-01.
+    poller = setInterval(() => { void talosRefreshTransfer() }, 1000)
+
     // Measured on every visit, not once at start: free memory, free space and
     // heat all move, and a fit answer from an hour ago is about a different
     // phone.
@@ -54,14 +75,17 @@ onMounted(async () => {
         talosRefreshLeftovers(),
         talosRefreshHuggingFaceToken(),
     ])
-    poller = setInterval(() => { void talosRefreshTransfer() }, 1000)
+    if (!mounted) stopPolling()
 })
 
-// The bar is driven by the native side, which keeps running when this screen
-// does not. Polling only while it is on screen costs nothing and stops cleanly.
-onUnmounted(() => {
+function stopPolling(): void {
     if (poller !== null) clearInterval(poller)
     poller = null
+}
+
+onUnmounted(() => {
+    mounted = false
+    stopPolling()
 })
 
 const deviceLine = computed(() => {
@@ -89,14 +113,76 @@ async function open(id: string): Promise<void> {
 async function start(key: string, label: string): Promise<void> {
     refused.value = null
     const result = await talosDownloadSet(key, label)
-    if (!result.ok) {
-        refused.value = result.reason === 'already-running'
-            ? t('localModels.alreadyRunning')
-            : `${t('localModels.refused')} ${result.reason}`
+    if (result.ok) {
+        started.value = { key, label }
+        paused.value = null
+        return
     }
+    refused.value = result.reason === 'already-running'
+        ? t('localModels.alreadyRunning')
+        : `${t('localModels.refused')} ${explain(result.reason)}`
+}
+
+/**
+ * Take the counter-offer.
+ *
+ * "At 8192 tokens of context it fits" was a sentence with nothing behind it:
+ * the context was hard-coded and no control could change it, so the app made an
+ * offer the user had no way to accept. Now it does — and the model is re-checked
+ * at that context, because the verdict is only true of the number it was
+ * computed at.
+ */
+async function acceptCounterOffer(key: string, context: number): Promise<void> {
+    talosSetLocalContext(context)
+    await talosExamineSet(key)
+}
+
+/**
+ * Give the space back.
+ *
+ * Nothing is dropped without the native side agreeing it is ours: the plugin
+ * accepts only paths under its own root that end in the partial suffix.
+ */
+async function reclaim(): Promise<void> {
+    for (const leftover of store.leftovers.items) {
+        await talosDiscardModelTransfer(leftover.path)
+    }
+    await talosRefreshLeftovers()
+}
+
+/** A slug turned into a sentence, or left as itself when we have no words. */
+function explain(reason: string): string {
+    const key = talosFailureKey(reason)
+    const seconds = talosRetryAfterSeconds(reason)
+    if (key === null) return reason
+    return seconds === null ? t(key) : `${t(key)} (${seconds}s)`
 }
 
 const tokenDraft = ref('')
+
+/**
+ * What was paused, so it can be started again.
+ *
+ * Pause used to be a one-way door: the block is the transfer's only control and
+ * it hid on `active`, so pausing erased the download from the screen entirely
+ * while the copy promised it would carry on. Remembering the set is what makes
+ * the promise true — resuming costs one request, because every byte and its
+ * hash are already on disk.
+ */
+const paused = ref<{ key: string; label: string } | null>(null)
+/** Recorded when the download STARTS — never guessed from the list afterwards. */
+const started = ref<{ key: string; label: string } | null>(null)
+
+async function pause(): Promise<void> {
+    paused.value = started.value
+    await talosStopLocalDownload()
+}
+
+async function resume(): Promise<void> {
+    const target = paused.value
+    paused.value = null
+    if (target) await start(target.key, target.label)
+}
 
 async function saveToken(): Promise<void> {
     const value = tokenDraft.value.trim()
@@ -151,9 +237,12 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
         </p>
         <p v-else class="text-xs text-[var(--talos-muted)]">{{ t('localModels.noDevice') }}</p>
 
-        <!-- A download in flight, with the bar the native side is driving. -->
+        <!-- A download in flight, with the bar the native side is driving.
+             Shown while it is active OR paused: hiding it on pause erased every
+             trace of the transfer and left no way to resume, while the copy
+             promised it would carry on where it left off. -->
         <div
-            v-if="store.transfer.active"
+            v-if="store.transfer.active || paused"
             data-testid="talos-models-transfer"
             class="flex flex-col gap-2 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3"
         >
@@ -162,14 +251,26 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                     {{ t('localModels.downloading') }} {{ store.transfer.modelName }}
                 </span>
                 <button
+                    v-if="store.transfer.active"
                     type="button"
                     data-testid="talos-models-stop"
                     :aria-label="t('localModels.stop')"
                     class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
-                    @click="talosStopLocalDownload()"
+                    @click="pause()"
                 >
                     <Pause class="size-4" aria-hidden="true" />
                 </button>
+                <!-- The other half of the promise. Resuming costs a request,
+                     not a download: every byte and its hash are on disk. -->
+                <Button
+                    v-else
+                    type="button"
+                    data-testid="talos-models-resume"
+                    class="talos-pressable min-h-11 rounded-full border border-[var(--talos-border)] px-3 text-sm text-[var(--talos-text)]"
+                    @click="resume()"
+                >
+                    {{ t('localModels.resume') }}
+                </Button>
             </div>
             <div class="h-1.5 overflow-hidden rounded-full bg-[var(--talos-active)]">
                 <div
@@ -191,13 +292,24 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
 
         <!-- Space held by attempts nobody is watching. The reservation is taken
              up front, so an abandoned download still holds the whole file. -->
-        <p
+        <div
             v-if="store.leftovers.totalBytes > 0"
             data-testid="talos-models-leftovers"
-            class="text-2xs text-[var(--talos-muted)]"
+            class="flex flex-wrap items-center gap-2 text-2xs text-[var(--talos-muted)]"
         >
-            {{ t('localModels.leftovers', { size: talosFormatBytes(store.leftovers.totalBytes) }) }}
-        </p>
+            <span>{{ t('localModels.leftovers', { size: talosFormatBytes(store.leftovers.totalBytes) }) }}</span>
+            <!-- The button that was missing. The string and the service call
+                 both existed and neither was wired to anything, so the line was
+                 a statement of loss with no way to act on it. -->
+            <button
+                type="button"
+                data-testid="talos-models-reclaim"
+                class="talos-pressable min-h-10 rounded-full border border-[var(--talos-border)] px-3 text-[var(--talos-text)]"
+                @click="reclaim()"
+            >
+                {{ t('localModels.reclaim') }}
+            </button>
+        </div>
 
         <p v-if="refused" role="alert" data-testid="talos-models-refused" class="text-xs text-[var(--talos-danger,#dc5b5b)]">
             {{ refused }}
@@ -209,11 +321,17 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
         <details v-if="!store.repo" data-testid="talos-models-token" class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3">
             <summary class="flex min-h-10 cursor-pointer items-center justify-between gap-2 text-sm font-semibold text-[var(--talos-text)]">
                 {{ t('localModels.tokenTitle') }}
-                <span v-if="store.hasToken" class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
-                    {{ t('localModels.tokenSaved') }}
+                <!-- A word, not a sentence: this is a badge pill at 10px with
+                     wide tracking, and the full explanation used to be crammed
+                     into it, wrapping over several lines and breaking the row. -->
+                <span v-if="store.hasToken" class="shrink-0 rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                    {{ t('localModels.tokenPresent') }}
                 </span>
             </summary>
             <p class="mt-2 text-2xs leading-4 text-[var(--talos-muted)]">{{ t('localModels.tokenWhy') }}</p>
+            <p v-if="store.hasToken" class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]">
+                {{ t('localModels.tokenSaved') }}
+            </p>
             <div class="mt-2 flex gap-2">
                 <input
                     v-model="tokenDraft"
@@ -322,6 +440,18 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                 {{ t('localModels.loadingFiles') }}
             </p>
 
+            <!-- A failure is said as a failure. It used to fall through to
+                 "this repository has no GGUF files a phone can open", which is
+                 a false statement about what was actually a rate limit. -->
+            <p
+                v-else-if="store.repo.failure"
+                role="alert"
+                data-testid="talos-models-repo-failed"
+                class="py-6 text-center text-sm text-[var(--talos-danger,#dc5b5b)]"
+            >
+                {{ t('localModels.repoFailed') }} {{ explain(store.repo.failure) }}
+            </p>
+
             <p v-else-if="!store.repo.sets.length" class="py-6 text-center text-sm text-[var(--talos-muted)]">
                 {{ t('localModels.emptyRepo') }}
             </p>
@@ -392,16 +522,25 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                         <p v-if="row.verdict.reasonKey" class="text-2xs text-[var(--talos-muted)]">
                             {{ t(row.verdict.reasonKey) }}
                         </p>
+                        <!-- The context every verdict was computed at. It was
+                             hard-coded and unstated, so the counter-offer named
+                             a number against a baseline the user could not see
+                             and had no control to change. -->
+                        <p data-testid="talos-models-context" class="text-3xs text-[var(--talos-muted)]">
+                            {{ t('localModels.contextExplain', { context: store.context }) }}
+                        </p>
                         <!-- The counter-offer. A refusal that ends the
                              conversation is a worse product than one that
                              moves it. -->
-                        <p
+                        <button
                             v-if="row.verdict.counterOfferContext"
+                            type="button"
                             data-testid="talos-models-counteroffer"
-                            class="text-2xs text-[var(--talos-accent)]"
+                            class="talos-pressable min-h-10 text-left text-2xs text-[var(--talos-accent)] underline"
+                            @click="acceptCounterOffer(row.key, row.verdict.counterOfferContext)"
                         >
                             {{ t('localModels.counterOffer', { context: row.verdict.counterOfferContext }) }}
-                        </p>
+                        </button>
                     </template>
 
                     <p v-else-if="row.set.examination.state === 'reading'" class="text-2xs text-[var(--talos-muted)]">
@@ -412,18 +551,21 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                         v-else-if="row.set.examination.state === 'unreadable'"
                         class="text-2xs text-[var(--talos-muted)]"
                     >
-                        {{ t('localModels.unreadable') }} {{ row.set.examination.reason }}
+                        {{ t('localModels.unreadable') }} {{ explain(row.set.examination.reason) }}
                     </p>
 
                     <div class="flex gap-2">
+                        <!-- Offered while unread AND after a failure: it used to
+                             render only for `unread`, so one failed check
+                             removed the only way to try again. -->
                         <Button
-                            v-if="row.set.examination.state === 'unread'"
+                            v-if="row.set.examination.state === 'unread' || row.set.examination.state === 'unreadable'"
                             type="button"
                             data-testid="talos-models-examine"
                             class="talos-pressable min-h-11 flex-1 rounded-full border border-[var(--talos-border)] text-sm text-[var(--talos-text)]"
                             @click="talosExamineSet(row.key)"
                         >
-                            {{ t('localModels.examine') }}
+                            {{ row.set.examination.state === 'unread' ? t('localModels.examine') : t('localModels.recheck') }}
                         </Button>
                         <!-- Disabled ONLY for what cannot work. A model that
                              will not fit stays offered: the card has said so,

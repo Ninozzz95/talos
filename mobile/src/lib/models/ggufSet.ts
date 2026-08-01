@@ -46,6 +46,23 @@ export interface TalosGgufSet {
     security: string | null
 }
 
+/**
+ * The verdict a set inherits from its pieces: the worst one, not the first.
+ *
+ * The Hub's own scan says `safe` when it looked and found nothing; anything else
+ * is a finding, and silence means it has not looked — which is neither a pass
+ * nor a warning. Ordered worst first so a single flagged shard cannot hide
+ * behind a clean one.
+ */
+function worstVerdict(verdicts: ReadonlyArray<string | null>): string | null {
+    const flagged = verdicts.filter((verdict): verdict is string =>
+        verdict !== null && verdict !== 'safe')
+    if (flagged.length > 0) {
+        return flagged.find((verdict) => verdict === 'unsafe') ?? flagged[0]!
+    }
+    return verdicts.some((verdict) => verdict === 'safe') ? 'safe' : null
+}
+
 /** `…-00002-of-00003.gguf` and `…-00003-of-00003.gguf` belong to one model. */
 function setKeyOf(path: string): string {
     return path.replace(/-\d{5}-of-\d{5}\.gguf$/i, '.gguf')
@@ -93,9 +110,14 @@ export function talosGroupGgufFiles(files: readonly TalosHuggingFaceFile[]): Tal
             incomplete: ordered.length !== expectedShards,
             expectedShards,
             foundShards: ordered.length,
-            // The worst verdict on any piece governs the set: a clean shard
+            // The WORST verdict on any piece governs the set: a clean shard
             // beside a flagged one is not a clean model.
-            security: ordered.map((file) => file.security).find((verdict) => verdict !== null) ?? null,
+            //
+            // This took the first non-null verdict instead, which is the exact
+            // opposite whenever the first shard is clean — the comment promised
+            // one thing and the code did another. Found by an adversarial
+            // review, 2026-08-01.
+            security: worstVerdict(ordered.map((file) => file.security)),
         })
     }
 

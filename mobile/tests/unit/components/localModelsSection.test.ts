@@ -61,6 +61,7 @@ function set(over: Record<string, unknown> = {}) {
         label: 'Q4_K_M',
         quantisation: 'Q4_K_M',
         paths: ['model-Q4_K_M.gguf'],
+        sizes: [2.5 * 1024 ** 3],
         totalBytes: 2.5 * 1024 ** 3,
         sha256: ['a'.repeat(64)],
         incomplete: false,
@@ -368,6 +369,56 @@ describe('a download in flight', () => {
         expect(wrapper.text()).toContain('can continue on mobile data')
     })
 
+    /**
+     * Pause used to be a one-way door: the block is the transfer's only control
+     * and it rendered under `active`, so pausing erased the download from the
+     * screen with no way back — while the copy promised it would carry on where
+     * it left off. Found by an adversarial review, 2026-08-01.
+     */
+    it('keeps the transfer on screen after a pause, with a way to resume', async () => {
+        store.state = baseState({
+            repo: { id: 'a/b', revision: 'main', loading: false, failure: null, sets: [set()] },
+        }) as never
+        const wrapper = await screen()
+
+        // Start it, so the section knows what to resume.
+        await wrapper.get('[data-testid="talos-models-download"]').trigger('click')
+        await flushPromises()
+
+        // Now it is running.
+        store.state.transfer.active = true
+        store.state.transfer.modelName = 'b Q4_K_M'
+        await wrapper.vm.$nextTick()
+
+        await wrapper.get('[data-testid="talos-models-stop"]').trigger('click')
+        store.state.transfer.active = false
+        await flushPromises()
+
+        // The block is still there, and it offers the other half of the promise.
+        expect(wrapper.find('[data-testid="talos-models-transfer"]').exists()).toBe(true)
+        const resume = wrapper.get('[data-testid="talos-models-resume"]')
+
+        store.download.mockClear()
+        await resume.trigger('click')
+        await flushPromises()
+
+        expect(store.download).toHaveBeenCalledWith('model-Q4_K_M.gguf', 'b Q4_K_M')
+    })
+
+    /**
+     * The line said what abandoned attempts were holding and offered nothing to
+     * do about it — the string and the service call both existed, and neither
+     * was wired to a button.
+     */
+    it('offers a way to get the abandoned space back', async () => {
+        store.state = baseState({
+            leftovers: { items: [{ path: '/x.part', bytes: 3 * 1024 ** 3 }], totalBytes: 3 * 1024 ** 3 },
+        }) as never
+        const wrapper = await screen()
+
+        expect(wrapper.find('[data-testid="talos-models-reclaim"]').exists()).toBe(true)
+    })
+
     it('is the only thing that can be paused, and pausing says it will resume', async () => {
         store.state = baseState({
             transfer: {
@@ -399,7 +450,7 @@ describe('a download in flight', () => {
 describe('starting one', () => {
     it('asks the store for the set that was tapped', async () => {
         store.state = baseState({
-            repo: { id: 'unsloth/Qwen3-4B-GGUF', revision: 'main', loading: false, sets: [set()] },
+            repo: { id: 'unsloth/Qwen3-4B-GGUF', revision: 'main', loading: false, failure: null, sets: [set()] },
         }) as never
         const wrapper = await screen()
 
@@ -412,7 +463,7 @@ describe('starting one', () => {
     it('shows the reason a download would not start', async () => {
         store.download.mockResolvedValue({ ok: false, reason: 'already-running' } as never)
         store.state = baseState({
-            repo: { id: 'a/b', revision: 'main', loading: false, sets: [set()] },
+            repo: { id: 'a/b', revision: 'main', loading: false, failure: null, sets: [set()] },
         }) as never
         const wrapper = await screen()
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 
 /**
@@ -21,6 +21,8 @@ const store = vi.hoisted(() => ({
     download: vi.fn(async () => ({ ok: true as const })),
     refreshDevice: vi.fn(async () => undefined),
     refreshTransfer: vi.fn(async () => undefined),
+    refreshLeftovers: vi.fn(async () => undefined),
+    refreshToken: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/stores/localModels', () => ({
@@ -31,6 +33,8 @@ vi.mock('@/stores/localModels', () => ({
     talosDownloadSet: store.download,
     talosRefreshDeviceCapacity: store.refreshDevice,
     talosRefreshTransfer: store.refreshTransfer,
+    talosRefreshLeftovers: store.refreshLeftovers,
+    talosRefreshHuggingFaceToken: store.refreshToken,
 }))
 
 import { createTalosLocalModelTools } from '@/lib/models/modelTools'
@@ -105,6 +109,8 @@ beforeEach(() => {
     store.open.mockClear()
     store.examine.mockClear()
     store.download.mockClear().mockResolvedValue({ ok: true })
+    store.refreshLeftovers.mockClear()
+    store.refreshToken.mockClear()
     store.state = baseState() as never
 })
 

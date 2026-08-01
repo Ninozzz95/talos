@@ -108,6 +108,42 @@ export interface TalosSetWarnings {
     flagged: string | null
 }
 
+/**
+ * An internal slug turned into something a person can act on.
+ *
+ * These were rendered VERBATIM as the whole error text, in both languages: the
+ * user read `rate-limited:254` or `not-gguf` and had nothing to do with it,
+ * while the strings written to explain them sat unused. Found by an adversarial
+ * review, 2026-08-01.
+ *
+ * A key, never a sentence — the screen localises. Unknown slugs return null so
+ * the caller can fall back to a generic line rather than print the slug.
+ */
+export function talosFailureKey(reason: string): string | null {
+    const slug = reason.split(':')[0] ?? reason
+    const known: Record<string, string> = {
+        'rate-limited': 'localModels.reasonRateLimited',
+        gated: 'localModels.gatedHelp',
+        'not-found': 'localModels.reasonNotFound',
+        unauthorised: 'localModels.reasonUnauthorised',
+        transport: 'localModels.reasonTransport',
+        'not-gguf': 'localModels.reasonNotGguf',
+        'unsupported-version': 'localModels.reasonUnsupportedVersion',
+        incomplete: 'localModels.reasonIncomplete',
+        truncated: 'localModels.reasonTruncated',
+        'no-device-measurement': 'localModels.reasonNoDevice',
+        'incomplete-set': 'localModels.reasonIncomplete',
+    }
+    return known[slug] ?? null
+}
+
+/** Seconds until a rate limit lifts, when the Hub said so — `rate-limited:254`. */
+export function talosRetryAfterSeconds(reason: string): number | null {
+    const parts = reason.split(':')
+    const seconds = parts.length > 1 ? Number(parts[1]) : Number.NaN
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : null
+}
+
 export function talosSetWarnings(set: {
     incomplete: boolean
     expectedShards: number
