@@ -1018,7 +1018,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     })
     const profiles = computed(() => talosMobileModelProfiles(
         discoveredModels.value,
-        (provider) => secrets[provider] === true,
+        // The on-device engine needs no secret, so demanding one would hide
+        // every model it can actually run. "Has what it needs" is the question
+        // this predicate is really asking, and for `local` the answer is yes by
+        // construction: a model that appears in its catalogue is a file already
+        // on this disk.
+        (provider) => provider === 'local' || secrets[provider] === true,
         modelLabPreferences.value,
     ))
     const selectedProfile = computed(() =>
@@ -3303,8 +3308,17 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         const timeoutSeconds = modelLabPreferences.value.provider_runtime[provider]?.timeout_seconds
         const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : undefined
         const state = catalogs[provider]
-        state.configured = adapter.requiresSecret ? Boolean(apiKey) : Boolean(endpoint)
-        if ((adapter.requiresSecret && !apiKey) || (!adapter.requiresSecret && !endpoint)) {
+        // Each adapter says what it needs, and "configured" is simply having it.
+        //
+        // This read "a key if it wants one, otherwise an address", which quietly
+        // assumed every provider wants exactly one of the two. The on-device
+        // engine wants neither, so it failed the endpoint half of a test written
+        // for Ollama and returned here — never reaching `listModels`, never
+        // calling the plugin, never showing a local model in the picker.
+        const missingSecret = adapter.requiresSecret && !apiKey
+        const missingEndpoint = adapter.requiresEndpoint && !endpoint
+        state.configured = !missingSecret && !missingEndpoint
+        if (!state.configured) {
             state.status = 'idle'
             state.error = null
             return null
@@ -3616,7 +3630,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     provider: profile.provider,
                 }))
             }
-            if (!adapter.requiresSecret && !endpoint) {
+            if (adapter.requiresEndpoint && !endpoint) {
                 throw new Error(deps.translate('models.providerEndpointBeforeTesting', {
                     provider: profile.provider,
                 }))
@@ -3658,6 +3672,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
     async function refreshConfiguredProviders(): Promise<void> {
         await Promise.all(PROVIDER_IDS.map(async (provider) => {
+            // No exception for the on-device engine any more. It is "configured"
+            // in the only sense that means anything — it has everything it needs
+            // — now that needing nothing is something an adapter can say. The
+            // special case that used to sit here was working around the gate in
+            // `refreshProvider` rather than fixing it, and it did not work: that
+            // gate then refused the engine anyway, one call later.
             if (!catalogs[provider].configured) return
             try {
                 await refreshProvider(provider)

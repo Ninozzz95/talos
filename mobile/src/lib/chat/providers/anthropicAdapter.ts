@@ -64,6 +64,9 @@ function requestTimeouts(timeout: number | undefined): { connectTimeout: number;
 export const anthropicAdapter: TalosMobileProviderAdapter = {
     provider: 'anthropic',
     requiresSecret: true,
+    // The API address is Anthropic own and fixed; there is nothing to point
+    // this at.
+    requiresEndpoint: false,
     async listModels(credential, transport) {
         const apiKey = requireProviderApiKey('anthropic', 'list_models', credential)
         const models = []

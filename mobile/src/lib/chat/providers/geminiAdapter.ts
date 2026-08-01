@@ -120,6 +120,8 @@ function geminiThoughtText(parts: ReadonlyArray<{ text?: string; thought?: boole
 export const geminiAdapter: TalosMobileProviderAdapter = {
     provider: 'gemini',
     requiresSecret: true,
+    // Google publishes one address. A key is the only thing the user supplies.
+    requiresEndpoint: false,
     async listModels(credential, transport) {
         const apiKey = requireProviderApiKey('gemini', 'list_models', credential)
         const models = []

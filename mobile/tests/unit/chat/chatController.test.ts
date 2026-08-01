@@ -35,6 +35,29 @@ const deviceFileSave = vi.hoisted(() => ({
 }))
 vi.mock('@/services/saveVaultFileToDevice', () => deviceFileSave)
 
+/**
+ * The bridge to the native engine, standing in for a device.
+ *
+ * Only `talosLocalInstalledModels` matters below: it is the far end of the
+ * chain the local provider is discovered through, and asserting on IT rather
+ * than on "was the adapter called" is the difference between a test that
+ * notices the discovery is dead and one that does not.
+ */
+const localEngine = vi.hoisted(() => ({
+    talosLocalEngineStatus: vi.fn(async () => ({ available: true, loadedPath: null })),
+    // Empty by default, because that is what a phone that has downloaded
+    // nothing reports, and because a model here would silently change every
+    // other test in this file: with one local model on disk and no keys saved,
+    // the app can send — correct behaviour, and not what those tests are about.
+    talosLocalInstalledModels: vi.fn(async (): Promise<Array<{ path: string, name: string, bytes: number }>> => []),
+    talosLocalEngineOpen: vi.fn(async () => undefined),
+    talosLocalEngineChatPrompt: vi.fn(async () => 'prompt'),
+    talosLocalEngineGenerate: vi.fn(async () => ({ text: 'ciao', tokens: 2 })),
+    talosLocalEngineCancel: vi.fn(async () => undefined),
+    talosLocalEngineClose: vi.fn(async () => undefined),
+}))
+vi.mock('@/services/localEngine', () => localEngine)
+
 function deferred<T = void>() {
     let resolve!: (value: T | PromiseLike<T>) => void
     const promise = new Promise<T>((settle) => { resolve = settle })
@@ -2382,6 +2405,46 @@ describe('chatController', () => {
         await controller.removeManualModel(manual.id)
         expect(controller.profiles.value.some((profile) => profile.id === 'openai:local-chat')).toBe(false)
         expect(controller.selectedModelId.value).toBeNull()
+    })
+
+    /**
+     * The engine on this device has no key and no address, and for a while that
+     * meant it had no models either.
+     *
+     * `refreshProvider` used to ask "a key if it wants one, ELSE an address",
+     * which is true of every provider that talks to a server and false of the
+     * only one that does not. The on-device engine failed the address half and
+     * the function returned before reaching the catalogue — so the plugin was
+     * never called, and the model picker showed nothing local. Every other test
+     * in this file passed throughout, on a device with a model sitting on disk.
+     *
+     * This asserts the far end: a file the engine reported became something the
+     * user can select. Nothing here mentions the gate, so it keeps working if
+     * the gate is rewritten again — and it fails if the third kind of provider
+     * is ever forgotten a second time.
+     */
+    it('discovers a provider that needs neither a key nor an address', async () => {
+        const { deps } = makeDeps()
+        const controller = createChatController(deps)
+        localEngine.talosLocalInstalledModels.mockResolvedValueOnce([
+            { path: '/models/local-test/smollm2-135m.gguf', name: 'smollm2-135m.gguf', bytes: 270_885_952 },
+        ])
+
+        // Deliberately no secret and no endpoint stored for `local`: needing
+        // nothing is the whole point, and saving either would hide the defect.
+        await controller.init()
+
+        expect(localEngine.talosLocalInstalledModels).toHaveBeenCalled()
+        expect(controller.profiles.value.map((profile) => profile.id))
+            .toContain('local:/models/local-test/smollm2-135m.gguf')
+        const profile = controller.profiles.value
+            .find((candidate) => candidate.provider === 'local')
+        expect(profile?.display_name).toBe('smollm2-135m')
+        // `has_secret` reads as "nothing it needs is missing" rather than "a key
+        // is stored" — which is why it is true for a provider that has no key at
+        // all. The name is worse than the behaviour; `talosMobileModelProfileIsCallable`
+        // only consults it for providers that require one.
+        expect(profile?.has_secret).toBe(true)
     })
 
     it('applies the persisted provider timeout to discovery and ordinary chat', async () => {

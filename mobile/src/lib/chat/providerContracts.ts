@@ -76,6 +76,23 @@ export interface TalosProviderStreamHandlers {
 export interface TalosMobileProviderAdapter {
     readonly provider: TalosMobileProviderId
     readonly requiresSecret: boolean
+    /**
+     * Whether this provider is unusable without a base URL.
+     *
+     * Stated rather than inferred, because inferring it cost a working feature.
+     * The callers used to read "does not need a key" as "is Ollama, therefore
+     * needs an address", which held for exactly as long as every provider was
+     * one of those two. The on-device engine is the third kind and needs
+     * NEITHER: it has nothing to authenticate to and nothing to connect to. Its
+     * catalogue was therefore refused before it was ever asked for, and the
+     * symptom was a model picker that showed no local models — indistinguishable
+     * from an empty disk, which is why it survived a full build, install and
+     * inspection.
+     *
+     * Required, not optional-with-a-default. A default is how the next adapter
+     * would inherit the wrong answer in silence.
+     */
+    readonly requiresEndpoint: boolean
     listModels(
         credential: TalosMobileProviderCredential,
         transport: TalosMobileHttpTransport,

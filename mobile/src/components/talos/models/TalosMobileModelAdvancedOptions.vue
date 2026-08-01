@@ -18,7 +18,7 @@ const vision = ref(false)
 const busy = ref(false)
 const error = ref('')
 const providerItems = TALOS_MOBILE_PROVIDERS
-    .filter((item): item is typeof item & { id: TalosMobileProviderId } => item.id !== 'unknown')
+    .filter((item): item is typeof item & { id: TalosMobileProviderId } => item.id !== 'unknown' && item.configurable)
     .map((item) => ({ value: item.id, label: item.label }))
 const manualModels = computed(() => controller.modelLabPreferences.value.manual_models)
 

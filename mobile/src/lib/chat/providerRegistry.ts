@@ -4,9 +4,19 @@ import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
 
 type AdapterLoader = () => Promise<TalosMobileProviderAdapter>
 
+/**
+ * What a provider needs before it can be asked anything — named at the call
+ * site, because `lazyAdapter('openai', true, false, …)` is a line nobody can
+ * read back and this pair is exactly where a silent wrong answer hides.
+ */
+interface AdapterNeeds {
+    readonly requiresSecret: boolean
+    readonly requiresEndpoint: boolean
+}
+
 function lazyAdapter(
     provider: TalosMobileProviderId,
-    requiresSecret: boolean,
+    needs: AdapterNeeds,
     loader: AdapterLoader,
 ): TalosMobileProviderAdapter {
     let resolved: Promise<TalosMobileProviderAdapter> | null = null
@@ -27,7 +37,8 @@ function lazyAdapter(
     }
     const adapter: TalosMobileProviderAdapter = {
         provider,
-        requiresSecret,
+        requiresSecret: needs.requiresSecret,
+        requiresEndpoint: needs.requiresEndpoint,
         async listModels(credential, transport) {
             return (await load()).listModels(credential, transport)
         },
@@ -56,17 +67,24 @@ function lazyAdapter(
 
 const loadOpenAiCompatible = () => import('@/lib/chat/providers/openAiCompatibleAdapter')
 
+/** A hosted service: the key is the whole of it, the URL is already known. */
+const KEY_ONLY: AdapterNeeds = Object.freeze({ requiresSecret: true, requiresEndpoint: false })
+/** A server the user runs: no account, but nothing works without its address. */
+const ADDRESS_ONLY: AdapterNeeds = Object.freeze({ requiresSecret: false, requiresEndpoint: true })
+/** The engine in this process. There is nothing to configure and no way to. */
+const NOTHING_AT_ALL: AdapterNeeds = Object.freeze({ requiresSecret: false, requiresEndpoint: false })
+
 export const TALOS_MOBILE_PROVIDER_ADAPTERS: Readonly<Record<TalosMobileProviderId, TalosMobileProviderAdapter>> = Object.freeze({
-    openai: lazyAdapter('openai', true, async () => (await loadOpenAiCompatible()).openAiAdapter),
-    deepseek: lazyAdapter('deepseek', true, async () => (await loadOpenAiCompatible()).deepSeekAdapter),
-    anthropic: lazyAdapter('anthropic', true, async () => (await import('@/lib/chat/providers/anthropicAdapter')).anthropicAdapter),
-    gemini: lazyAdapter('gemini', true, async () => (await import('@/lib/chat/providers/geminiAdapter')).geminiAdapter),
-    openrouter: lazyAdapter('openrouter', true, async () => (await loadOpenAiCompatible()).openRouterAdapter),
-    ollama: lazyAdapter('ollama', false, async () => (await import('@/lib/chat/providers/ollamaAdapter')).ollamaAdapter),
+    openai: lazyAdapter('openai', KEY_ONLY, async () => (await loadOpenAiCompatible()).openAiAdapter),
+    deepseek: lazyAdapter('deepseek', KEY_ONLY, async () => (await loadOpenAiCompatible()).deepSeekAdapter),
+    anthropic: lazyAdapter('anthropic', KEY_ONLY, async () => (await import('@/lib/chat/providers/anthropicAdapter')).anthropicAdapter),
+    gemini: lazyAdapter('gemini', KEY_ONLY, async () => (await import('@/lib/chat/providers/geminiAdapter')).geminiAdapter),
+    openrouter: lazyAdapter('openrouter', KEY_ONLY, async () => (await loadOpenAiCompatible()).openRouterAdapter),
+    ollama: lazyAdapter('ollama', ADDRESS_ONLY, async () => (await import('@/lib/chat/providers/ollamaAdapter')).ollamaAdapter),
     // Lazy like the rest, and for a sharper reason: this one pulls in the
     // bridge to the native engine, which has no business in the entry chunk of
     // a session that may never open a local model.
-    local: lazyAdapter('local', false, async () => (await import('@/lib/chat/providers/localAdapter')).localAdapter),
+    local: lazyAdapter('local', NOTHING_AT_ALL, async () => (await import('@/lib/chat/providers/localAdapter')).localAdapter),
 })
 
 export function providerAdapterFor(provider: TalosMobileProviderId | string): TalosMobileProviderAdapter {
