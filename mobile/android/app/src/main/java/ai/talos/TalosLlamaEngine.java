@@ -1,0 +1,176 @@
+package ai.talos;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+
+/**
+ * La metà che ESEGUE.
+ *
+ * {@link TalosBackendChoice} decide quale motore ha il diritto di girare e
+ * {@link TalosBenchmarkHarness} decide cosa conta come misura; entrambe erano
+ * scritte e provate prima che esistesse una riga di codice nativo, apposta —
+ * sono le regole a cui questo strato deve obbedire, non il contrario. Qui la
+ * generazione avviene davvero, e mentre avviene si misura.
+ *
+ * Il campionamento è su un thread separato che INTERROGA un contatore atomico,
+ * non su una callback per token: la finestra di misura e la temperatura vanno
+ * prese nello stesso istante, ed è la forma che l'harness pretende.
+ */
+public final class TalosLlamaEngine implements AutoCloseable {
+
+    /** Ogni mezzo secondo: sotto il massimo intervallo che l'harness accetta (1,5 s). */
+    static final long SAMPLE_INTERVAL_MS = 500L;
+
+    /** Oltre questo la prova si interrompe: un telefono non ci mette due minuti. */
+    static final long RUN_TIMEOUT_MS = 120_000L;
+
+    /**
+     * Quanto deve durare una generazione prima che valga la pena giudicarla.
+     *
+     * Serve perché il numero di token NON è una durata. Un modello da 135
+     * milioni di parametri su un telefono di punta produce novantasei token in
+     * poco più di un secondo, e l'harness — giustamente — rifiuta un secondo
+     * come misura: sotto i due secondi non c'è un ritmo, c'è rumore travestito.
+     * Chiedere «più token» risolverebbe su QUESTO telefono e romperebbe su uno
+     * lento, dove gli stessi token costano un minuto.
+     *
+     * Quindi la prova non si ferma a un conteggio ma a un tempo, e il conteggio
+     * è solo il tetto. Su un telefono veloce si ferma presto con molti token, su
+     * uno lento con pochi: in entrambi i casi ha misurato la stessa finestra.
+     */
+    static final long MEASURE_FLOOR_MS = 4_000L;
+
+    /** Da dove viene la temperatura. Iniettabile, così la prova non pretende Android. */
+    public interface ThermalSource {
+        String now();
+    }
+
+    /** Un'esecuzione: il testo prodotto e le finestre con cui è stata misurata. */
+    public static final class Run {
+        public final String text;
+        public final TalosBenchmarkHarness.Sample[] samples;
+
+        Run(String text, TalosBenchmarkHarness.Sample[] samples) {
+            this.text = text;
+            this.samples = samples;
+        }
+    }
+
+    private final long handle;
+    private boolean closed;
+
+    private TalosLlamaEngine(long handle) {
+        this.handle = handle;
+    }
+
+    /**
+     * I backend ggml registrati, o vuoto se la libreria non è a bordo.
+     *
+     * Vuole il Context perché è da lì che si ricava dove Android tiene le
+     * librerie native dell'app — la sola cartella in cui ggml può trovarli.
+     */
+    public static String backends(android.content.Context context) {
+        if (!TalosLlamaNative.AVAILABLE) return "";
+        TalosLlamaNative.ensureReady(context);
+        return TalosLlamaNative.nativeBackends();
+    }
+
+    /**
+     * Apre un modello, oppure restituisce null.
+     *
+     * Null e non un'eccezione: un modello che non si apre è un esito previsto —
+     * il file è troncato, la memoria non basta, la quantizzazione non è
+     * supportata — e la schermata deve poterlo dire invece di morire.
+     */
+    public static TalosLlamaEngine open(android.content.Context context, String modelPath,
+                                        int threads, int contextTokens, int gpuLayers) {
+        if (!TalosLlamaNative.AVAILABLE) return null;
+        TalosLlamaNative.ensureReady(context);
+        long handle = TalosLlamaNative.nativeOpen(modelPath, threads, contextTokens, gpuLayers);
+        return handle == 0 ? null : new TalosLlamaEngine(handle);
+    }
+
+    public int contextTokens() {
+        return TalosLlamaNative.nativeContextTokens(handle);
+    }
+
+    /**
+     * Genera, e misura mentre genera.
+     *
+     * @return il testo e le finestre, oppure null se la generazione è fallita.
+     *     Le finestre sono utili solo se la generazione è arrivata in fondo:
+     *     misurare un'esecuzione fallita significa misurare il fallimento.
+     */
+    public Run run(String prompt, int maxTokens, ThermalSource thermal) throws InterruptedException {
+        return run(prompt, maxTokens, thermal, false);
+    }
+
+    /**
+     * @param stopAtEndOfGeneration vero per una risposta vera, falso per una
+     *     misura. Vedi {@link #MEASURE_FLOOR_MS}: un modello che smette di
+     *     parlare dopo un secondo non ha reso lento il telefono.
+     */
+    public Run run(String prompt, int maxTokens, ThermalSource thermal,
+                   boolean stopAtEndOfGeneration) throws InterruptedException {
+        AtomicReference<String> produced = new AtomicReference<>(null);
+        Thread worker = new Thread(
+                () -> produced.set(TalosLlamaNative.nativeGenerate(
+                        handle, prompt, maxTokens, stopAtEndOfGeneration)),
+                "talos-llama-run");
+        worker.start();
+
+        List<TalosBenchmarkHarness.Sample> samples = new ArrayList<>();
+        long startedAt = System.currentTimeMillis();
+        long firstTokenAt = 0;
+
+        while (worker.isAlive()) {
+            long now = System.currentTimeMillis();
+            if (now - startedAt > RUN_TIMEOUT_MS) {
+                TalosLlamaNative.nativeCancel(handle);
+                break;
+            }
+            int tokens = TalosLlamaNative.nativeTokensProduced(handle);
+            // La prima finestra si apre col PRIMO token, non con la chiamata:
+            // prima di allora il tempo è la lettura del prompt, e sommarla al
+            // ritmo di generazione lo farebbe sembrare più lento di quanto è.
+            if (firstTokenAt == 0) {
+                if (tokens <= 0) {
+                    Thread.sleep(SAMPLE_INTERVAL_MS);
+                    continue;
+                }
+                firstTokenAt = now;
+            }
+            samples.add(new TalosBenchmarkHarness.Sample(now, tokens, thermal.now()));
+
+            // Misurato abbastanza a lungo e con abbastanza token: si ferma qui,
+            // qualunque sia il tetto richiesto. Continuare consumerebbe batteria
+            // per rendere più preciso un numero già valido.
+            boolean measuredEnough = now - firstTokenAt >= MEASURE_FLOOR_MS
+                    && tokens >= TalosBenchmarkHarness.MIN_TOKENS;
+            if (measuredEnough) {
+                TalosLlamaNative.nativeCancel(handle);
+                break;
+            }
+            Thread.sleep(SAMPLE_INTERVAL_MS);
+        }
+
+        worker.join();
+        String text = produced.get();
+        if (text == null) return null;
+
+        // Una finestra di chiusura col conteggio finale: senza, l'ultimo tratto
+        // di generazione non è misurato da nessuna finestra.
+        samples.add(new TalosBenchmarkHarness.Sample(
+                System.currentTimeMillis(), TalosLlamaNative.nativeTokensProduced(handle), thermal.now()));
+
+        return new Run(text, samples.toArray(new TalosBenchmarkHarness.Sample[0]));
+    }
+
+    @Override
+    public void close() {
+        if (closed) return;
+        closed = true;
+        TalosLlamaNative.nativeClose(handle);
+    }
+}

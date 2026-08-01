@@ -112,17 +112,12 @@ public class TalosDeviceCapacityPlugin extends Plugin {
         return false;
     }
 
-    /** Null below API 29, which is a fact rather than a reason to invent 'none'. */
+    /**
+     * Moved to {@link TalosThermal} once the local engine needed the same
+     * reading while it measures itself. One vocabulary, one reader: two copies
+     * are two copies that drift apart.
+     */
     private static String thermal(Context context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null;
-        PowerManager power = context.getSystemService(PowerManager.class);
-        if (power == null) return null;
-        switch (power.getCurrentThermalStatus()) {
-            case PowerManager.THERMAL_STATUS_NONE: return "none";
-            case PowerManager.THERMAL_STATUS_LIGHT: return "light";
-            case PowerManager.THERMAL_STATUS_MODERATE: return "moderate";
-            case PowerManager.THERMAL_STATUS_SEVERE: return "severe";
-            default: return "critical";
-        }
+        return TalosThermal.read(context);
     }
 }

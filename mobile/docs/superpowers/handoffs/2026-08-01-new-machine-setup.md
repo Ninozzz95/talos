@@ -219,9 +219,11 @@ $radice = "$env:USERPROFILE\Desktop\projects"
 New-Item -ItemType Directory -Force -Path $radice | Out-Null
 cd $radice
 
-git clone https://github.com/Ninozzz95/agent-virtual-machine.git AVM
+git clone --recurse-submodules https://github.com/Ninozzz95/agent-virtual-machine.git AVM
 cd AVM
 git checkout lane/talos-mobile
+# Il checkout del ramo può portare sottomoduli che il clone non conosceva.
+git submodule update --init --depth 1
 
 $env:TALOS_HOME = (Get-Location).Path
 [Environment]::SetEnvironmentVariable("TALOS_HOME", $env:TALOS_HOME, "User")
@@ -232,8 +234,22 @@ $env:TALOS_HOME
 ```
 
 **Verifica:** `lane/talos-mobile`, l'ultimo commit del ramo, e il percorso del
-progetto. Se dice `error: pathspec ... did not match`, il fetch non ha preso il
-ramo:
+progetto.
+
+Poi verifica il **sottomodulo**, perché senza il motore locale non compila:
+
+```powershell
+Test-Path "$env:TALOS_HOME\mobile\third_party\llama.cpp\CMakeLists.txt"
+git -C "$env:TALOS_HOME\mobile\third_party\llama.cpp" describe --tags
+```
+
+**Verifica:** `True` e `b10218`. Se il primo dà `False`, il clone non ha preso i
+sottomoduli: rilancia `git submodule update --init --depth 1`. Sono ~157 MB. Se
+manca, l'unico sintomo è un errore di CMake — che ora dice esattamente questo,
+perché il `CMakeLists.txt` del motore lo controlla e lo scrive per nome.
+
+Se il checkout del ramo dice `error: pathspec ... did not match`, il fetch non
+ha preso il ramo:
 
 ```powershell
 git fetch origin
@@ -381,15 +397,31 @@ volta è più lento: Gradle scarica se stesso)
 .\gradlew.bat assembleDebug
 Get-Item "app\build\outputs\apk\debug\app-debug.apk" | Select-Object Length
 ```
-**Verifica:** `BUILD SUCCESSFUL` e un file di circa **46 milioni** di byte.
+**Verifica:** `BUILD SUCCESSFUL` e un file di circa **28 milioni** di byte.
+
+> Il numero è cambiato due volte lo stesso giorno, e per ragioni opposte che
+> vale la pena saper leggere. Era ~46 M sul computer vecchio e ~40 M al primo
+> build qui. Poi il motore locale ha aggiunto `abiFilters 'arm64-v8a'`, che
+> toglie dall'APK le copie delle librerie per gli altri ABI, e
+> `useLegacyPackaging`, che le comprime invece di lasciarle distese. Il
+> risultato è **più piccolo pur contenendo llama.cpp**: l'APK cala, l'ingombro
+> *sul telefono* cresce, perché quelle librerie ora vengono estratte
+> all'installazione.
 
 Se arrivi qui senza errori, **il computer nuovo è operativo**.
 
 ---
 
-# PARTE D — solo per la FASE SUCCESSIVA (non serve per ripartire)
+# PARTE D — la catena nativa, per la FASE SUCCESSIVA
 
 La fase 1 è il **motore dei modelli locali**: llama.cpp compilato per Android.
+
+> **ESEGUITA il 2026-08-01** sul computer nuovo. D1, D1b e D2 sono fatti e
+> **provati** (vedi D4). Resta aperto solo D3, che dipende da un cavo.
+>
+> Questa parte è stata **corretta mentre la eseguivo**: come era scritta prima
+> mancava CMake, cioè lo strumento che compila llama.cpp. Con solo NDK e Rust
+> non si costruisce niente.
 
 ## D1 · NDK
 
@@ -398,12 +430,52 @@ $sdk = "$env:LOCALAPPDATA\Android\Sdk"
 & "$sdk\cmdline-tools\latest\bin\sdkmanager.bat" --sdk_root="$sdk" "ndk;27.0.12077973"
 Get-ChildItem "$sdk\ndk"
 ```
-**Verifica:** compare la cartella della versione.
+**Verifica:** compare `27.0.12077973`. Sono **2,2 GB** e qualche minuto di
+scaricamento. Poi incidi il percorso, che è quello che ogni strumento cerca:
+
+```powershell
+$ndk = "$sdk\ndk\27.0.12077973"
+[Environment]::SetEnvironmentVariable("ANDROID_NDK_HOME", $ndk, "User")
+[Environment]::SetEnvironmentVariable("ANDROID_NDK_ROOT", $ndk, "User")
+```
+
+## D1b · CMake e Ninja — **il pezzo che mancava**
+
+llama.cpp si costruisce con CMake, non con l'NDK da solo: l'NDK porta il
+compilatore, CMake è chi lo comanda. Il pacchetto dell'SDK porta **CMake e
+Ninja insieme**, dentro la cartella dell'SDK, quindi resta per-utente come
+tutto il resto.
+
+```powershell
+& "$sdk\cmdline-tools\latest\bin\sdkmanager.bat" --sdk_root="$sdk" "cmake;3.31.6"
+& "$sdk\cmake\3.31.6\bin\cmake.exe" --version
+Test-Path "$sdk\cmake\3.31.6\bin\ninja.exe"
+```
+**Verifica:** `cmake version 3.31.6` e `True`.
+
+**Perché la 3.31.6 e non la 4.x**, che pure c'è: llama.cpp dichiara
+`cmake_minimum_required(VERSION 3.14...3.28)`, e CMake 4 ha tolto la
+compatibilità con i progetti che chiedono meno della 3.5 — llama.cpp sta
+al sicuro, le sue dipendenze di terze parti non è detto. La 3.31.6 è la più
+recente delle 3.x: moderna e senza quella rottura.
 
 ## D2 · Rust coi target Android
 
+**Non usare `winget install Rustlang.Rustup`** come diceva la versione
+precedente di questa guida: su una macchina senza Visual Studio ti lascia con
+un Rust che non riesce a legare niente.
+
+Rust su Windows esiste in due sapori. Quello predefinito (**MSVC**) *pretende
+Visual Studio installato* per il suo linker — installazione **di sistema, con
+diritti da amministratore**, contro la regola «tutto solo per l'utente
+corrente» su una macchina condivisa. Quello **GNU** si porta il linker dietro e
+sta tutto in `%USERPROFILE%`. Per compilare verso Android non cambia nulla: il
+linker vero lo mette comunque l'NDK.
+
 ```powershell
-winget install --id Rustlang.Rustup -e --scope user
+$init = "$env:TEMP\rustup-init.exe"
+Invoke-WebRequest -Uri "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe" -OutFile $init
+& $init -y --default-host x86_64-pc-windows-gnu --default-toolchain stable --profile minimal
 ```
 
 Chiudi e riapri PowerShell, poi:
@@ -411,9 +483,21 @@ Chiudi e riapri PowerShell, poi:
 ```powershell
 rustup target add aarch64-linux-android
 rustc --version
-rustup target list --installed
+rustup show
 ```
-**Verifica:** `rustc 1.x` e nella lista `aarch64-linux-android`.
+**Verifica:** `rustc 1.x`, `Default host: x86_64-pc-windows-gnu`, e fra i
+target installati `aarch64-linux-android`.
+
+> **Limite dichiarato:** con l'host GNU «per l'uso di base non serve altro», ma
+> i crate che pretendono un compilatore C *per il computer* (non per il
+> telefono) vogliono MSYS2/MinGW. Per la fase 1 non serve — verso Android
+> compila l'NDK. Se un giorno un crate si lamenta, è questo il motivo, non un
+> guasto.
+>
+> C'è anche un difetto aperto di Rust su Windows verso Android
+> (`rust-lang/rust#113711`, `--version-script` con le barre sbagliate). **Su
+> questa macchina non si è presentato** — provato, vedi D4 — ma se ricompare,
+> ha un nome.
 
 ## D3 · Il telefono
 
@@ -427,6 +511,44 @@ adb devices
 **Verifica:** il telefono compare in elenco come `device`. Se dice
 `unauthorized`, sblocca il telefono e accetta il popup del debug USB. Se non
 compare, attiva **Opzioni sviluppatore → Debug USB**.
+
+> Sul computer **vecchio** `adb` non partiva affatto (`0xC0000135`, una DLL del
+> runtime Visual C++ mancante). **Sul nuovo parte** — verificato 2026-08-01,
+> `1.0.41 / 37.0.1`. Quel problema è morto col trasloco: manca solo il cavo.
+
+## D4 · La prova che la catena lega davvero
+
+Che i comandi rispondano non dimostra niente: dimostra che i file esistono.
+L'unica prova è **produrre una libreria ARM64 e guardarci dentro**. Due catene
+separate, perché sono davvero due — Rust usa il suo linker, CMake usa il
+proprio — e la fase 1 le vuole entrambe.
+
+Sonda Rust: un progetto minimo con `crate-type = ["cdylib"]` e una funzione
+`extern "C"`, costruito così:
+
+```powershell
+$env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = "$env:ANDROID_NDK_HOME\toolchains\llvm\prebuilt\windows-x86_64\bin\aarch64-linux-android24-clang.cmd"
+cargo build --release --target aarch64-linux-android
+```
+
+Sonda CMake: un `CMakeLists.txt` minimo con una `add_library(... SHARED ...)`,
+configurato col file-attrezzo dell'NDK:
+
+```powershell
+& "$sdk\cmake\3.31.6\bin\cmake.exe" -S . -B build -G Ninja `
+  -DCMAKE_TOOLCHAIN_FILE="$env:ANDROID_NDK_HOME\build\cmake\android.toolchain.cmake" `
+  -DCMAKE_MAKE_PROGRAM="$sdk\cmake\3.31.6\bin\ninja.exe" `
+  -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -DCMAKE_BUILD_TYPE=Release
+& "$sdk\cmake\3.31.6\bin\cmake.exe" --build build
+```
+
+**Verifica, per entrambi:** leggi i primi byte del `.so` prodotto. Il byte 4
+dev'essere `2` (ELF a 64 bit) e i byte 18-19 devono valere `0xB7` — che è
+`EM_AARCH64`, cioè *ARM a 64 bit*. Se lì trovi `0x3E` hai compilato per il PC
+e non te ne saresti accorto in nessun altro modo.
+
+**Esito 2026-08-01: entrambe passate.** Rust ha prodotto 446.496 byte di
+ELF64/`EM_AARCH64`; CMake+NDK 6.544 byte, stessa architettura.
 
 ---
 
@@ -457,6 +579,23 @@ compare, attiva **Opzioni sviluppatore → Debug USB**.
 - **PowerShell scrive UTF-8 col BOM** usando `Set-Content -Encoding utf8`, e
   `javac` lo rifiuta con `illegal character: '\ufeff'`. Per i file Java usa
   `[System.IO.File]::WriteAllText($percorso, $testo, (New-Object System.Text.UTF8Encoding $false))`.
+- **`git clone` senza `--recurse-submodules` non porta llama.cpp.** Il motore
+  locale è un sottomodulo pinnato (`mobile/third_party/llama.cpp`, tag
+  `b10218`), e senza di lui la parte nativa non compila. È la quarta cosa che
+  non arriva col clone, dopo `local.properties`, i due `node_modules` isolati e
+  i file generati da Capacitor.
+- **L'APK ha ora un ABI solo (`arm64-v8a`).** Da quando c'è codice nativo, quel
+  filtro decide su quali telefoni l'app si installa: i 32 bit restano fuori.
+  Scelta presa, non subita — ma è una scelta.
+- **La Parte D senza CMake non serve a niente.** L'NDK porta il compilatore, ma
+  chi lo comanda per llama.cpp è CMake, e col pacchetto dell'SDK arriva anche
+  Ninja. Era il buco della prima stesura di questa guida.
+- **Rust: mai la versione MSVC su una macchina senza Visual Studio.** Si
+  installa, risponde `rustc --version`, e poi non lega niente perché il linker
+  è dentro Visual Studio. Host GNU, e sta tutto in `%USERPROFILE%`.
+- **"Il comando risponde" non è una verifica.** Per la catena nativa l'unica
+  prova è il byte 18 del `.so`: `0xB7` = ARM64, `0x3E` = hai compilato per il
+  PC. Vedi D4.
 - **Il catalogo firmato non è configurato**: `TALOS_CATALOGUE_SOURCE` è `null`
   finché non decidi l'URL che lo serve e la chiave che lo firma. Non è un
   guasto, è una decisione aperta.
