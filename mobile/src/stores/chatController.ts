@@ -1580,9 +1580,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     function libraryContextConsentPermissions(
         runtime: TalosChatControllerSendRuntime,
     ): TalosToolPermissions {
+        // Same repair as the tool gate: what is in force, not what is stored.
         const restrictive = restrictiveToolPermissions(
             runtime.toolPermissions,
-            deps.settings.state.tools,
+            deps.settings.effectiveToolPermissions(),
         )
         return {
             ...restrictive,
@@ -2721,9 +2722,15 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             }
             const { resumeTalosAgentLoop, runTalosAgentLoop } = await import('@/lib/tools/agentLoop')
             const { executeTalosTool, preflightTalosToolExecution } = await import('@/lib/tools/executor')
+            // Both sides must be the permissions IN FORCE. The live side used to
+            // read `state.tools` — the stored value — and since this takes the
+            // more restrictive of the two, an inherited `deny` beat the `ask`
+            // the snapshot had just earned. The tool was offered, the model
+            // called it, and the gate refused it: `tool.web_search … denied`,
+            // with no card, which is why that card had never once been seen.
             const effectivePermissions = () => restrictiveToolPermissions(
                 sendRuntime.toolPermissions,
-                deps.settings.state.tools,
+                deps.settings.effectiveToolPermissions(),
             )
             const isEffectivelyEnabled = (name: string): boolean => (
                 sendRuntime.agentTools[name as keyof TalosAgentToolEnabled] === true
