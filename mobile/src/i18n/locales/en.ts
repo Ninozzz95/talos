@@ -1,4 +1,4 @@
-export const TALOS_EN_MESSAGES = {
+﻿export const TALOS_EN_MESSAGES = {
     common: {
         add: 'Add',
         back: 'Back',
@@ -1289,8 +1289,22 @@ export const TALOS_EN_MESSAGES = {
         tokenWhy: 'Optional, and worth having even for open models: without one you share a request limit with everyone else behind your carrier. It also opens repositories whose licence you have accepted.',
         tokenPlaceholder: 'hf_…',
         tokenSave: 'Save token',
+        tokenPresent: 'saved',
         tokenSaved: 'Saved on this device, in the same secure store as your provider keys.',
         tokenForget: 'Forget it',
+        resume: 'Resume',
+        repoFailed: 'That repository could not be read:',
+        contextExplain: 'Checked at {context} tokens of context. A smaller one needs less memory.',
+        reasonRateLimited: 'Hugging Face is limiting requests right now.',
+        reasonNotFound: 'That file is no longer published.',
+        reasonUnauthorised: 'That needs a token you have not saved.',
+        reasonTransport: 'The network did not answer.',
+        reasonNotGguf: 'That file is not a GGUF.',
+        reasonUnsupportedVersion: 'That GGUF version is newer than this build understands.',
+        reasonIncomplete: 'The header does not say what this phone needs to know.',
+        reasonTruncated: 'The header is larger than this build will fetch.',
+        reasonNoDevice: 'This phone has not been measured yet.',
+        recheck: 'Check again',
         ramFree: 'free memory',
         storageFree: 'free space',
     },

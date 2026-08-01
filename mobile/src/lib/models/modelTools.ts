@@ -9,6 +9,8 @@ import {
     talosDownloadSet,
     talosRefreshDeviceCapacity,
     talosRefreshTransfer,
+    talosRefreshLeftovers,
+    talosRefreshHuggingFaceToken,
 } from '@/stores/localModels'
 
 /**
@@ -79,6 +81,12 @@ export function createTalosLocalModelTools(): TalosToolDefinition<never>[] {
                 query: z.string().min(1).max(120).describe('What to look for, e.g. "qwen3 4b"'),
             }),
             async run(input) {
+                // The saved token, or the chat door reaches the Hub anonymously
+                // while the Model Lab door — the same feature — succeeds. Gated
+                // repositories and rate limits then fail in one place and work
+                // in the other, which is the worst kind of inconsistency
+                // because it looks like the model's fault.
+                await talosRefreshHuggingFaceToken()
                 await talosSearchLocalModels(input.query)
                 const state = talosLocalModels
                 if (state.searchFailure) {
@@ -115,6 +123,7 @@ export function createTalosLocalModelTools(): TalosToolDefinition<never>[] {
                 revision: z.string().max(120).optional().describe('Defaults to main'),
             }),
             async run(input) {
+                await talosRefreshHuggingFaceToken()
                 await talosRefreshDeviceCapacity()
                 await talosOpenModelRepo(input.repo, input.revision ?? 'main')
                 const state = talosLocalModels
@@ -203,10 +212,14 @@ export function createTalosLocalModelTools(): TalosToolDefinition<never>[] {
             }),
             async run(input) {
                 const state = talosLocalModels
+                const revision = input.revision ?? 'main'
                 // Open it if the model jumped straight here, so a download can
-                // never be started against a set nobody has looked at.
-                if (state.repo?.id !== input.repo) {
-                    await talosOpenModelRepo(input.repo, input.revision ?? 'main')
+                // never be started against a set nobody has looked at — and
+                // re-open when the REVISION differs, not only the repository.
+                // Ignoring it meant the revision the human approved in the
+                // consent sheet was not the revision that downloaded.
+                if (state.repo?.id !== input.repo || state.repo?.revision !== revision) {
+                    await talosOpenModelRepo(input.repo, revision)
                 }
                 const set = state.repo?.sets.find((candidate) => candidate.paths[0] === input.file)
                 if (!set) {
@@ -246,6 +259,11 @@ export function createTalosLocalModelTools(): TalosToolDefinition<never>[] {
             input: z.object({}),
             async run() {
                 await talosRefreshTransfer()
+                // Actually LOADED, not read out of a store nothing in the chat
+                // path ever populates: this answered "nothing is wasting space"
+                // while gigabytes sat reserved, because only the Model Lab
+                // screen had ever asked.
+                await talosRefreshLeftovers()
                 const { transfer, leftovers } = talosLocalModels
                 return {
                     ok: true,

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * "Will this model actually run on THIS phone?" — as arithmetic.
  *
  * Every app in this category shows a list of file names — `…Q4_K_M.gguf`,
@@ -137,7 +137,29 @@ export function talosMaxContextFor(
     model: TalosModelShape,
     device: TalosDeviceCapacity,
 ): number {
-    const budget = SAFE_SHARE * device.totalRamBytes - COMPUTE_OVERHEAD - RUNTIME_OVERHEAD
+    /**
+     * Budgeted against the memory a model would ACTUALLY have.
+     *
+     * This used to take a share of total RAM minus the two overheads, and
+     * nothing else — it ignored the model's own weights, the memory currently
+     * available, the threshold Android kills below, and the safety margin. So
+     * on a phone refused for `memory` the counter-offer named a context that
+     * `talosModelFit` then refused all over again: an offer the app could not
+     * honour, which is worse than saying nothing. Found by an adversarial
+     * review, 2026-08-01.
+     *
+     * Both ceilings apply. The RAM share is what the phone can spare at all;
+     * the resident figure is what is left once this model's weights are in
+     * memory, and the smaller of the two is the honest one.
+     */
+    const share = SAFE_SHARE * device.totalRamBytes - COMPUTE_OVERHEAD - RUNTIME_OVERHEAD
+    const resident = device.availableRamBytes
+        - device.lowMemoryThresholdBytes
+        - SAFETY_MARGIN
+        - COMPUTE_OVERHEAD
+        - RUNTIME_OVERHEAD
+        - model.weightBytes
+    const budget = Math.min(share, resident)
     if (budget <= 0) return 0
     const raw = Math.floor(budget / kvBytesPerToken(model))
     // Rounded down to a power-of-two-ish step, because a context of 6143 is a

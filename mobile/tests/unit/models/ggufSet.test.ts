@@ -107,14 +107,55 @@ describe('grouping a repository into models', () => {
         expect(sets[0]!.sha256).toEqual(['b'.repeat(64), null])
     })
 
-    /** A clean shard beside a flagged one is not a clean model. */
-    it('lets one flagged piece govern the whole set', () => {
+    /**
+     * A clean shard beside a flagged one is not a clean model — the WORST
+     * verdict governs, not the first.
+     *
+     * This took the first non-null verdict, which is the exact opposite
+     * whenever the first shard is clean: a flagged second shard hid behind it,
+     * while the comment two lines above promised otherwise. Found by an
+     * adversarial review, 2026-08-01.
+     */
+    it('lets one flagged piece govern the whole set, even behind a clean one', () => {
         const sets = talosGroupGgufFiles([
-            file('m-00001-of-00002.gguf', 1_000),
+            file('m-00001-of-00002.gguf', 1_000, { security: 'safe' }),
             file('m-00002-of-00002.gguf', 1_000, { security: 'unsafe' }),
         ])
 
         expect(sets[0]!.security).toBe('unsafe')
+    })
+
+    it('still reports a wholly clean set as clean', () => {
+        const sets = talosGroupGgufFiles([
+            file('m-00001-of-00002.gguf', 1_000, { security: 'safe' }),
+            file('m-00002-of-00002.gguf', 1_000, { security: 'safe' }),
+        ])
+
+        expect(sets[0]!.security).toBe('safe')
+    })
+
+    /** Silence means the Hub has not looked. That is not a pass and not a warning. */
+    it('says nothing when nothing was scanned', () => {
+        expect(talosGroupGgufFiles([file('m.gguf', 1_000, { security: null })])[0]!.security)
+            .toBeNull()
+    })
+
+    /**
+     * Each piece's OWN length, not just the sum.
+     *
+     * The download job fetches one file at a time, and handing it the set total
+     * for the first shard is what made it run past the end of that file, read
+     * the 416 as "changed upstream" and delete everything.
+     */
+    it('carries every piece length, not only their total', () => {
+        const sets = talosGroupGgufFiles([
+            file('m-00002-of-00003.gguf', 5_000_000_000),
+            file('m-00001-of-00003.gguf', 5_000_000_000),
+            file('m-00003-of-00003.gguf', 4_000_000_000),
+        ])
+
+        expect(sets[0]!.sizes).toEqual([5_000_000_000, 5_000_000_000, 4_000_000_000])
+        expect(sets[0]!.sizes.reduce((sum, size) => sum + size, 0)).toBe(sets[0]!.totalBytes)
     })
 
     /** Quantisations published one folder down are still one model each. */

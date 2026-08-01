@@ -209,3 +209,50 @@ describe('the phone as it is right now, not as a spec sheet', () => {
         expect(after).toBe('tight')
     })
 })
+
+/**
+ * The counter-offer has to be an offer the app can honour.
+ *
+ * `talosMaxContextFor` budgeted against a share of TOTAL RAM minus two
+ * overheads and nothing else — not the model's own weights, not the memory
+ * actually available, not the threshold Android kills below, not the safety
+ * margin. So on a phone refused for `memory` it named a context that
+ * `talosModelFit` then refused all over again: "at 8192 it fits", tap it, and
+ * it does not fit. An offer the app cannot honour is worse than no offer.
+ *
+ * Found by an adversarial review, 2026-08-01.
+ */
+describe('the counter-offer, which must survive being taken', () => {
+    it('names a context the fit calculation then accepts', () => {
+        // A phone whose weights fit but whose long-context cache does not,
+        // which is the entire situation a counter-offer exists for.
+        const refused = fit(SEVEN_B, {}, 32768)
+        expect(refused.band).toBe('wont-run')
+
+        const offered = refused.maxContext
+        expect(offered).toBeGreaterThan(0)
+
+        // THE assertion: take the offer, and it is honoured.
+        expect(fit(SEVEN_B, {}, offered).band).not.toBe('wont-run')
+    })
+
+    /**
+     * And when there is genuinely no context that works, it says zero rather
+     * than naming one that cannot.
+     */
+    it('offers nothing on a phone that cannot hold the weights at all', () => {
+        const tiny: Partial<TalosDeviceCapacity> = {
+            totalRamBytes: 3 * GIB,
+            availableRamBytes: 1 * GIB,
+            lowMemoryThresholdBytes: 256 * MIB,
+        }
+
+        expect(talosMaxContextFor(SEVEN_B, { ...MIDRANGE, ...tiny })).toBe(0)
+    })
+
+    /** It never offers more than the model was trained for. */
+    it('never exceeds the trained context', () => {
+        expect(talosMaxContextFor(SEVEN_B, MIDRANGE))
+            .toBeLessThanOrEqual(SEVEN_B.trainedContext)
+    })
+})

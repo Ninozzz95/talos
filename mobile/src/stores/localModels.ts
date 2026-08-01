@@ -46,6 +46,18 @@ export const TALOS_DEFAULT_LOCAL_CONTEXT = 4096
  */
 export const TALOS_HUGGING_FACE_PROVIDER = 'huggingface'
 
+/**
+ * How many times to go back for more header before giving up.
+ *
+ * Each round asks for exactly what the parser said it needed, so two are enough
+ * for anything real; the third exists so a malformed header cannot turn into a
+ * download of the whole file one doubling at a time.
+ */
+const TALOS_GGUF_HEADER_ATTEMPTS = 3
+
+/** Past this, it is not a header — and we are not fetching a model to read one. */
+const TALOS_GGUF_MAX_HEADER_BYTES = 32 * 1024 * 1024
+
 export type TalosSetExamination =
     | { state: 'unread' }
     | { state: 'reading' }
@@ -62,7 +74,14 @@ export interface TalosLocalModelsState {
     searching: boolean
     results: TalosHuggingFaceModel[]
     searchFailure: string | null
-    repo: { id: string; revision: string; sets: TalosLocalModelSet[]; loading: boolean } | null
+    repo: {
+        id: string
+        revision: string
+        sets: TalosLocalModelSet[]
+        loading: boolean
+        /** Why opening it failed — never confused with the search's own failure. */
+        failure: string | null
+    } | null
     device: TalosMeasuredDevice | null
     context: number
     /** Whether one exists — never the token itself, which stays in the Keystore. */
@@ -178,7 +197,20 @@ export async function talosRefreshDeviceCapacity(): Promise<void> {
     state.device = await talosMeasureDevice()
 }
 
+/**
+ * Only the newest answer is allowed to land.
+ *
+ * Two searches and two repository opens can be in flight at once — a phone
+ * changes networks, one request stalls and the next is instant — and without
+ * these counters a slow EARLIER answer overwrites a fast later one, so the list
+ * shows results for words the user has already replaced. Found by an
+ * adversarial review, 2026-08-01.
+ */
+let searchGeneration = 0
+let repoGeneration = 0
+
 export async function talosSearchLocalModels(query: string): Promise<void> {
+    const generation = ++searchGeneration
     state.query = query
     state.searchFailure = null
     if (query.trim() === '') {
@@ -187,12 +219,15 @@ export async function talosSearchLocalModels(query: string): Promise<void> {
     }
     state.searching = true
     try {
-        state.results = await requireClient().searchModels(query.trim())
+        const results = await requireClient().searchModels(query.trim())
+        if (generation !== searchGeneration) return
+        state.results = results
     } catch (failure) {
+        if (generation !== searchGeneration) return
         state.results = []
         state.searchFailure = describe(failure)
     } finally {
-        state.searching = false
+        if (generation === searchGeneration) state.searching = false
     }
 }
 
@@ -205,23 +240,37 @@ export async function talosSearchLocalModels(query: string): Promise<void> {
  * anonymous users share with everyone else behind their carrier's address.
  */
 export async function talosOpenModelRepo(id: string, revision = 'main'): Promise<void> {
-    state.repo = { id, revision, sets: [], loading: true }
+    const generation = ++repoGeneration
+    state.repo = { id, revision, sets: [], loading: true, failure: null }
     try {
         const paths = await requireClient().listGgufFiles(id, revision)
+        // A late answer must not resurrect a screen the user has left, nor
+        // replace the repository they are looking at now.
+        if (generation !== repoGeneration) return
         if (paths.length === 0) {
-            state.repo = { id, revision, sets: [], loading: false }
+            state.repo = { id, revision, sets: [], loading: false, failure: null }
             return
         }
         const files = await requireClient().pathsInfo(id, revision, paths)
+        if (generation !== repoGeneration) return
         state.repo = {
             id,
             revision,
             sets: talosGroupGgufFiles(files).map((set) => ({ ...set, examination: { state: 'unread' } })),
             loading: false,
+            failure: null,
         }
     } catch (failure) {
-        state.repo = { id, revision, sets: [], loading: false }
-        state.searchFailure = describe(failure)
+        if (generation !== repoGeneration) return
+        // The failure belongs to the REPOSITORY, not to the search.
+        //
+        // It was written into `searchFailure`, where the screen renders it in
+        // place of the results list — so one failed open permanently replaced
+        // the user's search with a bare error code. And the empty `sets` left
+        // behind made the screen say "this repository has no GGUF files a phone
+        // can open" about what was actually a rate limit. Found by an
+        // adversarial review, 2026-08-01.
+        state.repo = { id, revision, sets: [], loading: false, failure: describe(failure) }
     }
 }
 
@@ -257,9 +306,31 @@ export async function talosExamineSet(key: string): Promise<void> {
 
     set.examination = { state: 'reading' }
     try {
-        const head = await requireClient().readHead(
-            repo.id, repo.revision, set.paths[0]!, TALOS_GGUF_FIRST_READ_BYTES)
-        const parsed = talosReadGgufHeader(head, set.totalBytes)
+        /**
+         * Read, and read AGAIN when the parser says how much more it needs.
+         *
+         * The parser computes `needBytes` precisely so this can happen, and it
+         * was thrown away: `truncated` became a terminal "unreadable" state. A
+         * modern large-vocabulary GGUF routinely carries a header past one
+         * mebibyte — its tokeniser alone is a hundred thousand strings — so the
+         * models most worth checking were exactly the ones that could never be
+         * checked. Found by an adversarial review, 2026-08-01.
+         *
+         * Bounded: each attempt asks for what the parser named, and after a few
+         * rounds a header that keeps growing is a header we decline to chase.
+         */
+        let wanted = TALOS_GGUF_FIRST_READ_BYTES
+        let parsed = talosReadGgufHeader(
+            await requireClient().readHead(repo.id, repo.revision, set.paths[0]!, wanted),
+            set.totalBytes)
+        for (let attempt = 0; attempt < TALOS_GGUF_HEADER_ATTEMPTS; attempt += 1) {
+            if (parsed.ok || parsed.reason !== 'truncated') break
+            if (parsed.needBytes <= wanted || parsed.needBytes > TALOS_GGUF_MAX_HEADER_BYTES) break
+            wanted = Math.min(parsed.needBytes, TALOS_GGUF_MAX_HEADER_BYTES)
+            parsed = talosReadGgufHeader(
+                await requireClient().readHead(repo.id, repo.revision, set.paths[0]!, wanted),
+                set.totalBytes)
+        }
         if (!parsed.ok) {
             set.examination = { state: 'unreadable', reason: parsed.reason }
             return
