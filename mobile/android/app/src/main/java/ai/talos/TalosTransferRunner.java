@@ -87,7 +87,7 @@ public final class TalosTransferRunner {
      * up. Blocking on purpose: the host owns the thread.
      */
     public void run() {
-        TalosModelStore.Resume resume = slot.resume();
+        TalosModelStore.Resume resume = slot.resume(totalBytes);
         TalosResumableSha256 digest = resume.hashState == null
                 ? null
                 : TalosResumableSha256.restore(resume.hashState);
@@ -209,9 +209,11 @@ public final class TalosTransferRunner {
 
             file.seek(step.rangeFrom);
             byte[] buffer = new byte[BUFFER];
+            long arrived = 0;
             try (InputStream body = connection.getInputStream()) {
                 int read;
                 while ((read = body.read(buffer)) >= 0) {
+                    arrived += read;
                     if (host.stopRequested()) return true;
                     if (read == 0) continue;
                     file.write(buffer, 0, read);
@@ -226,6 +228,13 @@ public final class TalosTransferRunner {
                     if (state.haveBytes >= totalBytes) break;
                 }
             }
+            // A response that delivered nothing is a failure, not a success.
+            //
+            // It returned true with the state untouched, so the loop reissued
+            // the identical request immediately: a tight request loop for the
+            // whole eight-second stall window before a single failure was
+            // counted. Found by an adversarial review, 2026-08-01.
+            if (arrived == 0) return pause(TalosModelDownloadPolicy.applyError(state));
             return true;
         } catch (IOException dropped) {
             return pause(TalosModelDownloadPolicy.applyError(state));
@@ -246,7 +255,7 @@ public final class TalosTransferRunner {
             RandomAccessFile file,
             long nowMs) throws IOException {
         file.getFD().sync();
-        slot.checkpoint(state.haveBytes, digest.exportState());
+        slot.checkpoint(totalBytes, state.haveBytes, digest.exportState());
         state.lastCheckpointAtMs = nowMs;
         state.bytesSinceCheckpoint = 0;
     }

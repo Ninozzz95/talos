@@ -127,12 +127,21 @@ public final class TalosModelStore {
          * it is the reservation, and throwing it away would give the space back
          * to whatever is competing for it.
          */
-        public Resume resume() {
+        /**
+         * @param totalBytes the length of the file being resumed FOR.
+         *
+         * Passed in rather than read off the partial, because the partial does
+         * not shrink: a second attempt at a smaller revision of the same path
+         * would leave the old, larger reservation in place and its note would
+         * still look consistent. The caller is the only one who knows which
+         * file it is asking about.
+         */
+        public Resume resume(long totalBytes) {
             if (!partial.isFile()) {
                 sidecar.delete();
                 return new Resume(0, null);
             }
-            String[] recorded = readSidecar();
+            String[] recorded = readSidecar(totalBytes);
             if (recorded == null) return new Resume(0, null);
 
             long checkpointed = Long.parseLong(recorded[0]);
@@ -155,9 +164,18 @@ public final class TalosModelStore {
          * process outright and never calls `onStopJob` — so nothing may live
          * only in memory, waiting for a shutdown hook that will not run.
          */
-        public void checkpoint(long haveBytes, String hashState) {
+        public void checkpoint(long totalBytes, long haveBytes, String hashState) {
             String body = MAGIC + "\n"
                     + "have=" + haveBytes + "\n"
+                    // The length of the file this note is ABOUT.
+                    //
+                    // Without it the sidecar was trusted on nothing but its own
+                    // say-so: a note left by an attempt at a different revision
+                    // of the same path would be read as progress against the
+                    // new one, and the hash would then be computed over a
+                    // mixture of two files. Found by an adversarial review,
+                    // 2026-08-01.
+                    + "of=" + totalBytes + "\n"
                     + "hash=" + (hashState == null ? "" : hashState) + "\n"
                     + TERMINATOR + "\n";
             File scratch = new File(sidecar.getPath() + ".tmp");
@@ -196,7 +214,7 @@ public final class TalosModelStore {
         }
 
         /** Null for anything unreadable: a wrong resume is worse than a slow one. */
-        private String[] readSidecar() {
+        private String[] readSidecar(long totalBytes) {
             if (!sidecar.isFile()) return null;
             try {
                 List<String> lines = Files.readAllLines(sidecar.toPath(), StandardCharsets.UTF_8);
@@ -205,11 +223,17 @@ public final class TalosModelStore {
                 if (!TERMINATOR.equals(lines.get(lines.size() - 1))) return null;
                 String have = null;
                 String hash = null;
+                String of = null;
                 for (String line : lines) {
                     if (line.startsWith("have=")) have = line.substring(5);
                     else if (line.startsWith("hash=")) hash = line.substring(5);
+                    else if (line.startsWith("of=")) of = line.substring(3);
                 }
                 if (have == null || hash == null || hash.isEmpty()) return null;
+                // A note about a file of a different length is a note about a
+                // different file. Refusing it costs one re-download; trusting
+                // it produces a hash computed across two of them.
+                if (of == null || Long.parseLong(of) != totalBytes) return null;
                 long parsed = Long.parseLong(have);
                 if (parsed < 0) return null;
                 return new String[] { String.valueOf(parsed), hash };

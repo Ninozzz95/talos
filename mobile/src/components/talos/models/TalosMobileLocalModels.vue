@@ -559,7 +559,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                              render only for `unread`, so one failed check
                              removed the only way to try again. -->
                         <Button
-                            v-if="row.set.examination.state === 'unread' || row.set.examination.state === 'unreadable'"
+                            v-if="row.set.examination.state !== 'reading'"
                             type="button"
                             data-testid="talos-models-examine"
                             class="talos-pressable min-h-11 flex-1 rounded-full border border-[var(--talos-border)] text-sm text-[var(--talos-text)]"
