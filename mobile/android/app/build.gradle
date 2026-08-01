@@ -3,6 +3,9 @@ apply plugin: 'com.android.application'
 android {
     namespace = "ai.talos"
     compileSdk = rootProject.ext.compileSdkVersion
+    // Fissato, non lasciato al valore predefinito di AGP: il motore locale è
+    // compilato da questo NDK e una versione diversa è un compilatore diverso.
+    ndkVersion = "27.0.12077973"
     defaultConfig {
         applicationId "ai.talos"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -10,6 +13,35 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            // Solo arm64. Da quando esiste codice nativo questa riga decide su
+            // quali telefoni l'app si installa: i 32 bit restano fuori. È una
+            // perdita accettata e non subita — Google impone i 64 bit dal 2019 e
+            // llama.cpp su ARM a 32 bit non è una strada seria — ma va detta,
+            // perché prima di oggi l'app si installava ovunque.
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                arguments '-DCMAKE_BUILD_TYPE=Release',
+                        '-DBUILD_SHARED_LIBS=ON',
+                        '-DLLAMA_BUILD_APP=OFF',
+                        '-DLLAMA_BUILD_COMMON=OFF',
+                        '-DLLAMA_BUILD_UI=OFF',
+                        '-DLLAMA_OPENSSL=OFF',
+                        // Il computer che compila non è il telefono che esegue:
+                        // GGML_NATIVE accorderebbe il codice su questa macchina.
+                        '-DGGML_NATIVE=OFF',
+                        // Le due che rendono l'app distribuibile: ggml costruisce
+                        // più varianti CPU e sceglie a runtime quella che il
+                        // telefono regge davvero. Con minSdk 26 il parco va da
+                        // ARMv8.0 in su, e una singola build accordata sul
+                        // telefono di oggi si rifiuterebbe di partire su quelli.
+                        '-DGGML_BACKEND_DL=ON',
+                        '-DGGML_CPU_ALL_VARIANTS=ON',
+                        '-DGGML_LLAMAFILE=OFF'
+            }
+        }
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -17,9 +49,45 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // Copia affiancata. Il computer nuovo ha una chiave di debug diversa
+            // da quella che ha firmato l'app sul telefono dell'owner, quindi un
+            // aggiornamento sul posto e' rifiutato e l'unica alternativa sarebbe
+            // disinstallare — cioe' cancellargli chat e libreria. Con
+            // -PtalosSideBySide l'app si installa come pacchetto separato e la
+            // sua resta intatta. Il FileProvider usa gia' ${applicationId},
+            // quindi le due autorita' non si scontrano. Senza la proprieta' il
+            // build e' identico a prima: questo blocco non fa nulla.
+            if (project.hasProperty('talosSideBySide')) {
+                applicationIdSuffix '.dev'
+                versionNameSuffix '-dev'
+            }
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path 'src/main/cpp/CMakeLists.txt'
+            // La stessa con cui llama.cpp costruisce il proprio esempio Android.
+            version '3.31.6'
+        }
+    }
+    packagingOptions {
+        jniLibs {
+            // Le librerie native vanno ESTRATTE all'installazione.
+            //
+            // Il predefinito moderno è lasciarle dentro l'APK e mapparle da lì:
+            // occupano meno spazio e si installa più in fretta. Ma ggml cerca i
+            // suoi backend ELENCANDO una cartella, e una cartella che non
+            // contiene file non elenca niente — il registro resta vuoto e ogni
+            // modello «non si apre». Costa ~11 MB sul dispositivo, e li paghiamo
+            // per tenere le sette varianti CPU scelte a runtime, che sono ciò
+            // che fa girare l'app anche sui telefoni vecchi che minSdk 26
+            // ammette.
+            useLegacyPackaging = true
         }
     }
 }
