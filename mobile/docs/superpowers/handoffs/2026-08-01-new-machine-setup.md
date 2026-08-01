@@ -336,15 +336,39 @@ npm run typecheck
 **Verifica:** nessun errore, exit 0. (~40 secondi)
 
 ```powershell
-npx vitest run
-```
-**Verifica:** circa **2973 passed**, 0 failed. (~3 minuti)
-
-```powershell
 npm run build
 ```
 **Verifica:** stampa una riga JSON che finisce con `"ok":true`, e dentro
 `initial_css_bytes` sotto 150000 e `initial_javascript_bytes` sotto 560000.
+
+**Ora Capacitor deve materializzare il progetto Android — e va fatto PRIMA dei
+test, non dopo.**
+
+```powershell
+npx cap sync android
+Test-Path "$env:TALOS_HOME\mobile\android\app\src\main\res\xml\config.xml"
+```
+
+**Verifica:** `True`.
+
+Tre file di configurazione dentro `android/` li scrive Capacitor, non git:
+`res/xml/config.xml`, `assets/capacitor.config.json`,
+`assets/capacitor.plugins.json`. Sono nel `.gitignore` sotto
+`# Generated Config files`, quindi un clone non li porta.
+
+Il gate delle risorse Android non è una simulazione: copia **l'albero `res`
+vero** in uno spazio usa-e-getta e ci fa girare sopra lo strumento di
+produzione. Se `config.xml` non c'è, lo strumento conta 42 file dove ne
+pretende 43 e si ferma con `on-disk set mismatch: missing=[xml/config.xml]`.
+Cadono **24 test**: 23 di quel gate, più quello di Git Bash — che lancia lo
+stesso strumento e aspetta un marcatore che non arriverà mai, quindi non manda
+il Ctrl+C e fallisce su `sentCtrlC`. Sembrano due guasti diversi ed è lo
+stesso file mancante.
+
+```powershell
+npx vitest run
+```
+**Verifica:** **2973 passed**, 0 failed. (~3 minuti)
 
 ```powershell
 cd android
@@ -416,6 +440,10 @@ compare, attiva **Opzioni sviluppatore → Debug USB**.
 - **Il repository è privato**: `git clone` senza credenziali risponde
   `Repository not found`, che sembra un nome sbagliato e invece è
   autenticazione mancante. Vedi B5.
+- **`npx cap sync android` va fatto prima dei test, non dopo.** Tre file di
+  configurazione dentro `android/` li genera Capacitor e non stanno in git.
+  Senza, 24 test cadono citando `missing=[xml/config.xml]` e un `sentCtrlC`
+  che non c'entra nulla.
 - **Il numero di build dei `cmdline-tools` in B4 invecchia.** Google ruota
   l'archivio e il vecchio link comincia a dare 404. Se succede, prendi il link
   corrente da <https://developer.android.com/studio#command-line-tools-only>:
