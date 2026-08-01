@@ -1,4 +1,4 @@
-﻿export const TALOS_EN_MESSAGES = {
+export const TALOS_EN_MESSAGES = {
     common: {
         add: 'Add',
         back: 'Back',
@@ -921,7 +921,7 @@
         labSections: 'Model Lab sections',
         providers: 'Providers',
         catalog: 'Catalog',
-        onDevice: 'On device',
+        onDevice: 'Local',
         advancedManualModels: 'Advanced manual models',
         manualRecovery: 'Manual model recovery',
         manualRecoveryDetail: 'Add a provider model ID when discovery cannot list it. Capabilities below are user-declared, not provider-observed.',
@@ -1234,6 +1234,9 @@
     localModels: {
         intro: 'Models run entirely on this phone. Nothing you type reaches a server.',
         searchLabel: 'Search Hugging Face',
+        filterProvider: 'Filter by publisher',
+        allProviders: 'Every publisher',
+        providerCount: '{count} models',
         searchPlaceholder: 'qwen3, llama, gemma…',
         searching: 'Searching…',
         noResults: 'Nothing found for that.',

@@ -1,4 +1,4 @@
-﻿import type { TalosTranslatedMessages } from '@/i18n/contracts'
+import type { TalosTranslatedMessages } from '@/i18n/contracts'
 import type { TalosEnglishMessages } from './en'
 
 export const TALOS_IT_MESSAGES = {
@@ -924,7 +924,7 @@ export const TALOS_IT_MESSAGES = {
         labSections: 'Sezioni Model Lab',
         providers: 'Provider',
         catalog: 'Catalogo',
-        onDevice: 'Sul telefono',
+        onDevice: 'Locale',
         advancedManualModels: 'Modelli manuali avanzati',
         manualRecovery: 'Recupero manuale modello',
         manualRecoveryDetail: 'Aggiungi l’ID di un modello del provider quando il rilevamento non riesce a elencarlo. Le capacità seguenti sono dichiarate dall’utente, non osservate dal provider.',
@@ -1237,6 +1237,9 @@ export const TALOS_IT_MESSAGES = {
     localModels: {
         intro: 'I modelli girano interamente su questo telefono. Niente di quello che scrivi raggiunge un server.',
         searchLabel: 'Cerca su Hugging Face',
+        filterProvider: 'Filtra per autore',
+        allProviders: 'Tutti gli autori',
+        providerCount: '{count} modelli',
         searchPlaceholder: 'qwen3, llama, gemma…',
         searching: 'Sto cercando…',
         noResults: 'Non ho trovato nulla.',

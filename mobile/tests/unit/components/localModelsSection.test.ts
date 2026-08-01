@@ -207,6 +207,53 @@ describe('the results', () => {
         expect(result.attributes('aria-label')).toBe('Open unsloth/Qwen3-4B-GGUF')
     })
 
+    /**
+     * Grouped by whoever published the GGUF.
+     *
+     * Every row here is a stranger's upload, and the people who quantise models
+     * are a small recognisable set — so "who made this one" is most of what a
+     * reader uses to judge it. Ordered by use, because that is the only
+     * reputation signal the Hub gives us.
+     */
+    it('files the results under the organisation that published them', async () => {
+        store.state = baseState({
+            query: 'qwen',
+            results: [
+                { id: 'unsloth/Qwen3-4B-GGUF', downloads: 900, likes: 4, gated: false },
+                { id: 'bartowski/Qwen3-4B-GGUF', downloads: 400, likes: 2, gated: false },
+                { id: 'unsloth/Qwen3-8B-GGUF', downloads: 300, likes: 1, gated: false },
+            ],
+        }) as never
+        const wrapper = await screen()
+
+        const groups = wrapper.findAll('[data-testid="talos-models-provider-group"]')
+        expect(groups).toHaveLength(2)
+        expect(groups[0]!.text()).toContain('unsloth')
+        expect(groups[0]!.findAll('[data-testid="talos-models-result"]')).toHaveLength(2)
+        expect(groups[1]!.text()).toContain('bartowski')
+    })
+
+    /** The filter exists, and its options come from the results themselves. */
+    it('offers a publisher filter built from what actually came back', async () => {
+        store.state = baseState({
+            query: 'qwen',
+            results: [
+                { id: 'unsloth/a', downloads: 900, likes: 0, gated: false },
+                { id: 'bartowski/b', downloads: 400, likes: 0, gated: false },
+            ],
+        }) as never
+        const wrapper = await screen()
+
+        const select = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
+            .find((candidate) => candidate.props('ariaLabel') === 'Filter by publisher')
+
+        expect(select).toBeDefined()
+        expect(select?.props('items')).toEqual([
+            { value: 'unsloth', label: 'unsloth (1)' },
+            { value: 'bartowski', label: 'bartowski (1)' },
+        ])
+    })
+
     /** A gate is known from the search, not discovered after choosing. */
     it('marks a gated repository before it is opened', async () => {
         store.state = baseState({
