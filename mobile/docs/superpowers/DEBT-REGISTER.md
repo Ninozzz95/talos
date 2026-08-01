@@ -83,6 +83,32 @@ it. Closing an item by editing this file is forbidden.
 
 ---
 
+## PROVENANCE — three upstream hashes that could not be re-derived (2026-08-01)
+
+The conformance manifests had been recorded from a working copy carrying stray
+CR characters on some lines. Git normalises those on commit, so the committed
+text was always correct and `git status` stayed clean — but the numbers written
+into `upstream/shadcn-vue-2.8.0-manifest.json` and
+`upstream/desktop-ported-libs-manifest.json` described bytes that exist on no
+clean checkout. **All 24 shadcn rows and one ported row were unsatisfiable by
+any fresh clone**, which a first clone on a second machine exposed; CI would
+have shown the same. Re-recorded against canonical repository bytes.
+
+The text was provably unchanged: git calls a file clean only after normalising
+CR, so any difference beyond line endings would have shown as modified.
+
+| # | Item | Evidence |
+|---|---|---|
+| U1 | The three adapted rows' `upstream_sha256` still hold the pre-correction numbers. They describe the **pristine upstream** file, which is not on disk here — it lived in a probe app that was never vendored — so they cannot be recomputed from anything available. Only what could be proved was rewritten. | `adaptations[].upstream_sha256` in `upstream/shadcn-vue-2.8.0-manifest.json`; `source_evidence` names `generated-checksums.txt`, absent from the repo |
+| U2 | 32 tracked files hold CR **inside their blobs** despite `* text=auto eol=lf`. Harmless today — blob bytes are identical on every clone, so hashes reproduce — but it is the same trap one commit away. `git add --renormalize` is the fix, and it rewrites content, so it wants its own commit. | `git ls-files --eol` filtered to `attr/text=auto eol=lf` with `w/mixed` or `w/crlf` |
+
+Paying U1 means re-extracting shadcn-vue 2.8.0 into a probe app and recomputing
+the pristine hashes — which would also re-verify that the 21 unadapted files
+really are byte-identical to upstream, a claim currently resting on the
+original Codex 55/55 check rather than on anything reproducible here.
+
+---
+
 ## Sequencing — what must be paid before each roadmap phase
 
 - **Semantic retrieval probe**: A4 first (a third tier on four mutable closure

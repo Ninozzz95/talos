@@ -166,18 +166,74 @@ Get-ChildItem "$sdk\build-tools"
 
 **Verifica:** devono comparire `android-36` e `36.0.0`.
 
-## B5 · Clonare il repository
+## B5 · Autenticarsi su GitHub
+
+**Il repository è privato.** Senza credenziali GitHub risponde `Repository not
+found` — un 404, non un "accesso negato", perché a un anonimo non rivela
+nemmeno che il repository esiste. È l'errore più fuorviante di tutta questa
+procedura: sembra un nome sbagliato e invece è l'autenticazione che manca.
 
 ```powershell
-cd $env:USERPROFILE\Desktop
+winget install --id GitHub.cli -e --scope user
+```
+
+Il pacchetto finisce in una cartella che non è nel PATH della finestra in
+corso. Aggiungila, anche per le finestre future:
+
+```powershell
+$ghDir = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\GitHub.cli_Microsoft.Winget.Source_8wekyb3d8bbwe\bin"
+$env:PATH = "$ghDir;$env:PATH"
+$utente = [Environment]::GetEnvironmentVariable("PATH", "User")
+if ($utente -notlike "*$ghDir*") {
+    [Environment]::SetEnvironmentVariable("PATH", "$ghDir;$utente", "User")
+}
+gh --version
+```
+
+**Verifica:** stampa `gh version 2.x`. Se dice che non riconosce il comando, la
+cartella del pacchetto ha un altro nome: trovala con
+`Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Filter gh.exe -Recurse`.
+
+```powershell
+gh auth login
+```
+
+Rispondi: **GitHub.com** → **HTTPS** → **Authenticate Git with your GitHub
+credentials? Yes** → **Login with a web browser**. Quel «Yes» è il passaggio
+che fa funzionare `git clone`: senza, `gh` è autenticato ma git no.
+
+```powershell
+gh auth status
+```
+
+**Verifica:** `Logged in to github.com account Ninozzz95`.
+
+## B6 · Clonare il repository
+
+Il progetto può stare dove vuoi. Scegli **una** cartella e incidila in una
+variabile d'ambiente: tutti i passi successivi la useranno, così il percorso è
+scritto una volta sola e non c'è nulla da adattare a mano.
+
+```powershell
+$radice = "$env:USERPROFILE\Desktop\projects"
+New-Item -ItemType Directory -Force -Path $radice | Out-Null
+cd $radice
+
 git clone https://github.com/Ninozzz95/agent-virtual-machine.git AVM
 cd AVM
 git checkout lane/talos-mobile
+
+$env:TALOS_HOME = (Get-Location).Path
+[Environment]::SetEnvironmentVariable("TALOS_HOME", $env:TALOS_HOME, "User")
+
+git branch --show-current
 git log --oneline -1
+$env:TALOS_HOME
 ```
 
-**Verifica:** l'ultima riga deve essere il commit più recente del ramo. Se dice
-`error: pathspec ... did not match`, il fetch non ha preso il ramo:
+**Verifica:** `lane/talos-mobile`, l'ultimo commit del ramo, e il percorso del
+progetto. Se dice `error: pathspec ... did not match`, il fetch non ha preso il
+ramo:
 
 ```powershell
 git fetch origin
@@ -192,13 +248,13 @@ git checkout -b lane/talos-mobile origin/lane/talos-mobile
 > (`AVM-lanes/kimi`) perché due agenti lavoravano insieme. **Sul nuovo non
 > serve**: cloni e lavori diretto.
 
-## B6 · Il file che non arriva col clone
+## B7 · Il file che non arriva col clone
 
 `local.properties` è gitignored, quindi non c'è. Senza, Gradle non sa dove sia
 l'SDK e fallisce al primo comando.
 
 ```powershell
-cd $env:USERPROFILE\Desktop\AVM\mobile\android
+cd $env:TALOS_HOME\mobile\android
 $sdkPath = "$env:LOCALAPPDATA\Android\Sdk" -replace '\\', '/'
 Set-Content -Path "local.properties" -Value "sdk.dir=$sdkPath" -Encoding ascii
 Get-Content "local.properties"
@@ -207,10 +263,10 @@ Get-Content "local.properties"
 **Verifica:** stampa `sdk.dir=C:/Users/<UTENTE>/AppData/Local/Android/Sdk` —
 con le barre **in avanti**.
 
-## B7 · Le dipendenze
+## B8 · Le dipendenze — sono TRE installazioni, non una
 
 ```powershell
-cd $env:USERPROFILE\Desktop\AVM\mobile
+cd $env:TALOS_HOME\mobile
 npm ci
 ```
 
@@ -221,14 +277,42 @@ su cui girano i gate.
 **Verifica:** finisce senza errori. Se si ferma su
 `TALOS_RUNTIME_UNSUPPORTED`, la versione di Node è sbagliata — torna a B2.
 
-## B8 · Rimetti la memoria dell'assistente
-
-Il percorso dipende da **dove hai clonato**: è il percorso del progetto con le
-barre sostituite da trattini. Se hai clonato in `C:\Users\<UTENTE>\Desktop\AVM`,
-lo slug è `C--Users-<UTENTE>-Desktop-AVM`.
+Poi le due **installazioni isolate**. Due strumenti hanno un `package.json`
+proprio e un `node_modules` proprio, deliberatamente separati da quello
+dell'app: il generatore delle risorse Android e il lanciatore di Git Bash. Le
+loro dipendenze (`sharp`, `node-pty`) sono binari nativi che non devono finire
+nel grafo dell'app, e i test lo verificano — pretendono di risolverli dalla
+copia locale della corsia e non da una qualsiasi trovata altrove sul disco.
 
 ```powershell
-$slug = "C--Users-$env:USERNAME-Desktop-AVM"
+cd $env:TALOS_HOME\mobile\tools\android-assets
+npm ci
+
+cd $env:TALOS_HOME\mobile\tools\git-bash-launcher
+npm ci
+```
+
+**Verifica:**
+
+```powershell
+Test-Path "$env:TALOS_HOME\mobile\tools\android-assets\node_modules"
+Test-Path "$env:TALOS_HOME\mobile\tools\git-bash-launcher\node_modules\node-pty"
+```
+
+Devono stampare **`True` entrambi**. Se li salti, la suite passa comunque per
+il 99% e poi crolla con **34 fallimenti** che non nominano mai la causa vera:
+`TOOLING_MISSING`, `isolated tooling node_modules not found` e
+`Cannot find module 'node-pty'`. Sembrano trentaquattro guasti diversi; sono
+due `npm ci` mancanti.
+
+## B9 · Rimetti la memoria dell'assistente
+
+Il percorso dipende da **dove hai clonato**: è il percorso del progetto con
+`:` e `\` sostituiti da trattini. Non scriverlo a mano, ricavalo:
+
+```powershell
+$slug = $env:TALOS_HOME -replace '[:\\]', '-'
+$slug
 $destinazione = "$env:USERPROFILE\.claude\projects\$slug\memory"
 New-Item -ItemType Directory -Force -Path $destinazione | Out-Null
 
@@ -246,7 +330,7 @@ Copy-Item -Path "D:\talos-memory\*" -Destination $destinazione -Recurse -Force
 Nell'ordine. **Se uno fallisce, fermati e risolvi prima di andare avanti.**
 
 ```powershell
-cd $env:USERPROFILE\Desktop\AVM\mobile
+cd $env:TALOS_HOME\mobile
 npm run typecheck
 ```
 **Verifica:** nessun errore, exit 0. (~40 secondi)
@@ -325,6 +409,17 @@ compare, attiva **Opzioni sviluppatore → Debug USB**.
 # PARTE E — cose che fanno perdere un'ora
 
 - **`npm ci`, mai `npm install`.**
+- **Le installazioni sono tre**, non una: l'app, `mobile/tools/android-assets`
+  e `mobile/tools/git-bash-launcher`. Le ultime due sono isolate apposta e i
+  loro `node_modules` sono ignorati da git, quindi un clone non le porta. Chi
+  le salta vede 34 test rossi che sembrano un disastro e sono due comandi.
+- **Il repository è privato**: `git clone` senza credenziali risponde
+  `Repository not found`, che sembra un nome sbagliato e invece è
+  autenticazione mancante. Vedi B5.
+- **Il numero di build dei `cmdline-tools` in B4 invecchia.** Google ruota
+  l'archivio e il vecchio link comincia a dare 404. Se succede, prendi il link
+  corrente da <https://developer.android.com/studio#command-line-tools-only>:
+  cambia solo il numero nel nome del file.
 - **`JAVA_HOME` non persiste** fra shell se non l'hai salvato con
   `SetEnvironmentVariable(..., "User")`. Dopo averlo salvato, **riapri**
   PowerShell.
