@@ -30,6 +30,18 @@ const props = withDefaults(defineProps<{
 }>(), {
     requestedTab: null,
 })
+
+/**
+ * Which category is OPEN — the answer the address bar needs.
+ *
+ * `?tab=` was one-way: the query could open a category, and nothing ever wrote
+ * back. So the moment anyone touched the list the URL was describing a screen
+ * that was no longer there — and a deep link copied out of it reopened
+ * somewhere else. Null when nothing is open, which on the phone is a real
+ * state: the list is showing and no panel is.
+ */
+const emit = defineEmits<{ 'update:openTab': [tab: TalosMobileSettingsTabId | null] }>()
+
 const { t } = useTalosI18n()
 
 const activeTab = ref<TalosMobileSettingsTabId>('models')
@@ -137,6 +149,15 @@ watch([mobilePane, activeTab], async ([pane]) => {
     scroller?.scrollTo({ top: 0 })
 })
 onBeforeUnmount(() => { sheetNav.clear() })
+
+/**
+ * On the tablet the panel is always beside the list, so a category is always
+ * open. On the phone it is open only once the detail pane has taken the screen.
+ */
+const openTab = computed<TalosMobileSettingsTabId | null>(
+    () => (isMdLayout.value || mobilePane.value === 'detail') ? activeTab.value : null,
+)
+watch(openTab, (tab) => { emit('update:openTab', tab) })
 
 watch(() => props.requestedTab, (requested) => {
     if (!requested) return
