@@ -43,6 +43,16 @@ export interface TalosResearchRuntimeDeps {
     readonly keeper: (title: string) => TalosRunKeeper
     readonly now: () => string
     readonly perform: (branch: TalosResearchBranch, run: TalosResearchRun) => Promise<TalosResearchStepOutcome>
+    /**
+     * The last step, when there is one: read everything gathered and write the
+     * report. Optional because R-1 had no such thing and the phases before this
+     * one must keep working without it.
+     *
+     * It goes through the SAME journal as every other step, which is not a
+     * detail: a synthesis killed halfway is picked up like anything else, and
+     * one that finished is never paid for twice.
+     */
+    readonly synthesise?: (run: TalosResearchRun) => Promise<TalosResearchStepOutcome>
 }
 
 export interface TalosResearchProgress {
@@ -95,6 +105,10 @@ async function journalOf(
     const events = entries.map((entry) => JSON.parse(entry.payload_json) as TalosResearchEvent)
     return { run: talosResearchReplay(events), length: entries.length }
 }
+
+/** One name for the last step, so a resumed run recognises it as already done. */
+export const SYNTHESIS_STEP_ID = 'synthesis'
+const SYNTHESIS_LABEL = 'sintesi'
 
 export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
     /**
@@ -157,6 +171,40 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
                     return run
                 }
             }
+            if (deps.synthesise) {
+                const done = run.steps.find((step) => step.id === SYNTHESIS_STEP_ID)?.state === 'done'
+                if (!done) {
+                    keeper.engage(SYNTHESIS_LABEL)
+                    run = await append(deps, run, {
+                        kind: 'step_started',
+                        at: deps.now(),
+                        stepId: SYNTHESIS_STEP_ID,
+                        branchId: SYNTHESIS_STEP_ID,
+                        stepKind: 'synthesise',
+                    }, seq++)
+                    try {
+                        const outcome = await deps.synthesise(run)
+                        run = await append(deps, run, {
+                            kind: 'step_finished',
+                            at: deps.now(),
+                            stepId: SYNTHESIS_STEP_ID,
+                            spend: outcome.spend,
+                            resultRef: outcome.resultRef,
+                        }, seq++)
+                    } catch (failure) {
+                        run = await append(deps, run, {
+                            kind: 'step_failed',
+                            at: deps.now(),
+                            stepId: SYNTHESIS_STEP_ID,
+                            error: failure instanceof Error ? failure.message : 'unknown',
+                        }, seq++)
+                        // The gathering is not thrown away because the writing
+                        // failed: what was collected is on disk and paid for,
+                        // and a retry starts from the report, not the search.
+                        return run
+                    }
+                }
+            }
             run = await append(deps, run, { kind: 'run_finished', at: deps.now() }, seq++)
             onProgress?.({ run, done: total, total })
             return run
@@ -211,7 +259,14 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
                 const loaded = await journalOf(deps, row.id)
                 if (!loaded.run) continue
                 const recovered = talosResearchRecover(loaded.run, deps.now())
-                if (talosResearchWorkLeft(recovered).length > 0) runs.push(recovered)
+                // Branches left, OR a run that never reached `run_finished`.
+                // The second is not redundant: a run killed during the SYNTHESIS
+                // has every branch done and would otherwise read as complete,
+                // which would quietly throw away the gathering it paid for.
+                const open = recovered.status !== 'done'
+                    && recovered.status !== 'cancelled'
+                    && recovered.status !== 'failed'
+                if (talosResearchWorkLeft(recovered).length > 0 || open) runs.push(recovered)
             }
             return runs
         },

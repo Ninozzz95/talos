@@ -139,6 +139,32 @@ describe('a research run being driven', () => {
         expect(left.map((run) => run.id)).toEqual(['run-open'])
     })
 
+    it('picks up a run that was killed during the synthesis, not just during a branch', async () => {
+        const repository = createMemoryChatRepository()
+        const now = clock()
+        const wrote: string[] = []
+        const build = (synthesise?: () => Promise<typeof ONE_SEARCH>) => createTalosResearchRuntime({
+            repository,
+            keeper: () => fakeKeeper().keeper,
+            now,
+            perform: async () => ONE_SEARCH,
+            synthesise,
+        })
+
+        // Every branch finishes, then the process dies writing the report.
+        await build(async () => { throw new Error('KILLED') })
+            .start({ id: 'run-1', sessionId: 's', question: 'q', depth: 'quick', branches: BRANCHES })
+
+        const left = await build(async () => ONE_SEARCH).unfinished()
+        expect(left.map((run) => run.id)).toEqual(['run-1'])
+
+        const finished = await build(async () => { wrote.push('report'); return ONE_SEARCH }).resume('run-1')
+
+        // The gathering is not redone — only the report is written.
+        expect(wrote).toEqual(['report'])
+        expect(finished.status).toBe('done')
+    })
+
     it('does nothing at all when asked to resume a run that is already complete', async () => {
         const perform = vi.fn(async () => ONE_SEARCH)
         const { runtime } = make(perform)
