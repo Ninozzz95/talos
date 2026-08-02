@@ -7,7 +7,11 @@ import { flushPromises, mount } from '@vue/test-utils'
 const mockState = vi.hoisted(() => ({ controller: null as unknown }))
 const routeState = vi.hoisted(() => ({ query: {} as Record<string, unknown> }))
 vi.mock('@/stores/chatController', () => ({ useChatController: () => mockState.controller }))
-vi.mock('vue-router', () => ({ useRoute: () => routeState }))
+// The router is recorded, not stubbed away: whether the screen REPLACES or
+// PUSHES is the difference between the back gesture leaving Settings and it
+// walking out one category at a time.
+const routerCalls = vi.hoisted(() => ({ replace: vi.fn(() => Promise.resolve()), push: vi.fn(() => Promise.resolve()) }))
+vi.mock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => routerCalls }))
 
 import SettingsScreen from '@/screens/SettingsScreen.vue'
 
@@ -50,8 +54,15 @@ function makeController(opts: { secret?: boolean } = {}) {
 }
 
 beforeEach(() => {
+    vi.clearAllMocks()
     mockState.controller = makeController()
     routeState.query = {}
+    // A real `replace` changes the address. A stub that only records the call
+    // lets the screen write the same query over and over and still look right.
+    routerCalls.replace.mockImplementation((to: { query?: Record<string, unknown> }) => {
+        routeState.query = { ...(to.query ?? {}) }
+        return Promise.resolve()
+    })
     // Model Lab reopens on the section you left, and jsdom keeps one
     // localStorage for the whole file. Without this, the Catalog test decides
     // which section the tests after it open on. It happens not to bite in the
@@ -226,6 +237,37 @@ describe('SettingsScreen (functional)', () => {
         await flushPromises()
         expect(second.get('[data-model-lab-section="on-device"]').attributes('data-state')).toBe('active')
         expect(second.find('[data-model-lab-section="providers"]').attributes('data-state')).not.toBe('active')
+    })
+
+    /**
+     * `?tab=` used to be one-way: it could open a category, and nothing wrote
+     * back. So the address bar started lying the moment anyone touched the
+     * list, and a deep link copied out of it reopened somewhere else.
+     */
+    it('writes the open category back into the address, and clears it on the way out', async () => {
+        const wrapper = mount(SettingsScreen)
+        await wrapper.get('[data-settings-tab="appearance"]').trigger('click')
+        await flushPromises()
+
+        expect(routerCalls.replace).toHaveBeenCalledWith({ query: { tab: 'appearance' } })
+        // Never push: a history entry per category tap turns Android's back
+        // gesture into a walk through thirteen settings pages.
+        expect(routerCalls.push).not.toHaveBeenCalled()
+
+        routeState.query = { tab: 'appearance' }
+        const { useTalosSheetNav } = await import('@/composables/useTalosSheetNav')
+        useTalosSheetNav().subView.value!.back()
+        await flushPromises()
+
+        expect(routerCalls.replace).toHaveBeenLastCalledWith({ query: {} })
+    })
+
+    it('leaves the address alone when the deep link already says where we are', async () => {
+        routeState.query = { tab: 'models' }
+        mount(SettingsScreen)
+        await flushPromises()
+
+        expect(routerCalls.replace).not.toHaveBeenCalled()
     })
 
     it('opens a functional Browser panel from the exact settings deep link', () => {
