@@ -6,8 +6,9 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
+import { TabsContent } from 'reka-ui'
 import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
+import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
 import {
     Activity, ChevronDown, CircleCheck, CircleX, ClipboardCopy, Stethoscope, Timer,
 } from '@lucide/vue'
@@ -20,11 +21,11 @@ import { talosDeviceIssues, talosWithTimeout, type TalosDeviceIssue } from '@/li
 import { biometricUnlockAvailable } from '@/services/appLock'
 import { writeTalosClipboardText } from '@/services/clipboard'
 import {
-    TALOS_DOCTOR_SECTIONS,
     splitTalosDoctorRows,
     talosLockDoctorRow,
     talosStorageDoctorRow,
 } from '@/lib/diagnostics/doctorSections'
+import { talosRememberView, talosRememberedView } from '@/lib/navigation/rememberedView'
 import { buildTalosDiagnosticsReport } from '@/lib/diagnostics/diagnosticsReport'
 
 interface DoctorRow {
@@ -67,16 +68,17 @@ const issues = ref<readonly TalosDeviceIssue[]>([])
  * think the screen is only about that. So what stays open is what is
  * actionable — the failures — and everything that passed folds into one row.
  */
-const activeSection = ref<string>('status')
+const activeSection = ref<string>(talosRememberedView('doctor') ?? 'status')
+
+function chooseSection(section: string): void {
+    activeSection.value = section
+    talosRememberView('doctor', section)
+}
 const showPassing = ref(false)
 const copied = ref(false)
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 const copyError = ref<string | null>(null)
 
-const doctorSections = computed(() => TALOS_DOCTOR_SECTIONS.map((section) => ({
-    ...section,
-    label: t(`doctor.sections.${section.id}`),
-})))
 const verdict = computed(() => {
     if (rows.value.length === 0) return { ok: true, message: '' }
     const problems = rows.value.filter((row) => !row.ok).length
@@ -286,23 +288,14 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
             {{ verdict.message }}
         </p>
 
-        <TabsRoot v-if="!scanning" v-model="activeSection" class="flex min-w-0 flex-col gap-3">
-            <!-- Fixed, never scrollable; min-h-11 keeps every target over 48dp. -->
-            <TabsList
-                :aria-label="t('doctor.diagnosticsSections')"
-                class="grid grid-cols-3 gap-1 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-1"
-            >
-                <TabsTrigger
-                    v-for="section in doctorSections"
-                    :key="section.id"
-                    :value="section.id"
-                    :data-doctor-tab="section.id"
-                    class="talos-pressable min-h-11 rounded-lg px-2 text-sm text-[var(--talos-muted)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] data-[state=active]:bg-[var(--talos-active)] data-[state=active]:font-semibold data-[state=active]:text-[var(--talos-text)]"
-                >
-                    {{ section.label }}
-                </TabsTrigger>
-            </TabsList>
-
+        <TalosThemedTabs
+            v-if="!scanning"
+            class="flex min-w-0 flex-col gap-3"
+            surface="doctor"
+            :model-value="activeSection"
+            :aria-label="t('doctor.diagnosticsSections')"
+            @update:model-value="chooseSection"
+        >
             <!-- STATUS -->
             <TabsContent value="status" class="flex flex-col gap-2 outline-none">
                 <ul v-if="split.problems.length" class="flex flex-col gap-2">
@@ -456,7 +449,7 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
 
                 <p class="px-1 font-mono text-2xs text-[var(--talos-muted)]">{{ t('doctor.buildLabel', { build: buildId }) }}</p>
             </TabsContent>
-        </TabsRoot>
+        </TalosThemedTabs>
 
         <p class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]">
             {{ t('doctor.reportPrivacy') }}
