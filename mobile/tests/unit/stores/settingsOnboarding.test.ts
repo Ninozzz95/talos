@@ -165,19 +165,63 @@ describe('tone preference (F3-T4)', () => {
     })
 })
 
-describe('composer drawer preference (F3-T4bis owner #13, defaults per owner #15)', () => {
-    it('defaults ON and garbage falls closed to the default', () => {
-        expect(parseTalosMobileSettings(null).shell.composer_drawer).toBe(true)
-        expect(parseTalosMobileSettings(JSON.stringify({ shell: { composer_drawer: 'yes' } })).shell.composer_drawer).toBe(true)
+/**
+ * The composer was three independent switches — bottom drawer, immersive
+ * collapse, "+" as a dropdown — and owner 2026-08-02: "si influenzano e si
+ * possono accendere combinazioni senza senso". One choice now, and these are
+ * about the part that can go wrong quietly: the people who already had the old
+ * three set.
+ */
+describe('composer shape (one choice where there were three switches)', () => {
+    it('defaults to the drawer, and an unknown shape falls closed to it', () => {
+        expect(parseTalosMobileSettings(null).shell.composer_style).toBe('drawer')
+        expect(parseTalosMobileSettings(JSON.stringify({
+            composer_style_v1: true,
+            shell: { composer_style: 'a-shape-we-never-shipped' },
+        })).shell.composer_style).toBe('drawer')
     })
 
-    it('an explicit OFF choice persists through setShell and hydrate', async () => {
+    it('an explicit choice persists through setShell and hydrate', async () => {
         const store = useSettingsStore()
-        await store.setShell({ composer_drawer: false })
+        await store.setShell({ composer_style: 'compact' })
         __resetSettingsStoreForTests()
         const fresh = useSettingsStore()
         await fresh.hydrate()
-        expect(fresh.state.shell.composer_drawer).toBe(false)
+        expect(fresh.state.shell.composer_style).toBe('compact')
+    })
+
+    it('carries an existing install across from the three booleans', () => {
+        const migrate = (shell: Record<string, unknown>): string => parseTalosMobileSettings(
+            JSON.stringify({ defaults_v3: true, shell }),
+        ).shell.composer_style
+
+        expect(migrate({ composer_drawer: true })).toBe('drawer')
+        expect(migrate({ plus_dropdown: true })).toBe('menu')
+        // The drawer switched OFF is not "no row": it is the CLASSIC row, with
+        // Browse, effort and the Library chip inline. Its own shape.
+        expect(migrate({ composer_drawer: false })).toBe('classic')
+        expect(migrate({ immersive_composer: true })).toBe('compact')
+        // Immersive wins: it is the most visible of the three, so whoever had
+        // it on chose the shape they were looking at.
+        expect(migrate({ immersive_composer: true, plus_dropdown: false, composer_drawer: true }))
+            .toBe('compact')
+    })
+
+    it('reads a PRE-v3 drawer:false as the old broken default, not as a choice', () => {
+        // The defaults_v3 migration already ruled on this value and overwrote
+        // it. Reading the same false as "they wanted the anchored menu" would
+        // invent an intent out of something disowned one block earlier.
+        expect(parseTalosMobileSettings(JSON.stringify({
+            shell: { composer_drawer: false },
+        })).shell.composer_style).toBe('drawer')
+    })
+
+    it('runs once — a later deliberate choice is not re-migrated', () => {
+        expect(parseTalosMobileSettings(JSON.stringify({
+            defaults_v3: true,
+            composer_style_v1: true,
+            shell: { composer_style: 'drawer', plus_dropdown: true },
+        })).shell.composer_style).toBe('drawer')
     })
 })
 
@@ -187,7 +231,7 @@ describe('defaults v3 (owner #15)', () => {
     it('fresh installs get immersive+drawer+compact+complex', () => {
         const parsed = parseTalosMobileSettings(null)
         expect(parsed.shell.immersive_header).toBe(true)
-        expect(parsed.shell.composer_drawer).toBe(true)
+        expect(parsed.shell.composer_style).toBe('drawer')
         expect(parsed.motion_v6.mode).toBe('complex')
     })
 
@@ -198,7 +242,8 @@ describe('defaults v3 (owner #15)', () => {
             motion_v6: null,
         }))
         expect(parsed.shell.immersive_header).toBe(true)
-        expect(parsed.shell.composer_drawer).toBe(true)
+        // Pre-v3: the booleans were the old defaults, so the shape is the default too.
+        expect(parsed.shell.composer_style).toBe('drawer')
     })
 
     it('post-v3 explicit choices stick', () => {
@@ -208,7 +253,8 @@ describe('defaults v3 (owner #15)', () => {
             chat_layout: { bubble_scale: 'expanded' },
         }))
         expect(parsed.shell.immersive_header).toBe(false)
-        expect(parsed.shell.composer_drawer).toBe(false)
+        // Post-v3 the drawer:false WAS a choice: the classic inline row.
+        expect(parsed.shell.composer_style).toBe('classic')
         expect(parsed.chat_layout.bubble_scale).toBe('expanded')
     })
 })

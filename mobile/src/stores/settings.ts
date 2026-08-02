@@ -12,6 +12,12 @@ import { Preferences } from '@capacitor/preferences'
 import type { TalosSearchSourceId } from '@/lib/search/searchSources'
 import type { TalosLibrarySort } from '@/lib/libraryGrouping'
 import { TALOS_DEFAULT_CHAT_LAYOUT, sanitizeTalosChatLayout } from '@/lib/talosChatLayout'
+import {
+    TALOS_DEFAULT_COMPOSER_STYLE,
+    talosComposerStyleExists,
+    talosComposerStyleFromLegacy,
+    type TalosComposerStyle,
+} from '@/lib/composerStyle'
 
 /** Owner 2026-07-25: "di default large font size e small chat font size". */
 const TALOS_MOBILE_DEFAULT_BUBBLE_SCALE = 'compact' as const
@@ -103,18 +109,12 @@ export const TALOS_DEFAULT_COMPOSER_DEFAULTS: TalosComposerDefaults = Object.fre
 
 // Mobile-first shell preferences (design-lead innovation; desktop adoption via
 // backport ledger). immersive_header: ChatGPT-style floating chrome over a top
-// fade instead of the solid header bar. composer_drawer (F3-T4bis, owner #13):
-// Claude-style minimal composer bar (+ / model chip / mic) with the tool
-// controls organized into a bottom drawer.
+// fade instead of the solid header bar. The composer used to have three
+// switches here; it has one named shape now — see lib/composerStyle.
 export interface TalosMobileShellPreferences {
     immersive_header: boolean
-    composer_drawer: boolean
-    /** Owner 2026-07-24 (ChatGPT-style): compact single-line composer that
-     *  expands (shows model+effort) on focus. Additive to the other modes. */
-    immersive_composer: boolean
-    /** Owner 2026-07-24: the "+" opens an anchored DROPDOWN (ChatGPT-style)
-     *  instead of the bottom drawer. Same actions, different surface. */
-    plus_dropdown: boolean
+    /** One choice where there were three switches — see TalosComposerStyle. */
+    composer_style: TalosComposerStyle
     /** Owner 2026-07-24: the Android launcher icon follows the active theme
      *  preset. Opt-in — a restart is required to apply, so switching prompts
      *  the user (restart now / on next close). */
@@ -171,9 +171,7 @@ export interface TalosMobileShellPreferences {
 // drawer ARE the default mobile experience.
 const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     immersive_header: true,
-    composer_drawer: true,
-    immersive_composer: false,
-    plus_dropdown: false,
+    composer_style: TALOS_DEFAULT_COMPOSER_STYLE,
     launcher_icon_follows_theme: false,
     library_context_enabled: false,
     library_context_policy: null,
@@ -204,15 +202,9 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         immersive_header: typeof record.immersive_header === 'boolean'
             ? record.immersive_header
             : DEFAULT_SHELL_PREFERENCES.immersive_header,
-        composer_drawer: typeof record.composer_drawer === 'boolean'
-            ? record.composer_drawer
-            : DEFAULT_SHELL_PREFERENCES.composer_drawer,
-        immersive_composer: typeof record.immersive_composer === 'boolean'
-            ? record.immersive_composer
-            : DEFAULT_SHELL_PREFERENCES.immersive_composer,
-        plus_dropdown: typeof record.plus_dropdown === 'boolean'
-            ? record.plus_dropdown
-            : DEFAULT_SHELL_PREFERENCES.plus_dropdown,
+        composer_style: talosComposerStyleExists(record.composer_style)
+            ? record.composer_style
+            : DEFAULT_SHELL_PREFERENCES.composer_style,
         launcher_icon_follows_theme: typeof record.launcher_icon_follows_theme === 'boolean'
             ? record.launcher_icon_follows_theme
             : DEFAULT_SHELL_PREFERENCES.launcher_icon_follows_theme,
@@ -542,9 +534,17 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
     // Post-migration persists carry `defaults_v3`; explicit choices stick.
     const motionParsed = parseMotionPreferences(value.motion_v6 ?? createMobileDefaultMotionPreferences())
     const shellParsed = parseShellPreferences(value.shell)
+    /**
+     * The three composer switches became one choice (see TalosComposerStyle).
+     * Anyone who had already set them has three booleans persisted, and a
+     * missing `composer_style` would otherwise silently reset them to the
+     * default — the migration reads their combination and names it.
+     *
+     * Runs ONCE, gated on `composer_style_v1` like every migration above it: a
+     * later deliberate change sticks, because by then the flag is true.
+     */
     if (value.defaults_v3 !== true) {
         shellParsed.immersive_header = true
-        shellParsed.composer_drawer = true
         // Re-review 2026-07-25: bubble_scale is now the user-facing CHAT TEXT SIZE.
         // Forcing it here shipped 'Small' pre-selected and overwrote an explicit choice.
         if (motionParsed.mode === 'off') motionParsed.mode = 'complex'
@@ -582,6 +582,29 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         if (layoutRecord.bubble_scale === undefined || layoutRecord.bubble_scale === 'balanced') {
             chatLayout.bubble_scale = TALOS_MOBILE_DEFAULT_BUBBLE_SCALE
         }
+    }
+    /**
+     * The three composer switches became one choice (see lib/composerStyle).
+     * Anyone who had already set them has three booleans persisted, and a
+     * missing `composer_style` would otherwise silently reset them.
+     *
+     * AFTER the defaults_v3 block, and gated on it, because that migration
+     * already ruled that a pre-v3 `composer_drawer: false` was the broken old
+     * default rather than a choice — it overwrites it back to true. Reading
+     * that same false as "this person wanted the anchored menu" would be
+     * inventing an intent out of a value the migration above just disowned.
+     *
+     * Runs ONCE, like every migration around it: a later deliberate change
+     * sticks, because by then `composer_style_v1` is true.
+     */
+    if (value.composer_style_v1 !== true) {
+        shellParsed.composer_style = value.defaults_v3 === true
+            ? talosComposerStyleFromLegacy(
+                (typeof value.shell === 'object' && value.shell !== null)
+                    ? value.shell as Record<string, unknown>
+                    : {},
+            )
+            : TALOS_DEFAULT_COMPOSER_STYLE
     }
     return {
         shell: shellParsed,
@@ -668,6 +691,7 @@ export function useSettingsStore(): SettingsStore {
                 defaults_v3: true,
                 library_defaults_v1: true,
                 type_defaults_v1: true,
+                composer_style_v1: true,
                 shell: next.shell,
                 onboarding: next.onboarding,
                 security: next.security,

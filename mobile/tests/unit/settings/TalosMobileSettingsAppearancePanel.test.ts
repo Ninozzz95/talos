@@ -12,7 +12,11 @@ const stores = vi.hoisted(() => ({
     },
     settings: {
         state: {
-            shell: { immersive_header: false },
+            shell: {
+                immersive_header: false,
+                launcher_icon_follows_theme: false,
+                composer_style: 'drawer',
+            },
             chat_layout: {
                 message_style: 'sections',
                 bubble_scale: 'balanced',
@@ -151,6 +155,76 @@ describe('TalosMobileSettingsAppearancePanel', () => {
         // the question is which one is showing — not which one is present.
         expect(second.find('[data-appearance-section="design"]').attributes('data-state')).not.toBe('active')
         second.unmount()
+    })
+
+    /**
+     * Owner 2026-08-02: the composer was three switches that influenced one
+     * another, and could be set to combinations that meant nothing. One choice
+     * now — and the point of these is that the four shapes stay REACHABLE, not
+     * that the picker exists.
+     */
+    it('offers every composer shape and stores the chosen one', () => {
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true, TalosMobileVoiceSettings: true } },
+        })
+        const picker = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
+            .find((select) => select.props('ariaLabel') === 'Composer shape')
+
+        expect((picker?.props('items') as Array<{ value: string }>).map((item) => item.value))
+            .toEqual(['classic', 'drawer', 'menu', 'compact'])
+
+        picker?.vm.$emit('update:modelValue', 'compact')
+        expect(stores.settings.setShell).toHaveBeenCalledWith({ composer_style: 'compact' })
+        wrapper.unmount()
+    })
+
+    it('refuses a shape it never offered, instead of storing it', () => {
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true, TalosMobileVoiceSettings: true } },
+        })
+        wrapper.findAllComponents({ name: 'TalosThemedSelect' })
+            .find((select) => select.props('ariaLabel') === 'Composer shape')
+            ?.vm.$emit('update:modelValue', 'a-shape-we-never-shipped')
+
+        expect(stores.settings.setShell).not.toHaveBeenCalled()
+        wrapper.unmount()
+    })
+
+    it('keeps the everyday settings in the open and folds the rest away, still closed', () => {
+        // Owner 2026-08-02: twelve settings on one plane. Folded, not deleted —
+        // a disclosure that starts open is the same wall with an extra click.
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true, TalosMobileVoiceSettings: true } },
+        })
+        const advanced = wrapper.get('[data-testid="talos-appearance-advanced"]')
+        expect(advanced.attributes('open')).toBeUndefined()
+
+        const inside = (label: string): boolean => advanced.findAllComponents({ name: 'TalosThemedSelect' })
+            .some((select) => select.props('ariaLabel') === label)
+        expect(inside('Chat message style')).toBe(true)
+        expect(inside('Answer animation')).toBe(true)
+        // …and the ones people actually come here for are not behind it.
+        expect(inside('Theme preset')).toBe(false)
+        expect(inside('Composer shape')).toBe(false)
+        wrapper.unmount()
+    })
+
+    it('has no hand-drawn switch left in this panel', () => {
+        // "One switch app-wide" was claimed on 2026-08-02 while five of them
+        // were still drawn by hand right here. A claim worth re-checking rather
+        // than repeating.
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true, TalosMobileVoiceSettings: true } },
+        })
+        const switches = wrapper.findAll('[role="switch"]')
+        expect(switches.length).toBeGreaterThan(0)
+        expect(switches.every((control) => control.attributes('data-testid') === 'talos-themed-switch'))
+            .toBe(true)
+        wrapper.unmount()
     })
 
     // Product review 2026-07-25: the "Chat composer" select and the 34 Interface

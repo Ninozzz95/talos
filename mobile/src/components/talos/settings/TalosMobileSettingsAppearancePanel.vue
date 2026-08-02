@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { RotateCcw } from '@lucide/vue'
+import { RotateCcw, SlidersHorizontal } from '@lucide/vue'
 import { TabsContent } from 'reka-ui'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
@@ -26,6 +26,7 @@ import {
 } from '@/motion-v6/contracts'
 import { TALOS_FONT_SCALE_OPTIONS, type TalosFontScale } from '@/lib/talosFontScale'
 import { useSettingsStore, type TalosMotionPreferencePatch } from '@/stores/settings'
+import { TALOS_COMPOSER_STYLES, talosComposerStyleExists } from '@/lib/composerStyle'
 import { useThemeStore } from '@/stores/theme'
 import { talosRememberView, talosRememberedView } from '@/lib/navigation/rememberedView'
 
@@ -73,6 +74,20 @@ const windowPresentationItems = computed(() => TALOS_MOBILE_WINDOW_PRESENTATION_
     value: option.value,
     label: t(`appearance.windowModes.${option.value}`),
 })))
+
+const composerStyleItems = computed(() => TALOS_COMPOSER_STYLES.map((style) => ({
+    value: style,
+    label: t(`appearance.composerShapes.${style}`),
+})))
+
+/**
+ * Narrowed by the store's own guard rather than cast. A select can only emit
+ * what it was given, right up until someone edits the item list and not this.
+ */
+function setComposerStyle(value: string): void {
+    if (!talosComposerStyleExists(value)) return
+    void settings.setShell({ composer_style: value })
+}
 
 const activePreset = computed(() => TALOS_THEME_PRESETS.find((preset) => preset.id === theme.state.theme) ?? TALOS_THEME_PRESETS[0])
 const activePresetLabel = computed(() => t(`appearance.themeLabels.${activePreset.value.id}`))
@@ -195,6 +210,10 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
             data-appearance-section="design"
             class="talos-motion-tab-panel pt-4 outline-none"
         >
+            <!-- Owner 2026-08-02: twelve settings on one plane. The five people
+                 actually come here for stay in the open; the rest go behind a
+                 disclosure — the same `<details>` the Model Lab already uses for
+                 its manual models, so this is not a sixth way of hiding things. -->
             <div class="grid gap-4 sm:grid-cols-2">
                 <label class="block">
                     <span :class="selectLabelClass">{{ t('appearance.themePreset') }}</span>
@@ -216,103 +235,6 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
                         @update:model-value="changeMode"
                     />
                 </label>
-                <label class="block">
-                    <span :class="selectLabelClass">{{ t('appearance.chatMessageStyle') }}</span>
-                    <TalosThemedSelect
-                        class="mt-2"
-                        :model-value="settings.state.chat_layout.message_style"
-                        :items="messageStyleItems"
-                        :aria-label="t('appearance.chatMessageStyle')"
-                        @update:model-value="setChatLayout('message_style', $event)"
-                    />
-                </label>
-                <label class="flex items-center justify-between gap-3 py-1">
-                    <span>
-                        <span :class="selectLabelClass">{{ t('appearance.immersiveHeader') }}</span>
-                        <span class="block text-xs text-[var(--talos-muted)]">{{ t('appearance.immersiveHeaderBody') }}</span>
-                    </span>
-                    <button
-                        type="button"
-                        role="switch"
-                        :aria-checked="settings.state.shell.immersive_header"
-                        :aria-label="t('appearance.immersiveHeader')"
-                        class="talos-pressable relative h-6 w-11 shrink-0 rounded-full transition-colors"
-                        :class="settings.state.shell.immersive_header ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
-                        @click="settings.setShell({ immersive_header: !settings.state.shell.immersive_header })"
-                    ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.immersive_header ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
-                </label>
-                <label class="flex items-center justify-between gap-3 py-1">
-                    <span>
-                        <span :class="selectLabelClass">{{ t('appearance.composerDrawer') }}</span>
-                        <span class="block text-xs text-[var(--talos-muted)]">{{ t('appearance.composerDrawerBody') }}</span>
-                    </span>
-                    <button
-                        type="button"
-                        role="switch"
-                        :aria-checked="settings.state.shell.composer_drawer"
-                        :aria-label="t('appearance.composerDrawer')"
-                        class="talos-pressable relative h-6 w-11 shrink-0 rounded-full transition-colors"
-                        :class="settings.state.shell.composer_drawer ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
-                        @click="settings.setShell({ composer_drawer: !settings.state.shell.composer_drawer })"
-                    ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.composer_drawer ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
-                </label>
-                <label class="flex items-center justify-between gap-3 py-1">
-                    <span>
-                        <span :class="selectLabelClass">{{ t('appearance.immersiveComposer') }}</span>
-                        <span class="block text-xs text-[var(--talos-muted)]">{{ t('appearance.immersiveComposerBody') }}</span>
-                    </span>
-                    <button
-                        type="button"
-                        role="switch"
-                        :aria-checked="settings.state.shell.immersive_composer"
-                        :aria-label="t('appearance.immersiveComposer')"
-                        class="talos-pressable relative h-6 w-11 shrink-0 rounded-full transition-colors"
-                        :class="settings.state.shell.immersive_composer ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
-                        @click="settings.setShell({ immersive_composer: !settings.state.shell.immersive_composer })"
-                    ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.immersive_composer ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
-                </label>
-                <label class="flex items-center justify-between gap-3 py-1">
-                    <span>
-                        <span :class="selectLabelClass">{{ t('appearance.plusDropdown') }}</span>
-                        <span class="block text-xs text-[var(--talos-muted)]">{{ t('appearance.plusDropdownBody') }}</span>
-                    </span>
-                    <button
-                        type="button"
-                        role="switch"
-                        :aria-checked="settings.state.shell.plus_dropdown"
-                        :aria-label="t('appearance.plusDropdownAria')"
-                        class="talos-pressable relative h-6 w-11 shrink-0 rounded-full transition-colors"
-                        :class="settings.state.shell.plus_dropdown ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
-                        @click="settings.setShell({ plus_dropdown: !settings.state.shell.plus_dropdown })"
-                    ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.plus_dropdown ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
-                </label>
-                <label class="flex items-center justify-between gap-3 py-1">
-                    <span>
-                        <span :class="selectLabelClass">{{ t('appearance.launcherFollowsTheme') }}</span>
-                        <span class="block text-xs text-[var(--talos-muted)]">{{ t('appearance.launcherFollowsThemeBody') }}</span>
-                    </span>
-                    <button
-                        type="button"
-                        role="switch"
-                        :aria-checked="settings.state.shell.launcher_icon_follows_theme"
-                        :aria-label="t('appearance.launcherFollowsTheme')"
-                        class="talos-pressable relative h-6 w-11 shrink-0 rounded-full transition-colors"
-                        :class="settings.state.shell.launcher_icon_follows_theme ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
-                        @click="settings.setShell({ launcher_icon_follows_theme: !settings.state.shell.launcher_icon_follows_theme })"
-                    ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.launcher_icon_follows_theme ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
-                </label>
-                <label class="block">
-                    <span :class="selectLabelClass">{{ t('appearance.answerAnimation') }}</span>
-                    <TalosThemedSelect
-                        class="mt-1"
-                        data-testid="talos-streaming-animation-select"
-                        :model-value="settings.state.shell.streaming_animation"
-                        :items="streamingAnimations"
-                        :aria-label="t('appearance.answerAnimation')"
-                        @update:model-value="settings.setShell({ streaming_animation: $event as 'typewriter' | 'fade' })"
-                    />
-                </label>
-
                 <label class="block">
                     <span :class="selectLabelClass">{{ t('appearance.fontSize') }}</span>
                     <TalosThemedSelect
@@ -338,17 +260,25 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
                         @update:model-value="setChatLayout('bubble_scale', $event)"
                     />
                 </label>
-                <label class="block">
-                    <span :class="selectLabelClass">{{ t('appearance.mobileToolWindows') }}</span>
+                <!-- One choice where there were three switches. They influenced
+                     one another and could be set to combinations that meant
+                     nothing — with the drawer off and the dropdown off, the "+"
+                     announced itself as expanded and opened nothing at all. -->
+                <label class="block sm:col-span-2">
+                    <span :class="selectLabelClass">{{ t('appearance.composerShape') }}</span>
                     <TalosThemedSelect
                         class="mt-2"
-                        :model-value="settings.state.chat_layout.mobile_window_presentation"
-                        :items="windowPresentationItems"
-                        :aria-label="t('appearance.mobileToolWindowsAria')"
-                        @update:model-value="setChatLayout('mobile_window_presentation', $event)"
+                        data-testid="talos-composer-style-select"
+                        :model-value="settings.state.shell.composer_style"
+                        :items="composerStyleItems"
+                        :aria-label="t('appearance.composerShape')"
+                        @update:model-value="setComposerStyle"
                     />
+                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">
+                        {{ t(`appearance.composerShapes.${settings.state.shell.composer_style}Body`) }}
+                    </span>
                 </label>
-                <div class="border-t border-[var(--talos-border)] pt-3 text-xs leading-5 text-[var(--talos-muted)]">
+                <div class="border-t border-[var(--talos-border)] pt-3 text-xs leading-5 text-[var(--talos-muted)] sm:col-span-2">
                     <div class="flex items-center gap-2">
                         <span class="h-4 w-4 rounded-sm border border-[var(--talos-border)]" :style="{ background: activePreset.preview.background }" />
                         <span class="h-4 w-4 rounded-sm" :style="{ background: activePreset.preview.accent }" />
@@ -358,6 +288,57 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
                     <p class="mt-2">{{ activePresetDescription }}</p>
                 </div>
             </div>
+
+            <details data-testid="talos-appearance-advanced" class="mt-4 rounded-md border border-[var(--talos-border)] bg-[var(--talos-background)] p-3">
+                <summary class="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold text-[var(--talos-text)]">
+                    <SlidersHorizontal class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('appearance.advanced') }}
+                </summary>
+                <div class="mt-3 grid gap-4 sm:grid-cols-2">
+                    <label class="block">
+                        <span :class="selectLabelClass">{{ t('appearance.chatMessageStyle') }}</span>
+                        <TalosThemedSelect
+                            class="mt-2"
+                            :model-value="settings.state.chat_layout.message_style"
+                            :items="messageStyleItems"
+                            :aria-label="t('appearance.chatMessageStyle')"
+                            @update:model-value="setChatLayout('message_style', $event)"
+                        />
+                    </label>
+                    <label class="block">
+                        <span :class="selectLabelClass">{{ t('appearance.answerAnimation') }}</span>
+                        <TalosThemedSelect
+                            class="mt-2"
+                            data-testid="talos-streaming-animation-select"
+                            :model-value="settings.state.shell.streaming_animation"
+                            :items="streamingAnimations"
+                            :aria-label="t('appearance.answerAnimation')"
+                            @update:model-value="settings.setShell({ streaming_animation: $event as 'typewriter' | 'fade' })"
+                        />
+                    </label>
+                    <label class="block sm:col-span-2">
+                        <span :class="selectLabelClass">{{ t('appearance.mobileToolWindows') }}</span>
+                        <TalosThemedSelect
+                            class="mt-2"
+                            :model-value="settings.state.chat_layout.mobile_window_presentation"
+                            :items="windowPresentationItems"
+                            :aria-label="t('appearance.mobileToolWindowsAria')"
+                            @update:model-value="setChatLayout('mobile_window_presentation', $event)"
+                        />
+                    </label>
+                    <!-- The last two hand-drawn switches in this panel. The motion
+                         tab moved to the shared one on 2026-08-02; these were
+                         missed, which is exactly why "one switch app-wide" is a
+                         claim worth re-checking rather than repeating. -->
+                    <div :class="switchRowClass" class="sm:col-span-2">
+                        <span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.immersiveHeader') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.immersiveHeaderBody') }}</span></span>
+                        <TalosThemedSwitch class="mt-1" :aria-label="t('appearance.immersiveHeader')" :model-value="settings.state.shell.immersive_header" @update:model-value="settings.setShell({ immersive_header: $event })" />
+                    </div>
+                    <div :class="switchRowClass" class="sm:col-span-2">
+                        <span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.launcherFollowsTheme') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.launcherFollowsThemeBody') }}</span></span>
+                        <TalosThemedSwitch class="mt-1" :aria-label="t('appearance.launcherFollowsTheme')" :model-value="settings.state.shell.launcher_icon_follows_theme" @update:model-value="settings.setShell({ launcher_icon_follows_theme: $event })" />
+                    </div>
+                </div>
+            </details>
         </TabsContent>
 
         <TabsContent

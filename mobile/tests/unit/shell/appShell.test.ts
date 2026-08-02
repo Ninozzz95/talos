@@ -158,7 +158,7 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         window.localStorage.setItem('CapacitorStorage.talos.mobile.settings', JSON.stringify({
             defaults_v3: true,
             presentation_v2: true,
-            shell: { immersive_header: false, composer_drawer: false },
+            shell: { immersive_header: false, composer_style: 'classic' },
             onboarding: { intro_version: 2, intro_outcome: 'completed', setup_dismissed: true },
         }))
     })
@@ -206,7 +206,7 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
             presentation_v2: true,
             shell: {
                 immersive_header: false,
-                composer_drawer: false,
+                composer_style: 'classic',
                 library_context_enabled: true,
                 library_context_policy: {
                     schema_version: 1,
@@ -288,7 +288,7 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         window.localStorage.setItem('CapacitorStorage.talos.mobile.settings', JSON.stringify({
             defaults_v3: true,
             presentation_v2: true,
-            shell: { immersive_header: false, composer_drawer: true, immersive_composer: true },
+            shell: { immersive_header: false, composer_style: 'compact' },
             motion_v6: motion,
             onboarding: { intro_version: 2, intro_outcome: 'completed', setup_dismissed: true },
         }))
