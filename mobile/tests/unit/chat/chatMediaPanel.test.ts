@@ -139,9 +139,12 @@ describe('per-chat media panel', () => {
             .toEqual(expect.arrayContaining(['PDF', 'MD', 'TXT']))
         expect(collection.find('[data-talos-library-icon-kind="pdf"]').exists()).toBe(true)
 
-        const all = wrapper.findAll('button').find((button) => button.text() === 'All')
+        // Narrowing the list is a radiogroup, not a row of pressed buttons:
+        // `aria-pressed` on several at once is legal, so it could never say
+        // that choosing one un-chooses the rest.
+        const all = wrapper.findAll('[role="radio"]').find((button) => button.text() === 'All')
         expect(all).toBeDefined()
-        expect(all!.attributes('aria-pressed')).toBe('true')
+        expect(all!.attributes('aria-checked')).toBe('true')
         expect(all!.classes()).toContain('min-h-12')
         expect(all!.classes()).toContain('min-w-12')
         expect(all!.classes()).toContain('text-sm')

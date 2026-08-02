@@ -43,6 +43,7 @@ import {
     type TalosLibrarySurfaceTab,
 } from '@/lib/vaultLibrary'
 import { useTalosMobileToasts } from '@/stores/toasts'
+import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 import type { TalosLibraryContextMode } from '@/lib/chat/libraryPolicy'
 
 const controller = useChatController()
@@ -101,6 +102,24 @@ const sortOptions = computed<Array<{ value: TalosLibrarySort; label: string }>>(
 ])
 const query = ref('')
 const menuOpen = ref(false)
+const typeFilterOptions = computed(() => typeTabs.value.map((tab) => ({
+    value: tab.value,
+    label: tab.label,
+    testId: `talos-library-type-${tab.value}`,
+})))
+
+/** Appearance stays here; the radiogroup grammar belongs to the primitive. */
+function typeFilterOptionClass(selected: boolean): string {
+    return selected
+        ? 'talos-pressable min-h-12 min-w-12 rounded-full px-3 text-sm transition-colors bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))]'
+        : 'talos-pressable min-h-12 min-w-12 rounded-full px-3 text-sm transition-colors border border-[var(--talos-border)] text-[var(--talos-muted)]'
+}
+
+function chooseTypeFilter(value: string): void {
+    const found = typeTabs.value.find((tab) => tab.value === value)
+    if (found) typeFilter.value = found.value
+}
+
 const typeTabs = computed<Array<{ value: typeof typeFilter.value; label: string }>>(() => [
     { value: 'all', label: t('library.all') },
     { value: 'images', label: t('library.images') },
@@ -778,9 +797,18 @@ onMounted(async () => {
             <input v-model="query" type="search" inputmode="search" data-testid="talos-library-search" :placeholder="t('library.searchLibrary')" :aria-label="t('library.searchLibrary')" class="min-h-12 w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]" />
         </label>
 
-        <div class="mb-4 flex gap-1" role="group" :aria-label="t('library.filterByType')">
-            <button v-for="tab in typeTabs" :key="tab.value" type="button" :aria-pressed="typeFilter === tab.value" :data-testid="`talos-library-type-${tab.value}`" class="talos-pressable min-h-12 min-w-12 rounded-full px-3 text-sm transition-colors" :class="typeFilter === tab.value ? 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))]' : 'border border-[var(--talos-border)] text-[var(--talos-muted)]'" @click="typeFilter = tab.value">{{ tab.label }}</button>
-        </div>
+        <!-- Narrowing a list without leaving it: a radiogroup, not a row of
+             independent toggles. It used to be `role="group"` plus
+             `aria-pressed`, which announces "button, pressed" and never "1 of 4". -->
+        <TalosThemedFilter
+            class="mb-4"
+            group-class="flex gap-1"
+            :model-value="typeFilter"
+            :options="typeFilterOptions"
+            :group-label="t('library.filterByType')"
+            :option-class="typeFilterOptionClass"
+            @update:model-value="chooseTypeFilter"
+        />
 
         <div v-if="attachments.vaultError.value" role="alert" class="mb-3 flex items-center gap-2 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
             <AlertTriangle class="size-4 shrink-0" aria-hidden="true" />

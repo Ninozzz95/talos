@@ -5,6 +5,7 @@ import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import {
     mobileEffortLadderFromLevels,
 } from '@/lib/mobileEffort'
+import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 
 const props = defineProps<{
     effortLevels: string[]
@@ -26,6 +27,28 @@ function effortLabel(level: string): string {
     return t(key)
 }
 
+const effortOptions = computed(() => effortLadder.value.map((level) => ({
+    value: level,
+    label: effortLabel(level),
+    // The row already carried this hook and the tests point at it; the
+    // primitive owns the button now, so it has to carry it too.
+    testId: 'talos-mobile-effort-level',
+})))
+
+/**
+ * Appearance stays here; the radiogroup grammar belongs to the primitive. The
+ * selected skin comes from `aria-checked` in the scoped stylesheet below, so
+ * this does not need to know which one is chosen.
+ */
+function effortOptionClass(): string {
+    return `talos-mobile-effort-level min-h-11 rounded-md border px-3 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))]`
+}
+
+function chooseEffort(value: string): void {
+    const found = effortLadder.value.find((level) => level === value)
+    if (found) emit('selectEffort', found)
+}
+
 function onKeydown(event: KeyboardEvent): void {
     if (event.key !== 'Escape') return
     event.preventDefault()
@@ -42,25 +65,19 @@ function onKeydown(event: KeyboardEvent): void {
         <div class="text-2xs font-semibold uppercase text-[var(--talos-muted,var(--muted-foreground))]">
             {{ $t('chat.reasoningEffort') }}
         </div>
-        <div
-            class="flex flex-wrap gap-1.5"
-            role="group"
-            :aria-label="$t('chat.reasoningEffortLevels')"
+        <!-- One effort among several, so a radiogroup. As `role="group"` plus
+             `aria-pressed` it was eight independent tab stops standing between
+             a keyboard user and the switch underneath. -->
+        <TalosThemedFilter
+            group-class="flex flex-wrap gap-1.5"
+            :model-value="selectedEffort"
+            :options="effortOptions"
+            :group-label="$t('chat.reasoningEffortLevels')"
+            :option-class="effortOptionClass"
+            @update:model-value="chooseEffort"
         >
-            <button
-                v-for="level in effortLadder"
-                :key="level"
-                type="button"
-                data-testid="talos-mobile-effort-level"
-                :data-effort-level="level"
-                :aria-pressed="level === selectedEffort"
-                class="talos-mobile-effort-level min-h-11 rounded-md border px-3 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))]"
-                :data-selected="level === selectedEffort ? 'true' : 'false'"
-                @click="emit('selectEffort', level)"
-            >
-                {{ effortLabel(level) }}
-            </button>
-        </div>
+            <template #option="{ option }">{{ option.label }}</template>
+        </TalosThemedFilter>
 
         <label
             v-if="supportsThinking"
@@ -94,13 +111,21 @@ function onKeydown(event: KeyboardEvent): void {
 </template>
 
 <style scoped>
-.talos-mobile-effort-level {
+/*
+ * `:deep` because the buttons are rendered by the shared filter now, and a
+ * scoped rule only reaches a child component's ROOT element. Without it these
+ * two rules would quietly stop applying and the pills would lose their skin.
+ *
+ * Selected is read from `aria-checked`, not from a parallel data attribute:
+ * the look and the announcement then cannot disagree with each other.
+ */
+:deep(.talos-mobile-effort-level) {
     border-color: var(--talos-border, var(--border));
     background: var(--talos-panel, var(--card));
     color: var(--talos-muted, var(--muted-foreground));
 }
 
-.talos-mobile-effort-level[data-selected="true"] {
+:deep(.talos-mobile-effort-level[aria-checked="true"]) {
     border-color: var(--talos-accent-border, var(--border));
     background: var(--talos-accent-soft, var(--accent));
     color: var(--talos-accent-text, var(--accent-foreground));

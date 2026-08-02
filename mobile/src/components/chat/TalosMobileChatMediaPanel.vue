@@ -12,6 +12,7 @@ import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialo
 import { Button } from '@/components/ui/button'
 import { useTalosSourceCardIcons } from '@/composables/useTalosSourceCardIcons'
 import TalosThemedSelect, { type TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
+import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { useTalosVaultThumbnails } from '@/composables/useTalosVaultThumbnails'
@@ -109,6 +110,19 @@ const deleteBusy = ref(false)
 const toasts = useTalosMobileToasts()
 const { t, locale } = useTalosI18n()
 const tab = ref<TalosLibrarySurfaceTab>('all')
+
+/** Appearance stays here; the radiogroup grammar belongs to the primitive. */
+function mediaFilterOptionClass(selected: boolean): string {
+    const base = 'talos-pressable min-h-12 min-w-12 shrink-0 rounded-full px-3 text-sm transition-colors'
+    return selected
+        ? `${base} bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,#000)]`
+        : `${base} border border-[var(--talos-border)] text-[var(--talos-muted)]`
+}
+
+function chooseTab(value: string): void {
+    const found = TABS.value.find((entry) => entry.value === value)
+    if (found) tab.value = found.value
+}
 const contextModeSaving = ref(false)
 const contextBusy = reactive(new Set<string>())
 /**
@@ -655,20 +669,18 @@ const mediaScope = computed(() => {
                 </p>
             </section>
 
-            <div v-if="mine.length" role="group" :aria-label="$t('library.filterByType')" class="flex gap-1 overflow-x-auto px-3 pt-2">
-                <button
-                    v-for="entry in TABS"
-                    :key="entry.value"
-                    type="button"
-                    :aria-label="entry.ariaLabel"
-                    :aria-pressed="tab === entry.value"
-                    class="talos-pressable min-h-12 min-w-12 shrink-0 rounded-full px-3 text-sm transition-colors"
-                    :class="tab === entry.value
-                        ? 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,#000)]'
-                        : 'border border-[var(--talos-border)] text-[var(--talos-muted)]'"
-                    @click="tab = entry.value"
-                >{{ entry.label }}</button>
-            </div>
+            <!-- Narrowing what is listed, without leaving the panel: a
+                 radiogroup. It was `role="group"` plus `aria-pressed`, which
+                 announces independent toggles rather than one choice. -->
+            <TalosThemedFilter
+                v-if="mine.length"
+                group-class="flex gap-1 overflow-x-auto px-3 pt-2"
+                :model-value="tab"
+                :options="TABS"
+                :group-label="$t('library.filterByType')"
+                :option-class="mediaFilterOptionClass"
+                @update:model-value="chooseTab"
+            />
 
             <p
                 v-if="failure"
