@@ -27,3 +27,6 @@ docs/architecture/*plan*.md
 docs/architecture/*roadmap*.md
 final/
 .worktrees/
+
+# scratch temporanei degli agenti di ricerca
+mobile/.tmp-research/
