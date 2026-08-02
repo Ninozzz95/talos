@@ -672,6 +672,17 @@ export interface ChatControllerDeps {
                 readonly source?: 'tavily' | 'brave' | 'searxng' | 'custom' | null
                 readonly endpoint?: string | null
             }
+            /**
+             * R7: the two models of a research run, as `provider:modelId`.
+             *
+             * Null on either side is a standing instruction, not a blank: the
+             * writer follows the composer, the checker is picked automatically
+             * with the device first and never the writer.
+             */
+            readonly research_models: {
+                readonly author: string | null
+                readonly judge: string | null
+            }
         }
         hydrate(): Promise<void>
         setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
@@ -3811,6 +3822,33 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      * If this returns nothing but the author, the claims go out marked "not
      * verified", with the reason. That is the intended ending, not a failure.
      */
+    /**
+     * Turns a stored `provider:modelId` into something callable, or null.
+     *
+     * Null means "the model that was chosen is not here any more" — uninstalled,
+     * or on a provider that lost its key. What the caller does about that
+     * differs by role and is decided at the call site, because the two answers
+     * are genuinely different: a missing WRITER must stop the run, since
+     * quietly using another model would file a report under a name nobody
+     * picked; a missing JUDGE falls back to the automatic choice, and the
+     * report names whoever actually ruled.
+     */
+    async function researchModelChoice(stored: string | null): Promise<{
+        provider: TalosMobileProviderId
+        providerModel: TalosMobileProviderModel
+    } | null> {
+        if (!stored) return null
+        const cut = stored.indexOf(':')
+        if (cut < 0) return null
+        const provider = stored.slice(0, cut) as TalosMobileProviderId
+        const modelId = stored.slice(cut + 1)
+        if (!PROVIDER_IDS.includes(provider)) return null
+
+        if (catalogs[provider].models.length === 0) await refreshProvider(provider).catch(() => null)
+        const providerModel = catalogs[provider].models.find((model) => model.id === modelId)
+        return providerModel ? { provider, providerModel } : null
+    }
+
     async function researchJudgeCandidates(authorProvider: TalosMobileProviderId): Promise<readonly {
         id: string
         provider: TalosMobileProviderId
@@ -3922,16 +3960,31 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     // exists to make impossible.
                     if (collections.length === 0) throw new Error('TALOS_RESEARCH_NO_DOSSIERS')
 
-                    const profile = selectedProfile.value
-                    const model = selectedProviderModel.value
-                    if (!profile || !model) throw new Error('TALOS_RESEARCH_NO_MODEL')
+                    /*
+                     * R7 — the two models, and who picked them.
+                     *
+                     * The writer is whatever the user chose for the job; with no
+                     * choice made it follows the composer, because that is what
+                     * a person means by "the model I am using". A choice that
+                     * has since disappeared STOPS the run rather than sliding
+                     * onto something else: a report filed under a model nobody
+                     * picked is a provenance lie, and provenance is the whole
+                     * product here.
+                     */
+                    const chosenAuthor = await researchModelChoice(deps.settings.state.research_models.author)
+                    if (deps.settings.state.research_models.author && !chosenAuthor) {
+                        throw new Error('TALOS_RESEARCH_AUTHOR_UNAVAILABLE')
+                    }
+                    const authorProvider = chosenAuthor?.provider ?? selectedProfile.value?.provider ?? null
+                    const model = chosenAuthor?.providerModel ?? selectedProviderModel.value
+                    if (!authorProvider || !model) throw new Error('TALOS_RESEARCH_NO_MODEL')
 
                     const { prompt, sources } = talosResearchSynthesisPrompt(run.question, collections)
                     const [apiKey, endpoint] = await Promise.all([
-                        deps.getKey(profile.provider),
-                        deps.getEndpoint(profile.provider),
+                        deps.getKey(authorProvider),
+                        deps.getEndpoint(authorProvider),
                     ])
-                    const completion = await providerAdapterFor(profile.provider).complete({
+                    const completion = await providerAdapterFor(authorProvider).complete({
                         model,
                         turns: [{ role: 'user', content: prompt }],
                         system: 'Rispondi solo nel formato richiesto.',
@@ -3972,8 +4025,28 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * failed (arXiv 2604.06996), so a self-issued mark is not a
                      * weaker check — it is a false one.
                      */
-                    const author = { id: `${profile.provider}:${model.id}`, provider: profile.provider, model: model.id }
-                    const chosen = talosResearchPickJudge(author, await researchJudgeCandidates(profile.provider))
+                    const author = { id: `${authorProvider}:${model.id}`, provider: authorProvider, model: model.id }
+                    /*
+                     * The judge the user picked comes first in the queue — but
+                     * it still goes through the same refusal as everyone else,
+                     * so choosing the writer as its own checker cannot happen
+                     * by picking it here either. A choice that no longer exists
+                     * simply falls to the automatic order, and the report names
+                     * whoever actually ruled, so the substitution is visible
+                     * rather than silent.
+                     */
+                    const preferred = await researchModelChoice(deps.settings.state.research_models.judge)
+                    const chosen = talosResearchPickJudge(author, [
+                        ...(preferred
+                            ? [{
+                                id: `${preferred.provider}:${preferred.providerModel.displayName || preferred.providerModel.id}`,
+                                provider: preferred.provider,
+                                model: preferred.providerModel.id,
+                                providerModel: preferred.providerModel,
+                            }]
+                            : []),
+                        ...await researchJudgeCandidates(authorProvider),
+                    ])
                     let judgeTokens = 0
                     let judgeCredentials: { apiKey: string | null, endpoint: string | null } | null = null
 
@@ -4015,8 +4088,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         kind: 'document',
                     }, {
                         sessionId: chat.activeSession.value?.id ?? null,
-                        model: profile.model,
-                        provider: profile.provider,
+                        // The model that ACTUALLY wrote it, which is the chosen
+                        // one when there is a choice — not the composer's, which
+                        // may be a different model entirely.
+                        model: model.id,
+                        provider: authorProvider,
                         toolName: 'deep_research',
                     }).catch(() => null)
 

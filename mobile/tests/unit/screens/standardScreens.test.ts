@@ -16,6 +16,7 @@ function makeContextController() {
         init: vi.fn().mockResolvedValue(undefined),
         // R-1: the station now drives real runs, so the double has to answer
         // the two questions it asks on mount.
+        catalogs: { local: { models: [], configured: true, status: 'idle', error: null, errorDetail: null } },
         research: {
             list: vi.fn().mockResolvedValue([]),
             unfinished: vi.fn().mockResolvedValue([]),

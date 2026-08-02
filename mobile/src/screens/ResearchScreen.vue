@@ -19,6 +19,7 @@ import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import { useChatController } from '@/stores/chatController'
+import { useSettingsStore } from '@/stores/settings'
 import type { TalosResearchBranch, TalosResearchDepth, TalosResearchRun } from '@/lib/research/researchRun'
 import { talosResearchProgressOf } from '@/lib/research/researchRun'
 import type { TalosResearchReportRecord } from '@/lib/research/researchReport'
@@ -34,7 +35,68 @@ import {
 } from '@/lib/research/researchPlan'
 
 const controller = useChatController()
+const settings = useSettingsStore()
 const { t } = useTalosI18n()
+
+/**
+ * R7 — the two models, picked by the person paying for them.
+ *
+ * One writes the report, one checks its citations, and they want opposite
+ * things: the writer wants capability, the checker wants to be cheap enough to
+ * run once per claim and independent of the writer. Every serious deep-research
+ * implementation splits these (GPT Researcher has had them as separate settings
+ * — provider included — since users asked for it), and the split is worthless
+ * if the app makes the choice.
+ *
+ * Both default to null, which is a real answer and not an empty field: the
+ * writer follows the composer, and the checker is picked automatically with the
+ * device first. A stored copy of today's model would quietly stop tracking what
+ * the person is actually using.
+ */
+const everyModel = computed(() => Object.values(controller.catalogs)
+    .flatMap((catalog) => catalog.models.map((model) => ({
+        value: `${model.provider}:${model.id}`,
+        provider: model.provider,
+        label: model.displayName || model.id,
+    }))))
+
+/** What the report writer will be, resolved the same way the run resolves it. */
+const authorValue = computed(() => settings.state.research_models.author)
+const judgeValue = computed(() => settings.state.research_models.judge)
+
+/**
+ * The writer cannot be offered as its own checker.
+ *
+ * A model reviewing its own work is up to 50% more likely to pass a criterion it
+ * failed, so the run refuses it outright — and an option that will be refused is
+ * an option that should never have been on screen.
+ */
+const judgeChoices = computed(() => everyModel.value.filter((entry) => entry.value !== authorValue.value))
+
+/**
+ * Same house, weaker guarantee — said, not blocked.
+ *
+ * Self-preference is measured to extend to a model's own family, not only to
+ * itself, so a checker from the writer's provider is a real but softer
+ * independence. That is the user's call to make with the fact in front of them.
+ */
+const sameHouse = computed(() => {
+    const author = everyModel.value.find((entry) => entry.value === authorValue.value)
+    const judge = everyModel.value.find((entry) => entry.value === judgeValue.value)
+    return !!author && !!judge && author.provider === judge.provider
+})
+
+async function chooseAuthor(value: string): Promise<void> {
+    await settings.setResearchModels({ author: value === '' ? null : value })
+    // Whatever it was, the checker cannot be the writer.
+    if (value !== '' && settings.state.research_models.judge === value) {
+        await settings.setResearchModels({ judge: null })
+    }
+}
+
+function chooseJudge(value: string): Promise<void> {
+    return settings.setResearchModels({ judge: value === '' ? null : value })
+}
 
 const question = ref('')
 const runs = ref<readonly TalosResearchRun[]>([])
@@ -150,6 +212,7 @@ function reason(code: string): string {
     // The other refusal we own, and the one a user can fix in ten seconds:
     // the model they picked in the composer could not hold the format.
     if (code === 'TALOS_RESEARCH_NO_CLAIMS') return t('research.noClaims')
+    if (code === 'TALOS_RESEARCH_AUTHOR_UNAVAILABLE') return t('research.authorUnavailable')
     return code
 }
 
@@ -240,6 +303,55 @@ function verdictTone(support: string): string {
                 <Button data-testid="talos-research-propose" variant="outline" @click="propose()">
                     {{ t('research.propose') }}
                 </Button>
+            </div>
+
+            <!-- R7 — the two models. Above the plan because they change what
+                 the run costs and how much its verdicts are worth, and both of
+                 those are decisions to make before spending, not after. -->
+            <div
+                data-testid="talos-research-models"
+                class="space-y-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-3"
+            >
+                <p class="text-xs uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.modelsTitle') }}</p>
+
+                <label class="block space-y-1">
+                    <span class="text-xs text-[var(--talos-text)]">{{ t('research.authorLabel') }}</span>
+                    <select
+                        data-testid="talos-research-author"
+                        :value="authorValue ?? ''"
+                        class="min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                        @change="chooseAuthor(($event.target as HTMLSelectElement).value)"
+                    >
+                        <option value="">{{ t('research.authorFollowsComposer') }}</option>
+                        <option v-for="entry in everyModel" :key="entry.value" :value="entry.value">
+                            {{ entry.provider }} · {{ entry.label }}
+                        </option>
+                    </select>
+                </label>
+
+                <label class="block space-y-1">
+                    <span class="text-xs text-[var(--talos-text)]">{{ t('research.judgeLabel') }}</span>
+                    <select
+                        data-testid="talos-research-judge-choice"
+                        :value="judgeValue ?? ''"
+                        class="min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                        @change="chooseJudge(($event.target as HTMLSelectElement).value)"
+                    >
+                        <option value="">{{ t('research.judgeAutomatic') }}</option>
+                        <option v-for="entry in judgeChoices" :key="entry.value" :value="entry.value">
+                            {{ entry.provider }} · {{ entry.label }}
+                        </option>
+                    </select>
+                </label>
+
+                <p class="text-2xs leading-5 text-[var(--talos-muted)]">{{ t('research.modelsNote') }}</p>
+                <p
+                    v-if="sameHouse"
+                    data-testid="talos-research-same-house"
+                    class="text-2xs leading-5 text-[var(--talos-warning)]"
+                >
+                    {{ t('research.sameHouse') }}
+                </p>
             </div>
 
             <!-- The three levels are defaults, not cages: whatever they open,

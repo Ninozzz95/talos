@@ -333,6 +333,39 @@ const TALOS_DEFAULT_SEARCH_PREFERENCES: TalosMobileSearchPreferences = {
     endpoint: null,
 }
 
+/**
+ * R7 — the two models of a research run, chosen by the person who pays for them.
+ *
+ * Deep Research uses two models for two different jobs: one writes the report,
+ * one checks its citations. Every serious implementation of this splits them —
+ * GPT Researcher has had FAST_LLM and SMART_LLM as separate settings, provider
+ * included, since people asked for exactly that — and the reason is not tidiness.
+ * The roles want opposite things: the writer wants capability, the checker wants
+ * to be cheap enough to run once per claim and INDEPENDENT of the writer.
+ *
+ * Both are stored as `provider:modelId`, and both may be null:
+ *   author null → the model chosen in the composer, which is what a person means
+ *                 by "the model I am using".
+ *   judge  null → picked automatically: on-device first, never the author.
+ *
+ * Null is a real choice here, not an unset field. "Follow the composer" is a
+ * standing instruction that stays right when the composer changes, and freezing
+ * a copy of today's model into settings would quietly stop tracking it.
+ */
+export interface TalosResearchModelPreferences {
+    /** Who writes the report. Null = whatever the composer is set to. */
+    author: string | null
+    /** Who checks the citations. Null = chosen automatically, never the author. */
+    judge: string | null
+}
+
+function parseResearchModels(value: unknown): TalosResearchModelPreferences {
+    const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+    const one = (raw: unknown): string | null =>
+        (typeof raw === 'string' && raw.includes(':') && raw.trim() !== '' ? raw.trim() : null)
+    return { author: one(record.author), judge: one(record.judge) }
+}
+
 function parseSearchPreferences(value: unknown): TalosMobileSearchPreferences {
     const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
     const source = record.source
@@ -416,6 +449,8 @@ export interface TalosMobileSettingsState {
     tool_authorizations: TalosToolAuthorizationGrantsV1
     /** F1: the chosen web-search source. The key itself lives in secure storage. */
     search: TalosMobileSearchPreferences
+    /** R7: who writes the research report, and who checks it. */
+    research_models: TalosResearchModelPreferences
     shell: TalosMobileShellPreferences
     onboarding: TalosMobileOnboardingState
     security: TalosMobileSecurityPreferences
@@ -557,6 +592,7 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         agent_tools: parseTalosAgentToolEnabled(value.agent_tools),
         tool_authorizations: parseTalosToolAuthorizationGrants(value.tool_authorizations),
         search: parseSearchPreferences(value.search),
+        research_models: parseResearchModels(value.research_models),
         tone: parseTonePreferences(value.tone),
         chat_layout: chatLayout,
         ai_defaults: parseAiDefaults(value.ai_defaults),
@@ -596,6 +632,7 @@ export interface SettingsStore {
     ): Promise<void>
     revokeToolAuthorization(tool: TalosAgentToolId): Promise<void>
     setSearchPreferences(patch: Partial<TalosMobileSearchPreferences>): Promise<void>
+    setResearchModels(patch: Partial<TalosResearchModelPreferences>): Promise<void>
     setTone(preset: TalosToneId): Promise<void>
     setAiDefaults(patch: Partial<TalosAiDefaults>): Promise<void>
     setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
@@ -639,6 +676,7 @@ export function useSettingsStore(): SettingsStore {
                 agent_tools: next.agent_tools,
                 tool_authorizations: next.tool_authorizations,
                 search: next.search,
+                research_models: next.research_models,
                 tone: next.tone,
                 chat_layout: next.chat_layout,
                 ai_defaults: next.ai_defaults,
@@ -765,6 +803,7 @@ export function useSettingsStore(): SettingsStore {
             // on restart is a setting that lies, and that defect already shipped
             // once on the tool permissions.
             state.search = parsed.search
+            state.research_models = parsed.research_models
             state.tone = parsed.tone
         },
         setShell(patch) {
@@ -872,6 +911,11 @@ export function useSettingsStore(): SettingsStore {
         setSearchPreferences(patch) {
             return commit(() => ({
                 overrides: { search: parseSearchPreferences({ ...state.search, ...patch }) },
+            }))
+        },
+        setResearchModels(patch) {
+            return commit(() => ({
+                overrides: { research_models: parseResearchModels({ ...state.research_models, ...patch }) },
             }))
         },
         setTone(preset) {
