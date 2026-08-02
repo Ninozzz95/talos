@@ -14,7 +14,7 @@
  * row on disk.
  */
 import { computed, onMounted, ref } from 'vue'
-import { ChevronDown, ChevronRight, FileSearch, Play, Plus, RotateCcw, Trash2 } from '@lucide/vue'
+import { ChevronDown, ChevronRight, Download, FileSearch, Play, Plus, RotateCcw, Trash2 } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
@@ -24,6 +24,8 @@ import type { TalosResearchBranch, TalosResearchDepth, TalosResearchRun } from '
 import { talosResearchProgressOf } from '@/lib/research/researchRun'
 import type { TalosResearchReportRecord } from '@/lib/research/researchReport'
 import { talosResearchVerifiedStanding } from '@/lib/research/researchVerification'
+import type { TalosResearchRecheck } from '@/lib/research/researchRecheck'
+import { talosResearchRecheckStanding } from '@/lib/research/researchRecheck'
 import {
     TALOS_RESEARCH_DEPTHS,
     talosResearchPlanCost,
@@ -248,6 +250,11 @@ async function toggleReport(run: TalosResearchRun): Promise<void> {
     openRunId.value = run.id
     openClaim.value = null
     showSources.value = false
+    // Belongs to the report being read, so it does not survive into the next one.
+    recheck.value = null
+    followAnswer.value = null
+    followQuestion.value = ''
+    exported.value = false
     openReport.value = await controller.research.report(ref_)
     // Said out loud rather than shown as an empty panel: a report that will not
     // parse is a report whose verification cannot be trusted either.
@@ -271,6 +278,68 @@ const standing = computed(() => (openReport.value ? talosResearchVerifiedStandin
  * right there. "Nothing needed judging" is not "nobody could judge".
  */
 const judge = computed(() => openReport.value?.judge ?? null)
+
+/**
+ * R-5 — what you can do with a dossier after the day it was made.
+ *
+ * Three things, and they are the same idea three times: the research was paid
+ * for once, so asking more of it must not cost again. A follow-up reads the
+ * passages already on disk instead of searching the web; the export writes the
+ * report to the phone rather than to somebody's cloud; the re-check compares
+ * today's pages against the text we kept — which is only possible because we
+ * kept it, and is why over 75% of citations quietly going stale within three
+ * years is a problem we can see and nobody else can.
+ */
+const rechecking = ref(false)
+const recheck = ref<TalosResearchRecheck | null>(null)
+const recheckStanding = computed(() => (recheck.value ? talosResearchRecheckStanding(recheck.value) : null))
+const followQuestion = ref('')
+const followBusy = ref(false)
+const followAnswer = ref<TalosResearchReportRecord | null>(null)
+const exported = ref(false)
+
+async function runRecheck(run: TalosResearchRun): Promise<void> {
+    rechecking.value = true
+    recheck.value = null
+    try {
+        recheck.value = await controller.research.recheck(run.id)
+    } catch (failure) {
+        error.value = failure instanceof Error ? failure.message : String(failure)
+    } finally {
+        rechecking.value = false
+    }
+}
+
+async function askFollowUp(run: TalosResearchRun): Promise<void> {
+    const question = followQuestion.value.trim()
+    if (question.length === 0 || followBusy.value) return
+    followBusy.value = true
+    followAnswer.value = null
+    try {
+        const fileId = await controller.research.followUp(run.id, question)
+        // Read back what was filed rather than keeping a copy in memory: the
+        // answer the user is shown is then literally the one in the Library,
+        // verdicts included, and the two cannot disagree.
+        followAnswer.value = fileId ? await controller.research.report(fileId) : null
+        followQuestion.value = ''
+    } catch (failure) {
+        error.value = failure instanceof Error ? failure.message : String(failure)
+    } finally {
+        followBusy.value = false
+    }
+}
+
+async function exportReport(run: TalosResearchRun): Promise<void> {
+    const ref_ = reportRef(run)
+    if (!ref_) return
+    exported.value = false
+    try {
+        await controller.research.exportReport(ref_, `${run.question}.md`)
+        exported.value = true
+    } catch (failure) {
+        error.value = failure instanceof Error ? failure.message : String(failure)
+    }
+}
 
 function verdictTone(support: string): string {
     if (support === 'yes') return 'text-[var(--talos-success)]'
@@ -612,6 +681,85 @@ function verdictTone(support: string): string {
                                 </span>
                             </li>
                         </ul>
+
+                        <!-- R-5 - what the dossier is worth after today. All
+                             three read what was already paid for: no search
+                             happens here, and the export never leaves the phone. -->
+                        <div class="flex flex-wrap gap-2 border-t border-[var(--talos-border)] pt-3">
+                            <Button
+                                data-testid="talos-research-recheck"
+                                variant="outline"
+                                :disabled="rechecking"
+                                @click="runRecheck(run)"
+                            >
+                                <RotateCcw class="h-4 w-4" aria-hidden="true" />
+                                {{ rechecking ? t('research.rechecking') : t('research.recheck') }}
+                            </Button>
+                            <Button data-testid="talos-research-export" variant="outline" @click="exportReport(run)">
+                                <Download class="h-4 w-4" aria-hidden="true" />
+                                {{ exported ? t('research.exported') : t('research.export') }}
+                            </Button>
+                        </div>
+
+                        <div v-if="recheckStanding" data-testid="talos-research-recheck-result" class="space-y-1">
+                            <p class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
+                                {{ t('research.recheckLine', {
+                                    total: recheckStanding.total,
+                                    intact: recheckStanding.intact,
+                                    changed: recheckStanding.changed,
+                                    unreachable: recheckStanding.unreachable,
+                                }) }}
+                            </p>
+                            <!-- The sentence nobody else can write. -->
+                            <p v-if="recheckStanding.unreachable > 0" class="text-2xs text-[var(--talos-muted)]">
+                                {{ t('research.recheckStillReadable') }}
+                            </p>
+                            <p
+                                v-if="recheckStanding.passagesLost > 0"
+                                class="text-2xs text-[var(--talos-danger,var(--destructive))]"
+                            >
+                                {{ t('research.recheckPassagesLost', { count: recheckStanding.passagesLost }) }}
+                            </p>
+                        </div>
+
+                        <!-- R11 - asked of the sources already on disk. -->
+                        <div class="space-y-1 border-t border-[var(--talos-border)] pt-3">
+                            <div class="flex gap-2">
+                                <input
+                                    v-model="followQuestion"
+                                    type="text"
+                                    data-testid="talos-research-followup"
+                                    :placeholder="t('research.followUpPlaceholder')"
+                                    :aria-label="t('research.followUpPlaceholder')"
+                                    class="min-h-11 flex-1 rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                                    @keyup.enter="askFollowUp(run)"
+                                >
+                                <Button
+                                    data-testid="talos-research-followup-send"
+                                    variant="outline"
+                                    :disabled="followBusy"
+                                    @click="askFollowUp(run)"
+                                >
+                                    {{ followBusy ? t('research.followUpAsking') : t('research.followUpSend') }}
+                                </Button>
+                            </div>
+                            <p class="text-2xs text-[var(--talos-muted)]">{{ t('research.followUpNote') }}</p>
+
+                            <div v-if="followAnswer" data-testid="talos-research-followup-answer" class="space-y-1 pt-1">
+                                <p class="text-sm leading-6 text-[var(--talos-text)]">{{ followAnswer.summary }}</p>
+                                <p
+                                    v-for="(claim, index) in followAnswer.claims"
+                                    :key="`follow-${index}`"
+                                    class="flex items-start gap-2 text-xs"
+                                >
+                                    <span class="flex-1 text-[var(--talos-text)]">{{ claim.text }}</span>
+                                    <span
+                                        class="shrink-0 text-2xs"
+                                        :class="verdictTone(claim.checks.claimSupported)"
+                                    >{{ t(`research.support.${claim.checks.claimSupported}`) }}</span>
+                                </p>
+                            </div>
+                        </div>
                     </template>
                 </div>
             </div>

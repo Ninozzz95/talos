@@ -121,6 +121,15 @@ function controllerWith(report: TalosResearchReportRecord | null) {
             start: vi.fn(),
             resume: vi.fn(),
             report: vi.fn().mockResolvedValue(report),
+            recheck: vi.fn().mockResolvedValue({
+                at: '2027-01-01T00:00:00.000Z',
+                sources: [
+                    { url: 'https://rainews.it/x', title: 'A', state: 'intact', survived: 1, reason: null, passagesStanding: 1, passagesLost: 0 },
+                    { url: 'https://oasport.it/y', title: 'B', state: 'unreachable', survived: null, reason: '404', passagesStanding: 0, passagesLost: 0 },
+                ],
+            }),
+            followUp: vi.fn().mockResolvedValue('file-answer'),
+            exportReport: vi.fn().mockResolvedValue({ ok: true }),
         },
     }
 }
@@ -330,5 +339,81 @@ describe('R7 — the two models are the user’s choice', () => {
         await wrapper.get('[data-testid="talos-research-judge-choice"]').setValue('local:/storage/qwen.gguf')
         await settle(wrapper)
         expect(wrapper.find('[data-testid="talos-research-same-house"]').exists()).toBe(false)
+    })
+})
+
+describe('R-5 — what a dossier is worth after the day it was made', () => {
+    beforeEach(() => { mockState.controller = controllerWith(REPORT) })
+
+    async function openReport(wrapper: ReturnType<typeof mount>) {
+        await settle(wrapper)
+        await wrapper.get('[data-testid="talos-research-open-report"]').trigger('click')
+        await settle(wrapper)
+    }
+
+    /**
+     * R12, and the sentence no competitor can write.
+     *
+     * Over 75% of referenced web content changes within three years. Everyone
+     * else stored a URL, so the most they can report is that a request
+     * succeeded — which a rewritten page and a soft 404 both do. We kept the
+     * text, so "this one is gone AND you can still read it here" is a true
+     * sentence, and it has to be on screen when it applies.
+     */
+    it('reports what became of the sources, and that the dead ones are still readable', async () => {
+        const wrapper = mount(ResearchScreen)
+        await openReport(wrapper)
+
+        await wrapper.get('[data-testid="talos-research-recheck"]').trigger('click')
+        await settle(wrapper)
+
+        const line = wrapper.get('[data-testid="talos-research-recheck-result"]').text()
+        expect(line).toContain('2 sources')
+        expect(line).toContain('1 intact')
+        expect(line).toContain('1 no longer answer')
+        expect(line).toContain('stay readable here')
+    })
+
+    it('answers a follow-up from the sources already paid for, verdicts included', async () => {
+        const wrapper = mount(ResearchScreen)
+        await openReport(wrapper)
+
+        await wrapper.get('[data-testid="talos-research-followup"]').setValue('e Antonelli?')
+        await wrapper.get('[data-testid="talos-research-followup-send"]').trigger('click')
+        await settle(wrapper)
+
+        const answer = wrapper.get('[data-testid="talos-research-followup-answer"]')
+        // Read back from what was filed, so the answer on screen is the one in
+        // the Library — the two cannot drift apart.
+        expect(answer.text()).toContain('Ha vinto Norris.')
+        expect(answer.text()).toContain('supported')
+        expect(wrapper.text()).toContain('no new search')
+    })
+
+    it('exports the report to the phone and says it did', async () => {
+        const wrapper = mount(ResearchScreen)
+        await openReport(wrapper)
+
+        await wrapper.get('[data-testid="talos-research-export"]').trigger('click')
+        await settle(wrapper)
+
+        expect(wrapper.get('[data-testid="talos-research-export"]').text()).toContain('Saved')
+    })
+
+    it('does not carry one report\u2019s re-check into the next', async () => {
+        const wrapper = mount(ResearchScreen)
+        await openReport(wrapper)
+        await wrapper.get('[data-testid="talos-research-recheck"]').trigger('click')
+        await settle(wrapper)
+        expect(wrapper.find('[data-testid="talos-research-recheck-result"]').exists()).toBe(true)
+
+        // Closing and reopening is a different reading of a dossier; a stale
+        // panel would be reporting on sources it never checked.
+        await wrapper.get('[data-testid="talos-research-open-report"]').trigger('click')
+        await settle(wrapper)
+        await wrapper.get('[data-testid="talos-research-open-report"]').trigger('click')
+        await settle(wrapper)
+
+        expect(wrapper.find('[data-testid="talos-research-recheck-result"]').exists()).toBe(false)
     })
 })
