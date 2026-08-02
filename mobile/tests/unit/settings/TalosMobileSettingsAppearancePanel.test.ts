@@ -15,7 +15,8 @@ const stores = vi.hoisted(() => ({
             shell: {
                 immersive_header: false,
                 launcher_icon_follows_theme: false,
-                composer_style: 'drawer',
+                composer_shape: 'standard',
+                composer_plus: 'drawer',
             },
             chat_layout: {
                 message_style: 'sections',
@@ -158,34 +159,58 @@ describe('TalosMobileSettingsAppearancePanel', () => {
     })
 
     /**
-     * Owner 2026-08-02: the composer was three switches that influenced one
-     * another, and could be set to combinations that meant nothing. One choice
-     * now — and the point of these is that the four shapes stay REACHABLE, not
-     * that the picker exists.
+     * The composer was three switches that influenced one another; the first
+     * repair fused them into one list, and the owner caught it at once — "hai
+     * mischiato la forma del compositore e il tipo della sezione +". They are
+     * two questions: what the bar looks like, and where the "+" opens (which is
+     * where attach, Library and Browse live). These keep them apart.
      */
-    it('offers every composer shape and stores the chosen one', () => {
+    it('asks the two questions separately, and stores each on its own', () => {
         const wrapper = mount(TalosMobileSettingsAppearancePanel, {
             attachTo: document.body,
             global: { stubs: { TalosThemedSelect: true, TalosMobileVoiceSettings: true } },
         })
-        const picker = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
-            .find((select) => select.props('ariaLabel') === 'Composer shape')
+        const select = (label: string) => wrapper.findAllComponents({ name: 'TalosThemedSelect' })
+            .find((entry) => entry.props('ariaLabel') === label)
 
-        expect((picker?.props('items') as Array<{ value: string }>).map((item) => item.value))
-            .toEqual(['classic', 'drawer', 'menu', 'compact'])
+        expect((select('Composer shape')?.props('items') as Array<{ value: string }>).map((i) => i.value))
+            .toEqual(['classic', 'standard', 'compact'])
+        expect((select('The “+” opens')?.props('items') as Array<{ value: string }>).map((i) => i.value))
+            .toEqual(['drawer', 'menu'])
 
-        picker?.vm.$emit('update:modelValue', 'compact')
-        expect(stores.settings.setShell).toHaveBeenCalledWith({ composer_style: 'compact' })
+        select('Composer shape')?.vm.$emit('update:modelValue', 'compact')
+        expect(stores.settings.setShell).toHaveBeenCalledWith({ composer_shape: 'compact' })
+        select('The “+” opens')?.vm.$emit('update:modelValue', 'menu')
+        expect(stores.settings.setShell).toHaveBeenCalledWith({ composer_plus: 'menu' })
         wrapper.unmount()
     })
 
-    it('refuses a shape it never offered, instead of storing it', () => {
+    it('goes quiet about the “+” on the classic bar, and says why', async () => {
+        // The classic row carries attach, context and Browse inline, so there
+        // is no "+" for the setting to place. Offered but inert, with the
+        // reason beside it — never a live-looking control that does nothing.
+        stores.settings.state.shell.composer_shape = 'classic'
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true, TalosMobileVoiceSettings: true } },
+        })
+
+        const plus = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
+            .find((entry) => entry.props('ariaLabel') === 'The “+” opens')
+        expect(plus?.props('disabled')).toBe(true)
+        expect(wrapper.text()).toContain('The classic bar has no')
+
+        stores.settings.state.shell.composer_shape = 'standard'
+        wrapper.unmount()
+    })
+
+    it('refuses a value it never offered, instead of storing it', () => {
         const wrapper = mount(TalosMobileSettingsAppearancePanel, {
             attachTo: document.body,
             global: { stubs: { TalosThemedSelect: true, TalosMobileVoiceSettings: true } },
         })
         wrapper.findAllComponents({ name: 'TalosThemedSelect' })
-            .find((select) => select.props('ariaLabel') === 'Composer shape')
+            .find((entry) => entry.props('ariaLabel') === 'Composer shape')
             ?.vm.$emit('update:modelValue', 'a-shape-we-never-shipped')
 
         expect(stores.settings.setShell).not.toHaveBeenCalled()

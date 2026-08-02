@@ -26,7 +26,13 @@ import {
 } from '@/motion-v6/contracts'
 import { TALOS_FONT_SCALE_OPTIONS, type TalosFontScale } from '@/lib/talosFontScale'
 import { useSettingsStore, type TalosMotionPreferencePatch } from '@/stores/settings'
-import { TALOS_COMPOSER_STYLES, talosComposerStyleExists } from '@/lib/composerStyle'
+import {
+    TALOS_COMPOSER_PLUS_SURFACES,
+    TALOS_COMPOSER_SHAPES,
+    talosComposerHasPlus,
+    talosComposerPlusExists,
+    talosComposerShapeExists,
+} from '@/lib/composerStyle'
 import { useThemeStore } from '@/stores/theme'
 import { talosRememberView, talosRememberedView } from '@/lib/navigation/rememberedView'
 
@@ -75,18 +81,35 @@ const windowPresentationItems = computed(() => TALOS_MOBILE_WINDOW_PRESENTATION_
     label: t(`appearance.windowModes.${option.value}`),
 })))
 
-const composerStyleItems = computed(() => TALOS_COMPOSER_STYLES.map((style) => ({
-    value: style,
-    label: t(`appearance.composerShapes.${style}`),
+const composerShapeItems = computed(() => TALOS_COMPOSER_SHAPES.map((shape) => ({
+    value: shape,
+    label: t(`appearance.composerShapes.${shape}`),
+})))
+const composerPlusItems = computed(() => TALOS_COMPOSER_PLUS_SURFACES.map((surface) => ({
+    value: surface,
+    label: t(`appearance.composerPlusSurfaces.${surface}`),
 })))
 
 /**
- * Narrowed by the store's own guard rather than cast. A select can only emit
+ * The classic bar has no "+" at all — attach, context and Browse are already on
+ * it — so the surface setting has nothing to decide there. Offered but inert,
+ * with the reason written beside it, rather than a live-looking control that
+ * does nothing.
+ */
+const composerPlusApplies = computed(() => talosComposerHasPlus(settings.state.shell.composer_shape))
+
+/**
+ * Narrowed by the module's own guards rather than cast. A select can only emit
  * what it was given, right up until someone edits the item list and not this.
  */
-function setComposerStyle(value: string): void {
-    if (!talosComposerStyleExists(value)) return
-    void settings.setShell({ composer_style: value })
+function setComposerShape(value: string): void {
+    if (!talosComposerShapeExists(value)) return
+    void settings.setShell({ composer_shape: value })
+}
+
+function setComposerPlus(value: string): void {
+    if (!talosComposerPlusExists(value)) return
+    void settings.setShell({ composer_plus: value })
 }
 
 const activePreset = computed(() => TALOS_THEME_PRESETS.find((preset) => preset.id === theme.state.theme) ?? TALOS_THEME_PRESETS[0])
@@ -264,18 +287,37 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
                      one another and could be set to combinations that meant
                      nothing — with the drawer off and the dropdown off, the "+"
                      announced itself as expanded and opened nothing at all. -->
-                <label class="block sm:col-span-2">
+                <label class="block">
                     <span :class="selectLabelClass">{{ t('appearance.composerShape') }}</span>
                     <TalosThemedSelect
                         class="mt-2"
-                        data-testid="talos-composer-style-select"
-                        :model-value="settings.state.shell.composer_style"
-                        :items="composerStyleItems"
+                        data-testid="talos-composer-shape-select"
+                        :model-value="settings.state.shell.composer_shape"
+                        :items="composerShapeItems"
                         :aria-label="t('appearance.composerShape')"
-                        @update:model-value="setComposerStyle"
+                        @update:model-value="setComposerShape"
                     />
                     <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">
-                        {{ t(`appearance.composerShapes.${settings.state.shell.composer_style}Body`) }}
+                        {{ t(`appearance.composerShapes.${settings.state.shell.composer_shape}Body`) }}
+                    </span>
+                </label>
+                <!-- A second question, not a corner of the first: where the "+"
+                     opens is where attach, Library and Browse live. -->
+                <label class="block">
+                    <span :class="selectLabelClass">{{ t('appearance.composerPlus') }}</span>
+                    <TalosThemedSelect
+                        class="mt-2"
+                        data-testid="talos-composer-plus-select"
+                        :model-value="settings.state.shell.composer_plus"
+                        :items="composerPlusItems"
+                        :disabled="!composerPlusApplies"
+                        :aria-label="t('appearance.composerPlus')"
+                        @update:model-value="setComposerPlus"
+                    />
+                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">
+                        {{ composerPlusApplies
+                            ? t(`appearance.composerPlusSurfaces.${settings.state.shell.composer_plus}Body`)
+                            : t('appearance.composerPlusInline') }}
                     </span>
                 </label>
                 <div class="border-t border-[var(--talos-border)] pt-3 text-xs leading-5 text-[var(--talos-muted)] sm:col-span-2">

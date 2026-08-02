@@ -76,7 +76,7 @@ describe('shell.tablet_sidebar_width persistence (F6)', () => {
         expect(fresh.state.shell.tablet_sidebar_width).toBe(372)
         // The sibling shell flags stay untouched by the patch.
         expect(fresh.state.shell.immersive_header).toBe(true)
-        expect(fresh.state.shell.composer_style).toBe('drawer')
+        expect(fresh.state.shell.composer_shape).toBe('standard')
     })
 })
 
