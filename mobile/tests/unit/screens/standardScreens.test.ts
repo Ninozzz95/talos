@@ -56,16 +56,30 @@ describe('standard tab screens (verbatim desktop parity, step-1 empty states)', 
      * parity stays — that was never about the stub — and what replaces the stub
      * copy is the thing the phase is FOR: a rehearsal run you can start.
      */
-    it('research: Deep Research V3 header, and a rehearsal run that can be started', () => {
+    /**
+     * R-2, 2026-08-02: you cannot start a run you have not seen.
+     *
+     * The station no longer offers a start button next to the question. A plan
+     * is proposed first, it can be edited, and only then can anything be spent
+     * — which is the phase in one sentence. Gemini shows a plan; nobody shows
+     * what it will cost, and that is the line this asserts on.
+     */
+    it('research: proposes a plan first, and states the work before anything is spent', async () => {
         const w = mount(ResearchScreen)
         expect(w.get('[data-testid="mobile-screen-title"]').text()).toBe('Deep Research V3')
         expect(w.get('[data-testid="mobile-screen-eyebrow"]').text()).toContain('Deep research')
-        expect(w.text()).not.toContain('Not in this build')
-        expect(w.find('[data-testid="talos-research-question"]').exists()).toBe(true)
-        // Disabled until there is a question: a run costs a service and a
-        // notification, and starting one for an empty string is a lie about
-        // work being done.
-        expect(w.get<HTMLButtonElement>('[data-testid="talos-research-start"]').element.disabled).toBe(true)
+
+        // Nothing to start yet: there is no plan, so there is no button.
+        expect(w.find('[data-testid="talos-research-start"]').exists()).toBe(false)
+
+        await w.get('[data-testid="talos-research-question"]').setValue('quale tablet conviene')
+        await w.get('[data-testid="talos-research-propose"]').trigger('click')
+
+        expect(w.find('[data-testid="talos-research-plan"]').exists()).toBe(true)
+        expect(w.get('[data-testid="talos-research-totals"]').text()).toContain('pages')
+        // The money is refused, not invented: no provider price is wired yet.
+        expect(w.get('[data-testid="talos-research-cost"]').text()).toContain('cannot be worked out')
+        expect(w.get<HTMLButtonElement>('[data-testid="talos-research-start"]').element.disabled).toBe(false)
     })
 
     it('runs: Runtime cockpit header + Runtime eyebrow + real empty copy', () => {

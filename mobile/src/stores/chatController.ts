@@ -834,8 +834,14 @@ export interface ChatController {
      * is whatever asks next. A facade owned by the screen would die with it.
      */
     research: {
-        start(question: string, onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void):
-            Promise<import('@/lib/research/researchRun').TalosResearchRun>
+        start(
+            input: {
+                question: string
+                depth: import('@/lib/research/researchRun').TalosResearchDepth
+                branches: readonly import('@/lib/research/researchRun').TalosResearchBranch[]
+            },
+            onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void,
+        ): Promise<import('@/lib/research/researchRun').TalosResearchRun>
         resume(runId: string, onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void):
             Promise<import('@/lib/research/researchRun').TalosResearchRun>
         unfinished(): Promise<readonly import('@/lib/research/researchRun').TalosResearchRun[]>
@@ -3818,19 +3824,23 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             return runtime
         }
         return {
-            async start(question: string, onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void) {
+            async start(
+                input: {
+                    question: string
+                    depth: import('@/lib/research/researchRun').TalosResearchDepth
+                    branches: readonly import('@/lib/research/researchRun').TalosResearchBranch[]
+                },
+                onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void,
+            ) {
                 const engine = await ready()
-                const id = `research-${Date.now()}`
+                // The plan comes from the caller because R-2 made it the user's:
+                // building a default here would run something they never saw.
                 return engine.start({
-                    id,
+                    id: `research-${Date.now()}`,
                     sessionId: chat.activeSession.value?.id ?? 'none',
-                    question,
-                    depth: 'quick',
-                    branches: [
-                        { id: 'b1', question: `${question} — fonti`, estimate: { tokens: 0, searches: 1, pages: 2 } },
-                        { id: 'b2', question: `${question} — contraddizioni`, estimate: { tokens: 0, searches: 1, pages: 2 } },
-                        { id: 'b3', question: `${question} — sintesi`, estimate: { tokens: 0, searches: 1, pages: 1 } },
-                    ],
+                    question: input.question,
+                    depth: input.depth,
+                    branches: input.branches,
                 }, onProgress)
             },
             async resume(runId: string, onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void) {
