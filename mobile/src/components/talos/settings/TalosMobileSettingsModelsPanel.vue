@@ -10,7 +10,7 @@ import { useChatController } from '@/stores/chatController'
 
 const controller = useChatController()
 const { t } = useTalosI18n()
-const activeTab = ref<'providers' | 'catalog' | 'onDevice'>('providers')
+const activeTab = ref<'providers' | 'catalog' | 'on-device'>('providers')
 const TalosMobileModelCatalog = defineAsyncComponent(
     () => import('@/components/talos/models/TalosMobileModelCatalog.vue'),
 )
@@ -63,7 +63,7 @@ onMounted(() => { void controller.init() })
                 </TabsTrigger>
                 <!-- Models that run here, with nothing leaving the phone. Beside
                      the provider tabs on purpose: it is the same decision. -->
-                <TabsTrigger value="onDevice" :class="tabClass">
+                <TabsTrigger value="on-device" :class="tabClass">
                     <Cpu class="size-4" aria-hidden="true" /> {{ t('models.onDevice') }}
                 </TabsTrigger>
             </TabsList>
@@ -93,7 +93,7 @@ onMounted(() => { void controller.init() })
             </TabsContent>
 
             <TabsContent
-                value="onDevice"
+                value="on-device"
                 data-model-lab-section="on-device"
                 class="talos-motion-tab-panel mt-4 min-w-0 outline-none"
             >

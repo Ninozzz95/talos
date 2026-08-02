@@ -936,3 +936,830 @@ solo host cablato nell'APK, e gli intent nativi nuovi richiedono una nuova
 release. TALOS con Shizuku ha un ventaglio di azioni di sistema incomparabilmente
 più largo, e con la firma sul manifesto ha una garanzia che loro non offrono.
 
+---
+
+# PARTE 3 — I vincoli TALOS applicati a quello che le Parti 1 e 2 hanno trovato
+
+## 3.0 Come è stata fatta questa parte, e cosa non è confermato
+
+Il budget di ricerca web era esaurito anche per questa parte (200 chiamate su
+200, esattamente come per le prime due). Le fonti sono state aperte lo stesso, in
+tre modi: `curl` sui file grezzi di GitHub, `gh api` per gli alberi git e la
+ricerca di codice, e il fetcher standard per le pagine di documentazione che lo
+consentono. **Reddit non è stato usato: risponde 403 e nessuna affermazione qui
+sotto vi poggia.**
+
+Tre fatti di questa parte non vengono da documentazione ma **dal codice
+sorgente**, letto riga per riga: il caricatore di skill di Gemini CLI, il suo
+tool `activate_skill`, e il suo gestore di integrità delle policy. Dove cito
+codice, cito il file e la funzione. È l'unico modo di rispondere alla domanda
+«una skill può auto-approvarsi i tool?» senza fidarsi di un riassunto.
+
+Le quattro cose che **non** sono state confermate stanno in §3.8, in fondo, come
+elenco separato. Non sono state dedotte e non sono state riempite con
+ragionevolezza.
+
+## 3.1 Quali skill adottare per prime
+
+### Il criterio che decide tutto, e non è la licenza
+
+La licenza dice cosa **si può** spedire. Ma la domanda dell'owner era *«a cosa
+servirebbero su un telefono»*, e lì il filtro che elimina più candidati è un
+altro, ed è quello che Google ha scritto in una riga sola
+([skills/README.md](https://github.com/google-ai-edge/gallery/blob/main/skills/README.md)):
+
+> *«Unlike cloud-based LLMs that can spin up containers or access a terminal to
+> run Python scripts or CLI tools, on-device LLMs operate within a sandboxed
+> mobile environment. They cannot easily execute arbitrary system commands or
+> local scripts.»*
+
+**Su un telefono non c'è una shell.** Una skill Apache-2.0, perfettamente
+redistribuibile, che nel corpo dice «esegui `scripts/extract.py`» non è vietata:
+è **inerte**. E una skill inerte è peggio di una skill assente, perché occupa
+posto nel catalogo e il modello la sceglie, prova, fallisce. È lo stesso guasto
+che OpenAI ha in produzione con `gh-fix-ci`
+([#10695](https://github.com/openai/codex/issues/10695), §1.5).
+
+Il censimento va quindi rifatto su **due assi**, non uno: *licenza* × *cosa
+serve per girare*. Ne escono tre livelli.
+
+### Livello 0 — le undici che girano già su un telefono, oggi
+
+Sono le skill della Google AI Edge Gallery. **Licenza: Apache-2.0**, dal file
+`LICENSE` alla radice del repository
+([google-ai-edge/gallery](https://github.com/google-ai-edge/gallery)). Verifica
+fatta: sull'albero git ricorsivo **non esiste alcun file `LICENSE` o `NOTICE`
+sotto `skills/`** — non c'è la scacchiera di Anthropic, la licenza del
+repository copre tutto (metodo: `gh api .../git/trees/main?recursive=1` filtrato
+su `^skills/.*licen|notice`, zero risultati, 2026-08-02). Le tre skill
+`featured`, benché il README le presenti come contributi della community,
+portano ciascuna nel proprio README *«Copyright 2026 Google LLC / Licensed under
+the Apache License, Version 2.0»*.
+
+| Skill | `description` testuale | Perché su un telefono |
+|---|---|---|
+| `query-wikipedia` | *«Query summary from Wikipedia for a given topic.»* | **La più importante del lotto.** Un modello da 2-4 B non sa nulla dopo il proprio taglio e non ha browsing. Questa è l'unica messa a terra fattuale che costa una `fetch` |
+| `calculate-hash` | *«Calculate the hash of a given text.»* | Il modello locale sbaglia l'aritmetica esatta; il JS no. È il caso di scuola del «delega al codice» |
+| `qr-code` | *«Generates a QR code for the given url.»* | Output visuale nella chat, zero rete, zero permessi |
+| `interactive-map` | *«Show an interactive map view for the given location.»* | Dimostra il ritorno di una **webview** dentro la conversazione |
+| `mood-tracker` | *«A simple mood tracking skill that stores your daily mood and comments…»* | L'unica del lotto con **stato persistente**: serve come banco di prova di dove una skill scrive |
+| `send-email` | *«Send an email.»* | È la skill di **intent nativo**, cioè la porta che il programma Shizuku vuole spalancare. Da adottare come *forma*, non come funzione |
+| `text-spinner`, `kitchen-adventure` | demo | Non sono prodotto. Sono ottime **fixture di regressione** per il caricatore |
+| `mood-music` (featured) | genera musica via API Loudly | Il caso d'uso del **segreto dell'utente** (§3.4) |
+| `restaurant-roulette` (featured) | ricerca ristoranti in una ruota | Rete + UI ricca |
+| `virtual-piano` (featured) | tastiera virtuale | **Attenzione alla catena di licenze**: gli 88 file `.mp3` non sono di Google. Il README dichiara *«piano sound are from https://github.com/fuhton/piano-mp3 under MIT license»*. È l'esempio pratico che gli *asset* di una skill hanno una licenza propria, distinta dal codice |
+
+**Perché queste per prime, e non le più famose:** perché sono le uniche a essere
+state scritte **contro il vincolo che abbiamo noi**. Girano in una WebView
+nascosta, non chiedono una shell, non chiedono Python, e restituiscono testo,
+un'immagine o una webview. TALOS ha già quella WebView — è Capacitor 8 + Vue 3.
+Adottarle non è un port: è un caricamento.
+
+### Livello 1 — le skill di sola prosa, che non chiedono niente all'ambiente
+
+Sono skill il cui corpo è **istruzioni e basta**. Girano ovunque, incluso un
+modello da 4 GB, perché l'unica risorsa che consumano è contesto.
+
+**Da `anthropics/skills`** — Apache-2.0, `LICENSE.txt` presente in ciascuna
+cartella (ri-verificato oggi con una richiesta HTTP per cartella: tutte 200):
+
+| Skill | A cosa serve su TALOS |
+|---|---|
+| `skill-creator` | *«Create new skills, modify and improve existing skills, and measure skill performance…»* — è la skill che permette all'utente di **creare skill dal telefono**. Senza questa, la repo di skill è a senso unico |
+| `mcp-builder` | *«Guide for creating high-quality MCP servers…»* — TALOS parla già MCP; questa è la controparte lato autore |
+| `frontend-design` | *«Guidance for distinctive, intentional visual design when building new UI…»* — prosa pura, zero dipendenze |
+| `internal-comms` | *«…status reports, leadership updates, 3P updates, company newsletters, FAQs, incident reports…»* — è il caso d'uso «assistente» che non richiede rete |
+| `theme-factory` | 10 temi preimpostati di colori e font — utile per gli artefatti generati in chat |
+
+**Da `openai/skills`** — Apache-2.0, `LICENSE.txt` presente e verificato oggi:
+
+| Skill | A cosa serve su TALOS |
+|---|---|
+| `define-goal` | *«Help the user define a concrete, measurable goal before starting work…»* — è **il pezzo che manca alla piattaforma agentica**: prima di lanciare N agenti, definire cosa vuol dire «fatto» |
+| `security-best-practices` | Review di sicurezza per python/js/ts/go. Il `description` dichiara i limiti da sé: *«Trigger only for supported languages»* |
+| `security-threat-model` | *«…enumerates trust boundaries, assets, attacker capabilities, abuse paths, and mitigations…»* |
+| `security-ownership-map` | Completa le due sopra |
+| `.system/skill-creator`, `.system/plugin-creator` | Le controparti OpenAI di `skill-creator` |
+| `.system/skill-installer` | **Da leggere come specifica, non da spedire.** È il codice che risolve il problema «catalogo remoto, non cablato» (§2.4), e ci serve il suo comportamento, non il suo testo |
+
+### Livello 2 — quello che è redistribuibile ma non va spedito lo stesso
+
+Qui la licenza dice sì e il giudizio dice no. Vale la pena essere espliciti,
+perché è dove un elenco automatico sbaglierebbe.
+
+- **`brand-guidelines` (Anthropic, Apache-2.0).** Redistribuibile alla lettera.
+  Ma il `description` recita *«Applies **Anthropic's official** brand colors and
+  typography»*. Spedirla dentro TALOS significa mettere l'identità visiva di
+  Anthropic dentro il nostro prodotto — e **la Apache-2.0 non concede marchi**:
+  la §6 della licenza esclude espressamente i trademark dal grant. Licenza
+  concessa, marchio no. **Non si spedisce.**
+- **`webapp-testing`, `web-artifacts-builder`, `slack-gif-creator`,
+  `canvas-design`, `algorithmic-art`, `claude-api` (Anthropic, Apache-2.0).** Tutte
+  legittime, tutte **inerti sul telefono**: presuppongono Playwright, `bash`,
+  Python, un filesystem di progetto. `webapp-testing` dice testualmente *«write
+  native Python Playwright scripts»*. Sul telefono non c'è Python.
+- **`pdf`, `transcribe`, `speech` (OpenAI, Apache-2.0).** Le più tentanti e le
+  più ingannevoli. `pdf` vuole *«Poppler»* e *«`reportlab`, `pdfplumber`,
+  `pypdf`»*; `speech` dichiara *«require `OPENAI_API_KEY` for live calls»*. La
+  prima è inerte, la seconda trasforma una skill locale in un cliente di OpenAI
+  a spese dell'utente. Se un giorno TALOS avrà un runtime Python on-device, si
+  riaprono; oggi no.
+- **`docx`, `pdf`, `pptx`, `xlsx`, `doc-coauthoring` (Anthropic).** Già chiuse in
+  §2.2. Ri-verificato oggi: `doc-coauthoring/LICENSE.txt` continua a restituire
+  **404**. Nessuna licenza resta nessun permesso.
+- **Le 8 `figma-*` (OpenAI).** Licenza Figma, escluse in §2.3.
+
+### Il numero, in chiaro
+
+**Adottabili subito e utili su un telefono: 11 dalla Gallery + 5 da Anthropic +
+6 da OpenAI = 22 skill.** Tutte Apache-2.0, tutte con il file di licenza
+verificato aprendolo. Non sono le 165.788 stelle di `anthropics/skills`: sono le
+ventidue che funzionano dentro il vincolo che abbiamo.
+
+## 3.2 La repo remota e firmata: cosa copiare, cosa non copiare
+
+### Il confronto che l'owner ha chiesto, risolto sul codice
+
+**Gemini CLI: una skill non può auto-approvarsi i tool. E il motivo è più
+radicale di una policy — il campo non viene proprio letto.**
+
+Il caricatore di skill è
+[`packages/core/src/skills/skillLoader.ts`](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/skills/skillLoader.ts).
+La sua funzione di parsing ha questa firma, testuale:
+
+```ts
+export function parseFrontmatter(
+  content: string,
+): { name: string; description: string } | null
+```
+
+E la struttura che ne esce, `SkillDefinition`, contiene esattamente: `name`,
+`description`, `location`, `body`, `disabled?`, `isBuiltin?`, `extensionName?`.
+**`allowed-tools` non compare da nessuna parte.** Un `SKILL.md` che dichiari
+`allowed-tools: Bash(rm:*)` viene caricato senza errori e quel campo finisce nel
+nulla. *Un campo che non viene interpretato non può essere abusato.*
+
+Cosa succede all'attivazione lo dice
+[`packages/core/src/tools/activate-skill.ts`](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/tools/activate-skill.ts).
+Due gesti, e due soli. Primo, un consenso — `getConfirmationDetails()` compone
+un dialogo intitolato `Activate Skill: <nome>` che mostra la descrizione e
+l'elenco dei file, sotto l'etichetta **«Resources to be shared with the
+model»**; le skill `isBuiltin` sono le uniche che lo saltano. Secondo, l'unico
+privilegio concesso, con il commento originale del codice accanto:
+
+```ts
+// Add the skill's directory to the workspace context so the agent has permission
+// to read its bundled resources.
+this.config.getWorkspaceContext().addDirectory(path.dirname(skill.location));
+```
+
+**L'attivazione di una skill, in Gemini CLI, concede una cosa sola: leggere la
+propria cartella.** Non un tool, non un comando, non un permesso di rete.
+
+E la documentazione impone **due consensi distinti**, non uno
+([using-agent-skills.md](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/using-agent-skills.md)):
+
+> *«1. **Installation consent**: When installing from a remote URL, you will be
+> asked to confirm the source. 2. **Activation consent**: Every time a skill is
+> triggered during a session, the agent must ask for permission to activate it
+> and gain access to its resources.»*
+
+C'è un dettaglio che chiude il cerchio e che si vede solo scavando. Nel
+repository di Gemini CLI esiste
+`.gemini/skills/async-pr-review/policy.toml`: una skill con accanto la propria
+policy permissiva, che pre-approva decine di comandi. Sembrerebbe la
+contraddizione. Non lo è: quella policy **non viene letta dal caricatore**. È lo
+script della skill stessa a passarla a mano, con
+`gemini --policy "${POLICY_PATH}" -p …`
+([async-review.sh](https://github.com/google-gemini/gemini-cli/blob/main/.gemini/skills/async-pr-review/scripts/async-review.sh),
+riga 85). Cioè: per ottenere quei permessi bisogna eseguire uno script, e per
+eseguire uno script bisogna che l'utente lo approvi. **Anche quando una skill
+vuole allargarsi, deve passare da una porta che l'utente apre.**
+
+**Copilot / VS Code: l'esatto opposto, e in una riga.** Dal file sorgente della
+documentazione ufficiale
+([`docs/agent-customization/agent-plugins.md`](https://raw.githubusercontent.com/microsoft/vscode-docs/main/docs/agent-customization/agent-plugins.md),
+riga 276; pagina pubblicata:
+[code.visualstudio.com/docs/agent-customization/agent-plugins](https://code.visualstudio.com/docs/agent-customization/agent-plugins);
+`DateApproved: 7/29/2026` nel front matter del file):
+
+> *«Plugin MCP servers are implicitly trusted when you install the plugin.
+> Unlike workspace MCP servers, they do not show a separate trust prompt at
+> startup.»*
+
+Il resto della pagina conferma che è una scelta, non una svista: la fiducia si
+concede **una volta al marketplace** (*«The first time you install a plugin from
+a new marketplace, VS Code shows a trust prompt»*), e da lì in avanti tutto ciò
+che il bundle contiene entra senza altre domande — mentre la pagina stessa
+avverte che *«Plugins can include hooks and MCP servers that run code on your
+machine»*.
+
+**La differenza in una frase.** In Gemini CLI il consenso è **per attivazione**
+e non è delegabile al contenuto; in Copilot il consenso è **per installazione**
+e si eredita a tutto il pacchetto. Il primo modello sopravvive a un pacchetto
+malevolo che passi il controllo iniziale. Il secondo no.
+
+**E Claude Code sta dalla parte di Copilot, ma almeno lo scrive.** La
+documentazione di Claude Code dice, testuale
+([code.claude.com/docs/en/skills](https://code.claude.com/docs/en/skills)):
+
+> *«Review project skills before trusting a repository, since a skill can grant
+> itself broad tool access.»*
+
+*Una skill può concedere a se stessa un accesso ampio ai tool.* È l'ammissione
+esplicita che `allowed-tools` **allarga** (§2.1) e che il presidio è la
+diligenza dell'utente. Su un telefono, dove l'utente non legge un `SKILL.md`
+prima di premere «installa», quel presidio non esiste.
+
+### Il quadro completo, cinque host su una riga ciascuno
+
+| Host | Cosa verifica | Chi paga se l'hosting viene compromesso |
+|---|---|---|
+| **Anthropic** (marketplace) | JSON su git, pinning allo SHA, allowlist amministrativa. *«Plugins and marketplaces are highly trusted components that can execute arbitrary code»* ([discover-plugins](https://code.claude.com/docs/en/discover-plugins)) | L'utente |
+| **OpenAI** (`skill-installer`) | Nulla. Catalogo letto dall'API GitHub, download diretto | L'utente |
+| **Google** (Gallery) | Allowlist di host **cablato nell'APK** + allowlist remota in JSON + disclaimer testuale (§2.4) | L'utente |
+| **Gemini CLI** (policy) | **SHA-256 sull'intera cartella di policy**, tre stati `NEW`/`MATCH`/`MISMATCH` ([`policy/integrity.ts`](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/policy/integrity.ts)) | Nessuno, se l'utente rifiuta al `MISMATCH` |
+| **Copilot / VS Code** | Un prompt al marketplace, poi fiducia implicita sul bundle | L'utente |
+
+Il quarto è l'unico che assomiglia a qualcosa. `PolicyIntegrityManager` calcola
+un SHA-256 deterministico su percorso relativo + contenuto di ogni file di
+policy (ordinati, con separatore `\0`), lo confronta con l'ultimo accettato, e
+distingue **«mai visto»** da **«cambiato sotto i piedi»**. Non è una firma — è
+*trust on first use* — ma è **la struttura di controllo giusta su cui montare
+una firma**: c'è già il punto in cui il codice decide se procedere.
+
+**Nota che vale quanto le altre cinque righe:** la specifica del formato non ha
+niente da dire in materia. L'indice ufficiale
+[agentskills.io/llms.txt](https://agentskills.io/llms.txt) elenca **nove**
+documenti — implementazione client, vetrina, panoramica, best practice,
+valutazione, ottimizzazione delle descrizioni, quickstart, uso degli script,
+specifica — e **nessuno riguarda sicurezza, fiducia, firma o provenienza**. La
+pagina della specifica non contiene una sezione di sicurezza. Anche la
+specifica MCP, che pure ha un documento di sicurezza lungo e serio
+([modelcontextprotocol.io/specification/draft/basic/security_best_practices](https://modelcontextprotocol.io/specification/draft/basic/security_best_practices)),
+copre confused deputy, token passthrough, SSRF, dirottamento di handle,
+compromissione di server locali — e **non definisce alcuna firma o verifica di
+provenienza**. Il silenzio degli standard non è un'approvazione: è un vuoto.
+
+### Cosa copiare, in ordine di importanza
+
+1. **Il parser che legge solo `name` e `description`** (Gemini CLI). Tutto il
+   resto del frontmatter è dato da mostrare, non configurazione da applicare.
+   `allowed-tools` va **letto e ignorato**, e la sua presenza va mostrata
+   all'utente come «questa skill chiede X» — mai eseguita.
+2. **I due consensi separati** (Gemini CLI): installazione e attivazione. Il
+   secondo è quello che manca a tutti gli altri.
+3. **L'attivazione concede una cosa sola**: leggere la propria cartella.
+4. **Il controllo di integrità con tre stati** (Gemini CLI), promosso da hash a
+   firma: manifesto remoto firmato Ed25519, chiave pubblica nell'APK, verifica
+   **prima** del parsing del frontmatter, rifiuto in caso di firma assente o non
+   valida. Fail-closed, come Codex su macOS: *«if the selected policy cannot be
+   enforced by the platform sandbox, Codex refuses to run the command»* (§1.6).
+   Il `MISMATCH` di Gemini diventa da noi «la skill è cambiata dopo che l'hai
+   approvata»: schermata, non log.
+5. **La lista di chiavi che una configurazione locale non può sovrascrivere**
+   (Codex, §1.5 punto 5). Da noi: nessuna skill, in nessuna forma, tocca il
+   provider del modello, l'endpoint, la telemetria, le chiavi dell'utente.
+6. **Il confine del plugin che coincide col confine della licenza** (Anthropic,
+   §2.2). Un catalogo che mescola licenze deve renderle separabili con un gesto.
+7. **La composizione delle decisioni di permesso** (VS Code, riga 209 dello
+   stesso file): *«the most restrictive permission decision across all hooks
+   wins: `deny` overrides `ask`, which overrides `allow`»*. È l'unica regola di
+   composizione che non si può sbagliare.
+8. **Il passaggio dei segreti della Gallery**, che è la risposta diretta al
+   guasto di Codex `gh-fix-ci`: *«If your JS script requires an API key or
+   token, **do not pass it through the LLM prompt**. Instead, the AI Edge
+   Gallery app provides a secure mechanism: it will display a native dialog to
+   the user to input the required secret… which is then passed directly to your
+   script»*, dichiarato con `require-secret: true` nei `metadata` e ricevuto
+   come **secondo parametro** della funzione JS
+   ([skills/README.md](https://github.com/google-ai-edge/gallery/blob/main/skills/README.md)).
+   Il segreto non attraversa mai il modello.
+
+### Cosa non copiare, e perché
+
+1. **La fiducia implicita di Copilot.** Un consenso all'installazione che si
+   eredita a tutto il pacchetto per sempre. Su desktop è discutibile; su un
+   telefono con Shizuku è inaccettabile.
+2. **`allowed-tools` come auto-concessione.** Se lo implementiamo come lo
+   implementa Claude Code, importiamo la frase *«a skill can grant itself broad
+   tool access»* dentro un'app che può toccare il sistema operativo.
+3. **L'allowlist di host cablata nell'APK** (Google). Viola direttamente il
+   vincolo *«app distribuita: niente statico»*: un elenco che invecchia dentro
+   il binario. E l'allowlist remota della loro build open source è **svuotata**
+   (`SKILL_ALLOWLIST_URL = ""`), cioè la funzione esiste solo nella loro build.
+4. **«È su GitHub sotto la nostra organizzazione»** come intero modello di
+   fiducia (OpenAI). Lega la sicurezza al controllo di un account.
+5. **Il silenzio della specifica.** Non aspettare che `agentskills.io` aggiunga
+   una sezione di sicurezza per progettarne una.
+6. **La delega alla diligenza dell'utente.** Tutti e cinque gli host, alla fine,
+   scrivono una variante di «controlla prima di installare». È la parte del
+   modello che non sopravvive al passaggio su mobile.
+
+### Dove ci mette, nella tassonomia interna
+
+§2.4 concludeva che la firma è **L2 immediato**, e **L3** se verificata sul
+dispositivo. Il lavoro di questa parte lo conferma e aggiunge un secondo asse:
+**il consenso per attivazione** esiste già (Gemini CLI) ma nessuno lo ha portato
+su mobile, e **il parser che ignora i campi di privilegio** esiste già (Gemini
+CLI) ma nessuno lo ha combinato con una firma. La combinazione *firma verificata
+sul dispositivo + frontmatter senza potere + consenso a ogni attivazione* non è
+implementata da nessuno dei cinque host censiti. **Quello è il L3.**
+
+## 3.3 Due porte: cosa implica sul formato e sulla registrazione
+
+### Il modello di riferimento esiste, ed è a due assi
+
+Claude Code è l'unico host censito che tratta le due porte come **due assi
+indipendenti**, e pubblica la tabella
+([code.claude.com/docs/en/skills](https://code.claude.com/docs/en/skills)):
+
+| Frontmatter | L'utente può invocarla | Il modello può invocarla | Quando entra in contesto |
+|---|---|---|---|
+| (default) | Sì | Sì | Descrizione sempre in contesto, corpo all'invocazione |
+| `disable-model-invocation: true` | Sì | No | **Descrizione non in contesto**, corpo all'invocazione |
+| `user-invocable: false` | No | Sì | Descrizione sempre in contesto, corpo all'invocazione |
+
+Con la motivazione, che è quella giusta: *«Use this for workflows with side
+effects or that you want to control timing, like `/commit`, `/deploy`, or
+`/send-slack-message`. You don't want Claude deciding to deploy because your code
+looks ready.»*
+
+**Gemini CLI, per contro, ha una porta sola — la sua.** Testuale, dalla pagina
+del tool: *«The `activate_skill` tool is used exclusively by the Gemini agent.
+**You cannot invoke this tool manually.**»*
+([docs/tools/activate-skill.md](https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/activate-skill.md)).
+I comandi `/skills list|enable|disable|reload` gestiscono il catalogo, non
+invocano la skill. Un utente Gemini CLI **non può dire «usa questa skill adesso»**:
+può solo sperare che il modello la scelga. È esattamente la metà di funzione che
+il vincolo TALOS vieta.
+
+### Cosa implica sul formato
+
+**La `description` è una superficie di prodotto con due pubblici, non una
+docstring.** Entrambe le fonti primarie lo dicono nello stesso modo: per la
+specifica, *«The `name` and `description` fields are loaded at startup for all
+skills»*; per Gemini, *«This is the only information the model has before
+activation»*
+([skills-best-practices.md](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/skills-best-practices.md)).
+Ma con due porte quella stessa stringa la legge anche **l'umano**, nel menu
+della chat e nell'elenco della stazione. I 1024 caratteri della specifica sono
+un **tetto**, non un obiettivo: su un telefono la descrizione va scritta per
+essere letta su tre righe e instradata da un modello da 4 B. Conseguenza pratica:
+serve una **regola redazionale interna**, non solo un limite tecnico.
+
+**Il `name` è già il token del comando.** La specifica lo vincola a `a-z`, `0-9`
+e trattini, e impone che coincida col nome della cartella. Non serve inventare
+un secondo schema di nomi per la porta della chat: `/nome-skill` è dato dal
+formato. Uno schema di nomi in più sarebbe una divergenza dallo standard senza
+guadagno.
+
+**I due interruttori non sono campi di primo livello.** La specifica ha
+**esattamente sei** campi (§2.1) e aggiungerne di nostri romperebbe la
+compatibilità che la Parte 2 ha guadagnato. Vanno dove §2.1 ha già individuato
+il posto: `metadata` per le cose semplici, `agents/talos.yaml` per le cose
+strutturate (tool richiesti, permessi Shizuku, livello di rischio, se la skill
+funziona col motore locale). Un client che non conosce TALOS ignora il file
+affiancato e la skill continua a funzionare; è additivo, non divergente.
+
+**Il corpo non deve sapere da quale porta è entrato.** Stesso `SKILL.md`, stesse
+risorse. L'unica cosa che cambia legittimamente è **l'argomento**: dalla chat
+arriva testo libero, dalla piattaforma agentica arriva un payload strutturato.
+Claude Code risolve con la sostituzione di `$ARGUMENTS` e `$1..$n`; è il
+meccanismo minimo, e va progettato subito, perché aggiungerlo dopo significa
+riscrivere ogni skill già pubblicata.
+
+### Cosa implica sulla registrazione
+
+**Un solo registro, due adattatori.** Se la chat e la piattaforma agentica
+scoprono le skill con due percorsi diversi, prima o poi divergono. Codex ha già
+questo guasto in produzione, tracciato due volte:
+[#9752](https://github.com/openai/codex/issues/9752) (skill di progetto non più
+scoperte) e [#9226](https://github.com/openai/codex/issues/9226) (script sotto
+`scripts/` non scoperti). La scoperta va fatta **una volta**, e le due porte
+devono essere due viste sullo stesso indice.
+
+**La registrazione dev'essere osservabile.** Corollario diretto delle due issue
+qui sopra: una skill che sparisce in silenzio è indistinguibile da una skill che
+non è mai stata installata. Serve una schermata che dica **cosa è stato
+scoperto, cosa è stato scartato e perché** (firma assente, `name` non conforme,
+cartella e `name` che non coincidono, licenza mancante). Questo è anche il
+posto naturale in cui mostrare i campi ignorati del punto 1 di §3.2.
+
+**Le due porte hanno rischi diversi, e la differenza va codificata.** Dalla chat
+l'utente è presente e vede l'effetto; dalla piattaforma agentica può non
+esserci. `disable-model-invocation` esiste esattamente per questo. Su TALOS con
+Shizuku la regola dev'essere più stretta di quella di Claude Code: **una skill
+che agisce sul sistema operativo è invocabile solo dall'utente**, finché
+l'utente non ne alza esplicitamente il livello — che è la forma che i sette
+livelli di rischio del documento-visione Shizuku devono prendere qui.
+
+**E c'è un vincolo che nessuno dei due host affronta**: la porta della chat e
+quella della piattaforma agentica **possono essere attive insieme**. Due agenti
+paralleli che attivano la stessa skill con stato persistente (`mood-tracker` è
+l'esempio nel Livello 0) si pestano i piedi. Codex risolve il problema analogo
+con i worktree git (§1.4); noi non abbiamo worktree, quindi la risposta deve
+stare nel formato: **una skill dichiara se ha stato**, e se ce l'ha il registro
+la serializza.
+
+## 3.4 Una skill scaricata è un dato, mai un'istruzione
+
+### Cosa dicono le fonti sulla prompt injection
+
+**La specifica del formato non dice niente.** È il fatto più importante di
+questa sezione e va ripetuto: i nove documenti di
+[agentskills.io/llms.txt](https://agentskills.io/llms.txt) non includono una
+pagina di sicurezza, e la
+[specifica](https://agentskills.io/specification) non contiene una sezione di
+sicurezza. **Il formato che 44 prodotti hanno adottato non definisce un modello
+di minaccia.** Ogni host se lo è costruito da sé, e le differenze le abbiamo
+viste in §3.2.
+
+**Chi lo definisce meglio è Microsoft**, nella pagina di sicurezza degli agenti
+([`docs/agents/security.md`](https://raw.githubusercontent.com/microsoft/vscode-docs/main/docs/agents/security.md)):
+
+> *«AI systems are vulnerable to prompt injection attacks where malicious
+> content in tool outputs influences the AI's behavior and decision-making. This
+> content might be visible to the user, or hidden in comments or obscured
+> through formatting.»*
+
+E le quattro classi di rischio, testuali, che sono la lista di controllo più
+utile trovata in tutta la ricerca:
+
+- *«**Data exfiltration**: Sensitive information can be extracted and sent to
+  unauthorized parties through tool invocations or terminal commands.»*
+- *«**Context contamination**: Malicious content introduced into the workspace
+  through files, comments, or tool outputs can influence the AI's understanding
+  of the task.»*
+- *«**Tool output chaining**: Output from one tool becomes input for another,
+  creating opportunities for malicious content to propagate through the system.»*
+- *«**External data processing**: When the AI processes untrusted content from
+  files, web requests, or external tools, malicious instructions embedded in
+  that content can be interpreted as legitimate commands.»*
+
+Con l'avvertenza, nella stessa pagina, che le regole di auto-approvazione **non
+bastano**: *«Agent sandboxing is the strongest protection against malicious
+terminal commands. If prompt injection is a concern, use agent sandboxing…
+rather than relying on auto-approval rules alone. Auto-approval rules use
+best-effort command parsing and have known limitations with shell aliases, quote
+concatenation, and complex shell syntax.»*
+
+### Cosa fanno gli host per difendersi — e la cosa che nessuno fa
+
+Le difese realmente implementate, ciascuna con la fonte:
+
+| Difesa | Chi | Testo |
+|---|---|---|
+| **Finestra di contesto isolata per il contenuto scaricato** | Claude Code | *«Isolated context windows: Web fetch uses a separate context window to avoid injecting potentially malicious prompts»* ([security](https://code.claude.com/docs/en/security)) |
+| **Approvazione in due tempi sull'URL, con revisione del contenuto** | VS Code | *«First, it asks you to trust the domain… Then, **after the content is fetched, it presents the content for review before it is passed to the model**»* |
+| **Risultati di ricerca in cache per default** | Codex | Riduce *«exposure to prompt injection from arbitrary live content»* (§1.6) |
+| **Rete tagliata durante la fase dell'agente** | Codex cloud | *«Codex blocks internet access during the agent phase»* (§1.6) |
+| **Fail-closed sul matching dei comandi** | Claude Code | *«Fail-closed matching: Unmatched commands default to requiring manual approval»* |
+| **Consenso a ogni attivazione** | Gemini CLI | §3.2 |
+| **Delimitazione del corpo della skill** | Gemini CLI | Il corpo viene incapsulato in `<activated_skill name="…"><instructions>…</instructions><available_resources>…</available_resources></activated_skill>` ([activate-skill.ts](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/tools/activate-skill.ts)) |
+
+**E adesso la cosa scomoda, che va detta perché è il cuore della domanda.**
+Nessuno dei cinque host tratta davvero il corpo di una skill come un dato. Tutti
+lo **iniettano come istruzione**. Il tag `<activated_skill>` di Gemini è una
+delimitazione, non una neutralizzazione: il testo dentro resta prosa che il
+modello legge come guida. Claude Code lo dice senza infingimenti: *«the rendered
+`SKILL.md` content enters the conversation as a single message and stays there
+for the rest of the session»*. Una skill firmata e una skill scaricata da un URL
+arbitrario, una volta attivate, hanno **esattamente lo stesso potere retorico**.
+
+Quindi: **«una skill è un dato, mai un'istruzione» non è parità. È una cosa che
+TALOS deve inventare.** Nella tassonomia interna è L3, come la firma, e per lo
+stesso motivo — nessuno ce l'ha.
+
+### La forma concreta che può prendere su TALOS
+
+Il vincolo che l'owner ha già scritto altrove — *metadati = dati, mai istruzioni*
+— si applica qui con quattro conseguenze operative:
+
+1. **La firma è il confine fra dato e istruzione.** Una skill con firma valida
+   contro la chiave nell'APK entra come istruzione. Una skill senza firma —
+   caricata da URL, da file, da messaggio — entra come **dato**: il suo corpo si
+   mostra all'utente, si può leggere, non si attiva mai da sola. È la
+   traduzione onesta del `--consent` di Gemini, che oggi serve a *saltare* il
+   controllo; da noi serve a *concederlo*.
+2. **Il catalogo è sempre dato.** Le `description` di N skill entrano nel prompt
+   come elenco delimitato, con una regola permanente accanto che dice al modello
+   che quel blocco descrive strumenti disponibili e non contiene istruzioni da
+   eseguire. È la difesa più economica che esista e va messa al primo giro,
+   perché la `description` è **l'unico campo che un attaccante controlla e che
+   entra in contesto senza nessuna attivazione**.
+3. **Nessuna skill cambia lo stato dei permessi.** La regola di Gemini,
+   applicata alla lettera: il frontmatter non ha potere, `agents/talos.yaml` è
+   una **richiesta** che l'utente concede, mai una concessione che la skill si
+   prende.
+4. **I metadati possono contenere chiavi.** È la lezione di
+   [#31588](https://github.com/openai/codex/issues/31588) (§1.5): gli URL dei
+   remote git con dentro un PAT finivano non sanificati nei file di sessione e
+   venivano spediti all'API. Da noi: **i metadati di una skill non partono mai
+   verso un provider cloud senza sanificazione**, e il `require-secret` della
+   Gallery (§3.2, punto 8) è il meccanismo che impedisce a un segreto di entrare
+   nel prompt in primo luogo.
+
+## 3.5 iOS: il testo esatto di 2.5.2 e 4.7.2, e cosa comporta
+
+### Le due regole, verbatim
+
+Da [developer.apple.com/app-store/review/guidelines](https://developer.apple.com/app-store/review/guidelines/),
+lette il 2026-08-02:
+
+> **2.5.2** *«Apps should be self-contained in their bundles, and may not read or
+> write data outside the designated container area, nor may they **download,
+> install, or execute code which introduces or changes features or functionality
+> of the app**, including other apps. Educational apps designed to teach,
+> develop, or allow students to test executable code may, in limited
+> circumstances, download code provided that such code is not used for other
+> purposes. Such apps must make the source code provided by the app completely
+> viewable and editable by the user.»*
+
+> **4.7.2** *«**Your app may not extend or expose native platform APIs or
+> technologies to the software without prior permission from Apple.**»*
+
+### La deroga che salva l'idea, e che va letta insieme
+
+Presa da sola, la 2.5.2 chiuderebbe la partita: una repo di skill scaricabili è
+letteralmente *download di codice che introduce funzionalità nell'app*. Ma la
+2.5.2 non va letta da sola, perché la **4.7** apre una porta stretta e precisa:
+
+> **4.7 — Mini apps, mini games, streaming games, chatbots, plug-ins, and game
+> emulators.** *«Apps may offer certain software that is not embedded in the
+> binary, specifically **HTML5 and JavaScript mini apps** and mini games,
+> streaming games, chatbots, and **plug-ins**. […] You are responsible for all
+> such software offered in your app, including ensuring that such software
+> complies with these Guidelines and all applicable laws. Software that does not
+> comply with one or more guidelines will lead to the rejection of your app. You
+> must also ensure that the software adheres to the additional rules that follow
+> in 4.7.1 through 4.7.5.»*
+
+**Conclusione, e non è quella che ci si aspetta.** Una repo di skill scaricabili
+**è ammissibile su iOS a una condizione sola: che le skill siano HTML5 e
+JavaScript, e niente altro.** Nessun binario, nessuno script nativo, nessuna
+shell. Che è — parola per parola — l'architettura della Google AI Edge Gallery
+descritta in §2.5: la logica in un file HTML dentro una WebView nascosta.
+
+E non è teoria: **la Gallery è sull'App Store**. Il README linka
+[apps.apple.com/us/app/google-ai-edge-gallery/id6749645337](https://apps.apple.com/us/app/google-ai-edge-gallery/id6749645337)
+e dichiara *«Android 12 and up, and iOS 17 and up»*
+([README](https://github.com/google-ai-edge/gallery/blob/main/README.md)). C'è
+anche un allowlist di modelli specifico per iOS nel repository
+(`model_allowlists/ios_1_0_0.json`, con Gemma-3n E2B e E4B, `accelerators:
+"gpu"`, `minDeviceMemoryInGb` 6 e 8). Un'app che fa girare LLM locali su iPhone
+esiste e ha superato la review.
+
+### La 4.7.2 è il vero muro, ed è quello che colpisce Shizuku
+
+La 2.5.2 riguarda il *come* si esegue; la **4.7.2 riguarda il *cosa si può
+toccare***. *«Your app may not extend or expose native platform APIs or
+technologies to the software without prior permission from Apple.»*
+
+Un tool `run_intent` **il cui elenco di intent fosse scaricabile** sarebbe
+esattamente questo: esporre API native al software scaricato. E qui si capisce
+perché Google ha fatto una scelta che in §2.5 sembrava un limite tecnico:
+
+> *«While the app currently supports sending email and sending text out of the
+> box, **supporting additional native intent-based skills requires updating the
+> app's source code**. To add new capabilities, such as opening the camera,
+> setting alarms, etc., you must define the logic within the app's codebase.»*
+
+**Quella non è una scorciatoia: è conformità alla 4.7.2.** L'insieme degli
+intent è cablato nell'app e cambia solo con una release, quindi nessuna software
+scaricata «estende o espone» API native. Google ha pagato il prezzo giusto per
+poter stare sullo Store.
+
+### Le tre regole che nessuno cita e che sono obblighi di prodotto
+
+- **4.7.1** — il software offerto deve *«follow all privacy guidelines… include
+  a method for filtering objectionable material, a mechanism to report content
+  and timely responses to concerns, and the ability to block abusive users»*, e
+  seguire la 3.1 per i beni digitali. **Un catalogo di skill di terzi implica una
+  moderazione e un canale di segnalazione**, non solo una firma.
+- **4.7.3** — *«Your app may not share data or privacy permissions to any
+  individual software offered in your app without explicit user consent in each
+  instance.»* Cioè: **il consenso per attivazione di Gemini CLI (§3.2) non è solo
+  buona ingegneria: su iOS è un obbligo di review.** «in each instance», non una
+  volta all'installazione. La fiducia implicita di Copilot, su iOS, è
+  irregolare.
+- **4.7.4** — *«You must provide an index of software and metadata available in
+  your app. It must include universal links that lead to all of the software
+  offered in your app.»* Ogni skill del catalogo deve avere una **pagina web
+  pubblica raggiungibile da universal link**. Che, guarda caso, è anche il posto
+  dove pubblicare la scheda di provenienza e la licenza — le due cose che il
+  programma «library file provenance record» già chiede.
+- **4.7.5** — identificazione del software oltre la fascia d'età dell'app e
+  meccanismo di limitazione per età.
+
+### Cosa fare oggi, sapendo questo
+
+TALOS si distribuisce fuori dal Play Store (documento di distribuzione), e su
+Android **niente di tutto questo si applica**. Ma il costo di ignorarlo non è
+zero, è **differito**: se un giorno esiste una versione iOS, un catalogo di
+skill che mescola JS e azioni native va riscritto tutto.
+
+La mitigazione costa una riga adesso: **`agents/talos.yaml` porta un campo di
+modalità di esecuzione** — `js` (WebView, portabile su iOS) contro `native`
+(intent/Shizuku, solo Android, mai scaricabile come dato) — e il catalogo lo
+espone come filtro. La divisione della 4.7 diventa un attributo del formato
+invece che una migrazione.
+
+## 3.6 Il vincolo del contesto: 4k non è 200k
+
+### Prima i numeri veri, poi l'aritmetica
+
+L'unica misura affidabile di «quanto contesto ha un modello su un telefono» è
+quella che un'app spedita dichiara per i modelli che spedisce. Dal file di
+allowlist della Google AI Edge Gallery
+([`model_allowlists/1_0_15.json`](https://github.com/google-ai-edge/gallery/blob/main/model_allowlists/1_0_15.json),
+letto il 2026-08-02):
+
+| Modello | `maxTokens` | Peso su disco |
+|---|---|---|
+| Gemma-4-E2B-it | **4.000** | 2,59 GB |
+| Gemma-4-E4B-it | **4.000** | 3,66 GB |
+| Gemma-3n-E2B-it | **4.096** | 3,66 GB |
+| Gemma-3n-E4B-it | **4.096** | 4,92 GB |
+| Gemma3-1B-IT | **1.024** | 584 MB |
+| Qwen2.5-1.5B-Instruct | **4.096** | 1,60 GB |
+| DeepSeek-R1-Distill-Qwen-1.5B | **4.096** | 1,83 GB |
+| TinyGarden-270M, MobileActions-270M | **1.024** | 289 MB |
+
+E la conferma testuale nella descrizione che Google scrive per Gemma 3n:
+*«The current checkpoint only supports text and vision input, **with 4096 context
+length**.»* L'allowlist iOS dichiara gli stessi 4.096.
+
+Per llama.cpp — che è il motore di TALOS — il default è diverso ma non più
+generoso in pratica: `n_ctx = 0` significa *«context the model was trained
+with»*, e la costante che governa la riduzione automatica per stare in memoria è
+`fit_params_min_ctx = 4096`
+([`common/common.h`](https://github.com/ggml-org/llama.cpp/blob/master/common/common.h)).
+Cioè: **quando llama.cpp deve stringere per farci stare il modello, il pavimento
+è 4.096.** Il numero che l'owner ha in testa non è un'ipotesi prudente: è quello
+che i due stack principali scrivono nei propri file.
+
+**L'aritmetica, con le cautele.** La specifica dice che i metadati costano
+*«~100 tokens»* per skill. Va segnalata una **discrepanza fra due fonti
+primarie**: le best practice di Gemini CLI scrivono per lo stesso livello
+*«Metadata (name + description): Always in context (**~100 words**)»* — parole,
+non token, quindi una cifra più alta. Non le concilio: le riporto entrambe e uso
+la più favorevole, che è quella della specifica.
+
+Su una finestra di 4.096 token, con ~100 token di catalogo per skill:
+
+- **10 skill** = ~1.000 token = **~24%** della finestra, prima che l'utente
+  scriva.
+- **20 skill** = ~2.000 token = **~49%**.
+- **44 skill** (il catalogo di `openai/skills`) = ~4.400 token = **più
+  dell'intera finestra**.
+
+E questo *prima* del prompt di sistema, prima della cronologia, prima delle
+definizioni dei tool, e prima del corpo della skill attivata — che la specifica
+raccomanda sotto i 5.000 token, cioè **da solo più grande della finestra**.
+
+**Il tetto, detto in chiaro: su 4k si tengono visibili circa 8-12 skill; su 32k
+qualche decina.** Non centinaia. La frase di §2.1 — *«cento skill installate
+costano ~10.000 token di catalogo»* — è corretta come aritmetica ma va letta
+insieme a questa: **10.000 token è due volte e mezzo la finestra intera del
+modello che gira sul telefono.** Cento skill installate sono compatibili con il
+disco, non con il contesto.
+
+### Cosa fanno gli host per limitare il costo
+
+**1. Divulgazione progressiva** — è nella specifica (§2.1) e la implementano
+tutti. Tre livelli: metadati sempre, corpo all'attivazione, risorse a richiesta.
+È il pavimento, non il soffitto: **anche con la divulgazione progressiva perfetta,
+i metadati di 44 skill non entrano in 4k.**
+
+**2. Tool search** — Anthropic, generalmente disponibile sulla Claude API. Le
+cifre, dalla pagina che le pubblica
+([platform.claude.com — tool search tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool)):
+
+> *«A typical multiserver setup (GitHub, Slack, Sentry, Grafana, and Splunk) can
+> consume ~55k tokens in definitions before Claude does any work. Tool search
+> typically reduces this by over 85 percent, loading only the 3–5 tools Claude
+> needs for a given request.»*
+
+E il secondo effetto, che su un modello piccolo pesa più del primo:
+
+> *«Claude's ability to pick the right tool degrades once you exceed 30–50
+> available tools.»*
+
+Le soglie dichiarate per usarla: 10 o più tool, oppure definizioni oltre i 10k
+token. I limiti: 10.000 tool differibili per richiesta, 5 risultati per ricerca,
+almeno un tool non differito.
+
+**3. Code mode / chiamata programmatica dei tool** — invece di far passare ogni
+risultato intermedio dal modello, il modello scrive codice che chiama i tool e
+riceve solo il risultato filtrato. Le cifre, con la loro provenienza distinta:
+
+- Dalla documentazione: *«adding programmatic tool calling on top of basic
+  search tools improved performance by an average of 11% while using **24% fewer
+  input tokens**»*
+  ([programmatic-tool-calling](https://platform.claude.com/docs/en/agents-and-tools/tool-use/programmatic-tool-calling)),
+  e *«intermediate results are not loaded into Claude's context window»*.
+- Dal blog di ingegneria: *«This reduces the token usage from 150,000 tokens to
+  2,000 tokens—a time and cost saving of 98.7%»*
+  ([anthropic.com/engineering/code-execution-with-mcp](https://www.anthropic.com/engineering/code-execution-with-mcp)).
+  **Attenzione:** questa seconda cifra è **un esempio illustrativo in un post del
+  fornitore**, riferito a un singolo scenario (Google Drive → Salesforce), non a
+  un benchmark. La riporto perché la fonte è primaria, ma non ha lo stesso peso
+  del 24% misurato sopra.
+
+**4. Budget e sfratto** — Claude Code, alla compattazione automatica: *«Claude
+Code re-attaches the most recent invocation of each skill after the summary,
+**keeping the first 5,000 tokens of each**. Re-attached skills share a combined
+budget of **25,000 tokens**»*, riempito partendo dalla più recente, *«so older
+skills can be dropped entirely»*. E Codex fissa il budget di contesto dei
+metadati delle skill **al 2%**, come tracciato in
+[#19679](https://github.com/openai/codex/issues/19679) (§1.5).
+
+### Cosa significa per TALOS, in decisioni
+
+1. **Il tool search di Anthropic è un servizio, non una libreria: non esiste per
+   llama.cpp.** Va implementato lato client — e la documentazione dichiara che è
+   legittimo farlo: *«You can implement your own tool search logic (for example,
+   using embeddings or semantic search)»*. Su un telefono la scelta ovvia è
+   **BM25 sul catalogo locale**, che non richiede un secondo modello, non
+   richiede rete, e costa millisecondi. È esattamente una delle due varianti che
+   Anthropic offre lato server (`tool_search_tool_bm25`).
+2. **Il budget si esprime in percentuale della finestra, non in numero di
+   skill.** Il 2% di Codex è la forma giusta; il numero fisso è la forma
+   sbagliata. La finestra la conosce il motore quando carica il GGUF, quindi il
+   tetto si deriva a runtime — che è anche l'unico modo di rispettare *«app
+   distribuita: niente statico»*: nessun numero di skill cablato nell'APK.
+3. **Il catalogo va ordinato, non elencato.** Su 4.096 token, dopo il prompt di
+   sistema, ci stanno le descrizioni di 5-8 skill. Quali cinque è una decisione
+   di prodotto: le fissate dall'utente, poi le più usate di recente, poi quelle
+   pescate dalla ricerca sul turno corrente.
+4. **Il code mode non è un'ottimizzazione: è la condizione di esistenza.** Ed è
+   già disponibile — è la WebView nascosta della Gallery. Una skill che chiama
+   Wikipedia e restituisce *«a concise summary (1-3 complete sentences) to
+   conserve context»* — la frase è nel `SKILL.md` di `query-wikipedia`, e Google
+   l'ha scritta per lo stesso motivo per cui la scriveremmo noi — è la
+   differenza fra stare dentro 4k e non starci.
+5. **Il contatore dei token è lo strumento principale, non un vezzo.** §1.5 lo
+   ricavava dalla fatturazione ([#23794](https://github.com/openai/codex/issues/23794),
+   173 commenti). Su un modello locale l'argomento è più forte: non si paga a
+   token, ma **quando il contesto finisce la conversazione si degrada**, e
+   l'utente deve poterlo vedere arrivare.
+6. **Il tetto di 30-50 tool oltre il quale la selezione peggiora è misurato su
+   Claude.** Su un modello da 2-4 B è ragionevole aspettarsi che sia più basso,
+   ma **non ho una misura e non la invento**: è una cosa che TALOS deve misurare
+   sul proprio telefono di prova, ed è un candidato naturale per il banco di
+   benchmark già previsto dalla libreria modelli.
+
+## 3.7 Le decisioni che questa parte lascia sul tavolo
+
+Non sono raccomandazioni generiche: sono le scelte che vanno prese **prima** di
+scrivere la prima riga del caricatore, perché ognuna è costosa da cambiare dopo.
+
+1. **Il frontmatter non ha potere.** Si leggono `name` e `description`; tutto il
+   resto è dato da mostrare. `allowed-tools` si legge, si mostra, non si applica.
+2. **Due consensi, non uno.** Installazione e attivazione. Il secondo è anche un
+   obbligo della 4.7.3 se un giorno si va su iOS.
+3. **Firma Ed25519 verificata prima del parsing, fail-closed.** Il `MISMATCH` di
+   Gemini diventa una schermata, non un log.
+4. **La firma è il confine fra dato e istruzione.** Firmata = istruzione. Non
+   firmata = dato, mostrata all'utente, mai auto-attivata.
+5. **`agents/talos.yaml` è una richiesta, mai una concessione**, e porta il campo
+   `js | native` che tiene aperta la strada iOS.
+6. **Un registro, due adattatori, e una schermata che dice cosa è stato
+   scartato e perché.**
+7. **Il budget del catalogo è una percentuale della finestra del modello
+   caricato**, e la selezione è BM25 locale.
+8. **Il segreto non passa dal prompt**: dialogo nativo, secondo parametro,
+   modello mai coinvolto.
+9. **Le prime 22 skill sono quelle di §3.1**, e nessuna di esse presume una
+   shell.
+
+## 3.8 Cosa resta non confermato
+
+Quattro cose. Nessuna è stata riempita per ragionevolezza.
+
+- **Se l'app iOS della Google AI Edge Gallery spedisca davvero la funzione Agent
+  Skills.** Il repository contiene solo la cartella `Android/`; il sorgente iOS
+  non è pubblicato lì. Il README elenca le Agent Skills fra le funzioni senza
+  qualificare il sistema operativo, ed esiste un allowlist di modelli iOS. Ma
+  **non ho potuto verificare che la funzione ci sia**, e la differenza è esattamente
+  il punto della §3.5. **Non confermato.**
+- **Se Apple abbia mai concesso a qualcuno la «prior permission» della 4.7.2.**
+  Le linee guida la nominano; non esiste, nella documentazione pubblica che ho
+  potuto aprire, un elenco di deroghe concesse né una procedura per chiederla.
+  **Non confermato.**
+- **La data di ultimo aggiornamento delle App Review Guidelines.** Il testo di
+  2.5.2, 4.7 e 4.7.1-4.7.5 è stato letto il 2026-08-02 ed è riportato verbatim,
+  ma **la pagina, nel contenuto che ho ottenuto, non espone una data di
+  revisione**. Le citazioni valgono per come stavano quel giorno.
+- **Il numero oltre il quale la selezione delle skill peggiora su un modello
+  on-device.** La cifra 30-50 è di Anthropic e si riferisce a Claude. Per un
+  modello da 2-4 B non ho trovato una misura pubblicata e **non ne ho dedotta
+  una**. Va misurata.
+
+Una quinta, minore, per completezza: nei nomi dei file `.task` della Gallery
+compaiono suffissi come `ekv1280` ed `ekv2048`, che sembrano indicare la
+dimensione della cache KV. **L'interpretazione è mia e la fonte non la
+dichiara**, quindi non l'ho usata per nessun calcolo: i numeri di §3.6 vengono
+tutti dal campo `maxTokens` e dalle descrizioni testuali.
+
