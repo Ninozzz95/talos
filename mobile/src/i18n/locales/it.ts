@@ -1421,6 +1421,7 @@ export const TALOS_IT_MESSAGES = {
             connections: 'Connessioni',
             interface: 'Interfaccia',
             privacy: 'Privacy',
+            unavailable: 'Non in questa build',
         },
         tabs: {
             models: { label: 'Modelli', description: 'Chiavi provider, profili e modello chat predefinito.' },
@@ -1435,7 +1436,7 @@ export const TALOS_IT_MESSAGES = {
             privacy: { label: 'Privacy e autorizzazioni', description: 'Cosa TALOS può chiedere al dispositivo e cosa può lasciarlo.' },
             account: { label: 'Account', description: 'Identità workspace locale, blocco app e ripetizione dell’introduzione.' },
             agent_tools: { label: 'Strumenti agente', description: 'Scegli quali capacità può usare l’agente della chat.' },
-            system: { label: 'Sistema', description: 'Diagnostica, policy, audit e preparazione del backup.', gate: 'I servizi mobile di diagnostica e backup non sono ancora installati.' },
+            system: { label: 'Sistema', description: 'Policy, audit e preparazione del backup. I controlli del dispositivo stanno in Diagnostica.', gate: 'I servizi mobile di policy, audit e backup non sono ancora installati. I controlli del dispositivo sono in Diagnostica.' },
         },
     },
     agentTools: {

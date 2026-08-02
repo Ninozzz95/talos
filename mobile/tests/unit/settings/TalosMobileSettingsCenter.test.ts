@@ -161,7 +161,9 @@ describe('TalosMobileSettingsCenter — on the tablet, it really is tabs', () =>
         await nextTick()
         await new Promise((resolve) => setTimeout(resolve, 0))
         await nextTick()
-        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('Privacy and permissions')
+        // The last entry is System now: the four "not in this build" ones were
+        // pulled out of the live groups into a declared section at the end.
+        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('System')
 
         wrapper.get('[role="tab"][aria-selected="true"]').element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }))
         await nextTick()
@@ -173,6 +175,38 @@ describe('TalosMobileSettingsCenter — on the tablet, it really is tabs', () =>
 })
 
 describe('TalosMobileSettingsCenter', () => {
+
+    /**
+     * Owner 2026-08-02: the entries that say "not in this build" go into a
+     * declared section, or they go away. They used to be salted through the
+     * live ones — three of the five under Connections led nowhere, and someone
+     * scanning had to tap to find out which.
+     */
+    it('gathers everything unavailable under one declared heading, at the end', () => {
+        const wrapper = mountCenter()
+        // By test id rather than by sniffing classes: the heading reads as
+        // uppercase because of CSS, not because the string is.
+        const headings = wrapper.findAll('[data-testid="settings-group-heading"]').map((node) => node.text())
+
+        expect(headings.at(-1)).toBe('Not in this build')
+        // …and the live groups keep only live entries.
+        const rows = wrapper.findAll('[data-settings-tab]').map((row) => row.attributes('data-settings-tab'))
+        expect(rows.slice(-4)).toEqual(['integrations', 'email', 'reminders', 'system'])
+        wrapper.unmount()
+    })
+
+    it('stops the System entry denying a Doctor that ships', async () => {
+        // Exactly the defect the Search entry had: an entry announcing the
+        // absence of something the app does. What is genuinely missing is
+        // policy, audit and backup — so that is what it says.
+        const wrapper = mountCenter()
+        await activateTab(wrapper, 'system')
+
+        const panel = wrapper.get('[data-capability="system"]')
+        expect(panel.text()).toContain('Doctor')
+        expect(panel.text()).not.toContain('Doctor and backup services are not installed')
+        wrapper.unmount()
+    })
 
     it('keeps every remaining runtime-dependent category visible and explicitly gated', async () => {
         const wrapper = mountCenter()

@@ -1426,6 +1426,7 @@ export const TALOS_EN_MESSAGES = {
             connections: 'Connections',
             interface: 'Interface',
             privacy: 'Privacy',
+            unavailable: 'Not in this build',
         },
         tabs: {
             models: { label: 'Models', description: 'Provider keys, profiles and the default chat model.' },
@@ -1440,7 +1441,7 @@ export const TALOS_EN_MESSAGES = {
             privacy: { label: 'Privacy and permissions', description: 'What TALOS can ask the device for, and what leaves it.' },
             account: { label: 'Account', description: 'Local workspace identity, app lock and introduction replay.' },
             agent_tools: { label: 'Agent Tools', description: 'Choose which capabilities the chat agent may use.' },
-            system: { label: 'System', description: 'Doctor, policy, audit and backup readiness.', gate: 'Mobile Doctor and backup services are not installed yet.' },
+            system: { label: 'System', description: 'Policy, audit and backup readiness. Device checks live in Doctor.', gate: 'Mobile policy, audit and backup services are not installed yet. Device checks are in Doctor.' },
         },
     },
     agentTools: {
