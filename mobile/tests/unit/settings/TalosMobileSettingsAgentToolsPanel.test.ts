@@ -96,51 +96,56 @@ describe('TalosMobileSettingsAgentToolsPanel', () => {
         expect(wrapper.text()).not.toContain('agentTools.tools.')
 
         const search = wrapper.get('[data-agent-tool="library_search"]')
-        const toggle = search.get('input[role="switch"]')
+        const toggle = search.get('[role="switch"]')
         expect(toggle.attributes('aria-label')).toBe('Enable Search the Library')
-        expect((toggle.element as HTMLInputElement).checked).toBe(true)
+        expect(toggle.attributes('aria-checked')).toBe('true')
 
-        await toggle.setValue(false)
+        await toggle.trigger('click')
 
         expect(settings.setAgentToolEnabled).toHaveBeenCalledWith('library_search', false)
         const policy = wrapper.get('[data-agent-tool="library_context_policy_update"]')
         expect(policy.text()).toContain('Manage Library context policy')
-        expect((policy.get('input[role="switch"]').element as HTMLInputElement).checked)
-            .toBe(false)
+        // The one tool that ships off: announced off, not merely unchecked.
+        expect(policy.get('[role="switch"]').attributes('aria-checked')).toBe('false')
     })
 
-    it('AGENT-TOOLS-10 renders a pill switch while preserving the native accessible input', () => {
+    it('AGENT-TOOLS-10 shows exactly one switch per row, and it is the shared one', () => {
         const wrapper = mount(TalosMobileSettingsAgentToolsPanel)
         const row = wrapper.get('[data-agent-tool="library_search"]')
 
-        expect(row.get('input[role="switch"]').classes()).toContain('sr-only')
-        const visual = row.get('[data-agent-tool-toggle-visual]')
-        expect(visual.classes()).toContain('rounded-full')
-        expect(visual.classes()).toContain('pointer-events-none')
+        // The hand-drawn track is gone with the private implementation. Two
+        // controls in one row would be the bug this asserts against: the old
+        // markup kept a real input and a fake pill, and only one of them worked.
+        expect(row.findAll('[role="switch"]')).toHaveLength(1)
+        expect(row.findAll('[data-agent-tool-toggle-visual]')).toHaveLength(0)
+        expect(row.get('[role="switch"]').attributes('data-testid')).toBe('talos-themed-switch')
     })
 
-    it('TOOL-AUTH-27 makes the descriptive row area a native switch label target', () => {
+    it('TOOL-AUTH-27 keeps the whole row tappable, not just the switch itself', async () => {
         const wrapper = mount(TalosMobileSettingsAgentToolsPanel)
         const row = wrapper.get('[data-agent-tool="library_search"]')
-        const toggle = row.get('input[role="switch"]')
-        const label = row.get('[data-agent-tool-label="library_search"]')
+        const target = row.get('[data-agent-tool-label="library_search"]')
 
-        expect(label.element.tagName).toBe('LABEL')
-        expect(label.attributes('for')).toBe(toggle.attributes('id'))
-        expect(label.classes()).toContain('cursor-pointer')
+        // `for` does nothing when the control is a button, so the row carries
+        // the tap itself. The assertion is the effect, not the element: after
+        // touching the row area, the store was asked to flip that tool.
+        await target.trigger('click')
+        expect(settings.setAgentToolEnabled).toHaveBeenCalledWith('library_search', false)
     })
 
     it('AGENT-TOOLS-PERSIST-03 restores the controlled switch and announces a failed save', async () => {
         settings.setAgentToolEnabled.mockRejectedValueOnce(new Error('native detail'))
         const wrapper = mount(TalosMobileSettingsAgentToolsPanel)
         const toggle = wrapper.get(
-            '[data-agent-tool="library_search"] input[role="switch"]',
+            '[data-agent-tool="library_search"] [role="switch"]',
         )
 
-        await toggle.setValue(false)
+        await toggle.trigger('click')
         await flushPromises()
 
-        expect((toggle.element as HTMLInputElement).checked).toBe(true)
+        // Still announced ON: the save failed, and a controlled switch cannot
+        // show a value that was never stored.
+        expect(toggle.attributes('aria-checked')).toBe('true')
         expect(wrapper.text()).toContain('17 of 18 enabled')
         expect(wrapper.get('[data-testid="agent-tools-save-error"]').attributes('role')).toBe('alert')
         expect(wrapper.get('[data-testid="agent-tools-save-error"]').text())

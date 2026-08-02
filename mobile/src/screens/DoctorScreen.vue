@@ -7,6 +7,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
+import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 import {
     Activity, ChevronDown, CircleCheck, CircleX, ClipboardCopy, Stethoscope, Timer,
 } from '@lucide/vue'
@@ -46,8 +47,7 @@ const { t } = useTalosI18n()
  * station — someone looking for it is already here, and someone who is not will
  * never trip over it by accident.
  */
-function toggleDiagnostics(event: Event): void {
-    const on = (event.target as HTMLInputElement).checked
+function toggleDiagnostics(on: boolean): void {
     void settings.setShell({ debug_diagnostics: on })
     // Turning it off discards what was measured: otherwise the report says
     // `timingsRecorded: false` beside a list of sends, which contradicts itself.
@@ -418,23 +418,22 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
 
             <!-- ADVANCED -->
             <TabsContent value="advanced" class="flex flex-col gap-2 outline-none">
-                <label class="flex items-start justify-between gap-3 rounded-xl border border-[var(--talos-border)] px-3 py-2.5">
+                <div class="flex items-start justify-between gap-3 rounded-xl border border-[var(--talos-border)] px-3 py-2.5">
                     <span class="min-w-0">
                         <span class="block text-sm text-[var(--talos-text)]">{{ t('doctor.showTechnicalDetail') }}</span>
                         <span class="mt-1 block text-2xs leading-4 text-[var(--talos-muted)]">
                             {{ t('doctor.technicalDetailBody') }}
                         </span>
                     </span>
-                    <input
-                        type="checkbox"
-                        role="switch"
+                    <TalosThemedSwitch
+                        class="mt-1"
                         data-testid="talos-debug-diagnostics"
                         :aria-label="t('doctor.showTechnicalDetailAria')"
-                        :checked="settings.state.shell.debug_diagnostics"
-                        class="mt-1 h-5 w-9 shrink-0 accent-[var(--talos-accent)]"
-                        @change="toggleDiagnostics"
-                    >
-                </label>
+                        :model-value="settings.state.shell.debug_diagnostics"
+                        @update:model-value="toggleDiagnostics"
+                        @click.stop
+                    />
+                </div>
 
                 <!-- F5.1: recent device issues (fenced timeouts, swallowed native
                      errors) — the evidence channel for device-only failures. -->

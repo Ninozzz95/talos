@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { ShieldCheck } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { useSettingsStore } from '@/stores/settings'
+import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import type { TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
 import {
@@ -50,12 +51,11 @@ function description(tool: AgentToolControl): string {
     return t(`agentTools.tools.${tool.id}.description`)
 }
 
-async function setEnabled(tool: AgentToolControl, event: Event): Promise<void> {
-    const input = event.target as HTMLInputElement
-    const enabled = input.checked
-    // Native checkboxes flip before `change` runs. Keep the visual and
-    // accessible state on the committed value until persistence succeeds.
-    input.checked = settings.state.agent_tools[tool.id]
+async function setEnabled(tool: AgentToolControl, enabled: boolean): Promise<void> {
+    // The shared switch is controlled: it shows the stored value and never
+    // moves on its own, so there is nothing to put back when a save fails.
+    // What used to be three assignments to `input.checked` is now the absence
+    // of one — the control cannot show something that was never persisted.
     if (savingTool.value !== null) return
 
     savingTool.value = tool.id
@@ -63,7 +63,6 @@ async function setEnabled(tool: AgentToolControl, event: Event): Promise<void> {
     try {
         await settings.setAgentToolEnabled(tool.id, enabled)
     } catch {
-        input.checked = settings.state.agent_tools[tool.id]
         saveError.value = t('agentTools.saveFailed', { tool: title(tool) })
     } finally {
         savingTool.value = null
@@ -172,13 +171,15 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
                     :data-agent-tool="tool.id"
                     class="relative flex min-h-14 items-center gap-3 px-3 py-2.5"
                 >
-                    <label
-                        :for="`talos-agent-tool-${tool.id}`"
+                    <button
+                        type="button"
                         :data-agent-tool-label="tool.id"
+                        tabindex="-1"
+                        aria-hidden="true"
                         class="absolute inset-0 z-0 cursor-pointer"
-                    >
-                        <span class="sr-only">{{ title(tool) }}</span>
-                    </label>
+                        :disabled="savingTool !== null || revokingTool !== null"
+                        @click="setEnabled(tool, !settings.state.agent_tools[tool.id])"
+                    ></button>
                     <span class="pointer-events-none relative z-10 min-w-0 flex-1">
                         <span class="block text-sm font-semibold text-[var(--talos-text)]">{{ title(tool) }}</span>
                         <span class="mt-0.5 block text-xs leading-4 text-[var(--talos-muted)]">{{ description(tool) }}</span>
@@ -204,26 +205,16 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
                             :disabled="revokingTool !== null || savingTool !== null"
                             @click="revokeAuthorization(tool)"
                         >{{ t('agentTools.askAgain') }}</button>
-                        <label
-                            :for="`talos-agent-tool-${tool.id}`"
-                            class="flex min-h-11 cursor-pointer items-center"
-                        >
-                            <input
+                        <div class="flex min-h-11 items-center">
+                            <TalosThemedSwitch
                                 :id="`talos-agent-tool-${tool.id}`"
-                                type="checkbox"
-                                role="switch"
-                                class="peer sr-only"
+                                :data-agent-tool-switch="tool.id"
                                 :aria-label="t('agentTools.enableAria', { tool: title(tool) })"
-                                :checked="settings.state.agent_tools[tool.id]"
+                                :model-value="settings.state.agent_tools[tool.id]"
                                 :disabled="savingTool !== null || revokingTool !== null"
-                                @change="setEnabled(tool, $event)"
-                            >
-                            <span
-                                data-agent-tool-toggle-visual
-                                aria-hidden="true"
-                                class="pointer-events-none relative block h-6 w-11 rounded-full border border-[var(--talos-border)] bg-[var(--talos-input)] transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-5 after:rounded-full after:bg-[var(--talos-card)] after:shadow-sm after:transition-transform peer-checked:border-[var(--talos-accent)] peer-checked:bg-[var(--talos-accent)] peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--talos-ring)] peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-[var(--talos-panel)]"
+                                @update:model-value="setEnabled(tool, $event)"
                             />
-                        </label>
+                        </div>
                     </span>
                 </div>
             </div>

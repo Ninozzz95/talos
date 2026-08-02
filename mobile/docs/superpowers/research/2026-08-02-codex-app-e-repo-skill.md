@@ -573,3 +573,366 @@ La frase da mettere sul confronto è la loro, non nostra: *«Your files,
 credentials, permissions, and local setup stay on the machine where Codex is
 operating.»* Bene. Su TALOS, quella macchina **è** il telefono.
 
+---
+
+# PARTE 2 — Le skill: censire i repository che esistono
+
+## 2.1 La notizia che cambia il piano: il formato è uno solo, ed è aperto
+
+L'obiettivo dell'owner era «avere una nostra repo di skill open source già
+affermate da altri, da adattare a TALOS». La ricerca ha trovato qualcosa di
+meglio di un elenco di repository: **ha trovato che l'adattamento non serve.**
+
+Esiste uno **standard aperto unico**, pubblicato su
+[agentskills.io](https://agentskills.io/), con il suo repository su
+[github.com/agentskills/agentskills](https://github.com/agentskills/agentskills)
+— *«Specification and documentation for Agent Skills»*, **licenza Apache-2.0**,
+**23.757 stelle**, 1.660 fork, creato il 2025-12-16, ultimo push 2026-07-10
+(GitHub API, letta il 2026-08-02). La pagina di panoramica lo dice senza giri di
+parole:
+
+> *«The Agent Skills format was originally developed by Anthropic, released as an
+> open standard, and has been adopted by a growing number of agent products.»*
+
+Questo è il fatto che riorganizza tutta la Parte 2. Non ci sono cinque formati
+concorrenti da mediare: c'è **un formato** che Anthropic ha scritto, ha
+regalato, e che i suoi concorrenti diretti hanno adottato. La Client Showcase
+ufficiale ([agentskills.io/clients](https://agentskills.io/clients)) elenca **44
+prodotti** — conteggio ottenuto enumerando le voci `name:` dell'array `clients`
+nel sorgente della pagina, non stimato — e fra questi ci sono:
+
+**OpenAI Codex, Google Gemini CLI, GitHub Copilot, VS Code, Cursor, Mistral AI
+Vibe, Kiro (AWS), TRAE (ByteDance), Databricks Genie Code, Snowflake Cortex
+Code, JetBrains Junie, Tabnine, Spring AI, Laravel Boost, Pulumi Neo, Qodo,
+Goose, OpenHands, OpenCode, Roo Code, Amp, Factory, Letta, Firebender, Mux,
+ZeroClaw, nanobot, fast-agent, Claude Code e Claude.**
+
+Chi implementa il caricatore di skill di TALOS non sta scegliendo una fazione.
+Sta implementando **l'unica interfaccia che parlano tutti**.
+
+### La specifica, per intero, perché è corta
+
+Da [agentskills.io/specification](https://agentskills.io/specification).
+Una skill è **una cartella con dentro un `SKILL.md`**:
+
+```
+skill-name/
+├── SKILL.md          # Obbligatorio: metadati + istruzioni
+├── scripts/          # Opzionale: codice eseguibile
+├── references/       # Opzionale: documentazione
+├── assets/           # Opzionale: template, risorse
+└── ...
+```
+
+Il frontmatter YAML ha **esattamente sei campi**, due obbligatori:
+
+| Campo | Obblig. | Vincolo esatto |
+|---|---|---|
+| `name` | **Sì** | Max **64** caratteri, solo `a-z`, `0-9` e trattini; niente trattino iniziale o finale; niente trattini consecutivi; **deve coincidere col nome della cartella** |
+| `description` | **Sì** | Max **1024** caratteri, non vuota. Deve dire *cosa fa* **e** *quando usarla* |
+| `license` | No | Nome della licenza o riferimento a un file incluso |
+| `compatibility` | No | Max **500** caratteri. Requisiti d'ambiente (prodotto, pacchetti di sistema, accesso di rete) |
+| `metadata` | No | Mappa stringa→stringa arbitraria |
+| `allowed-tools` | No | Stringa separata da spazi di tool pre-approvati. **Sperimentale** |
+
+**Non esiste un campo `version` di primo livello.** L'esempio ufficiale della
+specifica mette la versione dentro `metadata`:
+
+```yaml
+metadata:
+  author: example-org
+  version: "1.0"
+```
+
+**La divulgazione progressiva è la parte architetturalmente importante**, ed è
+il motivo per cui questo formato funziona su un telefono:
+
+1. **Metadati (~100 token)** — *«The `name` and `description` fields are loaded at
+   startup for all skills»*
+2. **Istruzioni (<5000 token consigliati)** — *«The full SKILL.md body is loaded
+   when the skill is activated»*
+3. **Risorse (a richiesta)** — i file in `scripts/`, `references/`, `assets/`
+   *«are loaded only when required»*
+
+Con due regole di igiene: *«Keep your main SKILL.md under 500 lines»* e *«Keep
+file references one level deep from SKILL.md»*.
+
+**Perché conta su un telefono:** cento skill installate costano ~10.000 token di
+catalogo, non cento file interi. Su un modello on-device con finestra di contesto
+ridotta questa non è un'ottimizzazione, è la condizione di esistenza della
+funzione. La specifica è stata progettata per un vincolo che TALOS ha in forma
+più acuta di chiunque altro.
+
+### Come si dichiarano i tool richiesti — la verità è meno bella della specifica
+
+`allowed-tools` esiste ed è scritto **col trattino**. Esempio ufficiale:
+
+```yaml
+allowed-tools: Bash(git:*) Bash(jq:*) Read
+```
+
+Ma la specifica stessa lo marca *«Experimental. Support for this field may vary
+between agent implementations»*, e c'è una cosa che va capita bene prima di
+progettarci sopra un modello di permessi: **`allowed-tools` non restringe, allarga.**
+Nella documentazione di Claude Code è una **pre-concessione di permessi**, non un
+sandbox: i tool restano tutti richiamabili. Chi vuole *togliere* tool deve usare
+`disallowed-tools`, che è un'estensione di client, non della specifica.
+
+**Le skill non dichiarano i server MCP.** Quella dichiarazione sta un livello
+sopra, nel manifesto del plugin, oppure — ed è la soluzione più interessante per
+noi — in un **file affiancato specifico del fornitore**. OpenAI fa esattamente
+così: ognuna delle sue 44 skill ha un `agents/openai.yaml` accanto al `SKILL.md`.
+Esempio reale, non inventato, dalla skill `linear`
+([raw](https://raw.githubusercontent.com/openai/skills/main/skills/.curated/linear/agents/openai.yaml)):
+
+```yaml
+interface:
+  display_name: "Linear"
+  short_description: "Manage Linear issues in Codex"
+  icon_small: "./assets/linear-small.svg"
+  default_prompt: "Use Linear context to triage or update relevant issues..."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "linear"
+      description: "Linear MCP server"
+      transport: "streamable_http"
+      url: "https://mcp.linear.app/mcp"
+```
+
+La documentazione di OpenAI aggiunge un campo che a noi serve moltissimo:
+`policy.allow_implicit_invocation: false`
+([build-skills](https://learn.chatgpt.com/docs/build-skills)).
+
+**Il modello da copiare è questo: nucleo portabile + file affiancato del
+fornitore.** TALOS può definire `agents/talos.yaml` — con i tool richiesti, i
+permessi Shizuku necessari, il livello di rischio, l'icona, il fatto che la skill
+funzioni o no col motore locale — **senza rompere la compatibilità con nessuno
+dei 44 client**. Un `SKILL.md` scritto per Claude continua a funzionare da noi; una
+skill scritta da noi continua a funzionare su Claude Code, ignorando il file
+affiancato. È il modo giusto di estendere uno standard: additivo, non
+divergente.
+
+## 2.2 `anthropics/skills` — la licenza è a scacchiera, e quattro caselle sono nere
+
+**Metadati (GitHub API, 2026-08-02):** **165.788 stelle**, 19.724 fork, ultimo
+push 2026-07-24, `open_issues_count` 1.055 (che su GitHub include le PR).
+Descrizione: *«Public repository for Agent Skills»*.
+
+**Il fatto che decide tutto: il campo `license` dell'API vale `null`, e nella
+radice del repository non c'è alcun file LICENSE.** La radice contiene solo
+`.claude-plugin/`, `.gitignore`, `README.md`, `THIRD_PARTY_NOTICES.md`,
+`skills/`, `spec/`, `template/`. **La licenza è per singola cartella**, e va
+letta cartella per cartella. È esattamente il tipo di dettaglio che un riassunto
+di seconda mano perde, e che costerebbe caro.
+
+**Conteggio:** 18 file `SKILL.md` nel repository, di cui uno è `template/SKILL.md`
+→ **17 skill reali** (metodo: albero git ricorsivo via `gh api`, filtrato su
+`SKILL.md$`).
+
+**Censimento delle licenze, fatto leggendo i 16 file `LICENSE.txt` presenti:**
+
+| Licenza | N. | Skill |
+|---|---|---|
+| **Apache-2.0** ✅ | **12** | `algorithmic-art`, `brand-guidelines`, `canvas-design`, `claude-api`, `frontend-design`, `internal-comms`, `mcp-builder`, `skill-creator`, `slack-gif-creator`, `theme-factory`, `web-artifacts-builder`, `webapp-testing` |
+| **Proprietaria** ⛔ | **4** | `docx`, `pdf`, `pptx`, `xlsx` |
+| **Nessuna licenza** ⛔ | **1** | `doc-coauthoring` |
+
+Anthropic dichiara la separazione nel proprio README, e la dichiara bene:
+
+> *«Many skills in this repo are open source (Apache 2.0). We've also included the
+> document creation & editing skills that power Claude's document capabilities
+> under the hood in the `skills/docx`, `skills/pdf`, `skills/pptx`, and
+> `skills/xlsx` subfolders. **These are source-available, not open source**»*
+
+E il testo della licenza proprietaria non lascia margini di interpretazione
+creativa. Testuale, da
+[skills/docx/LICENSE.txt](https://raw.githubusercontent.com/anthropics/skills/main/skills/docx/LICENSE.txt):
+
+> © 2025 Anthropic, PBC. All rights reserved.
+> ADDITIONAL RESTRICTIONS: […] users may not:
+> - **Extract these materials from the Services or retain copies of these
+>   materials outside the Services**
+> - Reproduce or copy these materials […]
+> - **Create derivative works based on these materials**
+> - **Distribute, sublicense, or transfer these materials to any third party**
+> - […] Reverse engineer, decompile, or disassemble these materials
+
+**Verdetto operativo, senza ambiguità:**
+
+- ✅ **12 skill sono spedibili dentro TALOS.** Apache-2.0, uso commerciale
+  consentito, con gli obblighi soliti: conservare LICENSE, conservare le
+  attribuzioni, dichiarare le modifiche.
+- ⛔ **`docx`, `pdf`, `pptx`, `xlsx` non sono spedibili in nessuna forma.** Né
+  copiate, né adattate, né «ispirate». La licenza vieta espressamente di
+  *tenerne copia fuori dai Servizi di Anthropic*. Ed è una beffa che siano
+  proprio queste: sono le quattro con più script (`docx` 59 file, `pptx` 54,
+  `xlsx` 51), cioè le più tentanti.
+- ⛔ **`doc-coauthoring` non ha né `LICENSE.txt` né campo `license` nel
+  frontmatter** (verificato aprendo il file). Nessuna concessione = tutti i
+  diritti riservati per default. **L'assenza di una licenza non è un permesso.**
+  Se serve, si chiede ad Anthropic; non si assume per vicinanza.
+
+**Nota di coerenza interessante:** il `marketplace.json` di Anthropic raggruppa
+le quattro skill proprietarie in un plugin a sé (`document-skills`), separato da
+`example-skills`. **Il confine del plugin coincide esattamente col confine della
+licenza.** È una scelta di design che TALOS dovrebbe imitare: se un catalogo
+mescola licenze, il raggruppamento deve renderle separabili con un solo gesto.
+
+## 2.3 `openai/skills` — stesso problema, esito migliore
+
+**Metadati (GitHub API, 2026-08-02):** **24.428 stelle**, 1.663 fork, ultimo push
+2026-07-14, `license: null`, descrizione *«Skills Catalog for Codex»*. È il
+repository linkato dal comunicato dell'app come *«the open source repo»*.
+
+**Anche qui la licenza non è a livello di repository**, e il README lo dice in
+una riga: *«The license of an individual skill can be found directly inside the
+skill's directory inside the `LICENSE.txt` file.»*
+
+**Conteggio:** **44 `SKILL.md`** — 39 sotto `skills/.curated/` e 5 sotto
+`skills/.system/` (metodo: albero git ricorsivo). Tutte e 44 hanno un
+`LICENSE.txt` e tutte e 44 hanno un `agents/openai.yaml`.
+
+**Censimento delle licenze, fatto scaricando e classificando tutti e 44 i file:**
+
+| Licenza | N. | Note |
+|---|---|---|
+| **Apache-2.0** ✅ | **31** | Il grosso del catalogo, incluse `pdf`, `openai-docs`, `playwright`, `linear`, le skill di sicurezza |
+| **MIT** ✅ | **1** | `vercel-deploy` — *«Copyright (c) 2026 Vercel»* |
+| **MIT (testo, senza intestazione)** ✅ | **4** | Le quattro skill Notion — *«Copyright 2025 Notion Labs, Inc. Permission is hereby granted, free of charge…»*, corpo MIT integrale |
+| **Figma, proprietaria** ⛔ | **8** | Tutte le `figma-*` — *«Use of these Figma skills and related files ("Materials") is governed by the Figma Developer…»* |
+
+**Verdetto: 36 skill su 44 sono redistribuibili** (31 Apache + 1 MIT + 4 Notion
+MIT). Le 8 di Figma sono da escludere. Il rapporto è nettamente migliore che in
+casa Anthropic, e per un motivo comprensibile: OpenAI ha costruito un catalogo di
+integrazioni di terzi, e ogni terzo ha messo la sua licenza — Vercel MIT, Notion
+MIT, Figma no.
+
+**Nota di verifica:** il campo `license` dell'API GitHub vale `null` su entrambi i
+repository. Chiunque riporti «anthropics/skills è MIT» o «openai/skills è
+Apache» sta riportando un'impressione, non un fatto. Il fatto è che **la licenza
+va letta per cartella**, e che in entrambi i cataloghi ci sono cartelle che non
+si possono toccare.
+
+## 2.4 Come i cataloghi esistenti gestiscono fiducia e firma
+
+Il vincolo dell'owner dice: *repo di skill remota **e firmata***. La domanda
+naturale è come lo fanno gli altri. La risposta, verificata su tutti e tre gli
+attori principali, è netta e sorprendente:
+
+> **Nessuno firma niente.**
+
+**Anthropic.** I marketplace dei plugin sono **JSON ospitati su git, non
+firmati**. Il `marketplace.json` di `anthropics/skills` è un file semplice con
+`name`, `owner`, `metadata`, `plugins[]`. Gli unici controlli d'integrità
+disponibili sono: **il pinning allo SHA git**, l'allowlist amministrativa dei
+marketplace, e una protezione contro l'occupazione di nomi riservati. Nessuna
+firma crittografica. La documentazione è esplicita sul livello di fiducia
+richiesto: *«Plugins and marketplaces are highly trusted components that can
+execute arbitrary code on your machine with your user privileges. Only install
+plugins and add marketplaces from sources you trust»*
+([code.claude.com/docs/en/discover-plugins](https://code.claude.com/docs/en/discover-plugins)).
+
+**OpenAI.** L'installatore è a sua volta una skill, ed è leggibile
+([skill-installer](https://raw.githubusercontent.com/openai/skills/main/skills/.system/skill-installer/SKILL.md)).
+Comportamento reale: *«Curated listing is fetched from
+`https://github.com/openai/skills/tree/main/skills/.curated` via the GitHub API»*
+— cioè **il catalogo è remoto, non cablato**, esattamente come vuole il vincolo
+TALOS *«app distribuita: niente statico»*. Installa in
+`$CODEX_HOME/skills/<skill-name>`, scarica direttamente per i repo pubblici, e
+ricade su `git sparse checkout` in caso di errori di autenticazione. **Zero
+verifica di firma.** La fiducia è delegata interamente a «è su GitHub sotto
+l'organizzazione openai».
+
+**Google, che è il caso più interessante perché è già su Android** (§2.5). Il
+codice sorgente della AI Edge Gallery mostra due meccanismi e nessun terzo:
+1. un **allowlist di host compilato nell'APK** —
+   `private val APPROVED_SKILL_HOSTS = listOf("google-ai-edge.github.io")`
+   ([AddSkillFromUrlDialog.kt](https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/customtasks/agentchat/AddSkillFromUrlDialog.kt));
+2. una **allowlist remota in JSON** per le skill in vetrina — `SkillManager.kt`
+   contiene `private const val SKILL_ALLOWLIST_URL = ""` (svuotata nella build
+   open source) e il commento *«Fetches the featured skill allowlist from
+   [SKILL_ALLOWLIST_URL]»*, deserializzata in `data class SkillAllowlist(val
+   featuredSkills: List<AllowedSkill>)`.
+
+Una ricerca di codice su `signature|sha256|verifySignature` nei sorgenti Kotlin
+del repository **non restituisce risultati**. Il presidio è un disclaimer
+testuale, che vale la pena leggere perché è onesto:
+
+> *«Third-party skills are not authored or endorsed by Google. Google is not
+> responsible for their contents, security, or data handling practices. Please
+> exercise caution before providing sensitive information, such as personal
+> identification, tokens, or API keys.»*
+
+### Il one-up è disponibile, ed è a portata di mano
+
+**Lo stato dell'arte del settore, ad agosto 2026, è: allowlist di host + fiducia
+in GitHub + un disclaimer.** Nessuno dei tre attori maggiori firma le skill.
+
+Il vincolo che l'owner ha scritto — **repo remota e firmata** — non è quindi
+parità: è **L2 immediato**, e diventa **L3** se la firma è verificata sul
+dispositivo contro una chiave pubblica spedita nell'APK, perché a quel punto
+compromettere l'hosting non basta più per iniettare istruzioni in un agente che
+ha accesso al telefono. È un vantaggio che si prende con poche centinaia di
+righe: un manifesto remoto firmato Ed25519, la chiave pubblica nell'APK, la
+verifica prima del parsing del frontmatter, e il rifiuto in caso di firma
+assente — **fail-closed**, come fa Codex col sandbox su macOS (§1.6) e come
+Windows di Codex, per sua stessa ammissione, non fa (§1.5).
+
+## 2.5 Il precedente che conta più di tutti: Google AI Edge Gallery
+
+Fra i 44 client dello standard ce n'è uno che è, letteralmente, il gemello
+architetturale di TALOS: **Google AI Edge Gallery**
+([github.com/google-ai-edge/gallery](https://github.com/google-ai-edge/gallery))
+— *«A gallery that showcases on-device ML/GenAI use cases and allows people to
+try and use models locally»*. **Apache-2.0**, **24.333 stelle**, 2.594 fork,
+ultimo push 2026-07-31 (GitHub API, 2026-08-02).
+
+È un'app Android che fa girare LLM **sul dispositivo** e che ha implementato le
+Agent Skills. La sua documentazione affronta di petto il problema che TALOS avrà
+fra tre settimane, e lo scrive così
+([skills/README.md](https://github.com/google-ai-edge/gallery/blob/main/skills/README.md)):
+
+> *«Unlike cloud-based LLMs that can spin up containers or access a terminal to
+> run Python scripts or CLI tools, on-device LLMs operate within a sandboxed
+> mobile environment. They cannot easily execute arbitrary system commands or
+> local scripts due to security and resource constraints.»*
+
+La loro soluzione ha **due vie di esecuzione, e nessuna delle due è una shell**:
+
+1. **Skill JavaScript** — *«Running logic inside a lightweight, hidden webview,
+   which provides a cross-platform execution environment for custom logic»*. La
+   logica sta in un file HTML caricato in una WebView nascosta, e l'app chiama
+   una funzione asincrona esposta globalmente. La skill può restituire testo,
+   **un'immagine**, o **una webview** da mostrare.
+2. **Intent nativi** — *«Leveraging the Android/iOS operating system's built-in
+   capabilities (like sending email / text messages)»*, attraverso un tool
+   `run_intent` che prende `intent` e `parameters` (JSON). Con un limite
+   dichiarato: *«supporting additional native intent-based skills requires
+   updating the app's source code»* — ogni nuovo intent è codice nell'APK, non
+   dato scaricabile.
+
+**Le tre vie di installazione** sono: dalla lista in vetrina (allowlist remota),
+**da un URL** (con l'allowlist di host), e da un file locale via file picker.
+Con un dettaglio operativo che ci risparmierà mezza giornata quando ci arriveremo:
+`raw.githubusercontent.com` **non funziona** per le skill JS, perché serve i file
+come `text/plain` e la WebView rifiuta di eseguirli; serve un hosting vero
+(GitHub Pages con `.nojekyll`, Cloudflare, ecc.).
+
+**Cosa ci prendiamo, per intero:**
+- L'architettura a due vie — **WebView per la logica, Intent per il sistema
+  operativo** — è esattamente la forma che TALOS può assumere: la WebView ce
+  l'abbiamo già (Capacitor + Vue 3), e gli Intent sono la porta che il programma
+  Shizuku vuole aprire in modo molto più ambizioso del loro `send_email`.
+- Il fatto che **una skill scaricata non ottenga mai una shell** risolve in
+  partenza metà del problema di sicurezza e tutto il problema iOS (§3.4).
+- Il loro catalogo attuale — 8 skill `built-in` (`calculate-hash`,
+  `interactive-map`, `kitchen-adventure`, `mood-tracker`, `qr-code`,
+  `query-wikipedia`, `send-email`, `text-spinner`) e 3 `featured` (`mood-music`,
+  `restaurant-roulette`, `virtual-piano`) — è **Apache-2.0** e riusabile.
+
+**Dove li superiamo, e senza sforzo:** loro non firmano, il loro allowlist è un
+solo host cablato nell'APK, e gli intent nativi nuovi richiedono una nuova
+release. TALOS con Shizuku ha un ventaglio di azioni di sistema incomparabilmente
+più largo, e con la firma sul manifesto ha una garanzia che loro non offrono.
+
