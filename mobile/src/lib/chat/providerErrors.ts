@@ -138,6 +138,39 @@ export function malformedProviderResponse(
     })
 }
 
+/**
+ * The answer arrived, was well formed, and had nothing in it.
+ *
+ * Kept apart from `malformedProviderResponse` because the two send the reader to
+ * different places. Malformed means the provider broke its own contract; empty
+ * means it kept it and the model had nothing to say — most often a reasoning
+ * model that spent its entire token budget thinking, which is measured
+ * behaviour on small reasoning models, not a hypothesis. Reported as
+ * "malformed", it made the owner look for a broken provider on 2026-08-02 when
+ * the fix was to choose a different writer.
+ */
+export function emptyProviderResponse(
+    provider: TalosMobileProviderId,
+    operation: TalosMobileProviderOperation,
+    finishReason: string | null,
+): TalosMobileProviderError {
+    talosLogDeviceIssue(
+        'TALOS_PROVIDER_EMPTY',
+        [`${provider}/${operation}`, `finish=${finishReason ?? 'unknown'}`].join(' '),
+    )
+    return new TalosMobileProviderError({
+        provider,
+        operation,
+        message: 'TALOS_PROVIDER_RESPONSE_EMPTY',
+        // "length" is the provider telling us the budget ran out; anything else
+        // and the model simply produced nothing.
+        uiMessageKey: finishReason === 'length'
+            ? 'models.providerChatEmptyBudget'
+            : 'models.providerChatEmpty',
+        uiMessageParameters: { provider },
+    })
+}
+
 export function normalizeHttpEndpoint(
     provider: TalosMobileProviderId,
     operation: TalosMobileProviderOperation,

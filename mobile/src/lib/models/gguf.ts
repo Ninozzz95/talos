@@ -121,8 +121,28 @@ export type TalosGgufFailure =
     | { ok: false; reason: 'unsupported-version'; version: number }
     | { ok: false; reason: 'truncated'; needBytes: number }
     | { ok: false; reason: 'incomplete'; missing: string[] }
+    /**
+     * A valid GGUF that is not a model — an importance matrix, most often.
+     *
+     * Kept apart from `incomplete` because the two need opposite words. An
+     * incomplete header is a model we failed to understand; this is a file that
+     * was never a model, and telling the reader "the header does not say what I
+     * need" is true and useless. `general.type` says what it is; the format has
+     * carried that key since GGUFv3 and llama.cpp writes `model` on models.
+     */
+    | { ok: false; reason: 'not-a-model'; kind: string }
 
 export type TalosGgufResult = { ok: true; header: TalosGgufHeader } | TalosGgufFailure
+
+/**
+ * How much room to leave on an extrapolated header size.
+ *
+ * The average of the tokens read so far is a sample, and the tail of a
+ * vocabulary is usually longer than its head — rare words are long words. A
+ * fifteen percent margin costs nothing (the request is capped anyway) and saves
+ * the round trip that a one-percent shortfall would cost.
+ */
+const ARRAY_ESTIMATE_SLACK = 1.15
 
 /** Thrown internally the moment a read would run past the bytes we were given. */
 class Truncated extends Error {
@@ -203,7 +223,27 @@ class Reader {
             }
             // Strings are variable-length, so the only way past a hundred
             // thousand tokens is to walk them.
-            for (let index = 0; index < count; index += 1) this.skip(this.u64())
+            //
+            // And when the walk runs out of bytes, THIS is the one place in the
+            // parser that can do better than guessing. It knows how many
+            // strings there are and how long the ones it has read turned out to
+            // be: the remainder is arithmetic, not a doubling. The alternative
+            // was measured on a real file — a header of 10.969.337 bytes that
+            // three doublings from one mebibyte never reached, stopping at
+            // eight under a ceiling of thirty-two that was never approached.
+            const start = this.at
+            for (let index = 0; index < count; index += 1) {
+                try {
+                    this.skip(this.u64())
+                } catch (stopped) {
+                    // Nothing read yet means nothing to average: doubling is
+                    // still the honest answer there.
+                    if (!(stopped instanceof Truncated) || index === 0) throw stopped
+                    const perItem = (this.at - start) / index
+                    const estimate = Math.ceil(start + perItem * count * ARRAY_ESTIMATE_SLACK)
+                    throw new Truncated(Math.max(estimate, this.view.byteLength + 1))
+                }
+            }
             return
         }
         // A type this parser has never seen has an unknown width, so the
@@ -260,6 +300,13 @@ export function talosReadGgufHeader(bytes: ArrayBuffer, fileBytes: number): Talo
             const value = reader.value(type)
             if (value !== null) fields.set(key, value)
         }
+
+        // Asked before the tensor walk and before any model field is read: a
+        // file that is not a model has none of them, and reporting the absence
+        // of `block_count` on an importance matrix is a true sentence about the
+        // wrong question.
+        const declaredType = String(fields.get('general.type') ?? 'model')
+        if (declaredType !== 'model') return { ok: false, reason: 'not-a-model', kind: declaredType }
 
         // Tensor infos are walked, not read: their sizes are implied by the
         // data that follows, and the only thing needed from them is where they

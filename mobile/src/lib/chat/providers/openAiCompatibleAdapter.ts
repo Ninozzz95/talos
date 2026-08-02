@@ -15,6 +15,7 @@ import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import { talosToolsForOpenAi } from '@/lib/tools/registry'
 import { createOpenAiToolCallAccumulator, parseOpenAiToolCalls } from '@/lib/tools/wire'
 import {
+    emptyProviderResponse,
     malformedProviderResponse,
     normalizeHttpEndpoint,
     requireHttpSuccess,
@@ -50,6 +51,13 @@ const completionSchema = z.object({
                 z.string(),
                 z.array(z.object({ type: z.string().optional(), text: z.string().optional() }).passthrough()),
             ]).nullish(),
+            // The reasoning channel, under all three names the field has been
+            // given. `streamComplete` has always read these; `complete` did not,
+            // and a model that answered there had its reply thrown away as
+            // "malformed". Same file, same provider, two strands of knowledge.
+            reasoning: z.string().nullish(),
+            reasoning_content: z.string().nullish(),
+            reasoning_details: z.array(z.object({ text: z.string().optional() }).passthrough()).nullish(),
         }).passthrough(),
     }).passthrough()).min(1),
     usage: z.record(z.string(), z.unknown()).optional(),
@@ -65,6 +73,33 @@ function contentText(content: string | Array<{ text?: string }>): string {
     return typeof content === 'string'
         ? content
         : content.map((part) => part.text ?? '').join('')
+}
+
+/**
+ * What the model said, wherever it decided to say it.
+ *
+ * The answer belongs in `content` and usually is. When it is not, it is in the
+ * reasoning channel — and which of the three names that channel carries depends
+ * on the model, not on the provider: `reasoning` on OpenRouter,
+ * `reasoning_content` on DeepSeek-style APIs, `reasoning_details` on the newer
+ * OpenRouter models whose content, in several published integrations, was being
+ * dropped in silence.
+ *
+ * Real content always wins: a model that sends both must not have its notes
+ * preferred to its answer.
+ */
+function answerText(message: {
+    content?: string | Array<{ text?: string }> | null
+    reasoning?: string | null
+    reasoning_content?: string | null
+    reasoning_details?: Array<{ text?: string }> | null
+}): string {
+    const said = contentText(message.content ?? '').trim()
+    if (said) return said
+    const thought = message.reasoning
+        ?? message.reasoning_content
+        ?? (message.reasoning_details ?? []).map((part) => part.text ?? '').join('')
+    return (thought ?? '').trim()
 }
 
 function untrustedDocument(name: string, text: string): string {
@@ -232,11 +267,19 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
             const parsed = completionSchema.safeParse(response.data)
             if (!parsed.success) throw malformedProviderResponse(config.provider, 'complete', { received: response.data, issues: parsed.error.issues })
             const choice = parsed.data.choices[0]!
-            const text = contentText(choice.message.content ?? '')
+            const text = answerText(choice.message)
             const toolCalls = parseOpenAiToolCalls(choice.message)
             // A tool-calling turn legitimately has NO text: refusing it as
             // malformed would break the loop before it started.
-            if (!text && toolCalls.length === 0) throw malformedProviderResponse(config.provider, 'complete', { received: response.data, note: 'no text and no tool calls' })
+            //
+            // And when there is genuinely nothing — a reasoning model that spent
+            // its whole token budget thinking, which is measured behaviour and
+            // not a hypothesis — the answer ARRIVED and was well formed. It was
+            // empty. Calling that "malformed" sends the reader looking for a
+            // broken provider instead of a model that needs more room.
+            if (!text && toolCalls.length === 0) {
+                throw emptyProviderResponse(config.provider, 'complete', choice.finish_reason ?? null)
+            }
             return {
                 text,
                 model: parsed.data.model ?? input.model.id,

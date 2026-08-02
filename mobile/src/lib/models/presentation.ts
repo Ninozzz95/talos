@@ -163,6 +163,7 @@ export function talosFailureKey(reason: string): string | null {
         truncated: 'localModels.reasonTruncated',
         'no-device-measurement': 'localModels.reasonNoDevice',
         'incomplete-set': 'localModels.reasonIncomplete',
+        'not-a-model': 'localModels.reasonNotAModel',
     }
     return known[slug] ?? null
 }
