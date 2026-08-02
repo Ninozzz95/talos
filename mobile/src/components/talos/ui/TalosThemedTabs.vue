@@ -170,12 +170,17 @@ function onSwipeEnd(event: PointerEvent): void {
             class="relative flex w-full items-stretch gap-1 overflow-x-auto border-b border-[var(--talos-border)]"
             :class="listClass"
         >
+            <!-- The press dip is Tailwind rather than `.talos-pressable`, which
+                 Doctor's own tabs used: that class sets the whole `transition`
+                 shorthand from outside Tailwind's layers, so it would win over
+                 the colour transition and quietly take the fade with it. Same
+                 feel, one cascade, and `motion-reduce` still switches it off. -->
             <TabsTrigger
                 v-for="view in views"
                 :key="view.id"
                 :value="view.id"
                 :data-talos-tab="view.id"
-                class="relative inline-flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap px-3 text-sm font-medium text-[var(--talos-muted)] outline-none transition-colors data-[state=active]:text-[var(--talos-text)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] focus-visible:ring-inset"
+                class="relative inline-flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap px-3 text-sm font-medium text-[var(--talos-muted)] outline-none transition-[color,transform] duration-[var(--talos-motion-duration-control,160ms)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 data-[state=active]:text-[var(--talos-text)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] focus-visible:ring-inset"
             >
                 <!-- Leading chrome only — Model Lab puts a key, a box and a
                      chip beside its three names. The label itself is never
