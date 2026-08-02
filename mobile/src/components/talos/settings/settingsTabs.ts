@@ -42,7 +42,12 @@ export const TALOS_MOBILE_SETTINGS_TABS: readonly TalosMobileSettingsTab[] = Obj
     { id: 'privacy', label: 'Privacy and permissions', description: 'What TALOS can ask the device for, and what leaves it.', availability: 'available' },
     { id: 'account', label: 'Account', description: 'Local workspace identity, app lock and introduction replay.', availability: 'available' },
     { id: 'agent_tools', label: 'Agent Tools', description: 'Choose which capabilities the chat agent may use.', availability: 'available', group: 'Admin' },
-    { id: 'system', label: 'System', description: 'Doctor, policy, audit and backup readiness.', availability: 'gated', group: 'Admin', gateReason: 'Mobile Doctor and backup services are not installed yet.' },
+    // The gate reason used to say "Doctor and backup services are not
+    // installed" — and the Doctor ships, as a station of its own. Same defect
+    // the Search entry had: an entry announcing the absence of something the
+    // app does. What is genuinely missing here is policy, audit and backup, so
+    // that is what it now says, and it points at the Doctor instead of denying it.
+    { id: 'system', label: 'System', description: 'Policy, audit and backup readiness. Device checks live in Doctor.', availability: 'gated', group: 'Admin', gateReason: 'Mobile policy, audit and backup services are not installed yet. Device checks are in Doctor.' },
 ])
 
 export function talosMobileSettingsTab(id: TalosMobileSettingsTabId): TalosMobileSettingsTab {
@@ -58,11 +63,26 @@ export interface TalosMobileSettingsGroup {
     tabIds: readonly TalosMobileSettingsTabId[]
 }
 
+/**
+ * Owner 2026-08-02: the entries that say "not in this build" go into a declared
+ * section, or they go away.
+ *
+ * They used to be salted through the live ones — three of the five under
+ * Connections led nowhere, and someone scanning the list had to tap to find
+ * out which. Grouping them is the "no fake controls" rule applied to
+ * navigation: a section that announces itself as unavailable is honest, three
+ * dead ends wearing the same chevron as the live ones are not.
+ *
+ * They stay tappable rather than being deleted, because the panel behind each
+ * says WHY — and "why can't I do this" is a question the app should answer
+ * rather than pretend nobody asked.
+ */
 export const TALOS_MOBILE_SETTINGS_GROUPS: readonly TalosMobileSettingsGroup[] = Object.freeze([
     { label: 'Intelligence', tabIds: ['models', 'ai_defaults', 'agent_tools'] },
-    { label: 'Connections', tabIds: ['search', 'browser', 'integrations', 'email', 'reminders'] },
-    { label: 'Interface', tabIds: ['appearance', 'language', 'system'] },
+    { label: 'Connections', tabIds: ['search', 'browser'] },
+    { label: 'Interface', tabIds: ['appearance', 'language'] },
     // Its own group: a privacy claim is TALOS's central promise, and burying it
     // under Interface would say the opposite.
     { label: 'Privacy', tabIds: ['privacy'] },
+    { label: 'Unavailable', tabIds: ['integrations', 'email', 'reminders', 'system'] },
 ])
