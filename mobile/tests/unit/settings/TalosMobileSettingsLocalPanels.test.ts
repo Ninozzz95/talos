@@ -50,6 +50,13 @@ beforeEach(() => {
     settings.state.shell.library_context_policy = null
     settings.state.shell.library_autosave_generated = true
 })
+// The settings switches are the shared TalosThemedSwitch since 2026-08-02:
+// buttons with role="switch" and aria-checked, not native checkboxes. A tap is
+// a click, and the value read is the one announced to a screen reader.
+async function tapSwitch(wrapper: { get: (s: string) => { trigger: (e: string) => Promise<void> } }, label: string): Promise<void> {
+    await wrapper.get(`[role="switch"][aria-label="${label}"]`).trigger('click')
+}
+
 describe('local-first Settings panels', () => {
     it('persists utility, research, and vision defaults', async () => {
         const wrapper = mount(TalosMobileSettingsAiDefaultsPanel, {
@@ -58,7 +65,7 @@ describe('local-first Settings panels', () => {
         const selects = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
         selects.find((select) => select.props('ariaLabel') === 'Utility model mode')?.vm.$emit('update:modelValue', 'default_profile')
         selects.find((select) => select.props('ariaLabel') === 'Research model mode')?.vm.$emit('update:modelValue', 'default_profile')
-        await wrapper.get('[aria-label="Vision routing preference"]').setValue(false)
+        await tapSwitch(wrapper, 'Vision routing preference')
 
         expect(settings.setAiDefaults).toHaveBeenCalledWith({ utility_model_mode: 'default_profile' })
         expect(settings.setAiDefaults).toHaveBeenCalledWith({ research_model_mode: 'default_profile' })
@@ -70,8 +77,8 @@ describe('local-first Settings panels', () => {
         const wrapper = mount(TalosMobileSettingsAiDefaultsPanel, {
             global: { stubs: { TalosThemedSelect: true } },
         })
-        await wrapper.get('[aria-label="Let chats use your Library"]').setValue(false)
-        await wrapper.get('[aria-label="Auto-save generated files to the Library"]').setValue(false)
+        await tapSwitch(wrapper, 'Let chats use your Library')
+        await tapSwitch(wrapper, 'Auto-save generated files to the Library')
 
         expect(settings.setLibraryContextPolicy).toHaveBeenCalledWith({ enabled: false }, 0)
         expect(settings.setShell).toHaveBeenCalledWith({ library_autosave_generated: false })
@@ -83,7 +90,7 @@ describe('local-first Settings panels', () => {
             global: { stubs: { TalosThemedSelect: true } },
         })
 
-        await wrapper.get('[aria-label="Let chats use your Library"]').setValue(true)
+        await tapSwitch(wrapper, 'Let chats use your Library')
 
         expect(settings.setLibraryContextPolicy).not.toHaveBeenCalled()
         expect(wrapper.get('[data-testid="talos-library-mode-chooser"]').exists()).toBe(true)

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import TalosThemedSelect, { type TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
+import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 import { useSettingsStore, type TalosUtilityModelMode } from '@/stores/settings'
 import { TALOS_TONE_PRESETS, isTalosToneId } from '@/lib/tone'
 import {
@@ -33,8 +34,8 @@ function setMode(key: 'utility_model_mode' | 'research_model_mode', value: strin
     void settings.setAiDefaults({ [key]: value as TalosUtilityModelMode })
 }
 
-function setVision(event: Event): void {
-    void settings.setAiDefaults({ vision_enabled: (event.target as HTMLInputElement).checked })
+function setVision(enabled: boolean): void {
+    void settings.setAiDefaults({ vision_enabled: enabled })
 }
 
 // Library behaviour lives in the shell prefs but belongs on this panel.
@@ -79,8 +80,7 @@ function isLibraryMode(value: string): value is TalosLibraryContextMode {
     return (TALOS_LIBRARY_CONTEXT_MODES as readonly string[]).includes(value)
 }
 
-async function setLibraryEnabled(event: Event): Promise<void> {
-    const enabled = (event.target as HTMLInputElement).checked
+async function setLibraryEnabled(enabled: boolean): Promise<void> {
     libraryPolicyError.value = false
     if (enabled) {
         if (!libraryEnabled.value) pendingLibraryEnable.value = true
@@ -124,8 +124,8 @@ async function setLibraryMode(value: string): Promise<void> {
  * what matters to a person is whether TALOS may READ their things, CHANGE
  * them, or SEND them anywhere.
  */
-function setShellFlag(key: 'library_context_enabled' | 'library_autosave_generated', event: Event): void {
-    void settings.setShell({ [key]: (event.target as HTMLInputElement).checked })
+function setShellFlag(key: 'library_context_enabled' | 'library_autosave_generated', enabled: boolean): void {
+    void settings.setShell({ [key]: enabled })
 }
 </script>
 
@@ -168,38 +168,36 @@ function setShellFlag(key: 'library_context_enabled' | 'library_autosave_generat
             </label>
         </div>
 
-        <label class="flex min-h-14 cursor-pointer items-start justify-between gap-3 border-y border-[var(--talos-border)] py-3">
+        <div class="flex min-h-14 items-start justify-between gap-3 border-y border-[var(--talos-border)] py-3">
             <span>
                 <span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('aiDefaults.visionRouting') }}</span>
                 <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">{{ t('aiDefaults.visionRoutingBody') }}</span>
             </span>
-            <input
-                type="checkbox"
-                role="switch"
+            <TalosThemedSwitch
+                class="mt-1"
                 :aria-label="t('aiDefaults.visionRouting')"
-                :checked="settings.state.ai_defaults.vision_enabled"
-                class="mt-1 h-5 w-9 accent-[var(--talos-accent)]"
-                @change="setVision"
-            >
-        </label>
+                :model-value="settings.state.ai_defaults.vision_enabled"
+                @update:model-value="setVision($event)"
+                @click.stop
+            />
+        </div>
 
         <!-- Owner 2026-07-25: Library behaviour belongs to AI defaults (what the
              model may read / write), not to Appearance. -->
-        <label class="flex min-h-14 cursor-pointer items-start justify-between gap-3 border-b border-[var(--talos-border)] py-3">
+        <div class="flex min-h-14 items-start justify-between gap-3 border-b border-[var(--talos-border)] py-3">
             <span>
                 <span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('aiDefaults.libraryContext') }}</span>
                 <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">{{ t('aiDefaults.libraryContextBody') }}</span>
             </span>
-            <input
-                type="checkbox"
-                role="switch"
+            <TalosThemedSwitch
+                class="mt-1"
                 :aria-label="t('aiDefaults.libraryContext')"
-                :checked="libraryEnabled || pendingLibraryEnable"
+                :model-value="libraryEnabled || pendingLibraryEnable"
                 :disabled="libraryPolicySaving"
-                class="mt-1 h-5 w-9 accent-[var(--talos-accent)]"
-                @change="setLibraryEnabled"
-            >
-        </label>
+                @update:model-value="setLibraryEnabled"
+                @click.stop
+            />
+        </div>
 
         <section
             v-if="libraryEnabled || pendingLibraryEnable"
@@ -233,20 +231,19 @@ function setShellFlag(key: 'library_context_enabled' | 'library_autosave_generat
             </p>
         </section>
 
-        <label class="flex min-h-14 cursor-pointer items-start justify-between gap-3 border-b border-[var(--talos-border)] py-3">
+        <div class="flex min-h-14 items-start justify-between gap-3 border-b border-[var(--talos-border)] py-3">
             <span>
                 <span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('aiDefaults.autosaveGenerated') }}</span>
                 <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">{{ t('aiDefaults.autosaveGeneratedBody') }}</span>
             </span>
-            <input
-                type="checkbox"
-                role="switch"
+            <TalosThemedSwitch
+                class="mt-1"
                 :aria-label="t('aiDefaults.autosaveGeneratedAria')"
-                :checked="settings.state.shell.library_autosave_generated"
-                class="mt-1 h-5 w-9 accent-[var(--talos-accent)]"
-                @change="setShellFlag('library_autosave_generated', $event)"
-            >
-        </label>
+                :model-value="settings.state.shell.library_autosave_generated"
+                @update:model-value="setShellFlag('library_autosave_generated', $event)"
+                @click.stop
+            />
+        </div>
 
         <!-- The search source used to sit here. It moved to Settings → Search,
              which is where the settings hub already had an entry for it and
