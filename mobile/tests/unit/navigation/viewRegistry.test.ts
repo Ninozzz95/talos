@@ -19,6 +19,18 @@ import {
     talosViewExists,
     talosViewStorageKey,
 } from '@/lib/navigation/viewRegistry'
+import { TALOS_EN_MESSAGES } from '@/i18n/locales/en'
+import { TALOS_IT_MESSAGES } from '@/i18n/locales/it'
+
+/** Walks a dotted message key into a catalogue, returning '' rather than throwing. */
+function readMessage(messages: unknown, key: string): string {
+    let node: unknown = messages
+    for (const step of key.split('.')) {
+        if (typeof node !== 'object' || node === null) return ''
+        node = (node as Record<string, unknown>)[step]
+    }
+    return typeof node === 'string' ? node : ''
+}
 
 describe('the view register', () => {
     it('gives every surface at least two views and no duplicate ids', () => {
@@ -35,6 +47,45 @@ describe('the view register', () => {
 
         const surfaceIds = TALOS_VIEW_SURFACES.map((surface) => surface.id)
         expect(new Set(surfaceIds).size).toBe(surfaceIds.length)
+    })
+
+    /**
+     * These two moved here from `doctorSections.test.ts` when the register
+     * absorbed `TALOS_DOCTOR_SECTIONS`. They carry the owner's ask and the
+     * research that answered it, so they move rather than disappear.
+     *
+     * Owner 2026-07-26: "organizza bene anche le sezioni nel Doctor, non voglio
+     * che sia troppo affollata dal punto di vista dell'interfaccia … Insomma
+     * strutturalo in modo coerente."
+     *
+     * They also got stricter on the way. They used to read an English `label`
+     * field that nothing rendered — so they could pass while the shipped
+     * Italian name was four words long. Now they read the catalogues the app
+     * actually ships.
+     */
+    it('keeps the Doctor at three segments, so its row can never scroll', () => {
+        // Apple caps segments at about five on a phone, and NN/g find that once
+        // a tab row scrolls "the hidden tabs become less discoverable" — an
+        // overflow carousel in a diagnostics screen hides exactly the thing
+        // someone came to find.
+        const doctor = TALOS_VIEW_SURFACES.find((surface) => surface.id === 'doctor')
+        expect(doctor?.views.map((view) => view.id)).toEqual(['status', 'data', 'advanced'])
+    })
+
+    it('names every view in one or two plain words, in every language it ships', () => {
+        for (const [language, messages] of [['it', TALOS_IT_MESSAGES], ['en', TALOS_EN_MESSAGES]] as const) {
+            for (const surface of TALOS_VIEW_SURFACES) {
+                for (const view of surface.views) {
+                    const label = readMessage(messages, view.labelKey)
+                    expect(label, `${language} → ${view.labelKey} is missing`).toBeTruthy()
+                    expect(label.split(' ').length, `${language} → ${view.labelKey} is a sentence`)
+                        .toBeLessThanOrEqual(2)
+                    // NN/g: ALL CAPS reduces legibility, and a label must
+                    // predict its content rather than brand it.
+                    expect(label, `${language} → ${view.labelKey} shouts`).not.toBe(label.toUpperCase())
+                }
+            }
+        }
     })
 
     it('names every view through the message catalogues, never with a literal', () => {
@@ -117,17 +168,15 @@ describe('the view register', () => {
                 'src/components/talos/settings/TalosMobileSettingsModelsPanel.vue',
                 /<TabsContent[^>]*?\svalue="([^"]+)"/g,
             ],
-            ['doctor', 'src/lib/diagnostics/doctorSections.ts', /\{\s*id: '([a-z-]+)'/g],
+            // Doctor used to be read from `doctorSections.ts`, because it was the
+            // one screen that already declared its sections once. That list is
+            // gone: the register absorbed it, which is what "when Doctor is
+            // migrated, this case disappears rather than growing" meant.
+            ['doctor', 'src/screens/DoctorScreen.vue', /<TabsContent[^>]*?\svalue="([^"]+)"/g],
         ]
 
         for (const [surfaceId, file, pattern] of sources) {
-            const whole = readFileSync(join(process.cwd(), file), 'utf8')
-            // That module declares other id-bearing lists too, so the search is
-            // scoped to the sections array rather than the file: an unscoped
-            // match swept up diagnostic row ids and reported a drift that was
-            // the test's own fault.
-            const opens = whole.indexOf('TALOS_DOCTOR_SECTIONS: readonly TalosDoctorSection[] = [')
-            const source = opens === -1 ? whole : whole.slice(opens, whole.indexOf('\n]', opens))
+            const source = readFileSync(join(process.cwd(), file), 'utf8')
             const rendered = new Set([...source.matchAll(pattern)].map((match) => match[1]))
             const registered = new Set(
                 TALOS_VIEW_SURFACES.find((surface) => surface.id === surfaceId)?.views.map((view) => view.id),

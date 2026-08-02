@@ -1,0 +1,140 @@
+// @vitest-environment jsdom
+
+/**
+ * The Doctor had no unit test at all — only an end-to-end pass. Which is how
+ * the screen kept its own `data-doctor-tab` hook, its own hand-drawn segmented
+ * row and its own section list long after every other screen had been folded
+ * into one: nothing on this side of the build ever looked at it.
+ *
+ * These do not try to cover the probes. They cover the part this migration
+ * touched: the strip comes from the register, and the section you left is where
+ * the screen opens next time.
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+
+const harness = vi.hoisted(() => ({
+    settings: {
+        state: { shell: { debug_diagnostics: false } },
+        setShell: vi.fn().mockResolvedValue(undefined),
+    },
+    controller: {
+        chat: { state: { persistenceStatus: 'ready', persistenceError: null } },
+        traces: () => [],
+        clearTraces: vi.fn(),
+    },
+}))
+
+vi.mock('@/stores/settings', () => ({ useSettingsStore: () => harness.settings }))
+vi.mock('@/stores/chatController', () => ({ useChatController: () => harness.controller }))
+vi.mock('@capacitor/core', () => ({
+    Capacitor: { isNativePlatform: () => false, getPlatform: () => 'web' },
+}))
+vi.mock('@/services/dictation', () => ({
+    talosDictationDiagnostics: () => Promise.resolve({
+        buildId: 'test-build', pluginLoaded: true, available: true, error: null, trace: '',
+    }),
+}))
+vi.mock('@/services/databaseProtection', () => ({
+    talosDatabaseLockState: () => 'engaged',
+    talosDatabaseLockFailure: () => null,
+}))
+vi.mock('@/services/appLock', () => ({ biometricUnlockAvailable: () => Promise.resolve(true) }))
+// The share probe is a dynamic import inside the scan, and the strip is behind
+// `v-if="!scanning"` — an unmocked one leaves the screen showing a spinner and
+// every selector below failing for the wrong reason.
+vi.mock('@capacitor/share', () => ({ Share: { canShare: () => Promise.resolve({ value: true }) } }))
+vi.mock('@/services/clipboard', () => ({ writeTalosClipboardText: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('@/lib/talosDeviceLog', () => ({
+    talosDeviceIssues: () => [],
+    talosWithTimeout: <T>(work: Promise<T>) => work,
+}))
+
+import DoctorScreen from '@/screens/DoctorScreen.vue'
+
+async function openDoctor() {
+    const wrapper = mount(DoctorScreen, { attachTo: document.body })
+    await vi.dynamicImportSettled()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+}
+
+async function chooseSection(wrapper: Awaited<ReturnType<typeof openDoctor>>, id: string): Promise<void> {
+    // Reka commits on pointerdown, so a bare click never reaches it.
+    const tab = wrapper.get(`[data-talos-tab="${id}"]`).element as HTMLElement
+    tab.focus()
+    tab.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
+    tab.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+}
+
+beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+})
+
+describe('DoctorScreen', () => {
+    it('draws its three segments from the register, as a real tablist', async () => {
+        const wrapper = await openDoctor()
+
+        expect(wrapper.get('[role="tablist"]').attributes('aria-label')).toBe('Diagnostics sections')
+        expect(wrapper.findAll('[role="tab"]').map((tab) => tab.attributes('data-talos-tab')))
+            .toEqual(['status', 'data', 'advanced'])
+        expect(wrapper.get('[data-talos-tab="status"]').attributes('aria-selected')).toBe('true')
+        wrapper.unmount()
+    })
+
+    it('opens again on the section you left', async () => {
+        const first = await openDoctor()
+        await chooseSection(first, 'advanced')
+        expect(first.get('[data-talos-tab="advanced"]').attributes('aria-selected')).toBe('true')
+        first.unmount()
+
+        const second = await openDoctor()
+        expect(second.get('[data-talos-tab="advanced"]').attributes('aria-selected')).toBe('true')
+        second.unmount()
+    })
+
+    it('does not open on a section a release has removed', async () => {
+        // A device can hold the name of a view that no longer ships. A strip
+        // pointed at one renders with nothing selected and no panel under it.
+        localStorage.setItem('talos.view.doctor', 'timings')
+        const wrapper = await openDoctor()
+
+        expect(wrapper.get('[data-talos-tab="status"]').attributes('aria-selected')).toBe('true')
+        wrapper.unmount()
+    })
+
+    /**
+     * The gap flagged on 2026-08-02: turning the technical detail OFF discards
+     * what was measured, and nothing on this side of the build checked it. The
+     * report otherwise says `timingsRecorded: false` beside a list of sends,
+     * which contradicts itself.
+     */
+    it('throws away the recorded timings when technical detail is switched off', async () => {
+        harness.settings.state.shell.debug_diagnostics = true
+        const wrapper = await openDoctor()
+        await chooseSection(wrapper, 'advanced')
+
+        await wrapper.get('[role="switch"][data-testid="talos-debug-diagnostics"]').trigger('click')
+
+        expect(harness.settings.setShell).toHaveBeenCalledWith({ debug_diagnostics: false })
+        expect(harness.controller.clearTraces).toHaveBeenCalled()
+        harness.settings.state.shell.debug_diagnostics = false
+        wrapper.unmount()
+    })
+
+    it('keeps the timings when it is switched on, because there is nothing to discard', async () => {
+        harness.settings.state.shell.debug_diagnostics = false
+        const wrapper = await openDoctor()
+        await chooseSection(wrapper, 'advanced')
+
+        await wrapper.get('[role="switch"][data-testid="talos-debug-diagnostics"]').trigger('click')
+
+        expect(harness.settings.setShell).toHaveBeenCalledWith({ debug_diagnostics: true })
+        expect(harness.controller.clearTraces).not.toHaveBeenCalled()
+        wrapper.unmount()
+    })
+})

@@ -91,12 +91,27 @@ const SURFACES = [
         ],
     },
     {
+        /**
+         * Owner 2026-07-26: "non voglio che sia troppo affollata … fai in modo
+         * che ci siano dei settaggi e delle tab. Insomma strutturalo in modo
+         * coerente."
+         *
+         * The research settled the shape, and it is the reason this surface is
+         * capped at three: Apple caps segments at about five on a phone, and
+         * NN/g find that once a tab row scrolls "the hidden tabs become less
+         * discoverable" — an overflow carousel in a diagnostics screen hides
+         * exactly the thing someone came to find. Three also leaves every
+         * target well above 48dp on a 360dp screen.
+         */
         id: 'doctor',
         grammar: 'tabs',
         activation: 'automatic',
         views: [
+            // status: device checks and problems.
             { id: 'status', labelKey: 'doctor.sections.status' },
+            // data: where time and space go.
             { id: 'data', labelKey: 'doctor.sections.data' },
+            // advanced: debug switches and build.
             { id: 'advanced', labelKey: 'doctor.sections.advanced' },
         ],
     },

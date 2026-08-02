@@ -2,7 +2,6 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-    TALOS_DOCTOR_SECTIONS,
     talosLockDoctorRow,
     talosStorageDoctorRow,
     talosDoctorVerdict,
@@ -10,31 +9,14 @@ import {
 } from '@/lib/diagnostics/doctorSections'
 
 /**
- * Owner 2026-07-26: "organizza bene anche le sezioni nel Doctor, non voglio che
- * sia troppo affollata dal punto di vista dell'interfaccia, fai in modo che ci
- * siano dei settaggi e delle tab. Insomma strutturalo in modo coerente."
+ * How the Doctor is DIVIDED is now asserted in
+ * `tests/unit/navigation/viewRegistry.test.ts`, where the section list went
+ * when the register absorbed it. The owner's ask and the three-segment research
+ * moved with the tests, and got stricter on the way: they used to check an
+ * English label nothing rendered, and now check both shipped catalogues.
  *
- * The research decided the shape (2026-07-26, logged): THREE fixed segments, no
- * overflow — Apple caps segments at ~5 on iPhone and NN/g find that when a tab
- * row scrolls "the hidden tabs become less discoverable". Three also keeps every
- * target above 48dp on a 360dp screen.
+ * What stays here is what the Doctor SAYS: the rows, the verdict, the split.
  */
-describe('how the Doctor is divided', () => {
-    it('has exactly three fixed segments, so the row can never scroll', () => {
-        expect(TALOS_DOCTOR_SECTIONS).toHaveLength(3)
-        expect(TALOS_DOCTOR_SECTIONS.map((section) => section.id))
-            .toEqual(['status', 'data', 'advanced'])
-    })
-
-    it('labels them in one or two plain words', () => {
-        for (const section of TALOS_DOCTOR_SECTIONS) {
-            expect(section.label.split(' ').length).toBeLessThanOrEqual(2)
-            // NN/g: ALL CAPS reduces legibility, and a label must predict its
-            // content rather than brand it.
-            expect(section.label).not.toBe(section.label.toUpperCase())
-        }
-    })
-})
 
 const OK = { id: 'a', label: 'Platform', value: 'native', ok: true }
 const BAD = { id: 'b', label: 'Storage', value: 'error', ok: false }

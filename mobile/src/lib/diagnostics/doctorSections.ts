@@ -1,33 +1,18 @@
 /**
- * How the Doctor is divided, and what it says first.
+ * What the Doctor says, and in what order.
  *
- * Owner 2026-07-26: "non voglio che sia troppo affollata … fai in modo che ci
- * siano dei settaggi e delle tab. Insomma strutturalo in modo coerente."
- *
- * The research settled the shape. THREE fixed segments and no more: Apple caps
- * segments at about five on a phone, and NN/g find that once a tab row scrolls
- * "the hidden tabs become less discoverable" — an overflow carousel in a
- * diagnostics screen hides exactly the thing someone came to find. Three also
- * leaves every target well above 48dp on a 360dp screen.
+ * How it is DIVIDED used to live here too, as `TALOS_DOCTOR_SECTIONS`. That
+ * list moved into `lib/navigation/viewRegistry` — not because it was wrong, but
+ * because it was right and alone: it was the one place in the app that declared
+ * a screen's sections once, and every other screen went on declaring theirs
+ * three times over. The register is that idea, generalised. The reasoning it
+ * carried moved with it.
  *
  * Inside each segment the sections collapse, and they start CLOSED. NN/g
  * document the opposite as a real failure: WebMD expanded the first accordion
  * by default and users concluded the page was only about that, and left. What
  * is open should be what is actionable, never what happens to be first.
  */
-export interface TalosDoctorSection {
-    id: 'status' | 'data' | 'advanced'
-    label: string
-    /** One line on what the segment holds. Not rendered: labels must carry it. */
-    hint: string
-}
-
-export const TALOS_DOCTOR_SECTIONS: readonly TalosDoctorSection[] = [
-    { id: 'status', label: 'Status', hint: 'Device checks and problems' },
-    { id: 'data', label: 'Data', hint: 'Where time and space go' },
-    { id: 'advanced', label: 'Advanced', hint: 'Debug switches and build' },
-]
-
 export interface TalosDoctorRow {
     id: string
     label: string
