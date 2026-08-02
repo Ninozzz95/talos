@@ -3,6 +3,7 @@ import {
     talosResearchApply,
     talosResearchIdempotencyKey,
     talosResearchNextStep,
+    talosResearchProgressOf,
     talosResearchRecover,
     talosResearchReplay,
     talosResearchSpent,
@@ -157,5 +158,31 @@ describe('a research run that is killed and picked up again', () => {
         const run = talosResearchReplay([{ ...started, engine: 'cloud' }])!
 
         expect(run.engine).toBe('cloud')
+    })
+})
+
+describe('how far along a run says it is', () => {
+    /**
+     * The synthesis counts among the finished steps, so a total taken from the
+     * plan alone announced "2 of 1" the moment the report was written. One
+     * function answers this now, for the station and for the notification
+     * alike: two ways of working out the same number is how they disagreed.
+     */
+    it('counts the report once the run has one', () => {
+        const run = talosResearchReplay([
+            started, approved, search('s1', T1), finished('s1', T2),
+            { kind: 'step_started', at: T2, stepId: 'synthesis', branchId: 'synthesis', stepKind: 'synthesise' },
+            finished('synthesis', T3),
+        ])!
+
+        expect(talosResearchProgressOf(run)).toEqual({ done: 2, total: 2 })
+    })
+
+    it('does not count a report that has not been started', () => {
+        // The other direction of the same lie: a denominator that includes work
+        // which may never be attempted makes a finished run look incomplete.
+        const run = talosResearchReplay([started, approved, search('s1', T1)])!
+
+        expect(talosResearchProgressOf(run)).toEqual({ done: 0, total: 1 })
     })
 })

@@ -2,6 +2,7 @@ import type { TalosChatRepository } from '@/repositories/chatRepository'
 import type { TalosRunKeeper } from '@/services/longRunKeeper'
 import {
     talosResearchApply,
+    talosResearchProgressOf,
     talosResearchRecover,
     talosResearchReplay,
     talosResearchSpent,
@@ -129,18 +130,21 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
         // Anything left `running` belonged to a process that is no longer here.
         let run = talosResearchRecover(loaded.run, deps.now())
         let seq = loaded.length
-        const total = run.plan.length
         const keeper = deps.keeper(run.question)
 
         try {
             for (;;) {
                 const left = talosResearchWorkLeft(run)
-                onProgress?.({ run, done: total - left.length, total })
+                // Counted from the run, by the same function the station uses.
+                // Two ways of working out the same number is how a report that
+                // was finished came to be announced as "3 of 2".
+                const progress = talosResearchProgressOf(run)
+                onProgress?.({ run, ...progress })
                 if (left.length === 0) break
 
                 const branch = left[0]!
                 const stepId = talosResearchStepIdFor(branch.id, 'search')
-                keeper.engage(`${total - left.length + 1}/${total} · ${branch.question}`)
+                keeper.engage(`${progress.done + 1}/${progress.total} · ${branch.question}`)
 
                 run = await append(deps, run, {
                     kind: 'step_started',
@@ -206,7 +210,7 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
                 }
             }
             run = await append(deps, run, { kind: 'run_finished', at: deps.now() }, seq++)
-            onProgress?.({ run, done: total, total })
+            onProgress?.({ run, ...talosResearchProgressOf(run) })
             return run
         } finally {
             keeper.release()

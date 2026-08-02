@@ -112,3 +112,29 @@ describe('turning what was gathered into a report that can be checked', () => {
         expect(talosResearchReportStanding(report)).toEqual({ total: 3, supported: 2, unsupported: 1 })
     })
 })
+
+describe('the template handed back instead of an answer', () => {
+    /**
+     * A real run on the tablet: the model returned six lines that each began
+     * with the word AFFERMAZIONE, and the report filed six claims whose text
+     * was the name of the field. Dropping them leaves nothing, which makes the
+     * step fail — the honest outcome, because nothing was claimed.
+     */
+    it('is not read as a claim', () => {
+        const report = talosResearchParseSynthesis([
+            'SINTESI: il monte è alto 4808 metri.',
+            'AFFERMAZIONE | 1 | "alto 4808 metri"',
+            '<l’affermazione> | 1 | "alto 4808 metri"',
+            'Il monte è alto 4808 metri | 1 | "alto 4808 metri"',
+        ].join('\n'), [{
+            url: 'https://x.it',
+            title: 'x',
+            publishedAt: null,
+            text: 'Il monte è alto 4808 metri sul livello del mare.',
+            obtained: 'page',
+        }])
+
+        expect(report.claims).toHaveLength(1)
+        expect(report.claims[0]!.text).toBe('Il monte è alto 4808 metri')
+    })
+})
