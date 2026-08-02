@@ -91,6 +91,22 @@ describe('talosInteractionMotionStyleV6', () => {
         expect(active['--talos-motion-tab-change-transform']).toContain('translate3d')
         expect(Number(active['--talos-motion-tab-change-opacity'])).toBeLessThan(1)
 
+        /**
+         * A tab change is a VIEW SWAP, and it has to be tuned like one.
+         *
+         * Owner 2026-08-02, on a OnePlus 13: "non c'è un'animazione, c'è solo
+         * uno scatto di un frame". Measured on the device it was 69ms and
+         * 1.04px, because the spec said 150ms and 4px — hover numbers, while a
+         * window gets 18px and a sidebar 20. These are floors on the values
+         * AFTER the default preferences have damped them — which is the number
+         * a person actually sees, and the only one worth defending. The old
+         * spec produced 75ms and 2.6px here, so both of these bite.
+         */
+        expect(Number.parseInt(active['--talos-motion-duration-tab-change'] ?? '', 10))
+            .toBeGreaterThanOrEqual(100)
+        expect(Math.abs(Number.parseFloat(active['--talos-motion-tab-change-x'] ?? '')))
+            .toBeGreaterThanOrEqual(8)
+
         const composerOffPreferences = createDefaultTalosMotionV6Preferences()
         composerOffPreferences.interface.categories.composer = false
         const composerOff = talosInteractionMotionStyleV6({

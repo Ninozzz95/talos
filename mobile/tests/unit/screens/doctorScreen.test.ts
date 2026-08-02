@@ -83,6 +83,11 @@ describe('DoctorScreen', () => {
         expect(wrapper.findAll('[role="tab"]').map((tab) => tab.attributes('data-talos-tab')))
             .toEqual(['status', 'data', 'advanced'])
         expect(wrapper.get('[data-talos-tab="status"]').attributes('aria-selected')).toBe('true')
+        // The Doctor was left out of the shared panel animation when the other
+        // two got it, so its sections changed with no transition at all — found
+        // by looking at the phone, not by reading the diff.
+        expect(wrapper.get('[role="tabpanel"]').classes()).toContain('talos-motion-tab-panel')
+        expect(wrapper.get('[data-talos-tabs]').attributes('data-talos-tabs')).toBe('doctor')
         wrapper.unmount()
     })
 

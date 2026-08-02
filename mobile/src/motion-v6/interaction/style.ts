@@ -112,6 +112,10 @@ export function talosInteractionMotionStyleV6(request: TalosInteractionMotionSty
         '--talos-motion-open-transform': plans.menuOpen.keyframes[0]?.transform ?? 'none',
         '--talos-motion-surface-transform': plans.disclosure.keyframes[0]?.transform ?? 'none',
         '--talos-motion-tab-change-transform': plans.tab.keyframes[0]?.transform ?? 'none',
+        // The offset alone, so the keyframes can point it the other way when a
+        // tab is reached by going BACK. A composed transform string cannot have
+        // one of its components negated in CSS.
+        '--talos-motion-tab-change-x': `${plans.tab.enterX}px`,
         '--talos-motion-tab-change-opacity': `${plans.tab.keyframes[0]?.opacity ?? 1}`,
         '--talos-motion-open-style': plans.menuOpen.enabled ? presentation.open : 'off',
         '--talos-motion-surface-style': plans.menuOpen.enabled ? presentation.surface : 'off',

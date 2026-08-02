@@ -25,7 +25,7 @@
  * The visible treatment is the underline: M3's secondary tabs, which is what
  * fits a strip that lives inside a page rather than at its root.
  */
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { TabsIndicator, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import { useTalosI18n } from '@/i18n'
 import {
@@ -53,17 +53,24 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
 const { t } = useTalosI18n()
 
-const surface = computed(() => talosViewSurfaceOf(props.surface))
-const views = computed(() => surface.value?.views ?? [])
+/**
+ * Named `surfaceEntry`, not `surface`. In `<script setup>` a binding shadows a
+ * prop of the same name inside the template, so `:data-talos-tabs="surface"`
+ * was stamping "[object Object]" on every strip in the app — found on the
+ * device, and it also meant the end-to-end selector written against that hook
+ * could never have matched anything.
+ */
+const surfaceEntry = computed(() => talosViewSurfaceOf(props.surface))
+const views = computed(() => surfaceEntry.value?.views ?? [])
 
 /**
  * A surface can only be shown as tabs if it declared itself as tabs. Navigation
  * and filters are different controls with different semantics, and rendering
  * them through a tablist is exactly the mistake the settings centre makes today.
  */
-const renders = computed(() => surface.value?.grammar === 'tabs' && views.value.length > 1)
+const renders = computed(() => surfaceEntry.value?.grammar === 'tabs' && views.value.length > 1)
 
-const activation = computed(() => surface.value?.activation ?? 'manual')
+const activation = computed(() => surfaceEntry.value?.activation ?? 'manual')
 
 /**
  * Never hand Reka a value that is not one of its triggers: it would render the
@@ -76,6 +83,30 @@ const selected = computed(() => talosResolveView(props.surface, props.modelValue
 watch(selected, (value) => {
     if (value && value !== props.modelValue) emit('update:modelValue', value)
 }, { immediate: true })
+
+/**
+ * Which way the panel should arrive from: 1 going forward through the
+ * register's order, -1 going back.
+ *
+ * Owner 2026-08-02, on the device: the change was "uno scatto di un frame".
+ * Half of that was magnitude, fixed in the motion engine. The other half is
+ * this: with no direction, swiping left and swiping right looked identical,
+ * which reads as nothing happening at all once the movement is visible.
+ *
+ * The watcher's default `pre` flush matters — the variable has to be on the
+ * element before the panel is marked active, or the first change animates the
+ * wrong way round.
+ */
+const direction = ref(1)
+
+watch(selected, (next, previous) => {
+    if (!previous || next === previous) return
+    const order = views.value
+    const to = order.findIndex((view) => view.id === next)
+    const from = order.findIndex((view) => view.id === previous)
+    if (to === -1 || from === -1) return
+    direction.value = to > from ? 1 : -1
+})
 
 function choose(value: unknown): void {
     if (typeof value !== 'string') return
@@ -131,7 +162,15 @@ let swipeY: number | null = null
 function startsInsideASideScroller(target: EventTarget | null, root: EventTarget | null): boolean {
     let node = target instanceof Element ? target : null
     while (node && node !== root) {
-        if (node.scrollWidth > node.clientWidth + 1) return true
+        // Overflowing is not the same as scrolling. This checked the widths
+        // alone at first, and on the device that made a bordered box whose text
+        // ran 10px past its padding "a horizontal scroller" — so the swipe died
+        // anywhere near it. Only an element that can actually be scrolled
+        // sideways has a claim on the gesture.
+        if (node.scrollWidth > node.clientWidth + 1) {
+            const overflowX = getComputedStyle(node).overflowX
+            if (overflowX === 'auto' || overflowX === 'scroll') return true
+        }
         node = node.parentElement
     }
     return false
@@ -236,7 +275,7 @@ function onSwipeEnd(event: PointerEvent): void {
              the drag that reaches a tab sitting off-screen. touch-action cannot
              be widened again by a descendant, so the boundary is the only place
              this choice can be made. -->
-        <div class="min-w-0 touch-pan-y">
+        <div class="min-w-0 touch-pan-y" :style="{ '--talos-tab-direction': direction }">
             <slot :view="selected" />
         </div>
     </TabsRoot>

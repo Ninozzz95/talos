@@ -45,6 +45,20 @@ export type TalosInteractionMotionPlan = Readonly<{
     properties: readonly ['transform', 'opacity']
     keyframes: readonly TalosInteractionKeyframe[]
     finalStyle: TalosInteractionKeyframe
+    /**
+     * The entry offset on its own, in px, already scaled by intensity.
+     *
+     * On the PLAN and not inside a keyframe, deliberately: a keyframe carries
+     * only `transform` and `opacity`, and there is a test standing over that
+     * rule because those two are what the compositor can animate on its own.
+     * This is a measurement about the plan, not a property to animate.
+     *
+     * It exists because `transform` is a finished string, which is fine right
+     * up until something needs to point the movement the other way — a tab
+     * reached by going BACK should arrive from the left, and CSS cannot negate
+     * one component of a composed transform.
+     */
+    enterX: number
 }>
 
 export type TalosInteractionMotionRequest = Readonly<{
@@ -69,7 +83,13 @@ const DEFAULT_SPECS: Readonly<Record<TalosInteractionIntent, TalosInteractionSpe
     'sidebar-close': spec(180, visible, hidden(-20, 0)),
     'disclosure-open': spec(160, pose(0, -4, 0.99, 0, 0), visible),
     'disclosure-close': spec(120, visible, hidden(0, -4, 0.99)),
-    'tab-change': spec(150, pose(4, 0, 1, 0, 0.65), visible),
+    // Owner 2026-08-02, on the device: "non c'è un'animazione, c'è solo uno
+    // scatto di un frame". Measured on a OnePlus 13 it was 69ms and 1.04px —
+    // because this was tuned like a hover (150ms, 4px) while a window gets 18px
+    // and a sidebar 20. A tab change replaces the whole panel; it is a view
+    // swap, and the numbers now say so. At the owner's own 50%/65% preferences
+    // that lands at ~110ms and ~10px, which is a slide rather than a flicker.
+    'tab-change': spec(240, pose(40, 0, 1, 0, 0), visible),
     'menu-open': spec(150, pose(0, -6, 0.98, 0, 0), visible),
     'menu-close': spec(110, visible, hidden(0, -4, 0.98)),
     'popover-open': spec(170, pose(0, -8, 0.98, 0, 0), visible),
@@ -211,6 +231,7 @@ function immediatePlan(intent: TalosInteractionIntent, reason: Exclude<TalosInte
         properties: Object.freeze(['transform', 'opacity'] as const),
         keyframes: Object.freeze([finalStyle]),
         finalStyle,
+        enterX: 0,
     })
 }
 
@@ -230,7 +251,8 @@ export function resolveTalosInteractionMotion(request: TalosInteractionMotionReq
     const tuning = INTERFACE_PROFILE_TUNING[request.preferences.profile]
         ?? INTERFACE_PROFILE_TUNING.preset
     const intensity = Math.min(100, Math.max(0, request.preferences.intensity * tuning.intensity))
-    const from = keyframe(scalePose(selected.from, intensity))
+    const fromPose = scalePose(selected.from, intensity)
+    const from = keyframe(fromPose)
     const to = keyframe(scalePose(selected.to, intensity))
     const keyframes = Object.freeze([from, to])
     return Object.freeze({
@@ -250,5 +272,6 @@ export function resolveTalosInteractionMotion(request: TalosInteractionMotionReq
         properties: Object.freeze(['transform', 'opacity'] as const),
         keyframes,
         finalStyle: to,
+        enterX: Number(scaledNumber(fromPose.x)),
     })
 }
