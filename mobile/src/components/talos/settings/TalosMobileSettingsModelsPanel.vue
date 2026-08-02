@@ -2,15 +2,36 @@
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { Bot, Boxes, Cpu, KeyRound, SlidersHorizontal } from '@lucide/vue'
-import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
+import { TabsContent } from 'reka-ui'
 import TalosMobileProviderRuntimePanel from '@/components/talos/models/TalosMobileProviderRuntimePanel.vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
+import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
 import { talosMobileModelProfileIsCallable, talosMobileProviderById } from '@/lib/mobileProviders'
+import { talosRememberView, talosRememberedView } from '@/lib/navigation/rememberedView'
 import { useChatController } from '@/stores/chatController'
 
 const controller = useChatController()
 const { t } = useTalosI18n()
-const activeTab = ref<'providers' | 'catalog' | 'on-device'>('providers')
+
+/**
+ * The three sections, their order and their names come from the register now.
+ * What stays here is where the answer is kept — and that Model Lab reopens on
+ * the section you left, which it never did: someone watching a download had to
+ * walk back to it after every visit.
+ */
+const activeTab = ref<string>(talosRememberedView('models') ?? 'providers')
+
+function chooseTab(tab: string): void {
+    activeTab.value = tab
+    talosRememberView('models', tab)
+}
+
+/** Presentation, like the sticky list in Appearance: the strip owns the names. */
+const TAB_ICONS: Record<string, typeof KeyRound> = {
+    providers: KeyRound,
+    catalog: Boxes,
+    'on-device': Cpu,
+}
 const TalosMobileModelCatalog = defineAsyncComponent(
     () => import('@/components/talos/models/TalosMobileModelCatalog.vue'),
 )
@@ -29,8 +50,6 @@ const modelItems = computed(() => controller.profiles.value
         label: `${talosMobileProviderById(profile.provider).label} - ${profile.display_name}`,
         disabled: !profile.show_in_composer || !talosMobileModelProfileIsCallable(profile),
     })))
-const tabClass = 'inline-flex min-h-11 flex-1 items-center justify-center gap-2 border-b-2 border-transparent px-3 text-sm font-semibold text-[var(--talos-muted)] outline-none data-[state=active]:border-[var(--talos-accent)] data-[state=active]:text-[var(--talos-text)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]'
-
 onMounted(() => { void controller.init() })
 </script>
 
@@ -53,20 +72,16 @@ onMounted(() => { void controller.init() })
             <p v-else class="mt-3 text-xs leading-5 text-[var(--talos-muted)]">{{ t('models.configureToBegin') }}</p>
         </section>
 
-        <TabsRoot v-model="activeTab" activation-mode="automatic" orientation="horizontal" class="min-w-0">
-            <TabsList :aria-label="t('models.labSections')" class="flex border-b border-[var(--talos-border)]">
-                <TabsTrigger value="providers" :class="tabClass">
-                    <KeyRound class="size-4" aria-hidden="true" /> {{ t('models.providers') }}
-                </TabsTrigger>
-                <TabsTrigger value="catalog" :class="tabClass">
-                    <Boxes class="size-4" aria-hidden="true" /> {{ t('models.catalog') }}
-                </TabsTrigger>
-                <!-- Models that run here, with nothing leaving the phone. Beside
-                     the provider tabs on purpose: it is the same decision. -->
-                <TabsTrigger value="on-device" :class="tabClass">
-                    <Cpu class="size-4" aria-hidden="true" /> {{ t('models.onDevice') }}
-                </TabsTrigger>
-            </TabsList>
+        <TalosThemedTabs
+            class="min-w-0"
+            surface="models"
+            :model-value="activeTab"
+            :aria-label="t('models.labSections')"
+            @update:model-value="chooseTab"
+        >
+            <template #tab-leading="{ view }">
+                <component :is="TAB_ICONS[view.id]" v-if="TAB_ICONS[view.id]" class="size-4" aria-hidden="true" />
+            </template>
 
             <TabsContent
                 value="providers"
@@ -92,6 +107,8 @@ onMounted(() => { void controller.init() })
                 <TalosMobileModelCatalog />
             </TabsContent>
 
+            <!-- Models that run here, with nothing leaving the phone. Beside
+                 the provider sections on purpose: it is the same decision. -->
             <TabsContent
                 value="on-device"
                 data-model-lab-section="on-device"
@@ -99,6 +116,6 @@ onMounted(() => { void controller.init() })
             >
                 <TalosMobileLocalModels />
             </TabsContent>
-        </TabsRoot>
+        </TalosThemedTabs>
     </div>
 </template>
