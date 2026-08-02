@@ -85,3 +85,55 @@ Run precedente «quanto è alto il Monte Bianco» → **5 su 6, 1 smentita** dal
 | 6 | Il parser scarta il segnaposto **italiano**; un modello che rispondesse `CLAIM \| 1 \| …` passerebbe. | Minore. |
 | 7 | `quoteSpan` è conservato ma la UI mostra il passaggio **da solo**, non evidenziato dentro il testo intero della fonte. | Rifinitura, R-5. |
 | 8 | **R7 non è completo**: il modello «economico» esiste come *giudice scelto da una regola*, non come **scelta dell'utente** in Impostazioni, e il «lettore» che riassume le pagine non è mai stato costruito (la lettura è meccanica). | **APERTO — è il prossimo pezzo naturale.** |
+
+---
+
+## 8. R7 — i due modelli li sceglie l'utente (richiesta owner, stesso blocco)
+
+**Ricerca prima.** GPT Researcher — l'implementazione OSS di riferimento — tiene
+da anni `FAST_LLM`, `SMART_LLM` e `STRATEGIC_LLM` come impostazioni **separate**,
+e l'hanno separate anche per **fornitore** dopo che gli utenti l'hanno chiesto
+(issue #539, PR #813). Non è ordine: i due ruoli vogliono cose opposte — chi
+scrive vuole capacità, chi verifica vuole costare poco (gira una volta per
+citazione) ed essere **indipendente** da chi scrive. La letteratura sui
+verificatori aggiunge il motivo forte: fra generatore e verificatore i modi di
+sbagliare sono **correlati**, e la correlazione è massima quando è lo stesso
+modello o la stessa famiglia.
+
+**Costruito:**
+
+- `settings.research_models = { author, judge }`, ciascuno `provider:modelId` o
+  **null**. Null è una risposta vera, non un campo vuoto: `author: null` = «quello
+  del compositore» (istruzione permanente che resta giusta quando il compositore
+  cambia); `judge: null` = «automatico, prima il dispositivo».
+- La sezione **«I DUE MODELLI — LI SCEGLI TU»** sta nella stazione Ricerca
+  approfondita, **sopra il piano**: cambia quanto costa la run e quanto valgono i
+  suoi verdetti, e sono decisioni da prendere prima di spendere.
+- **Il selettore del verificatore non offre chi scrive.** Un'opzione che la run
+  rifiuterebbe comunque non deve essere sullo schermo; e se lo scrittore viene
+  cambiato in quello che era il verificatore, il verificatore torna automatico.
+- **Stessa casa = avviso, non divieto**: l'indulgenza verso sé stessi si estende
+  alla famiglia, ma è una scelta che spetta all'utente farla sapendolo.
+- **Scrittore scomparso = la run si ferma** (`TALOS_RESEARCH_AUTHOR_UNAVAILABLE`)
+  invece di scivolare su un altro modello: un rapporto depositato sotto il nome
+  di un modello che nessuno ha scelto è una bugia sulla provenienza, e la
+  provenienza è tutto il prodotto qui. Il **verificatore** scomparso ripiega
+  sull'automatico, e il rapporto scrive chi ha giudicato davvero — quindi la
+  sostituzione si vede.
+
+**Provato sul tablet.** Verificatore scelto a mano = `deepseek-v4-pro` (mentre
+l'automatico avrebbe preso il modello locale). Run «chi ha scritto il Nome della
+Rosa» → 2 su 2 sostenute, e il rapporto dice **«Verificate da un altro modello,
+mai da quello che ha scritto il rapporto: deepseek:deepseek-v4-pro»**.
+La scelta vince sull'automatismo.
+
+**Resta aperto di R7:** il **lettore** della spec (§7) — un modello economico che
+riassume ogni pagina ed estrae i passaggi — non esiste: oggi la lettura è
+meccanica. Non è un difetto, è la metà di R7 che non è mai stata costruita.
+
+**Trappola di verifica, da ricordare:** `npx vue-tsc --noEmit -p tsconfig.json`
+**non** vede quello che vede `vue-tsc -b` dentro `npm run build` (i tipi di
+dipendenza dichiarati a mano nel controller). Il cancello è `npm run build`. E
+`npm run build | tail` dentro una catena `&&` **passa comunque**, perché lo stato
+d'uscita è quello di `tail`: è così che un APK vecchio è finito installato mentre
+la build era rossa.
