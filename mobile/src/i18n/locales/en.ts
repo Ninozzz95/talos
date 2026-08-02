@@ -1644,6 +1644,7 @@ export const TALOS_EN_MESSAGES = {
         phaseNote: 'Phase R-1: a rehearsal run that only sleeps. What is being proved is that it survives — start one, close TALOS from the task switcher, and come back.',
         questionPlaceholder: 'A question to rehearse with',
         start: 'Start',
+        noSearchSource: 'No search source is set up, so there is nothing to research with. Set one in Settings, under Search.',
         propose: 'Plan',
         planTitle: 'The plan - change it before anything is spent',
         branchLabel: 'Line of enquiry',

@@ -134,6 +134,18 @@ async function resume(runId: string): Promise<void> {
     }
 }
 
+/**
+ * The one refusal this phase can produce on purpose, said in words.
+ *
+ * Everything else is passed through as it arrived — inventing a friendly
+ * sentence for an error nobody has read yet would hide the only clue there is.
+ * This one is different: it is OUR refusal, its cause is known, and it has a
+ * remedy the user can act on.
+ */
+function reason(code: string): string {
+    return code === 'TALOS_RESEARCH_NO_SEARCH_SOURCE' ? t('research.noSearchSource') : code
+}
+
 function doneCount(run: TalosResearchRun): number {
     return run.steps.filter((step) => step.state === 'done').length
 }
@@ -283,10 +295,21 @@ function doneCount(run: TalosResearchRun): number {
                     <li
                         v-for="step in run.steps"
                         :key="step.id"
-                        class="flex items-center justify-between gap-2 font-mono text-2xs text-[var(--talos-muted)]"
+                        class="font-mono text-2xs text-[var(--talos-muted)]"
                     >
-                        <span class="truncate">{{ step.id }}</span>
-                        <span>{{ step.state }}<template v-if="step.attempts > 1"> ×{{ step.attempts }}</template></span>
+                        <span class="flex items-center justify-between gap-2">
+                            <span class="truncate">{{ step.id }}</span>
+                            <span>{{ step.state }}<template v-if="step.attempts > 1"> ×{{ step.attempts }}</template></span>
+                        </span>
+                        <!-- Why it failed, beside the step that failed. "failed"
+                             on its own is the same lie as "no models": it names
+                             the outcome and hides the cause, and the cause is
+                             the only part the user can act on. -->
+                        <span
+                            v-if="step.error"
+                            data-testid="talos-research-step-error"
+                            class="block pl-2 text-[var(--talos-danger,var(--destructive))]"
+                        >{{ reason(step.error) }}</span>
                     </li>
                 </ul>
             </div>
