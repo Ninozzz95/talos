@@ -99,6 +99,24 @@ function choose(value: unknown): void {
 const SWIPE_MIN_PX = 56
 const SWIPE_HORIZONTAL_RATIO = 1.5
 
+/**
+ * The strip does not compete with Android for the edges.
+ *
+ * Gesture navigation reserves a band down each side of the screen for Back —
+ * 20dp by default, and more when the user raises back sensitivity. A horizontal
+ * drag that starts in there belongs to the system: the WebView usually never
+ * sees it, and when it does the gesture has already been half-consumed. Trying
+ * to take it back is possible (`setSystemGestureExclusionRects`) and wrong —
+ * stealing Back to change a tab is a bad trade in any app, let alone one asking
+ * for trust with the whole phone.
+ *
+ * So the rule is to yield: a swipe that starts near an edge is not ours, and
+ * the user gets the Back they were asking for. 24 CSS px covers the 20dp
+ * default with a little room; someone on high sensitivity simply gets Back over
+ * a wider band, which is the outcome we want anyway.
+ */
+const SYSTEM_GESTURE_EDGE_PX = 24
+
 let swipeX: number | null = null
 let swipeY: number | null = null
 
@@ -119,8 +137,17 @@ function startsInsideASideScroller(target: EventTarget | null, root: EventTarget
     return false
 }
 
+function startsInTheSystemsBackGesture(clientX: number): boolean {
+    const width = typeof window === 'undefined' ? 0 : window.innerWidth
+    if (width <= SYSTEM_GESTURE_EDGE_PX * 2) return false
+    return clientX <= SYSTEM_GESTURE_EDGE_PX || clientX >= width - SYSTEM_GESTURE_EDGE_PX
+}
+
 function onSwipeStart(event: PointerEvent): void {
-    if (startsInsideASideScroller(event.target, event.currentTarget)) {
+    if (
+        startsInsideASideScroller(event.target, event.currentTarget)
+        || startsInTheSystemsBackGesture(event.clientX)
+    ) {
         onSwipeCancel()
         return
     }
@@ -167,7 +194,7 @@ function onSwipeEnd(event: PointerEvent): void {
     >
         <TabsList
             :aria-label="ariaLabel"
-            class="relative flex w-full items-stretch gap-1 overflow-x-auto border-b border-[var(--talos-border)]"
+            class="relative flex items-stretch gap-1 overflow-x-auto border-b border-[var(--talos-border)]"
             :class="listClass"
         >
             <!-- The press dip is Tailwind rather than `.talos-pressable`, which
@@ -195,6 +222,22 @@ function onSwipeEnd(event: PointerEvent): void {
                 class="absolute bottom-0 left-0 h-0.5 w-[var(--reka-tabs-indicator-size)] translate-x-[var(--reka-tabs-indicator-position)] rounded-full bg-[var(--talos-accent)] transition-[width,transform] duration-200"
             />
         </TabsList>
-        <slot :view="selected" />
+        <!-- `touch-pan-y` is what makes the swipe exist at all on a phone, and it
+             took a device to find out. Chrome hands a touch drag to the
+             compositor after the first move and fires `pointercancel`: the
+             measured sequence was pointerdown → pointermove → pointercancel,
+             with pointerup NEVER arriving. So the swipe was dead on Android —
+             in this strip and in the hand-rolled one it replaced, since 2026-07-24.
+             Declaring that this area pans vertically only tells Chrome not to
+             take horizontal drags, and the full stream survives to pointerup.
+
+             On the panels rather than on the root, deliberately: the strip
+             itself is `overflow-x-auto`, and restricting it here would take away
+             the drag that reaches a tab sitting off-screen. touch-action cannot
+             be widened again by a descendant, so the boundary is the only place
+             this choice can be made. -->
+        <div class="min-w-0 touch-pan-y">
+            <slot :view="selected" />
+        </div>
     </TabsRoot>
 </template>

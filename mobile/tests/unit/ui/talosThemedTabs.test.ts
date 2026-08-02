@@ -79,6 +79,26 @@ describe('TalosThemedTabs', () => {
         expect(tab.classes()).toContain('motion-reduce:active:scale-100')
     })
 
+    it('tells the browser the panels pan vertically only, or there is no swipe at all', () => {
+        // Measured on a OnePlus 13 (Android 16): without this, Chrome hands the
+        // drag to the compositor after the first move and fires `pointercancel`
+        // — pointerup never arrives, so the swipe was dead on the device. It is
+        // on the panels and NOT on the strip, because the strip is
+        // overflow-x-auto and touch-action cannot be widened by a descendant.
+        const wrapper = mountTabs()
+        const panels = wrapper.get('[role="tablist"]').element.nextElementSibling
+        expect(panels?.className).toContain('touch-pan-y')
+        expect(wrapper.get('[role="tablist"]').classes()).not.toContain('touch-pan-y')
+    })
+
+    it('lets the strip grow with the bleed a screen gives it', () => {
+        // `w-full` pinned the list to the parent's content width, so Appearance's
+        // `-mx-4` shifted it left instead of widening it and the sticky bar
+        // stopped 16px short of the right edge — visible on the device as
+        // content sliding through the gap.
+        expect(mountTabs().get('[role="tablist"]').classes()).not.toContain('w-full')
+    })
+
     it('lets the screen place the strip without letting it redefine the strip', () => {
         // Appearance pins its list while the panel scrolls. That is layout, and
         // the screen owns layout — but only layout.
@@ -145,6 +165,26 @@ describe('TalosThemedTabs swipe', () => {
         const first = mountTabs({ modelValue: 'design' })
         await swipe(first, 110, 240)
         expect(first.emitted('update:modelValue')).toBeUndefined()
+    })
+
+    it('leaves the edges of the screen to Android, which owns Back there', async () => {
+        // Gesture navigation reserves a band down each side, 20dp by default and
+        // wider on high back sensitivity. Competing for it would mean stealing
+        // Back to change a tab — a bad trade in any app, and a worse one in this
+        // app. jsdom reports innerWidth 1024, so 10px in is inside the band.
+        const fromLeft = mountTabs({ modelValue: 'design' })
+        await swipe(fromLeft, 10, 300)
+        expect(fromLeft.emitted('update:modelValue')).toBeUndefined()
+
+        const fromRight = mountTabs({ modelValue: 'design' })
+        await swipe(fromRight, window.innerWidth - 8, 300)
+        expect(fromRight.emitted('update:modelValue')).toBeUndefined()
+
+        // …and a swipe that starts anywhere else still works, so the guard is
+        // not simply switching the gesture off.
+        const inland = mountTabs({ modelValue: 'design' })
+        await swipe(inland, 400, 200)
+        expect(lastChoice(inland)).toBe('motion')
     })
 
     it('leaves the gesture to whatever the finger landed on, if that scrolls sideways', async () => {
