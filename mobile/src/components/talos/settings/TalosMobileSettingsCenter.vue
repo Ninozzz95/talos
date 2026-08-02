@@ -6,7 +6,6 @@ import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosMediaQuery } from '@/composables/useTalosMediaQuery'
 import { useTalosAccountStore } from '@/stores/account'
 import TalosAccountAvatar from '@/components/talos/TalosAccountAvatar.vue'
-import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import TalosMobileSettingsModelsPanel from './TalosMobileSettingsModelsPanel.vue'
 import TalosMobileSettingsAiDefaultsPanel from './TalosMobileSettingsAiDefaultsPanel.vue'
 import TalosMobileSettingsAppearancePanel from './TalosMobileSettingsAppearancePanel.vue'
@@ -163,6 +162,87 @@ const ICONS: Record<TalosMobileSettingsTabId, Component> = {
     system: Settings,
 }
 
+/**
+ * Which ARIA pattern this screen is, right now.
+ *
+ * It was a `tablist` at every width, and at one of those widths that was simply
+ * untrue. The APG is explicit: tabs are panels in the SAME view, with the list
+ * visible beside them. Below 768px this screen hides the list, replaces it with
+ * the panel and offers a Back — that is a master-detail flow, which is
+ * navigation. Announcing "tab 4 of 13, selected" for a control that leaves the
+ * page is a promise the screen does not keep.
+ *
+ * So the grammar follows the layout, on the same media query that already
+ * drives it: side-by-side is tabs, one-at-a-time is navigation. Two patterns
+ * because there are genuinely two, not because one was easier to type.
+ */
+const isTabsGrammar = isMdLayout
+
+/** Row order, flattened once — the keyboard walk and the register both need it. */
+const orderedTabIds = computed<TalosMobileSettingsTabId[]>(() => [
+    TALOS_MOBILE_SETTINGS_ACCOUNT_TAB,
+    ...resolvedGroups.value.flatMap((group) => group.tabs.map((tab) => tab.id)),
+])
+
+function rowId(id: TalosMobileSettingsTabId): string {
+    return `talos-settings-row-${id}`
+}
+
+/**
+ * Panels mount on first visit and stay mounted — which is what Reka's Presence
+ * did, and worth keeping deliberately rather than inheriting. Mounting all
+ * thirteen up front would pull the whole settings tree into the first paint
+ * ("loads the heavy Catalog only when selected" is an existing test); throwing
+ * each away on leaving would re-run `controller.init()` every time someone
+ * glanced at Model Lab.
+ */
+const visited = ref(new Set<TalosMobileSettingsTabId>())
+watch(activeTab, (id) => { visited.value = new Set(visited.value).add(id) }, { immediate: true })
+const renderedTabs = computed(() => localizedTabs.value.filter((tab) => visited.value.has(tab.id)))
+
+function selectRow(id: TalosMobileSettingsTabId): void {
+    activeTab.value = id
+    openDetail()
+}
+
+/**
+ * Up/Down/Home/End across the rail — but only where the rail IS a tablist.
+ *
+ * This came free from Reka before, and it is the one thing worth hand-writing
+ * to get the semantics right: under the tabs pattern the whole list is a single
+ * tab stop and the arrows move within it, while under navigation every row is
+ * its own stop and Tab is how you move. Running the roving version on the phone
+ * would take twelve stops away from a keyboard user for no reason.
+ */
+function onRowKeydown(event: KeyboardEvent): void {
+    if (!isTabsGrammar.value) return
+    const ids = orderedTabIds.value
+    // From the row that has FOCUS, not the row that is selected. They are the
+    // same thing right up until they are not — press Down on a tab you tabbed
+    // to but have not chosen, and stepping from the selection skips one.
+    const from = (event.currentTarget as HTMLElement | null)?.dataset.settingsTab
+    const index = ids.indexOf((from ?? activeTab.value) as TalosMobileSettingsTabId)
+    if (index === -1) return
+
+    let target: number
+    switch (event.key) {
+        case 'ArrowDown': target = (index + 1) % ids.length; break
+        case 'ArrowUp': target = (index - 1 + ids.length) % ids.length; break
+        case 'Home': target = 0; break
+        case 'End': target = ids.length - 1; break
+        default: return
+    }
+    event.preventDefault()
+    const next = ids[target]
+    if (!next) return
+    activeTab.value = next
+    void nextTick(() => {
+        categoryRoot.value
+            ?.querySelector<HTMLElement>(`[data-settings-tab="${next}"]`)
+            ?.focus({ preventScroll: true })
+    })
+}
+
 const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
     models: TalosMobileSettingsModelsPanel,
     ai_defaults: TalosMobileSettingsAiDefaultsPanel,
@@ -180,20 +260,22 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
     <!-- Owner 2026-07-24: the framed card was redundant nesting inside the
          sheet — on mobile the categories/detail go FULL-WIDTH with the coherent
          parent padding; the framed side-by-side stays on tablet (md). -->
-    <TabsRoot
-        v-model="activeTab"
+    <div
         data-testid="settings-list-detail"
-        orientation="vertical"
-        activation-mode="automatic"
         class="flex flex-col md:h-full md:min-h-0 md:flex-row md:overflow-hidden md:rounded-none md:border-0 md:bg-[var(--talos-card)]"
     >
-        <aside
+        <!-- A complementary rail beside its detail on the tablet; a navigation
+             landmark on the phone, where it IS the whole screen until you pick
+             something. Same markup, because the difference is what it means,
+             not what it looks like. -->
+        <component
+            :is="isTabsGrammar ? 'aside' : 'nav'"
             ref="categoryRoot"
             data-testid="settings-category-pane"
             :data-talos-motion-intent="mobileMotionPane === 'categories' ? 'tab-change' : undefined"
             class="md:flex md:min-h-0 md:w-[var(--talos-tablet-sidebar-width)] md:flex-none md:flex-col md:overflow-hidden md:border-r md:border-[var(--talos-border)] md:bg-[var(--talos-sidebar)]/80 md:p-3"
             :class="mobilePane === 'detail' ? 'hidden' : 'block'"
-            :aria-label="t('settingsCenter.categories')"
+            :aria-label="isTabsGrammar ? t('settingsCenter.categories') : t('settingsCenter.talosCategories')"
             @animationend="clearMobilePaneMotion('categories', $event)"
         >
             <!-- Owner 2026-07-24 (Claude-style): account summary card on top +
@@ -202,12 +284,26 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
             <!-- Owner 2026-07-24: NO own horizontal padding on the phone — the
                  parent TalosMobileScreen already provides the 16px gutter (Claude
                  parity). Adding px here double-padded to 28px ("still too wide"). -->
-            <TabsList :aria-label="t('settingsCenter.talosCategories')" class="flex max-h-none w-full flex-col gap-5 px-0 py-2 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain md:px-0 md:py-0">
-                <TabsTrigger
-                    :value="TALOS_MOBILE_SETTINGS_ACCOUNT_TAB"
+            <div
+                data-testid="settings-category-list"
+                :role="isTabsGrammar ? 'tablist' : undefined"
+                :aria-orientation="isTabsGrammar ? 'vertical' : undefined"
+                :aria-label="isTabsGrammar ? t('settingsCenter.talosCategories') : undefined"
+                class="flex max-h-none w-full flex-col gap-5 px-0 py-2 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain md:px-0 md:py-0"
+            >
+                <button
+                    type="button"
+                    :id="rowId(TALOS_MOBILE_SETTINGS_ACCOUNT_TAB)"
+                    :role="isTabsGrammar ? 'tab' : undefined"
+                    :aria-selected="isTabsGrammar ? activeTab === TALOS_MOBILE_SETTINGS_ACCOUNT_TAB : undefined"
+                    :aria-current="!isTabsGrammar && activeTab === TALOS_MOBILE_SETTINGS_ACCOUNT_TAB ? 'page' : undefined"
+                    :aria-controls="isTabsGrammar && activeTab === TALOS_MOBILE_SETTINGS_ACCOUNT_TAB ? 'talos-settings-panel' : undefined"
+                    :tabindex="isTabsGrammar ? (activeTab === TALOS_MOBILE_SETTINGS_ACCOUNT_TAB ? 0 : -1) : undefined"
                     :data-settings-tab="TALOS_MOBILE_SETTINGS_ACCOUNT_TAB"
+                    :data-state="activeTab === TALOS_MOBILE_SETTINGS_ACCOUNT_TAB ? 'active' : 'inactive'"
                     class="talos-pressable flex w-full items-center gap-3 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] data-[state=active]:border-[var(--talos-accent-border)] data-[state=active]:bg-[var(--talos-active)]"
-                    @click="openDetail"
+                    @click="selectRow(TALOS_MOBILE_SETTINGS_ACCOUNT_TAB)"
+                    @keydown="onRowKeydown"
                 >
                     <TalosAccountAvatar size="md" />
                     <span class="min-w-0 flex-1">
@@ -215,18 +311,26 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                         <span class="block truncate text-xs text-[var(--talos-muted)]">{{ t('settingsCenter.localIdentity') }}</span>
                     </span>
                     <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
-                </TabsTrigger>
+                </button>
 
                 <div v-for="group in resolvedGroups" :key="group.label" class="w-full">
                     <p class="mb-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ group.label }}</p>
                     <div class="divide-y divide-[var(--talos-border)] overflow-hidden rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]">
-                        <TabsTrigger
+                        <button
                             v-for="tab in group.tabs"
                             :key="tab.id"
-                            :value="tab.id"
+                            type="button"
+                            :id="rowId(tab.id)"
+                            :role="isTabsGrammar ? 'tab' : undefined"
+                            :aria-selected="isTabsGrammar ? activeTab === tab.id : undefined"
+                            :aria-current="!isTabsGrammar && activeTab === tab.id ? 'page' : undefined"
+                            :aria-controls="isTabsGrammar && activeTab === tab.id ? 'talos-settings-panel' : undefined"
+                            :tabindex="isTabsGrammar ? (activeTab === tab.id ? 0 : -1) : undefined"
                             :data-settings-tab="tab.id"
+                            :data-state="activeTab === tab.id ? 'active' : 'inactive'"
                             class="talos-pressable flex min-h-14 w-full items-center gap-3 px-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)] data-[state=active]:bg-[var(--talos-active)]"
-                            @click="openDetail"
+                            @click="selectRow(tab.id)"
+                            @keydown="onRowKeydown"
                         >
                             <component :is="ICONS[tab.id]" class="size-5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                             <span class="min-w-0 flex-1">
@@ -234,11 +338,11 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                                 <span v-if="tab.availability === 'gated'" class="block truncate text-xs text-[var(--talos-muted)]">{{ t('settingsCenter.notInstalled') }}</span>
                             </span>
                             <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
-                        </TabsTrigger>
+                        </button>
                     </div>
                 </div>
-            </TabsList>
-        </aside>
+            </div>
+        </component>
 
         <section
             ref="detailRoot"
@@ -252,11 +356,15 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
         >
             <!-- Owner 2026-07-24: the in-body "Categories" back is GONE — the
                  sheet header's single contextual Back now returns to the list. -->
-            <TabsContent
-                v-for="tab in localizedTabs"
+            <div
+                v-for="tab in renderedTabs"
                 :key="tab.id"
-                :value="tab.id"
+                id="talos-settings-panel"
+                :role="isTabsGrammar ? 'tabpanel' : 'region'"
+                :aria-labelledby="rowId(tab.id)"
+                :hidden="tab.id !== activeTab"
                 :data-settings-panel="tab.id"
+                :data-state="tab.id === activeTab ? 'active' : 'inactive'"
                 class="talos-motion-tab-panel outline-none"
             >
                 <!-- Owner: the sheet header already shows the subsection title on
@@ -279,7 +387,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                 />
                 <component :is="LOCAL_PANELS[tab.id]" v-else-if="tab.availability === 'available' && LOCAL_PANELS[tab.id]" />
                 <TalosMobileSettingsCapabilityPanel v-else :tab="tab" />
-            </TabsContent>
+            </div>
         </section>
-    </TabsRoot>
+    </div>
 </template>
