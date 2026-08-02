@@ -7,6 +7,7 @@ function imageTool() {
         images: [{ base64: 'AA==', mediaType: 'image/png' }],
         error: null,
         permanent: false,
+        rateLimited: false,
     }))
     const save = vi.fn(async () => ({
         id: 'generated-1',
@@ -77,5 +78,48 @@ describe('generate_image capability boundary', () => {
         expect(result.messageAttachments).toBeUndefined()
         expect(generate).toHaveBeenCalledTimes(1)
         expect(save).toHaveBeenCalledTimes(1)
+    })
+})
+
+/**
+ * Owner 2026-08-02, from the device: the model retried twice and hit the same
+ * 429 both times, then told the user the service was overloaded. It was not
+ * lying — the tool's advice said "retrying once may work", and against a rate
+ * limit that sends it straight back into the wall.
+ */
+describe('what generate_image tells the model about a rate limit', () => {
+    async function failWith(status: number, rateLimited: boolean): Promise<string> {
+        const generate = vi.fn(async () => ({
+            images: [],
+            error: `HTTP ${status}: too many requests`,
+            permanent: false,
+            rateLimited,
+        }))
+        const [tool] = createTalosImageTools({
+            provider: () => 'OpenRouter',
+            generate,
+            save: vi.fn(),
+        })
+        const result = await executeTalosTool(tool, { prompt: 'a red fox' }, {
+            permissions: { read: 'allow', write: 'allow', outbound: 'allow' },
+            isToolEnabled: () => true,
+            requestConsent: vi.fn(async () => true),
+            audit: vi.fn(async () => {}),
+            context: { sessionId: 'session-1' },
+        })
+        return String((result as { content?: string }).content ?? '')
+    }
+
+    it('tells it to WAIT on a 429, not to ask again', async () => {
+        const content = await failWith(429, true)
+
+        expect(content).toContain('rate limiting')
+        expect(content).toContain('do NOT retry immediately')
+        // The old advice is what caused the two wasted attempts.
+        expect(content).not.toContain('Retrying once may work')
+    })
+
+    it('still offers one retry for an ordinary transient failure', async () => {
+        expect(await failWith(503, false)).toContain('Retrying once may work')
     })
 })

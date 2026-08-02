@@ -314,6 +314,67 @@ describe('talos.tool.authorization-checkpoint/1', () => {
         })
     })
 
+    /**
+     * Owner 2026-08-02, on the device: "ho premuto consenti sempre ma il pop-up
+     * non si è levato immediatamente, ho dovuto insistere".
+     *
+     * "Always allow" recorded the grant and then settled ONE request — the one
+     * on screen — while its siblings for the same tool stayed pending, so the
+     * sheet came straight back and asked a question that had just been answered.
+     */
+    it('TOOL-AUTH-04b settles every queued request the permanent grant already covers', async () => {
+        const gate = coordinator(vi.fn(async () => {}))
+        await gate.suspend(await makeCheckpoint([
+            await makeRequest(),
+            await makeRequest({ id: 'request-2', call_id: 'call-2' }),
+            await makeRequest({ id: 'request-3', call_id: 'call-3' }),
+        ]))
+
+        await gate.decide('request-1', 'always_allow')
+
+        const activity = (await repository.listSessionToolActivities('session-1'))[0]!
+        const persisted = parseTalosToolAuthorizationCheckpoint(activity.payload.checkpoint)
+        expect(persisted?.requests.map((request) => request.decision))
+            .toEqual(['always_allow', 'always_allow', 'always_allow'])
+    })
+
+    it('TOOL-AUTH-04c still asks about a request the grant does not cover', async () => {
+        // Same tool, but it wants an action nobody granted. That is a different
+        // question, and silence is not an answer to it.
+        const gate = coordinator(vi.fn(async () => {}))
+        await gate.suspend(await makeCheckpoint([
+            await makeRequest(),
+            await makeRequest({ id: 'request-2', call_id: 'call-2', actions: ['write', 'outbound'] }),
+        ]))
+
+        await gate.decide('request-1', 'always_allow')
+
+        const activity = (await repository.listSessionToolActivities('session-1'))[0]!
+        const persisted = parseTalosToolAuthorizationCheckpoint(activity.payload.checkpoint)
+        expect(persisted?.requests.map((request) => request.decision))
+            .toEqual(['always_allow', 'pending'])
+    })
+
+    it('TOOL-AUTH-04d never spreads a one-off decision to its siblings', async () => {
+        // "Allow once" and "deny" mean this call, not this tool.
+        for (const [index, decision] of (['allow_once', 'deny'] as const).entries()) {
+            const gate = coordinator(vi.fn(async () => {}))
+            // A distinct checkpoint per pass: the repository refuses to file the
+            // same activity id twice, which is the right thing for it to do.
+            await gate.suspend(await makeCheckpoint([
+                await makeRequest({ id: `request-a-${index}`, checkpoint_id: `checkpoint-${index}` }),
+                await makeRequest({ id: `request-b-${index}`, call_id: 'call-2', checkpoint_id: `checkpoint-${index}` }),
+            ], { id: `checkpoint-${index}` }))
+
+            await gate.decide(`request-a-${index}`, decision)
+
+            const activity = (await repository.listSessionToolActivities('session-1')).at(-1)!
+            const persisted = parseTalosToolAuthorizationCheckpoint(activity.payload.checkpoint)
+            expect(persisted?.requests.map((request) => request.decision))
+                .toEqual([decision, 'pending'])
+        }
+    })
+
     it('TOOL-AUTH-14 never auto-resumes a running-tools recovery checkpoint', async () => {
         const onReady = vi.fn(async () => {})
         const gate = coordinator(onReady)

@@ -2392,6 +2392,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                             images: [],
                                             error: `image model discovery failed - ${catalogFailure}`,
                                             permanent: talosImageErrorIsPermanent(catalogResponse.status),
+                                            rateLimited: catalogResponse.status === 429,
                                         }
                                     }
                                     const { parseTalosImageModels } = await import(
@@ -2483,6 +2484,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                     images: failure ? [] : parseTalosGeneratedImages(response.data),
                                     error: failure,
                                     permanent: failure !== null && talosImageErrorIsPermanent(response.status),
+                                    rateLimited: response.status === 429,
                                 }
                             },
                             async save(image, prompt) {

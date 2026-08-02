@@ -29,7 +29,13 @@ export interface TalosImageToolSources {
         prompt: string,
         shape: TalosImageShape,
         signal?: AbortSignal,
-    ): Promise<{ images: TalosGeneratedImage[]; error: string | null; permanent: boolean }>
+    ): Promise<{
+        images: TalosGeneratedImage[]
+        error: string | null
+        permanent: boolean
+        /** HTTP 429. Transient, but asking again NOW is not the way through. */
+        rateLimited: boolean
+    }>
     /** Into the Library, with the chat it came from. Returns the stored name. */
     save(image: TalosGeneratedImage, prompt: string): Promise<{
         id: string
@@ -68,7 +74,12 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
                 }
             }
 
-            let drawn: { images: TalosGeneratedImage[]; error: string | null; permanent: boolean }
+            let drawn: {
+                images: TalosGeneratedImage[]
+                error: string | null
+                permanent: boolean
+                rateLimited: boolean
+            }
             try {
                 drawn = await sources.generate(input.prompt, input.shape ?? 'square', context.signal)
             } catch (cause) {
@@ -97,7 +108,17 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
                         ? `${provider} refused the request — ${drawn.error}. `
                             + 'This will fail the same way if you ask again: do NOT retry. '
                             + 'Tell the user what happened and stop.'
-                        : `${provider} could not draw it right now — ${drawn.error}. Retrying once may work.`,
+                        : drawn.rateLimited
+                            // Owner 2026-08-02, from the device: the model
+                            // retried twice and hit the same 429 both times. It
+                            // was not lying — the advice below used to say
+                            // "retrying once may work", and against a rate limit
+                            // that sends it straight back into the wall.
+                            ? `${provider} is rate limiting this account — ${drawn.error}. `
+                                + 'Asking again right now will fail the same way: do NOT retry immediately. '
+                                + 'Tell the user it is a temporary limit, suggest trying again in a few minutes, '
+                                + 'and offer to do something else meanwhile.'
+                            : `${provider} could not draw it right now — ${drawn.error}. Retrying once may work.`,
                 }
             }
 
