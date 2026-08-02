@@ -1639,6 +1639,7 @@ export const TALOS_IT_MESSAGES = {
         phaseNote: 'Fase R-1: una run di prova che si limita a dormire. Quello che si sta dimostrando è che sopravvive — avviane una, chiudi TALOS dal gestore attività, e torna qui.',
         questionPlaceholder: 'Una domanda su cui fare la prova',
         start: 'Avvia',
+        noSearchSource: 'Nessuna sorgente di ricerca configurata, quindi non c’è con cosa cercare. Impostane una in Impostazioni, sotto Ricerca.',
         propose: 'Pianifica',
         planTitle: 'Il piano — cambialo prima che si spenda qualcosa',
         branchLabel: 'Linea di indagine',

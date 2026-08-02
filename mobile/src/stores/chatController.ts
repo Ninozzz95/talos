@@ -3810,12 +3810,84 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 repository: deps.chatRepository,
                 keeper: (title) => createTalosRunKeeper(title),
                 now: () => new Date().toISOString(),
-                // R-1 has no intelligence by design — the spec asks for a run
-                // that sleeps and resumes, so that the machinery around it can
-                // be proved before anything expensive is plugged in.
-                perform: async () => {
-                    await new Promise((wake) => setTimeout(wake, 6_000))
-                    return { spend: { tokens: 0, searches: 1, pages: 0 }, resultRef: null }
+                /**
+                 * R-3 — the step stopped being a rehearsal.
+                 *
+                 * It searches, reads what it finds, and files the result in the
+                 * Library as a dossier with the passages KEPT. The keeping is
+                 * the point: a dossier made of links rots as its pages do, and
+                 * cannot be re-checked once they are gone.
+                 *
+                 * The refusal at the top is deliberate. Research without a
+                 * search source is not degraded research, it is nothing at all,
+                 * and a run that quietly produced empty branches would spend
+                 * the user's time to teach them nothing.
+                 */
+                perform: async (branch) => {
+                    const source = deps.settings.state.search?.source ?? null
+                    if (!source) throw new Error('TALOS_RESEARCH_NO_SEARCH_SOURCE')
+
+                    const [
+                        { runTalosSearch, readTalosPage },
+                        { getProviderKey },
+                        { talosResearchCollect },
+                    ] = await Promise.all([
+                        import('@/services/webSearchRuntime'),
+                        import('@/services/secureKeyStore'),
+                        import('@/lib/research/researchCollector'),
+                    ])
+                    const apiKey = await getProviderKey(`search.${source}`).catch(() => null)
+                    const endpoint = deps.settings.state.search?.endpoint ?? null
+
+                    const collection = await talosResearchCollect({
+                        search: (query, maxResults) => runTalosSearch(
+                            source,
+                            { apiKey: apiKey ?? undefined, endpoint: endpoint ?? undefined },
+                            query,
+                            maxResults,
+                        ),
+                        read: (url) => readTalosPage(url),
+                    }, branch)
+
+                    // The dossier goes to the Library, where everything else the
+                    // app keeps already lives — one home, not a private store
+                    // only this feature knows how to read.
+                    const dossier = [
+                        `# ${collection.query}`,
+                        ...collection.sources.map((entry) => [
+                            `## ${entry.title}`,
+                            entry.url,
+                            entry.publishedAt ? `data dichiarata: ${entry.publishedAt}` : 'data non dichiarata',
+                            entry.obtained === 'snippet' ? '(solo estratto dal motore di ricerca)' : '',
+                            '',
+                            entry.text,
+                        ].filter(Boolean).join('\n')),
+                        ...(collection.unreachable.length > 0
+                            ? ['## Non raggiungibili', ...collection.unreachable.map((entry) => `${entry.url} — ${entry.reason}`)]
+                            : []),
+                    ].join('\n\n')
+
+                    const stored = await vaultService.createGenerated({
+                        name: `${collection.query}.md`,
+                        mediaType: 'text/markdown',
+                        text: dossier,
+                        kind: 'web_source',
+                        sourceLinks: collection.sources.map((entry) => ({
+                            url: entry.url,
+                            title: entry.title,
+                        })),
+                    }, {
+                        sessionId: chat.activeSession.value?.id ?? null,
+                        // Required and nullable on purpose: a caller that does
+                        // not know has to say so in writing. R-3 collects with
+                        // no model at all — the reading is mechanical — so the
+                        // honest answer here is null rather than a borrowed name.
+                        model: null,
+                        provider: null,
+                        toolName: 'deep_research',
+                    }).catch(() => null)
+
+                    return { spend: collection.spend, resultRef: stored?.file.id ?? null }
                 },
             })
         }
