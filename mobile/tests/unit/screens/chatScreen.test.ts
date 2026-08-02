@@ -19,7 +19,8 @@ const mockState = vi.hoisted(() => ({
             chat_layout: { message_style: 'sections' },
             shell: {
                 immersive_header: false,
-                composer_style: 'classic',
+                composer_shape: 'classic',
+                composer_plus: 'drawer',
                 library_context_enabled: true,
                 library_context_policy: null,
             },
@@ -209,7 +210,8 @@ beforeEach(() => {
     mockState.settings.state.onboarding = { intro_version: 0, intro_outcome: null, setup_dismissed: false }
     mockState.settings.state.shell = {
         immersive_header: false,
-        composer_style: 'classic',
+        composer_shape: 'classic',
+        composer_plus: 'drawer',
         library_context_enabled: true,
         library_context_policy: null,
     }

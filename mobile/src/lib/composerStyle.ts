@@ -1,74 +1,126 @@
 /**
- * The shape of the composer, as one choice.
+ * The composer, as TWO settings — because there are two questions.
  *
- * It used to be three independent switches — bottom drawer, immersive collapse,
- * "+" as a dropdown — and owner 2026-08-02: "si influenzano e si possono
+ * It began as three independent switches (bottom drawer, immersive collapse,
+ * "+" as a dropdown) and owner 2026-08-02: "si influenzano e si possono
  * accendere combinazioni senza senso". They did. With the drawer off and the
- * dropdown off, the "+" announced `aria-expanded=true` and opened nothing; that
- * had already been patched inside the composer with a fallback, which is the
- * shape of a bug you cannot fix at the switch, because the switch should not
- * exist.
+ * dropdown off, the "+" announced `aria-expanded=true` and opened nothing.
  *
- * Four named shapes instead of eight combinations:
- *   classic — every control in a row under the field, nothing hidden.
- *   drawer  — minimal bar; "+" opens the bottom drawer holding the tools.
- *   menu    — minimal bar; "+" opens an anchored menu instead.
- *   compact — one line at rest, expands as you type; "+" opens the menu.
+ * The first repair fused all three into one list of named shapes, and the owner
+ * caught the mistake immediately: "hai mischiato le impostazioni della forma
+ * del compositore e del tipo della sezione + (allega libreria etc). devono
+ * essere separati". Right — those are orthogonal. Fusing a matrix is only worth
+ * doing where the axes genuinely interact; where they do not, fusing them takes
+ * a choice away and hides it inside another one's name.
  *
- * Four rather than three because `drawerMode: false` is not "the drawer is
- * missing", it is the CLASSIC row — Browse, effort and the Library chip inline.
- * A first pass at this collapsed it away, and the chat screen's tests caught
- * it: reducing a matrix is only worth doing if every coherent corner of it
- * survives under a name.
+ * So:
  *
- * This lives on its own, away from the settings store, for a plain reason: it
- * is arithmetic with no side effects, and a test that wants the mapping should
- * not have to stand up a Preferences bridge — nor re-type the mapping into a
- * mock, where it would go on agreeing with itself after the real one changed.
+ *   SHAPE — what the bar looks like
+ *     classic  — every control in a row under the field: attach, context,
+ *                Browse, model, effort. Nothing hidden, nothing to open.
+ *     standard — a minimal bar; the tools live behind the "+".
+ *     compact  — the same minimal bar, collapsed to one line while idle.
+ *
+ *   PLUS SURFACE — where the "+" opens, and so where attach / Library / Browse
+ *     live when they are not inline
+ *     drawer — a sheet along the bottom
+ *     menu   — a menu anchored to the button
+ *
+ * The two only meet in one place, and it is not an interaction so much as an
+ * absence: the classic bar has no "+" at all, because everything it would hold
+ * is already on the bar. The setting is offered but inert there, and the screen
+ * says so rather than leaving a control that does nothing.
+ *
+ * This lives away from the settings store on purpose: it is arithmetic with no
+ * side effects, and a test that wants the mapping should not have to stand up a
+ * Preferences bridge — nor re-type the mapping into a mock, where it would go
+ * on agreeing with itself long after the real one changed.
  */
 
-export type TalosComposerStyle = 'classic' | 'drawer' | 'menu' | 'compact'
+/** What the bar looks like. */
+export type TalosComposerShape = 'classic' | 'standard' | 'compact'
 
-export const TALOS_COMPOSER_STYLES: readonly TalosComposerStyle[] = ['classic', 'drawer', 'menu', 'compact']
+/** Where the "+" opens — and so where attach, Library and Browse live. */
+export type TalosComposerPlusSurface = 'drawer' | 'menu'
 
-export const TALOS_DEFAULT_COMPOSER_STYLE: TalosComposerStyle = 'drawer'
+export const TALOS_COMPOSER_SHAPES: readonly TalosComposerShape[] = ['classic', 'standard', 'compact']
+export const TALOS_COMPOSER_PLUS_SURFACES: readonly TalosComposerPlusSurface[] = ['drawer', 'menu']
 
-export function talosComposerStyleExists(value: unknown): value is TalosComposerStyle {
-    return typeof value === 'string' && TALOS_COMPOSER_STYLES.includes(value as TalosComposerStyle)
+export const TALOS_DEFAULT_COMPOSER_SHAPE: TalosComposerShape = 'standard'
+export const TALOS_DEFAULT_COMPOSER_PLUS: TalosComposerPlusSurface = 'drawer'
+
+export function talosComposerShapeExists(value: unknown): value is TalosComposerShape {
+    return typeof value === 'string' && TALOS_COMPOSER_SHAPES.includes(value as TalosComposerShape)
+}
+
+export function talosComposerPlusExists(value: unknown): value is TalosComposerPlusSurface {
+    return typeof value === 'string' && TALOS_COMPOSER_PLUS_SURFACES.includes(value as TalosComposerPlusSurface)
+}
+
+/**
+ * Whether the "+" exists at all. False for the classic bar, which carries its
+ * own controls — so the surface setting has nothing to decide and the screen
+ * should say that instead of offering a live-looking control that is inert.
+ */
+export function talosComposerHasPlus(shape: TalosComposerShape): boolean {
+    return shape !== 'classic'
 }
 
 /**
  * What the composer is actually handed. The three flags stay as the composer's
- * own vocabulary — this is the one place that decides which combinations exist,
+ * own vocabulary — this is the one place that decides which arrangements exist,
  * so the component never has to defend itself against a nonsense one again.
  */
-export function talosComposerShape(style: TalosComposerStyle): {
-    drawerMode: boolean
-    plusDropdown: boolean
-    immersiveComposer: boolean
-} {
+export function talosComposerFlags(
+    shape: TalosComposerShape,
+    plus: TalosComposerPlusSurface,
+): { drawerMode: boolean; plusDropdown: boolean; immersiveComposer: boolean } {
     return {
-        drawerMode: style !== 'classic',
-        plusDropdown: style === 'menu' || style === 'compact',
-        immersiveComposer: style === 'compact',
+        drawerMode: shape !== 'classic',
+        immersiveComposer: shape === 'compact',
+        // Never true for the classic bar: `plusDropdown && !drawerMode` is what
+        // draws a leading "+" inside the field, and there it would only
+        // duplicate the row already under it.
+        plusDropdown: talosComposerHasPlus(shape) && plus === 'menu',
     }
 }
 
 /**
- * The one-shot migration for installs that already hold the three booleans.
+ * The one-shot migration, for installs holding either of the two older shapes
+ * of this setting.
  *
- * Immersive wins: it is the most visible of the three, so whoever had it on
- * chose the shape they were looking at. Then the drawer, because off means the
- * classic inline row and that is a whole different composer. `plus_dropdown`
- * comes last: it only ever decided WHERE the "+" opened.
+ * Two generations to carry across, and they are read in order of how recent
+ * they are:
  *
- * Nothing coherent is lost on the way across — every arrangement someone could
- * have been sitting on maps onto a shape that still exists.
+ *   1. `composer_style`, the single fused list that shipped on 2026-08-02 and
+ *      lived for one build. Each of its names splits cleanly in two.
+ *   2. the original three booleans. Immersive wins — it is the most visible of
+ *      the three, so whoever had it on chose the shape they were looking at.
+ *      Then the drawer, because off means the classic inline row and that is a
+ *      different composer. `plus_dropdown` comes last: it only ever decided
+ *      WHERE the "+" opened, which is precisely the second setting.
+ *
+ * Nothing coherent is lost on the way across.
  */
-export function talosComposerStyleFromLegacy(legacy: Record<string, unknown>): TalosComposerStyle {
-    if (legacy.immersive_composer === true) return 'compact'
-    if (legacy.composer_drawer === false) return 'classic'
-    if (legacy.plus_dropdown === true) return 'menu'
-    if (talosComposerStyleExists(legacy.composer_style)) return legacy.composer_style
-    return TALOS_DEFAULT_COMPOSER_STYLE
+export function talosComposerFromLegacy(legacy: Record<string, unknown>): {
+    shape: TalosComposerShape
+    plus: TalosComposerPlusSurface
+} {
+    if (talosComposerShapeExists(legacy.composer_shape)) {
+        return {
+            shape: legacy.composer_shape,
+            plus: talosComposerPlusExists(legacy.composer_plus) ? legacy.composer_plus : TALOS_DEFAULT_COMPOSER_PLUS,
+        }
+    }
+    switch (legacy.composer_style) {
+        case 'classic': return { shape: 'classic', plus: TALOS_DEFAULT_COMPOSER_PLUS }
+        case 'drawer': return { shape: 'standard', plus: 'drawer' }
+        case 'menu': return { shape: 'standard', plus: 'menu' }
+        case 'compact': return { shape: 'compact', plus: 'menu' }
+        default: break
+    }
+    if (legacy.immersive_composer === true) return { shape: 'compact', plus: 'menu' }
+    if (legacy.composer_drawer === false) return { shape: 'classic', plus: TALOS_DEFAULT_COMPOSER_PLUS }
+    if (legacy.plus_dropdown === true) return { shape: 'standard', plus: 'menu' }
+    return { shape: TALOS_DEFAULT_COMPOSER_SHAPE, plus: TALOS_DEFAULT_COMPOSER_PLUS }
 }

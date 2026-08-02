@@ -13,10 +13,13 @@ import type { TalosSearchSourceId } from '@/lib/search/searchSources'
 import type { TalosLibrarySort } from '@/lib/libraryGrouping'
 import { TALOS_DEFAULT_CHAT_LAYOUT, sanitizeTalosChatLayout } from '@/lib/talosChatLayout'
 import {
-    TALOS_DEFAULT_COMPOSER_STYLE,
-    talosComposerStyleExists,
-    talosComposerStyleFromLegacy,
-    type TalosComposerStyle,
+    TALOS_DEFAULT_COMPOSER_PLUS,
+    TALOS_DEFAULT_COMPOSER_SHAPE,
+    talosComposerFromLegacy,
+    talosComposerPlusExists,
+    talosComposerShapeExists,
+    type TalosComposerPlusSurface,
+    type TalosComposerShape,
 } from '@/lib/composerStyle'
 
 /** Owner 2026-07-25: "di default large font size e small chat font size". */
@@ -113,8 +116,10 @@ export const TALOS_DEFAULT_COMPOSER_DEFAULTS: TalosComposerDefaults = Object.fre
 // switches here; it has one named shape now — see lib/composerStyle.
 export interface TalosMobileShellPreferences {
     immersive_header: boolean
-    /** One choice where there were three switches — see TalosComposerStyle. */
-    composer_style: TalosComposerStyle
+    /** What the bar looks like — see lib/composerStyle. */
+    composer_shape: TalosComposerShape
+    /** Where the "+" opens, and so where attach / Library / Browse live. */
+    composer_plus: TalosComposerPlusSurface
     /** Owner 2026-07-24: the Android launcher icon follows the active theme
      *  preset. Opt-in — a restart is required to apply, so switching prompts
      *  the user (restart now / on next close). */
@@ -171,7 +176,8 @@ export interface TalosMobileShellPreferences {
 // drawer ARE the default mobile experience.
 const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     immersive_header: true,
-    composer_style: TALOS_DEFAULT_COMPOSER_STYLE,
+    composer_shape: TALOS_DEFAULT_COMPOSER_SHAPE,
+    composer_plus: TALOS_DEFAULT_COMPOSER_PLUS,
     launcher_icon_follows_theme: false,
     library_context_enabled: false,
     library_context_policy: null,
@@ -202,9 +208,12 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         immersive_header: typeof record.immersive_header === 'boolean'
             ? record.immersive_header
             : DEFAULT_SHELL_PREFERENCES.immersive_header,
-        composer_style: talosComposerStyleExists(record.composer_style)
-            ? record.composer_style
-            : DEFAULT_SHELL_PREFERENCES.composer_style,
+        composer_shape: talosComposerShapeExists(record.composer_shape)
+            ? record.composer_shape
+            : DEFAULT_SHELL_PREFERENCES.composer_shape,
+        composer_plus: talosComposerPlusExists(record.composer_plus)
+            ? record.composer_plus
+            : DEFAULT_SHELL_PREFERENCES.composer_plus,
         launcher_icon_follows_theme: typeof record.launcher_icon_follows_theme === 'boolean'
             ? record.launcher_icon_follows_theme
             : DEFAULT_SHELL_PREFERENCES.launcher_icon_follows_theme,
@@ -584,27 +593,33 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         }
     }
     /**
-     * The three composer switches became one choice (see lib/composerStyle).
-     * Anyone who had already set them has three booleans persisted, and a
-     * missing `composer_style` would otherwise silently reset them.
+     * The composer settled into TWO settings — the bar's shape, and where the
+     * "+" opens (see lib/composerStyle). There are two older shapes of this on
+     * real devices, and both are carried across: the fused `composer_style`
+     * that lived for one build, and before it the three raw booleans.
      *
      * AFTER the defaults_v3 block, and gated on it, because that migration
      * already ruled that a pre-v3 `composer_drawer: false` was the broken old
      * default rather than a choice — it overwrites it back to true. Reading
-     * that same false as "this person wanted the anchored menu" would be
+     * that same false as "this person wanted the classic bar" would be
      * inventing an intent out of a value the migration above just disowned.
      *
      * Runs ONCE, like every migration around it: a later deliberate change
-     * sticks, because by then `composer_style_v1` is true.
+     * sticks, because by then `composer_split_v1` is true.
      */
-    if (value.composer_style_v1 !== true) {
-        shellParsed.composer_style = value.defaults_v3 === true
-            ? talosComposerStyleFromLegacy(
-                (typeof value.shell === 'object' && value.shell !== null)
-                    ? value.shell as Record<string, unknown>
-                    : {},
-            )
-            : TALOS_DEFAULT_COMPOSER_STYLE
+    if (value.composer_split_v1 !== true) {
+        const carried = talosComposerFromLegacy(
+            (typeof value.shell === 'object' && value.shell !== null)
+                ? value.shell as Record<string, unknown>
+                : {},
+        )
+        // Pre-v3 installs never chose any of this: `defaults_v3` already ruled
+        // that their `composer_drawer: false` was the old broken default rather
+        // than an intention, and reading it as one would be inventing it.
+        if (value.defaults_v3 === true) {
+            shellParsed.composer_shape = carried.shape
+            shellParsed.composer_plus = carried.plus
+        }
     }
     return {
         shell: shellParsed,
@@ -691,7 +706,7 @@ export function useSettingsStore(): SettingsStore {
                 defaults_v3: true,
                 library_defaults_v1: true,
                 type_defaults_v1: true,
-                composer_style_v1: true,
+                composer_split_v1: true,
                 shell: next.shell,
                 onboarding: next.onboarding,
                 security: next.security,

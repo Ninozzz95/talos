@@ -29,7 +29,7 @@ import { createSessionActionRunner } from '@/lib/sessionActionRunner'
 import { createTalosChatLiveEdge } from '@/composables/useTalosChatLiveEdge'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
-import { talosComposerShape } from '@/lib/composerStyle'
+import { talosComposerFlags } from '@/lib/composerStyle'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import {
     parseTalosSessionLibraryContextPolicy,
@@ -54,11 +54,15 @@ const router = useRouter()
 const { t, locale } = useTalosI18n()
 const controller = useChatController()
 const settings = useSettingsStore()
-// One stored choice, expanded here into the three flags the composer speaks.
-// The mapping lives in the store so there is exactly one place that decides
-// which arrangements exist — the composer used to have to defend itself
-// against a combination where the "+" opened nothing at all.
-const composerShape = computed(() => talosComposerShape(settings.state.shell.composer_style))
+// Two stored choices — the bar's shape and where the "+" opens — expanded here
+// into the three flags the composer speaks. The mapping lives in one module, so
+// there is exactly one place that decides which arrangements exist: the
+// composer used to have to defend itself against a combination where the "+"
+// opened nothing at all.
+const composerShape = computed(() => talosComposerFlags(
+    settings.state.shell.composer_shape,
+    settings.state.shell.composer_plus,
+))
 const {
     catalogs,
     profiles,
