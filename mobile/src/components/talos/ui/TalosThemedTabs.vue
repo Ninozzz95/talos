@@ -182,6 +182,46 @@ function startsInTheSystemsBackGesture(clientX: number): boolean {
     return clientX <= SYSTEM_GESTURE_EDGE_PX || clientX >= width - SYSTEM_GESTURE_EDGE_PX
 }
 
+/**
+ * Owner 2026-08-02: "quando scorro molto lentamente la schermata deve seguire
+ * il tocco del dito".
+ *
+ * So this is direct manipulation, not a gesture that is merely detected at the
+ * end. The panels move under the finger while the drag is happening, and only
+ * settle when it is released — which is also what tells you, mid-drag, that the
+ * app noticed and how far you still have to go.
+ *
+ * Two details that decide whether it feels right:
+ *   - the drag only starts once the movement is clearly horizontal, so the
+ *     first few pixels of a vertical scroll never nudge the panel sideways;
+ *   - past the first and the last view there is nowhere to go, so the movement
+ *     is damped instead of free. Following the finger 1:1 into nothing reads as
+ *     a bug; resistance reads as an edge.
+ */
+const DRAG_START_PX = 8
+const DRAG_EDGE_RESISTANCE = 0.32
+
+const dragOffset = ref(0)
+const dragging = ref(false)
+/** Set while the release is settling back, so the spring-back can be animated. */
+const settling = ref(false)
+
+/**
+ * Direct manipulation is the user's own finger rather than motion the app
+ * decided on — but someone who has asked the system for less movement has asked
+ * for less movement, and this is cheap to honour. They still get the change,
+ * just without the panel travelling under them.
+ */
+function reducedMotionRequested(): boolean {
+    return typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+function stepFrom(index: number, dx: number): number {
+    return dx < 0 ? Math.min(views.value.length - 1, index + 1) : Math.max(0, index - 1)
+}
+
 function onSwipeStart(event: PointerEvent): void {
     if (
         startsInsideASideScroller(event.target, event.currentTarget)
@@ -190,33 +230,84 @@ function onSwipeStart(event: PointerEvent): void {
         onSwipeCancel()
         return
     }
+    settling.value = false
     swipeX = event.clientX
     swipeY = event.clientY
+}
+
+function onSwipeMove(event: PointerEvent): void {
+    if (swipeX === null || swipeY === null) return
+    const dx = event.clientX - swipeX
+    const dy = event.clientY - swipeY
+
+    if (!dragging.value) {
+        if (Math.abs(dx) < DRAG_START_PX) return
+        // Mostly vertical: this was a scroll all along, and the panel should not
+        // have moved at all.
+        if (Math.abs(dx) < Math.abs(dy) * SWIPE_HORIZONTAL_RATIO) {
+            onSwipeCancel()
+            return
+        }
+        dragging.value = true
+    }
+    if (reducedMotionRequested()) return
+
+    const order = views.value
+    const index = order.findIndex((view) => view.id === selected.value)
+    const atEnd = index === -1 || stepFrom(index, dx) === index
+    dragOffset.value = atEnd ? dx * DRAG_EDGE_RESISTANCE : dx
 }
 
 /** A pointer that leaves the element, or is taken over by a scroll, is not a swipe. */
 function onSwipeCancel(): void {
     swipeX = null
     swipeY = null
+    if (dragging.value) settleBack()
+    dragging.value = false
+}
+
+/** Spring back to rest, animated, so "not far enough" is something you can see. */
+function settleBack(): void {
+    if (dragOffset.value === 0) return
+    settling.value = true
+    dragOffset.value = 0
 }
 
 function onSwipeEnd(event: PointerEvent): void {
     if (swipeX === null || swipeY === null) return
     const dx = event.clientX - swipeX
     const dy = event.clientY - swipeY
-    onSwipeCancel()
+    swipeX = null
+    swipeY = null
+    const wasDragging = dragging.value
+    dragging.value = false
 
     // Short drags are taps with a shaky hand, and a mostly-vertical drag is
     // someone scrolling the panel. Neither should move the selection.
-    if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * SWIPE_HORIZONTAL_RATIO) return
+    if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * SWIPE_HORIZONTAL_RATIO) {
+        if (wasDragging) settleBack()
+        return
+    }
 
     const order = views.value
     const index = order.findIndex((view) => view.id === selected.value)
-    if (index === -1) return
+    if (index === -1) {
+        settleBack()
+        return
+    }
     // Clamped rather than wrapped: on the last view a further swipe left should
     // feel like the end of the strip, not like jumping back to the first.
-    const next = order[dx < 0 ? Math.min(order.length - 1, index + 1) : Math.max(0, index - 1)]
-    if (next && next.id !== selected.value) emit('update:modelValue', next.id)
+    const next = order[stepFrom(index, dx)]
+    if (next && next.id !== selected.value) {
+        // Released without a transition, because the panel underneath is being
+        // replaced at this instant and the incoming one plays its own entrance.
+        // Springing back AND animating in would be two motions arguing.
+        settling.value = false
+        dragOffset.value = 0
+        emit('update:modelValue', next.id)
+        return
+    }
+    settleBack()
 }
 </script>
 
@@ -228,6 +319,7 @@ function onSwipeEnd(event: PointerEvent): void {
         :activation-mode="activation"
         @update:model-value="choose"
         @pointerdown="onSwipeStart"
+        @pointermove="onSwipeMove"
         @pointerup="onSwipeEnd"
         @pointercancel="onSwipeCancel"
     >
@@ -275,7 +367,20 @@ function onSwipeEnd(event: PointerEvent): void {
              the drag that reaches a tab sitting off-screen. touch-action cannot
              be widened again by a descendant, so the boundary is the only place
              this choice can be made. -->
-        <div class="min-w-0 touch-pan-y" :style="{ '--talos-tab-direction': direction }">
+        <div
+            class="min-w-0 touch-pan-y"
+            :data-talos-tab-dragging="dragging ? 'true' : undefined"
+            :style="{
+                '--talos-tab-direction': direction,
+                transform: dragOffset === 0 ? undefined : `translate3d(${dragOffset}px, 0, 0)`,
+                // Only while settling. During the drag the panel is pinned to
+                // the finger, and a transition there would make it lag behind.
+                transition: settling
+                    ? 'transform var(--talos-motion-duration-tab-change, 160ms) var(--talos-motion-ease-tab-change, ease-out)'
+                    : undefined,
+            }"
+            @transitionend="settling = false"
+        >
             <slot :view="selected" />
         </div>
     </TabsRoot>

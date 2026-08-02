@@ -168,6 +168,116 @@ describe('TalosThemedTabs swipe', () => {
         expect(lastChoice(back)).toBe('design')
     })
 
+    /**
+     * Owner 2026-08-02: "quando scorro molto lentamente la schermata deve
+     * seguire il tocco del dito". Direct manipulation, not a gesture merely
+     * detected at the end.
+     */
+    describe('following the finger', () => {
+        function panels(wrapper: ReturnType<typeof mountTabs>): HTMLElement {
+            return wrapper.get('[role="tablist"]').element.nextElementSibling as HTMLElement
+        }
+
+        async function drag(
+            wrapper: ReturnType<typeof mountTabs>,
+            steps: Array<[number, number]>,
+        ): Promise<void> {
+            const root = wrapper.element as HTMLElement
+            const [firstX, firstY] = steps[0]!
+            root.dispatchEvent(new MouseEvent('pointerdown', { clientX: firstX, clientY: firstY, bubbles: true }))
+            for (const [x, y] of steps.slice(1)) {
+                root.dispatchEvent(new MouseEvent('pointermove', { clientX: x, clientY: y, bubbles: true }))
+            }
+            await wrapper.vm.$nextTick()
+        }
+
+        it('moves the panel with the pointer, one pixel for one pixel', async () => {
+            const wrapper = mountTabs({ modelValue: 'motion' })
+            await drag(wrapper, [[300, 200], [280, 202], [220, 204]])
+
+            expect(panels(wrapper).style.transform).toBe('translate3d(-80px, 0, 0)')
+            // Nothing is chosen until the finger comes off.
+            expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+        })
+
+        it('does not stir for the first few pixels, so a scroll never nudges it sideways', async () => {
+            const wrapper = mountTabs({ modelValue: 'motion' })
+            await drag(wrapper, [[300, 200], [295, 201]])
+
+            expect(panels(wrapper).style.transform).toBe('')
+        })
+
+        it('resists past the ends, because there is nothing to drag in from', async () => {
+            // Following the finger 1:1 into nothing reads as a bug; resistance
+            // reads as an edge.
+            const wrapper = mountTabs({ modelValue: 'design' })
+            await drag(wrapper, [[300, 200], [340, 202], [400, 204]])
+
+            // Anchored on `translate3d(` — a lazier extraction swallows the
+            // "3d" and reports 33200px, which is how this test first "passed".
+            const moved = Number(/translate3d\((-?[\d.]+)px/.exec(panels(wrapper).style.transform)?.[1])
+            expect(moved).toBeGreaterThan(0)
+            expect(moved).toBeLessThan(100 * 0.5)
+        })
+
+        it('lets go of a mostly-vertical drag instead of dragging the panel with it', async () => {
+            const wrapper = mountTabs({ modelValue: 'motion' })
+            await drag(wrapper, [[300, 200], [292, 260], [288, 400]])
+
+            expect(panels(wrapper).style.transform).toBe('')
+        })
+
+        it('springs back, visibly, when the drag was not far enough', async () => {
+            const wrapper = mountTabs({ modelValue: 'motion' })
+            await drag(wrapper, [[300, 200], [270, 202]])
+            expect(panels(wrapper).style.transform).toBe('translate3d(-30px, 0, 0)')
+
+            const root = wrapper.element as HTMLElement
+            root.dispatchEvent(new MouseEvent('pointerup', { clientX: 270, clientY: 202, bubbles: true }))
+            await wrapper.vm.$nextTick()
+
+            expect(panels(wrapper).style.transform).toBe('')
+            expect(panels(wrapper).style.transition).toContain('transform')
+            expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+        })
+
+        it('hands over to the entering panel without a second motion arguing with it', async () => {
+            const wrapper = mountTabs({ modelValue: 'design' })
+            await drag(wrapper, [[300, 200], [200, 202], [140, 204]])
+
+            const root = wrapper.element as HTMLElement
+            root.dispatchEvent(new MouseEvent('pointerup', { clientX: 140, clientY: 204, bubbles: true }))
+            await wrapper.vm.$nextTick()
+
+            expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['motion'])
+            expect(panels(wrapper).style.transform).toBe('')
+            // No spring-back transition: the panel underneath is being replaced
+            // at this instant and the incoming one plays its own entrance.
+            expect(panels(wrapper).style.transition).toBe('')
+        })
+
+        it('keeps the panel still for someone who asked for less movement, and still changes tab', async () => {
+            const original = window.matchMedia
+            window.matchMedia = ((query: string) => ({
+                matches: query.includes('reduce'),
+                addEventListener: () => {},
+                removeEventListener: () => {},
+            })) as unknown as typeof window.matchMedia
+
+            const wrapper = mountTabs({ modelValue: 'design' })
+            await drag(wrapper, [[300, 200], [200, 202], [140, 204]])
+            expect(panels(wrapper).style.transform).toBe('')
+
+            const root = wrapper.element as HTMLElement
+            root.dispatchEvent(new MouseEvent('pointerup', { clientX: 140, clientY: 204, bubbles: true }))
+            await wrapper.vm.$nextTick()
+            expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['motion'])
+
+            window.matchMedia = original
+            wrapper.unmount()
+        })
+    })
+
     it('ignores a drag that is mostly vertical, because that is someone scrolling', async () => {
         const wrapper = mountTabs({ modelValue: 'design' })
         await swipe(wrapper, 110, 130, 420)
