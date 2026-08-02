@@ -25,6 +25,13 @@ beforeEach(() => {
     mockSettings.setBrowserPreferences.mockClear()
 })
 
+// The settings switches are the shared TalosThemedSwitch since 2026-08-02:
+// buttons with role="switch" and aria-checked, not native checkboxes. A tap is
+// a click, and the value read is the one announced to a screen reader.
+async function tapSwitch(wrapper: { get: (s: string) => { trigger: (e: string) => Promise<void> } }, label: string): Promise<void> {
+    await wrapper.get(`[role="switch"][aria-label="${label}"]`).trigger('click')
+}
+
 describe('TalosMobileSettingsBrowserPanel', () => {
     it('exposes manual browsing and the exact three policy modes without a blanket bypass', () => {
         const wrapper = mount(TalosMobileSettingsBrowserPanel, { props: { developmentMode: false } })
@@ -48,7 +55,7 @@ describe('TalosMobileSettingsBrowserPanel', () => {
             ?.vm.$emit('update:modelValue', 'confirm_every_interaction')
         selects.find((select) => select.props('ariaLabel') === 'Open browser links in')
             ?.vm.$emit('update:modelValue', 'system_browser')
-        await wrapper.get('[aria-label="Suggest Browse for links"]').setValue(false)
+        await tapSwitch(wrapper, 'Suggest Browse for links')
 
         expect(mockSettings.setBrowserPreferences).toHaveBeenCalledWith({ hmi_mode: 'confirm_every_interaction' })
         expect(mockSettings.setBrowserPreferences).toHaveBeenCalledWith({ presentation: 'system_browser' })

@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { CircleAlert, ExternalLink, ShieldCheck } from '@lucide/vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
+import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 import type { TalosBrowserHmiMode } from '@/lib/talosBrowserHmiPolicy'
 import type { TalosMobileBrowserPresentation } from '@/lib/browser/browserContracts'
 import { useSettingsStore } from '@/stores/settings'
@@ -37,9 +38,9 @@ function setPresentation(value: string): void {
 
 function setBoolean(
     key: 'suggest_for_urls' | 'developer_untrusted_evidence',
-    event: Event,
+    enabled: boolean,
 ): void {
-    void settings.setBrowserPreferences({ [key]: (event.target as HTMLInputElement).checked })
+    void settings.setBrowserPreferences({ [key]: enabled })
 }
 </script>
 
@@ -75,35 +76,33 @@ function setBoolean(
             </p>
         </div>
 
-        <label class="flex min-h-14 cursor-pointer items-start justify-between gap-3 py-2">
+        <div class="flex min-h-14 cursor-pointer items-start justify-between gap-3 py-2">
             <span>
                 <span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('browser.suggestBrowse') }}</span>
                 <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">{{ t('browser.suggestBrowseBody') }}</span>
             </span>
-            <input
-                type="checkbox"
-                role="switch"
+            <TalosThemedSwitch
+                class="mt-1"
                 :aria-label="t('browser.suggestBrowse')"
-                :checked="settings.state.browser.suggest_for_urls"
-                class="mt-1 h-5 w-9 accent-[var(--talos-accent)]"
-                @change="setBoolean('suggest_for_urls', $event)"
-            >
-        </label>
+                :model-value="settings.state.browser.suggest_for_urls"
+                @update:model-value="setBoolean('suggest_for_urls', $event)"
+                @click.stop
+            />
+        </div>
 
-        <label v-if="developmentMode" class="flex min-h-14 cursor-pointer items-start justify-between gap-3 border-t border-[var(--talos-border)] py-3">
+        <div v-if="developmentMode" class="flex min-h-14 items-start justify-between gap-3 border-t border-[var(--talos-border)] py-3">
             <span>
                 <span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('browser.untrustedBrowserEvidence') }}</span>
                 <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">{{ t('browser.untrustedBrowserEvidenceBody') }}</span>
             </span>
-            <input
-                type="checkbox"
-                role="switch"
+            <TalosThemedSwitch
+                class="mt-1"
                 :aria-label="t('browser.showUntrustedBrowserEvidence')"
-                :checked="settings.state.browser.developer_untrusted_evidence"
-                class="mt-1 h-5 w-9 accent-[var(--talos-accent)]"
-                @change="setBoolean('developer_untrusted_evidence', $event)"
-            >
-        </label>
+                :model-value="settings.state.browser.developer_untrusted_evidence"
+                @update:model-value="setBoolean('developer_untrusted_evidence', $event)"
+                @click.stop
+            />
+        </div>
 
         <section class="border-t border-[var(--talos-border)] pt-4" :aria-label="t('browser.trustedNodeStatus')">
             <div class="flex items-start gap-3 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] p-3">
