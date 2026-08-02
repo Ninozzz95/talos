@@ -22,6 +22,20 @@ function mountCenter() {
     return mount(TalosMobileSettingsCenter, { attachTo: document.body, global: { stubs: panelStubs } })
 }
 
+/**
+ * jsdom answers every media query with `matches: false`, so a plain mount is
+ * the PHONE. Widths are not a detail here: this screen is two different ARIA
+ * patterns at two widths, and a test that does not say which one it is standing
+ * at is asserting nothing in particular.
+ */
+function widenToTablet(): void {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+        matches: query.includes('768'),
+        addEventListener: () => {},
+        removeEventListener: () => {},
+    })))
+}
+
 async function activateTab(wrapper: ReturnType<typeof mountCenter>, id: string): Promise<void> {
     const tab = wrapper.get(`[data-settings-tab="${id}"]`)
     ;(tab.element as HTMLElement).focus()
@@ -34,20 +48,100 @@ async function activateTab(wrapper: ReturnType<typeof mountCenter>, id: string):
 
 afterEach(() => {
     document.body.replaceChildren()
+    vi.unstubAllGlobals()
 })
 
-describe('TalosMobileSettingsCenter', () => {
-    it('renders one labelled tablist, thirteen tabs, and the selected tabpanel', () => {
+/**
+ * The screen used to call itself a `tablist` at every width, and at one of them
+ * that was untrue. The APG is explicit: tabs are panels in the SAME view with
+ * the list visible beside them. Below 768px this screen hides the list, puts the
+ * panel in its place and offers a Back — a master-detail flow, which is
+ * navigation. These two blocks are the same screen at its two real widths.
+ */
+describe('TalosMobileSettingsCenter — on the phone, it is navigation', () => {
+    it('offers a named landmark and thirteen destinations, not tabs', () => {
         const wrapper = mountCenter()
+
+        // No tablist, because tapping a row takes the list away.
+        expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
+        expect(wrapper.findAll('[role="tab"]')).toHaveLength(0)
+
+        const rail = wrapper.get('[data-testid="settings-category-pane"]')
+        expect(rail.element.tagName).toBe('NAV')
+        expect(rail.attributes('aria-label')).toBe('TALOS settings categories')
+        expect(wrapper.findAll('[data-settings-tab]')).toHaveLength(13)
+    })
+
+    it('marks where you are with aria-current, and gives every row its own tab stop', async () => {
+        const wrapper = mountCenter()
+        await activateTab(wrapper, 'appearance')
+
+        const current = wrapper.get('[data-settings-tab="appearance"]')
+        expect(current.attributes('aria-current')).toBe('page')
+        expect(current.attributes('aria-selected')).toBeUndefined()
+        // Roving tabindex belongs to the tabs pattern. Under navigation it would
+        // take twelve stops away from a keyboard user for nothing.
+        expect(wrapper.findAll('[data-settings-tab]').every((row) => row.attributes('tabindex') === undefined))
+            .toBe(true)
+    })
+
+    it('names the panel a region, labelled by the row that opened it', async () => {
+        const wrapper = mountCenter()
+        await activateTab(wrapper, 'language')
+
+        const panel = wrapper.get('[data-settings-panel="language"]')
+        expect(panel.attributes('role')).toBe('region')
+        expect(panel.attributes('aria-labelledby')).toBe('talos-settings-row-language')
+        expect(panel.classes()).toContain('talos-motion-tab-panel')
+    })
+
+    it('does not answer the arrow keys, because Tab is how you move through a list of links', async () => {
+        const wrapper = mountCenter()
+        const first = wrapper.get('[data-settings-tab="account"]')
+        ;(first.element as HTMLElement).focus()
+
+        // End, not ArrowDown. ArrowDown from the first row lands on Models —
+        // which is where the screen already was, so the roving walk running
+        // when it should not was invisible. End would jump to the far end.
+        for (const key of ['End', 'ArrowDown', 'ArrowUp', 'Home']) {
+            first.element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+            await nextTick()
+        }
+
+        const panels = wrapper.findAll('[data-settings-panel]')
+        expect(panels).toHaveLength(1)
+        expect(panels[0]!.attributes('data-settings-panel')).toBe('models')
+    })
+})
+
+describe('TalosMobileSettingsCenter — on the tablet, it really is tabs', () => {
+    it('renders one labelled vertical tablist, thirteen tabs, and the selected tabpanel', () => {
+        widenToTablet()
+        const wrapper = mountCenter()
+
         const tablist = wrapper.get('[role="tablist"]')
         expect(tablist.attributes('aria-label')).toBe('TALOS settings categories')
+        expect(tablist.attributes('aria-orientation')).toBe('vertical')
+        expect(wrapper.get('[data-testid="settings-category-pane"]').element.tagName).toBe('ASIDE')
         expect(wrapper.findAll('[role="tab"]')).toHaveLength(13)
         expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('Models')
         expect(wrapper.get('[role="tabpanel"]').attributes('data-settings-panel')).toBe('models')
         expect(wrapper.get('[role="tabpanel"]').classes()).toContain('talos-motion-tab-panel')
+        wrapper.unmount()
+    })
+
+    it('is one tab stop, with the arrows moving inside it', () => {
+        widenToTablet()
+        const wrapper = mountCenter()
+
+        const stops = wrapper.findAll('[role="tab"]').filter((tab) => tab.attributes('tabindex') === '0')
+        expect(stops).toHaveLength(1)
+        expect(stops[0]!.attributes('aria-selected')).toBe('true')
+        wrapper.unmount()
     })
 
     it('moves selection with ArrowDown, Home, and End', async () => {
+        widenToTablet()
         const wrapper = mountCenter()
         await nextTick()
         await new Promise((resolve) => setTimeout(resolve, 0))
@@ -74,7 +168,11 @@ describe('TalosMobileSettingsCenter', () => {
         await new Promise((resolve) => setTimeout(resolve, 0))
         await nextTick()
         expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('Account')
+        wrapper.unmount()
     })
+})
+
+describe('TalosMobileSettingsCenter', () => {
 
     it('keeps every remaining runtime-dependent category visible and explicitly gated', async () => {
         const wrapper = mountCenter()
@@ -168,7 +266,9 @@ describe('TalosMobileSettingsCenter', () => {
         expect(categories.classes()).not.toContain('hidden')
         expect(detail.classes()).toContain('hidden')
         expect(categories.attributes('data-talos-motion-intent')).toBe('tab-change')
-        expect(selected.attributes('aria-selected')).toBe('true')
+        // aria-current, not aria-selected: coming back to the list is coming
+        // back to a list of destinations.
+        expect(selected.attributes('aria-current')).toBe('page')
         expect(document.activeElement).toBe(selected.element)
         expect(nav.subView.value).toBeNull()
     })
@@ -191,7 +291,9 @@ describe('TalosMobileSettingsCenter md breakpoint', () => {
     it('TABLET-SETTINGS-SCROLL-02 gives exactly the inner tablist bounded vertical scrolling', () => {
         const wrapper = mountCenter()
         const categories = wrapper.get('[data-testid="settings-category-pane"]')
-        const tablist = wrapper.get('[role="tablist"]')
+        // By test id, not by role: the role is now the phone/tablet question,
+        // and the scrolling this pins is a layout fact at either width.
+        const tablist = wrapper.get('[data-testid="settings-category-list"]')
 
         expect(categories.classes()).not.toContain('md:overflow-y-auto')
         expect(categories.classes()).not.toContain('md:overscroll-contain')
