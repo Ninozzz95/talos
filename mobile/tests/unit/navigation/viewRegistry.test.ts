@@ -115,7 +115,7 @@ describe('the view register', () => {
             [
                 'models',
                 'src/components/talos/settings/TalosMobileSettingsModelsPanel.vue',
-                /<TabsTrigger[^>]*?\svalue="([^"]+)"/g,
+                /<TabsContent[^>]*?\svalue="([^"]+)"/g,
             ],
             ['doctor', 'src/lib/diagnostics/doctorSections.ts', /\{\s*id: '([a-z-]+)'/g],
         ]

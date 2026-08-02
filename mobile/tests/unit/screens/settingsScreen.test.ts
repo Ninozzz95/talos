@@ -52,6 +52,11 @@ function makeController(opts: { secret?: boolean } = {}) {
 beforeEach(() => {
     mockState.controller = makeController()
     routeState.query = {}
+    // Model Lab reopens on the section you left, and jsdom keeps one
+    // localStorage for the whole file. Without this, the Catalog test decides
+    // which section the tests after it open on. It happens not to bite in the
+    // current order, which is exactly why it is worth removing.
+    localStorage.clear()
 })
 
 describe('SettingsScreen (functional)', () => {
@@ -163,6 +168,10 @@ describe('SettingsScreen (functional)', () => {
         const tabs = tablist.findAll('[role="tab"]')
 
         expect(tabs.map((tab) => tab.text())).toEqual(['Providers', 'Catalog', 'Local'])
+        // The strip renders the names from the register; the icons come from
+        // the screen through a slot that cannot touch the name. Both, or the
+        // migration quietly cost the panel its icons.
+        expect(tabs.map((tab) => tab.find('svg').exists())).toEqual([true, true, true])
         expect(wrapper.find('[aria-label="Search model catalog"]').exists()).toBe(false)
         expect(wrapper.get('[data-model-lab-section="providers"]').classes())
             .toContain('talos-motion-tab-panel')
@@ -199,6 +208,24 @@ describe('SettingsScreen (functional)', () => {
         expect(wrapper.get('[data-model-lab-section="on-device"]').classes())
             .toContain('talos-motion-tab-panel')
         expect(wrapper.get('[data-testid="talos-models-section"]').exists()).toBe(true)
+    })
+
+    it('reopens Model Lab on the section you left, not always on Providers', async () => {
+        // Someone watching a download had to walk back to the on-device section
+        // after every visit. The proof is a second, independent mount.
+        routeState.query = { tab: 'models' }
+        const first = mount(SettingsScreen)
+        await first.get('[aria-label="Model Lab sections"]').findAll('[role="tab"]')[2]!
+            .trigger('mousedown', { button: 0, ctrlKey: false })
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        first.unmount()
+
+        const second = mount(SettingsScreen)
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        expect(second.get('[data-model-lab-section="on-device"]').attributes('data-state')).toBe('active')
+        expect(second.find('[data-model-lab-section="providers"]').attributes('data-state')).not.toBe('active')
     })
 
     it('opens a functional Browser panel from the exact settings deep link', () => {
