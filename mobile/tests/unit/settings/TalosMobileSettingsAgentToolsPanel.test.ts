@@ -26,6 +26,9 @@ const enabled = {
 
 const settings = vi.hoisted(() => ({
     state: {
+        // The three trust levels moved here from AI defaults on 2026-08-02:
+        // the panel now frames the tool list with how far the model may go.
+        tools: { read: 'allow', write: 'ask', outbound: 'ask' },
         agent_tools: {
             library_list: true,
             library_search: true,
@@ -168,5 +171,22 @@ describe('TalosMobileSettingsAgentToolsPanel', () => {
         await flushPromises()
 
         expect(settings.revokeToolAuthorization).toHaveBeenCalledWith('document_create')
+    })
+
+    /**
+     * P0-COPY-01, re-homed 2026-08-02. The promise about what leaves the device
+     * has to be made where the choice is made; when the trust levels moved out
+     * of AI defaults, the sentence that explains them moved too, and this is the
+     * test that proves it did not get lost on the way.
+     */
+    it('P0-COPY-01 states the active outbound and persistent-write web contract', () => {
+        const wrapper = mount(TalosMobileSettingsAgentToolsPanel, {
+            global: { stubs: { TalosThemedSelect: true } },
+        })
+
+        expect(wrapper.text()).toMatch(
+            /web search.*send.*off this device.*encrypted Library.*create or change/is,
+        )
+        expect(wrapper.text()).not.toMatch(/Nothing in TALOS does this today/i)
     })
 })

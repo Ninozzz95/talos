@@ -18,6 +18,8 @@ import { ChevronDown, ChevronRight, Download, FileSearch, Play, Plus, RotateCcw,
 import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
+import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
+import type { TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import type { TalosResearchBranch, TalosResearchDepth, TalosResearchRun } from '@/lib/research/researchRun'
@@ -74,6 +76,16 @@ const judgeValue = computed(() => settings.state.research_models.judge)
  * an option that should never have been on screen.
  */
 const judgeChoices = computed(() => everyModel.value.filter((entry) => entry.value !== authorValue.value))
+
+// The shared picker takes flat {value,label} pairs, so the provider — which used
+// to be a second span inside the <option> — moves into the label itself. It has
+// to stay: two houses ship a "flash" and a "pro", and without the provider in
+// front the two lines read the same.
+function labelled(entry: { value: string; label: string; provider: string }): TalosThemedSelectItem {
+    return { value: entry.value, label: `${entry.provider} · ${entry.label}` }
+}
+const authorItems = computed<TalosThemedSelectItem[]>(() => everyModel.value.map(labelled))
+const judgeItems = computed<TalosThemedSelectItem[]>(() => judgeChoices.value.map(labelled))
 
 /**
  * Same house, weaker guarantee — said, not blocked.
@@ -383,35 +395,32 @@ function verdictTone(support: string): string {
             >
                 <p class="text-xs uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.modelsTitle') }}</p>
 
-                <label class="block space-y-1">
-                    <span class="text-xs text-[var(--talos-text)]">{{ t('research.authorLabel') }}</span>
-                    <select
+                <!-- A <label> may not wrap these: the shared picker's control is
+                     a button, not a form element, so the name is tied to it with
+                     aria-label instead of by containment. -->
+                <div class="space-y-1">
+                    <span class="block text-xs text-[var(--talos-text)]">{{ t('research.authorLabel') }}</span>
+                    <TalosThemedSelect
                         data-testid="talos-research-author"
-                        :value="authorValue ?? ''"
-                        class="min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                        @change="chooseAuthor(($event.target as HTMLSelectElement).value)"
-                    >
-                        <option value="">{{ t('research.authorFollowsComposer') }}</option>
-                        <option v-for="entry in everyModel" :key="entry.value" :value="entry.value">
-                            {{ entry.provider }} · {{ entry.label }}
-                        </option>
-                    </select>
-                </label>
+                        :model-value="authorValue ?? ''"
+                        :items="authorItems"
+                        :none-label="t('research.authorFollowsComposer')"
+                        :aria-label="t('research.authorLabel')"
+                        @update:model-value="chooseAuthor"
+                    />
+                </div>
 
-                <label class="block space-y-1">
-                    <span class="text-xs text-[var(--talos-text)]">{{ t('research.judgeLabel') }}</span>
-                    <select
+                <div class="space-y-1">
+                    <span class="block text-xs text-[var(--talos-text)]">{{ t('research.judgeLabel') }}</span>
+                    <TalosThemedSelect
                         data-testid="talos-research-judge-choice"
-                        :value="judgeValue ?? ''"
-                        class="min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                        @change="chooseJudge(($event.target as HTMLSelectElement).value)"
-                    >
-                        <option value="">{{ t('research.judgeAutomatic') }}</option>
-                        <option v-for="entry in judgeChoices" :key="entry.value" :value="entry.value">
-                            {{ entry.provider }} · {{ entry.label }}
-                        </option>
-                    </select>
-                </label>
+                        :model-value="judgeValue ?? ''"
+                        :items="judgeItems"
+                        :none-label="t('research.judgeAutomatic')"
+                        :aria-label="t('research.judgeLabel')"
+                        @update:model-value="chooseJudge"
+                    />
+                </div>
 
                 <p class="text-2xs leading-5 text-[var(--talos-muted)]">{{ t('research.modelsNote') }}</p>
                 <p

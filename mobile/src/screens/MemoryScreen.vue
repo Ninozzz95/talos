@@ -10,6 +10,8 @@ import { useTalosI18n } from '@/i18n'
 import { BookMarked, Plus, RotateCcw, Trash2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
+import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
+import type { TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useChatController } from '@/stores/chatController'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import type { TalosLocalMemory } from '@/repositories/chatRepository'
@@ -37,6 +39,9 @@ const SCOPES = computed(() => [
     { id: 'session' as const, label: t('memory.thisChat') },
 ])
 
+const kindItems = computed<TalosThemedSelectItem[]>(() => KINDS.value.map((entry) => ({ value: entry.id, label: entry.label })))
+const scopeItems = computed<TalosThemedSelectItem[]>(() => SCOPES.value.map((entry) => ({ value: entry.id, label: entry.label })))
+
 const form = ref({
     title: '',
     content: '',
@@ -44,6 +49,18 @@ const form = ref({
     scope_type: 'global' as MemoryScope,
     scope_id: 'avm',
 })
+
+// The shared picker speaks plain strings. Rather than casting one back into the
+// union — which would let an unknown value into the form — the choice is looked
+// up in the list it came from: if it is not there, nothing changes.
+function chooseKind(value: string): void {
+    const found = KINDS.value.find((entry) => entry.id === value)
+    if (found) form.value.kind = found.id
+}
+function chooseScope(value: string): void {
+    const found = SCOPES.value.find((entry) => entry.id === value)
+    if (found) form.value.scope_type = found.id
+}
 const saving = ref(false)
 const formOpen = ref(false)
 const deleteTarget = ref<TalosLocalMemory | null>(null)
@@ -179,20 +196,22 @@ function statusLabel(memory: TalosLocalMemory): string {
                 class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 py-2 text-sm leading-5 text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
             />
             <div class="flex flex-wrap gap-2">
-                <select
-                    v-model="form.kind"
+                <TalosThemedSelect
+                    data-testid="talos-memory-kind"
+                    class="flex-1"
+                    :model-value="form.kind"
+                    :items="kindItems"
                     :aria-label="t('memory.kind')"
-                    class="min-h-11 flex-1 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-2 text-sm text-[var(--talos-text)]"
-                >
-                    <option v-for="kind in KINDS" :key="kind.id" :value="kind.id">{{ kind.label }}</option>
-                </select>
-                <select
-                    v-model="form.scope_type"
+                    @update:model-value="chooseKind"
+                />
+                <TalosThemedSelect
+                    data-testid="talos-memory-scope"
+                    class="flex-1"
+                    :model-value="form.scope_type"
+                    :items="scopeItems"
                     :aria-label="t('memory.scope')"
-                    class="min-h-11 flex-1 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-2 text-sm text-[var(--talos-text)]"
-                >
-                    <option v-for="scope in SCOPES" :key="scope.id" :value="scope.id">{{ scope.label }}</option>
-                </select>
+                    @update:model-value="chooseScope"
+                />
             </div>
             <input
                 v-if="form.scope_type === 'project'"

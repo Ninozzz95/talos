@@ -124,16 +124,6 @@ async function setLibraryMode(value: string): Promise<void> {
  * what matters to a person is whether TALOS may READ their things, CHANGE
  * them, or SEND them anywhere.
  */
-const toolChoices = computed<TalosThemedSelectItem[]>(() => [
-    { value: 'allow', label: t('aiDefaults.alwaysAllow') },
-    { value: 'ask', label: t('aiDefaults.askEveryTime') },
-    { value: 'deny', label: t('aiDefaults.neverAllow') },
-])
-
-function setToolPermission(action: 'read' | 'write' | 'outbound', value: string): void {
-    void settings.setToolPermissions({ [action]: value as 'allow' | 'ask' | 'deny' })
-}
-
 function setShellFlag(key: 'library_context_enabled' | 'library_autosave_generated', event: Event): void {
     void settings.setShell({ [key]: (event.target as HTMLInputElement).checked })
 }
@@ -266,51 +256,5 @@ function setShellFlag(key: 'library_context_enabled' | 'library_autosave_generat
              search-shaped question — because that is a default and not a
              connection. Owner, 2026-08-01. -->
 
-        <!-- Owner 2026-07-25: what the model may do on its own. -->
-        <section class="pt-4" data-testid="talos-tool-permissions">
-            <h3 class="text-sm font-semibold text-[var(--talos-text)]">{{ t('aiDefaults.autonomousTitle') }}</h3>
-            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-                {{ t('aiDefaults.autonomousBody') }}
-            </p>
-
-            <label class="mt-3 block">
-                <span class="block text-xs font-medium text-[var(--talos-muted)]">{{ t('aiDefaults.readThings') }}</span>
-                <TalosThemedSelect
-                    class="mt-1"
-                    data-testid="talos-tool-permission-read"
-                    :model-value="settings.state.tools.read"
-                    :items="toolChoices"
-                    :aria-label="t('aiDefaults.readPermission')"
-                    @update:model-value="setToolPermission('read', $event)"
-                />
-            </label>
-
-            <label class="mt-3 block">
-                <span class="block text-xs font-medium text-[var(--talos-muted)]">{{ t('aiDefaults.writeThings') }}</span>
-                <TalosThemedSelect
-                    class="mt-1"
-                    data-testid="talos-tool-permission-write"
-                    :model-value="settings.state.tools.write"
-                    :items="toolChoices"
-                    :aria-label="t('aiDefaults.writePermission')"
-                    @update:model-value="setToolPermission('write', $event)"
-                />
-            </label>
-
-            <label class="mt-3 block">
-                <span class="block text-xs font-medium text-[var(--talos-muted)]">{{ t('aiDefaults.outboundThings') }}</span>
-                <TalosThemedSelect
-                    class="mt-1"
-                    data-testid="talos-tool-permission-outbound"
-                    :model-value="settings.state.tools.outbound"
-                    :items="toolChoices"
-                    :aria-label="t('aiDefaults.outboundPermission')"
-                    @update:model-value="setToolPermission('outbound', $event)"
-                />
-                <span class="mt-1 block text-2xs leading-4 text-[var(--talos-muted)]">
-                    {{ t('aiDefaults.outboundBody') }}
-                </span>
-            </label>
-        </section>
     </div>
 </template>

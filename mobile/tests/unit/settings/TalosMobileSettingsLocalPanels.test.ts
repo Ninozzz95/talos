@@ -113,14 +113,4 @@ describe('local-first Settings panels', () => {
         expect(modeSelect?.props('modelValue')).toBe('broad_compat_v1')
     })
 
-    it('P0-COPY-01 states the active outbound and persistent-write web contract', () => {
-        const wrapper = mount(TalosMobileSettingsAiDefaultsPanel, {
-            global: { stubs: { TalosThemedSelect: true } },
-        })
-
-        expect(wrapper.text()).toMatch(
-            /web search.*send.*off this device.*encrypted Library.*create or change/is,
-        )
-        expect(wrapper.text()).not.toMatch(/Nothing in TALOS does this today/i)
-    })
 })
