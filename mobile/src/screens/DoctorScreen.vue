@@ -297,7 +297,7 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
             @update:model-value="chooseSection"
         >
             <!-- STATUS -->
-            <TabsContent value="status" class="flex flex-col gap-2 outline-none">
+            <TabsContent value="status" class="talos-motion-tab-panel flex flex-col gap-2 outline-none">
                 <ul v-if="split.problems.length" class="flex flex-col gap-2">
                     <li
                         v-for="row in split.problems"
@@ -346,7 +346,7 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
             </TabsContent>
 
             <!-- DATA -->
-            <TabsContent value="data" class="flex flex-col gap-2 outline-none">
+            <TabsContent value="data" class="talos-motion-tab-panel flex flex-col gap-2 outline-none">
                 <p v-if="!settings.state.shell.debug_diagnostics" data-testid="talos-doctor-timings-off" class="rounded-2xl border border-dashed border-[var(--talos-border)] px-3 py-6 text-center text-sm text-[var(--talos-muted)]">
                     {{ t('doctor.timingsOff') }}
                 </p>
@@ -410,7 +410,7 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
             </TabsContent>
 
             <!-- ADVANCED -->
-            <TabsContent value="advanced" class="flex flex-col gap-2 outline-none">
+            <TabsContent value="advanced" class="talos-motion-tab-panel flex flex-col gap-2 outline-none">
                 <div class="flex items-start justify-between gap-3 rounded-xl border border-[var(--talos-border)] px-3 py-2.5">
                     <span class="min-w-0">
                         <span class="block text-sm text-[var(--talos-text)]">{{ t('doctor.showTechnicalDetail') }}</span>

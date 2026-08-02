@@ -22,14 +22,27 @@
     }
 }
 
+/*
+ * A tab arrives from the side it came from.
+ *
+ * `--talos-tab-direction` is 1 going forward through the sections and -1 going
+ * back, set by the shared strip. Without it, swiping left and swiping right
+ * animated identically — which reads as no direction at all once the movement
+ * is big enough to notice. The distance is still the engine's, so the interface
+ * motion preferences and reduced-motion keep their say.
+ */
 @keyframes talos-settings-tab-change {
     from {
         opacity: var(--talos-motion-tab-change-opacity, 1);
-        transform: var(--talos-motion-tab-change-transform, none);
+        transform: translate3d(
+            calc(var(--talos-motion-tab-change-x, 0px) * var(--talos-tab-direction, 1)),
+            0,
+            0
+        );
     }
     to {
         opacity: 1;
-        transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+        transform: translate3d(0, 0, 0);
     }
 }
 

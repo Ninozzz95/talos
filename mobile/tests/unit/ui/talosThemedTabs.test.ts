@@ -79,6 +79,31 @@ describe('TalosThemedTabs', () => {
         expect(tab.classes()).toContain('motion-reduce:active:scale-100')
     })
 
+    it('stamps the surface id on the strip, not the surface object', () => {
+        // Found on the device: `<script setup>` lets a binding shadow a prop of
+        // the same name in the template, so this hook read "[object Object]"
+        // everywhere — and the end-to-end selector written against it could
+        // never have matched a thing.
+        expect(mountTabs().get('[data-talos-tabs]').attributes('data-talos-tabs')).toBe('appearance')
+    })
+
+    it('points the arriving panel the way you came from', async () => {
+        // Owner 2026-08-02, on the device: the change was "uno scatto di un
+        // frame". Half of that was the motion engine's magnitude; this is the
+        // other half — with no direction, swiping left and swiping right looked
+        // identical, which reads as nothing happening once the movement is big
+        // enough to see.
+        const wrapper = mountTabs({ modelValue: 'design' })
+        const panels = (): HTMLElement =>
+            wrapper.get('[role="tablist"]').element.nextElementSibling as HTMLElement
+
+        await wrapper.setProps({ modelValue: 'motion' })
+        expect(panels().style.getPropertyValue('--talos-tab-direction')).toBe('1')
+
+        await wrapper.setProps({ modelValue: 'design' })
+        expect(panels().style.getPropertyValue('--talos-tab-direction')).toBe('-1')
+    })
+
     it('tells the browser the panels pan vertically only, or there is no swipe at all', () => {
         // Measured on a OnePlus 13 (Android 16): without this, Chrome hands the
         // drag to the compositor after the first move and fires `pointercancel`
@@ -192,11 +217,28 @@ describe('TalosThemedTabs swipe', () => {
         // off-screen must scroll it, not change the tab underneath. jsdom
         // reports every element as unscrollable, so the overflow is staged.
         const wrapper = mountTabs({ modelValue: 'design' })
-        const list = wrapper.get('[role="tablist"]').element
+        const list = wrapper.get('[role="tablist"]').element as HTMLElement
         Object.defineProperty(list, 'scrollWidth', { value: 900, configurable: true })
         Object.defineProperty(list, 'clientWidth', { value: 320, configurable: true })
+        // jsdom applies no Tailwind, so the overflow the class would give it is
+        // staged too. The guard reads the computed value, not the class.
+        list.style.overflowX = 'auto'
 
         await swipe(wrapper, 240, 110, 100, list)
         expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    })
+
+    it('is not stopped by something that merely overflows, which is not a scroller', async () => {
+        // Found on the device: a bordered box whose text ran 10px past its
+        // padding was read as "a horizontal scroller", and the swipe died
+        // anywhere near it. Overflowing is not scrolling.
+        const wrapper = mountTabs({ modelValue: 'design' })
+        const list = wrapper.get('[role="tablist"]').element as HTMLElement
+        Object.defineProperty(list, 'scrollWidth', { value: 338, configurable: true })
+        Object.defineProperty(list, 'clientWidth', { value: 328, configurable: true })
+        list.style.overflowX = 'visible'
+
+        await swipe(wrapper, 240, 110, 100, list)
+        expect(lastChoice(wrapper)).toBe('motion')
     })
 })
