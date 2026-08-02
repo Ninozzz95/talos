@@ -58,7 +58,18 @@ export const TALOS_HUGGING_FACE_PROVIDER = 'huggingface'
  * for anything real; the third exists so a malformed header cannot turn into a
  * download of the whole file one doubling at a time.
  */
-const TALOS_GGUF_HEADER_ATTEMPTS = 3
+/**
+ * Quanti giri di lettura concede la sonda dell'intestazione.
+ *
+ * Cinque, non tre, e il numero non e' arbitrario: partendo da un mebibyte, un
+ * raddoppio per giro arriva a 32 MiB — cioe' esattamente al tetto — solo al
+ * quinto. Con tre si fermava a otto, e un'intestazione da 10,9 MB (reale:
+ * mradermacher/Holo-3.1-4B-i1) veniva dichiarata irraggiungibile sotto un
+ * soffitto che non era mai stato sfiorato. La stima per estrapolazione arriva
+ * quasi sempre prima; questo e' il paracadute per quando non c'e' niente da
+ * estrapolare.
+ */
+const TALOS_GGUF_HEADER_ATTEMPTS = 5
 
 /** Past this, it is not a header — and we are not fetching a model to read one. */
 const TALOS_GGUF_MAX_HEADER_BYTES = 32 * 1024 * 1024

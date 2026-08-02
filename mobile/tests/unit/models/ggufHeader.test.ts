@@ -72,7 +72,9 @@ class Writer {
 interface Field {
     key: string
     type: Type
-    value: number | string
+    value?: number | string
+    /** For Type.ARRAY of strings — the shape a tokeniser actually has. */
+    values?: string[]
 }
 
 function gguf(options: {
@@ -95,6 +97,11 @@ function gguf(options: {
         if (field.type === Type.STRING) writer.text(String(field.value))
         else if (field.type === Type.UINT64) writer.u64(Number(field.value))
         else if (field.type === Type.FLOAT32) writer.f32(Number(field.value))
+        else if (field.type === Type.ARRAY) {
+            writer.u32(Type.STRING)
+            writer.u64((field.values ?? []).length)
+            for (const value of field.values ?? []) writer.text(value)
+        }
         else writer.u32(Number(field.value))
     }
 
@@ -328,5 +335,86 @@ describe('reading a GGUF header', () => {
     /** Big enough that a header almost never needs a second request. */
     it('reads enough on the first request to cover an ordinary header', () => {
         expect(TALOS_GGUF_FIRST_READ_BYTES).toBeGreaterThanOrEqual(1024 * 1024)
+    })
+})
+
+describe('an intestazione that does not fit the first read', () => {
+    /**
+     * The defect the owner hit on a train, 2026-08-02.
+     *
+     * `mradermacher/Holo-3.1-4B-i1-GGUF` carries a **10.969.337-byte** header:
+     * merges 5,09 MB, tokens 4,85 MB, token_type 0,99 MB. The reader asks for
+     * one mebibyte, and when it falls short it GUESSES — "twice what I was
+     * given" — so three attempts reach 8 MiB and stop, two megabytes short,
+     * under a ceiling of 32 that was never approached.
+     *
+     * The parser is walking a string array when it runs out. It knows how many
+     * strings there are and how long the ones it has read were: that is a
+     * measurement, not a guess, and it converges in one more request instead of
+     * five.
+     */
+    it('estimates from the tokeniser it is walking instead of blindly doubling', () => {
+        const tokens = Array.from({ length: 4000 }, (_, index) => `token_${index}_padding_padding`)
+        const full = gguf({ fields: [...LLAMA, { key: 'tokenizer.ggml.tokens', type: Type.ARRAY, values: tokens }] })
+        const window = 4096
+
+        const result = talosReadGgufHeader(full.slice(0, window), 4_000_000_000)
+
+        expect(result.ok).toBe(false)
+        if (result.ok || result.reason !== 'truncated') throw new Error('atteso troncamento')
+        // Blind doubling would ask for 8.192 bytes — about 3% of what is needed.
+        // The estimate has to land in the right order of magnitude, or the loop
+        // gives up before it arrives.
+        expect(result.needBytes).toBeGreaterThan(full.byteLength * 0.8)
+    })
+
+    it('still asks for more when it has nothing to extrapolate from', () => {
+        // Truncated before a single string of the array was read: there is no
+        // average yet, and inventing one would be worse than doubling.
+        const result = talosReadGgufHeader(gguf({ fields: LLAMA }).slice(0, 30), 4_000_000_000)
+
+        expect(result.ok).toBe(false)
+        if (result.ok || result.reason !== 'truncated') throw new Error('atteso troncamento')
+        expect(result.needBytes).toBeGreaterThan(30)
+    })
+})
+
+describe('a file that is not a model', () => {
+    /**
+     * Also from the train: `Holo-3.1-4B.imatrix` was offered with a Download
+     * button and a fit verdict. It IS a valid GGUF — version 3, 496 tensors —
+     * but it carries four keys and none of them is a model's:
+     * `general.type='imatrix'`, `imatrix.datasets`, `imatrix.chunk_count`,
+     * `imatrix.chunk_size`. It is the importance matrix used to QUANTISE a
+     * model, not a model.
+     *
+     * Saying "the header does not tell me what I need" is true and useless. The
+     * reader has to say what the thing is.
+     */
+    it('recognises an importance matrix instead of calling it an unreadable model', () => {
+        const result = talosReadGgufHeader(gguf({
+            fields: [
+                { key: 'general.type', type: Type.STRING, value: 'imatrix' },
+                { key: 'imatrix.chunk_count', type: Type.UINT32, value: 319 },
+            ],
+        }), 3_626_464)
+
+        expect(result.ok).toBe(false)
+        if (result.ok) return
+        expect(result.reason).toBe('not-a-model')
+        if (result.reason !== 'not-a-model') return
+        expect(result.kind).toBe('imatrix')
+    })
+
+    it('does not mistake a real model for one, however it labels itself', () => {
+        // Real models carry `general.type = 'model'` — the Qwen on the tablet
+        // does. A missing key must not become a refusal either.
+        const labelled = talosReadGgufHeader(gguf({
+            fields: [{ key: 'general.type', type: Type.STRING, value: 'model' }, ...LLAMA],
+        }), 4_000_000_000)
+        const unlabelled = talosReadGgufHeader(gguf({ fields: LLAMA }), 4_000_000_000)
+
+        expect(labelled.ok).toBe(true)
+        expect(unlabelled.ok).toBe(true)
     })
 })
