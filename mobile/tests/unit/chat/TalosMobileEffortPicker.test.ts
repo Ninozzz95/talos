@@ -19,17 +19,22 @@ function mountPicker(overrides: Record<string, unknown> = {}) {
 describe('TalosMobileEffortPicker', () => {
     it('renders only the selected profile ladder in canonical order plus off', () => {
         const wrapper = mountPicker()
+        // One hook for every filter in the app since the shared radiogroup
+        // landed, the same way the Doctor's own tab hook went. And the state is
+        // ARIA now: `aria-checked` on a radio, not `aria-pressed` on a toggle —
+        // eight independent pressed buttons never said "one of these".
         expect(wrapper.findAll('[data-testid="talos-mobile-effort-level"]').map((item) => (
-            item.attributes('data-effort-level')
+            item.attributes('data-talos-filter-option')
         ))).toEqual(['off', 'low', 'medium', 'high'])
-        expect(wrapper.get('[data-effort-level="medium"]').attributes('aria-pressed')).toBe('true')
+        expect(wrapper.get('[role="radiogroup"]').exists()).toBe(true)
+        expect(wrapper.get('[data-talos-filter-option="medium"]').attributes('aria-checked')).toBe('true')
     })
 
     it('emits the selected effort without mutating the supplied value', async () => {
         const wrapper = mountPicker()
-        await wrapper.get('[data-effort-level="high"]').trigger('click')
+        await wrapper.get('[data-talos-filter-option="high"]').trigger('click')
         expect(wrapper.emitted('selectEffort')).toEqual([['high']])
-        expect(wrapper.get('[data-effort-level="medium"]').attributes('aria-pressed')).toBe('true')
+        expect(wrapper.get('[data-talos-filter-option="medium"]').attributes('aria-checked')).toBe('true')
     })
 
     it('does not expose extended thinking for unsupported profiles', () => {

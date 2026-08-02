@@ -43,10 +43,10 @@ async function verifyDurableComposerState(page: Page, viewport: { width: number;
     await composer.fill('Keep this unsent mobile draft exactly.')
 
     await page.getByLabel('Choose reasoning effort').click()
-    await page.locator('[data-effort-level="medium"]').click()
+    await page.locator('[data-talos-filter-option="medium"]').click()
     const reasoningDialog = page.getByRole('dialog', { name: 'Model & reasoning' })
     await expect(reasoningDialog).toBeVisible()
-    await expect(reasoningDialog.locator('[data-effort-level="medium"]')).toHaveAttribute('aria-pressed', 'true')
+    await expect(reasoningDialog.locator('[data-talos-filter-option="medium"]')).toHaveAttribute('aria-checked', 'true')
     const thinkingToggle = reasoningDialog.getByTestId('talos-mobile-thinking-toggle')
     await thinkingToggle.click()
     await expect(thinkingToggle).toHaveAttribute('aria-checked', 'true')

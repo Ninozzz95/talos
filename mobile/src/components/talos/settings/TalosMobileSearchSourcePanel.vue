@@ -5,6 +5,7 @@ import { Check, ExternalLink, Loader2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { useSettingsStore } from '@/stores/settings'
 import { TALOS_SEARCH_SOURCES, type TalosSearchSourceId } from '@/lib/search/searchSources'
+import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 
 /**
  * F1 — choosing where web search comes from.
@@ -52,6 +53,30 @@ onMounted(() => {
     endpointDraft.value = settings.state.search.endpoint ?? ''
     void refreshKeyState()
 })
+
+const sourceOptions = computed(() => TALOS_SEARCH_SOURCES.map((entry) => ({
+    value: entry.id,
+    label: entry.label,
+    testId: `talos-search-source-${entry.id}`,
+})))
+
+/** Appearance stays here; the radiogroup grammar belongs to the primitive. */
+function sourceOptionClass(isChosen: boolean): string {
+    const base = 'talos-pressable flex w-full items-start gap-2 rounded-xl border px-3 py-2.5 text-left'
+    return isChosen
+        ? `${base} border-[var(--talos-accent-border)] bg-[var(--talos-panel)]`
+        : `${base} border-[var(--talos-border)]`
+}
+
+/**
+ * Narrowed by lookup rather than cast. Nothing chosen is a real state here —
+ * it arrives as '' and simply matches no option, which is exactly what the
+ * radiogroup should announce.
+ */
+function chooseSource(value: string): void {
+    const found = TALOS_SEARCH_SOURCES.find((entry) => entry.id === value)
+    if (found) void choose(found.id)
+}
 
 async function choose(id: TalosSearchSourceId): Promise<void> {
     await settings.setSearchPreferences({ source: id })
@@ -138,30 +163,31 @@ const readiness = computed(() => {
             {{ t('search.description') }}
         </p>
 
-        <ul class="mt-3 space-y-2">
-            <li v-for="entry in TALOS_SEARCH_SOURCES" :key="entry.id">
-                <button
-                    type="button"
-                    :data-testid="`talos-search-source-${entry.id}`"
-                    class="talos-pressable flex w-full items-start gap-2 rounded-xl border px-3 py-2.5 text-left"
-                    :class="selected === entry.id
-                        ? 'border-[var(--talos-accent-border)] bg-[var(--talos-panel)]'
-                        : 'border-[var(--talos-border)]'"
-                    :aria-pressed="selected === entry.id"
-                    @click="choose(entry.id)"
-                >
-                    <Check
-                        class="mt-0.5 size-3.5 shrink-0"
-                        :class="selected === entry.id ? 'text-[var(--talos-accent)]' : 'opacity-0'"
-                        aria-hidden="true"
-                    />
-                    <span class="min-w-0">
-                        <span class="block text-sm text-[var(--talos-text)]">{{ entry.label }}</span>
-                        <span class="mt-0.5 block text-2xs leading-4 text-[var(--talos-muted)]">{{ t(NOTE_KEYS[entry.id]) }}</span>
-                    </span>
-                </button>
-            </li>
-        </ul>
+        <!-- One source among several: a radiogroup. It was a list of buttons
+             each carrying `aria-pressed`, which announces four independent
+             toggles rather than one choice — and gave no hint that picking one
+             puts the others down. The cards keep their check and their note
+             through the slot; only the grammar moved. -->
+        <TalosThemedFilter
+            group-class="mt-3 flex flex-col gap-2"
+            :model-value="selected ?? ''"
+            :options="sourceOptions"
+            :group-label="t('search.title')"
+            :option-class="sourceOptionClass"
+            @update:model-value="chooseSource"
+        >
+            <template #option="{ option, selected: isChosen }">
+                <Check
+                    class="mt-0.5 size-3.5 shrink-0"
+                    :class="isChosen ? 'text-[var(--talos-accent)]' : 'opacity-0'"
+                    aria-hidden="true"
+                />
+                <span class="min-w-0">
+                    <span class="block text-sm text-[var(--talos-text)]">{{ option.label }}</span>
+                    <span class="mt-0.5 block text-2xs leading-4 text-[var(--talos-muted)]">{{ t(NOTE_KEYS[option.value as TalosSearchSourceId]) }}</span>
+                </span>
+            </template>
+        </TalosThemedFilter>
 
         <template v-if="source">
             <Button

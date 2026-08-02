@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { Check, Database, MinusCircle, PlusCircle } from '@lucide/vue'
+import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import TalosMobileLibraryFileGlyph from '@/components/talos/library/TalosMobileLibraryFileGlyph.vue'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
@@ -29,6 +31,8 @@ const modeValue = computed<TurnModeValue>(() => {
     return props.override?.mode ?? 'inherit'
 })
 
+const { t } = useTalosI18n()
+
 const modeOptions = computed<Array<{ value: TurnModeValue; label: string }>>(() => [
     { value: 'inherit', label: 'library.contextInheritChat' },
     { value: 'off', label: 'library.contextOffForTurn' },
@@ -37,6 +41,26 @@ const modeOptions = computed<Array<{ value: TurnModeValue; label: string }>>(() 
     { value: 'ask_before_use_v1', label: 'aiDefaults.libraryModes.ask' },
     { value: 'agentic_on_demand_v1', label: 'aiDefaults.libraryModes.onDemand' },
 ])
+
+const modeFilterOptions = computed(() => modeOptions.value.map((option) => ({
+    value: option.value,
+    // Resolved here, because the shared filter takes a name and not a key.
+    label: t(option.label),
+    testId: `talos-library-turn-mode-${option.value}`,
+})))
+
+/** Appearance stays here; the radiogroup grammar belongs to the primitive. */
+function modeOptionClass(selected: boolean): string {
+    const base = 'talos-pressable flex min-h-12 w-full items-center gap-3 rounded-xl border px-3 text-left text-sm'
+    return selected
+        ? `${base} border-[var(--talos-accent)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]`
+        : `${base} border-[var(--talos-border)] text-[var(--talos-muted)]`
+}
+
+function chooseMode(value: string): void {
+    const found = modeOptions.value.find((option) => option.value === value)
+    if (found) setMode(found.value)
+}
 
 function uniqueIds(values: readonly string[] | undefined): string[] {
     return [...new Set((values ?? []).filter((value) => value.trim() !== ''))]
@@ -106,24 +130,23 @@ function setFileState(fileId: string, state: 'automatic' | 'included' | 'exclude
             <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
                 {{ $t('library.modeForNextMessage') }}
             </h3>
-            <div class="mt-2 grid gap-2">
-                <button
-                    v-for="option in modeOptions"
-                    :key="option.value"
-                    type="button"
-                    :data-testid="`talos-library-turn-mode-${option.value}`"
-                    :aria-pressed="modeValue === option.value"
-                    class="talos-pressable flex min-h-12 w-full items-center gap-3 rounded-xl border px-3 text-left text-sm"
-                    :class="modeValue === option.value
-                        ? 'border-[var(--talos-accent)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]'
-                        : 'border-[var(--talos-border)] text-[var(--talos-muted)]'"
-                    @click="setMode(option.value)"
-                >
+            <!-- One mode among several: a radiogroup. It was a stack of buttons
+                 each carrying `aria-pressed`, which says nothing about choosing
+                 one putting the others down. -->
+            <TalosThemedFilter
+                group-class="mt-2 grid gap-2"
+                :model-value="modeValue"
+                :options="modeFilterOptions"
+                :group-label="$t('library.modeForNextMessage')"
+                :option-class="modeOptionClass"
+                @update:model-value="chooseMode"
+            >
+                <template #option="{ option, selected }">
                     <Database class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                    <span class="min-w-0 flex-1">{{ $t(option.label) }}</span>
-                    <Check v-if="modeValue === option.value" class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                </button>
-            </div>
+                    <span class="min-w-0 flex-1">{{ option.label }}</span>
+                    <Check v-if="selected" class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                </template>
+            </TalosThemedFilter>
         </section>
 
         <section v-if="files.length">
