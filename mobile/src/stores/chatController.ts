@@ -826,6 +826,21 @@ export interface ChatController {
         create(input: { title: string; content: string }): Promise<import('@/repositories/chatRepository').TalosLocalNote>
         remove(noteId: string): Promise<void>
     }
+    /**
+     * R-1 — the research runs, driven and resumable.
+     *
+     * Exposed here because a run outlives the screen that started it: the
+     * station can be closed, the app can be killed, and what continues the work
+     * is whatever asks next. A facade owned by the screen would die with it.
+     */
+    research: {
+        start(question: string, onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void):
+            Promise<import('@/lib/research/researchRun').TalosResearchRun>
+        resume(runId: string, onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void):
+            Promise<import('@/lib/research/researchRun').TalosResearchRun>
+        unfinished(): Promise<readonly import('@/lib/research/researchRun').TalosResearchRun[]>
+        list(): Promise<readonly import('@/lib/research/researchRun').TalosResearchRun[]>
+    }
     memories: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalMemory[]>
         create(input: {
@@ -3774,6 +3789,62 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         activeSessionId: () => chat.activeSession.value?.id ?? null,
     })
 
+    /**
+     * The research facade, lazy for the same reason every station is: a chat
+     * that never opens Deep Research must not pay for its module.
+     */
+    const research = (() => {
+        let runtime: Awaited<ReturnType<typeof loadResearchRuntime>> | null = null
+        async function loadResearchRuntime() {
+            const [{ createTalosResearchRuntime }, { createTalosRunKeeper }] = await Promise.all([
+                import('@/services/researchRuntime'),
+                import('@/services/longRunKeeper'),
+            ])
+            return createTalosResearchRuntime({
+                repository: deps.chatRepository,
+                keeper: (title) => createTalosRunKeeper(title),
+                now: () => new Date().toISOString(),
+                // R-1 has no intelligence by design — the spec asks for a run
+                // that sleeps and resumes, so that the machinery around it can
+                // be proved before anything expensive is plugged in.
+                perform: async () => {
+                    await new Promise((wake) => setTimeout(wake, 6_000))
+                    return { spend: { tokens: 0, searches: 1, pages: 0 }, resultRef: null }
+                },
+            })
+        }
+        async function ready() {
+            runtime ??= await loadResearchRuntime()
+            return runtime
+        }
+        return {
+            async start(question: string, onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void) {
+                const engine = await ready()
+                const id = `research-${Date.now()}`
+                return engine.start({
+                    id,
+                    sessionId: chat.activeSession.value?.id ?? 'none',
+                    question,
+                    depth: 'quick',
+                    branches: [
+                        { id: 'b1', question: `${question} — fonti`, estimate: { tokens: 0, searches: 1, pages: 2 } },
+                        { id: 'b2', question: `${question} — contraddizioni`, estimate: { tokens: 0, searches: 1, pages: 2 } },
+                        { id: 'b3', question: `${question} — sintesi`, estimate: { tokens: 0, searches: 1, pages: 1 } },
+                    ],
+                }, onProgress)
+            },
+            async resume(runId: string, onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void) {
+                return (await ready()).resume(runId, onProgress)
+            },
+            async unfinished() {
+                return (await ready()).unfinished()
+            },
+            async list() {
+                return (await ready()).all()
+            },
+        }
+    })()
+
     async function send(
         text: string,
         turnPolicy: TalosLibraryTurnOverride | null = null,
@@ -3968,6 +4039,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         memories,
         tasks,
         notes,
+        research,
         resendMessage,
         retryAssistantMessage,
         send,

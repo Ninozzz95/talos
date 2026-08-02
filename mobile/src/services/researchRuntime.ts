@@ -216,6 +216,23 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
             return runs
         },
 
+        /**
+         * Every run, newest first, each replayed from its own journal.
+         *
+         * The listing row exists to make this cheap to ENUMERATE, never to
+         * answer questions about a run: it holds what the last living process
+         * believed. What is shown comes from the journal.
+         */
+        async all(): Promise<readonly TalosResearchRun[]> {
+            const rows = await deps.repository.listResearchRuns()
+            const runs: TalosResearchRun[] = []
+            for (const row of rows) {
+                const loaded = await journalOf(deps, row.id)
+                if (loaded.run) runs.push(talosResearchRecover(loaded.run, deps.now()))
+            }
+            return runs
+        },
+
         /** What a run has cost so far, from the steps that actually ran. */
         spent: talosResearchSpent,
     }
