@@ -84,10 +84,19 @@ export function talosResearchSynthesisPrompt(
         'Scrivi un rapporto rispettando ESATTAMENTE questo formato:',
         '',
         'SINTESI: una o due frasi che rispondono alla domanda.',
-        'AFFERMAZIONE | numero della fonte | "il passaggio esatto, copiato dalla fonte"',
-        '(una riga per affermazione, quante servono)',
+        '',
+        // Written as an example rather than as a labelled placeholder because a
+        // labelled one gets copied: a real run came back with six lines that
+        // began with the word AFFERMAZIONE, and a report whose every claim is
+        // the name of the field is worse than no report.
+        'Poi una riga per ogni affermazione, in questa forma:',
+        'affermazione | numero della fonte | "passaggio copiato dalla fonte"',
+        '',
+        'Per esempio:',
+        'La torre è alta 96 metri | 3 | "la torre misura 96 metri dalla base"',
         '',
         'Regole:',
+        '- scrivi l’affermazione vera e propria, non la parola «affermazione».',
         '- il passaggio deve essere copiato alla lettera dalla fonte che citi:',
         '  viene confrontato con il testo che abbiamo salvato, meccanicamente.',
         '- se le fonti non bastano a sostenere qualcosa, dillo invece di dedurlo.',
@@ -96,6 +105,9 @@ export function talosResearchSynthesisPrompt(
 
     return { prompt, sources }
 }
+
+/** The field's own name, handed back instead of a claim. Never a claim. */
+const PLACEHOLDER = /^[<\[(]?\s*(l['’]?\s*)?affermazione\s*(vera e propria)?\s*[>\])]?$/i
 
 /** Whitespace and quote marks differ between a page and a model. Meaning does not. */
 function comparable(text: string): string {
@@ -131,6 +143,12 @@ export function talosResearchParseSynthesis(
         if (!Number.isFinite(sourceIndex)) continue
         const quote = parts.slice(2).join('|').replace(/^["“]|["”]$/g, '').trim()
         if (parts[0]!.length === 0 || quote.length === 0) continue
+        // The template, echoed back. Seen on a real run: every line began with
+        // the word AFFERMAZIONE, and the report filed six claims each of which
+        // was the name of the field. Dropped rather than shown, which leaves
+        // the synthesis with nothing and makes the step fail — the honest
+        // outcome, because nothing was actually claimed.
+        if (PLACEHOLDER.test(parts[0]!)) continue
 
         const source = sources[sourceIndex - 1]
         claims.push({

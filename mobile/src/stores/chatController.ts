@@ -846,6 +846,8 @@ export interface ChatController {
             Promise<import('@/lib/research/researchRun').TalosResearchRun>
         unfinished(): Promise<readonly import('@/lib/research/researchRun').TalosResearchRun[]>
         list(): Promise<readonly import('@/lib/research/researchRun').TalosResearchRun[]>
+        /** R-4 — the report read back as structure, verdicts included. Null when it will not parse. */
+        report(fileId: string): Promise<import('@/lib/research/researchReport').TalosResearchReportRecord | null>
     }
     memories: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalMemory[]>
@@ -3796,6 +3798,65 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     })
 
     /**
+     * Who could judge the citations, best first.
+     *
+     * On-device models lead because they cost nothing, need no network, and
+     * belong to nobody's family of cloud models — which matters, since
+     * self-preference is measured to extend to a model's own relatives, not just
+     * to itself. Then a DIFFERENT provider, for the same reason. The author's own
+     * provider comes last and only with a different model: a weaker guarantee,
+     * which is why the judge's name is written into the report where the reader
+     * can see whose house it came from.
+     *
+     * If this returns nothing but the author, the claims go out marked "not
+     * verified", with the reason. That is the intended ending, not a failure.
+     */
+    async function researchJudgeCandidates(authorProvider: TalosMobileProviderId): Promise<readonly {
+        id: string
+        provider: TalosMobileProviderId
+        model: string
+        providerModel: TalosMobileProviderModel
+    }[]> {
+        // Reading the disk costs nothing, and a model downloaded ten minutes ago
+        // is exactly the one a user would expect to be usable.
+        if (catalogs.local.models.length === 0) await refreshProvider('local').catch(() => null)
+
+        const [{ talosResearchJudgeOrder }, { talosLocalInstalledModels }] = await Promise.all([
+            import('@/lib/research/researchVerification'),
+            import('@/services/localEngine'),
+        ])
+
+        // Among the models on this device, the largest is the most capable
+        // judge, and what it costs is time rather than money — the run is
+        // already inside a foreground service built for long work. Without this
+        // the judge would be whatever the filesystem happened to list first,
+        // which on a phone holding a 360M model and a 3B one is a coin toss
+        // over whether the verdicts mean anything.
+        const bytes = new Map(
+            (await talosLocalInstalledModels().catch(() => ({ models: [] as { path: string, bytes: number }[] })))
+                .models.map((file) => [file.path, file.bytes] as const),
+        )
+
+        return talosResearchJudgeOrder(authorProvider, PROVIDER_IDS, 'local').flatMap((provider) => {
+            const state = catalogs[provider]
+            if (provider !== 'local' && !state.configured) return []
+            const models = provider === 'local'
+                ? [...state.models].sort((left, right) => (bytes.get(right.id) ?? 0) - (bytes.get(left.id) ?? 0))
+                : state.models
+            return models.map((providerModel) => ({
+                // The NAME, not the identity. A local model's id is its absolute
+                // path, and the report says who verified it to a person — for
+                // whom "qwen2.5-3b-instruct" is the answer and forty characters
+                // of /storage/emulated/0/… is noise.
+                id: `${provider}:${providerModel.displayName || providerModel.id}`,
+                provider,
+                model: providerModel.id,
+                providerModel: providerModel as TalosMobileProviderModel,
+            }))
+        })
+    }
+
+    /**
      * The research facade, lazy for the same reason every station is: a chat
      * that never opens Deep Research must not pay for its module.
      */
@@ -3835,12 +3896,16 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 synthesise: async (run) => {
                     const [
                         { talosResearchParseDossier },
-                        { talosResearchSynthesisPrompt, talosResearchParseSynthesis, talosResearchReportStanding },
+                        { talosResearchSynthesisPrompt, talosResearchParseSynthesis },
                         { providerAdapterFor },
+                        { talosResearchJudgePrompt, talosResearchPickJudge, talosResearchVerify },
+                        { talosResearchReportDocument },
                     ] = await Promise.all([
                         import('@/lib/research/researchDossier'),
                         import('@/lib/research/researchSynthesis'),
                         import('@/lib/chat/providerRegistry'),
+                        import('@/lib/research/researchVerification'),
+                        import('@/lib/research/researchReport'),
                     ])
 
                     const collections = []
@@ -3875,35 +3940,78 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     }, { apiKey, endpoint }, deps.transport)
 
                     const report = talosResearchParseSynthesis(completion.text, sources)
-                    const standing = talosResearchReportStanding(report)
 
-                    const document = [
-                        `# ${run.question}`,
-                        '',
-                        report.summary,
-                        '',
-                        `Affermazioni: ${standing.total} — con citazione verificata: ${standing.supported}.`,
-                        '',
-                        ...report.claims.map((claim) => {
-                            const source = sources[claim.sourceIndex - 1]
-                            const mark = claim.quotePresent === 'yes'
-                                ? 'citazione verificata'
-                                : claim.quotePresent === 'no'
-                                    ? 'CITAZIONE NON TROVATA NELLA FONTE'
-                                    : 'fonte inesistente'
-                            return [
-                                `- ${claim.text}`,
-                                `  fonte: ${source?.title ?? '?'} — ${source?.url ?? '?'}`,
-                                `  passaggio: "${claim.quote}"`,
-                                `  ${mark}`,
-                            ].join('\n')
-                        }),
-                    ].join('\n')
+                    /*
+                     * Refused rather than written empty.
+                     *
+                     * A model that answers outside the required format yields no
+                     * claims, and a report with no claims is the thing this
+                     * phase exists to make impossible: it would file "0 of 0
+                     * supported" in the Library and read like a verified answer
+                     * with nothing in it. Caught on a real device with a 360M
+                     * model chosen in the composer, which cannot hold a format
+                     * across a forty-thousand-character prompt. The step fails
+                     * instead, the gathering stays paid for, and the retry
+                     * starts from the writing.
+                     */
+                    if (report.claims.length === 0) throw new Error('TALOS_RESEARCH_NO_CLAIMS')
+
+                    /*
+                     * R-4 — the report does not get to mark its own homework.
+                     *
+                     * Three levels: how the source was obtained (recorded when
+                     * it was read), whether the passage is really in the text we
+                     * kept, and whether that passage supports the claim. Only
+                     * the third costs anything, and it is also the only one the
+                     * field actually fails: on deep research agents, links
+                     * resolve above 94% of the time and factual support holds
+                     * between 39% and 77% (arXiv 2605.06635).
+                     *
+                     * The judge is never the author. A model reviewing its own
+                     * output is up to 50% more likely to pass a criterion it
+                     * failed (arXiv 2604.06996), so a self-issued mark is not a
+                     * weaker check — it is a false one.
+                     */
+                    const author = { id: `${profile.provider}:${model.id}`, provider: profile.provider, model: model.id }
+                    const chosen = talosResearchPickJudge(author, await researchJudgeCandidates(profile.provider))
+                    let judgeTokens = 0
+                    let judgeCredentials: { apiKey: string | null, endpoint: string | null } | null = null
+
+                    const verified = await talosResearchVerify({
+                        judge: chosen,
+                        at: () => new Date().toISOString(),
+                        ask: async (claimText, passage) => {
+                            if (!chosen) throw new Error('TALOS_RESEARCH_NO_JUDGE')
+                            judgeCredentials ??= {
+                                apiKey: await deps.getKey(chosen.provider),
+                                endpoint: await deps.getEndpoint(chosen.provider),
+                            }
+                            const verdict = await providerAdapterFor(chosen.provider).complete({
+                                model: chosen.providerModel,
+                                turns: [{ role: 'user', content: talosResearchJudgePrompt(claimText, passage) }],
+                                system: 'Rispondi con una riga sola, nel formato richiesto.',
+                                effort: 'off',
+                                thinking: false,
+                            }, judgeCredentials, deps.transport)
+                            judgeTokens += Number(verdict.usage?.completion_tokens ?? 0)
+                            return verdict.text
+                        },
+                    }, report.claims, sources)
 
                     const saved = await vaultService.createGenerated({
-                        name: `${run.question} — rapporto.md`,
+                        name: `${run.question} \u2014 rapporto.md`,
                         mediaType: 'text/markdown',
-                        text: document,
+                        text: talosResearchReportDocument({
+                            question: run.question,
+                            summary: report.summary,
+                            // The judge that was AVAILABLE, which is not the same
+                            // as the one that ruled on any given claim: a run
+                            // whose citations all failed the mechanical check
+                            // has no per-claim judge and still had one ready.
+                            judge: chosen?.id ?? null,
+                            claims: verified,
+                            sources,
+                        }),
                         kind: 'document',
                     }, {
                         sessionId: chat.activeSession.value?.id ?? null,
@@ -3916,7 +4024,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         spend: {
                             searches: 0,
                             pages: 0,
-                            tokens: Number(completion.usage?.completion_tokens ?? 0),
+                            // The verification is counted with the writing. It is
+                            // work the user paid for, and a cost that does not
+                            // appear is a cost nobody can decide about.
+                            tokens: Number(completion.usage?.completion_tokens ?? 0) + judgeTokens,
                         },
                         resultRef: saved?.file.id ?? null,
                     }
@@ -4010,6 +4121,25 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             },
             async list() {
                 return (await ready()).all()
+            },
+            /**
+             * The report of a finished run, read back as structure.
+             *
+             * Takes the file reference the synthesis step recorded rather than a
+             * run id, because that is what the journal actually points at — and
+             * because looking a run up again to find a pointer we already have
+             * is how two answers to the same question start to disagree.
+             *
+             * Null when the file is gone or unreadable. A report shown without
+             * its verification record would look verified, which is the one
+             * thing this phase must never do.
+             */
+            async report(fileId: string) {
+                const [file, { talosResearchParseReport }] = await Promise.all([
+                    deps.chatRepository.getVaultFile(fileId).catch(() => null),
+                    import('@/lib/research/researchReport'),
+                ])
+                return file?.extracted_text ? talosResearchParseReport(file.extracted_text) : null
             },
         }
     })()

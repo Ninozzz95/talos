@@ -14,12 +14,15 @@
  * row on disk.
  */
 import { computed, onMounted, ref } from 'vue'
-import { FileSearch, Play, Plus, RotateCcw, Trash2 } from '@lucide/vue'
+import { ChevronDown, ChevronRight, FileSearch, Play, Plus, RotateCcw, Trash2 } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import { useChatController } from '@/stores/chatController'
 import type { TalosResearchBranch, TalosResearchDepth, TalosResearchRun } from '@/lib/research/researchRun'
+import { talosResearchProgressOf } from '@/lib/research/researchRun'
+import type { TalosResearchReportRecord } from '@/lib/research/researchReport'
+import { talosResearchVerifiedStanding } from '@/lib/research/researchVerification'
 import {
     TALOS_RESEARCH_DEPTHS,
     talosResearchPlanCost,
@@ -143,11 +146,74 @@ async function resume(runId: string): Promise<void> {
  * remedy the user can act on.
  */
 function reason(code: string): string {
-    return code === 'TALOS_RESEARCH_NO_SEARCH_SOURCE' ? t('research.noSearchSource') : code
+    if (code === 'TALOS_RESEARCH_NO_SEARCH_SOURCE') return t('research.noSearchSource')
+    // The other refusal we own, and the one a user can fix in ten seconds:
+    // the model they picked in the composer could not hold the format.
+    if (code === 'TALOS_RESEARCH_NO_CLAIMS') return t('research.noClaims')
+    return code
 }
 
-function doneCount(run: TalosResearchRun): number {
-    return run.steps.filter((step) => step.state === 'done').length
+/**
+ * R-4 — the report, opened in layers.
+ *
+ * Five thousand words in a phone column is a wall, so the reader gets the answer
+ * first, then the claims, and only opens a claim when they want to see what it
+ * actually rests on. The layer that matters is the last one: the exact words
+ * from the page, the verdict, and the name of whoever gave it — which is
+ * information no other product can show, because it did not keep the passage.
+ */
+const openRunId = ref<string | null>(null)
+const openReport = ref<TalosResearchReportRecord | null>(null)
+const reportError = ref(false)
+const openClaim = ref<number | null>(null)
+const showSources = ref(false)
+
+/** The report file the synthesis wrote, when there is one to read. */
+function reportRef(run: TalosResearchRun): string | null {
+    const synthesis = run.steps.find((step) => step.kind === 'synthesise' && step.state === 'done')
+    return synthesis?.resultRef ?? null
+}
+
+async function toggleReport(run: TalosResearchRun): Promise<void> {
+    if (openRunId.value === run.id) {
+        openRunId.value = null
+        openReport.value = null
+        return
+    }
+    const ref_ = reportRef(run)
+    if (!ref_) return
+    openRunId.value = run.id
+    openClaim.value = null
+    showSources.value = false
+    openReport.value = await controller.research.report(ref_)
+    // Said out loud rather than shown as an empty panel: a report that will not
+    // parse is a report whose verification cannot be trusted either.
+    reportError.value = openReport.value === null
+}
+
+const standing = computed(() => (openReport.value ? talosResearchVerifiedStanding(
+    openReport.value.claims.map((claim) => ({
+        claim: { text: claim.text, sourceIndex: claim.sourceIndex, quote: '', quotePresent: 'yes' as const },
+        passage: claim.passage,
+        checks: claim.checks,
+    })),
+) : null))
+
+/**
+ * The judge the run had, taken from the record rather than from the claims.
+ *
+ * Reading it off the verdicts was wrong in a case that really happens: every
+ * citation fails the mechanical check, no claim carries a judge, and the panel
+ * announced that no independent judge was available — when one was sitting
+ * right there. "Nothing needed judging" is not "nobody could judge".
+ */
+const judge = computed(() => openReport.value?.judge ?? null)
+
+function verdictTone(support: string): string {
+    if (support === 'yes') return 'text-[var(--talos-success)]'
+    if (support === 'partial') return 'text-[var(--talos-warning)]'
+    if (support === 'no') return 'text-[var(--talos-danger,var(--destructive))]'
+    return 'text-[var(--talos-muted)]'
 }
 </script>
 
@@ -271,7 +337,11 @@ function doneCount(run: TalosResearchRun): number {
                 class="flex flex-wrap items-center gap-2 rounded-md border border-[var(--talos-accent)] bg-[var(--talos-panel-soft)] px-3 py-3 text-sm"
             >
                 <span class="flex-1 text-[var(--talos-text)]">
-                    {{ t('research.interrupted', { question: run.question, done: doneCount(run), total: run.plan.length }) }}
+                    {{ t('research.interrupted', {
+                        question: run.question,
+                        done: talosResearchProgressOf(run).done,
+                        total: talosResearchProgressOf(run).total,
+                    }) }}
                 </span>
                 <Button variant="outline" :disabled="busy" @click="resume(run.id)">
                     <RotateCcw class="h-4 w-4" aria-hidden="true" />
@@ -287,8 +357,8 @@ function doneCount(run: TalosResearchRun): number {
             >
                 <div class="flex items-baseline justify-between gap-2">
                     <span class="text-sm text-[var(--talos-text)]">{{ run.question }}</span>
-                    <span class="font-mono text-2xs text-[var(--talos-muted)]">
-                        {{ doneCount(run) }}/{{ run.plan.length }} · {{ run.status }}
+                    <span data-testid="talos-research-progress" class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
+                        {{ talosResearchProgressOf(run).done }}/{{ talosResearchProgressOf(run).total }} · {{ run.status }}
                     </span>
                 </div>
                 <ul class="mt-2 space-y-1">
@@ -312,6 +382,126 @@ function doneCount(run: TalosResearchRun): number {
                         >{{ reason(step.error) }}</span>
                     </li>
                 </ul>
+
+                <!-- R8/R10 — the report opens in layers. Nothing below is
+                     visible until it is asked for, because the answer is what
+                     the reader came for and the evidence is what they come back
+                     to when they doubt it. -->
+                <Button
+                    v-if="reportRef(run)"
+                    data-testid="talos-research-open-report"
+                    variant="ghost"
+                    class="mt-2 w-full justify-start"
+                    @click="toggleReport(run)"
+                >
+                    <component :is="openRunId === run.id ? ChevronDown : ChevronRight" class="h-4 w-4" aria-hidden="true" />
+                    {{ openRunId === run.id ? t('research.closeReport') : t('research.openReport') }}
+                </Button>
+
+                <div v-if="openRunId === run.id" class="mt-2 space-y-3" data-testid="talos-research-report">
+                    <p v-if="reportError" class="text-xs text-[var(--talos-danger,var(--destructive))]">
+                        {{ t('research.reportUnreadable') }}
+                    </p>
+
+                    <template v-if="openReport">
+                        <!-- Layer 1: the answer. -->
+                        <p class="text-sm leading-6 text-[var(--talos-text)]">{{ openReport.summary }}</p>
+
+                        <p data-testid="talos-research-standing" class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
+                            {{ t('research.standing', {
+                                supported: standing?.supported ?? 0,
+                                total: standing?.total ?? 0,
+                                partial: standing?.partial ?? 0,
+                                unsupported: standing?.unsupported ?? 0,
+                                unchecked: standing?.unchecked ?? 0,
+                            }) }}
+                        </p>
+                        <!-- The judge's name sits BESIDE the sentence, never
+                             inside it. vue-i18n escapes parameters, so a name
+                             holding a path came out as `&#x2F;storage&#x2F;…`
+                             on the tablet — the second time this project has
+                             paid for interpolating a path into a phrase. -->
+                        <p class="text-2xs text-[var(--talos-muted)]">
+                            <template v-if="judge">{{ t('research.verifiedByLead') }}</template>
+                            <template v-else>{{ t('research.notVerified') }}</template>
+                        </p>
+                        <p v-if="judge" data-testid="talos-research-judge" class="break-all font-mono text-2xs text-[var(--talos-muted)]">
+                            {{ judge }}
+                        </p>
+
+                        <!-- Layer 2: the claims, each with its verdict. -->
+                        <div
+                            v-for="(claim, index) in openReport.claims"
+                            :key="`${run.id}-claim-${index}`"
+                            data-testid="talos-research-claim"
+                            class="rounded-md border border-[var(--talos-border)] px-2 py-2"
+                        >
+                            <button
+                                type="button"
+                                class="flex w-full items-start gap-2 text-left"
+                                :aria-expanded="openClaim === index"
+                                @click="openClaim = openClaim === index ? null : index"
+                            >
+                                <span class="flex-1 text-sm text-[var(--talos-text)]">{{ claim.text }}</span>
+                                <span
+                                    class="shrink-0 text-2xs"
+                                    :class="verdictTone(claim.checks.claimSupported)"
+                                >{{ t(`research.support.${claim.checks.claimSupported}`) }}</span>
+                            </button>
+
+                            <!-- Layer 3: the exact words the claim rests on. -->
+                            <div v-if="openClaim === index" class="mt-2 space-y-1" data-testid="talos-research-passage">
+                                <p
+                                    v-if="claim.passage"
+                                    class="border-l-2 border-[var(--talos-accent)] pl-2 text-xs italic leading-5 text-[var(--talos-text)]"
+                                >{{ claim.passage }}</p>
+                                <p v-else class="text-xs text-[var(--talos-danger,var(--destructive))]">
+                                    {{ t('research.quoteMissing') }}
+                                </p>
+                                <p v-if="claim.checks.supportReason" class="text-2xs text-[var(--talos-muted)]">
+                                    {{ claim.checks.supportReason }}
+                                </p>
+                                <a
+                                    v-if="openReport.sources[claim.sourceIndex - 1]"
+                                    :href="openReport.sources[claim.sourceIndex - 1]!.url"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    class="block truncate text-2xs text-[var(--talos-accent)]"
+                                >{{ openReport.sources[claim.sourceIndex - 1]!.title }}</a>
+                                <p class="font-mono text-2xs text-[var(--talos-muted)]">
+                                    {{ openReport.sources[claim.sourceIndex - 1]?.obtained === 'snippet'
+                                        ? t('research.onlySnippet')
+                                        : t('research.pageRead') }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Layer 4: everything that was read. -->
+                        <button
+                            type="button"
+                            class="flex w-full items-center gap-2 text-left text-xs text-[var(--talos-muted)]"
+                            :aria-expanded="showSources"
+                            @click="showSources = !showSources"
+                        >
+                            <component :is="showSources ? ChevronDown : ChevronRight" class="h-3 w-3" aria-hidden="true" />
+                            {{ t('research.sourcesTitle', { count: openReport.sources.length }) }}
+                        </button>
+                        <ul v-if="showSources" class="space-y-1">
+                            <li v-for="source in openReport.sources" :key="source.url" class="text-2xs">
+                                <a
+                                    :href="source.url"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    class="block truncate text-[var(--talos-accent)]"
+                                >{{ source.title }}</a>
+                                <span class="font-mono text-[var(--talos-muted)]">
+                                    {{ source.publishedAt ?? t('research.noDate') }} ·
+                                    {{ source.obtained === 'snippet' ? t('research.onlySnippet') : t('research.pageRead') }}
+                                </span>
+                            </li>
+                        </ul>
+                    </template>
+                </div>
             </div>
         </div>
     </TalosMobileScreen>

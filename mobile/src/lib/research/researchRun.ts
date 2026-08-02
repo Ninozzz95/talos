@@ -353,6 +353,22 @@ export function talosResearchNextStep(run: TalosResearchRun): TalosResearchStep 
  * every attempt, and a new name is a step nobody can recognise as already done
  * — which is how a resumed run pays twice for the same search.
  */
+/**
+ * How far along a run is — one definition, so nothing can disagree with itself.
+ *
+ * The synthesis is a step like any other and counts among the finished ones, so
+ * a total taken from the plan alone announced "3 of 2" the moment the report was
+ * written. It is added to the total once the run actually has such a step, and
+ * not before: a denominator that counts work which may never be attempted is the
+ * same lie in the other direction.
+ */
+export function talosResearchProgressOf(run: TalosResearchRun): { readonly done: number, readonly total: number } {
+    return {
+        done: run.steps.filter((step) => step.state === 'done').length,
+        total: run.plan.length + (run.steps.some((step) => step.kind === 'synthesise') ? 1 : 0),
+    }
+}
+
 export function talosResearchStepIdFor(branchId: string, kind: TalosResearchStepKind): string {
     return `${branchId}:${kind}`
 }
