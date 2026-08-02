@@ -29,6 +29,7 @@ import { createSessionActionRunner } from '@/lib/sessionActionRunner'
 import { createTalosChatLiveEdge } from '@/composables/useTalosChatLiveEdge'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
+import { talosComposerShape } from '@/lib/composerStyle'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import {
     parseTalosSessionLibraryContextPolicy,
@@ -53,6 +54,11 @@ const router = useRouter()
 const { t, locale } = useTalosI18n()
 const controller = useChatController()
 const settings = useSettingsStore()
+// One stored choice, expanded here into the three flags the composer speaks.
+// The mapping lives in the store so there is exactly one place that decides
+// which arrangements exist — the composer used to have to defend itself
+// against a combination where the "+" opened nothing at all.
+const composerShape = computed(() => talosComposerShape(settings.state.shell.composer_style))
 const {
     catalogs,
     profiles,
@@ -1034,9 +1040,9 @@ onBeforeUnmount(() => {
                 :dictation-listening="dictation.status.value === 'listening'"
                 :dictation-starting="dictation.status.value === 'starting'"
                 :dictation-level="dictation.level.value"
-                :drawer-mode="settings.state.shell.composer_drawer"
-                :immersive-composer="settings.state.shell.immersive_composer"
-                :plus-dropdown="settings.state.shell.plus_dropdown"
+                :drawer-mode="composerShape.drawerMode"
+                :immersive-composer="composerShape.immersiveComposer"
+                :plus-dropdown="composerShape.plusDropdown"
                 :library-context-enabled="effectiveLibraryContextEnabled"
                 :library-context-mode="effectiveLibraryContextPolicy.mode"
                 :library-source-count="librarySelectedSourceCount"
