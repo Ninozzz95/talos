@@ -3823,6 +3823,104 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                  * and a run that quietly produced empty branches would spend
                  * the user's time to teach them nothing.
                  */
+                /**
+                 * The last step: read every dossier back and write the report.
+                 *
+                 * The sources are RELOADED from the Library rather than kept in
+                 * memory, because a resumed run is a new process that collected
+                 * nothing — and because the passages the citations are checked
+                 * against must be the ones that were actually stored, not a
+                 * copy that drifted.
+                 */
+                synthesise: async (run) => {
+                    const [
+                        { talosResearchParseDossier },
+                        { talosResearchSynthesisPrompt, talosResearchParseSynthesis, talosResearchReportStanding },
+                        { providerAdapterFor },
+                    ] = await Promise.all([
+                        import('@/lib/research/researchDossier'),
+                        import('@/lib/research/researchSynthesis'),
+                        import('@/lib/chat/providerRegistry'),
+                    ])
+
+                    const collections = []
+                    for (const step of run.steps) {
+                        if (step.state !== 'done' || !step.resultRef) continue
+                        const file = await deps.chatRepository.getVaultFile(step.resultRef).catch(() => null)
+                        const parsed = file?.extracted_text
+                            ? talosResearchParseDossier(file.extracted_text)
+                            : null
+                        if (parsed) collections.push(parsed)
+                    }
+                    // Refused, not written from nothing: a report with no
+                    // sources behind it is the one output this whole phase
+                    // exists to make impossible.
+                    if (collections.length === 0) throw new Error('TALOS_RESEARCH_NO_DOSSIERS')
+
+                    const profile = selectedProfile.value
+                    const model = selectedProviderModel.value
+                    if (!profile || !model) throw new Error('TALOS_RESEARCH_NO_MODEL')
+
+                    const { prompt, sources } = talosResearchSynthesisPrompt(run.question, collections)
+                    const [apiKey, endpoint] = await Promise.all([
+                        deps.getKey(profile.provider),
+                        deps.getEndpoint(profile.provider),
+                    ])
+                    const completion = await providerAdapterFor(profile.provider).complete({
+                        model,
+                        turns: [{ role: 'user', content: prompt }],
+                        system: 'Rispondi solo nel formato richiesto.',
+                        effort: 'off',
+                        thinking: false,
+                    }, { apiKey, endpoint }, deps.transport)
+
+                    const report = talosResearchParseSynthesis(completion.text, sources)
+                    const standing = talosResearchReportStanding(report)
+
+                    const document = [
+                        `# ${run.question}`,
+                        '',
+                        report.summary,
+                        '',
+                        `Affermazioni: ${standing.total} — con citazione verificata: ${standing.supported}.`,
+                        '',
+                        ...report.claims.map((claim) => {
+                            const source = sources[claim.sourceIndex - 1]
+                            const mark = claim.quotePresent === 'yes'
+                                ? 'citazione verificata'
+                                : claim.quotePresent === 'no'
+                                    ? 'CITAZIONE NON TROVATA NELLA FONTE'
+                                    : 'fonte inesistente'
+                            return [
+                                `- ${claim.text}`,
+                                `  fonte: ${source?.title ?? '?'} — ${source?.url ?? '?'}`,
+                                `  passaggio: "${claim.quote}"`,
+                                `  ${mark}`,
+                            ].join('\n')
+                        }),
+                    ].join('\n')
+
+                    const saved = await vaultService.createGenerated({
+                        name: `${run.question} — rapporto.md`,
+                        mediaType: 'text/markdown',
+                        text: document,
+                        kind: 'document',
+                    }, {
+                        sessionId: chat.activeSession.value?.id ?? null,
+                        model: profile.model,
+                        provider: profile.provider,
+                        toolName: 'deep_research',
+                    }).catch(() => null)
+
+                    return {
+                        spend: {
+                            searches: 0,
+                            pages: 0,
+                            tokens: Number(completion.usage?.completion_tokens ?? 0),
+                        },
+                        resultRef: saved?.file.id ?? null,
+                    }
+                },
                 perform: async (branch) => {
                     const source = deps.settings.state.search?.source ?? null
                     if (!source) throw new Error('TALOS_RESEARCH_NO_SEARCH_SOURCE')
@@ -3851,26 +3949,15 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
                     // The dossier goes to the Library, where everything else the
                     // app keeps already lives — one home, not a private store
-                    // only this feature knows how to read.
-                    const dossier = [
-                        `# ${collection.query}`,
-                        ...collection.sources.map((entry) => [
-                            `## ${entry.title}`,
-                            entry.url,
-                            entry.publishedAt ? `data dichiarata: ${entry.publishedAt}` : 'data non dichiarata',
-                            entry.obtained === 'snippet' ? '(solo estratto dal motore di ricerca)' : '',
-                            '',
-                            entry.text,
-                        ].filter(Boolean).join('\n')),
-                        ...(collection.unreachable.length > 0
-                            ? ['## Non raggiungibili', ...collection.unreachable.map((entry) => `${entry.url} — ${entry.reason}`)]
-                            : []),
-                    ].join('\n\n')
-
+                    // only this feature knows how to read. One document serves
+                    // both readers: prose for a person, the record fenced at
+                    // the end for the process that resumes later with no memory
+                    // of what it collected.
+                    const { talosResearchDossierDocument } = await import('@/lib/research/researchDossier')
                     const stored = await vaultService.createGenerated({
                         name: `${collection.query}.md`,
                         mediaType: 'text/markdown',
-                        text: dossier,
+                        text: talosResearchDossierDocument(collection),
                         kind: 'web_source',
                         sourceLinks: collection.sources.map((entry) => ({
                             url: entry.url,
@@ -3879,9 +3966,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     }, {
                         sessionId: chat.activeSession.value?.id ?? null,
                         // Required and nullable on purpose: a caller that does
-                        // not know has to say so in writing. R-3 collects with
-                        // no model at all — the reading is mechanical — so the
-                        // honest answer here is null rather than a borrowed name.
+                        // not know has to say so in writing. The gathering uses
+                        // no model — the reading is mechanical — so the honest
+                        // answer is null rather than a borrowed name.
                         model: null,
                         provider: null,
                         toolName: 'deep_research',
