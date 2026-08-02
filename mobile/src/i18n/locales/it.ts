@@ -1635,6 +1635,13 @@ export const TALOS_IT_MESSAGES = {
         shareReport: 'Condividi rapporto',
         noIssues: 'Nessun problema rilevato.',
     },
+    research: {
+        phaseNote: 'Fase R-1: una run di prova che si limita a dormire. Quello che si sta dimostrando è che sopravvive — avviane una, chiudi TALOS dal gestore attività, e torna qui.',
+        questionPlaceholder: 'Una domanda su cui fare la prova',
+        start: 'Avvia',
+        resume: 'Riprendi',
+        interrupted: '«{question}» si è fermata a {done} di {total}. Non verrà rifatto niente di già fatto.',
+    },
     stations: {
         deepResearchTitle: 'Ricerca approfondita V3',
         runtimeCockpitTitle: 'Cockpit runtime',

@@ -1640,6 +1640,13 @@ export const TALOS_EN_MESSAGES = {
         shareReport: 'Share report',
         noIssues: 'No issues found.',
     },
+    research: {
+        phaseNote: 'Phase R-1: a rehearsal run that only sleeps. What is being proved is that it survives — start one, close TALOS from the task switcher, and come back.',
+        questionPlaceholder: 'A question to rehearse with',
+        start: 'Start',
+        resume: 'Resume',
+        interrupted: '"{question}" stopped at {done} of {total}. Nothing already done will be repeated.',
+    },
     stations: {
         deepResearchTitle: 'Deep Research V3',
         runtimeCockpitTitle: 'Runtime cockpit',
