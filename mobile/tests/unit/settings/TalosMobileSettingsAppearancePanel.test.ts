@@ -55,6 +55,11 @@ beforeEach(() => {
     vi.clearAllMocks()
     stores.settings.state.motion_v6.mode = 'off'
     stores.settings.state.motion_v6.background_enabled = true
+    // The panel remembers the section you left, and jsdom keeps one localStorage
+    // for the whole file — so without this, the first test's trip through Voice
+    // decides where every later test opens. Worth knowing rather than papering
+    // over: it is exactly the behaviour the last test in this file asserts.
+    localStorage.clear()
 })
 
 async function activateTab(wrapper: VueWrapper, label: string): Promise<void> {
@@ -124,6 +129,28 @@ describe('TalosMobileSettingsAppearancePanel', () => {
         expect(activeText()).toContain('Design')
         await swipe(110, 130, 420) // vertical-dominant → no change
         expect(activeText()).toContain('Design')
+    })
+
+    it('opens again on the section you left, not on the one that happens to be first', async () => {
+        // Before the shared strip, Appearance always came back on Design, so
+        // someone tuning Motion paid for the trip on every visit. The proof is a
+        // second, independent mount — not a call to the memory.
+        const first = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true, TalosMobileVoiceSettings: true } },
+        })
+        await activateTab(first, 'Motion')
+        first.unmount()
+
+        const second = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true, TalosMobileVoiceSettings: true } },
+        })
+        expect(second.get('[data-appearance-section="motion"]').attributes('data-state')).toBe('active')
+        // Not `.exists()`: Reka keeps an inactive panel in the DOM, hidden, so
+        // the question is which one is showing — not which one is present.
+        expect(second.find('[data-appearance-section="design"]').attributes('data-state')).not.toBe('active')
+        second.unmount()
     })
 
     // Product review 2026-07-25: the "Chat composer" select and the 34 Interface

@@ -2,9 +2,10 @@
 import { computed, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { RotateCcw } from '@lucide/vue'
-import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
+import { TabsContent } from 'reka-ui'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
+import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
 import TalosMobileVoiceSettings from '@/components/talos/settings/TalosMobileVoiceSettings.vue'
 import {
     TALOS_THEME_MODE_OPTIONS,
@@ -26,6 +27,7 @@ import {
 import { TALOS_FONT_SCALE_OPTIONS, type TalosFontScale } from '@/lib/talosFontScale'
 import { useSettingsStore, type TalosMotionPreferencePatch } from '@/stores/settings'
 import { useThemeStore } from '@/stores/theme'
+import { talosRememberView, talosRememberedView } from '@/lib/navigation/rememberedView'
 
 const theme = useThemeStore()
 const settings = useSettingsStore()
@@ -144,41 +146,50 @@ const interfaceControls = computed(() => [
 ] as const)
 const interfaceCategories = ['windows', 'surfaces', 'navigation', 'composer', 'messages', 'feedback'] as const
 
-const sectionTabClass = 'min-h-11 shrink-0 rounded-md border border-transparent px-3 text-sm font-medium text-[var(--talos-muted)] outline-none data-[state=active]:border-[var(--talos-accent-border)] data-[state=active]:bg-[var(--talos-panel)] data-[state=active]:text-[var(--talos-text)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]'
 const selectLabelClass = 'text-xs font-semibold uppercase text-[var(--talos-muted)]'
 const switchRowClass = 'flex min-h-14 cursor-pointer items-start justify-between gap-3 border-t border-[var(--talos-border)] py-3'
 const rangeClass = 'mt-2 h-2 w-full cursor-pointer accent-[var(--talos-accent)]'
 
-// Owner 2026-07-24: swipe left/right switches section (like ChatGPT tabs). The
-// tabs are now controlled; a horizontal-dominant swipe steps the active section.
-const SECTIONS = ['design', 'motion', 'voice'] as const
-const activeSection = ref<(typeof SECTIONS)[number]>('design')
-let swipeX: number | null = null
-let swipeY: number | null = null
-function onSwipeStart(event: PointerEvent): void { swipeX = event.clientX; swipeY = event.clientY }
-function onSwipeEnd(event: PointerEvent): void {
-    if (swipeX === null || swipeY === null) return
-    const dx = event.clientX - swipeX
-    const dy = event.clientY - swipeY
-    swipeX = null; swipeY = null
-    // Only a clearly horizontal swipe changes tabs — vertical scrolling is safe.
-    if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.5) return
-    const index = SECTIONS.indexOf(activeSection.value)
-    const target = dx < 0 ? Math.min(SECTIONS.length - 1, index + 1) : Math.max(0, index - 1)
-    activeSection.value = SECTIONS[target]!
+/**
+ * The section list, its order, its default, the swipe that steps through it and
+ * the ARIA it needs are no longer written here: they come from the register, via
+ * the shared strip. What is left is the one thing that is genuinely this
+ * screen's — where the answer is kept.
+ *
+ * Reopening on the section you left is new. Before this, Appearance always came
+ * back on Design, so someone tuning Motion paid for the trip every time.
+ */
+const activeSection = ref<string>(talosRememberedView('appearance') ?? 'design')
+
+function chooseSection(section: string): void {
+    activeSection.value = section
+    talosRememberView('appearance', section)
 }
+
+/**
+ * Owner 2026-07-24: the section tabs stay PINNED while the panel scrolls. The
+ * swipe that used to live beside this now belongs to the shared strip; pinning
+ * is layout, so it stays with the screen.
+ *
+ * `sticky` overrides the strip's own `relative` because Tailwind emits the
+ * position utilities in a fixed order and sticky is the later one — and sticky
+ * establishes the containing block the indicator needs just as well, so nothing
+ * else has to change. Kept here rather than as a template comment: a comment
+ * beside the root element makes the component a fragment, and then a pointer
+ * event dispatched at the component root lands on the comment instead of on the
+ * strip. Which is exactly how the swipe test caught it.
+ */
+const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(--talos-background))] px-4 pb-2 pt-3'
 </script>
 
 <template>
-    <TabsRoot v-model="activeSection" activation-mode="automatic" orientation="horizontal" @pointerdown="onSwipeStart" @pointerup="onSwipeEnd">
-        <!-- Owner 2026-07-24: the section tabs stay PINNED (sticky) while the
-             panel scrolls; a horizontal SWIPE changes section (ChatGPT-style). -->
-        <TabsList :aria-label="t('appearance.sectionsLabel')" class="sticky top-0 z-10 -mx-4 flex gap-1 overflow-x-auto border-b border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-background))] px-4 pb-2 pt-3">
-            <TabsTrigger value="design" :class="sectionTabClass">{{ t('appearance.design') }}</TabsTrigger>
-            <TabsTrigger value="motion" :class="sectionTabClass">{{ t('appearance.motion') }}</TabsTrigger>
-            <TabsTrigger value="voice" :class="sectionTabClass">{{ t('appearance.voice') }}</TabsTrigger>
-        </TabsList>
-
+    <TalosThemedTabs
+        surface="appearance"
+        :model-value="activeSection"
+        :aria-label="t('appearance.sectionsLabel')"
+        :list-class="stickyListClass"
+        @update:model-value="chooseSection"
+    >
         <TabsContent
             value="design"
             data-appearance-section="design"
@@ -423,6 +434,5 @@ function onSwipeEnd(event: PointerEvent): void {
         >
             <TalosMobileVoiceSettings />
         </TabsContent>
-
-    </TabsRoot>
+    </TalosThemedTabs>
 </template>

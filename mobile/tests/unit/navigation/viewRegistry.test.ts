@@ -95,15 +95,27 @@ describe('the view register', () => {
         // — so its list lives in that module instead. When Doctor is migrated,
         // this second case disappears rather than growing.
         const sources: Array<[string, string, RegExp]> = [
+            // The charset is "anything but a quote" on purpose. It used to be
+            // [a-z-]+, and that is not a detail: Model Lab's third tab is
+            // value="onDevice", so the capital D put it outside the class and
+            // the gate reported agreement while the register was missing a
+            // whole view. A gate that only sees the ids it expects is not a
+            // gate. The \s keeps :value="section.id" from matching as if it
+            // were a literal.
+            // Appearance no longer writes its own triggers — the shared strip
+            // renders them straight from the register, so a trigger cannot
+            // disagree with it. Its panels still can, and that is the failure
+            // worth catching now: a registered view with no panel is a tab that
+            // opens onto nothing, and a panel nobody registered is dead markup.
             [
                 'appearance',
                 'src/components/talos/settings/TalosMobileSettingsAppearancePanel.vue',
-                /<TabsTrigger[^>]*?value="([a-z-]+)"/gs,
+                /<TabsContent[^>]*?\svalue="([^"]+)"/g,
             ],
             [
                 'models',
                 'src/components/talos/settings/TalosMobileSettingsModelsPanel.vue',
-                /<TabsTrigger[^>]*?value="([a-z-]+)"/gs,
+                /<TabsTrigger[^>]*?\svalue="([^"]+)"/g,
             ],
             ['doctor', 'src/lib/diagnostics/doctorSections.ts', /\{\s*id: '([a-z-]+)'/g],
         ]

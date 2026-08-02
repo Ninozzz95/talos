@@ -41,6 +41,12 @@ const props = defineProps<{
     modelValue: string
     /** Names the strip for a screen reader. The surface, not the current view. */
     ariaLabel?: string
+    /**
+     * Layout for the list only — sticky offsets, the bleed a screen needs to
+     * reach its own padding. The grammar is not negotiable; where the strip
+     * sits on the page is the screen's business.
+     */
+    listClass?: string
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
@@ -76,6 +82,76 @@ function choose(value: unknown): void {
     if (!talosViewExists(props.surface, value)) return
     emit('update:modelValue', value)
 }
+
+/**
+ * Swipe left and right to step through the views — owner, 2026-07-24, "like
+ * ChatGPT tabs". It lived in the Appearance panel alone; now that the register
+ * knows the order of every surface, stepping through it is four lines that work
+ * everywhere rather than four lines each screen has to write again.
+ *
+ * A swipe is a path-based gesture, and WCAG 2.5.1 asks that anything driven by
+ * one also work from a single pointer without a path. It does: the tabs above
+ * are still there, still tappable, still reachable by keyboard. The gesture is
+ * a shortcut, never the only way in. (Checked against what I know of the
+ * criterion rather than a fresh source — this session's web-search budget is
+ * spent, and I would rather say so than imply I re-read it.)
+ */
+const SWIPE_MIN_PX = 56
+const SWIPE_HORIZONTAL_RATIO = 1.5
+
+let swipeX: number | null = null
+let swipeY: number | null = null
+
+/**
+ * A swipe that starts inside something that scrolls sideways belongs to that
+ * thing. The tab strip itself is the common case — it is `overflow-x-auto`, so
+ * dragging it to see a hidden tab would otherwise also change the tab — and the
+ * catalogue's chip rows are the other. This is not a defect the Appearance
+ * version could show, because nothing in Appearance scrolls sideways; it is one
+ * the other two surfaces would have inherited the moment they got the gesture.
+ */
+function startsInsideASideScroller(target: EventTarget | null, root: EventTarget | null): boolean {
+    let node = target instanceof Element ? target : null
+    while (node && node !== root) {
+        if (node.scrollWidth > node.clientWidth + 1) return true
+        node = node.parentElement
+    }
+    return false
+}
+
+function onSwipeStart(event: PointerEvent): void {
+    if (startsInsideASideScroller(event.target, event.currentTarget)) {
+        onSwipeCancel()
+        return
+    }
+    swipeX = event.clientX
+    swipeY = event.clientY
+}
+
+/** A pointer that leaves the element, or is taken over by a scroll, is not a swipe. */
+function onSwipeCancel(): void {
+    swipeX = null
+    swipeY = null
+}
+
+function onSwipeEnd(event: PointerEvent): void {
+    if (swipeX === null || swipeY === null) return
+    const dx = event.clientX - swipeX
+    const dy = event.clientY - swipeY
+    onSwipeCancel()
+
+    // Short drags are taps with a shaky hand, and a mostly-vertical drag is
+    // someone scrolling the panel. Neither should move the selection.
+    if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * SWIPE_HORIZONTAL_RATIO) return
+
+    const order = views.value
+    const index = order.findIndex((view) => view.id === selected.value)
+    if (index === -1) return
+    // Clamped rather than wrapped: on the last view a further swipe left should
+    // feel like the end of the strip, not like jumping back to the first.
+    const next = order[dx < 0 ? Math.min(order.length - 1, index + 1) : Math.max(0, index - 1)]
+    if (next && next.id !== selected.value) emit('update:modelValue', next.id)
+}
 </script>
 
 <template>
@@ -85,10 +161,14 @@ function choose(value: unknown): void {
         :model-value="selected"
         :activation-mode="activation"
         @update:model-value="choose"
+        @pointerdown="onSwipeStart"
+        @pointerup="onSwipeEnd"
+        @pointercancel="onSwipeCancel"
     >
         <TabsList
             :aria-label="ariaLabel"
             class="relative flex w-full items-stretch gap-1 overflow-x-auto border-b border-[var(--talos-border)]"
+            :class="listClass"
         >
             <TabsTrigger
                 v-for="view in views"

@@ -71,4 +71,85 @@ describe('TalosThemedTabs', () => {
     it('gives every tab a target a finger can hit', () => {
         expect(mountTabs().get('[data-talos-tab="design"]').classes()).toContain('min-h-11')
     })
+
+    it('lets the screen place the strip without letting it redefine the strip', () => {
+        // Appearance pins its list while the panel scrolls. That is layout, and
+        // the screen owns layout — but only layout.
+        const wrapper = mountTabs({ listClass: 'sticky top-0 z-10' })
+        const list = wrapper.get('[role="tablist"]')
+        expect(list.classes()).toContain('sticky')
+        expect(list.classes()).toContain('overflow-x-auto')
+    })
+})
+
+/**
+ * Swipe left and right to step through the views — owner, 2026-07-24, "like
+ * ChatGPT tabs". It used to live in the Appearance panel and nowhere else; these
+ * pin it now that every registered surface inherits it.
+ */
+describe('TalosThemedTabs swipe', () => {
+    function swipe(
+        wrapper: ReturnType<typeof mountTabs>,
+        fromX: number,
+        toX: number,
+        toY = 100,
+        startOn?: Element,
+    ): Promise<void> {
+        const root = wrapper.element as HTMLElement
+        const down = (startOn ?? root) as HTMLElement
+        down.dispatchEvent(new MouseEvent('pointerdown', { clientX: fromX, clientY: 100, bubbles: true }))
+        root.dispatchEvent(new MouseEvent('pointerup', { clientX: toX, clientY: toY, bubbles: true }))
+        return wrapper.vm.$nextTick()
+    }
+
+    function lastChoice(wrapper: ReturnType<typeof mountTabs>): string | undefined {
+        return wrapper.emitted('update:modelValue')?.at(-1)?.[0] as string | undefined
+    }
+
+    it('steps forward on a swipe left and back on a swipe right, in the register\'s order', async () => {
+        const forward = mountTabs({ modelValue: 'design' })
+        await swipe(forward, 240, 110)
+        expect(lastChoice(forward)).toBe('motion')
+
+        const back = mountTabs({ modelValue: 'motion' })
+        await swipe(back, 110, 240)
+        expect(lastChoice(back)).toBe('design')
+    })
+
+    it('ignores a drag that is mostly vertical, because that is someone scrolling', async () => {
+        const wrapper = mountTabs({ modelValue: 'design' })
+        await swipe(wrapper, 110, 130, 420)
+        expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    })
+
+    it('ignores a drag too short to be a gesture', async () => {
+        const wrapper = mountTabs({ modelValue: 'design' })
+        await swipe(wrapper, 200, 160) // 40px, under the threshold
+        expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    })
+
+    it('stops at the ends instead of wrapping round', async () => {
+        // On the last view a further swipe should feel like the end of the
+        // strip, not like a jump back to the first.
+        const last = mountTabs({ modelValue: 'voice' })
+        await swipe(last, 240, 110)
+        expect(last.emitted('update:modelValue')).toBeUndefined()
+
+        const first = mountTabs({ modelValue: 'design' })
+        await swipe(first, 110, 240)
+        expect(first.emitted('update:modelValue')).toBeUndefined()
+    })
+
+    it('leaves the gesture to whatever the finger landed on, if that scrolls sideways', async () => {
+        // The tab strip is overflow-x-auto: dragging it to reach a tab that is
+        // off-screen must scroll it, not change the tab underneath. jsdom
+        // reports every element as unscrollable, so the overflow is staged.
+        const wrapper = mountTabs({ modelValue: 'design' })
+        const list = wrapper.get('[role="tablist"]').element
+        Object.defineProperty(list, 'scrollWidth', { value: 900, configurable: true })
+        Object.defineProperty(list, 'clientWidth', { value: 320, configurable: true })
+
+        await swipe(wrapper, 240, 110, 100, list)
+        expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    })
 })
