@@ -109,6 +109,39 @@ export function talosResearchSynthesisPrompt(
 /** The field's own name, handed back instead of a claim. Never a claim. */
 const PLACEHOLDER = /^[<\[(]?\s*(l['’]?\s*)?affermazione\s*(vera e propria)?\s*[>\])]?$/i
 
+/**
+ * R11 — a follow-up answered from what was already paid for.
+ *
+ * The same shape as the synthesis, because it must be checked the same way: a
+ * follow-up whose citations nobody verified would be the weak link in an
+ * otherwise verified dossier. What changes is the standing instruction — no
+ * search is happening, so the sources are all there will ever be, and the model
+ * is told to say so rather than fill the gap from memory.
+ *
+ * With everything already on disk this costs one model call and no network for
+ * the sources; on the device's own engine it costs nothing at all. Elsewhere a
+ * follow-up starts the whole research again.
+ */
+export function talosResearchFollowUpPrompt(
+    question: string,
+    collections: readonly TalosResearchCollection[],
+): { prompt: string, sources: readonly TalosResearchSource[] } {
+    const built = talosResearchSynthesisPrompt(question, collections)
+    return {
+        sources: built.sources,
+        prompt: [
+            'Queste sono le fonti già raccolte in una ricerca precedente.',
+            'NON è stata fatta nessuna ricerca nuova e non ce ne sarà: quello che',
+            'c’è qui sotto è tutto quello che esiste.',
+            '',
+            built.prompt,
+            '',
+            '- se queste fonti non rispondono alla domanda, scrivilo nella SINTESI',
+            '  invece di rispondere da quello che sai: qui si risponde solo con le fonti.',
+        ].join('\n'),
+    }
+}
+
 /** Whitespace and quote marks differ between a page and a model. Meaning does not. */
 function comparable(text: string): string {
     return text

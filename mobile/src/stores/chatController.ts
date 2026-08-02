@@ -859,6 +859,12 @@ export interface ChatController {
         list(): Promise<readonly import('@/lib/research/researchRun').TalosResearchRun[]>
         /** R-4 — the report read back as structure, verdicts included. Null when it will not parse. */
         report(fileId: string): Promise<import('@/lib/research/researchReport').TalosResearchReportRecord | null>
+        /** R11 — a further question, answered from the sources already paid for. */
+        followUp(runId: string, question: string): Promise<string | null>
+        /** R12 — are the sources still saying what they said? */
+        recheck(runId: string): Promise<import('@/lib/research/researchRecheck').TalosResearchRecheck>
+        /** R11 — the report as a Markdown file on the phone. */
+        exportReport(fileId: string, displayName: string): Promise<unknown>
     }
     memories: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalMemory[]>
@@ -3895,6 +3901,158 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     }
 
     /**
+     * Writes a report from sources already gathered, and checks every citation.
+     *
+     * One function for two jobs, because they are the same job. The synthesis at
+     * the end of a run and a follow-up question asked a week later differ only
+     * in the prompt: both read passages that are already on disk, both must come
+     * back as claims tied to those passages, and both must be checked by a model
+     * that did not write them. Written twice they would drift, and the half that
+     * drifted would be the one nobody looked at.
+     *
+     * Touches the network only to reach the models. No search, no page fetch:
+     * everything it reasons over was paid for once already.
+     */
+    async function researchCheckedReport(input: {
+        question: string
+        prompt: { prompt: string, sources: readonly import('@/lib/research/researchCollector').TalosResearchSource[] }
+        fileName: string
+    }): Promise<{ fileId: string | null, tokens: number, judge: string | null, claims: number }> {
+        const [
+            { providerAdapterFor },
+            { talosResearchParseSynthesis },
+            { talosResearchJudgePrompt, talosResearchPickJudge, talosResearchVerify },
+            { talosResearchReportDocument },
+        ] = await Promise.all([
+            import('@/lib/chat/providerRegistry'),
+            import('@/lib/research/researchSynthesis'),
+            import('@/lib/research/researchVerification'),
+            import('@/lib/research/researchReport'),
+        ])
+
+        /*
+         * R7 — the two models, and who picked them.
+         *
+         * The writer is whatever the user chose for the job; with no choice made
+         * it follows the composer, because that is what a person means by "the
+         * model I am using". A choice that has since disappeared STOPS the work
+         * rather than sliding onto something else: a report filed under a model
+         * nobody picked is a provenance lie, and provenance is the whole product
+         * here.
+         */
+        const chosenAuthor = await researchModelChoice(deps.settings.state.research_models.author)
+        if (deps.settings.state.research_models.author && !chosenAuthor) {
+            throw new Error('TALOS_RESEARCH_AUTHOR_UNAVAILABLE')
+        }
+        const authorProvider = chosenAuthor?.provider ?? selectedProfile.value?.provider ?? null
+        const model = chosenAuthor?.providerModel ?? selectedProviderModel.value
+        if (!authorProvider || !model) throw new Error('TALOS_RESEARCH_NO_MODEL')
+
+        const [apiKey, endpoint] = await Promise.all([
+            deps.getKey(authorProvider),
+            deps.getEndpoint(authorProvider),
+        ])
+        const completion = await providerAdapterFor(authorProvider).complete({
+            model,
+            turns: [{ role: 'user', content: input.prompt.prompt }],
+            system: 'Rispondi solo nel formato richiesto.',
+            effort: 'off',
+            thinking: false,
+        }, { apiKey, endpoint }, deps.transport)
+
+        const report = talosResearchParseSynthesis(completion.text, input.prompt.sources)
+
+        /*
+         * Refused rather than written empty.
+         *
+         * A model that answers outside the required format yields no claims, and
+         * a report with no claims is the thing this phase exists to make
+         * impossible: it would file "0 of 0 supported" in the Library and read
+         * like a verified answer with nothing in it. Caught on a real device
+         * with a 360M model chosen in the composer, which cannot hold a format
+         * across a forty-thousand-character prompt.
+         */
+        if (report.claims.length === 0) throw new Error('TALOS_RESEARCH_NO_CLAIMS')
+
+        /*
+         * R-4 — the report does not get to mark its own homework.
+         *
+         * The judge the user picked comes first in the queue, but goes through
+         * the same refusal as everyone else, so choosing the writer as its own
+         * checker cannot happen by picking it here either. A choice that no
+         * longer exists falls to the automatic order, and the report names
+         * whoever actually ruled — so the substitution is visible, not silent.
+         */
+        const author = { id: `${authorProvider}:${model.id}`, provider: authorProvider, model: model.id }
+        const preferred = await researchModelChoice(deps.settings.state.research_models.judge)
+        const chosen = talosResearchPickJudge(author, [
+            ...(preferred
+                ? [{
+                    id: `${preferred.provider}:${preferred.providerModel.displayName || preferred.providerModel.id}`,
+                    provider: preferred.provider,
+                    model: preferred.providerModel.id,
+                    providerModel: preferred.providerModel,
+                }]
+                : []),
+            ...await researchJudgeCandidates(authorProvider),
+        ])
+        let judgeTokens = 0
+        let judgeCredentials: { apiKey: string | null, endpoint: string | null } | null = null
+
+        const verified = await talosResearchVerify({
+            judge: chosen,
+            at: () => new Date().toISOString(),
+            ask: async (claimText, passage) => {
+                if (!chosen) throw new Error('TALOS_RESEARCH_NO_JUDGE')
+                judgeCredentials ??= {
+                    apiKey: await deps.getKey(chosen.provider),
+                    endpoint: await deps.getEndpoint(chosen.provider),
+                }
+                const verdict = await providerAdapterFor(chosen.provider).complete({
+                    model: chosen.providerModel,
+                    turns: [{ role: 'user', content: talosResearchJudgePrompt(claimText, passage) }],
+                    system: 'Rispondi con una riga sola, nel formato richiesto.',
+                    effort: 'off',
+                    thinking: false,
+                }, judgeCredentials, deps.transport)
+                judgeTokens += Number(verdict.usage?.completion_tokens ?? 0)
+                return verdict.text
+            },
+        }, report.claims, input.prompt.sources)
+
+        const saved = await vaultService.createGenerated({
+            name: input.fileName,
+            mediaType: 'text/markdown',
+            text: talosResearchReportDocument({
+                question: input.question,
+                summary: report.summary,
+                // The judge that was AVAILABLE, which is not the same as the one
+                // that ruled on any given claim: work whose citations all failed
+                // the mechanical check has no per-claim judge and still had one
+                // ready.
+                judge: chosen?.id ?? null,
+                claims: verified,
+                sources: input.prompt.sources,
+            }),
+            kind: 'document',
+        }, {
+            sessionId: chat.activeSession.value?.id ?? null,
+            // The model that ACTUALLY wrote it, which is the chosen one when
+            // there is a choice — not the composer's, which may be different.
+            model: model.id,
+            provider: authorProvider,
+            toolName: 'deep_research',
+        }).catch(() => null)
+
+        return {
+            fileId: saved?.file.id ?? null,
+            tokens: Number(completion.usage?.completion_tokens ?? 0) + judgeTokens,
+            judge: chosen?.id ?? null,
+            claims: verified.length,
+        }
+    }
+
+    /**
      * The research facade, lazy for the same reason every station is: a chat
      * that never opens Deep Research must not pay for its module.
      */
@@ -3934,16 +4092,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 synthesise: async (run) => {
                     const [
                         { talosResearchParseDossier },
-                        { talosResearchSynthesisPrompt, talosResearchParseSynthesis },
-                        { providerAdapterFor },
-                        { talosResearchJudgePrompt, talosResearchPickJudge, talosResearchVerify },
-                        { talosResearchReportDocument },
+                        { talosResearchSynthesisPrompt },
                     ] = await Promise.all([
                         import('@/lib/research/researchDossier'),
                         import('@/lib/research/researchSynthesis'),
-                        import('@/lib/chat/providerRegistry'),
-                        import('@/lib/research/researchVerification'),
-                        import('@/lib/research/researchReport'),
                     ])
 
                     const collections = []
@@ -3960,141 +4112,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     // exists to make impossible.
                     if (collections.length === 0) throw new Error('TALOS_RESEARCH_NO_DOSSIERS')
 
-                    /*
-                     * R7 — the two models, and who picked them.
-                     *
-                     * The writer is whatever the user chose for the job; with no
-                     * choice made it follows the composer, because that is what
-                     * a person means by "the model I am using". A choice that
-                     * has since disappeared STOPS the run rather than sliding
-                     * onto something else: a report filed under a model nobody
-                     * picked is a provenance lie, and provenance is the whole
-                     * product here.
-                     */
-                    const chosenAuthor = await researchModelChoice(deps.settings.state.research_models.author)
-                    if (deps.settings.state.research_models.author && !chosenAuthor) {
-                        throw new Error('TALOS_RESEARCH_AUTHOR_UNAVAILABLE')
-                    }
-                    const authorProvider = chosenAuthor?.provider ?? selectedProfile.value?.provider ?? null
-                    const model = chosenAuthor?.providerModel ?? selectedProviderModel.value
-                    if (!authorProvider || !model) throw new Error('TALOS_RESEARCH_NO_MODEL')
-
-                    const { prompt, sources } = talosResearchSynthesisPrompt(run.question, collections)
-                    const [apiKey, endpoint] = await Promise.all([
-                        deps.getKey(authorProvider),
-                        deps.getEndpoint(authorProvider),
-                    ])
-                    const completion = await providerAdapterFor(authorProvider).complete({
-                        model,
-                        turns: [{ role: 'user', content: prompt }],
-                        system: 'Rispondi solo nel formato richiesto.',
-                        effort: 'off',
-                        thinking: false,
-                    }, { apiKey, endpoint }, deps.transport)
-
-                    const report = talosResearchParseSynthesis(completion.text, sources)
-
-                    /*
-                     * Refused rather than written empty.
-                     *
-                     * A model that answers outside the required format yields no
-                     * claims, and a report with no claims is the thing this
-                     * phase exists to make impossible: it would file "0 of 0
-                     * supported" in the Library and read like a verified answer
-                     * with nothing in it. Caught on a real device with a 360M
-                     * model chosen in the composer, which cannot hold a format
-                     * across a forty-thousand-character prompt. The step fails
-                     * instead, the gathering stays paid for, and the retry
-                     * starts from the writing.
-                     */
-                    if (report.claims.length === 0) throw new Error('TALOS_RESEARCH_NO_CLAIMS')
-
-                    /*
-                     * R-4 — the report does not get to mark its own homework.
-                     *
-                     * Three levels: how the source was obtained (recorded when
-                     * it was read), whether the passage is really in the text we
-                     * kept, and whether that passage supports the claim. Only
-                     * the third costs anything, and it is also the only one the
-                     * field actually fails: on deep research agents, links
-                     * resolve above 94% of the time and factual support holds
-                     * between 39% and 77% (arXiv 2605.06635).
-                     *
-                     * The judge is never the author. A model reviewing its own
-                     * output is up to 50% more likely to pass a criterion it
-                     * failed (arXiv 2604.06996), so a self-issued mark is not a
-                     * weaker check — it is a false one.
-                     */
-                    const author = { id: `${authorProvider}:${model.id}`, provider: authorProvider, model: model.id }
-                    /*
-                     * The judge the user picked comes first in the queue — but
-                     * it still goes through the same refusal as everyone else,
-                     * so choosing the writer as its own checker cannot happen
-                     * by picking it here either. A choice that no longer exists
-                     * simply falls to the automatic order, and the report names
-                     * whoever actually ruled, so the substitution is visible
-                     * rather than silent.
-                     */
-                    const preferred = await researchModelChoice(deps.settings.state.research_models.judge)
-                    const chosen = talosResearchPickJudge(author, [
-                        ...(preferred
-                            ? [{
-                                id: `${preferred.provider}:${preferred.providerModel.displayName || preferred.providerModel.id}`,
-                                provider: preferred.provider,
-                                model: preferred.providerModel.id,
-                                providerModel: preferred.providerModel,
-                            }]
-                            : []),
-                        ...await researchJudgeCandidates(authorProvider),
-                    ])
-                    let judgeTokens = 0
-                    let judgeCredentials: { apiKey: string | null, endpoint: string | null } | null = null
-
-                    const verified = await talosResearchVerify({
-                        judge: chosen,
-                        at: () => new Date().toISOString(),
-                        ask: async (claimText, passage) => {
-                            if (!chosen) throw new Error('TALOS_RESEARCH_NO_JUDGE')
-                            judgeCredentials ??= {
-                                apiKey: await deps.getKey(chosen.provider),
-                                endpoint: await deps.getEndpoint(chosen.provider),
-                            }
-                            const verdict = await providerAdapterFor(chosen.provider).complete({
-                                model: chosen.providerModel,
-                                turns: [{ role: 'user', content: talosResearchJudgePrompt(claimText, passage) }],
-                                system: 'Rispondi con una riga sola, nel formato richiesto.',
-                                effort: 'off',
-                                thinking: false,
-                            }, judgeCredentials, deps.transport)
-                            judgeTokens += Number(verdict.usage?.completion_tokens ?? 0)
-                            return verdict.text
-                        },
-                    }, report.claims, sources)
-
-                    const saved = await vaultService.createGenerated({
-                        name: `${run.question} \u2014 rapporto.md`,
-                        mediaType: 'text/markdown',
-                        text: talosResearchReportDocument({
-                            question: run.question,
-                            summary: report.summary,
-                            // The judge that was AVAILABLE, which is not the same
-                            // as the one that ruled on any given claim: a run
-                            // whose citations all failed the mechanical check
-                            // has no per-claim judge and still had one ready.
-                            judge: chosen?.id ?? null,
-                            claims: verified,
-                            sources,
-                        }),
-                        kind: 'document',
-                    }, {
-                        sessionId: chat.activeSession.value?.id ?? null,
-                        // The model that ACTUALLY wrote it, which is the chosen
-                        // one when there is a choice — not the composer's, which
-                        // may be a different model entirely.
-                        model: model.id,
-                        provider: authorProvider,
-                        toolName: 'deep_research',
-                    }).catch(() => null)
+                    const written = await researchCheckedReport({
+                        question: run.question,
+                        prompt: talosResearchSynthesisPrompt(run.question, collections),
+                        fileName: `${run.question} — rapporto.md`,
+                    })
 
                     return {
                         spend: {
@@ -4103,9 +4125,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             // The verification is counted with the writing. It is
                             // work the user paid for, and a cost that does not
                             // appear is a cost nobody can decide about.
-                            tokens: Number(completion.usage?.completion_tokens ?? 0) + judgeTokens,
+                            tokens: written.tokens,
                         },
-                        resultRef: saved?.file.id ?? null,
+                        resultRef: written.fileId,
                     }
                 },
                 perform: async (branch) => {
@@ -4210,6 +4232,142 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * its verification record would look verified, which is the one
              * thing this phase must never do.
              */
+            /**
+             * R11 — a follow-up answered without going back to the web.
+             *
+             * The sources of that run are already on disk with their text, so
+             * the question is answered from what was paid for once. Every other
+             * product restarts the research, which costs again and — worse —
+             * can come back with a different set of sources, so the follow-up
+             * silently stops being about the same dossier.
+             *
+             * The answer is checked exactly like the report: same claim shape,
+             * same mechanical passage check, same judge who did not write it.
+             */
+            async followUp(runId: string, question: string) {
+                const [{ talosResearchParseDossier }, { talosResearchFollowUpPrompt }] = await Promise.all([
+                    import('@/lib/research/researchDossier'),
+                    import('@/lib/research/researchSynthesis'),
+                ])
+                const run = (await (await ready()).all()).find((entry) => entry.id === runId)
+                if (!run) throw new Error('TALOS_RESEARCH_RUN_UNKNOWN')
+
+                const collections = []
+                for (const step of run.steps) {
+                    if (step.kind !== 'search' || step.state !== 'done' || !step.resultRef) continue
+                    const file = await deps.chatRepository.getVaultFile(step.resultRef).catch(() => null)
+                    const parsed = file?.extracted_text ? talosResearchParseDossier(file.extracted_text) : null
+                    if (parsed) collections.push(parsed)
+                }
+                if (collections.length === 0) throw new Error('TALOS_RESEARCH_NO_DOSSIERS')
+
+                const written = await researchCheckedReport({
+                    question,
+                    prompt: talosResearchFollowUpPrompt(question, collections),
+                    fileName: `${question} — risposta.md`,
+                })
+                return written.fileId
+            },
+
+            /**
+             * R12 — asking whether the sources still say what they said.
+             *
+             * The one thing in this phase nobody else can do at any price. Over
+             * 75% of referenced web content changes within three years, and a
+             * product that stored only links can at most tell you a request
+             * succeeded — which a rewritten page and a soft 404 both do. We kept
+             * the text, so the real question is answerable, and the exact one is
+             * answerable too: are the sentences we quoted still on that page.
+             *
+             * The result is filed in the Library beside the report, because a
+             * check that leaves no trace has to be paid for again every time
+             * somebody wonders.
+             */
+            async recheck(runId: string) {
+                const [
+                    { talosResearchParseDossier },
+                    { talosResearchParseReport },
+                    { talosResearchRecheckReport },
+                    { readTalosPage },
+                ] = await Promise.all([
+                    import('@/lib/research/researchDossier'),
+                    import('@/lib/research/researchReport'),
+                    import('@/lib/research/researchRecheck'),
+                    import('@/services/webSearchRuntime'),
+                ])
+
+                const run = (await (await ready()).all()).find((entry) => entry.id === runId)
+                if (!run) throw new Error('TALOS_RESEARCH_RUN_UNKNOWN')
+
+                const reportRef = run.steps.find((step) => step.kind === 'synthesise' && step.state === 'done')?.resultRef
+                const reportFile = reportRef ? await deps.chatRepository.getVaultFile(reportRef).catch(() => null) : null
+                const report = reportFile?.extracted_text ? talosResearchParseReport(reportFile.extracted_text) : null
+                if (!report) throw new Error('TALOS_RESEARCH_NO_REPORT')
+
+                // The kept text lives in the dossiers, not in the report: the
+                // report carries the passages it cited, the dossiers carry
+                // everything that was read.
+                const kept = new Map<string, string>()
+                for (const step of run.steps) {
+                    if (step.kind !== 'search' || step.state !== 'done' || !step.resultRef) continue
+                    const file = await deps.chatRepository.getVaultFile(step.resultRef).catch(() => null)
+                    const parsed = file?.extracted_text ? talosResearchParseDossier(file.extracted_text) : null
+                    for (const source of parsed?.sources ?? []) kept.set(source.url, source.text)
+                }
+
+                // Held like any other long job: this is N network requests on a
+                // phone, and a screen that goes off mid-way must not take the
+                // work with it.
+                const { createTalosRunKeeper } = await import('@/services/longRunKeeper')
+                const keeper = createTalosRunKeeper(run.question)
+                try {
+                    keeper.engage(`ricontrollo · ${run.question}`)
+                    const recheck = await talosResearchRecheckReport({
+                        read: (url) => readTalosPage(url),
+                        at: () => new Date().toISOString(),
+                    }, report, kept)
+
+                    const { talosResearchRecheckDocument } = await import('@/lib/research/researchRecheckDocument')
+                    await vaultService.createGenerated({
+                        name: `${run.question} — ricontrollo.md`,
+                        mediaType: 'text/markdown',
+                        text: talosResearchRecheckDocument(run.question, recheck),
+                        kind: 'document',
+                    }, {
+                        sessionId: chat.activeSession.value?.id ?? null,
+                        // Nothing here is a model's opinion: the pages were read
+                        // and compared. Saying null is the honest answer.
+                        model: null,
+                        provider: null,
+                        toolName: 'deep_research',
+                    }).catch(() => null)
+
+                    return recheck
+                } finally {
+                    keeper.release()
+                }
+            },
+
+            /**
+             * The report as a file on the phone. Markdown, generated here.
+             *
+             * PDF and DOCX wait for F2 and are not pretended at: an export that
+             * silently hands over a differently-shaped file is worse than one
+             * that says what it is.
+             */
+            async exportReport(fileId: string, displayName: string) {
+                const [file, { saveTalosVaultFileToDevice }] = await Promise.all([
+                    deps.chatRepository.getVaultFile(fileId),
+                    import('@/services/saveVaultFileToDevice'),
+                ])
+                if (!file?.extracted_text) throw new Error('TALOS_RESEARCH_NO_REPORT')
+                return saveTalosVaultFileToDevice({
+                    displayName,
+                    mediaType: 'text/markdown',
+                    bytes: new TextEncoder().encode(file.extracted_text),
+                })
+            },
+
             async report(fileId: string) {
                 const [file, { talosResearchParseReport }] = await Promise.all([
                     deps.chatRepository.getVaultFile(fileId).catch(() => null),
