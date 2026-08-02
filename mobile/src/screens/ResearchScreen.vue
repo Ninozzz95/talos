@@ -14,12 +14,21 @@
  * row on disk.
  */
 import { computed, onMounted, ref } from 'vue'
-import { FileSearch, Play, RotateCcw } from '@lucide/vue'
+import { FileSearch, Play, Plus, RotateCcw, Trash2 } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import { useChatController } from '@/stores/chatController'
-import type { TalosResearchRun } from '@/lib/research/researchRun'
+import type { TalosResearchBranch, TalosResearchDepth, TalosResearchRun } from '@/lib/research/researchRun'
+import {
+    TALOS_RESEARCH_DEPTHS,
+    talosResearchPlanCost,
+    talosResearchPlanFor,
+    talosResearchPlanReworded,
+    talosResearchPlanTotals,
+    talosResearchPlanWith,
+    talosResearchPlanWithout,
+} from '@/lib/research/researchPlan'
 
 const controller = useChatController()
 const { t } = useTalosI18n()
@@ -29,7 +38,45 @@ const runs = ref<readonly TalosResearchRun[]>([])
 const busy = ref(false)
 const error = ref<string | null>(null)
 
-const canStart = computed(() => question.value.trim().length > 0 && !busy.value)
+const depth = ref<TalosResearchDepth>('quick')
+const plan = ref<readonly TalosResearchBranch[]>([])
+const addition = ref('')
+
+const totals = computed(() => talosResearchPlanTotals(plan.value))
+/**
+ * No price is passed yet, and that is the honest state rather than a gap
+ * papered over: OpenRouter publishes per-token rates we may read, the other
+ * providers publish nothing machine-readable, and neither is wired here. So
+ * the panel shows the WORK and says the money is not knowable — which is what
+ * `talosResearchPlanCost` answers when it is given nothing.
+ */
+const cost = computed(() => talosResearchPlanCost(totals.value, null))
+
+const canStart = computed(() => plan.value.length > 0 && !busy.value)
+
+function propose(): void {
+    if (question.value.trim().length === 0) return
+    plan.value = talosResearchPlanFor(question.value, depth.value)
+}
+
+function chooseDepth(next: TalosResearchDepth): void {
+    depth.value = next
+    if (plan.value.length > 0) propose()
+}
+
+function dropBranch(branchId: string): void {
+    plan.value = talosResearchPlanWithout(plan.value, branchId)
+}
+
+function addBranch(): void {
+    if (addition.value.trim().length === 0) return
+    plan.value = talosResearchPlanWith(plan.value, addition.value, depth.value)
+    addition.value = ''
+}
+
+function reword(branchId: string, text: string): void {
+    plan.value = talosResearchPlanReworded(plan.value, branchId, text)
+}
 
 /** Runs whose journal still owes work — the ones a kill left behind. */
 const unfinished = ref<readonly TalosResearchRun[]>([])
@@ -53,10 +100,18 @@ async function start(): Promise<void> {
         // The progress callback repaints WHILE the run is going, so the steps
         // are visibly landing one at a time instead of appearing all at once at
         // the end — which is what would happen if this only refreshed after.
-        await controller.research.start(question.value.trim(), (progress) => {
+        await controller.research.start({
+            question: question.value.trim(),
+            depth: depth.value,
+            // The plan that RAN is the one the user approved, edits included.
+            // Handing the runtime a fresh default here would quietly discard
+            // everything they just changed, which is the whole of R-2.
+            branches: plan.value,
+        }, (progress) => {
             runs.value = [progress.run, ...runs.value.filter((run) => run.id !== progress.run.id)]
         })
         question.value = ''
+        plan.value = []
     } catch (failure) {
         error.value = failure instanceof Error ? failure.message : String(failure)
     } finally {
@@ -104,7 +159,83 @@ function doneCount(run: TalosResearchRun): number {
                     :aria-label="t('research.questionPlaceholder')"
                     class="min-h-11 flex-1 rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 >
-                <Button data-testid="talos-research-start" :disabled="!canStart" @click="start()">
+                <Button data-testid="talos-research-propose" variant="outline" @click="propose()">
+                    {{ t('research.propose') }}
+                </Button>
+            </div>
+
+            <!-- The three levels are defaults, not cages: whatever they open,
+                 the plan below stays editable. -->
+            <div class="flex flex-wrap gap-2">
+                <Button
+                    v-for="profile in Object.values(TALOS_RESEARCH_DEPTHS)"
+                    :key="profile.depth"
+                    :data-testid="`talos-research-depth-${profile.depth}`"
+                    :variant="depth === profile.depth ? 'default' : 'outline'"
+                    @click="chooseDepth(profile.depth)"
+                >
+                    {{ t(`research.depth.${profile.depth}`) }}
+                    <span class="font-mono text-2xs opacity-70">{{ profile.sources }} / {{ profile.minutes }}m</span>
+                </Button>
+            </div>
+
+            <div
+                v-if="plan.length > 0"
+                data-testid="talos-research-plan"
+                class="space-y-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-3"
+            >
+                <p class="text-xs uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.planTitle') }}</p>
+
+                <div v-for="branch in plan" :key="branch.id" class="flex items-center gap-2">
+                    <input
+                        :value="branch.question"
+                        type="text"
+                        :aria-label="t('research.branchLabel')"
+                        class="min-h-11 flex-1 rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                        @change="reword(branch.id, ($event.target as HTMLInputElement).value)"
+                    >
+                    <span class="font-mono text-2xs text-[var(--talos-muted)]">{{ branch.estimate.pages }}p</span>
+                    <Button variant="ghost" :aria-label="t('research.removeBranch')" @click="dropBranch(branch.id)">
+                        <Trash2 class="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <input
+                        v-model="addition"
+                        type="text"
+                        data-testid="talos-research-add"
+                        :placeholder="t('research.addBranch')"
+                        :aria-label="t('research.addBranch')"
+                        class="min-h-11 flex-1 rounded-lg border border-dashed border-[var(--talos-border)] bg-transparent px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                        @keyup.enter="addBranch()"
+                    >
+                    <Button variant="ghost" :aria-label="t('research.addBranch')" @click="addBranch()">
+                        <Plus class="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                </div>
+
+                <!-- The work is always stated. The money only when a published
+                     price was obtained - see `talosResearchPlanCost`. -->
+                <p data-testid="talos-research-totals" class="font-mono text-2xs text-[var(--talos-muted)]">
+                    {{ t('research.totals', {
+                        branches: totals.branches,
+                        searches: totals.searches,
+                        pages: totals.pages,
+                        minutes: totals.minutes,
+                        tokens: totals.tokens,
+                    }) }}
+                </p>
+                <p data-testid="talos-research-cost" class="font-mono text-2xs text-[var(--talos-muted)]">
+                    <template v-if="cost.known">
+                        {{ t('research.costKnown', { amount: cost.amount.toFixed(2), currency: cost.currency }) }}
+                    </template>
+                    <template v-else>
+                        {{ t('research.costUnknown') }}
+                    </template>
+                </p>
+
+                <Button data-testid="talos-research-start" :disabled="!canStart" class="w-full" @click="start()">
                     <Play class="h-4 w-4" aria-hidden="true" />
                     {{ t('research.start') }}
                 </Button>
