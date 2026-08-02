@@ -545,6 +545,21 @@ export function createTalosToolAuthorizationCoordinator(deps: {
                 const target = owner.checkpoint.requests.find(
                     (request) => request.id === requestId,
                 )!
+                /**
+                 * Which other pending requests this decision also answers.
+                 *
+                 * Owner 2026-08-02, on the device: "ho premuto consenti sempre
+                 * ma il pop-up non si è levato immediatamente, ho dovuto
+                 * insistere". This is why. "Always allow" recorded the grant and
+                 * then settled ONE request — the one on screen — while its
+                 * siblings for the same tool stayed pending, so the sheet came
+                 * straight back and asked a question that had just been answered.
+                 *
+                 * Only siblings the grant actually covers: a request needing an
+                 * action the grant does not carry is a different question and
+                 * still has to be asked.
+                 */
+                let alsoAnswered: (request: typeof target) => boolean = (request) => request.id === requestId
                 if (decision === 'always_allow') {
                     if (!target.allow_persistent) return
                     if (!isTalosAgentToolId(target.tool)) {
@@ -557,12 +572,18 @@ export function createTalosToolAuthorizationCoordinator(deps: {
                     if (!grant || !target.actions.every((action) => grant.actions.includes(action))) {
                         throw new Error('TALOS_TOOL_AUTHORIZATION_GRANT_NOT_PERSISTED')
                     }
+                    alsoAnswered = (request) => request.id === requestId || (
+                        request.decision === 'pending'
+                        && request.tool === target.tool
+                        && request.allow_persistent
+                        && request.actions.every((action) => grant.actions.includes(action))
+                    )
                 }
                 const decidedAt = now()
                 const checkpoint = parseTalosToolAuthorizationCheckpoint({
                     ...owner.checkpoint,
                     requests: owner.checkpoint.requests.map((request) =>
-                        request.id === requestId
+                        alsoAnswered(request)
                             ? { ...request, decision, decided_at: decidedAt }
                             : request),
                     updated_at: decidedAt,
