@@ -4,6 +4,7 @@ import { useTalosI18n } from '@/i18n'
 import { RotateCcw } from '@lucide/vue'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
+import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 import TalosMobileVoiceSettings from '@/components/talos/settings/TalosMobileVoiceSettings.vue'
 import {
     TALOS_THEME_MODE_OPTIONS,
@@ -97,8 +98,7 @@ function setInterfaceSelect(key: 'profile' | 'easing', value: string): void {
     void settings.setMotionPreferences({ interface: { [key]: value } } as TalosMotionPreferencePatch)
 }
 
-function setMotionBoolean(key: 'background_enabled' | 'interface_enabled' | 'pause_when_hidden' | 'respect_data_saver', event: Event): void {
-    const checked = (event.target as HTMLInputElement).checked
+function setMotionBoolean(key: 'background_enabled' | 'interface_enabled' | 'pause_when_hidden' | 'respect_data_saver', checked: boolean): void {
     const patch: TalosMotionPreferencePatch = { [key]: checked }
     // T6.5: enabling the background while the renderer mode is 'off' would be
     // a silent no-op — promote to 'simple' so the switch does what it says.
@@ -119,8 +119,8 @@ function setInterfaceNumber(key: 'duration_scale' | 'intensity' | 'stagger', eve
     void settings.setMotionPreferences({ interface: { [key]: Number((event.target as HTMLInputElement).value) } })
 }
 
-function setInterfaceCategory(key: keyof typeof settings.state.motion_v6.interface.categories, event: Event): void {
-    void settings.setMotionPreferences({ interface: { categories: { [key]: (event.target as HTMLInputElement).checked } } })
+function setInterfaceCategory(key: keyof typeof settings.state.motion_v6.interface.categories, checked: boolean): void {
+    void settings.setMotionPreferences({ interface: { categories: { [key]: checked } } })
 }
 
 const streamingAnimations = computed(() => [
@@ -375,14 +375,14 @@ function onSwipeEnd(event: PointerEvent): void {
                 </label>
             </div>
 
-            <label :class="switchRowClass">
+            <div :class="switchRowClass">
                 <span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.backgroundMotion') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.backgroundMotionBody') }}</span></span>
-                <input type="checkbox" role="switch" :aria-label="t('appearance.backgroundMotion')" :checked="settings.state.motion_v6.background_enabled && settings.state.motion_v6.mode !== 'off'" class="mt-1 h-5 w-9 accent-[var(--talos-accent)]" @change="setMotionBoolean('background_enabled', $event)">
-            </label>
-            <label :class="switchRowClass">
+                <TalosThemedSwitch class="mt-1" :aria-label="t('appearance.backgroundMotion')" :model-value="settings.state.motion_v6.background_enabled && settings.state.motion_v6.mode !== 'off'" @update:model-value="setMotionBoolean('background_enabled', $event)" @click.stop />
+            </div>
+            <div :class="switchRowClass">
                 <span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.interfaceMotion') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.interfaceMotionBody') }}</span></span>
-                <input type="checkbox" role="switch" :aria-label="t('appearance.interfaceMotion')" :checked="settings.state.motion_v6.interface_enabled" class="mt-1 h-5 w-9 accent-[var(--talos-accent)]" @change="setMotionBoolean('interface_enabled', $event)">
-            </label>
+                <TalosThemedSwitch class="mt-1" :aria-label="t('appearance.interfaceMotion')" :model-value="settings.state.motion_v6.interface_enabled" @update:model-value="setMotionBoolean('interface_enabled', $event)" @click.stop />
+            </div>
 
             <div class="grid gap-4 sm:grid-cols-2">
                 <label v-for="control in motionControls" :key="control.key" class="block">
@@ -405,15 +405,15 @@ function onSwipeEnd(event: PointerEvent): void {
             <fieldset class="border-t border-[var(--talos-border)] pt-3">
                 <legend class="text-xs font-semibold uppercase text-[var(--talos-muted)]">{{ t('appearance.interfaceCategories') }}</legend>
                 <div class="mt-2 grid gap-2 sm:grid-cols-2">
-                    <label v-for="key in interfaceCategories" :key="key" class="flex min-h-11 items-center justify-between gap-3 border-b border-[var(--talos-border)] px-1 text-sm capitalize text-[var(--talos-text)]">
+                    <div v-for="key in interfaceCategories" :key="key" class="flex min-h-11 items-center justify-between gap-3 border-b border-[var(--talos-border)] px-1 text-sm capitalize text-[var(--talos-text)]">
                         {{ t(`appearance.categories.${key}`) }}
-                        <input type="checkbox" role="switch" :aria-label="t('appearance.categoryMotion', { category: t(`appearance.categories.${key}`) })" :checked="settings.state.motion_v6.interface.categories[key]" class="h-5 w-9 accent-[var(--talos-accent)]" @change="setInterfaceCategory(key, $event)">
-                    </label>
+                        <TalosThemedSwitch class="mt-1" :aria-label="t('appearance.categoryMotion', { category: t(`appearance.categories.${key}`) })" :model-value="settings.state.motion_v6.interface.categories[key]" @update:model-value="setInterfaceCategory(key, $event)" @click.stop />
+                    </div>
                 </div>
             </fieldset>
 
-            <label :class="switchRowClass"><span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.pauseWhenHidden') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.pauseWhenHiddenBody') }}</span></span><input type="checkbox" role="switch" :aria-label="t('appearance.pauseWhenHiddenAria')" :checked="settings.state.motion_v6.pause_when_hidden" class="mt-1 h-5 w-9 accent-[var(--talos-accent)]" @change="setMotionBoolean('pause_when_hidden', $event)"></label>
-            <label :class="switchRowClass"><span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.respectDataSaver') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.respectDataSaverBody') }}</span></span><input type="checkbox" role="switch" :aria-label="t('appearance.respectDataSaver')" :checked="settings.state.motion_v6.respect_data_saver" class="mt-1 h-5 w-9 accent-[var(--talos-accent)]" @change="setMotionBoolean('respect_data_saver', $event)"></label>
+            <div :class="switchRowClass"><span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.pauseWhenHidden') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.pauseWhenHiddenBody') }}</span></span><TalosThemedSwitch class="mt-1" :aria-label="t('appearance.pauseWhenHiddenAria')" :model-value="settings.state.motion_v6.pause_when_hidden" @update:model-value="setMotionBoolean('pause_when_hidden', $event)" @click.stop /></div>
+            <div :class="switchRowClass"><span><span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.respectDataSaver') }}</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">{{ t('appearance.respectDataSaverBody') }}</span></span><TalosThemedSwitch class="mt-1" :aria-label="t('appearance.respectDataSaver')" :model-value="settings.state.motion_v6.respect_data_saver" @update:model-value="setMotionBoolean('respect_data_saver', $event)" @click.stop /></div>
         </TabsContent>
 
         <TabsContent

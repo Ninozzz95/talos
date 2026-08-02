@@ -10,6 +10,7 @@ vi.mock('@/stores/chatController', () => ({ useChatController: () => mockState.c
 
 import { __resetSettingsStoreForTests, useSettingsStore } from '@/stores/settings'
 import ResearchScreen from '@/screens/ResearchScreen.vue'
+import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 
 const NOTHING = { searches: 0, pages: 0, tokens: 0 }
 
@@ -132,6 +133,30 @@ function controllerWith(report: TalosResearchReportRecord | null) {
             exportReport: vi.fn().mockResolvedValue({ ok: true }),
         },
     }
+}
+
+/**
+ * The two model pickers are the shared TalosThemedSelect, not a native <select>,
+ * so the test drives them the way a user does — through the component's own
+ * contract — instead of setting a value on an element that no longer exists.
+ *
+ * The empty choice is not an item: it is the picker's `noneLabel` row, and the
+ * value it emits is ''. `offered` puts it back at the head of the list so the
+ * expectations still read as the list the user actually sees.
+ */
+function picker(wrapper: ReturnType<typeof mount>, testid: string) {
+    return wrapper.getComponent<typeof TalosThemedSelect>(`[data-testid="${testid}"]`)
+}
+
+function offered(wrapper: ReturnType<typeof mount>, testid: string): string[] {
+    const found = picker(wrapper, testid)
+    const items = found.props('items').map((item) => item.value)
+    return found.props('noneLabel') === undefined ? items : ['', ...items]
+}
+
+async function choose(wrapper: ReturnType<typeof mount>, testid: string, value: string): Promise<void> {
+    picker(wrapper, testid).vm.$emit('update:modelValue', value)
+    await settle(wrapper)
 }
 
 async function settle(wrapper: { vm: { $nextTick: () => Promise<void> } }): Promise<void> {
@@ -279,9 +304,8 @@ describe('R7 — the two models are the user’s choice', () => {
         const wrapper = mount(ResearchScreen)
         await settle(wrapper)
 
-        const author = wrapper.get<HTMLSelectElement>('[data-testid="talos-research-author"]')
-        expect(author.element.value).toBe('')
-        expect(author.findAll('option').map((option) => option.attributes('value'))).toEqual([
+        expect(picker(wrapper, 'talos-research-author').props('modelValue')).toBe('')
+        expect(offered(wrapper, 'talos-research-author')).toEqual([
             '', 'deepseek:deepseek-v4-flash', 'deepseek:deepseek-v4-pro', 'local:/storage/qwen.gguf',
         ])
     })
@@ -297,11 +321,9 @@ describe('R7 — the two models are the user’s choice', () => {
         const wrapper = mount(ResearchScreen)
         await settle(wrapper)
 
-        await wrapper.get('[data-testid="talos-research-author"]').setValue('deepseek:deepseek-v4-flash')
-        await settle(wrapper)
+        await choose(wrapper, 'talos-research-author', 'deepseek:deepseek-v4-flash')
 
-        const judge = wrapper.get('[data-testid="talos-research-judge-choice"]')
-        expect(judge.findAll('option').map((option) => option.attributes('value'))).toEqual([
+        expect(offered(wrapper, 'talos-research-judge-choice')).toEqual([
             '', 'deepseek:deepseek-v4-pro', 'local:/storage/qwen.gguf',
         ])
     })
@@ -310,12 +332,10 @@ describe('R7 — the two models are the user’s choice', () => {
         const wrapper = mount(ResearchScreen)
         await settle(wrapper)
 
-        await wrapper.get('[data-testid="talos-research-judge-choice"]').setValue('deepseek:deepseek-v4-pro')
-        await settle(wrapper)
+        await choose(wrapper, 'talos-research-judge-choice', 'deepseek:deepseek-v4-pro')
         expect(useSettingsStore().state.research_models.judge).toBe('deepseek:deepseek-v4-pro')
 
-        await wrapper.get('[data-testid="talos-research-author"]').setValue('deepseek:deepseek-v4-pro')
-        await settle(wrapper)
+        await choose(wrapper, 'talos-research-author', 'deepseek:deepseek-v4-pro')
 
         // Back to automatic rather than left pointing at the writer.
         expect(useSettingsStore().state.research_models.judge).toBeNull()
@@ -325,19 +345,16 @@ describe('R7 — the two models are the user’s choice', () => {
         const wrapper = mount(ResearchScreen)
         await settle(wrapper)
 
-        await wrapper.get('[data-testid="talos-research-author"]').setValue('deepseek:deepseek-v4-flash')
-        await settle(wrapper)
+        await choose(wrapper, 'talos-research-author', 'deepseek:deepseek-v4-flash')
         expect(wrapper.find('[data-testid="talos-research-same-house"]').exists()).toBe(false)
 
-        await wrapper.get('[data-testid="talos-research-judge-choice"]').setValue('deepseek:deepseek-v4-pro')
-        await settle(wrapper)
+        await choose(wrapper, 'talos-research-judge-choice', 'deepseek:deepseek-v4-pro')
 
         // Stated, not forbidden: self-preference reaches a model's family, but
         // whether that matters here is the user's call to make knowingly.
         expect(wrapper.get('[data-testid="talos-research-same-house"]').text()).toContain('same house')
 
-        await wrapper.get('[data-testid="talos-research-judge-choice"]').setValue('local:/storage/qwen.gguf')
-        await settle(wrapper)
+        await choose(wrapper, 'talos-research-judge-choice', 'local:/storage/qwen.gguf')
         expect(wrapper.find('[data-testid="talos-research-same-house"]').exists()).toBe(false)
     })
 })

@@ -159,10 +159,10 @@ describe('TalosMobileSettingsAppearancePanel', () => {
         wrapper.findAllComponents({ name: 'TalosThemedSelect' })
             .find((select) => select.props('ariaLabel') === 'Motion renderer mode')
             ?.vm.$emit('update:modelValue', 'complex')
-        await wrapper.get('[aria-label="Background motion"]').setValue(false)
-        await wrapper.get('[aria-label="Interface motion"]').setValue(false)
+        await tapSwitch(wrapper, 'Background motion')
+        await tapSwitch(wrapper, 'Interface motion')
         await wrapper.get('[aria-label="Background speed"]').setValue('150')
-        await wrapper.get('[aria-label="Pause motion when hidden"]').setValue(false)
+        await tapSwitch(wrapper, 'Pause motion when hidden')
 
         expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ mode: 'complex' })
         expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ background_enabled: false })
@@ -171,6 +171,20 @@ describe('TalosMobileSettingsAppearancePanel', () => {
         expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ pause_when_hidden: false })
     })
 })
+
+/**
+ * The motion switches are the shared TalosThemedSwitch since 2026-08-02, so they
+ * are buttons carrying role="switch" and aria-checked — not native checkboxes.
+ * Reading `.checked` on them returns undefined and setting it does nothing, so
+ * the tests below read the announced state and tap the control instead.
+ */
+function switchState(wrapper: ReturnType<typeof mount>, label: string): string | undefined {
+    return wrapper.get(`[role="switch"][aria-label="${label}"]`).attributes('aria-checked')
+}
+
+async function tapSwitch(wrapper: ReturnType<typeof mount>, label: string): Promise<void> {
+    await wrapper.get(`[role="switch"][aria-label="${label}"]`).trigger('click')
+}
 
 describe('background motion toggle promotion (T6.5)', () => {
     it('shows OFF for the device-defect state (enabled flag but mode off) and promotes on tap', async () => {
@@ -183,10 +197,9 @@ describe('background motion toggle promotion (T6.5)', () => {
             global: { stubs: { TalosThemedSelect: true } },
         })
         await activateTab(wrapper, 'Motion')
-        const toggle = wrapper.get('[role="switch"][aria-label="Background motion"]')
-        expect((toggle.element as HTMLInputElement).checked).toBe(false)
-        ;(toggle.element as HTMLInputElement).checked = true
-        await toggle.trigger('change')
+        // Announced OFF even though the flag is set, because the renderer is off.
+        expect(switchState(wrapper, 'Background motion')).toBe('false')
+        await tapSwitch(wrapper, 'Background motion')
         expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({
             background_enabled: true,
             mode: 'simple',
@@ -202,9 +215,8 @@ describe('background motion toggle promotion (T6.5)', () => {
             global: { stubs: { TalosThemedSelect: true } },
         })
         await activateTab(wrapper, 'Motion')
-        const toggle = wrapper.get('[role="switch"][aria-label="Background motion"]')
-        ;(toggle.element as HTMLInputElement).checked = false
-        await toggle.trigger('change')
+        expect(switchState(wrapper, 'Background motion')).toBe('true')
+        await tapSwitch(wrapper, 'Background motion')
         expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ background_enabled: false })
         wrapper.unmount()
     })

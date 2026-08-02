@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 import { ShieldCheck } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { useSettingsStore } from '@/stores/settings'
+import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
+import type { TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
 import {
     TALOS_AGENT_TOOL_CONTROLS,
     type TalosAgentToolGroup,
@@ -23,6 +25,19 @@ const groups = computed(() => groupOrder.map((id) => ({
 const enabledCount = computed(() => TALOS_AGENT_TOOL_CONTROLS.filter(
     (tool) => settings.state.agent_tools[tool.id],
 ).length)
+// Moved here from AI defaults on 2026-08-02, owner-approved: how far the
+// model may go without asking is the frame around WHICH tools it may use,
+// so it belongs above the list rather than at the foot of another screen.
+const toolChoices = computed<TalosThemedSelectItem[]>(() => [
+    { value: 'allow', label: t('agentTools.alwaysAllow') },
+    { value: 'ask', label: t('agentTools.askEveryTime') },
+    { value: 'deny', label: t('agentTools.neverAllow') },
+])
+
+function setToolPermission(action: 'read' | 'write' | 'outbound', value: string): void {
+    void settings.setToolPermissions({ [action]: value as 'allow' | 'ask' | 'deny' })
+}
+
 const savingTool = ref<TalosAgentToolId | null>(null)
 const revokingTool = ref<TalosAgentToolId | null>(null)
 const saveError = ref<string | null>(null)
@@ -86,6 +101,54 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
                 <p class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]">{{ t('agentTools.policyNote') }}</p>
             </div>
         </div>
+
+        <!-- Owner 2026-07-25: what the model may do on its own. Moved out of AI
+             defaults 2026-08-02: trust first, then the eighteen capacities. -->
+        <section data-testid="talos-tool-permissions">
+            <h3 class="text-sm font-semibold text-[var(--talos-text)]">{{ t('agentTools.autonomousTitle') }}</h3>
+            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
+                {{ t('agentTools.autonomousBody') }}
+            </p>
+
+            <label class="mt-3 block">
+                <span class="block text-xs font-medium text-[var(--talos-muted)]">{{ t('agentTools.readThings') }}</span>
+                <TalosThemedSelect
+                    class="mt-1"
+                    data-testid="talos-tool-permission-read"
+                    :model-value="settings.state.tools.read"
+                    :items="toolChoices"
+                    :aria-label="t('agentTools.readPermission')"
+                    @update:model-value="setToolPermission('read', $event)"
+                />
+            </label>
+
+            <label class="mt-3 block">
+                <span class="block text-xs font-medium text-[var(--talos-muted)]">{{ t('agentTools.writeThings') }}</span>
+                <TalosThemedSelect
+                    class="mt-1"
+                    data-testid="talos-tool-permission-write"
+                    :model-value="settings.state.tools.write"
+                    :items="toolChoices"
+                    :aria-label="t('agentTools.writePermission')"
+                    @update:model-value="setToolPermission('write', $event)"
+                />
+            </label>
+
+            <label class="mt-3 block">
+                <span class="block text-xs font-medium text-[var(--talos-muted)]">{{ t('agentTools.outboundThings') }}</span>
+                <TalosThemedSelect
+                    class="mt-1"
+                    data-testid="talos-tool-permission-outbound"
+                    :model-value="settings.state.tools.outbound"
+                    :items="toolChoices"
+                    :aria-label="t('agentTools.outboundPermission')"
+                    @update:model-value="setToolPermission('outbound', $event)"
+                />
+                <span class="mt-1 block text-2xs leading-4 text-[var(--talos-muted)]">
+                    {{ t('agentTools.outboundBody') }}
+                </span>
+            </label>
+        </section>
 
         <p class="text-xs font-medium text-[var(--talos-text)]" aria-live="polite">
             {{ t('agentTools.enabledCount', { enabled: enabledCount, total: TALOS_AGENT_TOOL_CONTROLS.length }) }}
