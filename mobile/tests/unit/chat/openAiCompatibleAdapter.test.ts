@@ -31,7 +31,7 @@ describe('OpenAI-compatible mobile adapters', () => {
             status: 200,
             data: { model: 'gpt-vision', choices: [{ message: { content: 'seen' }, finish_reason: 'stop' }] },
         })
-        await openAiAdapter.complete({
+        await deepSeekAdapter.complete({
             model: {
                 id: 'gpt-vision', provider: 'openai', displayName: 'Vision',
                 chatCompatibility: 'supported', inputModalities: ['text', 'image'],
@@ -131,7 +131,7 @@ describe('OpenAI-compatible mobile adapters', () => {
             timeoutMs: 45_000,
         }
         const catalog = await openAiAdapter.listModels(credential, transport)
-        await openAiAdapter.complete({
+        await deepSeekAdapter.complete({
             model: catalog.models[0]!,
             turns: [{ role: 'user', content: 'Reply exactly TALOS_PROBE_OK' }],
             effort: 'off',
@@ -288,5 +288,65 @@ describe('OpenAI-compatible mobile adapters', () => {
         const failure = openAiAdapter.listModels({ apiKey: 'sentinel-secret' }, transport)
         await expect(failure).rejects.toMatchObject({ provider: 'openai', operation: 'list_models', status: 401 })
         await expect(failure).rejects.not.toThrow(/sentinel-secret/)
+    })
+})
+
+describe('l endpoint, per provider', () => {
+    /**
+     * Owner 2026-08-03: su `/v1/chat/completions` i modelli OpenAI nuovi
+     * rifiutano tool e ragionamento insieme, e TALOS offre i tool a ogni
+     * messaggio. La deviazione e' per il SOLO OpenAI, e questo test esiste
+     * perche' il modo piu' facile di rompere tre provider e' correggerne uno.
+     */
+    function transportFor(data: unknown) {
+        const request = vi.fn().mockResolvedValue({ status: 200, data })
+        return { request, transport: { request } as unknown as TalosMobileHttpTransport }
+    }
+
+    const messaggio = {
+        model: 'x',
+        input: [{ role: 'user' as const, content: 'ciao' }],
+    }
+
+    it('manda OpenAI su /v1/responses, con il corpo nuovo', async () => {
+        const { request, transport } = transportFor({
+            status: 'completed',
+            output: [{ type: 'message', content: [{ type: 'output_text', text: 'ciao' }] }],
+            usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        })
+        await openAiAdapter.complete({
+            model: { id: 'gpt-5.6-luna', provider: 'openai', displayName: 'Luna', supportedParameters: [] },
+            turns: [{ role: 'user', content: 'ciao' }],
+            system: 'Sei TALOS.',
+            effort: 'high',
+        } as never, { apiKey: 'k' }, transport)
+
+        const inviata = request.mock.calls[0]![0] as { url: string, data: Record<string, unknown> }
+        expect(inviata.url).toMatch(/\/responses$/)
+        // `instructions` e `input`, non `messages`. E il ragionamento resta
+        // quello scelto: e' tutto il punto della migrazione.
+        expect(inviata.data.instructions).toBe('Sei TALOS.')
+        expect(inviata.data.input).toBeDefined()
+        expect(inviata.data.messages).toBeUndefined()
+        expect(inviata.data.reasoning).toEqual({ effort: 'high' })
+        expect(inviata.data.store).toBe(false)
+    })
+
+    it('lascia DeepSeek e OpenRouter dove stavano', async () => {
+        for (const adapter of [deepSeekAdapter, openRouterAdapter]) {
+            const { request, transport } = transportFor({
+                model: 'x', choices: [{ message: { content: 'ciao' } }],
+            })
+            await adapter.complete({
+                model: { id: 'x', provider: adapter.provider, displayName: 'X', supportedParameters: [] },
+                turns: [{ role: 'user', content: 'ciao' }],
+                effort: 'high',
+            } as never, { apiKey: 'k' }, transport)
+
+            const inviata = request.mock.calls[0]![0] as { url: string, data: Record<string, unknown> }
+            expect(inviata.url).toMatch(/\/chat\/completions$/)
+            expect(inviata.data.messages).toBeDefined()
+            expect(inviata.data.input).toBeUndefined()
+        }
     })
 })
