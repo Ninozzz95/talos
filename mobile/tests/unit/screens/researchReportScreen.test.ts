@@ -305,6 +305,11 @@ describe('the report a person can actually check', () => {
         await settle(wrapper)
         await settle(wrapper)
 
+        // Three failed, so the plural is right — but see the sibling case: the
+        // device rendered "1 linee di indagine non sono riuscite" for one.
+        expect(wrapper.get('[data-testid="talos-research-failed-steps"]').text())
+            .toContain('3 lines of enquiry failed')
+
         const reasons = wrapper.findAll('[data-testid="talos-research-step-error"]')
         // Two branches died of the same thing: that is ONE problem, said once.
         expect(reasons).toHaveLength(2)
@@ -314,6 +319,26 @@ describe('the report a person can actually check', () => {
         // …and an error nobody has read yet, left raw rather than dressed up in
         // a friendly sentence that would hide the only clue there is.
         expect(reasons[1]!.text()).toBe('HTTP 503 upstream')
+    })
+
+    it('counts a single failed branch in words, not as "1 branches"', async () => {
+        // Caught on the tablet, on a real interrupted run: the only sentence a
+        // person sees when a research goes wrong was ungrammatical in both
+        // languages at the one count it is most likely to have.
+        mockState.controller = controllerWith(REPORT, {
+            ...RUN,
+            steps: [
+                step({ id: 'b1:search', branchId: 'b1', state: 'failed', error: 'TALOS_RESEARCH_NO_SEARCH_SOURCE' }),
+                step({ id: 'synthesis', branchId: 'synthesis', kind: 'synthesise', resultRef: 'file-report' }),
+            ],
+        })
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const panel = wrapper.get('[data-testid="talos-research-failed-steps"]').text()
+        expect(panel).toContain('One line of enquiry failed')
+        expect(panel).not.toContain('1 lines')
     })
 
     /**
