@@ -2375,6 +2375,15 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     // che veniva «non ho uno strumento per elencare la tua
                     // Libreria».
                     libraryAccess: () => deps.settings.state.shell?.library_access ?? 'ask',
+                    /**
+                     * Le ricerche, dalla stessa fonte che alimenta la stazione.
+                     * Owner: «non dobbiamo inventarci nulla» — nessun secondo
+                     * elenco che possa dire una cosa diversa da quella.
+                     */
+                    research: () => ({
+                        list: () => research.list(),
+                        isRunning: (id: string) => research.registry.isRunning(id),
+                    }),
                     libraryContextPolicy: policyToolSources,
                     /**
                      * F2 — making documents. Always available: unlike search it

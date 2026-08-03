@@ -104,7 +104,7 @@ describe('Agent Tools control registry', () => {
         expect(parsed.web_search).toBe(true)
         expect(parsed).not.toHaveProperty('future_shell')
         expect(parsed.library_context_policy_update).toBe(false)
-        expect(Object.keys(parsed)).toHaveLength(18)
+        expect(Object.keys(parsed)).toHaveLength(19)
         expect(isTalosAgentToolEnabled('library_search', parsed)).toBe(false)
         expect(isTalosAgentToolEnabled('future_shell', parsed)).toBe(false)
     })

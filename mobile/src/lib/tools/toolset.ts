@@ -5,6 +5,10 @@ import {
 } from '@/lib/tools/readTools'
 import { parseTalosFileProvenance } from '@/lib/files/provenance'
 import { createTalosWebTools, type TalosWebToolSources } from '@/lib/search/webTools'
+import {
+    createTalosResearchTools,
+    type TalosResearchToolSources,
+} from '@/lib/tools/researchTools'
 import { createTalosDocumentTools, type TalosDocumentToolSources } from '@/lib/documents/documentTools'
 import { createTalosImageTools, type TalosImageToolSources } from '@/lib/images/imageTools'
 import {
@@ -98,6 +102,12 @@ export interface TalosToolsetDeps {
      * to the model — the same shape as the Library opt-out above.
      */
     web?(): TalosWebToolSources | null
+    /**
+     * «Che ricerche ho fatto?» — owner 2026-08-03, per chiudere il blocco
+     * Ricerca. Assente quando non c'e' un giornale da leggere: assente qui vuol
+     * dire assente per il modello, come per i tool web.
+     */
+    research?(): TalosResearchToolSources | null
     /**
      * F2 — making documents. A `write`, so the permission gate governs it and
      * D12's "ask once per conversation" applies.
@@ -431,6 +441,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             // so a search source configured a minute ago must govern THIS
             // message rather than the next launch.
             const web = deps.web?.() ?? null
+            const research = deps.research?.() ?? null
             const documents = deps.documents?.() ?? null
             const images = deps.images?.() ?? null
             return [
@@ -439,6 +450,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...policyTools,
                 ...modelTools,
                 ...(web ? createTalosWebTools(web) : []),
+                ...(research ? createTalosResearchTools(research) : []),
                 ...(documents ? createTalosDocumentTools(documents) : []),
                 ...(images ? createTalosImageTools(images) : []),
             ]

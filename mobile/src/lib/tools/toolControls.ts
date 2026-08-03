@@ -27,6 +27,12 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     local_model_inspect: true,
     local_model_download: true,
     local_models_status: true,
+    /**
+     * «Che ricerche ho fatto?» — owner 2026-08-03, per chiudere il blocco
+     * Ricerca. Acceso di serie come `library_list`: e' una lettura di cose che
+     * l'utente ha creato lui, e senza di essa la domanda non ha risposta.
+     */
+    research_list: true,
 })
 
 export type TalosAgentToolId = keyof typeof TALOS_DEFAULT_AGENT_TOOL_ENABLED
