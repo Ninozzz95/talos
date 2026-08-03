@@ -144,39 +144,107 @@ export function talosPermissionAction(state: TalosPermissionState): 'request' | 
 }
 
 /**
- * I passi IN PIÙ che chiede questo produttore, quando ce ne sono.
+ * Chi ha fatto il telefono, nei due campi pubblici che Android espone.
  *
- * L'esenzione dal risparmio energetico è standard Android e si ottiene con un
- * intent. Su alcune interfacce non basta: ColorOS/OxygenOS ha anche l'avvio
- * automatico e le due «ottimizzazioni» che ricongelano l'app, e quelle stanno
- * in menu del produttore **senza intent pubblico**.
+ * `manufacturer` e' chi fabbrica, `brand` e' quello che il cliente legge sulla
+ * scocca: un POCO espone `Xiaomi` e `POCO`. Servono entrambi perche' un
+ * firmware particolare puo' mettere il nome utile in uno solo dei due.
  *
- * Qui ci sono istruzioni e non scorciatoie, e la scelta è deliberata: i nomi
- * dei componenti OEM cambiano fra una versione e l'altra, e un collegamento
- * profondo che atterra sulla schermata sbagliata — o che lancia un'eccezione —
- * è peggio di una frase che dice dove andare. Il pulsante che apre ciò che
- * Android garantisce resta; questo è ciò che gli sta accanto.
- *
- * Elencati solo i produttori per cui abbiamo una fonte, non tutti quelli
- * immaginabili: una lista inventata farebbe cercare all'utente voci che sul suo
- * telefono non esistono, che è il modo più veloce per fargli credere di aver
- * sbagliato lui.
+ * **Non** c'e' la versione della ROM, ed e' una decisione: `ro.miui.*`,
+ * `ro.build.version.emui` e simili sono interfacce non-SDK, ristrette da
+ * Android 9, che possono sparire senza preavviso. La famiglia OEM basta a
+ * scegliere le istruzioni.
  */
-export function talosBackgroundExtraSteps(manufacturer: string): readonly string[] {
-    const maker = manufacturer.trim().toLowerCase()
-    // Stessa interfaccia, tre marchi: OPPO possiede OnePlus e realme, e ColorOS
-    // gira su tutti e tre.
-    if (maker === 'oneplus' || maker === 'oppo' || maker === 'realme') {
-        // CHIAVI, non frasi. Visto sul tablet il 2026-08-03: scritte qui, i
-        // passi comparivano in inglese dentro un'app in italiano — e sono
-        // proprio le istruzioni che qualcuno deve poter seguire alla lettera.
-        return Object.freeze([
-            'privacyPermissions.makerSteps.colorosAutoLaunch',
-            'privacyPermissions.makerSteps.colorosDeepOptimisation',
-            'privacyPermissions.makerSteps.colorosLockRecents',
-        ])
-    }
-    return Object.freeze([])
+export interface TalosMakerIdentity {
+    readonly manufacturer?: string | null
+    readonly brand?: string | null
+}
+
+export type TalosMakerFamily =
+    | 'coloros' | 'xiaomi' | 'samsung' | 'huawei' | 'honor' | 'vivo'
+    | 'stockish' | 'unknown'
+
+function makerToken(value?: string | null): string {
+    return (value ?? '').trim().toLocaleLowerCase('en-US').replace(/[^a-z0-9]+/g, '')
+}
+
+/**
+ * La famiglia, per token normalizzati e mai per `includes()`.
+ *
+ * Un confronto per sottostringa su marchi corti produce falsi positivi — e un
+ * falso positivo qui non e' un errore visibile: e' una lista di istruzioni che
+ * manda qualcuno a cercare voci che sul suo telefono non esistono, e lo fa
+ * sentire in torto.
+ */
+export function talosResolveMakerFamily(identity: TalosMakerIdentity): TalosMakerFamily {
+    const tokens = new Set([makerToken(identity.manufacturer), makerToken(identity.brand)])
+    const any = (...names: string[]) => names.some((name) => tokens.has(name))
+
+    if (any('xiaomi', 'redmi', 'poco')) return 'xiaomi'
+    if (any('samsung')) return 'samsung'
+    if (any('huawei')) return 'huawei'
+    // Honor tiene chiavi sue: la grammatica e' quella di Huawei, ma il primo
+    // livello e' «App» dove Huawei mostra «App e servizi». Una frase condivisa
+    // manderebbe meta' degli utenti a cercare una voce che non c'e'.
+    if (any('honor')) return 'honor'
+    if (any('vivo', 'iqoo')) return 'vivo'
+    if (any('oneplus', 'oppo', 'realme')) return 'coloros'
+    if (any('motorola', 'nothing', 'asus', 'sony')) return 'stockish'
+    return 'unknown'
+}
+
+const MAKER_STEPS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+    coloros: Object.freeze([
+        'privacyPermissions.makerSteps.colorosAutoLaunch',
+        'privacyPermissions.makerSteps.colorosDeepOptimisation',
+        'privacyPermissions.makerSteps.colorosLockRecents',
+    ]),
+    xiaomi: Object.freeze([
+        'privacyPermissions.makerSteps.xiaomiAutostart',
+        'privacyPermissions.makerSteps.xiaomiUnrestricted',
+        'privacyPermissions.makerSteps.xiaomiLockRecents',
+    ]),
+    samsung: Object.freeze([
+        'privacyPermissions.makerSteps.samsungNeverSleeping',
+    ]),
+    huawei: Object.freeze([
+        'privacyPermissions.makerSteps.huaweiAppLaunch',
+        'privacyPermissions.makerSteps.huaweiManualLaunch',
+        'privacyPermissions.makerSteps.huaweiLockRecents',
+    ]),
+    honor: Object.freeze([
+        'privacyPermissions.makerSteps.honorAppLaunch',
+        'privacyPermissions.makerSteps.honorManualLaunch',
+        'privacyPermissions.makerSteps.honorLockRecents',
+    ]),
+})
+
+/**
+ * I passi IN PIU' che chiede questo produttore, quando ce ne sono.
+ *
+ * Chiavi i18n, mai frasi: scritte a mano nel modulo comparivano in inglese
+ * dentro un'app in italiano, e sono proprio le istruzioni che qualcuno deve
+ * poter seguire alla lettera.
+ *
+ * ## Chi c'e' e chi no, e perche'
+ *
+ * Dentro solo cio' che ha documentazione ufficiale localizzata e concordanza
+ * fra piu' fonti: Xiaomi/Redmi/POCO, Samsung, Huawei, Honor — piu' ColorOS, che
+ * c'era gia'.
+ *
+ * **vivo/iQOO resta FUORI**, pur avendo fonti concordanti: manca una guida
+ * ufficiale vivo corrente, le voci cambiano fra Funtouch OS e OriginOS, e il
+ * testo non e' stato provato alla lettera su un dispositivo. La regola e' che
+ * un percorso sbagliato e' peggio di nessun percorso — chi non trova la voce
+ * crede di aver sbagliato lui. Il testo candidato e' nel dossier, pronto ad
+ * entrare appena qualcuno lo verifica su hardware.
+ *
+ * **Motorola, Nothing, ASUS e Sony restano vuoti**: usano i controlli Android
+ * standard, che TALOS gia' copre. Riempire la pagina con istruzioni generiche
+ * la farebbe scorrere via anche a chi ne ha bisogno.
+ */
+export function talosBackgroundExtraSteps(identity: TalosMakerIdentity): readonly string[] {
+    return MAKER_STEPS[talosResolveMakerFamily(identity)] ?? Object.freeze([])
 }
 
 /**

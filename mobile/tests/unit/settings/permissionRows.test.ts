@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     TALOS_PERMISSION_ROWS,
     talosBackgroundExtraSteps,
+    talosResolveMakerFamily,
     talosPermissionLabel,
     talosPermissionAction,
     visibleTalosPermissionRows,
@@ -134,23 +135,79 @@ describe('la riga che decide se il lavoro lungo arriva in fondo', () => {
         expect(row.purpose).not.toContain('cannot be turned off')
     })
 
-    it('offre i passi in piu solo dove esistono davvero', () => {
-        // ColorOS gira su tutti e tre i marchi: OPPO possiede OnePlus e realme.
-        for (const maker of ['oneplus', 'OnePlus', 'oppo', 'realme']) {
-            expect(talosBackgroundExtraSteps(maker).length).toBeGreaterThan(0)
+    it('riconosce le famiglie per token, mai per sottostringa', () => {
+        // Un confronto per sottostringa su marchi corti produce falsi positivi,
+        // e qui un falso positivo non e' un errore visibile: e' una lista che
+        // manda qualcuno a cercare voci che sul suo telefono non esistono.
+        const casi: Array<[{ manufacturer: string, brand: string }, string]> = [
+            [{ manufacturer: 'Xiaomi', brand: 'Xiaomi' }, 'xiaomi'],
+            [{ manufacturer: 'XIAOMI', brand: 'POCO' }, 'xiaomi'],
+            [{ manufacturer: ' Xiaomi ', brand: 'Redmi' }, 'xiaomi'],
+            [{ manufacturer: 'samsung', brand: 'Samsung' }, 'samsung'],
+            [{ manufacturer: 'HUAWEI', brand: 'HUAWEI' }, 'huawei'],
+            [{ manufacturer: 'HONOR', brand: 'HONOR' }, 'honor'],
+            [{ manufacturer: 'vivo', brand: 'iQOO' }, 'vivo'],
+            [{ manufacturer: 'OnePlus', brand: 'OnePlus' }, 'coloros'],
+            [{ manufacturer: 'realme', brand: 'realme' }, 'coloros'],
+            [{ manufacturer: 'motorola', brand: 'motorola' }, 'stockish'],
+            [{ manufacturer: 'Acme', brand: 'Acme' }, 'unknown'],
+        ]
+        for (const [identity, atteso] of casi) {
+            expect(talosResolveMakerFamily(identity)).toBe(atteso)
         }
-        // Niente per gli altri: una lista inventata farebbe cercare voci che su
-        // quel telefono non esistono, e chi cerca crede di aver sbagliato lui.
-        expect(talosBackgroundExtraSteps('google')).toEqual([])
-        expect(talosBackgroundExtraSteps('')).toEqual([])
     })
 
-    it('nomina l avvio automatico, che e il passo che l intent non copre', () => {
-        // Chiavi e non frasi: scritte a mano nel modulo, i passi comparivano in
-        // inglese dentro un app in italiano — proprio le istruzioni che qualcuno
-        // deve poter seguire alla lettera. Visto sul tablet il 2026-08-03.
-        const steps = talosBackgroundExtraSteps('oneplus')
-        expect(steps).toContain('privacyPermissions.makerSteps.colorosAutoLaunch')
-        for (const key of steps) expect(key.startsWith('privacyPermissions.')).toBe(true)
+    it('usa il MARCHIO quando il produttore non basta', () => {
+        // Un POCO espone `MANUFACTURER=Xiaomi` e `BRAND=POCO`. Il marchio serve
+        // da rete quando un firmware particolare mette il nome utile in uno
+        // solo dei due campi.
+        expect(talosResolveMakerFamily({ manufacturer: 'sconosciuto', brand: 'POCO' }))
+            .toBe('xiaomi')
+        expect(talosResolveMakerFamily({})).toBe('unknown')
+    })
+
+    it('da i passi ai produttori che hanno una fonte, e chiavi mai frasi', () => {
+        for (const identity of [
+            { manufacturer: 'oneplus', brand: 'oneplus' },
+            { manufacturer: 'Xiaomi', brand: 'Redmi' },
+            { manufacturer: 'samsung', brand: 'samsung' },
+            { manufacturer: 'huawei', brand: 'huawei' },
+            { manufacturer: 'HONOR', brand: 'HONOR' },
+        ]) {
+            const passi = talosBackgroundExtraSteps(identity)
+            expect(passi.length).toBeGreaterThan(0)
+            for (const key of passi) expect(key.startsWith('privacyPermissions.makerSteps.')).toBe(true)
+        }
+    })
+
+    it('tiene Huawei e Honor SEPARATI', () => {
+        // La grammatica e' la stessa, ma il primo livello e' «App» su Honor
+        // dove Huawei mostra «App e servizi». Una frase condivisa manderebbe
+        // meta' degli utenti a cercare una voce che non c'e'.
+        const huawei = talosBackgroundExtraSteps({ manufacturer: 'huawei', brand: 'huawei' })
+        const honor = talosBackgroundExtraSteps({ manufacturer: 'honor', brand: 'honor' })
+        expect(honor).not.toEqual(huawei)
+    })
+
+    it('tace dove non c e verifica, invece di riempire la pagina', () => {
+        /**
+         * vivo/iQOO ha fonti concordanti ma nessuna guida ufficiale corrente e
+         * nessuna prova su hardware: le voci cambiano fra Funtouch OS e
+         * OriginOS. Un percorso sbagliato e' peggio di nessun percorso — chi non
+         * trova la voce crede di aver sbagliato lui.
+         *
+         * Motorola, Nothing, ASUS e Sony usano i controlli Android standard,
+         * che TALOS gia' copre.
+         */
+        expect(talosBackgroundExtraSteps({ manufacturer: 'vivo', brand: 'iQOO' })).toEqual([])
+        for (const maker of ['motorola', 'nothing', 'asus', 'sony', 'acme']) {
+            expect(talosBackgroundExtraSteps({ manufacturer: maker, brand: maker })).toEqual([])
+        }
+    })
+
+    it('raggruppa Xiaomi, Redmi e POCO sotto gli stessi passi', () => {
+        const xiaomi = talosBackgroundExtraSteps({ manufacturer: 'Xiaomi', brand: 'Xiaomi' })
+        expect(talosBackgroundExtraSteps({ manufacturer: 'Xiaomi', brand: 'Redmi' })).toEqual(xiaomi)
+        expect(talosBackgroundExtraSteps({ manufacturer: 'Xiaomi', brand: 'POCO' })).toEqual(xiaomi)
     })
 })

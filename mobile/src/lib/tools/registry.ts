@@ -118,6 +118,26 @@ function schemaOf(tool: TalosToolDefinition<never>): JsonSchema {
     return schema
 }
 
+/**
+ * La stessa cosa, PIATTA — la forma che vuole `/v1/responses`.
+ *
+ * `name`, `description` e `parameters` accanto a `type: "function"`, non
+ * annidati. Sta qui e non nel modulo dell'endpoint perche' deve passare dallo
+ * STESSO `schemaOf`: e' li' che uno schema senza `type` viene normalizzato, e
+ * due normalizzazioni diverse sarebbero due descrizioni dello stesso tool a
+ * seconda di quale endpoint lo riceve.
+ */
+export function talosToolsForOpenAiResponses(
+    tools: ReadonlyArray<TalosToolDefinition<never>>,
+): unknown[] {
+    return tools.map((tool) => ({
+        type: 'function',
+        name: tool.name,
+        description: tool.description,
+        parameters: schemaOf(tool),
+    }))
+}
+
 /** OpenAI, DeepSeek, OpenRouter and Ollama all speak this shape. */
 export function talosToolsForOpenAi(tools: ReadonlyArray<TalosToolDefinition<never>>): unknown[] {
     return tools.map((tool) => ({

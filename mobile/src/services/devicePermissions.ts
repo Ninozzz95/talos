@@ -17,6 +17,7 @@ interface TalosDevicePermissionsPlugin {
         microphone: string
         batteryExempt?: boolean
         manufacturer?: string
+        brand?: string
     }>
     requestNotifications(): Promise<{ state: string }>
     requestBatteryExemption(): Promise<{ opened: boolean, alreadyExempt: boolean, route?: string }>
@@ -52,6 +53,8 @@ export interface TalosDeviceState {
     batteryExempt: boolean
     /** Minuscolo, e vuoto quando non lo sappiamo — decide i passi in più. */
     manufacturer: string
+    /** Il marchio sulla scocca: un POCO espone `Xiaomi` e `POCO`. */
+    brand: string
 }
 
 export async function readTalosDeviceState(): Promise<TalosDeviceState> {
@@ -65,6 +68,7 @@ export async function readTalosDeviceState(): Promise<TalosDeviceState> {
             biometricHardware: false,
             batteryExempt: false,
             manufacturer: '',
+            brand: '',
         }
     }
     const [device, biometric] = await Promise.all([
@@ -83,6 +87,7 @@ export async function readTalosDeviceState(): Promise<TalosDeviceState> {
         // non abbiamo potuto verificare.
         batteryExempt: device?.batteryExempt === true,
         manufacturer: device?.manufacturer ?? '',
+        brand: device?.brand ?? '',
     }
 }
 
