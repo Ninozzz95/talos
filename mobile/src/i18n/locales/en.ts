@@ -1691,6 +1691,14 @@ export const TALOS_EN_MESSAGES = {
             failedHere: 'It stopped on an error. The reason is below.',
             doneNoReport: 'Finished without writing the report: the gathering is there, the synthesis is not.',
             reportNotSaved: 'The report was written but could not be saved. The gathering is intact: resuming restarts from the writing, not from the searches.',
+            activity: 'Activity',
+            stepState: {
+                pending: 'pending',
+                running: 'running',
+                done: 'done',
+                failed: 'failed',
+                interrupted: 'interrupted',
+            },
         buckets: {
             cancelled: 'Cancelled',
             paused: 'Paused',

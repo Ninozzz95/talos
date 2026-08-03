@@ -20,6 +20,7 @@
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { talosResearchIsTerminal } from '@/lib/research/researchRun'
+import { talosResearchReportRefOf } from '@/lib/research/researchCard'
 import { useRoute, useRouter } from 'vue-router'
 import { TabsContent } from 'reka-ui'
 import { AlertTriangle, ChevronRight, Download, Play, RotateCcw } from '@lucide/vue'
@@ -67,7 +68,21 @@ watch(runId, (id) => {
     unwatch = null
     liveRun.value = null
     if (!id) return
-    unwatch = controller.research.registry.watch(id, (progress) => { liveRun.value = progress })
+    unwatch = controller.research.registry.watch(id, (progress) => {
+        liveRun.value = progress
+        /**
+         * The report is loaded once, when the page mounts. A research that
+         * FINISHES while you are watching it therefore had a report on disk and
+         * a page that had never gone to look.
+         *
+         * Owner 2026-08-03: a run with Sonnet 5 as author read «conclusa senza
+         * scrivere il rapporto». The report was complete — six claims, ten
+         * sources, judged — and it appeared the moment the page was reopened
+         * from the list. The engine had done its job; only the screen was
+         * behind. Watching a thing has to include noticing that it arrived.
+         */
+        if (!view.report.value && talosResearchReportRefOf(progress.run)) void view.reload()
+    })
 }, { immediate: true })
 
 onBeforeUnmount(() => unwatch?.())
@@ -91,6 +106,8 @@ const solidity = computed(() => {
 
 /** Which model judged this run — from the record, never inferred from the claims. */
 const judge = computed(() => report.value?.judge ?? null)
+
+const steps = computed(() => current.value?.steps ?? [])
 
 const failedSteps = computed(() => current.value?.steps.filter((step) => step.state === 'failed') ?? [])
 
@@ -308,6 +325,40 @@ function openSource(index: number): void {
                         >{{ text }}</p>
                     </div>
                 </div>
+
+                <!--
+                    The steps, openable, and shown by default when there is no
+                    report to read instead.
+
+                    The visual research of 2026-08-03 puts this at the centre of
+                    the chosen direction: the plan and the record stay openable,
+                    and on an error only the broken step expands — the way
+                    GitHub Actions does it. It is also the thing that would have
+                    told us, hours earlier, that a report had been written and
+                    its reference lost: «conclusa senza scrivere il rapporto»
+                    was all the page could say, and a person cannot report that.
+                -->
+                <details v-if="steps.length" data-testid="talos-research-activity" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]" :open="!report">
+                    <summary class="talos-pressable min-h-11 cursor-pointer list-none px-3 py-3 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                        {{ t('research.activity') }}
+                    </summary>
+                    <ul class="flex flex-col gap-1 px-3 pb-3">
+                        <li
+                            v-for="step in steps"
+                            :key="step.id"
+                            data-testid="talos-research-activity-step"
+                            class="flex items-baseline justify-between gap-3 font-mono text-2xs tabular-nums"
+                        >
+                            <span class="min-w-0 flex-1 truncate text-[var(--talos-text)]">{{ step.id }}</span>
+                            <span :class="step.state === 'failed' ? 'text-[var(--talos-danger)]' : 'text-[var(--talos-muted)]'">
+                                {{ t(`research.stepState.${step.state}`) }}
+                            </span>
+                            <!-- Whether the step left something behind is the
+                                 difference between "it ran" and "it produced". -->
+                            <span class="shrink-0 text-[var(--talos-muted)]">{{ step.resultRef ? '●' : '—' }}</span>
+                        </li>
+                    </ul>
+                </details>
 
                 <p v-if="reportUnreadable" data-testid="talos-research-unreadable" class="rounded-xl border border-[var(--talos-border)] p-3 text-sm text-[var(--talos-muted)]">
                     {{ t('research.reportUnreadable') }}
