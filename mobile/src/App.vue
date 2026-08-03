@@ -188,8 +188,26 @@ watch(sidebarOpen, (open) => {
 // Owner 2026-07-24: when "launcher icon follows theme" is on, switching preset
 // (or enabling the toggle while off-icon) prompts to restart-and-reskin the
 // Android home-screen icon (opt-in, native).
+// DUE sorgenti, non una che restituisce un array.
+//
+// Owner 2026-08-03, con uno screenshot: cambiando il layout della Libreria
+// compariva «Aggiornare l'icona dell'app?». Due difetti impilati, e nessuno dei
+// due nell'icona.
+//
+// `setShell()` rimpiazza l'INTERO oggetto `state.shell` (`parseShellPreferences`
+// costruisce un valore nuovo), quindi scrivere `library_view` invalida la
+// dipendenza su `state.shell` anche se `launcher_icon_follows_theme` non si è
+// mosso, e il getter rigira. Fin qui sarebbe innocuo — se non che il getter
+// restituiva un ARRAY NUOVO a ogni giro, e Vue confronta per identità: un array
+// nuovo è sempre «cambiato», quindi nulla filtrava il giro spurio.
+//
+// Con due getter separati Vue confronta elemento per elemento, e una coppia
+// immutata non fa scattare niente.
 watch(
-    () => [themeStore.state.theme, settingsStore.state.shell.launcher_icon_follows_theme] as const,
+    [
+        () => themeStore.state.theme,
+        () => settingsStore.state.shell.launcher_icon_follows_theme,
+    ],
     ([theme, enabled]) => { launcherIcon.evaluate(theme, enabled) },
 )
 const chatScreen = ref<InstanceType<typeof ChatScreen> | null>(null)
