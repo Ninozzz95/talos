@@ -25,6 +25,11 @@
 #include "llama.h"
 #include "ggml-backend.h"
 #include "sampling.h"
+#include "chat.h"
+// `chat.h` si accontenta della dichiarazione anticipata (`json_fwd.hpp`); qui il
+// tipo va COSTRUITO, quindi serve l'intestazione intera. È la stessa copia
+// vendorizzata che compila `common`, non una dipendenza nuova.
+#include <nlohmann/json.hpp>
 
 #define TALOS_TAG "TalosLlama"
 #define TALOS_LOGI(...) __android_log_print(ANDROID_LOG_INFO, TALOS_TAG, __VA_ARGS__)
@@ -57,6 +62,38 @@ struct talos_session {
      */
     std::mutex  text_lock;
     std::string text;
+
+    /**
+     * Il template VERO del modello, eseguito da un motore Jinja.
+     *
+     * Non è la stessa cosa di prima con un nome diverso.
+     * `llama_chat_apply_template`, l'API di basso livello che usavamo, **non
+     * esegue mai** il Jinja che sta nel GGUF: lo passa a
+     * `llm_chat_detect_template`, che lo ANNUSA cercando sottostringhe, e poi
+     * applica una reimplementazione C++ cablata della famiglia indovinata. Per
+     * qualunque Qwen3 il verdetto è «CHATML» e ne esce ChatML nudo.
+     *
+     * Ciò che va perso in quel passaggio è esattamente ciò che l'owner ha
+     * segnalato: la logica `enable_thinking` (che decide se i tag `<think>` li
+     * scrive il template o li deve inventare il modello) e l'intero blocco
+     * `<tools>`. Da lì i tag di ragionamento stampati nel corpo e
+     * l'impossibilità di offrire un tool a un modello locale — che sono la
+     * stessa mancanza, non due.
+     */
+    common_chat_templates_ptr templates;
+
+    /**
+     * Come rileggere ciò che il modello ha appena detto.
+     *
+     * `common_chat_templates_apply` restituisce, insieme al prompt, il FORMATO
+     * con cui quel modello parlerà: dove mette il ragionamento, come annuncia
+     * una chiamata. Va conservato fra la formattazione e la lettura, perché è
+     * il ponte fra le due — e senza, `common_chat_parse` non sa che cosa sta
+     * leggendo e restituisce tutto come contenuto, cioè il difetto di prima
+     * scritto in modo più moderno.
+     */
+    common_chat_params chat;
+    bool               chat_ready = false;
 };
 
 std::once_flag g_init_once;
@@ -234,6 +271,16 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
     session->sampler = sampler;
     session->vocab   = llama_model_get_vocab(model);
 
+    // Costruito una volta, all'apertura: compilare un template Jinja a ogni
+    // messaggio sarebbe lavoro rifatto identico per tutta la conversazione.
+    // Un modello senza template non è un errore fatale — la formattazione lo
+    // dirà al chiamante — ma è un fatto da registrare qui, dove si vede.
+    try {
+        session->templates = common_chat_templates_init(model, "");
+    } catch (const std::exception & failure) {
+        TALOS_LOGE("template non inizializzabile: %s", failure.what());
+    }
+
     TALOS_LOGI("modello aperto: %s (contesto %u, thread %d)",
                path.c_str(), llama_n_ctx(ctx), ctx_params.n_threads);
     return reinterpret_cast<jlong>(session);
@@ -266,8 +313,7 @@ Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlo
     talos_session * session = as_session(handle);
     if (session == nullptr) return env->NewStringUTF("");
 
-    const char * tmpl = llama_model_chat_template(session->model, nullptr);
-    if (tmpl == nullptr) {
+    if (session->templates == nullptr) {
         TALOS_LOGE("il GGUF non porta un template di chat");
         return env->NewStringUTF("");
     }
@@ -275,39 +321,95 @@ Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlo
     const jsize count = env->GetArrayLength(roles);
     if (count != env->GetArrayLength(contents) || count <= 0) return env->NewStringUTF("");
 
-    // Le stringhe restano vive finché llama_chat_apply_template legge i loro
-    // puntatori: liberarle prima sarebbe memoria già restituita.
-    std::vector<std::string> held;
-    std::vector<llama_chat_message> messages;
-    held.reserve((size_t) count * 2);
-    messages.reserve((size_t) count);
+    common_chat_templates_inputs inputs;
+    inputs.add_generation_prompt = true;
+    // Il punto di tutta la faccenda: il Jinja del modello viene ESEGUITO,
+    // invece di essere annusato per indovinare una famiglia.
+    inputs.use_jinja = true;
+    // Il ragionamento lo gestisce il template, e quindi il parser: è così che
+    // i tag smettono di comparire nel corpo della risposta.
+    inputs.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+    inputs.messages.reserve((size_t) count);
     for (jsize index = 0; index < count; index += 1) {
         auto role = (jstring) env->GetObjectArrayElement(roles, index);
         auto content = (jstring) env->GetObjectArrayElement(contents, index);
-        held.push_back(jstring_to_utf8(env, role));
-        held.push_back(jstring_to_utf8(env, content));
-        messages.push_back({ held[held.size() - 2].c_str(), held[held.size() - 1].c_str() });
+        common_chat_msg message;
+        message.role = jstring_to_utf8(env, role);
+        message.content = jstring_to_utf8(env, content);
+        inputs.messages.push_back(std::move(message));
         env->DeleteLocalRef(role);
         env->DeleteLocalRef(content);
     }
 
-    // La documentazione consiglia il doppio dei caratteri totali; se non basta
-    // la funzione dice quanto serve, e si rialloca invece di troncare.
-    size_t wanted = 0;
-    for (const std::string & piece : held) wanted += piece.size();
-    std::vector<char> buffer(wanted * 2 + 512);
-    int32_t written = llama_chat_apply_template(
-            tmpl, messages.data(), messages.size(), true, buffer.data(), (int32_t) buffer.size());
-    if (written > (int32_t) buffer.size()) {
-        buffer.resize((size_t) written + 1);
-        written = llama_chat_apply_template(
-                tmpl, messages.data(), messages.size(), true, buffer.data(), (int32_t) buffer.size());
-    }
-    if (written < 0) {
-        TALOS_LOGE("template di chat non applicabile");
+    try {
+        session->chat = common_chat_templates_apply(session->templates.get(), inputs);
+        session->chat_ready = true;
+    } catch (const std::exception & failure) {
+        // Un template Jinja è codice, e codice può rompersi su un modello che
+        // non abbiamo mai visto. Detto per nome invece che come prompt vuoto:
+        // «questo modello non si formatta» è un'informazione, un prompt vuoto è
+        // un mistero.
+        TALOS_LOGE("template di chat non applicabile: %s", failure.what());
+        session->chat_ready = false;
         return env->NewStringUTF("");
     }
-    return env->NewStringUTF(std::string(buffer.data(), (size_t) written).c_str());
+
+    TALOS_LOGI("formato di chat: %s (ragionamento: %s)",
+               common_chat_format_name(session->chat.format),
+               session->chat.supports_thinking ? "sì" : "no");
+    return env->NewStringUTF(session->chat.prompt.c_str());
+}
+
+/**
+ * Rilegge la risposta separando ciò che il modello ha PENSATO da ciò che ha
+ * DETTO.
+ *
+ * Owner 2026-08-03, con Holo-3.1-4B: la risposta si apriva con `<think></think>`
+ * stampati come testo. TALOS ha il cassetto «Ragionamento» e lo usa con i
+ * provider di rete; sul motore locale non riconosceva i tag di questo modello e
+ * finivano nel corpo.
+ *
+ * Non è una ripulitura a stringhe, ed è deliberato: la documentazione di Qwen
+ * avverte di NON usare parser basati su parole d'arresto per i modelli che
+ * ragionano, «because the model may output stopwords in the thought section».
+ * Il formato lo conosce il template, quindi la lettura la fa chi il template
+ * l'ha applicato.
+ *
+ * Restituisce JSON perché attraversare JNI una volta con un oggetto costa meno
+ * di attraversarlo tre volte con tre stringhe, e perché il prossimo passo
+ * aggiunge qui le chiamate ai tool senza cambiare la firma.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeParseReply(JNIEnv * env, jclass, jlong handle, jstring reply) {
+    talos_session * session = as_session(handle);
+    const std::string text = jstring_to_utf8(env, reply);
+    if (session == nullptr || !session->chat_ready) {
+        // Senza un formato non si inventa una lettura: si restituisce il testo
+        // come sta, che è ciò che accadeva prima e almeno non perde nulla.
+        nlohmann::ordered_json plain;
+        plain["content"] = text;
+        plain["reasoning"] = "";
+        return env->NewStringUTF(plain.dump().c_str());
+    }
+
+    nlohmann::ordered_json out;
+    try {
+        common_chat_parser_params parsing(session->chat);
+        parsing.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+        parsing.parser.load(session->chat.parser);
+        // `is_partial` falso: questa è la risposta finita. Lo streaming continua
+        // a mostrare il testo grezzo mentre arriva, ed è corretto — è alla fine
+        // che si decide che cosa era ragionamento.
+        const common_chat_msg parsed = common_chat_parse(text, false, parsing);
+        out["content"] = parsed.content;
+        out["reasoning"] = parsed.reasoning_content;
+    } catch (const std::exception & failure) {
+        // Una risposta che non si lascia leggere non è una risposta persa.
+        TALOS_LOGE("risposta non interpretabile: %s", failure.what());
+        out["content"] = text;
+        out["reasoning"] = "";
+    }
+    return env->NewStringUTF(out.dump().c_str());
 }
 
 /**

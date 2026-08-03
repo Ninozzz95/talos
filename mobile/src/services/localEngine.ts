@@ -29,6 +29,20 @@ export interface TalosLocalEngineOpenResult {
 export interface TalosLocalEngineGeneration {
     text: string
     tokens: number
+    /**
+     * Ciò che il modello ha pensato, già staccato da ciò che ha detto.
+     *
+     * Owner 2026-08-03: `<think></think>` stampati sopra la risposta. Non era
+     * una mancanza del cassetto «Ragionamento» — quello esiste e funziona coi
+     * provider di rete — ma del motore locale, che passava al modello ChatML
+     * nudo e poi rileggeva l'uscita senza sapere che formato aspettarsi.
+     *
+     * La separazione la fa `common_chat_parse` sul lato nativo, cioè lo stesso
+     * codice che ha applicato il template: la documentazione di Qwen avverte di
+     * non usare parser a parole d'arresto per i modelli che ragionano, «because
+     * the model may output stopwords in the thought section».
+     */
+    reasoning?: string
 }
 
 interface TalosLlamaPlugin {

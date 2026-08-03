@@ -93,6 +93,15 @@ final class TalosLlamaNative {
      */
     static native String nativeApplyChatTemplate(long handle, String[] roles, String[] contents);
 
+    /**
+     * Separa il ragionamento dal contenuto, secondo il formato del modello.
+     *
+     * JSON: `{"content": "...", "reasoning": "..."}`. Attraversare JNI una volta
+     * con un oggetto costa meno che tre volte con tre stringhe, e il prossimo
+     * passo — le chiamate ai tool — si aggiunge qui senza cambiare la firma.
+     */
+    static native String nativeParseReply(long handle, String reply);
+
     static native void nativeCancel(long handle);
 
     static native int nativeContextTokens(long handle);

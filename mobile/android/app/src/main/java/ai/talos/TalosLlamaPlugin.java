@@ -214,8 +214,38 @@ public class TalosLlamaPlugin extends Plugin {
                 generating.set(false);
             }
 
+            /**
+             * Il testo grezzo viene SEPARATO qui, non lasciato alla chat.
+             *
+             * Owner 2026-08-03: `<think></think>` stampati sopra la risposta.
+             * TALOS ha il cassetto «Ragionamento» e lo usa coi provider di
+             * rete; qui non riconosceva i tag di questo modello. Chi sa dove
+             * finisce il ragionamento è chi ha applicato il template — non un
+             * cercatore di stringhe a valle, che la documentazione di Qwen
+             * sconsiglia esplicitamente perché «the model may output stopwords
+             * in the thought section».
+             *
+             * Lo streaming resta grezzo di proposito: separare a metà frase
+             * vorrebbe dire indovinare dove finisce un tag non ancora chiuso.
+             * È alla fine che si decide che cosa era pensiero.
+             */
+            final String raw = engine.textSoFar();
             JSObject result = new JSObject();
-            result.put("text", engine.textSoFar());
+            result.put("text", raw);
+            result.put("reasoning", "");
+            try {
+                JSONObject split = new JSONObject(engine.parseReply(raw));
+                final String content = split.optString("content", "");
+                // Un contenuto vuoto con del ragionamento dentro vuol dire che
+                // il modello ha SOLO pensato: in quel caso il testo grezzo è
+                // più onesto di una risposta vuota.
+                if (!content.isEmpty()) result.put("text", content);
+                result.put("reasoning", split.optString("reasoning", ""));
+            } catch (JSONException malformed) {
+                // Il testo resta quello grezzo: si perde la separazione, mai la
+                // risposta.
+                android.util.Log.w("TalosLlama", "risposta non separabile", malformed);
+            }
             result.put("tokens", engine.tokensProduced());
             call.resolve(result);
         });

@@ -141,6 +141,17 @@ public final class TalosLlamaEngine implements AutoCloseable {
         return TalosLlamaNative.nativeApplyChatTemplate(handle, roles, contents);
     }
 
+    /**
+     * Ciò che il modello ha pensato, separato da ciò che ha detto.
+     *
+     * JSON, e va letto DOPO `chatPrompt`, perché è quella chiamata a stabilire
+     * con che formato questo modello parla. Senza formato la risposta torna
+     * intera nel contenuto: si perde la separazione, mai il testo.
+     */
+    public String parseReply(String reply) {
+        return TalosLlamaNative.nativeParseReply(handle, reply);
+    }
+
     /** Stops the current generation. What was produced so far still stands. */
     public void cancel() {
         TalosLlamaNative.nativeCancel(handle);
