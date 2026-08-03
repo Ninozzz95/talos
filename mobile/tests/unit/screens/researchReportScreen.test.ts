@@ -8,8 +8,19 @@ import type { TalosResearchReportRecord } from '@/lib/research/researchReport'
 const mockState = vi.hoisted(() => ({ controller: null as unknown }))
 vi.mock('@/stores/chatController', () => ({ useChatController: () => mockState.controller }))
 
+/**
+ * The station split into pages on 2026-08-03, so these mount the page that now
+ * owns each contract — the report at its own address, the setup behind the FAB.
+ * The route is mocked rather than a real router because the contracts here are
+ * about the report, not about navigation.
+ */
+const routeState = vi.hoisted(() => ({ params: { id: 'run-1' } as Record<string, string> }))
+const routerCalls = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }))
+vi.mock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => routerCalls }))
+
 import { __resetSettingsStoreForTests, useSettingsStore } from '@/stores/settings'
-import ResearchScreen from '@/screens/ResearchScreen.vue'
+import ResearchReportScreen from '@/screens/ResearchReportScreen.vue'
+import ResearchNewScreen from '@/screens/ResearchNewScreen.vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 
 const NOTHING = { searches: 0, pages: 0, tokens: 0 }
@@ -111,13 +122,23 @@ const CATALOGS = {
     },
 }
 
-function controllerWith(report: TalosResearchReportRecord | null) {
+function controllerWith(report: TalosResearchReportRecord | null, run: TalosResearchRun = RUN) {
     return {
         // The real controller always has these; a double without them is a
         // double that cannot fail the way production would.
         catalogs: CATALOGS,
         research: {
-            list: vi.fn().mockResolvedValue([RUN]),
+            // The live index the pages subscribe to. A double without it is a
+            // double that cannot fail the way production would.
+            registry: {
+                watch: vi.fn(() => () => {}),
+                isRunning: vi.fn(() => false),
+                running: vi.fn(() => []),
+                latest: vi.fn(() => null),
+                open: vi.fn(() => () => {}),
+                close: vi.fn(),
+            },
+            list: vi.fn().mockResolvedValue([run]),
             unfinished: vi.fn().mockResolvedValue([]),
             start: vi.fn(),
             resume: vi.fn(),
@@ -181,41 +202,45 @@ describe('the report a person can actually check', () => {
      * work done than existed. A progress line that can exceed its own total is
      * a progress line nobody can read.
      */
-    it('counts the report as one of the steps it obviously is', async () => {
-        const wrapper = mount(ResearchScreen)
+    /**
+     * The counter that used to say "3 of 2" is now arithmetic in
+     * `talosResearchProgressOf`, asserted in researchCard.test.ts where it can
+     * be checked without a screen. A finished report shows the BALANCE here,
+     * not a counter — the counter is for work still happening.
+     */
+    it('leads with how well it holds, not with how much was read', async () => {
+        const wrapper = mount(ResearchReportScreen)
         await settle(wrapper)
 
-        expect(wrapper.get('[data-testid="talos-research-progress"]').text()).toContain('3/3')
+        const balance = wrapper.get('[data-testid="talos-research-balance"]')
+        expect(balance.text()).toContain('50%')
+        // Never the source count: scale is not support.
+        expect(balance.text()).not.toContain('2 fonti')
     })
 
-    it('opens in layers: the answer first, the evidence only when asked', async () => {
-        const wrapper = mount(ResearchScreen)
-        await settle(wrapper)
-
-        // Nothing of the report is on screen until it is opened.
-        expect(wrapper.text()).not.toContain('Ha vinto Norris.')
-
-        await wrapper.get('[data-testid="talos-research-open-report"]').trigger('click')
+    it('opens in layers: the answer here, the evidence one page in', async () => {
+        // The layering survived the restructure; it just moved from an
+        // expanding row to a route. The report gives the answer and the list of
+        // claims; the passage a claim rests on is the claim's own page.
+        const wrapper = mount(ResearchReportScreen)
         await settle(wrapper)
 
         expect(wrapper.text()).toContain('Ha vinto Norris.')
-        // The claims are listed, but their passages are not: that is the layer.
         expect(wrapper.findAll('[data-testid="talos-research-claim"]')).toHaveLength(2)
         expect(wrapper.find('[data-testid="talos-research-passage"]').exists()).toBe(false)
 
-        await wrapper.findAll('[data-testid="talos-research-claim"]')[0]!.get('button').trigger('click')
-        await settle(wrapper)
-
-        // The exact words from the page — the thing a product that stores only
-        // links cannot show at any price.
-        expect(wrapper.get('[data-testid="talos-research-passage"]').text())
-            .toContain('Lando Norris ha vinto il Gran Premio d’Ungheria 2026')
+        // The exact words from the page live one route in — the thing a
+        // product that stores only links cannot show at any price.
+        await wrapper.findAll('[data-testid="talos-research-claim"]')[0]!.trigger('click')
+        expect(routerCalls.push).toHaveBeenCalledWith({
+            name: 'research-claim',
+            params: { id: 'run-1', index: '0' },
+        })
     })
 
     it('shows the standing and names the judge, which is never the author', async () => {
-        const wrapper = mount(ResearchScreen)
+        const wrapper = mount(ResearchReportScreen)
         await settle(wrapper)
-        await wrapper.get('[data-testid="talos-research-open-report"]').trigger('click')
         await settle(wrapper)
 
         expect(wrapper.get('[data-testid="talos-research-standing"]').text()).toContain('1 of 2 supported')
@@ -234,9 +259,8 @@ describe('the report a person can actually check', () => {
      */
     it('shows a judge whose name contains slashes exactly as it is', async () => {
         mockState.controller = controllerWith({ ...REPORT, judge: 'local:/storage/emulated/0/qwen.gguf' })
-        const wrapper = mount(ResearchScreen)
+        const wrapper = mount(ResearchReportScreen)
         await settle(wrapper)
-        await wrapper.get('[data-testid="talos-research-open-report"]').trigger('click')
         await settle(wrapper)
 
         expect(wrapper.get('[data-testid="talos-research-judge"]').text()).toBe('local:/storage/emulated/0/qwen.gguf')
@@ -244,20 +268,52 @@ describe('the report a person can actually check', () => {
     })
 
     it('does not hide the claim whose quotation was never in the source', async () => {
-        const wrapper = mount(ResearchScreen)
+        const wrapper = mount(ResearchReportScreen)
         await settle(wrapper)
-        await wrapper.get('[data-testid="talos-research-open-report"]').trigger('click')
         await settle(wrapper)
 
         // Still listed, and marked. A report that drops its weakest claim tells
         // the reader it never had one.
         expect(wrapper.text()).toContain('Antonelli è arrivato secondo.')
 
-        await wrapper.findAll('[data-testid="talos-research-claim"]')[1]!.get('button').trigger('click')
+        // And it leads somewhere like the others: a weak claim is not a
+        // dead end, it is the one most worth opening.
+        await wrapper.findAll('[data-testid="talos-research-claim"]')[1]!.trigger('click')
+        expect(routerCalls.push).toHaveBeenCalledWith({
+            name: 'research-claim',
+            params: { id: 'run-1', index: '1' },
+        })
+    })
+
+    /**
+     * Nearly lost in the 2026-08-03 restructure. The station this page replaced
+     * printed the cause of every failed branch; the first draft of the page
+     * printed a count. "2 branches failed" is not something a person can act
+     * on — and three of these codes are our own refusals with a remedy.
+     */
+    it('says WHY a branch failed, once per distinct cause', async () => {
+        mockState.controller = controllerWith(REPORT, {
+            ...RUN,
+            steps: [
+                step({ id: 'b1:search', branchId: 'b1', state: 'failed', error: 'TALOS_RESEARCH_NO_SEARCH_SOURCE' }),
+                step({ id: 'b2:search', branchId: 'b2', state: 'failed', error: 'TALOS_RESEARCH_NO_SEARCH_SOURCE' }),
+                step({ id: 'b3:search', branchId: 'b3', state: 'failed', error: 'HTTP 503 upstream' }),
+                step({ id: 'synthesis', branchId: 'synthesis', kind: 'synthesise', resultRef: 'file-report' }),
+            ],
+        })
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
         await settle(wrapper)
 
-        expect(wrapper.get('[data-testid="talos-research-passage"]').text())
-            .toContain('not in the source text')
+        const reasons = wrapper.findAll('[data-testid="talos-research-step-error"]')
+        // Two branches died of the same thing: that is ONE problem, said once.
+        expect(reasons).toHaveLength(2)
+        // Our own refusal, spelled out with its remedy…
+        expect(reasons[0]!.text()).toContain('search')
+        expect(reasons[0]!.text()).not.toContain('TALOS_RESEARCH')
+        // …and an error nobody has read yet, left raw rather than dressed up in
+        // a friendly sentence that would hide the only clue there is.
+        expect(reasons[1]!.text()).toBe('HTTP 503 upstream')
     })
 
     /**
@@ -274,9 +330,8 @@ describe('the report a person can actually check', () => {
                 checks: { ...claim.checks, claimSupported: 'unchecked' as const, judge: null, judgedAt: null },
             })),
         })
-        const wrapper = mount(ResearchScreen)
+        const wrapper = mount(ResearchReportScreen)
         await settle(wrapper)
-        await wrapper.get('[data-testid="talos-research-open-report"]').trigger('click')
         await settle(wrapper)
 
         expect(wrapper.text()).toContain('local:qwen3-3b')
@@ -285,12 +340,11 @@ describe('the report a person can actually check', () => {
 
     it('says so when the report cannot be read back', async () => {
         mockState.controller = controllerWith(null)
-        const wrapper = mount(ResearchScreen)
+        const wrapper = mount(ResearchReportScreen)
         await settle(wrapper)
-        await wrapper.get('[data-testid="talos-research-open-report"]').trigger('click')
         await settle(wrapper)
 
-        expect(wrapper.get('[data-testid="talos-research-report"]').text()).toContain('cannot be read back')
+        expect(wrapper.get('[data-testid="talos-research-unreadable"]').text()).toContain('cannot be read back')
     })
 })
 
@@ -301,7 +355,7 @@ describe('R7 — the two models are the user’s choice', () => {
     })
 
     it('offers every model for the writer, and follows the composer by default', async () => {
-        const wrapper = mount(ResearchScreen)
+        const wrapper = mount(ResearchNewScreen)
         await settle(wrapper)
 
         expect(picker(wrapper, 'talos-research-author').props('modelValue')).toBe('')
@@ -318,7 +372,7 @@ describe('R7 — the two models are the user’s choice', () => {
      * promise the run breaks later.
      */
     it('never offers the writer as its own checker', async () => {
-        const wrapper = mount(ResearchScreen)
+        const wrapper = mount(ResearchNewScreen)
         await settle(wrapper)
 
         await choose(wrapper, 'talos-research-author', 'deepseek:deepseek-v4-flash')
@@ -329,7 +383,7 @@ describe('R7 — the two models are the user’s choice', () => {
     })
 
     it('drops a checker that has just been made the writer', async () => {
-        const wrapper = mount(ResearchScreen)
+        const wrapper = mount(ResearchNewScreen)
         await settle(wrapper)
 
         await choose(wrapper, 'talos-research-judge-choice', 'deepseek:deepseek-v4-pro')
@@ -342,7 +396,7 @@ describe('R7 — the two models are the user’s choice', () => {
     })
 
     it('says when both come from the same house instead of blocking it', async () => {
-        const wrapper = mount(ResearchScreen)
+        const wrapper = mount(ResearchNewScreen)
         await settle(wrapper)
 
         await choose(wrapper, 'talos-research-author', 'deepseek:deepseek-v4-flash')
@@ -364,7 +418,6 @@ describe('R-5 — what a dossier is worth after the day it was made', () => {
 
     async function openReport(wrapper: ReturnType<typeof mount>) {
         await settle(wrapper)
-        await wrapper.get('[data-testid="talos-research-open-report"]').trigger('click')
         await settle(wrapper)
     }
 
@@ -378,7 +431,7 @@ describe('R-5 — what a dossier is worth after the day it was made', () => {
      * sentence, and it has to be on screen when it applies.
      */
     it('reports what became of the sources, and that the dead ones are still readable', async () => {
-        const wrapper = mount(ResearchScreen)
+        const wrapper = mount(ResearchReportScreen)
         await openReport(wrapper)
 
         await wrapper.get('[data-testid="talos-research-recheck"]').trigger('click')
@@ -392,7 +445,7 @@ describe('R-5 — what a dossier is worth after the day it was made', () => {
     })
 
     it('answers a follow-up from the sources already paid for, verdicts included', async () => {
-        const wrapper = mount(ResearchScreen)
+        const wrapper = mount(ResearchReportScreen)
         await openReport(wrapper)
 
         await wrapper.get('[data-testid="talos-research-followup"]').setValue('e Antonelli?')
@@ -408,7 +461,7 @@ describe('R-5 — what a dossier is worth after the day it was made', () => {
     })
 
     it('exports the report to the phone and says it did', async () => {
-        const wrapper = mount(ResearchScreen)
+        const wrapper = mount(ResearchReportScreen)
         await openReport(wrapper)
 
         await wrapper.get('[data-testid="talos-research-export"]').trigger('click')
@@ -417,20 +470,19 @@ describe('R-5 — what a dossier is worth after the day it was made', () => {
         expect(wrapper.get('[data-testid="talos-research-export"]').text()).toContain('Saved')
     })
 
-    it('does not carry one report\u2019s re-check into the next', async () => {
-        const wrapper = mount(ResearchScreen)
-        await openReport(wrapper)
-        await wrapper.get('[data-testid="talos-research-recheck"]').trigger('click')
-        await settle(wrapper)
-        expect(wrapper.find('[data-testid="talos-research-recheck-result"]').exists()).toBe(true)
+    it('never shows a re-check result the reader did not just ask for', async () => {
+        // A stale panel would be reporting on sources it never checked. The
+        // report lives at its own address now, so "a different reading" is a
+        // new page rather than a reopened row — and a new page starts empty.
+        const first = mount(ResearchReportScreen)
+        await openReport(first)
+        await first.get('[data-testid="talos-research-recheck"]').trigger('click')
+        await settle(first)
+        expect(first.find('[data-testid="talos-research-recheck-result"]').exists()).toBe(true)
+        first.unmount()
 
-        // Closing and reopening is a different reading of a dossier; a stale
-        // panel would be reporting on sources it never checked.
-        await wrapper.get('[data-testid="talos-research-open-report"]').trigger('click')
-        await settle(wrapper)
-        await wrapper.get('[data-testid="talos-research-open-report"]').trigger('click')
-        await settle(wrapper)
-
-        expect(wrapper.find('[data-testid="talos-research-recheck-result"]').exists()).toBe(false)
+        const second = mount(ResearchReportScreen)
+        await openReport(second)
+        expect(second.find('[data-testid="talos-research-recheck-result"]').exists()).toBe(false)
     })
 })

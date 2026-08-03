@@ -3,7 +3,7 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { reactive, ref } from 'vue'
 import { mount } from '@vue/test-utils'
-import ResearchScreen from '@/screens/ResearchScreen.vue'
+import ResearchNewScreen from '@/screens/ResearchNewScreen.vue'
 import RunsScreen from '@/screens/RunsScreen.vue'
 
 const mockState = vi.hoisted(() => ({ controller: null as unknown }))
@@ -66,12 +66,14 @@ describe('standard tab screens (verbatim desktop parity, step-1 empty states)', 
      * what it will cost, and that is the line this asserts on.
      */
     it('research: proposes a plan first, and states the work before anything is spent', async () => {
-        const w = mount(ResearchScreen)
-        expect(w.get('[data-testid="mobile-screen-title"]').text()).toBe('Deep Research V3')
-        expect(w.get('[data-testid="mobile-screen-eyebrow"]').text()).toContain('Deep research')
+        // The setup moved behind the station's button on 2026-08-03, so this
+        // mounts the page that now owns it. The contract is unchanged: no plan,
+        // no start, and the work stated before anything is spent.
+        const w = mount(ResearchNewScreen)
+        expect(w.get('[data-testid="mobile-screen-title"]').text()).toBe('New research')
 
-        // Nothing to start yet: there is no plan, so there is no button.
-        expect(w.find('[data-testid="talos-research-start"]').exists()).toBe(false)
+        // Nothing to start yet: there is no plan, so the button refuses.
+        expect(w.get('[data-testid="talos-research-start"]').attributes('disabled')).toBeDefined()
 
         await w.get('[data-testid="talos-research-question"]').setValue('quale tablet conviene')
         await w.get('[data-testid="talos-research-propose"]').trigger('click')

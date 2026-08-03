@@ -92,6 +92,22 @@ const SURFACES = [
     },
     {
         /**
+         * The report, at two distances: what it claims, and what it read.
+         *
+         * Registered rather than hand-drawn for the ordinary reason — it then
+         * has the same strip, the same swipe and the same memory as everything
+         * else, and the drift gate watches it too.
+         */
+        id: 'research-report',
+        grammar: 'tabs',
+        activation: 'automatic',
+        views: [
+            { id: 'claims', labelKey: 'research.claimsTab' },
+            { id: 'sources', labelKey: 'research.sourcesTab' },
+        ],
+    },
+    {
+        /**
          * Owner 2026-07-26: "non voglio che sia troppo affollata … fai in modo
          * che ci siano dei settaggi e delle tab. Insomma strutturalo in modo
          * coerente."

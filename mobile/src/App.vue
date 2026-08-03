@@ -499,6 +499,16 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     notes: 'navigation.notes',
     doctor: 'navigation.doctor',
     research: 'stations.deepResearchTitle',
+    // The inner research surfaces keep the station's name in the sheet header:
+    // each page titles itself, and repeating that title twice on a phone spends
+    // the one line of chrome there is on saying the same thing.
+    'research-new': 'research.newTitle',
+    'research-report': 'stations.deepResearchTitle',
+    // These two DO name themselves: on the device the sheet header wins over
+    // the screen's own title, so leaving the station's name there made a claim
+    // page and a source page indistinguishable from the list behind them.
+    'research-claim': 'research.claimTitle',
+    'research-source': 'research.sourceTitle',
     runs: 'stations.runtimeCockpitTitle',
     context: 'navigation.library',
     settings: 'stations.settingsCenterTitle',

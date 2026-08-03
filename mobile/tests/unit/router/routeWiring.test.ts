@@ -30,10 +30,19 @@ const SCREEN_CONTRACT: Record<string, { file: string; component: string; markers
 
 describe('router wiring', () => {
 
-    it('resolves each of the 10 tab routes to its real parity screen', async () => {
-        expect(TALOS_MOBILE_ROUTES.map((r) => r.name)).toEqual(['chat', 'chats', 'memory', 'tasks', 'notes', 'doctor', 'research', 'runs', 'context', 'settings'])
-        const components = await Promise.all(TALOS_MOBILE_ROUTES.map((route) => route.component()))
-        for (const [index, route] of TALOS_MOBILE_ROUTES.entries()) {
+    it('resolves each tab route to its real parity screen', async () => {
+        // Deep Research became four surfaces on 2026-08-03 — the list, the
+        // setup, the report and the two pages inside it. Only the ones with a
+        // parity contract are checked here; the inner pages have their own
+        // tests and no desktop counterpart to be verbatim against.
+        expect(TALOS_MOBILE_ROUTES.map((r) => r.name)).toEqual([
+            'chat', 'chats', 'memory', 'tasks', 'notes', 'doctor',
+            'research', 'research-new', 'research-report', 'research-claim', 'research-source',
+            'runs', 'context', 'settings',
+        ])
+        const contracted = TALOS_MOBILE_ROUTES.filter((route) => SCREEN_CONTRACT[route.name])
+        const components = await Promise.all(contracted.map((route) => route.component()))
+        for (const [index, route] of contracted.entries()) {
             const contract = SCREEN_CONTRACT[route.name]
             const component = components[index] as { __name?: string }
             const source = readFileSync(resolve(process.cwd(), 'src/screens', contract.file), 'utf8')
