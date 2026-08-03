@@ -72,8 +72,16 @@ describe('standard tab screens (verbatim desktop parity, step-1 empty states)', 
         const w = mount(ResearchNewScreen)
         expect(w.get('[data-testid="mobile-screen-title"]').text()).toBe('New research')
 
-        // Nothing to start yet: there is no plan, so the button refuses.
-        expect(w.get('[data-testid="talos-research-start"]').attributes('disabled')).toBeDefined()
+        /**
+         * Nothing to start yet, so there is no start button — not a disabled
+         * one. Walking the tablet on 2026-08-03 found the previous version:
+         * question typed, models chosen, and a full-accent «Avvia» that did
+         * nothing when pressed, with no line anywhere saying a plan had to come
+         * first. From the outside that is indistinguishable from a broken app.
+         */
+        expect(w.find('[data-testid="talos-research-start"]').exists()).toBe(false)
+        // The one live action carries the accent instead.
+        expect(w.get('[data-testid="talos-research-propose"]').classes().join(' ')).toContain('bg-')
 
         await w.get('[data-testid="talos-research-question"]').setValue('quale tablet conviene')
         await w.get('[data-testid="talos-research-propose"]').trigger('click')

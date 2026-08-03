@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 import { Globe } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import { useTalosSourceCardIcons } from '@/composables/useTalosSourceCardIcons'
+import { useTalosI18n } from '@/i18n'
+import { talosPublishedOn } from '@/lib/publishedDate'
 import type { TalosMobileWebSource } from '@/stores/chat'
 
 /**
@@ -26,6 +28,7 @@ const props = defineProps<{
 }>()
 
 const open = ref(false)
+const { locale } = useTalosI18n()
 
 function siteOf(source: TalosMobileWebSource): string {
     if (source.site) return source.site
@@ -131,7 +134,7 @@ async function openSource(source: TalosMobileWebSource): Promise<void> {
                          date says so, rather than leaving a blank the reader
                          fills in with "recent". -->
                     <p class="mt-0.5 text-3xs text-[var(--talos-muted)]">
-                        {{ source.publishedAt ?? $t('chat.dateUnknown') }}
+                        {{ source.publishedAt ? talosPublishedOn(source.publishedAt, locale) : $t('chat.dateUnknown') }}
                     </p>
                     <p class="mt-1 truncate text-3xs text-[var(--talos-muted)] opacity-80">{{ source.url }}</p>
                     </button>

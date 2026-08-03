@@ -19,18 +19,18 @@
  * places where our evidence work is actually visible.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { talosResearchIsTerminal } from '@/lib/research/researchRun'
+import { talosResearchIsResting, talosResearchIsTerminal } from '@/lib/research/researchRun'
 import { talosResearchReportRefOf } from '@/lib/research/researchCard'
 import {
-    TALOS_RESEARCH_NO_STANDING,
     talosResearchDuration,
     talosResearchElapsedSeconds,
     talosResearchOutline,
-    talosResearchPhaseOf,
 } from '@/lib/research/researchOutline'
+import { talosResearchNarration, talosResearchStepTitle } from '@/lib/research/researchNarration'
+import { talosPublishedOn } from '@/lib/publishedDate'
 import { useRoute, useRouter } from 'vue-router'
 import { TabsContent } from 'reka-ui'
-import { AlertTriangle, ChevronRight, Download, Play, RotateCcw } from '@lucide/vue'
+import { AlertTriangle, ChevronRight, Download, Pause, Play, RotateCcw } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
@@ -40,7 +40,6 @@ import { useTalosResearchRun } from '@/composables/useTalosResearchRun'
 import { talosRememberView, talosRememberedView } from '@/lib/navigation/rememberedView'
 import { talosResearchSolidity, type TalosResearchStanding } from '@/lib/research/researchCard'
 import { talosResearchVerifiedStanding } from '@/lib/research/researchVerification'
-import { talosResearchProgressOf } from '@/lib/research/researchRun'
 import { talosResearchRecheckStanding, type TalosResearchRecheck } from '@/lib/research/researchRecheck'
 import type { TalosResearchReportRecord } from '@/lib/research/researchReport'
 import type { TalosResearchProgress } from '@/services/researchRuntime'
@@ -48,7 +47,7 @@ import type { TalosResearchProgress } from '@/services/researchRuntime'
 const route = useRoute()
 const router = useRouter()
 const controller = useChatController()
-const { t } = useTalosI18n()
+const { t, locale } = useTalosI18n()
 
 const runId = computed(() => String(route.params.id ?? ''))
 const view = useTalosResearchRun(() => runId.value)
@@ -96,7 +95,6 @@ onBeforeUnmount(() => unwatch?.())
 
 const isRunning = computed(() => controller.research.registry.isRunning(runId.value))
 const current = computed(() => liveRun.value?.run ?? run.value)
-const progress = computed(() => (current.value ? talosResearchProgressOf(current.value) : null))
 
 const standing = computed<TalosResearchStanding | null>(() => (report.value
     ? talosResearchVerifiedStanding(report.value.claims.map((claim) => ({
@@ -117,17 +115,31 @@ const judge = computed(() => report.value?.judge ?? null)
 const steps = computed(() => current.value?.steps ?? [])
 
 /**
- * The operating header, and the document's own shape — both entirely local.
+ * Everything the page says about a run in flight — all of it local, none of it
+ * waiting for anything.
  *
- * The visual research of 2026-08-03 found that none of the five products
- * documents the first half-second of a run, and that is precisely why this
- * matters: we already know what to draw. The plan was approved before a penny
- * was spent, so its branches ARE the report's sections, and the header can say
- * where the run is from the instant it starts. Nothing here waits for disk or
- * network, so the first frame cannot be late.
+ * Owner 2026-08-03, on the page this replaces: «non c'è un titolo hero, non c'è
+ * un progresso di quello che si sta facendo … dei termini molto tecnici. Deve
+ * essere production ready». The diagnosis was exact. The page said HOW MUCH —
+ * `0/2`, `RACCOLGO`, `b1:search` — and never WHAT, which is the half a person
+ * actually wants; and the material for that half was already on the run,
+ * unused. The plan is approved before a penny is spent, so every branch carries
+ * the question it went to answer, and the sentence writes itself from it.
+ *
+ * The visual research of the same day found that none of the five competitors
+ * documents the first half-second of a run at all. Nothing here touches disk or
+ * network, so ours cannot be late.
  */
+const heading = computed(() => current.value?.title ?? current.value?.question ?? '')
+/** Renaming keeps the question asked. Showing it is how that promise stays true. */
+const renamed = computed(() => Boolean(current.value?.title))
 const outline = computed(() => (current.value ? talosResearchOutline(current.value) : []))
-const phase = computed(() => (current.value ? talosResearchPhaseOf(current.value) : 'planning'))
+const sectionsDone = computed(() => outline.value.filter((entry) => entry.state === 'done').length)
+const ended = computed(() => talosResearchIsTerminal(current.value?.status ?? 'planning'))
+const resting = computed(() => talosResearchIsResting(current.value?.status ?? 'planning'))
+const say = computed(() => (current.value
+    ? talosResearchNarration(current.value, isRunning.value)
+    : { key: 'research.say.planning', params: {} }))
 
 /**
  * The clock ticks from a timestamp on the RUN, not from a timer started when
@@ -136,40 +148,42 @@ const phase = computed(() => (current.value ? talosResearchPhaseOf(current.value
  */
 const nowIso = ref(new Date().toISOString())
 let clock: ReturnType<typeof setInterval> | null = null
-onMounted(() => { clock = setInterval(() => { nowIso.value = new Date().toISOString() }, 1000) })
-onBeforeUnmount(() => { if (clock !== null) clearInterval(clock) })
+function stopClock(): void {
+    if (clock === null) return
+    clearInterval(clock)
+    clock = null
+}
+// A finished research has a duration that cannot change, so a timer for it is a
+// wake-up per second on a phone that buys nothing. It stops the moment the run
+// ends under you, not only when the page closes.
+onMounted(() => { if (!ended.value) clock = setInterval(() => { nowIso.value = new Date().toISOString() }, 1000) })
+watch(ended, (over) => { if (over) stopClock() })
+onBeforeUnmount(stopClock)
 
 const elapsed = computed(() => (current.value
     ? talosResearchDuration(talosResearchElapsedSeconds(current.value, nowIso.value))
     : null))
 
-/**
- * Shown from the first frame WITH ZEROS IN IT, before there is anything to
- * count. It is the one number that says what this product is for, and a page
- * that reveals it only at the end teaches the reader to look for something else
- * meanwhile — which is exactly how every competitor ends up leading with the
- * number of sources.
- */
-const balance = computed(() => standing.value ?? TALOS_RESEARCH_NO_STANDING)
+const balance = computed(() => standing.value
+    ?? { total: 0, supported: 0, partial: 0, unsupported: 0, unchecked: 0 })
 
 const failedSteps = computed(() => current.value?.steps.filter((step) => step.state === 'failed') ?? [])
 
 /**
- * What to say when there is no report — and there is always something to say.
+ * The record, in names instead of identifiers.
  *
- * Each of these is a different situation for the person, and telling them apart
- * is the difference between "wait" and "do something". The old page said
- * nothing at all for the last two.
+ * It stays — it is what ended an hours-long hunt on 2026-08-03, when the page
+ * could only say «conclusa senza scrivere il rapporto» and the record showed
+ * the synthesis had in fact produced one. But it printed `b1:search` and a `●`,
+ * which are useful to exactly one reader, and he wrote them. Owner, same day:
+ * closed, at the bottom, in words.
  */
-const liveLine = computed(() => {
-    const status = current.value?.status
-    if (isRunning.value) return 'research.cardRunning'
-    if (status === 'paused' || status === 'pause_requested') return 'research.pausedHere'
-    if (status === 'cancelled') return 'research.cancelledHere'
-    if (status === 'failed') return 'research.failedHere'
-    if (status === 'done') return 'research.doneNoReport'
-    return 'research.stopped'
-})
+const record = computed(() => steps.value.map((step) => ({
+    id: step.id,
+    state: step.state,
+    saved: Boolean(step.resultRef),
+    title: current.value ? talosResearchStepTitle(current.value, step) : null,
+})))
 
 /**
  * WHY a branch failed, not just how many did.
@@ -230,6 +244,26 @@ async function resume(): Promise<void> {
     }
 }
 
+/**
+ * Stopping it from the page it is running on.
+ *
+ * The station has had this in its row menu since the CRUD block; the page it
+ * leads to had only Resume, so a research you were watching could be started
+ * and followed from here but only stopped by going back. Pausing asks nothing
+ * first — it takes nothing away — which is the same rule the station follows.
+ */
+async function pause(): Promise<void> {
+    if (busy.value) return
+    busy.value = true
+    try {
+        await controller.research.pause(runId.value)
+    } catch (failure) {
+        error.value = failure instanceof Error ? failure.message : String(failure)
+    } finally {
+        busy.value = false
+    }
+}
+
 async function runRecheck(): Promise<void> {
     rechecking.value = true
     recheck.value = null
@@ -282,7 +316,10 @@ function openSource(index: number): void {
 </script>
 
 <template>
-    <TalosMobileScreen :title="current?.question ?? t('stations.deepResearchTitle')" data-testid="talos-research-report-screen">
+    <!-- The station name, not the question: inside the sheet this header hides
+         and the question becomes the body's own <h1>, so passing it here would
+         print the same title twice on the one surface that does show it. -->
+    <TalosMobileScreen :title="t('stations.deepResearchTitle')" data-testid="talos-research-report-screen">
         <div class="flex flex-col gap-4">
             <p v-if="loading" class="text-sm text-[var(--talos-muted)]">{{ t('research.loading') }}</p>
 
@@ -291,33 +328,68 @@ function openSource(index: number): void {
             </p>
 
             <template v-else>
-                <!-- The balance first. What a report claims is worth less than
-                     whether the claims stood, and every competitor leads with
-                     the opposite. -->
                 <!--
-                    The operating header. State in a word, how long it has been
-                    going, and how far — the three things a person checks before
-                    deciding whether to wait. Sticky, because on a phone the
-                    answer to "what is it doing" must not require scrolling back
-                    up through a report.
+                    The question, first and large.
+
+                    Owner 2026-08-03: «non c'è un titolo hero». True — the
+                    question lived only in the sheet chrome, truncated, while
+                    the page opened on a status badge in monospaced capitals. A
+                    research IS a question being answered, so the question is
+                    this document's title and belongs where a title goes.
                 -->
-                <header data-testid="talos-research-header" class="sticky top-0 z-10 -mx-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-[var(--talos-border)] bg-[var(--talos-background)] px-4 pb-2 pt-1">
-                    <span
-                        class="font-mono text-2xs uppercase tracking-wide"
-                        :class="phase === 'ended' ? 'text-[var(--talos-muted)]' : 'text-[var(--talos-accent)]'"
-                    >{{ t(`research.phase.${phase}`) }}</span>
-                    <span v-if="elapsed" data-testid="talos-research-elapsed" class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ elapsed }}</span>
-                    <span v-if="progress && progress.total > 0" class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
-                        {{ progress.done }}/{{ progress.total }}
-                    </span>
+                <header data-testid="talos-research-hero" class="pt-4">
+                    <h1 class="talos-title text-xl font-semibold leading-7 text-[var(--talos-text)]">{{ heading }}</h1>
+                    <p v-if="renamed" data-testid="talos-research-asked-question" class="mt-1 text-2xs leading-5 text-[var(--talos-muted)]">
+                        {{ t('research.askedQuestion', { question: current?.question ?? '' }) }}
+                    </p>
+
+                    <!--
+                        What it is doing, in a sentence, named after the branch
+                        it is on. `role="status"` announces it without moving
+                        the focus — the visual research asks for exactly this
+                        and for nothing more theatrical.
+                    -->
+                    <p
+                        data-testid="talos-research-say"
+                        role="status"
+                        class="mt-3 text-sm leading-6 text-[var(--talos-text)]"
+                    >{{ t(say.key, say.params) }}</p>
+
+                    <p data-testid="talos-research-meta" class="mt-1 flex flex-wrap items-baseline gap-x-2 text-2xs leading-5 text-[var(--talos-muted)]">
+                        <span v-if="elapsed" data-testid="talos-research-elapsed">
+                            {{ ended ? t('research.endedAfter', { elapsed }) : t('research.runningSince', { elapsed }) }}
+                        </span>
+                        <!-- The separator is its own element so the flex gap
+                             falls on BOTH sides of it. Glued to the text it
+                             read «1 min 14 s  ·2 di 2 sezioni» on the tablet. -->
+                        <span v-if="elapsed && outline.length" aria-hidden="true">·</span>
+                        <span v-if="outline.length">{{ t('research.sectionsDone', { done: sectionsDone, total: outline.length }) }}</span>
+                    </p>
+
+                    <!-- One control, and only the one that applies. While it is
+                         draining towards a checkpoint neither does: the pause
+                         has been asked for and there is nothing left to press. -->
+                    <Button v-if="isRunning && !resting" data-testid="talos-research-pause" variant="outline" class="mt-3" :disabled="busy" @click="pause()">
+                        <Pause class="h-4 w-4" aria-hidden="true" />
+                        {{ t('research.actionPause') }}
+                    </Button>
+                    <Button v-else-if="!isRunning && !ended" data-testid="talos-research-resume" variant="outline" class="mt-3" :disabled="busy" @click="resume()">
+                        <Play class="h-4 w-4" aria-hidden="true" />
+                        {{ t('research.resume') }}
+                    </Button>
                 </header>
 
-                <section data-testid="talos-research-balance" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4">
+                <!--
+                    What a report claims is worth less than whether the claims
+                    stood, and every competitor leads with the opposite: the
+                    number of sources, which is scale mistaken for support.
+                -->
+                <section v-if="report" data-testid="talos-research-balance" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4">
                     <p class="flex items-baseline gap-2">
                         <span class="text-3xl font-semibold tabular-nums text-[var(--talos-text)]">{{ solidity === null ? '—' : `${solidity}%` }}</span>
                         <span class="text-xs text-[var(--talos-muted)]">{{ t('research.solidity') }}</span>
                     </p>
-                    <p data-testid="talos-research-standing" class="mt-2 font-mono text-2xs leading-5 tabular-nums text-[var(--talos-muted)]">
+                    <p data-testid="talos-research-standing" class="mt-2 text-2xs leading-5 tabular-nums text-[var(--talos-muted)]">
                         {{ t('research.standing', {
                             supported: balance.supported,
                             total: balance.total,
@@ -326,50 +398,10 @@ function openSource(index: number): void {
                             unchecked: balance.unchecked,
                         }) }}
                     </p>
-                    <p v-if="report" class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">
+                    <p class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">
                         <template v-if="judge">{{ t('research.verifiedByLead') }} <span data-testid="talos-research-judge" class="break-all font-mono">{{ judge }}</span></template>
                         <template v-else>{{ t('research.notVerified') }}</template>
                     </p>
-                </section>
-
-                <!--
-                    Shown whenever there is no finished report, which is not the
-                    same as "still has branches left".
-
-                    Owner 2026-08-03: a research that stopped after its branches
-                    but before its report drew a COMPLETELY EMPTY page — five
-                    sections, every one of them in a `v-else` that did not
-                    apply. `done < total` was false because the synthesis had
-                    not been recorded as a step yet, so the one thing that could
-                    have spoken stayed silent. A page with nothing on it is
-                    worse than an error: it gives the person nothing to do and
-                    nothing to report.
-                -->
-                <section v-if="!report" data-testid="talos-research-live" class="rounded-xl border border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] p-3">
-                    <p class="font-mono text-2xs tabular-nums text-[var(--talos-text)]">
-                        {{ t(liveLine, { done: progress?.done ?? 0, total: progress?.total ?? 0 }) }}
-                    </p>
-                    <!-- A determinate bar only while the denominator is real.
-                         A percentage of a plan that can still grow is theatre —
-                         the one thing the competitor research said not to copy. -->
-                    <div
-                        v-if="progress && progress.total > 0"
-                        class="mt-2 h-1 overflow-hidden rounded-full bg-[var(--talos-border)]"
-                        role="progressbar"
-                        :aria-valuemin="0"
-                        :aria-valuemax="progress.total"
-                        :aria-valuenow="progress.done"
-                        :aria-valuetext="t('research.cardRunning', { done: progress.done, total: progress.total })"
-                    >
-                        <div
-                            class="h-full rounded-full bg-[var(--talos-accent)] transition-[width] duration-500"
-                            :style="{ width: `${Math.round((progress.done / progress.total) * 100)}%` }"
-                        />
-                    </div>
-                    <Button v-if="!isRunning && !talosResearchIsTerminal(current?.status ?? 'planning')" data-testid="talos-research-resume" variant="outline" class="mt-2" :disabled="busy" @click="resume()">
-                        <Play class="h-4 w-4" aria-hidden="true" />
-                        {{ t('research.resume') }}
-                    </Button>
                 </section>
 
                 <div v-if="failedSteps.length" data-testid="talos-research-failed-steps" class="flex items-start gap-2 rounded-xl border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-xs leading-5 text-[var(--talos-danger)]">
@@ -388,18 +420,6 @@ function openSource(index: number): void {
                 </div>
 
                 <!--
-                    The steps, openable, and shown by default when there is no
-                    report to read instead.
-
-                    The visual research of 2026-08-03 puts this at the centre of
-                    the chosen direction: the plan and the record stay openable,
-                    and on an error only the broken step expands — the way
-                    GitHub Actions does it. It is also the thing that would have
-                    told us, hours earlier, that a report had been written and
-                    its reference lost: «conclusa senza scrivere il rapporto»
-                    was all the page could say, and a person cannot report that.
-                -->
-                <!--
                     The document, before it exists: one section per approved
                     branch, each saying where it is. This is the answer to the
                     question the visual research found NOBODY answering — what to
@@ -407,45 +427,30 @@ function openSource(index: number): void {
                     the plan was agreed before any money was spent.
                 -->
                 <section v-if="!report && outline.length" data-testid="talos-research-outline" class="flex flex-col gap-2">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.expectedSections') }}</p>
+                    <h2 class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.expectedSections') }}</h2>
                     <div
-                        v-for="(section, index) in outline"
-                        :key="section.id"
+                        v-for="(entry, index) in outline"
+                        :key="entry.id"
                         data-testid="talos-research-outline-section"
                         class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3"
                     >
                         <p class="flex items-baseline gap-2">
-                            <span class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ index + 1 }}</span>
-                            <span class="min-w-0 flex-1 text-sm leading-5 text-[var(--talos-text)]">{{ section.question }}</span>
+                            <span class="text-2xs tabular-nums text-[var(--talos-muted)]">{{ index + 1 }}</span>
+                            <span class="min-w-0 flex-1 text-sm leading-5 text-[var(--talos-text)]">{{ entry.question }}</span>
                         </p>
                         <p
-                            class="mt-1 font-mono text-2xs"
-                            :class="section.state === 'failed' ? 'text-[var(--talos-danger)]' : 'text-[var(--talos-muted)]'"
-                        >{{ t(`research.stepState.${section.state}`) }}</p>
+                            class="mt-1 text-2xs"
+                            :class="entry.state === 'failed' ? 'text-[var(--talos-danger)]' : 'text-[var(--talos-muted)]'"
+                        >{{ t(`research.sectionState.${entry.state}`) }}</p>
                     </div>
                 </section>
 
-                <details v-if="steps.length" data-testid="talos-research-activity" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]" :open="!report">
-                    <summary class="talos-pressable min-h-11 cursor-pointer list-none px-3 py-3 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
-                        {{ t('research.activity') }}
-                    </summary>
-                    <ul class="flex flex-col gap-1 px-3 pb-3">
-                        <li
-                            v-for="step in steps"
-                            :key="step.id"
-                            data-testid="talos-research-activity-step"
-                            class="flex items-baseline justify-between gap-3 font-mono text-2xs tabular-nums"
-                        >
-                            <span class="min-w-0 flex-1 truncate text-[var(--talos-text)]">{{ step.id }}</span>
-                            <span :class="step.state === 'failed' ? 'text-[var(--talos-danger)]' : 'text-[var(--talos-muted)]'">
-                                {{ t(`research.stepState.${step.state}`) }}
-                            </span>
-                            <!-- Whether the step left something behind is the
-                                 difference between "it ran" and "it produced". -->
-                            <span class="shrink-0 text-[var(--talos-muted)]">{{ step.resultRef ? '●' : '—' }}</span>
-                        </li>
-                    </ul>
-                </details>
+                <!-- The one number that says what this product is for, promised
+                     before it can be shown. A page that reveals it only at the
+                     end teaches the reader to look for something else meanwhile. -->
+                <p v-if="!report" data-testid="talos-research-balance-empty" class="text-2xs leading-5 text-[var(--talos-muted)]">
+                    {{ t('research.balanceEmpty') }}
+                </p>
 
                 <p v-if="reportUnreadable" data-testid="talos-research-unreadable" class="rounded-xl border border-[var(--talos-border)] p-3 text-sm text-[var(--talos-muted)]">
                     {{ t('research.reportUnreadable') }}
@@ -490,8 +495,8 @@ function openSource(index: number): void {
                             >
                                 <span class="min-w-0 flex-1">
                                     <span class="block truncate text-sm text-[var(--talos-text)]">{{ source.title || source.url }}</span>
-                                    <span class="mt-1 block font-mono text-2xs text-[var(--talos-muted)]">
-                                        {{ source.publishedAt ?? t('research.noDate') }} ·
+                                    <span class="mt-1 block text-2xs text-[var(--talos-muted)]">
+                                        {{ source.publishedAt ? talosPublishedOn(source.publishedAt, locale) : t('research.noDate') }} ·
                                         {{ source.obtained === 'snippet' ? t('research.onlySnippet') : t('research.pageRead') }}
                                     </span>
                                 </span>
@@ -554,6 +559,41 @@ function openSource(index: number): void {
                         <p class="text-2xs leading-5 text-[var(--talos-muted)]">{{ t('research.followUpNote') }}</p>
                     </div>
                 </template>
+
+                <!--
+                    The record, closed and last.
+
+                    It stays, and for a reason worth stating: on 2026-08-03 the
+                    page could only say «conclusa senza scrivere il rapporto»
+                    while the record showed the synthesis had produced one, and
+                    that line is what ended an hours-long hunt. But it is
+                    evidence, not content — owner, same day: closed, at the
+                    bottom, and in words rather than `b1:search`.
+
+                    The visual research puts the same shape at the centre of the
+                    chosen direction: plan and record openable, never dominant,
+                    the way GitHub Actions keeps a workflow's log.
+                -->
+                <details v-if="record.length" data-testid="talos-research-activity" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]">
+                    <summary class="talos-pressable min-h-11 cursor-pointer list-none px-3 py-3 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                        {{ t('research.howItWasBuilt') }}
+                    </summary>
+                    <ul class="flex flex-col gap-2 px-3 pb-3">
+                        <li
+                            v-for="entry in record"
+                            :key="entry.id"
+                            data-testid="talos-research-activity-step"
+                            class="flex items-baseline justify-between gap-3 text-2xs leading-5"
+                        >
+                            <span class="min-w-0 flex-1 text-[var(--talos-text)]">{{ entry.title ? t(entry.title.key, entry.title.params) : entry.id }}</span>
+                            <!-- Whether the step left something behind is the
+                                 difference between "it ran" and "it produced". -->
+                            <span class="shrink-0" :class="entry.state === 'failed' ? 'text-[var(--talos-danger)]' : 'text-[var(--talos-muted)]'">
+                                {{ t(`research.stepState.${entry.state}`) }}<template v-if="entry.saved"> · {{ t('research.stepSaved') }}</template>
+                            </span>
+                        </li>
+                    </ul>
+                </details>
 
                 <p v-if="error" role="alert" data-testid="talos-research-report-error" class="rounded-xl border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
                     {{ error }}

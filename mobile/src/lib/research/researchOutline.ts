@@ -1,11 +1,9 @@
 import {
-    talosResearchIsResting,
     talosResearchIsTerminal,
     talosResearchStepIdFor,
     type TalosResearchRun,
     type TalosResearchStepState,
 } from '@/lib/research/researchRun'
-import type { TalosResearchStanding } from '@/lib/research/researchCard'
 
 /**
  * The document, before it exists.
@@ -24,8 +22,6 @@ import type { TalosResearchStanding } from '@/lib/research/researchCard'
  * Everything here is arithmetic over the run. No disk, no network: the first
  * frame cannot be late because there is nothing to wait for.
  */
-
-export type TalosResearchPhase = 'planning' | 'collecting' | 'writing' | 'paused' | 'ended'
 
 export interface TalosResearchSection {
     readonly id: string
@@ -48,20 +44,22 @@ export function talosResearchOutline(run: TalosResearchRun): readonly TalosResea
 }
 
 /**
- * Where the run is, in words a person uses.
+ * When a finished run actually finished.
  *
- * Deliberately coarser than `status`: the journal distinguishes `collecting`
- * from `synthesising` from `verifying`, and a reader does not care which of the
- * three the machine calls itself — they care whether it is still gathering or
- * already writing. `writing` is derived from the synthesis step existing, not
- * from the status, because that is the fact that actually changed.
+ * NOT `updatedAt`, which is stamped by every event the journal accepts — a
+ * rename among them. A research done in four minutes yesterday and renamed
+ * today would otherwise read «conclusa in 1 giorno», and the page would be
+ * quoting the moment you retitled it as the moment it stopped thinking.
+ *
+ * The last step to report a finish is the real end. A run cancelled before any
+ * step finished has none, and there `updatedAt` is the best there is.
  */
-export function talosResearchPhaseOf(run: TalosResearchRun): TalosResearchPhase {
-    if (talosResearchIsTerminal(run.status)) return 'ended'
-    if (talosResearchIsResting(run.status)) return 'paused'
-    if (run.plan.length === 0) return 'planning'
-    const synthesis = run.steps.find((step) => step.kind === 'synthesise')
-    return synthesis && synthesis.state !== 'pending' ? 'writing' : 'collecting'
+function endedAt(run: TalosResearchRun): string {
+    let last: string | null = null
+    for (const step of run.steps) {
+        if (step.finishedAt && (last === null || step.finishedAt > last)) last = step.finishedAt
+    }
+    return last ?? run.updatedAt
 }
 
 /**
@@ -74,7 +72,7 @@ export function talosResearchPhaseOf(run: TalosResearchRun): TalosResearchPhase 
  */
 export function talosResearchElapsedSeconds(run: TalosResearchRun, now: string): number {
     const started = Date.parse(run.startedAt)
-    const until = Date.parse(talosResearchIsTerminal(run.status) ? run.updatedAt : now)
+    const until = Date.parse(talosResearchIsTerminal(run.status) ? endedAt(run) : now)
     if (!Number.isFinite(started) || !Number.isFinite(until)) return 0
     return Math.max(0, Math.round((until - started) / 1000))
 }
@@ -85,19 +83,3 @@ export function talosResearchDuration(seconds: number): string {
     const minutes = Math.floor(seconds / 60)
     return `${minutes} min ${String(seconds % 60).padStart(2, '0')} s`
 }
-
-/**
- * The evidence balance, present from the first frame with zeros in it.
- *
- * Shown before there is anything to count on purpose. It is the one number that
- * says what this product is for, and a page that reveals it only at the end
- * teaches the reader to look for something else in the meantime — which is
- * exactly how every competitor ends up leading with the source count.
- */
-export const TALOS_RESEARCH_NO_STANDING: TalosResearchStanding = Object.freeze({
-    total: 0,
-    supported: 0,
-    partial: 0,
-    unsupported: 0,
-    unchecked: 0,
-})

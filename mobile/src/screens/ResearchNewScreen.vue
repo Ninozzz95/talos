@@ -103,7 +103,6 @@ const totals = computed(() => talosResearchPlanTotals(plan.value))
  * publish nothing machine-readable, and neither is wired here.
  */
 const cost = computed(() => talosResearchPlanCost(totals.value, null))
-const canStart = computed(() => plan.value.length > 0 && !busy.value)
 
 function propose(): void {
     if (question.value.trim().length === 0) return
@@ -137,7 +136,9 @@ function reword(branchId: string, text: string): void {
  * or not you stay — that is what the registry is for.
  */
 async function start(): Promise<void> {
-    if (!canStart.value) return
+    // The button is only rendered once there is a plan, but a second tap while
+    // the first is in flight would start the same research twice.
+    if (plan.value.length === 0 || busy.value) return
     busy.value = true
     try {
         const { id } = await controller.research.start({
@@ -174,8 +175,30 @@ async function start(): Promise<void> {
                 />
             </label>
 
-            <Button data-testid="talos-research-propose" variant="outline" class="w-full" @click="propose()">
-                {{ t('research.propose') }}
+            <!--
+                One live action at a time, and it is always this one first.
+
+                Found by walking the tablet on 2026-08-03: with a question typed
+                and both models chosen, «Avvia» sat there in full accent colour
+                and DISABLED, because `canStart` wants a plan and the plan only
+                exists after «Pianifica». Nothing on the screen said so. Tapping
+                the obvious primary button and having nothing whatsoever happen
+                is, from the outside, indistinguishable from the app being
+                broken — and it is very probably part of what owner 2026-08-03
+                reported as «non riesco a fare partire una deep research».
+
+                So the accent moves rather than the explanation being added: a
+                dead control is worse than an absent one, and this screen's own
+                promise is «one decision per screen instead of all of them at
+                once».
+            -->
+            <Button
+                data-testid="talos-research-propose"
+                :variant="plan.length > 0 ? 'outline' : 'default'"
+                class="w-full"
+                @click="propose()"
+            >
+                {{ plan.length > 0 ? t('research.proposeAgain') : t('research.propose') }}
             </Button>
 
             <div data-testid="talos-research-models" class="space-y-2 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
@@ -279,9 +302,12 @@ async function start(): Promise<void> {
                 {{ error }}
             </p>
 
-            <Button data-testid="talos-research-start" :disabled="!canStart" class="w-full" @click="start()">
+            <!-- Only once there is something to start. Before that the plan
+                 button above carries the accent, so the screen never shows a
+                 primary action that does nothing when pressed. -->
+            <Button v-if="plan.length > 0" data-testid="talos-research-start" :disabled="busy" class="w-full" @click="start()">
                 <Play class="h-4 w-4" aria-hidden="true" />
-                {{ t('research.start') }}
+                {{ busy ? t('research.starting') : t('research.start') }}
             </Button>
         </div>
     </TalosMobileScreen>

@@ -102,6 +102,28 @@ function makeController() {
             saveComposerDraft: vi.fn().mockResolvedValue(undefined),
             setSessionLibraryContextPolicy: vi.fn().mockResolvedValue(undefined),
         },
+        /**
+         * The research station follows whatever is already running the moment
+         * it mounts, and this stub had nothing for it to follow — so opening a
+         * station threw `Cannot read properties of undefined (reading
+         * 'registry')` out of an async `onMounted`, where no test could see it.
+         * It surfaced only as two unhandled rejections in the suite summary,
+         * which turned every unit run red without failing anything.
+         */
+        research: {
+            registry: {
+                running: () => [] as string[],
+                isRunning: () => false,
+                watch: () => () => undefined,
+            },
+            list: vi.fn().mockResolvedValue([]),
+            report: vi.fn().mockResolvedValue(null),
+            pause: vi.fn().mockResolvedValue(undefined),
+            resume: vi.fn().mockResolvedValue(undefined),
+            rename: vi.fn().mockResolvedValue(undefined),
+            cancel: vi.fn().mockResolvedValue(undefined),
+            remove: vi.fn().mockResolvedValue([]),
+        },
         selectModel: vi.fn(),
         saveKey: vi.fn().mockResolvedValue(undefined),
         removeKey: vi.fn().mockResolvedValue(undefined),
