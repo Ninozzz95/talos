@@ -10,7 +10,17 @@ import type { TalosMobileIntroOutcome, TalosMobileOnboardingState } from '@/stor
  * keeps the session latch (no reopen loop) — the unsaved version simply offers
  * the intro again on the next cold start, which is honest.
  */
-export const TALOS_MOBILE_INTRO_VERSION = 2
+/**
+ * 3 — la pagina del background (2026-08-03).
+ *
+ * Alzata di proposito, non per abitudine. Chi ha già TALOS installato ha i tre
+ * passi essenziali fatti, quindi `startIndex` lo porta **esattamente** sulla
+ * pagina nuova: vede quella e nient'altro. È l'unico modo di raggiungere chi ha
+ * l'app da prima con una cosa senza la quale ogni ricerca lunga muore
+ * ([[permissions-onboarding-page-blocking]]) — e succede una volta sola, perché
+ * la chiusura scrive comunque la versione anche se la persona rifiuta.
+ */
+export const TALOS_MOBILE_INTRO_VERSION = 3
 
 export interface TalosMobileIntroStateDependencies {
     hydrated: () => boolean
