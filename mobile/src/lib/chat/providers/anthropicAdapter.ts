@@ -17,6 +17,7 @@ import {
     requireHttpSuccess,
     requireProviderApiKey,
 } from '@/lib/chat/providerErrors'
+import { talosNumericUsage } from '@/lib/chat/providers/usage'
 
 /**
  * The provider's own words out of an error body, and nothing else.
@@ -52,7 +53,24 @@ const completionSchema = z.object({
         type: z.string(),
         text: z.string().optional(),
     }).passthrough()),
-    usage: z.record(z.string(), z.number()).optional(),
+    /**
+     * Telemetry, and read as such.
+     *
+     * This asked for numbers, and it was the only adapter that did — the
+     * OpenAI-compatible one already accepts anything, and the consumer
+     * (`promptCache.ts`) types it `Record<string, unknown>`. Anthropic's usage
+     * block legitimately carries nulls (`cache_creation_input_tokens`), nested
+     * objects (`cache_creation`, `server_tool_use`) and strings
+     * (`service_tier`), so any of those threw the WHOLE answer away as
+     * malformed — an answer that had been generated and paid for, rejected
+     * over an accounting field nobody was reading.
+     *
+     * Found 2026-08-03: a deep research with Sonnet 5 as author stopped on
+     * TALOS_PROVIDER_RESPONSE_MALFORMED at the synthesis. Chat was fine because
+     * chat STREAMS and builds its own usage; only this non-streaming path
+     * parses the provider's.
+     */
+    usage: z.record(z.string(), z.unknown()).optional(),
 }).passthrough()
 
 function requestTimeouts(timeout: number | undefined): { connectTimeout: number; readTimeout: number } | Record<string, never> {
@@ -154,7 +172,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             text,
             model: parsed.data.model ?? input.model.id,
             finishReason: parsed.data.stop_reason ?? null,
-            usage: parsed.data.usage ?? null,
+            usage: talosNumericUsage(parsed.data.usage),
             ...(toolCalls.length ? { toolCalls } : {}),
         }
     },
