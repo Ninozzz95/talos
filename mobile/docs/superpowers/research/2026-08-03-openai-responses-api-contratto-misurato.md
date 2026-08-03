@@ -132,3 +132,61 @@ dispositivo. È ciò che tiene il modello utilizzabile oggi.
 
 Resta però **silenziosa**: chi chiede «ragionamento alto» ottiene «none» e non
 lo sa. Se la migrazione slitta, quella riga nella ricevuta va scritta comunque.
+
+---
+
+## 5. Lo streaming e il rimando dei tool — MISURATI (2026-08-03, stessa sessione)
+
+Erano i due pezzi mancanti. Non c'era niente da delegare: la pagina delle docs
+rifiuta il fetch, ma **curl sull'API funziona** ed è una fonte più forte.
+
+### Gli eventi, in ordine
+
+Risposta di solo testo:
+
+```
+response.created → response.in_progress → response.output_item.added
+→ response.content_part.added → response.output_text.delta (×N)
+→ response.output_text.done → response.content_part.done
+→ response.output_item.done → response.completed
+```
+
+Risposta che chiama un tool — **nessun `content_part`**, e due `output_item`
+(il ragionamento e la chiamata):
+
+```
+response.created → response.in_progress → response.output_item.added (×2)
+→ response.function_call_arguments.delta (×N)
+→ response.function_call_arguments.done
+→ response.output_item.done (×2) → response.completed
+```
+
+**Dove sta la roba:**
+
+| evento | campo |
+|---|---|
+| `response.output_text.delta` | `delta` — il pezzo di testo |
+| `response.function_call_arguments.delta` | `delta` — pezzi della stringa JSON |
+| `response.output_item.done` | `item` — la `function_call` INTERA, con `call_id` |
+| `response.completed` | `response.usage` — l'uso finale |
+
+Quindi la chiamata non va ricomposta a mano dai delta: `output_item.done` la
+consegna intera. I delta servono solo se si vuole mostrarla mentre si forma.
+
+### Il rimando del risultato: FUNZIONA
+
+Nel secondo giro `input` porta **due elementi in più**, entrambi con lo stesso
+`call_id`:
+
+```json
+{"type":"function_call","call_id":"call_iKV…","name":"library_search",
+ "arguments":"{\"query\":\"batteria\"}"}
+{"type":"function_call_output","call_id":"call_iKV…",
+ "output":"[{\"nome\":\"batteria-oneplus.md\"}]"}
+```
+
+→ **200**, e il modello risponde usando il risultato: «Ho trovato un documento
+nella tua Libreria: **batteria-oneplus.md**».
+
+**Confermato:** la chiamata originale va **rimessa** in `input` accanto al
+risultato (come su chat/completions), e `output` è una **stringa**.
