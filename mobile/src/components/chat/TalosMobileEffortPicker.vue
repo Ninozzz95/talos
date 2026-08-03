@@ -6,6 +6,7 @@ import {
     mobileEffortLadderFromLevels,
 } from '@/lib/mobileEffort'
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
+import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 
 const props = defineProps<{
     effortLevels: string[]
@@ -79,27 +80,38 @@ function onKeydown(event: KeyboardEvent): void {
             <template #option="{ option }">{{ option.label }}</template>
         </TalosThemedFilter>
 
-        <label
+        <!--
+            L'interruttore condiviso, al posto della sesta copia fatta a mano.
+
+            Owner 2026-08-03, con uno screenshot: il pomello stava FUORI dal
+            binario. Non era un'approssimazione grafica — misurato nella pagina
+            viva sul tablet, il binario è largo 48px e il pomello cominciava a
+            48px, cioè sbordava di venti pixel interi, tutto quanto.
+
+            La causa: il pomello era `absolute` senza `left`, quindi partiva
+            dalla sua POSIZIONE STATICA — e un `<button>` centra il proprio
+            contenuto, per cui quella posizione è il centro (24px) — e sopra ci
+            si sommava `translate-x-6`, altri 24px. Le altre cinque copie in
+            giro per l'app scrivono `left` esplicito e infatti stanno dentro:
+            questa era l'unica rotta, ed è per questo che si vedeva in un posto
+            solo.
+
+            `TalosThemedSwitch` non posiziona nulla in assoluto: il pomello è un
+            figlio in flusso dentro un contenitore `items-center`. Il difetto
+            non è corretto, è reso impossibile.
+        -->
+        <div
             v-if="supportsThinking"
             class="flex min-h-11 items-center justify-between gap-3 border-t border-[var(--talos-border,var(--border))] pt-2 text-sm text-[var(--talos-text,var(--foreground))]"
         >
             <span class="min-w-0">{{ $t('chat.extendedThinking') }}</span>
-            <button
-                type="button"
-                role="switch"
-                data-testid="talos-mobile-thinking-toggle"
-                :aria-checked="thinking"
-                class="relative h-7 w-12 shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))]"
-                :class="thinking ? 'bg-[var(--talos-accent,var(--primary))]' : 'bg-[var(--talos-border,var(--border))]'"
-                @click="emit('selectThinking', !thinking)"
-            >
-                <span
-                    aria-hidden="true"
-                    class="absolute top-1 size-5 rounded-full bg-white transition-transform"
-                    :class="thinking ? 'translate-x-6' : 'translate-x-1'"
-                />
-            </button>
-        </label>
+            <TalosThemedSwitch
+                test-id="talos-mobile-thinking-toggle"
+                :model-value="thinking"
+                :aria-label="$t('chat.extendedThinking')"
+                @update:model-value="emit('selectThinking', $event)"
+            />
+        </div>
 
         <p
             v-if="effortLadder.length <= 1"

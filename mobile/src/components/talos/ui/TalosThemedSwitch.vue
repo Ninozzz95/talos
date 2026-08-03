@@ -36,9 +36,20 @@ withDefaults(defineProps<{
     /** The thing being switched — never its state. */
     ariaLabel?: string
     disabled?: boolean
+    /**
+     * The hook the replaced control already carried.
+     *
+     * Same reason as `TalosFilterOption.testId`: the primitive owns the button,
+     * so adopting it has to preserve whatever selector was pointed at the
+     * hand-rolled switch it replaces — otherwise the adoption silently breaks
+     * every test and end-to-end selector aimed at the old thing, and the
+     * coherence work reads as a regression.
+     */
+    testId?: string
 }>(), {
     ariaLabel: undefined,
     disabled: false,
+    testId: 'talos-themed-switch',
 })
 
 defineEmits<{ 'update:modelValue': [value: boolean] }>()
@@ -46,7 +57,7 @@ defineEmits<{ 'update:modelValue': [value: boolean] }>()
 
 <template>
     <SwitchRoot
-        data-testid="talos-themed-switch"
+        :data-testid="testId"
         :model-value="modelValue"
         :disabled="disabled"
         :aria-label="ariaLabel"
