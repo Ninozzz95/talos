@@ -7,6 +7,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -239,8 +240,26 @@ public class TalosLlamaPlugin extends Plugin {
                 // Un contenuto vuoto con del ragionamento dentro vuol dire che
                 // il modello ha SOLO pensato: in quel caso il testo grezzo è
                 // più onesto di una risposta vuota.
-                if (!content.isEmpty()) result.put("text", content);
+                JSONArray calls = split.optJSONArray("toolCalls");
+                final boolean called = calls != null && calls.length() > 0;
+                /**
+                 * Il testo grezzo torna utile SOLO quando non c'e' nient'altro.
+                 *
+                 * Visto sul tablet il 2026-08-03: a una richiesta che il
+                 * modello ha risolto chiamando un tool, `content` e'
+                 * legittimamente vuoto — la risposta E' la chiamata — e la
+                 * ricaduta sul grezzo faceva comparire in chat
+                 * `<tool_call>{...}</tool_call>` come se fosse una frase.
+                 *
+                 * La ricaduta serve per un caso diverso e vero: un modello che
+                 * ha solo PENSATO, senza dire ne' chiamare niente. Li' il
+                 * grezzo e' piu' onesto di una bolla vuota.
+                 */
+                if (!content.isEmpty() || called) result.put("text", content);
                 result.put("reasoning", split.optString("reasoning", ""));
+                // Le chiamate, nella stessa forma degli altri provider: chi
+                // le esegue non deve andarsele a cercare dentro una stringa.
+                if (called) result.put("toolCalls", calls);
             } catch (JSONException malformed) {
                 // Il testo resta quello grezzo: si perde la separazione, mai la
                 // risposta.
@@ -347,7 +366,18 @@ public class TalosLlamaPlugin extends Plugin {
             call.reject("TALOS_LLAMA_TURNS_INVALID");
             return;
         }
-        String prompt = engine.chatPrompt(roles, contents);
+        /**
+         * I tool, se ce ne sono, nella forma OpenAI che il registro produce gia'
+         * per gli altri provider.
+         *
+         * Owner 2026-08-03: «i locali devono avere le stesse possibilita' dei
+         * key». Passati al TEMPLATE e non descritti a parole nel prompt: ogni
+         * famiglia annuncia una chiamata a modo suo, e quel formato lo conosce
+         * il GGUF, non noi.
+         */
+        JSArray tools = call.getArray("tools");
+        String toolsJson = tools == null || tools.length() == 0 ? null : tools.toString();
+        String prompt = engine.chatPrompt(roles, contents, toolsJson);
         if (prompt == null || prompt.isEmpty()) {
             // Named, so the interface can say WHY instead of producing a worse
             // answer that looks like the model's fault.

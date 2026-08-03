@@ -43,6 +43,15 @@ export interface TalosLocalEngineGeneration {
      * the model may output stopwords in the thought section».
      */
     reasoning?: string
+    /**
+     * Le chiamate che il modello ha chiesto di eseguire.
+     *
+     * Owner 2026-08-03: «i locali devono avere le stesse possibilità dei key».
+     * Nella stessa forma degli altri provider, perché l'esecutore a valle non
+     * deve sapere da dove arriva una chiamata: un tool eseguito per un modello
+     * locale è lo stesso tool.
+     */
+    toolCalls?: ReadonlyArray<{ name: string, arguments: string, id: string }>
 }
 
 interface TalosLlamaPlugin {
@@ -76,6 +85,15 @@ interface TalosLlamaPlugin {
     }>
     chatPrompt(options: {
         turns: ReadonlyArray<{ role: string, content: string }>
+        /**
+         * I tool, in forma OpenAI, passati al TEMPLATE del modello.
+         *
+         * Non descritti a parole nel prompt: ogni famiglia annuncia una
+         * chiamata a modo suo — `<tool_call>`, JSON puro, blocchi speciali — e
+         * quel formato lo conosce il GGUF. Il template restituisce anche la
+         * grammatica che rende la chiamata valida per costruzione.
+         */
+        tools?: readonly unknown[]
     }): Promise<{ prompt: string }>
     cancel(): Promise<void>
     close(): Promise<void>
@@ -190,8 +208,9 @@ export async function talosLocalInstalledModels(): Promise<TalosLocalModelListin
  */
 export async function talosLocalEngineChatPrompt(
     turns: ReadonlyArray<{ role: string, content: string }>,
+    tools?: readonly unknown[],
 ): Promise<string> {
-    const { prompt } = await plugin.chatPrompt({ turns })
+    const { prompt } = await plugin.chatPrompt({ turns, tools })
     return prompt
 }
 
