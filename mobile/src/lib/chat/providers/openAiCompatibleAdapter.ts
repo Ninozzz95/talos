@@ -12,6 +12,8 @@ import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
 import { talosPromptCacheKey } from '@/lib/chat/promptCache'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
+import { talosToolsForOpenAiResponses } from '@/lib/tools/registry'
+import { talosReadOpenAiResponse } from '@/lib/chat/providers/openAiResponses'
 import {
     TALOS_OPENAI_REASONING_NONE,
     talosHasReasoningConflict,
@@ -170,6 +172,65 @@ function normalizeModel(config: OpenAiCompatibleConfig, model: z.infer<typeof mo
     }
 }
 
+/**
+ * Il corpo per `/v1/responses`, che e' un'altra cosa da `messages`.
+ *
+ * Owner 2026-08-03: su `/v1/chat/completions` i modelli nuovi rifiutano tool e
+ * ragionamento insieme, e siccome TALOS offre i suoi tool a ogni messaggio, su
+ * quei modelli non funziona niente. Qui convivono — verificato interrogando
+ * l'API, non letto.
+ *
+ * Le tre differenze che romperebbero un porting fatto a memoria:
+ * `instructions` al posto del messaggio di sistema, `input` al posto di
+ * `messages`, e i tool PIATTI.
+ *
+ * `store: false` e' deliberato: TALOS non vuole che le conversazioni restino
+ * sul server. Il prezzo e' che il contesto lo ricostruiamo noi a ogni
+ * richiesta, ed e' il motivo per cui il lettore conserva ogni elemento.
+ */
+/** Una riga vuota fra due riepiloghi: sono paragrafi, non righe. */
+const TALOS_SUMMARY_SEPARATOR = `
+
+`
+
+function responsesCompletionData(
+    input: TalosMobileCompletionInput,
+    stream: boolean,
+): Record<string, unknown> {
+    const items: Array<Record<string, unknown>> = []
+    for (const turn of input.turns) {
+        // I giri con i tool arriveranno col ciclo completo: per ora entrano
+        // solo i due ruoli che questo endpoint rende senza ambiguita'.
+        if (turn.role !== 'user' && turn.role !== 'assistant') continue
+        const content = typeof turn.content === 'string' ? turn.content : ''
+        if (content === '') continue
+        items.push({ role: turn.role, content })
+    }
+
+    const data: Record<string, unknown> = {
+        model: input.model.id,
+        input: items,
+        stream,
+        store: false,
+    }
+    if (input.system?.trim()) data.instructions = input.system
+    const tools = talosModelSupportsToolCalling(input.model) ? input.tools : undefined
+    if (tools?.length) {
+        data.tools = talosToolsForOpenAiResponses(tools)
+        data.tool_choice = 'auto'
+    }
+    /**
+     * `high` resta `high`, e qui sta il punto della migrazione.
+     *
+     * Sul vecchio endpoint la stessa richiesta costringeva a scendere a
+     * `'none'` per poter offrire i tool. Qui no: la famiglia GPT-5.6 accetta
+     * il livello scelto insieme ai tool, quindi la scelta dell'utente arriva
+     * al modello come l'ha fatta.
+     */
+    if (input.effort !== 'off') data.reasoning = { effort: input.effort }
+    return data
+}
+
 function compatibleCompletionData(
     config: OpenAiCompatibleConfig,
     input: TalosMobileCompletionInput,
@@ -262,6 +323,43 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
         async complete(input: TalosMobileCompletionInput, credential: TalosMobileProviderCredential, transport: TalosMobileHttpTransport): Promise<TalosMobileCompletionResult> {
             const apiKey = requireProviderApiKey(config.provider, 'complete', credential)
             const baseUrl = compatibleBaseUrl(config, credential, 'complete')
+            /**
+             * OpenAI parla un altro endpoint, e la deviazione e' QUI, dentro il
+             * ramo che gia' esisteva per provider.
+             *
+             * Non un adattatore nuovo: duplicherebbe autenticazione, timeout,
+             * abort, ricevuta e smistamento dei tool. DeepSeek, OpenRouter e
+             * Ollama restano dove sono, e il test di regressione controlla
+             * proprio che il loro corpo non cambi.
+             */
+            if (config.provider === 'openai') {
+                const response = await transport.request({
+                    method: 'POST',
+                    url: `${baseUrl}/responses`,
+                    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+                    data: responsesCompletionData(input, false),
+                    ...requestTimeouts(credential),
+                })
+                requireHttpSuccess({ provider: 'openai', operation: 'complete', status: response.status, data: response.data })
+                const read = talosReadOpenAiResponse(response.data)
+                // Un turno che chiama un tool ha legittimamente zero testo: la
+                // risposta E' la chiamata. Rifiutarlo come vuoto romperebbe il
+                // ciclo prima che cominci.
+                if (!read.text && read.toolCalls.length === 0) {
+                    throw emptyProviderResponse('openai', 'complete', read.status)
+                }
+                return {
+                    text: read.text,
+                    model: input.model.id,
+                    finishReason: read.status,
+                    usage: read.usage,
+                    toolCalls: read.toolCalls.map((call) => ({ ...call })),
+                    // Il riepilogo, non la catena di pensiero: quella resta
+                    // cifrata e non si mostra.
+                    reasoning: read.reasoningSummaries.join(TALOS_SUMMARY_SEPARATOR) || undefined,
+                }
+            }
+
             const send = async (payload: Record<string, unknown>) => transport.request({
                 method: 'POST',
                 url: `${baseUrl}/chat/completions`,

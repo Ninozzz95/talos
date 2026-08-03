@@ -2528,13 +2528,16 @@ describe('chatController', () => {
     })
 
     it('drops probe evidence when the target manual model disappears in flight', async () => {
+        // Su DeepSeek e non su OpenAI: dal 2026-08-03 OpenAI parla
+        // `/v1/responses`, e questo caso prova la corsa fra una prova in volo e
+        // un modello che sparisce — niente che dipenda dall'endpoint.
         const { deps, store, settings, request } = makeDeps()
-        store.set('openai', 'sk-openai')
+        store.set('deepseek', 'sk-deepseek')
         const controller = createChatController(deps)
         await controller.init()
         const manual: TalosMobileManualModel = {
             id: 'manual-race',
-            provider: 'openai',
+            provider: 'deepseek',
             model: 'race-model',
             display_name: 'Race model',
             input_modalities: ['text'],
@@ -2550,7 +2553,7 @@ describe('chatController', () => {
             return Promise.resolve({ status: 500, data: { error: { message: 'unexpected request' } } })
         })
 
-        const pending = controller.probeModel('openai:race-model')
+        const pending = controller.probeModel('deepseek:race-model')
         await vi.waitFor(() => expect(release).toBeTypeOf('function'))
         await controller.removeManualModel(manual.id)
         release({
@@ -2559,7 +2562,7 @@ describe('chatController', () => {
         })
 
         await expect(pending).rejects.toThrow(/model changed/i)
-        expect(settings.state.model_lab.probe_results['openai:race-model']).toBeUndefined()
+        expect(settings.state.model_lab.probe_results['deepseek:race-model']).toBeUndefined()
     })
 
     it('persists a model change immediately into the active session and global default', async () => {

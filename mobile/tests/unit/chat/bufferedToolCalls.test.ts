@@ -48,7 +48,7 @@ const toolCallBody = (content: unknown) => ({
 
 describe('buffered completions that ask for a tool', () => {
     it('accepts the documented null content instead of calling it malformed', async () => {
-        const result = await openAiAdapter.complete(
+        const result = await deepSeekAdapter.complete(
             input('openai', 'gpt-5'), { apiKey: 'k' }, transportWith(toolCallBody(null)),
         )
         expect(result.toolCalls).toEqual([
@@ -67,14 +67,14 @@ describe('buffered completions that ask for a tool', () => {
     })
 
     it('still refuses a response that carries neither text nor a tool call', async () => {
-        await expect(openAiAdapter.complete(
+        await expect(deepSeekAdapter.complete(
             input('openai', 'gpt-5'), { apiKey: 'k' },
             transportWith({ choices: [{ message: { role: 'assistant', content: null } }] }),
         )).rejects.toThrow()
     })
 
     it('keeps preamble text when the model both speaks and calls', async () => {
-        const result = await openAiAdapter.complete(
+        const result = await deepSeekAdapter.complete(
             input('openai', 'gpt-5'), { apiKey: 'k' },
             transportWith(toolCallBody('Let me look that up.')),
         )
