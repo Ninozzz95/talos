@@ -173,6 +173,7 @@ describe('the view register', () => {
             // gone: the register absorbed it, which is what "when Doctor is
             // migrated, this case disappears rather than growing" meant.
             ['doctor', 'src/screens/DoctorScreen.vue', /<TabsContent[^>]*?\svalue="([^"]+)"/g],
+            ['research-report', 'src/screens/ResearchReportScreen.vue', /<TabsContent[^>]*?\svalue="([^"]+)"/g],
         ]
 
         for (const [surfaceId, file, pattern] of sources) {

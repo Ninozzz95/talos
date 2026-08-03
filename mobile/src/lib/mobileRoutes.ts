@@ -1,6 +1,9 @@
 import type { Component } from 'vue'
 
-export type TalosMobileRouteName = 'chat' | 'chats' | 'memory' | 'tasks' | 'notes' | 'doctor' | 'research' | 'runs' | 'context' | 'settings'
+export type TalosMobileRouteName =
+    | 'chat' | 'chats' | 'memory' | 'tasks' | 'notes' | 'doctor'
+    | 'research' | 'research-new' | 'research-report' | 'research-claim' | 'research-source'
+    | 'runs' | 'context' | 'settings'
 
 export interface TalosMobileRoute {
     name: TalosMobileRouteName
@@ -16,6 +19,10 @@ const loadTasksScreen = () => import('@/screens/TasksScreen.vue').then((module) 
 const loadNotesScreen = () => import('@/screens/NotesScreen.vue').then((module) => module.default)
 const loadDoctorScreen = () => import('@/screens/DoctorScreen.vue').then((module) => module.default)
 const loadResearchScreen = () => import('@/screens/ResearchScreen.vue').then((module) => module.default)
+const loadResearchNewScreen = () => import('@/screens/ResearchNewScreen.vue').then((module) => module.default)
+const loadResearchReportScreen = () => import('@/screens/ResearchReportScreen.vue').then((module) => module.default)
+const loadResearchClaimScreen = () => import('@/screens/ResearchClaimScreen.vue').then((module) => module.default)
+const loadResearchSourceScreen = () => import('@/screens/ResearchSourceScreen.vue').then((module) => module.default)
 const loadRunsScreen = () => import('@/screens/RunsScreen.vue').then((module) => module.default)
 const loadContextScreen = () => import('@/screens/ContextScreen.vue').then((module) => module.default)
 const loadSettingsScreen = () => import('@/screens/SettingsScreen.vue').then((module) => module.default)
@@ -33,7 +40,23 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'tasks', path: '/tasks', desktop_station_id: 'tasks', component: loadTasksScreen },
     { name: 'notes', path: '/notes', desktop_station_id: 'notes', component: loadNotesScreen },
     { name: 'doctor', path: '/doctor', desktop_station_id: 'doctor', component: loadDoctorScreen },
+    /**
+     * The research surfaces, from the list inwards.
+     *
+     * `/research/new` is declared BEFORE `/research/:id` on purpose. Vue Router
+     * ranks a static segment above a parameter, so the order is not what saves
+     * it — but a reader should not have to know that to be sure "new" is not a
+     * research called new.
+     *
+     * Each is a real address rather than a sheet, because a research is the
+     * thing a person most wants to reopen, keep and send — and the morning's
+     * work on `?tab=` showed what an address that tells the truth is worth.
+     */
     { name: 'research', path: '/research', desktop_station_id: 'research', component: loadResearchScreen },
+    { name: 'research-new', path: '/research/new', desktop_station_id: 'research', component: loadResearchNewScreen },
+    { name: 'research-report', path: '/research/:id', desktop_station_id: 'research', component: loadResearchReportScreen },
+    { name: 'research-claim', path: '/research/:id/claim/:index', desktop_station_id: 'research', component: loadResearchClaimScreen },
+    { name: 'research-source', path: '/research/:id/source/:index', desktop_station_id: 'research', component: loadResearchSourceScreen },
     { name: 'runs', path: '/runs', desktop_station_id: 'tasks', component: loadRunsScreen },
     { name: 'context', path: '/context', desktop_station_id: 'context_vault', component: loadContextScreen },
     { name: 'settings', path: '/settings', desktop_station_id: 'settings', component: loadSettingsScreen },
