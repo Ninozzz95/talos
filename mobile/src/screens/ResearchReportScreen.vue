@@ -126,6 +126,9 @@ function reason(code: string): string {
     if (code === 'TALOS_RESEARCH_NO_SEARCH_SOURCE') return t('research.noSearchSource')
     if (code === 'TALOS_RESEARCH_NO_CLAIMS') return t('research.noClaims')
     if (code === 'TALOS_RESEARCH_AUTHOR_UNAVAILABLE') return t('research.authorUnavailable')
+    // Prefix, not equality: the storage layer's own message is appended, and it
+    // is the only clue about WHY the write failed.
+    if (code.startsWith('TALOS_RESEARCH_REPORT_NOT_SAVED')) return t('research.reportNotSaved')
     return code
 }
 

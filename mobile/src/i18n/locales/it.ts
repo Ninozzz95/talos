@@ -1685,6 +1685,7 @@ export const TALOS_IT_MESSAGES = {
             cancelledHere: 'Annullata. Resta quello che aveva già raccolto; non riprende.',
             failedHere: 'Si è fermata per un errore. Sotto c’è il motivo.',
             doneNoReport: 'Conclusa senza scrivere il rapporto: la raccolta c’è, la sintesi no.',
+            reportNotSaved: 'Il rapporto è stato scritto ma non si è potuto salvare. La raccolta è intatta: riprendendo si riparte dalla scrittura, non dalle ricerche.',
         buckets: {
             cancelled: 'Annullate',
             paused: 'In pausa',
