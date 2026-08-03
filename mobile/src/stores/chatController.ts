@@ -12,6 +12,7 @@ import type {
 } from '@/components/chat/mobileChatTypes'
 import { buildChatCompletion } from '@/lib/chat/chatCompletion'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
+import { talosComposerBusy } from '@/lib/chat/composerBusy'
 import {
     talosToolActivityDetail,
     talosToolConsentCopy,
@@ -781,6 +782,12 @@ export interface ChatController {
      */
     listChatMediaFileIds(sessionId: string): Promise<string[]>
     readonly canSend: ComputedRef<boolean>
+    /**
+     * Whether the generation the app is busy with belongs to THIS chat. A
+     * composer that reads the bare `sending` flag offers Stop for somebody
+     * else's answer, and pressing it kills that answer.
+     */
+    readonly composerBusy: ComputedRef<import('@/lib/chat/composerBusy').TalosComposerBusy>
     readonly browseMode: ComputedRef<boolean>
     readonly sendDisabledReason: ComputedRef<string>
     readonly preferenceError: Readonly<Ref<string | null>>
@@ -3332,12 +3339,34 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         && (selectedProfile.value ? catalogs[selectedProfile.value.provider].configured : false)
         && !chat.state.sending,
     )
+    /**
+     * Whose generation the composer is looking at — this chat's, or another's.
+     *
+     * Owner 2026-08-03: opening a new chat while one was still printing turned
+     * the new chat's Send into Stop. `state.sending` is one flag for the whole
+     * app; nothing asked WHICH conversation it belonged to, though the store
+     * knew.
+     */
+    const composerBusy = computed(() => talosComposerBusy(
+        chat.state.sending,
+        chat.state.sendingSessionId,
+        chat.activeSession.value?.id ?? null,
+    ))
+
     const sendDisabledReason = computed(() => {
         void localization.state.locale
         if (chat.state.persistenceStatus === 'error') {
             return chat.state.persistenceError ?? talosT('chat.localStorageUnavailable')
         }
         if (chat.state.persistenceStatus !== 'ready') return talosT('chat.preparingLocalStorage')
+        /**
+         * Said, rather than left to be discovered. `send()` refuses outright
+         * while anything is generating, and the refusal used to be silent: you
+         * pressed send in the new chat and nothing happened, with no line
+         * anywhere explaining why. Same defect as the dead «Avvia» button, in a
+         * different corner of the app.
+         */
+        if (composerBusy.value === 'other-chat') return talosT('chat.answeringElsewhere')
         if (!selectedProfile.value) return talosT('chat.addProviderKeyOrEndpoint')
         if (!talosMobileModelProfileIsCallable(selectedProfile.value)) {
             return talosT('chat.addSpecificProviderKey', { provider: selectedProfile.value.provider })
@@ -4745,6 +4774,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         listChatMediaFileIds: (sessionId: string) =>
             deps.chatRepository.listSessionAttachmentFileIds(sessionId),
         canSend,
+        composerBusy,
         browseMode,
         sendDisabledReason,
         preferenceError: readonly(preferenceError),

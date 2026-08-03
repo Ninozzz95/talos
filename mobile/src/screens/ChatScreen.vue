@@ -70,6 +70,9 @@ const {
     effort,
     thinking,
     canSend,
+    // Whose generation this is. The bare `sending` flag is the whole app's, and
+    // reading it here put a Stop button on somebody else's answer.
+    composerBusy,
     browseMode,
     sendDisabledReason,
     preferenceError,
@@ -971,7 +974,7 @@ onBeforeUnmount(() => {
                 <!-- Conversation -->
                 <TalosMobileMessageList
                     :messages="chat.messages"
-                    :sending="chat.state.sending"
+                    :sending="composerBusy === 'this-chat'"
                     :model-labels="modelLabels"
                     :message-style="settings.state.chat_layout.message_style"
                     :text-scale="settings.state.chat_layout.bubble_scale"
@@ -1026,7 +1029,7 @@ onBeforeUnmount(() => {
                 :selected-effort="effort"
                 :thinking="thinking"
                 :can-send="canSend"
-                :sending="chat.state.sending"
+                :sending="composerBusy === 'this-chat'"
                 :refreshing-models="refreshingModels"
                 :discovery-problems="discoveryProblems"
                 :send-disabled-reason="sendDisabledReason"

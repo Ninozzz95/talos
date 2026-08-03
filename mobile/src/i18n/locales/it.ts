@@ -447,6 +447,7 @@ export const TALOS_IT_MESSAGES = {
         },
     },
     chat: {
+        answeringElsewhere: 'Sto rispondendo in un’altra chat. Appena finisce, puoi scrivere qui.',
         newChat: 'Nuova chat',
         temporaryChat: 'Modalità incognito',
         normalMode: 'Modalità normale',
