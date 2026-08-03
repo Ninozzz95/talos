@@ -15,8 +15,11 @@ interface TalosDevicePermissionsPlugin {
         notifications: string
         notificationsRuntime: boolean
         microphone: string
+        batteryExempt?: boolean
+        manufacturer?: string
     }>
     requestNotifications(): Promise<{ state: string }>
+    requestBatteryExemption(): Promise<{ opened: boolean, alreadyExempt: boolean, route?: string }>
     openAppSettings(): Promise<{ opened: boolean }>
     openNotificationSettings(): Promise<{ opened: boolean }>
 }
@@ -38,6 +41,17 @@ export interface TalosDeviceState {
     /** False below Android 13, where there is no notification permission. */
     notificationsRuntime: boolean
     biometricHardware: boolean
+    /**
+     * Se il telefono ha smesso di sospendere TALOS.
+     *
+     * Non è una comodità: senza, una Deep Research muore tre volte su tre
+     * appena si blocca lo schermo — misurato sul OnePlus 13 il 2026-08-03,
+     * malgrado il foreground service. E va riletta ogni volta, perché la
+     * documentazione OnePlus dice che il sistema la **riazzera da solo**.
+     */
+    batteryExempt: boolean
+    /** Minuscolo, e vuoto quando non lo sappiamo — decide i passi in più. */
+    manufacturer: string
 }
 
 export async function readTalosDeviceState(): Promise<TalosDeviceState> {
@@ -49,6 +63,8 @@ export async function readTalosDeviceState(): Promise<TalosDeviceState> {
             notifications: 'prompt',
             notificationsRuntime: false,
             biometricHardware: false,
+            batteryExempt: false,
+            manufacturer: '',
         }
     }
     const [device, biometric] = await Promise.all([
@@ -62,6 +78,11 @@ export async function readTalosDeviceState(): Promise<TalosDeviceState> {
         notifications: asState(device?.notifications ?? 'prompt'),
         notificationsRuntime: device?.notificationsRuntime ?? false,
         biometricHardware: biometric,
+        // Falso quando il ponte non risponde: meglio dire «da sistemare» e far
+        // toccare un pulsante che funziona, che dire «a posto» per una cosa che
+        // non abbiamo potuto verificare.
+        batteryExempt: device?.batteryExempt === true,
+        manufacturer: device?.manufacturer ?? '',
     }
 }
 
@@ -83,4 +104,18 @@ export async function openTalosAppSettings(kind: 'app' | 'notifications' = 'app'
         ? plugin.openNotificationSettings()
         : plugin.openAppSettings()
     await call.catch(() => undefined)
+}
+
+/**
+ * Apre la richiesta di esenzione dal risparmio energetico.
+ *
+ * Non restituisce «concesso»: restituisce «aperto». La scelta la fa l'utente in
+ * una schermata di sistema, e l'unico modo onesto di sapere com'è andata è
+ * rileggere lo stato al ritorno — che è ciò che il pannello fa già a ogni
+ * ritorno in primo piano. Una schermata che dicesse «fatto» perché ha aperto un
+ * dialogo mentirebbe alla prima volta che qualcuno preme Annulla.
+ */
+export async function requestTalosBatteryExemption(): Promise<boolean> {
+    const result = await plugin.requestBatteryExemption().catch(() => null)
+    return result?.opened === true
 }

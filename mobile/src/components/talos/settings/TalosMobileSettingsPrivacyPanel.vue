@@ -4,6 +4,7 @@ import { useTalosI18n } from '@/i18n'
 import { CircleAlert, CircleCheck, CircleDashed, ShieldCheck } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import {
+    talosBackgroundExtraSteps,
     talosPermissionAction,
     visibleTalosPermissionRows,
     type TalosPermissionRow,
@@ -13,6 +14,7 @@ import {
     openTalosAppSettings,
     readTalosDeviceState,
     requestTalosMicrophone,
+    requestTalosBatteryExemption,
     requestTalosNotifications,
     type TalosDeviceState,
 } from '@/services/devicePermissions'
@@ -33,6 +35,10 @@ const device = ref<TalosDeviceState>({
     notifications: 'prompt',
     notificationsRuntime: false,
     biometricHardware: false,
+    // Falso finché non l'abbiamo chiesto al sistema: la riga dirà «da
+    // sistemare» per un istante e poi la verità, che è meglio del contrario.
+    batteryExempt: false,
+    manufacturer: '',
 })
 const { t } = useTalosI18n()
 const busy = ref<string | null>(null)
@@ -46,8 +52,28 @@ const rows = computed(() => visibleTalosPermissionRows({
 function stateOf(row: TalosPermissionRow): TalosPermissionState | null {
     if (row.id === 'microphone') return device.value.microphone
     if (row.id === 'notifications') return device.value.notifications
+    /**
+     * La riga che prima non aveva stato NE pulsante.
+     *
+     * Si diceva concessa all'installazione e non toglibile — tre affermazioni
+     * false su tre — e quindi non mostrava niente su cui agire. E' l'esenzione
+     * dal risparmio energetico: o c'e' o non c'e', e quando non c'e' si puo'
+     * chiedere, quindi entra nella stessa macchina a stati delle altre.
+     */
+    if (row.id === 'background') return device.value.batteryExempt ? 'granted' : 'prompt'
     return null
 }
+
+/**
+ * I passi che Android non sa fare da solo, mostrati solo finche' servono.
+ *
+ * Spariscono appena l'esenzione c'e': una lista di istruzioni sopra una cosa
+ * gia' sistemata e' rumore, e insegna a scorrere oltre proprio la sezione che
+ * un giorno tornera' a servire — su ColorOS l'impostazione si riazzera da sola.
+ */
+const backgroundSteps = computed(() => (device.value.batteryExempt
+    ? []
+    : talosBackgroundExtraSteps(device.value.manufacturer)))
 function rowTitle(row: TalosPermissionRow): string {
     return t(`privacyPermissions.rows.${row.id}.title`)
 }
@@ -85,6 +111,7 @@ async function act(row: TalosPermissionRow): Promise<void> {
         }
         if (row.id === 'microphone') await requestTalosMicrophone()
         if (row.id === 'notifications') await requestTalosNotifications()
+        if (row.id === 'background') await requestTalosBatteryExemption()
         await refresh()
     } finally {
         busy.value = null
@@ -167,6 +194,26 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
                 :disabled="busy === row.id"
                 @click="act(row)"
             >{{ t('privacyPermissions.allow') }}</Button>
+
+            <!--
+                I passi che Android non sa fare da solo.
+
+                Solo sotto la riga del background, solo finché serve, e solo per
+                i produttori di cui abbiamo una fonte. Istruzioni e non
+                scorciatoie: i nomi dei componenti OEM cambiano fra una versione
+                e l'altra, e un collegamento profondo che atterra sulla
+                schermata sbagliata è peggio di una frase che dice dove andare.
+            -->
+            <template v-if="row.id === 'background' && backgroundSteps.length">
+                <p class="mt-2 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                    {{ t('privacyPermissions.makerStepsTitle') }}
+                </p>
+                <ol data-testid="talos-permission-maker-steps" class="mt-1 flex list-decimal flex-col gap-1 pl-4">
+                    <li v-for="stepKey in backgroundSteps" :key="stepKey" class="text-2xs leading-4 text-[var(--talos-muted)]">
+                        {{ t(stepKey) }}
+                    </li>
+                </ol>
+            </template>
         </div>
     </section>
 </template>

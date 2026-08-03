@@ -31,6 +31,17 @@ export type TalosPermissionKind =
     | 'runtime'
     /** Granted at install. Android never asks, and neither can we. */
     | 'install'
+    /**
+     * Un'esenzione del SISTEMA, non un permesso: nessuno la concede
+     * all'installazione, va chiesta, e il produttore può ritirarla da solo.
+     *
+     * Esiste perché una sola riga la richiedeva e la stava descrivendo come
+     * `install` — cioè «concessa, non toglibile» — mentre era il contrario, ed
+     * era anche la riga da cui dipende tutto ciò che dura più di uno schermo
+     * acceso. Una schermata permessi che rassicura sulla voce sbagliata è
+     * peggio di una che non c'è.
+     */
+    | 'exemption'
     /** Not a permission at all — a capability, or a picker that needs none. */
     | 'none'
 
@@ -76,10 +87,25 @@ export const TALOS_PERMISSION_ROWS: readonly TalosPermissionRow[] = [
         purpose: 'Attaching documents. TALOS can only open the files you pick in the system chooser; it has no access to the rest of your storage.',
     },
     {
+        /**
+         * LA riga di questa schermata, e fino al 2026-08-03 diceva il falso.
+         *
+         * Era `install`, con il testo «Long tasks keep going when you leave the
+         * app. Granted when TALOS was installed … it cannot be turned off from
+         * here.» Tutte e tre le affermazioni sono sbagliate, e sono state
+         * smentite da una misura: sul OnePlus 13 una Deep Research muore tre
+         * volte su tre appena si blocca lo schermo, perché ColorOS congela
+         * l'app malgrado il foreground service; con l'esenzione si conclude da
+         * sola in 1 min 04 s.
+         *
+         * Era la forma peggiore possibile di difetto in una schermata permessi:
+         * rassicurava proprio sulla voce da cui dipende tutto il lavoro lungo,
+         * e quindi nessuno andava a cercarla.
+         */
         id: 'background',
         title: 'Running in the background',
-        kind: 'install',
-        purpose: 'Long tasks keep going when you leave the app. Granted when TALOS was installed — Android does not ask for this one, and it cannot be turned off from here.',
+        kind: 'exemption',
+        purpose: 'Long tasks — a research, a model download — keep going after you leave the app or lock the screen. Without it the phone suspends TALOS within seconds and the work is lost; this is the one setting that decides it.',
     },
     {
         id: 'network',
@@ -115,6 +141,42 @@ export function talosPermissionLabel(state: TalosPermissionState): string {
 export function talosPermissionAction(state: TalosPermissionState): 'request' | 'settings' | 'none' {
     if (state === 'granted') return 'none'
     return state === 'denied' ? 'settings' : 'request'
+}
+
+/**
+ * I passi IN PIÙ che chiede questo produttore, quando ce ne sono.
+ *
+ * L'esenzione dal risparmio energetico è standard Android e si ottiene con un
+ * intent. Su alcune interfacce non basta: ColorOS/OxygenOS ha anche l'avvio
+ * automatico e le due «ottimizzazioni» che ricongelano l'app, e quelle stanno
+ * in menu del produttore **senza intent pubblico**.
+ *
+ * Qui ci sono istruzioni e non scorciatoie, e la scelta è deliberata: i nomi
+ * dei componenti OEM cambiano fra una versione e l'altra, e un collegamento
+ * profondo che atterra sulla schermata sbagliata — o che lancia un'eccezione —
+ * è peggio di una frase che dice dove andare. Il pulsante che apre ciò che
+ * Android garantisce resta; questo è ciò che gli sta accanto.
+ *
+ * Elencati solo i produttori per cui abbiamo una fonte, non tutti quelli
+ * immaginabili: una lista inventata farebbe cercare all'utente voci che sul suo
+ * telefono non esistono, che è il modo più veloce per fargli credere di aver
+ * sbagliato lui.
+ */
+export function talosBackgroundExtraSteps(manufacturer: string): readonly string[] {
+    const maker = manufacturer.trim().toLowerCase()
+    // Stessa interfaccia, tre marchi: OPPO possiede OnePlus e realme, e ColorOS
+    // gira su tutti e tre.
+    if (maker === 'oneplus' || maker === 'oppo' || maker === 'realme') {
+        // CHIAVI, non frasi. Visto sul tablet il 2026-08-03: scritte qui, i
+        // passi comparivano in inglese dentro un'app in italiano — e sono
+        // proprio le istruzioni che qualcuno deve poter seguire alla lettera.
+        return Object.freeze([
+            'privacyPermissions.makerSteps.colorosAutoLaunch',
+            'privacyPermissions.makerSteps.colorosDeepOptimisation',
+            'privacyPermissions.makerSteps.colorosLockRecents',
+        ])
+    }
+    return Object.freeze([])
 }
 
 /**
