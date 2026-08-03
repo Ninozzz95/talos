@@ -10,6 +10,18 @@ export interface TalosMobileRoute {
     path: string
     desktop_station_id: string
     component: () => Promise<Component>
+    /**
+     * The page one level up, for routes that live INSIDE a station rather than
+     * being one.
+     *
+     * Declared here, next to the path, because the alternative was discovered
+     * the hard way: System Back asked only "is this a station?", every research
+     * sub-page answered yes, and Back from a report threw the person out to the
+     * chat with the main menu open instead of returning to the list. A route
+     * that is nested in its path and silent about its parent is exactly the
+     * shape of that bug, so the drift test refuses one.
+     */
+    parent?: TalosMobileRouteName
 }
 
 const loadChatScreen = () => import('@/screens/ChatScreen.vue').then((module) => module.default)
@@ -53,10 +65,10 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
      * work on `?tab=` showed what an address that tells the truth is worth.
      */
     { name: 'research', path: '/research', desktop_station_id: 'research', component: loadResearchScreen },
-    { name: 'research-new', path: '/research/new', desktop_station_id: 'research', component: loadResearchNewScreen },
-    { name: 'research-report', path: '/research/:id', desktop_station_id: 'research', component: loadResearchReportScreen },
-    { name: 'research-claim', path: '/research/:id/claim/:index', desktop_station_id: 'research', component: loadResearchClaimScreen },
-    { name: 'research-source', path: '/research/:id/source/:index', desktop_station_id: 'research', component: loadResearchSourceScreen },
+    { name: 'research-new', path: '/research/new', desktop_station_id: 'research', component: loadResearchNewScreen, parent: 'research' },
+    { name: 'research-report', path: '/research/:id', desktop_station_id: 'research', component: loadResearchReportScreen, parent: 'research' },
+    { name: 'research-claim', path: '/research/:id/claim/:index', desktop_station_id: 'research', component: loadResearchClaimScreen, parent: 'research-report' },
+    { name: 'research-source', path: '/research/:id/source/:index', desktop_station_id: 'research', component: loadResearchSourceScreen, parent: 'research-report' },
     { name: 'runs', path: '/runs', desktop_station_id: 'tasks', component: loadRunsScreen },
     { name: 'context', path: '/context', desktop_station_id: 'context_vault', component: loadContextScreen },
     { name: 'settings', path: '/settings', desktop_station_id: 'settings', component: loadSettingsScreen },
@@ -101,6 +113,47 @@ export function preloadTalosMobileRoutes(): Promise<void> {
 
 export function isTalosMobileRouteName(value: unknown): value is TalosMobileRouteName {
     return typeof value === 'string' && (TALOS_MOBILE_ROUTE_NAMES as readonly string[]).includes(value)
+}
+
+export interface TalosMobileRouteTarget {
+    readonly name: TalosMobileRouteName
+    readonly params: Readonly<Record<string, string>>
+}
+
+/**
+ * Where "up" goes from a page inside a station, params and all.
+ *
+ * The parameters are read off the PARENT'S OWN path rather than copied wholesale
+ * from the child: a claim knows `id` and `index`, its parent wants only `id`,
+ * and handing a report an index it never declared is how a route quietly starts
+ * matching something else. Deriving them from the path also means a future
+ * nested route gets this right without anyone remembering to.
+ *
+ * Null for every station top and for the chat: those are not "inside" anything,
+ * and Back has its own older answer for them (owner 2026-07-24 — a station top
+ * returns to the main menu).
+ */
+export function talosMobileParentRoute(
+    name: string,
+    params: Readonly<Record<string, unknown>> = {},
+): TalosMobileRouteTarget | null {
+    const route = TALOS_MOBILE_ROUTES.find((entry) => entry.name === name)
+    if (!route?.parent) return null
+    const parentName = route.parent
+    const parent = TALOS_MOBILE_ROUTES.find((entry) => entry.name === parentName)
+    if (!parent) return null
+
+    const wanted: Record<string, string> = {}
+    for (const segment of parent.path.split('/')) {
+        if (!segment.startsWith(':')) continue
+        const key = segment.slice(1)
+        const value = params[key]
+        // A parent that needs a parameter we do not have is not a destination.
+        // Better to fall through to the station rules than to push a broken URL.
+        if (typeof value !== 'string' || value.length === 0) return null
+        wanted[key] = value
+    }
+    return { name: parentName, params: wanted }
 }
 
 // Compatibility symbol retained for test/consumer code that previously asked for
