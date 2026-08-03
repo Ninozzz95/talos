@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
+import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 
 /**
  * F5.2 — device-proven dialog shell. reka-ui Dialogs never appear on the
@@ -17,6 +18,18 @@ const emit = defineEmits<{ close: [] }>()
 
 const root = ref<HTMLElement | null>(null)
 const { trapTab } = useTalosModalSurface(root)
+
+/**
+ * System Back closes THIS, before anything else.
+ *
+ * Found on the tablet 2026-08-03: with a dialog open, Back walked straight past
+ * it to the station rule and threw the person out to the chat with the main
+ * menu open — the dialog vanished because its screen unmounted, not because it
+ * had been dismissed. The registry is LIFO and the dialog only exists while it
+ * is open, so registering here puts it on top for exactly as long as it should
+ * be, and fixes every confirmation in the app rather than one screen's.
+ */
+useTalosOverlayBack(() => emit('close'))
 </script>
 
 <template>

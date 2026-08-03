@@ -20,26 +20,34 @@
  * fill in behind, which is the only version that stays fast when there are
  * fifty of them.
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { AlertTriangle, LayoutGrid, List, Plus, Search } from '@lucide/vue'
+import { AlertTriangle, LayoutGrid, List, Loader2, Plus, Search } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
+import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
+import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
+import { Button } from '@/components/ui/button'
+import { useTalosDeferredBusy } from '@/composables/useTalosDeferredBusy'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
-import type { TalosResearchRun } from '@/lib/research/researchRun'
+import { talosResearchIsResting, talosResearchIsTerminal, type TalosResearchRun } from '@/lib/research/researchRun'
 import type { TalosResearchProgress } from '@/services/researchRuntime'
 import {
+    talosResearchActionsFor,
     talosResearchCardOf,
     talosResearchFilterCards,
     talosResearchNeedsAttention,
     talosResearchReportRefOf,
     talosResearchSolidity,
+    type TalosResearchAction,
     type TalosResearchBucket,
+    type TalosResearchCard,
     type TalosResearchStanding,
 } from '@/lib/research/researchCard'
 import { talosResearchVerifiedStanding } from '@/lib/research/researchVerification'
+import { TALOS_DANGER_ACTION_CLASS } from '@/lib/dangerAction'
 
 const controller = useChatController()
 const settings = useSettingsStore()
@@ -72,7 +80,7 @@ const cards = computed(() => runs.value.map((run) => talosResearchCardOf(run, {
 
 const shown = computed(() => talosResearchFilterCards(cards.value, bucket.value, query.value))
 
-const BUCKETS: ReadonlyArray<TalosResearchBucket | 'all'> = ['all', 'running', 'paused', 'unfinished', 'done', 'failed']
+const BUCKETS: ReadonlyArray<TalosResearchBucket | 'all'> = ['all', 'running', 'paused', 'unfinished', 'done', 'cancelled', 'failed']
 const filterOptions = computed(() => BUCKETS.map((id) => ({
     value: id,
     label: t(`research.buckets.${id}`),
@@ -128,8 +136,32 @@ async function fillStandings(): Promise<void> {
 /** Watchers on the runs in flight, dropped on the way out — never the runs themselves. */
 const watching = new Map<string, () => void>()
 
+/**
+ * Runs the person asked to stop, until the answer arrives.
+ *
+ * Seen on the tablet 2026-08-03: a pause asked while the REPORT was being
+ * written let that step finish — which is drain-then-checkpoint working, since
+ * the call was already sent and already paid for — and the research completed.
+ * Correct, and completely silent: the tap simply vanished. A stop that quietly
+ * does nothing is worse than one that refuses, because the person will tap it
+ * again on the next research and trust it less every time.
+ */
+const asked = new Set<string>()
+
 function absorb(progress: TalosResearchProgress): void {
-    runs.value = [progress.run, ...runs.value.filter((run) => run.id !== progress.run.id)]
+    const run = progress.run
+    runs.value = [run, ...runs.value.filter((entry) => entry.id !== run.id)]
+
+    if (!asked.has(run.id)) return
+    if (talosResearchIsResting(run.status)) {
+        // It stopped. The card says so; nothing to add.
+        asked.delete(run.id)
+    } else if (talosResearchIsTerminal(run.status)) {
+        asked.delete(run.id)
+        notice.value = run.status === 'done'
+            ? t('research.finishedInstead')
+            : null
+    }
 }
 
 function followRunning(): void {
@@ -151,6 +183,125 @@ onBeforeUnmount(() => {
 
 function open(id: string): void {
     void router.push({ name: 'research-report', params: { id } })
+}
+
+/**
+ * The actions of a row, and the two questions they ask before doing anything.
+ *
+ * `busy` keeps one action at a time and only draws a wait that turns out to be
+ * real — see the composable for why the two are separate. Errors are said out
+ * loud rather than swallowed: an action that silently did nothing is worse than
+ * one that failed, because the person will try it again.
+ */
+const busy = useTalosDeferredBusy()
+const actionError = ref<string | null>(null)
+const notice = ref<string | null>(null)
+
+const renameTarget = ref<TalosResearchCard | null>(null)
+const renameValue = ref('')
+const renameField = ref<HTMLInputElement | null>(null)
+const deleteTarget = ref<TalosResearchCard | null>(null)
+const cancelTarget = ref<TalosResearchCard | null>(null)
+
+const ACTION_LABEL: Record<TalosResearchAction, string> = {
+    open: 'research.actionOpen',
+    rename: 'research.actionRename',
+    pause: 'research.actionPause',
+    resume: 'research.actionResume',
+    cancel: 'research.actionCancel',
+    delete: 'research.actionDelete',
+}
+
+function menuFor(card: TalosResearchCard): TalosRowAction[] {
+    return talosResearchActionsFor(card).map((action) => ({
+        id: action,
+        label: t(ACTION_LABEL[action]),
+        danger: action === 'delete',
+        testId: `talos-research-action-${action}`,
+    }))
+}
+
+async function act(card: TalosResearchCard, action: string): Promise<void> {
+    actionError.value = null
+    notice.value = null
+    switch (action) {
+        case 'open': open(card.id); return
+        case 'rename':
+            renameTarget.value = card
+            renameValue.value = card.renamed ? card.question : ''
+            await nextTick()
+            renameField.value?.focus()
+            return
+        // The two destructive ones ASK first. Pausing does not: it takes
+        // nothing away, and a confirmation there would be friction guarding
+        // nothing.
+        case 'cancel': cancelTarget.value = card; return
+        case 'delete': deleteTarget.value = card; return
+        case 'pause':
+            asked.add(card.id)
+            await guarded(card.id, () => controller.research.pause(card.id), false)
+            return
+        case 'resume': await guarded(card.id, async () => {
+            await controller.research.resume(card.id)
+            followRunning()
+        }, false); return
+    }
+}
+
+/**
+ * `reread` is false for the actions the LIVE registry already reports.
+ *
+ * The tablet showed why: tapping Pause on a running research changed nothing on
+ * screen. The registry had reported `pause_requested` — the interval between
+ * being asked and being able to comply — and the card had it for an instant,
+ * before this function re-read the list from the journal and put back the
+ * `collecting` the disk still held. The journal is right; it simply has not
+ * heard yet, because the driver is the only writer and it is mid-step.
+ */
+async function guarded(key: string, work: () => Promise<unknown>, reread = true): Promise<void> {
+    try {
+        await busy.run(key, work)
+        if (reread) await refresh()
+    } catch (failure) {
+        actionError.value = failure instanceof Error ? failure.message : String(failure)
+    }
+}
+
+async function submitRename(): Promise<void> {
+    const target = renameTarget.value
+    if (!target) return
+    const title = renameValue.value.trim()
+    // Blank is not a title; it puts the question back, which is also what the
+    // "Put the question back" button does. Either way the person chose it.
+    await guarded(target.id, () => controller.research.rename(target.id, title.length === 0 ? null : title))
+    renameTarget.value = null
+}
+
+async function confirmCancel(): Promise<void> {
+    const target = cancelTarget.value
+    if (!target) return
+    await guarded(target.id, () => controller.research.cancel(target.id), false)
+    cancelTarget.value = null
+}
+
+async function confirmDelete(): Promise<void> {
+    const target = deleteTarget.value
+    if (!target) return
+    try {
+        const removed = await busy.run(target.id, () => controller.research.remove(target.id))
+        // Say what went. A delete that also took eighteen dossiers and said
+        // nothing is a delete the person cannot check.
+        if (removed) {
+            notice.value = removed.length > 0
+                ? t('research.deletedSources', { count: removed.length })
+                : t('research.deletedAlone')
+        }
+        standings.value = new Map([...standings.value].filter(([id]) => id !== target.id))
+        await refresh()
+    } catch (failure) {
+        actionError.value = failure instanceof Error ? failure.message : String(failure)
+    }
+    deleteTarget.value = null
 }
 
 function startNew(): void {
@@ -209,6 +360,15 @@ function when(iso: string): string {
                 </button>
             </div>
 
+            <!-- Said without stealing the focus: a status message is heard,
+                 never jumped to. -->
+            <p v-if="notice" role="status" data-testid="talos-research-notice" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-xs text-[var(--talos-muted)]">
+                {{ notice }}
+            </p>
+            <p v-if="actionError" role="alert" data-testid="talos-research-action-error" class="rounded-xl border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
+                {{ actionError }}
+            </p>
+
             <p v-if="error" role="alert" data-testid="talos-research-error" class="rounded-xl border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
                 {{ error }}
             </p>
@@ -232,13 +392,31 @@ function when(iso: string): string {
                 class="min-w-0"
                 :class="layout === 'grid' ? 'grid grid-cols-2 gap-2 sm:grid-cols-3' : 'flex flex-col gap-2'"
             >
-                <li v-for="card in shown" :key="card.id" class="min-w-0">
+                <li
+                    v-for="card in shown"
+                    :key="card.id"
+                    class="relative min-w-0 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]"
+                    :class="busy.visible.value === card.id ? 'opacity-60' : ''"
+                >
+                    <!-- The overflow button sits OUTSIDE the opening button.
+                         Nesting them would make one hit area swallow the other,
+                         and the research is explicit that the two must not
+                         overlap: the text opens the research, the dots act on it. -->
+                    <div class="absolute right-1 top-1 z-10">
+                        <TalosRowActions
+                            :test-id="`talos-research-menu-${card.id}`"
+                            :label="t('research.actionsFor', { title: card.question })"
+                            :items="menuFor(card)"
+                            @select="(action) => act(card, action)"
+                        />
+                    </div>
                     <button
                         type="button"
                         data-testid="talos-research-card"
                         :data-research-id="card.id"
                         :data-bucket="card.bucket"
-                        class="talos-pressable flex h-full w-full flex-col gap-2 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-left"
+                        :disabled="busy.pending.value === card.id"
+                        class="talos-pressable flex h-full w-full flex-col gap-2 rounded-xl p-3 pr-12 text-left"
                         @click="open(card.id)"
                     >
                         <span class="flex items-start gap-2">
@@ -256,7 +434,14 @@ function when(iso: string): string {
                         <!-- Running: what is happening. Finished: how it held.
                              Never the number of sources, which is scale and not
                              support. -->
-                        <span v-if="card.bucket === 'running'" data-testid="talos-research-card-progress" class="font-mono text-2xs tabular-nums text-[var(--talos-accent)]">
+                        <!-- Still working, but on its way to stopping. Saying
+                             "in corso" here would make the tap look ignored;
+                             saying "in pausa" would be a lie while a paid-for
+                             step is still in flight. -->
+                        <span v-if="card.status === 'pause_requested'" data-testid="talos-research-card-pausing" class="font-mono text-2xs tabular-nums text-[var(--talos-warning)]">
+                            {{ t('research.pausing', { done: card.done, total: card.total }) }}
+                        </span>
+                        <span v-else-if="card.bucket === 'running'" data-testid="talos-research-card-progress" class="font-mono text-2xs tabular-nums text-[var(--talos-accent)]">
                             {{ t('research.cardRunning', { done: card.done, total: card.total }) }}
                         </span>
                         <!-- `total > 0`, not merely "there is a standing": a
@@ -276,7 +461,15 @@ function when(iso: string): string {
                             {{ t(`research.buckets.${card.bucket}`) }}
                         </span>
 
-                        <span class="font-mono text-2xs text-[var(--talos-muted)]">{{ when(card.startedAt) }}</span>
+                        <span class="flex items-center gap-2 font-mono text-2xs text-[var(--talos-muted)]">
+                            {{ when(card.startedAt) }}
+                            <!-- Progress for a row lives ON the row, and appears
+                                 only once the wait is real. See the composable. -->
+                            <span v-if="busy.visible.value === card.id" class="inline-flex items-center gap-1 text-[var(--talos-accent)]">
+                                <Loader2 class="size-3 animate-spin" aria-hidden="true" />
+                                {{ t('research.working') }}
+                            </span>
+                        </span>
                     </button>
                 </li>
             </ul>
@@ -291,5 +484,64 @@ function when(iso: string): string {
         >
             <Plus class="size-6" aria-hidden="true" />
         </button>
+
+        <TalosMobileConfirmDialog
+            v-if="renameTarget"
+            :title="t('research.renameTitle')"
+            :description="t('research.renameHint')"
+            @close="renameTarget = null"
+        >
+            <label class="block text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]" for="talos-research-rename-field">
+                {{ t('research.renameLabel') }}
+            </label>
+            <input
+                id="talos-research-rename-field"
+                ref="renameField"
+                v-model="renameValue"
+                type="text"
+                maxlength="120"
+                data-testid="talos-research-rename-field"
+                :placeholder="renameTarget.originalQuestion"
+                class="min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                @keyup.enter="submitRename()"
+            >
+            <template #footer>
+                <Button variant="ghost" @click="renameTarget = null">{{ t('common.cancel') }}</Button>
+                <Button data-testid="talos-research-rename-save" @click="submitRename()">{{ t('common.save') }}</Button>
+            </template>
+        </TalosMobileConfirmDialog>
+
+        <!-- Names the research and says what goes with it. "Are you sure?" gives
+             a person nothing they can weigh. -->
+        <TalosMobileConfirmDialog
+            v-if="deleteTarget"
+            :title="t('research.deleteTitle', { title: deleteTarget.question })"
+            :description="deleteTarget.bucket === 'done' ? t('research.deleteBodyWithSources') : t('research.deleteBody')"
+            @close="deleteTarget = null"
+        >
+            <template #footer>
+                <Button variant="ghost" @click="deleteTarget = null">{{ t('common.cancel') }}</Button>
+                <Button variant="destructive" :class="TALOS_DANGER_ACTION_CLASS" data-testid="talos-research-delete-confirm" @click="confirmDelete()">
+                    {{ t('research.deleteConfirm') }}
+                </Button>
+            </template>
+        </TalosMobileConfirmDialog>
+
+        <!-- Cancelling is confirmed because it cannot be undone. Pausing is not,
+             because it takes nothing away, and a confirmation there would be
+             friction guarding nothing. -->
+        <TalosMobileConfirmDialog
+            v-if="cancelTarget"
+            :title="t('research.cancelTitle', { title: cancelTarget.question })"
+            :description="t('research.cancelBody')"
+            @close="cancelTarget = null"
+        >
+            <template #footer>
+                <Button variant="ghost" @click="cancelTarget = null">{{ t('research.cancelKeep') }}</Button>
+                <Button variant="destructive" :class="TALOS_DANGER_ACTION_CLASS" data-testid="talos-research-cancel-confirm" @click="confirmCancel()">
+                    {{ t('research.cancelConfirm') }}
+                </Button>
+            </template>
+        </TalosMobileConfirmDialog>
     </TalosMobileScreen>
 </template>

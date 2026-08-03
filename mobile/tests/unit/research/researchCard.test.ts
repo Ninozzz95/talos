@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
     talosResearchBucketOf,
+    talosResearchActionsFor,
     talosResearchCardOf,
     talosResearchFilterCards,
     talosResearchNeedsAttention,
@@ -57,9 +58,10 @@ describe('what a research looks like before you open it', () => {
     })
 
     it('puts every stopped-but-owing state in one bucket, and failure in its own', () => {
-        for (const status of ['planning', 'collecting', 'synthesising', 'verifying', 'cancelled'] as const) {
+        for (const status of ['planning', 'collecting', 'synthesising', 'verifying'] as const) {
             expect(talosResearchBucketOf(run({ status }), false)).toBe('unfinished')
         }
+        expect(talosResearchBucketOf(run({ status: 'cancelled' }), false)).toBe('cancelled')
         expect(talosResearchBucketOf(run({ status: 'failed' }), false)).toBe('failed')
         expect(talosResearchBucketOf(run({ status: 'done' }), false)).toBe('done')
     })
@@ -110,8 +112,11 @@ describe('what a research looks like before you open it', () => {
         expect(talosResearchBucketOf(run({ status: 'paused' }), false)).toBe('paused')
         // A pause that has not finished landing is the same situation to read.
         expect(talosResearchBucketOf(run({ status: 'pause_requested' }), false)).toBe('paused')
-        // And cancelled is NOT paused: it owes nothing and never resumes.
-        expect(talosResearchBucketOf(run({ status: 'cancelled' }), false)).toBe('unfinished')
+        // And cancelled is neither: it owes nothing and never resumes. It gets
+        // a drawer of its own for the same reason paused does — filing a
+        // decision with the accidents misreads it — and here the old label was
+        // actively wrong, promising "interrupted" work could be carried on.
+        expect(talosResearchBucketOf(run({ status: 'cancelled' }), false)).toBe('cancelled')
         // The live registry still wins: a run being resumed right now is running.
         expect(talosResearchBucketOf(run({ status: 'paused' }), true)).toBe('running')
     })
@@ -141,5 +146,41 @@ describe('what a research looks like before you open it', () => {
         expect(talosResearchFilterCards(cards, 'failed', 'iphone').map((card) => card.id)).toEqual(['c'])
         // Whitespace is not a search.
         expect(talosResearchFilterCards(cards, 'all', '   ')).toHaveLength(3)
+    })
+})
+
+describe('what can be done to a research', () => {
+    function actions(status: TalosResearchStatus, isRunning = false) {
+        return talosResearchActionsFor(talosResearchCardOf(run({ status }), { isRunning }))
+    }
+
+    it('offers Pause and Cancel while it works, and never Delete', () => {
+        // Removing the journal from under the single writer would destroy the
+        // only record that a step already sent to a provider was paid for.
+        expect(actions('collecting', true)).toEqual(['open', 'rename', 'pause', 'cancel'])
+    })
+
+    it('offers Resume to anything that still owes work, however it stopped', () => {
+        // On purpose or by a kill — from the reader's side both are "carry on".
+        expect(actions('paused')).toContain('resume')
+        expect(actions('collecting')).toContain('resume')
+        expect(actions('pause_requested')).toContain('resume')
+    })
+
+    it('never offers Resume for a research that ended', () => {
+        // The engine refuses to drive a terminal run, so an offer here would be
+        // a button that lies — and for `cancelled` it would also read as an
+        // undo, which it is not.
+        for (const status of ['done', 'cancelled', 'failed'] as const) {
+            expect(actions(status)).not.toContain('resume')
+            expect(actions(status)).not.toContain('cancel')
+            expect(actions(status)).toContain('delete')
+        }
+    })
+
+    it('always lets you open it and name it', () => {
+        for (const status of ['collecting', 'paused', 'done', 'cancelled', 'failed'] as const) {
+            expect(actions(status).slice(0, 2)).toEqual(['open', 'rename'])
+        }
     })
 })

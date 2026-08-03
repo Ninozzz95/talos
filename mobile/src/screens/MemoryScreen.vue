@@ -15,6 +15,7 @@ import type { TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSel
 import { useChatController } from '@/stores/chatController'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import type { TalosLocalMemory } from '@/repositories/chatRepository'
+import { TALOS_DANGER_ACTION_CLASS } from '@/lib/dangerAction'
 
 const controller = useChatController()
 const { t } = useTalosI18n()
@@ -294,7 +295,7 @@ function statusLabel(memory: TalosLocalMemory): string {
         >
             <template #footer>
                 <Button type="button" variant="ghost" @click="deleteTarget = null">{{ t('common.cancel') }}</Button>
-                <Button type="button" variant="destructive" @click="confirmDelete">
+                <Button type="button" variant="destructive" :class="TALOS_DANGER_ACTION_CLASS" @click="confirmDelete">
                     <Trash2 class="size-4" aria-hidden="true" /> {{ t('common.delete') }}
                 </Button>
             </template>

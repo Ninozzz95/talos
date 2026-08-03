@@ -175,27 +175,41 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
             if (talosResearchIsResting(run.status)) {
                 run = await append(deps, run, { kind: 'run_resumed', at: deps.now() }, seq++)
             }
-            for (;;) {
-                /**
-                 * "Drain then checkpoint", checked HERE — between steps, which
-                 * is the only place where nothing is in flight.
-                 *
-                 * A stop asked mid-step lets that step finish and be committed
-                 * by the code below before this is reached again. That is not
-                 * politeness: the call is already sent and already paid for, and
-                 * throwing its answer away would spend the person's money for
-                 * nothing.
-                 */
+            /**
+             * "Drain then checkpoint", asked at every point where NOTHING is in
+             * flight — and there are two of them, not one.
+             *
+             * A stop that lands mid-step lets that step finish and commit
+             * first: the call is already sent and already paid for, and
+             * discarding its answer to honour the word "pause" sooner would
+             * spend the person's money for nothing.
+             *
+             * There is exactly ONE such point, and the tablet is what settled
+             * it. A pause asked during the SYNTHESIS looked ignored, so the
+             * obvious move was to add a second check before that step — but
+             * between the loop breaking and the synthesis starting there is no
+             * `await`, so nothing can arrive in the gap and the check was dead
+             * code a mutation could delete without failing a thing. The real
+             * gap was never here: a pause asked during the last step lets that
+             * step finish, and when the last step IS the report there is
+             * nothing left to not-do. That is drain-then-checkpoint working;
+             * what was missing was saying so, which the station now does.
+             */
+            async function rest(): Promise<TalosResearchRun | null> {
                 const asked = stopping.get(runId)
-                if (asked) {
-                    stopping.delete(runId)
-                    run = await append(deps, run, { kind: 'run_pause_requested', at: deps.now() }, seq++)
-                    run = await append(deps, run, asked === 'cancel'
-                        ? { kind: 'run_cancelled', at: deps.now() }
-                        : { kind: 'run_paused', at: deps.now() }, seq++)
-                    onProgress?.({ run, ...talosResearchProgressOf(run) })
-                    return run
-                }
+                if (!asked) return null
+                stopping.delete(runId)
+                run = await append(deps, run, { kind: 'run_pause_requested', at: deps.now() }, seq++)
+                run = await append(deps, run, asked === 'cancel'
+                    ? { kind: 'run_cancelled', at: deps.now() }
+                    : { kind: 'run_paused', at: deps.now() }, seq++)
+                onProgress?.({ run, ...talosResearchProgressOf(run) })
+                return run
+            }
+
+            for (;;) {
+                const stopped = await rest()
+                if (stopped) return stopped
 
                 const left = talosResearchWorkLeft(run)
                 // Counted from the run, by the same function the station uses.
@@ -241,6 +255,7 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
             if (deps.synthesise) {
                 const done = run.steps.find((step) => step.id === SYNTHESIS_STEP_ID)?.state === 'done'
                 if (!done) {
+
                     keeper.engage(SYNTHESIS_LABEL)
                     run = await append(deps, run, {
                         kind: 'step_started',

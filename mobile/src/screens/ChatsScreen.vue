@@ -24,6 +24,7 @@ import { useChatController } from '@/stores/chatController'
 import { archivedChatSessions, orderChatSessions } from '@/lib/chatListGestures'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import { talosLightImpact } from '@/services/haptics'
+import { TALOS_DANGER_ACTION_CLASS } from '@/lib/dangerAction'
 
 // F6 — embedded mode: the tablet split view mounts this screen as the
 // persistent left panel. Selection then must NOT navigate (the chat already
@@ -651,7 +652,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
             </label>
             <template #footer>
                 <Button type="button" variant="ghost" :disabled="actionBusy" @click="bulkDeleteOpen = false"><X class="size-4" aria-hidden="true" /> {{ t('common.cancel') }}</Button>
-                <Button type="button" variant="destructive" data-testid="talos-chats-bulk-delete-confirm" :disabled="actionBusy" @click="confirmBulkDelete">
+                <Button type="button" variant="destructive" :class="TALOS_DANGER_ACTION_CLASS" data-testid="talos-chats-bulk-delete-confirm" :disabled="actionBusy" @click="confirmBulkDelete">
                     <LoaderCircle v-if="actionBusy" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
                     <Trash2 v-else class="size-4" aria-hidden="true" />
                     {{ actionBusy ? t('chat.deleting') : t('common.delete') }}

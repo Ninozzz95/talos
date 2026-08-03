@@ -1,3 +1,4 @@
+import { shallowRef } from 'vue'
 import type { TalosResearchProgress } from '@/services/researchRuntime'
 import { talosResearchProgressOf, type TalosResearchRun } from '@/lib/research/researchRun'
 
@@ -79,7 +80,21 @@ export interface TalosResearchRegistry {
 export function createTalosResearchRegistry(): TalosResearchRegistry {
     const watchers = new Map<string, Set<TalosResearchWatcher>>()
     const latest = new Map<string, TalosResearchProgress>()
-    const live = new Set<string>()
+    /**
+     * REACTIVE, and that is the whole point of it being a ref.
+     *
+     * The tablet 2026-08-03: a paused research kept saying "in corso" forever.
+     * The run really had stopped — the counter sat still — but `isRunning` read
+     * a plain Set, so the screen's computed had no reason to run again when the
+     * run closed. It only looked right before because pausing also re-read the
+     * whole list from disk, which invalidated everything by brute force; the
+     * moment that re-read was removed (it was undoing the "pausing…" line) the
+     * staleness underneath became visible.
+     *
+     * A new Set on every change rather than mutation in place: `shallowRef`
+     * tracks the reference, not the contents.
+     */
+    const live = shallowRef<ReadonlySet<string>>(new Set())
 
     function fanOut(runId: string, progress: TalosResearchProgress): void {
         latest.set(runId, progress)
@@ -96,25 +111,32 @@ export function createTalosResearchRegistry(): TalosResearchRegistry {
 
     return {
         open(runId) {
-            live.add(runId)
+            live.value = new Set(live.value).add(runId)
             return (progress) => fanOut(runId, progress)
         },
         close(runId) {
-            live.delete(runId)
+            if (!live.value.has(runId)) return
+            const next = new Set(live.value)
+            next.delete(runId)
+            live.value = next
         },
         report(runId, run) {
             fanOut(runId, { run, ...talosResearchProgressOf(run) })
         },
         forget(runId) {
-            live.delete(runId)
+            if (live.value.has(runId)) {
+                const next = new Set(live.value)
+                next.delete(runId)
+                live.value = next
+            }
             latest.delete(runId)
             watchers.delete(runId)
         },
         isRunning(runId) {
-            return live.has(runId)
+            return live.value.has(runId)
         },
         running() {
-            return [...live]
+            return [...live.value]
         },
         watch(runId, watcher) {
             let set = watchers.get(runId)

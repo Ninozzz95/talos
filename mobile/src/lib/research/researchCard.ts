@@ -1,5 +1,5 @@
-import type { TalosResearchRun } from '@/lib/research/researchRun'
-import { talosResearchIsResting, talosResearchProgressOf } from '@/lib/research/researchRun'
+import type { TalosResearchRun, TalosResearchStatus } from '@/lib/research/researchRun'
+import { talosResearchIsResting, talosResearchIsTerminal, talosResearchProgressOf } from '@/lib/research/researchRun'
 
 /**
  * What a research looks like from the outside, before you open it.
@@ -21,7 +21,7 @@ import { talosResearchIsResting, talosResearchProgressOf } from '@/lib/research/
  */
 
 /** The buckets the filter offers. One run is in exactly one. */
-export type TalosResearchBucket = 'running' | 'paused' | 'unfinished' | 'done' | 'failed'
+export type TalosResearchBucket = 'running' | 'paused' | 'unfinished' | 'cancelled' | 'done' | 'failed'
 
 export interface TalosResearchStanding {
     readonly total: number
@@ -42,6 +42,8 @@ export interface TalosResearchCard {
     readonly startedAt: string
     readonly updatedAt: string
     readonly bucket: TalosResearchBucket
+    /** The journal's own word for it, which the bucket deliberately blurs. */
+    readonly status: TalosResearchStatus
     readonly done: number
     readonly total: number
     /** Branches that failed, so a card can admit a partial result instead of hiding it. */
@@ -66,6 +68,11 @@ export function talosResearchBucketOf(
     if (isRunning) return 'running'
     if (run.status === 'failed') return 'failed'
     if (run.status === 'done') return 'done'
+    // Cancelled is a DECISION, like pausing, and for the same reason it does
+    // not belong with the runs the phone killed. Worse than untidy: those are
+    // filed as "interrupted", which promises they can be carried on — and a
+    // cancelled research is the one thing here that never resumes.
+    if (run.status === 'cancelled') return 'cancelled'
     // Paused is its OWN bucket, and that is the point of pausing: the person
     // stopped this on purpose and expects to come back to it. Filing it beside
     // the runs the phone killed would tell them their decision was an accident.
@@ -92,6 +99,7 @@ export function talosResearchCardOf(
         startedAt: run.startedAt,
         updatedAt: run.updatedAt,
         bucket: talosResearchBucketOf(run, options.isRunning),
+        status: run.status,
         done: progress.done,
         total: progress.total,
         failedSteps: run.steps.filter((step) => step.state === 'failed').length,
@@ -152,4 +160,32 @@ export function talosResearchFilterCards(
         if (needle.length === 0) return true
         return card.question.toLowerCase().includes(needle)
     })
+}
+
+/**
+ * What can be done to this research, right now.
+ *
+ * A list rather than a set of disabled entries: which actions exist is a fact
+ * about the thing, and a menu of dead options makes the reader work out why
+ * they are dead. A running research offers Pause and Cancel; a paused one
+ * offers Resume; a cancelled one offers neither, because the engine refuses to
+ * drive a run that ended and pretending otherwise would be a button that lies.
+ *
+ * Delete is missing while it runs, and that is not squeamishness: removing the
+ * journal from under the single writer would destroy the only record that a
+ * step already sent to a provider had been paid for. Stop it first.
+ */
+export type TalosResearchAction = 'open' | 'rename' | 'pause' | 'resume' | 'cancel' | 'delete'
+
+export function talosResearchActionsFor(card: TalosResearchCard): readonly TalosResearchAction[] {
+    const actions: TalosResearchAction[] = ['open', 'rename']
+    if (card.bucket === 'running') {
+        actions.push('pause', 'cancel')
+        // No delete: see above.
+        return actions
+    }
+    // Resting or merely interrupted — both still owe work and both resume.
+    if (!talosResearchIsTerminal(card.status)) actions.push('resume', 'cancel')
+    actions.push('delete')
+    return actions
 }

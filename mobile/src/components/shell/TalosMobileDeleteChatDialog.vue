@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import { talosCleanupCount } from '@/lib/chat/sessionCleanup'
 import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
+import { TALOS_DANGER_ACTION_CLASS } from '@/lib/dangerAction'
 
 /**
  * "Delete chat?" — with what it takes from the Library, and the choice.
@@ -139,6 +140,7 @@ function close(): void {
             <Button
                 type="button"
                 variant="destructive"
+                :class="TALOS_DANGER_ACTION_CLASS"
                 data-testid="talos-session-delete-confirm"
                 :disabled="running || props.busy"
                 @click="confirm"
