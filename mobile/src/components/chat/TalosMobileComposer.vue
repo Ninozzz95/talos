@@ -982,6 +982,29 @@ watch(() => props.prompt, () => {
             </div>
         </div>
 
+        <!--
+            The reason the composer will not send, where eyes can find it.
+
+            It was announced to screen readers and hung on the Send button's
+            `title` — which on a phone nobody can hover, and which is not there
+            at all while the composer is empty and the right button is the Mic.
+            So a person met a composer that silently refused and said nothing.
+
+            Owner 2026-08-03 hit the same shape twice in one day: the dead
+            «Avvia» in the research setup, and a new chat that would not send
+            because another one was still answering. Both were controls that
+            declined without explaining.
+
+            Only when it is genuinely blocked: `sending` has its own visible
+            state (the Stop button), and repeating "processing" under it would
+            be noise.
+        -->
+        <p
+            v-if="!sending && sendDisabledReason"
+            data-testid="talos-composer-blocked-reason"
+            class="px-1 pt-1 text-2xs leading-5 text-[var(--talos-muted)]"
+        >{{ sendDisabledReason }}</p>
+
         <span class="sr-only" role="status" aria-live="polite">{{ statusText }}</span>
 
         <!-- F3-T4bis: organized tool drawer (drawer mode only). -->

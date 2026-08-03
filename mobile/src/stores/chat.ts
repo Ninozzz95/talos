@@ -194,6 +194,16 @@ export interface ChatState {
      * was homeless.
      */
     streamingSessionId: string | null
+    /**
+     * WHICH chat is generating, not merely that something is.
+     *
+     * `sending` alone is one flag for the whole app, so every composer read
+     * it and every composer showed a Stop button for somebody else's answer
+     * (owner 2026-08-03). `streamingSessionId` could not stand in: it is set
+     * only once the reply belongs to a conversation, leaving a window where
+     * the app knows it is busy and not on whose behalf.
+     */
+    sendingSessionId: string | null
     /** Defect #5: the reasoning of the reply being streamed right now. */
     streamingReasoning: string | null
     /** Defect #4: false once the oldest message of the session is on screen. */
@@ -438,6 +448,7 @@ export function createChatStore<Runtime = undefined>(
         sending: false,
         streamingText: null,
         streamingSessionId: null,
+        sendingSessionId: null,
         streamingReasoning: null,
         hasOlderMessages: false,
         loadingOlderMessages: false,
@@ -1082,6 +1093,8 @@ export function createChatStore<Runtime = undefined>(
         input: TalosChatContinuationInput<Runtime>,
     ): Promise<boolean> {
         state.sending = true
+        // The chat you are on owns it until the journal says otherwise.
+        state.sendingSessionId = activeSession.value?.id ?? null
         state.lastError = null
         const abort = new AbortController()
         activeStreamAbort = abort
@@ -1129,6 +1142,7 @@ export function createChatStore<Runtime = undefined>(
             }
 
             state.streamingSessionId = owner.id
+            state.sendingSessionId = owner.id
             const handlers: TalosStreamHandlers = {
                 onChunk: (text) => {
                     streamed += text
@@ -1216,6 +1230,7 @@ export function createChatStore<Runtime = undefined>(
         } finally {
             state.streamingText = null
             state.streamingSessionId = null
+            state.sendingSessionId = null
             state.streamingReasoning = null
             if (activeStreamAbort === abort) activeStreamAbort = null
             state.sending = false
@@ -1273,6 +1288,7 @@ export function createChatStore<Runtime = undefined>(
         }
 
         state.sending = true
+        state.sendingSessionId = activeSession.value?.id ?? null
         state.lastError = null
         const acceptedAt = new Date().toISOString()
         const abort = new AbortController()
@@ -1280,6 +1296,7 @@ export function createChatStore<Runtime = undefined>(
         const finishSend = (): void => {
             state.streamingText = null
             state.streamingSessionId = null
+            state.sendingSessionId = null
             state.streamingReasoning = null
             activeStreamAbort = null
             state.sending = false
@@ -1353,6 +1370,7 @@ export function createChatStore<Runtime = undefined>(
         // From here the live reply BELONGS to this conversation. Switching chats
         // must not carry it across, and the previous behaviour did exactly that.
         state.streamingSessionId = session.id
+        state.sendingSessionId = session.id
 
         // The user turn is committed — let the composer clear NOW (text +
         // attachments) instead of lingering for the whole assistant stream.
