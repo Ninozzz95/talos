@@ -147,6 +147,7 @@ import type {
     TalosChatSendIdentity,
     TalosChatSendPreparationContext,
 } from '@/lib/chat/sendSnapshot'
+import { createTalosResearchRegistry } from '@/lib/research/researchRegistry'
 import { newTalosMobileId } from '@/lib/mobileIds'
 import type { TalosToolConsentRequest } from '@/lib/tools/executor'
 import type {
@@ -845,6 +846,18 @@ export interface ChatController {
      * is whatever asks next. A facade owned by the screen would die with it.
      */
     research: {
+        /**
+         * The live index over the runs in flight. A screen subscribes to it
+         * instead of owning the promise, so going back cannot end the research
+         * — see lib/research/researchRegistry.
+         */
+        readonly registry: import('@/lib/research/researchRegistry').TalosResearchRegistry
+        /**
+         * Starts and returns AT ONCE, with the id and the promise for whoever
+         * genuinely wants to wait. It used to return the promise for the whole
+         * run, so every caller became its owner and an unmounted screen was a
+         * job nobody could see.
+         */
         start(
             input: {
                 question: string
@@ -852,9 +865,9 @@ export interface ChatController {
                 branches: readonly import('@/lib/research/researchRun').TalosResearchBranch[]
             },
             onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void,
-        ): Promise<import('@/lib/research/researchRun').TalosResearchRun>
+        ): Promise<{ id: string, running: Promise<import('@/lib/research/researchRun').TalosResearchRun> }>
         resume(runId: string, onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void):
-            Promise<import('@/lib/research/researchRun').TalosResearchRun>
+            Promise<{ id: string, running: Promise<import('@/lib/research/researchRun').TalosResearchRun> }>
         unfinished(): Promise<readonly import('@/lib/research/researchRun').TalosResearchRun[]>
         list(): Promise<readonly import('@/lib/research/researchRun').TalosResearchRun[]>
         /** R-4 — the report read back as structure, verdicts included. Null when it will not parse. */
@@ -4060,6 +4073,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      */
     const research = (() => {
         let runtime: Awaited<ReturnType<typeof loadResearchRuntime>> | null = null
+        // Built eagerly and cheaply: it holds only ids and the last progress,
+        // and a screen must be able to ask "is anything running?" before the
+        // heavy runtime module has ever been loaded.
+        const registry = createTalosResearchRegistry()
         async function loadResearchRuntime() {
             const [{ createTalosResearchRuntime }, { createTalosRunKeeper }] = await Promise.all([
                 import('@/services/researchRuntime'),
@@ -4194,6 +4211,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             return runtime
         }
         return {
+            /**
+             * The live index over the runs. A screen SUBSCRIBES to this rather
+             * than owning a promise — see lib/research/researchRegistry.
+             */
+            registry,
             async start(
                 input: {
                     question: string
@@ -4203,18 +4225,41 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void,
             ) {
                 const engine = await ready()
+                const id = `research-${Date.now()}`
+                const report = registry.open(id)
                 // The plan comes from the caller because R-2 made it the user's:
                 // building a default here would run something they never saw.
-                return engine.start({
-                    id: `research-${Date.now()}`,
+                //
+                // The promise is deliberately NOT awaited here. Owner 2026-08-02:
+                // going back must not end the research. The caller used to await
+                // it, so the only handle to a running job was a screen — and an
+                // unmounted screen is a job nobody can see any more.
+                const running = engine.start({
+                    id,
                     sessionId: chat.activeSession.value?.id ?? 'none',
                     question: input.question,
                     depth: input.depth,
                     branches: input.branches,
-                }, onProgress)
+                }, (progress) => {
+                    report(progress)
+                    onProgress?.(progress)
+                }).finally(() => registry.close(id))
+                // Nothing observes the rejection until someone asks for it, and
+                // an unhandled rejection in the console is not an error report.
+                // The journal already records what failed; this keeps the
+                // process quiet about it.
+                running.catch(() => undefined)
+                return { id, running }
             },
             async resume(runId: string, onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void) {
-                return (await ready()).resume(runId, onProgress)
+                const engine = await ready()
+                const report = registry.open(runId)
+                const running = engine.resume(runId, (progress) => {
+                    report(progress)
+                    onProgress?.(progress)
+                }).finally(() => registry.close(runId))
+                running.catch(() => undefined)
+                return { id: runId, running }
             },
             async unfinished() {
                 return (await ready()).unfinished()

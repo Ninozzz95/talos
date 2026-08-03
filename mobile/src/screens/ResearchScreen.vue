@@ -13,7 +13,7 @@
  * as it finishes, so what survives a kill is not a promise in a comment but a
  * row on disk.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ChevronDown, ChevronRight, Download, FileSearch, Play, Plus, RotateCcw, Trash2 } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,7 @@ import type { TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSel
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import type { TalosResearchBranch, TalosResearchDepth, TalosResearchRun } from '@/lib/research/researchRun'
+import type { TalosResearchProgress } from '@/services/researchRuntime'
 import { talosResearchProgressOf } from '@/lib/research/researchRun'
 import type { TalosResearchReportRecord } from '@/lib/research/researchReport'
 import { talosResearchVerifiedStanding } from '@/lib/research/researchVerification'
@@ -170,25 +171,59 @@ async function refresh(): Promise<void> {
     }
 }
 
-onMounted(refresh)
+onMounted(async () => {
+    await refresh()
+    // Anything still going gets a watcher again, and the registry replays its
+    // last progress immediately — so a run in flight shows as in flight rather
+    // than as a finished-looking row waiting for its next step.
+    followRunning()
+})
+
+/**
+ * The runs this screen is currently watching, so it can let go on the way out.
+ *
+ * Owner 2026-08-02: "quando torni indietro… bisogna mantenerla running nello
+ * sfondo". The screen no longer OWNS a run — it subscribes to one. Unsubscribing
+ * on unmount removes the watcher and nothing else; the run keeps going and the
+ * next visit picks it back up with its last reported progress.
+ */
+const watching = new Map<string, () => void>()
+
+function absorb(progress: TalosResearchProgress): void {
+    runs.value = [progress.run, ...runs.value.filter((run) => run.id !== progress.run.id)]
+}
+
+function follow(runId: string): void {
+    if (watching.has(runId)) return
+    watching.set(runId, controller.research.registry.watch(runId, absorb))
+}
+
+/** Re-attach to everything already in flight. This is what "coming back" means. */
+function followRunning(): void {
+    for (const runId of controller.research.registry.running()) follow(runId)
+}
+
+onBeforeUnmount(() => {
+    for (const stop of watching.values()) stop()
+    watching.clear()
+})
 
 async function start(): Promise<void> {
     if (!canStart.value) return
     busy.value = true
     try {
-        // The progress callback repaints WHILE the run is going, so the steps
-        // are visibly landing one at a time instead of appearing all at once at
-        // the end — which is what would happen if this only refreshed after.
-        await controller.research.start({
+        // Awaits the HANDING OVER, not the run. The old code awaited the whole
+        // thing here, which is why leaving the screen lost the only thing that
+        // could see it.
+        const { id } = await controller.research.start({
             question: question.value.trim(),
             depth: depth.value,
             // The plan that RAN is the one the user approved, edits included.
             // Handing the runtime a fresh default here would quietly discard
             // everything they just changed, which is the whole of R-2.
             branches: plan.value,
-        }, (progress) => {
-            runs.value = [progress.run, ...runs.value.filter((run) => run.id !== progress.run.id)]
         })
+        follow(id)
         question.value = ''
         plan.value = []
     } catch (failure) {
@@ -202,9 +237,8 @@ async function start(): Promise<void> {
 async function resume(runId: string): Promise<void> {
     busy.value = true
     try {
-        await controller.research.resume(runId, (progress) => {
-            runs.value = runs.value.map((run) => (run.id === progress.run.id ? progress.run : run))
-        })
+        await controller.research.resume(runId)
+        follow(runId)
     } catch (failure) {
         error.value = failure instanceof Error ? failure.message : String(failure)
     } finally {
