@@ -19,6 +19,7 @@
  * places where our evidence work is actually visible.
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { talosResearchIsTerminal } from '@/lib/research/researchRun'
 import { useRoute, useRouter } from 'vue-router'
 import { TabsContent } from 'reka-ui'
 import { AlertTriangle, ChevronRight, Download, Play, RotateCcw } from '@lucide/vue'
@@ -92,6 +93,23 @@ const solidity = computed(() => {
 const judge = computed(() => report.value?.judge ?? null)
 
 const failedSteps = computed(() => current.value?.steps.filter((step) => step.state === 'failed') ?? [])
+
+/**
+ * What to say when there is no report — and there is always something to say.
+ *
+ * Each of these is a different situation for the person, and telling them apart
+ * is the difference between "wait" and "do something". The old page said
+ * nothing at all for the last two.
+ */
+const liveLine = computed(() => {
+    const status = current.value?.status
+    if (isRunning.value) return 'research.cardRunning'
+    if (status === 'paused' || status === 'pause_requested') return 'research.pausedHere'
+    if (status === 'cancelled') return 'research.cancelledHere'
+    if (status === 'failed') return 'research.failedHere'
+    if (status === 'done') return 'research.doneNoReport'
+    return 'research.stopped'
+})
 
 /**
  * WHY a branch failed, not just how many did.
@@ -233,11 +251,41 @@ function openSource(index: number): void {
                     </p>
                 </section>
 
-                <section v-if="isRunning || (progress && progress.done < progress.total)" data-testid="talos-research-live" class="rounded-xl border border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] p-3">
+                <!--
+                    Shown whenever there is no finished report, which is not the
+                    same as "still has branches left".
+
+                    Owner 2026-08-03: a research that stopped after its branches
+                    but before its report drew a COMPLETELY EMPTY page — five
+                    sections, every one of them in a `v-else` that did not
+                    apply. `done < total` was false because the synthesis had
+                    not been recorded as a step yet, so the one thing that could
+                    have spoken stayed silent. A page with nothing on it is
+                    worse than an error: it gives the person nothing to do and
+                    nothing to report.
+                -->
+                <section v-if="!report" data-testid="talos-research-live" class="rounded-xl border border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] p-3">
                     <p class="font-mono text-2xs tabular-nums text-[var(--talos-text)]">
-                        {{ t(isRunning ? 'research.cardRunning' : 'research.stopped', { done: progress?.done ?? 0, total: progress?.total ?? 0 }) }}
+                        {{ t(liveLine, { done: progress?.done ?? 0, total: progress?.total ?? 0 }) }}
                     </p>
-                    <Button v-if="!isRunning" data-testid="talos-research-resume" variant="outline" class="mt-2" :disabled="busy" @click="resume()">
+                    <!-- A determinate bar only while the denominator is real.
+                         A percentage of a plan that can still grow is theatre —
+                         the one thing the competitor research said not to copy. -->
+                    <div
+                        v-if="progress && progress.total > 0"
+                        class="mt-2 h-1 overflow-hidden rounded-full bg-[var(--talos-border)]"
+                        role="progressbar"
+                        :aria-valuemin="0"
+                        :aria-valuemax="progress.total"
+                        :aria-valuenow="progress.done"
+                        :aria-valuetext="t('research.cardRunning', { done: progress.done, total: progress.total })"
+                    >
+                        <div
+                            class="h-full rounded-full bg-[var(--talos-accent)] transition-[width] duration-500"
+                            :style="{ width: `${Math.round((progress.done / progress.total) * 100)}%` }"
+                        />
+                    </div>
+                    <Button v-if="!isRunning && !talosResearchIsTerminal(current?.status ?? 'planning')" data-testid="talos-research-resume" variant="outline" class="mt-2" :disabled="busy" @click="resume()">
                         <Play class="h-4 w-4" aria-hidden="true" />
                         {{ t('research.resume') }}
                     </Button>

@@ -1681,6 +1681,10 @@ export const TALOS_IT_MESSAGES = {
             deletedAlone: 'Eliminata.',
             pausing: 'Sto salvando il passaggio {done} di {total}, poi mi fermo',
             finishedInstead: 'Era all’ultimo passaggio, già pagato: l’ho finita invece di buttarlo via.',
+            pausedHere: 'In pausa: {done} passaggi su {total} sono fatti e salvati.',
+            cancelledHere: 'Annullata. Resta quello che aveva già raccolto; non riprende.',
+            failedHere: 'Si è fermata per un errore. Sotto c’è il motivo.',
+            doneNoReport: 'Conclusa senza scrivere il rapporto: la raccolta c’è, la sintesi no.',
         buckets: {
             cancelled: 'Annullate',
             paused: 'In pausa',
