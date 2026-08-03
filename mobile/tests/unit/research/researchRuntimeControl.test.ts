@@ -154,6 +154,34 @@ describe('stopping a research that is running', () => {
         expect(attempts).toBe(2)
     })
 
+    it('stops before the report is written, not after paying for it', async () => {
+        // A pause asked during the last BRANCH must not go on to buy the
+        // synthesis — the dearest step of the run.
+        let runtime: ReturnType<typeof createTalosResearchRuntime>
+        let wrote = false
+        const made = createTalosResearchRuntime({
+            repository: createMemoryChatRepository(),
+            keeper: () => fakeKeeper(),
+            now: clock(),
+            perform: async () => {
+                await runtime.pause('run-1')
+                return ONE_SEARCH
+            },
+            synthesise: async () => { wrote = true; return ONE_SEARCH },
+        })
+        runtime = made
+
+        const run = await made.start({ ...START, branches: [BRANCHES[0]!] })
+
+        expect(run.status).toBe('paused')
+        expect(wrote).toBe(false)
+        // …and the gathering it did pay for is banked and resumable.
+        expect(talosResearchSpent(run).searches).toBe(1)
+
+        expect((await made.resume('run-1')).status).toBe('done')
+        expect(wrote).toBe(true)
+    })
+
     it('refuses to re-end a research that has already ended', async () => {
         // A notification action can arrive after the fact. It must not rewrite
         // the ending, and above all must not turn `done` into `paused`.

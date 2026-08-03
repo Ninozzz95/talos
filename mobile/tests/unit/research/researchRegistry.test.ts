@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { computed } from 'vue'
 import { createTalosResearchRegistry } from '@/lib/research/researchRegistry'
 import type { TalosResearchRun } from '@/lib/research/researchRun'
 import type { TalosResearchProgress } from '@/services/researchRuntime'
@@ -177,5 +178,66 @@ describe('states that arrive without the engine', () => {
         registry.report('run-1', run())
 
         expect(seen).toEqual([])
+    })
+})
+
+/**
+ * The live index has to be REACTIVE, not merely correct.
+ *
+ * The tablet 2026-08-03: a paused research kept saying "in corso" for ever. The
+ * run really had stopped — its counter sat still — but `isRunning` read a plain
+ * Set, so the screen's computed had no reason to run again when the run closed.
+ * It had only ever looked right because pausing also re-read the whole list
+ * from disk, which invalidated everything by brute force.
+ */
+describe('the live index seen from a screen', () => {
+    it('wakes a computed when a run opens and when it closes', () => {
+        const registry = createTalosResearchRegistry()
+        let evaluations = 0
+        const showing = computed(() => {
+            evaluations += 1
+            return registry.isRunning('run-1')
+        })
+
+        expect(showing.value).toBe(false)
+        expect(evaluations).toBe(1)
+
+        registry.open('run-1')
+        expect(showing.value).toBe(true)
+        expect(evaluations).toBe(2)
+
+        // The one that used to be missed: nothing else changes, so if closing
+        // is invisible the card stays "running" until something unrelated
+        // happens to invalidate it.
+        registry.close('run-1')
+        expect(showing.value).toBe(false)
+        expect(evaluations).toBe(3)
+    })
+
+    it('wakes it for `running()` too, and for a forgotten run', () => {
+        const registry = createTalosResearchRegistry()
+        const all = computed(() => registry.running().join(','))
+
+        expect(all.value).toBe('')
+        registry.open('a')
+        registry.open('b')
+        expect(all.value).toBe('a,b')
+
+        registry.forget('a')
+        expect(all.value).toBe('b')
+    })
+
+    it('closing something that was never open changes nothing', () => {
+        // Idempotent by contract, and a new Set on every call would wake every
+        // watcher in the app for nothing.
+        const registry = createTalosResearchRegistry()
+        registry.open('a')
+        let evaluations = 0
+        const all = computed(() => { evaluations += 1; return registry.running().length })
+
+        expect(all.value).toBe(1)
+        registry.close('b')
+        expect(all.value).toBe(1)
+        expect(evaluations).toBe(1)
     })
 })
