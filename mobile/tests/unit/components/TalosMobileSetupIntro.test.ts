@@ -19,6 +19,9 @@ import { reactive, ref } from 'vue'
  */
 const state = vi.hoisted(() => ({
     security: { app_lock_enabled: false },
+    /** Le azioni che la persona ha DECISO, distinte dai valori ereditati. */
+    toolsChosen: [] as string[],
+    toolPermissions: [] as Array<Record<string, string>>,
     secrets: {} as Record<string, boolean>,
     account: { display_name: '' },
     savedNames: [] as string[],
@@ -29,8 +32,15 @@ const state = vi.hoisted(() => ({
 
 vi.mock('@/stores/settings', () => ({
     useSettingsStore: () => ({
-        state: reactive({ security: state.security }),
+        state: reactive({ security: state.security, tools_chosen: state.toolsChosen }),
         setSecurity: vi.fn(async () => {}),
+        setToolPermissions: vi.fn(async (patch: Record<string, string>) => {
+            state.toolPermissions.push(patch)
+            // Toccare un permesso e' sceglierlo: il magazzino vero fa lo stesso.
+            for (const action of Object.keys(patch)) {
+                if (!state.toolsChosen.includes(action)) state.toolsChosen.push(action)
+            }
+        }),
     }),
 }))
 
@@ -97,6 +107,8 @@ beforeEach(() => {
     state.memoryNames.length = 0
     state.memoryFailure = false
     state.memoryExisting = false
+    state.toolsChosen.length = 0
+    state.toolPermissions.length = 0
     for (const key of Object.keys(state.secrets)) delete state.secrets[key]
 })
 
@@ -188,7 +200,7 @@ describe('what TALOS says it is, before asking for anything', () => {
 })
 
 describe('first-run setup', () => {
-    it('ONBOARD-UNIFIED-02 keeps name, PIN, model and background in one setup modal', async () => {
+    it('ONBOARD-UNIFIED-02 keeps every first-run decision in one setup modal', async () => {
         const wrapper = await mountSetup()
         const steps = wrapper.findAll('[data-testid="talos-setup-step"]')
         /**
@@ -200,8 +212,9 @@ describe('first-run setup', () => {
          * chiedere quando la persona ha capito a che serve: a quel punto ha
          * gia dato nome, PIN e modello.
          */
-        expect(steps).toHaveLength(4)
-        expect(steps.map((step) => step.text())).toEqual(['Name', 'PIN', 'Model', 'Background'])
+        expect(steps).toHaveLength(5)
+        expect(steps.map((step) => step.text()))
+            .toEqual(['Name', 'PIN', 'Model', 'Autonomy', 'Background'])
         expect(steps[0]!.attributes('aria-current')).toBe('step')
         expect(wrapper.find('[data-testid="talos-setup-identity"]').exists()).toBe(true)
         wrapper.unmount()
@@ -289,11 +302,85 @@ describe('first-run setup', () => {
         await flushPromises()
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         await flushPromises()
-        // Un passo in piu: la pagina del background e l'ultima.
+        // Nome → PIN → Modello, e poi l'autonomia.
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         await flushPromises()
+        // L'autonomia si passa DECIDENDO, che e' il punto della pagina: la
+        // scelta avanza da sola, e «chiedimelo» e' una risposta legittima.
+        await wrapper.get('[data-testid="talos-setup-autonomy-ask"]').trigger('click')
+        await flushPromises()
+        // La scelta ha gia' portato al background, che e' l'ultima pagina:
+        // da li' non c'e' un «avanti», c'e' il tasto per entrare.
         await wrapper.get('[data-testid="talos-intro-cta"]').trigger('click')
         expect(wrapper.emitted('close')).toEqual([['completed']])
+        wrapper.unmount()
+    })
+
+    it('dice «non ora» solo dove si sta davvero saltando qualcosa', async () => {
+        /**
+         * Visto sul tablet il 2026-08-03, dove il PIN non c'e'. Finche i passi
+         * erano tre, il ramo «non ora» copriva il solo PIN e la frase era
+         * giusta: si salta la protezione. Con Modello, Autonomia e Background
+         * il ramo e' diventato di tutti, e le pagine nuove offrivano «Non ora»
+         * a chi non stava saltando niente.
+         */
+        const wrapper = await mountSetup()
+        await wrapper.get('[data-testid="talos-setup-name"]').setValue('Nino')
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+        // Sul PIN, senza PIN, «non ora» e' la parola giusta.
+        expect(wrapper.get('[data-testid="talos-setup-next"]').text()).toBe('Not now')
+
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+        // Sul modello no: si va avanti, non si rinuncia a nulla.
+        expect(wrapper.get('[data-testid="talos-setup-next"]').text()).toBe('Next')
+
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+        expect(wrapper.get('[data-testid="talos-setup-next"]').text()).toBe('Next')
+        wrapper.unmount()
+    })
+
+    it('scrive negli STESSI tre permessi che leggono le Impostazioni', async () => {
+        /**
+         * Owner: «una pagina guidata per impostare i permessi dentro l'app».
+         *
+         * Guidata, non duplicata. I tre menu a tendina esistono gia' nel
+         * pannello Strumenti agente; clonarli qui sarebbe una seconda casa per
+         * la stessa impostazione — il difetto che stiamo togliendo altrove. La
+         * pagina prende UNA decisione e la scrive dove sta gia', percio' questo
+         * test guarda il magazzino e non lo schermo.
+         */
+        const wrapper = await mountSetup()
+        await wrapper.get('[data-testid="talos-setup-name"]').setValue('Nino')
+        for (let step = 0; step < 3; step += 1) {
+            await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+            await flushPromises()
+        }
+        await wrapper.get('[data-testid="talos-setup-autonomy-allow"]').trigger('click')
+        await flushPromises()
+
+        expect(state.toolPermissions).toEqual([{ read: 'allow', write: 'allow', outbound: 'allow' }])
+        // E la scelta e' registrata COME scelta: «chiedimelo» sarebbe uguale al
+        // predefinito, quindi senza questo elenco il passo non risulterebbe mai
+        // fatto per chi sceglie la prudenza.
+        expect(state.toolsChosen.sort()).toEqual(['outbound', 'read', 'write'])
+        wrapper.unmount()
+    })
+
+    it('registra anche la prudenza come una decisione', async () => {
+        const wrapper = await mountSetup()
+        await wrapper.get('[data-testid="talos-setup-name"]').setValue('Nino')
+        for (let step = 0; step < 3; step += 1) {
+            await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+            await flushPromises()
+        }
+        await wrapper.get('[data-testid="talos-setup-autonomy-ask"]').trigger('click')
+        await flushPromises()
+
+        expect(state.toolPermissions).toEqual([{ read: 'ask', write: 'ask', outbound: 'ask' }])
+        expect(state.toolsChosen.sort()).toEqual(['outbound', 'read', 'write'])
         wrapper.unmount()
     })
 
@@ -312,6 +399,8 @@ describe('first-run setup', () => {
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         await flushPromises()
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-setup-autonomy-ask"]').trigger('click')
         await flushPromises()
 
         expect(wrapper.find('[data-testid="talos-setup-background"]').exists()).toBe(true)

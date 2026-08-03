@@ -15,14 +15,15 @@ import { TALOS_SETUP_STEPS, talosSetupProgress } from '@/lib/onboarding/setupPro
 describe('what first-run setup still needs', () => {
     it('asks for everything on a fresh install', () => {
         const progress = talosSetupProgress({
-            identitySet: false, pinSet: false, modelReady: false, backgroundReady: false,
+            identitySet: false, pinSet: false, modelReady: false,
+            autonomyChosen: false, backgroundReady: false,
         })
-        expect(progress.steps.map((step) => step.done)).toEqual([false, false, false, false])
+        expect(progress.steps.map((step) => step.done)).toEqual([false, false, false, false, false])
         expect(progress.startIndex).toBe(0)
         expect(progress.complete).toBe(false)
     })
 
-    it('names the four steps after what the person controls', () => {
+    it('names the five steps after what the person controls', () => {
         // Not "Security" and "Provider configuration" — a PIN and a model are
         // the things they recognise and can point at.
         //
@@ -33,14 +34,15 @@ describe('what first-run setup still needs', () => {
         // qualcosa. Senza l'esenzione una Deep Research muore tre volte su tre
         // appena si blocca lo schermo — misurato sul OnePlus 13.
         expect(TALOS_SETUP_STEPS.map((step) => step.label))
-            .toEqual(['Name', 'PIN', 'Model', 'Background'])
+            .toEqual(['Name', 'PIN', 'Model', 'Autonomy', 'Background'])
     })
 
     it('opens on the model step when a PIN is already set', () => {
         // The app was killed between the two steps, or the PIN was set earlier
         // from Settings. Asking for it twice would be the app not looking.
         const progress = talosSetupProgress({
-            identitySet: true, pinSet: true, modelReady: false, backgroundReady: false,
+            identitySet: true, pinSet: true, modelReady: false,
+            autonomyChosen: false, backgroundReady: false,
         })
         expect(progress.steps[1]!.done).toBe(true)
         expect(progress.startIndex).toBe(2)
@@ -49,7 +51,8 @@ describe('what first-run setup still needs', () => {
 
     it('is finished only when the phone will let the work finish too', () => {
         const withoutBackground = talosSetupProgress({
-            identitySet: true, pinSet: true, modelReady: true, backgroundReady: false,
+            identitySet: true, pinSet: true, modelReady: true,
+            autonomyChosen: false, backgroundReady: false,
         })
         // Chi ha gia l'app installata sta esattamente qui, ed e il motivo per
         // cui la versione dell'intro e stata alzata: `startIndex` lo porta
@@ -58,17 +61,19 @@ describe('what first-run setup still needs', () => {
         expect(withoutBackground.startIndex).toBe(3)
 
         const done = talosSetupProgress({
-            identitySet: true, pinSet: true, modelReady: true, backgroundReady: true,
+            identitySet: true, pinSet: true, modelReady: true,
+            autonomyChosen: true, backgroundReady: true,
         })
         expect(done.complete).toBe(true)
-        expect(done.startIndex).toBe(3)
+        expect(done.startIndex).toBe(4)
     })
 
     it('still opens on the PIN when only a model is configured', () => {
         // Sequential order, per the wizard research: the second step is not a
         // reason to skip past the first one silently.
         const progress = talosSetupProgress({
-            identitySet: false, pinSet: false, modelReady: true, backgroundReady: false,
+            identitySet: false, pinSet: false, modelReady: true,
+            autonomyChosen: false, backgroundReady: false,
         })
         expect(progress.startIndex).toBe(0)
         expect(progress.steps[2]!.done).toBe(true)

@@ -5,6 +5,7 @@ import { ArrowLeft, Check, ShieldCheck } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileSettingsLanguagePanel from '@/components/talos/settings/TalosMobileSettingsLanguagePanel.vue'
 import { TALOS_SETUP_STEPS, talosSetupProgress, type TalosSetupStepId } from '@/lib/onboarding/setupProgress'
+import { TALOS_TOOL_ACTIONS } from '@/lib/tools/permissionTypes'
 import { talosBackgroundExtraSteps } from '@/lib/permissions/permissionRows'
 import { readTalosDeviceState, requestTalosBatteryExemption } from '@/services/devicePermissions'
 import { TALOS_INTRO_LANGUAGE_PAGE_ENABLED } from '@/lib/localizationPolicy'
@@ -60,12 +61,38 @@ function onVisible(): void {
     if (document.visibilityState === 'visible') void readBackground()
 }
 
+/**
+ * Se la persona ha DECISO cosa TALOS puo fare da solo.
+ *
+ * Non «e diverso dal predefinito»: il magazzino tiene l elenco delle azioni
+ * scelte, separato dai valori. «Chiedimelo sempre» e una risposta legittima e
+ * va registrata come tale, altrimenti chi sceglie la prudenza non finirebbe mai
+ * questo passo.
+ */
+const autonomyChosen = computed(() => TALOS_TOOL_ACTIONS
+    .every((action) => settings.state.tools_chosen.includes(action)))
+
 const progress = computed(() => talosSetupProgress({
     identitySet: identityMemorySynced.value,
     pinSet: pinSet.value,
     modelReady: modelReady.value,
+    autonomyChosen: autonomyChosen.value,
     backgroundReady: backgroundReady.value,
 }))
+
+const decidingAutonomy = ref(false)
+async function decideAutonomy(value: 'ask' | 'allow'): Promise<void> {
+    if (decidingAutonomy.value) return
+    decidingAutonomy.value = true
+    try {
+        // Gli STESSI tre valori che le Impostazioni leggono, non una copia:
+        // toccarli e sceglierli, e il magazzino lo registra da se.
+        await settings.setToolPermissions({ read: value, write: value, outbound: value })
+        next()
+    } finally {
+        decidingAutonomy.value = false
+    }
+}
 
 const index = ref(0)
 const stage = ref<'language' | 'story' | 'setup'>(
@@ -81,6 +108,11 @@ const traits = computed(() => [
     { title: t('onboarding.traitTwoModelsTitle'), body: t('onboarding.traitTwoModelsBody') },
     { title: t('onboarding.traitFilesTitle'), body: t('onboarding.traitFilesBody') },
 ])
+const autonomyExamples = computed(() => [
+    t('onboarding.autonomyRead'),
+    t('onboarding.autonomyWrite'),
+    t('onboarding.autonomyOutbound'),
+])
 const coming = computed(() => [
     t('onboarding.comingZethos'),
     t('onboarding.comingShizuku'),
@@ -90,6 +122,7 @@ const coming = computed(() => [
 function setupStepLabel(id: TalosSetupStepId): string {
     if (id === 'identity') return t('onboarding.identityStep')
     if (id === 'pin') return t('onboarding.pinStep')
+    if (id === 'autonomy') return t('onboarding.autonomyStep')
     if (id === 'permissions') return t('onboarding.backgroundStep')
     return t('onboarding.modelStep')
 }
@@ -443,6 +476,59 @@ function onKeydown(event: KeyboardEvent): void {
                 </template>
 
                 <!--
+                    Che cosa TALOS puo fare da solo.
+
+                    Owner: «una pagina guidata per impostare i permessi dentro
+                    l'app non solo di Android, quindi per quanto riguarda la
+                    libreria la ricerca eccetera».
+
+                    NON duplica le Impostazioni: scrive negli stessi tre valori
+                    che il pannello Strumenti agente legge, e li dichiara
+                    «scelti». Quel pannello resta la casa per la messa a punto
+                    fine — qui c'e' UNA decisione che un nuovo arrivato puo
+                    davvero prendere, con accanto la conseguenza. Duplicare i
+                    tre menu a tendina qui sarebbe una seconda casa per la
+                    stessa impostazione, che e' esattamente il difetto che
+                    stiamo togliendo altrove.
+                -->
+                <template v-else-if="step.id === 'autonomy'">
+                    <h1 id="talos-setup-title" class="talos-title text-2xl font-semibold leading-tight">
+                        {{ t('onboarding.autonomyTitle') }}
+                    </h1>
+                    <p class="mt-3 text-md leading-7 text-[var(--talos-muted)]">
+                        {{ t('onboarding.autonomyBody') }}
+                    </p>
+
+                    <ul class="mt-5 flex flex-col gap-3" data-testid="talos-setup-autonomy-list">
+                        <li v-for="line in autonomyExamples" :key="line" class="flex gap-2 text-md leading-7">
+                            <span class="mt-2.5 size-1.5 shrink-0 rounded-full bg-[var(--talos-accent)]" aria-hidden="true" />
+                            <span>{{ line }}</span>
+                        </li>
+                    </ul>
+
+                    <div class="mt-7 flex flex-col gap-2">
+                        <button
+                            type="button"
+                            data-testid="talos-setup-autonomy-ask"
+                            :disabled="decidingAutonomy"
+                            class="talos-pressable flex min-h-12 items-center justify-center rounded-xl border border-[var(--talos-accent-border,var(--talos-border))] bg-[var(--talos-active,var(--talos-panel))] px-4 text-sm font-medium disabled:opacity-50"
+                            @click="decideAutonomy('ask')"
+                        >{{ t('onboarding.autonomyAsk') }}</button>
+                        <button
+                            type="button"
+                            data-testid="talos-setup-autonomy-allow"
+                            :disabled="decidingAutonomy"
+                            class="talos-pressable flex min-h-12 items-center justify-center rounded-xl border border-[var(--talos-border)] px-4 text-sm font-medium disabled:opacity-50"
+                            @click="decideAutonomy('allow')"
+                        >{{ t('onboarding.autonomyAllow') }}</button>
+                    </div>
+
+                    <p class="mt-4 text-sm leading-6 text-[var(--talos-muted)]">
+                        {{ t('onboarding.autonomyLater') }}
+                    </p>
+                </template>
+
+                <!--
                     L'ultima pagina, e l'unica che parla del telefono.
 
                     Owner 2026-08-03: «assicurarci che l'utente venga guidato per
@@ -531,7 +617,19 @@ function onKeydown(event: KeyboardEvent): void {
                     <template v-if="step.id === 'identity'">
                         {{ identitySaving ? t('onboarding.identitySaving') : t('onboarding.identitySave') }}
                     </template>
-                    <template v-else>{{ pinSet ? t('common.next') : t('common.notNow') }}</template>
+                    <!--
+                        «Non ora» appartiene al PIN, e solo a lui.
+
+                        Finche i passi erano tre, questo `v-else` copriva il solo
+                        PIN e la frase era giusta: si sta saltando la protezione.
+                        Con Modello, Autonomia e Background il ramo e' diventato
+                        di tutti, e sulle pagine nuove diceva «Non ora» a chi non
+                        stava saltando un bel niente — visto sul tablet il
+                        2026-08-03, dove il PIN non c'e'.
+                    -->
+                    <template v-else>
+                        {{ step.id === 'pin' && !pinSet ? t('common.notNow') : t('common.next') }}
+                    </template>
                 </Button>
                 <Button
                     v-else
