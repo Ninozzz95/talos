@@ -1107,6 +1107,65 @@ export function createSqliteChatRepository(
                     row.status, row.started_at, row.updated_at],
             )
         },
+        /**
+         * A research and everything it wrote, in ONE transaction.
+         *
+         * The dossiers are revoked with the same call that drops the journal
+         * because the two only make sense together: pages kept without the run
+         * that fetched them are files nobody can trace, and a journal kept
+         * without its pages points at evidence that is gone. Half of this
+         * committing would leave exactly one of those.
+         *
+         * A dossier already revoked is skipped rather than failing the delete:
+         * the person asked for this research to go, and refusing because part
+         * of it went earlier would strand the rest forever.
+         */
+        async deleteResearchRun(runId: string) {
+            return transaction(async (database) => {
+                const rows = await database.query(
+                    "SELECT payload_json FROM talos_research_events WHERE run_id = ?",
+                    [runId],
+                )
+                const dossiers = new Set<string>()
+                for (const row of rows) {
+                    const payload = String((row as TalosSqlRow).payload_json ?? '{}')
+                    let parsed: { resultRef?: unknown }
+                    // A journal is read from storage: one unparseable row must
+                    // not make a research undeletable.
+                    try { parsed = JSON.parse(payload) as { resultRef?: unknown } } catch { continue }
+                    if (typeof parsed.resultRef === 'string' && parsed.resultRef.length > 0) {
+                        dossiers.add(parsed.resultRef)
+                    }
+                }
+
+                const timestamp = now()
+                const removed: string[] = []
+                for (const fileId of dossiers) {
+                    const exists = await database.query(
+                        "SELECT id FROM talos_vault_files WHERE id = ? AND status != 'revoked' LIMIT 1",
+                        [fileId],
+                    )
+                    if (exists.length !== 1) continue
+                    await database.run(
+                        `UPDATE talos_vault_files
+                         SET status = 'revoked', private_uri = '', extracted_text = NULL, updated_at = ?
+                         WHERE id = ?`,
+                        [timestamp, fileId],
+                    )
+                    await database.run(
+                        `UPDATE talos_file_authority_grants
+                         SET status = 'revoked', revoked_at = ?, updated_at = ?
+                         WHERE vault_file_id = ? AND status = 'active'`,
+                        [timestamp, timestamp, fileId],
+                    )
+                    removed.push(fileId)
+                }
+
+                await database.run('DELETE FROM talos_research_events WHERE run_id = ?', [runId])
+                await database.run('DELETE FROM talos_research_runs WHERE id = ?', [runId])
+                return removed
+            })
+        },
         async listResearchRuns() {
             const rows = await (await db()).query(
                 `SELECT id, session_id, question, depth, engine, status, started_at, updated_at

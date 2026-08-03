@@ -878,6 +878,14 @@ export interface ChatController {
         recheck(runId: string): Promise<import('@/lib/research/researchRecheck').TalosResearchRecheck>
         /** R11 — the report as a Markdown file on the phone. */
         exportReport(fileId: string, displayName: string): Promise<unknown>
+        /** Stop, keep everything, come back later. Resumable — never `cancel`. */
+        pause(runId: string): Promise<import('@/lib/research/researchRun').TalosResearchRun>
+        /** Stop for good. What was collected stays readable; nothing more is bought. */
+        cancel(runId: string): Promise<import('@/lib/research/researchRun').TalosResearchRun>
+        /** Change the label shown in the list. `null` restores the question. */
+        rename(runId: string, title: string | null): Promise<import('@/lib/research/researchRun').TalosResearchRun>
+        /** Delete a research and the dossiers it wrote. Returns the vault ids removed. */
+        remove(runId: string): Promise<readonly string[]>
     }
     memories: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalMemory[]>
@@ -4250,6 +4258,41 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 // process quiet about it.
                 running.catch(() => undefined)
                 return { id, running }
+            },
+            /**
+             * Stopping goes through the SAME live registry the station watches,
+             * so the card changes the moment the person taps rather than at the
+             * next refresh — and a pause that has been asked for but not yet
+             * landed is visible as exactly that.
+             */
+            async pause(runId: string) {
+                const engine = await ready()
+                const run = await engine.pause(runId)
+                registry.report(runId, run)
+                return run
+            },
+            async cancel(runId: string) {
+                const engine = await ready()
+                const run = await engine.cancel(runId)
+                registry.report(runId, run)
+                return run
+            },
+            async rename(runId: string, title: string | null) {
+                const engine = await ready()
+                const run = await engine.rename(runId, title)
+                registry.report(runId, run)
+                return run
+            },
+            /**
+             * Deleting closes the registry entry FIRST. A watcher left pointing
+             * at a run whose journal has gone would keep a dead card on screen,
+             * and the station would have no way to learn it was dead.
+             */
+            async remove(runId: string) {
+                const engine = await ready()
+                const removed = await engine.remove(runId)
+                registry.forget(runId)
+                return removed
             },
             async resume(runId: string, onProgress?: (progress: import('@/services/researchRuntime').TalosResearchProgress) => void) {
                 const engine = await ready()

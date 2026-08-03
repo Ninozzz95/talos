@@ -7,6 +7,7 @@ import {
     talosResearchRecover,
     talosResearchReplay,
     talosResearchSpent,
+    talosResearchWorkLeft,
     type TalosResearchEvent,
 } from '@/lib/research/researchRun'
 
@@ -184,5 +185,98 @@ describe('how far along a run says it is', () => {
         const run = talosResearchReplay([started, approved, search('s1', T1)])!
 
         expect(talosResearchProgressOf(run)).toEqual({ done: 0, total: 1 })
+    })
+})
+
+/**
+ * Pausing, cancelling and renaming — added 2026-08-03 after the research on
+ * long-running work found that Android has no notion of a pause at all:
+ * WorkManager's states are ENQUEUED/RUNNING/SUCCEEDED/FAILED/CANCELLED/BLOCKED,
+ * CANCELLED is terminal, and calling it when a person asked to pause would
+ * throw away a research they had paid for.
+ */
+describe('stopping a research without losing it', () => {
+    const ready = [started, approved]
+
+    function fold(events: readonly TalosResearchEvent[]) {
+        return talosResearchReplay(events)!
+    }
+
+    it('keeps "asked to stop" and "stopped" apart, because money sits between them', () => {
+        // The pause can land while a step is in flight and already paid for.
+        const asking = fold([...ready, search('s1', T1), { kind: 'run_pause_requested', at: T2 }])
+        expect(asking.status).toBe('pause_requested')
+
+        const rested = fold([...ready, search('s1', T1), { kind: 'run_pause_requested', at: T2 },
+            finished('s1', T3), { kind: 'run_paused', at: T3 }])
+        expect(rested.status).toBe('paused')
+        // Drained, not discarded: the step that was in flight is banked.
+        expect(rested.steps[0]!.state).toBe('done')
+        expect(talosResearchSpent(rested).searches).toBe(1)
+    })
+
+    it('books no new step while resting — enforced where work is decided', () => {
+        // A step that was mid-flight when the process died: recovery marks it
+        // `interrupted`, which is the one state worth retrying, so this is the
+        // strongest case — there IS work sitting there to be picked up.
+        const killed = talosResearchRecover(fold([...ready, search('s1', T1)]), T2)
+
+        const resting = talosResearchApply(killed, { kind: 'run_pause_requested', at: T2 })!
+        expect(talosResearchNextStep(resting)).toBeNull()
+
+        const paused = talosResearchApply(killed, { kind: 'run_paused', at: T2 })!
+        expect(talosResearchNextStep(paused)).toBeNull()
+
+        // …and it is still there, untouched, the moment the person resumes.
+        const back = talosResearchApply(paused, { kind: 'run_resumed', at: T3 })!
+        expect(back.status).toBe('collecting')
+        expect(talosResearchNextStep(back)?.id).toBe('s1')
+        expect(talosResearchNextStep(back)?.state).toBe('interrupted')
+    })
+
+    it('still OWES the work it paused on', () => {
+        // A different question from "what should the engine do now": drawing an
+        // empty plan for a run about to be resumed would be a lie about scope.
+        const paused = fold([...ready, { kind: 'run_paused', at: T1 }])
+        expect(talosResearchWorkLeft(paused).map((branch) => branch.id)).toEqual(['b1'])
+
+        const cancelled = fold([...ready, { kind: 'run_cancelled', at: T1 }])
+        expect(talosResearchWorkLeft(cancelled)).toEqual([])
+    })
+
+    it('treats a second pause as the same pause, not a harder one', () => {
+        // Two taps, or one tap and one replay of a journal written twice.
+        const twice = fold([...ready, { kind: 'run_paused', at: T1 }, { kind: 'run_pause_requested', at: T2 }])
+        expect(twice.status).toBe('paused')
+    })
+
+    it('refuses to reopen or re-stop a run that has ended', () => {
+        // Reachable: a stale notification action arriving after the run
+        // finished. Cancelled means cancelled — a resume that reopened it would
+        // spend money on a research the person ended.
+        const cancelled = fold([...ready, { kind: 'run_cancelled', at: T1 }])
+        expect(talosResearchApply(cancelled, { kind: 'run_resumed', at: T2 })!.status).toBe('cancelled')
+        expect(talosResearchApply(cancelled, { kind: 'run_pause_requested', at: T2 })!.status).toBe('cancelled')
+
+        const done = fold([...ready, { kind: 'run_finished', at: T1 }])
+        expect(talosResearchApply(done, { kind: 'run_paused', at: T2 })!.status).toBe('done')
+    })
+
+    it('renames the LABEL and never the question that was paid for', () => {
+        const named = fold([...ready, { kind: 'run_renamed', at: T1, title: '  Tablet 2026  ' }])
+        expect(named.title).toBe('Tablet 2026')
+        // The fact stays: the export, the plan and the provenance all lean on it.
+        expect(named.question).toBe('quale tablet conviene')
+
+        // Blank is not a title — it restores the question as the label, which is
+        // also what "Restore the original title" writes.
+        expect(talosResearchApply(named, { kind: 'run_renamed', at: T2, title: '   ' })!.title).toBeNull()
+        expect(talosResearchApply(named, { kind: 'run_renamed', at: T2, title: null })!.title).toBeNull()
+    })
+
+    it('starts with no title at all, rather than a copy of the question', () => {
+        // A copy would drift the moment anything touched one of the two, and
+        // would make "has a custom title" unanswerable.
+        expect(fold(ready).title).toBeNull()
     })
 })

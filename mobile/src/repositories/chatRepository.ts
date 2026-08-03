@@ -417,6 +417,17 @@ export interface TalosChatRepository {
     /** Keeps the listing row in step with the journal that produced it. */
     upsertResearchRun(row: TalosResearchRunRow): Promise<void>
     listResearchRuns(): Promise<TalosResearchRunRow[]>
+    /**
+     * Removes a research: its journal, its listing row, and the dossiers it
+     * wrote into the Library.
+     *
+     * The dossiers go with it because a research IS its sources — leaving them
+     * behind would keep the pages the run paid for while losing the only record
+     * that says why they were fetched, and the Library would fill with files
+     * nobody can trace. Returns the vault ids it removed, so the caller can say
+     * what went.
+     */
+    deleteResearchRun(runId: string): Promise<readonly string[]>
     deleteNote(noteId: string): Promise<void>
     createMemory(input: CreateMemoryInput): Promise<TalosLocalMemory>
     upsertMemory(input: CreateMemoryInput): Promise<TalosLocalMemory>

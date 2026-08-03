@@ -1,5 +1,5 @@
 import type { TalosResearchRun } from '@/lib/research/researchRun'
-import { talosResearchProgressOf } from '@/lib/research/researchRun'
+import { talosResearchIsResting, talosResearchProgressOf } from '@/lib/research/researchRun'
 
 /**
  * What a research looks like from the outside, before you open it.
@@ -21,7 +21,7 @@ import { talosResearchProgressOf } from '@/lib/research/researchRun'
  */
 
 /** The buckets the filter offers. One run is in exactly one. */
-export type TalosResearchBucket = 'running' | 'unfinished' | 'done' | 'failed'
+export type TalosResearchBucket = 'running' | 'paused' | 'unfinished' | 'done' | 'failed'
 
 export interface TalosResearchStanding {
     readonly total: number
@@ -33,7 +33,12 @@ export interface TalosResearchStanding {
 
 export interface TalosResearchCard {
     readonly id: string
+    /** What the list SHOWS: the chosen label, or the question when there is none. */
     readonly question: string
+    /** The question as asked, kept beside the label so provenance survives a rename. */
+    readonly originalQuestion: string
+    /** True when someone named this research themselves. */
+    readonly renamed: boolean
     readonly startedAt: string
     readonly updatedAt: string
     readonly bucket: TalosResearchBucket
@@ -61,6 +66,12 @@ export function talosResearchBucketOf(
     if (isRunning) return 'running'
     if (run.status === 'failed') return 'failed'
     if (run.status === 'done') return 'done'
+    // Paused is its OWN bucket, and that is the point of pausing: the person
+    // stopped this on purpose and expects to come back to it. Filing it beside
+    // the runs the phone killed would tell them their decision was an accident.
+    // `pause_requested` sits here too — it is a pause that has not finished
+    // landing, not a different situation for the reader.
+    if (talosResearchIsResting(run.status)) return 'paused'
     // Everything else — planning, collecting, synthesising, verifying, cancelled
     // — is work that stopped without finishing. One bucket, because from the
     // reader's side they are the same situation: it owes something and nothing
@@ -75,7 +86,9 @@ export function talosResearchCardOf(
     const progress = talosResearchProgressOf(run)
     return {
         id: run.id,
-        question: run.question,
+        question: run.title ?? run.question,
+        originalQuestion: run.question,
+        renamed: run.title !== null,
         startedAt: run.startedAt,
         updatedAt: run.updatedAt,
         bucket: talosResearchBucketOf(run, options.isRunning),

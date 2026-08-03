@@ -72,7 +72,7 @@ const cards = computed(() => runs.value.map((run) => talosResearchCardOf(run, {
 
 const shown = computed(() => talosResearchFilterCards(cards.value, bucket.value, query.value))
 
-const BUCKETS: ReadonlyArray<TalosResearchBucket | 'all'> = ['all', 'running', 'unfinished', 'done', 'failed']
+const BUCKETS: ReadonlyArray<TalosResearchBucket | 'all'> = ['all', 'running', 'paused', 'unfinished', 'done', 'failed']
 const filterOptions = computed(() => BUCKETS.map((id) => ({
     value: id,
     label: t(`research.buckets.${id}`),

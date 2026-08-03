@@ -1657,6 +1657,7 @@ export const TALOS_IT_MESSAGES = {
         searchPlaceholder: 'Cerca fra le ricerche',
         filterLabel: 'Filtra le ricerche',
         buckets: {
+            paused: 'In pausa',
             all: 'Tutte',
             running: 'In corso',
             unfinished: 'Interrotte',

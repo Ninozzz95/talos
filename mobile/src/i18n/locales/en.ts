@@ -1662,6 +1662,7 @@ export const TALOS_EN_MESSAGES = {
         searchPlaceholder: 'Search your research',
         filterLabel: 'Filter research',
         buckets: {
+            paused: 'Paused',
             all: 'All',
             running: 'Running',
             unfinished: 'Interrupted',
