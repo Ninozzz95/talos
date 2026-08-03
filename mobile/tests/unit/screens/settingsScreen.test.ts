@@ -109,7 +109,21 @@ describe('SettingsScreen (functional)', () => {
         expect(wrapper.text()).toContain('2 models available')
     })
 
-    it('selects the default model through the controller', async () => {
+    /**
+     * Rimossi con la sezione che verificavano.
+     *
+     * Owner 2026-08-03: «puoi levare la sezione in alto del modello predefinito,
+     * è inutile». Il selettore non esiste più QUI — la scelta resta nel
+     * selettore rapido del composer e nella linguetta Locale.
+     *
+     * `skip` invece di cancellare, e per una ragione che vale più della
+     * simmetria col commento nel componente: il secondo di questi due asserisce
+     * un contratto reale — un modello nascosto o non supportato resta VISIBILE e
+     * disabilitato invece di sparire — e quel contratto non è stato riasserito
+     * altrove. Cancellarli lo farebbe sparire senza che nessuno se ne accorga.
+     * Chi rimette il selettore, o lo riasserisce sul composer, li riaccende.
+     */
+    it.skip('selects the default model through the controller', async () => {
         const controller = makeController({ secret: true })
         mockState.controller = controller
         const wrapper = mount(SettingsScreen)
@@ -122,7 +136,7 @@ describe('SettingsScreen (functional)', () => {
         expect(controller.selectModel).toHaveBeenCalledWith('claude-opus')
     })
 
-    it('keeps hidden or unsupported models discoverable but disabled in the Model Lab picker', () => {
+    it.skip('keeps hidden or unsupported models discoverable but disabled in the Model Lab picker', () => {
         const controller = makeController({ secret: true })
         controller.profiles.value.push({
             id: 'gemini:gemini-embed', provider: 'gemini', model: 'gemini-embed', display_name: 'Gemini Embed',

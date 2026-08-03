@@ -17,7 +17,7 @@
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Search, Download, Pause, AlertTriangle, ChevronLeft, ShieldAlert, Cpu } from '@lucide/vue'
+import { Search, Download, Pause, AlertTriangle, ChevronLeft, ShieldAlert, Cpu, LayoutGrid, List } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import {
     talosLocalModels,
@@ -36,7 +36,22 @@ import {
     talosForgetHuggingFaceToken,
 } from '@/stores/localModels'
 import { talosDiscardModelTransfer } from '@/services/modelTransfer'
-import { talosLocalEngineStatus, type TalosLocalEngineStatus } from '@/services/localEngine'
+import {
+    talosLocalEngineStatus,
+    talosLocalInstalledModels,
+    type TalosLocalEngineStatus,
+    type TalosLocalModelFile,
+} from '@/services/localEngine'
+import {
+    talosInstalledModelsView,
+    talosModelSize,
+    TALOS_INSTALLED_MODEL_SORTS,
+    TALOS_INSTALLED_MODEL_SORT_DEFAULT,
+    type TalosInstalledModelSort,
+} from '@/lib/models/installedModels'
+import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
+import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
+import { useSettingsStore } from '@/stores/settings'
 import type { TalosCatalogueRecommendation } from '@/lib/models/catalogue'
 import { talosGroupModelsByProvider, talosProviderOptions } from '@/lib/models/providerGrouping'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
@@ -49,10 +64,98 @@ import {
     talosSetWarnings,
 } from '@/lib/models/presentation'
 
-const { t } = useTalosI18n()
+const { t, locale } = useTalosI18n()
+const settings = useSettingsStore()
+
+/**
+ * The SAME choice the Library and the research station store.
+ *
+ * Owner 2026-08-03 on this list: «lo stile deve essere quello della libreria
+ * della ricerca etc, rendilo coerente al massimo, chip filtri etc, mi
+ * raccomando e critico». Coherence is not only how a thing is drawn: somebody
+ * who chose the list layout once should not choose it again in every room, so
+ * this reads and writes `shell.library_view` instead of owning a third
+ * preference nobody asked for.
+ */
+const layout = computed(() => settings.state.shell.library_view)
+function chooseLayout(next: 'grid' | 'list'): void {
+    void settings.setShell({ library_view: next })
+}
+
+async function copyPath(path: string): Promise<void> {
+    // «Dove sta» was half the owner's question. The path is on the row, but a
+    // forty-character address nobody can select is an address nobody can use.
+    try {
+        await navigator.clipboard.writeText(path)
+    } catch {
+        // No clipboard permission: the path stays readable where it is.
+    }
+}
 
 const query = ref('')
 const refused = ref<string | null>(null)
+
+/**
+ * The models already on this phone.
+ *
+ * Owner 2026-08-03, minutes after a download finished: «ho appena scaricato un
+ * modello ma non ho idea di dove sia … NON VA BENE». The app knew — the same
+ * listing already ranks judges for a research — and showed nobody. The panel
+ * was entirely about ACQUIRING models and had nothing about HAVING them.
+ */
+const installed = ref<readonly TalosLocalModelFile[]>([])
+const unreadable = ref<readonly { path: string, reason: string }[]>([])
+const installedQuery = ref('')
+const installedSort = ref<TalosInstalledModelSort>(TALOS_INSTALLED_MODEL_SORT_DEFAULT)
+const installedLoading = ref(true)
+
+const installedView = computed(() => talosInstalledModelsView(installed.value, {
+    query: installedQuery.value,
+    sort: installedSort.value,
+}))
+
+const sortItems = computed(() => TALOS_INSTALLED_MODEL_SORTS.map((value) => ({
+    value,
+    label: t(`localModels.sort.${value}`),
+    testId: `talos-models-installed-sort-${value}`,
+})))
+
+/**
+ * The pill, drawn the way the research station draws it.
+ *
+ * A radiogroup whose selected option looks like the others is a control that
+ * refuses to say what it is doing — and the first render of this section was
+ * exactly that: three words in a row, no fill, no state.
+ */
+function sortOptionClass(selected: boolean): string {
+    const base = 'talos-pressable min-h-11 shrink-0 rounded-full px-3 text-sm transition-colors'
+    return selected
+        ? `${base} bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))]`
+        : `${base} border border-[var(--talos-border)] text-[var(--talos-muted)]`
+}
+
+function installedDate(at: number): string {
+    // Zero means the filesystem refused to say. Printing 1 January 1970 would
+    // be the list lying confidently rather than admitting a gap.
+    if (!at) return t('localModels.dateUnknown')
+    return new Intl.DateTimeFormat(locale.value === 'it' ? 'it-IT' : 'en-US', { dateStyle: 'medium' })
+        .format(new Date(at))
+}
+
+async function loadInstalled(): Promise<void> {
+    installedLoading.value = true
+    try {
+        const listing = await talosLocalInstalledModels()
+        installed.value = listing.models
+        unreadable.value = listing.unreadable
+    } catch {
+        // A refusal here is not the same as "no models": the list stays as it
+        // was and the empty state below never claims the phone is bare.
+        installed.value = []
+    } finally {
+        installedLoading.value = false
+    }
+}
 let poller: ReturnType<typeof setInterval> | null = null
 
 const store = talosLocalModels
@@ -117,6 +220,7 @@ const device = computed(() => {
  */
 const engine = ref<TalosLocalEngineStatus | null>(null)
 onMounted(async () => { engine.value = await talosLocalEngineStatus() })
+onMounted(() => { void loadInstalled() })
 
 /** One catalogue row, worked out once rather than four times per render. */
 function rowOf(item: Readonly<TalosCatalogueRecommendation>) {
@@ -293,6 +397,126 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
         data-testid="talos-models-section"
     >
         <p class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('localModels.intro') }}</p>
+
+        <!--
+            What is ALREADY here, before anything about getting more.
+
+            Owner 2026-08-03: «ho appena scaricato un modello ma non ho idea di
+            dove sia». This panel was entirely about acquiring models and had
+            nothing whatsoever about having them — the download finished, and
+            the only trace was a file nobody could reach.
+
+            The shape is the Library's, and the research station rebuilt on the
+            same day is the thing being copied rather than a new design: search,
+            one ordering picked from a radiogroup, a row per file with its size
+            and when it arrived.
+        -->
+        <section data-testid="talos-models-installed" class="flex flex-col gap-3">
+            <div class="flex items-baseline justify-between gap-2">
+                <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                    {{ t('localModels.installedTitle') }}
+                </h3>
+                <span v-if="installedView.total" class="text-2xs tabular-nums text-[var(--talos-muted)]">
+                    {{ t('localModels.installedCount', { count: installedView.total }) }}
+                </span>
+            </div>
+
+            <template v-if="installedView.total > 0">
+                <!-- The Library's search field to the pixel: same rounding, same
+                     inset icon, same height. A third shape for the same job is a
+                     third thing to learn. -->
+                <label class="relative block">
+                    <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
+                    <input
+                        v-model="installedQuery"
+                        type="search"
+                        inputmode="search"
+                        data-testid="talos-models-installed-search"
+                        :placeholder="t('localModels.installedSearch')"
+                        :aria-label="t('localModels.installedSearch')"
+                        class="min-h-12 w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+                    >
+                </label>
+
+                <div class="flex items-center gap-2">
+                    <TalosThemedFilter
+                        class="min-w-0 flex-1"
+                        group-class="flex gap-1 overflow-x-auto"
+                        :model-value="installedSort"
+                        :options="sortItems"
+                        :group-label="t('localModels.sortLabel')"
+                        :option-class="sortOptionClass"
+                        @update:model-value="installedSort = $event as TalosInstalledModelSort"
+                    />
+                    <button
+                        type="button"
+                        data-testid="talos-models-installed-layout"
+                        :aria-label="t(layout === 'grid' ? 'research.showAsList' : 'research.showAsGrid')"
+                        class="talos-pressable inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-[var(--talos-border)] text-[var(--talos-muted)]"
+                        @click="chooseLayout(layout === 'grid' ? 'list' : 'grid')"
+                    >
+                        <List v-if="layout === 'grid'" class="size-4" aria-hidden="true" />
+                        <LayoutGrid v-else class="size-4" aria-hidden="true" />
+                    </button>
+                </div>
+            </template>
+
+            <p v-if="installedLoading" class="text-xs text-[var(--talos-muted)]">{{ t('localModels.installedLoading') }}</p>
+
+            <!-- «Nessuno» and «nessuno che corrisponde» are different sentences,
+                 and saying the first when the second is true sends somebody to
+                 download a model they already have. -->
+            <p
+                v-else-if="installedView.total === 0"
+                data-testid="talos-models-installed-empty"
+                class="rounded-xl border border-[var(--talos-border)] p-3 text-xs leading-5 text-[var(--talos-muted)]"
+            >{{ t('localModels.installedEmpty') }}</p>
+            <p
+                v-else-if="installedView.models.length === 0"
+                class="text-xs text-[var(--talos-muted)]"
+            >{{ t('localModels.installedNoMatch') }}</p>
+
+            <ul
+                v-else
+                data-testid="talos-models-installed-list"
+                :data-layout="layout"
+                class="min-w-0"
+                :class="layout === 'grid' ? 'grid grid-cols-2 gap-2 sm:grid-cols-3' : 'flex flex-col gap-2'"
+            >
+                <li
+                    v-for="file in installedView.models"
+                    :key="file.path"
+                    data-testid="talos-models-installed-row"
+                    class="relative min-w-0 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 pr-12"
+                >
+                    <!-- Outside the row body and never nested in a button: two
+                         hit areas that overlap mean one swallows the other. -->
+                    <div class="absolute right-1 top-1 z-10">
+                        <TalosRowActions
+                            :test-id="`talos-models-installed-menu-${file.name}`"
+                            :label="t('localModels.actionsFor', { name: file.name })"
+                            :items="[{ id: 'copy', label: t('localModels.copyPath') }]"
+                            @select="() => copyPath(file.path)"
+                        />
+                    </div>
+                    <p class="truncate text-sm text-[var(--talos-text)]">{{ file.name }}</p>
+                    <p class="mt-1 flex flex-wrap gap-x-2 text-2xs tabular-nums text-[var(--talos-muted)]">
+                        <span>{{ talosModelSize(file.bytes, locale) }}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{{ installedDate(file.modifiedAt) }}</span>
+                    </p>
+                    <p class="mt-1 break-all font-mono text-3xs leading-4 text-[var(--talos-muted)]">{{ file.path }}</p>
+                </li>
+            </ul>
+
+            <!-- A folder that refused to open makes the list above PARTIAL, and
+                 silence there reads as "you have no models". -->
+            <p
+                v-if="unreadable.length"
+                data-testid="talos-models-installed-unreadable"
+                class="text-2xs leading-5 text-[var(--talos-danger,#dc5b5b)]"
+            >{{ t('localModels.installedUnreadable', { count: unreadable.length }) }}</p>
+        </section>
 
         <!-- The device strip. Every verdict below is an answer ABOUT this, so
              it stays at the top rather than hiding in a settings panel: the

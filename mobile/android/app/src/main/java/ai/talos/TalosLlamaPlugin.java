@@ -249,6 +249,11 @@ public class TalosLlamaPlugin extends Plugin {
             row.put("path", entry.path);
             row.put("bytes", entry.bytes);
             row.put("name", new File(entry.path).getName());
+            // WHEN it arrived. Without it the list can only be sorted by
+            // name or size, and the question a person actually asks after a
+            // download is "which one did I just get" — owner 2026-08-03:
+            // «ho appena scaricato un modello ma non ho idea di dove sia».
+            row.put("modifiedAt", new File(entry.path).lastModified());
             models.put(row);
         }
         JSObject result = new JSObject();

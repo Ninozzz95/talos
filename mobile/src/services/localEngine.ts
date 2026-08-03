@@ -45,7 +45,7 @@ interface TalosLlamaPlugin {
         stopAtEndOfGeneration?: boolean
     }): Promise<TalosLocalEngineGeneration>
     installed(): Promise<{
-        models: Array<{ path: string, bytes: number, name: string }>
+        models: Array<{ path: string, bytes: number, name: string, modifiedAt?: number }>
         unreadable?: Array<{ path: string, reason: string }>
     }>
     chatPrompt(options: {
@@ -88,6 +88,16 @@ export interface TalosLocalModelFile {
     path: string
     bytes: number
     name: string
+    /**
+     * Epoch milliseconds from the file itself. The question a person asks
+     * right after a download is "which one did I just get", and a list that
+     * can only be ordered by name or size cannot answer it.
+     *
+     * Zero when the filesystem refused to say — `lastModified()` returns 0
+     * rather than throwing, and a 1970 date on screen would be a lie the
+     * list tells confidently.
+     */
+    modifiedAt: number
 }
 
 /** A folder the walk could not open, and the cause it reported. */
@@ -124,7 +134,12 @@ export interface TalosLocalModelListing {
 export async function talosLocalInstalledModels(): Promise<TalosLocalModelListing> {
     const { models, unreadable } = await plugin.installed()
     return {
-        models: Array.isArray(models) ? models : [],
+        // `modifiedAt` is optional on the wire so an older native side —
+        // side-by-side installs make that a real case — degrades to «date
+        // unknown» instead of putting 1970 at the top of the list.
+        models: Array.isArray(models)
+            ? models.map((file) => ({ ...file, modifiedAt: file.modifiedAt ?? 0 }))
+            : [],
         unreadable: Array.isArray(unreadable) ? unreadable : [],
     }
 }
