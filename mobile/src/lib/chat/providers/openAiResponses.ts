@@ -35,6 +35,27 @@ export interface TalosOpenAiResponseRead {
     readonly usage: Record<string, number> | null
     /** `completed`, `incomplete`, … — quello che il corpo dichiara. */
     readonly status: string | null
+    /**
+     * Il riepilogo del ragionamento, quando si chiede `reasoning.summary:"auto"`.
+     *
+     * NON è la catena di pensiero: è un riassunto che il modello produce
+     * apposta. Chiamarlo «ragionamento completo» sarebbe una promessa che l'API
+     * non fa — il pensiero grezzo resta cifrato.
+     */
+    readonly reasoningSummaries: readonly string[]
+    /**
+     * TUTTI gli elementi di `output`, verbatim e in ordine.
+     *
+     * Servono per il giro successivo: con `store:false` la conversazione la
+     * ricostruiamo noi a ogni richiesta, e gli elementi `reasoning` portano un
+     * `encrypted_content` opaco che va **rimandato identico**. Scartarli — che
+     * è quello che faceva la prima versione di questo lettore — significa
+     * togliere al modello il contesto del proprio ragionamento fra un turno e
+     * l'altro del ciclo dei tool.
+     *
+     * Non si ricostruiscono a mano e non si toccano: si copiano.
+     */
+    readonly replayItems: readonly unknown[]
 }
 
 interface RawItem {
@@ -54,9 +75,10 @@ interface RawItem {
  * (`output[] → content[] → text`). La scorciatoia `output_text` nel JSON grezzo
  * non esiste — verificato, non supposto.
  *
- * Il ragionamento si salta: arriva come `encrypted_content`, che non è
- * leggibile. Metterlo nel cassetto «Ragionamento» vorrebbe dire mostrare una
- * stringa cifrata a qualcuno che si aspetta un pensiero.
+ * Del ragionamento si prende il RIEPILOGO, non il pensiero: `encrypted_content`
+ * è opaco e mostrarlo vorrebbe dire dare una stringa cifrata a chi si aspetta
+ * un ragionamento. Ma l'elemento intero si conserva in `replayItems`, perché
+ * con `store:false` va rimandato identico al giro dopo.
  */
 export function talosReadOpenAiResponse(data: unknown): TalosOpenAiResponseRead {
     const body = (data ?? {}) as { output?: unknown, usage?: unknown, status?: unknown }
@@ -64,8 +86,17 @@ export function talosReadOpenAiResponse(data: unknown): TalosOpenAiResponseRead 
 
     let text = ''
     const toolCalls: TalosOpenAiResponseToolCall[] = []
+    const reasoningSummaries: string[] = []
 
     for (const item of items) {
+        if (item?.type === 'reasoning' && Array.isArray((item as { summary?: unknown }).summary)) {
+            for (const part of (item as { summary: Array<{ type?: unknown, text?: unknown }> }).summary) {
+                if (part?.type === 'summary_text' && typeof part.text === 'string') {
+                    reasoningSummaries.push(part.text)
+                }
+            }
+            continue
+        }
         if (item?.type === 'message' && Array.isArray(item.content)) {
             for (const part of item.content as Array<{ type?: unknown, text?: unknown }>) {
                 if (part?.type === 'output_text' && typeof part.text === 'string') text += part.text
@@ -89,6 +120,9 @@ export function talosReadOpenAiResponse(data: unknown): TalosOpenAiResponseRead 
         toolCalls,
         usage: talosOpenAiResponsesUsage(body.usage),
         status: typeof body.status === 'string' ? body.status : null,
+        reasoningSummaries,
+        // Copia integrale: include i campi opachi che il replay pretende.
+        replayItems: items,
     }
 }
 
