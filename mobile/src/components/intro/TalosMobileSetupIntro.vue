@@ -5,6 +5,8 @@ import { ArrowLeft, Check, ShieldCheck } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileSettingsLanguagePanel from '@/components/talos/settings/TalosMobileSettingsLanguagePanel.vue'
 import { TALOS_SETUP_STEPS, talosSetupProgress, type TalosSetupStepId } from '@/lib/onboarding/setupProgress'
+import { talosBackgroundExtraSteps } from '@/lib/permissions/permissionRows'
+import { readTalosDeviceState, requestTalosBatteryExemption } from '@/services/devicePermissions'
 import { TALOS_INTRO_LANGUAGE_PAGE_ENABLED } from '@/lib/localizationPolicy'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
 import { TALOS_DISPLAY_NAME_MEMORY_ID } from '@/services/profileMemory'
@@ -41,10 +43,28 @@ const nameDraft = ref(account.state.display_name)
 
 const pinSet = computed(() => settings.state.security.app_lock_enabled === true)
 const modelReady = computed(() => Object.values(controller.secrets).some(Boolean))
+/**
+ * Se il telefono ha smesso di sospendere TALOS.
+ *
+ * Riletto a ogni ritorno in primo piano, perche la scelta si fa in una
+ * schermata di SISTEMA: l unico modo onesto di sapere com e andata e chiedere
+ * di nuovo quando si torna. E su ColorOS l impostazione si riazzera da sola.
+ */
+const backgroundReady = ref(false)
+async function readBackground(): Promise<void> {
+    const state = await readTalosDeviceState()
+    backgroundReady.value = state.batteryExempt
+    manufacturer.value = state.manufacturer
+}
+function onVisible(): void {
+    if (document.visibilityState === 'visible') void readBackground()
+}
+
 const progress = computed(() => talosSetupProgress({
     identitySet: identityMemorySynced.value,
     pinSet: pinSet.value,
     modelReady: modelReady.value,
+    backgroundReady: backgroundReady.value,
 }))
 
 const index = ref(0)
@@ -70,11 +90,33 @@ const coming = computed(() => [
 function setupStepLabel(id: TalosSetupStepId): string {
     if (id === 'identity') return t('onboarding.identityStep')
     if (id === 'pin') return t('onboarding.pinStep')
+    if (id === 'permissions') return t('onboarding.backgroundStep')
     return t('onboarding.modelStep')
+}
+
+const manufacturer = ref('')
+const backgroundSteps = computed(() => (backgroundReady.value
+    ? []
+    : talosBackgroundExtraSteps(manufacturer.value)))
+
+const askingBackground = ref(false)
+async function askBackground(): Promise<void> {
+    if (askingBackground.value) return
+    askingBackground.value = true
+    try {
+        await requestTalosBatteryExemption()
+        // Non si risolve «concesso»: si e solo aperta una schermata di sistema.
+        // La verita arriva al ritorno, quando si rilegge lo stato.
+        await readBackground()
+    } finally {
+        askingBackground.value = false
+    }
 }
 
 onMounted(async () => {
     introState?.setBack(hardwareBack)
+    void readBackground()
+    document.addEventListener('visibilitychange', onVisible)
     const savedName = account.state.display_name.trim()
     if (savedName) {
         try {
@@ -92,7 +134,10 @@ onMounted(async () => {
     index.value = props.replay ? 0 : progress.value.startIndex
     root.value?.focus()
 })
-onBeforeUnmount(() => { introState?.setBack(null) })
+onBeforeUnmount(() => {
+    introState?.setBack(null)
+    document.removeEventListener('visibilitychange', onVisible)
+})
 
 function beginSetup(): void {
     stage.value = 'setup'
@@ -385,7 +430,7 @@ function onKeydown(event: KeyboardEvent): void {
                     </p>
                 </template>
 
-                <template v-else>
+                <template v-else-if="step.id === 'model'">
                     <h1 id="talos-setup-title" class="talos-title text-2xl font-semibold leading-tight">
                         {{ t('onboarding.modelTitle') }}
                     </h1>
@@ -395,6 +440,70 @@ function onKeydown(event: KeyboardEvent): void {
                     <div class="mt-6" data-testid="talos-setup-model">
                         <TalosMobileProviderRuntimePanel />
                     </div>
+                </template>
+
+                <!--
+                    L'ultima pagina, e l'unica che parla del telefono.
+
+                    Owner 2026-08-03: «assicurarci che l'utente venga guidato per
+                    whitelistare l'applicazione in modo che giri in BG. Senza
+                    questa non possiamo andare avanti.»
+
+                    Sta in fondo perche la ricerca sui permessi dice di chiedere
+                    quando la persona ha capito a che serve, non all'avvio: qui
+                    ha gia dato un nome allo spazio, un PIN e un modello, quindi
+                    «le ricerche lunghe muoiono senza questa» vuol dire qualcosa.
+
+                    E si puo saltare. Un onboarding che non lascia passare e un
+                    onboarding che le persone disinstallano.
+                -->
+                <template v-else>
+                    <h1 id="talos-setup-title" class="talos-title text-2xl font-semibold leading-tight">
+                        {{ t('onboarding.backgroundTitle') }}
+                    </h1>
+                    <p class="mt-3 text-md leading-7 text-[var(--talos-muted)]">
+                        {{ t('onboarding.backgroundBody') }}
+                    </p>
+                    <p class="mt-4 text-md font-medium leading-7">
+                        {{ t('onboarding.backgroundConsequence') }}
+                    </p>
+
+                    <div
+                        v-if="backgroundReady"
+                        data-testid="talos-setup-background-done"
+                        class="mt-7 flex items-center gap-2 rounded-xl border border-[var(--talos-accent-border,var(--talos-border))] bg-[var(--talos-active,var(--talos-panel))] px-4 py-3 text-sm"
+                    >
+                        <Check class="size-5 text-[var(--talos-accent)]" aria-hidden="true" />
+                        {{ t('onboarding.backgroundDone') }}
+                    </div>
+                    <button
+                        v-else
+                        type="button"
+                        data-testid="talos-setup-background"
+                        :disabled="askingBackground"
+                        class="talos-pressable mt-7 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[var(--talos-border)] px-4 text-sm font-medium disabled:opacity-50"
+                        @click="askBackground()"
+                    >
+                        <ShieldCheck class="size-5 text-[var(--talos-accent)]" aria-hidden="true" />
+                        {{ t('onboarding.backgroundAllow') }}
+                    </button>
+
+                    <!-- I passi che l'intent non copre, solo dove esistono
+                         davvero e solo finche servono. -->
+                    <template v-if="backgroundSteps.length">
+                        <p class="mt-5 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                            {{ t('privacyPermissions.makerStepsTitle') }}
+                        </p>
+                        <ol data-testid="talos-setup-background-steps" class="mt-2 flex list-decimal flex-col gap-1.5 pl-5">
+                            <li v-for="stepKey in backgroundSteps" :key="stepKey" class="text-sm leading-6 text-[var(--talos-muted)]">
+                                {{ t(stepKey) }}
+                            </li>
+                        </ol>
+                    </template>
+
+                    <p class="mt-4 text-sm leading-6 text-[var(--talos-muted)]">
+                        {{ t('onboarding.backgroundLater') }}
+                    </p>
                 </template>
             </section>
 

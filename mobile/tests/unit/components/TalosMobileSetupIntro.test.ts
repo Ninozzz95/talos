@@ -188,11 +188,20 @@ describe('what TALOS says it is, before asking for anything', () => {
 })
 
 describe('first-run setup', () => {
-    it('ONBOARD-UNIFIED-02 keeps name, PIN and model in one setup modal', async () => {
+    it('ONBOARD-UNIFIED-02 keeps name, PIN, model and background in one setup modal', async () => {
         const wrapper = await mountSetup()
         const steps = wrapper.findAll('[data-testid="talos-setup-step"]')
-        expect(steps).toHaveLength(3)
-        expect(steps.map((step) => step.text())).toEqual(['Name', 'PIN', 'Model'])
+        /**
+         * Quattro dal 2026-08-03, e il quarto e ultimo di proposito.
+         *
+         * Owner: «assicurarci che l'utente venga guidato per whitelistare
+         * l'applicazione in modo che giri in BG. Senza questa non possiamo
+         * andare avanti.» Ultimo perche la ricerca sui permessi dice di
+         * chiedere quando la persona ha capito a che serve: a quel punto ha
+         * gia dato nome, PIN e modello.
+         */
+        expect(steps).toHaveLength(4)
+        expect(steps.map((step) => step.text())).toEqual(['Name', 'PIN', 'Model', 'Background'])
         expect(steps[0]!.attributes('aria-current')).toBe('step')
         expect(wrapper.find('[data-testid="talos-setup-identity"]').exists()).toBe(true)
         wrapper.unmount()
@@ -280,8 +289,37 @@ describe('first-run setup', () => {
         await flushPromises()
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         await flushPromises()
+        // Un passo in piu: la pagina del background e l'ultima.
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
         await wrapper.get('[data-testid="talos-intro-cta"]').trigger('click')
         expect(wrapper.emitted('close')).toEqual([['completed']])
+        wrapper.unmount()
+    })
+
+    it('offre il background senza chiederlo da solo, e lascia passare', async () => {
+        /**
+         * Owner: «senza questa non possiamo andare avanti» — ma un onboarding
+         * che non lascia passare e un onboarding che le persone disinstallano.
+         * La pagina spiega, offre un pulsante, e il tasto avanti resta.
+         */
+        const permissions = await import('@/services/devicePermissions')
+        const spy = vi.spyOn(permissions, 'requestTalosBatteryExemption')
+        const wrapper = await mountSetup()
+        await wrapper.get('[data-testid="talos-setup-name"]').setValue('Nino')
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-testid="talos-setup-background"]').exists()).toBe(true)
+        // Niente e stato chiesto al sistema per il solo fatto di essere arrivati
+        // qui: la richiesta parte dal dito, come dice la guida di Android.
+        expect(spy).not.toHaveBeenCalled()
+        // E si puo chiudere senza concedere.
+        expect(wrapper.find('[data-testid="talos-intro-cta"]').exists()).toBe(true)
         wrapper.unmount()
     })
 

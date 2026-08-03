@@ -13,7 +13,7 @@
  * so resuming is read from reality rather than from a cursor that can go stale
  * and then quietly send someone back through a step they already finished.
  */
-export type TalosSetupStepId = 'identity' | 'pin' | 'model'
+export type TalosSetupStepId = 'identity' | 'pin' | 'model' | 'permissions'
 
 export interface TalosSetupStepDefinition {
     id: TalosSetupStepId
@@ -25,6 +25,15 @@ export const TALOS_SETUP_STEPS: readonly TalosSetupStepDefinition[] = Object.fre
     { id: 'identity', label: 'Name' },
     { id: 'pin', label: 'PIN' },
     { id: 'model', label: 'Model' },
+    /**
+     * L ultimo, e ultimo per una ragione.
+     *
+     * La ricerca sui permessi dice di chiedere quando la persona ha capito a
+     * che serve, non all avvio. Qui a questo punto ha gia dato un nome allo
+     * spazio, un PIN e un modello: sa che cos e TALOS, quindi la frase «le
+     * ricerche lunghe muoiono senza questa» vuol dire qualcosa.
+     */
+    { id: 'permissions', label: 'Background' },
 ])
 
 export interface TalosSetupState {
@@ -34,6 +43,14 @@ export interface TalosSetupState {
     pinSet: boolean
     /** Somewhere to think: a provider key on this device, or a local model. */
     modelReady: boolean
+    /**
+     * Il telefono ha smesso di sospendere TALOS.
+     *
+     * Letto dal sistema come gli altri tre — nessun passo qui e «fatto» perche
+     * qualcuno ha premuto Avanti. Owner 2026-08-03: senza questa esenzione una
+     * Deep Research muore tre volte su tre appena si blocca lo schermo.
+     */
+    backgroundReady: boolean
 }
 
 export interface TalosSetupStep extends TalosSetupStepDefinition {
@@ -52,6 +69,7 @@ export function talosSetupProgress(state: TalosSetupState): TalosSetupProgress {
         identity: state.identitySet,
         pin: state.pinSet,
         model: state.modelReady,
+        permissions: state.backgroundReady,
     }
     const steps = TALOS_SETUP_STEPS.map((step) => ({ ...step, done: done[step.id] }))
     const first = steps.findIndex((step) => !step.done)
