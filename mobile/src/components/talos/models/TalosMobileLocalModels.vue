@@ -17,7 +17,7 @@
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Search, Download, Pause, AlertTriangle, ChevronLeft, ShieldAlert, Cpu, LayoutGrid, List } from '@lucide/vue'
+import { Search, Download, Pause, AlertTriangle, ChevronLeft, ShieldAlert, Cpu, LayoutGrid, List, FolderOpen } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import {
     talosLocalModels,
@@ -52,6 +52,11 @@ import {
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
 import { useSettingsStore } from '@/stores/settings'
+import {
+    talosModelImportFailure,
+    talosOnModelImportProgress,
+    talosPickModelFromDevice,
+} from '@/services/modelImport'
 import type { TalosCatalogueRecommendation } from '@/lib/models/catalogue'
 import { talosGroupModelsByProvider, talosProviderOptions } from '@/lib/models/providerGrouping'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
@@ -141,6 +146,52 @@ function installedDate(at: number): string {
     return new Intl.DateTimeFormat(locale.value === 'it' ? 'it-IT' : 'en-US', { dateStyle: 'medium' })
         .format(new Date(at))
 }
+
+/**
+ * A model already on the phone, handed over.
+ *
+ * Owner 2026-08-03: «nessuna possibilità di usare modelli caricati direttamente
+ * dalla memoria, NON VA BENE». The file is copied into the same root the
+ * downloader uses, so an imported model is not a second class of model — it
+ * shows up in the list above, in the fit maths and in the chat picker without
+ * one more line of plumbing.
+ */
+const importing = ref(false)
+const importCopied = ref(0)
+const importTotal = ref(0)
+const importError = ref<string | null>(null)
+let stopImportProgress: (() => void) | null = null
+
+const importPercent = computed(() => (importTotal.value > 0
+    ? Math.min(100, Math.round((importCopied.value / importTotal.value) * 100))
+    : 0))
+
+async function importFromDevice(): Promise<void> {
+    if (importing.value) return
+    importing.value = true
+    importError.value = null
+    importCopied.value = 0
+    importTotal.value = 0
+    stopImportProgress = talosOnModelImportProgress((copied, total) => {
+        importCopied.value = copied
+        importTotal.value = total
+    })
+    try {
+        const picked = await talosPickModelFromDevice()
+        // Cancelling the picker is not a failure and must not leave a red line
+        // behind: the person changed their mind, which is allowed.
+        if (picked.imported) await loadInstalled()
+    } catch (failure) {
+        const code = failure instanceof Error ? failure.message : String(failure)
+        importError.value = t(talosModelImportFailure(code))
+    } finally {
+        stopImportProgress?.()
+        stopImportProgress = null
+        importing.value = false
+    }
+}
+
+onUnmounted(() => { stopImportProgress?.() })
 
 async function loadInstalled(): Promise<void> {
     installedLoading.value = true
@@ -508,6 +559,43 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                     <p class="mt-1 break-all font-mono text-3xs leading-4 text-[var(--talos-muted)]">{{ file.path }}</p>
                 </li>
             </ul>
+
+            <!--
+                The door that opens inward.
+
+                A phone can already hold a `.gguf` — put there over USB, or
+                downloaded outside TALOS — and until today the app had no way to
+                be given it. For something local-first, that is «open a file»
+                missing.
+            -->
+            <div class="flex flex-col gap-1">
+                <Button
+                    data-testid="talos-models-import"
+                    variant="outline"
+                    class="w-full"
+                    :disabled="importing"
+                    @click="importFromDevice()"
+                >
+                    <FolderOpen class="size-4" aria-hidden="true" />
+                    {{ importing ? t('localModels.importing') : t('localModels.importFromDevice') }}
+                </Button>
+                <!-- A determinate bar because the denominator is a real file
+                     size, not a guess — and a 3 GB copy without one looks hung. -->
+                <div
+                    v-if="importing && importTotal > 0"
+                    class="h-1 overflow-hidden rounded-full bg-[var(--talos-border)]"
+                    role="progressbar"
+                    :aria-valuemin="0"
+                    :aria-valuemax="100"
+                    :aria-valuenow="importPercent"
+                >
+                    <div class="h-full rounded-full bg-[var(--talos-accent)] transition-[width] duration-300" :style="{ width: `${importPercent}%` }" />
+                </div>
+                <p class="text-2xs leading-4 text-[var(--talos-muted)]">{{ t('localModels.importNote') }}</p>
+                <p v-if="importError" role="alert" data-testid="talos-models-import-error" class="text-2xs leading-5 text-[var(--talos-danger,#dc5b5b)]">
+                    {{ importError }}
+                </p>
+            </div>
 
             <!-- A folder that refused to open makes the list above PARTIAL, and
                  silence there reads as "you have no models". -->

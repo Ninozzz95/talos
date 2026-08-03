@@ -33,6 +33,9 @@ public class MainActivity extends BridgeActivity {
         // suspends a backgrounded WebView, and a 4 GB transfer spends most of
         // its hours there.
         registerPlugin(TalosModelTransferPlugin.class);
+        // A model the person already has on the phone. Local-first means the
+        // door has to open inward too, not only towards Hugging Face.
+        registerPlugin(TalosModelImportPlugin.class);
         // "Will this model run on THIS phone" — asked of the phone, live, rather
         // than of a table of chip names that is wrong for anything newer than it.
         registerPlugin(TalosDeviceCapacityPlugin.class);
