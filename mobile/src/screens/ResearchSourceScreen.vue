@@ -18,10 +18,11 @@ import { ChevronRight, ExternalLink } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import { useTalosResearchRun } from '@/composables/useTalosResearchRun'
+import { talosPublishedOn } from '@/lib/publishedDate'
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useTalosI18n()
+const { t, locale } = useTalosI18n()
 
 const runId = computed(() => String(route.params.id ?? ''))
 const index = computed(() => Number.parseInt(String(route.params.index ?? ''), 10))
@@ -72,7 +73,7 @@ function openClaim(at: number): void {
                     </div>
                     <div>
                         <dt class="text-2xs uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.publishedAt') }}</dt>
-                        <dd class="mt-1 font-mono text-sm text-[var(--talos-text)]">{{ source.publishedAt ?? t('research.noDate') }}</dd>
+                        <dd class="mt-1 text-sm text-[var(--talos-text)]">{{ source.publishedAt ? talosPublishedOn(source.publishedAt, locale) : t('research.noDate') }}</dd>
                     </div>
                 </dl>
 

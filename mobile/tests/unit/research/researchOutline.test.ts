@@ -3,7 +3,6 @@ import {
     talosResearchDuration,
     talosResearchElapsedSeconds,
     talosResearchOutline,
-    talosResearchPhaseOf,
 } from '@/lib/research/researchOutline'
 import type { TalosResearchRun, TalosResearchStatus, TalosResearchStep } from '@/lib/research/researchRun'
 
@@ -78,35 +77,6 @@ describe('the sections a report will have, before it has any', () => {
     })
 })
 
-describe('where the run is, in words a person uses', () => {
-    const synthesis = (state: TalosResearchStep['state']) =>
-        step({ id: 'synthesis', branchId: 'synthesis', kind: 'synthesise', state })
-
-    it('says «writing» from the synthesis step, not from the status', () => {
-        // The journal calls itself collecting/synthesising/verifying and a
-        // reader cares about none of those three. What actually changed is that
-        // the report step exists.
-        expect(talosResearchPhaseOf(run({ steps: [step({})] }))).toBe('collecting')
-        expect(talosResearchPhaseOf(run({ steps: [step({}), synthesis('running')] }))).toBe('writing')
-        // Started once and failed is still "writing" — it is where the run is.
-        expect(talosResearchPhaseOf(run({ steps: [step({}), synthesis('failed')] }))).toBe('writing')
-        // A step that exists but has never been attempted is not writing yet.
-        expect(talosResearchPhaseOf(run({ steps: [step({}), synthesis('pending')] }))).toBe('collecting')
-    })
-
-    it('puts a stop and an ending ahead of everything else', () => {
-        expect(talosResearchPhaseOf(run({ status: 'paused', steps: [synthesis('running')] }))).toBe('paused')
-        expect(talosResearchPhaseOf(run({ status: 'pause_requested' }))).toBe('paused')
-        for (const status of ['done', 'cancelled', 'failed'] as const) {
-            expect(talosResearchPhaseOf(run({ status }))).toBe('ended')
-        }
-    })
-
-    it('says «planning» only when there is no plan at all', () => {
-        expect(talosResearchPhaseOf(run({ plan: [] }))).toBe('planning')
-    })
-})
-
 describe('how long it has been going', () => {
     it('measures from the run, never from when a screen opened', () => {
         // A research is watched from several places and outlives all of them.
@@ -120,9 +90,39 @@ describe('how long it has been going', () => {
             status: 'done',
             startedAt: '2026-08-03T10:00:00.000Z',
             updatedAt: '2026-08-03T10:02:00.000Z',
+            steps: [step({ finishedAt: '2026-08-03T10:02:00.000Z' })],
         })
         // Two hours later it still reads two minutes.
         expect(talosResearchElapsedSeconds(over, '2026-08-03T12:00:00.000Z')).toBe(120)
+    })
+
+    it('measures to the last step, not to the last time anything was written', () => {
+        // `updatedAt` is stamped by every event the journal accepts, and a
+        // rename is one of them. A research done in two minutes yesterday and
+        // retitled today would read as if it had thought for a day.
+        const renamed = run({
+            status: 'done',
+            title: 'La moka',
+            startedAt: '2026-08-03T10:00:00.000Z',
+            steps: [
+                step({ finishedAt: '2026-08-03T10:01:00.000Z' }),
+                step({ id: 'b2:search', branchId: 'b2', finishedAt: '2026-08-03T10:02:00.000Z' }),
+            ],
+            updatedAt: '2026-08-04T18:30:00.000Z',
+        })
+        expect(talosResearchElapsedSeconds(renamed, '2026-08-04T19:00:00.000Z')).toBe(120)
+    })
+
+    it('falls back to the journal when nothing ever finished', () => {
+        // Cancelled before the first step reported: there is no better answer,
+        // and zero would be a lie about a run that did occupy the machine.
+        const stillborn = run({
+            status: 'cancelled',
+            startedAt: '2026-08-03T10:00:00.000Z',
+            updatedAt: '2026-08-03T10:00:30.000Z',
+            steps: [step({ state: 'failed', finishedAt: null })],
+        })
+        expect(talosResearchElapsedSeconds(stillborn, '2026-08-03T12:00:00.000Z')).toBe(30)
     })
 
     it('survives a timestamp it cannot read', () => {
