@@ -60,9 +60,16 @@ final class TalosLlamaNative {
     /**
      * @param gpuLayers quanti strati spingere sulla GPU. 0 = tutto su CPU, che
      *     è il pavimento contro cui ogni altro backend viene misurato.
+     * @param deterministic vero solo per MISURARE. La prova di un backend è che
+     *     produca lo stesso testo della CPU, quindi il banco chiede l'argmax;
+     *     una chat no, e per mesi se l'è preso lo stesso — da lì i token di
+     *     altre lingue infilati a metà parola. Il predefinito è la chat, perché
+     *     un banco che sbaglia si vede subito nei nostri numeri mentre una chat
+     *     che sbaglia si vede solo sul telefono di chi la usa.
      * @return l'handle, oppure 0 se il modello non si è aperto.
      */
-    static native long nativeOpen(String modelPath, int threads, int contextTokens, int gpuLayers);
+    static native long nativeOpen(String modelPath, int threads, int contextTokens, int gpuLayers,
+                                  boolean deterministic);
 
     /** Token prodotti finora. Interrogabile da un altro thread durante la generazione. */
     static native int nativeTokensProduced(long handle);

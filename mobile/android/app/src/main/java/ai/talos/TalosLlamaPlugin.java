@@ -99,11 +99,16 @@ public class TalosLlamaPlugin extends Plugin {
         final int threads = call.getInt("threads", 4);
         final int contextTokens = call.getInt("contextTokens", 4096);
         final int gpuLayers = call.getInt("gpuLayers", 0);
+        // Chiedibile, e falso per difetto: la chat vuole un campionamento vero,
+        // il banco di prova vuole l'argmax perché confronta due backend e
+        // pretende lo stesso testo da entrambi. Erano la stessa cosa, ed è da
+        // lì che venivano i token di altre lingue a metà parola.
+        final boolean deterministic = Boolean.TRUE.equals(call.getBoolean("deterministic", false));
 
         worker.execute(() -> {
             closeOpenModel();
             TalosLlamaEngine engine = TalosLlamaEngine.open(
-                    getContext(), path, threads, contextTokens, gpuLayers);
+                    getContext(), path, threads, contextTokens, gpuLayers, deterministic);
             if (engine == null) {
                 call.reject("TALOS_LLAMA_OPEN_FAILED");
                 return;

@@ -85,9 +85,25 @@ public final class TalosLlamaEngine implements AutoCloseable {
      */
     public static TalosLlamaEngine open(android.content.Context context, String modelPath,
                                         int threads, int contextTokens, int gpuLayers) {
+        return open(context, modelPath, threads, contextTokens, gpuLayers, false);
+    }
+
+    /**
+     * Come sopra, ma dicendo se serve l'argmax.
+     *
+     * `deterministic` esiste per il banco di prova: confrontare due backend
+     * vuol dire pretendere LO STESSO testo, e un campionamento con temperatura
+     * farebbe divergere due esecuzioni entrambe corrette. La chat vuole il
+     * contrario, e per mesi ha avuto l'argmax perché il requisito della misura
+     * era finito nel percorso di tutti.
+     */
+    public static TalosLlamaEngine open(android.content.Context context, String modelPath,
+                                        int threads, int contextTokens, int gpuLayers,
+                                        boolean deterministic) {
         if (!TalosLlamaNative.AVAILABLE) return null;
         TalosLlamaNative.ensureReady(context);
-        long handle = TalosLlamaNative.nativeOpen(modelPath, threads, contextTokens, gpuLayers);
+        long handle = TalosLlamaNative.nativeOpen(modelPath, threads, contextTokens, gpuLayers,
+                                                  deterministic);
         return handle == 0 ? null : new TalosLlamaEngine(handle);
     }
 

@@ -24,6 +24,7 @@
 
 #include "llama.h"
 #include "ggml-backend.h"
+#include "sampling.h"
 
 #define TALOS_TAG "TalosLlama"
 #define TALOS_LOGI(...) __android_log_print(ANDROID_LOG_INFO, TALOS_TAG, __VA_ARGS__)
@@ -34,7 +35,7 @@ namespace {
 struct talos_session {
     llama_model *       model   = nullptr;
     llama_context *     ctx     = nullptr;
-    llama_sampler *     sampler = nullptr;
+    common_sampler *    sampler = nullptr;
     const llama_vocab * vocab   = nullptr;
 
     // Letti dal thread del campionatore mentre la generazione gira sull'altro.
@@ -151,7 +152,8 @@ Java_ai_talos_TalosLlamaNative_nativeBackends(JNIEnv * env, jclass) {
  */
 JNIEXPORT jlong JNICALL
 Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPath,
-                                          jint threads, jint contextTokens, jint gpuLayers) {
+                                          jint threads, jint contextTokens, jint gpuLayers,
+                                          jboolean deterministic) {
     const std::string path = jstring_to_utf8(env, modelPath);
     if (path.empty()) {
         TALOS_LOGE("percorso del modello vuoto");
@@ -187,13 +189,44 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
         return 0;
     }
 
-    // Campionamento greedy, e non è una semplificazione: la prova di un backend
-    // è che produca LO STESSO testo della CPU. Con un campionamento casuale due
-    // esecuzioni corrette divergerebbero e il confronto non direbbe nulla.
-    llama_sampler_chain_params sampler_params = llama_sampler_chain_default_params();
-    sampler_params.no_perf = true;
-    llama_sampler * sampler = llama_sampler_chain_init(sampler_params);
-    llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
+    /**
+     * COME SI SCEGLIE IL TOKEN. Qui stava metà del difetto che l'owner ha visto.
+     *
+     * La catena era `greedy` e basta — nessuna temperatura, nessun top-p,
+     * nessun min-p, nessuna penalità — e il commento diceva perché: serviva a
+     * far produrre a CPU e GPU *lo stesso identico testo*, altrimenti il
+     * confronto fra backend non dice nulla. È un requisito vero, ma del BANCO
+     * DI PROVA, e si era preso anche la chat.
+     *
+     * Greedy prende sempre l'argmax. Su un 4B quantizzato a 4 bit l'errore di
+     * quantizzazione sposta i logit di poco, e quando due candidati sono quasi
+     * pari greedy si impegna su quello che sta avanti di un millesimo — senza
+     * alcun pavimento che rifiuti i token implausibili. Un modello multilingue
+     * ha token quasi gemelli fra alfabeti diversi, e da lì escono
+     * «non sono in grado di известны il futuro» e «l'es如果你对 su dispositivo»:
+     * non traduzioni sbagliate, ma token sbagliati scelti a metà parola
+     * ([[local-model-think-tags-and-token-soup]]).
+     *
+     * I valori NON sono inventati: sono i predefiniti di `common_params_sampling`,
+     * cioè esattamente quelli con cui gira `llama-cli` — top_k 40, top_p 0,95,
+     * **min_p 0,05**, temp 0,80. Il min_p è il pezzo che conta: scarta ogni
+     * token sotto il 5% della probabilità del migliore, che è precisamente il
+     * meccanismo che avrebbe tagliato «известны».
+     *
+     * Il banco di prova non perde niente: con `temp = 0` la catena a monte
+     * finisce comunque su `dist`, ma la distribuzione è un solo picco, quindi
+     * l'esito è l'argmax e resta deterministico. I filtri prima (top_k, top_p,
+     * min_p) non possono togliere il massimo, per costruzione.
+     */
+    common_params_sampling sampling;
+    if (deterministic) sampling.temp = 0.0f;
+    common_sampler * sampler = common_sampler_init(model, sampling);
+    if (sampler == nullptr) {
+        TALOS_LOGE("campionatore non costruito");
+        llama_free(ctx);
+        llama_model_free(model);
+        return 0;
+    }
 
     auto * session = new talos_session();
     session->model   = model;
@@ -396,7 +429,12 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
     for (int produced = 0; produced < limit; ) {
         if (session->cancelled.load(std::memory_order_relaxed)) break;
 
-        sampled = llama_sampler_sample(session->sampler, session->ctx, -1);
+        sampled = common_sampler_sample(session->sampler, session->ctx, -1);
+        // Il token va DICHIARATO al campionatore, non solo campionato: le
+        // penalità di ripetizione e la grammatica tengono uno stato, e senza
+        // questa riga non vedono mai ciò che è stato prodotto — cioè sono
+        // presenti nella catena e inerti.
+        common_sampler_accept(session->sampler, sampled, true);
         // Durante una MISURA la fine-generazione non ferma niente, e non è una
         // scorciatoia: un modello piccolo decide di tacere dopo un secondo, e un
         // benchmark che finisce quando il modello ha finito misura la sua
@@ -439,7 +477,7 @@ JNIEXPORT void JNICALL
 Java_ai_talos_TalosLlamaNative_nativeClose(JNIEnv *, jclass, jlong handle) {
     talos_session * session = as_session(handle);
     if (session == nullptr) return;
-    if (session->sampler != nullptr) llama_sampler_free(session->sampler);
+    if (session->sampler != nullptr) common_sampler_free(session->sampler);
     if (session->ctx != nullptr) llama_free(session->ctx);
     if (session->model != nullptr) llama_model_free(session->model);
     delete session;

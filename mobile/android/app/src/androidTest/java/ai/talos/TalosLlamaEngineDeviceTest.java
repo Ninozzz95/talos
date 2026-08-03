@@ -80,7 +80,7 @@ public class TalosLlamaEngineDeviceTest {
                 "modello di prova assente: spingilo in " + (file == null ? "?" : file.getAbsolutePath()),
                 file != null && file.isFile());
 
-        TalosLlamaEngine engine = TalosLlamaEngine.open(context, file.getAbsolutePath(), 4, 2048, 0);
+        TalosLlamaEngine engine = TalosLlamaEngine.open(context, file.getAbsolutePath(), 4, 2048, 0, true);
         assertNotNull("il modello non si è aperto — guarda logcat, tag TalosLlama", engine);
 
         try {
@@ -113,7 +113,7 @@ public class TalosLlamaEngineDeviceTest {
         // contro cui ogni altro backend viene misurato.
         // Contesto largo abbastanza da contenere il tetto della prova: è il
         // tempo a fermarla, e su un telefono veloce quel tempo sono molti token.
-        TalosLlamaEngine engine = TalosLlamaEngine.open(context, file.getAbsolutePath(), 4, 2048, 0);
+        TalosLlamaEngine engine = TalosLlamaEngine.open(context, file.getAbsolutePath(), 4, 2048, 0, true);
         assertNotNull("il modello non si è aperto — guarda logcat, tag TalosLlama", engine);
 
         try {
