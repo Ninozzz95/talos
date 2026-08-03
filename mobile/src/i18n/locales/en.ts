@@ -1699,6 +1699,14 @@ export const TALOS_EN_MESSAGES = {
                 failed: 'failed',
                 interrupted: 'interrupted',
             },
+            expectedSections: 'The sections it will have',
+            phase: {
+                planning: 'planning',
+                collecting: 'gathering',
+                writing: 'writing the report',
+                paused: 'paused',
+                ended: 'ended',
+            },
         buckets: {
             cancelled: 'Cancelled',
             paused: 'Paused',
