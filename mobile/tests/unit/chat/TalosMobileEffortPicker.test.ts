@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TalosMobileEffortPicker from '@/components/chat/TalosMobileEffortPicker.vue'
+import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 
 function mountPicker(overrides: Record<string, unknown> = {}) {
     return mount(TalosMobileEffortPicker, {
@@ -49,6 +50,31 @@ describe('TalosMobileEffortPicker', () => {
         expect(toggle.attributes('aria-checked')).toBe('false')
         await toggle.trigger('click')
         expect(wrapper.emitted('selectThinking')).toEqual([[true]])
+    })
+
+    it('uses the shared switch, not a sixth hand-rolled one', () => {
+        /**
+         * Owner 2026-08-03, with a screenshot: the thumb sat OUTSIDE its track.
+         * Measured in the live page on the tablet — track 48px wide, thumb
+         * starting at 48px, twenty pixels of overflow, the whole thing outside.
+         *
+         * The cause was structural, not cosmetic: the thumb was `absolute` with
+         * no `left`, so it started from its STATIC position — and a `<button>`
+         * centres its content, putting that at 24px — and `translate-x-6` added
+         * another 24. The five other hand-rolled copies in the app set `left`
+         * explicitly and are fine, which is why it showed in exactly one place.
+         *
+         * Geometry is not assertable in jsdom, so this asserts the thing that
+         * makes the geometry impossible to get wrong: there is ONE switch, and
+         * this is it. Rewriting a bespoke one here fails this test.
+         */
+        const wrapper = mountPicker({ supportsThinking: true, thinking: true })
+        expect(wrapper.findComponent(TalosThemedSwitch).exists()).toBe(true)
+
+        const thumbs = wrapper.findAll('.absolute')
+        expect(thumbs.map((node) => node.attributes('class') ?? '')
+            .filter((classes) => classes.includes('translate-x')))
+            .toEqual([])
     })
 
     it('explains when a model has no reasoning setting', () => {
