@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
     talosInstalledModelsView,
+    talosModelFolder,
     talosModelSize,
     TALOS_INSTALLED_MODEL_SORT_DEFAULT,
 } from '@/lib/models/installedModels'
@@ -73,6 +74,42 @@ describe('the models already on this phone', () => {
         const original = [...ALL]
         talosInstalledModelsView(ALL, { sort: 'size' })
         expect(ALL).toEqual(original)
+    })
+})
+
+describe('where a model sits, in the part that differs', () => {
+    /**
+     * The row printed the whole address in monospace: three wrapped lines per
+     * model of which the first fifty characters are the same for all of them.
+     * The exact string still exists under ⋮ «Copia il percorso» — which is the
+     * only form of it anybody can actually use.
+     */
+    it('answers with the folder under models/, not the shared prefix', () => {
+        expect(talosModelFolder(`${ROOT}imported/prova.gguf`)).toBe('imported')
+    })
+
+    it('names the publisher rather than the revision folder under it', () => {
+        // The real layout, read off the tablet on 2026-08-03:
+        // models/<publisher>/<repo>/<revision>/file.gguf — `safe(repo)` keeps
+        // the slash, so the folder directly under `models` is the publisher.
+        // The two segments below it are the repo, which repeats the file name,
+        // and the revision, which is almost always `main`.
+        expect(talosModelFolder(`${ROOT}unsloth/SmolLM2-360M-Instruct-GGUF/main/SmolLM2-360M-Instruct-Q5_K_M.gguf`))
+            .toBe('unsloth')
+    })
+
+    it('reads a model dropped in a folder of its own the same way', () => {
+        expect(talosModelFolder(`${ROOT}local-test/qwen2.5-3b-instruct.gguf`)).toBe('local-test')
+    })
+
+    it('says nothing at all for a file lying in the root', () => {
+        // Better an absent line than a folder name invented to fill it.
+        expect(talosModelFolder(`${ROOT}model.gguf`)).toBe('')
+    })
+
+    it('falls back to the parent when the layout is not the one we wrote', () => {
+        expect(talosModelFolder('/sdcard/Download/model.gguf')).toBe('Download')
+        expect(talosModelFolder('model.gguf')).toBe('')
     })
 })
 

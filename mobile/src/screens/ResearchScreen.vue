@@ -26,6 +26,7 @@ import { AlertTriangle, LayoutGrid, List, Loader2, Plus, Search } from '@lucide/
 import { useTalosI18n } from '@/i18n'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
+import { talosSortChipClass } from '@/lib/sortChip'
 import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import { Button } from '@/components/ui/button'
@@ -90,13 +91,6 @@ const filterOptions = computed(() => BUCKETS.map((id) => ({
 function chooseBucket(value: string): void {
     const found = BUCKETS.find((entry) => entry === value)
     if (found) bucket.value = found
-}
-
-function filterOptionClass(selected: boolean): string {
-    const base = 'talos-pressable min-h-11 shrink-0 rounded-full px-3 text-sm transition-colors'
-    return selected
-        ? `${base} bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))]`
-        : `${base} border border-[var(--talos-border)] text-[var(--talos-muted)]`
 }
 
 async function refresh(): Promise<void> {
@@ -343,7 +337,7 @@ function when(iso: string): string {
                     :model-value="bucket"
                     :options="filterOptions"
                     :group-label="t('research.filterLabel')"
-                    :option-class="filterOptionClass"
+                    :option-class="talosSortChipClass"
                     @update:model-value="chooseBucket"
                 />
                 <!-- Two states, immediate effect, no Save: a switch by the rule,

@@ -44,12 +44,13 @@ import {
 } from '@/services/localEngine'
 import {
     talosInstalledModelsView,
+    talosModelFolder,
     talosModelSize,
     TALOS_INSTALLED_MODEL_SORTS,
-    TALOS_INSTALLED_MODEL_SORT_DEFAULT,
     type TalosInstalledModelSort,
 } from '@/lib/models/installedModels'
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
+import { talosSortChipClass } from '@/lib/sortChip'
 import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
 import { useSettingsStore } from '@/stores/settings'
 import {
@@ -87,15 +88,38 @@ function chooseLayout(next: 'grid' | 'list'): void {
     void settings.setShell({ library_view: next })
 }
 
+/**
+ * The address, said out loud once and then put where it can be used.
+ *
+ * «Dove sta» was half the owner's question, and a forty-character path nobody
+ * can select is an address nobody can act on — so this is the answer, not the
+ * line that used to sit on the row.
+ *
+ * It reports both outcomes, which it did not have to before. The row still
+ * printed the whole path, so a copy that quietly failed cost nothing: you read
+ * it off the screen instead. Now the row does not, and a silent failure would
+ * leave somebody with a menu item that does nothing and an address they cannot
+ * reach by any other route. Compacting a screen is allowed to remove a line; it
+ * is not allowed to remove the only copy of something.
+ */
+const copyNotice = ref<{ ok: boolean, text: string } | null>(null)
+let copyTimer: ReturnType<typeof setTimeout> | null = null
+
 async function copyPath(path: string): Promise<void> {
-    // «Dove sta» was half the owner's question. The path is on the row, but a
-    // forty-character address nobody can select is an address nobody can use.
     try {
         await navigator.clipboard.writeText(path)
+        copyNotice.value = { ok: true, text: t('localModels.pathCopied') }
     } catch {
-        // No clipboard permission: the path stays readable where it is.
+        // Named, and with the one thing left to try. Verified on the tablet
+        // 2026-08-03: with a real tap the write succeeds — a refusal here means
+        // the system denied the clipboard, not that the path is wrong.
+        copyNotice.value = { ok: false, text: t('localModels.pathCopyRefused') }
     }
+    if (copyTimer !== null) clearTimeout(copyTimer)
+    copyTimer = setTimeout(() => { copyNotice.value = null }, 4000)
 }
+
+onUnmounted(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
 
 const query = ref('')
 const refused = ref<string | null>(null)
@@ -111,7 +135,18 @@ const refused = ref<string | null>(null)
 const installed = ref<readonly TalosLocalModelFile[]>([])
 const unreadable = ref<readonly { path: string, reason: string }[]>([])
 const installedQuery = ref('')
-const installedSort = ref<TalosInstalledModelSort>(TALOS_INSTALLED_MODEL_SORT_DEFAULT)
+/**
+ * Remembered, like the Library remembers its own.
+ *
+ * It was a plain `ref`, which is the same defect the Library carried until July
+ * (debt P6): a preference that resets on every visit is not a preference, it is
+ * a default with a switch on it. There is no argument for the same
+ * list-ordering choice being durable in one room and amnesiac in the next.
+ */
+const installedSort = computed<TalosInstalledModelSort>({
+    get: () => settings.state.shell.models_sort,
+    set: (value) => { void settings.setShell({ models_sort: value }) },
+})
 const installedLoading = ref(true)
 
 const installedView = computed(() => talosInstalledModelsView(installed.value, {
@@ -124,20 +159,6 @@ const sortItems = computed(() => TALOS_INSTALLED_MODEL_SORTS.map((value) => ({
     label: t(`localModels.sort.${value}`),
     testId: `talos-models-installed-sort-${value}`,
 })))
-
-/**
- * The pill, drawn the way the research station draws it.
- *
- * A radiogroup whose selected option looks like the others is a control that
- * refuses to say what it is doing — and the first render of this section was
- * exactly that: three words in a row, no fill, no state.
- */
-function sortOptionClass(selected: boolean): string {
-    const base = 'talos-pressable min-h-11 shrink-0 rounded-full px-3 text-sm transition-colors'
-    return selected
-        ? `${base} bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))]`
-        : `${base} border border-[var(--talos-border)] text-[var(--talos-muted)]`
-}
 
 function installedDate(at: number): string {
     // Zero means the filesystem refused to say. Printing 1 January 1970 would
@@ -273,11 +294,27 @@ const engine = ref<TalosLocalEngineStatus | null>(null)
 onMounted(async () => { engine.value = await talosLocalEngineStatus() })
 onMounted(() => { void loadInstalled() })
 
+/**
+ * The family name, when it is not the model name said twice.
+ *
+ * The catalogue carries both, and for most entries the family is the first word
+ * of the display name — «Qwen3» under «Qwen3 4B Instruct». A whole line per row
+ * spent repeating a word already two lines above it is exactly the vertical
+ * spend the owner asked to economise; where the two genuinely differ
+ * («Mistral» for a «Ministral 8B») it still gets said.
+ */
+function familyWorthSaying(entry: TalosCatalogueRecommendation['entry']): string | null {
+    const family = entry.family.trim()
+    if (family === '') return null
+    return entry.displayName.toLowerCase().startsWith(family.toLowerCase()) ? null : family
+}
+
 /** One catalogue row, worked out once rather than four times per render. */
 function rowOf(item: Readonly<TalosCatalogueRecommendation>) {
     return {
         key: item.entry.id,
         initials: talosModelInitials(item.entry.family),
+        family: familyWorthSaying(item.entry),
         entry: item.entry,
         size: talosFormatBytes(item.entry.fileBytes),
         working: talosFormatBytes(item.entry.ramWorkingBytes),
@@ -472,7 +509,13 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                 </span>
             </div>
 
-            <template v-if="installedView.total > 0">
+            <!-- Controls for a list that has something to control.
+                 With one model on the phone, a search field, three sort chips
+                 and a layout switch are three rows of furniture standing over a
+                 single row of content — the exact «spreco di spazio» this pass
+                 is about. Nothing is designed differently; it simply is not
+                 drawn until there is more than one thing to order. -->
+            <template v-if="installedView.total > 1">
                 <!-- The Library's search field to the pixel: same rounding, same
                      inset icon, same height. A third shape for the same job is a
                      third thing to learn. -->
@@ -496,7 +539,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                         :model-value="installedSort"
                         :options="sortItems"
                         :group-label="t('localModels.sortLabel')"
-                        :option-class="sortOptionClass"
+                        :option-class="talosSortChipClass"
                         @update:model-value="installedSort = $event as TalosInstalledModelSort"
                     />
                     <button
@@ -551,14 +594,35 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                         />
                     </div>
                     <p class="truncate text-sm text-[var(--talos-text)]">{{ file.name }}</p>
-                    <p class="mt-1 flex flex-wrap gap-x-2 text-2xs tabular-nums text-[var(--talos-muted)]">
+                    <!-- Two lines per row, not five.
+                         The third line used to be the whole address in
+                         monospace, which on a phone wraps to three lines whose
+                         first fifty characters are identical for every model in
+                         the list. What differs is the folder, so that is what is
+                         said; the exact string lives under ⋮ «Copia il
+                         percorso», which is also the only form of it anybody can
+                         act on. -->
+                    <p class="mt-1 flex min-w-0 flex-wrap gap-x-2 text-2xs tabular-nums text-[var(--talos-muted)]">
                         <span>{{ talosModelSize(file.bytes, locale) }}</span>
                         <span aria-hidden="true">·</span>
                         <span>{{ installedDate(file.modifiedAt) }}</span>
+                        <template v-if="talosModelFolder(file.path)">
+                            <span aria-hidden="true">·</span>
+                            <span class="min-w-0 truncate font-mono">{{ talosModelFolder(file.path) }}</span>
+                        </template>
                     </p>
-                    <p class="mt-1 break-all font-mono text-3xs leading-4 text-[var(--talos-muted)]">{{ file.path }}</p>
                 </li>
             </ul>
+
+            <!-- Said where the tap happened, and never in a way that steals
+                 focus: `role="status"` is heard, never jumped to. -->
+            <p
+                v-if="copyNotice"
+                role="status"
+                data-testid="talos-models-copy-notice"
+                class="text-2xs leading-5"
+                :class="copyNotice.ok ? 'text-[var(--talos-muted)]' : 'text-[var(--talos-danger,#dc5b5b)]'"
+            >{{ copyNotice.text }}</p>
 
             <!--
                 The door that opens inward.
@@ -628,6 +692,10 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                 >{{ t(`localModels.thermal_${device.thermal}`) }}</span>
             </div>
 
+            <!-- Left as two lines per cell on purpose.
+                 Putting «memoria libera» beside «4,1 GB» in a column a third of
+                 a phone wide truncates the label to «memoria li…» — a saving of
+                 seventeen pixels paid for with a word nobody can read. -->
             <div class="grid grid-cols-3 gap-2">
                 <div class="flex flex-col">
                     <b class="font-mono text-sm font-semibold tabular-nums text-[var(--talos-text)]">{{ device.ram }}</b>
@@ -713,7 +781,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                         <span>{{ row.size }}</span><span class="opacity-40">·</span>
                         <span>{{ row.entry.contextTokens }}</span>
                     </div>
-                    <p class="text-2xs leading-snug text-[var(--talos-muted)]">{{ row.entry.family }}</p>
+                    <p v-if="row.family" class="text-2xs leading-snug text-[var(--talos-muted)]">{{ row.family }}</p>
                     <p class="flex items-center gap-1.5 text-2xs font-semibold text-[var(--talos-success,#4c9a6a)]">
                         <span class="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
                         {{ t('localModels.bandComfortable') }}
