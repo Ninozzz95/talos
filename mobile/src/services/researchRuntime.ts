@@ -332,6 +332,45 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
     }
 
     return {
+        /**
+         * Writes the research into existence, and stops there.
+         *
+         * Separate from driving it because the caller needs to hand out an
+         * ADDRESS. Owner 2026-08-03: starting a research landed on "questa
+         * ricerca non esiste più" and stayed there. It was true when the page
+         * asked — the controller returned the id as soon as the work was
+         * *scheduled*, and `run_started` had not been written yet, so the page
+         * asked the journal for something that did not exist for another
+         * moment. Awaiting the whole run instead is not the fix either: that
+         * was the old bug where leaving the screen ended the research.
+         *
+         * So: open, which resolves when the run is REAL, then drive.
+         */
+        async open(input: {
+            id: string
+            sessionId: string
+            question: string
+            depth: TalosResearchDepth
+            engine?: TalosResearchEngine
+            branches: readonly TalosResearchBranch[]
+        }): Promise<TalosResearchRun> {
+            const at = deps.now()
+            const started = await append(deps, null, {
+                kind: 'run_started',
+                at,
+                id: input.id,
+                sessionId: input.sessionId,
+                question: input.question,
+                depth: input.depth,
+                engine: input.engine ?? 'device',
+            }, 0)
+            return append(deps, started, {
+                kind: 'plan_approved',
+                at,
+                branches: [...input.branches],
+            }, 1)
+        },
+
         /** Opens a run and does the work. The journal exists before any step does. */
         async start(input: {
             id: string
@@ -341,21 +380,7 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
             engine?: TalosResearchEngine
             branches: readonly TalosResearchBranch[]
         }, onProgress?: (progress: TalosResearchProgress) => void): Promise<TalosResearchRun> {
-            const at = deps.now()
-            let run = await append(deps, null, {
-                kind: 'run_started',
-                at,
-                id: input.id,
-                sessionId: input.sessionId,
-                question: input.question,
-                depth: input.depth,
-                engine: input.engine ?? 'device',
-            }, 0)
-            run = await append(deps, run, {
-                kind: 'plan_approved',
-                at,
-                branches: [...input.branches],
-            }, 1)
+            const run = await this.open(input)
             return drive(run.id, onProgress)
         },
 

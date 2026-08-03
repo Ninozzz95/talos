@@ -1686,6 +1686,10 @@ export const TALOS_EN_MESSAGES = {
             deletedAlone: 'Deleted.',
             pausing: 'Saving step {done} of {total}, then stopping',
             finishedInstead: 'It was on its last step, already paid for: it finished rather than throw that away.',
+            pausedHere: 'Paused: {done} of {total} steps are done and saved.',
+            cancelledHere: 'Cancelled. What it had gathered stays; it does not resume.',
+            failedHere: 'It stopped on an error. The reason is below.',
+            doneNoReport: 'Finished without writing the report: the gathering is there, the synthesis is not.',
         buckets: {
             cancelled: 'Cancelled',
             paused: 'Paused',

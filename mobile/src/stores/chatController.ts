@@ -4242,13 +4242,26 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 // going back must not end the research. The caller used to await
                 // it, so the only handle to a running job was a screen — and an
                 // unmounted screen is a job nobody can see any more.
-                const running = engine.start({
+                const opening = {
                     id,
                     sessionId: chat.activeSession.value?.id ?? 'none',
                     question: input.question,
                     depth: input.depth,
                     branches: input.branches,
-                }, (progress) => {
+                }
+                /**
+                 * The research is written into existence BEFORE this resolves,
+                 * so the id handed back is an address that already works.
+                 *
+                 * Owner 2026-08-03: starting one landed on "questa ricerca non
+                 * esiste più" and stayed there. It was true at the instant the
+                 * page asked — the id came back as soon as the work was
+                 * scheduled, and `run_started` had not been written yet.
+                 */
+                const opened = await engine.open(opening)
+                report({ run: opened, done: 0, total: opening.branches.length })
+
+                const running = engine.resume(id, (progress) => {
                     report(progress)
                     onProgress?.(progress)
                 }).finally(() => registry.close(id))
