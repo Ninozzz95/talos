@@ -53,13 +53,23 @@ function offered(
 }
 
 describe('live Library revocation', () => {
-    it('P1-CTX-AGENT-06 offers only the dedicated policy tool while the Library master is off', async () => {
+    it('P1-CTX-AGENT-06 offers only the dedicated policy tool when the Library is DENIED', async () => {
+        /**
+         * Owner 2026-08-03: l'accesso alla Libreria ha ora la stessa grammatica
+         * di ogni altra autorizzazione — consenti / chiedi / nega.
+         *
+         * Il caso qui e' **nega**, e la regola vale: su nega i tool non vengono
+         * nemmeno offerti, cosi' il modello non promette una ricerca che non
+         * fara'. Prima sparivano anche su «chiedi», e da li' veniva il difetto
+         * che l'owner ha fotografato: «posso solo CREARE documenti nella tua
+         * Libreria, non navigarla».
+         */
         const toolset = await createTalosToolset({
             repository: {
                 listVaultFileSummaries: vi.fn(async () => [summary()]),
             } as never,
             readVaultFileText: vi.fn(async () => 'PRIVATE_REVOKED_PAYLOAD'),
-            libraryEnabled: () => false,
+            libraryAccess: () => 'deny' as const,
             libraryContextPolicy: {
                 read: vi.fn(async () => ({
                     scope: 'global' as const,
@@ -116,7 +126,7 @@ describe('live Library revocation', () => {
         const toolset = await createTalosToolset({
             repository: { listVaultFileSummaries } as never,
             readVaultFileText: vi.fn(async () => 'PRIVATE_REVOKED_PAYLOAD'),
-            libraryEnabled: () => enabled,
+            libraryAccess: () => (enabled ? 'allow' as const : 'deny' as const),
         })
         const tool = offered(toolset, 'library_list')
 
@@ -146,7 +156,7 @@ describe('live Library revocation', () => {
             } as never,
             readVaultFileText: vi.fn(async () => null),
             readVaultFileBytes,
-            libraryEnabled: () => enabled,
+            libraryAccess: () => (enabled ? 'allow' as const : 'deny' as const),
         })
         const tool = offered(toolset, 'library_read')
 
@@ -183,7 +193,7 @@ describe('live Library revocation', () => {
             readVaultFileText: vi.fn(async () => 'PRIVATE_REVOKED_PAYLOAD'),
             readVaultFileBytes,
             saveVaultFileToDevice,
-            libraryEnabled: () => enabled,
+            libraryAccess: () => (enabled ? 'allow' as const : 'deny' as const),
         })
         const tool = offered(toolset, 'library_export')
 
@@ -199,5 +209,60 @@ describe('live Library revocation', () => {
         expect(readVaultFileBytes).toHaveBeenCalledWith('vault-private')
         expect(saveVaultFileToDevice).not.toHaveBeenCalled()
         expect(result).toMatchObject({ ok: false, code: 'TALOS_LIBRARY_DISABLED' })
+    })
+})
+
+describe('la Libreria ha la stessa grammatica di ogni altra autorizzazione', () => {
+    /**
+     * Owner 2026-08-03, con uno screenshot: «che cosa ho nella libreria» →
+     * «non ho uno strumento per elencare il contenuto della tua Libreria,
+     * posso solo CREARE documenti al suo interno».
+     *
+     * La causa: i tool `library_*` erano legati a `library_context_enabled`,
+     * che vuol dire «attaccami la Libreria a OGNI messaggio» ed e' spento di
+     * serie per scelta. Chi non voleva l'iniezione automatica perdeva anche il
+     * modo di CHIEDERE.
+     *
+     * Owner: «facciamo come nelle altre autorizzazioni — consenti sempre,
+     * chiedi ogni volta (default, col popup che cambia QUESTA setting), nega
+     * (cioe' non chiede)».
+     */
+    it('su CHIEDI i tool ci sono: e il cartellino a decidere, non il silenzio', async () => {
+        const toolset = await createTalosToolset({
+            ...executionDeps(),
+            libraryAccess: () => 'ask' as const,
+        })
+        const offerti = toolset
+            .offer(TALOS_DEFAULT_TOOL_PERMISSIONS, TALOS_DEFAULT_AGENT_TOOL_ENABLED)
+            .map((tool) => tool.name)
+        expect(offerti).toContain('library_list')
+        expect(offerti).toContain('library_search')
+    })
+
+    it('su NEGA spariscono, cosi il modello non promette cio che non fara', () => {
+        // Stessa regola dei tool web: «assente qui vuol dire assente per il
+        // modello». Offrire e poi rifiutare sarebbe peggio, perche' il modello
+        // annuncerebbe una ricerca e poi fallirebbe.
+        return createTalosToolset({ ...executionDeps(), libraryAccess: () => 'deny' as const })
+            .then((toolset) => {
+                const offerti = toolset
+                    .offer(TALOS_DEFAULT_TOOL_PERMISSIONS, TALOS_DEFAULT_AGENT_TOOL_ENABLED)
+                    .map((tool) => tool.name)
+                expect(offerti).not.toContain('library_list')
+                expect(offerti).not.toContain('library_search')
+            })
+    })
+
+    it('il booleano vecchio spento diventa CHIEDI, non nega', () => {
+        // Chi aveva spento l'interruttore aveva detto «non attaccarmela a ogni
+        // messaggio», non «mai guardarla». Trattarlo come `deny` toglierebbe a
+        // un utente esistente una capacita' che non ha mai rifiutato.
+        return createTalosToolset({ ...executionDeps(), libraryEnabled: () => false })
+            .then((toolset) => {
+                const offerti = toolset
+                    .offer(TALOS_DEFAULT_TOOL_PERMISSIONS, TALOS_DEFAULT_AGENT_TOOL_ENABLED)
+                    .map((tool) => tool.name)
+                expect(offerti).toContain('library_list')
+            })
     })
 })

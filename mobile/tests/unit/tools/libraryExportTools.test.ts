@@ -209,7 +209,7 @@ describe('library_export toolset boundary', () => {
                 bytesWritten: 3,
                 displayName: 'generated.pdf',
             })),
-            libraryEnabled: () => enabled,
+            libraryAccess: () => (enabled ? 'allow' as const : 'deny' as const),
         })
 
         expect(toolset.offer({ write: 'allow' }, TALOS_DEFAULT_AGENT_TOOL_ENABLED)

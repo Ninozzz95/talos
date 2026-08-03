@@ -142,6 +142,23 @@ export interface TalosMobileShellPreferences {
      *  not instructed to emit the marker and no capture runs. */
     library_autosave_generated: boolean
     /** Owner 2026-07-25: remembered Library view (grid gallery / list). */
+    /**
+     * Quanto accesso ha il MODELLO alla Libreria — owner 2026-08-03.
+     *
+     * Distinta da `library_context_enabled`, che governa l'iniezione
+     * AMBIENTALE («attacca la mia Libreria a ogni messaggio»): erano lo stesso
+     * interruttore, e spegnendo l'una si perdeva anche l'altra. Ne restava un
+     * modello capace di creare un documento nella Libreria e incapace di dire
+     * cosa contiene.
+     *
+     * Tre stati, la stessa grammatica di ogni altra autorizzazione dell'app:
+     * `allow` legge · `ask` legge chiedendo la prima volta, e il cartellino
+     * scrive QUESTA impostazione · `deny` non viene nemmeno offerto.
+     *
+     * Predefinito `ask`: non fa trapelare niente ed e' il pavimento sicuro —
+     * la stessa ragione per cui i permessi dei tool partono tutti da li'.
+     */
+    library_access: 'allow' | 'ask' | 'deny'
     library_view: 'grid' | 'list'
     /**
      * Owner 2026-07-30. Grouping by origin chat was a plain `ref`, so it reset
@@ -208,6 +225,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
      * already has `library_search` and can ask when it actually needs to.
      */
     library_autosave_generated: true,
+    library_access: 'ask',
     library_view: 'list',
     // Owner 2026-07-25 set grouping on; it just never survived a reopen.
     library_group_by_chat: true,
@@ -245,6 +263,12 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
             : DEFAULT_SHELL_PREFERENCES.library_autosave_generated,
         // Re-review 2026-07-25: this hardcoded 'grid' as the fallback, so the
         // documented 'list' default never shipped.
+        // Chi aveva il booleano ACCESO diventa `allow`; chi lo aveva spento
+        // diventa `ask` e non `deny`, perche' aveva detto «non attaccarmela a
+        // ogni messaggio», non «mai guardarla».
+        library_access: record.library_access === 'allow' || record.library_access === 'deny'
+            ? record.library_access
+            : (record.library_context_enabled === true ? 'allow' : DEFAULT_SHELL_PREFERENCES.library_access),
         library_view: record.library_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.library_view,
         library_group_by_chat: typeof record.library_group_by_chat === 'boolean'
             ? record.library_group_by_chat

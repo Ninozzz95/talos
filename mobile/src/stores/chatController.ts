@@ -654,6 +654,8 @@ export interface ChatControllerDeps {
             readonly tone: { readonly preset: TalosToneId }
             readonly shell?: {
                 readonly library_context_enabled?: boolean
+                /** I tool della Libreria seguono QUESTO, non l iniezione ambientale. */
+                readonly library_access?: 'allow' | 'ask' | 'deny'
                 readonly library_context_policy?: TalosLibraryContextPolicyV1 | null
                 readonly library_autosave_generated?: boolean
             /** Owner 2026-07-26: show technical codes, off in production. */
@@ -2368,6 +2370,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     // but a later tool call cannot walk around a switch the
                     // user has just turned off.
                     libraryEnabled: () => deps.settings.state.shell?.library_context_enabled === true,
+                    // I tool seguono il permesso a tre stati, non l'iniezione
+                    // ambientale: erano lo stesso interruttore, ed e' da li'
+                    // che veniva «non ho uno strumento per elencare la tua
+                    // Libreria».
+                    libraryAccess: () => deps.settings.state.shell?.library_access ?? 'ask',
                     libraryContextPolicy: policyToolSources,
                     /**
                      * F2 — making documents. Always available: unlike search it
