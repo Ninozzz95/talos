@@ -67,6 +67,35 @@ export function talosInstalledModelsView(
     return { models: kept, total: models.length }
 }
 
+/**
+ * Where a model sits, in the one word that differs between them.
+ *
+ * The row used to print the whole address in monospace, and on a phone that is
+ * three wrapped lines of which the first fifty characters —
+ * `/storage/emulated/0/Android/data/ai.talos.dev/files/models/` — are IDENTICAL
+ * for every model in the list. Five models cost fifteen lines to say one thing
+ * five times. What actually differs is the folder under `models/`: `imported`
+ * for a file handed over from the phone, the repository's own folder for
+ * anything downloaded.
+ *
+ * The exact address is not lost — it stays one tap away under ⋮ «Copia il
+ * percorso», which is also the only form of it anybody can use, since a
+ * forty-character string nobody can select is an address nobody can act on.
+ *
+ * An empty answer means "directly in the models root", and the caller shows
+ * nothing rather than inventing a folder name.
+ */
+export function talosModelFolder(path: string): string {
+    const parts = path.split('/').filter((part) => part.length > 0)
+    // The filename is already the first line of the row.
+    const folders = parts.slice(0, -1)
+    const root = folders.lastIndexOf('models')
+    if (root >= 0) return folders[root + 1] ?? ''
+    // Not under a `models` root at all — an unexpected layout, so answer with
+    // the immediate parent instead of pretending to know the scheme.
+    return folders[folders.length - 1] ?? ''
+}
+
 /** `3,2 GB` — the unit a person uses about a model, never bytes. */
 export function talosModelSize(bytes: number, locale: string): string {
     if (!Number.isFinite(bytes) || bytes <= 0) return '—'

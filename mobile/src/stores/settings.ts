@@ -11,6 +11,11 @@ import { reactive, readonly } from 'vue'
 import { Preferences } from '@capacitor/preferences'
 import type { TalosSearchSourceId } from '@/lib/search/searchSources'
 import type { TalosLibrarySort } from '@/lib/libraryGrouping'
+import {
+    TALOS_INSTALLED_MODEL_SORTS,
+    TALOS_INSTALLED_MODEL_SORT_DEFAULT,
+    type TalosInstalledModelSort,
+} from '@/lib/models/installedModels'
 import { TALOS_DEFAULT_CHAT_LAYOUT, sanitizeTalosChatLayout } from '@/lib/talosChatLayout'
 import {
     TALOS_DEFAULT_COMPOSER_PLUS,
@@ -147,6 +152,17 @@ export interface TalosMobileShellPreferences {
      */
     library_group_by_chat: boolean
     library_sort: TalosLibrarySort
+    /**
+     * How the Model Lab orders the models already on the phone.
+     *
+     * Remembered here rather than in the component for the reason
+     * `library_group_by_chat` is: a preference held in a plain `ref` is not a
+     * preference, it is a default that resets every time the panel closes. The
+     * Library learned that in July (debt P6) and there is no argument for the
+     * same list-ordering choice being durable in one room and amnesiac in the
+     * next.
+     */
+    models_sort: TalosInstalledModelSort
     /** Interface text size only; message prose has independent bubble_scale. */
     ui_font_scale: TalosFontScale
     /**
@@ -196,6 +212,9 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     // Owner 2026-07-25 set grouping on; it just never survived a reopen.
     library_group_by_chat: true,
     library_sort: 'recent',
+    // «Which one did I just download» — the question asked right after a
+    // download, and the only one the panel could not answer at all.
+    models_sort: TALOS_INSTALLED_MODEL_SORT_DEFAULT,
     ui_font_scale: TALOS_DEFAULT_FONT_SCALE,
     streaming_animation: 'typewriter',
     debug_diagnostics: false,
@@ -235,6 +254,12 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         library_sort: record.library_sort === 'oldest' || record.library_sort === 'name'
             ? record.library_sort
             : DEFAULT_SHELL_PREFERENCES.library_sort,
+        // Checked against the list the sorter actually knows, so a value from a
+        // future version — or a corrupt one — falls back instead of reaching
+        // the comparator as an order nobody implemented.
+        models_sort: TALOS_INSTALLED_MODEL_SORTS.includes(record.models_sort as TalosInstalledModelSort)
+            ? record.models_sort as TalosInstalledModelSort
+            : DEFAULT_SHELL_PREFERENCES.models_sort,
         ui_font_scale: parseTalosFontScale(record.ui_font_scale),
         streaming_animation: record.streaming_animation === 'fade' ? 'fade' : 'typewriter',
         // Fail closed: anything unrecognised is OFF, so a corrupt preference

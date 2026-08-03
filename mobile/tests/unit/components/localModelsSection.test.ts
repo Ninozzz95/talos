@@ -42,7 +42,32 @@ vi.mock('@/stores/localModels', () => ({
     talosForgetHuggingFaceToken: store.forgetToken,
 }))
 
+/**
+ * What is already on the phone. Left empty by default so every test written
+ * before this section keeps meeting the screen it was written against.
+ */
+const engine = vi.hoisted(() => ({
+    installed: [] as { path: string, name: string, bytes: number, modifiedAt: number }[],
+}))
+
+vi.mock('@/services/localEngine', () => ({
+    talosLocalEngineStatus: vi.fn(async () => null),
+    talosLocalInstalledModels: vi.fn(async () => ({ models: engine.installed, unreadable: [] })),
+}))
+
 import TalosMobileLocalModels from '@/components/talos/models/TalosMobileLocalModels.vue'
+import { useSettingsStore } from '@/stores/settings'
+
+const MODELS_ROOT = '/storage/emulated/0/Android/data/ai.talos.dev/files/models'
+
+function installed(name: string, folder: string) {
+    return {
+        path: `${MODELS_ROOT}/${folder}/${name}`,
+        name,
+        bytes: 2_600_000_000,
+        modifiedAt: 1_785_700_000_000,
+    }
+}
 
 function fit(over: Record<string, unknown> = {}) {
     return {
@@ -72,6 +97,32 @@ function set(over: Record<string, unknown> = {}) {
         security: 'safe',
         examination: { state: 'unread' },
         ...over,
+    }
+}
+
+function recommendation(family: string, displayName: string) {
+    return {
+        fits: true,
+        headroomBytes: 1_000_000_000,
+        entry: {
+            id: `${family}-${displayName}`,
+            family,
+            displayName,
+            publisher: 'unsloth',
+            license: 'apache-2.0',
+            paramsB: 4,
+            quantisation: 'Q4_K_M',
+            fileBytes: 2_600_000_000,
+            sha256: 'a'.repeat(64),
+            download: { kind: 'huggingface', repo: 'unsloth/x', file: 'x.gguf' },
+            runtime: ['llama.cpp'],
+            contextTokens: 32_768,
+            ramWorkingBytes: 3_100_000_000,
+            referenceSpeed: [],
+            tags: [],
+            addedAt: null,
+            popularity: 1,
+        },
     }
 }
 
@@ -109,6 +160,7 @@ function baseState(over: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+    engine.installed = []
     store.examine.mockClear()
     store.download.mockClear().mockResolvedValue({ ok: true })
     store.saveToken.mockClear()
@@ -135,6 +187,167 @@ async function searchScreen() {
     await flushPromises()
     return wrapper
 }
+
+/**
+ * Owner 2026-08-03, on this panel: «compattare ed economizzare gli spazi, per
+ * renderlo più navigabile». Not a coat of paint — a row that costs five lines
+ * to say four things pushes the list off the screen it is meant to fill.
+ */
+describe('the space a row is allowed to cost', () => {
+    it('drops the address every model shares and keeps the folder that differs', async () => {
+        engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
+        const wrapper = await screen()
+
+        const row = wrapper.get('[data-testid="talos-models-installed-row"]')
+        // The whole path used to be printed in monospace, wrapping to three
+        // lines whose first fifty characters are identical for every model.
+        expect(row.text()).not.toContain(MODELS_ROOT)
+        // What is left says which folder it is in — the only part that differs.
+        expect(row.text()).toContain('imported')
+        expect(row.text()).toContain('Qwen3-4B-Q4_K_M.gguf')
+    })
+
+    it('still hands over the exact address, under the row menu', async () => {
+        // Compacting is not hiding: the full string is one tap away, and a
+        // forty-character path nobody can select was never usable anyway.
+        // Proved end to end on the tablet 2026-08-03 — tapped, then pasted back
+        // out of the Android clipboard, character for character.
+        engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
+        const wrapper = await screen()
+
+        expect(wrapper.find('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').exists())
+            .toBe(true)
+    })
+
+    it('says the copy failed, now that the row no longer carries the path', async () => {
+        /**
+         * While the whole path was printed on the row, a copy that quietly
+         * failed cost nothing — you read it off the screen instead. It is not
+         * on the screen any more, so a silent failure would leave a menu item
+         * that does nothing and an address reachable by no other route.
+         */
+        const clipboard = { writeText: vi.fn(async () => { throw new Error('denied') }) }
+        Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true })
+        engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
+        const wrapper = await screen()
+
+        await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
+        await flushPromises()
+        // Teleported to the body so no ancestor's overflow can clip it, which
+        // puts it outside the wrapper's own tree.
+        const item = document.querySelector<HTMLElement>('[role="menuitem"]')
+        item?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await flushPromises()
+
+        const notice = wrapper.get('[data-testid="talos-models-copy-notice"]')
+        expect(notice.text()).toContain('clipboard would not take')
+    })
+
+    it('confirms the copy when it works, so the tap is not silent either', async () => {
+        const clipboard = { writeText: vi.fn(async () => undefined) }
+        Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true })
+        engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
+        const wrapper = await screen()
+
+        await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
+        await flushPromises()
+        // Teleported to the body so no ancestor's overflow can clip it, which
+        // puts it outside the wrapper's own tree.
+        const item = document.querySelector<HTMLElement>('[role="menuitem"]')
+        item?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await flushPromises()
+
+        // The outcome, not the call: what reached the clipboard is the exact
+        // path, and the screen says so.
+        expect(clipboard.writeText).toHaveBeenCalledWith(`${MODELS_ROOT}/imported/Qwen3-4B-Q4_K_M.gguf`)
+        expect(wrapper.get('[data-testid="talos-models-copy-notice"]').text()).toContain('Path copied')
+    })
+
+    it('draws no search, no sort and no layout switch over a single model', async () => {
+        engine.installed = [installed('solo.gguf', 'imported')]
+        const wrapper = await screen()
+
+        expect(wrapper.findAll('[data-testid="talos-models-installed-row"]')).toHaveLength(1)
+        expect(wrapper.find('[data-testid="talos-models-installed-search"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-models-installed-sort-recent"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-models-installed-layout"]').exists()).toBe(false)
+    })
+
+    it('brings them back as soon as there is more than one thing to order', async () => {
+        engine.installed = [installed('uno.gguf', 'imported'), installed('due.gguf', 'main')]
+        const wrapper = await screen()
+
+        expect(wrapper.find('[data-testid="talos-models-installed-search"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-models-installed-sort-recent"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-models-installed-layout"]').exists()).toBe(true)
+    })
+})
+
+describe('an ordering the panel is allowed to remember', () => {
+    /**
+     * It was a plain `ref` — the same defect the Library carried until July
+     * (debt P6). A preference that resets on every visit is not a preference,
+     * and there is no argument for the same list-ordering choice being durable
+     * in one room and amnesiac in the next.
+     */
+    it('opens on the order last chosen, not on the default', async () => {
+        const settings = useSettingsStore()
+        await settings.setShell({ models_sort: 'size' })
+        engine.installed = [installed('uno.gguf', 'imported'), installed('due.gguf', 'main')]
+
+        const wrapper = await screen()
+
+        expect(wrapper.get('[data-testid="talos-models-installed-sort-size"]').attributes('aria-checked'))
+            .toBe('true')
+        expect(wrapper.get('[data-testid="talos-models-installed-sort-recent"]').attributes('aria-checked'))
+            .toBe('false')
+    })
+
+    it('writes the choice where the Library writes its own', async () => {
+        const settings = useSettingsStore()
+        await settings.setShell({ models_sort: 'recent' })
+        engine.installed = [installed('uno.gguf', 'imported'), installed('due.gguf', 'main')]
+
+        const wrapper = await screen()
+        await wrapper.get('[data-testid="talos-models-installed-sort-name"]').trigger('click')
+        await flushPromises()
+
+        expect(settings.state.shell.models_sort).toBe('name')
+    })
+})
+
+describe('a catalogue row that does not say the same word twice', () => {
+    it('drops the family when the model name already begins with it', async () => {
+        store.state = baseState({
+            catalogue: {
+                state: 'ready', ageDays: null, fromCache: false, refusal: null,
+                recommended: [recommendation('Qwen3', 'Qwen3 4B Instruct')],
+                rejected: [],
+            },
+        }) as never
+        const wrapper = await screen()
+
+        const row = wrapper.get('[data-testid="talos-models-catalogue-row"]')
+        expect(row.text()).toContain('Qwen3 4B Instruct')
+        // A whole line per row spent repeating a word two lines above it.
+        expect(row.text().match(/Qwen3/g)).toHaveLength(1)
+    })
+
+    it('keeps it when the two are genuinely different', async () => {
+        // «Mistral» under a «Ministral 8B» is a fact about the model, not an
+        // echo of its name, so it survives the same rule that removed the echo.
+        store.state = baseState({
+            catalogue: {
+                state: 'ready', ageDays: null, fromCache: false, refusal: null,
+                recommended: [recommendation('Mistral', 'Ministral 8B')],
+                rejected: [],
+            },
+        }) as never
+        const wrapper = await screen()
+
+        expect(wrapper.get('[data-testid="talos-models-catalogue-row"]').text()).toContain('Mistral')
+    })
+})
 
 describe('what the phone is', () => {
     it('states the device the fit answers are about', async () => {

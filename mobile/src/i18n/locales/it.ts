@@ -1240,7 +1240,7 @@ export const TALOS_IT_MESSAGES = {
     localModels: {
         importFromDevice: 'Aggiungi un modello dal telefono',
         importing: 'Sto copiando il modello…',
-        importNote: 'Il file viene copiato qui dentro, quindi per qualche minuto occupa lo spazio due volte. Da quel momento funziona come uno scaricato.',
+        importNote: 'Viene copiato qui dentro: per qualche minuto occupa il doppio dello spazio.',
         importNotGguf: 'Quel file non è un modello GGUF. TALOS legge solo quel formato.',
         importNoSpace: 'Non c’è abbastanza spazio libero per copiarlo. Libera spazio e riprova.',
         importAlreadyHere: 'Un modello con questo nome è già su questo dispositivo.',
@@ -1249,6 +1249,8 @@ export const TALOS_IT_MESSAGES = {
         importFailed: 'La copia non è andata a buon fine. Il file a metà è stato tolto.',
         actionsFor: 'Altre azioni per {name}',
         copyPath: 'Copia il percorso',
+        pathCopied: 'Percorso copiato.',
+        pathCopyRefused: 'Gli appunti non hanno accettato il percorso. Riprova, o leggilo dalla cartella dei modelli.',
         installedTitle: 'Su questo dispositivo',
         installedCount: '{count} modelli',
         installedSearch: 'Cerca fra i modelli scaricati',
