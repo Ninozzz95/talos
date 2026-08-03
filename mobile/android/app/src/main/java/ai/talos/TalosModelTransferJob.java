@@ -72,12 +72,8 @@ public class TalosModelTransferJob extends JobService {
 
                     @Override
                     public void finished(String reason) {
-                        Notification ended = TalosTransferNotification.ended(
+                        TalosTransferNotification.announceEnd(
                                 TalosModelTransferJob.this, request.modelName, reason);
-                        NotificationManager manager = getSystemService(NotificationManager.class);
-                        if (manager != null) {
-                            manager.notify(TalosTransferNotification.NOTIFICATION_ID, ended);
-                        }
 
                         // "stopped" is the system taking the job away — thermal
                         // pressure, a constraint no longer met, a better moment

@@ -4242,6 +4242,45 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             runtime ??= await loadResearchRuntime()
             return runtime
         }
+
+        /**
+         * Say so when it ends, even if nobody is looking.
+         *
+         * A research takes minutes. The person starts it, locks the phone, and
+         * until today nothing at all told them it was over — so in practice
+         * they sat and watched it, which makes the background work we built
+         * worth precisely nothing.
+         *
+         * Attached HERE rather than inside the runtime because the runtime is
+         * pure of the device on purpose, and because both doors — start and
+         * resume — come through this facade. The failure path reads the run
+         * back from the journal: a drive that rejects has no run to hand over,
+         * and «si è fermata per un errore» is the message that matters most.
+         */
+        function announceWhenDone(id: string, running: Promise<import('@/lib/research/researchRun').TalosResearchRun>): void {
+            const announce = async (run: import('@/lib/research/researchRun').TalosResearchRun): Promise<void> => {
+                const [{ talosResearchDoneNotice }, notifier] = await Promise.all([
+                    import('@/lib/research/researchNarration'),
+                    import('@/services/doneNotification'),
+                ])
+                const notice = talosResearchDoneNotice(run)
+                if (!notice) return
+                await notifier.talosNotifyDone({
+                    id: notifier.TALOS_DONE_RESEARCH_ID,
+                    title: notice.title,
+                    text: deps.translate(notice.text.key, notice.text.params),
+                    route: notice.route,
+                })
+            }
+            void running.then(
+                (run) => announce(run),
+                async () => {
+                    const run = (await (await ready()).all()).find((entry) => entry.id === id)
+                    if (run) await announce(run)
+                },
+            ).catch(() => undefined)
+        }
+
         return {
             /**
              * The live index over the runs. A screen SUBSCRIBES to this rather
@@ -4294,6 +4333,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 // The journal already records what failed; this keeps the
                 // process quiet about it.
                 running.catch(() => undefined)
+                announceWhenDone(id, running)
                 return { id, running }
             },
             /**
@@ -4339,6 +4379,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     onProgress?.(progress)
                 }).finally(() => registry.close(runId))
                 running.catch(() => undefined)
+                announceWhenDone(runId, running)
                 return { id: runId, running }
             },
             async unfinished() {

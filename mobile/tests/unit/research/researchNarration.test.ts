@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { talosResearchNarration, talosResearchStepTitle } from '@/lib/research/researchNarration'
+import {
+    talosResearchDoneNotice,
+    talosResearchNarration,
+    talosResearchStepTitle,
+} from '@/lib/research/researchNarration'
 import type { TalosResearchRun, TalosResearchStatus, TalosResearchStep } from '@/lib/research/researchRun'
 
 /**
@@ -188,5 +192,55 @@ describe('the name a step carries in the record', () => {
             .toBe('research.stepTitle.searchPlain')
         expect(talosResearchStepTitle(run(), step({ branchId: 'ghost', kind: 'read' })).key)
             .toBe('research.stepTitle.readPlain')
+    })
+})
+
+/**
+ * The announcement when it ends, or the deliberate silence.
+ *
+ * A research takes minutes. The person starts it, locks the phone, and until
+ * today nothing told them it was over — so in practice they sat and watched it,
+ * which makes the background work worth nothing.
+ */
+describe('what to say when a research ends', () => {
+    const written = step({
+        id: 'synthesis', branchId: 'synthesis', kind: 'synthesise', state: 'done', resultRef: 'file-report',
+    })
+
+    it('says nothing at all while it is still going', () => {
+        expect(talosResearchDoneNotice(run({ status: 'collecting' }))).toBeNull()
+        expect(talosResearchDoneNotice(run({ status: 'paused' }))).toBeNull()
+        expect(talosResearchDoneNotice(run({ status: 'pause_requested' }))).toBeNull()
+    })
+
+    it('stays silent about a research the person cancelled themselves', () => {
+        // Telling them it stopped is the app repeating their own action back at
+        // them, and every notification like that makes the next one easier to
+        // swipe away unread.
+        expect(talosResearchDoneNotice(run({ status: 'cancelled' }))).toBeNull()
+    })
+
+    it('carries the address of THIS research, not of the app', () => {
+        const notice = talosResearchDoneNotice(run({ status: 'done', steps: [written] }))
+        expect(notice?.route).toBe('/research/run-1')
+    })
+
+    it('speaks in the person’s own words, and says the same thing the page says', () => {
+        const notice = talosResearchDoneNotice(run({ status: 'done', steps: [written] }))
+        expect(notice?.title).toBe('chi ha inventato la moka')
+        expect(notice?.text.key).toBe('research.say.done')
+    })
+
+    it('prefers a title the person chose over the question they typed', () => {
+        const renamed = run({ status: 'done', title: 'La moka', steps: [written] })
+        expect(talosResearchDoneNotice(renamed)?.title).toBe('La moka')
+    })
+
+    it('does not announce a report that was never written', () => {
+        // Same status, different situation — and «conclusa» on the lock screen
+        // for a run with nothing to read is the 2026-08-03 hunt all over again.
+        expect(talosResearchDoneNotice(run({ status: 'done', steps: [] }))?.text.key)
+            .toBe('research.doneNoReport')
+        expect(talosResearchDoneNotice(run({ status: 'failed' }))?.text.key).toBe('research.say.failed')
     })
 })

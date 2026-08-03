@@ -73,17 +73,13 @@ public class TalosModelTransferService extends Service {
 
                         @Override
                         public void finished(String reason) {
-                            Notification ended = TalosTransferNotification.ended(
-                                    TalosModelTransferService.this, request.modelName, reason);
                             // Detach first, then post: stopping the service with
                             // the notification attached takes the outcome off
                             // screen, and a download that fails silently in a
                             // pocket is one the user believes finished.
                             stopForeground(STOP_FOREGROUND_DETACH);
-                            NotificationManager manager = getSystemService(NotificationManager.class);
-                            if (manager != null) {
-                                manager.notify(TalosTransferNotification.NOTIFICATION_ID, ended);
-                            }
+                            TalosTransferNotification.announceEnd(
+                                    TalosModelTransferService.this, request.modelName, reason);
                             TalosTransferSession.end();
                             stopSelf();
                         }

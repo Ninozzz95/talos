@@ -34,6 +34,7 @@ import {
     talosStationExit,
     type TalosStationEntry,
 } from '@/lib/backNavigation'
+import { talosOnNotificationRoute, talosTakeLaunchRoute } from '@/services/doneNotification'
 import { talosOverlayBackActive, handleTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { talosLightImpact } from '@/services/haptics'
 import { Capacitor } from '@capacitor/core'
@@ -498,6 +499,7 @@ const activeCleanupPlan = computed<TalosSessionCleanupPlan>(() => {
 
 let lifecycle: NativeLifecycleController | null = null
 let resumeRelock: TalosResumeRelockController | null = null
+let stopNotificationRoutes: (() => void) | null = null
 
 const activeRoute = computed<TalosMobileRouteName>(() => {
     const match = TALOS_MOBILE_ROUTES.find((entry) => entry.name === route.name)
@@ -517,6 +519,28 @@ watch(activeRoute, (to, from) => {
     stationEntry.value = talosStationEntryAfter(stationEntry.value, { to, from, viaSidebar: enteringViaSidebar })
     enteringViaSidebar = false
 })
+
+/**
+ * Where a tapped notification lands.
+ *
+ * The address travels on the notification itself, so this stays a dumb router
+ * push: the thing that finished knows which page it belongs to, and nothing
+ * here has to guess from a title. The query survives because the Model Lab is
+ * `/settings?tab=models` rather than a route of its own.
+ *
+ * The sidebar closes on the way. Arriving from outside the app with the main
+ * menu open over the page you asked for would be the notification landing
+ * somewhere you then have to navigate out of.
+ */
+async function followNotificationRoute(target: string): Promise<void> {
+    const [path, search] = target.split('?')
+    if (!path) return
+    sidebarOpen.value = false
+    await router.push({
+        path,
+        query: search ? Object.fromEntries(new URLSearchParams(search)) : {},
+    }).catch(() => undefined)
+}
 
 /** Back at a station top: undo the move that brought you here. */
 function leaveStation(): void {
@@ -624,6 +648,16 @@ onMounted(async () => {
         && !(tabletLayout.isTablet.value && lastRoute === 'chats')) {
         await router.replace(pathFor(lastRoute))
     }
+    /**
+     * A notification tapped while the app was closed, taken AFTER the remembered
+     * route is restored — restoring it afterwards would overwrite the very page
+     * the person asked for by tapping.
+     */
+    const launched = await talosTakeLaunchRoute()
+    if (launched) await followNotificationRoute(launched)
+    // And one tapped while the app was already up, which arrives as an event
+    // because there is nobody to ask at that point.
+    stopNotificationRoutes = talosOnNotificationRoute((target) => { void followNotificationRoute(target) })
     if (!disabled.has('lifecycle')) {
         // R1-3 — the PIN protected only cold boots; the everyday path is a
         // resumed resident app. Re-arm the lock after a real background stay.
@@ -702,6 +736,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(async () => {
+    stopNotificationRoutes?.()
     await resumeRelock?.dispose()
     await lifecycle?.dispose()
 })
