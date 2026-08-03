@@ -30,7 +30,7 @@ import { talosResearchNarration, talosResearchStepTitle } from '@/lib/research/r
 import { talosPublishedOn } from '@/lib/publishedDate'
 import { useRoute, useRouter } from 'vue-router'
 import { TabsContent } from 'reka-ui'
-import { AlertTriangle, ChevronRight, Download, Pause, Play, RotateCcw } from '@lucide/vue'
+import { AlertTriangle, ChevronRight, Download, MessageSquare, Pause, Play, RotateCcw } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
@@ -276,6 +276,28 @@ async function runRecheck(): Promise<void> {
     }
 }
 
+/**
+ * Leave for a chat about this research — an actual one.
+ *
+ * Owner 2026-08-03: «deve partire fisicamente una chat … esattamente come una
+ * chat nuova, non deve essere nella pagina della ricerca». The navigation is
+ * the point as much as the session is: the report page is not where a
+ * conversation belongs, so this ends by leaving it.
+ */
+const openingChat = ref(false)
+async function openChat(): Promise<void> {
+    if (openingChat.value) return
+    openingChat.value = true
+    try {
+        await controller.research.openChat(runId.value)
+        await router.push({ name: 'chat' })
+    } catch (failure) {
+        error.value = failure instanceof Error ? failure.message : String(failure)
+    } finally {
+        openingChat.value = false
+    }
+}
+
 async function exportReport(): Promise<void> {
     const fileId = current.value ? (await import('@/lib/research/researchCard'))
         .talosResearchReportRefOf(current.value) : null
@@ -513,6 +535,12 @@ function openSource(index: number): void {
                         <Button data-testid="talos-research-export" variant="outline" @click="exportReport()">
                             <Download class="h-4 w-4" aria-hidden="true" />
                             {{ exported ? t('research.exported') : t('research.export') }}
+                        </Button>
+                        <!-- Leaves this page on purpose: a conversation does not
+                             belong inside a report. -->
+                        <Button data-testid="talos-research-open-chat" variant="outline" :disabled="openingChat" @click="openChat()">
+                            <MessageSquare class="h-4 w-4" aria-hidden="true" />
+                            {{ openingChat ? t('research.openingChat') : t('research.openChat') }}
                         </Button>
                     </div>
 

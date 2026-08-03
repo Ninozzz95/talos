@@ -886,6 +886,12 @@ export interface ChatController {
         rename(runId: string, title: string | null): Promise<import('@/lib/research/researchRun').TalosResearchRun>
         /** Delete a research and the dossiers it wrote. Returns the vault ids removed. */
         remove(runId: string): Promise<readonly string[]>
+        /**
+         * A real chat session, named after the research, with the report
+         * attached — visible in the composer and removable. Not the follow-up
+         * box: that answers from the passages without spending again.
+         */
+        openChat(runId: string): Promise<void>
     }
     memories: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalMemory[]>
@@ -4495,6 +4501,51 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     import('@/lib/research/researchReport'),
                 ])
                 return file?.extracted_text ? talosResearchParseReport(file.extracted_text) : null
+            },
+
+            /**
+             * Talk about a research in a chat — a REAL one.
+             *
+             * Owner 2026-08-03: «quando in fondo voglio fare partire un'altra
+             * chat, deve partire fisicamente una chat, ma col contesto della
+             * ricerca. Deve essere esattamente come una chat nuova, non deve
+             * essere nella pagina della ricerca». So this is not the follow-up
+             * box at the bottom of the report — that one stays, and answers
+             * from the passages on disk without spending again. This is the
+             * other thing: a session of its own, with the report in it.
+             *
+             * The competitor research (2026-08-03, §2.9) looked for this in all
+             * five products and found nobody doing it: they all continue inside
+             * the original thread. So there is no model to copy, and the choice
+             * is ours — the report goes in as an ATTACHMENT, visible in the
+             * composer and removable, rather than as invisible context. A
+             * person who cannot see what the model was given cannot judge the
+             * answer, and a context they cannot remove is one they cannot
+             * refuse. It is also the same rule the Library already follows:
+             * what comes in is data, never instructions.
+             *
+             * The session is renamed to the research, because a chat called
+             * "New chat" is one you cannot find again tomorrow.
+             */
+            async openChat(runId: string): Promise<void> {
+                const [{ talosResearchReportRefOf }, runs] = await Promise.all([
+                    import('@/lib/research/researchCard'),
+                    (await ready()).all(),
+                ])
+                const run = runs.find((entry) => entry.id === runId)
+                if (!run) throw new Error('TALOS_RESEARCH_RUN_UNKNOWN')
+
+                const fileId = talosResearchReportRefOf(run)
+                const file = fileId ? await deps.chatRepository.getVaultFile(fileId) : null
+                if (!file) throw new Error('TALOS_RESEARCH_NO_REPORT')
+
+                // The new session FIRST: starting one revokes the attachments of
+                // the last, so attaching before it would hand the report to a
+                // chat and then take it away again.
+                await sessionLifecycle.newSession()
+                const opened = chat.activeSession.value
+                if (opened) await sessionLifecycle.renameSession(opened.id, run.title ?? run.question)
+                await attachments.attachExisting(file)
             },
         }
     })()
