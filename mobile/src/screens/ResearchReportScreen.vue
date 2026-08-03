@@ -18,9 +18,16 @@
  * read. Each row leads further in, because the claim and the source are the two
  * places where our evidence work is actually visible.
  */
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { talosResearchIsTerminal } from '@/lib/research/researchRun'
 import { talosResearchReportRefOf } from '@/lib/research/researchCard'
+import {
+    TALOS_RESEARCH_NO_STANDING,
+    talosResearchDuration,
+    talosResearchElapsedSeconds,
+    talosResearchOutline,
+    talosResearchPhaseOf,
+} from '@/lib/research/researchOutline'
 import { useRoute, useRouter } from 'vue-router'
 import { TabsContent } from 'reka-ui'
 import { AlertTriangle, ChevronRight, Download, Play, RotateCcw } from '@lucide/vue'
@@ -108,6 +115,42 @@ const solidity = computed(() => {
 const judge = computed(() => report.value?.judge ?? null)
 
 const steps = computed(() => current.value?.steps ?? [])
+
+/**
+ * The operating header, and the document's own shape — both entirely local.
+ *
+ * The visual research of 2026-08-03 found that none of the five products
+ * documents the first half-second of a run, and that is precisely why this
+ * matters: we already know what to draw. The plan was approved before a penny
+ * was spent, so its branches ARE the report's sections, and the header can say
+ * where the run is from the instant it starts. Nothing here waits for disk or
+ * network, so the first frame cannot be late.
+ */
+const outline = computed(() => (current.value ? talosResearchOutline(current.value) : []))
+const phase = computed(() => (current.value ? talosResearchPhaseOf(current.value) : 'planning'))
+
+/**
+ * The clock ticks from a timestamp on the RUN, not from a timer started when
+ * this screen mounted: a research outlives every screen that watches it, and a
+ * duration owned by a component would restart each time somebody looked.
+ */
+const nowIso = ref(new Date().toISOString())
+let clock: ReturnType<typeof setInterval> | null = null
+onMounted(() => { clock = setInterval(() => { nowIso.value = new Date().toISOString() }, 1000) })
+onBeforeUnmount(() => { if (clock !== null) clearInterval(clock) })
+
+const elapsed = computed(() => (current.value
+    ? talosResearchDuration(talosResearchElapsedSeconds(current.value, nowIso.value))
+    : null))
+
+/**
+ * Shown from the first frame WITH ZEROS IN IT, before there is anything to
+ * count. It is the one number that says what this product is for, and a page
+ * that reveals it only at the end teaches the reader to look for something else
+ * meanwhile — which is exactly how every competitor ends up leading with the
+ * number of sources.
+ */
+const balance = computed(() => standing.value ?? TALOS_RESEARCH_NO_STANDING)
 
 const failedSteps = computed(() => current.value?.steps.filter((step) => step.state === 'failed') ?? [])
 
@@ -251,21 +294,39 @@ function openSource(index: number): void {
                 <!-- The balance first. What a report claims is worth less than
                      whether the claims stood, and every competitor leads with
                      the opposite. -->
-                <section v-if="standing" data-testid="talos-research-balance" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4">
+                <!--
+                    The operating header. State in a word, how long it has been
+                    going, and how far — the three things a person checks before
+                    deciding whether to wait. Sticky, because on a phone the
+                    answer to "what is it doing" must not require scrolling back
+                    up through a report.
+                -->
+                <header data-testid="talos-research-header" class="sticky top-0 z-10 -mx-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-[var(--talos-border)] bg-[var(--talos-background)] px-4 pb-2 pt-1">
+                    <span
+                        class="font-mono text-2xs uppercase tracking-wide"
+                        :class="phase === 'ended' ? 'text-[var(--talos-muted)]' : 'text-[var(--talos-accent)]'"
+                    >{{ t(`research.phase.${phase}`) }}</span>
+                    <span v-if="elapsed" data-testid="talos-research-elapsed" class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ elapsed }}</span>
+                    <span v-if="progress && progress.total > 0" class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
+                        {{ progress.done }}/{{ progress.total }}
+                    </span>
+                </header>
+
+                <section data-testid="talos-research-balance" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4">
                     <p class="flex items-baseline gap-2">
-                        <span class="text-3xl font-semibold tabular-nums text-[var(--talos-text)]">{{ solidity }}%</span>
+                        <span class="text-3xl font-semibold tabular-nums text-[var(--talos-text)]">{{ solidity === null ? '—' : `${solidity}%` }}</span>
                         <span class="text-xs text-[var(--talos-muted)]">{{ t('research.solidity') }}</span>
                     </p>
                     <p data-testid="talos-research-standing" class="mt-2 font-mono text-2xs leading-5 tabular-nums text-[var(--talos-muted)]">
                         {{ t('research.standing', {
-                            supported: standing.supported,
-                            total: standing.total,
-                            partial: standing.partial,
-                            unsupported: standing.unsupported,
-                            unchecked: standing.unchecked,
+                            supported: balance.supported,
+                            total: balance.total,
+                            partial: balance.partial,
+                            unsupported: balance.unsupported,
+                            unchecked: balance.unchecked,
                         }) }}
                     </p>
-                    <p class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">
+                    <p v-if="report" class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">
                         <template v-if="judge">{{ t('research.verifiedByLead') }} <span data-testid="talos-research-judge" class="break-all font-mono">{{ judge }}</span></template>
                         <template v-else>{{ t('research.notVerified') }}</template>
                     </p>
@@ -338,6 +399,32 @@ function openSource(index: number): void {
                     its reference lost: «conclusa senza scrivere il rapporto»
                     was all the page could say, and a person cannot report that.
                 -->
+                <!--
+                    The document, before it exists: one section per approved
+                    branch, each saying where it is. This is the answer to the
+                    question the visual research found NOBODY answering — what to
+                    draw in the first half-second — and it costs nothing, because
+                    the plan was agreed before any money was spent.
+                -->
+                <section v-if="!report && outline.length" data-testid="talos-research-outline" class="flex flex-col gap-2">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.expectedSections') }}</p>
+                    <div
+                        v-for="(section, index) in outline"
+                        :key="section.id"
+                        data-testid="talos-research-outline-section"
+                        class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3"
+                    >
+                        <p class="flex items-baseline gap-2">
+                            <span class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ index + 1 }}</span>
+                            <span class="min-w-0 flex-1 text-sm leading-5 text-[var(--talos-text)]">{{ section.question }}</span>
+                        </p>
+                        <p
+                            class="mt-1 font-mono text-2xs"
+                            :class="section.state === 'failed' ? 'text-[var(--talos-danger)]' : 'text-[var(--talos-muted)]'"
+                        >{{ t(`research.stepState.${section.state}`) }}</p>
+                    </div>
+                </section>
+
                 <details v-if="steps.length" data-testid="talos-research-activity" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]" :open="!report">
                     <summary class="talos-pressable min-h-11 cursor-pointer list-none px-3 py-3 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
                         {{ t('research.activity') }}
