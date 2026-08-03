@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
     TALOS_PERMISSION_ROWS,
+    talosBackgroundExtraSteps,
     talosPermissionLabel,
     talosPermissionAction,
     visibleTalosPermissionRows,
@@ -35,12 +36,23 @@ describe('what the screen may claim', () => {
 
     it('says plainly which rows are not permissions at all', () => {
         // Files are reached through the system picker, which needs no
-        // permission; the foreground service is granted at install. Presenting
-        // either as something the user can toggle would be a lie.
+        // permission. Presenting that as something the user can toggle would be
+        // a lie.
         const files = TALOS_PERMISSION_ROWS.find((row) => row.id === 'files')!
         expect(files.kind).toBe('none')
-        const background = TALOS_PERMISSION_ROWS.find((row) => row.id === 'background')!
-        expect(background.kind).toBe('install')
+
+        /**
+         * `background` era qui, e diceva `install`.
+         *
+         * Questo test codificava la stessa affermazione falsa della schermata —
+         * «concessa all'installazione, non toglibile» — e quindi la difendeva
+         * invece di sorvegliarla. Il permesso `FOREGROUND_SERVICE` in effetti è
+         * concesso all'installazione; solo che **non basta**, ed è l'esenzione
+         * dal risparmio energetico a decidere se il lavoro lungo arriva in
+         * fondo. Misurato sul OnePlus 13 il 2026-08-03: senza, tre morti su tre.
+         *
+         * La riga vive adesso nel gruppo qui sotto, come `exemption`.
+         */
     })
 
     it('explains each one in terms of the feature and the boundary', () => {
@@ -98,5 +110,47 @@ describe('which rows a given device sees', () => {
         expect(rows.map((row) => row.id)).toEqual([
             'microphone', 'notifications', 'appLock', 'files', 'background', 'network',
         ])
+    })
+})
+
+describe('la riga che decide se il lavoro lungo arriva in fondo', () => {
+    /**
+     * Owner 2026-08-03. La riga diceva: «Long tasks keep going when you leave
+     * the app. Granted when TALOS was installed - Android does not ask for this
+     * one, and it cannot be turned off from here.» Tutte e tre le affermazioni
+     * false, e smentite da una misura: sul OnePlus 13 una Deep Research muore
+     * tre volte su tre appena si blocca lo schermo, malgrado il foreground
+     * service; con l esenzione si conclude da sola in 1 min 04 s.
+     *
+     * Era la forma peggiore di difetto in una schermata permessi: rassicurava
+     * proprio sulla voce da cui dipende tutto il lavoro lungo, quindi nessuno
+     * andava a cercarla.
+     */
+    it('non e concessa all installazione, e non lo dice piu', () => {
+        const row = TALOS_PERMISSION_ROWS.find((entry) => entry.id === 'background')!
+        expect(row.kind).toBe('exemption')
+        expect(row.kind).not.toBe('install')
+        expect(row.purpose).not.toContain('Granted when TALOS was installed')
+        expect(row.purpose).not.toContain('cannot be turned off')
+    })
+
+    it('offre i passi in piu solo dove esistono davvero', () => {
+        // ColorOS gira su tutti e tre i marchi: OPPO possiede OnePlus e realme.
+        for (const maker of ['oneplus', 'OnePlus', 'oppo', 'realme']) {
+            expect(talosBackgroundExtraSteps(maker).length).toBeGreaterThan(0)
+        }
+        // Niente per gli altri: una lista inventata farebbe cercare voci che su
+        // quel telefono non esistono, e chi cerca crede di aver sbagliato lui.
+        expect(talosBackgroundExtraSteps('google')).toEqual([])
+        expect(talosBackgroundExtraSteps('')).toEqual([])
+    })
+
+    it('nomina l avvio automatico, che e il passo che l intent non copre', () => {
+        // Chiavi e non frasi: scritte a mano nel modulo, i passi comparivano in
+        // inglese dentro un app in italiano — proprio le istruzioni che qualcuno
+        // deve poter seguire alla lettera. Visto sul tablet il 2026-08-03.
+        const steps = talosBackgroundExtraSteps('oneplus')
+        expect(steps).toContain('privacyPermissions.makerSteps.colorosAutoLaunch')
+        for (const key of steps) expect(key.startsWith('privacyPermissions.')).toBe(true)
     })
 })

@@ -301,6 +301,22 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- La casella senza la quale niente di lungo arriva in fondo.
+
+         Misurato sul OnePlus 13 il 2026-08-03: il foreground service `dataSync`
+         qui sopra è dichiarato e attivo, e NON basta — ColorOS congela comunque
+         la WebView appena l'app va in background («OplusHansManager … enter
+         SM»), e una Deep Research muore tre volte su tre. Con l'esenzione si
+         conclude da sola in 1 min 04 s.
+
+         Il permesso serve per poter aprire il dialogo DIRETTO
+         (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, un tocco) invece della
+         sola lista di sistema in cui l'app va cercata fra tutte. La
+         documentazione lo riserva ai casi in cui «the core function of the app
+         is adversely affected», con «task automation apps» fra quelli ammessi:
+         per TALOS non è un'interpretazione, è la misura qui sopra. E la app non
+         passa dal Play Store, quindi quella policy non ci vincola comunque. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- The download that must not be cut short. From Android 15 a dataSync
          foreground service is killed after six hours a day, which a 4 GB model
          on a slow link genuinely reaches; a user-initiated data transfer job

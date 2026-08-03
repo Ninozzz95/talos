@@ -412,6 +412,12 @@ export const TALOS_IT_MESSAGES = {
         grantedAtInstall: 'Concessa all’installazione',
         allowSteps: 'Per consentirlo: apri le impostazioni di sistema, tocca Autorizzazioni, quindi attiva {permission}.',
         openSystemSettings: 'Apri impostazioni di sistema',
+        makerStepsTitle: 'Passi in più chiesti da questo telefono',
+        makerSteps: {
+                colorosAutoLaunch: 'Impostazioni → App → Avvio automatico: attivalo per TALOS.',
+                colorosDeepOptimisation: 'Impostazioni → Batteria → Ottimizzazione batteria → ⋮ → Avanzate: disattiva «Ottimizzazione profonda» e «Ottimizzazione standby».',
+                colorosLockRecents: 'Nei recenti, tieni premuta la scheda di TALOS e tocca il lucchetto.',
+        },
         allow: 'Consenti',
         states: {
             granted: 'Consentito',
@@ -438,7 +444,7 @@ export const TALOS_IT_MESSAGES = {
             },
             background: {
                 title: 'Esecuzione in background',
-                purpose: 'Le attività lunghe continuano quando lasci l’app. Concessa installando TALOS: Android non la richiede e non può essere disattivata da qui.',
+                purpose: 'Le attività lunghe — una ricerca, lo scaricamento di un modello — vanno avanti dopo che esci dall’app o blocchi lo schermo. Senza, il telefono sospende TALOS in pochi secondi e il lavoro è perso: è questa l’impostazione che lo decide.',
             },
             network: {
                 title: 'Accesso alla rete',

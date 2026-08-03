@@ -1,11 +1,13 @@
 package ai.talos;
 
+import android.annotation.SuppressLint;
 import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.provider.Settings;
 
 import androidx.core.app.NotificationManagerCompat;
@@ -61,7 +63,40 @@ public class TalosDevicePermissionsPlugin extends Plugin {
             result.put("notificationsRuntime", true);
         }
         result.put("microphone", micState());
+        /**
+         * L'esenzione dal risparmio energetico, che è LA voce di questa pagina.
+         *
+         * Misurato sul OnePlus 13 il 2026-08-03: senza, ColorOS congela la
+         * WebView appena l'app va in background — «OplusHansManager … enter SM»
+         * — e una Deep Research muore tre volte su tre; con l'esenzione si
+         * conclude da sola in 1 min 04 s. Il foreground service `dataSync` è
+         * dichiarato e attivo e NON basta: è l'OEM a decidere.
+         *
+         * Riletta a ogni chiamata, mai ricordata. La documentazione di OnePlus
+         * dice che il sistema **riazzera da solo** questa impostazione — «OnePlus
+         * randomly reverts Battery Optimization settings, requiring users to
+         * periodically re-verify» — quindi un valore messo in cache all'avvio
+         * sarebbe una promessa che scade senza avvisare.
+         */
+        result.put("batteryExempt", isBatteryExempt());
+        /**
+         * Chi ha fabbricato il telefono, perché i passi in più li decide lui.
+         *
+         * Su OnePlus/ColorOS l'esenzione non basta da sola: servono anche
+         * l'avvio automatico e il blocco nei recenti, che stanno in menu del
+         * produttore senza intent pubblico. La pagina non può indovinare: le
+         * serve sapere davanti a quale telefono sta per poter dire i passi
+         * giusti invece di quelli generici.
+         */
+        result.put("manufacturer", Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.toLowerCase());
         call.resolve(result);
+    }
+
+    /** Vero quando Android ha smesso di sospendere questa app. */
+    private boolean isBatteryExempt() {
+        PowerManager power = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+        if (power == null) return false;
+        return power.isIgnoringBatteryOptimizations(getContext().getPackageName());
     }
 
     private String micState() {
@@ -124,6 +159,61 @@ public class TalosDevicePermissionsPlugin extends Plugin {
             call.resolve(new JSObject().put("opened", true));
         } catch (Exception error) {
             openAppSettings(call);
+        }
+    }
+
+    /**
+     * Chiede l'esenzione dal risparmio energetico — la casella che rende
+     * funzionante tutto ciò che dura più di uno schermo acceso.
+     *
+     * Due intent, e la scelta fra i due non è arbitraria. La documentazione
+     * Android ne descrive uno che apre il **dialogo diretto**
+     * (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, un tocco) e uno che apre
+     * la **lista di sistema** (`ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`,
+     * dove l'app va cercata fra tutte). Il primo è riservato ai casi in cui
+     * «the core function of the app is adversely affected», con «task
+     * automation apps» fra quelli ammessi.
+     *
+     * TALOS ci sta dentro, e non per interpretazione: è misurato. Senza
+     * esenzione una Deep Research muore tre volte su tre appena si blocca lo
+     * schermo, e un download da 4 GB con lei. In più TALOS non passa dal Play
+     * Store ([[distribution-off-play-store]]), quindi quella policy non ci
+     * vincola comunque — ma la ragione per cui la rispetteremmo c'è lo stesso.
+     *
+     * Il secondo intent resta come rete: se il costruttore ha tolto il dialogo
+     * diretto, meglio la lista di sistema con tre istruzioni accanto che un
+     * pulsante che non fa niente.
+     *
+     * Non risponde MAI «concesso»: risponde «aperto». Quello che l'utente ha
+     * scelto si legge da `state()` al ritorno, perché è il sistema a saperlo e
+     * non noi — e una schermata che dicesse «fatto» senza verificare sarebbe
+     * peggio di una che non chiede.
+     */
+    @PluginMethod
+    public void requestBatteryExemption(PluginCall call) {
+        if (isBatteryExempt()) {
+            call.resolve(new JSObject().put("opened", false).put("alreadyExempt", true));
+            return;
+        }
+        JSObject result = new JSObject().put("alreadyExempt", false);
+        try {
+            @SuppressLint("BatteryLife")
+            Intent direct = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            direct.setData(Uri.parse("package:" + getContext().getPackageName()));
+            direct.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(direct);
+            call.resolve(result.put("opened", true).put("route", "dialog"));
+        } catch (Exception noDialog) {
+            try {
+                Intent list = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                list.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(list);
+                call.resolve(result.put("opened", true).put("route", "list"));
+            } catch (Exception noList) {
+                // Nessuna delle due schermate esiste. Non è un errore su cui
+                // l'utente possa agire, ed è la pagina a portare le istruzioni.
+                call.resolve(result.put("opened", false).put("route", "none"));
+            }
         }
     }
 

@@ -409,6 +409,12 @@ export const TALOS_EN_MESSAGES = {
         grantedAtInstall: 'Granted at install',
         allowSteps: 'To allow it: open the system settings, tap Permissions, then turn on {permission}.',
         openSystemSettings: 'Open system settings',
+        makerStepsTitle: 'Extra steps this phone asks for',
+        makerSteps: {
+                colorosAutoLaunch: 'Settings → Apps → Auto-launch: turn it on for TALOS.',
+                colorosDeepOptimisation: 'Settings → Battery → Battery optimisation → ⋮ → Advanced: turn off “Deep optimisation” and “Sleep standby optimisation”.',
+                colorosLockRecents: 'In Recents, hold the TALOS card and tap the lock.',
+        },
         allow: 'Allow',
         states: {
             granted: 'Allowed',
@@ -435,7 +441,7 @@ export const TALOS_EN_MESSAGES = {
             },
             background: {
                 title: 'Running in the background',
-                purpose: 'Long tasks keep going when you leave the app. Granted when TALOS was installed — Android does not ask for this one, and it cannot be turned off from here.',
+                purpose: 'Long tasks — a research, a model download — keep going after you leave the app or lock the screen. Without it the phone suspends TALOS within seconds and the work is lost: this is the setting that decides it.',
             },
             network: {
                 title: 'Network access',
