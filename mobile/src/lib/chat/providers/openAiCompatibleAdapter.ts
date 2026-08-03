@@ -21,6 +21,7 @@ import {
     requireHttpSuccess,
     requireProviderApiKey,
 } from '@/lib/chat/providerErrors'
+import { talosNumericUsage } from '@/lib/chat/providers/usage'
 
 const modelSchema = z.object({
     id: z.string().min(1),
@@ -123,14 +124,6 @@ function openAiTurnContent(turn: TalosMobileCompletionInput['turns'][number]): s
         }
     }
     return content
-}
-
-function numericUsage(usage: Record<string, unknown> | undefined): Record<string, number> | null {
-    if (!usage) return null
-    const entries = Object.entries(usage).filter(
-        (entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]),
-    )
-    return entries.length ? Object.fromEntries(entries) : null
 }
 
 function requestTimeouts(credential: TalosMobileProviderCredential): { connectTimeout: number; readTimeout: number } | Record<string, never> {
@@ -284,7 +277,7 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 text,
                 model: parsed.data.model ?? input.model.id,
                 finishReason: choice.finish_reason ?? null,
-                usage: numericUsage(parsed.data.usage),
+                usage: talosNumericUsage(parsed.data.usage),
                 ...(toolCalls.length ? { toolCalls } : {}),
             }
         },
