@@ -5,11 +5,30 @@ import { nextTick, reactive, ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import { TALOS_MOBILE_ROUTES } from '@/lib/mobileRoutes'
-import { __resetSettingsStoreForTests } from '@/stores/settings'
+import { __resetSettingsStoreForTests, useSettingsStore } from '@/stores/settings'
 import { createDefaultTalosMotionV6Preferences } from '@/motion-v6/defaults'
 
 const mockState = vi.hoisted(() => ({ controller: null as unknown }))
 vi.mock('@/stores/chatController', () => ({ useChatController: () => mockState.controller }))
+
+/**
+ * L'icona del launcher, spiata.
+ *
+ * Owner 2026-08-03, con uno screenshot: cambiando il layout della Libreria
+ * compariva «Aggiornare l'icona dell'app?». Il difetto non era nell'icona — era
+ * che il watcher rigirava a ogni scrittura di preferenza e non filtrava nulla.
+ */
+const iconSpy = vi.hoisted(() => ({ evaluate: vi.fn() }))
+vi.mock('@/services/launcherIcon', () => ({
+    useLauncherIconController: () => ({
+        state: { pending: null },
+        evaluate: iconSpy.evaluate,
+        hydrate: async () => undefined,
+        confirmNow: async () => undefined,
+        later: () => undefined,
+        dismiss: () => undefined,
+    }),
+}))
 
 import App from '@/App.vue'
 
@@ -461,6 +480,51 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         await flushPromises()
         await newChatFromOptions(wrapper)   // busy released → allowed again
         expect(controller.newSession).toHaveBeenCalledTimes(2)
+        wrapper.unmount()
+    })
+})
+
+describe('il dialogo dell icona non c entra con le altre preferenze', () => {
+    it('non chiede di riavviare quando cambia il layout della Libreria', async () => {
+        iconSpy.evaluate.mockClear()
+        mockState.controller = makeController()
+        const wrapper = mount(App, { global: { plugins: [makeRouter()] } })
+        await flushPromises()
+
+        // La valutazione all avvio e legittima: e quella che scopre se l icona
+        // applicata corrisponde al tema. Da qui in poi non deve piu succedere
+        // se non cambia il tema o l interruttore.
+        iconSpy.evaluate.mockClear()
+
+        const settings = useSettingsStore()
+        await settings.setShell({ library_view: 'grid' })
+        await flushPromises()
+
+        /**
+         * Il difetto che l'owner ha fotografato. `setShell` rimpiazza l'intero
+         * oggetto `state.shell`, quindi la dipendenza si invalida anche per una
+         * chiave che il watcher non guarda; e il getter restituiva un array
+         * NUOVO a ogni giro, che Vue considera sempre cambiato. Rimettere il
+         * getter singolo e questo test torna rosso.
+         */
+        expect(iconSpy.evaluate).not.toHaveBeenCalled()
+        wrapper.unmount()
+    })
+
+    it('lo chiede ancora quando cambia davvero l interruttore dell icona', async () => {
+        iconSpy.evaluate.mockClear()
+        mockState.controller = makeController()
+        const wrapper = mount(App, { global: { plugins: [makeRouter()] } })
+        await flushPromises()
+        iconSpy.evaluate.mockClear()
+
+        const settings = useSettingsStore()
+        await settings.setShell({ launcher_icon_follows_theme: true })
+        await flushPromises()
+
+        // Il filtro non deve essere diventato un tappo: la cosa che il watcher
+        // esiste per notare deve ancora passare.
+        expect(iconSpy.evaluate).toHaveBeenCalled()
         wrapper.unmount()
     })
 })
