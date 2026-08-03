@@ -38,15 +38,48 @@
 
 export type TalosResearchDepth = 'quick' | 'deep' | 'exhaustive'
 
+/**
+ * `pause_requested` and `paused` are two states, not one, and the reason is the
+ * money.
+ *
+ * A pause can arrive while a step is IN FLIGHT and already paid for. Throwing
+ * that answer away to honour the word "pause" immediately would spend the
+ * user's money for nothing, so the engine drains the step it has started,
+ * commits it, and only then rests — the research of 2026-08-03 calls this
+ * "drain then checkpoint". `pause_requested` is the interval in between: the
+ * intention is recorded and no new step will be booked, but the safe point has
+ * not been reached yet. Collapsing the two would make the screen lie in one
+ * direction or the other.
+ *
+ * `paused` is NOT `cancelled`. Cancelled is terminal — Android's own WorkManager
+ * has no PAUSED state and its CANCELLED cannot be resumed — so writing one when
+ * the person asked for the other would throw away a research they had paid for.
+ */
 export type TalosResearchStatus =
     | 'planning'
     | 'awaiting_plan_approval'
     | 'collecting'
     | 'synthesising'
     | 'verifying'
+    | 'pause_requested'
+    | 'paused'
     | 'done'
     | 'cancelled'
     | 'failed'
+
+/** The states from which nothing more will ever happen. */
+export const TALOS_RESEARCH_TERMINAL: readonly TalosResearchStatus[] = Object.freeze([
+    'done', 'cancelled', 'failed',
+])
+
+export function talosResearchIsTerminal(status: TalosResearchStatus): boolean {
+    return TALOS_RESEARCH_TERMINAL.includes(status)
+}
+
+/** Stopped, but still owing work: the engine must not book, the run can resume. */
+export function talosResearchIsResting(status: TalosResearchStatus): boolean {
+    return status === 'paused' || status === 'pause_requested'
+}
 
 /** Where the run is executing. The whole point of R1b is that this can change. */
 export type TalosResearchEngine = 'device' | 'cloud'
@@ -110,6 +143,12 @@ export interface TalosResearchRun {
     readonly depth: TalosResearchDepth
     readonly engine: TalosResearchEngine
     readonly status: TalosResearchStatus
+    /**
+     * The label the list shows, when someone has chosen one. `null` means "use
+     * the question" — which is the honest default, because the question IS the
+     * name of a research until a person decides otherwise.
+     */
+    readonly title: string | null
     readonly plan: readonly TalosResearchBranch[]
     readonly steps: readonly TalosResearchStep[]
     readonly startedAt: string
@@ -143,6 +182,21 @@ export type TalosResearchEvent =
         readonly resultRef: string | null
     }
     | { readonly kind: 'step_failed', readonly at: string, readonly stepId: string, readonly error: string }
+    /** The person asked to stop; a step may still be in flight. */
+    | { readonly kind: 'run_pause_requested', readonly at: string }
+    /** The safe point was reached: nothing is in flight and everything is committed. */
+    | { readonly kind: 'run_paused', readonly at: string }
+    | { readonly kind: 'run_resumed', readonly at: string }
+    /**
+     * A LABEL changed, never the question.
+     *
+     * `title` is what the list shows; `question` is the fact that was asked and
+     * paid for, and it stays. Letting a rename overwrite it would detach the
+     * research from the thing that generated it — and the export would then
+     * carry a title that no longer traces to any prompt. `null` restores the
+     * question as the label.
+     */
+    | { readonly kind: 'run_renamed', readonly at: string, readonly title: string | null }
     | { readonly kind: 'run_cancelled', readonly at: string }
     | { readonly kind: 'run_finished', readonly at: string }
 
@@ -208,6 +262,7 @@ export function talosResearchApply(
             depth: event.depth,
             engine: event.engine,
             status: 'planning',
+            title: null,
             plan: [],
             steps: [],
             startedAt: event.at,
@@ -296,6 +351,38 @@ export function talosResearchApply(
             })
         }
 
+        /**
+         * Asking twice is not asking harder: the second request must not move a
+         * run that has already reached the safe point back into "stopping".
+         * And a run that has finished is not pausable at all — the journal is
+         * read after a kill, and a stale request arriving late must not
+         * resurrect a terminal run.
+         */
+        case 'run_pause_requested':
+            if (talosResearchIsTerminal(run.status) || run.status === 'paused') return run
+            return touched({ status: 'pause_requested' })
+
+        case 'run_paused':
+            if (talosResearchIsTerminal(run.status)) return run
+            return touched({ status: 'paused' })
+
+        /**
+         * Back to collecting, which is where the resume point lives. Refused
+         * from a terminal state for the same reason: cancelled means cancelled,
+         * and a resume that reopened it would spend money on a run the person
+         * ended.
+         */
+        case 'run_resumed':
+            if (talosResearchIsTerminal(run.status)) return run
+            return touched({ status: 'collecting' })
+
+        case 'run_renamed': {
+            // Whitespace is not a title. Blank restores the question, which is
+            // also what "Restore the original title" writes.
+            const title = event.title === null ? null : event.title.trim()
+            return touched({ title: title === null || title.length === 0 ? null : title })
+        }
+
         case 'run_cancelled':
             return touched({ status: 'cancelled' })
 
@@ -340,7 +427,12 @@ export function talosResearchRecover(run: TalosResearchRun, at: string): TalosRe
  * been partly paid for.
  */
 export function talosResearchNextStep(run: TalosResearchRun): TalosResearchStep | null {
-    if (run.status === 'cancelled' || run.status === 'done' || run.status === 'failed') return null
+    if (talosResearchIsTerminal(run.status)) return null
+    // The pause is enforced HERE, in the one function that decides what to do
+    // next, rather than at each call site that might forget. "No new step is
+    // booked" is not advice to the engine — it is the engine having nothing to
+    // book.
+    if (talosResearchIsResting(run.status)) return null
     return run.steps.find((step) => step.state === 'interrupted')
         ?? run.steps.find((step) => step.state === 'pending')
         ?? null
@@ -389,7 +481,10 @@ export function talosResearchWorkLeft(
     run: TalosResearchRun,
     kind: TalosResearchStepKind = 'search',
 ): readonly TalosResearchBranch[] {
-    if (run.status === 'cancelled' || run.status === 'done' || run.status === 'failed') return []
+    // Terminal only. A paused run still OWES this work — saying otherwise would
+    // draw an empty plan for something the person is about to resume, and is
+    // the opposite question from "what should the engine do right now".
+    if (talosResearchIsTerminal(run.status)) return []
     return run.plan.filter((branch) => {
         const step = run.steps.find((candidate) => candidate.id === talosResearchStepIdFor(branch.id, kind))
         return !step || step.state !== 'done'

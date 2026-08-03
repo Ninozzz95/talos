@@ -2,6 +2,8 @@ import type { TalosChatRepository } from '@/repositories/chatRepository'
 import type { TalosRunKeeper } from '@/services/longRunKeeper'
 import {
     talosResearchApply,
+    talosResearchIsResting,
+    talosResearchIsTerminal,
     talosResearchProgressOf,
     talosResearchRecover,
     talosResearchReplay,
@@ -39,7 +41,7 @@ export interface TalosResearchStepOutcome {
 
 export interface TalosResearchRuntimeDeps {
     readonly repository: Pick<TalosChatRepository,
-        'appendResearchEvent' | 'readResearchJournal' | 'upsertResearchRun' | 'listResearchRuns'>
+        'appendResearchEvent' | 'readResearchJournal' | 'upsertResearchRun' | 'listResearchRuns' | 'deleteResearchRun'>
     /** The foreground service, borrowed rather than rebuilt — see longRunKeeper. */
     readonly keeper: (title: string) => TalosRunKeeper
     readonly now: () => string
@@ -107,11 +109,31 @@ async function journalOf(
     return { run: talosResearchReplay(events), length: entries.length }
 }
 
+/** What was asked of a running research: keep it, or end it. */
+export type TalosResearchStop = 'pause' | 'cancel'
+
 /** One name for the last step, so a resumed run recognises it as already done. */
 export const SYNTHESIS_STEP_ID = 'synthesis'
 const SYNTHESIS_LABEL = 'sintesi'
 
 export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
+    /**
+     * Runs this process is driving right now, and what the person asked of them.
+     *
+     * The journal's `seq` is assigned by the WRITER, not the database — that is
+     * what makes a duplicate append collide instead of double-charging. It also
+     * means there can only ever be ONE writer per run at a time: a `pause()`
+     * that appended on its own while `drive()` held its own counter would hand
+     * both the same number and lose one of the two writes.
+     *
+     * So a stop asked of a running research is a request held HERE, and the
+     * driver — the single writer — is what puts it in the journal. A stop asked
+     * of a research nobody is driving is written directly, because then there is
+     * no other writer to collide with.
+     */
+    const driving = new Set<string>()
+    const stopping = new Map<string, TalosResearchStop>()
+
     /**
      * Works through whatever the plan still owes, holding the service while it does.
      *
@@ -129,11 +151,52 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
 
         // Anything left `running` belonged to a process that is no longer here.
         let run = talosResearchRecover(loaded.run, deps.now())
+
+        /**
+         * A run that is over is not driveable, and this is not a formality.
+         *
+         * Without it the loop found nothing left to do, fell straight through
+         * to `run_finished`, and a CANCELLED research came back as "done" — the
+         * ending rewritten by the act of looking at it. Reachable from an
+         * ordinary tap: Resume on a run that was cancelled, or a stale
+         * notification action.
+         */
+        if (talosResearchIsTerminal(run.status)) return run
+
         let seq = loaded.length
-        const keeper = deps.keeper(run.question)
+        const keeper = deps.keeper(run.title ?? run.question)
+        driving.add(runId)
 
         try {
+            // Picking a paused research back up is an EVENT, not a silent
+            // change of mind: without it the journal would show a run that
+            // collected sources while claiming to be resting, and the ledger of
+            // what happened is the one thing here that has to be true.
+            if (talosResearchIsResting(run.status)) {
+                run = await append(deps, run, { kind: 'run_resumed', at: deps.now() }, seq++)
+            }
             for (;;) {
+                /**
+                 * "Drain then checkpoint", checked HERE — between steps, which
+                 * is the only place where nothing is in flight.
+                 *
+                 * A stop asked mid-step lets that step finish and be committed
+                 * by the code below before this is reached again. That is not
+                 * politeness: the call is already sent and already paid for, and
+                 * throwing its answer away would spend the person's money for
+                 * nothing.
+                 */
+                const asked = stopping.get(runId)
+                if (asked) {
+                    stopping.delete(runId)
+                    run = await append(deps, run, { kind: 'run_pause_requested', at: deps.now() }, seq++)
+                    run = await append(deps, run, asked === 'cancel'
+                        ? { kind: 'run_cancelled', at: deps.now() }
+                        : { kind: 'run_paused', at: deps.now() }, seq++)
+                    onProgress?.({ run, ...talosResearchProgressOf(run) })
+                    return run
+                }
+
                 const left = talosResearchWorkLeft(run)
                 // Counted from the run, by the same function the station uses.
                 // Two ways of working out the same number is how a report that
@@ -213,8 +276,44 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
             onProgress?.({ run, ...talosResearchProgressOf(run) })
             return run
         } finally {
+            driving.delete(runId)
+            // A stop that outlived its run would fire at the head of the NEXT
+            // drive and stop a research the person had just asked to continue.
+            stopping.delete(runId)
             keeper.release()
         }
+    }
+
+    /**
+     * Stop a research, without pretending the two words mean the same thing.
+     *
+     * `pause` leaves it resumable and owing its remaining work; `cancel` is
+     * terminal. Android's own scheduler has no pause at all — WorkManager's
+     * CANCELLED cannot be resumed — so writing one for the other would throw
+     * away a research that had been paid for.
+     */
+    async function requestStop(runId: string, mode: TalosResearchStop): Promise<TalosResearchRun> {
+        const loaded = await journalOf(deps, runId)
+        if (!loaded.run) throw new Error('TALOS_RESEARCH_RUN_UNKNOWN')
+        // Already over: a stale notification action arriving after the fact
+        // must not rewrite the ending.
+        if (talosResearchIsTerminal(loaded.run.status)) return loaded.run
+
+        if (driving.has(runId)) {
+            // The driver is the single writer. Record the intention and let it
+            // land at the next safe point — see the note in `drive`.
+            stopping.set(runId, mode)
+            return talosResearchApply(loaded.run, { kind: 'run_pause_requested', at: deps.now() }) ?? loaded.run
+        }
+
+        // Nobody is driving, so nothing is in flight and there is nothing to
+        // drain: this IS the safe point.
+        let run = loaded.run
+        let seq = loaded.length
+        run = await append(deps, run, mode === 'cancel'
+            ? { kind: 'run_cancelled', at: deps.now() }
+            : { kind: 'run_paused', at: deps.now() }, seq++)
+        return run
     }
 
     return {
@@ -248,6 +347,43 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
         /** Picks a run up again. Safe to call on one that is already finished. */
         resume: drive,
 
+        /** Stop, keep everything, come back later. */
+        pause(runId: string): Promise<TalosResearchRun> {
+            return requestStop(runId, 'pause')
+        },
+
+        /** Stop for good. What was collected stays readable; nothing more is bought. */
+        cancel(runId: string): Promise<TalosResearchRun> {
+            return requestStop(runId, 'cancel')
+        },
+
+        /**
+         * Change the LABEL. The question stays.
+         *
+         * Renaming is safe to write at any time, running or not — but it still
+         * goes through the journal rather than the listing row, because the row
+         * holds what the last living process believed and the journal is what
+         * the run actually is. `null` restores the question as the label.
+         */
+        async rename(runId: string, title: string | null): Promise<TalosResearchRun> {
+            const loaded = await journalOf(deps, runId)
+            if (!loaded.run) throw new Error('TALOS_RESEARCH_RUN_UNKNOWN')
+            return append(deps, loaded.run, { kind: 'run_renamed', at: deps.now(), title }, loaded.length)
+        },
+
+        /**
+         * Remove a research and everything it wrote.
+         *
+         * Refused while this process is driving it: deleting the journal from
+         * under the single writer would leave it appending to a run that no
+         * longer exists, and — worse — a step already sent to a provider would
+         * lose the only record that says it was paid for. Stop it first.
+         */
+        async remove(runId: string): Promise<readonly string[]> {
+            if (driving.has(runId)) throw new Error('TALOS_RESEARCH_RUN_BUSY')
+            return deps.repository.deleteResearchRun(runId)
+        },
+
         /**
          * Runs that were left half-done, newest first.
          *
@@ -263,13 +399,15 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
                 const loaded = await journalOf(deps, row.id)
                 if (!loaded.run) continue
                 const recovered = talosResearchRecover(loaded.run, deps.now())
+                // A run someone PAUSED is not unfinished business to be picked
+                // back up: they stopped it on purpose, and offering it here is
+                // how an automatic resume spends money they chose not to spend.
+                if (talosResearchIsResting(recovered.status)) continue
                 // Branches left, OR a run that never reached `run_finished`.
                 // The second is not redundant: a run killed during the SYNTHESIS
                 // has every branch done and would otherwise read as complete,
                 // which would quietly throw away the gathering it paid for.
-                const open = recovered.status !== 'done'
-                    && recovered.status !== 'cancelled'
-                    && recovered.status !== 'failed'
+                const open = !talosResearchIsTerminal(recovered.status)
                 if (talosResearchWorkLeft(recovered).length > 0 || open) runs.push(recovered)
             }
             return runs

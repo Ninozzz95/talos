@@ -502,6 +502,36 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
         async upsertResearchRun(row) {
             researchRuns.set(row.id, { ...row })
         },
+        async deleteResearchRun(runId: string) {
+            const journal = researchJournals.get(runId) ?? []
+            const dossiers = new Set<string>()
+            for (const entry of journal) {
+                let parsed: { resultRef?: unknown }
+                try { parsed = JSON.parse(entry.payload_json) as { resultRef?: unknown } } catch { continue }
+                if (typeof parsed.resultRef === 'string' && parsed.resultRef.length > 0) {
+                    dossiers.add(parsed.resultRef)
+                }
+            }
+            const removed: string[] = []
+            for (const fileId of dossiers) {
+                const file = vaultFiles.get(fileId)
+                if (!file || file.status === 'revoked') continue
+                file.status = 'revoked'
+                file.private_uri = ''
+                file.extracted_text = null
+                file.updated_at = now()
+                for (const grant of grants.values()) {
+                    if (grant.vault_file_id === fileId && grant.status === 'active') {
+                        grant.status = 'revoked'
+                        grant.updated_at = now()
+                    }
+                }
+                removed.push(fileId)
+            }
+            researchJournals.delete(runId)
+            researchRuns.delete(runId)
+            return removed
+        },
         async listResearchRuns() {
             return [...researchRuns.values()]
                 .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.id.localeCompare(left.id))

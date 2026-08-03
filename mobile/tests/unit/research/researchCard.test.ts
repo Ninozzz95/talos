@@ -17,6 +17,7 @@ function run(patch: Partial<TalosResearchRun> = {}): TalosResearchRun {
         depth: 'quick',
         engine: 'device',
         status: 'done' as TalosResearchStatus,
+        title: null,
         plan: [{ id: 'b1', question: 'b1' }] as TalosResearchRun['plan'],
         steps: [
             { id: 'b1:search', branchId: 'b1', kind: 'search', state: 'done' },
@@ -96,6 +97,35 @@ describe('what a research looks like before you open it', () => {
             .toBe(true)
         // And a report nobody has read yet makes no claim either way.
         expect(talosResearchNeedsAttention(card(null))).toBe(false)
+    })
+
+    /**
+     * Added 2026-08-03 with the pause. The research on long-running work is
+     * blunt about it: Android has no pause, CANCELLED is terminal, and the two
+     * must never be written for one another.
+     */
+    it('gives a paused research its own bucket, apart from the ones the phone killed', () => {
+        // Stopping on purpose is a decision. Filing it with the runs that died
+        // would tell the person their decision was an accident.
+        expect(talosResearchBucketOf(run({ status: 'paused' }), false)).toBe('paused')
+        // A pause that has not finished landing is the same situation to read.
+        expect(talosResearchBucketOf(run({ status: 'pause_requested' }), false)).toBe('paused')
+        // And cancelled is NOT paused: it owes nothing and never resumes.
+        expect(talosResearchBucketOf(run({ status: 'cancelled' }), false)).toBe('unfinished')
+        // The live registry still wins: a run being resumed right now is running.
+        expect(talosResearchBucketOf(run({ status: 'paused' }), true)).toBe('running')
+    })
+
+    it('shows the chosen label but keeps the question that was paid for', () => {
+        const plain = talosResearchCardOf(run(), { isRunning: false })
+        expect(plain.question).toBe('Quando è uscito il primo iPhone')
+        expect(plain.renamed).toBe(false)
+
+        const named = talosResearchCardOf(run({ title: 'iPhone, le date' }), { isRunning: false })
+        expect(named.question).toBe('iPhone, le date')
+        // Provenance survives the rename — the export carries both, labelled.
+        expect(named.originalQuestion).toBe('Quando è uscito il primo iPhone')
+        expect(named.renamed).toBe(true)
     })
 
     it('filters by bucket and by words, together', () => {

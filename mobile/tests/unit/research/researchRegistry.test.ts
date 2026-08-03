@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createTalosResearchRegistry } from '@/lib/research/researchRegistry'
+import type { TalosResearchRun } from '@/lib/research/researchRun'
 import type { TalosResearchProgress } from '@/services/researchRuntime'
 
 const progress = (done: number, total = 3): TalosResearchProgress => ({
@@ -109,5 +110,72 @@ describe('the live research registry', () => {
         expect(registry.isRunning('nobody')).toBe(false)
         expect(registry.latest('nobody')).toBeNull()
         expect(() => registry.close('nobody')).not.toThrow()
+    })
+})
+
+/**
+ * Publishing a state the engine did not produce — added 2026-08-03 with pause,
+ * cancel, rename and delete. Those all happen to a run that is NOT being
+ * driven, and the station has to see them at the moment of the tap.
+ */
+describe('states that arrive without the engine', () => {
+    function run(patch: Partial<TalosResearchRun> = {}): TalosResearchRun {
+        return {
+            id: 'run-1',
+            sessionId: 'chat-1',
+            question: 'chi ha vinto',
+            depth: 'quick',
+            engine: 'device',
+            status: 'paused',
+            title: null,
+            plan: [{ id: 'b1', question: 'b1', estimate: { tokens: 1, searches: 1, pages: 1 } }],
+            steps: [],
+            startedAt: '2026-08-03T08:00:00.000Z',
+            updatedAt: '2026-08-03T08:05:00.000Z',
+            ...patch,
+        }
+    }
+
+    it('tells the watchers without claiming the run is live', () => {
+        // Marking it live to announce that it STOPPED would be the same lie in
+        // the other direction — and `isRunning` is what decides the bucket.
+        const registry = createTalosResearchRegistry()
+        const seen: string[] = []
+        registry.watch('run-1', (progress) => seen.push(progress.run.status))
+
+        registry.report('run-1', run())
+
+        expect(seen).toEqual(['paused'])
+        expect(registry.isRunning('run-1')).toBe(false)
+        expect(registry.running()).toEqual([])
+    })
+
+    it('forgets a deleted research completely, unlike one that merely finished', () => {
+        const registry = createTalosResearchRegistry()
+        registry.report('run-1', run({ status: 'done' }))
+        // A late watcher on a FINISHED run still deserves to see how it ended.
+        const afterClose: string[] = []
+        registry.close('run-1')
+        registry.watch('run-1', (progress) => afterClose.push(progress.run.status))
+        expect(afterClose).toEqual(['done'])
+
+        // A deleted one has no ending to replay: putting a card back on screen
+        // for something that no longer exists is worse than showing nothing.
+        registry.forget('run-1')
+        const afterForget: string[] = []
+        registry.watch('run-1', (progress) => afterForget.push(progress.run.status))
+        expect(afterForget).toEqual([])
+        expect(registry.latest('run-1')).toBeNull()
+    })
+
+    it('drops the watchers of a deleted research, so nothing can wake them', () => {
+        const registry = createTalosResearchRegistry()
+        const seen: string[] = []
+        registry.watch('run-1', (progress) => seen.push(progress.run.status))
+
+        registry.forget('run-1')
+        registry.report('run-1', run())
+
+        expect(seen).toEqual([])
     })
 })

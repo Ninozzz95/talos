@@ -1,4 +1,5 @@
 import type { TalosResearchProgress } from '@/services/researchRuntime'
+import { talosResearchProgressOf, type TalosResearchRun } from '@/lib/research/researchRun'
 
 /**
  * The runs that are happening RIGHT NOW, and who is watching them.
@@ -51,6 +52,26 @@ export interface TalosResearchRegistry {
      * that has just mounted needs the current state, not the next change.
      */
     watch(runId: string, watcher: TalosResearchWatcher): () => void
+    /**
+     * Publish a state a run reached WITHOUT the engine driving it — a pause, a
+     * cancellation, a rename.
+     *
+     * Deliberately not `open`: those are the moments a run stops being live, and
+     * marking it live to announce that it stopped would be the same lie in the
+     * other direction. The watchers still hear it, which is what makes a card
+     * change under the finger instead of at the next refresh.
+     */
+    report(runId: string, run: TalosResearchRun): void
+    /**
+     * The run is GONE — forget it entirely, watchers and last state included.
+     *
+     * Different from `close`, and the difference matters: close means "finished"
+     * and keeps the final progress on purpose, so a screen arriving afterwards
+     * still sees how it ended. There is no "how it ended" for a research that
+     * has been deleted, and replaying one to a late watcher would put a card
+     * back on screen for something that no longer exists.
+     */
+    forget(runId: string): void
     /** The last progress a run reported, if it reported any. */
     latest(runId: string): TalosResearchProgress | null
 }
@@ -80,6 +101,14 @@ export function createTalosResearchRegistry(): TalosResearchRegistry {
         },
         close(runId) {
             live.delete(runId)
+        },
+        report(runId, run) {
+            fanOut(runId, { run, ...talosResearchProgressOf(run) })
+        },
+        forget(runId) {
+            live.delete(runId)
+            latest.delete(runId)
+            watchers.delete(runId)
         },
         isRunning(runId) {
             return live.has(runId)

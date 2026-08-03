@@ -121,6 +121,7 @@ const ROUTES: Readonly<Record<keyof TalosChatRepository, Rule>> = {
     readResearchJournal: 'durable',
     upsertResearchRun: 'durable',
     listResearchRuns: 'durable',
+    deleteResearchRun: 'durable',
     createNote: 'durable',
     listNotes: 'durable',
     deleteNote: 'durable',

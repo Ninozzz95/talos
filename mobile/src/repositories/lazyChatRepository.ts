@@ -173,6 +173,9 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         async listResearchRuns() {
             return (await ready()).listResearchRuns()
         },
+        async deleteResearchRun(runId: string) {
+            return (await ready()).deleteResearchRun(runId)
+        },
         async deleteNote(noteId: string) {
             return (await ready()).deleteNote(noteId)
         },
