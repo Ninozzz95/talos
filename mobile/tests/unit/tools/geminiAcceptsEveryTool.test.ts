@@ -1,7 +1,20 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createTalosToolset } from '@/lib/tools/toolset'
 import { talosToolsForGemini } from '@/lib/tools/registry'
-import { TALOS_DEFAULT_AGENT_TOOL_ENABLED } from '@/lib/tools/toolControls'
+import { TALOS_AGENT_TOOL_IDS } from '@/lib/tools/toolControls'
+
+/**
+ * EVERY tool that can exist, not merely the ones a bare build offers.
+ *
+ * This used the default enabled-map, and on 2026-08-03 that hole cost a real
+ * 400: `library_context_policy_update` is OFF by default and is exactly the
+ * tool whose schema breaks providers. A guard that watches only the defaults
+ * watches the wrong suite — someone turns one switch on and every call is
+ * refused.
+ */
+const EVERY_TOOL_ENABLED = Object.freeze(
+    Object.fromEntries(TALOS_AGENT_TOOL_IDS.map((id) => [id, true])),
+) as Record<string, boolean>
 
 /**
  * Owner 2026-07-31, visible in his screen recording at 00:18 — an old turn in a
@@ -56,7 +69,7 @@ async function geminiPayload(): Promise<unknown> {
     })
     const tools = toolset.offer(
         { read: 'allow', write: 'allow', outbound: 'allow' },
-        TALOS_DEFAULT_AGENT_TOOL_ENABLED,
+        EVERY_TOOL_ENABLED as never,
     )
     expect(tools.length).toBeGreaterThan(10)
     return talosToolsForGemini(tools as never)
