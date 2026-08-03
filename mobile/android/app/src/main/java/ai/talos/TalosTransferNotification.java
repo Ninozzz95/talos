@@ -80,17 +80,33 @@ public final class TalosTransferNotification {
     }
 
     /**
-     * How it ended, stated plainly and left on screen.
+     * How it ended, stated plainly, and on a channel that can be heard.
+     *
+     * This used to post on the channel above, and inherited its silence: LOW
+     * importance, no sound, no heads-up. Correct for a bar that reports hours of
+     * progress, and exactly wrong for the one moment the person is waiting for
+     * — owner 2026-08-03: «ho appena scaricato un modello ma non ho idea di dove
+     * sia … nessuna notifica in app o android di avvenuto scaricamento».
+     *
+     * A notification cannot change channel in place, so the bar is CANCELLED and
+     * the outcome posted anew. Reusing the id would have quietly kept it on the
+     * quiet channel, which is the bug wearing a different hat.
      *
      * A download that fails while the phone is in a pocket and clears its own
      * notification is a download the user believes finished — and then they go
      * looking for a model that is not there.
      */
-    public static Notification ended(Context context, String modelName, String reason) {
-        return base(context, modelName, explain(reason))
-                .setOngoing(false)
-                .setAutoCancel(true)
-                .build();
+    public static void announceEnd(Context context, String modelName, String reason) {
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        if (manager != null) manager.cancel(NOTIFICATION_ID);
+        TalosDoneNotification.post(
+                context,
+                TalosDoneNotification.TRANSFER_ID,
+                modelName,
+                explain(reason),
+                // The Model Lab, so "where is it?" is one tap rather than a hunt
+                // — which is the other half of what the owner reported.
+                "/settings?tab=models");
     }
 
     private static NotificationCompat.Builder base(Context context, String title, String text) {

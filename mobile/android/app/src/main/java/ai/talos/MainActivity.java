@@ -16,6 +16,10 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(TalosBiometricKeyPlugin.class);
         // R-1b: keeps long operations alive when the app is backgrounded.
         registerPlugin(TalosRunServicePlugin.class);
+        // And says so when it ends. The keeper's notification is the work in
+        // progress; this is the one the person is actually waiting for, and it
+        // carries the address of the thing that finished.
+        registerPlugin(TalosDonePlugin.class);
         registerPlugin(TalosDevicePermissionsPlugin.class);
         // Owner 2026-07-28: durable, user-chosen Save-As for encrypted Library
         // files. The plugin accepts only TALOS's private export staging path.

@@ -99,6 +99,38 @@ export function talosResearchNarration(run: TalosResearchRun, driving: boolean):
     return next ? line('research.say.searching', { question: next }) : line('research.say.writing')
 }
 
+export interface TalosResearchDoneNotice {
+    /** The person's own words, untranslated — it is their question. */
+    readonly title: string
+    readonly text: TalosResearchLine
+    /** The page of THIS research. A notification that lands anywhere else has
+     *  spent the user's attention and given nothing back. */
+    readonly route: string
+}
+
+/**
+ * What to announce when a research ends, or nothing.
+ *
+ * A research takes minutes: the person starts it, locks the phone, and until
+ * today nothing told them it was over. They had to sit and watch it — which
+ * makes the background work worth nothing.
+ *
+ * `cancelled` is deliberately silent. They stopped it themselves seconds ago;
+ * telling them it stopped is the app repeating their own action back at them,
+ * and every such notification makes the next one easier to swipe away unread.
+ */
+export function talosResearchDoneNotice(run: TalosResearchRun): TalosResearchDoneNotice | null {
+    if (!talosResearchIsTerminal(run.status)) return null
+    if (run.status === 'cancelled') return null
+    return {
+        title: run.title ?? run.question,
+        // Not driving, and terminal: the same sentence the page shows, which is
+        // how the notification and the page cannot end up disagreeing.
+        text: talosResearchNarration(run, false),
+        route: `/research/${run.id}`,
+    }
+}
+
 /**
  * A step's name, for the record at the bottom of the page.
  *
