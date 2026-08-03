@@ -13,7 +13,7 @@
  * so resuming is read from reality rather than from a cursor that can go stale
  * and then quietly send someone back through a step they already finished.
  */
-export type TalosSetupStepId = 'identity' | 'pin' | 'model' | 'permissions'
+export type TalosSetupStepId = 'identity' | 'pin' | 'model' | 'autonomy' | 'permissions'
 
 export interface TalosSetupStepDefinition {
     id: TalosSetupStepId
@@ -25,6 +25,17 @@ export const TALOS_SETUP_STEPS: readonly TalosSetupStepDefinition[] = Object.fre
     { id: 'identity', label: 'Name' },
     { id: 'pin', label: 'PIN' },
     { id: 'model', label: 'Model' },
+    /**
+     * Che cosa TALOS puo fare da solo.
+     *
+     * Subito dopo il modello perche parla dei poteri DI QUEL modello: puo
+     * leggere la Libreria, salvarci dentro, uscire in rete. I controlli
+     * esistono gia in Impostazioni e questa pagina non li duplica — scrive
+     * negli stessi tre valori. Quello che mancava era che nessuno li
+     * PRESENTASSE mai, quindi l idea di cosa l app fa da sola se la formava per
+     * caso.
+     */
+    { id: 'autonomy', label: 'Autonomy' },
     /**
      * L ultimo, e ultimo per una ragione.
      *
@@ -43,6 +54,17 @@ export interface TalosSetupState {
     pinSet: boolean
     /** Somewhere to think: a provider key on this device, or a local model. */
     modelReady: boolean
+    /**
+     * La persona ha DECISO cosa TALOS puo fare da solo.
+     *
+     * Non «e diverso dal predefinito»: il magazzino tiene l elenco delle azioni
+     * davvero scelte, separato dai valori, proprio perche un predefinito e una
+     * supposizione fatta al posto di qualcuno e una scelta e un opinione.
+     * «Chiedimelo sempre» resta una risposta legittima, e va registrata come
+     * tale — altrimenti il passo non sarebbe mai fatto per chi sceglie la
+     * prudenza.
+     */
+    autonomyChosen: boolean
     /**
      * Il telefono ha smesso di sospendere TALOS.
      *
@@ -69,6 +91,7 @@ export function talosSetupProgress(state: TalosSetupState): TalosSetupProgress {
         identity: state.identitySet,
         pin: state.pinSet,
         model: state.modelReady,
+        autonomy: state.autonomyChosen,
         permissions: state.backgroundReady,
     }
     const steps = TALOS_SETUP_STEPS.map((step) => ({ ...step, done: done[step.id] }))
