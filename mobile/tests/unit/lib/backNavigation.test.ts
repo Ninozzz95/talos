@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { resolveTalosBackAction, type TalosBackState } from '@/lib/backNavigation'
+import {
+    resolveTalosBackAction,
+    talosStationEntryAfter,
+    talosStationExit,
+    type TalosBackState,
+} from '@/lib/backNavigation'
 
 // Owner 2026-07-24: the sidebar is the MAIN MENU — stations/Settings are opened
 // from it, so system Back at a station top must return to the sidebar, not jump
@@ -26,8 +31,22 @@ describe('resolveTalosBackAction', () => {
         expect(resolveTalosBackAction(state({ hasSheetSubView: true, isStation: true }))).toBe('sheet-subview-back')
     })
 
-    it('returns a station TOP to the sidebar (owner: the main menu), not to chat', () => {
-        expect(resolveTalosBackAction(state({ isStation: true }))).toBe('station-to-sidebar')
+    /**
+     * Owner 2026-08-03: «se la pagina ricerca si apre dalla sidebar, se torno
+     * indietro perché mi chiude la sidebar e mi torna alla chat? un po' di buon
+     * senso». Back at a station top used to run `navigate('chat')` and force the
+     * drawer open whatever had come before — so a station opened FROM the
+     * Settings Center took the Settings Center with it on the way out.
+     *
+     * The 2026-07-24 rule lives inside the new one rather than being reversed:
+     * a station opened from the main menu still returns to the main menu,
+     * because that is what undoing the move means when the move started there.
+     */
+    it('leaves a station TOP the way it was entered, whatever that was', () => {
+        expect(resolveTalosBackAction(state({ isStation: true }))).toBe('leave-station')
+        // Still true with in-app history to pop: leaving is not a history move,
+        // because the drawer is state and popping a route cannot restore it.
+        expect(resolveTalosBackAction(state({ isStation: true, canGoBack: true }))).toBe('leave-station')
     })
 
     /**
@@ -61,5 +80,55 @@ describe('resolveTalosBackAction', () => {
     it('falls through to history/exit on the chat base', () => {
         expect(resolveTalosBackAction(state({ canGoBack: true }))).toBe('history')
         expect(resolveTalosBackAction(state({ canGoBack: false }))).toBe('exit')
+    })
+})
+
+/**
+ * How the station was entered, and what Back does with it.
+ *
+ * Owner 2026-08-03: «se la pagina ricerca si apre dalla sidebar, se torno
+ * indietro perché mi chiude la sidebar e mi torna alla chat? un po' di buon
+ * senso». The old answer ran `navigate('chat')` and forced the drawer open no
+ * matter what had come before, so a station opened from the Settings Center
+ * took the Settings Center with it on the way out.
+ */
+describe('leaving a station the way you came into it', () => {
+    it('remembers the door, so the main menu comes back with you', () => {
+        const entry = talosStationEntryAfter(null, { to: 'research', from: 'chat', viaSidebar: true })
+        expect(talosStationExit(entry)).toEqual({ route: 'chat', sidebar: true })
+    })
+
+    it('does not throw away what was underneath', () => {
+        // Settings open, research opened from the menu over the top of it.
+        const entry = talosStationEntryAfter(null, { to: 'research', from: 'settings', viaSidebar: true })
+        expect(talosStationExit(entry)).toEqual({ route: 'settings', sidebar: true })
+    })
+
+    it('leaves the menu shut when the menu was not the door', () => {
+        // Reached from the chat's own composer rather than from the drawer.
+        const entry = talosStationEntryAfter(null, { to: 'library', from: 'chat', viaSidebar: false })
+        expect(talosStationExit(entry)).toEqual({ route: 'chat', sidebar: false })
+    })
+
+    it('ignores moves INSIDE one station, which are not an entrance', () => {
+        // The list, a report, a claim and a source are one place to the person.
+        // Recording these would make Back navigate the list to itself.
+        const door = talosStationEntryAfter(null, { to: 'research', from: 'chat', viaSidebar: true })
+        let entry = talosStationEntryAfter(door, { to: 'research-report', from: 'research', viaSidebar: false })
+        entry = talosStationEntryAfter(entry, { to: 'research-claim', from: 'research-report', viaSidebar: false })
+        entry = talosStationEntryAfter(entry, { to: 'research', from: 'research-claim', viaSidebar: false })
+        expect(entry).toEqual(door)
+        expect(talosStationExit(entry).route).toBe('chat')
+    })
+
+    it('forgets the door once you are back on the chat', () => {
+        const door = talosStationEntryAfter(null, { to: 'research', from: 'chat', viaSidebar: true })
+        expect(talosStationEntryAfter(door, { to: 'chat', from: 'research', viaSidebar: false })).toBeNull()
+    })
+
+    it('falls back to the main menu when nothing was recorded at all', () => {
+        // A cold start straight into a station: the 2026-07-24 rule stands,
+        // because a station IS opened from the main menu.
+        expect(talosStationExit(null)).toEqual({ route: 'chat', sidebar: true })
     })
 })

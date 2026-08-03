@@ -10,13 +10,15 @@
  * harness, so the DECISION lives here where it can be unit-tested; App.vue only
  * maps each action to its effect.
  */
+import { talosMobileStationOf } from '@/lib/mobileRoutes'
+
 export type TalosBackAction =
     | 'close-overlay'
     | 'dismiss-wizard'
     | 'close-sidebar'
     | 'sheet-subview-back'
     | 'station-subpage-parent'
-    | 'station-to-sidebar'
+    | 'leave-station'
     | 'history'
     | 'exit'
 
@@ -55,6 +57,57 @@ export function resolveTalosBackAction(state: TalosBackState): TalosBackAction {
      * there would leave the app instead of going up one level.
      */
     if (state.isStationSubPage) return state.canGoBack ? 'history' : 'station-subpage-parent'
-    if (state.isStation) return 'station-to-sidebar'
+    /**
+     * Leave the station the way you came into it.
+     *
+     * This used to be `navigate('chat')` plus "open the drawer", unconditional,
+     * and the cost was everything that had been underneath. Owner 2026-08-03:
+     * «se la pagina ricerca si apre dalla sidebar, se torno indietro perché mi
+     * chiude la sidebar e mi torna alla chat? un po' di buon senso». Quite.
+     *
+     * The 2026-07-24 rule survives inside this one rather than being reversed:
+     * a station opened FROM the main menu still returns to the main menu — that
+     * is what undoing the move means when the move started there. What no
+     * longer happens is a station opened from anywhere else dropping you on the
+     * chat and throwing away the Settings Center you had open.
+     */
+    if (state.isStation) return 'leave-station'
     return state.canGoBack ? 'history' : 'exit'
+}
+
+/**
+ * What "the way you came in" was, kept across moves.
+ *
+ * The drawer is component state rather than a route, so the platform's own
+ * history cannot answer this: popping back to the chat would lose the menu the
+ * person opened the station from. This is the smallest thing worth remembering
+ * — where they were, and whether the menu was the door.
+ */
+export interface TalosStationEntry {
+    readonly from: string
+    readonly viaSidebar: boolean
+}
+
+/**
+ * Recorded when the STATION changes, never when you move inside one.
+ *
+ * The distinction is the whole point: the research list, a report, a claim and
+ * a source are one place to the person, and treating the list-to-report move as
+ * "entering a station" would make Back navigate the list to itself.
+ */
+export function talosStationEntryAfter(
+    previous: TalosStationEntry | null,
+    move: { readonly to: string, readonly from: string, readonly viaSidebar: boolean },
+): TalosStationEntry | null {
+    if (move.to === 'chat') return null
+    if (talosMobileStationOf(move.to) === talosMobileStationOf(move.from)) return previous
+    return { from: move.from, viaSidebar: move.viaSidebar }
+}
+
+/** Where Back lands, and whether the main menu comes back with it. */
+export function talosStationExit(entry: TalosStationEntry | null): { route: string, sidebar: boolean } {
+    // With nothing recorded — a cold start straight into a station — the
+    // 2026-07-24 answer stands: a station is opened from the main menu, so the
+    // main menu is where leaving it goes.
+    return { route: entry?.from ?? 'chat', sidebar: entry?.viaSidebar ?? true }
 }
