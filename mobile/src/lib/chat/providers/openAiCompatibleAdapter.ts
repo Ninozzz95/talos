@@ -13,7 +13,7 @@ import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers
 import { talosPromptCacheKey } from '@/lib/chat/promptCache'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import { talosToolsForOpenAiResponses } from '@/lib/tools/registry'
-import { talosReadOpenAiResponse } from '@/lib/chat/providers/openAiResponses'
+import { talosReadOpenAiResponse, talosReadOpenAiResponsesEvent } from '@/lib/chat/providers/openAiResponses'
 import {
     TALOS_OPENAI_REASONING_NONE,
     talosHasReasoningConflict,
@@ -199,12 +199,38 @@ function responsesCompletionData(
 ): Record<string, unknown> {
     const items: Array<Record<string, unknown>> = []
     for (const turn of input.turns) {
-        // I giri con i tool arriveranno col ciclo completo: per ora entrano
-        // solo i due ruoli che questo endpoint rende senza ambiguita'.
+        /**
+         * IL CICLO DEI TOOL, che qui non ha un ruolo `tool`.
+         *
+         * Su chat/completions il risultato e' un messaggio con
+         * `role: "tool"` e `tool_call_id`. Qui sono ELEMENTI, non messaggi:
+         * `function_call` per la richiesta e `function_call_output` per la
+         * risposta, appaiati da `call_id`. Con `store: false` il contesto lo
+         * ricostruiamo noi a ogni richiesta, quindi la chiamata originale va
+         * RIMESSA accanto al suo risultato — se manca, il modello riceve un
+         * esito senza sapere di che domanda fosse.
+         */
+        if (turn.role === 'tool') {
+            items.push({
+                type: 'function_call_output',
+                call_id: turn.toolCallId ?? '',
+                // Stringa, sempre: l'API accetta anche strutture ricche, ma un
+                // oggetto grezzo qui diventerebbe `[object Object]`.
+                output: typeof turn.content === 'string' ? turn.content : JSON.stringify(turn.content),
+            })
+            continue
+        }
         if (turn.role !== 'user' && turn.role !== 'assistant') continue
         const content = typeof turn.content === 'string' ? turn.content : ''
-        if (content === '') continue
-        items.push({ role: turn.role, content })
+        if (content !== '') items.push({ role: turn.role, content })
+        for (const call of turn.toolCalls ?? []) {
+            items.push({
+                type: 'function_call',
+                call_id: call.id,
+                name: call.name,
+                arguments: call.arguments,
+            })
+        }
     }
 
     const data: Record<string, unknown> = {
@@ -351,7 +377,16 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 return {
                     text: read.text,
                     model: input.model.id,
-                    finishReason: read.status,
+                    /**
+                     * `tool_calls` quando ce ne sono, e non lo stato.
+                     *
+                     * Il ciclo a valle riparte guardando QUESTO campo: con
+                     * `completed` una chiamata tornerebbe indietro corretta e
+                     * non verrebbe eseguita da nessuno — la conversazione si
+                     * fermerebbe con una richiesta in mano e nessuno a
+                     * rispondere.
+                     */
+                    finishReason: read.toolCalls.length ? 'tool_calls' : read.status,
                     usage: read.usage,
                     toolCalls: read.toolCalls.map((call) => ({ ...call })),
                     // Il riepilogo, non la catena di pensiero: quella resta
@@ -414,6 +449,50 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
         async streamComplete(input, credential, handlers) {
             const apiKey = requireProviderApiKey(config.provider, 'complete', credential)
             const baseUrl = compatibleBaseUrl(config, credential, 'complete')
+
+            /**
+             * Lo streaming di `/v1/responses`, che ha eventi TUTTI SUOI.
+             *
+             * `chat.completion.chunk` qui non esiste: il testo arriva in
+             * `response.output_text.delta`, la chiamata completa in
+             * `response.output_item.done`, l'uso in `response.completed`.
+             *
+             * La chiamata NON si ricompone dai delta degli argomenti: l'API la
+             * consegna intera, con il suo `call_id`, e ricostruirla a mano
+             * sarebbe lavoro in piu' e meno affidabile.
+             */
+            if (config.provider === 'openai') {
+                const calls: Array<{ name: string, arguments: string, id: string }> = []
+                let usage: Record<string, number> | null = null
+                const stream = await talosStreamText({
+                    url: `${baseUrl}/responses`,
+                    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+                    body: responsesCompletionData(input, true),
+                    signal: handlers.signal,
+                    accumulator: createTalosSseAccumulator(),
+                    extract: (payload) => {
+                        const read = talosReadOpenAiResponsesEvent(JSON.parse(payload))
+                        if (read.kind === 'tool-call') calls.push({ ...read.call })
+                        if (read.kind === 'done') usage = read.usage
+                        return read.kind === 'text' ? read.delta : ''
+                    },
+                    onChunk: handlers.onChunk,
+                    onReasoning: handlers.onReasoning,
+                })
+                if (!stream.text && calls.length === 0) {
+                    throw malformedProviderResponse('openai', 'complete', {
+                        received: { text: stream.text, calls: calls.length },
+                        note: 'stream ended with no text and no tool calls',
+                    })
+                }
+                return {
+                    text: stream.text,
+                    model: input.model.id,
+                    usage,
+                    ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : {}),
+                }
+            }
+
             const toolCalls = createOpenAiToolCallAccumulator()
             const stream = await talosStreamText({
                 url: `${baseUrl}/chat/completions`,
