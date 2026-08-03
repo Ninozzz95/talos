@@ -15,6 +15,7 @@ export type TalosBackAction =
     | 'dismiss-wizard'
     | 'close-sidebar'
     | 'sheet-subview-back'
+    | 'station-subpage-parent'
     | 'station-to-sidebar'
     | 'history'
     | 'exit'
@@ -26,6 +27,12 @@ export interface TalosBackState {
     wizardOpen: boolean
     sidebarOpen: boolean
     hasSheetSubView: boolean
+    /**
+     * The current ROUTE is a page inside a station — a report, a claim, a source
+     * — rather than the station's own top. Checked before `isStation`, which is
+     * true for both.
+     */
+    isStationSubPage: boolean
     isStation: boolean
     canGoBack: boolean
 }
@@ -35,6 +42,19 @@ export function resolveTalosBackAction(state: TalosBackState): TalosBackAction {
     if (state.wizardOpen) return 'dismiss-wizard'
     if (state.sidebarOpen) return 'close-sidebar'
     if (state.hasSheetSubView) return 'sheet-subview-back'
+    /**
+     * Inside a station, Back is TEMPORAL: it undoes the last move, it does not
+     * climb a tree. Android has separate ideas for these and the hardware
+     * button is the temporal one — so a person who reached a claim FROM a
+     * source page goes back to that source, not to the report the hierarchy
+     * would name.
+     *
+     * The declared parent is the safety net, not the rule: with no in-app
+     * history there is nothing to undo — a link opened cold, or a page reached
+     * by `replace` after starting a research — and popping the platform stack
+     * there would leave the app instead of going up one level.
+     */
+    if (state.isStationSubPage) return state.canGoBack ? 'history' : 'station-subpage-parent'
     if (state.isStation) return 'station-to-sidebar'
     return state.canGoBack ? 'history' : 'exit'
 }

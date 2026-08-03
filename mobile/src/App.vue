@@ -10,7 +10,7 @@ import TalosBootLogo from '@/components/brand/TalosBootLogo.vue'
 import TalosMobileHeader from '@/components/shell/TalosMobileHeader.vue'
 import TalosMobileToastRegion from '@/components/shell/TalosMobileToastRegion.vue'
 import ChatScreen from '@/screens/ChatScreen.vue'
-import { TALOS_MOBILE_ROUTES, type TalosMobileRouteName } from '@/lib/mobileRoutes'
+import { TALOS_MOBILE_ROUTES, talosMobileParentRoute, type TalosMobileRouteName } from '@/lib/mobileRoutes'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useThemeStore } from '@/stores/theme'
 import { useSettingsStore } from '@/stores/settings'
@@ -485,6 +485,19 @@ const activeRoute = computed<TalosMobileRouteName>(() => {
 // Chat is the persistent base; every other tab presents its screen in a sheet
 // over it — the mobile mirror of the desktop windowed workspace.
 const isStation = computed(() => activeRoute.value !== 'chat')
+/**
+ * A page INSIDE a station, which System Back must leave one level at a time.
+ *
+ * `isStation` says "not the chat" and is true just as much for a claim as for
+ * the research list, which is why Back used to throw a person all the way out
+ * to the chat with the main menu open (reported on the phone, reproduced on the
+ * tablet 2026-08-03). The route table now declares each nested page's parent;
+ * this reads it rather than pattern-matching on names.
+ */
+const stationParent = computed(() => talosMobileParentRoute(
+    activeRoute.value,
+    route.params as Record<string, unknown>,
+))
 // TABLET-SETTINGS-01: Settings categories are the primary pane for that task.
 // Mounting the unrelated chat rail beside them creates a redundant third pane.
 const tabletChatRailVisible = computed(() => (
@@ -620,6 +633,7 @@ onMounted(async () => {
                     wizardOpen: intro.introOpen.value,
                     sidebarOpen: sidebarOpen.value,
                     hasSheetSubView: sheetNav.subView.value !== null,
+                    isStationSubPage: stationParent.value !== null,
                     isStation: isStation.value,
                     canGoBack: event.canGoBack,
                 })
@@ -628,6 +642,13 @@ onMounted(async () => {
                     case 'dismiss-wizard': intro.handleBack(); return 'handled'
                     case 'close-sidebar': sidebarOpen.value = false; return 'handled'
                     case 'sheet-subview-back': sheetNav.subView.value?.back(); return 'handled'
+                    case 'station-subpage-parent': {
+                        // Only reached with nothing to undo, so this is a push
+                        // to the level above rather than a pop.
+                        const parent = stationParent.value
+                        if (parent) void router.push(parent)
+                        return 'handled'
+                    }
                     case 'station-to-sidebar': void navigate('chat'); sidebarOpen.value = true; return 'handled'
                     case 'history': return 'history'
                     case 'exit': return 'exit'
