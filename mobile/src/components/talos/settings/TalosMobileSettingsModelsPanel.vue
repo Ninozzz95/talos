@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
+import { defineAsyncComponent, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Bot, Boxes, Cpu, KeyRound, SlidersHorizontal } from '@lucide/vue'
+import { Boxes, Cpu, KeyRound, SlidersHorizontal } from '@lucide/vue'
 import { TabsContent } from 'reka-ui'
 import TalosMobileProviderRuntimePanel from '@/components/talos/models/TalosMobileProviderRuntimePanel.vue'
-import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
+// import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
-import { talosMobileModelProfileIsCallable, talosMobileProviderById } from '@/lib/mobileProviders'
+// Servivano alla sezione «Modello predefinito», commentata sotto.
+// import { talosMobileModelProfileIsCallable, talosMobileProviderById } from '@/lib/mobileProviders'
 import { talosRememberView, talosRememberedView } from '@/lib/navigation/rememberedView'
 import { useChatController } from '@/stores/chatController'
 
@@ -44,22 +45,32 @@ const TalosMobileModelAdvancedOptions = defineAsyncComponent(
 const TalosMobileLocalModels = defineAsyncComponent(
     () => import('@/components/talos/models/TalosMobileLocalModels.vue'),
 )
-const modelItems = computed(() => controller.profiles.value
-    .map((profile) => ({
-        value: profile.id,
-        label: `${talosMobileProviderById(profile.provider).label} - ${profile.display_name}`,
-        disabled: !profile.show_in_composer || !talosMobileModelProfileIsCallable(profile),
-    })))
+// const modelItems = computed(() => controller.profiles.value
+//     .map((profile) => ({
+//         value: profile.id,
+//         label: `${talosMobileProviderById(profile.provider).label} - ${profile.display_name}`,
+//         disabled: !profile.show_in_composer || !talosMobileModelProfileIsCallable(profile),
+//     })))
 onMounted(() => { void controller.init() })
 </script>
 
 <template>
     <div class="min-w-0 space-y-5">
-        <section :aria-label="t('models.defaultModel')" data-testid="settings-models" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
-            <h4 class="flex items-center gap-2 text-sm font-semibold text-[var(--talos-text)]">
-                <Bot class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('models.defaultModel') }}
+        <!--
+            RIMOSSA dall'owner il 2026-08-03: «puoi levare la sezione in alto del
+            modello predefinito, è inutile».
+
+            Commentata invece che cancellata perché la scelta esiste comunque in
+            due posti che restano — il selettore rapido del composer e la
+            linguetta Locale — quindi qui era una terza copia della stessa
+            decisione, in cima a una pagina che parla d'altro. Se dovesse
+            servire di nuovo, torna togliendo questi due marcatori.
+
+        <section :aria-label="t('models.defaultModel')" data-testid="settings-models" class="rounded-md border border-[var(- -talos-border)] bg-[var(- -talos-panel)] p-3">
+            <h4 class="flex items-center gap-2 text-sm font-semibold text-[var(- -talos-text)]">
+                <Bot class="size-4 text-[var(- -talos-accent)]" aria-hidden="true" /> {{ t('models.defaultModel') }}
             </h4>
-            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ t('models.sharedSelection') }}</p>
+            <p class="mt-1 text-xs leading-5 text-[var(- -talos-muted)]">{{ t('models.sharedSelection') }}</p>
             <TalosThemedSelect
                 v-if="modelItems.length"
                 class="mt-3"
@@ -69,8 +80,9 @@ onMounted(() => { void controller.init() })
                 :placeholder="t('models.selectDiscovered')"
                 @update:model-value="controller.selectModel"
             />
-            <p v-else class="mt-3 text-xs leading-5 text-[var(--talos-muted)]">{{ t('models.configureToBegin') }}</p>
+            <p v-else class="mt-3 text-xs leading-5 text-[var(- -talos-muted)]">{{ t('models.configureToBegin') }}</p>
         </section>
+        -->
 
         <TalosThemedTabs
             class="min-w-0"
