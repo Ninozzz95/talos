@@ -79,6 +79,18 @@ export interface TalosToolsetDeps {
      */
     libraryEnabled?(): boolean
     /**
+     * Quanto accesso ha il modello alla Libreria, con la stessa grammatica di
+     * ogni altra autorizzazione — owner 2026-08-03.
+     *
+     * `allow` legge · `ask` legge chiedendo la prima volta · `deny` non viene
+     * nemmeno offerto, cosi' il modello non promette una ricerca che non fara'.
+     *
+     * Assente ricade su `libraryEnabled()`, che era un booleano: acceso →
+     * `allow`, spento → **`ask`** e non `deny`, perche' chi ha spento ha detto
+     * «non attaccarmela a ogni messaggio», non «mai guardarla».
+     */
+    libraryAccess?(): 'allow' | 'ask' | 'deny'
+    /**
      * F1 — the web tools, present only when a search source is configured.
      *
      * D3: with nothing chosen the model does not receive the schemas at all, so
@@ -137,18 +149,63 @@ export interface TalosToolset {
 
 export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosToolset> {
     const now = deps.now ?? (() => new Date().toISOString())
-    const libraryAllowed = (): boolean => {
-        if (!deps.libraryEnabled) return true
+    const libraryAccess = (): 'allow' | 'ask' | 'deny' => {
         try {
-            return deps.libraryEnabled()
+            if (deps.libraryAccess) return deps.libraryAccess()
+            if (!deps.libraryEnabled) return 'allow'
+            // Il booleano vecchio: spento vuol dire «non attaccarmela a ogni
+            // messaggio», non «mai guardarla». Quindi `ask`, e il cartellino
+            // chiede la prima volta.
+            return deps.libraryEnabled() ? 'allow' : 'ask'
         } catch {
-            // A missing/broken settings source cannot broaden Vault access.
-            return false
+            // Una sorgente rotta non puo' allargare l'accesso al Vault.
+            return 'deny'
         }
     }
+    const libraryAllowed = (): boolean => libraryAccess() !== 'deny'
+    /**
+     * Non piu' un rifiuto: un tool offerto che fallisce sempre e' peggio di uno
+     * assente, perche' il modello lo promette e poi non lo mantiene. Il
+     * permesso `read` decide PRIMA, e su «nega» il tool non viene offerto.
+     *
+     * Resta come funzione perche' `library_context_enabled` continua a
+     * governare l'iniezione ambientale, che e' un'altra cosa e ha ragione di
+     * avere il suo interruttore.
+     */
     const requireLibraryEnabled = (): void => {
+        // Solo `deny` rifiuta: `ask` e' governato dal cartellino di consenso,
+        // che chiede PRIMA di eseguire invece di fallire dopo.
         if (!libraryAllowed()) throw new Error('TALOS_LIBRARY_DISABLED')
     }
+    /**
+     * I tool della Libreria NON sono un caso speciale, e trattarli come tale
+     * era il difetto.
+     *
+     * Owner 2026-08-03, con uno screenshot: «che cosa ho nella libreria» →
+     * «non ho uno strumento per elencare il contenuto della tua Libreria,
+     * posso solo CREARE documenti al suo interno». Misurato sul corpo davvero
+     * inviato: partivano tredici tool e nessuno della Libreria — su DeepSeek
+     * come su OpenAI, quindi non era del provider.
+     *
+     * Qui c'era un filtro che toglieva ogni `library_*` quando
+     * `library_context_enabled` era falso. Ma quell'interruttore vuol dire
+     * «attacca la mia Libreria a OGNI messaggio»: ambientale, costosa, spenta
+     * di serie per scelta. Legarci anche i tool significava che chi non vuole
+     * l'iniezione automatica perde pure il modo di CHIEDERE — e restava un
+     * modello capace di creare un documento nella Libreria e incapace di dire
+     * cosa contiene.
+     *
+     * La protezione non sparisce: cambia di posto, e va dove l'owner ha chiesto
+     * che stesse — la stessa grammatica di ogni altra autorizzazione. I tool
+     * della Libreria sono tool di `read`, quindi `tools.read` li governa gia'
+     * con i suoi tre stati: **consenti** (leggono), **chiedi** (predefinito: il
+     * cartellino compare alla prima chiamata, e «consenti sempre» scrive
+     * l'autorizzazione per QUEL tool), **nega** (non vengono nemmeno offerti,
+     * quindi il modello non promette una ricerca che non fara').
+     *
+     * Non serviva una quarta impostazione: bastava smettere di trattarli
+     * diversamente da tutti gli altri.
+     */
     const isEnabled = (
         name: string,
         enabledTools: Readonly<TalosAgentToolEnabled>,
@@ -156,6 +213,8 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
         && (
             name === 'library_context_policy_update'
             || !name.startsWith('library_')
+            // Su `deny` spariscono; su `ask` restano, ed e' il cartellino a
+            // decidere. Prima sparivano anche su `ask`, ed era il difetto.
             || libraryAllowed()
         )
 

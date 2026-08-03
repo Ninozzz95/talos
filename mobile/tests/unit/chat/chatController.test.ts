@@ -189,6 +189,7 @@ function makeDeps() {
         tone: { preset: 'balanced' as const },
         shell: {
             library_context_enabled: false,
+            library_access: 'deny' as const,
             library_context_policy: null as import('@/lib/chat/libraryPolicy').TalosLibraryContextPolicyV1 | null,
             library_autosave_generated: false,
             debug_diagnostics: false,
@@ -571,6 +572,7 @@ describe('chatController', () => {
         Object.assign(settings.state, {
             shell: {
                 library_context_enabled: false,
+            library_access: 'deny' as const,
                 library_autosave_generated: true,
                 debug_diagnostics: false,
             },
@@ -675,6 +677,7 @@ describe('chatController', () => {
         settings.state.agent_tools.library_context_policy_update = true
         settings.state.shell = {
             library_context_enabled: false,
+            library_access: 'deny' as const,
             library_context_policy: null,
             library_autosave_generated: false,
             debug_diagnostics: false,
@@ -1101,7 +1104,11 @@ describe('chatController', () => {
                 if (providerRound === 1) {
                     // The schema was legitimately offered. Revoke before the
                     // provider-returned call reaches the execution boundary.
+                    // Revoca a meta' volo: sotto la grammatica a tre stati
+                    // e' `deny` a chiudere la porta, non l'interruttore
+                    // dell'iniezione ambientale.
                     shell.library_context_enabled = false
+                    shell.library_access = 'deny'
                     listSummaries.mockClear()
                     return {
                         status: 200,
