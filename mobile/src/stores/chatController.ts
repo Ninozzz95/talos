@@ -4065,10 +4065,28 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             model: model.id,
             provider: authorProvider,
             toolName: 'deep_research',
-        }).catch(() => null)
+        }).catch((failure: unknown) => {
+            /**
+             * Loud, because this is the most expensive failure in the run.
+             *
+             * It used to be `.catch(() => null)`. The report was then recorded
+             * as a step that FINISHED with no file behind it, `run_finished`
+             * was appended, and the research announced itself complete — with
+             * nothing to read. Owner 2026-08-03 saw exactly that: «conclusa
+             * senza scrivere il rapporto». Every source had been fetched and
+             * every model call paid for; the one artefact that justified the
+             * spending was dropped without a word.
+             *
+             * Failing here costs nothing that was not already lost, and buys
+             * the two things silence took away: the person is told, and the
+             * step is resumable — the gathering stays on disk, so a retry
+             * starts from the writing, not from the searching.
+             */
+            throw new Error(`TALOS_RESEARCH_REPORT_NOT_SAVED: ${failure instanceof Error ? failure.message : String(failure)}`)
+        })
 
         return {
-            fileId: saved?.file.id ?? null,
+            fileId: saved.file.id,
             tokens: Number(completion.usage?.completion_tokens ?? 0) + judgeTokens,
             judge: chosen?.id ?? null,
             claims: verified.length,

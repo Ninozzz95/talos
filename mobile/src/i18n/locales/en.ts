@@ -1690,6 +1690,7 @@ export const TALOS_EN_MESSAGES = {
             cancelledHere: 'Cancelled. What it had gathered stays; it does not resume.',
             failedHere: 'It stopped on an error. The reason is below.',
             doneNoReport: 'Finished without writing the report: the gathering is there, the synthesis is not.',
+            reportNotSaved: 'The report was written but could not be saved. The gathering is intact: resuming restarts from the writing, not from the searches.',
         buckets: {
             cancelled: 'Cancelled',
             paused: 'Paused',

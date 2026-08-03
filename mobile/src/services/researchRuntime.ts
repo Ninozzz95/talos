@@ -249,13 +249,24 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
                     }, seq++)
                     // A failed step is a result, not a question: stop rather
                     // than spin. What was paid for stays paid for and readable.
+                    onProgress?.({ run, ...talosResearchProgressOf(run) })
                     return run
                 }
             }
             if (deps.synthesise) {
                 const done = run.steps.find((step) => step.id === SYNTHESIS_STEP_ID)?.state === 'done'
                 if (!done) {
-
+                    /**
+                     * The synthesis reports like every other step.
+                     *
+                     * It did not, and it is the LONGEST one: the loop published
+                     * progress only at its own top, so a screen watching a run
+                     * sat frozen on the last branch count for the whole minute
+                     * the report was being written, and then jumped straight to
+                     * an ending. Owner 2026-08-03: «nessuna progress bar, da
+                     * debug non prod ready». Half of that was this — there was
+                     * nothing to draw a bar FROM.
+                     */
                     keeper.engage(SYNTHESIS_LABEL)
                     run = await append(deps, run, {
                         kind: 'step_started',
@@ -264,6 +275,7 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
                         branchId: SYNTHESIS_STEP_ID,
                         stepKind: 'synthesise',
                     }, seq++)
+                    onProgress?.({ run, ...talosResearchProgressOf(run) })
                     try {
                         const outcome = await deps.synthesise(run)
                         run = await append(deps, run, {
@@ -273,6 +285,7 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
                             spend: outcome.spend,
                             resultRef: outcome.resultRef,
                         }, seq++)
+                        onProgress?.({ run, ...talosResearchProgressOf(run) })
                     } catch (failure) {
                         run = await append(deps, run, {
                             kind: 'step_failed',
@@ -283,6 +296,9 @@ export function createTalosResearchRuntime(deps: TalosResearchRuntimeDeps) {
                         // The gathering is not thrown away because the writing
                         // failed: what was collected is on disk and paid for,
                         // and a retry starts from the report, not the search.
+                        // Reported before returning, or the screen keeps the
+                        // last cheerful count it was given and never learns.
+                        onProgress?.({ run, ...talosResearchProgressOf(run) })
                         return run
                     }
                 }

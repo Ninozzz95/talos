@@ -256,3 +256,52 @@ describe('renaming and removing a research', () => {
         expect((refusal as Error | null)?.message).toBe('TALOS_RESEARCH_RUN_BUSY')
     })
 })
+
+describe('what a screen watching a run is told', () => {
+    it('hears the report being written, not only the branches', async () => {
+        /**
+         * The synthesis is the LONGEST step, and it published nothing: the loop
+         * reported only at its own top, so a screen sat frozen on the last
+         * branch count for the whole minute the report took, then jumped to an
+         * ending. Owner 2026-08-03: «nessuna progress bar». Half of that was
+         * this — there was nothing to draw a bar from.
+         */
+        const seen: Array<{ done: number; total: number; status: string }> = []
+        const runtime = createTalosResearchRuntime({
+            repository: createMemoryChatRepository(),
+            keeper: () => fakeKeeper(),
+            now: clock(),
+            perform: async () => ONE_SEARCH,
+            synthesise: async () => ONE_SEARCH,
+        })
+
+        await runtime.start({ ...START, branches: [BRANCHES[0]!] }, (progress) => {
+            seen.push({ done: progress.done, total: progress.total, status: progress.run.status })
+        })
+
+        // The denominator GROWS when the synthesis becomes a real step, and the
+        // screen is told at that moment rather than discovering it at the end.
+        expect(seen.some((entry) => entry.total === 1)).toBe(true)
+        expect(seen.some((entry) => entry.total === 2 && entry.done === 1)).toBe(true)
+        // And the finished state arrives as a report too.
+        expect(seen.at(-1)).toMatchObject({ done: 2, total: 2, status: 'done' })
+    })
+
+    it('says so when a step fails, instead of leaving the last cheerful count', async () => {
+        const seen: string[] = []
+        const runtime = createTalosResearchRuntime({
+            repository: createMemoryChatRepository(),
+            keeper: () => fakeKeeper(),
+            now: clock(),
+            perform: async () => ONE_SEARCH,
+            synthesise: async () => { throw new Error('il modello non ha tenuto il formato') },
+        })
+
+        await runtime.start({ ...START, branches: [BRANCHES[0]!] }, (progress) => {
+            seen.push(progress.run.steps.map((step) => step.state).join(','))
+        })
+
+        // The last thing the screen hears includes the failure.
+        expect(seen.at(-1)).toContain('failed')
+    })
+})
