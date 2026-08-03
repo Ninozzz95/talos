@@ -89,6 +89,10 @@ async function run(
         text: generation.text,
         model: input.model.id,
         finishReason: 'stop',
+        // Nello stesso campo che usano i provider di rete, quindi nello stesso
+        // cassetto: il ragionamento di un modello locale non è una cosa diversa
+        // dal ragionamento di Claude, e non merita una seconda superficie.
+        reasoning: generation.reasoning || undefined,
         // Only what was actually counted. A local run has no billing and no
         // prompt-token figure to report, and inventing one would put a number
         // in the receipt that means nothing.
