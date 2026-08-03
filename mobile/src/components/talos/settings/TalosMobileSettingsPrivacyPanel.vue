@@ -39,6 +39,7 @@ const device = ref<TalosDeviceState>({
     // sistemare» per un istante e poi la verità, che è meglio del contrario.
     batteryExempt: false,
     manufacturer: '',
+    brand: '',
 })
 const { t } = useTalosI18n()
 const busy = ref<string | null>(null)
@@ -73,7 +74,7 @@ function stateOf(row: TalosPermissionRow): TalosPermissionState | null {
  */
 const backgroundSteps = computed(() => (device.value.batteryExempt
     ? []
-    : talosBackgroundExtraSteps(device.value.manufacturer)))
+    : talosBackgroundExtraSteps(device.value)))
 function rowTitle(row: TalosPermissionRow): string {
     return t(`privacyPermissions.rows.${row.id}.title`)
 }

@@ -55,7 +55,7 @@ const backgroundReady = ref(false)
 async function readBackground(): Promise<void> {
     const state = await readTalosDeviceState()
     backgroundReady.value = state.batteryExempt
-    manufacturer.value = state.manufacturer
+    maker.value = { manufacturer: state.manufacturer, brand: state.brand }
 }
 function onVisible(): void {
     if (document.visibilityState === 'visible') void readBackground()
@@ -127,10 +127,10 @@ function setupStepLabel(id: TalosSetupStepId): string {
     return t('onboarding.modelStep')
 }
 
-const manufacturer = ref('')
+const maker = ref<{ manufacturer: string, brand: string }>({ manufacturer: '', brand: '' })
 const backgroundSteps = computed(() => (backgroundReady.value
     ? []
-    : talosBackgroundExtraSteps(manufacturer.value)))
+    : talosBackgroundExtraSteps(maker.value)))
 
 const askingBackground = ref(false)
 async function askBackground(): Promise<void> {

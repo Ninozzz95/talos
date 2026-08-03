@@ -89,6 +89,20 @@ public class TalosDevicePermissionsPlugin extends Plugin {
          * giusti invece di quelli generici.
          */
         result.put("manufacturer", Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.toLowerCase());
+        /**
+         * E il MARCHIO, che non e' la stessa cosa.
+         *
+         * `MANUFACTURER` e' chi fabbrica, `BRAND` e' quello che il cliente
+         * legge sulla scocca: un POCO espone `MANUFACTURER=Xiaomi` e
+         * `BRAND=POCO`. Servono entrambi perche' un firmware particolare puo'
+         * mettere il nome utile in uno solo dei due campi.
+         *
+         * NON si legge la versione della ROM (`ro.miui.ui.version.name` e
+         * simili): sono interfacce non-SDK, ristrette da Android 9 in poi, che
+         * possono sparire senza preavviso. La famiglia OEM basta a scegliere le
+         * istruzioni; la versione no, e costerebbe una via d'accesso fragile.
+         */
+        result.put("brand", Build.BRAND == null ? "" : Build.BRAND.toLowerCase());
         call.resolve(result);
     }
 
