@@ -291,6 +291,49 @@ describe('the report a person can actually check', () => {
      * printed a count. "2 branches failed" is not something a person can act
      * on — and three of these codes are our own refusals with a remedy.
      */
+    it('goes and reads the report when the research finishes under it', async () => {
+        /**
+         * The report is loaded once, on mount. A research that FINISHES while
+         * you are watching it therefore had a report on disk and a page that
+         * had never gone to look — it read «conclusa senza scrivere il
+         * rapporto» while six judged claims sat there, and appeared the moment
+         * the page was reopened from the list. Watching a thing has to include
+         * noticing that it arrived.
+         */
+        const working = {
+            ...RUN,
+            status: 'collecting' as const,
+            steps: [step({ id: 'b1:search', branchId: 'b1' })],
+        }
+        mockState.controller = controllerWith(REPORT, working)
+        const controller = mockState.controller as never as ReturnType<typeof controllerWith>
+
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+        // Nothing to read yet: no synthesis step, so no report reference.
+        expect(controller.research.report).not.toHaveBeenCalled()
+
+        // The run finishes, and the registry says so.
+        const watcher = controller.research.registry.watch.mock.calls[0]?.[1] as
+            (progress: { run: TalosResearchRun; done: number; total: number }) => void
+        controller.research.list = vi.fn().mockResolvedValue([RUN])
+        watcher({ run: RUN, done: 3, total: 3 })
+        await settle(wrapper)
+        await settle(wrapper)
+
+        expect(controller.research.report).toHaveBeenCalledWith('file-report')
+        expect(wrapper.text()).toContain('Ha vinto Norris.')
+
+        // And it stops looking once it has it. Progress arrives many times a
+        // minute; re-reading the file on every tick would put the disk in the
+        // path of an indicator.
+        watcher({ run: RUN, done: 3, total: 3 })
+        watcher({ run: RUN, done: 3, total: 3 })
+        await settle(wrapper)
+        expect(controller.research.report).toHaveBeenCalledTimes(1)
+    })
+
     it('says WHY a branch failed, once per distinct cause', async () => {
         mockState.controller = controllerWith(REPORT, {
             ...RUN,
