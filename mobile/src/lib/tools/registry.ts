@@ -100,6 +100,21 @@ function schemaOf(tool: TalosToolDefinition<never>): JsonSchema {
     // inside a function declaration, so it is dropped here rather than in each
     // of the four translations.
     const { $schema: _dialect, ...schema } = z.toJSONSchema(tool.input, { io: 'input' }) as JsonSchema
+    /**
+     * A top-level union loses its `type`, and Anthropic refuses the whole call.
+     *
+     * Owner 2026-08-03, verbatim from the device:
+     * `tools.4.custom.input_schema.type: Field required` — HTTP 400, every send
+     * to Anthropic, not just the one that wanted the tool. `z.discriminatedUnion`
+     * emits `{oneOf: [...]}` with no `type` of its own, which is correct JSON
+     * Schema and unacceptable to a provider that requires the key.
+     *
+     * Saying `type: 'object'` here is not a guess: every branch of those unions
+     * IS an object, and the tool-calling contract of all four providers takes an
+     * object and nothing else. It is written down rather than assumed, and the
+     * gate in registry.test.ts fails if a tool ever advertises otherwise.
+     */
+    if (typeof schema.type !== 'string') return { type: 'object', ...schema }
     return schema
 }
 

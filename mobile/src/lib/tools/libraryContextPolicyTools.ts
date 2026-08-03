@@ -52,43 +52,57 @@ const expectedRevision = z.number().int().min(0)
 const fileIds = z.array(z.string().trim().min(1).max(255)).min(1).max(64)
 const mode = z.enum(TALOS_LIBRARY_CONTEXT_MODES)
 
-const inputSchema = z.discriminatedUnion('action', [
-    z.object({
-        action: z.literal('set_mode'),
-        scope,
-        mode,
-        expected_revision: expectedRevision,
-    }).strict(),
-    z.object({
-        action: z.literal('set_enabled'),
-        scope,
-        enabled: z.boolean(),
-        expected_revision: expectedRevision,
-    }).strict(),
-    z.object({
-        action: z.literal('include_files'),
-        scope,
-        file_ids: fileIds,
-        expected_revision: expectedRevision,
-    }).strict(),
-    z.object({
-        action: z.literal('exclude_files'),
-        scope,
-        file_ids: fileIds,
-        expected_revision: expectedRevision,
-    }).strict(),
-    z.object({
-        action: z.literal('clear_overrides'),
-        scope,
-        expected_revision: expectedRevision,
-    }).strict(),
-    z.object({
-        action: z.literal('undo'),
-        scope,
-        receipt_id: z.string().trim().min(1).max(255),
-        expected_revision: expectedRevision,
-    }).strict(),
-])
+/**
+ * ONE flat object, not a discriminated union — and that is a provider
+ * constraint, not a preference.
+ *
+ * Owner 2026-08-03, from his tablet, then reproduced against the live API:
+ *
+ *   tools.4.custom.input_schema: input_schema does not support oneOf, allOf,
+ *   or anyOf at the top level        anthropic / claude-sonnet-5   HTTP 400
+ *
+ * A `z.discriminatedUnion` emits exactly that at the top level. Anthropic
+ * refuses it outright, and a refused schema takes the WHOLE call with it — so
+ * this one tool made every send to Anthropic fail, not merely the ones that
+ * wanted it. The first repair added the missing `type`, which the first 400
+ * asked for; the API then raised this one. Only the device could say that.
+ *
+ * So the shape is flat and the per-action requirements move into a refinement:
+ * the model still cannot send `set_mode` without a mode, it just gets told by
+ * us instead of by the type system. The cost is real — TypeScript no longer
+ * narrows `input` on `action` — and it is paid explicitly in `run` below.
+ */
+const inputSchema = z.object({
+    action: z.enum([
+        'set_mode',
+        'set_enabled',
+        'include_files',
+        'exclude_files',
+        'clear_overrides',
+        'undo',
+    ]),
+    scope,
+    expected_revision: expectedRevision,
+    mode: mode.optional().describe('Required for set_mode. Ignored for every other action.'),
+    enabled: z.boolean().optional().describe('Required for set_enabled. Ignored for every other action.'),
+    file_ids: fileIds.optional().describe('Required for include_files and exclude_files. Ignored otherwise.'),
+    receipt_id: z.string().trim().min(1).max(255).optional()
+        .describe('Required for undo: the receipt id of the change to reverse. Ignored otherwise.'),
+}).strict().superRefine((value, ctx) => {
+    const missing = (field: string): void => {
+        ctx.addIssue({
+            code: 'custom',
+            path: [field],
+            message: `${field} is required when action is ${value.action}.`,
+        })
+    }
+    if (value.action === 'set_mode' && value.mode === undefined) missing('mode')
+    if (value.action === 'set_enabled' && value.enabled === undefined) missing('enabled')
+    if ((value.action === 'include_files' || value.action === 'exclude_files') && value.file_ids === undefined) {
+        missing('file_ids')
+    }
+    if (value.action === 'undo' && value.receipt_id === undefined) missing('receipt_id')
+})
 
 type PolicyToolInput = z.infer<typeof inputSchema>
 
@@ -105,6 +119,27 @@ export interface TalosLibraryContextPolicyReceiptV1 {
 }
 
 const MAX_RECEIPTS = 32
+
+/**
+ * The price of the flat schema, paid where it is owed.
+ *
+ * The input can no longer narrow on `action`, because Anthropic refuses a
+ * discriminated union at the top of `input_schema` (see the schema above). The
+ * per-action requirements live in a refinement, so these branches should be
+ * unreachable — and if one is ever reached, that means the refinement and the
+ * branch have drifted apart. It says so instead of asserting with `!`.
+ */
+function missingField(field: string, action: string): {
+    ok: false
+    code: string
+    content: string
+} {
+    return {
+        ok: false,
+        code: 'TALOS_LIBRARY_POLICY_INPUT_INCOMPLETE',
+        content: `${field} is required when action is ${action}. Nothing was changed.`,
+    }
+}
 
 function uniqueFileIds(values: readonly string[]): string[] {
     return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
@@ -304,9 +339,14 @@ export function createTalosLibraryContextPolicyTools(
             }
 
             if (input.action === 'undo') {
+                // The schema's refinement already rejects this, so reaching it
+                // means the refinement and this branch disagree. Say so rather
+                // than assert with `!`: a wrong answer is worse than a refusal.
+                if (input.receipt_id === undefined) return missingField('receipt_id', input.action)
+                const receiptId = input.receipt_id
                 let receipt: TalosLibraryContextPolicyReceiptV1 | undefined
-                let matchedReceiptId = input.receipt_id
-                for (const candidateId of receiptLookupIds(input.receipt_id)) {
+                let matchedReceiptId = receiptId
+                for (const candidateId of receiptLookupIds(receiptId)) {
                     receipt = receipts.get(candidateId)
                     if (!receipt && sources.readReceipt) {
                         receipt = parseTalosLibraryContextPolicyReceipt(
@@ -371,10 +411,13 @@ export function createTalosLibraryContextPolicyTools(
                 excluded_file_ids: excluded,
             }
             if (input.action === 'set_mode') {
+                if (input.mode === undefined) return missingField('mode', input.action)
                 next = { ...next, enabled: true, mode: input.mode }
             } else if (input.action === 'set_enabled') {
+                if (input.enabled === undefined) return missingField('enabled', input.action)
                 next = { ...next, enabled: input.enabled }
             } else if (input.action === 'include_files') {
+                if (input.file_ids === undefined) return missingField('file_ids', input.action)
                 const additions = uniqueFileIds(input.file_ids)
                 const added = new Set(additions)
                 next = {
@@ -383,6 +426,7 @@ export function createTalosLibraryContextPolicyTools(
                     excluded_file_ids: excluded.filter((id) => !added.has(id)),
                 }
             } else if (input.action === 'exclude_files') {
+                if (input.file_ids === undefined) return missingField('file_ids', input.action)
                 const additions = uniqueFileIds(input.file_ids)
                 const blocked = new Set(additions)
                 next = {
