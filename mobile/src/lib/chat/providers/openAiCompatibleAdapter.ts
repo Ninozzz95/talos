@@ -12,6 +12,12 @@ import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
 import { talosPromptCacheKey } from '@/lib/chat/promptCache'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
+import {
+    TALOS_OPENAI_REASONING_NONE,
+    talosHasReasoningConflict,
+    talosOpenAiRejectsToolsWithReasoning,
+    talosRememberReasoningConflict,
+} from '@/lib/chat/providers/openAiReasoningTools'
 import { talosToolsForOpenAi } from '@/lib/tools/registry'
 import { createOpenAiToolCallAccumulator, parseOpenAiToolCalls } from '@/lib/tools/wire'
 import {
@@ -199,7 +205,15 @@ function compatibleCompletionData(
         data.reasoning = { effort: input.effort }
     }
     if (config.provider === 'openai' && input.effort !== 'off' && input.model.supportedParameters.includes('reasoning_effort')) {
-        data.reasoning_effort = input.effort
+        /**
+         * `'none'` ESPLICITO quando questo modello ha gia' rifiutato la coppia.
+         *
+         * Non «non mandarlo»: provato contro l'API vera il 2026-08-03, con il
+         * campo OMESSO il rifiuto e' identico — il modello applica un livello
+         * suo lato server. Solo un `'none'` scritto lo disarma.
+         */
+        const conflicted = data.tools !== undefined && talosHasReasoningConflict(input.model.id)
+        data.reasoning_effort = conflicted ? TALOS_OPENAI_REASONING_NONE : input.effort
     }
     /**
      * OpenAI caches prefixes over 1,024 tokens on its own; this only tells it
@@ -248,14 +262,29 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
         async complete(input: TalosMobileCompletionInput, credential: TalosMobileProviderCredential, transport: TalosMobileHttpTransport): Promise<TalosMobileCompletionResult> {
             const apiKey = requireProviderApiKey(config.provider, 'complete', credential)
             const baseUrl = compatibleBaseUrl(config, credential, 'complete')
-            const data = compatibleCompletionData(config, input, false)
-            const response = await transport.request({
+            const send = async (payload: Record<string, unknown>) => transport.request({
                 method: 'POST',
                 url: `${baseUrl}/chat/completions`,
                 headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-                data,
+                data: payload,
                 ...requestTimeouts(credential),
             })
+            let response = await send(compatibleCompletionData(config, input, false))
+            /**
+             * Si impara dal rifiuto invece di portarsi dietro un elenco.
+             *
+             * Owner 2026-08-03, con uno screenshot: `gpt-5.6-luna` rispondeva
+             * 400 a «Ciaoo», perche' TALOS offre i suoi tool a ogni messaggio e
+             * quel modello non li accetta insieme al ragionamento. Un elenco
+             * cablato invecchierebbe dentro l'APK e sbaglierebbe sul prossimo
+             * modello; il provider invece lo dice, e lo dice in modo
+             * riconoscibile. Un solo nuovo tentativo, e il modello resta
+             * segnato per il resto della sessione.
+             */
+            if (talosOpenAiRejectsToolsWithReasoning(response.status, response.data)) {
+                talosRememberReasoningConflict(input.model.id)
+                response = await send(compatibleCompletionData(config, input, false))
+            }
             requireHttpSuccess({ provider: config.provider, operation: 'complete', status: response.status, data: response.data })
             const parsed = completionSchema.safeParse(response.data)
             if (!parsed.success) throw malformedProviderResponse(config.provider, 'complete', { received: response.data, issues: parsed.error.issues })
