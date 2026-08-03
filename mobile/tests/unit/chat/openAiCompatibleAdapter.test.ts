@@ -350,3 +350,60 @@ describe('l endpoint, per provider', () => {
         }
     })
 })
+
+describe('il ciclo dei tool, che qui non ha un ruolo tool', () => {
+    /**
+     * Su chat/completions il risultato e' un messaggio `role:"tool"` con
+     * `tool_call_id`. Su `/v1/responses` sono ELEMENTI: `function_call` per la
+     * richiesta e `function_call_output` per la risposta, appaiati da `call_id`.
+     *
+     * Con `store:false` il contesto lo ricostruiamo noi a ogni richiesta, quindi
+     * la chiamata originale va RIMESSA accanto al suo risultato: se manca, il
+     * modello riceve un esito senza sapere di che domanda fosse.
+     */
+    it('rimette la chiamata accanto al suo risultato', async () => {
+        const request = vi.fn().mockResolvedValue({
+            status: 200,
+            data: { status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: 'trovato' }] }] },
+        })
+        await openAiAdapter.complete({
+            model: { id: 'gpt-5.6-luna', provider: 'openai', displayName: 'Luna', supportedParameters: [] },
+            effort: 'off',
+            turns: [
+                { role: 'user', content: 'Cerca batteria.' },
+                { role: 'assistant', content: '', toolCalls: [{ id: 'call_1', name: 'library_search', arguments: '{"query":"batteria"}' }] },
+                { role: 'tool', content: '[{"nome":"batteria.md"}]', toolCallId: 'call_1' },
+            ],
+        } as never, { apiKey: 'k' }, { request } as unknown as TalosMobileHttpTransport)
+
+        const items = (request.mock.calls[0]![0] as { data: { input: Array<Record<string, unknown>> } }).data.input
+        expect(items).toEqual([
+            { role: 'user', content: 'Cerca batteria.' },
+            { type: 'function_call', call_id: 'call_1', name: 'library_search', arguments: '{"query":"batteria"}' },
+            { type: 'function_call_output', call_id: 'call_1', output: '[{"nome":"batteria.md"}]' },
+        ])
+        // Nessun `role: "tool"`: quel ruolo su questo endpoint non esiste.
+        expect(items.some((item) => item.role === 'tool')).toBe(false)
+    })
+
+    it('non lascia mai un risultato senza il suo call_id', async () => {
+        // Due risultati con lo stesso identificativo vuoto sarebbero due esiti
+        // che non si sa a chi appartengono.
+        const request = vi.fn().mockResolvedValue({
+            status: 200,
+            data: { status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: 'ok' }] }] },
+        })
+        await openAiAdapter.complete({
+            model: { id: 'gpt-5.6-luna', provider: 'openai', displayName: 'Luna', supportedParameters: [] },
+            effort: 'off',
+            turns: [
+                { role: 'assistant', content: '', toolCalls: [{ id: 'call_a', name: 'x', arguments: '{}' }] },
+                { role: 'tool', content: 'primo', toolCallId: 'call_a' },
+            ],
+        } as never, { apiKey: 'k' }, { request } as unknown as TalosMobileHttpTransport)
+
+        const items = (request.mock.calls[0]![0] as { data: { input: Array<Record<string, unknown>> } }).data.input
+        const risultato = items.find((item) => item.type === 'function_call_output')!
+        expect(risultato.call_id).toBe('call_a')
+    })
+})
