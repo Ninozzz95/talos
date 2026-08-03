@@ -152,6 +152,7 @@ function controllerWith(report: TalosResearchReportRecord | null, run: TalosRese
             }),
             followUp: vi.fn().mockResolvedValue('file-answer'),
             exportReport: vi.fn().mockResolvedValue({ ok: true }),
+            openChat: vi.fn().mockResolvedValue(undefined),
         },
     }
 }
@@ -552,5 +553,62 @@ describe('R-5 — what a dossier is worth after the day it was made', () => {
         const second = mount(ResearchReportScreen)
         await openReport(second)
         expect(second.find('[data-testid="talos-research-recheck-result"]').exists()).toBe(false)
+    })
+})
+
+/**
+ * A chat about the research, which is a different thing from the follow-up box.
+ *
+ * Owner 2026-08-03: «quando in fondo voglio fare partire un'altra chat, deve
+ * partire fisicamente una chat, ma col contesto della ricerca. Deve essere
+ * esattamente come una chat nuova, non deve essere nella pagina della ricerca».
+ */
+describe('leaving the report for a real chat about it', () => {
+    beforeEach(() => {
+        mockState.controller = controllerWith(REPORT)
+        routerCalls.push.mockClear()
+    })
+
+    async function openReport(wrapper: ReturnType<typeof mount>) {
+        await settle(wrapper)
+        await settle(wrapper)
+    }
+
+    it('opens a session AND navigates away, because a chat is not a page section', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        await openReport(wrapper)
+
+        await wrapper.get('[data-testid="talos-research-open-chat"]').trigger('click')
+        await settle(wrapper)
+
+        const controller = mockState.controller as ReturnType<typeof controllerWith>
+        expect(controller.research.openChat).toHaveBeenCalledWith('run-1')
+        // The navigation is half the requirement: staying here would be the
+        // follow-up box again, which already exists and is a different thing.
+        expect(routerCalls.push).toHaveBeenCalledWith({ name: 'chat' })
+    })
+
+    it('does not offer it while there is no report to take along', async () => {
+        mockState.controller = controllerWith(null)
+        const wrapper = mount(ResearchReportScreen)
+        await openReport(wrapper)
+
+        expect(wrapper.find('[data-testid="talos-research-open-chat"]').exists()).toBe(false)
+    })
+
+    it('stays on the report when the session could not be made', async () => {
+        // Navigating anyway would leave the person in an unrelated chat with no
+        // idea that the thing they asked for did not happen.
+        const controller = controllerWith(REPORT)
+        controller.research.openChat = vi.fn().mockRejectedValue(new Error('TALOS_RESEARCH_NO_REPORT'))
+        mockState.controller = controller
+
+        const wrapper = mount(ResearchReportScreen)
+        await openReport(wrapper)
+        await wrapper.get('[data-testid="talos-research-open-chat"]').trigger('click')
+        await settle(wrapper)
+
+        expect(routerCalls.push).not.toHaveBeenCalled()
+        expect(wrapper.get('[data-testid="talos-research-report-error"]').text()).toContain('TALOS_RESEARCH_NO_REPORT')
     })
 })

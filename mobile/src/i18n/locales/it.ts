@@ -1721,6 +1721,8 @@ export const TALOS_IT_MESSAGES = {
             failed: 'non riuscito',
             interrupted: 'interrotto',
         },
+        openChat: 'Parlane in una chat',
+        openingChat: 'Sto aprendo la chat…',
         stepSaved: 'salvato',
         howItWasBuilt: 'Come è stato costruito',
         runningSince: 'In corso da {elapsed}',
