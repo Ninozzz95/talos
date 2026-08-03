@@ -86,7 +86,7 @@ function openClaim(at: number): void {
 
                 <section v-else class="flex flex-col gap-2">
                     <p class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
-                        {{ t('research.claimsOnThisSource', { count: dependants.length }) }}
+                        {{ t(dependants.length === 1 ? 'research.claimsOnThisSourceOne' : 'research.claimsOnThisSourceMany', { count: dependants.length }) }}
                     </p>
                     <button
                         v-for="entry in dependants"

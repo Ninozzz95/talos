@@ -164,6 +164,10 @@ describe('the source page', () => {
         const wrapper = await open(ResearchSourceScreen, { id: 'run-1', index: '1' })
         const claims = wrapper.findAll('[data-testid="talos-research-source-claim"]')
         expect(claims).toHaveLength(1)
+        // Counted in words when there is one of it. The device showed the other
+        // half of this bug as "1 linee di indagine non sono riuscite".
+        expect(wrapper.text()).toContain('One claim rests on this source')
+        expect(wrapper.text()).not.toContain('1 claims')
 
         await claims[0]!.trigger('click')
         expect(routerCalls.push).toHaveBeenCalledWith({

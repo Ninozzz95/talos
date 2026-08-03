@@ -246,7 +246,7 @@ function openSource(index: number): void {
                 <div v-if="failedSteps.length" data-testid="talos-research-failed-steps" class="flex items-start gap-2 rounded-xl border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-xs leading-5 text-[var(--talos-danger)]">
                     <AlertTriangle class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
                     <div class="min-w-0 flex-1">
-                        <p>{{ t('research.branchesFailed', { count: failedSteps.length }) }}</p>
+                        <p>{{ t(failedSteps.length === 1 ? 'research.branchesFailedOne' : 'research.branchesFailedMany', { count: failedSteps.length }) }}</p>
                         <!-- The reason, kept from the station this page replaced:
                              a count you can do nothing with is not a diagnosis. -->
                         <p
