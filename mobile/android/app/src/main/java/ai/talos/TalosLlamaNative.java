@@ -91,7 +91,8 @@ final class TalosLlamaNative {
      * da nascondere: comporre un formato «ragionevole» a mano è ciò che rende
      * un modello locale apparentemente scadente.
      */
-    static native String nativeApplyChatTemplate(long handle, String[] roles, String[] contents);
+    static native String nativeApplyChatTemplate(long handle, String[] roles, String[] contents,
+                                                 String toolsJson);
 
     /**
      * Separa il ragionamento dal contenuto, secondo il formato del modello.

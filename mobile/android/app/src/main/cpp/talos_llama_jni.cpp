@@ -94,6 +94,17 @@ struct talos_session {
      */
     common_chat_params chat;
     bool               chat_ready = false;
+
+    /**
+     * I parametri con cui il campionatore e' stato costruito all'apertura.
+     *
+     * Conservati perche' la GRAMMATICA arriva dopo: la restituisce
+     * `common_chat_templates_apply` insieme al prompt, e cambia a ogni
+     * messaggio (dipende da quali tool sono offerti). Ricostruire il
+     * campionatore vuol dire ripartire da questi, non da zero, altrimenti a
+     * ogni turno si perderebbero temperatura e filtri.
+     */
+    common_params_sampling sampling;
 };
 
 std::once_flag g_init_once;
@@ -157,6 +168,57 @@ std::string jstring_to_utf8(JNIEnv * env, jstring value) {
 
 talos_session * as_session(jlong handle) {
     return reinterpret_cast<talos_session *>(handle);
+}
+
+/**
+ * Rimette in piedi il campionatore con la grammatica che il template ha
+ * restituito — ed e' questo che trasforma «il modello prova a chiamare un tool»
+ * in «la chiamata e' valida per costruzione».
+ *
+ * GBNF vincola l'uscita, e la documentazione di llama.cpp e' esplicita su cosa
+ * costa: «The JSON schema is only used to constrain the model output and is not
+ * injected into the prompt» — quindi non consuma contesto, che su un 4B conta.
+ *
+ * PIGRA, e non e' un dettaglio. Una grammatica sempre attiva costringerebbe il
+ * modello a emettere una chiamata a OGNI messaggio, anche a «ciao»: i
+ * `grammar_triggers` sono i punti in cui il vincolo si accende, e senza di loro
+ * un modello con dei tool offerti smetterebbe semplicemente di parlare
+ * italiano.
+ *
+ * I `preserved_tokens` vanno tradotti da stringhe a identificativi, perche' il
+ * campionatore ragiona su token e non su testo. Si tengono solo quelli che il
+ * vocabolario rende con UN token: una stringa che ne produce due non e' un
+ * token speciale di questo modello, e proteggerla a meta' non vuol dire niente.
+ */
+void applyGrammar(talos_session * session) {
+    common_params_sampling sampling = session->sampling;
+    if (session->chat.grammar.empty()) {
+        sampling.grammar = common_grammar();
+        sampling.grammar_lazy = false;
+        sampling.grammar_triggers.clear();
+        sampling.preserved_tokens.clear();
+    } else {
+        sampling.grammar = common_grammar(COMMON_GRAMMAR_TYPE_TOOL_CALLS, session->chat.grammar);
+        sampling.grammar_lazy = session->chat.grammar_lazy;
+        sampling.grammar_triggers = session->chat.grammar_triggers;
+        sampling.preserved_tokens.clear();
+        for (const std::string & piece : session->chat.preserved_tokens) {
+            const std::vector<llama_token> ids =
+                    common_tokenize(session->vocab, piece, /*add_special*/ false, /*parse_special*/ true);
+            if (ids.size() == 1) sampling.preserved_tokens.insert(ids[0]);
+        }
+    }
+
+    common_sampler * rebuilt = common_sampler_init(session->model, sampling);
+    if (rebuilt == nullptr) {
+        // Un campionatore che non si costruisce e' quasi sempre una grammatica
+        // che non compila. Si tiene quello di prima: si perde la garanzia sulla
+        // chiamata, non la conversazione.
+        TALOS_LOGE("grammatica non applicabile, tengo il campionatore precedente");
+        return;
+    }
+    if (session->sampler != nullptr) common_sampler_free(session->sampler);
+    session->sampler = rebuilt;
 }
 
 } // namespace
@@ -270,6 +332,7 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
     session->ctx     = ctx;
     session->sampler = sampler;
     session->vocab   = llama_model_get_vocab(model);
+    session->sampling = sampling;
 
     // Costruito una volta, all'apertura: compilare un template Jinja a ogni
     // messaggio sarebbe lavoro rifatto identico per tutta la conversazione.
@@ -309,7 +372,8 @@ Java_ai_talos_TalosLlamaNative_nativeTokensProduced(JNIEnv *, jclass, jlong hand
  */
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlong handle,
-                                                       jobjectArray roles, jobjectArray contents) {
+                                                       jobjectArray roles, jobjectArray contents,
+                                                       jstring toolsJson) {
     talos_session * session = as_session(handle);
     if (session == nullptr) return env->NewStringUTF("");
 
@@ -323,6 +387,29 @@ Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlo
 
     common_chat_templates_inputs inputs;
     inputs.add_generation_prompt = true;
+    /**
+     * I TOOL, passati al template invece che descritti a parole nel prompt.
+     *
+     * Owner 2026-08-03: «i locali devono avere le stesse possibilita' dei key».
+     * Ogni famiglia annuncia una chiamata a modo suo — `<tool_call>`, JSON
+     * puro, blocchi speciali — e quel formato sta nel template del GGUF. Qui i
+     * tool arrivano nella forma OpenAI che il registro produce gia' per gli
+     * altri provider, e il template li rende nella sintassi che QUESTO modello
+     * e' stato addestrato a produrre.
+     *
+     * Un tool illeggibile non spegne la conversazione: si registra e si va
+     * avanti senza. Meglio un modello che non puo' chiamare niente di un
+     * modello che non risponde.
+     */
+    const std::string tools = jstring_to_utf8(env, toolsJson);
+    if (!tools.empty()) {
+        try {
+            inputs.tools = common_chat_tools_parse_oaicompat(nlohmann::ordered_json::parse(tools));
+            inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
+        } catch (const std::exception & failure) {
+            TALOS_LOGE("tool non interpretabili, procedo senza: %s", failure.what());
+        }
+    }
     // Il punto di tutta la faccenda: il Jinja del modello viene ESEGUITO,
     // invece di essere annusato per indovinare una famiglia.
     inputs.use_jinja = true;
@@ -354,9 +441,13 @@ Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlo
         return env->NewStringUTF("");
     }
 
-    TALOS_LOGI("formato di chat: %s (ragionamento: %s)",
+    applyGrammar(session);
+
+    TALOS_LOGI("formato di chat: %s (ragionamento: %s, tool: %zu, grammatica: %s)",
                common_chat_format_name(session->chat.format),
-               session->chat.supports_thinking ? "sì" : "no");
+               session->chat.supports_thinking ? "si" : "no",
+               inputs.tools.size(),
+               session->chat.grammar.empty() ? "no" : (session->chat.grammar_lazy ? "pigra" : "sempre"));
     return env->NewStringUTF(session->chat.prompt.c_str());
 }
 
@@ -389,6 +480,7 @@ Java_ai_talos_TalosLlamaNative_nativeParseReply(JNIEnv * env, jclass, jlong hand
         nlohmann::ordered_json plain;
         plain["content"] = text;
         plain["reasoning"] = "";
+        plain["toolCalls"] = nlohmann::ordered_json::array();
         return env->NewStringUTF(plain.dump().c_str());
     }
 
@@ -403,11 +495,32 @@ Java_ai_talos_TalosLlamaNative_nativeParseReply(JNIEnv * env, jclass, jlong hand
         const common_chat_msg parsed = common_chat_parse(text, false, parsing);
         out["content"] = parsed.content;
         out["reasoning"] = parsed.reasoning_content;
+        /**
+         * Le chiamate ai tool, che uscivano di qui gia' prima e venivano
+         * buttate.
+         *
+         * `common_chat_msg` porta `tool_calls` accanto a `content` e
+         * `reasoning_content`, popolate dallo stesso parser che conosce il
+         * formato di QUESTO modello. Non serviva scrivere un lettore per
+         * famiglia — e la documentazione di Qwen avverte esplicitamente di non
+         * provarci con parser a parole d'arresto, «because the model may output
+         * stopwords in the thought section».
+         */
+        nlohmann::ordered_json calls = nlohmann::ordered_json::array();
+        for (const common_chat_tool_call & call : parsed.tool_calls) {
+            nlohmann::ordered_json entry;
+            entry["name"] = call.name;
+            entry["arguments"] = call.arguments;
+            entry["id"] = call.id;
+            calls.push_back(std::move(entry));
+        }
+        out["toolCalls"] = std::move(calls);
     } catch (const std::exception & failure) {
         // Una risposta che non si lascia leggere non è una risposta persa.
         TALOS_LOGE("risposta non interpretabile: %s", failure.what());
         out["content"] = text;
         out["reasoning"] = "";
+        out["toolCalls"] = nlohmann::ordered_json::array();
     }
     return env->NewStringUTF(out.dump().c_str());
 }

@@ -138,7 +138,19 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * prompt.
      */
     public String chatPrompt(String[] roles, String[] contents) {
-        return TalosLlamaNative.nativeApplyChatTemplate(handle, roles, contents);
+        return chatPrompt(roles, contents, null);
+    }
+
+    /**
+     * Come sopra, ma offrendo dei tool al modello.
+     *
+     * {@code toolsJson} e un array in forma OpenAI — la stessa che il registro
+     * produce gia per gli altri provider. Il template del GGUF lo rende nella
+     * sintassi che QUESTO modello e stato addestrato a produrre, e restituisce
+     * anche la grammatica che rende la chiamata valida per costruzione.
+     */
+    public String chatPrompt(String[] roles, String[] contents, String toolsJson) {
+        return TalosLlamaNative.nativeApplyChatTemplate(handle, roles, contents, toolsJson);
     }
 
     /**

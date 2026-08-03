@@ -9,13 +9,28 @@ import type { TalosMobileProviderModel } from '@/lib/chat/providerContracts'
  * tool paths. OpenRouter alone therefore fails closed on a missing token.
  */
 export function talosModelSupportsToolCalling(model: TalosMobileProviderModel): boolean {
-    // The on-device engine has no tool wire at all. llama.cpp returns text; the
-    // structured call format the other families implement is a service-side
-    // contract, and a GGUF of a few billion parameters has never agreed to one.
-    // Offering schemas anyway would spend context a small model has little of,
-    // to describe abilities it cannot use, and the replies would arrive as prose
-    // pretending to be a call.
-    if (model.provider === 'local') return false
+    /**
+     * Il motore locale ADESSO il cablaggio ce l'ha, e la negazione se ne va per
+     * ultima — che è l'unico ordine sensato.
+     *
+     * Diceva: «llama.cpp returns text; the structured call format the other
+     * families implement is a service-side contract, and a GGUF of a few
+     * billion parameters has never agreed to one». Era vero finché il prompt lo
+     * costruivamo noi con ChatML nudo. Non lo è più:
+     *
+     *  - i tool entrano in `common_chat_templates_apply`, quindi arrivano al
+     *    modello nella sintassi su cui QUEL modello è stato addestrato — la
+     *    conosce il template del GGUF, non noi;
+     *  - la grammatica GBNF che il template restituisce vincola l'uscita, e
+     *    **pigra**: si accende solo sui punti d'innesco, altrimenti il modello
+     *    sarebbe costretto a chiamare un tool anche per rispondere «ciao»;
+     *  - `common_chat_parse` restituisce `tool_calls` già separate, con lo
+     *    stesso parser che ha applicato il template.
+     *
+     * Owner 2026-08-03: «i locali devono avere le stesse possibilità dei key».
+     * Un'app local-first in cui il modello locale è l'unico che non può fare
+     * niente contraddice la propria premessa.
+     */
     return model.provider !== 'openrouter'
         || model.supportedParameters.includes('tools')
 }

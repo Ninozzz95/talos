@@ -13,6 +13,9 @@ import {
     talosLocalEngineStatus,
     talosLocalInstalledModels,
 } from '@/services/localEngine'
+import { talosToolsForOpenAi } from '@/lib/tools/registry'
+import { talosNormaliseLocalToolCalls } from '@/lib/chat/localToolCalls'
+import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 
 /**
  * The engine on this device, answering through the same contract as everyone
@@ -79,12 +82,27 @@ async function run(
     onChunk?: (text: string) => void,
 ): Promise<TalosMobileCompletionResult> {
     await ensureLoaded(input.model.id)
-    const prompt = await talosLocalEngineChatPrompt(conversationOf(input))
+    /**
+     * I tool, nella STESSA forma che ricevono i provider di rete.
+     *
+     * Owner 2026-08-03: «i locali devono avere le stesse possibilità dei key».
+     * `talosToolsForOpenAi` è la funzione che serve già gli altri adattatori —
+     * riusarla vuol dire che un tool non ha due descrizioni a seconda di chi lo
+     * esegue, e la guardia `anthropicAcceptsEveryTool` continua a valere per
+     * tutti.
+     *
+     * Il filtro sulle capacità del modello resta al suo posto: è lì che si
+     * decide se questo modello può chiamare qualcosa, e non qui.
+     */
+    const offered = talosModelSupportsToolCalling(input.model) ? input.tools : undefined
+    const tools = offered?.length ? talosToolsForOpenAi(offered) : undefined
+    const prompt = await talosLocalEngineChatPrompt(conversationOf(input), tools)
     const generation = await talosLocalEngineGenerate(
         prompt,
         (delta) => { onChunk?.(delta) },
         { maxTokens: MAX_TOKENS, stopAtEndOfGeneration: true },
     )
+    const normalised = talosNormaliseLocalToolCalls(generation.toolCalls)
     return {
         text: generation.text,
         model: input.model.id,
@@ -93,6 +111,12 @@ async function run(
         // cassetto: il ragionamento di un modello locale non è una cosa diversa
         // dal ragionamento di Claude, e non merita una seconda superficie.
         reasoning: generation.reasoning || undefined,
+        // E lo stesso vale per le chiamate: l'esecutore a valle non deve sapere
+        // da dove arrivano.
+        // Normalizzate una volta sola: il formato Hermes che Qwen usa non
+        // prevede un identificativo, e senza quello due chiamate nello stesso
+        // turno non si sanno riappaiare ai loro risultati.
+        toolCalls: normalised.length ? [...normalised] : undefined,
         // Only what was actually counted. A local run has no billing and no
         // prompt-token figure to report, and inventing one would put a number
         // in the receipt that means nothing.
