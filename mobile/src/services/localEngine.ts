@@ -38,6 +38,18 @@ interface TalosLlamaPlugin {
         threads?: number
         contextTokens?: number
         gpuLayers?: number
+        /**
+         * L'argmax, per MISURARE — mai per parlare.
+         *
+         * Confrontare due backend vuol dire pretendere lo stesso identico testo
+         * da entrambi, quindi il banco di prova chiede questo. La chat no: con
+         * l'argmax un 4B quantizzato si impunta sul token in testa di un
+         * millesimo e finisce a ripetere la stessa frase fino a esaurire i
+         * token. Misurato sul tablet il 2026-08-03, stesso modello e stesso
+         * prompt: acceso, cinque ripetizioni di fila; spento, una risposta che
+         * si chiude da sola in 112 token invece di 160.
+         */
+        deterministic?: boolean
     }): Promise<TalosLocalEngineOpenResult>
     generate(options: {
         prompt: string
@@ -79,7 +91,13 @@ export async function talosLocalEngineStatus(): Promise<TalosLocalEngineStatus> 
 
 export async function talosLocalEngineOpen(
     path: string,
-    options: { threads?: number, contextTokens?: number, gpuLayers?: number } = {},
+    options: {
+        threads?: number
+        contextTokens?: number
+        gpuLayers?: number
+        /** Solo per il banco di prova — vedi la nota sull'interfaccia del plugin. */
+        deterministic?: boolean
+    } = {},
 ): Promise<TalosLocalEngineOpenResult> {
     return plugin.open({ path, ...options })
 }
