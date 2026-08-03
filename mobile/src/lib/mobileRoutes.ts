@@ -121,6 +121,18 @@ export interface TalosMobileRouteTarget {
 }
 
 /**
+ * Which station a route belongs to — the list, its report, its claims and its
+ * sources are all one place as far as the person is concerned.
+ *
+ * Used to tell "I moved WITHIN Deep Research" from "I left it for somewhere
+ * else", which is the difference between a move Back should undo with history
+ * and one it should undo by leaving the station.
+ */
+export function talosMobileStationOf(name: string): string | null {
+    return TALOS_MOBILE_ROUTES.find((entry) => entry.name === name)?.desktop_station_id ?? null
+}
+
+/**
  * Where "up" goes from a page inside a station, params and all.
  *
  * The parameters are read off the PARENT'S OWN path rather than copied wholesale

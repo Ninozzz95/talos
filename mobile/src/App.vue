@@ -28,7 +28,12 @@ import { talosInteractionMotionStyleV6 } from '@/motion-v6/interaction/style'
 import { useChatController } from '@/stores/chatController'
 import { useTalosMobileIntroState } from '@/composables/useTalosMobileIntroState'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
-import { resolveTalosBackAction } from '@/lib/backNavigation'
+import {
+    resolveTalosBackAction,
+    talosStationEntryAfter,
+    talosStationExit,
+    type TalosStationEntry,
+} from '@/lib/backNavigation'
 import { talosOverlayBackActive, handleTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { talosLightImpact } from '@/services/haptics'
 import { Capacitor } from '@capacitor/core'
@@ -192,7 +197,24 @@ const sessionBusy = computed(() =>
     Boolean((chatScreen.value as { sessionActionBusy?: boolean } | null)?.sessionActionBusy)
     || shellActionBusy.value)
 
+/**
+ * How the station you are looking at was entered, so Back can undo that exact
+ * move instead of jumping to a fixed place.
+ *
+ * Owner 2026-08-03, on the old behaviour: «se la pagina ricerca si apre dalla
+ * sidebar, se torno indietro perché mi chiude la sidebar e mi torna alla chat?»
+ * Back ran `navigate('chat')` and forced the drawer open whatever had happened
+ * before — so a station opened from the Settings Center took the Settings
+ * Center with it on the way out.
+ *
+ * The drawer is state, not a route, which is why history alone cannot answer
+ * this: popping back to the chat would lose the menu the person came from.
+ */
+const stationEntry = ref<TalosStationEntry | null>(null)
+let enteringViaSidebar = false
+
 function sidebarNavigate(name: TalosMobileRouteName, query: LocationQueryRaw = {}): void {
+    enteringViaSidebar = true
     sidebarOpen.value = false
     void navigate(name, query)
 }
@@ -485,6 +507,23 @@ const activeRoute = computed<TalosMobileRouteName>(() => {
 // Chat is the persistent base; every other tab presents its screen in a sheet
 // over it — the mobile mirror of the desktop windowed workspace.
 const isStation = computed(() => activeRoute.value !== 'chat')
+
+/**
+ * Recorded when the STATION changes, never when you move within one: going from
+ * the research list to a report is not entering a station, and treating it as
+ * one would make Back navigate the list to itself.
+ */
+watch(activeRoute, (to, from) => {
+    stationEntry.value = talosStationEntryAfter(stationEntry.value, { to, from, viaSidebar: enteringViaSidebar })
+    enteringViaSidebar = false
+})
+
+/** Back at a station top: undo the move that brought you here. */
+function leaveStation(): void {
+    const exit = talosStationExit(stationEntry.value)
+    void navigate(exit.route as TalosMobileRouteName)
+    sidebarOpen.value = exit.sidebar
+}
 /**
  * A page INSIDE a station, which System Back must leave one level at a time.
  *
@@ -649,7 +688,7 @@ onMounted(async () => {
                         if (parent) void router.push(parent)
                         return 'handled'
                     }
-                    case 'station-to-sidebar': void navigate('chat'); sidebarOpen.value = true; return 'handled'
+                    case 'leave-station': leaveStation(); return 'handled'
                     case 'history': return 'history'
                     case 'exit': return 'exit'
                 }

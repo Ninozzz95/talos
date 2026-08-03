@@ -283,8 +283,8 @@ async function openFile(file: TalosLocalVaultFile): Promise<void> {
     if (docView.value?.id === file.id && full !== null) docText.value = full
 }
 // Product review 2026-07-25: Android Back inside a fullscreen preview used to
-// fall through to 'station-to-sidebar' — it ejected the user to the chat with the
-// sidebar open instead of closing the preview.
+// fall through to the station-top action — it left the station entirely instead
+// of closing the preview.
 useTalosOverlayBack(() => {
     if (menuOpen.value) { menuOpen.value = false; return }
     if (docView.value) { docView.value = null; return }
