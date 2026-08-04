@@ -2587,16 +2587,28 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                     ),
                                     endpoint: sendRuntime.providerEndpoints[drawer] ?? null,
                                 })
-                                const drawing = deps.transport.request({
-                                    url: plan.url,
-                                    method: 'POST',
-                                    headers: plan.headers,
-                                    data: plan.body,
-                                    // Drawing is slower than answering; the chat
-                                    // timeout would cut a picture that is coming.
-                                    connectTimeout: 120_000,
-                                    readTimeout: 120_000,
-                                })
+                                /*
+                                 * Una modifica parte in multipart, e il
+                                 * trasporto nativo non sa impacchettare byte:
+                                 * prende `data` come oggetto da serializzare in
+                                 * JSON. Quel ramo va per la sua strada, che e'
+                                 * `fetch` — misurata dal dispositivo — e torna
+                                 * con la stessa forma `{status, data}`, cosi'
+                                 * tutto cio' che segue resta uno solo.
+                                 */
+                                const drawing = plan.multipart
+                                    ? (await import('@/lib/images/imageMultipart'))
+                                        .sendTalosImageMultipart(plan, signal)
+                                    : deps.transport.request({
+                                        url: plan.url,
+                                        method: 'POST',
+                                        headers: plan.headers,
+                                        data: plan.body,
+                                        // Drawing is slower than answering; the chat
+                                        // timeout would cut a picture that is coming.
+                                        connectTimeout: 120_000,
+                                        readTimeout: 120_000,
+                                    })
                                 /**
                                  * Stop means stop waiting.
                                  *
