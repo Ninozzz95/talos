@@ -56,6 +56,10 @@ export const TALOS_IT_MESSAGES = {
         actionFailed: 'Errore durante {action}: {detail}',
     },
     navigation: {
+        // Il pulsante dice DOVE va. Uno che si chiama «torna alla chat»
+        // e va da un'altra parte e' peggio di uno che non c'e'.
+        backToChat: 'Torna alla chat',
+        backToNamed: 'Torna a {name}',
         chat: 'Chat',
         chats: 'Chat',
         settings: 'Impostazioni',

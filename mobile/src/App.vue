@@ -582,6 +582,29 @@ const stationParent = computed(() => talosMobileParentRoute(
 ))
 // TABLET-SETTINGS-01: Settings categories are the primary pane for that task.
 // Mounting the unrelated chat rail beside them creates a redundant third pane.
+/**
+ * Il gradino sopra, per il pulsante in alto a sinistra.
+ *
+ * Owner 2026-08-04, provato sul telefono: «il pulsante indietro in alto a
+ * sinistra fa chiudere tutto». La gesture di sistema risaliva la catena — usa
+ * `stationParent` poche righe piu' sotto — e quel bottone no: due comandi per
+ * lo stesso gesto, con due destinazioni diverse.
+ *
+ * Ora leggono la STESSA cosa. Se domani la catena cambia, cambia per entrambi.
+ */
+function goToStationParent(): void {
+    const parent = stationParent.value
+    if (parent) void router.push(parent)
+}
+
+/** Il nome del posto dove si torna, perche' il pulsante possa dirlo. */
+const stationParentTitle = computed(() => {
+    const parent = stationParent.value
+    if (!parent) return undefined
+    const key = SHEET_TITLE_KEY[parent.name as TalosMobileRouteName]
+    return key ? t(key) : undefined
+})
+
 const tabletChatRailVisible = computed(() => (
     tabletLayout.isTablet.value && activeRoute.value !== 'settings'
 ))
@@ -1013,6 +1036,8 @@ onBeforeUnmount(async () => {
                     v-if="isStation"
                     :title="sheetTitle"
                     :presentation="settingsStore.state.chat_layout.mobile_window_presentation"
+                    :parent-back="stationParent ? goToStationParent : null"
+                    :parent-title="stationParentTitle"
                     @close="navigate('chat')"
                 >
                     <RouterView />

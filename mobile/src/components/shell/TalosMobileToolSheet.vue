@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, provide, ref } from 'vue'
+import { computed, onMounted, provide, ref } from 'vue'
 import { ArrowLeft, X } from '@lucide/vue'
 import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
+import { useTalosI18n } from '@/i18n'
 
 // Station sheet presented over the persistent chat base — mirror of the desktop
 // TalosMobileToolSheet (window/TalosMobileToolSheet.vue): Back-to-chat header,
@@ -11,16 +12,51 @@ import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 // fullscreen (default) covers the viewport; drawer keeps ONE fixed tall height
 // so every station matches — and animates in (slide-up + backdrop fade, 250ms,
 // globally zeroed under reduced-motion).
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
     title: string
     description?: string
     presentation?: 'fullscreen' | 'drawer'
+    /**
+     * Come si risale di UN passo, quando questa pagina ne ha uno sopra.
+     *
+     * Lo sa solo chi conosce le rotte, cioe' App: qui arriva come una funzione
+     * gia' pronta, e la sua presenza e' anche la risposta alla domanda «sono
+     * dentro qualcosa?».
+     */
+    parentBack?: (() => void) | null
+    /** Il nome del posto dove si torna, per dirlo invece di farlo indovinare. */
+    parentTitle?: string
 }>(), {
     presentation: 'fullscreen',
+    parentBack: null,
 })
 const emit = defineEmits<{ close: [] }>()
 
 const { subView } = useTalosSheetNav()
+const { t } = useTalosI18n()
+
+/**
+ * Un passo indietro, e sempre il piu' vicino.
+ *
+ * L'ordine non e' arbitrario: si esce prima dalla cosa piu' interna. Saltare
+ * al livello sbagliato e' esattamente il difetto che l'owner ha visto —
+ * chiudere tutto da una pagina di dettaglio butta via due passi invece di uno.
+ */
+function goBack(): void {
+    if (subView.value) { subView.value.back(); return }
+    if (props.parentBack) { props.parentBack(); return }
+    emit('close')
+}
+
+const backLabel = computed(() => {
+    if (subView.value) return t('common.back')
+    if (props.parentBack) {
+        return props.parentTitle
+            ? t('navigation.backToNamed', { name: props.parentTitle })
+            : t('common.back')
+    }
+    return t('navigation.backToChat')
+})
 
 const entered = ref(false)
 const root = ref<HTMLElement | null>(null)
@@ -67,12 +103,30 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
                  sub-view, the header shows the subsection title and Back returns
                  to the station (not a second in-body arrow). -->
             <header class="flex shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-transparent px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+                <!--
+                    Owner 2026-08-04, provato sul telefono: «il pulsante
+                    indietro in alto a sinistra fa chiudere tutto».
+
+                    Aveva ragione. Questo bottone conosceva i `subView` — il
+                    vecchio meccanismo dei fogli — ma NON le pagine-figlie di
+                    rotta, che sono quelle nate con la navigazione lineare.
+                    Aperta una nota, `subView` era nullo e il ramo `else`
+                    chiudeva la stazione intera. La gesture di sistema
+                    funzionava perche' passa da `stationParent`, che questo
+                    bottone non consultava: due comandi per lo stesso gesto,
+                    con due destinazioni diverse.
+
+                    Tre casi, tre destinazioni, e ognuno DICE la sua: un
+                    pulsante che si chiama «Back to chat» e va da un'altra
+                    parte e' peggio di uno che non c'e'.
+                -->
                 <button
                     type="button"
                     data-testid="talos-sheet-back"
-                    :aria-label="subView ? 'Back' : 'Back to chat'"
+                    :data-back-target="subView ? 'subview' : (parentBack ? 'parent' : 'chat')"
+                    :aria-label="backLabel"
                     class="talos-pressable inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--talos-muted)]"
-                    @click="subView ? subView.back() : emit('close')"
+                    @click="goBack"
                 >
                     <ArrowLeft class="h-4 w-4" aria-hidden="true" />
                 </button>

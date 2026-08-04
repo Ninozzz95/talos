@@ -4,7 +4,17 @@ import { useTalosI18n } from '@/i18n'
 import { BookMarked, FileText } from '@lucide/vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
-import TalosMobileMessageImage from '@/components/chat/TalosMobileMessageImage.vue'
+/*
+ * La bolla-immagine arriva col primo messaggio che ne ha una, non all'avvio.
+ *
+ * Porta con se' il visore a schermo intero e il lettore di provenienza, e la
+ * prima schermata di TALOS e' una chat nuova: nessuna immagine, nessun motivo
+ * di averli gia' in memoria. Il grafo d'avvio e' a pochi byte dal tetto, e
+ * questa e' esattamente la roba che ci va dietro.
+ */
+const TalosMobileMessageImage = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileMessageImage.vue'),
+)
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import TalosMobileSourcesChip from '@/components/chat/TalosMobileSourcesChip.vue'
