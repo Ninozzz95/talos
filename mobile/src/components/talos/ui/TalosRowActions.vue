@@ -27,7 +27,7 @@
  */
 import { computed, nextTick, ref } from 'vue'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
-import { MoreVertical } from '@lucide/vue'
+import { Check, MoreVertical } from '@lucide/vue'
 
 export interface TalosRowAction {
     readonly id: string
@@ -35,6 +35,32 @@ export interface TalosRowAction {
     /** Renders apart, below a rule. Still a menuitem — colour is never the only signal. */
     readonly danger?: boolean
     readonly testId?: string
+    /**
+     * Una voce che sta ACCESA o SPENTA, non una che si esegue.
+     *
+     * Serviva alla Libreria — «tieni sempre questo file nel contesto», «non
+     * usarlo mai» — che per questo aveva un menu tutto suo. Due menu di riga
+     * nella stessa app e' la cosa che la coerenza deve togliere, quindi la
+     * spunta viene qui invece che restare laggiu'.
+     *
+     * `undefined` vuol dire «non e' una voce a due stati»: chi non la usa non
+     * si accorge che esiste.
+     */
+    readonly checked?: boolean
+    readonly disabled?: boolean
+    /**
+     * L'icona della voce, e il nome che la voce ha per chi non la vede.
+     *
+     * Vengono dalla Libreria, che aveva un menu suo e lo faceva meglio: con
+     * l'icona un elenco si scorre a colpo d'occhio, e `ariaLabel` porta il NOME
+     * della riga dentro la voce — «Elimina» da solo, letto ad alta voce fuori
+     * contesto, non dice cosa si sta per eliminare.
+     *
+     * Unificare voleva dire scegliere fra i due menu: ha vinto quello che dava
+     * di piu', non quello che c'era in piu' posti.
+     */
+    readonly icon?: unknown
+    readonly ariaLabel?: string
 }
 
 const props = defineProps<{
@@ -50,7 +76,7 @@ const props = defineProps<{
     testId?: string
 }>()
 
-const emit = defineEmits<{ (event: 'select', id: string): void }>()
+const emit = defineEmits<{ (event: 'select', id: string, checked?: boolean): void }>()
 
 const open = ref(false)
 const trigger = ref<HTMLButtonElement | null>(null)
@@ -116,7 +142,12 @@ function choose(item: TalosRowAction): void {
     // dialog steals the focus the dialog is trying to take, and progress for a
     // row belongs on the row, never inside a menu that should have gone.
     close(!item.danger)
-    emit('select', item.id)
+    // Per una voce a due stati si manda quello NUOVO: chi ascolta non deve
+    // ricalcolare da se' cosa ha appena visto sullo schermo. Per una voce
+    // normale NON si manda niente: aggiungere un secondo argomento sempre
+    // presente cambierebbe la firma per tutti quelli che non ne hanno bisogno.
+    if (item.checked === undefined) emit('select', item.id)
+    else emit('select', item.id, !item.checked)
 }
 
 function step(delta: number): void {
@@ -186,7 +217,7 @@ defineExpose({ close })
         aria-haspopup="menu"
         :aria-expanded="open"
         :aria-controls="open ? menuId : undefined"
-        class="talos-pressable inline-flex size-11 shrink-0 items-center justify-center rounded-full text-[var(--talos-muted)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="talos-pressable inline-flex size-12 shrink-0 items-center justify-center rounded-full text-[var(--talos-muted)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
         @click.stop.prevent="open ? close() : show()"
         @keydown="onTriggerKey"
     >
@@ -233,17 +264,24 @@ defineExpose({ close })
                      something too. -->
                     <button
                         type="button"
-                        role="menuitem"
                         :tabindex="index === active ? 0 : -1"
                         :data-testid="item.testId"
-                        class="talos-pressable flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                        :aria-label="item.ariaLabel"
+                        :disabled="item.disabled === true"
+                        :role="item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'"
+                        :aria-checked="item.checked === undefined ? undefined : item.checked"
+                        class="talos-pressable flex min-h-12 w-full items-center gap-2 rounded-lg px-3 text-left text-sm focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:opacity-50"
                         :class="item.danger
                             ? 'bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]'
                             : 'text-[var(--talos-text)] hover:bg-[var(--talos-active)]'"
                         @click="choose(item)"
                         @focus="active = index"
                     >
-                        {{ item.label }}
+                        <component :is="item.icon" v-if="item.icon" class="size-4 shrink-0" :class="item.danger ? '' : 'text-[var(--talos-accent)]'" aria-hidden="true" />
+                        <span class="min-w-0 flex-1">{{ item.label }}</span>
+                        <!-- La spunta e' un segno, non un colore: resta leggibile
+                             anche dove il colore non arriva. -->
+                        <Check v-if="item.checked === true" class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                     </button>
                 </template>
             </div>

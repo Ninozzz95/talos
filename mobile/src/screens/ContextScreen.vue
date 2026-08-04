@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
 import { useTalosI18n } from '@/i18n'
 import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
 import { useTalosVaultThumbnails } from '@/composables/useTalosVaultThumbnails'
@@ -13,7 +14,6 @@ import {
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
-import TalosMobileLibraryActionsMenu from '@/components/talos/library/TalosMobileLibraryActionsMenu.vue'
 import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLibraryFileRow.vue'
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
 import TalosMobileLibraryFileTile from '@/components/talos/library/TalosMobileLibraryFileTile.vue'
@@ -421,14 +421,22 @@ async function setGlobalFileContext(
     }
 }
 
+/**
+ * Le voci parlano il vocabolario del menu CONDIVISO.
+ *
+ * Prima erano `tone: 'danger'` e `kind: 'checkbox'`, parole che solo il menu
+ * della Libreria capiva. Adottando quello condiviso sarebbero diventate silenzio:
+ * l'Elimina non sarebbe uscito rosso nell'app vera, non solo nei test. La spunta
+ * ora si dichiara con `checked` (presente = voce a due stati) e il pericolo con
+ * `danger`.
+ */
 interface GlobalLibraryAction {
     id: 'attach' | 'save' | 'delete' | 'context-include' | 'context-exclude'
     label: string
     ariaLabel: string
     icon: Component
     disabled?: boolean
-    tone?: 'danger'
-    kind?: 'action' | 'checkbox'
+    danger?: boolean
     checked?: boolean
     testId: string
 }
@@ -463,7 +471,6 @@ function fileActions(file: TalosLocalVaultFile): GlobalLibraryAction[] {
                 ariaLabel: t('library.includeNamedInContext', { name: file.display_name }),
                 icon: Check,
                 disabled: contextDisabled,
-                kind: 'checkbox',
                 checked: override === 'included',
                 testId: `talos-library-action-context-include-${file.id}`,
             },
@@ -473,7 +480,6 @@ function fileActions(file: TalosLocalVaultFile): GlobalLibraryAction[] {
                 ariaLabel: t('library.excludeNamedFromContext', { name: file.display_name }),
                 icon: X,
                 disabled: contextDisabled,
-                kind: 'checkbox',
                 checked: override === 'excluded',
                 testId: `talos-library-action-context-exclude-${file.id}`,
             },
@@ -486,7 +492,7 @@ function fileActions(file: TalosLocalVaultFile): GlobalLibraryAction[] {
             ariaLabel: t('library.deleteNamed', { name: file.display_name }),
             icon: Trash2,
             disabled: actionBusy.value,
-            tone: 'danger',
+            danger: true,
             testId: `talos-library-action-delete-${file.id}`,
         },
     )
@@ -961,7 +967,7 @@ onMounted(async () => {
                         </span>
                     </template>
                     <template #actions>
-                        <TalosMobileLibraryActionsMenu
+                        <TalosRowActions
                             v-if="!bulk.active.value"
                             :label="t('library.fileActionsFor', { name: entry.file.display_name })"
                             :test-id="`talos-library-actions-${entry.file.id}`"

@@ -3,7 +3,7 @@ import type { Component } from 'vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { Check, Download, Eye, Globe2, LockKeyhole, Sparkles, Upload, X } from '@lucide/vue'
-import TalosMobileLibraryActionsMenu from '@/components/talos/library/TalosMobileLibraryActionsMenu.vue'
+import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
 import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLibraryFileRow.vue'
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
 import TalosMobileImageViewer from '@/components/talos/library/TalosMobileImageViewer.vue'
@@ -764,7 +764,7 @@ const mediaScope = computed(() => {
                             </span>
                         </template>
                         <template #actions>
-                            <TalosMobileLibraryActionsMenu
+                            <TalosRowActions
                                 :label="$t('library.fileActionsFor', { name: file.display_name })"
                                 :test-id="`talos-chat-media-actions-${file.id}`"
                                 :items="fileActions(file)"
