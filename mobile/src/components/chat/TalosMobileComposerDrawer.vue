@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { SwitchRoot, SwitchThumb } from 'reka-ui'
+import { TALOS_SWITCH_THUMB_CLASS, TALOS_SWITCH_TRACK_CLASS } from '@/lib/switchStyles'
 /**
  * F3-T4bis (owner #13, Claude screenshots) — the organized "Add to chat"
  * bottom drawer. Big single-shot tiles up top (they act and close), calm
@@ -127,48 +129,42 @@ function effortLabel(level: string): string {
                     </button>
                 </div>
 
-                <button
-                    type="button"
-                    role="switch"
+                <SwitchRoot
                     data-testid="talos-drawer-browse"
-                    :aria-checked="browseMode"
+                    :model-value="browseMode"
                     class="talos-pressable flex min-h-13 w-full items-center gap-3 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 px-3 text-left"
-                    @click="emit('toggleBrowse', !browseMode)"
+                    @update:model-value="emit('toggleBrowse', $event)"
                 >
                     <span class="flex size-9 items-center justify-center rounded-full bg-[var(--talos-active)]">
                         <Globe2 class="size-4" aria-hidden="true" />
                     </span>
                     <span class="min-w-0 flex-1 text-sm">{{ $t('chat.browseWeb') }}</span>
-                    <span
-                        class="relative h-6 w-11 rounded-full transition-colors duration-200"
-                        :class="browseMode ? 'bg-[var(--talos-accent,var(--primary))]' : 'bg-[var(--talos-border)]'"
-                        aria-hidden="true"
-                    >
-                        <span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="browseMode ? 'left-[22px]' : 'left-0.5'" />
+                    <!-- `data-state` a mano: reka lo mette sulla RIGA, che qui e'
+                         il SwitchRoot, non su questo binario. Senza,
+                         il pomello si muove e il binario resta spento. -->
+                    <span :class="TALOS_SWITCH_TRACK_CLASS" :data-state="browseMode ? 'checked' : 'unchecked'" aria-hidden="true">
+                        <SwitchThumb :class="TALOS_SWITCH_THUMB_CLASS" />
                     </span>
-                </button>
+                </SwitchRoot>
 
-                <button
+                <SwitchRoot
                     v-if="supportsThinking"
-                    type="button"
-                    role="switch"
                     data-testid="talos-drawer-thinking"
-                    :aria-checked="thinking"
+                    :model-value="thinking"
                     class="talos-pressable flex min-h-13 w-full items-center gap-3 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 px-3 text-left"
-                    @click="emit('selectThinking', !thinking)"
+                    @update:model-value="emit('selectThinking', $event)"
                 >
                     <span class="flex size-9 items-center justify-center rounded-full bg-[var(--talos-active)]">
                         <Brain class="size-4" aria-hidden="true" />
                     </span>
                     <span class="min-w-0 flex-1 text-sm">{{ $t('chat.extendedThinking') }}</span>
-                    <span
-                        class="relative h-6 w-11 rounded-full transition-colors duration-200"
-                        :class="thinking ? 'bg-[var(--talos-accent,var(--primary))]' : 'bg-[var(--talos-border)]'"
-                        aria-hidden="true"
-                    >
-                        <span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="thinking ? 'left-[22px]' : 'left-0.5'" />
+                    <!-- `data-state` a mano: reka lo mette sulla RIGA, che qui e'
+                         il SwitchRoot, non su questo binario. Senza,
+                         il pomello si muove e il binario resta spento. -->
+                    <span :class="TALOS_SWITCH_TRACK_CLASS" :data-state="thinking ? 'checked' : 'unchecked'" aria-hidden="true">
+                        <SwitchThumb :class="TALOS_SWITCH_THUMB_CLASS" />
                     </span>
-                </button>
+                </SwitchRoot>
 
                 <div v-if="realEfforts().length" class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3">
                     <p class="text-xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">{{ $t('chat.reasoningEffort') }}</p>

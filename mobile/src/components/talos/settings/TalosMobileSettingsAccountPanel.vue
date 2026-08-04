@@ -7,6 +7,7 @@
  */
 import { inject, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 import { useTalosI18n } from '@/i18n'
 import { Check, RotateCcw } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -235,28 +236,12 @@ async function toggleBiometric(): Promise<void> {
             </p>
             <div class="mt-1 flex items-center justify-between gap-3">
                 <span class="text-sm text-[var(--talos-text)]">{{ t('account.requirePin') }}</span>
-                <button
-                    type="button"
-                    role="switch"
-                    data-testid="talos-applock-toggle"
-                    :aria-checked="settings.state.security.app_lock_enabled"
+                <TalosThemedSwitch
+                    test-id="talos-applock-toggle"
+                    :model-value="settings.state.security.app_lock_enabled"
                     :aria-label="t('account.requirePin')"
-                    class="talos-pressable -mr-1 flex min-h-11 min-w-11 items-center justify-center"
-                    @click="toggleAppLock"
-                >
-                    <span
-                        class="relative h-6 w-11 rounded-full transition-colors duration-200"
-                        :class="settings.state.security.app_lock_enabled
-                            ? 'bg-[var(--talos-accent,var(--primary))]'
-                            : 'bg-[var(--talos-border,var(--border))]'"
-                        aria-hidden="true"
-                    >
-                        <span
-                            class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200"
-                            :class="settings.state.security.app_lock_enabled ? 'left-[22px]' : 'left-0.5'"
-                        />
-                    </span>
-                </button>
+                    @update:model-value="toggleAppLock"
+                />
             </div>
             <TalosMobileAppLockModal
                 v-if="lockModal !== null"
@@ -298,56 +283,24 @@ async function toggleBiometric(): Promise<void> {
                         {{ t('account.screenSecureBody') }}
                     </span>
                 </span>
-                <button
-                    type="button"
-                    role="switch"
-                    data-testid="talos-screen-secure-toggle"
-                    :aria-checked="settings.state.security.screen_secure"
+                <TalosThemedSwitch
+                    test-id="talos-screen-secure-toggle"
+                    :model-value="settings.state.security.screen_secure"
                     :aria-label="t('account.screenSecure')"
-                    class="talos-pressable -mr-1 flex min-h-11 min-w-11 items-center justify-center"
-                    @click="toggleScreenSecure"
-                >
-                    <span
-                        class="relative h-6 w-11 rounded-full transition-colors duration-200"
-                        :class="settings.state.security.screen_secure
-                            ? 'bg-[var(--talos-accent,var(--primary))]'
-                            : 'bg-[var(--talos-border,var(--border))]'"
-                        aria-hidden="true"
-                    >
-                        <span
-                            class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200"
-                            :class="settings.state.security.screen_secure ? 'left-[22px]' : 'left-0.5'"
-                        />
-                    </span>
-                </button>
+                    @update:model-value="toggleScreenSecure"
+                />
             </div>
             <div
                 v-if="settings.state.security.app_lock_enabled && biometricAvailable"
                 class="mt-3 flex items-center justify-between gap-3"
             >
                 <span class="text-sm text-[var(--talos-text)]">{{ t('account.biometrics') }}</span>
-                <button
-                    type="button"
-                    role="switch"
-                    data-testid="talos-applock-biometric"
-                    :aria-checked="settings.state.security.app_lock_biometric"
+                <TalosThemedSwitch
+                    test-id="talos-applock-biometric"
+                    :model-value="settings.state.security.app_lock_biometric"
                     :aria-label="t('account.biometrics')"
-                    class="talos-pressable -mr-1 flex min-h-11 min-w-11 items-center justify-center"
-                    @click="toggleBiometric"
-                >
-                    <span
-                        class="relative h-6 w-11 rounded-full transition-colors duration-200"
-                        :class="settings.state.security.app_lock_biometric
-                            ? 'bg-[var(--talos-accent,var(--primary))]'
-                            : 'bg-[var(--talos-border,var(--border))]'"
-                        aria-hidden="true"
-                    >
-                        <span
-                            class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200"
-                            :class="settings.state.security.app_lock_biometric ? 'left-[22px]' : 'left-0.5'"
-                        />
-                    </span>
-                </button>
+                    @update:model-value="toggleBiometric"
+                />
             </div>
         </section>
 
