@@ -980,18 +980,18 @@ export const TALOS_EN_MESSAGES = {
         // Non un filtro che nasconde — nascondere toglie anche il motivo
         // per liberare memoria.
         fitLabel: {
-            'comfortable': 'Fits',
+            'comfortable': 'Runs well',
             'tight': 'Tight',
-            'will-crawl': 'Very slow',
-            'wont-run': 'Too big',
+            'will-crawl': 'Too slow',
+            'wont-run': 'Won’t run here',
         },
         fitReason: {
-            'comfortable': 'Fits comfortably. {left} left over.',
-            'tight': 'It fits, but only {left} is left: under load the system may close TALOS.',
-            'will-crawl': 'It barely fits and would run too slowly to use.',
-            'wont-run': 'Needs {missing} more. Free some memory and check again, or pick a smaller variant.',
+            'comfortable': 'Fits in memory comfortably: {left} of RAM left.',
+            'tight': 'Fits in memory, but only {left} of RAM is left: under load Android may close TALOS.',
+            'will-crawl': 'It barely fits, and the phone would spend its time reading from disk instead of writing.',
+            'wont-run': 'Needs {missing} more RAM. Disk space is not the issue: the model has to sit in MEMORY to generate.',
         },
-        fitFree: 'Free memory: {free}',
+        fitFree: 'Free RAM: {free}',
         defaultModel: 'Default model',
         sharedSelection: 'Model Lab and the Chat quick picker share this live selection.',
         defaultChatModel: 'Default chat model',
@@ -1328,6 +1328,13 @@ export const TALOS_EN_MESSAGES = {
         sortLabel: 'Sort',
         // I valori sono i nomi del Hub, non nostri.
         sort: {
+            // I modelli GIA' sul telefono: ordinati per quando sono arrivati,
+            // come si chiamano, quanto pesano. Sono chiavi diverse da quelle
+            // della lista sfogliata, e cancellarle deduplicando le ha fatte
+            // comparire crude sullo schermo — visto sul tablet 2026-08-04.
+            recent: 'Recent',
+            name: 'Name',
+            size: 'Size',
             downloads: 'Most downloaded',
             likes: 'Most liked',
             lastModified: 'Recently updated',
@@ -1340,7 +1347,7 @@ export const TALOS_EN_MESSAGES = {
         // fa chi mette un modello su un TELEFONO.
         filtersLabel: 'Filters',
         filter: {
-            'fits': 'Fits',
+            'fits': 'Runs here',
             'chat': 'Chat',
             'code': 'Code',
             'q4': 'Q4',
