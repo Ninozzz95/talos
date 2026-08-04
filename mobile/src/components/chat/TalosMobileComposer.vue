@@ -14,7 +14,9 @@ import { Loader2, ArrowUp,
     SlidersHorizontal,
     Plus,
     Sparkles,
-    Square, } from '@lucide/vue'
+    Square,
+    Check,
+    X, } from '@lucide/vue'
 import TalosMicWaveform from '@/components/brand/TalosMicWaveform.vue'
 import TalosMobileAttachmentTray from '@/components/chat/TalosMobileAttachmentTray.vue'
 import TalosMobileModelEffortDrawer from '@/components/chat/TalosMobileModelEffortDrawer.vue'
@@ -132,6 +134,7 @@ const emit = defineEmits<{
     send: []
     stop: []
     toggleDictation: []
+    discardDictation: []
     selectModelProfile: [profileId: string]
     selectModelRoutingProfile: [profileId: string]
     selectEffort: [level: TalosMobileEffortLevel]
@@ -624,34 +627,55 @@ watch(() => props.prompt, () => {
             </Button>
         </div>
 
-        <!-- Owner 2026-07-24 (Claude/ChatGPT-style): a distinct listening state —
-             accent-tinted pill, a live pulsing dot, a volume-reactive waveform
-             filling the width, a clear "Listening" label and a dedicated Stop
-             control (transcription flows inline into the field). -->
+        <!--
+            Mentre si detta il compositore ha UNA cosa da mostrare.
+            Owner 2026-08-04: «vorrei che il campo testo venisse nascosto mentre
+            registri, in modo che si veda solo la barra di registrazione. Al
+            momento si vedono entrambi e risulta ripetitivo.» Aveva ragione: nel
+            campo non si scrive mentre si parla, quindi occupava spazio per non
+            offrire niente.
+
+            La forma viene dal riferimento che ha passato (Claude mobile): due
+            comandi soli, opposti, agli estremi — uno butta, uno tiene — e in
+            mezzo l'onda che reagisce alla voce, che e' l'unica cosa che dice
+            «ti sto sentendo».
+        -->
         <div
             v-if="dictationListening || dictationStarting"
             data-testid="talos-dictation-live"
-            class="talos-dictation-live mb-2 flex items-center gap-3 rounded-2xl border border-[var(--talos-accent,var(--primary))]/30 bg-[color-mix(in_srgb,var(--talos-accent,#c08b3c)_10%,transparent)] px-3 py-2"
+            class="talos-dictation-live flex items-center gap-3 rounded-2xl border border-[var(--talos-accent,var(--primary))]/30 bg-[color-mix(in_srgb,var(--talos-accent,#c08b3c)_10%,transparent)] px-2 py-2"
         >
-            <span class="relative flex size-2.5 shrink-0" aria-hidden="true">
-                <span class="absolute inline-flex h-full w-full rounded-full bg-[var(--talos-accent,var(--primary))] opacity-60 motion-safe:animate-ping"></span>
-                <span class="relative inline-flex size-2.5 rounded-full bg-[var(--talos-accent,var(--primary))]"></span>
-            </span>
-            <TalosMicWaveform :level="dictationStarting ? 0.12 : dictationLevel" :bars="18" class="min-w-0 flex-1" />
-            <span class="shrink-0 text-xs font-semibold tracking-wide text-[var(--talos-accent,var(--primary))]">
-                {{ dictationStarting ? $t('chat.starting') : $t('chat.listening') }}
-            </span>
+            <!-- ✕ BUTTA VIA: rimette il campo com'era prima di parlare. Se si
+                 limitasse a fermare sarebbe un doppione del ✓, cioe' un comando
+                 che mente. -->
             <button
                 type="button"
-                :aria-label="$t('chat.cancelDictation')"
-                class="talos-pressable flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                data-testid="talos-dictation-discard"
+                :aria-label="$t('chat.discardDictation')"
+                class="talos-pressable flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--talos-panel,var(--card))] text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                @click="emit('discardDictation')"
+            >
+                <X class="size-4" aria-hidden="true" />
+            </button>
+            <TalosMicWaveform :level="dictationStarting ? 0.12 : dictationLevel" :bars="24" class="min-w-0 flex-1" />
+            <!-- Il nome dello stato resta, ma per chi non vede: l'onda lo dice
+                 gia' a chi guarda, e la barra non deve diventare una frase. -->
+            <span class="sr-only" role="status">
+                {{ dictationStarting ? $t('chat.starting') : $t('chat.listening') }}
+            </span>
+            <!-- ✓ TIENE: chiude la dettatura e lascia il testo nel campo. -->
+            <button
+                type="button"
+                data-testid="talos-dictation-keep"
+                :aria-label="$t('chat.stopDictation')"
+                class="talos-pressable flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 @click="emit('toggleDictation')"
             >
-                <Square class="size-3.5" fill="currentColor" aria-hidden="true" />
+                <Check class="size-4" aria-hidden="true" />
             </button>
         </div>
 
-        <div class="relative min-w-0">
+        <div v-if="!(dictationListening || dictationStarting)" class="relative min-w-0">
             <!-- Owner 2026-07-24 immersive compact pill: [+] input [mic] [send] on ONE
                  line; model+effort appear on focus (expanded). @pointerdown.prevent keeps
                  the field focused / keyboard up when a control is tapped (Android WebView

@@ -582,6 +582,7 @@ export const TALOS_IT_MESSAGES = {
         removeFailedFiles: 'Rimuovi i file che non è stato possibile aggiungere prima dell’invio',
         improvingPrompt: 'Miglioramento prompt',
         stopResponse: 'Interrompi risposta',
+        discardDictation: 'Annulla la dettatura',
         stopDictation: 'Interrompi dettatura',
         dictate: 'Detta',
         startingDictation: 'Avvio dettatura…',

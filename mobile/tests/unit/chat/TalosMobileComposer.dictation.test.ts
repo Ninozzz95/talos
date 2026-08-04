@@ -40,21 +40,57 @@ describe('TalosMobileComposer dictation (F2-T5)', () => {
         expect(wrapper.emitted('toggleDictation')).toHaveLength(1)
     })
 
-    it('reflects the listening state with pressed semantics', () => {
+    it('mentre si detta il CAMPO SPARISCE: resta solo la barra', () => {
+        /**
+         * Owner 2026-08-04, con screenshot: «vorrei che il campo testo venisse
+         * nascosto mentre registri, in modo che si veda solo la barra di
+         * registrazione. Al momento si vedono entrambi e risulta ripetitivo.»
+         *
+         * Non e' solo estetica: nel campo non si scrive mentre si parla, quindi
+         * occupava spazio senza offrire niente.
+         */
+        const fermo = mountComposer({ dictationSupported: true })
+        expect(fermo.find('textarea').exists()).toBe(true)
+
         const wrapper = mountComposer({ dictationSupported: true, dictationListening: true })
-        // The composer mic toggle carries aria-pressed; the listening pill's
-        // dedicated Stop button (Claude-style) does not — disambiguate.
-        const mic = wrapper.get('button[aria-label="Stop dictation"]')
-        expect(mic.attributes('aria-pressed')).toBe('true')
+        expect(wrapper.get('[data-testid="talos-dictation-live"]').exists()).toBe(true)
+        expect(wrapper.find('textarea').exists()).toBe(false)
     })
 
-    it('shows the Claude-style listening pill with a waveform and a Stop control', () => {
+    it('due comandi OPPOSTI agli estremi: uno butta, uno tiene', () => {
+        /**
+         * La forma viene dal riferimento passato dall'owner (Claude mobile).
+         * Il ✕ non e' un secondo Stop: emette `discardDictation`, che rimette il
+         * campo com'era prima di parlare. Due comandi che fanno la stessa cosa
+         * sarebbero un comando che mente.
+         */
         const wrapper = mountComposer({ dictationSupported: true, dictationListening: true })
         const pill = wrapper.get('[data-testid="talos-dictation-live"]')
-        expect(pill.text()).toContain('Listening')
         expect(pill.find('[data-testid="talos-mic-waveform"]').exists()).toBe(true)
-        // Re-review 2026-07-25: the pill's control is "Cancel dictation" so it does
-        // not share an accessible name with the morphing right button ("Stop dictation").
-        expect(pill.find('button[aria-label="Cancel dictation"]').exists()).toBe(true)
+
+        /*
+         * L'icona, non solo il bottone.
+         *
+         * La prima versione di questo test guardava che i due bottoni ci
+         * fossero, e passava: `X` e `Check` NON erano importati, Vue li rendeva
+         * come elementi sconosciuti e i due cerchi erano vuoti sullo schermo.
+         * L'ha preso uno screenshot dal dispositivo, non il typecheck.
+         */
+        for (const id of ['talos-dictation-discard', 'talos-dictation-keep']) {
+            expect(pill.get(`[data-testid="${id}"]`).find('svg').exists(), id).toBe(true)
+        }
+
+        pill.get('[data-testid="talos-dictation-discard"]').trigger('click')
+        pill.get('[data-testid="talos-dictation-keep"]').trigger('click')
+        expect(wrapper.emitted('discardDictation')).toHaveLength(1)
+        expect(wrapper.emitted('toggleDictation')).toHaveLength(1)
+    })
+
+    it('«In ascolto» resta per chi non vede, senza diventare una frase sullo schermo', () => {
+        // L'onda lo dice gia' a chi guarda; il testo serve a chi non guarda.
+        const wrapper = mountComposer({ dictationSupported: true, dictationListening: true })
+        const stato = wrapper.get('[data-testid="talos-dictation-live"] [role="status"]')
+        expect(stato.text()).toContain('Listening')
+        expect(stato.classes()).toContain('sr-only')
     })
 })
