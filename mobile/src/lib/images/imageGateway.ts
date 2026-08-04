@@ -51,6 +51,21 @@ export interface TalosImagePlan {
     url: string
     headers: Record<string, string>
     body: Record<string, unknown>
+    /**
+     * Quando c'e', la richiesta NON passa dal trasporto JSON dell'app.
+     *
+     * OpenAI accetta una modifica solo in `multipart/form-data`: e' l'unico
+     * posto in tutta TALOS che vuole un corpo non-JSON. Descritto qui invece
+     * che assemblato: questo modulo pianifica e basta — resta una funzione pura,
+     * verificabile senza un DOM, e i byte li impacchetta chi spedisce.
+     *
+     * `body` resta popolato con gli stessi campi, cosi' chi legge un piano
+     * vede cosa parte senza dover sapere che forma ha il pacco.
+     */
+    multipart?: {
+        fields: Record<string, string>
+        file: { field: string, base64: string, mediaType: string, filename: string }
+    }
 }
 
 export interface TalosGeneratedImage {
@@ -72,6 +87,21 @@ const OPENAI_SIZE: Record<TalosImageShape, string> = {
     landscape: '1536x1024',
 }
 
+/**
+ * Il nome del file che accompagna l'immagine nel pacco.
+ *
+ * Non e' una formalita': un `multipart` porta il nome accanto ai byte, e un
+ * server che trova `sorgente` senza estensione puo' rifiutarsi di indovinare
+ * che tipo di immagine sia. L'estensione la ricaviamo dal tipo dichiarato,
+ * che e' quello che la Libreria ha registrato al salvataggio.
+ */
+function extensionFor(mediaType: string): string {
+    const sotto = mediaType.split('/')[1]?.split(';')[0]?.trim().toLowerCase() ?? ''
+    if (sotto === 'jpeg' || sotto === 'jpg') return 'jpg'
+    if (sotto === 'png' || sotto === 'webp' || sotto === 'gif') return sotto
+    return 'png'
+}
+
 const GEMINI_ASPECT: Record<TalosImageShape, string> = {
     square: '1:1',
     portrait: '3:4',
@@ -84,23 +114,74 @@ export function planTalosImageRequest(
     config: { apiKey: string; model: string; endpoint?: string | null },
 ): TalosImagePlan {
     /**
-     * Partire da un'immagine: oggi lo sa fare solo Gemini.
+     * Partire da un'immagine: la sanno fare Gemini e OpenAI, non OpenRouter.
      *
-     * Misurato il 2026-08-04. OpenAI vuole `POST /v1/images/edits` in
-     * **multipart/form-data**, che e' l'unico posto in tutta l'app dove serve
-     * un corpo non-JSON: va provato attraverso `CapacitorHttp` prima di
-     * scriverlo, perche' la documentazione dice cosa accetta il server, non
-     * cosa riesce a mandare questo telefono. OpenRouter ha una via sua.
-     *
-     * Finche' non sono misurati, lo dicono invece di provarci: una richiesta
-     * che ignora l'immagine in silenzio consegna una scena nuova al posto di
-     * una modifica, e chi guarda non ha modo di capire che e' successo.
+     * OpenRouter lo dice invece di provarci. Una richiesta che ignora
+     * l'immagine in silenzio consegna una scena nuova al posto di una modifica,
+     * e chi guarda non ha modo di capire che e' successo.
      */
-    if (request.source && provider !== 'gemini') {
+    if (request.source && provider === 'openrouter') {
         throw new Error(`TALOS_IMAGE_EDIT_UNSUPPORTED_PROVIDER:${provider}`)
     }
     if (provider === 'openai') {
         const base = (config.endpoint ?? 'https://api.openai.com/v1').replace(/\/+$/, '')
+        /**
+         * Modificare e disegnare sono due INDIRIZZI diversi, non due modi di
+         * chiamare lo stesso.
+         *
+         * MISURATO dal dispositivo il 2026-08-04: `fetch` con `FormData` dalla
+         * WebView arriva a `api.openai.com/v1/images/edits` e viene letto — la
+         * risposta e' 401 sulla chiave, non un errore di trasporto ne' un muro
+         * CORS. Era la sola cosa che mancava per scrivere questo ramo, perche'
+         * la documentazione dice cosa accetta il server, non cosa riesce a
+         * mandare questo telefono.
+         *
+         * Documentazione letta il 2026-08-04: obbligatori `model`, `image`,
+         * `prompt`; la risposta torna in `b64_json` come le generazioni, quindi
+         * il lettore a valle non cambia.
+         */
+        if (request.source) {
+            const fields: Record<string, string> = {
+                model: config.model,
+                prompt: request.prompt,
+                size: OPENAI_SIZE[request.shape],
+                n: '1',
+                output_format: 'png',
+            }
+            /*
+             * La fedelta' dei volti si chiede solo dove esiste.
+             *
+             * `input_fidelity` tiene i tratti del viso quando la modifica non
+             * doveva toccarli — ed e' esattamente cio' che serve a chi dice
+             * «cambia lo sfondo alla MIA foto». Ma vale su gpt-image-1 e su
+             * gpt-image-2 NON e' applicabile: mandarlo la' fa fallire tutto.
+             *
+             * Il modello qui non lo scegliamo noi, lo pesca il catalogo — e
+             * pesca il piu' nuovo. Quindi si chiede solo dove la
+             * documentazione lo prevede, e ogni modello che non riconosciamo
+             * non lo riceve: una modifica meno fedele si vede e si puo'
+             * rifare, una chiamata rifiutata no.
+             */
+            if (/^gpt-image-1/i.test(config.model)) fields.input_fidelity = 'high'
+            return {
+                url: `${base}/images/edits`,
+                headers: {
+                    // Nessun `Content-Type`: lo scrive FormData, con il
+                    // confine che si e' scelto. Deciderlo qui lo romperebbe.
+                    Authorization: `Bearer ${config.apiKey}`,
+                },
+                body: fields,
+                multipart: {
+                    fields,
+                    file: {
+                        field: 'image',
+                        base64: request.source.base64,
+                        mediaType: request.source.mediaType,
+                        filename: `sorgente.${extensionFor(request.source.mediaType)}`,
+                    },
+                },
+            }
+        }
         return {
             url: `${base}/images/generations`,
             headers: {
