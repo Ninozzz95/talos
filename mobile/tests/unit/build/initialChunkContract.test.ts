@@ -15,6 +15,7 @@ interface FixtureOptions {
     eagerMessageOverflowMenu?: boolean
     eagerPromptEnhancer?: boolean
     eagerSlashCommandMenu?: boolean
+    eagerEnhancerDrawer?: boolean
     eagerModelCatalog?: boolean
     eagerModelAdvanced?: boolean
     eagerToolset?: boolean
@@ -39,6 +40,9 @@ function createFixture(options: FixtureOptions = {}): string {
     const messageOverflowMenuKey = 'src/components/chat/TalosMobileMessageOverflowMenu.vue'
     const promptEnhancerKey = 'src/components/chat/TalosMobilePromptEnhancerPopover.vue'
     const slashCommandMenuKey = 'src/components/chat/TalosMobileSlashCommandMenu.vue'
+    // Il pannello «quanto riscrivere, con quale modello»: statico si porta
+    // dietro il Select di reka-ui, misurato 80.223 byte nel grafo d'avvio.
+    const enhancerDrawerKey = 'src/components/chat/TalosMobileEnhancerDrawer.vue'
     const modelCatalogKey = 'src/components/talos/models/TalosMobileModelCatalog.vue'
     const modelAdvancedKey = 'src/components/talos/models/TalosMobileModelAdvancedOptions.vue'
     // The tool suite: loaded on the first send, never at boot.
@@ -69,6 +73,7 @@ function createFixture(options: FixtureOptions = {}): string {
     const messageOverflowMenuIsDynamic = options.eagerMessageOverflowMenu !== true
     const promptEnhancerIsDynamic = options.eagerPromptEnhancer !== true
     const slashCommandMenuIsDynamic = options.eagerSlashCommandMenu !== true
+    const enhancerDrawerIsDynamic = options.eagerEnhancerDrawer !== true
     const modelCatalogIsDynamic = options.eagerModelCatalog !== true
     const modelAdvancedIsDynamic = options.eagerModelAdvanced !== true
     const routeKeys = [
@@ -98,6 +103,7 @@ function createFixture(options: FixtureOptions = {}): string {
                 ...(messageOverflowMenuIsDynamic ? [] : [messageOverflowMenuKey]),
                 ...(promptEnhancerIsDynamic ? [] : [promptEnhancerKey]),
                 ...(slashCommandMenuIsDynamic ? [] : [slashCommandMenuKey]),
+                ...(enhancerDrawerIsDynamic ? [] : [enhancerDrawerKey]),
                 ...(toolsetIsDynamic ? [] : [toolsetKey]),
                 ...(documentsAreDynamic ? [] : [documentGeneratorKey]),
                 ...(launcherIconDialogIsDynamic ? [] : [launcherIconDialogKey]),
@@ -115,6 +121,7 @@ function createFixture(options: FixtureOptions = {}): string {
                 ...(messageOverflowMenuIsDynamic ? [messageOverflowMenuKey] : []),
                 ...(promptEnhancerIsDynamic ? [promptEnhancerKey] : []),
                 ...(slashCommandMenuIsDynamic ? [slashCommandMenuKey] : []),
+                ...(enhancerDrawerIsDynamic ? [enhancerDrawerKey] : []),
                 ...(toolsetIsDynamic ? [toolsetKey] : []),
                 agentLoopKey,
                 toolConsentKey,
@@ -148,6 +155,10 @@ function createFixture(options: FixtureOptions = {}): string {
         [slashCommandMenuKey]: {
             file: 'assets/slash-command-menu.js',
             isDynamicEntry: slashCommandMenuIsDynamic,
+        },
+        [enhancerDrawerKey]: {
+            file: 'assets/enhancer-drawer.js',
+            isDynamicEntry: enhancerDrawerIsDynamic,
         },
         [modelCatalogKey]: {
             file: 'assets/model-catalog.js',
@@ -294,15 +305,35 @@ describe('initial JavaScript chunk contract', () => {
 
         expect(result.status).toBe(0)
         expect(result.stdout).toContain('initial_javascript_bytes')
-        expect(result.stdout).toContain('sqlite_dynamic_entry')
-        expect(result.stdout).toContain('model_catalog_dynamic_entry')
-        expect(result.stdout).toContain('model_advanced_dynamic_entry')
-        expect(result.stdout).toContain('welcome_en_dynamic_entry')
-        expect(result.stdout).toContain('welcome_it_dynamic_entry')
-        expect(result.stdout).toContain('welcome_runtime_dynamic_entry')
-        expect(result.stdout).toContain('welcome_easter_egg_dynamic_entry')
-        expect(result.stdout).toContain('welcome_title_dynamic_entry')
-        expect(result.stdout).toContain('workspace_background_dynamic_entry')
+        /**
+         * Il rapporto elenca i confini PER PERCORSO, e ogni riga deve
+         * corrispondere alla propria chiave.
+         *
+         * Prima erano indici scritti a mano — `dynamicEntries[16]` — e bastava
+         * aggiungere un confine in mezzo alla lista perché ogni etichetta dopo
+         * quel punto finisse sul valore sbagliato. È successo il 2026-08-04
+         * aggiungendo il drawer dell'enhancer: il rapporto continuava a dire
+         * `"ok": true` mentre chiamava il pannello media «icona del
+         * lanciatore». Questo test è ciò che non lo lascia succedere di nuovo.
+         */
+        const report = JSON.parse(result.stdout) as {
+            dynamic_entries: Record<string, string>
+        }
+        const righe = Object.entries(report.dynamic_entries)
+        expect(righe.length).toBeGreaterThanOrEqual(20)
+        for (const [percorso, chiave] of righe) {
+            // O la chiave del manifesto È il percorso, o è il nome sintetico
+            // che Vite genera per quel file: mai quello di un altro.
+            const nucleo = percorso.split('/').at(-1)!.replace(/\.(vue|ts|json)$/, '')
+            expect(
+                chiave === percorso || chiave.includes(nucleo),
+                `la riga «${percorso}» punta a «${chiave}», che non è sua`,
+            ).toBe(true)
+        }
+        expect(report.dynamic_entries['src/repositories/productionChatRepository.ts'])
+            .toBeDefined()
+        expect(report.dynamic_entries['src/components/chat/TalosMobileEnhancerDrawer.vue'])
+            .toBeDefined()
     })
 
     it('rejects SQLite when it enters the static initial graph', () => {
@@ -394,8 +425,13 @@ describe('initial JavaScript chunk contract', () => {
 
         expect(result.status).toBe(0)
         expect(result.stdout).toContain('_SettingsScreen-fixture.js')
-        expect(result.stdout).toContain('model_catalog_dynamic_entry')
-        expect(result.stdout).toContain('model_advanced_dynamic_entry')
+        // Il nome sintetico di Vite per una voce annidata resta legato alla
+        // SUA riga: è il caso che il formato posizionale sbagliava.
+        expect(JSON.parse(result.stdout).dynamic_entries['src/screens/SettingsScreen.vue'])
+            .toContain('SettingsScreen')
+        expect(JSON.parse(result.stdout)
+            .dynamic_entries['src/components/talos/models/TalosMobileModelAdvancedOptions.vue'])
+            .toBeDefined()
     })
 
     it('WELCOME-CHUNK-02 rejects either welcome locale catalog in the initial static graph', () => {

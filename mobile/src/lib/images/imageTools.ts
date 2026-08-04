@@ -39,6 +39,14 @@ export interface TalosImageToolSources {
      * di non funzionare che il chiamante distingue col messaggio.
      */
     findImage(reference: string): Promise<{ base64: string, mediaType: string, name: string } | null>
+    /**
+     * I nomi delle immagini disponibili, per l'ERRORE.
+     *
+     * Un errore che dice «non trovata» senza dire cosa c'e' costringe a
+     * indovinare. Misurato 2026-08-04: cinque tentativi di fila, tutti falliti
+     * in 20ms, e poi il modello si e' arreso.
+     */
+    availableImages(): readonly string[]
     generate(
         prompt: string,
         shape: TalosImageShape,
@@ -113,11 +121,32 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
             if (input.from_image) {
                 const found = await sources.findImage(input.from_image).catch(() => null)
                 if (!found) {
+                    /*
+                     * L'errore NOMINA cio' che c'e'.
+                     *
+                     * MISURATO 2026-08-04 dalla diagnostica dell'owner:
+                     * gpt-5.6-terra ha chiamato questo tool cinque volte di
+                     * fila con lo stesso riferimento, ogni volta fallendo in
+                     * 20ms, e poi ha detto alla persona «errore tecnico del
+                     * riferimento immagine». Claude, nella stessa situazione,
+                     * aveva prima cercato il nome con `library_list` e
+                     * `library_read` — e aveva funzionato.
+                     *
+                     * La differenza non era il modello: era che questo
+                     * messaggio diceva «non c'e'» senza dire COSA c'e'. Un
+                     * errore che offre l'alternativa si corregge al primo
+                     * tentativo; uno che nega e basta si paga cinque volte.
+                     */
+                    const disponibili = sources.availableImages()
+                    const elenco = disponibili.length > 0
+                        ? `The images you can use are: ${disponibili.map((n) => `«${n}»`).join(', ')}. `
+                            + 'Call this tool again with one of those exact names.'
+                        : 'There are no images in this conversation or in the Library, so there is nothing to change. '
+                            + 'Leave from_image out to draw a new picture, or ask the user to attach a photo.'
                     return {
                         ok: false,
                         code: 'TALOS_IMAGE_SOURCE_NOT_FOUND',
-                        content: `No image called «${input.from_image}» is in this conversation or in the Library. `
-                            + 'Ask the user which picture they mean, or leave from_image out to draw a new one.',
+                        content: `No image called «${input.from_image}» is here. ${elenco}`,
                     }
                 }
                 source = { base64: found.base64, mediaType: found.mediaType }
