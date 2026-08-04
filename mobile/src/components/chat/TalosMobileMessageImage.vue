@@ -124,7 +124,7 @@ onBeforeUnmount(release)
                 class="pointer-events-none absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/55 px-1.5 py-0.5 text-3xs font-medium leading-4 text-white/95 backdrop-blur-[2px]"
             >
                 <Sparkles class="size-2.5 shrink-0" aria-hidden="true" />
-                {{ $t('chat.imageAiGenerated', { producer: provenance }) }}
+                {{ $t('chat.imageAiGenerated') }}
             </span>
         </span>
     </button>
@@ -164,6 +164,15 @@ onBeforeUnmount(release)
             <div class="flex min-h-0 flex-1 items-center justify-center p-4" @click="opened = false">
                 <img :src="source" :alt="name" class="max-h-full max-w-full object-contain">
             </div>
+            <!-- Qui il nome di CHI l'ha fatta, dove c'e' spazio e nessuna
+                 etichetta accanto con cui confondersi. -->
+            <p
+                v-if="provenance"
+                data-testid="talos-image-provenance-detail"
+                class="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-xs text-white/70"
+            >
+                {{ $t('chat.imageAiProducer', { producer: provenance }) }}
+            </p>
         </div>
     </Teleport>
 </template>

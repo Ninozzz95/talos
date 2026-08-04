@@ -55,12 +55,36 @@ async function monta(bytes: Uint8Array) {
 }
 
 describe('l’immagine dice cosa è, leggendolo da sé', () => {
-    it('un’immagine con credenziali C2PA porta l’etichetta col NOME di chi l’ha fatta', async () => {
+    it('la targhetta dice che l’ha fatta una MACCHINA, senza nominare chi', async () => {
+        /**
+         * Owner 2026-08-04, con schermata: «in un'immagine generata da Opus 5
+         * mi dice OpenAI».
+         *
+         * Non era un errore — il modello della chat scrive, quello delle
+         * immagini disegna, e Anthropic non genera immagini — ma «IA · OpenAI»
+         * finiva a due centimetri da «TALOS · Claude Opus 5», e due etichette
+         * corte e vicine che nominano cose diverse si leggono come una
+         * contraddizione.
+         *
+         * Quindi la targhetta fa UNA cosa sola.
+         */
         const wrapper = await monta(pngCon('caBX', MANIFESTO))
         const targhetta = wrapper.find('[data-testid="talos-image-provenance"]')
         expect(targhetta.exists()).toBe(true)
-        // Non «IA» e basta: chi guarda deve sapere CHI, e viene dal manifesto.
-        expect(targhetta.text()).toContain('OpenAI')
+        expect(targhetta.text().trim()).toBe('AI')
+        expect(targhetta.text()).not.toContain('OpenAI')
+    })
+
+    it('il NOME di chi l’ha fatta si vede aprendo l’immagine', async () => {
+        // L'informazione non si perde: si sposta dove c'e' spazio e nessuna
+        // etichetta accanto con cui confondersi.
+        const wrapper = await monta(pngCon('caBX', MANIFESTO))
+        expect(document.body.textContent).not.toContain('OpenAI')
+
+        await wrapper.get('[data-testid="talos-message-image"]').trigger('click')
+        await wrapper.vm.$nextTick()
+        const dettaglio = document.querySelector('[data-testid="talos-image-provenance-detail"]')
+        expect(dettaglio?.textContent).toContain('OpenAI')
     })
 
     it('una foto scattata col telefono resta MUTA, non «forse»', async () => {

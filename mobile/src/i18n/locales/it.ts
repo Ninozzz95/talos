@@ -683,8 +683,14 @@ export const TALOS_IT_MESSAGES = {
         retryResponse: 'Riprova risposta',
         saveToLibrary: 'Salva nella Libreria',
         imageUnavailable: 'non disponibile',
+        // La targhetta fa UNA cosa: dire che l'ha fatta una macchina.
+        // Il nome del produttore sta accanto a «TALOS · Claude Opus 5», e due
+        // etichette corte e vicine che nominano cose diverse si leggono come
+        // una contraddizione: il modello della chat scrive, quello delle
+        // immagini disegna, e non sono lo stesso. Il nome si vede aprendo.
+        imageAiGenerated: 'IA',
         // Letto dal file, non indovinato: il manifesto C2PA dice CHI l'ha fatta.
-        imageAiGenerated: 'IA · {producer}',
+        imageAiProducer: 'Immagine generata da {producer}',
         closePreview: 'Chiudi anteprima',
         loadingEarlier: 'Caricamento messaggi precedenti…',
         scrollEarlier: 'Scorri verso l’alto per i messaggi precedenti',
