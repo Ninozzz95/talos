@@ -657,6 +657,11 @@ export interface ChatControllerDeps {
                 /** I tool della Libreria seguono QUESTO, non l iniezione ambientale. */
                 readonly library_access?: 'allow' | 'ask' | 'deny'
                 readonly memory_write_access?: 'allow' | 'ask' | 'deny'
+                readonly prompt_enhancer?: {
+                    readonly model: string | null
+                    readonly effort: string
+                    readonly depth?: import('@/lib/chat/promptEnhancerDepth').TalosPromptEnhancerDepth
+                }
                 readonly library_context_policy?: TalosLibraryContextPolicyV1 | null
                 readonly library_autosave_generated?: boolean
             /** Owner 2026-07-26: show technical codes, off in production. */
@@ -3906,8 +3911,24 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         promptEnhancement.value = null
         promptEnhancementError.value = null
 
-        const profile = selectedProfile.value
-        const providerModel = selectedProviderModel.value
+        /**
+         * Chi riscrive il prompt puo' NON essere il modello della chat.
+         *
+         * Owner 2026-08-04: «se uso ChatGPT 5.6 Sol Max per la chat, non e'
+         * detto che sia necessario usare lo stesso modello per un semplice
+         * prompt enhancing — potrebbe essere uno spreco di token e soldi».
+         *
+         * Il modello della chat si sceglie per il compito piu' difficile della
+         * conversazione; riscrivere un prompt non e' quel compito. Non averne
+         * scelto uno vuol dire «quello del compositore»: chi non tocca niente
+         * ottiene esattamente il comportamento di prima.
+         */
+        const enhancer = deps.settings.state.shell?.prompt_enhancer
+        const chosen = enhancer?.model
+            ? profiles.value.find((entry) => entry.id === enhancer.model) ?? null
+            : null
+        const profile = chosen ?? selectedProfile.value
+        const providerModel = chosen ? null : selectedProviderModel.value
         let apiKey: string | null = null
         try {
             const promptModule = await import('@/lib/chat/promptEnhancement')
@@ -3931,8 +3952,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     apiKey,
                     endpoint,
                     timeoutMs: timeoutSeconds ? timeoutSeconds * 1000 : undefined,
-                    effort: effort.value,
+                    // L'effort dell'enhancer, non quello della chat: un
+                    // ragionamento lungo su una riscrittura e' la spesa che
+                    // questa scelta esiste per evitare.
+                    effort: enhancer?.effort ?? effort.value,
                     thinking: thinking.value,
+                    depth: enhancer?.depth,
                 },
                 text,
                 deps.transport,
@@ -4800,6 +4825,38 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         return accepted
     }
 
+    /**
+     * Gli allegati di un messaggio, pronti per essere rimandati.
+     *
+     * Owner 2026-08-04: «riprova prompt non re invia immagini o file
+     * allegati». Era vero e non era un caso limite: «Riprova» rimandava il solo
+     * testo, quindi su un messaggio con una foto il modello riceveva la domanda
+     * senza la cosa di cui parlava — e rispondeva comunque, il che e' il modo
+     * peggiore di fallire.
+     *
+     * L'identificativo del legame e' NUOVO: e' la chiave del legame fra QUESTO
+     * messaggio e il file, e riusarla vorrebbe dire dire che i due messaggi
+     * sono lo stesso. Il file e il permesso invece si riusano: il permesso e'
+     * concesso al file, non al messaggio, quindi vale ancora.
+     */
+    async function bindingsOf(
+        messageId: string,
+    ): Promise<import('@/repositories/chatRepository').AppendChatAttachmentInput[]> {
+        try {
+            const bound = await deps.chatRepository.listMessageAttachments(messageId)
+            return bound.map((entry) => ({
+                id: newTalosMobileId(),
+                vault_file_id: entry.vault_file_id,
+                grant_id: entry.grant_id,
+            }))
+        } catch {
+            // Un allegato che non si rilegge non deve impedire il rinvio del
+            // testo: meglio una riprova incompleta che nessuna riprova. Il
+            // messaggio dell'utente resta visibile e confrontabile.
+            return []
+        }
+    }
+
     async function resendMessage(messageId: string): Promise<void> {
         clearPromptEnhancement()
         const message = chat.messages.find((candidate) => candidate.id === messageId)
@@ -4809,7 +4866,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         await chat.send(message.content, selectedModelId.value, {
             command_id: 'resend_message',
             resend_of_message_id: message.id,
-        })
+        }, await bindingsOf(message.id))
     }
 
     async function retryAssistantMessage(messageId: string): Promise<void> {
@@ -4827,7 +4884,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             command_id: 'retry_assistant_response',
             retry_of_message_id: message.id,
             resend_of_message_id: previousUser.id,
-        })
+        }, await bindingsOf(previousUser.id))
     }
 
     async function newSession(options: { ephemeral?: boolean } = {}): Promise<void> {

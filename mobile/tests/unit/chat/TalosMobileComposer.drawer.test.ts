@@ -328,12 +328,25 @@ describe('enhancer visible reason (F4-#20)', () => {
         expect(String(blocked![0][0])).toContain('Write a prompt')
     })
 
-    it('drawer row forwards the enhancement when a prompt exists', async () => {
+    it('la voce del cassetto APRE il pannello, e la spesa parte quando si risponde', async () => {
+        /**
+         * Decisione cambiata 2026-08-04. Owner: «prima che parta l'enhancing
+         * bisogna selezionare modello e ragionamento ove previsto, e il tono».
+         *
+         * Prima il tocco faceva partire la chiamata: chi voleva un modello
+         * diverso scopriva di non poterlo scegliere mentre il conto correva.
+         */
         const wrapper = mountComposer({ drawerMode: true, prompt: 'Migliora questo testo' })
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-drawer-enhance"]').exists()).toBe(true))
         await wrapper.get('[data-testid="talos-drawer-enhance"]').trigger('click')
+
         expect(wrapper.emitted('enhanceBlocked')).toBeUndefined()
+        // Niente e' ancora partito.
+        expect(wrapper.emitted('enhancePrompt')).toBeUndefined()
+
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-enhancer-setup"]').exists()).toBe(true))
+        await wrapper.get('[data-testid="talos-enhancer-start"]').trigger('click')
         expect(wrapper.emitted('enhancePrompt')).toHaveLength(1)
     })
 

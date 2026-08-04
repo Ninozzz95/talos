@@ -8,6 +8,11 @@
  * UI as gated/read-only per the identical-to-desktop rule but hold no live state here.
  */
 import { reactive, readonly } from 'vue'
+import {
+    TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH,
+    isTalosPromptEnhancerDepth,
+    type TalosPromptEnhancerDepth,
+} from '@/lib/chat/promptEnhancerDepth'
 import { Preferences } from '@capacitor/preferences'
 import type { TalosSearchSourceId } from '@/lib/search/searchSources'
 import type { TalosLibrarySort } from '@/lib/libraryGrouping'
@@ -202,6 +207,23 @@ export interface TalosMobileShellPreferences {
      * cosa che li distingue davvero.
      */
     local_model_aliases: Record<string, string>
+    /**
+     * Chi riscrive i prompt, e quanto.
+     *
+     * Owner 2026-08-04: «se uso ChatGPT 5.6 Sol Max per la chat, non e' detto
+     * che sia necessario usare lo stesso modello per un semplice prompt
+     * enhancing — potrebbe essere uno spreco di token e soldi».
+     *
+     * Il modello della chat si sceglie per il compito piu' difficile della
+     * conversazione; riscrivere un prompt non e' quel compito. `model: null`
+     * vuol dire «quello del compositore», che resta il comportamento di prima
+     * per chi non tocca niente.
+     */
+    prompt_enhancer: {
+        model: string | null
+        effort: TalosMobileEffortLevel
+        depth: TalosPromptEnhancerDepth
+    }
     /** Interface text size only; message prose has independent bubble_scale. */
     ui_font_scale: TalosFontScale
     /**
@@ -257,6 +279,13 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     // download, and the only one the panel could not answer at all.
     models_sort: TALOS_INSTALLED_MODEL_SORT_DEFAULT,
     local_model_aliases: {},
+    prompt_enhancer: {
+        model: null,
+        // Riscrivere un prompt non e' un problema da ragionamento lungo: il
+        // predefinito e' basso di proposito, ed e' la meta' del punto.
+        effort: 'low',
+        depth: TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH,
+    },
     ui_font_scale: TALOS_DEFAULT_FONT_SCALE,
     streaming_animation: 'typewriter',
     debug_diagnostics: false,
@@ -311,6 +340,20 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         // Checked against the list the sorter actually knows, so a value from a
         // future version — or a corrupt one — falls back instead of reaching
         // the comparator as an order nobody implemented.
+        // Quello che torna dal disco non decide la forma di cio' che il resto
+        // del codice legge: ogni campo passa dalla sua guardia.
+        prompt_enhancer: (() => {
+            const saved = (record.prompt_enhancer ?? {}) as Partial<TalosMobileShellPreferences['prompt_enhancer']>
+            return {
+                model: typeof saved.model === 'string' && saved.model.length > 0 ? saved.model : null,
+                effort: TALOS_MOBILE_EFFORT_ORDER.includes(saved.effort as TalosMobileEffortLevel)
+                    ? saved.effort as TalosMobileEffortLevel
+                    : DEFAULT_SHELL_PREFERENCES.prompt_enhancer.effort,
+                depth: isTalosPromptEnhancerDepth(saved.depth)
+                    ? saved.depth
+                    : DEFAULT_SHELL_PREFERENCES.prompt_enhancer.depth,
+            }
+        })(),
         // Solo coppie di stringhe: una preferenza che torna dal disco non
         // decide la forma di cio' che il resto del codice legge.
         local_model_aliases: Object.fromEntries(

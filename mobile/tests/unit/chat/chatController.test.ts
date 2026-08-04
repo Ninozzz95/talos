@@ -4596,3 +4596,61 @@ describe('chatController', () => {
         expect(JSON.stringify({ catalogs: controller.catalogs, profiles: controller.profiles.value })).not.toContain('sentinel-secret')
     })
 })
+
+/**
+ * Owner 2026-08-04: «riprova prompt non re invia immagini o file allegati».
+ *
+ * Non era un caso limite: «Riprova» rimandava il SOLO testo, quindi su un
+ * messaggio con una foto il modello riceveva la domanda senza la cosa di cui
+ * parlava — e rispondeva comunque, che è il modo peggiore di fallire.
+ */
+describe('riprova e rinvia, con quello che c’era attaccato', () => {
+    it('RESEND-ATT-01 rimanda il file insieme al testo', async () => {
+        const { deps, store, chatRepository } = makeDeps()
+        const runtime = attachmentRuntime(chatRepository)
+        deps.filePicker = runtime.picker
+        deps.vaultService = runtime.vault
+        store.set('anthropic', 'sk-ant')
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.attachments.selectFiles()
+        await controller.send('Riassumi questo file')
+        const original = controller.chat.messages.find((message) => message.role === 'user')!
+
+        await controller.resendMessage(original.id)
+
+        const rinviato = controller.chat.messages.filter((message) => message.role === 'user').at(-1)!
+        expect(rinviato.id).not.toBe(original.id)
+        const attaccati = await chatRepository.listMessageAttachments(rinviato.id)
+        expect(attaccati).toEqual([expect.objectContaining({
+            vault_file_id: 'vault-brief',
+            grant_id: 'grant-brief',
+        })])
+    })
+
+    it('RESEND-ATT-02 il legame è NUOVO, il file e il permesso sono gli stessi', async () => {
+        /**
+         * L'identificativo del legame è la chiave fra QUESTO messaggio e il
+         * file: riusarla direbbe che i due messaggi sono lo stesso. Il permesso
+         * invece è concesso al file, non al messaggio, quindi vale ancora.
+         */
+        const { deps, store, chatRepository } = makeDeps()
+        const runtime = attachmentRuntime(chatRepository)
+        deps.filePicker = runtime.picker
+        deps.vaultService = runtime.vault
+        store.set('anthropic', 'sk-ant')
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.attachments.selectFiles()
+        await controller.send('Riassumi questo file')
+        const original = controller.chat.messages.find((message) => message.role === 'user')!
+        const prima = await chatRepository.listMessageAttachments(original.id)
+
+        await controller.resendMessage(original.id)
+        const rinviato = controller.chat.messages.filter((message) => message.role === 'user').at(-1)!
+        const dopo = await chatRepository.listMessageAttachments(rinviato.id)
+
+        expect(dopo[0]!.id).not.toBe(prima[0]!.id)
+        expect(dopo[0]!.grant_id).toBe(prima[0]!.grant_id)
+    })
+})
