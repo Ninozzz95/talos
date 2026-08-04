@@ -1324,6 +1324,8 @@ export const TALOS_IT_MESSAGES = {
         displayNameTitle: 'Nome visualizzato',
     },
     localModels: {
+        variants: 'Varianti',
+        fullCard: 'Scheda completa su Hugging Face',
         // «4,9 M scaricati», non «4685368 download»: il numero per intero
         // non lo legge nessuno.
         downloadsShort: '{count} scaricati',
