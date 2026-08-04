@@ -983,6 +983,22 @@ export const TALOS_IT_MESSAGES = {
         categoryProductivity: 'produttività',
     },
     models: {
+        // La capienza: owner 2026-08-04, «come etichetta che vedo sempre».
+        // Non un filtro che nasconde — nascondere toglie anche il motivo
+        // per liberare memoria.
+        fitLabel: {
+            'comfortable': 'Ci sta',
+            'tight': 'Al limite',
+            'will-crawl': 'Lentissimo',
+            'wont-run': 'Non ci sta',
+        },
+        fitReason: {
+            'comfortable': 'Entra comodo. Restano {left} liberi.',
+            'tight': 'Entra, ma restano solo {left}: sotto carico il sistema potrebbe chiudere TALOS.',
+            'will-crawl': 'Ci sta per un pelo e girerebbe cosi’ piano da non essere usabile.',
+            'wont-run': 'Servono {missing} in più. Libera memoria e ricontrolla, oppure scegli una variante più piccola.',
+        },
+        fitFree: 'Memoria libera: {free}',
         defaultModel: 'Modello predefinito',
         sharedSelection: 'Model Lab e il selettore rapido della Chat condividono questa selezione in tempo reale.',
         defaultChatModel: 'Modello chat predefinito',

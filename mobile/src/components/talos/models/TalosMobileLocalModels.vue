@@ -60,6 +60,7 @@ import {
     talosPickModelFromDevice,
 } from '@/services/modelImport'
 import type { TalosCatalogueRecommendation } from '@/lib/models/catalogue'
+import { talosFitBadge } from '@/lib/models/fitBadge'
 import { talosGroupModelsByProvider, talosProviderOptions } from '@/lib/models/providerGrouping'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import {
@@ -395,8 +396,37 @@ function rowOf(item: Readonly<TalosCatalogueRecommendation>) {
         missing: talosFormatBytes(Math.abs(item.headroomBytes)),
         fits: item.fits,
         speed: item.entry.referenceSpeed[0]?.tokensPerSecond ?? null,
+        /*
+         * L'etichetta di capienza — owner 2026-08-04, sul mockup approvato:
+         * «come etichetta che vedo sempre».
+         *
+         * NON un filtro: nascondere un modello perche' oggi non c'e' spazio
+         * toglie l'informazione che domani, liberando memoria, potrebbe
+         * starci — e toglie anche il motivo per liberarla.
+         *
+         * Il verdetto viene dal catalogo, che ha gia' pesato il file piu' la
+         * memoria di lavoro. Qui si TRADUCE e basta.
+         */
+        badge: talosFitBadge({
+            band: item.fits
+                ? (item.headroomBytes < TALOS_TIGHT_HEADROOM_BYTES ? 'tight' : 'comfortable')
+                : 'wont-run',
+            needsBytes: item.entry.ramWorkingBytes,
+            availableBytes: item.entry.ramWorkingBytes + item.headroomBytes,
+        }),
+        headroom: talosFormatBytes(Math.abs(item.headroomBytes)),
+        headroomPositive: item.headroomBytes >= 0,
     }
 }
+
+/**
+ * Sotto questo margine «ci sta» diventa «al limite».
+ *
+ * 512 MB: sotto, il sistema Android comincia a chiudere processi in background
+ * sotto carico, e TALOS con un modello aperto e' il primo candidato. Dire «ci
+ * sta» a chi sta per perdere l'app a meta' generazione e' una mezza verita'.
+ */
+const TALOS_TIGHT_HEADROOM_BYTES = 512 * 1024 * 1024
 
 const recommended = computed(() => store.catalogue.recommended.map(rowOf))
 const rejected = computed(() => store.catalogue.rejected.map(rowOf))
@@ -858,6 +888,36 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                         <span>{{ row.entry.quantisation }}</span><span class="opacity-40">·</span>
                         <span>{{ row.size }}</span><span class="opacity-40">·</span>
                         <span>{{ row.entry.contextTokens }}</span>
+                        <!-- L'etichetta di capienza vive QUI, dove si scorre.
+                             Owner 2026-08-04: «come etichetta che vedo sempre».
+                             La barra misura contro la memoria libera di QUESTO
+                             telefono, e quando sfora lo OLTREPASSA — un limite
+                             superato che si vede non va letto. -->
+                        <span
+                            data-testid="talos-model-fit"
+                            :data-fit-tone="row.badge.tone"
+                            class="flex min-w-[7.5rem] flex-1 items-center gap-2"
+                        >
+                            <span class="relative h-1.5 flex-1 overflow-hidden rounded-full bg-current/10">
+                                <i
+                                    class="absolute inset-y-0 left-0 block rounded-full"
+                                    :class="{
+                                        'bg-[var(--talos-success,#6FD09A)]': row.badge.tone === 'ok',
+                                        'bg-[var(--talos-warning,#E5B76B)]': row.badge.tone === 'tight',
+                                        'bg-[var(--talos-danger,#E0716B)]': row.badge.tone === 'over',
+                                    }"
+                                    :style="{ width: `${Math.min(100, row.badge.ratio * 100)}%` }"
+                                ></i>
+                            </span>
+                            <span
+                                class="shrink-0 text-3xs font-semibold"
+                                :class="{
+                                    'text-[var(--talos-success,#6FD09A)]': row.badge.tone === 'ok',
+                                    'text-[var(--talos-warning,#E5B76B)]': row.badge.tone === 'tight',
+                                    'text-[var(--talos-danger,#E0716B)]': row.badge.tone === 'over',
+                                }"
+                            >{{ t(row.badge.labelKey) }}</span>
+                        </span>
                     </div>
                     <p v-if="row.family" class="text-2xs leading-snug text-[var(--talos-muted)]">{{ row.family }}</p>
                     <p class="flex items-center gap-1.5 text-2xs font-semibold text-[var(--talos-success,#4c9a6a)]">
@@ -906,20 +966,26 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             </article>
         </template>
 
-        <!-- The secondary door. Free search on the Hub is for somebody who
-             already knows what they want; it does not open the screen. -->
+        <!--
+            Owner 2026-08-04: «e' ancora un campo input in cui devi inserire
+            manualmente le cose; voglio una lista gia' caricata con un loading,
+            con i filtri».
+
+            La ricerca era dietro una porta da aprire, e chi non la apriva
+            restava con il catalogo misurato e basta. Ora il campo e' sempre
+            visibile e ha cambiato mestiere: da «scrivi cosa cercare» a «cerca
+            altro sul Hub» — la stessa grammatica della Libreria, dove il campo
+            restringe cio' che gia' vedi invece di essere la porta d'ingresso.
+        -->
         <button
             v-if="!store.repo && !searching"
             type="button"
             data-testid="talos-models-open-search"
-            class="talos-pressable flex items-center gap-2.5 rounded-2xl border border-dashed border-[var(--talos-border)] p-3 text-left"
+            class="talos-pressable flex items-center gap-2.5 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2.5 text-left"
             @click="searching = true"
         >
             <Search class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
-            <span class="flex flex-col">
-                <b class="text-xs font-semibold text-[var(--talos-text)]">{{ t('localModels.searchLabel') }}</b>
-                <span class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.searchWhy') }}</span>
-            </span>
+            <span class="text-sm text-[var(--talos-muted)]">{{ t('localModels.searchLabel') }}</span>
         </button>
 
         <!-- A download in flight, with the bar the native side is driving.
