@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import TalosThemedSelect, { type TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
 import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
-import { useSettingsStore, type TalosUtilityModelMode } from '@/stores/settings'
+import { useSettingsStore } from '@/stores/settings'
 import { TALOS_TONE_PRESETS, isTalosToneId } from '@/lib/tone'
 import {
     TALOS_LIBRARY_CONTEXT_MODES,
@@ -12,11 +12,6 @@ import {
 
 const settings = useSettingsStore()
 const { t } = useTalosI18n()
-const modeItems = computed(() => [
-    { value: 'same_as_chat', label: t('aiDefaults.sameAsChat') },
-    { value: 'default_profile', label: t('aiDefaults.useDefaultProfile') },
-])
-
 // F3-T4 (owner #11): selectable assistant tone; the model may suggest a
 // better fit via toast, but only the user switches it (here or from the toast).
 const toneItems = computed(() => TALOS_TONE_PRESETS.map((preset) => ({
@@ -27,11 +22,6 @@ const toneItems = computed(() => TALOS_TONE_PRESETS.map((preset) => ({
 function setTone(value: string): void {
     if (!isTalosToneId(value)) return
     void settings.setTone(value)
-}
-
-function setMode(key: 'utility_model_mode' | 'research_model_mode', value: string): void {
-    if (value !== 'same_as_chat' && value !== 'default_profile') return
-    void settings.setAiDefaults({ [key]: value as TalosUtilityModelMode })
 }
 
 function setVision(enabled: boolean): void {
@@ -145,28 +135,25 @@ function setShellFlag(key: 'library_context_enabled' | 'library_autosave_generat
             </span>
         </label>
 
-        <div class="grid gap-4 sm:grid-cols-2">
-            <label class="block">
-                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">{{ t('aiDefaults.utilityModelMode') }}</span>
-                <TalosThemedSelect
-                    class="mt-2"
-                    :model-value="settings.state.ai_defaults.utility_model_mode"
-                    :items="modeItems"
-                    :aria-label="t('aiDefaults.utilityModelMode')"
-                    @update:model-value="setMode('utility_model_mode', $event)"
-                />
-            </label>
-            <label class="block">
-                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">{{ t('aiDefaults.researchModelMode') }}</span>
-                <TalosThemedSelect
-                    class="mt-2"
-                    :model-value="settings.state.ai_defaults.research_model_mode"
-                    :items="modeItems"
-                    :aria-label="t('aiDefaults.researchModelMode')"
-                    @update:model-value="setMode('research_model_mode', $event)"
-                />
-            </label>
-        </div>
+        <!--
+            Qui c'erano due tendine, «Modalita' modello di utilita'» e «Modalita'
+            modello di ricerca». Non erano nel posto sbagliato: **non erano
+            lette da nessuno**. Nessuna riga del codice consultava
+            `utility_model_mode` o `research_model_mode` — sembravano governare
+            quale modello facesse cosa, e non governavano niente.
+
+            Un comando inerte e' peggio di un comando assente: chi lo trova
+            crede di aver deciso, e quando il risultato non cambia cerca la
+            causa da un'altra parte.
+
+            Le scelte VERE esistono e sono migliori di queste: il modello della
+            conversazione sta nel compositore, dove si sceglie mentre si scrive;
+            i due modelli della ricerca stanno nella stazione, accanto al piano
+            che governano. Una casa sola piu' un rimando, non due copie.
+        -->
+        <p class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-xs leading-5 text-[var(--talos-muted)]">
+            {{ t('aiDefaults.modelChoicesElsewhere') }}
+        </p>
 
         <div class="flex min-h-14 items-start justify-between gap-3 border-y border-[var(--talos-border)] py-3">
             <span>
