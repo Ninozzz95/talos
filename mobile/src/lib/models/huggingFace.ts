@@ -155,12 +155,35 @@ export interface TalosHuggingFaceModel {
     updatedAt: string | null
     /** A cosa serve: chat, codice, embedding. Dal Hub, non indovinato dal nome. */
     task: string | null
+    /**
+     * I numeri VERI del modello, quando il Hub li ha letti dai file GGUF.
+     *
+     * MISURATO 2026-08-04, ed e' la scoperta che rende inutile stimare dal
+     * nome: chiedendo `expand[]=gguf` la lista torna con `total` (i parametri,
+     * esatti), `totalFileSize` (i byte su disco) e `context_length` (la finestra
+     * vera). In UNA richiesta per tutta la lista, non una per riga — che era
+     * il motivo per cui si stimava.
+     *
+     * `null` quando il Hub non e' riuscito a leggerli: allora, e solo allora,
+     * si ripiega sulla stima dal nome.
+     */
+    gguf: { parameters: number, fileBytes: number, contextLength: number, architecture: string | null } | null
     /** Le etichette del repo: da qui esce la licenza per il filtro. */
     tags: readonly string[]
 }
 
+export type TalosHuggingFaceSort = 'downloads' | 'likes' | 'lastModified' | 'createdAt'
+
 export interface TalosHuggingFaceClient {
-    searchModels(query: string, limit?: number): Promise<TalosHuggingFaceModel[]>
+    searchModels(
+        query: string,
+        limit?: number,
+        /**
+         * Come ordinare. Il Hub li accetta tutti; questa e' la sua lista, non
+         * una nostra invenzione.
+         */
+        sort?: TalosHuggingFaceSort,
+    ): Promise<TalosHuggingFaceModel[]>
     listGgufFiles(repo: string, revision: string): Promise<string[]>
     pathsInfo(repo: string, revision: string, paths: readonly string[]): Promise<TalosHuggingFaceFile[]>
     resolveDownload(repo: string, revision: string, path: string): Promise<TalosHuggingFaceDownload>
@@ -185,6 +208,27 @@ export interface TalosHuggingFaceCard {
     /** Il README, per intero e non interpretato. */
     readme: string
     updatedAt: string | null
+}
+
+/**
+ * I numeri GGUF di una riga, se ci sono e hanno senso.
+ *
+ * Si controlla che siano positivi invece di fidarsi: un `total` a zero
+ * significa che il Hub non e' riuscito a leggere il file, e trattarlo come «un
+ * modello da zero parametri» direbbe a chiunque che ci sta comodo.
+ */
+function leggiGguf(value: unknown): TalosHuggingFaceModel['gguf'] {
+    if (!value || typeof value !== 'object') return null
+    const row = value as Record<string, unknown>
+    const parameters = Number(row.total ?? 0)
+    const fileBytes = Number(row.totalFileSize ?? 0)
+    if (!(parameters > 0) || !(fileBytes > 0)) return null
+    return {
+        parameters,
+        fileBytes,
+        contextLength: Number(row.context_length ?? 0) || 0,
+        architecture: typeof row.architecture === 'string' ? row.architecture : null,
+    }
 }
 
 export function talosCreateHuggingFaceClient(
@@ -227,7 +271,7 @@ export function talosCreateHuggingFaceClient(
          * and a search that returns twenty results the user cannot use reads as
          * a broken search.
          */
-        async searchModels(query, limit = 20) {
+        async searchModels(query, limit = 20, sort = 'downloads') {
             /*
              * Senza testo si SFOGLIA, non si cerca il vuoto.
              *
@@ -242,10 +286,26 @@ export function talosCreateHuggingFaceClient(
              */
             const parameters = new URLSearchParams({
                 filter: 'gguf',
-                sort: 'downloads',
+                sort,
                 direction: '-1',
                 limit: String(limit),
             })
+            /*
+             * `expand[]=gguf` e' cio' che rende reale la capienza.
+             *
+             * Senza, una riga porta solo il nome e i download, e per sapere
+             * quanto pesa un modello serviva una richiesta per repository —
+             * venti righe, venti richieste, e il limitatore condiviso per
+             * operatore. Con, la stessa singola richiesta torna con i parametri
+             * esatti, i byte su disco e la finestra di contesto.
+             *
+             * MISURATO contro l'API il 2026-08-04.
+             */
+            parameters.append('expand[]', 'gguf')
+            parameters.append('expand[]', 'downloads')
+            parameters.append('expand[]', 'likes')
+            parameters.append('expand[]', 'pipeline_tag')
+            parameters.append('expand[]', 'tags')
             const cercato = query.trim()
             if (cercato.length > 0) parameters.set('search', cercato)
             const response = await options.fetch(`${HUB}/api/models?${parameters}`, {
@@ -260,6 +320,7 @@ export function talosCreateHuggingFaceClient(
                 downloads: Number(row.downloads ?? 0),
                 likes: Number(row.likes ?? 0),
                 task: typeof row.pipeline_tag === 'string' ? row.pipeline_tag : null,
+                gguf: leggiGguf(row.gguf),
                 tags: Array.isArray(row.tags) ? row.tags.filter((t): t is string => typeof t === 'string') : [],
                 // The Hub answers `"auto"` or `"manual"` when a gate exists and
                 // OMITS the field otherwise, so absent means open. Reading it

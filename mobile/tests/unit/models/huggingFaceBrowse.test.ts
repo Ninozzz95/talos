@@ -31,6 +31,8 @@ const RIGA = {
     likes: 606,
     pipeline_tag: 'text-generation',
     tags: ['gguf', 'license:apache-2.0'],
+    // I numeri veri, come li restituisce il Hub con `expand[]=gguf`.
+    gguf: { total: 8953803264, totalFileSize: 5400000000, context_length: 262144, architecture: 'qwen35' },
 }
 
 describe('sfogliare invece di cercare', () => {
@@ -80,5 +82,37 @@ describe('la scheda del modello', () => {
         const scheda = await c.describeModel('tizio/x')
         expect(scheda.readme).toBe('')
         expect(scheda.author).toBe('tizio')
+    })
+})
+
+describe('i numeri veri invece della stima', () => {
+    it('chiede `expand[]=gguf` — è ciò che rende la capienza MISURATA', async () => {
+        /**
+         * MISURATO contro l'API il 2026-08-04. Senza, una riga porta solo nome
+         * e download, e per sapere quanto pesa serviva una richiesta per
+         * repository: venti righe, venti richieste, e il limitatore che gli
+         * anonimi condividono per operatore.
+         */
+        const { client: c, visti } = client({ '/api/models?': { body: [RIGA] } })
+        await c.searchModels('')
+        expect(visti[0]).toContain('expand%5B%5D=gguf')
+    })
+
+    it('porta a casa parametri, byte e finestra di contesto', async () => {
+        const { client: c } = client({ '/api/models?': { body: [RIGA] } })
+        const [m] = await c.searchModels('')
+        expect(m!.gguf?.parameters).toBe(8953803264)
+        expect(m!.gguf?.fileBytes).toBe(5400000000)
+        expect(m!.gguf?.contextLength).toBe(262144)
+    })
+
+    it('un `total` a zero NON diventa «un modello da zero parametri»', () => {
+        // Significa che il Hub non è riuscito a leggere il file. Trattarlo come
+        // un numero direbbe a chiunque che ci sta comodo.
+        return (async () => {
+            const { client: c } = client({ '/api/models?': { body: [{ ...RIGA, gguf: { total: 0, totalFileSize: 0 } }] } })
+            const [m] = await c.searchModels('')
+            expect(m!.gguf).toBeNull()
+        })()
     })
 })
