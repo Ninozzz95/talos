@@ -1,4 +1,5 @@
 import { computed, reactive, readonly, ref, type ComputedRef, type Ref } from 'vue'
+import { talosBytesToBase64 } from '@/lib/bytesToBase64'
 import { talosT, useTalosLocalization } from '@/i18n'
 import type { TalosTranslate } from '@/i18n/contracts'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
@@ -2502,7 +2503,35 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         if (!drawer) return null
                         return {
                             provider: () => drawer,
-                            async generate(prompt, shape, signal) {
+                            /**
+                             * L'immagine di partenza, presa dalla Libreria.
+                             *
+                             * Si accetta il nome visibile o l'identificativo,
+                             * perche' il modello ha visto passare un allegato e
+                             * conosce il primo, non il secondo. Il confronto sul
+                             * nome ignora maiuscole e spazi ai bordi: chi
+                             * riscrive «Foto.PNG» intende lo stesso file.
+                             *
+                             * Solo immagini: chiedere di modificare un PDF e
+                             * ricevere un disegno nuovo sarebbe la stessa
+                             * confusione che questo lavoro esiste per togliere.
+                             */
+                            async findImage(reference) {
+                                const wanted = reference.trim().toLowerCase()
+                                const file = attachments.vaultFiles.find((entry) => (
+                                    entry.id === reference
+                                    || entry.display_name.trim().toLowerCase() === wanted
+                                )) ?? null
+                                if (!file || !file.media_type.startsWith('image/')) return null
+                                const raw = await vaultService.readFilePreview(file.id).catch(() => null)
+                                if (!raw) return null
+                                return {
+                                    base64: talosBytesToBase64(raw.bytes),
+                                    mediaType: file.media_type,
+                                    name: file.display_name,
+                                }
+                            },
+                            async generate(prompt, shape, signal, source) {
                                 const {
                                     planTalosImageRequest, parseTalosGeneratedImages,
                                     readTalosImageError, talosImageErrorIsPermanent,
@@ -2549,7 +2578,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                 // From the catalogue TALOS already discovered,
                                 // never from a constant in the APK: this app
                                 // ships and a frozen model id ages in the field.
-                                const plan = planTalosImageRequest(drawer, { prompt, shape }, {
+                                const plan = planTalosImageRequest(drawer, { prompt, shape, source }, {
                                     apiKey,
                                     model: pickTalosImageModel(
                                         drawer,

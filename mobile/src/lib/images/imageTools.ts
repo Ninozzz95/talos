@@ -25,10 +25,25 @@ import type { AppendChatAttachmentInput } from '@/repositories/chatRepository'
 export interface TalosImageToolSources {
     /** Which provider will draw, for the sentence the model gets back. */
     provider(): string | null
+    /**
+     * L'immagine da cui partire, presa dalla Libreria per nome o per
+     * identificativo.
+     *
+     * Il modello non ha i byte: ha visto un allegato nella conversazione e ne
+     * conosce il nome. Questa funzione fa il ponte, ed e' l'unico posto che
+     * puo' farlo — un tool che chiedesse al modello di incollare il base64
+     * dell'immagine consumerebbe il contesto della conversazione per
+     * trasportare dei byte che stanno gia' su questo disco.
+     *
+     * `null` quando quel file non c'e' o non e' un'immagine: due modi diversi
+     * di non funzionare che il chiamante distingue col messaggio.
+     */
+    findImage(reference: string): Promise<{ base64: string, mediaType: string, name: string } | null>
     generate(
         prompt: string,
         shape: TalosImageShape,
         signal?: AbortSignal,
+        source?: { base64: string, mediaType: string } | null,
     ): Promise<{
         images: TalosGeneratedImage[]
         error: string | null
@@ -51,9 +66,12 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
     const generate = defineTalosTool({
         name: 'generate_image',
         title: 'Draw an image',
-        description: 'Generate an image from a description and put it in this conversation. '
+        description: 'Generate an image from a description, or change an image the user already has, and put the result in this conversation. '
             + 'The image is saved in the Library and comes back for you to look at, so you can judge it and try again if it is wrong. '
-            + 'Describe the subject, the composition and the style in the prompt; there is no separate style setting.',
+            + 'Describe the subject, the composition and the style in the prompt; there is no separate style setting. '
+            + 'To CHANGE a picture instead of drawing a new one, pass from_image with the name of a file the user attached or has in the Library — '
+            + 'then the prompt describes the change, not the whole scene. Without from_image the result is a brand new picture, '
+            + 'which is not what someone asking to edit their own photo wants.',
         action: 'write',
         requiredActions: ['outbound', 'write'],
         input: z.object({
@@ -61,6 +79,8 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
                 .describe('What to draw, in full: subject, composition, style, colours, mood.'),
             shape: z.enum(SHAPES).optional()
                 .describe('The proportions of the picture. Default square.'),
+            from_image: z.string().min(1).max(300).optional()
+                .describe('The name or id of an image the user attached or has in the Library, to change instead of drawing from scratch. Leave it out to draw a new picture.'),
         }),
         async run(input, context) {
             const provider = sources.provider()
@@ -80,8 +100,30 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
                 permanent: boolean
                 rateLimited: boolean
             }
+            /*
+             * L'immagine di partenza si cerca PRIMA di chiamare il provider.
+             *
+             * Un nome sbagliato deve costare zero: se si chiedesse a disegnare
+             * e poi si scoprisse che il file non c'e', la persona avrebbe
+             * pagato una generazione che non voleva. E il modello riceve un
+             * motivo su cui puo' agire — chiedere quale file, invece di
+             * riprovare lo stesso.
+             */
+            let source: { base64: string, mediaType: string } | null = null
+            if (input.from_image) {
+                const found = await sources.findImage(input.from_image).catch(() => null)
+                if (!found) {
+                    return {
+                        ok: false,
+                        code: 'TALOS_IMAGE_SOURCE_NOT_FOUND',
+                        content: `No image called «${input.from_image}» is in this conversation or in the Library. `
+                            + 'Ask the user which picture they mean, or leave from_image out to draw a new one.',
+                    }
+                }
+                source = { base64: found.base64, mediaType: found.mediaType }
+            }
             try {
-                drawn = await sources.generate(input.prompt, input.shape ?? 'square', context.signal)
+                drawn = await sources.generate(input.prompt, input.shape ?? 'square', context.signal, source)
             } catch (cause) {
                 const message = cause instanceof Error ? cause.message : String(cause)
                 if (context.signal?.aborted) {

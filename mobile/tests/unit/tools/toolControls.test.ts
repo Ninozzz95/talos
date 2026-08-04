@@ -160,11 +160,25 @@ describe('Agent Tools control registry', () => {
          * answer was a polite lecture about Settings. The model is not the
          * permission gate — the gate is, and it asks the user at call time.
          */
+        /**
+         * Ripinnati 2026-08-04 per `generate_image`, che ha guadagnato
+         * `from_image` — l'immagine da cui partire invece di disegnare da zero.
+         *
+         * **Tutti e tre i dialetti si sono mossi, il piano di controllo NO.** È
+         * esattamente la lettura che questa separazione esiste per permettere:
+         * il contratto pubblico (nome, titolo, azioni richieste) è identico, e
+         * a cambiare è solo lo schema degli argomenti — cioè si è aggiunto un
+         * parametro opzionale, non si è toccato cosa il tool può fare né quali
+         * permessi pretende.
+         *
+         * Se il piano di controllo si fosse mosso insieme a loro, la domanda da
+         * farsi sarebbe stata un'altra.
+         */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('e89cf710899a1ab23ee907fa54ddb9e5e6789f9a566855db2d4e803461699f36')
+            .toBe('29cfc66987dc9da003c1948b99449548b3cc10d0e22c75e7ac47cc75ecf4baaf')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('da58cb6344a626596a0e48e9f10d5bebfb28a4b88fc963cdeeeb044145e6461a')
+            .toBe('67c1b3b00aeddf9f567b0d90e24d4bdfeacb4b248f4a33cd6ccc527caaef6ed8')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('3798b8e3b7f73d1dc1697fe18f986a7945dbc7de5f51d40135499eeab5c2c8a4')
+            .toBe('46b95bc026894f839618ff31cb77077e037978753fb95f5ba646d771f0d94afb')
     })
 })

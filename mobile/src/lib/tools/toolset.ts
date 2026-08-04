@@ -1,4 +1,5 @@
 import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
+import { talosBytesToBase64 } from '@/lib/bytesToBase64'
 import {
     createTalosReadTools,
     type TalosLibraryListEntry,
@@ -51,15 +52,6 @@ import type {
  * from afterwards — is written in exactly one place.
  */
 /** Bytes to base64, in chunks: one huge spread argument blows the stack. */
-function base64FromBytes(bytes: Uint8Array): string {
-    let binary = ''
-    const CHUNK = 0x8000
-    for (let index = 0; index < bytes.length; index += CHUNK) {
-        binary += String.fromCharCode(...bytes.subarray(index, index + CHUNK))
-    }
-    return btoa(binary)
-}
-
 export interface TalosToolsetDeps {
     repository: TalosChatRepository
     readVaultFileText(fileId: string): Promise<string | null>
@@ -329,7 +321,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                     return {
                         name: summary.display_name,
                         text: '',
-                        image: { base64: base64FromBytes(file.bytes), mediaType: file.mediaType },
+                        image: { base64: talosBytesToBase64(file.bytes), mediaType: file.mediaType },
                     }
                 }
             }
