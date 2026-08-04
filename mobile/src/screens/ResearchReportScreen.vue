@@ -34,6 +34,7 @@ import { AlertTriangle, ChevronRight, Download, MessageSquare, Pause, Play, Rota
 import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
+import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
 import { useChatController } from '@/stores/chatController'
 import { useTalosResearchRun } from '@/composables/useTalosResearchRun'
@@ -298,15 +299,59 @@ async function openChat(): Promise<void> {
     }
 }
 
-async function exportReport(): Promise<void> {
-    const fileId = current.value ? (await import('@/lib/research/researchCard'))
-        .talosResearchReportRefOf(current.value) : null
+/**
+ * Esportare: prima la domanda «a chi lo stai dando».
+ *
+ * Owner 2026-08-03: «quando clicchi per generare il pdf appare un popup che ti
+ * fa scegliere il "tono" del pdf tra 3 template».
+ *
+ * I tre sono documenti diversi per FORMA, non tre tavolozze — vedi
+ * `researchPdf.ts` per il perche' proprio quei tre. Il .md resta in fondo,
+ * sottovoce: e' quello che serve a chi vuole il testo per aprirlo altrove, e
+ * toglierlo per fare posto alla novita' sarebbe una perdita travestita da
+ * riordino.
+ */
+const exportOpen = ref(false)
+const exportBusy = ref<string | null>(null)
+
+const EXPORT_CHOICES = [
+    { id: 'report', label: 'research.pdfToneReport', why: 'research.pdfToneReportWhy' },
+    { id: 'brief', label: 'research.pdfToneBrief', why: 'research.pdfToneBriefWhy' },
+    { id: 'dossier', label: 'research.pdfToneDossier', why: 'research.pdfToneDossierWhy' },
+    { id: 'md', label: 'research.pdfMarkdown', why: 'research.pdfMarkdownWhy' },
+] as const
+
+async function reportFileId(): Promise<string | null> {
+    return current.value
+        ? (await import('@/lib/research/researchCard')).talosResearchReportRefOf(current.value)
+        : null
+}
+
+/** Il nome del file: quello che si legge nella cartella Download fra un mese. */
+function exportName(extension: string): string {
+    const run = current.value
+    return `${run?.title?.trim() || run?.question || 'ricerca'}.${extension}`
+}
+
+async function exportAs(choice: string): Promise<void> {
+    if (exportBusy.value) return
+    const fileId = await reportFileId()
     if (!fileId || !current.value) return
+    exportBusy.value = choice
+    error.value = null
     try {
-        await controller.research.exportReport(fileId, `${current.value.question}.md`)
+        if (choice === 'md') await controller.research.exportReport(fileId, exportName('md'))
+        else await controller.research.exportReportPdf(fileId, choice, exportName('pdf'))
         exported.value = true
+        exportOpen.value = false
     } catch (failure) {
-        error.value = failure instanceof Error ? failure.message : String(failure)
+        // Detto per nome: un PDF che non si e' fatto e un popup che si chiude
+        // da solo sono la stessa cosa vista da fuori.
+        error.value = t('research.pdfFailed', {
+            detail: failure instanceof Error ? failure.message : String(failure),
+        })
+    } finally {
+        exportBusy.value = null
     }
 }
 
@@ -532,7 +577,7 @@ function openSource(index: number): void {
                             <RotateCcw class="h-4 w-4" aria-hidden="true" />
                             {{ rechecking ? t('research.rechecking') : t('research.recheck') }}
                         </Button>
-                        <Button data-testid="talos-research-export" variant="outline" @click="exportReport()">
+                        <Button data-testid="talos-research-export" variant="outline" @click="exportOpen = true">
                             <Download class="h-4 w-4" aria-hidden="true" />
                             {{ exported ? t('research.exported') : t('research.export') }}
                         </Button>
@@ -628,5 +673,38 @@ function openSource(index: number): void {
                 </p>
             </template>
         </div>
+
+        <!-- Owner 2026-08-03: il popup che chiede il TONO. Quattro righe, ognuna
+             con una frase che dice a chi serve: un elenco di nomi senza il
+             «per chi» costringe ad aprirli tutti e tre per capire. -->
+        <TalosMobileConfirmDialog
+            v-if="exportOpen"
+            :title="t('research.pdfTitle')"
+            :description="t('research.pdfBody')"
+            @close="exportOpen = false"
+        >
+            <div class="flex flex-col gap-2">
+                <button
+                    v-for="choice in EXPORT_CHOICES"
+                    :key="choice.id"
+                    type="button"
+                    :data-testid="`talos-research-export-${choice.id}`"
+                    :disabled="exportBusy !== null"
+                    class="talos-pressable flex flex-col gap-0.5 rounded-xl border border-[var(--talos-border)] p-3 text-left disabled:opacity-60"
+                    :class="choice.id === 'md' ? 'border-dashed' : ''"
+                    @click="exportAs(choice.id)"
+                >
+                    <span class="text-sm font-medium text-[var(--talos-text)]">
+                        {{ exportBusy === choice.id ? t('research.pdfBuilding') : t(choice.label) }}
+                    </span>
+                    <span class="text-2xs leading-4 text-[var(--talos-muted)]">{{ t(choice.why) }}</span>
+                </button>
+            </div>
+            <template #footer>
+                <Button variant="ghost" :disabled="exportBusy !== null" @click="exportOpen = false">
+                    {{ t('common.cancel') }}
+                </Button>
+            </template>
+        </TalosMobileConfirmDialog>
     </TalosMobileScreen>
 </template>

@@ -887,6 +887,8 @@ export interface ChatController {
         recheck(runId: string): Promise<import('@/lib/research/researchRecheck').TalosResearchRecheck>
         /** R11 — the report as a Markdown file on the phone. */
         exportReport(fileId: string, displayName: string): Promise<unknown>
+        /** Lo stesso rapporto come PDF, nel tono scelto: `report`, `brief` o `dossier`. */
+        exportReportPdf(fileId: string, tone: string, displayName: string): Promise<unknown>
         /** Stop, keep everything, come back later. Resumable — never `cancel`. */
         pause(runId: string): Promise<import('@/lib/research/researchRun').TalosResearchRun>
         /** Stop for good. What was collected stays readable; nothing more is bought. */
@@ -4578,6 +4580,58 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     displayName,
                     mediaType: 'text/markdown',
                     bytes: new TextEncoder().encode(file.extracted_text),
+                })
+            },
+
+            /**
+             * Lo stesso rapporto, ma come PDF, nel tono chiesto.
+             *
+             * Owner 2026-08-03: «quando clicchi per generare il pdf appare un
+             * popup che ti fa scegliere il "tono" del pdf tra 3 template».
+             *
+             * Passa dal generatore che c'e' gia' — `generateTalosDocument` con
+             * `format: 'pdf'` — invece di costruirne un secondo qui.
+             *
+             * E RIAPRE il file prima di consegnarlo. `verifyTalosDocument` non
+             * lo fa da solo: e' una funzione a parte, che il chiamante deve
+             * ricordarsi di chiamare, ed e' la ragione per cui quel modulo
+             * esiste — «un DOCX corrotto consegnato con sicurezza e' peggio di
+             * un rifiuto: l'utente lo scopre davanti a chi gliel'ha chiesto».
+             * Un rapporto di ricerca finisce in mano a qualcun altro piu' spesso
+             * di quasi ogni altro file che TALOS produce.
+             *
+             * Gli import sono dinamici: pdfmake e i suoi font sono megabyte, e
+             * non devono pesare sul primo disegno della chat.
+             */
+            async exportReportPdf(fileId: string, tone: string, displayName: string) {
+                const [
+                    record,
+                    { talosResearchPdfSpec },
+                    { generateTalosDocument, verifyTalosDocument },
+                    { saveTalosVaultFileToDevice },
+                ] = await Promise.all([
+                    this.report(fileId),
+                    import('@/lib/research/researchPdf'),
+                    import('@/lib/documents/documentGenerator'),
+                    import('@/services/saveVaultFileToDevice'),
+                ])
+                if (!record) throw new Error('TALOS_RESEARCH_NO_REPORT')
+                const document = await generateTalosDocument({
+                    format: 'pdf',
+                    title: displayName.replace(/\.pdf$/i, ''),
+                    report: talosResearchPdfSpec(record, tone as never, {
+                        date: new Date().toLocaleDateString(),
+                    }),
+                })
+                const check = await verifyTalosDocument(document)
+                // Il guasto porta con se' cosa si e' trovato riaprendo: «PDF»
+                // senza altro e' la promessa vuota che il controllo esiste per
+                // fermare.
+                if (!check.ok) throw new Error(`TALOS_RESEARCH_PDF_CORRUPT: ${check.detail}`)
+                return saveTalosVaultFileToDevice({
+                    displayName,
+                    mediaType: 'application/pdf',
+                    bytes: document.bytes,
                 })
             },
 
