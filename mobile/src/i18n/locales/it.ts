@@ -373,6 +373,7 @@ export const TALOS_IT_MESSAGES = {
         assistantTone: 'Tono assistente',
         toneSuggestionBody: 'Il modello può suggerire un tono più adatto alla conversazione: decidi tu dalla notifica.',
         utilityModelMode: 'Modalità modello di utilità',
+        modelChoicesElsewhere: 'Quale modello risponde si sceglie nel compositore, mentre scrivi. I due modelli della ricerca — chi scrive il rapporto e chi verifica le citazioni — si scelgono nella stazione Ricerca approfondita, accanto al piano che governano.',
         researchModelMode: 'Modalità modello di ricerca',
         sameAsChat: 'Come la chat',
         useDefaultProfile: 'Usa profilo predefinito',

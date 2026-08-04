@@ -370,6 +370,7 @@ export const TALOS_EN_MESSAGES = {
         assistantTone: 'Assistant tone',
         toneSuggestionBody: 'The model may suggest a better-fitting tone for a conversation — you decide from the notification.',
         utilityModelMode: 'Utility model mode',
+        modelChoicesElsewhere: 'Which model answers is chosen in the composer, while you write. The two research models — the one that writes the report and the one that checks the citations — are chosen in the Deep research station, next to the plan they govern.',
         researchModelMode: 'Research model mode',
         sameAsChat: 'Same as chat',
         useDefaultProfile: 'Use default profile',

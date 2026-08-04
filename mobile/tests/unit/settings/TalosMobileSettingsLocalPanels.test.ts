@@ -58,17 +58,29 @@ async function tapSwitch(wrapper: { get: (s: string) => { trigger: (e: string) =
 }
 
 describe('local-first Settings panels', () => {
-    it('persists utility, research, and vision defaults', async () => {
+    it('persiste la scelta sulla vista, che è l’unica delle tre che governa qualcosa', async () => {
+        /**
+         * Le altre due tendine — «modalità modello di utilità» e «modalità
+         * modello di ricerca» — sono state TOLTE il 2026-08-04.
+         *
+         * Non erano nel posto sbagliato: **non erano lette da nessuno**.
+         * Nessuna riga consultava `utility_model_mode` o
+         * `research_model_mode`. Un comando inerte è peggio di uno assente:
+         * chi lo trova crede di aver deciso, e quando il risultato non cambia
+         * cerca la causa da un'altra parte.
+         *
+         * `vision_enabled` invece è vivo — lo legge `chatController` per
+         * dirottare su un modello che vede le immagini — e resta.
+         */
         const wrapper = mount(TalosMobileSettingsAiDefaultsPanel, {
             global: { stubs: { TalosThemedSelect: true } },
         })
         const selects = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
-        selects.find((select) => select.props('ariaLabel') === 'Utility model mode')?.vm.$emit('update:modelValue', 'default_profile')
-        selects.find((select) => select.props('ariaLabel') === 'Research model mode')?.vm.$emit('update:modelValue', 'default_profile')
-        await tapSwitch(wrapper, 'Vision routing preference')
+        expect(selects.some((select) => /model mode/i.test(String(select.props('ariaLabel'))))).toBe(false)
+        // E al loro posto c'è il rimando a dove la scelta vive davvero.
+        expect(wrapper.text()).toContain('chosen in the composer')
 
-        expect(settings.setAiDefaults).toHaveBeenCalledWith({ utility_model_mode: 'default_profile' })
-        expect(settings.setAiDefaults).toHaveBeenCalledWith({ research_model_mode: 'default_profile' })
+        await tapSwitch(wrapper, 'Vision routing preference')
         expect(settings.setAiDefaults).toHaveBeenCalledWith({ vision_enabled: false })
     })
 
