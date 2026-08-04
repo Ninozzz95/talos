@@ -680,6 +680,8 @@ export const TALOS_EN_MESSAGES = {
         retryResponse: 'Retry response',
         saveToLibrary: 'Save to Library',
         imageUnavailable: 'not available',
+        // Read from the file, not guessed: the C2PA manifest names the maker.
+        imageAiGenerated: 'AI · {producer}',
         closePreview: 'Close preview',
         loadingEarlier: 'Loading earlier messages…',
         scrollEarlier: 'Scroll up for earlier messages',
