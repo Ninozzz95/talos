@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Check, Sparkles } from '@lucide/vue'
 import TalosMobileLibraryFileGlyph from '@/components/talos/library/TalosMobileLibraryFileGlyph.vue'
-import TalosMobileLibraryActionsMenu from '@/components/talos/library/TalosMobileLibraryActionsMenu.vue'
+import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 
 /**
@@ -27,7 +27,7 @@ defineProps<{
     contextLabel: string
     actionsLabel: string
     /** Whatever the actions menu accepts; this tile only forwards it. */
-    actions: InstanceType<typeof TalosMobileLibraryActionsMenu>['$props']['items']
+    actions: readonly TalosRowAction[]
     tapLabel: string
 }>()
 
@@ -81,7 +81,7 @@ const emit = defineEmits<{
             v-if="!selecting"
             class="absolute bottom-1 right-1 z-[2] [&_[data-talos-library-actions-trigger]]:bg-black/60 [&_[data-talos-library-actions-trigger]]:text-white"
         >
-            <TalosMobileLibraryActionsMenu
+            <TalosRowActions
                 :label="actionsLabel"
                 :test-id="`talos-library-actions-${file.id}`"
                 :items="actions"

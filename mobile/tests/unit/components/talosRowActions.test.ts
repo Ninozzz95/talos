@@ -68,7 +68,9 @@ describe('the row actions button', () => {
         const button = wrapper.get('button')
         expect(button.element.tagName).toBe('BUTTON')
         // 44px each way — the class, because jsdom has no layout to measure.
-        expect(button.classes()).toContain('size-11')
+        // 48 dp: la soglia Android. Il menu della Libreria, assorbito qui, la
+        // rispettava mentre questo no — unificare ha preso il valore migliore.
+        expect(button.classes()).toContain('size-12')
     })
 
     it('moves the focus into the menu when it opens', async () => {

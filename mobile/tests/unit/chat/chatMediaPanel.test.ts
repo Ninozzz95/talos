@@ -13,7 +13,7 @@ const browserMock = vi.hoisted(() => ({
 vi.mock('@/services/inAppBrowserService', () => browserMock)
 
 import TalosMobileChatMediaPanel from '@/components/chat/TalosMobileChatMediaPanel.vue'
-import TalosMobileLibraryActionsMenu from '@/components/talos/library/TalosMobileLibraryActionsMenu.vue'
+import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 import { __resetToastsForTests, useTalosMobileToasts } from '@/stores/toasts'
 
@@ -86,7 +86,7 @@ function mountPanel(overrides: Record<string, unknown> = {}) {
 }
 
 function mediaActionMenu(wrapper: VueWrapper, fileId: string) {
-    const menu = wrapper.findAllComponents(TalosMobileLibraryActionsMenu)
+    const menu = wrapper.findAllComponents(TalosRowActions)
         .find((candidate) => candidate.props('testId') === `talos-chat-media-actions-${fileId}`)
     expect(menu).toBeDefined()
     return menu!

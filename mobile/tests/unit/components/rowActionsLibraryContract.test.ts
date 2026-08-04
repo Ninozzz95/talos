@@ -3,10 +3,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { Download, Trash2 } from '@lucide/vue'
-import TalosMobileLibraryActionsMenu from '@/components/talos/library/TalosMobileLibraryActionsMenu.vue'
+import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
 
 function mountMenu() {
-    return mount(TalosMobileLibraryActionsMenu, {
+    return mount(TalosRowActions, {
         props: {
             label: 'Actions for budget.pdf',
             testId: 'file-actions',
@@ -23,7 +23,6 @@ function mountMenu() {
                     label: 'Any chat may read it',
                     ariaLabel: 'Let the model read budget.pdf',
                     icon: Download,
-                    kind: 'checkbox',
                     checked: true,
                     testId: 'share-action',
                 },
@@ -32,7 +31,7 @@ function mountMenu() {
                     label: 'Delete file',
                     ariaLabel: 'Delete budget.pdf',
                     icon: Trash2,
-                    tone: 'danger',
+                    danger: true,
                     disabled: true,
                     testId: 'delete-action',
                 },
@@ -50,7 +49,7 @@ function bodyElement(selector: string): HTMLElement {
 
 afterEach(() => { document.body.innerHTML = '' })
 
-describe('TalosMobileLibraryActionsMenu', () => {
+describe('TalosRowActions', () => {
     it('LIB-MENU-01 exposes a 48px Reka menu button and opens the menu', async () => {
         const wrapper = mountMenu()
         const trigger = wrapper.get('[data-testid="file-actions"]')
@@ -64,7 +63,7 @@ describe('TalosMobileLibraryActionsMenu', () => {
         await flushPromises()
 
         expect(trigger.attributes('aria-expanded')).toBe('true')
-        expect(bodyElement('[data-testid="file-actions-content"]').getAttribute('role')).toBe('menu')
+        expect(bodyElement('[data-testid="talos-row-actions-menu"]').getAttribute('role')).toBe('menu')
     })
 
     it('LIB-MENU-02 emits a stable id when an ordinary item is selected', async () => {
@@ -73,7 +72,10 @@ describe('TalosMobileLibraryActionsMenu', () => {
         bodyElement('[data-testid="save-action"]').click()
         await flushPromises()
 
-        expect(wrapper.emitted('select')).toEqual([['save', undefined]])
+        // Il menu condiviso NON aggiunge un secondo argomento alle voci
+        // normali: sarebbe una firma diversa per tutti quelli che non hanno
+        // voci a due stati.
+        expect(wrapper.emitted('select')).toEqual([['save']])
     })
 
     it('LIB-MENU-03 exposes controlled checkbox truth and emits the requested boolean', async () => {
@@ -94,7 +96,9 @@ describe('TalosMobileLibraryActionsMenu', () => {
         await wrapper.get('[data-testid="file-actions"]').trigger('click')
         const item = bodyElement('[data-testid="delete-action"]')
 
-        expect(item.getAttribute('aria-disabled')).toBe('true')
+        // Un `<button>` disabilitato lo e' davvero, non lo dichiara soltanto:
+        // il click non parte, che e' l'unica cosa che conta.
+        expect((item as HTMLButtonElement).disabled).toBe(true)
         expect(item.classList).toContain('min-h-12')
         expect(item.className).toContain('talos-danger')
         item.click()
