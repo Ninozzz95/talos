@@ -1320,6 +1320,30 @@ export const TALOS_EN_MESSAGES = {
         displayNameTitle: 'Display name',
     },
     localModels: {
+        // «4,9 M scaricati», non «4685368 download»: il numero per intero
+        // non lo legge nessuno.
+        downloadsShort: '{count} downloads',
+        sortLabel: 'Sort',
+        // I valori sono i nomi del Hub, non nostri.
+        sort: {
+            downloads: 'Most downloaded',
+            likes: 'Most liked',
+            lastModified: 'Recently updated',
+            createdAt: 'Newest',
+        },
+        // La variante su cui la stima e' calcolata, quando l'abbiamo assunta
+        // noi: un peso senza la variante a cui si riferisce e' un'impressione.
+        inQuant: 'in {q}',
+        // I cinque chip del mockup: ognuno risponde a una domanda che si
+        // fa chi mette un modello su un TELEFONO.
+        filtersLabel: 'Filters',
+        filter: {
+            'fits': 'Fits',
+            'chat': 'Chat',
+            'code': 'Code',
+            'q4': 'Q4',
+            'open-licence': 'Open licence',
+        },
         importFromDevice: 'Add a model from this phone',
         importing: 'Copying the model…',
         importNote: 'Copied in here: for a few minutes it takes twice the space.',
@@ -1349,12 +1373,6 @@ export const TALOS_EN_MESSAGES = {
         installedNoMatch: 'No downloaded model matches.',
         installedUnreadable: 'A folder would not open, so this list may be incomplete. ({count})',
         dateUnknown: 'date unknown',
-        sortLabel: 'Sort the models',
-        sort: {
-            recent: 'Most recent',
-            name: 'Name',
-            size: 'Size',
-        },
         intro: 'Models run entirely on this phone. Nothing you type reaches a server.',
         searchLabel: 'Search Hugging Face',
         searchWhy: 'The whole GGUF universe, if you know what you want.',

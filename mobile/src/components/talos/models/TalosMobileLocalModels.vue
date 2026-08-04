@@ -17,7 +17,7 @@
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Search, Download, Pause, AlertTriangle, ChevronLeft, ShieldAlert, Cpu, LayoutGrid, List, FolderOpen } from '@lucide/vue'
+import { ChevronRight, Search, Download, Pause, AlertTriangle, ChevronLeft, ShieldAlert, Cpu, LayoutGrid, List, FolderOpen } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import {
@@ -33,6 +33,7 @@ import {
     talosRefreshLeftovers,
     talosRefreshHuggingFaceToken,
     talosLoadLocalCatalogue,
+    talosSetLocalModelSort,
     talosSetHuggingFaceToken,
     talosForgetHuggingFaceToken,
 } from '@/stores/localModels'
@@ -60,7 +61,15 @@ import {
     talosPickModelFromDevice,
 } from '@/services/modelImport'
 import type { TalosCatalogueRecommendation } from '@/lib/models/catalogue'
+import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
+import type { TalosHuggingFaceSort } from '@/lib/models/huggingFace'
 import { talosFitBadge } from '@/lib/models/fitBadge'
+import { talosEstimateSizeFromName, talosEstimatedBand } from '@/lib/models/sizeFromName'
+import {
+    talosApplyBrowseFilters,
+    TALOS_BROWSE_FILTERS,
+    type TalosBrowseFilterId,
+} from '@/lib/models/browseFilters'
 import { talosGroupModelsByProvider, talosProviderOptions } from '@/lib/models/providerGrouping'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import {
@@ -519,7 +528,140 @@ const tokenDraft = ref('')
  */
 const providerFilter = ref('')
 
-const providerGroups = computed(() => talosGroupModelsByProvider(store.results))
+/**
+ * I filtri accesi. Owner 2026-08-04, dal mockup approvato.
+ *
+ * Un elenco e non cinque booleani: si somma con `every`, si conta, e aggiungere
+ * un filtro domani non aggiunge una variabile da ricordare.
+ */
+/** L'autore, che nel Hub e' la prima meta' dell'identificativo. */
+function autoreDi(id: string): string {
+    return id.includes('/') ? id.slice(0, id.indexOf('/')) : id
+}
+
+/** La licenza, dall'etichetta `license:...` che il Hub mette fra i tag. */
+function licenzaDi(model: { tags?: readonly string[] }): string | null {
+    /*
+     * `tags` puo' mancare, e non e' un caso di scuola: una lista salvata da una
+     * versione precedente non ce l'ha, e una riga che manda in crash l'elenco
+     * per un campo assente e' peggio di una riga senza licenza.
+     */
+    const tag = model.tags?.find((x) => x.startsWith('license:'))
+    return tag ? tag.slice('license:'.length) : null
+}
+
+/**
+ * I parametri come li scrive chi ne parla: `30B`, `2,8T`.
+ *
+ * E' il numero che dice davvero la taglia di un modello, e il Hub lo
+ * restituisce esatto: mostrarlo per intero (30532122624) non lo direbbe a
+ * nessuno.
+ */
+function parametriDi(total: number): string {
+    if (total >= 1e12) return `${(total / 1e12).toFixed(1).replace('.', ',')}T`
+    if (total >= 1e9) return `${Math.round(total / 1e9)}B`
+    return `${Math.round(total / 1e6)}M`
+}
+
+/** «4,9 M scaricati» invece di «4685368 download». */
+function scaricatiDi(n: number): string {
+    const corto = n >= 1e6 ? `${(n / 1e6).toFixed(1).replace('.', ',')} M` : n >= 1e3 ? `${Math.round(n / 1e3)} K` : String(n)
+    return t('localModels.downloadsShort', { count: corto })
+}
+
+const filtriAttivi = ref<TalosBrowseFilterId[]>([])
+
+/**
+ * Le voci dell'ordinamento.
+ *
+ * I valori sono i nomi del Hub — `downloads`, `likes`, `lastModified`,
+ * `createdAt` — e non nostri: tradurli a ogni richiesta vorrebbe dire sbagliare
+ * la traduzione una volta e non capire perche' la lista e' quella sbagliata.
+ */
+const ordinamenti = computed(() => ([
+    { value: 'downloads', label: t('localModels.sort.downloads') },
+    { value: 'likes', label: t('localModels.sort.likes') },
+    { value: 'lastModified', label: t('localModels.sort.lastModified') },
+    { value: 'createdAt', label: t('localModels.sort.createdAt') },
+]))
+function commutaFiltro(id: TalosBrowseFilterId): void {
+    filtriAttivi.value = filtriAttivi.value.includes(id)
+        ? filtriAttivi.value.filter((x) => x !== id)
+        : [...filtriAttivi.value, id]
+}
+
+/**
+ * La lista come si vede: filtrata.
+ *
+ * La capienza resta un'ETICHETTA su ogni riga anche quando il filtro «ci sta»
+ * e' spento — owner 2026-08-04: «come etichetta che vedo sempre». Il filtro e'
+ * un gesto in piu', non il modo normale di guardare la lista.
+ */
+const risultatiVisibili = computed(() => talosApplyBrowseFilters(
+    store.results,
+    filtriAttivi.value,
+    store.device?.availableRamBytes ?? 0,
+))
+
+const providerGroups = computed(() => talosGroupModelsByProvider(risultatiVisibili.value))
+
+/**
+ * La capienza stimata di una riga sfogliata, calcolata UNA volta per nome.
+ *
+ * La cache non e' un vezzo: il template la interroga piu' volte per riga e la
+ * lista si ridisegna a ogni filtro. Senza, si rifarebbe la regex venti volte
+ * per venti modelli a ogni tasto premuto.
+ */
+/**
+ * La capienza di una riga sfogliata: MISURATA quando si puo', stimata quando no.
+ *
+ * MISURATO 2026-08-04: chiedendo `expand[]=gguf` la lista torna coi parametri
+ * esatti, i byte su disco e la finestra di contesto. Quindi il numero e' vero,
+ * non dedotto dal nome — e il nome resta solo come ripiego per le righe che il
+ * Hub non e' riuscito a leggere.
+ *
+ * In cache per riga: il template la interroga piu' volte e la lista si
+ * ridisegna a ogni filtro.
+ */
+const capienze = new Map<string, {
+    tone: 'ok' | 'tight' | 'over'
+    ratio: number
+    labelKey: string
+    size: string
+    estimated: boolean
+} | null>()
+
+function stimaDi(model: { id: string, gguf?: { fileBytes: number, contextLength: number } | null }) {
+    const chiave = model.id
+    if (capienze.has(chiave)) return capienze.get(chiave)!
+    const libera = store.device?.availableRamBytes ?? 0
+    if (libera <= 0) { capienze.set(chiave, null); return null }
+
+    /*
+     * Il margine di lavoro sopra i pesi: il file entra sul disco, ma per
+     * APRIRLO servono anche la cache del contesto e i buffer del runtime. Un
+     * verdetto sul solo file direbbe «ci sta» a qualcosa che poi non si apre —
+     * l'errore che costa un download intero.
+     */
+    const misurato = model.gguf?.fileBytes
+    const fileBytes = misurato ?? talosEstimateSizeFromName(chiave)?.fileBytes ?? null
+    if (!fileBytes) { capienze.set(chiave, null); return null }
+
+    const workingBytes = fileBytes * 1.25
+    const band = talosEstimatedBand(workingBytes, libera)
+    const badge = talosFitBadge({ band, needsBytes: workingBytes, availableBytes: libera })
+    const esito = {
+        tone: badge.tone,
+        ratio: badge.ratio,
+        labelKey: badge.labelKey,
+        size: talosFormatBytes(fileBytes),
+        // La tilde compare solo quando il numero e' dedotto: una stima che si
+        // spaccia per misura e' peggio di nessun numero.
+        estimated: misurato === undefined,
+    }
+    capienze.set(chiave, esito)
+    return esito
+}
 const providerItems = computed(() => talosProviderOptions(providerGroups.value))
 const visibleGroups = computed(() => providerFilter.value === ''
     ? providerGroups.value
@@ -584,8 +726,11 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
 </script>
 
 <template>
+    <!-- Owner 2026-08-04: «meno padding laterale su tutta la schermata
+         locale». Da 4 a 2: su un telefono ogni riga guadagna 16px di larghezza
+         utile, e i nomi dei modelli sono lunghi. -->
     <div
-        class="flex min-h-full flex-col gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3"
+        class="flex min-h-full flex-col gap-3 px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3"
         data-testid="talos-models-section"
     >
         <p class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('localModels.intro') }}</p>
@@ -888,36 +1033,13 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                         <span>{{ row.entry.quantisation }}</span><span class="opacity-40">·</span>
                         <span>{{ row.size }}</span><span class="opacity-40">·</span>
                         <span>{{ row.entry.contextTokens }}</span>
-                        <!-- L'etichetta di capienza vive QUI, dove si scorre.
-                             Owner 2026-08-04: «come etichetta che vedo sempre».
-                             La barra misura contro la memoria libera di QUESTO
-                             telefono, e quando sfora lo OLTREPASSA — un limite
-                             superato che si vede non va letto. -->
-                        <span
-                            data-testid="talos-model-fit"
-                            :data-fit-tone="row.badge.tone"
-                            class="flex min-w-[7.5rem] flex-1 items-center gap-2"
-                        >
-                            <span class="relative h-1.5 flex-1 overflow-hidden rounded-full bg-current/10">
-                                <i
-                                    class="absolute inset-y-0 left-0 block rounded-full"
-                                    :class="{
-                                        'bg-[var(--talos-success,#6FD09A)]': row.badge.tone === 'ok',
-                                        'bg-[var(--talos-warning,#E5B76B)]': row.badge.tone === 'tight',
-                                        'bg-[var(--talos-danger,#E0716B)]': row.badge.tone === 'over',
-                                    }"
-                                    :style="{ width: `${Math.min(100, row.badge.ratio * 100)}%` }"
-                                ></i>
-                            </span>
-                            <span
-                                class="shrink-0 text-3xs font-semibold"
-                                :class="{
-                                    'text-[var(--talos-success,#6FD09A)]': row.badge.tone === 'ok',
-                                    'text-[var(--talos-warning,#E5B76B)]': row.badge.tone === 'tight',
-                                    'text-[var(--talos-danger,#E0716B)]': row.badge.tone === 'over',
-                                }"
-                            >{{ t(row.badge.labelKey) }}</span>
-                        </span>
+                        <!-- La capienza, dal componente unico: due liste sulla stessa
+                             schermata non devono poter divergere. -->
+                        <TalosModelFitBar
+                            :tone="row.badge.tone"
+                            :ratio="row.badge.ratio"
+                            :label="t(row.badge.labelKey)"
+                        />
                     </div>
                     <p v-if="row.family" class="text-2xs leading-snug text-[var(--talos-muted)]">{{ row.family }}</p>
                     <p class="flex items-center gap-1.5 text-2xs font-semibold text-[var(--talos-success,#4c9a6a)]">
@@ -1133,6 +1255,42 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             </Button>
         </form>
 
+        <!--
+            I chip del mockup approvato: Ci sta · Chat · Codice · Q4 · Licenza
+            libera. Owner 2026-08-04: «voglio una lista già caricata con un
+            loading, con i filtri».
+
+            Non le faccette del Hub: ognuno risponde a una domanda che si fa chi
+            mette un modello su un TELEFONO. «Ci sta» è l'unico che nessun altro
+            catalogo può avere, perché ha bisogno di sapere quanta memoria ha
+            questo dispositivo.
+        -->
+        <div
+            v-if="!store.repo && store.results.length"
+            data-testid="talos-models-filters"
+            role="group"
+            :aria-label="t('localModels.filtersLabel')"
+            class="-mx-2 flex gap-1.5 overflow-x-auto px-2 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+            <button
+                v-for="id in TALOS_BROWSE_FILTERS"
+                :key="id"
+                type="button"
+                :data-testid="`talos-models-filter-${id}`"
+                :aria-pressed="filtriAttivi.includes(id)"
+                class="talos-pressable shrink-0 rounded-full border px-3 py-1.5 text-2xs font-medium whitespace-nowrap transition-colors"
+                :class="filtriAttivi.includes(id)
+                    ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-accent-text)]'
+                    : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]'"
+                @click="commutaFiltro(id)"
+            >{{ t(`localModels.filter.${id}`) }}</button>
+        </div>
+
+        <!-- L'ordinamento, col selettore che questa schermata usa gia' per il
+             filtro autore. Owner 2026-08-04: «la grammatica c'è già, non devi
+             inventarti nulla». Le voci sono quelle del Hub, non nostre. -->
+
+
         <p v-if="store.searching" class="py-6 text-center text-sm text-[var(--talos-muted)]">
             {{ t('localModels.searching') }}
         </p>
@@ -1147,13 +1305,25 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                  the two halves of the Model Lab read alike. Its options are
                  derived from the results — there is no list of publishers in
                  this app, because that list would age. -->
+            <!-- Due comandi, una riga. Impilati a tutta larghezza mangiavano
+                 mezzo schermo prima che si vedesse un modello — misurato
+                 guardando la schermata sul telefono, non supposto. -->
+            <div class="flex gap-2">
             <TalosThemedSelect
-                v-model="providerFilter"
+                data-testid="talos-models-sort"
+                class="flex-1"
+                :model-value="store.sort"
+                :items="ordinamenti"
+                :aria-label="t('localModels.sortLabel')"
+                @update:model-value="(v) => talosSetLocalModelSort(v as TalosHuggingFaceSort)"
+            />
+            <TalosThemedSelect     v-model="providerFilter"
                 data-testid="talos-models-provider-filter"
                 :items="providerItems"
                 :aria-label="t('localModels.filterProvider')"
                 :none-label="t('localModels.allProviders')"
             />
+            </div>
 
             <section
                 v-for="group in visibleGroups"
@@ -1177,16 +1347,47 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                     class="talos-pressable w-full rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3 text-left"
                     @click="open(model.id)"
                 >
-                    <span class="block truncate text-sm font-semibold text-[var(--talos-text)]">{{ model.id }}</span>
-                    <span class="mt-0.5 flex flex-wrap items-center gap-1.5 text-2xs text-[var(--talos-muted)]">
-                        <span>{{ t('localModels.downloadsCount', { count: model.downloads }) }}</span>
-                        <!-- Known from the search, so nobody picks a model,
-                             reads a fit answer and then cannot have it. -->
-                        <span
-                            v-if="model.gated"
-                            class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 font-semibold uppercase tracking-wide"
-                        >{{ t('localModels.gated') }}</span>
+                    <!--
+                        La card del mockup approvato: nome → autore · licenza →
+                        meta → barra, col chevron che dice che si apre.
+
+                        L'ordine non e' estetico. Il nome dice COSA, la riga
+                        sotto dice DI CHI e a quali condizioni, la meta dice se
+                        e' vivo, e la barra — ultima — dice se puoi averlo. E'
+                        la sequenza in cui si decide.
+                    -->
+                    <span class="flex items-start gap-2">
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate font-mono text-sm font-semibold text-[var(--talos-text)]">{{ model.id }}</span>
+                            <span class="mt-0.5 flex flex-wrap items-center gap-x-1.5 font-mono text-2xs text-[var(--talos-muted)]">
+                                <span>{{ autoreDi(model.id) }}</span>
+                                <template v-if="licenzaDi(model)">
+                                    <span class="opacity-40">·</span><span>{{ licenzaDi(model) }}</span>
+                                </template>
+                                <template v-if="model.gguf?.parameters">
+                                    <span class="opacity-40">·</span><span>{{ parametriDi(model.gguf.parameters) }}</span>
+                                </template>
+                            </span>
+                            <span class="mt-0.5 flex flex-wrap items-center gap-x-1.5 font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
+                                <span>{{ scaricatiDi(model.downloads) }}</span>
+                                <template v-if="model.likes"><span class="opacity-40">·</span><span>{{ model.likes }} ★</span></template>
+                                <span
+                                    v-if="model.gated"
+                                    class="rounded-full bg-[var(--talos-active)] px-1.5 font-semibold uppercase tracking-wide"
+                                >{{ t('localModels.gated') }}</span>
+                            </span>
+                        </span>
+                        <ChevronRight class="mt-0.5 size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                     </span>
+                    <TalosModelFitBar
+                        v-if="stimaDi(model)"
+                        class="mt-2"
+                        :tone="stimaDi(model)!.tone as 'ok' | 'tight' | 'over'"
+                        :ratio="stimaDi(model)!.ratio"
+                        :label="t(stimaDi(model)!.labelKey)"
+                        :size="stimaDi(model)!.size"
+                        :estimated="stimaDi(model)!.estimated"
+                    />
                 </button>
             </section>
         </template>

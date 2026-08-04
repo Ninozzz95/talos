@@ -208,14 +208,27 @@ describe('finding and opening a repository', () => {
         expect(store.talosLocalModels.results).toEqual([])
     })
 
-    it('does not go to the Hub at all for an empty search', async () => {
+    it('senza testo SFOGLIA il Hub invece di svuotare la lista', async () => {
+        /**
+         * Contratto cambiato di proposito, owner 2026-08-04: «è ancora un campo
+         * input in cui devi inserire manualmente le cose; voglio una lista già
+         * caricata con un loading».
+         *
+         * Prima una ricerca vuota azzerava i risultati, quindi la schermata si
+         * apriva vuota e restava vuota. MISURATO contro l'API vera: omettendo
+         * `search`, il Hub risponde coi modelli GGUF ordinati per download.
+         */
         const fetch = vi.fn(async () => json([]))
         const store = await import('@/stores/localModels')
         store.talosInitLocalModels(fetch as never)
 
         await store.talosSearchLocalModels('   ')
 
-        expect(fetch).not.toHaveBeenCalled()
+        expect(fetch).toHaveBeenCalledTimes(1)
+        const chiamata = String(fetch.mock.calls[0]![0])
+        // Sfoglia: NON chiede «i modelli che contengono la stringa vuota».
+        expect(chiamata).not.toContain('search=')
+        expect(chiamata).toContain('sort=downloads')
     })
 })
 

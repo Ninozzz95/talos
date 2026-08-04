@@ -4,6 +4,7 @@ import {
     type TalosHuggingFaceClient,
     type TalosHuggingFaceFailure,
     type TalosHuggingFaceModel,
+    type TalosHuggingFaceSort,
 } from '@/lib/models/huggingFace'
 import { talosGroupGgufFiles, type TalosGgufSet } from '@/lib/models/ggufSet'
 import { TALOS_GGUF_FIRST_READ_BYTES, talosReadGgufHeader } from '@/lib/models/gguf'
@@ -87,6 +88,8 @@ export interface TalosLocalModelSet extends TalosGgufSet {
 
 export interface TalosLocalModelsState {
     query: string
+    /** Come ordinare la lista sfogliata. I nomi sono quelli del Hub. */
+    sort: TalosHuggingFaceSort
     searching: boolean
     results: TalosHuggingFaceModel[]
     searchFailure: string | null
@@ -132,6 +135,19 @@ export interface TalosLocalModelsState {
 
 const state = reactive<TalosLocalModelsState>({
     query: '',
+    /*
+     * L'ordinamento della lista sfogliata.
+     *
+     * Owner 2026-08-04: «metti anche ordinamenti con dropdown, la grammatica
+     * c'e' gia'». I nomi sono quelli del Hub, non nostri: `downloads`,
+     * `likes`, `lastModified`, `createdAt`. Inventarne di nostri vorrebbe dire
+     * tradurli a ogni richiesta e sbagliare la traduzione una volta.
+     *
+     * Il predefinito e' «piu' scaricati»: e' il solo segnale onesto che l'API
+     * offre su cosa funziona davvero, e chi apre la schermata non ha ancora una
+     * preferenza.
+     */
+    sort: 'downloads',
     searching: false,
     results: [],
     searchFailure: null,
@@ -271,6 +287,19 @@ export async function talosLoadLocalCatalogue(): Promise<void> {
         state.catalogue.refusal = loaded.state === 'refused' ? loaded.reason : null
         state.catalogue.recommended = []
         state.catalogue.rejected = []
+        /*
+         * Senza catalogo curato si SFOGLIA il Hub, invece di mostrare il vuoto.
+         *
+         * Il documento curato porta la memoria di lavoro gia' misurata, quindi
+         * quando c'e' e' meglio: la capienza si calcola senza una richiesta. Ma
+         * quando non c'e' — ed e' il caso di questa build, che non ha un host
+         * configurato — la schermata restava con un campo da riempire, che e'
+         * esattamente cio' che l'owner ha chiesto di togliere.
+         *
+         * Non si aspetta l'esito: la lista arriva quando arriva, e intanto la
+         * parte installata e' gia' usabile.
+         */
+        void talosSearchLocalModels('')
         return
     }
 
@@ -290,13 +319,21 @@ export async function talosSearchLocalModels(query: string): Promise<void> {
     const generation = ++searchGeneration
     state.query = query
     state.searchFailure = null
-    if (query.trim() === '') {
-        state.results = []
-        return
-    }
+    /*
+     * Il vuoto SFOGLIA, non svuota.
+     *
+     * Owner 2026-08-04: «voglio una lista gia' caricata con un loading, con i
+     * filtri». Prima una ricerca senza testo azzerava i risultati, quindi la
+     * schermata si apriva vuota e restava vuota finche' non scrivevi qualcosa —
+     * e su questo dispositivo il catalogo curato non arriva nemmeno, perche' e'
+     * un documento su un host che questa build non ha configurato.
+     *
+     * Il Hub una lista ce l'ha: omettendo `search` risponde coi modelli GGUF
+     * ordinati per download. Misurato contro l'API vera.
+     */
     state.searching = true
     try {
-        const results = await requireClient().searchModels(query.trim())
+        const results = await requireClient().searchModels(query.trim(), 20, state.sort)
         if (generation !== searchGeneration) return
         state.results = results
     } catch (failure) {
@@ -316,6 +353,20 @@ export async function talosSearchLocalModels(query: string): Promise<void> {
  * how an app with a hundred-file repository walks into the rate limiter that
  * anonymous users share with everyone else behind their carrier's address.
  */
+/**
+ * Cambia ordinamento e RICARICA.
+ *
+ * L'ordinamento lo fa il Hub, non noi: riordinare in locale i venti che abbiamo
+ * gia' darebbe «i venti piu' scaricati, ordinati per data» — che non e' «i piu'
+ * recenti», ed e' la specie di bugia che nessuno nota finche' non cerca
+ * qualcosa che c'e' ma non compare.
+ */
+export async function talosSetLocalModelSort(sort: TalosHuggingFaceSort): Promise<void> {
+    if (state.sort === sort) return
+    state.sort = sort
+    await talosSearchLocalModels(state.query)
+}
+
 export async function talosOpenModelRepo(id: string, revision = 'main'): Promise<void> {
     const generation = ++repoGeneration
     state.repo = { id, revision, sets: [], loading: true, failure: null }
