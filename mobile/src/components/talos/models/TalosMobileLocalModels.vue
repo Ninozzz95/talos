@@ -15,7 +15,7 @@
  * rejection that ends the conversation is a worse product than one that moves
  * it. Nothing here is disabled without saying why.
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { ChevronRight, Search, Download, Pause, AlertTriangle, ChevronLeft, ShieldAlert, Cpu, LayoutGrid, List, FolderOpen } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,7 @@ import {
     talosRefreshTransfer,
     talosRefreshLeftovers,
     talosRefreshHuggingFaceToken,
+    talosDescribeModelRepo,
     talosLoadLocalCatalogue,
     talosSetLocalModelSort,
     talosSetHuggingFaceToken,
@@ -714,6 +715,124 @@ const progressPercent = computed(() => {
  * recomputes them on every render is a list that stutters on the phone this
  * feature exists for.
  */
+/**
+ * La scheda del repository aperto: chi, con che licenza, cosa dice di se'.
+ *
+ * Si carica quando il repository si apre e non prima: e' una richiesta in piu'
+ * per modello, e farla per venti righe di lista sarebbe venti richieste per una
+ * descrizione che nessuno sta leggendo.
+ */
+const scheda = ref<{ author: string | null, license: string | null, readme: string, updatedAt: string | null } | null>(null)
+
+watch(() => store.repo?.id, async (id: string | undefined) => {
+    scheda.value = null
+    if (!id) return
+    /*
+     * La scheda e' un di piu': se non arriva, la pagina resta usabile.
+     *
+     * `try` e non solo `.catch`: la chiamata puo' fallire PRIMA di diventare
+     * una promessa — senza un client configurato lancia subito — e un
+     * `.catch()` non prende quello. La pagina del modello serve a scegliere una
+     * variante; una descrizione mancante non e' una ragione per non poterlo
+     * fare.
+     */
+    try {
+        scheda.value = await talosDescribeModelRepo(id)
+    } catch {
+        scheda.value = null
+    }
+}, { immediate: true })
+
+/**
+ * La parte del README che si mostra.
+ *
+ * NON tutto: un README vero e' markdown con tabelle, badge e blocchi di codice,
+ * e renderlo male e' peggio che non renderlo. Si prende il primo paragrafo di
+ * prosa — saltando l'intestazione YAML e i titoli — e per il resto c'e' il
+ * rimando alla scheda completa.
+ */
+const descrizione = computed(() => {
+    const testo = scheda.value?.readme ?? ''
+    if (!testo) return null
+    // L'intestazione YAML in cima al README non e' prosa: e' metadati, e
+    // mostrarla al posto della descrizione direbbe «license: apache-2.0».
+    const senzaFrontmatter = testo.replace(/^---[\s\S]*?\n---\n/, '')
+    const paragrafo = senzaFrontmatter
+        .split(/\n\s*\n/)
+        .map((blocco) => blocco.trim())
+        /*
+         * PROSA, non un elenco.
+         *
+         * MISURATO guardando la pagina sul telefono: il primo blocco lungo di
+         * `Qwen3.5-4B` era una lista di link — «- You can now also fine-tune...
+         * [Unsloth](https://...)» — che come descrizione non dice niente e in
+         * markdown grezzo si legge peggio di niente.
+         *
+         * Si saltano elenchi, titoli, tabelle, codice e HTML: cio' che resta e'
+         * una frase scritta per essere letta.
+         */
+        .map(pulisci)
+        /*
+         * Si sceglie DOPO aver pulito, non prima.
+         *
+         * MISURATO due volte sul telefono. Al primo giro il blocco scelto era
+         * una lista di link; l'ho escluso col prefisso `-`. Al secondo era
+         * `![Qwen Chat](https://chat.qwen.ai)` — che non comincia con `!`,
+         * perche' nel README sta in fila ad altri badge.
+         *
+         * Il difetto era il metodo: elencare i prefissi da rifiutare e' una
+         * lista che si allunga a ogni README nuovo. Cosi' invece si toglie il
+         * markup e si guarda cosa RESTA: se non restano parole vere, non era
+         * una descrizione — qualunque forma avesse.
+         */
+        .find((testo) => testo.length > 40 && contaParole(testo) >= 8)
+    return paragrafo ? paragrafo.slice(0, 320) : null
+})
+
+/** Via il markup: immagini, link, enfasi, titoli, punti elenco. */
+function pulisci(blocco: string): string {
+    return blocco
+        // Le immagini per prime: `![x](y)` sparisce del tutto, e non diventa
+        // «x» — un badge non e' una frase.
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+        // I link diventano il loro testo: l'indirizzo e' rumore su un telefono.
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/^[#>\s]*/, '')
+        .replace(/^[-*+]\s+/gm, '')
+        .replace(/[*_`]/g, '')
+        .replace(/https?:\/\/\S+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+/**
+ * Le parole vere: sequenze di lettere lunghe almeno tre.
+ *
+ * Serve a distinguere una frase da cio' che resta di una fila di badge —
+ * «Qwen Chat Hugging Face Discord» ha parole ma non e' una descrizione, e otto
+ * e' la soglia sotto cui non lo e' quasi mai.
+ */
+function contaParole(testo: string): number {
+    return (testo.match(/[\p{L}]{3,}/gu) ?? []).length
+}
+
+/** I tag della scheda: solo quelli che aiutano a decidere. */
+const tagDellaScheda = computed(() => [
+    scheda.value?.author,
+    scheda.value?.license,
+    store.repo?.sets[0]?.label ? null : null,
+].filter((x): x is string => typeof x === 'string' && x.length > 0))
+
+/** La memoria libera, per il titolo della sezione varianti. */
+const memoriaLibera = computed(() => (store.device?.availableRamBytes
+    ? talosFormatBytes(store.device.availableRamBytes)
+    : null))
+
+function apriSchedaCompleta(): void {
+    if (store.repo) void open(store.repo.id)
+}
+
 const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
     set,
     key: set.paths[0]!,
@@ -722,6 +841,27 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
     verdict: set.examination.state === 'read'
         ? talosFitVerdict(set.examination.fit, store.context)
         : null,
+    /*
+     * La capienza della VARIANTE, come nel mockup: qui i byte sono quelli veri
+     * del set, non una stima — il repository e' aperto e i file sono stati
+     * contati. E' il momento in cui si sceglie fra Q4 e Q6, cioe' la decisione
+     * vera di chi installa un modello locale.
+     */
+    badge: (() => {
+        const libera = store.device?.availableRamBytes ?? 0
+        if (libera <= 0) return null
+        const working = set.totalBytes * 1.25
+        return {
+            ...talosFitBadge({
+                band: talosEstimatedBand(working, libera),
+                needsBytes: working,
+                availableBytes: libera,
+            }),
+            /** Quanto resta dopo, o quanto manca: il numero azionabile. */
+            delta: talosFormatBytes(Math.abs(libera - working)),
+            avanza: libera - working >= 0,
+        }
+    })(),
 })))
 </script>
 
@@ -733,7 +873,13 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
         class="flex min-h-full flex-col gap-3 px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3"
         data-testid="talos-models-section"
     >
-        <p class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('localModels.intro') }}</p>
+        <!-- Con un modello aperto questa E' una pagina, non una sezione: cio'
+             che riguarda gli altri modelli sparisce. Owner 2026-08-04: «la
+             pagina dedicata per ogni modello». Lasciare sopra «su questo
+             dispositivo» e la scheda del telefono faceva scorrere mezzo schermo
+             prima di arrivare alle varianti, che sono il motivo per cui si e'
+             entrati. -->
+        <p v-if="!store.repo" class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('localModels.intro') }}</p>
 
         <!--
             What is ALREADY here, before anything about getting more.
@@ -748,7 +894,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             one ordering picked from a radiogroup, a row per file with its size
             and when it arrived.
         -->
-        <section data-testid="talos-models-installed" class="flex flex-col gap-3">
+        <section v-if="!store.repo" data-testid="talos-models-installed" class="flex flex-col gap-3">
             <div class="flex items-baseline justify-between gap-2">
                 <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
                     {{ t('localModels.installedTitle') }}
@@ -887,7 +1033,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             -->
             <div class="flex flex-col gap-1">
                 <Button
-                    data-testid="talos-models-import"
+                    v-if="!store.repo" data-testid="talos-models-import"
                     variant="outline"
                     class="w-full"
                     :disabled="importing"
@@ -1411,8 +1557,38 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                 >
                     <ChevronLeft class="size-4" aria-hidden="true" />
                 </button>
-                <span class="min-w-0 truncate text-sm font-semibold text-[var(--talos-text)]">{{ store.repo.id }}</span>
+                <span class="min-w-0 truncate font-mono text-sm font-semibold text-[var(--talos-text)]">{{ store.repo.id }}</span>
             </div>
+
+            <!-- La scheda, come nel mockup: chi l'ha fatto e a quali condizioni,
+                 poi cosa dice di se'. La descrizione e' il README dell'autore,
+                 non un riassunto nostro — inventarne uno sarebbe peggio che non
+                 mostrarne nessuno. -->
+            <div v-if="scheda" data-testid="talos-models-card" class="flex flex-col gap-2">
+                <div class="flex flex-wrap gap-1.5">
+                    <span
+                        v-for="tag in tagDellaScheda"
+                        :key="tag"
+                        class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 py-0.5 font-mono text-2xs text-[var(--talos-muted)]"
+                    >{{ tag }}</span>
+                </div>
+                <p v-if="descrizione" class="text-xs leading-5 text-[var(--talos-text)]">{{ descrizione }}</p>
+                <button
+                    type="button"
+                    data-testid="talos-models-card-link"
+                    class="talos-pressable self-start font-mono text-2xs text-[var(--talos-accent)]"
+                    @click="apriSchedaCompleta()"
+                >{{ t('localModels.fullCard') }} →</button>
+            </div>
+
+            <!-- «VARIANTI · 4,1 GB LIBERI»: il titolo porta il numero contro cui
+                 si sta decidendo, così non va cercato altrove. -->
+            <p
+                v-if="store.repo.sets.length"
+                class="mt-1 font-mono text-2xs uppercase tracking-wider text-[var(--talos-muted)]"
+            >
+                {{ t('localModels.variants') }}<template v-if="memoriaLibera"> · {{ t('models.fitFree', { free: memoriaLibera }) }}</template>
+            </p>
 
             <p v-if="store.repo.loading" class="py-6 text-center text-sm text-[var(--talos-muted)]">
                 {{ t('localModels.loadingFiles') }}
@@ -1442,9 +1618,25 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                     class="flex flex-col gap-2 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3"
                 >
                     <div class="flex items-baseline justify-between gap-2">
-                        <span class="text-sm font-semibold text-[var(--talos-text)]">{{ row.set.label }}</span>
-                        <span class="text-2xs text-[var(--talos-muted)]">{{ row.size }}</span>
+                        <span class="font-mono text-sm font-semibold text-[var(--talos-text)]">{{ row.set.label }}</span>
+                        <span class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ row.size }}</span>
                     </div>
+
+                    <!-- La capienza della variante: qui i byte sono VERI, il
+                         repository è aperto e i file sono stati contati. È il
+                         momento in cui si sceglie fra Q4 e Q6. -->
+                    <template v-if="row.badge">
+                        <TalosModelFitBar
+                            :tone="row.badge.tone"
+                            :ratio="row.badge.ratio"
+                            :label="t(row.badge.labelKey)"
+                        />
+                        <p class="text-2xs leading-4 text-[var(--talos-muted)]">
+                            {{ t(row.badge.reasonKey, row.badge.avanza
+                                ? { left: row.badge.delta }
+                                : { missing: row.badge.delta }) }}
+                        </p>
+                    </template>
 
                     <!-- Cannot work at all: two of three shards is not a small
                          model, it is nothing. -->

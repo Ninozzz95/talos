@@ -361,6 +361,17 @@ export async function talosSearchLocalModels(query: string): Promise<void> {
  * recenti», ed e' la specie di bugia che nessuno nota finche' non cerca
  * qualcosa che c'e' ma non compare.
  */
+/**
+ * La scheda di un repository: autore, licenza, README.
+ *
+ * Non tocca lo stato: torna il dato e basta. Chi la chiama decide se e quando
+ * mostrarla, e una scheda che fallisce non deve poter rompere la pagina del
+ * modello — che serve a scegliere una variante, non a leggere una descrizione.
+ */
+export async function talosDescribeModelRepo(repo: string) {
+    return requireClient().describeModel(repo)
+}
+
 export async function talosSetLocalModelSort(sort: TalosHuggingFaceSort): Promise<void> {
     if (state.sort === sort) return
     state.sort = sort
