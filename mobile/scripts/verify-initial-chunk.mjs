@@ -89,6 +89,15 @@ const DYNAMIC_BOUNDARIES = [
         suffix: 'src/components/chat/TalosMobileSlashCommandMenu.vue',
         code: 'TALOS_SLASH_COMMAND_MENU_NOT_LAZY',
     },
+    // Il pannello «quanto riscrivere, con quale modello». Importato
+    // staticamente si porta dietro il Select di reka-ui: misurato il
+    // 2026-08-04, 80.223 byte nel grafo d'avvio — da 594 KB a 674 KB, oltre il
+    // tetto. Era passato typecheck e test perche' nessuno dei due pesa il
+    // pacco; solo il build lo vede.
+    {
+        suffix: 'src/components/chat/TalosMobileEnhancerDrawer.vue',
+        code: 'TALOS_ENHANCER_DRAWER_NOT_LAZY',
+    },
     { suffix: 'src/screens/ResearchScreen.vue', code: 'TALOS_ROUTE_NOT_LAZY' },
     { suffix: 'src/screens/RunsScreen.vue', code: 'TALOS_ROUTE_NOT_LAZY' },
     { suffix: 'src/screens/ContextScreen.vue', code: 'TALOS_ROUTE_NOT_LAZY' },
@@ -277,7 +286,7 @@ try {
             boundaryFailure = true
             continue
         }
-        dynamicEntries.push(key)
+        dynamicEntries.push({ suffix: boundary.suffix, key })
     }
 
     if (!boundaryFailure) {
@@ -337,21 +346,24 @@ try {
                 maximum_initial_css_bytes: maximumCss,
                 initial_javascript_gzip_bytes: initialGzipBytes,
                 initial_css_gzip_bytes: initialCssGzipBytes,
-                sqlite_dynamic_entry: dynamicEntries[0],
-                message_renderer_dynamic_entry: dynamicEntries[1],
-                message_overflow_dynamic_entry: dynamicEntries[2],
-                prompt_enhancer_dynamic_entry: dynamicEntries[3],
-                slash_command_menu_dynamic_entry: dynamicEntries[4],
-                station_dynamic_entries: dynamicEntries.slice(5, 9),
-                model_catalog_dynamic_entry: dynamicEntries[9],
-                model_advanced_dynamic_entry: dynamicEntries[10],
-                launcher_icon_dialog_dynamic_entry: dynamicEntries[16],
-                welcome_en_dynamic_entry: dynamicEntries[17],
-                welcome_it_dynamic_entry: dynamicEntries[18],
-                welcome_runtime_dynamic_entry: dynamicEntries[19],
-                welcome_easter_egg_dynamic_entry: dynamicEntries[20],
-                welcome_title_dynamic_entry: dynamicEntries[21],
-                workspace_background_dynamic_entry: dynamicEntries[22],
+                // Per NOME, non per posizione.
+                //
+                // Prima erano indici scritti a mano — `dynamicEntries[16]` — e
+                // bastava aggiungere un confine in mezzo alla lista perche' ogni
+                // etichetta dopo quel punto finisse sul valore sbagliato. E'
+                // successo il 2026-08-04 aggiungendo il drawer dell'enhancer: il
+                // rapporto ha continuato a dire `"ok": true` mentre chiamava il
+                // pannello media «icona del lanciatore». Un rapporto che sbaglia
+                // i nomi e' peggio di uno che tace, perche' lo si legge per
+                // orientarsi.
+                // La chiave e' il PERCORSO, non il codice d'errore: quattro
+                // stazioni condividono `TALOS_ROUTE_NOT_LAZY` e due cataloghi
+                // condividono il loro, quindi una mappa per codice ne
+                // perderebbe quattro per strada senza dirlo. 24 confini devono
+                // comparire come 24 righe.
+                dynamic_entries: Object.fromEntries(
+                    dynamicEntries.map(({ suffix, key }) => [suffix, key]),
+                ),
             })}\n`)
         }
     }

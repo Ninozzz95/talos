@@ -20,7 +20,6 @@ import { Loader2, ArrowUp,
 import TalosMicWaveform from '@/components/brand/TalosMicWaveform.vue'
 import TalosMobileAttachmentTray from '@/components/chat/TalosMobileAttachmentTray.vue'
 import TalosMobileModelEffortDrawer from '@/components/chat/TalosMobileModelEffortDrawer.vue'
-import TalosMobileEnhancerDrawer from '@/components/chat/TalosMobileEnhancerDrawer.vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
 import { Button } from '@/components/ui/button'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
@@ -52,6 +51,23 @@ const TalosMobileComposerDrawer = defineAsyncComponent(
 )
 const TalosMobileLibraryContextSheet = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileLibraryContextSheet.vue'),
+)
+/*
+ * Il pannello che si vede prima di riscrivere: pigro, come il popover accanto.
+ *
+ * MISURATO 2026-08-04, e non era un dettaglio: importato staticamente si porta
+ * dietro il selettore di reka-ui, e con lui **80.223 byte** nel grafo d'avvio —
+ * il budget e' passato da 594 KB a 674 KB, cioe' oltre il tetto. Il costo non
+ * era del pannello: era del Select, che l'avvio non usa e che quel pannello e'
+ * il solo, fra i suoi vicini, a tirare dentro.
+ *
+ * Il cancello del bundle lo pretende: c'e' una riga in
+ * `verify-initial-chunk.mjs` che fallisce se questo confine sparisce, come per
+ * il popover. Un import che torna statico non deve poter passare in silenzio
+ * una seconda volta.
+ */
+const TalosMobileEnhancerDrawer = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileEnhancerDrawer.vue'),
 )
 
 const props = withDefaults(defineProps<{
