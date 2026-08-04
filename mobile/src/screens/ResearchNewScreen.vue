@@ -32,6 +32,7 @@ import {
     talosResearchPlanTotals,
     talosResearchPlanWith,
     talosResearchPlanWithout,
+    talosResearchSynthesisLoad,
 } from '@/lib/research/researchPlan'
 
 const controller = useChatController()
@@ -72,6 +73,29 @@ const authorItems = computed<TalosThemedSelectItem[]>(() => everyModel.value.map
 const judgeItems = computed<TalosThemedSelectItem[]>(() => judgeChoices.value.map(labelled))
 
 /** Same house, weaker guarantee — said, not blocked. */
+/**
+ * L'autore gira sul dispositivo.
+ *
+ * Cambia due cose visibili, e vanno dette PRIMA di avviare: il piano si stringe
+ * (vedi `talosResearchPlanFor`) e la scrittura richiede minuti invece di
+ * secondi. Owner 2026-08-04, sull'avviso: dev'essere da prodotto — quindi dice
+ * cosa si guadagna, quanto costa in numeri veri, e cosa fare.
+ */
+const localAuthor = computed(() => {
+    const author = everyModel.value.find((entry) => entry.value === authorValue.value)
+    return author?.provider === 'local'
+})
+
+/** I token che l'autore dovra' leggere in una volta, dal piano vero. */
+const authorLoad = computed(() => talosResearchSynthesisLoad(plan.value))
+
+/** Quante fonti apre davvero una profondita', con l'autore che c'e' adesso. */
+function sourcesFor(profile: { depth: TalosResearchDepth, sources: number }): number {
+    if (!localAuthor.value) return profile.sources
+    return talosResearchPlanFor('x', profile.depth, true)
+        .reduce((sum, branch) => sum + branch.estimate.pages, 0)
+}
+
 const sameHouse = computed(() => {
     const author = everyModel.value.find((entry) => entry.value === authorValue.value)
     const judge = everyModel.value.find((entry) => entry.value === judgeValue.value)
@@ -106,7 +130,7 @@ const cost = computed(() => talosResearchPlanCost(totals.value, null))
 
 function propose(): void {
     if (question.value.trim().length === 0) return
-    plan.value = talosResearchPlanFor(question.value, depth.value)
+    plan.value = talosResearchPlanFor(question.value, depth.value, localAuthor.value)
 }
 
 function chooseDepth(next: TalosResearchDepth): void {
@@ -229,6 +253,17 @@ async function start(): Promise<void> {
                 </div>
 
                 <p class="text-2xs leading-5 text-[var(--talos-muted)]">{{ t('research.modelsNote') }}</p>
+                <!-- Detto PRIMA di avviare, non dopo mezz'ora di attesa. Non e'
+                     un allarme: e' il patto: niente esce dal telefono, in
+                     cambio ci vuole tempo — con i numeri veri di questo piano. -->
+                <div v-if="localAuthor" data-testid="talos-research-local-author" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
+                    <p class="text-sm font-medium text-[var(--talos-text)]">{{ t('research.localAuthorTitle') }}</p>
+                    <p class="mt-1 text-2xs leading-5 text-[var(--talos-muted)]">
+                        {{ t('research.localAuthorBody', { depth: t(`research.depth.${depth}`), tokens: authorLoad.toLocaleString() }) }}
+                    </p>
+                    <p class="mt-1 text-2xs leading-5 text-[var(--talos-muted)]">{{ t('research.localAuthorAdvice') }}</p>
+                </div>
+
                 <p v-if="sameHouse" data-testid="talos-research-same-house" class="text-2xs leading-5 text-[var(--talos-warning)]">
                     {{ t('research.sameHouse') }}
                 </p>
@@ -245,7 +280,12 @@ async function start(): Promise<void> {
                     @click="chooseDepth(profile.depth)"
                 >
                     {{ t(`research.depth.${profile.depth}`) }}
-                    <span class="font-mono text-2xs opacity-70">{{ profile.sources }} / {{ profile.minutes }}m</span>
+                    <!-- Il numero e' quello che SUCCEDERA', non quello del
+                         listino. Con un autore sul dispositivo il piano si
+                         stringe, e una linguetta che continua a promettere 80
+                         fonti mentre il piano sotto ne fa 6 e' una
+                         contraddizione visibile nella stessa schermata. -->
+                    <span class="font-mono text-2xs opacity-70">{{ sourcesFor(profile) }} / {{ profile.minutes }}m</span>
                 </Button>
             </div>
 

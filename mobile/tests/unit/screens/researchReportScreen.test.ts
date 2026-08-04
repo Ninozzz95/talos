@@ -718,3 +718,53 @@ describe('quando un passo fallisce, la pagina dice la cosa GIUSTA', () => {
         expect(wrapper.text()).toContain('Certo! Ecco un riassunto')
     })
 })
+
+/**
+ * L'autore sul dispositivo, 2026-08-04.
+ *
+ * Owner, dopo aver visto un 3B macinare mezz'ora senza consegnare: approvate
+ * entrambe — il piano si stringe E lo si dice prima di avviare.
+ */
+describe('quando a scrivere e un modello sul telefono', () => {
+    it('il piano si STRINGE, invece di chiedergli un prompt che non finisce', async () => {
+        const { talosResearchPlanFor } = await import('@/lib/research/researchPlan')
+        const rete = talosResearchPlanFor('quando nasce la Vespa', 'deep', false)
+        const telefono = talosResearchPlanFor('quando nasce la Vespa', 'deep', true)
+
+        const pagine = (p: readonly { estimate: { pages: number } }[]) =>
+            p.reduce((n, b) => n + b.estimate.pages, 0)
+        expect(pagine(telefono)).toBeLessThan(pagine(rete))
+        // Stessi rami: si accorcia la lettura, non si taglia la domanda.
+        expect(telefono).toHaveLength(rete.length)
+    })
+
+    it('non GONFIA una ricerca rapida che chiedeva gia meno', async () => {
+        // Il limite abbassa soltanto. Nessuno ha chiesto piu' fonti.
+        const { talosResearchPlanFor } = await import('@/lib/research/researchPlan')
+        const rete = talosResearchPlanFor('x', 'quick', false)
+        const telefono = talosResearchPlanFor('x', 'quick', true)
+        expect(telefono[0]!.estimate.pages).toBeLessThanOrEqual(rete[0]!.estimate.pages)
+    })
+})
+
+describe('il tetto locale, distribuito', () => {
+    it('da lo STESSO totale a ogni profondita — piu profonda non puo rendere meno', async () => {
+        /**
+         * Visto sul tablet il 2026-08-04: le linguette dicevano «Rapida 6» e
+         * «Approfondita 4». Dividere sei fonti su quattro rami e arrotondare
+         * per difetto ne perdeva due. Piu' profonda che rende meno non e' una
+         * scelta discutibile: sembra rotta.
+         */
+        const { talosResearchPlanFor } = await import('@/lib/research/researchPlan')
+        const totale = (depth: 'quick' | 'deep' | 'exhaustive') =>
+            talosResearchPlanFor('x', depth, true).reduce((n, b) => n + b.estimate.pages, 0)
+
+        expect(totale('quick')).toBe(totale('deep'))
+        expect(totale('deep')).toBe(totale('exhaustive'))
+        // E i rami restano quelli della profondita': si accorcia la lettura,
+        // non si tolgono le domande.
+        expect(talosResearchPlanFor('x', 'exhaustive', true)).toHaveLength(
+            talosResearchPlanFor('x', 'exhaustive', false).length,
+        )
+    })
+})
