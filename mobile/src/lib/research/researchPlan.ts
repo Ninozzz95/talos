@@ -77,19 +77,61 @@ const FACETS: readonly string[] = [
  * learn one thing. The facets are ordered by how often they change an answer,
  * so a two-branch quick run gets the two that matter most.
  */
+/**
+ * Quante fonti per ramo regge un autore che gira SUL TELEFONO.
+ *
+ * Il rapporto si scrive leggendo tutte le fonti raccolte in un colpo solo,
+ * quindi la profondita' non decide solo quanto si cerca: decide la lunghezza
+ * del prompt finale. Misurato sul OnePlus Pad 3 il 2026-08-04 — dieci pagine
+ * facevano 11009 token, e un 3B con quel prompt macinava mezz'ora senza
+ * consegnare. Non e' un limite del contesto (quello e' 16384): e' il tempo.
+ *
+ * Il tetto e' sul TOTALE, non sul singolo ramo, e la differenza non e' un
+ * dettaglio: la sintesi legge tutti i rami insieme. Col tetto per ramo,
+ * «Esaustiva» restava a 39.000 token — sei rami da tre fonti — cioe' oltre il
+ * doppio del contesto, esattamente il difetto che si voleva chiudere.
+ *
+ * Sei fonti in tutto tengono la sintesi in un prompt che un modello sul
+ * dispositivo scrive in minuti, non in decine di minuti, a QUALSIASI
+ * profondita'. Il numero e' basso di proposito: un rapporto che arriva vale
+ * piu' di uno piu' ricco che non arriva.
+ */
+const TALOS_LOCAL_SOURCES_TOTAL = 6
+
 export function talosResearchPlanFor(
     question: string,
     depth: TalosResearchDepth,
+    /** L'autore gira sul dispositivo: il piano si adatta a lui. */
+    localAuthor = false,
 ): readonly TalosResearchBranch[] {
     const profile = TALOS_RESEARCH_DEPTHS[depth]
-    const perBranch = Math.max(1, Math.round(profile.sources / profile.branches))
+    const chiesto = Math.max(1, Math.round(profile.sources / profile.branches))
+    // Si ABBASSA soltanto: se la profondita' chiede gia' meno di cosi', quella
+    // vince — nessuno ha chiesto di gonfiare una ricerca rapida.
+    /*
+     * Il totale si DISTRIBUISCE, non si divide e basta.
+     *
+     * Dividere e arrotondare per difetto perdeva fonti a ogni ramo: sei fonti
+     * su quattro rami facevano uno per ramo, cioe' quattro — e sulle linguette
+     * «Approfondita» mostrava 4 dove «Rapida» mostrava 6. Piu' profonda che
+     * rende meno non e' una scelta discutibile: sembra rotta, e lo era.
+     *
+     * Il resto va ai primi rami, quindi il totale e' esatto a qualsiasi
+     * profondita' e le linguette dicono tutte lo stesso numero.
+     */
+    const perBranch = localAuthor
+        ? Math.max(1, Math.min(chiesto, Math.floor(TALOS_LOCAL_SOURCES_TOTAL / profile.branches)))
+        : chiesto
+    const avanzo = localAuthor && perBranch * profile.branches < TALOS_LOCAL_SOURCES_TOTAL
+        ? Math.min(TALOS_LOCAL_SOURCES_TOTAL - perBranch * profile.branches, profile.branches)
+        : 0
     return Array.from({ length: profile.branches }, (_, index) => ({
         id: `b${index + 1}`,
         question: `${question.trim()} — ${FACETS[index % FACETS.length]}`,
         estimate: {
             searches: 1,
-            pages: perBranch,
-            tokens: perBranch * TOKENS_PER_SOURCE + TOKENS_PER_BRANCH_SYNTHESIS,
+            pages: perBranch + (index < avanzo ? 1 : 0),
+            tokens: (perBranch + (index < avanzo ? 1 : 0)) * TOKENS_PER_SOURCE + TOKENS_PER_BRANCH_SYNTHESIS,
         },
     }))
 }
@@ -211,4 +253,19 @@ export function talosResearchPlanReworded(
     return plan.map((branch) => (
         branch.id === branchId ? { ...branch, question: question.trim() } : branch
     ))
+}
+
+/**
+ * Quanto DEVE LEGGERE IN UNA VOLTA chi scrive il rapporto.
+ *
+ * Non e' il totale della ricerca — quello comprende le ricerche e le sintesi
+ * per ramo, che sono chiamate separate. Il prompt finale porta il testo di
+ * tutte le fonti raccolte, e basta.
+ *
+ * La differenza conta perche' e' quella che un avviso mostra all'utente: dire
+ * 21.000 quando il modello ne legge 9.000 e' una cifra plausibile invece che
+ * vera, ed e' esattamente cio' che la disciplina sul costo vieta.
+ */
+export function talosResearchSynthesisLoad(plan: readonly TalosResearchBranch[]): number {
+    return plan.reduce((sum, branch) => sum + branch.estimate.pages, 0) * TOKENS_PER_SOURCE
 }
