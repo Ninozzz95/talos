@@ -1027,8 +1027,28 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         requestId: string,
         decision: Exclude<TalosToolAuthorizationDecision, 'pending'>,
     ): Promise<boolean> {
+        /**
+         * La domanda sparisce quando si RISPONDE, non quando il lavoro finisce.
+         *
+         * Owner 2026-08-04: il cartellino restava li' finche' il modello non
+         * aveva finito di rispondere. La causa e' l'attesa qui sotto: `decide`
+         * sblocca il tool, il tool gira, il modello continua, e solo allora
+         * questa riga ritornava — quindi la sincronizzazione che toglie il
+         * cartellino arrivava alla fine di tutto.
+         *
+         * Chi ha appena detto «si'» sta guardando una domanda a cui ha gia'
+         * risposto, e non ha modo di sapere se il suo tocco e' servito.
+         *
+         * Si nasconde subito e si risincronizza dopo: se dietro c'e' un'altra
+         * domanda, `syncToolAuthorizations` la rimette su: nascondere non e'
+         * rispondere anche per quelle che restano.
+         */
+        toolAuthorizationPromptVisible.value = false
         const decided = await authorizationCoordinator.decide(requestId, decision)
         syncToolAuthorizations()
+        // Il prossimo in coda torna visibile da se': `sync` non riaccende la
+        // tendina, la riaccende chi sa che c'e' ancora qualcosa da chiedere.
+        showToolAuthorization()
         return decided
     }
 
