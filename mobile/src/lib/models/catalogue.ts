@@ -1,4 +1,8 @@
-import type { TalosDeviceCapacity } from '@/lib/models/fit'
+import {
+    talosEstimatedCapacity,
+    type TalosCapacityVerdict,
+    type TalosDeviceCapacity,
+} from '@/lib/models/fit'
 
 /**
  * The signed TALOS catalogue — M8.
@@ -228,6 +232,15 @@ export interface TalosCatalogueRecommendation {
     fits: boolean
     /** How much memory would be left over, or how much is missing. */
     headroomBytes: number
+    /**
+     * Which wall, and by how much — memory or disk.
+     *
+     * This row used to compare the bare file size against free space while
+     * `fit.ts` demanded a gigabyte of reserve on top, so a phone with 700 MiB of
+     * slack was recommended a model the download policy then refused. One
+     * function decides for both now.
+     */
+    capacity: TalosCapacityVerdict
 }
 
 /**
@@ -251,11 +264,19 @@ export function talosRecommendFromCatalogue(
 
     return entries
         .filter((entry) => device.abiSupported || entry.runtime.includes('webgpu'))
-        .map((entry) => ({
-            entry,
-            fits: entry.ramWorkingBytes <= usable && entry.fileBytes <= device.freeStorageBytes,
-            headroomBytes: usable - entry.ramWorkingBytes,
-        }))
+        .map((entry) => {
+            const capacity = talosEstimatedCapacity({
+                fileBytes: entry.fileBytes,
+                workingBytes: entry.ramWorkingBytes,
+                device,
+            })
+            return {
+                entry,
+                fits: capacity.state === 'fits' || capacity.state === 'tight',
+                headroomBytes: usable - entry.ramWorkingBytes,
+                capacity,
+            }
+        })
         .sort((left, right) => {
             if (left.fits !== right.fits) return left.fits ? -1 : 1
             return left.fits

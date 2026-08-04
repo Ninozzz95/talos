@@ -89,6 +89,38 @@ describe('the integrity value', () => {
 
         expect(file?.sha256).toBeNull()
     })
+
+    it('fails closed on a non-array paths-info payload', async () => {
+        const { hf } = client(() => respond({ status: 200, body: { path: 'x.gguf' } }))
+
+        await expect(hf.pathsInfo('meta/repo', 'main', ['x.gguf']))
+            .resolves.toEqual([])
+    })
+
+    it('drops malformed byte rows and never promotes an invalid oid to sha256', async () => {
+        const { hf } = client(() => respond({
+            status: 200,
+            body: [
+                null,
+                7,
+                {},
+                { path: 'zero.gguf', lfs: { size: 0, oid: 'a'.repeat(64) } },
+                { path: 'negative.gguf', size: -1 },
+                { path: 'string-size.gguf', size: '42' },
+                { path: 'valid.gguf', size: 42, lfs: { oid: 'not-a-sha256' } },
+            ],
+        }))
+
+        await expect(hf.pathsInfo('meta/repo', 'main', [
+            'zero.gguf', 'negative.gguf', 'string-size.gguf', 'valid.gguf',
+        ])).resolves.toEqual([{
+            path: 'valid.gguf',
+            sizeBytes: 42,
+            sha256: null,
+            xetHash: null,
+            security: null,
+        }])
+    })
 })
 
 describe('being rate limited', () => {

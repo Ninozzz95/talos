@@ -21,9 +21,9 @@
  * scritti a mano: un colore fisso qui sarebbe illeggibile su meta' dei temi.
  */
 const props = defineProps<{
-    tone: 'ok' | 'tight' | 'over'
+    tone: 'ok' | 'tight' | 'over' | 'unknown'
     /** Quanto occupa del disponibile. Oltre 1 significa che sfora. */
-    ratio: number
+    ratio: number | null
     /** La parola dentro l'etichetta: «Ci sta», «Al limite», «Non ci sta». */
     label: string
     /** La dimensione, quando e' una stima letta dal nome. */
@@ -43,6 +43,7 @@ const COLORE = {
     ok: 'var(--talos-success, #6FD09A)',
     tight: 'var(--talos-warning, #E5B76B)',
     over: 'var(--talos-danger, #E0716B)',
+    unknown: 'var(--talos-text-muted, #8C94A3)',
 } as const
 
 /**
@@ -53,7 +54,9 @@ const COLORE = {
  * nel punto in cui il disponibile finisce — e il pieno lo supera. E' l'unico
  * modo perche' «quanto sfora» si veda, invece di leggersi.
  */
-const segno = () => (props.ratio <= 1 ? 100 : (1 / props.ratio) * 100)
+const segno = () => (
+    props.ratio === null || props.ratio <= 1 ? 100 : (1 / props.ratio) * 100
+)
 </script>
 
 <template>
@@ -66,7 +69,11 @@ const segno = () => (props.ratio <= 1 ? 100 : (1 / props.ratio) * 100)
         <!-- `overflow-visible`: il segno sporge di un pixel sopra e sotto la
              barra, ed e' proprio quel bordo che lo rende leggibile. Tagliarlo
              lo faceva sparire dentro il pieno. -->
-        <span class="relative h-1.5 min-w-16 flex-1 rounded-full bg-[var(--talos-active)]">
+        <span
+            v-if="ratio !== null"
+            data-testid="talos-model-fit-track"
+            class="relative h-1.5 min-w-16 flex-1 rounded-full bg-[var(--talos-active)]"
+        >
             <i
                 class="absolute inset-y-0 left-0 block rounded-full opacity-90"
                 :style="{ width: `${Math.min(100, ratio * 100)}%`, background: COLORE[tone] }"

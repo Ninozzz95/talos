@@ -244,5 +244,29 @@ describe('what to put in front of this phone', () => {
         const ranked = talosRecommendFromCatalogue(models(), { ...phone, freeStorageBytes: 1 * GIB })
 
         expect(ranked.find((row) => row.entry.id === 'big')!.fits).toBe(false)
+        expect(ranked.find((row) => row.entry.id === 'big')!.capacity.state).toBe('storage-blocked')
+    })
+
+    it('uses the one-gibibyte reserve instead of comparing the bare file', () => {
+        const fileBytes = 3 * GIB
+        const onlySevenHundredMibLeft = fileBytes + 700 * 1024 ** 2
+        const ranked = talosRecommendFromCatalogue(
+            [{ ...models()[0]!, fileBytes, ramWorkingBytes: 2 * GIB }],
+            { ...phone, freeStorageBytes: onlySevenHundredMibLeft },
+        )
+
+        expect(ranked[0]!.fits).toBe(false)
+        expect(ranked[0]!.capacity).toMatchObject({
+            state: 'storage-blocked',
+            limit: 'storage',
+            missingBytes: 324 * 1024 ** 2,
+        })
+    })
+
+    it('does not recommend when storage could not be measured', () => {
+        const ranked = talosRecommendFromCatalogue(models(), { ...phone, freeStorageBytes: null })
+
+        expect(ranked.every((row) => row.fits === false)).toBe(true)
+        expect(ranked.every((row) => row.capacity.state === 'unknown')).toBe(true)
     })
 })

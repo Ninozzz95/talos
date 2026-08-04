@@ -1,0 +1,12 @@
+[
+  {
+    "type": "file",
+    "path": "Meta-Llama-3.1-70B-Instruct-Q4_K_M.gguf",
+    "size": 42520398400,
+    "lfs": {
+      "oid": "f775c87029be95fb41df9e2882e6e938b73121c30ffc235ac6b6b880add49aa5",
+      "size": 42520398400
+    },
+    "securityFileStatus": { "status": "safe" }
+  }
+]

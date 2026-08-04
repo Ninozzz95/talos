@@ -284,6 +284,17 @@ describe('inspecting', () => {
 
         expect(JSON.parse(result.content).device.measuredBandwidth).toBe(false)
     })
+
+    it('does not format unknown storage as a measured zero', async () => {
+        store.state = baseState({
+            device: { ...(baseState().device as never), freeStorageBytes: null },
+            repo: { id: 'a/b', revision: 'main', loading: false, sets: [set()] },
+        }) as never
+
+        const result = await call('local_model_inspect', { repo: 'a/b' })
+
+        expect(JSON.parse(result.content).device.freeStorage).toBeNull()
+    })
 })
 
 describe('downloading', () => {

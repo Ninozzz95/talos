@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+    TALOS_STORAGE_RESERVE_BYTES,
+    talosEstimatedCapacity,
     talosKvCacheBytes,
     talosMaxContextFor,
     talosModelFit,
@@ -61,6 +63,100 @@ const fit = (
     device: { ...MIDRANGE, ...device },
     context,
     fileBytes: (model.weightBytes ?? SMALL.weightBytes) + 8 * MIB,
+})
+
+describe('the one capacity verdict used by every list', () => {
+    const measured = {
+        availableRamBytes: 6 * GIB,
+        lowMemoryThresholdBytes: 512 * MIB,
+        freeStorageBytes: 20 * GIB,
+    }
+
+    it('does not turn an unmeasured disk into a positive answer', () => {
+        const verdict = talosEstimatedCapacity({
+            fileBytes: 2 * GIB,
+            workingBytes: 3 * GIB,
+            device: { ...measured, freeStorageBytes: null },
+        })
+
+        expect(verdict).toMatchObject({
+            state: 'unknown',
+            reason: 'storage-measurement',
+        })
+    })
+
+    it('names storage first when the file cannot land, even if RAM is also short', () => {
+        const freeStorageBytes = 5.5 * GIB
+        const verdict = talosEstimatedCapacity({
+            fileBytes: 5 * GIB,
+            workingBytes: 20 * GIB,
+            device: { ...measured, freeStorageBytes },
+        })
+
+        expect(verdict).toEqual({
+            state: 'storage-blocked',
+            limit: 'storage',
+            needsBytes: 5 * GIB + TALOS_STORAGE_RESERVE_BYTES,
+            availableBytes: freeStorageBytes,
+            missingBytes: 512 * MIB,
+        })
+    })
+
+    it('names memory only after storage has passed', () => {
+        const verdict = talosEstimatedCapacity({
+            fileBytes: 2 * GIB,
+            workingBytes: 6 * GIB,
+            device: measured,
+        })
+
+        expect(verdict).toEqual({
+            state: 'memory-blocked',
+            limit: 'memory',
+            needsBytes: 6 * GIB,
+            availableBytes: 5.5 * GIB,
+            missingBytes: 512 * MIB,
+        })
+    })
+
+    it('keeps tight and fits as distinct known states', () => {
+        expect(talosEstimatedCapacity({
+            fileBytes: GIB,
+            workingBytes: 5.25 * GIB,
+            device: measured,
+        })).toEqual({
+            state: 'tight',
+            limit: 'memory',
+            needsBytes: 5.25 * GIB,
+            availableBytes: 5.5 * GIB,
+            missingBytes: 0,
+        })
+
+        expect(talosEstimatedCapacity({
+            fileBytes: GIB,
+            workingBytes: 4 * GIB,
+            device: measured,
+        })).toEqual({
+            state: 'fits',
+            limit: 'memory',
+            needsBytes: 4 * GIB,
+            availableBytes: 5.5 * GIB,
+            missingBytes: 0,
+        })
+    })
+
+    it('does not invent a verdict when model size or memory is unavailable', () => {
+        expect(talosEstimatedCapacity({
+            fileBytes: null,
+            workingBytes: null,
+            device: measured,
+        })).toMatchObject({ state: 'unknown', reason: 'model-size' })
+
+        expect(talosEstimatedCapacity({
+            fileBytes: GIB,
+            workingBytes: 2 * GIB,
+            device: null,
+        })).toMatchObject({ state: 'unknown', reason: 'memory-measurement' })
+    })
 })
 
 describe('the KV cache, which is where the surprises live', () => {

@@ -41,7 +41,16 @@ export interface TalosDeviceCapacity {
     availableRamBytes: number
     /** Below this Android starts killing; it is not free memory. */
     lowMemoryThresholdBytes: number
-    freeStorageBytes: number
+    /**
+     * What the platform would free up for us — larger than free space, because
+     * it counts caches it would drop.
+     *
+     * `null` means the question could not be ASKED, which is not the same as an
+     * answer of zero and must never be read as one. A device whose
+     * `StorageManager` refuses would otherwise have every model on the Hub
+     * refused for lack of space, on a measurement nobody took.
+     */
+    freeStorageBytes: number | null
     /** Null when this chip is not in the table: then no speed is predicted. */
     memoryBandwidthBytesPerSecond: number | null
     thermal: TalosThermalState | null
@@ -94,6 +103,41 @@ export interface TalosModelFit {
  */
 export const TALOS_STORAGE_RESERVE_BYTES = 1024 * MIB
 const STORAGE_RESERVE = TALOS_STORAGE_RESERVE_BYTES
+
+/**
+ * Below this much left over, "it runs" becomes "only just".
+ *
+ * 512 MiB: under it Android starts closing background processes under load, and
+ * TALOS holding an open model is the first candidate. Telling someone it fits
+ * when they are about to lose the app mid-generation is a half-truth.
+ *
+ * Exported because the browse list, the variant list and the catalogue all draw
+ * the same amber, and three copies of one number are three numbers waiting to
+ * disagree — which is precisely how the storage gate came to exist in one place
+ * and be missing from four others.
+ */
+export const TALOS_TIGHT_HEADROOM_BYTES = 512 * MIB
+
+/**
+ * How many bytes short of landing this file is — the DISK question, which is
+ * never the memory one.
+ *
+ * Zero means it lands: either there is room, or there is no measurement and we
+ * decline to invent one. Positive is the number a person can act on, because
+ * unlike memory, storage is something they can go and free.
+ *
+ * Every caller goes through here so the reserve is applied once. It very nearly
+ * was not: the catalogue compared the bare file size against free space while
+ * this file demanded a gigabyte on top, so a phone with 700 MiB of slack was
+ * offered a model that the download policy then refused.
+ */
+export function talosStorageShortfall(
+    fileBytes: number,
+    freeStorageBytes: number | null,
+): number {
+    if (freeStorageBytes === null) return 0
+    return Math.max(0, fileBytes + STORAGE_RESERVE - freeStorageBytes)
+}
 /** llama.cpp's own scratch, plus what the app costs while it runs. */
 const COMPUTE_OVERHEAD = 320 * MIB
 const RUNTIME_OVERHEAD = 64 * MIB
@@ -174,6 +218,135 @@ function demote(band: TalosModelBand): TalosModelBand {
     return band
 }
 
+/**
+ * Which of the two walls this model hits, when the answer must be given from a
+ * size alone.
+ *
+ * ## Why this exists beside `talosModelFit`
+ *
+ * `talosModelFit` is the full answer and needs a GGUF header — layers, KV
+ * heads, head dimension — which costs a ranged read per model. A list of twenty
+ * browsed rows cannot pay that, so it answers from the file size and says so.
+ *
+ * It lives HERE, next to the full calculation, because the thing that matters
+ * about it is that the two agree: same reserve, same tight threshold, same gate
+ * ORDER. When it lived in the module that guesses sizes from names, it quietly
+ * grew a different answer — it judged memory only, so a phone with no room left
+ * was told a model "runs well" right up until the download refused it.
+ *
+ * ## Storage first, and it is a different question
+ *
+ * Disk and memory fail differently and are repaired differently: space can be
+ * freed, memory cannot. A phone that is nearly full is the ordinary case where
+ * disk decides — and answering "won't run here" there sends someone to look for
+ * a smaller model when what they needed was to delete some videos.
+ *
+ * Disk is binary on purpose: there is no "tight" for storage, because the
+ * reserve IS the margin. Memory has bands because a model can run and still be
+ * a bad idea; a file either lands or it does not.
+ */
+export type TalosCapacityState =
+    | 'unknown'
+    | 'fits'
+    | 'tight'
+    | 'memory-blocked'
+    | 'storage-blocked'
+
+export type TalosCapacityUnknownReason =
+    | 'model-size'
+    | 'memory-measurement'
+    | 'storage-measurement'
+
+interface TalosCapacityUnknownVerdict {
+    state: 'unknown'
+    reason: TalosCapacityUnknownReason
+}
+
+interface TalosCapacityKnownVerdict {
+    state: Exclude<TalosCapacityState, 'unknown'>
+    /** Which wall decided. The two are fixed by different actions. */
+    limit: 'memory' | 'storage'
+    /** What the DECIDING constraint asks for — so a bar draws the real ratio. */
+    needsBytes: number
+    /** What the deciding constraint has. Never mixed with the other one's. */
+    availableBytes: number
+    /** How much is missing, in the deciding constraint's units. Zero when it fits. */
+    missingBytes: number
+}
+
+export type TalosCapacityVerdict =
+    | TalosCapacityUnknownVerdict
+    | TalosCapacityKnownVerdict
+
+export function talosEstimatedCapacity(input: {
+    /** Bytes on disk. */
+    fileBytes: number | null
+    /** Weights plus cache and buffers: what it costs to USE, not to keep. */
+    workingBytes: number | null
+    device: Pick<TalosDeviceCapacity,
+        'availableRamBytes' | 'lowMemoryThresholdBytes' | 'freeStorageBytes'> | null
+}): TalosCapacityVerdict {
+    if (
+        input.fileBytes === null
+        || input.workingBytes === null
+        || !Number.isFinite(input.fileBytes)
+        || !Number.isFinite(input.workingBytes)
+        || input.fileBytes <= 0
+        || input.workingBytes <= 0
+    ) {
+        return { state: 'unknown', reason: 'model-size' }
+    }
+
+    const { device } = input
+    if (device === null) return { state: 'unknown', reason: 'memory-measurement' }
+    if (
+        device.freeStorageBytes === null
+        || !Number.isFinite(device.freeStorageBytes)
+        || device.freeStorageBytes <= 0
+    ) {
+        return { state: 'unknown', reason: 'storage-measurement' }
+    }
+
+    const shortfall = talosStorageShortfall(input.fileBytes, device.freeStorageBytes)
+    if (shortfall > 0) {
+        return {
+            state: 'storage-blocked',
+            limit: 'storage',
+            needsBytes: input.fileBytes + STORAGE_RESERVE,
+            availableBytes: device.freeStorageBytes,
+            missingBytes: shortfall,
+        }
+    }
+
+    if (
+        !Number.isFinite(device.availableRamBytes)
+        || !Number.isFinite(device.lowMemoryThresholdBytes)
+        || device.availableRamBytes <= 0
+        || device.lowMemoryThresholdBytes < 0
+    ) {
+        return { state: 'unknown', reason: 'memory-measurement' }
+    }
+
+    /*
+     * Minus the threshold Android kills below, which is the same subtraction
+     * the full calculation makes. Raw available memory counts bytes the system
+     * will take back the moment anything else needs them, and a verdict built
+     * on those is optimistic exactly when the phone is busy — which is when
+     * someone is most likely to be reading this list.
+     */
+    const usable = device.availableRamBytes - device.lowMemoryThresholdBytes
+    const headroom = usable - input.workingBytes
+    return {
+        state: headroom < 0
+            ? 'memory-blocked'
+            : (headroom < TALOS_TIGHT_HEADROOM_BYTES ? 'tight' : 'fits'),
+        limit: 'memory',
+        needsBytes: input.workingBytes,
+        availableBytes: Math.max(0, usable),
+        missingBytes: Math.max(0, -headroom),
+    }
+}
+
 export function talosModelFit(input: {
     model: TalosModelShape
     device: TalosDeviceCapacity
@@ -217,7 +390,11 @@ export function talosModelFit(input: {
     // The gates, in order: the first failure wins and names itself. Order
     // matters — telling someone their RAM is short when the file will not even
     // fit on disk sends them to fix the wrong thing.
-    if (input.fileBytes + STORAGE_RESERVE > device.freeStorageBytes) return refuse('storage')
+    //
+    // An unmeasured disk skips the gate rather than failing it: refusing on
+    // evidence we do not have is the one answer that is wrong in both
+    // directions, because it is unfixable by the person reading it.
+    if (talosStorageShortfall(input.fileBytes, device.freeStorageBytes) > 0) return refuse('storage')
     if (!device.abiSupported) return refuse('unsupported')
     if (requiredBytes > SAFE_SHARE * device.totalRamBytes) return refuse('context')
     if (residentBytes <= 0) return refuse('memory')

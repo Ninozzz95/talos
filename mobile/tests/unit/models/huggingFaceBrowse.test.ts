@@ -27,12 +27,23 @@ function client(risposte: Record<string, { ok?: boolean, body: unknown }>) {
 
 const RIGA = {
     id: 'deepreinforce-ai/Ornith-1.0-9B-GGUF',
+    sha: 'c'.repeat(40),
     downloads: 4907682,
     likes: 606,
     pipeline_tag: 'text-generation',
     tags: ['gguf', 'license:apache-2.0'],
     // I numeri veri, come li restituisce il Hub con `expand[]=gguf`.
-    gguf: { total: 8953803264, totalFileSize: 5400000000, context_length: 262144, architecture: 'qwen35' },
+    gguf: {
+        total: 8953803264,
+        totalFileSize: 5400000000,
+        context_length: 262144,
+        architecture: 'qwen35',
+        chat_template: 'present',
+    },
+    siblings: [
+        { rfilename: 'Ornith-1.0-9B-Q4_0.gguf' },
+        { rfilename: 'Ornith-1.0-9B-Q4_K_M.gguf' },
+    ],
 }
 
 describe('sfogliare invece di cercare', () => {
@@ -56,6 +67,7 @@ describe('sfogliare invece di cercare', () => {
         const [m] = await c.searchModels('')
         expect(m!.task).toBe('text-generation')
         expect(m!.tags).toContain('license:apache-2.0')
+        expect(m!.hasChatTemplate).toBe(true)
     })
 })
 
@@ -86,7 +98,7 @@ describe('la scheda del modello', () => {
 })
 
 describe('i numeri veri invece della stima', () => {
-    it('chiede `expand[]=gguf` — è ciò che rende la capienza MISURATA', async () => {
+    it('chiede gguf, sibling e revisione in una sola richiesta browse', async () => {
         /**
          * MISURATO contro l'API il 2026-08-04. Senza, una riga porta solo nome
          * e download, e per sapere quanto pesa serviva una richiesta per
@@ -96,14 +108,27 @@ describe('i numeri veri invece della stima', () => {
         const { client: c, visti } = client({ '/api/models?': { body: [RIGA] } })
         await c.searchModels('')
         expect(visti[0]).toContain('expand%5B%5D=gguf')
+        expect(visti[0]).toContain('expand%5B%5D=siblings')
+        expect(visti[0]).toContain('expand%5B%5D=sha')
     })
 
-    it('porta a casa parametri, byte e finestra di contesto', async () => {
+    it('separa i byte repository dalla variante mobile stimata', async () => {
         const { client: c } = client({ '/api/models?': { body: [RIGA] } })
         const [m] = await c.searchModels('')
         expect(m!.gguf?.parameters).toBe(8953803264)
-        expect(m!.gguf?.fileBytes).toBe(5400000000)
+        expect(m!.gguf?.repositoryFileBytes).toBe(5400000000)
         expect(m!.gguf?.contextLength).toBe(262144)
+        expect(m!.revision).toBe('c'.repeat(40))
+        expect(m!.siblings.map((row) => row.path)).toEqual([
+            'Ornith-1.0-9B-Q4_0.gguf',
+            'Ornith-1.0-9B-Q4_K_M.gguf',
+        ])
+        expect(m!.browseVariant).toMatchObject({
+            quantisation: 'Q4_K_M',
+            source: 'parameter-estimate',
+            estimated: true,
+        })
+        expect(m!.browseVariant?.fileBytes).not.toBe(5400000000)
     })
 
     it('un `total` a zero NON diventa «un modello da zero parametri»', () => {
@@ -114,5 +139,36 @@ describe('i numeri veri invece della stima', () => {
             const [m] = await c.searchModels('')
             expect(m!.gguf).toBeNull()
         })()
+    })
+
+    it('normalizza sibling malformati senza farli entrare nel contratto', async () => {
+        const { client: c } = client({
+            '/api/models?': {
+                body: [{
+                    ...RIGA,
+                    siblings: [
+                        null,
+                        { rfilename: '' },
+                        { rfilename: 'model-Q4_K_M.gguf', size: -1, lfs: { oid: 42 } },
+                    ],
+                }],
+            },
+        })
+
+        const [m] = await c.searchModels('')
+        expect(m!.siblings).toEqual([
+            { path: 'model-Q4_K_M.gguf', sizeBytes: null, sha256: null },
+        ])
+        expect(m!.browseVariant?.source).toBe('parameter-estimate')
+    })
+
+    it('non tratta un nome di ramo come revisione immutabile', async () => {
+        const { client: c } = client({
+            '/api/models?': { body: [{ ...RIGA, sha: 'main' }] },
+        })
+
+        const [m] = await c.searchModels('')
+
+        expect(m!.revision).toBeNull()
     })
 })

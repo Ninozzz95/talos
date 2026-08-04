@@ -45,6 +45,18 @@ beforeEach(() => {
 })
 
 describe('measuring the phone', () => {
+    it('normalises invalid storage measurements without inventing zero bytes', async () => {
+        const { talosNormaliseStorageMeasurement } = await import('@/services/deviceCapacity')
+
+        expect([
+            talosNormaliseStorageMeasurement(0),
+            talosNormaliseStorageMeasurement(-1),
+            talosNormaliseStorageMeasurement(Number.NaN),
+            talosNormaliseStorageMeasurement(Number.POSITIVE_INFINITY),
+        ]).toEqual([null, null, null, null])
+        expect(talosNormaliseStorageMeasurement(12_345)).toBe(12_345)
+    })
+
     it('hands the fit calculation exactly what the device reported', async () => {
         const { talosMeasureDevice } = await import('@/services/deviceCapacity')
 
@@ -84,6 +96,23 @@ describe('measuring the phone', () => {
         const measured = await talosMeasureDevice()
 
         expect(measured?.memoryBandwidthBytesPerSecond).toBeNull()
+    })
+
+    it('propagates a refused storage probe as unknown', async () => {
+        bridge.measure.mockResolvedValue({
+            totalRamBytes: 3_000_000_000,
+            availableRamBytes: 400_000_000,
+            lowMemoryThresholdBytes: 200_000_000,
+            freeStorageBytes: 0,
+            abiSupported: true,
+            thermal: null,
+            memoryBandwidthBytesPerSecond: 5_000_000_000,
+            deviceModel: 'A low-end phone',
+            androidSdk: 29,
+        })
+        const { talosMeasureDevice } = await import('@/services/deviceCapacity')
+
+        expect((await talosMeasureDevice())?.freeStorageBytes).toBeNull()
     })
 
     /** Below API 29 there is no thermal API. That is a fact, not a reason for 'none'. */

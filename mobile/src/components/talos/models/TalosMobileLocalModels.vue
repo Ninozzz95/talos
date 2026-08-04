@@ -63,11 +63,12 @@ import {
 } from '@/services/modelImport'
 import type { TalosCatalogueRecommendation } from '@/lib/models/catalogue'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
-import type { TalosHuggingFaceSort } from '@/lib/models/huggingFace'
-import { talosFitBadge } from '@/lib/models/fitBadge'
-import { talosEstimateSizeFromName, talosEstimatedBand } from '@/lib/models/sizeFromName'
+import type { TalosHuggingFaceModel, TalosHuggingFaceSort } from '@/lib/models/huggingFace'
+import { talosFitBadge, type TalosFitTone } from '@/lib/models/fitBadge'
+import { talosEstimatedCapacity } from '@/lib/models/fit'
 import {
     talosApplyBrowseFilters,
+    talosBrowseCapacitySize,
     TALOS_BROWSE_FILTERS,
     type TalosBrowseFilterId,
 } from '@/lib/models/browseFilters'
@@ -353,7 +354,9 @@ const device = computed(() => {
     return {
         name: measured.deviceModel,
         ram: talosFormatBytes(measured.availableRamBytes),
-        storage: talosFormatBytes(measured.freeStorageBytes),
+        storage: measured.freeStorageBytes === null
+            ? t('common.unknown')
+            : talosFormatBytes(measured.freeStorageBytes),
         bandwidth: measured.memoryBandwidthBytesPerSecond === null
             ? null
             : `${Math.round(measured.memoryBandwidthBytesPerSecond / 1024 ** 3)} GB/s`,
@@ -403,7 +406,10 @@ function rowOf(item: Readonly<TalosCatalogueRecommendation>) {
         entry: item.entry,
         size: talosFormatBytes(item.entry.fileBytes),
         working: talosFormatBytes(item.entry.ramWorkingBytes),
-        missing: talosFormatBytes(Math.abs(item.headroomBytes)),
+        missing: item.capacity.state === 'unknown'
+            ? null
+            : talosFormatBytes(Math.abs(
+                item.capacity.availableBytes - item.capacity.needsBytes)),
         fits: item.fits,
         speed: item.entry.referenceSpeed[0]?.tokensPerSecond ?? null,
         /*
@@ -417,26 +423,14 @@ function rowOf(item: Readonly<TalosCatalogueRecommendation>) {
          * Il verdetto viene dal catalogo, che ha gia' pesato il file piu' la
          * memoria di lavoro. Qui si TRADUCE e basta.
          */
-        badge: talosFitBadge({
-            band: item.fits
-                ? (item.headroomBytes < TALOS_TIGHT_HEADROOM_BYTES ? 'tight' : 'comfortable')
-                : 'wont-run',
-            needsBytes: item.entry.ramWorkingBytes,
-            availableBytes: item.entry.ramWorkingBytes + item.headroomBytes,
-        }),
-        headroom: talosFormatBytes(Math.abs(item.headroomBytes)),
-        headroomPositive: item.headroomBytes >= 0,
+        badge: talosFitBadge(item.capacity),
+        headroom: item.capacity.state === 'unknown'
+            ? null
+            : talosFormatBytes(Math.abs(
+                item.capacity.availableBytes - item.capacity.needsBytes)),
+        headroomPositive: item.capacity.state === 'fits' || item.capacity.state === 'tight',
     }
 }
-
-/**
- * Sotto questo margine «ci sta» diventa «al limite».
- *
- * 512 MB: sotto, il sistema Android comincia a chiudere processi in background
- * sotto carico, e TALOS con un modello aperto e' il primo candidato. Dire «ci
- * sta» a chi sta per perdere l'app a meta' generazione e' una mezza verita'.
- */
-const TALOS_TIGHT_HEADROOM_BYTES = 512 * 1024 * 1024
 
 const recommended = computed(() => store.catalogue.recommended.map(rowOf))
 const rejected = computed(() => store.catalogue.rejected.map(rowOf))
@@ -459,9 +453,9 @@ async function search(): Promise<void> {
     await talosSearchLocalModels(query.value)
 }
 
-async function open(id: string): Promise<void> {
+async function open(id: string, revision = 'main'): Promise<void> {
     refused.value = null
-    await talosOpenModelRepo(id)
+    await talosOpenModelRepo(id, revision)
 }
 
 async function start(key: string, label: string): Promise<void> {
@@ -601,7 +595,7 @@ function commutaFiltro(id: TalosBrowseFilterId): void {
 const risultatiVisibili = computed(() => talosApplyBrowseFilters(
     store.results,
     filtriAttivi.value,
-    store.device?.availableRamBytes ?? 0,
+    store.device,
 ))
 
 const providerGroups = computed(() => talosGroupModelsByProvider(risultatiVisibili.value))
@@ -616,49 +610,51 @@ const providerGroups = computed(() => talosGroupModelsByProvider(risultatiVisibi
 /**
  * La capienza di una riga sfogliata: MISURATA quando si puo', stimata quando no.
  *
- * MISURATO 2026-08-04: chiedendo `expand[]=gguf` la lista torna coi parametri
- * esatti, i byte su disco e la finestra di contesto. Quindi il numero e' vero,
- * non dedotto dal nome — e il nome resta solo come ripiego per le righe che il
- * Hub non e' riuscito a leggere.
+ * MISURATO 2026-08-04: `expand[]=siblings` porta i nomi delle varianti ma non i
+ * byte LFS. Il selector sceglie quindi una Q4 realmente pubblicata e marca la
+ * stima da parametri; soltanto un sibling con byte positivi e' misura. Il nome
+ * resta compatibilita' per cache legacy prive del campo `browseVariant`.
  *
  * In cache per riga: il template la interroga piu' volte e la lista si
  * ridisegna a ogni filtro.
  */
 const capienze = new Map<string, {
-    tone: 'ok' | 'tight' | 'over'
-    ratio: number
+    tone: TalosFitTone
+    ratio: number | null
     labelKey: string
-    size: string
+    size: string | null
     estimated: boolean
-} | null>()
+}>()
 
-function stimaDi(model: { id: string, gguf?: { fileBytes: number, contextLength: number } | null }) {
-    const chiave = model.id
-    if (capienze.has(chiave)) return capienze.get(chiave)!
-    const libera = store.device?.availableRamBytes ?? 0
-    if (libera <= 0) { capienze.set(chiave, null); return null }
+function stimaDi(model: TalosHuggingFaceModel) {
+    const size = talosBrowseCapacitySize(model)
+    const fileBytes = size?.fileBytes ?? null
+    const workingBytes = size?.workingBytes ?? null
+    const measured = store.device
+    const chiave = [
+        model.id,
+        fileBytes ?? 'unknown-size',
+        workingBytes ?? 'unknown-working-size',
+        measured?.availableRamBytes ?? 'unknown-memory',
+        measured?.lowMemoryThresholdBytes ?? 'unknown-threshold',
+        measured?.freeStorageBytes ?? 'unknown-storage',
+    ].join('|')
+    const cached = capienze.get(chiave)
+    if (cached) return cached
 
-    /*
-     * Il margine di lavoro sopra i pesi: il file entra sul disco, ma per
-     * APRIRLO servono anche la cache del contesto e i buffer del runtime. Un
-     * verdetto sul solo file direbbe «ci sta» a qualcosa che poi non si apre —
-     * l'errore che costa un download intero.
-     */
-    const misurato = model.gguf?.fileBytes
-    const fileBytes = misurato ?? talosEstimateSizeFromName(chiave)?.fileBytes ?? null
-    if (!fileBytes) { capienze.set(chiave, null); return null }
-
-    const workingBytes = fileBytes * 1.25
-    const band = talosEstimatedBand(workingBytes, libera)
-    const badge = talosFitBadge({ band, needsBytes: workingBytes, availableBytes: libera })
+    const badge = talosFitBadge(talosEstimatedCapacity({
+        fileBytes,
+        workingBytes,
+        device: measured,
+    }))
     const esito = {
         tone: badge.tone,
         ratio: badge.ratio,
         labelKey: badge.labelKey,
-        size: talosFormatBytes(fileBytes),
+        size: fileBytes === null ? null : talosFormatBytes(fileBytes),
         // La tilde compare solo quando il numero e' dedotto: una stima che si
         // spaccia per misura e' peggio di nessun numero.
-        estimated: misurato === undefined,
+        estimated: size?.estimated ?? false,
     }
     capienze.set(chiave, esito)
     return esito
@@ -830,7 +826,7 @@ const memoriaLibera = computed(() => (store.device?.availableRamBytes
     : null))
 
 function apriSchedaCompleta(): void {
-    if (store.repo) void open(store.repo.id)
+    if (store.repo) void open(store.repo.id, store.repo.revision)
 }
 
 const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
@@ -848,18 +844,22 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
      * vera di chi installa un modello locale.
      */
     badge: (() => {
-        const libera = store.device?.availableRamBytes ?? 0
-        if (libera <= 0) return null
-        const working = set.totalBytes * 1.25
+        const fileBytes = set.incomplete ? null : set.totalBytes
+        const working = fileBytes === null ? null : fileBytes * 1.25
+        const capacity = talosEstimatedCapacity({
+            fileBytes,
+            workingBytes: working,
+            device: store.device,
+        })
+        const badge = talosFitBadge(capacity)
         return {
-            ...talosFitBadge({
-                band: talosEstimatedBand(working, libera),
-                needsBytes: working,
-                availableBytes: libera,
-            }),
+            ...badge,
             /** Quanto resta dopo, o quanto manca: il numero azionabile. */
-            delta: talosFormatBytes(Math.abs(libera - working)),
-            avanza: libera - working >= 0,
+            delta: capacity.state === 'unknown'
+                ? null
+                : talosFormatBytes(Math.abs(
+                    capacity.availableBytes - capacity.needsBytes)),
+            avanza: capacity.state === 'fits' || capacity.state === 'tight',
         }
     })(),
 })))
@@ -1223,12 +1223,17 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                         <span>{{ row.entry.quantisation }}</span><span class="opacity-40">·</span>
                         <span>{{ row.size }}</span>
                     </div>
-                    <p class="flex items-center gap-1.5 text-2xs font-semibold text-[var(--talos-danger,#dc5b5b)]">
-                        <span class="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
-                        {{ t('localModels.bandWontRun') }}
-                        <span class="font-mono text-3xs font-medium tabular-nums text-[var(--talos-muted)]">
-                            {{ t('localModels.shortBy', { size: row.missing }) }}
-                        </span>
+                    <TalosModelFitBar
+                        :tone="row.badge.tone"
+                        :ratio="row.badge.ratio"
+                        :label="t(row.badge.labelKey)"
+                    />
+                    <p class="text-2xs leading-4 text-[var(--talos-muted)]">
+                        {{ t(row.badge.reasonKey, row.headroom === null
+                            ? {}
+                            : (row.headroomPositive
+                                ? { left: row.headroom }
+                                : { missing: row.headroom })) }}
                     </p>
                 </div>
             </article>
@@ -1491,7 +1496,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                     data-testid="talos-models-result"
                     :aria-label="`${t('localModels.open')} ${model.id}`"
                     class="talos-pressable w-full rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3 text-left"
-                    @click="open(model.id)"
+                    @click="open(model.id, model.revision ?? 'main')"
                 >
                     <!--
                         La card del mockup approvato: nome → autore · licenza →
@@ -1528,7 +1533,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                     <TalosModelFitBar
                         v-if="stimaDi(model)"
                         class="mt-2"
-                        :tone="stimaDi(model)!.tone as 'ok' | 'tight' | 'over'"
+                        :tone="stimaDi(model)!.tone"
                         :ratio="stimaDi(model)!.ratio"
                         :label="t(stimaDi(model)!.labelKey)"
                         :size="stimaDi(model)!.size"
@@ -1632,9 +1637,11 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                             :label="t(row.badge.labelKey)"
                         />
                         <p class="text-2xs leading-4 text-[var(--talos-muted)]">
-                            {{ t(row.badge.reasonKey, row.badge.avanza
-                                ? { left: row.badge.delta }
-                                : { missing: row.badge.delta }) }}
+                            {{ t(row.badge.reasonKey, row.badge.delta === null
+                                ? {}
+                                : (row.badge.avanza
+                                    ? { left: row.badge.delta }
+                                    : { missing: row.badge.delta })) }}
                         </p>
                     </template>
 

@@ -104,6 +104,13 @@ function recommendation(family: string, displayName: string) {
     return {
         fits: true,
         headroomBytes: 1_000_000_000,
+        capacity: {
+            state: 'fits',
+            limit: 'memory',
+            needsBytes: 3_100_000_000,
+            availableBytes: 4_100_000_000,
+            missingBytes: 0,
+        },
         entry: {
             id: `${family}-${displayName}`,
             family,
@@ -163,6 +170,7 @@ beforeEach(() => {
     engine.installed = []
     store.examine.mockClear()
     store.download.mockClear().mockResolvedValue({ ok: true })
+    store.open.mockClear()
     store.saveToken.mockClear()
     store.forgetToken.mockClear()
     store.state = baseState() as never
@@ -446,6 +454,25 @@ describe('the results', () => {
         expect(result.attributes('aria-label')).toBe('Open unsloth/Qwen3-4B-GGUF')
     })
 
+    it('opens the immutable revision returned with the browse row', async () => {
+        const revision = 'c'.repeat(40)
+        store.state = baseState({
+            query: 'qwen',
+            results: [{
+                id: 'unsloth/Qwen3-4B-GGUF',
+                revision,
+                downloads: 900,
+                likes: 4,
+                gated: false,
+            }],
+        }) as never
+        const wrapper = await screen()
+
+        await wrapper.get('[data-testid="talos-models-result"]').trigger('click')
+
+        expect(store.open).toHaveBeenCalledWith('unsloth/Qwen3-4B-GGUF', revision)
+    })
+
     /**
      * Grouped by whoever published the GGUF.
      *
@@ -584,6 +611,8 @@ describe('what is refused and what is merely warned about', () => {
 
         expect(wrapper.get('[data-testid="talos-models-incomplete"]').text()).toContain('missing 2 of 3')
         expect(wrapper.get('[data-testid="talos-models-download"]').attributes('disabled')).toBeDefined()
+        expect(wrapper.get('[data-testid="talos-model-fit"]').text()).toContain('Needs checking')
+        expect(wrapper.get('[data-testid="talos-model-fit"]').text()).not.toContain('Runs well')
     })
 
     /**

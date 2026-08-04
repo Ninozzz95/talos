@@ -22,7 +22,12 @@
  * quelli che posso avere adesso», e resta spento finche' non lo si tocca.
  * L'etichetta continua a esserci su tutte le righe, filtro o no.
  */
-import { talosEstimateSizeFromName, talosEstimatedBand } from './sizeFromName'
+import { talosEstimateSizeFromName } from './sizeFromName'
+import { talosEstimatedCapacity, type TalosDeviceCapacity } from './fit'
+
+/** Le tre misure che decidono se un modello ci sta: due di memoria, una di disco. */
+export type TalosFilterDevice = Pick<TalosDeviceCapacity,
+    'availableRamBytes' | 'lowMemoryThresholdBytes' | 'freeStorageBytes'>
 
 export type TalosBrowseFilterId = 'fits' | 'chat' | 'code' | 'q4' | 'open-licence'
 
@@ -34,10 +39,51 @@ export interface TalosBrowsableModel {
     task?: string | null
     /** Puo' mancare: una lista salvata da una versione precedente non ce l'ha. */
     tags?: readonly string[]
+    /**
+     * Presente sulle righe normalizzate dal client corrente. `null` e'
+     * informazione: il client ha cercato una Q4 reale e non l'ha trovata.
+     * L'assenza del campo, invece, identifica soltanto una cache legacy.
+     */
+    browseVariant?: {
+        fileBytes: number
+        workingBytes: number
+        estimated?: boolean
+    } | null
+}
+
+export interface TalosBrowseCapacitySize {
+    fileBytes: number
+    workingBytes: number
+    estimated: boolean
 }
 
 /** Le licenze che permettono di usare il modello senza chiedere niente a nessuno. */
 const LIBERE = /license:(apache-2\.0|mit|bsd|cc-by-4\.0|cc0|openrail|llama\d)/i
+
+/** The one byte source shared by the visible row and the positive fit filter. */
+export function talosBrowseCapacitySize(
+    model: TalosBrowsableModel,
+): TalosBrowseCapacitySize | null {
+    if (Object.prototype.hasOwnProperty.call(model, 'browseVariant')) {
+        const variant = model.browseVariant
+        if (
+            variant === null
+            || variant === undefined
+            || !Number.isFinite(variant.fileBytes)
+            || !Number.isFinite(variant.workingBytes)
+            || variant.fileBytes <= 0
+            || variant.workingBytes <= 0
+        ) return null
+        return {
+            fileBytes: variant.fileBytes,
+            workingBytes: variant.workingBytes,
+            estimated: variant.estimated === true,
+        }
+    }
+
+    // Compatibility only: cached rows written before browseVariant existed.
+    return talosEstimateSizeFromName(model.id)
+}
 
 /**
  * Se questo modello passa quel filtro.
@@ -50,14 +96,30 @@ const LIBERE = /license:(apache-2\.0|mit|bsd|cc-by-4\.0|cc0|openrail|llama\d)/i
 export function talosModelPassesFilter(
     model: TalosBrowsableModel,
     filter: TalosBrowseFilterId,
-    availableBytes: number,
+    device: TalosFilterDevice | null,
 ): boolean {
     switch (filter) {
         case 'fits': {
-            const stima = talosEstimateSizeFromName(model.id)
-            // Senza stima non si esclude: «non lo so» non e' «non ci sta».
-            if (!stima || availableBytes <= 0) return true
-            return talosEstimatedBand(stima.workingBytes, availableBytes) !== 'wont-run'
+            const stima = talosBrowseCapacitySize(model)
+            // «Gira qui» e' una promessa positiva: senza prova la riga resta
+            // visibile a filtro spento, ma non entra in questo sottoinsieme.
+            if (!stima) return false
+            /*
+             * Lo stesso verdetto dell'etichetta, non un secondo calcolo: il
+             * filtro dice «mostrami solo quelli che posso avere adesso», e una
+             * riga nascosta qui che l'etichetta chiamava verde — o viceversa —
+             * e' il modo piu' veloce di far smettere di fidarsi di entrambe.
+             *
+             * E ora «non ci sta» include il telefono pieno, non solo la memoria
+             * corta: un modello che non si puo' scaricare non e' un modello che
+             * si puo' avere adesso.
+             */
+            const verdict = talosEstimatedCapacity({
+                fileBytes: stima.fileBytes,
+                workingBytes: stima.workingBytes,
+                device,
+            })
+            return verdict.state === 'fits' || verdict.state === 'tight'
         }
         case 'chat':
             return model.task === 'text-generation' || /instruct|chat/i.test(model.id)
@@ -85,9 +147,9 @@ export function talosModelPassesFilter(
 export function talosApplyBrowseFilters<T extends TalosBrowsableModel>(
     models: readonly T[],
     active: readonly TalosBrowseFilterId[],
-    availableBytes: number,
+    device: TalosFilterDevice | null,
 ): T[] {
     if (active.length === 0) return [...models]
     return models.filter((model) =>
-        active.every((filter) => talosModelPassesFilter(model, filter, availableBytes)))
+        active.every((filter) => talosModelPassesFilter(model, filter, device)))
 }

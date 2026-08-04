@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { talosEstimateSizeFromName, talosEstimatedBand } from '@/lib/models/sizeFromName'
+import { talosEstimateSizeFromName } from '@/lib/models/sizeFromName'
+import { talosEstimatedCapacity } from '@/lib/models/fit'
 
 const GB = 1024 * 1024 * 1024
 
@@ -42,14 +43,25 @@ describe('stimare il peso dal nome', () => {
         expect(talosEstimateSizeFromName('Phi-4-mini-instruct-Q4_K_S.gguf')).toBeNull()
     })
 
-    it('le soglie sono le STESSE della lista curata', () => {
+    it('delega le soglie al verdetto centrale della lista curata', () => {
         /**
          * Due liste sulla stessa schermata che chiamano «al limite» due cose
          * diverse insegnano a non fidarsi di nessuna delle due.
          */
-        expect(talosEstimatedBand(2 * GB, 4.4 * GB)).toBe('comfortable')
-        expect(talosEstimatedBand(4.2 * GB, 4.4 * GB)).toBe('tight')
-        expect(talosEstimatedBand(18 * GB, 4.4 * GB)).toBe('wont-run')
+        const device = {
+            availableRamBytes: 4.4 * GB,
+            lowMemoryThresholdBytes: 0,
+            freeStorageBytes: 100 * GB,
+        }
+        const verdict = (workingBytes: number) => talosEstimatedCapacity({
+            fileBytes: workingBytes / 1.25,
+            workingBytes,
+            device,
+        }).state
+
+        expect(verdict(2 * GB)).toBe('fits')
+        expect(verdict(4.2 * GB)).toBe('tight')
+        expect(verdict(18 * GB)).toBe('memory-blocked')
     })
 })
 

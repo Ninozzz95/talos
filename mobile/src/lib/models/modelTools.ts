@@ -151,7 +151,9 @@ export function createTalosLocalModelTools(): TalosToolDefinition<never>[] {
                         device: device === null ? null : {
                             model: device.deviceModel,
                             freeMemory: format(device.availableRamBytes),
-                            freeStorage: format(device.freeStorageBytes),
+                            freeStorage: device.freeStorageBytes === null
+                                ? null
+                                : format(device.freeStorageBytes),
                             // Null means the probe refused; the model must not
                             // report a speed we did not measure.
                             measuredBandwidth: device.memoryBandwidthBytesPerSecond !== null,

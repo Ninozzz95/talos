@@ -11,6 +11,12 @@
  * a native download job.
  */
 
+import {
+    talosSelectMobileBrowseVariant,
+    type TalosBrowseSibling,
+    type TalosBrowseVariant,
+} from './browseVariant'
+
 /** The 2026 CDN. The legacy `cdn-lfs*` hosts did not appear once in probing. */
 export const TALOS_HF_RESOLVE_HOST = 'us.aws.cdn.hf.co'
 
@@ -142,6 +148,8 @@ export interface TalosHuggingFaceClientOptions {
 
 export interface TalosHuggingFaceModel {
     id: string
+    /** Commit returned by the browse response; null is never replaced by main. */
+    revision: string | null
     downloads: number
     likes: number
     /**
@@ -167,7 +175,16 @@ export interface TalosHuggingFaceModel {
      * `null` quando il Hub non e' riuscito a leggerli: allora, e solo allora,
      * si ripiega sulla stima dal nome.
      */
-    gguf: { parameters: number, fileBytes: number, contextLength: number, architecture: string | null } | null
+    gguf: {
+        parameters: number
+        /** Aggregate repository bytes, never the size of one variant. */
+        repositoryFileBytes: number | null
+        contextLength: number
+        architecture: string | null
+    } | null
+    siblings: readonly TalosBrowseSibling[]
+    hasChatTemplate: boolean
+    browseVariant: TalosBrowseVariant | null
     /** Le etichette del repo: da qui esce la licenza per il filtro. */
     tags: readonly string[]
 }
@@ -221,14 +238,45 @@ function leggiGguf(value: unknown): TalosHuggingFaceModel['gguf'] {
     if (!value || typeof value !== 'object') return null
     const row = value as Record<string, unknown>
     const parameters = Number(row.total ?? 0)
-    const fileBytes = Number(row.totalFileSize ?? 0)
-    if (!(parameters > 0) || !(fileBytes > 0)) return null
+    const repositoryFileBytes = Number(row.totalFileSize ?? 0)
+    if (!Number.isFinite(parameters) || !(parameters > 0)) return null
     return {
         parameters,
-        fileBytes,
+        repositoryFileBytes: Number.isFinite(repositoryFileBytes) && repositoryFileBytes > 0
+            ? repositoryFileBytes
+            : null,
         contextLength: Number(row.context_length ?? 0) || 0,
         architecture: typeof row.architecture === 'string' ? row.architecture : null,
     }
+}
+
+function leggiSibling(value: unknown): TalosBrowseSibling[] {
+    if (!Array.isArray(value)) return []
+    return value.flatMap((item): TalosBrowseSibling[] => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+        const row = item as Record<string, unknown>
+        const path = typeof row.rfilename === 'string' ? row.rfilename.trim() : ''
+        if (!path) return []
+        const lfs = row.lfs && typeof row.lfs === 'object' && !Array.isArray(row.lfs)
+            ? row.lfs as Record<string, unknown>
+            : null
+        const rawSize = Number(lfs?.size ?? row.size ?? 0)
+        const rawSha = lfs?.oid ?? lfs?.sha256
+        return [{
+            path,
+            sizeBytes: Number.isFinite(rawSize) && rawSize > 0 ? rawSize : null,
+            sha256: typeof rawSha === 'string' && /^[0-9a-f]{64}$/iu.test(rawSha)
+                ? rawSha.toLowerCase()
+                : null,
+        }]
+    })
+}
+
+function haChatTemplate(value: unknown): boolean {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    const template = (value as Record<string, unknown>).chat_template
+    return (typeof template === 'string' && template.trim().length > 0)
+        || (Array.isArray(template) && template.length > 0)
 }
 
 export function talosCreateHuggingFaceClient(
@@ -306,6 +354,8 @@ export function talosCreateHuggingFaceClient(
             parameters.append('expand[]', 'likes')
             parameters.append('expand[]', 'pipeline_tag')
             parameters.append('expand[]', 'tags')
+            parameters.append('expand[]', 'siblings')
+            parameters.append('expand[]', 'sha')
             const cercato = query.trim()
             if (cercato.length > 0) parameters.set('search', cercato)
             const response = await options.fetch(`${HUB}/api/models?${parameters}`, {
@@ -314,22 +364,45 @@ export function talosCreateHuggingFaceClient(
             const refusal = refuse(response, query)
             if (refusal) throw refusal
 
-            const rows = await response.json() as Array<Record<string, unknown>>
-            return rows.map((row) => ({
-                id: String(row.id ?? row.modelId ?? ''),
-                downloads: Number(row.downloads ?? 0),
-                likes: Number(row.likes ?? 0),
-                task: typeof row.pipeline_tag === 'string' ? row.pipeline_tag : null,
-                gguf: leggiGguf(row.gguf),
-                tags: Array.isArray(row.tags) ? row.tags.filter((t): t is string => typeof t === 'string') : [],
-                // The Hub answers `"auto"` or `"manual"` when a gate exists and
-                // OMITS the field otherwise, so absent means open. Reading it
-                // the cautious way round would mark nearly every model gated
-                // and hide the catalogue; a gate that slips through is named at
-                // `/resolve/`, with the page where the licence can be accepted.
-                gated: row.gated !== undefined && row.gated !== null && row.gated !== false,
-                updatedAt: typeof row.lastModified === 'string' ? row.lastModified : null,
-            })).filter((model) => model.id !== '')
+            const payload = await response.json() as unknown
+            const rows = Array.isArray(payload) ? payload : []
+            return rows.flatMap((raw): TalosHuggingFaceModel[] => {
+                if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
+                const row = raw as Record<string, unknown>
+                const id = String(row.id ?? row.modelId ?? '')
+                if (!id) return []
+                const gguf = leggiGguf(row.gguf)
+                const siblings = leggiSibling(row.siblings)
+                const rawRevision = row.sha
+                return [{
+                    id,
+                    revision: typeof rawRevision === 'string'
+                        && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu.test(rawRevision)
+                        ? rawRevision.toLowerCase()
+                        : null,
+                    downloads: Number(row.downloads ?? 0),
+                    likes: Number(row.likes ?? 0),
+                    task: typeof row.pipeline_tag === 'string' ? row.pipeline_tag : null,
+                    gguf,
+                    siblings,
+                    hasChatTemplate: haChatTemplate(row.gguf),
+                    browseVariant: talosSelectMobileBrowseVariant({
+                        id,
+                        parameters: gguf?.parameters ?? null,
+                        siblings,
+                    }),
+                    tags: Array.isArray(row.tags)
+                        ? row.tags.filter((t): t is string => typeof t === 'string')
+                        : [],
+                    // The Hub answers `"auto"` or `"manual"` when a gate exists and
+                    // OMITS the field otherwise, so absent means open. Reading it
+                    // the cautious way round would mark nearly every model gated
+                    // and hide the catalogue; a gate that slips through is named at
+                    // `/resolve/`, with the page where the licence can be accepted.
+                    gated: row.gated !== undefined && row.gated !== null && row.gated !== false,
+                    updatedAt: typeof row.lastModified === 'string' ? row.lastModified : null,
+                }]
+            })
         },
 
         /**
@@ -398,17 +471,38 @@ export function talosCreateHuggingFaceClient(
             const refusal = refuse(response, repo)
             if (refusal) throw refusal
 
-            const rows = await response.json() as Array<Record<string, unknown>>
-            return rows.map((row) => {
-                const lfs = row.lfs as { oid?: string; size?: number } | undefined
-                const security = row.securityFileStatus as { status?: string } | undefined
-                return {
-                    path: String(row.path ?? ''),
-                    sizeBytes: Number(lfs?.size ?? row.size ?? 0),
-                    sha256: typeof lfs?.oid === 'string' ? lfs.oid : null,
+            const payload = await response.json() as unknown
+            if (!Array.isArray(payload)) return []
+            return payload.flatMap((raw): TalosHuggingFaceFile[] => {
+                if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
+                const row = raw as Record<string, unknown>
+                const path = typeof row.path === 'string' ? row.path.trim() : ''
+                if (!path) return []
+                const lfs = row.lfs && typeof row.lfs === 'object' && !Array.isArray(row.lfs)
+                    ? row.lfs as Record<string, unknown>
+                    : null
+                const positiveBytes = (value: unknown): number | null => (
+                    typeof value === 'number' && Number.isFinite(value) && value > 0
+                        ? value
+                        : null
+                )
+                const sizeBytes = positiveBytes(lfs?.size) ?? positiveBytes(row.size)
+                if (sizeBytes === null) return []
+                const rawSha = lfs?.oid
+                const security = row.securityFileStatus
+                    && typeof row.securityFileStatus === 'object'
+                    && !Array.isArray(row.securityFileStatus)
+                    ? row.securityFileStatus as Record<string, unknown>
+                    : null
+                return [{
+                    path,
+                    sizeBytes,
+                    sha256: typeof rawSha === 'string' && /^[0-9a-f]{64}$/iu.test(rawSha)
+                        ? rawSha.toLowerCase()
+                        : null,
                     xetHash: typeof row.xetHash === 'string' ? row.xetHash : null,
                     security: typeof security?.status === 'string' ? security.status : null,
-                }
+                }]
             })
         },
 
