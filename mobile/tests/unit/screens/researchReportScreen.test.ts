@@ -152,6 +152,7 @@ function controllerWith(report: TalosResearchReportRecord | null, run: TalosRese
             }),
             followUp: vi.fn().mockResolvedValue('file-answer'),
             exportReport: vi.fn().mockResolvedValue({ ok: true }),
+            exportReportPdf: vi.fn().mockResolvedValue({ ok: true }),
             openChat: vi.fn().mockResolvedValue(undefined),
         },
     }
@@ -533,10 +534,64 @@ describe('R-5 — what a dossier is worth after the day it was made', () => {
         const wrapper = mount(ResearchReportScreen)
         await openReport(wrapper)
 
+        // Owner 2026-08-03: esportare ora CHIEDE prima. Il .md non e' sparito —
+        // e' l'ultima riga del popup, per chi vuole il testo da aprire altrove.
         await wrapper.get('[data-testid="talos-research-export"]').trigger('click')
+        await settle(wrapper)
+        document.querySelector<HTMLElement>('[data-testid="talos-research-export-md"]')!.click()
         await settle(wrapper)
 
         expect(wrapper.get('[data-testid="talos-research-export"]').text()).toContain('Saved')
+    })
+
+    it('chiede il TONO prima di generare il PDF, e i tre non sono lo stesso documento', async () => {
+        /**
+         * Owner 2026-08-03: «quando clicchi per generare il pdf appare un popup
+         * che ti fa scegliere il "tono" del pdf tra 3 template».
+         *
+         * Ogni riga porta anche la frase che dice A CHI serve: un elenco di
+         * soli nomi costringe ad aprirli tutti e tre per capire la differenza.
+         */
+        const wrapper = mount(ResearchReportScreen)
+        await openReport(wrapper)
+
+        await wrapper.get('[data-testid="talos-research-export"]').trigger('click')
+        await settle(wrapper)
+
+        for (const tone of ['report', 'brief', 'dossier']) {
+            const riga = document.querySelector<HTMLElement>(`[data-testid="talos-research-export-${tone}"]`)
+            expect(riga, tone).not.toBeNull()
+            expect(riga!.textContent!.length).toBeGreaterThan(40)
+        }
+
+        document.querySelector<HTMLElement>('[data-testid="talos-research-export-dossier"]')!.click()
+        await settle(wrapper)
+
+        const controller = mockState.controller as ReturnType<typeof controllerWith>
+        expect(controller.research.exportReportPdf).toHaveBeenCalledTimes(1)
+        // Il tono scelto arriva davvero al generatore, e il nome del file e'
+        // quello che si legge nella cartella Download fra un mese.
+        const [, tono, nome] = controller.research.exportReportPdf.mock.calls[0]!
+        expect(tono).toBe('dossier')
+        expect(nome).toMatch(/\.pdf$/)
+        expect(controller.research.exportReport).not.toHaveBeenCalled()
+    })
+
+    it('un PDF che non si e fatto viene DETTO, non nascosto da un popup che si chiude', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        await openReport(wrapper)
+        const rotto = mockState.controller as ReturnType<typeof controllerWith>
+        rotto.research.exportReportPdf = vi.fn().mockRejectedValue(new Error('font mancante'))
+
+        await wrapper.get('[data-testid="talos-research-export"]').trigger('click')
+        await settle(wrapper)
+        document.querySelector<HTMLElement>('[data-testid="talos-research-export-report"]')!.click()
+        await settle(wrapper)
+
+        expect(wrapper.get('[data-testid="talos-research-report-error"]').text()).toContain('font mancante')
+        // E il popup resta aperto: si puo' riprovare con un altro tono senza
+        // ricominciare dal bottone.
+        expect(document.querySelector('[data-testid="talos-research-export-brief"]')).not.toBeNull()
     })
 
     it('never shows a re-check result the reader did not just ask for', async () => {
