@@ -657,6 +657,7 @@ export interface ChatControllerDeps {
                 /** I tool della Libreria seguono QUESTO, non l iniezione ambientale. */
                 readonly library_access?: 'allow' | 'ask' | 'deny'
                 readonly memory_write_access?: 'allow' | 'ask' | 'deny'
+                readonly image_attachment_consent?: 'allow' | 'ask' | 'deny'
                 readonly prompt_enhancer?: {
                     readonly model: string | null
                     readonly effort: string
@@ -698,6 +699,8 @@ export interface ChatControllerDeps {
         setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
         setModelLabPreferences(value: TalosMobileModelLabPreferences): Promise<void>
         setTone(preset: TalosToneId): Promise<void>
+        /** Scrive una preferenza della shell — usata dal consenso sulle immagini. */
+        setShell?(patch: Record<string, unknown>): Promise<void>
         setLibraryContextPolicy(
             patch: import('@/lib/chat/libraryPolicy').TalosLibraryContextPolicyPatch,
             expectedRevision: number,
@@ -759,6 +762,9 @@ export interface ChatController {
     readonly endpoints: Readonly<Record<TalosMobileProviderId, string | null>>
     readonly modelLabPreferences: ComputedRef<TalosMobileModelLabPreferences>
     readonly profiles: ComputedRef<TalosMobileModelProfileView[]>
+    /** La domanda in attesa sull'immagine che sta per uscire, o null. */
+    readonly imageConsentRequest: Readonly<Ref<{ count: number, provider: string } | null>>
+    answerImageConsent(answer: 'allow' | 'once' | 'deny'): Promise<void>
     readonly selectedModelId: Ref<string | null>
     readonly selectedProfile: ComputedRef<TalosMobileModelProfileView | null>
     readonly selectedProviderModel: ComputedRef<TalosMobileProviderModel | null>
@@ -1111,11 +1117,46 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     let modelLabWrite: Promise<void> = Promise.resolve()
     let promptEnhancementRevision = 0
     const vaultService = deps.vaultService ?? unavailableVaultService
+    /**
+     * La domanda sull'immagine che sta per uscire.
+     *
+     * Il controller la mette in coda e la schermata la mostra: qui non si
+     * disegna niente, e la logica di chi puo' allegare cosa resta in un posto
+     * solo. `null` quando non c'e' niente da chiedere.
+     */
+    const imageConsentRequest = ref<{ count: number, provider: string } | null>(null)
+    let imageConsentResolve: ((answer: 'allow' | 'once' | 'deny') => void) | null = null
+
+    async function answerImageConsent(answer: 'allow' | 'once' | 'deny'): Promise<void> {
+        imageConsentRequest.value = null
+        const resolve = imageConsentResolve
+        imageConsentResolve = null
+        // «Sempre» si ricorda; «solo questa volta» e «no» non cambiano niente:
+        // una scelta di questo tipo si alza, non si abbassa da sola.
+        if (answer === 'allow') await deps.settings.setShell?.({ image_attachment_consent: 'allow' })
+        resolve?.(answer)
+    }
+
     const attachments = useTalosMobileAttachments({
         picker: deps.filePicker ?? unavailableFilePicker,
         vault: vaultService,
         translate: deps.translate,
         currentSessionId: () => chat.activeSession.value?.id ?? null,
+        imageConsent: () => deps.settings.state.shell?.image_attachment_consent ?? 'ask',
+        askImageConsent: (count) => new Promise((resolve) => {
+            // Se qualcuno sta gia' rispondendo, la seconda domanda non si
+            // accoda in silenzio: si nega, che e' l'esito prudente.
+            if (imageConsentResolve) { resolve('deny'); return }
+            imageConsentResolve = resolve
+            imageConsentRequest.value = {
+                count,
+                // Il NOME del provider, non il suo identificativo: «anthropic»
+                // in minuscolo e' una chiave interna, e in una frase rivolta
+                // a una persona si legge come un refuso.
+                provider: TALOS_MOBILE_PROVIDERS.find((entry) => entry.id === selectedProfile.value?.provider)?.label
+                    ?? deps.translate('chat.imageConsentProviderUnknown'),
+            }
+        }),
     })
 
     const modelLabPreferences = computed(() =>
@@ -4963,6 +5004,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         endpoints: readonly(endpoints) as Readonly<Record<TalosMobileProviderId, string | null>>,
         modelLabPreferences,
         profiles,
+        imageConsentRequest,
+        answerImageConsent,
         selectedModelId,
         selectedProfile,
         selectedProviderModel,

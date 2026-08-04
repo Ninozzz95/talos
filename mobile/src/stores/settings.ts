@@ -173,6 +173,19 @@ export interface TalosMobileShellPreferences {
      * conversazione futura: la prima volta si guarda.
      */
     memory_write_access: 'allow' | 'ask' | 'deny'
+    /**
+     * Se un'immagine puo' lasciare il telefono.
+     *
+     * Owner 2026-08-04: «quando carichi una tua immagine questo potrebbe essere
+     * un problema di sicurezza e bisogna fare scegliere l'utente tramite
+     * pop-up».
+     *
+     * TALOS e' local-first, ma un allegato ESCE. Una foto e' la cosa piu'
+     * sensibile che una persona attacca — volti, luoghi, targhe, documenti — e
+     * finora partiva come parte un file di testo, senza che nessuno lo dicesse.
+     * Nasce a `ask`: la prima volta si guarda.
+     */
+    image_attachment_consent: 'allow' | 'ask' | 'deny'
     library_view: 'grid' | 'list'
     /**
      * Owner 2026-07-30. Grouping by origin chat was a plain `ref`, so it reset
@@ -271,6 +284,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     library_autosave_generated: true,
     library_access: 'ask',
     memory_write_access: 'ask',
+    image_attachment_consent: 'ask',
     library_view: 'list',
     // Owner 2026-07-25 set grouping on; it just never survived a reopen.
     library_group_by_chat: true,
@@ -322,6 +336,9 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         // Nessun booleano da migrare: nasce a tre stati, come pretende la
         // grammatica unica dei permessi. Un valore ignoto sul disco ricade sul
         // predefinito, che e' il piu' prudente dei tre.
+        image_attachment_consent: record.image_attachment_consent === 'allow' || record.image_attachment_consent === 'deny'
+            ? record.image_attachment_consent
+            : DEFAULT_SHELL_PREFERENCES.image_attachment_consent,
         memory_write_access: record.memory_write_access === 'allow' || record.memory_write_access === 'deny'
             ? record.memory_write_access
             : DEFAULT_SHELL_PREFERENCES.memory_write_access,
