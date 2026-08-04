@@ -56,6 +56,7 @@ export interface TalosLocalEngineGeneration {
 
 interface TalosLlamaPlugin {
     available(): Promise<TalosLocalEngineStatus>
+    deleteInstalled(options: { path: string }): Promise<{ deleted: boolean }>
     open(options: {
         path: string
         threads?: number
@@ -246,4 +247,19 @@ export async function talosLocalEngineGenerate(
     } finally {
         await subscription.remove()
     }
+}
+
+/**
+ * Cancella un modello scaricato.
+ *
+ * Owner 2026-08-04: sui modelli locali non si poteva fare CRUD — si scaricavano
+ * e non si toglievano, se non dalle impostazioni di sistema, cioe' uscendo da
+ * TALOS per rimediare a una cosa fatta dentro TALOS.
+ *
+ * `deleted: false` non e' un guasto: vuol dire che il file non c'era gia' piu'
+ * — l'esito che si voleva, ottenuto da qualcun altro.
+ */
+export async function talosLocalModelDelete(path: string): Promise<boolean> {
+    const { deleted } = await plugin.deleteInstalled({ path })
+    return deleted
 }

@@ -19,6 +19,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { Search, Download, Pause, AlertTriangle, ChevronLeft, ShieldAlert, Cpu, LayoutGrid, List, FolderOpen } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
+import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import {
     talosLocalModels,
     talosSearchLocalModels,
@@ -51,7 +52,7 @@ import {
 } from '@/lib/models/installedModels'
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 import { talosSortChipClass } from '@/lib/sortChip'
-import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
+import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import { useSettingsStore } from '@/stores/settings'
 import {
     talosModelImportFailure,
@@ -104,6 +105,79 @@ function chooseLayout(next: 'grid' | 'list'): void {
  */
 const copyNotice = ref<{ ok: boolean, text: string } | null>(null)
 let copyTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * CRUD sui modelli scaricati — owner 2026-08-04: non c'era.
+ *
+ * «Usiamo la grammatica dell'app gia' esistente»: quindi menu ⋮ come nella
+ * Ricerca, dialogo di rinomina identico (campo, «rimetti il nome originale»,
+ * salva) ed eliminazione con la conferma che dice cosa va via davvero — qui i
+ * gigabyte sul disco, che sono la cosa che nessuno si aspetta di riscaricare.
+ */
+function aliasOf(file: TalosLocalModelFile): string {
+    return settings.state.shell.local_model_aliases?.[file.path] ?? ''
+}
+
+/** Come si chiama per chi lo guarda: il suo nome se gliene ha dato uno. */
+function nameOf(file: TalosLocalModelFile): string {
+    return aliasOf(file) || file.name
+}
+
+function menuFor(file: TalosLocalModelFile): TalosRowAction[] {
+    return [
+        { id: 'rename', label: t('localModels.rename'), testId: `talos-models-rename-${file.name}` },
+        { id: 'copy', label: t('localModels.copyPath'), testId: `talos-models-copy-${file.name}` },
+        { id: 'delete', label: t('localModels.delete'), danger: true, testId: `talos-models-delete-${file.name}` },
+    ]
+}
+
+const renameTarget = ref<TalosLocalModelFile | null>(null)
+const renameValue = ref('')
+const deleteTarget = ref<TalosLocalModelFile | null>(null)
+const crudError = ref<string | null>(null)
+
+function act(file: TalosLocalModelFile, action: string): void {
+    crudError.value = null
+    if (action === 'copy') { void copyPath(file.path); return }
+    if (action === 'rename') {
+        renameTarget.value = file
+        renameValue.value = aliasOf(file)
+        return
+    }
+    if (action === 'delete') deleteTarget.value = file
+}
+
+async function submitRename(): Promise<void> {
+    const target = renameTarget.value
+    if (!target) return
+    const chosen = renameValue.value.trim()
+    const aliases = { ...settings.state.shell.local_model_aliases }
+    // Vuoto vuol dire «rimetti il nome del file»: lo stesso significato che ha
+    // nella Ricerca, dove svuotare il campo rimette la domanda.
+    if (chosen.length === 0) delete aliases[target.path]
+    else aliases[target.path] = chosen
+    await settings.setShell({ local_model_aliases: aliases })
+    renameTarget.value = null
+}
+
+async function confirmDelete(): Promise<void> {
+    const target = deleteTarget.value
+    if (!target) return
+    try {
+        const { talosLocalModelDelete } = await import('@/services/localEngine')
+        await talosLocalModelDelete(target.path)
+        // Anche l'alias se ne va: un nome che punta a un file che non c'e' piu'
+        // e' un residuo che ricomparirebbe su un modello riscaricato.
+        const aliases = { ...settings.state.shell.local_model_aliases }
+        delete aliases[target.path]
+        await settings.setShell({ local_model_aliases: aliases })
+        deleteTarget.value = null
+        await loadInstalled()
+    } catch (failure) {
+        crudError.value = failure instanceof Error ? failure.message : String(failure)
+        deleteTarget.value = null
+    }
+}
 
 async function copyPath(path: string): Promise<void> {
     try {
@@ -589,11 +663,15 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                         <TalosRowActions
                             :test-id="`talos-models-installed-menu-${file.name}`"
                             :label="t('localModels.actionsFor', { name: file.name })"
-                            :items="[{ id: 'copy', label: t('localModels.copyPath') }]"
-                            @select="() => copyPath(file.path)"
+                            :items="menuFor(file)"
+                            @select="(action) => act(file, action)"
                         />
                     </div>
-                    <p class="truncate text-sm text-[var(--talos-text)]">{{ file.name }}</p>
+                    <p class="truncate text-sm text-[var(--talos-text)]">{{ nameOf(file) }}</p>
+                    <!-- Il nome vero resta leggibile sotto quello scelto: un
+                         alias che NASCONDE il file rende impossibile capire
+                         quale GGUF si sta per cancellare. -->
+                    <p v-if="aliasOf(file)" class="truncate font-mono text-2xs text-[var(--talos-muted)]">{{ file.name }}</p>
                     <!-- Two lines per row, not five.
                          The third line used to be the whole address in
                          monospace, which on a phone wraps to three lines whose
@@ -1218,4 +1296,50 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             </ul>
         </template>
     </div>
+
+    <!-- Rinomina: lo STESSO dialogo della Ricerca. Campo, e il campo vuoto
+         rimette il nome del file — che li' rimette la domanda. -->
+    <TalosMobileConfirmDialog
+        v-if="renameTarget"
+        :title="t('localModels.renameTitle')"
+        :description="t('localModels.renameHint')"
+        @close="renameTarget = null"
+    >
+        <input
+            v-model="renameValue"
+            type="text"
+            data-testid="talos-models-rename-field"
+            :placeholder="renameTarget.name"
+            :aria-label="t('localModels.renameLabel')"
+            class="min-h-12 w-full rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+        >
+        <template #footer>
+            <Button variant="ghost" @click="renameTarget = null">{{ t('common.cancel') }}</Button>
+            <Button data-testid="talos-models-rename-save" @click="void submitRename()">{{ t('common.save') }}</Button>
+        </template>
+    </TalosMobileConfirmDialog>
+
+    <!-- Eliminazione: la conferma dice cosa va via DAVVERO, cioe' i gigabyte.
+         «Elimina il modello?» non fa pensare a un'ora di download.
+         La misura passa dallo STESSO formatter della riga: sul dispositivo la
+         riga diceva «2,7 GB» e la conferma «2.5 GB» — stesso file, due numeri,
+         nella stessa interazione. Uno contava in base 10 e l'altro in base 2, e
+         chi legge non puo' saperlo: pensa che uno dei due sia sbagliato. -->
+    <TalosMobileConfirmDialog
+        v-if="deleteTarget"
+        :title="t('localModels.deleteTitle', { name: nameOf(deleteTarget) })"
+                :description="t('localModels.deleteBody', { size: talosModelSize(deleteTarget.bytes, locale) })"
+        @close="deleteTarget = null"
+    >
+        <template #footer>
+            <Button variant="ghost" @click="deleteTarget = null">{{ t('common.cancel') }}</Button>
+            <Button variant="destructive" data-testid="talos-models-delete-confirm" @click="void confirmDelete()">
+                {{ t('localModels.deleteConfirm') }}
+            </Button>
+        </template>
+    </TalosMobileConfirmDialog>
+
+    <p v-if="crudError" role="alert" data-testid="talos-models-crud-error" class="rounded-xl border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
+        {{ crudError }}
+    </p>
 </template>

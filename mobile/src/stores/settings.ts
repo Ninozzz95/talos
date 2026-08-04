@@ -189,6 +189,19 @@ export interface TalosMobileShellPreferences {
      * next.
      */
     models_sort: TalosInstalledModelSort
+    /**
+     * I nomi che l'utente ha dato ai modelli scaricati, per percorso.
+     *
+     * Un GGUF si chiama come ha deciso chi l'ha pubblicato — «Qwen3.5-4B-
+     * Uncensored-HauhauCS-Aggressive-Q4_K_M» — che non e' il nome con cui una
+     * persona lo pensa. Owner 2026-08-04: «se voglio dargli un alias o
+     * rinominarlo non e' possibile».
+     *
+     * La chiave e' il PERCORSO e non il nome del file: due modelli di
+     * pubblicatori diversi possono chiamarsi uguale, e il percorso e' l'unica
+     * cosa che li distingue davvero.
+     */
+    local_model_aliases: Record<string, string>
     /** Interface text size only; message prose has independent bubble_scale. */
     ui_font_scale: TalosFontScale
     /**
@@ -243,6 +256,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     // «Which one did I just download» — the question asked right after a
     // download, and the only one the panel could not answer at all.
     models_sort: TALOS_INSTALLED_MODEL_SORT_DEFAULT,
+    local_model_aliases: {},
     ui_font_scale: TALOS_DEFAULT_FONT_SCALE,
     streaming_animation: 'typewriter',
     debug_diagnostics: false,
@@ -297,6 +311,12 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         // Checked against the list the sorter actually knows, so a value from a
         // future version — or a corrupt one — falls back instead of reaching
         // the comparator as an order nobody implemented.
+        // Solo coppie di stringhe: una preferenza che torna dal disco non
+        // decide la forma di cio' che il resto del codice legge.
+        local_model_aliases: Object.fromEntries(
+            Object.entries(record.local_model_aliases ?? {})
+                .filter(([key, value]) => typeof key === 'string' && typeof value === 'string' && value.trim().length > 0),
+        ),
         models_sort: TALOS_INSTALLED_MODEL_SORTS.includes(record.models_sort as TalosInstalledModelSort)
             ? record.models_sort as TalosInstalledModelSort
             : DEFAULT_SHELL_PREFERENCES.models_sort,

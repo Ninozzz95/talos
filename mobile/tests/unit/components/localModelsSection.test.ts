@@ -234,8 +234,11 @@ describe('the space a row is allowed to cost', () => {
         await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
         await flushPromises()
         // Teleported to the body so no ancestor's overflow can clip it, which
-        // puts it outside the wrapper's own tree.
-        const item = document.querySelector<HTMLElement>('[role="menuitem"]')
+        // puts it outside the wrapper's own tree. Si punta la voce PER NOME:
+        // da quando il menu ha anche Rinomina ed Elimina, «la prima voce» non
+        // e' piu' la copia — e un test che clicca a posizione trova la voce
+        // sbagliata senza dirlo.
+        const item = document.querySelector<HTMLElement>('[data-testid^="talos-models-copy-"]')
         item?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
         await flushPromises()
 
@@ -252,8 +255,11 @@ describe('the space a row is allowed to cost', () => {
         await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
         await flushPromises()
         // Teleported to the body so no ancestor's overflow can clip it, which
-        // puts it outside the wrapper's own tree.
-        const item = document.querySelector<HTMLElement>('[role="menuitem"]')
+        // puts it outside the wrapper's own tree. Si punta la voce PER NOME:
+        // da quando il menu ha anche Rinomina ed Elimina, «la prima voce» non
+        // e' piu' la copia — e un test che clicca a posizione trova la voce
+        // sbagliata senza dirlo.
+        const item = document.querySelector<HTMLElement>('[data-testid^="talos-models-copy-"]')
         item?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
         await flushPromises()
 
@@ -751,5 +757,64 @@ describe('starting one', () => {
         await flushPromises()
 
         expect(wrapper.get('[data-testid="talos-models-refused"]').text()).toContain('One download at a time')
+    })
+})
+
+/**
+ * CRUD sui modelli scaricati — owner 2026-08-04: «non è possibile crudare i
+ * modelli locali nel dispositivo, se voglio dargli un alias o rinominarlo non è
+ * possibile, usiamo la grammatica dell'app già esistente».
+ */
+describe('dare un nome a un modello, e toglierlo', () => {
+    it('la riga offre rinomina, copia ed elimina — non solo la copia', async () => {
+        engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
+        const wrapper = await screen()
+        await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
+        await flushPromises()
+
+        const voci = [...document.querySelectorAll('[role="menuitem"]')].map((v) => v.getAttribute('data-testid'))
+        expect(voci).toContain('talos-models-rename-Qwen3-4B-Q4_K_M.gguf')
+        expect(voci).toContain('talos-models-copy-Qwen3-4B-Q4_K_M.gguf')
+        expect(voci).toContain('talos-models-delete-Qwen3-4B-Q4_K_M.gguf')
+    })
+
+    it('il nome scelto sostituisce quello del file, ma non lo NASCONDE', async () => {
+        /**
+         * Un alias che copre il nome vero rende impossibile capire quale GGUF si
+         * sta per cancellare: due pubblicatori possono chiamare i loro modelli
+         * allo stesso modo.
+         */
+        engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
+        const wrapper = await screen()
+        await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
+        await flushPromises()
+        document.querySelector<HTMLElement>('[data-testid^="talos-models-rename-"]')!
+            .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await flushPromises()
+
+        const campo = document.querySelector<HTMLInputElement>('[data-testid="talos-models-rename-field"]')!
+        campo.value = 'Il piccolo veloce'
+        campo.dispatchEvent(new Event('input', { bubbles: true }))
+        document.querySelector<HTMLElement>('[data-testid="talos-models-rename-save"]')!.click()
+        await flushPromises()
+
+        const riga = wrapper.get('[data-testid="talos-models-installed-row"]')
+        expect(riga.text()).toContain('Il piccolo veloce')
+        expect(riga.text()).toContain('Qwen3-4B-Q4_K_M.gguf')
+    })
+
+    it('la conferma di eliminazione dice quanti GIGABYTE tornano', async () => {
+        // «Eliminare il modello?» non fa pensare a un'ora di scaricamento.
+        engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
+        const wrapper = await screen()
+        await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
+        await flushPromises()
+        document.querySelector<HTMLElement>('[data-testid^="talos-models-delete-"]')!
+            .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await flushPromises()
+
+        const dialogo = document.querySelector('[data-testid="talos-models-delete-confirm"]')!
+            .closest('[role="dialog"]') ?? document.body
+        expect(dialogo.textContent).toMatch(/GB|MB/)
     })
 })
