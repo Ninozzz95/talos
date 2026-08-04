@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
-import { Image as ImageIcon, X } from '@lucide/vue'
+import { Image as ImageIcon, Sparkles, X } from '@lucide/vue'
 import { useChatController } from '@/stores/chatController'
+import { readTalosImageProvenance, talosProvenanceLabel } from '@/lib/images/provenance'
 
 /**
  * An image in a message bubble, shown as an image.
@@ -27,6 +28,18 @@ const source = ref<string | null>(null)
 const failed = ref(false)
 let current: string | null = null
 
+/**
+ * Cosa questa immagine dichiara di se stessa.
+ *
+ * Non lo indoviniamo da come e' arrivata: lo LEGGE dal file. Misurato il
+ * 2026-08-04, le immagini di OpenAI portano dentro un manifesto C2PA firmato
+ * che dice chi le ha fatte e che vengono da un algoritmo. Cosi' l'etichetta e'
+ * vera anche per una foto che la persona ha importato da fuori, e resta muta
+ * quando il file non dichiara niente — che e' il caso di ogni foto scattata
+ * col telefono.
+ */
+const provenance = ref<string | null>(null)
+
 function release(): void {
     if (current !== null) URL.revokeObjectURL(current)
     current = null
@@ -36,10 +49,19 @@ watch(() => props.fileId, async (fileId) => {
     release()
     source.value = null
     failed.value = false
+    provenance.value = null
     if (!fileId) return
     try {
-        const url = await controller.attachments.previewUrl(fileId)
-        if (url === null) { failed.value = true; return }
+        /*
+         * I byte una volta sola: da questi nascono sia l'immagine da mostrare
+         * sia la sua dichiarazione. Chiedere il file due volte per leggerlo
+         * due volte costerebbe il doppio a ogni foto che scorre.
+         */
+        const bytes = await controller.attachments.previewBytes(fileId)
+        if (bytes === null) { failed.value = true; return }
+        const letto = readTalosImageProvenance(bytes)
+        provenance.value = letto.declaresAiGenerated ? talosProvenanceLabel(letto) : null
+        const url = URL.createObjectURL(new Blob([bytes as unknown as BlobPart]))
         current = url
         source.value = url
     } catch {
@@ -75,14 +97,28 @@ onBeforeUnmount(release)
         class="talos-pressable max-w-full"
         @click="open"
     >
-        <img
-            :src="source"
-            :alt="name"
-            data-testid="talos-message-image"
-            loading="lazy"
-            decoding="async"
-            class="max-h-56 w-auto max-w-full rounded-xl border border-current/15 object-contain"
-        >
+        <span class="relative inline-block max-w-full">
+            <img
+                :src="source"
+                :alt="name"
+                data-testid="talos-message-image"
+                loading="lazy"
+                decoding="async"
+                class="max-h-56 w-auto max-w-full rounded-xl border border-current/15 object-contain"
+            >
+            <!-- Il marchio sta SULL'immagine, non sotto: sotto verrebbe letto
+                 come una didascalia della conversazione, e questa e' una cosa
+                 che l'immagine dice di se stessa. La targhetta porta il proprio
+                 sfondo perche' sotto puo' esserci qualsiasi colore. -->
+            <span
+                v-if="provenance"
+                data-testid="talos-image-provenance"
+                class="pointer-events-none absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/55 px-1.5 py-0.5 text-3xs font-medium leading-4 text-white/95 backdrop-blur-[2px]"
+            >
+                <Sparkles class="size-2.5 shrink-0" aria-hidden="true" />
+                {{ $t('chat.imageAiGenerated', { producer: provenance }) }}
+            </span>
+        </span>
     </button>
     <!-- The honest fallback: it says an image was sent, and which one, rather
          than leaving a hole where a picture should be. -->

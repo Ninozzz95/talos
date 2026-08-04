@@ -683,6 +683,8 @@ export const TALOS_IT_MESSAGES = {
         retryResponse: 'Riprova risposta',
         saveToLibrary: 'Salva nella Libreria',
         imageUnavailable: 'non disponibile',
+        // Letto dal file, non indovinato: il manifesto C2PA dice CHI l'ha fatta.
+        imageAiGenerated: 'IA · {producer}',
         closePreview: 'Chiudi anteprima',
         loadingEarlier: 'Caricamento messaggi precedenti…',
         scrollEarlier: 'Scorri verso l’alto per i messaggi precedenti',
