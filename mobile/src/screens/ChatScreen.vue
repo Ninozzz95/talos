@@ -93,6 +93,15 @@ const draft = createTalosMobileComposerDraftController({
     translate: t,
 })
 const prompt = draft.prompt
+/**
+ * Cosa c'era nel campo PRIMA di parlare.
+ *
+ * Serve perche' «annulla» annulli davvero: le trascrizioni arrivano nel campo
+ * mentre si parla, quindi fermarsi e basta lascia dentro tutto quello che si e'
+ * detto. Due comandi che fanno la stessa cosa sono un comando che mente.
+ */
+const dictationDraftBefore = ref('')
+
 // F2-T5: live dictation — partials compose onto the draft captured at start.
 const dictation = useTalosMobileDictation({
     base: () => prompt.value,
@@ -100,6 +109,17 @@ const dictation = useTalosMobileDictation({
     language: () => resolveTalosDictationLanguageTag(settings.state.voice.dictation_language),
     errorMessage: (code) => t(`chat.dictationErrors.${code}`),
 })
+
+async function toggleDictation(): Promise<void> {
+    if (dictation.status.value === 'idle') dictationDraftBefore.value = prompt.value
+    await dictation.toggle()
+}
+
+/** Butta via quello che si e' detto e rimette il campo com'era. */
+function discardDictation(): void {
+    dictation.cancel()
+    draft.updatePrompt(dictationDraftBefore.value)
+}
 const composer = ref<InstanceType<typeof TalosMobileComposer> | null>(null)
 const composerWrap = ref<HTMLElement | null>(null)
 // F4-#22: shared guard — failed session actions surface as toasts, never as
@@ -1058,7 +1078,8 @@ onBeforeUnmount(() => {
                 @update:prompt="draft.updatePrompt($event)"
                 @send="onSend"
                 @stop="chat.stopStreaming()"
-                @toggle-dictation="dictation.toggle()"
+                @toggle-dictation="void toggleDictation()"
+                @discard-dictation="discardDictation()"
                 @attach="selectAttachments"
                 @take-photo="attachments.takePhoto"
                 @pick-photos="attachments.pickPhotos"

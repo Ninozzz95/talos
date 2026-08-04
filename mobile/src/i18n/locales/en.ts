@@ -579,6 +579,7 @@ export const TALOS_EN_MESSAGES = {
         removeFailedFiles: 'Remove files that could not be added before sending',
         improvingPrompt: 'Improving prompt',
         stopResponse: 'Stop response',
+        discardDictation: 'Discard dictation',
         stopDictation: 'Stop dictation',
         dictate: 'Dictate',
         startingDictation: 'Starting dictation…',
