@@ -1867,6 +1867,8 @@ export const TALOS_IT_MESSAGES = {
         costUnknown: 'Il costo non si può calcolare da qui: questo provider non pubblica un prezzo leggibile.',
         resume: 'Riprendi',
         interrupted: '«{question}» si è fermata a {done} di {total}. Non verrà rifatto niente di già fatto.',
+        promptTooLong: 'Quello che la ricerca ha raccolto è più lungo di quanto questo modello riesca a leggere in una volta. Non è questione di capacità: scegli una profondità minore, oppure un modello con più contesto, e riprendi — la raccolta resta.',
+        modelSaid: 'Il modello ha risposto: «{detail}»',
         noClaims: 'Il modello non ha risposto nel formato richiesto, quindi non c’è nessuna affermazione da verificare e il rapporto non è stato scritto. Scegli un modello più capace nel compositore e riprendi: quello che è già stato raccolto resta.',
         modelsTitle: 'I due modelli — li scegli tu',
         authorLabel: 'Scrive il rapporto',

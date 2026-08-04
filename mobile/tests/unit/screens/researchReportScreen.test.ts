@@ -667,3 +667,54 @@ describe('leaving the report for a real chat about it', () => {
         expect(wrapper.get('[data-testid="talos-research-report-error"]').text()).toContain('TALOS_RESEARCH_NO_REPORT')
     })
 })
+
+/**
+ * Il perche' di un passo fallito, 2026-08-04.
+ *
+ * Con l'autore locale la sintesi falliva e la pagina dava la colpa al formato,
+ * mandando a scegliere un modello piu' capace. La causa vera era un'altra: il
+ * motore aveva rifiutato 11009 token in un contesto da 4096, e nessun modello
+ * piu' capace avrebbe cambiato niente.
+ */
+describe('quando un passo fallisce, la pagina dice la cosa GIUSTA', () => {
+    it('il prompt troppo lungo non viene chiamato «formato sbagliato»', async () => {
+        const rotto = {
+            ...RUN,
+            status: 'failed' as const,
+            steps: [
+                step({ id: 'b1:search', branchId: 'b1' }),
+                step({
+                    id: 'synthesis', branchId: 'synthesis', kind: 'synthesise', state: 'failed',
+                    error: 'TALOS_LOCAL_PROMPT_TOO_LONG: 11009 token, il contesto ne regge 4096',
+                }),
+            ],
+        }
+        mockState.controller = controllerWith(null, rotto)
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+
+        const testo = wrapper.text()
+        expect(testo).toContain('longer than this model can read at once')
+        // Il rimedio sbagliato non deve comparire: cambiare modello non risolve
+        // un prompt che non entra.
+        expect(testo).not.toContain('did not answer in the required format')
+    })
+
+    it('«zero affermazioni» porta con se COSA ha risposto il modello', async () => {
+        // «Non ha risposto niente» e «ha risposto un'altra cosa» mandano a fare
+        // due cose diverse.
+        const rotto = {
+            ...RUN,
+            status: 'failed' as const,
+            steps: [step({
+                id: 'synthesis', branchId: 'synthesis', kind: 'synthesise', state: 'failed',
+                error: 'TALOS_RESEARCH_NO_CLAIMS: Certo! Ecco un riassunto della storia della Lavazza.',
+            })],
+        }
+        mockState.controller = controllerWith(null, rotto)
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+
+        expect(wrapper.text()).toContain('Certo! Ecco un riassunto')
+    })
+})
