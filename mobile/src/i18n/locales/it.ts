@@ -1268,6 +1268,7 @@ export const TALOS_IT_MESSAGES = {
         opening: 'Apertura…',
     },
     memory: {
+        itemMissing: 'Questa memoria non c’è più.',
         searchPlaceholder: 'Cerca fra le memorie',
         title: 'Memoria',
         explanation: 'Le memorie sono salvate su questo dispositivo e inserite sempre come contesto dichiarato non attendibile: non possono mai sovrascrivere regole di sistema o sicurezza.',
@@ -1429,6 +1430,8 @@ export const TALOS_IT_MESSAGES = {
         storageFree: 'spazio libero',
     },
     notes: {
+        // La nota puo' essere stata cancellata altrove, o l'indirizzo copiato a mano.
+        itemMissing: 'Questa nota non c’è più.',
         searchPlaceholder: 'Cerca fra le note',
         intro: 'Le note sono salvate su questo dispositivo e trattate come contesto dichiarato non attendibile: non possono mai impartire istruzioni.',
         title: 'Titolo nota',
@@ -1439,6 +1442,7 @@ export const TALOS_IT_MESSAGES = {
         deleteNamed: 'Elimina nota {title}',
     },
     tasks: {
+        itemMissing: 'Questa attività non c’è più.',
         searchPlaceholder: 'Cerca fra le attività',
         intro: 'Attività collegate alle esecuzioni e salvate sul dispositivo: funzionano completamente offline.',
         title: 'Titolo attività',

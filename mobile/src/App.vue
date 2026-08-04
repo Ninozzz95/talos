@@ -592,6 +592,17 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     memory: 'navigation.memory',
     tasks: 'navigation.tasks',
     notes: 'navigation.notes',
+    /*
+     * Le pagine di dettaglio tengono il nome della STAZIONE nell'intestazione.
+     *
+     * La stessa scelta gia' fatta per le pagine interne della Ricerca: ogni
+     * pagina si intitola da se' col titolo della cosa che mostra, e ripetere
+     * quel titolo anche nella cornice spenderebbe l'unica riga che c'e' su un
+     * telefono per dire due volte la stessa parola.
+     */
+    'memory-item': 'navigation.memory',
+    'task-item': 'navigation.tasks',
+    'note-item': 'navigation.notes',
     doctor: 'navigation.doctor',
     research: 'stations.deepResearchTitle',
     // The inner research surfaces keep the station's name in the sheet header:

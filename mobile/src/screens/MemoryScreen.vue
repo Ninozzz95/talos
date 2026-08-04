@@ -12,12 +12,19 @@ import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import type { TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
+import { useRouter } from 'vue-router'
 import { useChatController } from '@/stores/chatController'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import type { TalosLocalMemory } from '@/repositories/chatRepository'
 import { TALOS_DANGER_ACTION_CLASS } from '@/lib/dangerAction'
 
 const controller = useChatController()
+const router = useRouter()
+
+/** Voce → pagina → dettaglio, sempre nello stesso verso. */
+function open(item: TalosLocalMemory): void {
+    void router.push({ name: 'memory-item', params: { id: item.id } })
+}
 const { t } = useTalosI18n()
 
 const entries = ref<TalosLocalMemory[]>([])
@@ -283,7 +290,16 @@ function statusLabel(memory: TalosLocalMemory): string {
             >
                 <div class="flex items-start gap-2">
                     <BookMarked class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                    <div class="min-w-0 flex-1">
+                    <!-- Il blocco di testo APRE la pagina. Non tutta la riga:
+                         accanto ci sono gia' dei bottoni, e un bottone dentro
+                         un bottone non e' HTML valido — il tocco finirebbe a
+                         quello sbagliato. -->
+                    <button
+                        type="button"
+                        data-testid="talos-memory-open"
+                        class="talos-pressable min-w-0 flex-1 text-left"
+                        @click="open(memory)"
+                    >
                         <div class="flex flex-wrap items-center gap-1.5">
                             <span class="text-sm font-semibold text-[var(--talos-text)]">{{ memory.title }}</span>
                             <span class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ kindLabel(memory) }}</span>
@@ -297,7 +313,7 @@ function statusLabel(memory: TalosLocalMemory): string {
                         <p v-if="memory.last_used_at" class="mt-1 text-2xs text-[var(--talos-muted)]">
                             {{ t('memory.used', { time: relativeTime(memory.last_used_at) }) }}
                         </p>
-                    </div>
+                    </button>
                     <button
                         type="button"
                         :aria-label="t(memory.status === 'active' ? 'memory.disableNamed' : 'memory.enableNamed', { title: memory.title })"

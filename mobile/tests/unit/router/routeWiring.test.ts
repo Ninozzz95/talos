@@ -12,6 +12,7 @@ vi.setConfig({ testTimeout: 30_000 })
 import {
     preloadTalosMobileRoutes,
     TALOS_MOBILE_ROUTES,
+    talosMobileParentRoute,
 } from '@/lib/mobileRoutes'
 
 // Each tab route must load its real parity screen, not the old title-only placeholder.
@@ -36,10 +37,31 @@ describe('router wiring', () => {
         // parity contract are checked here; the inner pages have their own
         // tests and no desktop counterpart to be verbatim against.
         expect(TALOS_MOBILE_ROUTES.map((r) => r.name)).toEqual([
-            'chat', 'chats', 'memory', 'tasks', 'notes', 'doctor',
+            'chat', 'chats',
+            // Ogni stazione-elenco ha ora la sua pagina di dettaglio, come la
+            // Ricerca. Owner 2026-08-04: «ogni scheda apre una pagina dedicata,
+            // Indietro va alla precedente, dev'essere lineare».
+            'memory', 'memory-item',
+            'tasks', 'task-item',
+            'notes', 'note-item',
+            'doctor',
             'research', 'research-new', 'research-report', 'research-claim', 'research-source',
             'runs', 'context', 'settings',
         ])
+
+        /**
+         * La catena all'indietro è dichiarata, non dedotta dal percorso.
+         *
+         * È ciò che rende Indietro lineare: senza `parent`, una pagina aperta
+         * da due posti diversi torna a quello sbagliato — il difetto che la
+         * navigazione dell'owner esiste per togliere.
+         */
+        for (const [figlio, genitore] of [
+            ['memory-item', 'memory'], ['task-item', 'tasks'], ['note-item', 'notes'],
+        ] as const) {
+            expect(talosMobileParentRoute(figlio, { id: 'x1' }))
+                .toEqual({ name: genitore, params: {} })
+        }
         const contracted = TALOS_MOBILE_ROUTES.filter((route) => SCREEN_CONTRACT[route.name])
         const components = await Promise.all(contracted.map((route) => route.component()))
         for (const [index, route] of contracted.entries()) {

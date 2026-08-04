@@ -1,7 +1,16 @@
 <script setup lang="ts">
+import { defineAsyncComponent } from 'vue'
 import { Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import ChatsScreen from '@/screens/ChatsScreen.vue'
+/*
+ * L'elenco delle chat arriva quando la barra si mostra, non all'avvio.
+ *
+ * MISURATO 2026-08-04: importato staticamente qui finiva nel grafo d'avvio con
+ * **16.416 byte** — e la barra laterale esiste solo sul tablet, dove compare
+ * comunque dopo il montaggio. Su un telefono quei byte si pagavano senza che
+ * nessuno li vedesse mai.
+ */
+const ChatsScreen = defineAsyncComponent(() => import('@/screens/ChatsScreen.vue'))
 
 /**
  * F6 — persistent tablet chat panel (Claude split-view pattern, owner's

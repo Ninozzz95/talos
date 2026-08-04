@@ -8,11 +8,18 @@ import { computed, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { Search, CheckSquare, Plus, Trash2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
+import { useRouter } from 'vue-router'
 import { useChatController } from '@/stores/chatController'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import type { TalosLocalTask } from '@/repositories/chatRepository'
 
 const controller = useChatController()
+const router = useRouter()
+
+/** Voce → pagina → dettaglio, sempre nello stesso verso. */
+function open(item: TalosLocalTask): void {
+    void router.push({ name: 'task-item', params: { id: item.id } })
+}
 const { t } = useTalosI18n()
 
 const entries = ref<TalosLocalTask[]>([])
@@ -185,7 +192,16 @@ function shortId(value: string | null): string {
             >
                 <div class="flex items-start gap-2">
                     <CheckSquare class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                    <div class="min-w-0 flex-1">
+                    <!-- Il blocco di testo APRE la pagina. Non tutta la riga:
+                         accanto ci sono gia' dei bottoni, e un bottone dentro
+                         un bottone non e' HTML valido — il tocco finirebbe a
+                         quello sbagliato. -->
+                    <button
+                        type="button"
+                        data-testid="talos-task-open"
+                        class="talos-pressable min-w-0 flex-1 text-left"
+                        @click="open(task)"
+                    >
                         <div class="text-sm font-semibold text-[var(--talos-text)]" :class="task.status === 'done' ? 'line-through opacity-60' : ''">
                             {{ task.title }}
                         </div>
@@ -193,7 +209,7 @@ function shortId(value: string | null): string {
                         <p class="mt-1 font-mono text-2xs text-[var(--talos-muted)]">
                             {{ t('tasks.runIdLabel') }} {{ shortId(task.run_id) }} · {{ updatedAt(task.updated_at) }}
                         </p>
-                    </div>
+                    </button>
                     <button
                         type="button"
                         :aria-label="t('tasks.cycleNamed', { title: task.title })"
