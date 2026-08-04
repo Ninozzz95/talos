@@ -45,6 +45,25 @@ export interface TalosImageRequest {
      * modificare.
      */
     source?: { base64: string, mediaType: string } | null
+    /**
+     * DOVE modificare: la maschera.
+     *
+     * Owner 2026-08-04, «questo lo dobbiamo risolvere», citando la diagnosi che
+     * il modello stesso aveva fatto del nostro tool:
+     *
+     *   «il generatore e' image-to-image su tutta la scena, non un compositing
+     *   mascherato per-ROI; non garantisce invarianza pixel-level di sfondo,
+     *   pose e corpi»
+     *
+     * Senza, «cambia lo sfondo» ridisegna anche il soggetto — prova visiva
+     * dell'owner: una foto ristilizzata bene, ma «le scritte sulle casse sono
+     * inventate e qualche oggetto sul tavolo e' spostato».
+     *
+     * Un PNG con canale alfa: **trasparente = modifica qui**, opaco = lascia
+     * stare. E' il contratto di OpenAI, non una nostra convenzione, e va detto
+     * perche' e' il contrario di quello che quasi tutti si aspettano.
+     */
+    mask?: { base64: string, mediaType: string } | null
 }
 
 export interface TalosImagePlan {
@@ -64,7 +83,14 @@ export interface TalosImagePlan {
      */
     multipart?: {
         fields: Record<string, string>
-        file: { field: string, base64: string, mediaType: string, filename: string }
+        /**
+         * I file del pacco: l'immagine, e la maschera quando c'e'.
+         *
+         * Una LISTA e non un file solo, perche' una modifica mascherata ne
+         * porta due e un contratto con un file cablato andrebbe riscritto al
+         * primo che se ne aggiunge.
+         */
+        files: { field: string, base64: string, mediaType: string, filename: string }[]
     }
 }
 
@@ -163,6 +189,28 @@ export function planTalosImageRequest(
              * rifare, una chiamata rifiutata no.
              */
             if (/^gpt-image-1/i.test(config.model)) fields.input_fidelity = 'high'
+            /*
+             * La maschera e' un SECONDO file nello stesso pacco.
+             *
+             * Non un campo di testo: `mask` e' un'immagine come `image`, e va
+             * spedita con gli stessi byte binari. Per questo il piano porta una
+             * lista di file invece di uno solo — un contratto con un file
+             * cablato avrebbe richiesto di riscriverlo qui il giorno dopo.
+             */
+            const files = [{
+                field: 'image',
+                base64: request.source.base64,
+                mediaType: request.source.mediaType,
+                filename: `sorgente.${extensionFor(request.source.mediaType)}`,
+            }]
+            if (request.mask) {
+                files.push({
+                    field: 'mask',
+                    base64: request.mask.base64,
+                    mediaType: request.mask.mediaType,
+                    filename: `maschera.${extensionFor(request.mask.mediaType)}`,
+                })
+            }
             return {
                 url: `${base}/images/edits`,
                 headers: {
@@ -171,15 +219,7 @@ export function planTalosImageRequest(
                     Authorization: `Bearer ${config.apiKey}`,
                 },
                 body: fields,
-                multipart: {
-                    fields,
-                    file: {
-                        field: 'image',
-                        base64: request.source.base64,
-                        mediaType: request.source.mediaType,
-                        filename: `sorgente.${extensionFor(request.source.mediaType)}`,
-                    },
-                },
+                multipart: { fields, files },
             }
         }
         return {

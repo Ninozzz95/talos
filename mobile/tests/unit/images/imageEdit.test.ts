@@ -73,7 +73,7 @@ describe('OpenAI: modificare è un ALTRO indirizzo, non un altro campo', () => {
             size: '1024x1536',
             n: '1',
         })
-        expect(plan.multipart?.file).toMatchObject({
+        expect(plan.multipart?.files[0]).toMatchObject({
             field: 'image',
             base64: 'AAAA',
             mediaType: 'image/png',
@@ -84,8 +84,8 @@ describe('OpenAI: modificare è un ALTRO indirizzo, non un altro campo', () => {
         // Un server che trova «sorgente» senza estensione può rifiutarsi di
         // indovinare che immagine sia.
         const jpg = openai('gpt-image-2', { base64: 'AAAA', mediaType: 'image/jpeg' })
-        expect(jpg.multipart?.file.filename).toBe('sorgente.jpg')
-        expect(openai('gpt-image-2', SOURCE).multipart?.file.filename).toBe('sorgente.png')
+        expect(jpg.multipart?.files[0]!.filename).toBe('sorgente.jpg')
+        expect(openai('gpt-image-2', SOURCE).multipart?.files[0]!.filename).toBe('sorgente.png')
     })
 
     it('NESSUN Content-Type scritto a mano: lo decide FormData', () => {
@@ -118,5 +118,36 @@ describe('OpenAI: modificare è un ALTRO indirizzo, non un altro campo', () => {
         const plan = openai('gpt-image-2')
         expect(plan.multipart).toBeUndefined()
         expect(plan.headers['Content-Type']).toBe('application/json')
+    })
+})
+
+describe('la maschera: DOVE modificare', () => {
+    it('viaggia come SECONDO file nello stesso pacco, non come campo di testo', () => {
+        /**
+         * Owner 2026-08-04, «questo lo dobbiamo risolvere», citando la diagnosi
+         * che il modello aveva fatto del nostro tool: «image-to-image su tutta
+         * la scena, non un compositing mascherato per-ROI». Senza maschera
+         * «cambia lo sfondo» ridisegna anche il soggetto.
+         */
+        const plan = planTalosImageRequest('openai', {
+            prompt: 'sfondo blu',
+            shape: 'square',
+            source: SOURCE,
+            mask: { base64: 'BBBB', mediaType: 'image/png' },
+        }, { apiKey: 'k', model: 'gpt-image-2' })
+
+        expect(plan.multipart?.files).toHaveLength(2)
+        expect(plan.multipart?.files[1]).toMatchObject({
+            field: 'mask', base64: 'BBBB', filename: 'maschera.png',
+        })
+        // L'ordine conta per chi legge: prima cosa si modifica, poi dove.
+        expect(plan.multipart?.files[0]!.field).toBe('image')
+    })
+
+    it('senza maschera il pacco porta UN file solo', () => {
+        // Chi non ne passa una non deve accorgersi che questa strada esiste.
+        const plan = planTalosImageRequest('openai', { prompt: 'x', shape: 'square', source: SOURCE },
+            { apiKey: 'k', model: 'gpt-image-2' })
+        expect(plan.multipart?.files).toHaveLength(1)
     })
 })

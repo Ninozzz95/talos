@@ -52,6 +52,8 @@ export interface TalosImageToolSources {
         shape: TalosImageShape,
         signal?: AbortSignal,
         source?: { base64: string, mediaType: string } | null,
+        /** DOVE modificare. Trasparente = qui, opaco = lascia stare. */
+        mask?: { base64: string, mediaType: string } | null,
     ): Promise<{
         images: TalosGeneratedImage[]
         error: string | null
@@ -89,6 +91,13 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
                 .describe('The proportions of the picture. Default square.'),
             from_image: z.string().min(1).max(300).optional()
                 .describe('The name or id of an image the user attached or has in the Library, to change instead of drawing from scratch. Leave it out to draw a new picture.'),
+            mask: z.string().min(1).max(300).optional()
+                .describe(
+                    'The name or id of a mask image, to change only PART of from_image. '
+                    + 'The mask must be a PNG the same size as the picture, where the TRANSPARENT areas are the ones you want changed '
+                    + 'and the opaque areas are left exactly as they are. Only use this when the user has a mask file: you cannot draw one, '
+                    + 'and without it the whole scene is redrawn, so background and untouched objects will shift.',
+                ),
         }),
         async run(input, context) {
             const provider = sources.provider()
@@ -151,8 +160,40 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
                 }
                 source = { base64: found.base64, mediaType: found.mediaType }
             }
+            /*
+             * La maschera vive o muore con la sorgente.
+             *
+             * Una maschera senza immagine da modificare non ha niente da
+             * mascherare: accettarla in silenzio manderebbe un disegno da zero
+             * con un file in piu' nel pacco, e OpenAI risponderebbe con un
+             * errore che nomina un campo che la persona non ha mai visto.
+             */
+            let mask: { base64: string, mediaType: string } | null = null
+            if (input.mask) {
+                if (!source) {
+                    return {
+                        ok: false,
+                        code: 'TALOS_IMAGE_MASK_WITHOUT_SOURCE',
+                        content: 'A mask says WHERE to change a picture, so it needs from_image too. '
+                            + 'Pass the picture in from_image, or leave the mask out.',
+                    }
+                }
+                const found = await sources.findImage(input.mask).catch(() => null)
+                if (!found) {
+                    const disponibili = sources.availableImages()
+                    return {
+                        ok: false,
+                        code: 'TALOS_IMAGE_MASK_NOT_FOUND',
+                        content: `No mask called «${input.mask}» is here. `
+                            + (disponibili.length > 0
+                                ? `The images you can use are: ${disponibili.map((n) => `«${n}»`).join(', ')}.`
+                                : 'There are no images here at all, so leave the mask out.'),
+                    }
+                }
+                mask = { base64: found.base64, mediaType: found.mediaType }
+            }
             try {
-                drawn = await sources.generate(input.prompt, input.shape ?? 'square', context.signal, source)
+                drawn = await sources.generate(input.prompt, input.shape ?? 'square', context.signal, source, mask)
             } catch (cause) {
                 const message = cause instanceof Error ? cause.message : String(cause)
                 if (context.signal?.aborted) {

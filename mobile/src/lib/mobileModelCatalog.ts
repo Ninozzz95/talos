@@ -12,8 +12,42 @@ import {
 const REASONING_PARAMETERS = new Set(['reasoning', 'reasoning_effort', 'thinking', 'think'])
 const EFFORT_LEVELS = Object.freeze(['low', 'medium', 'high'])
 
+/**
+ * Le famiglie che il ragionamento ce l'hanno, quando il catalogo tace.
+ *
+ * MISURATO 2026-08-04 dall'owner: «ChatGPT da chiave OpenAI, non OpenRouter, non
+ * ha lo switch dell'effort nella pillola del modello». Lo stesso modello, due
+ * strade, due comandi diversi — e chi usa TALOS non ha modo di sapere che
+ * dipende da come ha inserito la chiave: vede solo un comando che a volte c'e' e
+ * a volte no.
+ *
+ * La causa: `GET /v1/models` di OpenAI **non dichiara** i parametri che accetta.
+ * OpenRouter si', ed e' per questo che di la' funzionava. E' la stessa lezione
+ * gia' pagata su `/v1/responses`: l'API di OpenAI dice meno di quanto sa, e
+ * quello che non dice va dedotto o misurato, non aspettato.
+ *
+ * Si deduce dalla FAMIGLIA, non dal nome intero: `gpt-5.6-terra` e
+ * `gpt-5.6-luna` sono lo stesso motore con due tarature, e un elenco di nomi
+ * completi invecchierebbe al primo modello nuovo — che in un'app distribuita
+ * vuol dire invecchiare nell'APK di chi l'ha gia' installata.
+ */
+const REASONING_FAMILIES = [/^gpt-5/i, /^o[1-4](?:[-.]|$)/i]
+
 function supportsReasoning(model: TalosMobileProviderModel): boolean {
-    return model.supportedParameters.some((parameter) => REASONING_PARAMETERS.has(parameter))
+    if (model.supportedParameters.some((parameter) => REASONING_PARAMETERS.has(parameter))) {
+        return true
+    }
+    /*
+     * La deduzione vale SOLO dove il catalogo tace.
+     *
+     * Un provider che dichiara i suoi parametri sa cosa accetta meglio di noi:
+     * se ha parlato e non ha nominato il ragionamento, e' un no, non un
+     * silenzio. Dedurre anche li' vorrebbe dire offrire un comando che il
+     * server rifiutera' — e un comando che non governa niente e' peggio di uno
+     * assente.
+     */
+    if (model.supportedParameters.length > 0) return false
+    return REASONING_FAMILIES.some((famiglia) => famiglia.test(model.id))
 }
 
 export function manualModelToProviderModel(model: TalosMobileManualModel): TalosMobileProviderModel {

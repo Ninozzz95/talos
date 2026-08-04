@@ -2575,7 +2575,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                     name: file.display_name,
                                 }
                             },
-                            async generate(prompt, shape, signal, source) {
+                            async generate(prompt, shape, signal, source, mask) {
                                 const {
                                     planTalosImageRequest, parseTalosGeneratedImages,
                                     readTalosImageError, talosImageErrorIsPermanent,
@@ -2622,7 +2622,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                 // From the catalogue TALOS already discovered,
                                 // never from a constant in the APK: this app
                                 // ships and a frozen model id ages in the field.
-                                const plan = planTalosImageRequest(drawer, { prompt, shape, source }, {
+                                const plan = planTalosImageRequest(drawer, { prompt, shape, source, mask }, {
                                     apiKey,
                                     model: pickTalosImageModel(
                                         drawer,
