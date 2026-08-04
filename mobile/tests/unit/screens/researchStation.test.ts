@@ -387,3 +387,147 @@ describe('the destructive button', () => {
         expect(confirm.className).not.toMatch(/(^|\s)text-destructive/)
     })
 })
+
+/**
+ * La selezione multipla, aggiunta 2026-08-04.
+ *
+ * Il gesto del tieni-premuto era stato LIBERATO per questa funzione e poi non
+ * costruita: tenere premuta una ricerca non faceva niente. La ricerca sulle
+ * azioni di riga (2026-08-03) dice che ⋮ e' la via primaria per agire su UNA e
+ * il tieni-premuto e' la SELEZIONE — quindi qui il gesto accende il modo.
+ */
+async function hold(wrapper: Awaited<ReturnType<typeof station>>, id = 'run-1') {
+    const row = wrapper.get(`[data-research-id="${id}"]`).element.closest('li')!
+    row.dispatchEvent(new PointerEvent('pointerdown', { clientX: 10, clientY: 10, bubbles: true }))
+    vi.advanceTimersByTime(600)
+    await wrapper.vm.$nextTick()
+}
+
+describe('selezionarne piu di una', () => {
+    beforeEach(() => vi.useFakeTimers())
+
+    it('il tieni-premuto ACCENDE la selezione, non apre un secondo menu', async () => {
+        const wrapper = await station([run()])
+        expect(wrapper.find('[data-testid="talos-research-selection-bar"]').exists()).toBe(false)
+
+        await hold(wrapper)
+
+        expect(wrapper.get('[data-testid="talos-research-selection-bar"]').text()).toContain('1')
+        // Il menu di riga tace: «Apri» porterebbe via a meta' selezione.
+        expect(wrapper.find('[data-testid="talos-research-menu-run-1"]').exists()).toBe(false)
+    })
+
+    it('si entra anche da un pulsante, perche il gesto da solo non lo trova nessuno', async () => {
+        // Owner sulle Chat, chiesto due volte.
+        const wrapper = await station([run()])
+        await wrapper.get('[data-testid="talos-research-select-header"]').trigger('click')
+        expect(wrapper.get('[data-testid="talos-research-selection-bar"]').text()).toContain('0')
+    })
+
+    it('una IN CORSO non si spunta, e lo dice invece di ignorare il dito', async () => {
+        /**
+         * Non e' una scelta di questa schermata: `talosResearchActionsFor` non
+         * offre `delete` mentre gira, perche' il driver sta ancora scrivendo su
+         * quella voce del giornale. Lasciarla spuntare e poi saltarla in
+         * silenzio direbbe che sono andate cinque cose quando ne sono andate
+         * quattro.
+         */
+        const wrapper = await station([run({ status: 'collecting' }), run({ id: 'run-2' })], ['run-1'])
+        await wrapper.get('[data-testid="talos-research-select-header"]').trigger('click')
+
+        const inCorso = wrapper.get('[data-research-id="run-1"]')
+        expect(inCorso.text()).toContain('Running')
+        await inCorso.trigger('click')
+        expect(wrapper.get('[data-testid="talos-research-selection-bar"]').text()).toContain('0')
+
+        // Quella ferma si', e «tutte» prende solo lei.
+        await wrapper.get('[data-testid="talos-research-select-all"]').trigger('click')
+        expect(wrapper.get('[data-testid="talos-research-selection-bar"]').text()).toContain('1')
+    })
+
+    it('nel modo selezione un tocco SPUNTA, non apre la ricerca', async () => {
+        const wrapper = await station([run()])
+        await wrapper.get('[data-testid="talos-research-select-header"]').trigger('click')
+        routerCalls.push.mockClear()
+
+        await wrapper.get('[data-research-id="run-1"]').trigger('click')
+
+        expect(routerCalls.push).not.toHaveBeenCalled()
+        expect(wrapper.get('[data-testid="talos-research-selection-bar"]').text()).toContain('1')
+    })
+
+    it('elimina tutte quelle spuntate e DICE quanti dossier sono andati con loro', async () => {
+        vi.useRealTimers()
+        const wrapper = await station([run(), run({ id: 'run-2' })])
+        await wrapper.get('[data-testid="talos-research-select-header"]').trigger('click')
+        await wrapper.get('[data-testid="talos-research-select-all"]').trigger('click')
+        await wrapper.get('[data-testid="talos-research-bulk-delete"]').trigger('click')
+        await flushPromises()
+        document.querySelector<HTMLElement>('[data-testid="talos-research-bulk-delete-confirm"]')!.click()
+        await flushPromises()
+
+        const controller = mockState.controller as never as ReturnType<typeof controllerWith>
+        expect(controller.research.remove).toHaveBeenCalledTimes(2)
+        // Due per ricerca, quattro in tutto: un'eliminazione che tace su cosa
+        // si e' portata via e' un'eliminazione che non si puo' verificare.
+        expect(wrapper.get('[data-testid="talos-research-notice"]').text()).toContain('4')
+    })
+
+    it('una che si rifiuta non ferma il resto, e viene DETTA', async () => {
+        vi.useRealTimers()
+        const wrapper = await station([run(), run({ id: 'run-2' })])
+        const controller = mockState.controller as never as ReturnType<typeof controllerWith>
+        controller.research.remove = vi.fn(async (id: string) => {
+            if (id === 'run-1') throw new Error('il file e in uso')
+            return ['file-1']
+        }) as never
+
+        await wrapper.get('[data-testid="talos-research-select-header"]').trigger('click')
+        await wrapper.get('[data-testid="talos-research-select-all"]').trigger('click')
+        await wrapper.get('[data-testid="talos-research-bulk-delete"]').trigger('click')
+        await flushPromises()
+        document.querySelector<HTMLElement>('[data-testid="talos-research-bulk-delete-confirm"]')!.click()
+        await flushPromises()
+
+        expect(controller.research.remove).toHaveBeenCalledTimes(2)
+        const detto = wrapper.get('[data-testid="talos-research-notice"]').text()
+        expect(detto).toContain('1')
+        expect(detto.toLowerCase()).toContain('could not be deleted')
+    })
+})
+
+describe('il tocco dopo il tieni-premuto', () => {
+    beforeEach(() => vi.useFakeTimers())
+
+    it('non viene ingoiato dalla soppressione del gesto precedente', async () => {
+        /**
+         * Trovato sul OnePlus Pad 3, 2026-08-04, e da nessuna altra parte.
+         *
+         * Il tieni-premuto alza una bandiera per mangiarsi il PROPRIO click —
+         * quello che chiude la pressione, che altrimenti aprirebbe la ricerca
+         * nell'istante in cui si accende la selezione. Ma quel click a volte non
+         * arriva mai, e la bandiera resta alzata ad aspettarlo: se la mangia il
+         * tocco successivo, che era legittimo. Sullo schermo: si tiene premuta
+         * una ricerca, si tocca la seconda, e la seconda non si spunta.
+         */
+        const wrapper = await station([run(), run({ id: 'run-2' })])
+        const prima = wrapper.get('[data-research-id="run-1"]').element.closest('li')!
+
+        // Tieni premuto: la selezione si accende, la bandiera resta alzata
+        // perche' nessun click chiude la pressione.
+        prima.dispatchEvent(new PointerEvent('pointerdown', { clientX: 10, clientY: 10, bubbles: true }))
+        vi.advanceTimersByTime(600)
+        prima.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
+        await wrapper.vm.$nextTick()
+        expect(wrapper.get('[data-testid="talos-research-selection-bar"]').text()).toContain('1')
+
+        // Ora un tocco sulla seconda: pointerdown e poi click, come fa un dito.
+        const seconda = wrapper.get('[data-research-id="run-2"]')
+        seconda.element.closest('li')!.dispatchEvent(
+            new PointerEvent('pointerdown', { clientX: 10, clientY: 10, bubbles: true }),
+        )
+        await seconda.trigger('click')
+
+        expect(wrapper.get('[data-testid="talos-research-selection-bar"]').text()).toContain('2')
+    })
+})
