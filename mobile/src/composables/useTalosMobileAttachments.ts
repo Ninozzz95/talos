@@ -39,6 +39,16 @@ export interface TalosMobileAttachmentsOptions {
     idFactory?: () => string
     /** The active chat, stamped as a file's origin (provenance + grouping). */
     currentSessionId?: () => string | null
+    /**
+     * Se un'immagine puo' uscire da questo telefono, e come chiederlo.
+     *
+     * Owner 2026-08-04. Sta qui e non nella schermata perche' questo e' il
+     * punto UNICO da cui passano tutte le vie — scelta file, fotocamera,
+     * galleria — e un cancello messo su una sola di quelle e' un cancello con
+     * tre porte accanto.
+     */
+    imageConsent?: () => 'allow' | 'ask' | 'deny'
+    askImageConsent?: (count: number) => Promise<'allow' | 'once' | 'deny'>
 }
 
 export interface TalosMobileAttachmentsController {
@@ -239,6 +249,21 @@ export function useTalosMobileAttachments(
         try {
             const pickedFiles = await pick()
             if (pickedFiles.length === 0 || !validateAddition(pickedFiles)) return
+
+            // Le immagini si chiedono PRIMA di entrare nel Vault: rifiutare
+            // dopo l'ingestione vorrebbe dire aver gia' copiato la foto.
+            const images = pickedFiles.filter((file) => (file.declaredMediaType || '').startsWith('image/'))
+            if (images.length > 0) {
+                const stance = options.imageConsent?.() ?? 'allow'
+                if (stance === 'deny') {
+                    error.value = options.translate('chat.imageConsentDenied')
+                    return
+                }
+                if (stance === 'ask' && options.askImageConsent) {
+                    const answer = await options.askImageConsent(images.length)
+                    if (answer === 'deny') return
+                }
+            }
             const jobs = pickedFiles.map((pickedFile) => {
                 const draft: TalosMobileAttachmentDraft = {
                     id: idFactory(),

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import { talosChatDiscardedByModeSwitch } from '@/lib/chat/modeSwitch'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
@@ -841,6 +842,35 @@ onBeforeUnmount(async () => {
                 @close="mediaPanelOpen = false"
                 @open="mediaPanelOpen = false"
             />
+
+            <!-- Owner 2026-08-04: un'immagine che esce dal telefono e' una
+                 DECISIONE, non un gesto. Sta sopra i cartellini dei tool perche'
+                 blocca un'ingestione gia' cominciata: la foto non e' ancora nel
+                 Vault, e la risposta decide se ci entra. -->
+            <TalosMobileConfirmDialog
+                v-if="chatController.imageConsentRequest?.value"
+                data-testid="talos-image-consent"
+                :title="t('chat.imageConsentTitle')"
+                :description="t(
+                    chatController.imageConsentRequest.value!.count > 1
+                        ? 'chat.imageConsentBodyMany'
+                        : 'chat.imageConsentBody',
+                    { provider: chatController.imageConsentRequest.value!.provider },
+                )"
+                @close="void chatController.answerImageConsent?.('deny')"
+            >
+                <template #footer>
+                    <Button variant="ghost" data-testid="talos-image-consent-no" @click="void chatController.answerImageConsent?.('deny')">
+                        {{ t('chat.imageConsentNever') }}
+                    </Button>
+                    <Button variant="outline" data-testid="talos-image-consent-always" @click="void chatController.answerImageConsent?.('allow')">
+                        {{ t('chat.imageConsentAlways') }}
+                    </Button>
+                    <Button data-testid="talos-image-consent-once" @click="void chatController.answerImageConsent?.('once')">
+                        {{ t('chat.imageConsentOnce') }}
+                    </Button>
+                </template>
+            </TalosMobileConfirmDialog>
 
             <TalosMobileToolAuthorizationRecoveryCard
                 v-if="activeToolAuthorizationRecovery && chatController.toolAuthorizationPromptVisible.value"
