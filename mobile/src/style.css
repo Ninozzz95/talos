@@ -297,6 +297,20 @@
     }
 }
 
+/* Una riga che si tiene premuta per SELEZIONARLA non deve anche selezionare il
+   proprio testo.
+   Visto sul OnePlus Pad 3 (2026-08-04): il tieni-premuto sulla stazione Ricerca
+   accendeva il modo selezione E le maniglie azzurre della selezione di testo
+   della WebView, con la barra Copia/Condividi sopra la nostra. Due selezioni
+   diverse, dallo stesso dito, nello stesso istante.
+   `-webkit-touch-callout` toglie anche il menu lungo-tocco dei link e delle
+   immagini, che sulla stessa riga sarebbe la terza. */
+.talos-holdable {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
 /* F1-T4 animation mandate: every interactive element gets a simple, engine-tuned
    micro-interaction. Durations/easings come from the motion-v6 interaction CSS
    vars published on the shell root (talosInteractionMotionStyleV6); the engine

@@ -22,7 +22,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { AlertTriangle, LayoutGrid, List, Loader2, Plus, Search } from '@lucide/vue'
+import { AlertTriangle, Check, CheckSquare, LayoutGrid, List, Loader2, Plus, Search, Trash2, X } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
@@ -30,6 +30,8 @@ import { talosSortChipClass } from '@/lib/sortChip'
 import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import { Button } from '@/components/ui/button'
+import { talosLightImpact } from '@/services/haptics'
+import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
 import { useTalosDeferredBusy } from '@/composables/useTalosDeferredBusy'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
@@ -298,6 +300,147 @@ async function confirmDelete(): Promise<void> {
     deleteTarget.value = null
 }
 
+/**
+ * Selezionarne piu' di una, poi eliminarle.
+ *
+ * Il gesto del tieni-premuto era stato LIBERATO per questa funzione e poi non
+ * costruita: tenere premuta una ricerca non faceva niente. La ricerca sulle
+ * azioni di riga (2026-08-03) dice esattamente questo — il menu ⋮ e' la via
+ * primaria per agire su UNA, e il tieni-premuto e' la SELEZIONE — quindi qui il
+ * gesto non apre un secondo menu: accende il modo.
+ *
+ * Il modo e' lo stesso delle Chat e della Libreria, dalla stessa composable:
+ * «2 selezionate» deve voler dire la stessa cosa ovunque, e chi ha imparato a
+ * uscire da una selezione in un posto non deve reimpararlo qui.
+ */
+const bulk = useTalosBulkSelection()
+const bulkDeleteOpen = ref(false)
+
+/**
+ * Una ricerca IN CORSO non si elimina — non e' una scelta di questa schermata,
+ * e' `talosResearchActionsFor` che non offre `delete` mentre gira, perche' il
+ * driver sta ancora scrivendo su quella voce del giornale.
+ *
+ * Quindi non si puo' nemmeno selezionare. L'alternativa — lasciarla spuntare e
+ * poi saltarla in silenzio — direbbe alla persona che ha eliminato cinque cose
+ * mentre ne sono andate quattro.
+ */
+function selectable(card: TalosResearchCard): boolean {
+    return card.bucket !== 'running'
+}
+
+const selectableIds = computed(() => shown.value.filter(selectable).map((card) => card.id))
+
+function tapCard(card: TalosResearchCard): void {
+    // Nel modo selezione un tocco SPUNTA. Aprire la ricerca da qui sarebbe
+    // un'altra azione travestita dallo stesso gesto.
+    if (!bulk.active.value) { open(card.id); return }
+    if (selectable(card)) bulk.toggle(card.id)
+}
+
+/**
+ * Il tieni-premuto: 500 ms senza muovere il dito, come nelle Chat.
+ *
+ * Lo stesso `HOLD_SLOP_PX` esiste perche' senza tolleranza uno scorrimento
+ * lento della lista accende la selezione, e senza il `touch-action: pan-y` sul
+ * `li` la WebView manda `pointercancel` e il gesto non finisce mai — misurato
+ * su questo telefono, non supposto.
+ */
+const HOLD_MS = 500
+const HOLD_SLOP_PX = 10
+let holdTimer: ReturnType<typeof setTimeout> | null = null
+let holdOrigin: { x: number, y: number } | null = null
+let suppressNextClick = false
+
+function clearHold(): void {
+    if (holdTimer !== null) clearTimeout(holdTimer)
+    holdTimer = null
+    holdOrigin = null
+}
+
+function onCardPointerDown(card: TalosResearchCard, event: PointerEvent): void {
+    /**
+     * Un gesto nuovo azzera la soppressione del gesto precedente.
+     *
+     * Visto sul OnePlus Pad 3 (2026-08-04): dopo un tieni-premuto il tocco
+     * DOPO non spuntava niente. Il tieni-premuto alza la bandiera per mangiarsi
+     * il proprio click — quello che chiude la pressione, che aprirebbe la
+     * ricerca nell'istante in cui si accende la selezione — ma quel click a
+     * volte non arriva mai, e la bandiera resta alzata ad aspettarlo: se la
+     * mangia il tocco successivo, che era legittimo.
+     *
+     * Sta PRIMA dell'uscita anticipata di proposito: nel modo selezione il
+     * gesto non fa altro, ma la bandiera va comunque abbassata.
+     */
+    suppressNextClick = false
+    if (bulk.active.value) return
+    clearHold()
+    holdOrigin = { x: event.clientX, y: event.clientY }
+    holdTimer = setTimeout(() => {
+        void talosLightImpact()
+        suppressNextClick = true
+        // Se quella tenuta non si puo' eliminare il modo si accende comunque,
+        // vuoto: il gesto resta scopribile, e la riga dice da se' perche' non
+        // si spunta invece di ignorare il dito.
+        bulk.enter(selectable(card) ? card.id : undefined)
+        clearHold()
+    }, HOLD_MS)
+}
+
+function onCardPointerMove(event: PointerEvent): void {
+    if (!holdOrigin) return
+    if (Math.abs(event.clientX - holdOrigin.x) > HOLD_SLOP_PX
+        || Math.abs(event.clientY - holdOrigin.y) > HOLD_SLOP_PX) clearHold()
+}
+
+function onCardPointerEnd(): void {
+    clearHold()
+}
+
+function onCardClickCapture(event: Event): void {
+    // Il click che chiude il tieni-premuto arriverebbe sulla carta e aprirebbe
+    // la ricerca nell'istante in cui la selezione si accende.
+    if (!suppressNextClick) return
+    suppressNextClick = false
+    event.stopPropagation()
+    event.preventDefault()
+}
+
+async function confirmBulkDelete(): Promise<void> {
+    const ids = bulk.ids.value
+    if (ids.length === 0) return
+    actionError.value = null
+    notice.value = null
+    let sources = 0
+    const stubborn: string[] = []
+    for (const id of ids) {
+        try {
+            const removed = await controller.research.remove(id)
+            sources += removed?.length ?? 0
+        } catch {
+            // Una che si rifiuta non deve fermare il resto del gruppo.
+            stubborn.push(id)
+        }
+    }
+    const done = ids.length - stubborn.length
+    // Si dice quante sono andate E quante no: un'eliminazione di gruppo che
+    // tace sui rifiuti e' un'eliminazione che la persona non puo' verificare.
+    const parts: string[] = []
+    if (done > 0) {
+        parts.push(sources > 0
+            ? t('research.bulkDeletedSources', { count: done, sources })
+            : t('research.bulkDeleted', { count: done }))
+    }
+    if (stubborn.length > 0) parts.push(t('research.bulkDeleteFailed', { count: stubborn.length }))
+    notice.value = parts.length > 0 ? parts.join(' ') : null
+    standings.value = new Map([...standings.value].filter(([id]) => !ids.includes(id) || stubborn.includes(id)))
+    bulkDeleteOpen.value = false
+    await refresh()
+    // Quello che e' sopravvissuto resta spuntato; il resto non deve restare un
+    // conteggio di righe che non esistono piu'.
+    bulk.reconcile(runs.value.map((run) => run.id))
+}
+
 function startNew(): void {
     void router.push({ name: 'research-new' })
 }
@@ -342,6 +485,20 @@ function when(iso: string): string {
                 />
                 <!-- Two states, immediate effect, no Save: a switch by the rule,
                      drawn as the pair of icons every gallery uses. -->
+                <!-- Owner sulle Chat, chiesto due volte: se nella selezione si
+                     entra solo tenendo premuto, non la trova nessuno. Sta dove
+                     un comando di selezione si cerca, e sparisce mentre il modo
+                     e' acceso perche' la barra sotto possiede gia' l'uscita. -->
+                <button
+                    v-if="!bulk.active.value && selectableIds.length > 0"
+                    type="button"
+                    data-testid="talos-research-select-header"
+                    :aria-label="t('research.selectResearches')"
+                    class="talos-pressable inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-[var(--talos-border)] text-[var(--talos-muted)]"
+                    @click="bulk.enter()"
+                >
+                    <CheckSquare class="size-4" aria-hidden="true" />
+                </button>
                 <button
                     type="button"
                     data-testid="talos-research-layout"
@@ -352,6 +509,34 @@ function when(iso: string): string {
                     <List v-if="layout === 'grid'" class="size-4" aria-hidden="true" />
                     <LayoutGrid v-else class="size-4" aria-hidden="true" />
                 </button>
+            </div>
+
+            <!-- La barra della selezione: mentre il modo e' acceso la schermata
+                 ha UN significato solo. -->
+            <div
+                v-if="bulk.active.value"
+                data-testid="talos-research-selection-bar"
+                class="flex items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
+            >
+                <Button type="button" size="icon" variant="ghost" class="min-h-11 min-w-11 rounded-full" :aria-label="t('research.cancelSelection')" data-testid="talos-research-selection-exit" @click="bulk.exit()">
+                    <X class="size-4" aria-hidden="true" />
+                </Button>
+                <span class="text-sm font-medium">{{ bulk.count.value === 1 ? t('research.selectedOne') : t('research.selected', { count: bulk.count.value }) }}</span>
+                <Button type="button" variant="ghost" size="sm" class="ml-auto" data-testid="talos-research-select-all" @click="bulk.selectAll(selectableIds)">
+                    {{ bulk.allSelected(selectableIds) ? t('common.none') : t('library.all') }}
+                </Button>
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    class="min-h-11 min-w-11 rounded-full text-[var(--talos-danger)]"
+                    data-testid="talos-research-bulk-delete"
+                    :aria-label="t('research.deleteSelected')"
+                    :disabled="bulk.count.value === 0"
+                    @click="bulkDeleteOpen = true"
+                >
+                    <Trash2 class="size-4" aria-hidden="true" />
+                </Button>
             </div>
 
             <!-- Said without stealing the focus: a status message is heard,
@@ -389,14 +574,28 @@ function when(iso: string): string {
                 <li
                     v-for="card in shown"
                     :key="card.id"
-                    class="relative min-w-0 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]"
-                    :class="busy.visible.value === card.id ? 'opacity-60' : ''"
+                    class="talos-holdable relative min-w-0 rounded-xl border bg-[var(--talos-panel)]"
+                    :class="[
+                        busy.visible.value === card.id ? 'opacity-60' : '',
+                        bulk.isSelected(card.id) ? 'border-[var(--talos-accent)]' : 'border-[var(--talos-border)]',
+                    ]"
+                    :style="{ touchAction: 'pan-y' }"
+                    @pointerdown="onCardPointerDown(card, $event)"
+                    @pointermove="onCardPointerMove($event)"
+                    @pointerup="onCardPointerEnd()"
+                    @pointercancel="onCardPointerEnd()"
+                    @click.capture="onCardClickCapture($event)"
+                    @contextmenu.prevent
                 >
                     <!-- The overflow button sits OUTSIDE the opening button.
                          Nesting them would make one hit area swallow the other,
                          and the research is explicit that the two must not
                          overlap: the text opens the research, the dots act on it. -->
-                    <div class="absolute right-1 top-1 z-10">
+                    <!-- Nel modo selezione il menu di riga sarebbe una seconda
+                         via, contraddittoria: «Apri» porta via a meta'
+                         selezione e il suo Elimina non riconcilia il
+                         conteggio. Al suo posto la spunta. -->
+                    <div v-if="!bulk.active.value" class="absolute right-1 top-1 z-10">
                         <TalosRowActions
                             :test-id="`talos-research-menu-${card.id}`"
                             :label="t('research.actionsFor', { title: card.question })"
@@ -411,8 +610,30 @@ function when(iso: string): string {
                         :data-bucket="card.bucket"
                         :disabled="busy.pending.value === card.id"
                         class="talos-pressable flex h-full w-full flex-col gap-2 rounded-xl p-3 pr-12 text-left"
-                        @click="open(card.id)"
+                        :aria-pressed="bulk.active.value && selectable(card) ? bulk.isSelected(card.id) : undefined"
+                        @click="tapCard(card)"
                     >
+                        <!-- Una in corso non si elimina, quindi non si spunta —
+                             e lo DICE, invece di lasciare un cerchio che non
+                             risponde al dito. -->
+                        <span
+                            v-if="bulk.active.value"
+                            data-testid="talos-research-card-tick"
+                            class="flex items-center gap-1.5 text-2xs text-[var(--talos-muted)]"
+                        >
+                            <span
+                                v-if="selectable(card)"
+                                class="flex size-5 shrink-0 items-center justify-center rounded-full border-2"
+                                :class="bulk.isSelected(card.id) ? 'border-[var(--talos-accent)] bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,#000)]' : 'border-[var(--talos-border)]'"
+                                aria-hidden="true"
+                            >
+                                <Check v-if="bulk.isSelected(card.id)" class="size-3.5" />
+                            </span>
+                            <template v-else>
+                                <Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+                                {{ t('research.runningNotSelectable') }}
+                            </template>
+                        </span>
                         <span class="flex items-start gap-2">
                             <span class="min-w-0 flex-1 text-sm font-semibold leading-5 text-[var(--talos-text)]" :class="layout === 'grid' ? 'line-clamp-3' : 'line-clamp-2'">
                                 {{ card.question }}
@@ -507,6 +728,22 @@ function when(iso: string): string {
 
         <!-- Names the research and says what goes with it. "Are you sure?" gives
              a person nothing they can weigh. -->
+        <!-- Chiede come quella singola, e per la stessa ragione: porta via
+             anche i dossier delle fonti. -->
+        <TalosMobileConfirmDialog
+            v-if="bulkDeleteOpen"
+            :title="t('research.bulkDeleteTitle', { count: bulk.count.value })"
+            :description="t('research.bulkDeleteBody')"
+            @close="bulkDeleteOpen = false"
+        >
+            <template #footer>
+                <Button variant="ghost" @click="bulkDeleteOpen = false">{{ t('common.cancel') }}</Button>
+                <Button variant="destructive" :class="TALOS_DANGER_ACTION_CLASS" data-testid="talos-research-bulk-delete-confirm" @click="confirmBulkDelete()">
+                    {{ t('research.deleteConfirm') }}
+                </Button>
+            </template>
+        </TalosMobileConfirmDialog>
+
         <TalosMobileConfirmDialog
             v-if="deleteTarget"
             :title="t('research.deleteTitle', { title: deleteTarget.question })"

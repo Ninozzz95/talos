@@ -320,6 +320,11 @@ function onRowPointerDown(session: { id: string; title: string }, isArchived: bo
     // row: "Open" navigates away mid-selection, and its single Delete never
     // reconciled the selection, leaving a count that referred to a chat that no
     // longer existed.
+    // Un gesto nuovo azzera la soppressione del precedente: la bandiera alzata
+    // dal tieni-premuto aspetta un click che a volte non arriva mai, e senza
+    // questa riga se lo mangia il tocco dopo. Misurato sulla Ricerca, che ha
+    // lo stesso schema — qui il menu che si apre lo nascondeva.
+    suppressNextClick = false
     if (bulk.active.value) return
     clearHold()
     holdOrigin = { x: event.clientX, y: event.clientY }
@@ -469,7 +474,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                     :key="session.id"
                     data-testid="talos-chats-row"
                     :data-active="controller.chat.activeSession.value?.id === session.id ? 'true' : 'false'"
-                    class="rounded-lg"
+                    class="talos-holdable rounded-lg"
                     :class="controller.chat.activeSession.value?.id === session.id ? 'bg-[var(--talos-active)]' : ''"
                     :style="{ touchAction: 'pan-y' }"
                     @pointerdown="onRowPointerDown(session, false, $event)"
@@ -514,7 +519,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                         v-for="session in archived"
                         :key="session.id"
                         data-testid="talos-chats-archived-row"
-                        class="rounded-lg"
+                        class="talos-holdable rounded-lg"
                         :style="{ touchAction: 'pan-y' }"
                         @pointerdown="onRowPointerDown(session, true, $event)"
                         @pointermove="onRowPointerMove($event)"
