@@ -159,6 +159,15 @@ export interface TalosMobileShellPreferences {
      * la stessa ragione per cui i permessi dei tool partono tutti da li'.
      */
     library_access: 'allow' | 'ask' | 'deny'
+    /**
+     * Se il modello puo' SCRIVERE in memoria.
+     *
+     * Stessa grammatica di `library_access` — owner 2026-08-04: «i permessi
+     * devono avere la stessa grammatica, TUTTI». Nasce a `ask` perche'
+     * quello che finisce in memoria il modello lo rilegge da se' in ogni
+     * conversazione futura: la prima volta si guarda.
+     */
+    memory_write_access: 'allow' | 'ask' | 'deny'
     library_view: 'grid' | 'list'
     /**
      * Owner 2026-07-30. Grouping by origin chat was a plain `ref`, so it reset
@@ -226,6 +235,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
      */
     library_autosave_generated: true,
     library_access: 'ask',
+    memory_write_access: 'ask',
     library_view: 'list',
     // Owner 2026-07-25 set grouping on; it just never survived a reopen.
     library_group_by_chat: true,
@@ -266,6 +276,12 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         // Chi aveva il booleano ACCESO diventa `allow`; chi lo aveva spento
         // diventa `ask` e non `deny`, perche' aveva detto «non attaccarmela a
         // ogni messaggio», non «mai guardarla».
+        // Nessun booleano da migrare: nasce a tre stati, come pretende la
+        // grammatica unica dei permessi. Un valore ignoto sul disco ricade sul
+        // predefinito, che e' il piu' prudente dei tre.
+        memory_write_access: record.memory_write_access === 'allow' || record.memory_write_access === 'deny'
+            ? record.memory_write_access
+            : DEFAULT_SHELL_PREFERENCES.memory_write_access,
         library_access: record.library_access === 'allow' || record.library_access === 'deny'
             ? record.library_access
             : (record.library_context_enabled === true ? 'allow' : DEFAULT_SHELL_PREFERENCES.library_access),

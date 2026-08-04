@@ -1,3 +1,4 @@
+import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
 import {
     createTalosReadTools,
     type TalosLibraryListEntry,
@@ -94,6 +95,9 @@ export interface TalosToolsetDeps {
      * «non attaccarmela a ogni messaggio», non «mai guardarla».
      */
     libraryAccess?(): 'allow' | 'ask' | 'deny'
+    /** Se il modello puo' scrivere in memoria: stessa grammatica di sopra. */
+    memoryWriteAccess?(): 'allow' | 'ask' | 'deny'
+    memoryWrite?(): import('@/lib/tools/memoryWriteTools').TalosMemoryWriteSources | null
     /**
      * F1 — the web tools, present only when a search source is configured.
      *
@@ -442,6 +446,11 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             // message rather than the next launch.
             const web = deps.web?.() ?? null
             const research = deps.research?.() ?? null
+            // Su «nega» non viene nemmeno offerto: un tool che il modello
+            // promette e poi non puo' eseguire e' peggio di uno assente.
+            const memoryWrite = (deps.memoryWriteAccess?.() ?? 'ask') === 'deny'
+                ? null
+                : deps.memoryWrite?.() ?? null
             const documents = deps.documents?.() ?? null
             const images = deps.images?.() ?? null
             return [
@@ -451,6 +460,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...modelTools,
                 ...(web ? createTalosWebTools(web) : []),
                 ...(research ? createTalosResearchTools(research) : []),
+                ...(memoryWrite ? createTalosMemoryWriteTools(memoryWrite) : []),
                 ...(documents ? createTalosDocumentTools(documents) : []),
                 ...(images ? createTalosImageTools(images) : []),
             ]

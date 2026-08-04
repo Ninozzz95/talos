@@ -656,6 +656,7 @@ export interface ChatControllerDeps {
                 readonly library_context_enabled?: boolean
                 /** I tool della Libreria seguono QUESTO, non l iniezione ambientale. */
                 readonly library_access?: 'allow' | 'ask' | 'deny'
+                readonly memory_write_access?: 'allow' | 'ask' | 'deny'
                 readonly library_context_policy?: TalosLibraryContextPolicyV1 | null
                 readonly library_autosave_generated?: boolean
             /** Owner 2026-07-26: show technical codes, off in production. */
@@ -2385,6 +2386,33 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     research: () => ({
                         list: () => research.list(),
                         isRunning: (id: string) => research.registry.isRunning(id),
+                    }),
+                    memoryWriteAccess: () => deps.settings.state.shell?.memory_write_access ?? 'ask',
+                    /**
+                     * Scrive dove scrive la stazione, con la stessa `create`.
+                     *
+                     * Una seconda via di scrittura verso lo stesso deposito e'
+                     * come nascono i due formati che non si parlano: quello che
+                     * il modello annota dev'essere indistinguibile da quello
+                     * che l'utente ha scritto a mano, perche' finiscono nella
+                     * stessa lista e vengono riletti dallo stesso codice.
+                     *
+                     * `scope_type: 'global'` di proposito: «ricordati che
+                     * preferisco le risposte brevi» non vale solo in questa
+                     * conversazione, ed e' il genere di cosa che si chiede una
+                     * volta sola aspettandosi che valga sempre.
+                     */
+                    memoryWrite: () => ({
+                        create: async (input) => {
+                            const saved = await memories.create({
+                                title: input.title,
+                                content: input.content,
+                                kind: input.kind,
+                                scope_type: 'global',
+                                scope_id: null,
+                            })
+                            return { title: saved.title }
+                        },
                     }),
                     libraryContextPolicy: policyToolSources,
                     /**
