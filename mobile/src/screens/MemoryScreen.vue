@@ -7,7 +7,7 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { BookMarked, Plus, RotateCcw, Trash2 } from '@lucide/vue'
+import { Search, BookMarked, Plus, RotateCcw, Trash2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
@@ -21,6 +21,21 @@ const controller = useChatController()
 const { t } = useTalosI18n()
 
 const entries = ref<TalosLocalMemory[]>([])
+
+/**
+ * Il campo di ricerca dell'impalcatura che l'owner ha approvato: titolo,
+ * ricerca, lista, FAB. Mancava qui, e una lista che cresce senza un modo per
+ * restringerla si scorre finche' non ci si arrende.
+ *
+ * Filtra su cio' che una persona ricorda — le parole che ha scritto lei —
+ * non su un identificativo.
+ */
+const query = ref('')
+const shown = computed(() => {
+    const termine = query.value.trim().toLowerCase()
+    if (termine.length === 0) return entries.value
+    return entries.value.filter((memory) => ((memory.title ?? '').toLowerCase().includes(termine)) || ((memory.content ?? '').toLowerCase().includes(termine)))
+})
 const loading = ref(false)
 const error = ref<string | null>(null)
 const actionMessage = ref<string | null>(null)
@@ -165,6 +180,26 @@ function statusLabel(memory: TalosLocalMemory): string {
 
 <template>
     <div class="flex min-h-full flex-col gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3" data-testid="talos-memory-screen">
+        <!-- L'impalcatura approvata dall'owner: ricerca, lista, FAB. Mancava
+             qui, e una lista che cresce senza un modo per restringerla si
+             scorre finche' non ci si arrende.
+             Sta FUORI da ogni catena `v-if`: infilarlo in mezzo a un
+             `v-if`/`v-else` rompe la coppia, e il campo deve restare visibile
+             anche quando la lista e' vuota — e' con la lista vuota che si
+             cancella il filtro. -->
+        <label class="relative block">
+            <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
+            <input
+                v-model="query"
+                type="search"
+                inputmode="search"
+                data-testid="talos-memory-search"
+                :placeholder="t('memory.searchPlaceholder')"
+                :aria-label="t('memory.searchPlaceholder')"
+                class="min-h-12 w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+            >
+        </label>
+
         <p class="text-xs leading-5 text-[var(--talos-muted)]">
             {{ t('memory.explanation') }}
         </p>
@@ -237,10 +272,9 @@ function statusLabel(memory: TalosLocalMemory): string {
         <p v-if="!entries.length && !loading" class="py-6 text-center text-sm text-[var(--talos-muted)]">
             {{ t('memory.empty') }}
         </p>
-
-        <ul v-else class="flex flex-col gap-2">
+<ul v-else class="flex flex-col gap-2">
             <li
-                v-for="memory in entries"
+                v-for="memory in shown"
                 :key="memory.id"
                 data-testid="talos-memory-row"
                 :data-memory-status="memory.status"
