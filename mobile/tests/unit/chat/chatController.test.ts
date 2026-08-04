@@ -557,10 +557,24 @@ describe('chatController', () => {
         })
         expect(controller.pendingToolAuthorizations.value[0]?.title).not.toBe('Create a document')
 
-        await controller.decideToolAuthorization(
+        /**
+         * Il cartellino sparisce quando si RISPONDE, non quando il lavoro
+         * finisce.
+         *
+         * Owner 2026-08-04: restava li' finche' il modello non aveva finito.
+         * La causa era l'attesa dentro `decideToolAuthorization` — il tool
+         * gira, il modello continua, e solo allora la tendina si chiudeva.
+         * Qui la promessa NON viene attesa: la visibilita' dev'essere gia'
+         * caduta.
+         */
+        controller.showToolAuthorization()
+        expect(controller.toolAuthorizationPromptVisible.value).toBe(true)
+        const deciding = controller.decideToolAuthorization(
             controller.pendingToolAuthorizations.value[0]!.request_id,
             'deny',
         )
+        expect(controller.toolAuthorizationPromptVisible.value).toBe(false)
+        await deciding
 
         expect(providerRound).toBe(2)
         expect(controller.pendingToolAuthorizations.value).toEqual([])
