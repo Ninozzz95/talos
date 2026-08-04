@@ -174,11 +174,17 @@ describe('Agent Tools control registry', () => {
          * Se il piano di controllo si fosse mosso insieme a loro, la domanda da
          * farsi sarebbe stata un'altra.
          */
+        /*
+         * Ri-fissate 2026-08-04: `generate_image` ha guadagnato `mask` — DOVE
+         * modificare. Tutti e tre i dialetti si sono mossi, come dev'essere: e'
+         * lo stesso contratto tradotto tre volte. Il piano di controllo NO: se
+         * si fosse mosso anche lui, la domanda da farsi sarebbe stata un'altra.
+         */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('29cfc66987dc9da003c1948b99449548b3cc10d0e22c75e7ac47cc75ecf4baaf')
+            .toBe('84f55d186d855b53f4e8ec1858768c354fa4b055098f6e8a2299da8074968d4b')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('67c1b3b00aeddf9f567b0d90e24d4bdfeacb4b248f4a33cd6ccc527caaef6ed8')
+            .toBe('5e286d09447ed927711db677e80f9e847f70d904ed522063f11b196859ce0d3f')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('46b95bc026894f839618ff31cb77077e037978753fb95f5ba646d771f0d94afb')
+            .toBe('2eb5fb9cf0724f880168279e9bdf480f7b3547d441b68726b2f773ccf32afd42')
     })
 })

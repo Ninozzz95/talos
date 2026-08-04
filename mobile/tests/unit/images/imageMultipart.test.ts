@@ -18,7 +18,7 @@ const PIANO: TalosImagePlan = {
     body: {},
     multipart: {
         fields: { model: 'gpt-image-2', prompt: 'fallo blu', n: '1' },
-        file: { field: 'image', base64: 'AAECAw==', mediaType: 'image/png', filename: 'sorgente.png' },
+        files: [{ field: 'image', base64: 'AAECAw==', mediaType: 'image/png', filename: 'sorgente.png' }],
     },
 }
 
@@ -91,5 +91,28 @@ describe('spedire una modifica in multipart', () => {
         await expect(sendTalosImageMultipart({ ...PIANO, multipart: undefined }))
             .rejects.toThrow('TALOS_IMAGE_MULTIPART_MISSING')
         expect(visto.url).toBeUndefined()
+    })
+})
+
+describe('la maschera nel pacco', () => {
+    it('parte come SECONDO file, coi suoi byte', async () => {
+        const visto = intercetta({ status: 200, testo: '{}' })
+        await sendTalosImageMultipart({
+            ...PIANO,
+            multipart: {
+                fields: PIANO.multipart!.fields,
+                files: [
+                    ...PIANO.multipart!.files,
+                    { field: 'mask', base64: 'BAUGBw==', mediaType: 'image/png', filename: 'maschera.png' },
+                ],
+            },
+        })
+        const maschera = visto.corpo?.get('mask') as File
+        expect(maschera).toBeInstanceOf(Blob)
+        expect(maschera.name).toBe('maschera.png')
+        // «BAUGBw==» sono i byte 4,5,6,7: si contano, non si suppongono.
+        expect(Array.from(new Uint8Array(await maschera.arrayBuffer()))).toEqual([4, 5, 6, 7])
+        // E l'immagine c'e' ancora: la maschera si AGGIUNGE, non sostituisce.
+        expect(visto.corpo?.get('image')).toBeInstanceOf(Blob)
     })
 })

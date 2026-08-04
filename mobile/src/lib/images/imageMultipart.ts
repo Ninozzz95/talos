@@ -64,11 +64,13 @@ export async function sendTalosImageMultipart(
 
     const form = new FormData()
     for (const [nome, valore] of Object.entries(parts.fields)) form.append(nome, valore)
-    form.append(
-        parts.file.field,
-        new Blob([base64ToBytes(parts.file.base64)], { type: parts.file.mediaType }),
-        parts.file.filename,
-    )
+    for (const file of parts.files) {
+        form.append(
+            file.field,
+            new Blob([base64ToBytes(file.base64)], { type: file.mediaType }),
+            file.filename,
+        )
+    }
 
     let risposta: Response
     try {
