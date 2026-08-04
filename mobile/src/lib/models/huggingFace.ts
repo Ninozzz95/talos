@@ -153,6 +153,10 @@ export interface TalosHuggingFaceModel {
      */
     gated: boolean
     updatedAt: string | null
+    /** A cosa serve: chat, codice, embedding. Dal Hub, non indovinato dal nome. */
+    task: string | null
+    /** Le etichette del repo: da qui esce la licenza per il filtro. */
+    tags: readonly string[]
 }
 
 export interface TalosHuggingFaceClient {
@@ -165,6 +169,22 @@ export interface TalosHuggingFaceClient {
      * gigabytes are committed to.
      */
     readHead(repo: string, revision: string, path: string, bytes: number): Promise<ArrayBuffer>
+    /**
+     * La scheda del modello: chi l'ha fatto, con che licenza, e cosa dice di se'.
+     *
+     * La descrizione viene dal README del repo, non da un riassunto nostro: e'
+     * cio' che l'autore ha scritto, e inventarne uno sarebbe peggio che non
+     * mostrarne nessuno. Torna GREZZO — chi lo mostra decide quanto renderne.
+     */
+    describeModel(repo: string): Promise<TalosHuggingFaceCard>
+}
+
+export interface TalosHuggingFaceCard {
+    author: string | null
+    license: string | null
+    /** Il README, per intero e non interpretato. */
+    readme: string
+    updatedAt: string | null
 }
 
 export function talosCreateHuggingFaceClient(
@@ -208,13 +228,26 @@ export function talosCreateHuggingFaceClient(
          * a broken search.
          */
         async searchModels(query, limit = 20) {
+            /*
+             * Senza testo si SFOGLIA, non si cerca il vuoto.
+             *
+             * MISURATO 2026-08-04 contro l'API vera: omettendo `search`, il Hub
+             * restituisce comunque una lista ordinata per download. Mandare
+             * `search: ''` invece chiede «i modelli che contengono la stringa
+             * vuota», che e' una domanda diversa e con una risposta peggiore.
+             *
+             * E' la differenza fra una schermata che si apre gia' piena e una
+             * che aspetta che tu sappia cosa cercare — owner 2026-08-04: «voglio
+             * una lista gia' caricata con un loading, con i filtri».
+             */
             const parameters = new URLSearchParams({
-                search: query,
                 filter: 'gguf',
                 sort: 'downloads',
                 direction: '-1',
                 limit: String(limit),
             })
+            const cercato = query.trim()
+            if (cercato.length > 0) parameters.set('search', cercato)
             const response = await options.fetch(`${HUB}/api/models?${parameters}`, {
                 headers: headers(),
             })
@@ -226,6 +259,8 @@ export function talosCreateHuggingFaceClient(
                 id: String(row.id ?? row.modelId ?? ''),
                 downloads: Number(row.downloads ?? 0),
                 likes: Number(row.likes ?? 0),
+                task: typeof row.pipeline_tag === 'string' ? row.pipeline_tag : null,
+                tags: Array.isArray(row.tags) ? row.tags.filter((t): t is string => typeof t === 'string') : [],
                 // The Hub answers `"auto"` or `"manual"` when a gate exists and
                 // OMITS the field otherwise, so absent means open. Reading it
                 // the cautious way round would mark nearly every model gated
@@ -243,6 +278,30 @@ export function talosCreateHuggingFaceClient(
          * folder down, and a listing that stops at the top level shows a
          * repository as empty when it holds a dozen usable files.
          */
+        async describeModel(repo) {
+            const [info, readme] = await Promise.all([
+                options.fetch(`${HUB}/api/models/${repo}`, { headers: headers() }),
+                /*
+                 * Il README si scarica dal ramo, non dall'API: `/api/models`
+                 * porta `cardData` (i metadati in cima al file) ma NON il testo.
+                 * Misurato 2026-08-04: `/raw/main/README.md` risponde 200 con la
+                 * scheda intera.
+                 */
+                options.fetch(`${HUB}/${repo}/raw/main/README.md`, { headers: headers() }),
+            ])
+            const refusal = refuse(info, repo)
+            if (refusal) throw refusal
+
+            const row = await info.json() as Record<string, unknown>
+            const card = (row.cardData ?? {}) as Record<string, unknown>
+            return {
+                author: typeof row.author === 'string' ? row.author : null,
+                license: typeof card.license === 'string' ? card.license : null,
+                // Un README che manca non e' un guasto: certi repo non ne hanno.
+                readme: readme.ok ? await readme.text() : '',
+                updatedAt: typeof row.lastModified === 'string' ? row.lastModified : null,
+            }
+        },
         async listGgufFiles(repo, revision) {
             const response = await options.fetch(
                 `${HUB}/api/models/${repo}/tree/${revision}?recursive=true`,
