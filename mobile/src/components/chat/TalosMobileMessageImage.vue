@@ -2,7 +2,6 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { Image as ImageIcon, Sparkles, X } from '@lucide/vue'
 import { useChatController } from '@/stores/chatController'
-import { readTalosImageProvenance, talosProvenanceLabel } from '@/lib/images/provenance'
 
 /**
  * An image in a message bubble, shown as an image.
@@ -59,6 +58,15 @@ watch(() => props.fileId, async (fileId) => {
          */
         const bytes = await controller.attachments.previewBytes(fileId)
         if (bytes === null) { failed.value = true; return }
+        /*
+         * Il lettore di provenienza arriva quando serve, non all'avvio.
+         *
+         * Sa camminare i chunk di un PNG e i segmenti di un JPEG: e' lavoro che
+         * ha senso solo davanti a un'immagine vera, e la prima schermata non ne
+         * ha nessuna. Il budget del pacco d'avvio e' stretto — misurato, non
+         * temuto — e questa e' esattamente la roba che ci va dietro.
+         */
+        const { readTalosImageProvenance, talosProvenanceLabel } = await import('@/lib/images/provenance')
         const letto = readTalosImageProvenance(bytes)
         provenance.value = letto.declaresAiGenerated ? talosProvenanceLabel(letto) : null
         const url = URL.createObjectURL(new Blob([bytes as unknown as BlobPart]))
