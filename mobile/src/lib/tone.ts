@@ -85,20 +85,58 @@ export function buildTalosSystemPrompt(tone: TalosToneId, identity?: TalosModelI
         + 'never mention this mechanism otherwise, and never change your own tone until the user switches.'
 }
 
-// R1 device evidence: the model appends the marker on the SAME line as prose
-// ("…come stai? [TONE_SUGGESTION: balanced]") — requiring a newline let it
-// leak into the visible AND persisted reply. Trailing-anchor only: a marker
-// mid-text is still never touched.
-const SUGGESTION_PATTERN = /\s*\[TONE_SUGGESTION:\s*([a-z_-]+)\s*\]\s*$/i
+/**
+ * Ovunque sia, non solo in fondo.
+ *
+ * Owner 2026-08-03, su Qwen3.5-Uncensored: il marcatore compariva nel testo
+ * della risposta. L'ancora finale copriva il caso previsto — il modello che lo
+ * mette in coda — e non quello vero: un modello che lo scrive e poi continua a
+ * parlare. Restava li', visibile e salvato.
+ *
+ * Il rischio del taglio globale era che un marcatore CITATO dall'utente
+ * sparisse. Ma questo e' un meccanismo nostro, iniettato dal nostro prompt di
+ * sistema: se compare in una risposta e' nostro, e le probabilita' che qualcuno
+ * scriva davvero `[TONE_SUGGESTION: balanced]` sono trascurabili davanti a un
+ * difetto misurato.
+ */
+const SUGGESTION_PATTERN_ALL = /\s*\[TONE_SUGGESTION:\s*([a-z_-]+)\s*\]/gi
+
+export function extractToneSuggestion(raw: string): { text: string; suggestion: TalosToneId | null } {
+    let suggestion: TalosToneId | null = null
+    const text = raw.replace(SUGGESTION_PATTERN_ALL, (_intero, id: string) => {
+        const candidato = id.toLowerCase()
+        // L'ULTIMO valido vince: se il modello cambia idea a meta' risposta,
+        // quella che conta e' l'ultima cosa che ha detto.
+        if (isTalosToneId(candidato)) suggestion = candidato
+        return ''
+    }).trimEnd()
+    return { text, suggestion }
+}
 
 /**
- * Strip a FINAL-line suggestion marker. Fail-closed: unknown ids strip without
- * suggesting; markers inside the body are body text and stay untouched.
+ * Quanto del testo che sta arrivando si puo' gia' MOSTRARE.
+ *
+ * Il taglio sopra vale sulla risposta finita; durante lo streaming il marcatore
+ * arriva a pezzi — `[TONE_`, `SUGGEST`, `ION: balanced]` — e chi guarda lo vede
+ * comparire e poi sparire. E' cosi' che l'owner l'ha visto.
+ *
+ * Quindi si trattiene la coda finche' potrebbe essere l'inizio di un marcatore.
+ * Il costo e' qualche carattere in ritardo di un istante; il guadagno e' che il
+ * meccanismo non si mostra mai. Un `[` che NON diventa un marcatore riappare al
+ * pezzo dopo, appena si sa che non lo era.
  */
-export function extractToneSuggestion(raw: string): { text: string; suggestion: TalosToneId | null } {
-    const match = SUGGESTION_PATTERN.exec(raw)
-    if (!match) return { text: raw, suggestion: null }
-    const text = raw.slice(0, match.index).trimEnd()
-    const candidate = match[1].toLowerCase()
-    return { text, suggestion: isTalosToneId(candidate) ? candidate : null }
+export function talosVisibleWhileStreaming(accumulated: string): string {
+    const ripulito = accumulated.replace(SUGGESTION_PATTERN_ALL, '')
+    const apertura = ripulito.lastIndexOf('[')
+    if (apertura < 0) return ripulito
+    const coda = ripulito.slice(apertura)
+    // Trattenere SOLO se la coda e' ancora un prefisso plausibile: una parentesi
+    // qualsiasi nel testo dell'utente non deve restare nascosta per sempre.
+    const inizio = '[TONE_SUGGESTION:'
+    const sembra = coda.length <= inizio.length
+        ? inizio.toLowerCase().startsWith(coda.toLowerCase())
+        : coda.toLowerCase().startsWith(inizio.toLowerCase())
+    // `trimEnd` sulla parte trattenuta: lo spazio prima del marcatore non
+    // deve restare appeso in fondo alla bolla mentre si aspetta.
+    return sembra ? ripulito.slice(0, apertura).trimEnd() : ripulito
 }

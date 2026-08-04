@@ -63,11 +63,59 @@ describe('extractToneSuggestion (F3-T4)', () => {
         expect(suggestion).toBe('balanced')
     })
 
-    it('ignores markers that are not on the final line (never mutates body text)', () => {
-        const body = 'The token [TONE_SUGGESTION: friendly] appears mid-text.\nFinal line.'
-        const { text, suggestion } = extractToneSuggestion(body)
-        expect(text).toBe(body)
-        expect(suggestion).toBeNull()
+    it('toglie il marcatore ANCHE a meta testo — decisione ribaltata 2026-08-04', () => {
+        /**
+         * Regola precedente: un marcatore fuori dall'ultima riga era testo del
+         * corpo e non si toccava, per non mutilare chi lo citasse.
+         *
+         * Ribaltata su prova: owner 2026-08-03, con Qwen3.5-Uncensored, il
+         * marcatore compariva NEL TESTO della risposta. L'ancora finale copriva
+         * il caso previsto — il modello che lo mette in coda — e non quello
+         * vero: un modello che lo scrive e poi continua a parlare.
+         *
+         * E' un meccanismo nostro, iniettato dal nostro prompt di sistema: se
+         * compare in una risposta e' nostro. Il caso della citazione resta
+         * teorico; il difetto era misurato.
+         */
+        const { text, suggestion } = extractToneSuggestion(
+            'Il token [TONE_SUGGESTION: friendly] sta in mezzo.\nUltima riga.',
+        )
+        expect(text).toBe('Il token sta in mezzo.\nUltima riga.')
+        expect(suggestion).toBe('friendly')
+    })
+
+    it('con due marcatori vince l ULTIMO', () => {
+        // Se il modello cambia idea a meta' risposta, quella che conta e'
+        // l'ultima cosa che ha detto.
+        const { text, suggestion } = extractToneSuggestion(
+            'a [TONE_SUGGESTION: friendly] b [TONE_SUGGESTION: concise]',
+        )
+        expect(text).toBe('a b')
+        expect(suggestion).toBe('concise')
+    })
+})
+
+describe('talosVisibleWhileStreaming — il marcatore non si vede MAI', () => {
+    it('trattiene la coda finche potrebbe essere l inizio di un marcatore', async () => {
+        /**
+         * Il taglio finale vale sulla risposta finita; durante lo streaming il
+         * marcatore arriva a pezzi e chi guarda lo vede comparire e poi
+         * sparire. E' cosi' che l'owner l'ha visto.
+         */
+        const { talosVisibleWhileStreaming } = await import('@/lib/tone')
+        expect(talosVisibleWhileStreaming('Ciao. [')).toBe('Ciao.')
+        expect(talosVisibleWhileStreaming('Ciao. [TONE_SUG')).toBe('Ciao.')
+        expect(talosVisibleWhileStreaming('Ciao. [TONE_SUGGESTION: bal')).toBe('Ciao.')
+        // Completo: sparisce del tutto, non si mostra un istante.
+        expect(talosVisibleWhileStreaming('Ciao. [TONE_SUGGESTION: balanced]')).toBe('Ciao.')
+    })
+
+    it('una parentesi qualunque NON resta nascosta per sempre', async () => {
+        // Trattenere ogni `[` vorrebbe dire che un elenco `[1]` sparisce fino a
+        // fine risposta.
+        const { talosVisibleWhileStreaming } = await import('@/lib/tone')
+        expect(talosVisibleWhileStreaming('vedi [1] e poi')).toBe('vedi [1] e poi')
+        expect(talosVisibleWhileStreaming('un [esempio')).toBe('un [esempio')
     })
 })
 
@@ -75,5 +123,32 @@ describe('isTalosToneId', () => {
     it('accepts known ids and rejects garbage', () => {
         expect(isTalosToneId('balanced')).toBe(true)
         expect(isTalosToneId('sarcastic')).toBe(false)
+    })
+})
+
+describe('lo streaming, pezzo per pezzo come arriva davvero', () => {
+    it('non mostra MAI il marcatore, nemmeno per un fotogramma', async () => {
+        /**
+         * Simula l'imbuto del controller: si accumula il grezzo e si consegna
+         * solo la differenza di cio' che si puo' mostrare. E' la stessa
+         * aritmetica che gira in `chatController`, isolata qui perche' il
+         * difetto e' di questa aritmetica, non del provider.
+         */
+        const { talosVisibleWhileStreaming } = await import('@/lib/tone')
+        const pezzi = ['Ciao', ', tutto', ' bene? [TONE', '_SUGGESTION:', ' friendly]']
+        let grezzo = ''
+        let mostrato = ''
+        const visto: string[] = []
+        for (const pezzo of pezzi) {
+            grezzo += pezzo
+            const visibile = talosVisibleWhileStreaming(grezzo)
+            if (visibile.length > mostrato.length) {
+                mostrato = visibile
+                visto.push(mostrato)
+            }
+        }
+        // Nessuno degli stati intermedi contiene una traccia del marcatore.
+        for (const stato of visto) expect(stato).not.toMatch(/TONE|\[/)
+        expect(mostrato).toBe('Ciao, tutto bene?')
     })
 })

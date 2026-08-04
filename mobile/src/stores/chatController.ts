@@ -83,7 +83,7 @@ import {
     type ChatTurn,
     type TalosStreamHandlers,
 } from '@/stores/chat'
-import { TALOS_TONE_PRESETS, buildTalosSystemPrompt, extractToneSuggestion, type TalosToneId } from '@/lib/tone'
+import { TALOS_TONE_PRESETS, buildTalosSystemPrompt, extractToneSuggestion, talosVisibleWhileStreaming, type TalosToneId } from '@/lib/tone'
 import {
     extractLibrarySaveBlocks,
     librarySaveInstruction,
@@ -2908,13 +2908,36 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 tools: typeof offeredTools,
             ): Promise<ChatCompletionResult> => {
                 openRound()
+                /**
+                 * Il marcatore del tono non si vede MAI, nemmeno per un istante.
+                 *
+                 * Owner 2026-08-03: `[TONE_SUGGESTION:` sfuggiva nel testo delle
+                 * risposte. Il taglio c'era gia', ma sulla risposta FINITA:
+                 * durante lo streaming il marcatore compariva a pezzi e poi
+                 * spariva, ed e' quello che si vedeva.
+                 *
+                 * Qui si accumula il grezzo e si consegna solo la parte che si
+                 * puo' gia' mostrare, come differenza. Sta in questo punto
+                 * perche' e' l'imbuto unico di ogni provider: metterlo negli
+                 * adattatori vorrebbe dire sei copie e cinque che invecchiano.
+                 */
+                let grezzo = ''
+                let mostrato = ''
                 // The first chunk is the first provider byte, whether this
                 // high-risk draft is still buffered or already user-visible.
                 const timed = handlers && {
                     ...handlers,
                     onChunk: (text: string) => {
                         round.open?.firstChunk()
-                        handlers.onChunk(text)
+                        grezzo += text
+                        const visibile = talosVisibleWhileStreaming(grezzo)
+                        // Solo in avanti: l'interfaccia riceve aggiunte, non
+                        // ritrattazioni, e cio' che e' trattenuto non e' mai
+                        // stato mostrato.
+                        if (visibile.length > mostrato.length) {
+                            handlers.onChunk(visibile.slice(mostrato.length))
+                            mostrato = visibile
+                        }
                     },
                     onReasoning: (text: string) => {
                         round.open?.firstChunk()
