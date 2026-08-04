@@ -1539,6 +1539,7 @@ export const TALOS_IT_MESSAGES = {
             outbound: 'Fuori dispositivo',
         },
         tools: {
+            memory_write: { title: 'Ricorda una cosa', description: 'Scrive in memoria quello che gli chiedi di ricordare per le conversazioni future.' },
             research_list: { title: 'Le tue ricerche', description: 'Elenca le ricerche approfondite che hai avviato, come sono finite e a che punto sono.' },
             library_list: { title: 'Sfoglia la Libreria', description: 'Elenca tutti i file della Libreria accessibili a questa chat.' },
             library_search: { title: 'Cerca nella Libreria', description: 'Trova corrispondenze nei nomi e nel contenuto dei documenti.' },

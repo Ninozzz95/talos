@@ -363,7 +363,7 @@ describe('useSettingsStore', () => {
         expect(store.state.agent_tools.library_search).toBe(false)
         expect(store.state.agent_tools).not.toHaveProperty('future_shell')
         expect(store.state.agent_tools.library_context_policy_update).toBe(false)
-        expect(Object.keys(store.state.agent_tools)).toHaveLength(19)
+        expect(Object.keys(store.state.agent_tools)).toHaveLength(20)
 
         await store.setAgentToolEnabled('library_search', true)
 

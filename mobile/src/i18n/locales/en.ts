@@ -1544,6 +1544,7 @@ export const TALOS_EN_MESSAGES = {
             outbound: 'Off-device',
         },
         tools: {
+            memory_write: { title: 'Remember something', description: 'Writes to memory what you ask it to remember for future conversations.' },
             research_list: { title: 'Your researches', description: 'List the deep researches you have run, how each ended and how far it got.' },
             library_list: { title: 'Browse the Library', description: 'List every Library file this chat may access.' },
             library_search: { title: 'Search the Library', description: 'Find matching names and document contents.' },

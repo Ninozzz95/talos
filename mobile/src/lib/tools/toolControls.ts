@@ -33,6 +33,12 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
      * l'utente ha creato lui, e senza di essa la domanda non ha risposta.
      */
     research_list: true,
+    /**
+     * Acceso di serie, ma il permesso e' `ask`: il modello lo VEDE e lo puo'
+     * proporre, e chi decide se scrivere davvero e' il cartellino. Spegnerlo
+     * di serie avrebbe nascosto la funzione a chi non sa di doverla cercare.
+     */
+    memory_write: true,
 })
 
 export type TalosAgentToolId = keyof typeof TALOS_DEFAULT_AGENT_TOOL_ENABLED
