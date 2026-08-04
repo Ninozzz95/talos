@@ -1886,7 +1886,7 @@ export const TALOS_EN_MESSAGES = {
         recheckLine: 'Re-checked {total} sources · {intact} intact · {changed} changed · {unreachable} no longer answer',
         recheckStillReadable: 'Sources that no longer answer stay readable here: the text was kept on the day of the research.',
         recheckPassagesLost: '{count} quoted passages are no longer in their source.',
-        export: 'Export .md',
+        export: 'Export',
         exported: 'Saved',
         followUpPlaceholder: 'Ask more about this research',
         followUpSend: 'Ask',

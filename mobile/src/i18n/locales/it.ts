@@ -1881,7 +1881,7 @@ export const TALOS_IT_MESSAGES = {
         recheckLine: 'Ricontrollate {total} fonti · {intact} intatte · {changed} cambiate · {unreachable} non rispondono più',
         recheckStillReadable: 'Le fonti che non rispondono più restano leggibili qui: il testo è stato conservato il giorno della ricerca.',
         recheckPassagesLost: '{count} passaggi citati non sono più nella loro fonte.',
-        export: 'Esporta .md',
+        export: 'Esporta',
         exported: 'Salvato',
         followUpPlaceholder: 'Chiedi altro su questa ricerca',
         followUpSend: 'Chiedi',
