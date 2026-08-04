@@ -92,16 +92,27 @@ async function holdRow(wrapper: ReturnType<typeof mountScreen>, selector: string
     await flushPromises()
 }
 
-function menu(): HTMLElement {
-    const element = document.body.querySelector('[data-testid="talos-chats-row-menu"]')
-    if (!element) throw new Error('row menu not open')
-    return element as HTMLElement
+/**
+ * Il menu ora sta sotto il ⋮, che e' visibile: si apre toccandolo, non
+ * scoprendolo con un gesto.
+ */
+async function openRowMenu(
+    wrapper: ReturnType<typeof mountScreen>,
+    selector = '[data-testid="talos-chats-row"]',
+    index = 0,
+): Promise<void> {
+    const riga = wrapper.findAll(selector)[index]
+    const trigger = riga.find('[data-testid^="talos-chats-menu-"]')
+    if (!trigger.exists()) throw new Error('nessun ⋮ sulla riga')
+    await trigger.trigger('click')
+    await flushPromises()
 }
 
 function menuItem(label: string): HTMLButtonElement {
-    const item = [...menu().querySelectorAll('button')].find((button) => button.textContent?.trim() === label)
+    const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+        .find((button) => button.textContent?.trim() === label)
     if (!item) throw new Error(`menu item ${label} not found`)
-    return item as HTMLButtonElement
+    return item
 }
 
 describe('ChatsScreen (F3-T3)', () => {
@@ -184,23 +195,29 @@ describe('ChatsScreen embedded panel mode (F6)', () => {
         page.unmount()
     })
 
-    it('SF6-F2: the embedded hold menu anchors to the held row, not the viewport', async () => {
+    it('SF6-F2 non e piu un problema: il ⋮ sta DENTRO la riga, anche nel pannello', async () => {
+        /**
+         * Il difetto originale era un menu posizionato a mano che sul tablet si
+         * spalmava su tutta la vista divisa. Ora il menu appartiene al ⋮ della
+         * riga e si ancora da se': non c'e' piu' un calcolo che possa sbagliare.
+         */
         const wrapper = mount(ChatsScreen, { props: { embedded: true }, attachTo: document.body })
-        await holdRow(wrapper, '[data-testid="talos-chats-row"]')
-        const element = menu()
-        // Anchored: inline left/width derived from the row rect (viewport-wide
-        // inset-x-6 smears the menu across the whole tablet split view).
-        expect(element.style.left).not.toBe('')
-        expect(element.style.width).not.toBe('')
-        expect(element.className).not.toContain('inset-x-6')
+        const riga = wrapper.findAll('[data-testid="talos-chats-row"]')[0]
+        expect(riga.find('[data-testid^="talos-chats-menu-"]').exists()).toBe(true)
         wrapper.unmount()
     })
 })
 
-describe('ChatsScreen hold dropdown (F5.1)', () => {
-    it('long-press opens the row menu; a moved finger cancels it', async () => {
+describe('il gesto e il ⋮ — allineati alla Ricerca (2026-08-04)', () => {
+    it('il tieni-premuto ACCENDE la selezione; il dito che scorre no', async () => {
+        /**
+         * Decisione ribaltata. La ricerca sulle azioni di riga (2026-08-03)
+         * dice che ⋮ e' la via primaria per agire su UNA e il tieni-premuto e'
+         * la selezione. Qui era l'inverso, e le due liste della stessa app
+         * rispondevano in modo opposto allo stesso dito.
+         */
         const wrapper = mountScreen()
-        // Moved finger: no menu.
+        // Dito che scorre: niente, era uno scorrimento della lista.
         vi.useFakeTimers()
         try {
             const row = wrapper.findAll('[data-testid="talos-chats-row"]')[0].element
@@ -210,17 +227,26 @@ describe('ChatsScreen hold dropdown (F5.1)', () => {
         } finally {
             vi.useRealTimers()
         }
-        expect(document.body.querySelector('[data-testid="talos-chats-row-menu"]')).toBeNull()
+        expect(wrapper.find('[data-testid="talos-chats-selection-bar"]').exists()).toBe(false)
 
         await holdRow(wrapper, '[data-testid="talos-chats-row"]')
-        expect(menu().getAttribute('role')).toBe('menu')
-        expect(menu().textContent).toContain('Archive')
+        // La riga tenuta parte gia' spuntata: il dito era li' sopra.
+        expect(wrapper.get('[data-testid="talos-chats-selection-bar"]').text()).toContain('1')
+        wrapper.unmount()
+    })
+
+    it('il ⋮ e visibile senza scoprirlo, e porta le stesse azioni', async () => {
+        const wrapper = mountScreen()
+        await openRowMenu(wrapper)
+        const voci = [...document.querySelectorAll('[role="menuitem"]')].map((v) => v.textContent?.trim())
+        expect(voci).toContain('Archive')
+        expect(voci).toContain('Delete')
         wrapper.unmount()
     })
 
     it('archives from the menu and unarchives from the archived section menu', async () => {
         const wrapper = mountScreen()
-        await holdRow(wrapper, '[data-testid="talos-chats-row"]', 1) // Pancake recipe
+        await openRowMenu(wrapper, '[data-testid="talos-chats-row"]', 1) // Pancake recipe
         menuItem('Archive').click()
         await flushPromises()
         const controller = mockState.controller as ReturnType<typeof makeController>
@@ -228,7 +254,7 @@ describe('ChatsScreen hold dropdown (F5.1)', () => {
         expect(wrapper.findAll('[data-testid="talos-chats-row"]')).toHaveLength(1)
 
         await wrapper.get('[data-testid="talos-chats-archived-toggle"]').trigger('click')
-        await holdRow(wrapper, '[data-testid="talos-chats-archived-row"]')
+        await openRowMenu(wrapper, '[data-testid="talos-chats-archived-row"]')
         menuItem('Unarchive').click()
         await flushPromises()
         expect(controller.chat.setSessionArchived).toHaveBeenCalledWith('s1', false)
@@ -240,7 +266,7 @@ describe('ChatsScreen hold dropdown (F5.1)', () => {
         const controller = mockState.controller as ReturnType<typeof makeController>
         controller.renameSession.mockRejectedValueOnce(new Error('TALOS_CHAT_RENAME_UNVERIFIED'))
         const wrapper = mountScreen()
-        await holdRow(wrapper, '[data-testid="talos-chats-row"]', 1)
+        await openRowMenu(wrapper, '[data-testid="talos-chats-row"]', 1)
         menuItem('Rename').click()
         await flushPromises()
         const input = document.body.querySelector<HTMLInputElement>('[aria-label="Chat name"]')
@@ -258,7 +284,7 @@ describe('ChatsScreen hold dropdown (F5.1)', () => {
 
     it('deletes through the menu behind the confirm dialog', async () => {
         const wrapper = mountScreen()
-        await holdRow(wrapper, '[data-testid="talos-chats-row"]', 1)
+        await openRowMenu(wrapper, '[data-testid="talos-chats-row"]', 1)
         menuItem('Delete').click()
         await flushPromises()
         const dialog = document.body.querySelector('[role="dialog"]')

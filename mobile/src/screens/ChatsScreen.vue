@@ -8,8 +8,9 @@
  */
 import { computed, nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import { useTalosI18n } from '@/i18n'
-import { Archive, ArchiveRestore, Check, CheckSquare, ChevronDown, LoaderCircle, MessageSquarePlus, MessageSquareText, Pencil, Search, Trash2, X } from '@lucide/vue'
+import { Check, CheckSquare, ChevronDown, LoaderCircle, MessageSquarePlus, Search, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
@@ -290,19 +291,8 @@ async function archiveSession(session: { id: string; title: string }, value: boo
     }
 }
 
-// F5.1 — tap-and-hold context menu. Long-press (500ms without moving) opens
-// the dropdown for that row; tap elsewhere / Escape closes it.
-interface RowMenuState {
-    session: { id: string; title: string; archived: boolean }
-    top: number
-    /** SF6-F2 (embedded): anchor the menu to the held row, not the viewport. */
-    left: number | null
-    width: number | null
-}
-const rowMenu = ref<RowMenuState | null>(null)
-// The click that ends the long-press lands on the JUST-OPENED backdrop and
-// would close the menu instantly — ignore dismissals in the first moment.
-let menuOpenedAt = 0
+// Tieni-premuto: 500 ms senza muovere il dito. Accende la SELEZIONE — il menu
+// di riga sta sotto il ⋮, che e' visibile e non va scoperto.
 const HOLD_MS = 500
 const HOLD_SLOP_PX = 10
 let holdTimer: ReturnType<typeof setTimeout> | null = null
@@ -315,7 +305,7 @@ function clearHold(): void {
     holdOrigin = null
 }
 
-function onRowPointerDown(session: { id: string; title: string }, isArchived: boolean, event: PointerEvent): void {
+function onRowPointerDown(session: { id: string; title: string }, _isArchived: boolean, event: PointerEvent): void {
     // In selection mode the row menu is a second, contradictory way to act on a
     // row: "Open" navigates away mid-selection, and its single Delete never
     // reconciled the selection, leaving a count that referred to a chat that no
@@ -328,17 +318,22 @@ function onRowPointerDown(session: { id: string; title: string }, isArchived: bo
     if (bulk.active.value) return
     clearHold()
     holdOrigin = { x: event.clientX, y: event.clientY }
-    const anchor = (event.currentTarget as HTMLElement).getBoundingClientRect()
     holdTimer = setTimeout(() => {
         void talosLightImpact()
         suppressNextClick = true
-        rowMenu.value = {
-            session: { id: session.id, title: session.title, archived: isArchived },
-            top: Math.min(anchor.bottom + 4, window.innerHeight - 260),
-            left: props.embedded ? anchor.left + 8 : null,
-            width: props.embedded ? Math.max(anchor.width - 16, 180) : null,
-        }
-        menuOpenedAt = Date.now()
+        /*
+         * Il gesto accende la SELEZIONE, non un secondo menu.
+         *
+         * La ricerca sulle azioni di riga (2026-08-03) dice che ⋮ e' la via
+         * primaria per agire su UNA e il tieni-premuto e' la selezione. Qui era
+         * l'inverso — il gesto apriva il menu e la selezione stava dietro un
+         * bottone in intestazione — quindi le due liste della stessa app
+         * rispondevano in modo opposto allo stesso dito.
+         *
+         * La riga tenuta parte gia' spuntata: il dito era li' sopra, e un
+         * secondo tocco per riprenderla sarebbe un passo per niente.
+         */
+        bulk.enter(session.id)
         clearHold()
     }, HOLD_MS)
 }
@@ -362,16 +357,28 @@ function onRowClickCapture(event: MouseEvent): void {
     }
 }
 
-function closeRowMenu(): void {
-    if (Date.now() - menuOpenedAt < 400) return
-    rowMenu.value = null
+/**
+ * Le voci di una riga, nella forma condivisa con la Ricerca.
+ *
+ * Una funzione sola per chat attive e archiviate: sono la stessa cosa con un
+ * verbo diverso, e due elenchi scritti a mano divergono al primo cambiamento.
+ */
+function menuFor(session: { archived: boolean }): TalosRowAction[] {
+    return [
+        { id: 'open', label: t('common.open'), testId: 'talos-chats-action-open' },
+        { id: 'rename', label: t('common.rename'), testId: 'talos-chats-action-rename' },
+        session.archived
+            ? { id: 'unarchive', label: t('chats.unarchive'), testId: 'talos-chats-action-unarchive' }
+            : { id: 'archive', label: t('chats.archive'), testId: 'talos-chats-action-archive' },
+        { id: 'select', label: t('common.select'), testId: 'talos-chats-select' },
+        { id: 'delete', label: t('common.delete'), danger: true, testId: 'talos-chats-action-delete' },
+    ]
 }
 
-function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delete' | 'select'): void {
-    const target = rowMenu.value?.session
-    // Menu actions always dismiss — the time guard only covers the backdrop.
-    rowMenu.value = null
-    if (!target) return
+function act(
+    target: { id: string; title: string; archived: boolean },
+    action: string,
+): void {
     if (action === 'open') void openSession(target.id)
     else if (action === 'rename') void openRename(target)
     else if (action === 'archive') void archiveSession(target, true)
@@ -440,7 +447,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
             class="mx-5 mt-2 flex items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
         >
             <Button type="button" size="icon" variant="ghost" class="min-h-11 min-w-11 rounded-full" :aria-label="t('chats.cancelSelection')" @click="bulk.exit()"><X class="size-4" aria-hidden="true" /></Button>
-            <span class="text-sm font-medium">{{ t('chats.selected', { count: bulk.count.value }) }}</span>
+            <span class="text-sm font-medium">{{ bulk.count.value === 1 ? t('chats.selectedOne') : t('chats.selected', { count: bulk.count.value }) }}</span>
             <Button type="button" variant="ghost" size="sm" class="ml-auto" @click="bulk.selectAll(selectableIds)">
                 {{ bulk.allSelected(selectableIds) ? t('common.none') : t('library.all') }}
             </Button>
@@ -474,7 +481,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                     :key="session.id"
                     data-testid="talos-chats-row"
                     :data-active="controller.chat.activeSession.value?.id === session.id ? 'true' : 'false'"
-                    class="talos-holdable rounded-lg"
+                    class="relative talos-holdable rounded-lg"
                     :class="controller.chat.activeSession.value?.id === session.id ? 'bg-[var(--talos-active)]' : ''"
                     :style="{ touchAction: 'pan-y' }"
                     @pointerdown="onRowPointerDown(session, false, $event)"
@@ -484,6 +491,18 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                     @click.capture="onRowClickCapture($event)"
                     @contextmenu.prevent
                 >
+                    <!-- ⋮ e' la via primaria: il tieni-premuto ora
+                         seleziona, come nella Ricerca. Sta fuori dal
+                         bottone che apre la chat, perche' due aree di
+                         tocco annidate se ne mangiano una. -->
+                    <div v-if="!bulk.active.value" class="absolute right-1 top-1 z-10">
+                        <TalosRowActions
+                            :test-id="`talos-chats-menu-${session.id}`"
+                            :label="t('chats.actionsFor', { title: sessionTitle(session) })"
+                            :items="menuFor({ archived: false })"
+                            @select="(action) => act({ id: session.id, title: sessionTitle(session), archived: false }, action)"
+                        />
+                    </div>
                     <button
                         type="button"
                         data-testid="talos-chats-open"
@@ -519,7 +538,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                         v-for="session in archived"
                         :key="session.id"
                         data-testid="talos-chats-archived-row"
-                        class="talos-holdable rounded-lg"
+                        class="relative talos-holdable rounded-lg"
                         :style="{ touchAction: 'pan-y' }"
                         @pointerdown="onRowPointerDown(session, true, $event)"
                         @pointermove="onRowPointerMove($event)"
@@ -528,6 +547,18 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                         @click.capture="onRowClickCapture($event)"
                         @contextmenu.prevent
                     >
+                    <!-- ⋮ e' la via primaria: il tieni-premuto ora
+                         seleziona, come nella Ricerca. Sta fuori dal
+                         bottone che apre la chat, perche' due aree di
+                         tocco annidate se ne mangiano una. -->
+                    <div v-if="!bulk.active.value" class="absolute right-1 top-1 z-10">
+                        <TalosRowActions
+                            :test-id="`talos-chats-menu-${session.id}`"
+                            :label="t('chats.actionsFor', { title: sessionTitle(session) })"
+                            :items="menuFor({ archived: true })"
+                            @select="(action) => act({ id: session.id, title: sessionTitle(session), archived: true }, action)"
+                        />
+                    </div>
                         <button
                             type="button"
                             data-testid="talos-chats-archived-open"
@@ -559,50 +590,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
         </div>
 
         <!-- F5.1 — hold dropdown: one menu for the held row -->
-        <Teleport to="body">
-            <div v-if="rowMenu" class="fixed inset-0 z-[80]" @click="closeRowMenu" @keydown.escape="closeRowMenu">
-                <div
-                    data-testid="talos-chats-row-menu"
-                    role="menu"
-                    :aria-label="t('chats.actionsFor', { title: sessionTitle(rowMenu.session) })"
-                    class="absolute rounded-xl border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.16)]"
-                    :class="rowMenu.left === null ? 'inset-x-6' : ''"
-                    :style="rowMenu.left === null
-                        ? { top: `${rowMenu.top}px` }
-                        : { top: `${rowMenu.top}px`, left: `${rowMenu.left}px`, width: `${rowMenu.width}px` }"
-                    @click.stop
-                >
-                    <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="menuAction('open')">
-                        <MessageSquareText class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('common.open') }}
-                    </button>
-                    <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="menuAction('rename')">
-                        <Pencil class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('common.rename') }}
-                    </button>
-                    <button
-                        v-if="!rowMenu.session.archived"
-                        type="button" role="menuitem"
-                        class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
-                        @click="menuAction('archive')"
-                    >
-                        <Archive class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('chats.archive') }}
-                    </button>
-                    <button
-                        v-else
-                        type="button" role="menuitem"
-                        class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
-                        @click="menuAction('unarchive')"
-                    >
-                        <ArchiveRestore class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('chats.unarchive') }}
-                    </button>
-                    <button type="button" role="menuitem" data-testid="talos-chats-select" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="menuAction('select')">
-                        <CheckSquare class="size-4" aria-hidden="true" /> {{ t('common.select') }}
-                    </button>
-                    <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-danger,#dc5b5b)] hover:bg-[var(--talos-active)]" @click="menuAction('delete')">
-                        <Trash2 class="size-4" aria-hidden="true" /> {{ t('common.delete') }}
-                    </button>
-                </div>
-            </div>
-        </Teleport>
+        
 
         <!-- F5.2: device-proven manual dialogs (reka-ui never rendered on
              the owner's WebView). -->
