@@ -1425,6 +1425,7 @@ export const TALOS_EN_MESSAGES = {
         selectChats: 'Select chats',
         newShort: 'New',
         cancelSelection: 'Cancel selection',
+        selectedOne: '1 chat selected',
         selected: '{count} selected',
         deleteSelected: 'Delete selected chats',
         holdForActions: 'Hold a chat for actions.',

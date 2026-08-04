@@ -212,7 +212,7 @@ defineExpose({ close })
                 role="menu"
                 :aria-label="props.label"
                 data-testid="talos-row-actions-menu"
-                class="absolute min-w-44 max-w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.28)]"
+                class="talos-holdable absolute min-w-44 max-w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.28)]"
                 :style="{ top: `${at.top}px`, right: `${at.right}px` }"
                 @click.stop
                 @keydown="onMenuKey"

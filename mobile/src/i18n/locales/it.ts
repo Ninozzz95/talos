@@ -1420,6 +1420,7 @@ export const TALOS_IT_MESSAGES = {
         selectChats: 'Seleziona chat',
         newShort: 'Nuova',
         cancelSelection: 'Annulla selezione',
+        selectedOne: '1 chat selezionata',
         selected: '{count} selezionate',
         deleteSelected: 'Elimina chat selezionate',
         holdForActions: 'Tieni premuta una chat per le azioni.',
