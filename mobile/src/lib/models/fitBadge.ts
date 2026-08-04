@@ -11,6 +11,23 @@
  *
  * Quindi si vedono tutti, e ognuno dice come sta rispetto a QUESTO telefono.
  *
+ * ## RAM, non spazio su disco. E va DETTO.
+ *
+ * Owner 2026-08-04, guardando la schermata: «ho paura che tu stia confondendo
+ * la memoria RAM con la memoria di archiviazione». Aveva ragione a temerlo, e
+ * il difetto era nelle PAROLE: «ci sta» si legge come spazio, e lo spazio non
+ * e' mai il problema — su quel telefono ce n'erano 395 GB liberi contro 4,3 GB
+ * di RAM.
+ *
+ * RICERCATO 2026-08-04: con `mmap` llama.cpp puo' aprire un modello piu' grande
+ * della RAM, perche' il sistema pagina i pesi da disco su richiesta. Ma per
+ * generare UN token servono quasi tutti i pesi, quindi in pratica il modello
+ * deve stare in memoria: se non ci sta, il telefono passa il tempo a leggere
+ * dal disco e Android chiude l'app sotto pressione.
+ *
+ * Quindi il verdetto sulla RAM e' quello giusto — e le parole ora lo dicono:
+ * «Gira bene», «Non gira qui», non «ci sta».
+ *
  * ## Il numero contro cui si misura
  *
  * Non una soglia generica: `availableRamBytes`, che

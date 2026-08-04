@@ -987,18 +987,18 @@ export const TALOS_IT_MESSAGES = {
         // Non un filtro che nasconde — nascondere toglie anche il motivo
         // per liberare memoria.
         fitLabel: {
-            'comfortable': 'Ci sta',
+            'comfortable': 'Gira bene',
             'tight': 'Al limite',
-            'will-crawl': 'Lentissimo',
-            'wont-run': 'Non ci sta',
+            'will-crawl': 'Troppo lento',
+            'wont-run': 'Non gira qui',
         },
         fitReason: {
-            'comfortable': 'Entra comodo. Restano {left} liberi.',
-            'tight': 'Entra, ma restano solo {left}: sotto carico il sistema potrebbe chiudere TALOS.',
-            'will-crawl': 'Ci sta per un pelo e girerebbe cosi’ piano da non essere usabile.',
-            'wont-run': 'Servono {missing} in più. Libera memoria e ricontrolla, oppure scegli una variante più piccola.',
+            'comfortable': 'Entra in memoria comodo: restano {left} di RAM libera.',
+            'tight': 'Entra in memoria, ma restano solo {left} di RAM: sotto carico Android potrebbe chiudere TALOS.',
+            'will-crawl': 'Entra per un pelo, e il telefono passerebbe il tempo a leggere dal disco invece che a scrivere.',
+            'wont-run': 'Servono {missing} di RAM in più. Lo spazio su disco non c’entra: il modello deve stare in MEMORIA per generare.',
         },
-        fitFree: 'Memoria libera: {free}',
+        fitFree: 'RAM libera: {free}',
         defaultModel: 'Modello predefinito',
         sharedSelection: 'Model Lab e il selettore rapido della Chat condividono questa selezione in tempo reale.',
         defaultChatModel: 'Modello chat predefinito',
@@ -1332,6 +1332,13 @@ export const TALOS_IT_MESSAGES = {
         sortLabel: 'Ordina',
         // I valori sono i nomi del Hub, non nostri.
         sort: {
+            // I modelli GIA' sul telefono: ordinati per quando sono arrivati,
+            // come si chiamano, quanto pesano. Sono chiavi diverse da quelle
+            // della lista sfogliata, e cancellarle deduplicando le ha fatte
+            // comparire crude sullo schermo — visto sul tablet 2026-08-04.
+            recent: 'Recenti',
+            name: 'Nome',
+            size: 'Dimensione',
             downloads: 'Più scaricati',
             likes: 'Più apprezzati',
             lastModified: 'Aggiornati di recente',
@@ -1344,7 +1351,7 @@ export const TALOS_IT_MESSAGES = {
         // fa chi mette un modello su un TELEFONO.
         filtersLabel: 'Filtri',
         filter: {
-            'fits': 'Ci sta',
+            'fits': 'Gira qui',
             'chat': 'Chat',
             'code': 'Codice',
             'q4': 'Q4',
