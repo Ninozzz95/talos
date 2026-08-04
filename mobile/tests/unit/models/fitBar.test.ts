@@ -27,6 +27,14 @@ describe('la barra della capienza', () => {
         expect(segno.attributes('style')).toMatch(/left:\s*7[0-2]/)
     })
 
+    it('quando manca una misura non inventa né barra né rapporto', () => {
+        const sconosciuta = barra({ tone: 'unknown', ratio: null, label: 'Da verificare' })
+
+        expect(sconosciuta.attributes('data-fit-tone')).toBe('unknown')
+        expect(sconosciuta.find('[data-testid="talos-model-fit-track"]').exists()).toBe(false)
+        expect(sconosciuta.text()).toContain('Da verificare')
+    })
+
     it('quando ci sta, non c’è nessun segno da mostrare', () => {
         // Il limite è il bordo: disegnarci sopra una riga sarebbe rumore.
         expect(barra({ ratio: 0.6 }).find('[data-testid="talos-model-fit-mark"]').exists())
@@ -38,7 +46,12 @@ describe('la barra della capienza', () => {
          * I token si invertono fra chiaro e scuro perché sono colori di primo
          * piano. Un colore fisso qui sarebbe illeggibile su metà dei temi.
          */
-        for (const [tone, token] of [['ok', 'success'], ['tight', 'warning'], ['over', 'danger']] as const) {
+        for (const [tone, token] of [
+            ['ok', 'success'],
+            ['tight', 'warning'],
+            ['over', 'danger'],
+            ['unknown', 'text-muted'],
+        ] as const) {
             const html = barra({ tone, ratio: 0.5 }).html()
             expect(html).toContain(`var(--talos-${token}`)
         }

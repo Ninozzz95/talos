@@ -43,6 +43,11 @@ export interface TalosMeasuredDevice extends TalosDeviceCapacity {
     androidSdk: number
 }
 
+/** A refused or malformed StorageManager probe is absence, never zero space. */
+export function talosNormaliseStorageMeasurement(value: number): number | null {
+    return Number.isFinite(value) && value > 0 ? value : null
+}
+
 /**
  * Measure, or say plainly that we cannot.
  *
@@ -58,7 +63,7 @@ export async function talosMeasureDevice(): Promise<TalosMeasuredDevice | null> 
             totalRamBytes: measured.totalRamBytes,
             availableRamBytes: measured.availableRamBytes,
             lowMemoryThresholdBytes: measured.lowMemoryThresholdBytes,
-            freeStorageBytes: measured.freeStorageBytes,
+            freeStorageBytes: talosNormaliseStorageMeasurement(measured.freeStorageBytes),
             abiSupported: measured.abiSupported,
             thermal: thermalOf(measured.thermal),
             // Zero is the probe refusing, not a phone with no memory bus. It has

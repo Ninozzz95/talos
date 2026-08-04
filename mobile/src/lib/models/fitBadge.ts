@@ -28,6 +28,18 @@
  * Quindi il verdetto sulla RAM e' quello giusto — e le parole ora lo dicono:
  * «Gira bene», «Non gira qui», non «ci sta».
  *
+ * ## Ma il disco e' un muro SUO, e prima
+ *
+ * Owner 2026-08-04: «sul tablet ci sono 38 GB liberi, non 395». Aver capito che
+ * il verdetto giusto e' sulla RAM non voleva dire che il disco non conta —
+ * voleva dire che sono DUE domande, e che una lista che ne fa una sola mente
+ * nel caso ordinario del telefono quasi pieno.
+ *
+ * Le due si riparano in modi opposti: lo spazio si libera, la memoria no. Per
+ * questo il disco si guarda per PRIMO e ha parole sue — «Non c'e' spazio», con
+ * quanti byte mancano. Dire «non gira qui» a chi ha solo il telefono pieno lo
+ * manda a cercare un modello piu' piccolo, che e' la cura sbagliata.
+ *
  * ## Il numero contro cui si misura
  *
  * Non una soglia generica: `availableRamBytes`, che
@@ -39,29 +51,33 @@
  * TRADUCE, e non decide niente per conto suo — se un giorno il calcolo cambia,
  * cambia in un posto solo.
  */
-import type { TalosModelBand } from './fit'
+import type { TalosCapacityVerdict } from './fit'
 
-export type TalosFitTone = 'ok' | 'tight' | 'over'
+export type TalosFitTone = 'ok' | 'tight' | 'over' | 'unknown'
 
 export interface TalosFitBadge {
     /** Il colore della cosa: verde, giallo, rosso. */
     tone: TalosFitTone
     /** Quanto del disponibile occupa, da 0 a 1. Oltre 1 significa che sfora. */
-    ratio: number
+    ratio: number | null
     /** La chiave della frase corta, quella dentro la pillola. */
     labelKey: string
     /** La chiave della frase che spiega, sotto. */
     reasonKey: string
 }
 
-const TONE: Record<TalosModelBand, TalosFitTone> = {
-    comfortable: 'ok',
+const TONE: Record<Exclude<TalosCapacityVerdict['state'], 'unknown'>, TalosFitTone> = {
+    fits: 'ok',
     tight: 'tight',
-    // «Girera' lentissimo» non e' «non ci sta», ma per chi guarda una lista la
-    // decisione e' la stessa: non prenderlo. Il perche' resta nella frase
-    // sotto, che e' il posto dove una sfumatura si puo' spiegare.
-    'will-crawl': 'over',
-    'wont-run': 'over',
+    'memory-blocked': 'over',
+    'storage-blocked': 'over',
+}
+
+const KEY: Record<Exclude<TalosCapacityVerdict['state'], 'unknown'>, string> = {
+    fits: 'comfortable',
+    tight: 'tight',
+    'memory-blocked': 'no-memory',
+    'storage-blocked': 'no-space',
 }
 
 /**
@@ -77,20 +93,25 @@ const TONE: Record<TalosModelBand, TalosFitTone> = {
  * «due volte» portano alla stessa decisione. Il numero esatto resta nella
  * frase.
  */
-export function talosFitBadge(input: {
-    band: TalosModelBand
-    /** Quanto pesa una volta caricato: file piu' cache, non solo il file. */
-    needsBytes: number
-    availableBytes: number
-}): TalosFitBadge {
-    const tone = TONE[input.band]
+export function talosFitBadge(input: TalosCapacityVerdict): TalosFitBadge {
+    if (input.state === 'unknown') {
+        return {
+            tone: 'unknown',
+            ratio: null,
+            labelKey: 'models.fitLabel.unknown',
+            reasonKey: `models.fitReason.unknown-${input.reason}`,
+        }
+    }
+
+    const tone = TONE[input.state]
     const denominatore = Math.max(1, input.availableBytes)
     const ratio = Math.min(1.6, input.needsBytes / denominatore)
+    const chiave = KEY[input.state]
     return {
         tone,
         ratio,
-        labelKey: `models.fitLabel.${input.band}`,
-        reasonKey: `models.fitReason.${input.band}`,
+        labelKey: `models.fitLabel.${chiave}`,
+        reasonKey: `models.fitReason.${chiave}`,
     }
 }
 

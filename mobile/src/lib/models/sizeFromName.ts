@@ -64,8 +64,6 @@ export interface TalosEstimatedSize {
     assumedQuantisation: string | null
 }
 
-const GIB = 1024 * 1024 * 1024
-
 /**
  * Il margine sopra i pesi, per poterlo davvero aprire.
  *
@@ -119,18 +117,16 @@ export function talosEstimateSizeFromName(name: string): TalosEstimatedSize | nu
     }
 }
 
-/**
- * Il verdetto di capienza da una stima.
+/*
+ * Il verdetto NON sta piu' qui.
  *
- * Le stesse tre soglie della lista curata, perche' due liste sulla stessa
- * schermata che chiamano «al limite» due cose diverse insegnano a non fidarsi
- * di nessuna delle due.
+ * `talosEstimatedBand` viveva in fondo a questo file e guardava solo la
+ * memoria. Era il posto sbagliato in un modo che si e' pagato: questo modulo
+ * parla di NOMI e di pesi, e un verdetto ospitato qui e' un verdetto che nessuno
+ * confronta con quello vero — cosi' ha smesso di misurare il disco senza che
+ * niente lo facesse notare.
+ *
+ * Ora sta in `fit.ts`, accanto al calcolo completo, e si chiama
+ * `talosEstimatedCapacity`. Stessa riserva, stessa soglia, stesso ORDINE dei
+ * cancelli: se un giorno cambia il calcolo, cambia per tutti e due insieme.
  */
-export function talosEstimatedBand(
-    workingBytes: number,
-    availableBytes: number,
-): 'comfortable' | 'tight' | 'wont-run' {
-    const margine = availableBytes - workingBytes
-    if (margine < 0) return 'wont-run'
-    return margine < 0.5 * GIB ? 'tight' : 'comfortable'
-}
