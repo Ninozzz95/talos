@@ -290,6 +290,57 @@ public class TalosLlamaPlugin extends Plugin {
      * loading, instead of at the moment of choosing.
      */
     @PluginMethod
+    /**
+     * Cancella un modello scaricato — il file e il suo sidecar.
+     *
+     * Owner 2026-08-04: «non e' possibile fare CRUD sui modelli locali». Non lo
+     * era davvero: si potevano scaricare e mai togliere dall'app, solo dalle
+     * impostazioni di sistema — cioe' uscendo da TALOS per rimediare a una cosa
+     * fatta dentro TALOS.
+     *
+     * Il percorso viene VERIFICATO contro la radice dei modelli invece di
+     * essere cancellato com'e' arrivato: un percorso e' una stringa che passa
+     * dalla WebView, e questo metodo cancella file. Fuori dalla radice si
+     * rifiuta, e lo dice.
+     */
+    public void deleteInstalled(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null || path.isEmpty()) {
+            call.reject("TALOS_LOCAL_MODEL_PATH_REQUIRED");
+            return;
+        }
+        try {
+            File root = TalosTransferSession.rootFor(getContext());
+            File target = new File(path).getCanonicalFile();
+            if (!target.getPath().startsWith(root.getCanonicalFile().getPath() + File.separator)) {
+                call.reject("TALOS_LOCAL_MODEL_OUTSIDE_ROOT");
+                return;
+            }
+            if (!target.exists()) {
+                // Gia' sparito: l'esito che l'utente voleva. Un errore qui
+                // manderebbe a cercare un guasto che non c'e'.
+                JSObject done = new JSObject();
+                done.put("deleted", false);
+                call.resolve(done);
+                return;
+            }
+            boolean removed = target.delete();
+            // Il sidecar accanto al file: senza, resta un residuo che il
+            // downloader potrebbe leggere come un trasferimento a meta'.
+            new File(target.getPath() + ".talos").delete();
+            if (!removed) {
+                call.reject("TALOS_LOCAL_MODEL_DELETE_FAILED");
+                return;
+            }
+            JSObject done = new JSObject();
+            done.put("deleted", true);
+            call.resolve(done);
+        } catch (Exception failure) {
+            call.reject("TALOS_LOCAL_MODEL_DELETE_FAILED", failure);
+        }
+    }
+
+    @PluginMethod
     public void installed(PluginCall call) {
         // The SAME root the downloader writes to. Asking for `getFilesDir()`
         // instead would compile, run, and return an empty list forever — the
