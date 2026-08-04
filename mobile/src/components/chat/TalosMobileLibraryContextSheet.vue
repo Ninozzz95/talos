@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Check, Database, MinusCircle, PlusCircle } from '@lucide/vue'
+import { Check, Database } from '@lucide/vue'
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import TalosMobileLibraryFileGlyph from '@/components/talos/library/TalosMobileLibraryFileGlyph.vue'
@@ -97,6 +97,29 @@ function setMode(value: TurnModeValue): void {
     publish(candidate)
 }
 
+/**
+ * Le tre scelte per un file, con i test-id che le due vecchie portavano.
+ *
+ * `include` ed `exclude` restano gli stessi identificativi: la grammatica
+ * cambia, i selettori puntati su quei comandi no — altrimenti l'adozione si
+ * legge come una regressione.
+ */
+function fileStateOptions(file: { id: string, display_name: string }) {
+    return [
+        { value: 'automatic', label: t('library.contextAutomatic'), testId: `talos-library-turn-auto-${file.id}` },
+        { value: 'included', label: t('library.contextIncluded'), testId: `talos-library-turn-include-${file.id}` },
+        { value: 'excluded', label: t('library.contextExcluded'), testId: `talos-library-turn-exclude-${file.id}` },
+    ]
+}
+
+/** Compatto: tre voci su una riga stretta, sotto il nome del file. */
+function fileStateOptionClass(selected: boolean): string {
+    const base = 'talos-pressable min-h-9 rounded-full border px-2.5 text-2xs'
+    return selected
+        ? `${base} border-[var(--talos-accent)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]`
+        : `${base} border-[var(--talos-border)] text-[var(--talos-muted)]`
+}
+
 function fileState(fileId: string): 'automatic' | 'included' | 'excluded' {
     if (props.override?.excluded_file_ids?.includes(fileId)) return 'excluded'
     if (props.override?.included_file_ids?.includes(fileId)) return 'included'
@@ -169,32 +192,31 @@ function setFileState(fileId: string, state: 'automatic' | 'included' | 'exclude
                         <span class="block truncate text-xs font-medium text-[var(--talos-text)]">
                             {{ file.display_name }}
                         </span>
-                        <span class="mt-0.5 block text-2xs text-[var(--talos-muted)]">
-                            {{ $t(`library.context${fileState(file.id).charAt(0).toUpperCase()}${fileState(file.id).slice(1)}`) }}
-                        </span>
+                        <!--
+                            TRE stati, quindi un radiogroup — non due
+                            interruttori indipendenti.
+
+                            Erano due bottoni con `aria-pressed`: un lettore di
+                            schermo diceva «pulsante, non premuto» due volte e
+                            mai «automatico, 1 di 3». E guardandoli, su
+                            «automatico» sembravano semplicemente due comandi
+                            spenti: lo stato corrente non era da nessuna parte
+                            se non in una riga di testo accanto.
+
+                            Sotto il nome e non di fianco: tre scelte accanto a
+                            un nome di file non ci stanno su un telefono, e
+                            comprimerle vorrebbe dire tre bersagli che si
+                            sbagliano.
+                        -->
+                        <TalosThemedFilter
+                            group-class="mt-1.5 flex gap-1"
+                            :model-value="fileState(file.id)"
+                            :options="fileStateOptions(file)"
+                            :group-label="$t('library.contextForNamed', { name: file.display_name })"
+                            :option-class="fileStateOptionClass"
+                            @update:model-value="(value) => setFileState(file.id, value as 'automatic' | 'included' | 'excluded')"
+                        />
                     </span>
-                    <button
-                        type="button"
-                        :data-testid="`talos-library-turn-include-${file.id}`"
-                        :aria-label="$t('library.includeNamedForNextMessage', { name: file.display_name })"
-                        :aria-pressed="fileState(file.id) === 'included'"
-                        class="talos-pressable flex size-11 shrink-0 items-center justify-center rounded-full border border-[var(--talos-border)]"
-                        :class="fileState(file.id) === 'included' ? 'text-[var(--talos-accent)]' : 'text-[var(--talos-muted)]'"
-                        @click="setFileState(file.id, fileState(file.id) === 'included' ? 'automatic' : 'included')"
-                    >
-                        <PlusCircle class="size-4" aria-hidden="true" />
-                    </button>
-                    <button
-                        type="button"
-                        :data-testid="`talos-library-turn-exclude-${file.id}`"
-                        :aria-label="$t('library.excludeNamedForNextMessage', { name: file.display_name })"
-                        :aria-pressed="fileState(file.id) === 'excluded'"
-                        class="talos-pressable flex size-11 shrink-0 items-center justify-center rounded-full border border-[var(--talos-border)]"
-                        :class="fileState(file.id) === 'excluded' ? 'text-[var(--talos-danger)]' : 'text-[var(--talos-muted)]'"
-                        @click="setFileState(file.id, fileState(file.id) === 'excluded' ? 'automatic' : 'excluded')"
-                    >
-                        <MinusCircle class="size-4" aria-hidden="true" />
-                    </button>
                 </li>
             </ul>
         </section>

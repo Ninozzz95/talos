@@ -1096,6 +1096,7 @@ export const TALOS_IT_MESSAGES = {
         globalContextMode: 'Contesto Libreria globale',
         contextModeOff: 'Disattivato',
         contextState: 'Contesto: {state}',
+        contextForNamed: 'Contesto per {name}',
         contextAutomatic: 'Automatico',
         contextIncluded: 'Incluso',
         contextExcluded: 'Escluso',
