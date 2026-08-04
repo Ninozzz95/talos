@@ -1264,6 +1264,7 @@ export const TALOS_EN_MESSAGES = {
         opening: 'Opening…',
     },
     memory: {
+        itemMissing: 'This memory is gone.',
         searchPlaceholder: 'Search memories',
         title: 'Memory',
         explanation: 'Memories are stored on this device and always injected as untrusted disclosed context — they can never override system or security rules.',
@@ -1430,6 +1431,8 @@ export const TALOS_EN_MESSAGES = {
         storageFree: 'free space',
     },
     notes: {
+        // The note may have been deleted elsewhere, or the address hand-typed.
+        itemMissing: 'This note is gone.',
         searchPlaceholder: 'Search notes',
         intro: 'Notes are stored on this device and treated as untrusted disclosed context — they can never carry instructions.',
         title: 'Note title',
@@ -1440,6 +1443,7 @@ export const TALOS_EN_MESSAGES = {
         deleteNamed: 'Delete note {title}',
     },
     tasks: {
+        itemMissing: 'This task is gone.',
         searchPlaceholder: 'Search tasks',
         intro: 'Run-linked tasks, stored on this device — fully functional offline.',
         title: 'Task title',

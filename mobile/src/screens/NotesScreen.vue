@@ -5,8 +5,9 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Search, StickyNote, Plus, Trash2 } from '@lucide/vue'
+import { ChevronRight, Search, StickyNote, Plus } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
+import { useRouter } from 'vue-router'
 import { useChatController } from '@/stores/chatController'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import type { TalosLocalNote } from '@/repositories/chatRepository'
@@ -15,6 +16,12 @@ const controller = useChatController()
 const { t } = useTalosI18n()
 
 const entries = ref<TalosLocalNote[]>([])
+const router = useRouter()
+
+/** Voce → pagina → dettaglio, sempre nello stesso verso. */
+function open(note: TalosLocalNote): void {
+    void router.push({ name: 'note-item', params: { id: note.id } })
+}
 
 /**
  * Il campo di ricerca dell'impalcatura che l'owner ha approvato: titolo,
@@ -77,15 +84,6 @@ async function submit(): Promise<void> {
     }
 }
 
-async function remove(note: TalosLocalNote): Promise<void> {
-    error.value = null
-    try {
-        await controller.notes.remove(note.id)
-        await refresh()
-    } catch (cause) {
-        error.value = describeError(cause)
-    }
-}
 </script>
 
 <template>
@@ -154,25 +152,29 @@ async function remove(note: TalosLocalNote): Promise<void> {
                 data-testid="talos-note-row"
                 class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3"
             >
-                <div class="flex items-start gap-2">
+                <!-- La riga APRE la nota. Owner 2026-08-04: «ogni scheda apre
+                     una pagina dedicata». Prima non si apriva affatto: aveva
+                     solo il cestino, e il contenuto intero riversato dentro. -->
+                <button
+                    type="button"
+                    data-testid="talos-note-open"
+                    class="talos-pressable flex w-full items-start gap-2 text-left"
+                    @click="open(note)"
+                >
                     <StickyNote class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-1.5">
                             <span class="text-sm font-semibold text-[var(--talos-text)]">{{ note.title }}</span>
                             <span class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('notes.untrusted') }}</span>
                         </div>
-                        <p class="mt-1 whitespace-pre-wrap text-xs leading-5 text-[var(--talos-muted)]">{{ note.content }}</p>
+                        <!-- Due righe, non tutta la nota: la riga ANTICIPA, la
+                             pagina CONTIENE. Prima una nota lunga occupava lo
+                             schermo intero e scorrere l'elenco era impossibile. -->
+                        <p class="mt-1 line-clamp-2 whitespace-pre-wrap text-xs leading-5 text-[var(--talos-muted)]">{{ note.content }}</p>
                         <p class="mt-1 text-2xs text-[var(--talos-muted)]">{{ updatedAt(note.updated_at) }}</p>
                     </div>
-                    <button
-                        type="button"
-                        :aria-label="t('notes.deleteNamed', { title: note.title })"
-                        class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
-                        @click="remove(note)"
-                    >
-                        <Trash2 class="size-4" aria-hidden="true" />
-                    </button>
-                </div>
+                    <ChevronRight class="mt-0.5 size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                </button>
             </li>
         </ul>
     </div>

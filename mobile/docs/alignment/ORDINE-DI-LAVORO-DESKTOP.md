@@ -3,7 +3,16 @@
 **Destinatario:** l'agente che lavora sul ramo `main` (desktop).
 **Emesso da:** la corsia mobile, `lane/talos-mobile`.
 **Autorizzato da:** l'owner, 2026-08-04, sulla tabella del censimento.
-**Stato dei fatti:** desktop `dafb945` (2026-07-30) · mobile `6ca85dc` (2026-08-04) · base comune `6270de3` (2026-07-20).
+**Stato dei fatti:** desktop `dafb945` (2026-07-30) · mobile **`643035b`** (2026-08-04) · base comune `6270de3` (2026-07-20).
+
+> **Correzione 2026-08-04, segnalata da Codex.** La prima stesura citava le
+> ancore come `git show lane/talos-mobile:...`, cioè un ramo che **si muove**, e
+> dichiarava in intestazione un mobile (`6ca85dc`) già superato: `643035b` aveva
+> nel frattempo cambiato `mobile/src/lib/images/imageTools.ts`, che è un'ancora
+> di §3.2. Un ordine di lavoro le cui verifiche cambiano da sole non è
+> riproducibile. **Da qui in avanti le ancore si leggono a REVISIONE FISSA**, e
+> quando la corsia avanza è un commit documentale a spostare il riferimento —
+> mai il ramo a spostarlo di nascosto.
 
 ---
 
@@ -16,9 +25,16 @@ documento nomina è raggiungibile da dove sei:
 
 ```bash
 git fetch origin
-git show lane/talos-mobile:mobile/<percorso>        # leggere un file mobile
-git log --oneline main..lane/talos-mobile -- mobile/ # cosa ha fatto la corsia
+git show 643035b:mobile/<percorso>                  # leggere un'ancora, FISSA
+git log --oneline main..643035b -- mobile/          # cosa ha fatto la corsia
+git log --oneline 643035b..lane/talos-mobile -- mobile/   # cosa è cambiato DOPO
 ```
+
+La revisione è fissa di proposito: `lane/talos-mobile` avanza mentre lavori, e
+un'ancora letta da un ramo in movimento può contraddire il documento senza che
+nessuno abbia sbagliato. L'ultimo comando serve a sapere se una tua ancora si è
+mossa: se ha cambiato qualcosa, dillo invece di adattarti — quel documento va
+riemesso, non reinterpretato.
 
 Non chiedere file all'owner e non farti mandare copie: una copia invecchia, un
 riferimento a git no. **Ogni affermazione di questo documento cita un file a una

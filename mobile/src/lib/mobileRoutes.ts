@@ -2,6 +2,8 @@ import type { Component } from 'vue'
 
 export type TalosMobileRouteName =
     | 'chat' | 'chats' | 'memory' | 'tasks' | 'notes' | 'doctor'
+    // Le pagine di dettaglio: voce → pagina → dettaglio, come la Ricerca.
+    | 'memory-item' | 'task-item' | 'note-item'
     | 'research' | 'research-new' | 'research-report' | 'research-claim' | 'research-source'
     | 'runs' | 'context' | 'settings'
 
@@ -38,6 +40,21 @@ const loadResearchSourceScreen = () => import('@/screens/ResearchSourceScreen.vu
 const loadRunsScreen = () => import('@/screens/RunsScreen.vue').then((module) => module.default)
 const loadContextScreen = () => import('@/screens/ContextScreen.vue').then((module) => module.default)
 const loadSettingsScreen = () => import('@/screens/SettingsScreen.vue').then((module) => module.default)
+/*
+ * Le pagine di dettaglio delle tre stazioni-elenco.
+ *
+ * Owner 2026-08-04, con quattro schermate di riferimento: «ogni voce apre una
+ * pagina, ogni scheda apre una pagina dedicata, Indietro va alla precedente».
+ * La Ricerca aveva gia' questa catena; Memoria, Note e Attivita' no — le loro
+ * schede non si aprivano affatto, avevano solo i bottoni d'azione.
+ *
+ * E non e' solo coerenza: la riga mostrava il contenuto INTERO, senza taglio,
+ * quindi una nota lunga rendeva la lista impossibile da scorrere. La pagina
+ * esiste perche' il testo lungo abbia dove stare.
+ */
+const loadNoteItemScreen = () => import('@/screens/NoteItemScreen.vue').then((module) => module.default)
+const loadMemoryItemScreen = () => import('@/screens/MemoryItemScreen.vue').then((module) => module.default)
+const loadTaskItemScreen = () => import('@/screens/TaskItemScreen.vue').then((module) => module.default)
 
 // Route chunks remain packaged local assets in the Capacitor application. Chat is
 // also mounted eagerly by App as the persistent base behind every station sheet.
@@ -48,9 +65,12 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'chats', path: '/chats', desktop_station_id: 'chat', component: loadChatsScreen },
     // F4 Memory station — desktop `memory` feature, local registry.
     { name: 'memory', path: '/memory', desktop_station_id: 'memory', component: loadMemoryScreen },
+    { name: 'memory-item', path: '/memory/:id', desktop_station_id: 'memory', component: loadMemoryItemScreen, parent: 'memory' },
     // F5 stations — local-first Tasks / Notes / Doctor.
     { name: 'tasks', path: '/tasks', desktop_station_id: 'tasks', component: loadTasksScreen },
+    { name: 'task-item', path: '/tasks/:id', desktop_station_id: 'tasks', component: loadTaskItemScreen, parent: 'tasks' },
     { name: 'notes', path: '/notes', desktop_station_id: 'notes', component: loadNotesScreen },
+    { name: 'note-item', path: '/notes/:id', desktop_station_id: 'notes', component: loadNoteItemScreen, parent: 'notes' },
     { name: 'doctor', path: '/doctor', desktop_station_id: 'doctor', component: loadDoctorScreen },
     /**
      * The research surfaces, from the list inwards.
