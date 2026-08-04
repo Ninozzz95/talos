@@ -63,6 +63,22 @@ function conversationOf(input: TalosMobileCompletionInput): Array<{ role: string
 }
 
 /**
+ * Quanto contesto si chiede al motore locale.
+ *
+ * Non chiederlo NON vuol dire «quello per cui il modello e' stato addestrato»:
+ * misurato sul OnePlus Pad 3 il 2026-08-04, llama.cpp apriva a **4096** e lo
+ * diceva da se' nel log — `n_ctx_seq (4096) < n_ctx_train (32768)`. Con quel
+ * tetto la sintesi di una ricerca, che vale 11009 token, non entrava: il passo
+ * falliva e sembrava che il modello non avesse risposto.
+ *
+ * 16384 e' una scelta, non un massimo: la cache KV cresce col contesto e su un
+ * telefono la memoria e' il vincolo vero (~4 GB liberi a caldo sul tablet di
+ * prova). Sedicimila token tengono una sintesi di ricerca con margine, e
+ * costano circa la meta' del contesto pieno del modello.
+ */
+const TALOS_LOCAL_CONTEXT_TOKENS = 16384
+
+/**
  * Makes sure the requested model is the one in memory.
  *
  * The engine holds one at a time, deliberately — two multi-gigabyte models on a
@@ -74,7 +90,7 @@ async function ensureLoaded(path: string): Promise<void> {
     const status = await talosLocalEngineStatus()
     if (!status.available) throw new Error('TALOS_LOCAL_ENGINE_UNAVAILABLE')
     if (status.loadedPath === path) return
-    await talosLocalEngineOpen(path)
+    await talosLocalEngineOpen(path, { contextTokens: TALOS_LOCAL_CONTEXT_TOKENS })
 }
 
 async function run(

@@ -1872,6 +1872,8 @@ export const TALOS_EN_MESSAGES = {
         costUnknown: 'The cost cannot be worked out from here: this provider publishes no price we can read.',
         resume: 'Resume',
         interrupted: '"{question}" stopped at {done} of {total}. Nothing already done will be repeated.',
+        promptTooLong: 'What the research gathered is longer than this model can read at once. It is not a matter of capability: pick a smaller depth, or a model with more context, and resume — the collection stays.',
+        modelSaid: 'The model answered: "{detail}"',
         noClaims: 'The model did not answer in the required format, so there is nothing to verify and no report was written. Pick a more capable model in the composer and resume: what was gathered is kept.',
         modelsTitle: 'The two models — you choose them',
         authorLabel: 'Writes the report',

@@ -16,6 +16,7 @@
 #include <android/log.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <atomic>
 #include <cstring>
 #include <mutex>
@@ -591,7 +592,24 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
 
     const int budget = (int) llama_n_ctx(session->ctx);
     if (wanted >= budget) {
+        /**
+         * SI LANCIA, non si restituisce niente.
+         *
+         * Prima questo ramo tornava `nullptr`, che sopra diventa una stringa
+         * vuota — indistinguibile da «il modello non ha avuto niente da dire».
+         * Misurato il 2026-08-04: la sintesi di una ricerca con autore locale
+         * falliva con `TALOS_RESEARCH_NO_CLAIMS`, e per sapere che il vero
+         * motivo era «11009 token in un contesto da 4096» e' servito leggere il
+         * logcat nativo. Un limite superato e' un fatto che il chiamante puo'
+         * spiegare all'utente; il silenzio non lo e'.
+         */
         TALOS_LOGE("prompt di %d token oltre il contesto di %d", wanted, budget);
+        char messaggio[160];
+        snprintf(messaggio, sizeof(messaggio),
+                 "TALOS_LOCAL_PROMPT_TOO_LONG: %d token, il contesto ne regge %d",
+                 wanted, budget);
+        jclass eccezione = env->FindClass("java/lang/IllegalStateException");
+        if (eccezione != nullptr) env->ThrowNew(eccezione, messaggio);
         return nullptr;
     }
     const int limit = maxTokens > 0 ? maxTokens : 64;

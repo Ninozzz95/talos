@@ -4048,7 +4048,26 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
          * with a 360M model chosen in the composer, which cannot hold a format
          * across a forty-thousand-character prompt.
          */
-        if (report.claims.length === 0) throw new Error('TALOS_RESEARCH_NO_CLAIMS')
+        if (report.claims.length === 0) {
+            /*
+             * Il rifiuto porta con se' COSA e' arrivato invece.
+             *
+             * `TALOS_RESEARCH_NO_CLAIMS` da solo non e' diagnosticabile: dice
+             * che non c'erano affermazioni, non se il modello ha scritto prosa,
+             * ha ripetuto il template, si e' fermato a meta' o non ha detto
+             * niente. Misurato il 2026-08-04 con `qwen2.5-3b` come autore — il
+             * passo e' fallito e non c'era modo di sapere perche' senza
+             * rieseguire l'intera ricerca.
+             *
+             * L'estratto e' corto e finisce nel registro, che e' locale: non
+             * esce dal telefono, e non trascina 40.000 caratteri di rapporto
+             * dentro una riga di errore.
+             */
+            const detto = completion.text.trim().replace(/\s+/g, ' ').slice(0, 220)
+            throw new Error(
+                `TALOS_RESEARCH_NO_CLAIMS: ${detto.length > 0 ? detto : '(risposta vuota)'}`,
+            )
+        }
 
         /*
          * R-4 — the report does not get to mark its own homework.

@@ -199,7 +199,25 @@ const record = computed(() => steps.value.map((step) => ({
  */
 function reason(code: string): string {
     if (code === 'TALOS_RESEARCH_NO_SEARCH_SOURCE') return t('research.noSearchSource')
-    if (code === 'TALOS_RESEARCH_NO_CLAIMS') return t('research.noClaims')
+    /*
+     * Il prompt piu' lungo del contesto NON e' «non ha tenuto il formato».
+     *
+     * Misurato il 2026-08-04: con l'autore locale il passo falliva, e la frase
+     * qui sotto dava la colpa al formato mandando a cambiare modello — mentre
+     * il motore aveva rifiutato 11009 token in un contesto da 4096, e nessun
+     * modello piu' capace avrebbe cambiato niente. Il rimedio vero e' un'altra
+     * cosa, quindi e' un'altra frase.
+     */
+    if (code.startsWith('TALOS_LOCAL_PROMPT_TOO_LONG')) return t('research.promptTooLong')
+    if (code.startsWith('TALOS_RESEARCH_NO_CLAIMS')) {
+        // Il rifiuto porta con se' cosa e' arrivato: se c'e', si mostra, perche'
+        // «non ha risposto niente» e «ha risposto un'altra cosa» mandano a fare
+        // due cose diverse.
+        const detto = code.slice('TALOS_RESEARCH_NO_CLAIMS:'.length).trim()
+        return detto.length > 0
+            ? `${t('research.noClaims')} ${t('research.modelSaid', { detail: detto })}`
+            : t('research.noClaims')
+    }
     if (code === 'TALOS_RESEARCH_AUTHOR_UNAVAILABLE') return t('research.authorUnavailable')
     // Prefix, not equality: the storage layer's own message is appended, and it
     // is the only clue about WHY the write failed.
