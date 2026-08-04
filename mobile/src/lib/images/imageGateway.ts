@@ -31,6 +31,20 @@ export type TalosImageShape = 'square' | 'portrait' | 'landscape'
 export interface TalosImageRequest {
     prompt: string
     shape: TalosImageShape
+    /**
+     * L'immagine da cui partire, quando non si disegna da zero.
+     *
+     * Owner 2026-08-04: «bisogna rendere disponibile il tool di generazione da
+     * immagine utente a invio modello». Prima non c'era un posto dove metterla:
+     * la richiesta sapeva solo descrivere, e chiedere «modificami questa foto»
+     * produceva una scena nuova con persone diverse — non una versione peggiore
+     * di cio' che si voleva, un'altra cosa.
+     *
+     * I byte, non un indirizzo: TALOS e' local-first e l'immagine sta gia' sul
+     * dispositivo. Un URL vorrebbe dire pubblicarla da qualche parte per poterla
+     * modificare.
+     */
+    source?: { base64: string, mediaType: string } | null
 }
 
 export interface TalosImagePlan {
@@ -69,6 +83,22 @@ export function planTalosImageRequest(
     request: TalosImageRequest,
     config: { apiKey: string; model: string; endpoint?: string | null },
 ): TalosImagePlan {
+    /**
+     * Partire da un'immagine: oggi lo sa fare solo Gemini.
+     *
+     * Misurato il 2026-08-04. OpenAI vuole `POST /v1/images/edits` in
+     * **multipart/form-data**, che e' l'unico posto in tutta l'app dove serve
+     * un corpo non-JSON: va provato attraverso `CapacitorHttp` prima di
+     * scriverlo, perche' la documentazione dice cosa accetta il server, non
+     * cosa riesce a mandare questo telefono. OpenRouter ha una via sua.
+     *
+     * Finche' non sono misurati, lo dicono invece di provarci: una richiesta
+     * che ignora l'immagine in silenzio consegna una scena nuova al posto di
+     * una modifica, e chi guarda non ha modo di capire che e' successo.
+     */
+    if (request.source && provider !== 'gemini') {
+        throw new Error(`TALOS_IMAGE_EDIT_UNSUPPORTED_PROVIDER:${provider}`)
+    }
     if (provider === 'openai') {
         const base = (config.endpoint ?? 'https://api.openai.com/v1').replace(/\/+$/, '')
         return {
@@ -119,7 +149,25 @@ export function planTalosImageRequest(
             // A list of content blocks, not a bare string. The docs' own example
             // sends `[{type:'text', text:...}]`, and this is the shape that
             // leaves room for the reference images the API also accepts.
-            input: [{ type: 'text', text: request.prompt }],
+            /*
+             * MISURATO contro l'API il 2026-08-04, non ricordato.
+             *
+             * Il blocco immagine e' `{ type: 'image', mime_type, data }` — i due
+             * campi PIATTI, non annidati sotto una chiave `image`. Ci si e'
+             * arrivati facendo parlare l'API: un `type` inventato le fa
+             * elencare tutti quelli che accetta (`image` c'e'), e un blocco
+             * `{type:'image'}` nudo risponde «Missing/unsupported mime_type in
+             * image content», cioe' nomina il campo che vuole.
+             *
+             * L'immagine va DOPO il testo: l'istruzione dice cosa fare, e
+             * quello che segue e' la cosa su cui farlo.
+             */
+            input: [
+                { type: 'text', text: request.prompt },
+                ...(request.source
+                    ? [{ type: 'image', mime_type: request.source.mediaType, data: request.source.base64 }]
+                    : []),
+            ],
             /**
              * Owner's device, 2026-07-27, verbatim from the wire at last:
              *   HTTP 400: The 'type' parameter is required at 'response_format'.
