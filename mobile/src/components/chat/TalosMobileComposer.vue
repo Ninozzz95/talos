@@ -30,6 +30,10 @@ import type {
 } from '@/components/chat/mobileChatTypes'
 import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import type { TalosMobilePromptEnhancementResult } from '@/lib/chat/promptEnhancement'
+import {
+    TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH,
+    type TalosPromptEnhancerDepth,
+} from '@/lib/chat/promptEnhancerDepth'
 import type { TalosMobileCommandId } from '@/lib/mobileCommandRegistry'
 import type { TalosMobileAttachmentDraft } from '@/composables/useTalosMobileAttachments'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
@@ -74,6 +78,10 @@ const props = withDefaults(defineProps<{
     contextDisabledReason?: string
     enhancingPrompt?: boolean
     promptEnhancement?: TalosMobilePromptEnhancementResult | null
+    enhancerDepth?: TalosPromptEnhancerDepth
+    enhancerModel?: string | null
+    enhancerEffort?: string
+    enhancerModels?: readonly { id: string, label: string, provider: string, efforts: readonly string[] }[]
     promptEnhancementError?: string
     browseMode?: boolean
     browserSuggestionUrl?: string | null
@@ -111,6 +119,10 @@ const props = withDefaults(defineProps<{
     contextDisabledReason: '',
     enhancingPrompt: false,
     promptEnhancement: null,
+    enhancerDepth: TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH,
+    enhancerModel: null,
+    enhancerEffort: 'low',
+    enhancerModels: () => [],
     promptEnhancementError: '',
     browseMode: false,
     browserSuggestionUrl: null,
@@ -148,6 +160,9 @@ const emit = defineEmits<{
     openModelLab: []
     refreshModels: []
     enhancePrompt: []
+    updateEnhancerDepth: [value: TalosPromptEnhancerDepth]
+    updateEnhancerModel: [value: string | null]
+    updateEnhancerEffort: [value: string]
     enhanceBlocked: [reason: string]
     cancelPromptEnhancement: []
     insertPromptEnhancement: []
@@ -486,8 +501,15 @@ function requestPromptEnhancement(): void {
         return
     }
     modelPickerOpen.value = false
+    /*
+     * Aprire NON fa piu' partire.
+     *
+     * Owner 2026-08-04: «prima che parta l'enhancing bisogna selezionare
+     * modello e ragionamento ove previsto, e il tono». Prima il drawer si
+     * apriva e la spesa era gia' partita: chi voleva un modello diverso
+     * scopriva di non poterlo scegliere mentre il conto correva.
+     */
     enhancerDrawerOpen.value = true
-    emit('enhancePrompt')
 }
 
 // Manual dismissal of the enhancer drawer abandons the enhancement; the
@@ -1084,6 +1106,14 @@ watch(() => props.prompt, () => {
             :error="promptEnhancementError ?? ''"
             :result="promptEnhancement ?? null"
             :model-title="modelTitle"
+            :depth="enhancerDepth"
+            :model="enhancerModel"
+            :effort="enhancerEffort"
+            :models="enhancerModels"
+            @start="emit('enhancePrompt')"
+            @update:depth="(value) => emit('updateEnhancerDepth', value)"
+            @update:model="(value) => emit('updateEnhancerModel', value)"
+            @update:effort="(value) => emit('updateEnhancerEffort', value)"
             @close="dismissEnhancerDrawer"
             @cancel="emit('cancelPromptEnhancement')"
             @insert="emit('insertPromptEnhancement')"

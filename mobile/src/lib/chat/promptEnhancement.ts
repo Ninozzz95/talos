@@ -1,3 +1,8 @@
+import {
+    TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH,
+    talosPromptEnhancerSystemPrompt,
+    type TalosPromptEnhancerDepth,
+} from '@/lib/chat/promptEnhancerDepth'
 import { z } from 'zod'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
 import type { TalosMessageParameters } from '@/i18n/contracts'
@@ -57,6 +62,8 @@ export interface TalosMobilePromptEnhancementContext {
     timeoutMs?: number
     effort: string
     thinking: boolean
+    /** Quanto riscrivere. Assente = equilibrato, il caso normale. */
+    depth?: TalosPromptEnhancerDepth
 }
 
 export type TalosMobilePromptEnhancementErrorCode =
@@ -215,7 +222,10 @@ export async function runTalosMobilePromptEnhancement(
                 timeoutMs: context.timeoutMs,
                 effort: context.effort,
                 thinking: context.thinking,
-                system: TALOS_MOBILE_PROMPT_ENHANCER_SYSTEM_PROMPT,
+                system: talosPromptEnhancerSystemPrompt(
+                    TALOS_MOBILE_PROMPT_ENHANCER_SYSTEM_PROMPT,
+                    context.depth ?? TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH,
+                ),
             }),
             transport,
         )

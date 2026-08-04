@@ -321,6 +321,11 @@ describe('TalosMobileComposer', () => {
         expect(improve.classes()).toContain('min-h-11')
         expect(improve.classes()).toContain('min-w-11')
         await improve.trigger('click')
+        // Il tocco apre il pannello delle scelte; la chiamata parte da li'.
+        // Owner 2026-08-04: modello, ragionamento e livello si decidono PRIMA.
+        expect(view.emitted('enhancePrompt')).toBeUndefined()
+        await flushPromises()
+        await view.get('[data-testid="talos-enhancer-start"]').trigger('click')
         expect(view.emitted('enhancePrompt')).toHaveLength(1)
         // F4-#26: the enhancement flow lives in its own dedicated drawer.
         expect(view.get('[data-testid="talos-enhancer-drawer"]').exists()).toBe(true)

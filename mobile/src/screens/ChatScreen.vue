@@ -14,6 +14,8 @@ import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue
 import { createTalosMobileComposerDraftController } from '@/composables/useTalosMobileComposerDraft'
 import { useTalosMobileDictation } from '@/composables/useTalosMobileDictation'
 import { resolveTalosDictationLanguageTag } from '@/lib/dictationPolicy'
+import { TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH } from '@/lib/chat/promptEnhancerDepth'
+import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import { talosLightImpact } from '@/services/haptics'
 import {
     createTalosManualBrowserActivity,
@@ -120,6 +122,34 @@ function discardDictation(): void {
     dictation.cancel()
     draft.updatePrompt(dictationDraftBefore.value)
 }
+/**
+ * Chi riscrive i prompt, e quanto — owner 2026-08-04.
+ *
+ * Sta nelle preferenze e non in una variabile della schermata perche' e' una
+ * decisione che si prende una volta: chi ha deciso che le riscritture le fa un
+ * modello economico non vuole ridirlo a ogni prompt.
+ */
+const enhancer = computed(() => settings.state.shell?.prompt_enhancer ?? {
+    // Una preferenza che non c'e' ancora (installazione vecchia, o un doppio
+    // nei test) non deve far sparire il pannello: si ricade sui predefiniti,
+    // che sono anche il comportamento di prima.
+    model: null,
+    effort: 'low' as TalosMobileEffortLevel,
+    depth: TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH,
+})
+
+/** Solo i modelli che questo dispositivo puo' davvero chiamare. */
+const enhancerModels = computed(() => controller.profiles.value.map((profile) => ({
+    id: profile.id,
+    label: profile.display_name || profile.model,
+    provider: profile.provider,
+    efforts: profile.effort_levels ?? [],
+})))
+
+async function setEnhancer(patch: Partial<typeof enhancer.value>): Promise<void> {
+    await settings.setShell({ prompt_enhancer: { ...enhancer.value, ...patch } })
+}
+
 const composer = ref<InstanceType<typeof TalosMobileComposer> | null>(null)
 const composerWrap = ref<HTMLElement | null>(null)
 // F4-#22: shared guard — failed session actions surface as toasts, never as
@@ -1054,6 +1084,10 @@ onBeforeUnmount(() => {
                 :discovery-problems="discoveryProblems"
                 :send-disabled-reason="sendDisabledReason"
                 :enhancing-prompt="enhancingPrompt"
+                :enhancer-depth="enhancer.depth"
+                :enhancer-model="enhancer.model"
+                :enhancer-effort="enhancer.effort"
+                :enhancer-models="enhancerModels"
                 :prompt-enhancement="promptEnhancement"
                 :prompt-enhancement-error="promptEnhancementError ?? ''"
                 :attachments="attachments.items"
@@ -1092,6 +1126,9 @@ onBeforeUnmount(() => {
                 @open-model-lab="router.push({ name: 'settings', query: { tab: 'models' } })"
                 @open-context="router.push({ name: 'context' })"
                 @enhance-prompt="requestPromptEnhancement"
+                @update-enhancer-depth="(value) => void setEnhancer({ depth: value })"
+                @update-enhancer-model="(value) => void setEnhancer({ model: value })"
+                @update-enhancer-effort="(value) => void setEnhancer({ effort: value as TalosMobileEffortLevel })"
                 @enhance-blocked="onEnhanceBlocked"
                 @cancel-prompt-enhancement="cancelPromptEnhancement"
                 @insert-prompt-enhancement="insertPromptEnhancement"
