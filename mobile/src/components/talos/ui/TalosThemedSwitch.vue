@@ -30,6 +30,7 @@
  * invisible, so the thumb now carries a border that survives colour removal.
  */
 import { SwitchRoot, SwitchThumb } from 'reka-ui'
+import { TALOS_SWITCH_THUMB_CLASS, TALOS_SWITCH_TRACK_CLASS } from '@/lib/switchStyles'
 
 withDefaults(defineProps<{
     modelValue: boolean
@@ -61,13 +62,13 @@ defineEmits<{ 'update:modelValue': [value: boolean] }>()
         :model-value="modelValue"
         :disabled="disabled"
         :aria-label="ariaLabel"
-        class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border border-[var(--talos-border)] bg-[var(--talos-input)] transition-colors outline-none data-[state=checked]:border-[var(--talos-accent)] data-[state=checked]:bg-[var(--talos-accent)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--talos-panel)] disabled:cursor-not-allowed disabled:opacity-50 forced-colors:border-[ButtonBorder]"
+        :class="TALOS_SWITCH_TRACK_CLASS"
         @update:model-value="$emit('update:modelValue', $event)"
     >
         <!-- The thumb keeps a border of its own so the control still reads as
              on or off when forced-colors strips the track's fill. -->
         <SwitchThumb
-            class="pointer-events-none block size-5 translate-x-0.5 rounded-full border border-transparent bg-[var(--talos-card)] shadow-sm transition-transform data-[state=checked]:translate-x-5 forced-colors:border-[ButtonText] forced-colors:bg-[ButtonText] forced-colors:data-[state=checked]:bg-[Highlight]"
+            :class="TALOS_SWITCH_THUMB_CLASS"
         />
     </SwitchRoot>
 </template>
