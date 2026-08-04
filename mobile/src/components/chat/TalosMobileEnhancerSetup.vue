@@ -56,9 +56,15 @@ const depthOptions = computed(() => TALOS_PROMPT_ENHANCER_DEPTHS.map((id) => ({
  * «Quello del compositore» e' una voce, non l'assenza di una voce.
  *
  * Un selettore vuoto non dice cosa succede se non si sceglie; questa riga si'.
+ *
+ * Perche' una sentinella e non la stringa vuota: reka-ui riserva `''` a «nessuna
+ * scelta, mostra il segnaposto» e RIFIUTA una voce che la usi. Scritta cosi', la
+ * riga esplodeva al montaggio e il selettore del modello non si disegnava — un
+ * difetto vero, non un rumore dei test, perche' l'errore nasce nel componente.
  */
+const MODELLO_DELLA_CHAT = 'talos-enhancer-model-della-chat'
 const modelItems = computed<TalosThemedSelectItem[]>(() => [
-    { value: '', label: t('chat.enhancerModelSame') },
+    { value: MODELLO_DELLA_CHAT, label: t('chat.enhancerModelSame') },
     ...props.models.map((entry) => ({ value: entry.id, label: `${entry.provider} · ${entry.label}` })),
 ])
 
@@ -102,10 +108,10 @@ const effortOptions = computed(() => efforts.value.map((id) => ({
             </p>
             <TalosThemedSelect
                 data-testid="talos-enhancer-model"
-                :model-value="model ?? ''"
+                :model-value="model ?? MODELLO_DELLA_CHAT"
                 :items="modelItems"
                 :aria-label="t('chat.enhancerModelLabel')"
-                @update:model-value="(value) => emit('update:model', value === '' ? null : value)"
+                @update:model-value="(value) => emit('update:model', value === MODELLO_DELLA_CHAT ? null : value)"
             />
             <p class="text-2xs leading-5 text-[var(--talos-muted)]">{{ t('chat.enhancerModelHint') }}</p>
 

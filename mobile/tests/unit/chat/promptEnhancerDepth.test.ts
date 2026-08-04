@@ -97,10 +97,28 @@ describe('il pannello che si vede prima di riscrivere', () => {
         expect(b).toContain('never more invented')
     })
 
-    it('«quello del compositore» è una VOCE, non l assenza di una voce', async () => {
-        // Un selettore vuoto non dice cosa succede se non si sceglie.
+    it('«quello del compositore» è una VOCE, e si può DAVVERO scegliere', async () => {
+        /**
+         * Un selettore vuoto non dice cosa succede se non si sceglie.
+         *
+         * Il grilletto si guardava e basta, prima: e il grilletto mostra il
+         * nome della voce scelta anche quando la voce non esiste piu'. Cosi'
+         * una voce con valore vuoto — che reka-ui RIFIUTA, perche' la stringa
+         * vuota vuol dire «nessuna scelta» — ha attraversato il cancello
+         * mentre nell'app la tendina non si disegnava. Qui si apre, come fa
+         * una persona, e si contano le voci che ci sono davvero dentro.
+         */
         const wrapper = await panel()
-        expect(wrapper.text()).toContain('The composer’s model')
+        const trigger = wrapper.get('[data-testid="talos-themed-select-trigger"]').element
+        for (const tipo of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+            trigger.dispatchEvent(new window.MouseEvent(tipo, { bubbles: true, button: 0 }))
+        }
+        await new Promise((resolve) => setTimeout(resolve, 80))
+
+        // Teleportate: vivono nel documento, non dentro il wrapper.
+        const tendina = document.body.textContent ?? ''
+        expect(tendina).toContain('The composer’s model')
+        expect(tendina).toContain('gpt-5.6-luna')
     })
 
     it('il ragionamento compare solo dove il modello lo prevede davvero', async () => {

@@ -30,3 +30,24 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.scrollTo !== 'fun
 if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
     Element.prototype.scrollIntoView = () => {}
 }
+
+/**
+ * La cattura del puntatore: jsdom non la implementa, e senza di essa NESSUN
+ * selettore di questa app si e' mai potuto aprire in un test.
+ *
+ * reka-ui chiama `hasPointerCapture` sul primo `pointerdown` del grilletto: se
+ * manca, l'apertura muore li' e le voci non nascono mai. Il costo non era
+ * teorico — le voci di un selettore vivono solo da aperto, quindi un difetto
+ * dentro una voce era invisibile a chiunque non aprisse il selettore. E' cosi'
+ * che una voce con valore vuoto ha attraversato il cancello: i test la
+ * leggevano sul grilletto, dove il testo appare comunque.
+ *
+ * Restano protesi inerti, come quelle sopra: dicono «nessuna cattura», che e'
+ * la verita' in un ambiente senza puntatore. Non simulano un comportamento su
+ * cui un test possa poi appoggiare un'affermazione.
+ */
+if (typeof Element !== 'undefined' && typeof Element.prototype.hasPointerCapture !== 'function') {
+    Element.prototype.hasPointerCapture = () => false
+    Element.prototype.setPointerCapture = () => {}
+    Element.prototype.releasePointerCapture = () => {}
+}
