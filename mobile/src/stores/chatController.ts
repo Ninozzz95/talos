@@ -2516,13 +2516,57 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                              * ricevere un disegno nuovo sarebbe la stessa
                              * confusione che questo lavoro esiste per togliere.
                              */
+                            /**
+                             * I nomi delle immagini che ci sono davvero.
+                             *
+                             * Servono all'ERRORE, non alla ricerca. Misurato
+                             * 2026-08-04 dalla diagnostica dell'owner:
+                             * gpt-5.6-terra ha chiamato `generate_image` CINQUE
+                             * volte di fila, ognuna fallita in 20ms con
+                             * `TALOS_IMAGE_SOURCE_NOT_FOUND`, e poi si e' arreso
+                             * dicendo «errore tecnico del riferimento immagine».
+                             * Claude, nello stesso posto, aveva prima chiamato
+                             * `library_list` e `library_read` per scoprire il
+                             * nome esatto — e allora aveva funzionato.
+                             *
+                             * La differenza non e' il modello: e' che il nostro
+                             * errore diceva «non trovata» senza dire COSA c'e'.
+                             * Un errore che non offre l'alternativa costringe a
+                             * indovinare, e indovinare cinque volte costa cinque
+                             * round veri.
+                             */
+                            availableImages() {
+                                return attachments.vaultFiles
+                                    .filter((entry) => entry.media_type.startsWith('image/'))
+                                    .map((entry) => entry.display_name)
+                            },
                             async findImage(reference) {
                                 const wanted = reference.trim().toLowerCase()
-                                const file = attachments.vaultFiles.find((entry) => (
-                                    entry.id === reference
-                                    || entry.display_name.trim().toLowerCase() === wanted
-                                )) ?? null
-                                if (!file || !file.media_type.startsWith('image/')) return null
+                                const senzaCoda = (nome: string) => nome.replace(/\.[^.]+$/, '')
+                                const immagini = attachments.vaultFiles
+                                    .filter((entry) => entry.media_type.startsWith('image/'))
+                                const nome = (entry: { display_name: string }) =>
+                                    entry.display_name.trim().toLowerCase()
+
+                                /*
+                                 * Dal piu' preciso al piu' generoso, e ci si
+                                 * ferma al primo che decide.
+                                 *
+                                 * L'ultimo passo accetta una corrispondenza
+                                 * parziale SOLO se e' unica: con due immagini
+                                 * che contengono la stessa parola, scegliere la
+                                 * prima vorrebbe dire modificare in silenzio la
+                                 * foto sbagliata. Meglio non trovarla e dire
+                                 * quali sono — quello lo si corregge, una
+                                 * modifica al file sbagliato no.
+                                 */
+                                const parziali = immagini.filter((entry) =>
+                                    nome(entry).includes(wanted) || wanted.includes(nome(entry)))
+                                const file = immagini.find((entry) => entry.id === reference)
+                                    ?? immagini.find((entry) => nome(entry) === wanted)
+                                    ?? immagini.find((entry) => senzaCoda(nome(entry)) === senzaCoda(wanted))
+                                    ?? (parziali.length === 1 ? parziali[0] : null)
+                                if (!file) return null
                                 const raw = await vaultService.readFilePreview(file.id).catch(() => null)
                                 if (!raw) return null
                                 return {

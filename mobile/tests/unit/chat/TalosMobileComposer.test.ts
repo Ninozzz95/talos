@@ -324,6 +324,19 @@ describe('TalosMobileComposer', () => {
         // Il tocco apre il pannello delle scelte; la chiamata parte da li'.
         // Owner 2026-08-04: modello, ragionamento e livello si decidono PRIMA.
         expect(view.emitted('enhancePrompt')).toBeUndefined()
+        /*
+         * Due attese, non una: dal 2026-08-04 il drawer e' caricato PIGRO —
+         * statico si portava dietro il Select di reka-ui, e con lui 80.223 byte
+         * nel grafo d'avvio. Il primo giro risolve il modulo, il secondo monta
+         * il componente. Aspettare una volta sola lo cercherebbe prima che
+         * esista, che e' esattamente cio' che fa una persona che tocca due
+         * volte perche' «non si e' aperto».
+         *
+         * `dynamicImportSettled` e' l'attesa giusta: `flushPromises` svuota le
+         * microtask, ma la risoluzione di un `import()` vero passa dal
+         * trasformatore e non e' una microtask.
+         */
+        await vi.dynamicImportSettled()
         await flushPromises()
         await view.get('[data-testid="talos-enhancer-start"]').trigger('click')
         expect(view.emitted('enhancePrompt')).toHaveLength(1)

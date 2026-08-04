@@ -95,6 +95,13 @@ flag` spento è la forma giusta; una migrazione che cancella dati non lo è.
 Scrivi nel commit *perché* è nascosto e *cosa* lo riaccende, altrimenti fra due
 mesi qualcuno lo cancella davvero.
 
+> **Correzione 2026-08-04, segnalata da Codex.** La prima stesura di questo
+> documento diceva qui «nascondi» e alla regola §4.7 «non toccare §1.1 e §1.2»:
+> due istruzioni che si annullano, e lui si è fermato invece di sceglierne una.
+> Ha fatto bene. **§1.2 è l'unica eccezione alla regola del non-toccare**, e
+> vale solo per il gesto di nascondere: il flag e la riga che lo legge. Tutto il
+> resto di quelle due aree resta intoccabile come §1.1.
+
 ### 1.3 Un programma a sé, PRIMA della piattaforma agentica
 
 **`skills`** — l'owner: «assolutamente sì, e l'ho dimenticato». Ma non è
@@ -359,7 +366,12 @@ si porta dietro il componente Select e con lui 80 KB nel grafo d'avvio.
 6. **Se una capacità del desktop è migliore, dillo.** Questo documento nasce da
    un censimento, non da un giudizio: dove il desktop ha ragione, la voce va
    riscritta al contrario, non eseguita al rovescio in silenzio.
-7. **Non toccare ciò che è in §1.1 e §1.2.** Neanche per migliorarlo.
+7. **§1.1 non si tocca. Neanche per migliorarlo.** Sono aree rimandate a una
+   conversazione che non è ancora avvenuta.
+8. **§1.2 si tocca in un punto solo:** l'ingresso dall'interfaccia. Il flag e la
+   riga che lo legge, niente altro — non le rotte, non i modelli, non i test,
+   non i dati. È l'unica eccezione alla regola 7, e vale solo per il gesto di
+   nascondere.
 
 ---
 
