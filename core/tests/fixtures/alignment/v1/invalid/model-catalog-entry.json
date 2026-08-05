@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "id": "deepseek-ai/deepseek-ocr-gguf",
+  "family": "DeepSeek OCR",
+  "display_name": "DeepSeek OCR mutable alias",
+  "publisher": "deepseek-ai",
+  "license": "MIT",
+  "parameters_b": null,
+  "quantization": "Q4_K_M",
+  "context_window": 8192,
+  "source": {
+    "provider": "huggingface",
+    "repository": "deepseek-ai/DeepSeek-OCR-GGUF",
+    "revision": "latest",
+    "url": "https://huggingface.co/deepseek-ai/DeepSeek-OCR-GGUF"
+  },
+  "files": [
+    {
+      "path": "deepseek-ocr-q4_k_m.gguf",
+      "size_bytes": 2147483648,
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "format": "gguf"
+    }
+  ],
+  "runtimes": [
+    {
+      "engine": "llama_cpp",
+      "locations": ["local_mobile"]
+    }
+  ],
+  "requirements": {
+    "ram_bytes": 4294967296,
+    "vram_bytes": null
+  },
+  "tags": ["ocr"],
+  "status": "available",
+  "added_at": "2026-08-04T11:00:00Z"
+}

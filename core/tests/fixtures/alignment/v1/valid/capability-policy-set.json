@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "revision": 13,
+  "policies": [
+    {
+      "capability": "browser.read",
+      "actions": ["read", "outbound"],
+      "decision": "ask",
+      "source": "default",
+      "risk": "medium",
+      "updated_at": null,
+      "last_used_at": null
+    },
+    {
+      "capability": "files.write",
+      "actions": ["write"],
+      "decision": "deny",
+      "source": "user",
+      "risk": "high",
+      "updated_at": "2026-08-04T10:00:00Z",
+      "last_used_at": null
+    }
+  ],
+  "grants": [
+    {
+      "id": "grant-browser-session-1",
+      "capability": "browser.read",
+      "tool_id": "browser-snapshot",
+      "actions": ["read", "outbound"],
+      "scope": "session",
+      "scope_id": "session-42",
+      "status": "active",
+      "granted_at": "2026-08-04T10:01:00Z",
+      "expires_at": "2026-08-04T18:01:00Z",
+      "risk_acknowledged": true
+    }
+  ]
+}

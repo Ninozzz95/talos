@@ -42,6 +42,9 @@ function testMainCliRunsContractTests(): void
         'Browser/BrowserContractTest.php',
         'Browser/BrowserContractFixtureTest.php',
         'Browser/BrowserOrchestrationTest.php',
+        'Alignment/AlignmentContractFixtureTest.php',
+        'Alignment/AlignmentContractDecoderTest.php',
+        'Alignment/AlignmentContractValueObjectTest.php',
         'ProceduralToolCompilerTest.php',
         'ProviderInputResourceTest.php',
         'ProviderCapabilitiesTest.php',
@@ -94,6 +97,21 @@ function testBrowserContractTestsUseTheCliRunnerSuccessMarker(): void
     }
 }
 
+function testAlignmentContractTestsUseTheCliRunnerSuccessMarker(): void
+{
+    foreach ([
+        'Alignment/AlignmentContractFixtureTest.php' => 'All Alignment contract fixture tests passed',
+        'Alignment/AlignmentContractDecoderTest.php' => 'All Alignment contract decoder tests passed',
+        'Alignment/AlignmentContractValueObjectTest.php' => 'All Alignment contract value object tests passed',
+    ] as $path => $marker) {
+        $test = (string) file_get_contents(__DIR__.'/'.$path);
+        assertTrue(
+            str_contains($test, $marker),
+            "{$path} must end with the success marker consumed by kadmos test.",
+        );
+    }
+}
+
 function testComposerTestDelegatesToTheFullCliSuite(): void
 {
     $composer = json_decode((string) file_get_contents(__DIR__.'/../composer.json'), true, 32, JSON_THROW_ON_ERROR);
@@ -123,6 +141,7 @@ $tests = [
     'testToolContractTestUsesTheCliRunnerSuccessMarker',
     'testProceduralCompilerUsesTheCliRunnerSuccessMarker',
     'testBrowserContractTestsUseTheCliRunnerSuccessMarker',
+    'testAlignmentContractTestsUseTheCliRunnerSuccessMarker',
     'testComposerTestDelegatesToTheFullCliSuite',
     'testLiveBenchmarkReadsCredentialsFromEnvironmentOnly',
 ];

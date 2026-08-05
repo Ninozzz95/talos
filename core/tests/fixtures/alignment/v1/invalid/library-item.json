@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "library-invalid",
+  "source": { "type": "artifact", "id": "artifact-2", "url": null },
+  "kind": "file",
+  "origin": "generated",
+  "title": "Invalid",
+  "content": {
+    "status": "available",
+    "mime_type": "application/pdf",
+    "size_bytes": 10,
+    "sha256": null,
+    "content_ref": "file:///data/user/0/ai.talos/files/private.pdf",
+    "text_preview": null,
+    "failure_code": null
+  },
+  "trust_boundary": "generated_content",
+  "provenance": {
+    "schema_version": 1,
+    "entity_id": "library-invalid",
+    "generated_at": "2026-08-04T14:00:00Z",
+    "activity": { "kind": "tool_generation", "tool_name": null, "session_id": null, "prompt_message_id": null },
+    "agent": { "kind": "model", "provider": null, "model": null, "version": null },
+    "derived_from": [],
+    "content_credentials": { "format": "c2pa", "present": false, "verification": "valid", "issuer": null }
+  },
+  "relationships": { "chat_count": 0, "backlinks": [] },
+  "capabilities": { "can_attach": true, "can_preview": true, "can_download": true },
+  "occurred_at": "2026-08-04T14:00:00Z",
+  "metadata": {}
+}

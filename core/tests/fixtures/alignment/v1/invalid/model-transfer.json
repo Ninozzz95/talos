@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "transfer-invalid",
+  "model_id": "model-x",
+  "operation": "download",
+  "mode": "preview",
+  "execution_location": "local_mobile",
+  "target_id": "phone-this-device",
+  "state": "completed",
+  "have_bytes": 200,
+  "total_bytes": 100,
+  "verification": "verified",
+  "fault_code": null,
+  "updated_at": "2026-08-04T12:00:00Z"
+}
