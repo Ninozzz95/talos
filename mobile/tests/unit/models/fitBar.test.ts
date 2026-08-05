@@ -50,7 +50,7 @@ describe('la barra della capienza', () => {
             ['ok', 'success'],
             ['tight', 'warning'],
             ['over', 'danger'],
-            ['unknown', 'text-muted'],
+            ['unknown', 'muted'],
         ] as const) {
             const html = barra({ tone, ratio: 0.5 }).html()
             expect(html).toContain(`var(--talos-${token}`)

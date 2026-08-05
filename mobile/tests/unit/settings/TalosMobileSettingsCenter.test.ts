@@ -10,7 +10,7 @@ if (!Element.prototype.scrollIntoView) {
 }
 
 const panelStubs = {
-    TalosMobileSettingsModelsPanel: { template: '<div data-panel="models">Models panel</div>' },
+    RouterLink: { props: ['to'], template: '<a data-router-link-stub><slot /></a>' },
     TalosMobileSettingsAiDefaultsPanel: { template: '<div data-panel="ai_defaults">AI defaults panel</div>' },
     TalosMobileSettingsAppearancePanel: { template: '<div data-panel="appearance">Appearance panel</div>' },
     TalosMobileSettingsLanguagePanel: { template: '<div data-testid="talos-settings-language">Language panel</div>' },
@@ -59,7 +59,7 @@ afterEach(() => {
  * navigation. These two blocks are the same screen at its two real widths.
  */
 describe('TalosMobileSettingsCenter — on the phone, it is navigation', () => {
-    it('offers a named landmark and thirteen destinations, not tabs', () => {
+    it('offers one routed Model Lab link plus twelve inline destinations, not tabs', () => {
         const wrapper = mountCenter()
 
         // No tablist, because tapping a row takes the list away.
@@ -69,7 +69,9 @@ describe('TalosMobileSettingsCenter — on the phone, it is navigation', () => {
         const rail = wrapper.get('[data-testid="settings-category-pane"]')
         expect(rail.element.tagName).toBe('NAV')
         expect(rail.attributes('aria-label')).toBe('TALOS settings categories')
-        expect(wrapper.findAll('[data-settings-tab]')).toHaveLength(13)
+        expect(wrapper.findAll('[data-settings-tab]')).toHaveLength(12)
+        expect(wrapper.findAll('[data-testid="settings-model-lab-link"]')).toHaveLength(1)
+        expect(wrapper.get('[data-testid="settings-model-lab-link"]').text()).toContain('Model Lab')
     })
 
     it('marks where you are with aria-current, and gives every row its own tab stop', async () => {
@@ -110,12 +112,12 @@ describe('TalosMobileSettingsCenter — on the phone, it is navigation', () => {
 
         const panels = wrapper.findAll('[data-settings-panel]')
         expect(panels).toHaveLength(1)
-        expect(panels[0]!.attributes('data-settings-panel')).toBe('models')
+        expect(panels[0]!.attributes('data-settings-panel')).toBe('ai_defaults')
     })
 })
 
 describe('TalosMobileSettingsCenter — on the tablet, it really is tabs', () => {
-    it('renders one labelled vertical tablist, thirteen tabs, and the selected tabpanel', () => {
+    it('renders one standalone Model Lab link beside a twelve-tab inline settings list', () => {
         widenToTablet()
         const wrapper = mountCenter()
 
@@ -123,9 +125,10 @@ describe('TalosMobileSettingsCenter — on the tablet, it really is tabs', () =>
         expect(tablist.attributes('aria-label')).toBe('TALOS settings categories')
         expect(tablist.attributes('aria-orientation')).toBe('vertical')
         expect(wrapper.get('[data-testid="settings-category-pane"]').element.tagName).toBe('ASIDE')
-        expect(wrapper.findAll('[role="tab"]')).toHaveLength(13)
-        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('Models')
-        expect(wrapper.get('[role="tabpanel"]').attributes('data-settings-panel')).toBe('models')
+        expect(wrapper.findAll('[role="tab"]')).toHaveLength(12)
+        expect(wrapper.get('[data-testid="settings-model-lab-link"]').element.closest('[role="tablist"]')).toBeNull()
+        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('AI Defaults')
+        expect(wrapper.get('[role="tabpanel"]').attributes('data-settings-panel')).toBe('ai_defaults')
         expect(wrapper.get('[role="tabpanel"]').classes()).toContain('talos-motion-tab-panel')
         wrapper.unmount()
     })
@@ -146,8 +149,7 @@ describe('TalosMobileSettingsCenter — on the tablet, it really is tabs', () =>
         await nextTick()
         await new Promise((resolve) => setTimeout(resolve, 0))
         await nextTick()
-        // Claude-style order: the Account card is the FIRST tab, then the
-        // grouped categories (Intelligence: Models, AI Defaults, Agent Tools…).
+        // Account is first; Model Lab is navigation outside this tab sequence.
         const first = wrapper.get('[role="tab"]')
         expect(first.text()).toContain('Account')
         ;(first.element as HTMLElement).focus()
@@ -155,7 +157,7 @@ describe('TalosMobileSettingsCenter — on the tablet, it really is tabs', () =>
         await nextTick()
         await new Promise((resolve) => setTimeout(resolve, 0))
         await nextTick()
-        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('Models')
+        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('AI Defaults')
 
         wrapper.get('[role="tab"][aria-selected="true"]').element.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }))
         await nextTick()

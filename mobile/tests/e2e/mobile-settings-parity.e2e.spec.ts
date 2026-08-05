@@ -10,18 +10,32 @@ async function openSettings(page: import('@playwright/test').Page): Promise<void
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]').getByText('Settings Center').first()).toBeVisible()
 }
 
-test('Settings exposes all eleven desktop categories plus mobile-only Language and Privacy, real Browser controls, and honest remaining gates', async ({ page }) => {
+async function openSettingsCategory(
+    page: import('@playwright/test').Page,
+    id: string,
+): Promise<void> {
+    const panel = page.locator(`[data-settings-panel="${id}"]`)
+    if (await panel.isVisible()) return
+    await page.locator(`[data-settings-tab="${id}"]`).click()
+    await expect(panel).toBeVisible()
+}
+
+test('Settings exposes twelve inline categories plus a standalone Model Lab destination', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openSettings(page)
 
-    const settingsTabs = page.getByRole('tablist', { name: 'TALOS settings categories' })
-    // Eleven from the desktop, plus mobile-owned Language and Privacy:
-    // Android locale and runtime-permission contracts have no desktop peer.
-    await expect(settingsTabs.getByRole('tab')).toHaveCount(13)
-    await expect(settingsTabs.getByRole('tab', { name: 'Language' })).toBeVisible()
-    await expect(settingsTabs.getByRole('tab', { name: /Privacy and permissions/ })).toBeVisible()
+    const settingsNavigation = page.getByRole('navigation', { name: 'TALOS settings categories' })
+    // Phone Settings is master/detail navigation; only tablet uses tabs.
+    await expect(settingsNavigation.locator('[data-settings-tab]')).toHaveCount(12)
+    await expect(settingsNavigation.getByRole('tab')).toHaveCount(0)
+    const modelLabLink = page.getByTestId('settings-model-lab-link')
+    await expect(modelLabLink).toBeVisible()
+    await expect(modelLabLink).toContainText('Model Lab')
+    expect(await modelLabLink.evaluate((node) => node.closest('[role="tablist"]'))).toBeNull()
+    await expect(page.locator('[data-settings-tab="language"]')).toBeVisible()
+    await expect(page.locator('[data-settings-tab="privacy"]')).toBeVisible()
 
-    await settingsTabs.getByRole('tab', { name: 'Browser' }).click()
+    await openSettingsCategory(page, 'browser')
     await expect(page.getByTestId('talos-mobile-browser-settings')).toBeVisible()
     await page.getByLabel('Browser interaction policy').click()
     await page.getByRole('option', { name: 'Confirm every interaction' }).click()
@@ -32,7 +46,7 @@ test('Settings exposes all eleven desktop categories plus mobile-only Language a
 
     await page.reload()
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toBeVisible()
-    await page.getByRole('tab', { name: 'Browser' }).click()
+    await openSettingsCategory(page, 'browser')
     await expect(page.getByLabel('Browser interaction policy')).toContainText('Confirm every interaction')
     await expect(page.getByLabel('Open browser links in')).toContainText('System browser')
     await expect(page.getByLabel('Suggest Browse for links')).not.toBeChecked()
@@ -42,8 +56,7 @@ test('Library context requires an explicit mode and persists the global additive
     await page.setViewportSize({ width: 390, height: 844 })
     await openSettings(page)
 
-    await page.getByRole('tablist', { name: 'TALOS settings categories' })
-        .getByRole('tab', { name: 'AI Defaults' }).click()
+    await openSettingsCategory(page, 'ai_defaults')
 
     const master = page.getByRole('switch', { name: 'Let chats use your Library' })
     await expect(master).not.toBeChecked()
@@ -67,7 +80,7 @@ test('Library context requires an explicit mode and persists the global additive
 
     await page.reload()
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toBeVisible()
-    await page.getByRole('tab', { name: 'AI Defaults' }).click()
+    await openSettingsCategory(page, 'ai_defaults')
     await expect(page.getByRole('switch', { name: 'Let chats use your Library' })).toBeChecked()
     await expect(page.getByLabel('Library context mode')).toContainText('Relevant sources only')
     await expect(page.getByTestId('talos-library-mode-chooser')).toHaveAttribute('data-policy-source', 'global')
@@ -84,8 +97,7 @@ test('Tavily key setup opens only the official platform in a user-owned browser 
     })
     await openSettings(page)
 
-    await page.getByRole('tablist', { name: 'TALOS settings categories' })
-        .getByRole('tab', { name: 'AI Defaults' }).click()
+    await openSettingsCategory(page, 'search')
     await page.getByTestId('talos-search-source-tavily').click()
     await expect(page.getByTestId('talos-tavily-api-key-link')).toBeVisible()
 
@@ -101,7 +113,7 @@ test('Appearance changes theme and Motion V6 preferences without reload and pers
     await page.setViewportSize({ width: 390, height: 844 })
     await openSettings(page)
 
-    await page.getByRole('tab', { name: 'Appearance', exact: true }).click()
+    await openSettingsCategory(page, 'appearance')
     await page.getByLabel('Theme preset').click()
     await page.getByRole('option', { name: 'Aurora Research' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme-preset', 'aurora')
@@ -114,7 +126,7 @@ test('Appearance changes theme and Motion V6 preferences without reload and pers
     await page.reload()
     await expect(page.locator('html')).toHaveAttribute('data-theme-preset', 'aurora')
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toBeVisible()
-    await page.getByRole('tab', { name: 'Appearance', exact: true }).click()
+    await openSettingsCategory(page, 'appearance')
     await page.getByRole('tab', { name: 'Motion', exact: true }).click()
     await expect(page.getByLabel('Motion renderer mode')).toContainText('Complex')
     await expect(page.getByRole('slider', { name: 'Background speed' })).toHaveValue('150')
@@ -124,7 +136,7 @@ test('dictation language persists independently from the interface locale', asyn
     await page.setViewportSize({ width: 390, height: 844 })
     await openSettings(page)
 
-    await page.getByRole('tab', { name: 'Appearance', exact: true }).click()
+    await openSettingsCategory(page, 'appearance')
     await page.getByRole('tab', { name: 'Voice', exact: true }).click()
     await page.getByLabel('Dictation language').click()
     await page.getByRole('option', { name: 'Italiano' }).click()
@@ -133,7 +145,7 @@ test('dictation language persists independently from the interface locale', asyn
 
     await page.reload()
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toBeVisible()
-    await page.getByRole('tab', { name: 'Appearance', exact: true }).click()
+    await openSettingsCategory(page, 'appearance')
     await page.getByRole('tab', { name: 'Voice', exact: true }).click()
     await expect(page.getByLabel('Dictation language')).toContainText('Italiano')
     await expect(page.getByText('Lingua di dettatura', { exact: true })).toHaveCount(0)
@@ -143,9 +155,9 @@ test('Settings remains reachable without horizontal overflow at 360x640', async 
     await page.setViewportSize({ width: 360, height: 640 })
     await openSettings(page)
 
-    const categoryList = page.getByRole('tablist', { name: 'TALOS settings categories' })
-    await categoryList.getByRole('tab', { name: 'System' }).scrollIntoViewIfNeeded()
-    await categoryList.getByRole('tab', { name: 'System' }).click()
+    const systemRow = page.locator('[data-settings-tab="system"]')
+    await systemRow.scrollIntoViewIfNeeded()
+    await systemRow.click()
     await expect(page.locator('[data-settings-panel="system"]')).toBeVisible()
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
@@ -175,10 +187,9 @@ test('Font size scales interface chrome and persists', async ({ page }) => {
     const menuBefore = await menuItemSize()
 
     await openSettings(page)
-    await page.getByRole('tablist', { name: 'TALOS settings categories' })
-        .getByRole('tab', { name: 'Appearance' }).click()
-    const panelBefore = await panelSize()
     const tabBefore = await tabSize()
+    await openSettingsCategory(page, 'appearance')
+    const panelBefore = await panelSize()
     expect(menuBefore).toBeGreaterThan(0)
 
     await page.locator('[data-testid="talos-font-scale-select"] [data-testid="talos-themed-select-trigger"]').click()

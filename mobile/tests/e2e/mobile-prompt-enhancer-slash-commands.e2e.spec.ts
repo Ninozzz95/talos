@@ -32,6 +32,13 @@ function firstUserText(body: GeminiRequestBody): string {
     return body.contents?.[0]?.parts?.[0]?.text ?? ''
 }
 
+async function requestPromptEnhancement(page: Page): Promise<void> {
+    await page.getByLabel('Improve prompt').click()
+    const setup = page.getByRole('dialog', { name: 'Prompt enhancement', exact: true })
+    await expect(setup).toBeVisible()
+    await setup.getByRole('button', { name: 'Improve the prompt', exact: true }).click()
+}
+
 
 test('uses the selected model to preview cancel insert replace and finally send', async ({ page }) => {
     const enhancementBodies: GeminiRequestBody[] = []
@@ -88,7 +95,7 @@ test('uses the selected model to preview cancel insert replace and finally send'
     const original = 'Draft a concise launch note for the mobile release.'
     await composer.fill(original)
 
-    await page.getByLabel('Improve prompt').click()
+    await requestPromptEnhancement(page)
     const preview = page.getByRole('dialog', { name: 'Prompt enhancement preview' })
     await expect(preview).toBeVisible()
     await expect(page.getByTestId('talos-mobile-enhancement-provenance'))
@@ -99,13 +106,13 @@ test('uses the selected model to preview cancel insert replace and finally send'
     await expect(preview).toHaveCount(0)
     await expect(composer).toHaveValue(original)
 
-    await page.getByLabel('Improve prompt').click()
+    await requestPromptEnhancement(page)
     await expect(preview).toBeVisible()
     await preview.getByRole('button', { name: 'Insert below', exact: true }).click()
     const inserted = `${original}\n\nEnhanced 2: ${original}`
     await expect(composer).toHaveValue(inserted)
 
-    await page.getByLabel('Improve prompt').click()
+    await requestPromptEnhancement(page)
     await expect(preview).toBeVisible()
     await preview.getByRole('button', { name: 'Replace prompt', exact: true }).click()
     const replaced = `Enhanced 3: ${inserted}`
@@ -116,7 +123,7 @@ test('uses the selected model to preview cancel insert replace and finally send'
     // resolving. Every other spec waits for this; this one did not, which is
     // why it was the only test that flaked when the suite went parallel.
     await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
-    await composer.press('Enter')
+    await page.getByLabel('Send message').click()
     await expect(page.getByText('Provider accepted the final enhanced prompt.', { exact: true })).toBeVisible()
     await expect(page.getByTestId('talos-mobile-message-list').getByText(replaced, { exact: true }))
         .toBeVisible()
@@ -159,8 +166,8 @@ test('operates slash commands at 360px without overflow, and every row runs', as
 
     await composer.fill('/model')
     await composer.press('Enter')
-    await expect(page).toHaveURL(/\/settings\?tab=models$/)
-    await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
+    await expect(page).toHaveURL(/\/settings\/models$/)
+    await expect(page.getByTestId('talos-model-lab-hub')).toBeVisible()
     await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
 
@@ -232,7 +239,7 @@ test('preserves the draft on malformed provider output and reload', async ({ pag
     const composer = page.getByLabel('Message TALOS')
     const draft = 'Preserve this exact draft after malformed enhancement output.'
     await composer.fill(draft)
-    await page.getByLabel('Improve prompt').click()
+    await requestPromptEnhancement(page)
     await expect(page.getByTestId('talos-mobile-enhancer-error'))
         .toContainText('The selected model returned an invalid prompt enhancement.')
     await expect(composer).toHaveValue(draft)

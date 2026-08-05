@@ -51,12 +51,9 @@ describe('TalosThemedTabs', () => {
         expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['design'])
     })
 
-    it('takes activation from the register, not from the caller', () => {
-        // Model Lab probes the local engine when its panel mounts, so arrowing
-        // across its tabs under automatic activation fires a probe per keystroke.
-        // The APG allows automatic only where panels are already there.
-        expect(mountTabs({ surface: 'models', modelValue: 'providers' })
-            .get('[data-talos-tabs]').attributes('data-orientation')).toBeDefined()
+    it('does not reinterpret the routed Model Lab as a tab surface', () => {
+        const retired = mountTabs({ surface: 'models', modelValue: 'providers' })
+        expect(retired.find('[data-talos-tabs]').exists()).toBe(false)
         expect(mountTabs().get('[role="tablist"]').exists()).toBe(true)
     })
 

@@ -42,7 +42,7 @@ const SEEN_NOT_DISMISSED = {
                 defaults_v3: true,
             presentation_v2: true,
             shell: { immersive_header: false, composer_drawer: false },
-            onboarding: { intro_version: 2, intro_outcome: 'completed', setup_dismissed: false },
+            onboarding: { intro_version: 3, intro_outcome: 'completed', setup_dismissed: false },
             }),
         }],
     }],
@@ -62,7 +62,7 @@ test.describe('intro first-run (fresh install)', () => {
         await expect(intro).toContainText('no us to reach')
         await expect(intro).toContainText('Zethos')
         await page.locator('[data-testid="talos-setup-begin"]').click()
-        await expect(intro.locator('[data-testid="talos-setup-step"]')).toHaveCount(3)
+        await expect(intro.locator('[data-testid="talos-setup-step"]')).toHaveCount(5)
         await intro.locator('[data-testid="talos-setup-name"]').fill('Nino')
         await intro.locator('[data-testid="talos-setup-next"]').click()
         // PIN leads with the consequence because it really is the key.
@@ -72,6 +72,14 @@ test.describe('intro first-run (fresh install)', () => {
         await page.locator('[data-testid="talos-setup-next"]').click()
         // Model keeps the Keystore truth (never a server-side claim).
         await expect(intro).toContainText('Keystore')
+        await page.locator('[data-testid="talos-setup-next"]').click()
+        // Autonomy is an explicit decision, not a hidden default.
+        await expect(intro.locator('[data-testid="talos-setup-autonomy-list"]')).toBeVisible()
+        await intro.locator('[data-testid="talos-setup-autonomy-ask"]').click()
+        // Background is the fifth and final step; only here can setup finish.
+        await expect(intro.locator(
+            '[data-testid="talos-setup-background"], [data-testid="talos-setup-background-done"]',
+        )).toHaveCount(1)
         await page.locator('[data-testid="talos-intro-cta"]').click()
         await expect(intro).toHaveCount(0)
         // The wizard must NOT appear behind it any more.
@@ -106,7 +114,8 @@ test.describe('first-run setup checklist', () => {
         await expect(checklist).toContainText('Add a provider key')
         await expect(checklist).toContainText('Choose your model')
         await page.locator('[data-testid="talos-setup-step-key"]').click()
-        await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
+        await expect(page).toHaveURL(/\/settings\/models\/providers$/)
+        await expect(page.getByTestId('settings-models-providers-screen')).toBeVisible()
         await page.goBack()
         await expect(checklist).toBeVisible({ timeout: 15000 })
         await page.locator('[data-testid="talos-setup-dismiss"]').click()
@@ -123,6 +132,7 @@ test('immersive header toggle swaps the header bar for floating pills', async ({
     await page.locator('[aria-label="Open menu"]').click()
     await page.locator('[data-testid="talos-mobile-sidebar"] [aria-label="Open Settings"]').click()
     await page.locator('[data-settings-tab="appearance"]').click()
+    await page.getByTestId('talos-appearance-advanced').locator('summary').click()
     await page.locator('[role="switch"][aria-label="Immersive header"]').click()
     await page.goBack()
     await expect(page.locator(HEADER)).toHaveCount(0)
@@ -143,7 +153,7 @@ test('Account panel replays first-run setup from Settings', async ({ page }) => 
     await page.locator('[data-testid="talos-language-continue"]').click()
     await page.locator('[data-testid="talos-setup-begin"]').click()
     await expect(page.locator(INTRO)).toContainText('What should TALOS call you?')
-    await expect(page.locator(INTRO).locator('[data-testid="talos-setup-step"]')).toHaveCount(3)
+    await expect(page.locator(INTRO).locator('[data-testid="talos-setup-step"]')).toHaveCount(5)
 })
 
 test('app lock arms with a PIN, gates the cold start, and only a real PIN unlocks', async ({ page }) => {

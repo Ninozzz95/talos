@@ -25,8 +25,37 @@ describe('applyTalosMobileDesignTokens', () => {
         expect(target.style.getPropertyValue('--talos-font-mono')).toContain('JetBrains Mono')
         expect(target.style.getPropertyValue('--radius')).toBe('0rem')
         expect(target.style.getPropertyValue('--talos-density-scale')).toBe('1')
+        expect(target.style.getPropertyValue('--talos-space-page')).not.toBe('')
+        expect(target.style.getPropertyValue('--talos-space-section')).not.toBe('')
+        expect(target.style.getPropertyValue('--talos-space-card')).not.toBe('')
+        expect(target.style.getPropertyValue('--talos-space-control')).not.toBe('')
+        expect(target.style.getPropertyValue('--talos-space-inline')).not.toBe('')
+        expect(target.style.getPropertyValue('--talos-icon-size')).not.toBe('')
+        expect(target.style.getPropertyValue('--talos-touch-target')).toBe('3rem')
+        expect(target.style.getPropertyValue('--talos-radius-card')).not.toBe('')
+        expect(target.style.getPropertyValue('--talos-radius-control')).not.toBe('')
         // motion intents are deferred: exposed as data attributes, never animated.
         expect(target.getAttribute('data-talos-motion-ambient')).toBe('telemetry.ambient')
+    })
+
+    it('changes layout tokens with density and radius but keeps the 48dp floor', () => {
+        const compactSharp = parseTalosMobileDesignTokens({ ...identity, density: 'compact', radius: 'sharp' })
+        const spaciousSoft = parseTalosMobileDesignTokens({ ...identity, density: 'spacious', radius: 'soft' })
+
+        applyTalosMobileDesignTokens(compactSharp, 'light', target)
+        const first = {
+            page: target.style.getPropertyValue('--talos-space-page'),
+            card: target.style.getPropertyValue('--talos-space-card'),
+            radius: target.style.getPropertyValue('--talos-radius-card'),
+            touch: target.style.getPropertyValue('--talos-touch-target'),
+        }
+        applyTalosMobileDesignTokens(spaciousSoft, 'dark', target)
+
+        expect(target.style.getPropertyValue('--talos-space-page')).not.toBe(first.page)
+        expect(target.style.getPropertyValue('--talos-space-card')).not.toBe(first.card)
+        expect(target.style.getPropertyValue('--talos-radius-card')).not.toBe(first.radius)
+        expect(first.touch).toBe('3rem')
+        expect(target.style.getPropertyValue('--talos-touch-target')).toBe('3rem')
     })
 
     it('forced light and forced dark map the exact palette roles', () => {

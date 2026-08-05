@@ -382,3 +382,95 @@ Prima di modificare comportamento, l'implementatore deve riconfermare:
 
 Un drift non autorizza un aggiustamento silenzioso: il ledger viene emendato con
 decisione adopt/adapt/reject prima del codice.
+
+## 10. Emendamento: allegati nel contratto OpenAI Responses
+
+Durante il corpus regressivo della fase 2, il payload E2E ha dimostrato che il
+ramo `/v1/responses` perdeva `turn.parts`. Verifica primaria del 2026-08-04:
+
+- la [quickstart ufficiale OpenAI](https://platform.openai.com/docs/quickstart/make-your-first-api-request)
+  mostra un input multimodale come messaggio `role: "user"` con `content`
+  composto da `{ type: "input_text", text }` e
+  `{ type: "input_image", image_url }`;
+- il [riferimento ufficiale Responses](https://platform.openai.com/docs/api-reference/responses-streaming/response/output_item?lang=node.js)
+  specifica `input_image`, `image_url` come stringa URL/data-URL e il livello
+  `detail` facoltativo.
+
+Decisione upstream: **ADAPT** il wire ufficiale dietro
+`openAiCompatibleAdapter.ts`. I documenti già estratti localmente restano testo
+non fidato in un blocco `input_text`; le immagini autorizzate diventano
+`input_image` con data URL. I metadati privati AVM (`attachmentId`, grant,
+`sha256`, URI Vault) non attraversano il boundary. Nessun nuovo pacchetto e
+nessun upload OpenAI Files: la politica locale e il consenso già esistenti
+restano l'autorità.
+
+## 11. Emendamento: stacking dei menu teletrasportati
+
+Il viaggio E2E File ha mostrato un menu `Teleport` presente nel DOM e
+focalizzabile, ma non toccabile dentro il dialogo Media. La
+[CSS Positioned Layout Level 3](https://www.w3.org/TR/css-position-3/#stacking)
+stabilisce che i box fixed formano stacking context e rimanda allo stack level
+di `z-index` per il painting order. Il
+[WAI-ARIA Menu Button Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/menu-button/)
+richiede che attivare il bottone mostri il menu e vi sposti il focus: una
+superficie dipinta dietro il dialogo non soddisfa l'operabilità touch, anche se
+la semantica ARIA è corretta.
+
+Decisione upstream: **ADAPT** queste regole alla scala mobile osservata, senza
+nuova libreria. `TalosRowActions` usa layer 110: superiore ai dialoghi/viewer
+95 e ai select 100, inferiore al lock screen 120. Il test unitario pinna questo
+ordine e l'E2E verifica l'attivazione reale della voce dentro Media.
+
+## 12. Emendamento: contrasto della status bar Android 16
+
+La prova fisica Paper/chiaro sul tablet OPD2415, Android 16/API 36, ha mostrato
+icone bianche quasi invisibili sullo sfondo chiaro dell'app. Verifica primaria
+del 2026-08-04:
+
+- la [Status Bar API ufficiale di Capacitor 8](https://capacitorjs.com/docs/apis/status-bar)
+  definisce `Style.Dark` come testo chiaro per sfondi scuri e `Style.Light`
+  come testo scuro per sfondi chiari; la mappatura già presente è quindi
+  corretta;
+- la stessa pagina stabilisce che, per app Android 16/API 36 con Capacitor 8,
+  `backgroundColor` e `overlaysWebView` non hanno più effetto, mentre
+  `setStyle()` resta l'API disponibile per il foreground;
+- la guida Android ufficiale
+  [Display content edge-to-edge in views](https://developer.android.com/develop/ui/views/layout/edge-to-edge)
+  richiede di aggiornare manualmente il colore delle icone di sistema quando
+  necessario affinché contrasti con il contenuto sottostante.
+
+Pin locale verificato: `@capacitor/status-bar` **8.0.3** e
+`@capacitor/core`/`@capacitor/android` **8.4.2**. Decisione upstream:
+**ADAPT** il plugin ufficiale già pin dentro il Theme Store TALOS. Ogni
+applicazione del tema deve inviare schema risolto e background appena applicato
+al framing nativo. I setter non più operativi su API 36 restano per la
+compatibilità con Android precedenti; non si aggiunge codice nativo parallelo.
+
+## 13. Emendamento: gerarchia unica tra drawer e Impostazioni
+
+Il 2026-08-05 la prova umana ha trovato lo stesso hub Model Lab in due punti
+della navigazione primaria: voce autonoma nel drawer e link figlio nel Centro
+impostazioni. Fonti primarie correnti consultate:
+
+- [Android — Settings](https://developer.android.com/design/ui/mobile/guides/patterns/settings):
+  raccomanda di collocare le preferenze frequenti vicino alla funzione cui si
+  riferiscono; se il drawer esiste, `Settings` è la destinazione laterale
+  ordinata dopo le altre, mentre le impostazioni non essenziali restano nella
+  gerarchia secondaria;
+- [Android — Layouts and navigation patterns](https://developer.android.com/design/ui/mobile/guides/layout-and-content/layout-and-nav-patterns):
+  definisce drawer, bar e rail come navigazione primaria tra parent view e
+  destinazioni primarie allo stesso livello;
+- [Android NavigationUI](https://developer.android.com/guide/navigation/integrations/ui):
+  definisce una destinazione top-level come radice o livello più alto di un
+  insieme gerarchicamente collegato e usa `Up` per le destinazioni non
+  top-level.
+
+Decisione upstream: **ADAPT**, senza dipendenze. TALOS mantiene un solo ingresso
+primario `Impostazioni` nel drawer e un solo link figlio
+`settings-model-lab-link` nel Centro impostazioni. Il parent route resta
+`settings`, quindi header e System Back continuano a riflettere la gerarchia.
+Picker modello, composer, checklist e comando `/model` restano scorciatoie
+contestuali, coerenti con la raccomandazione Android di porre le preferenze
+frequenti vicino al compito che le richiede. Il simbolo
+`TalosMobileSidebar.openModelLab` viene ritirato; nessuna route, API o package
+viene aggiunto.

@@ -32,6 +32,68 @@ export type TalosThemeIdentityPalette = Record<TalosThemeIdentityPaletteRole, st
 export type TalosThemeDensity = 'compact' | 'comfortable' | 'spacious'
 export type TalosThemeRadius = 'sharp' | 'balanced' | 'soft'
 
+export interface TalosLayoutDensityTokens {
+    readonly page: string
+    readonly section: string
+    readonly card: string
+    readonly control: string
+    readonly inline: string
+    readonly icon: string
+    /** Accessibility floor: density may compress whitespace, never the target. */
+    readonly touchTarget: '3rem'
+}
+
+export interface TalosComponentRadiusTokens {
+    readonly radiusCard: string
+    readonly radiusControl: string
+}
+
+export const TALOS_LAYOUT_DENSITY_SCALE: Readonly<Record<TalosThemeDensity, TalosLayoutDensityTokens>> = Object.freeze({
+    compact: Object.freeze({
+        page: '0.75rem',
+        section: '0.75rem',
+        card: '0.625rem',
+        control: '0.625rem',
+        inline: '0.375rem',
+        icon: '1rem',
+        touchTarget: '3rem',
+    }),
+    comfortable: Object.freeze({
+        page: '1rem',
+        section: '1rem',
+        card: '0.75rem',
+        control: '0.75rem',
+        inline: '0.5rem',
+        icon: '1rem',
+        touchTarget: '3rem',
+    }),
+    spacious: Object.freeze({
+        page: '1.25rem',
+        section: '1.25rem',
+        card: '1rem',
+        control: '0.875rem',
+        inline: '0.625rem',
+        icon: '1.125rem',
+        touchTarget: '3rem',
+    }),
+})
+
+export const TALOS_COMPONENT_RADIUS_SCALE: Readonly<Record<TalosThemeRadius, TalosComponentRadiusTokens>> = Object.freeze({
+    sharp: Object.freeze({ radiusCard: '0rem', radiusControl: '0rem' }),
+    balanced: Object.freeze({ radiusCard: '0.5rem', radiusControl: '0.375rem' }),
+    soft: Object.freeze({ radiusCard: '0.75rem', radiusControl: '0.75rem' }),
+})
+
+export function talosLayoutTokensFor(
+    density: TalosThemeDensity,
+    radius: TalosThemeRadius,
+): TalosLayoutDensityTokens & TalosComponentRadiusTokens {
+    return {
+        ...TALOS_LAYOUT_DENSITY_SCALE[density],
+        ...TALOS_COMPONENT_RADIUS_SCALE[radius],
+    }
+}
+
 export interface TalosThemeTypographyFace {
     family: string
     fallback_families: string[]

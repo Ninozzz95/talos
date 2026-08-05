@@ -773,8 +773,7 @@ describe('ChatScreen (functional, local-first)', () => {
         await field.setValue('/model')
         composer.vm.$emit('selectSlashCommand', 'open_model_center')
         await vi.waitFor(() => expect(mockState.routerPush).toHaveBeenCalledWith({
-            name: 'settings',
-            query: { tab: 'models' },
+            name: 'settings-models',
         }))
         expect(field.element.value).toBe('')
         expect(controller.__drafts.has('new')).toBe(false)
@@ -818,10 +817,16 @@ describe('welcome setup checklist (F2-T6)', () => {
         expect(checklist.text()).toContain('Choose your model')
     })
 
-    it('routes the key step to Settings → Models', async () => {
+    it('routes setup and composer entry points to their dedicated Model Lab pages', async () => {
         const wrapper = mount(ChatScreen)
         await wrapper.get('[data-testid="talos-setup-step-key"]').trigger('click')
-        expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'settings', query: { tab: 'models' } })
+        expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'settings-models-providers' })
+
+        await wrapper.get('[data-testid="talos-setup-step-model"]').trigger('click')
+        expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'settings-models-catalog' })
+
+        wrapper.getComponent(TalosMobileComposer).vm.$emit('openModelLab')
+        expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'settings-models' })
     })
 
     it('hides when setup is genuinely complete', () => {

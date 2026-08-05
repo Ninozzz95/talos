@@ -332,6 +332,48 @@ describe('l endpoint, per provider', () => {
         expect(inviata.data.store).toBe(false)
     })
 
+    it('F2-RED-17 conserva documento e immagine autorizzati nel wire Responses', async () => {
+        const { request, transport } = transportFor({
+            status: 'completed',
+            output: [{ type: 'message', content: [{ type: 'output_text', text: 'visti' }] }],
+        })
+        await openAiAdapter.complete({
+            model: {
+                id: 'gpt-vision', provider: 'openai', displayName: 'Vision',
+                supportedParameters: [], inputModalities: ['text', 'image'], outputModalities: ['text'],
+            },
+            effort: 'off',
+            turns: [{
+                role: 'user',
+                content: 'Inspect.',
+                parts: [
+                    {
+                        type: 'image', attachmentId: 'image-1', name: 'image.png', mediaType: 'image/png',
+                        base64: 'aGVsbG8=', sha256: 'a'.repeat(64),
+                    },
+                    {
+                        type: 'document_text', attachmentId: 'doc-1', name: 'notes.txt',
+                        mediaType: 'text/plain', text: 'Untrusted notes', sha256: 'b'.repeat(64),
+                    },
+                ],
+            }],
+        } as never, { apiKey: 'k' }, transport)
+
+        const input = (request.mock.calls[0]![0] as {
+            data: { input: Array<Record<string, unknown>> }
+        }).data.input
+        expect(input).toEqual([{
+            role: 'user',
+            content: [
+                { type: 'input_text', text: 'Inspect.' },
+                { type: 'input_image', image_url: 'data:image/png;base64,aGVsbG8=' },
+                { type: 'input_text', text: '[Untrusted attachment: notes.txt]\nUntrusted notes' },
+            ],
+        }])
+        expect(JSON.stringify(input)).not.toContain('attachmentId')
+        expect(JSON.stringify(input)).not.toContain('sha256')
+    })
+
     it('lascia DeepSeek e OpenRouter dove stavano', async () => {
         for (const adapter of [deepSeekAdapter, openRouterAdapter]) {
             const { request, transport } = transportFor({

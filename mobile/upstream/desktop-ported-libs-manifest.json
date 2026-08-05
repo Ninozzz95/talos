@@ -24,9 +24,9 @@
     },
     {
       "mobile_path": "mobile/src/lib/talosThemes.ts",
-      "sha256": "f58e241a1edb5cc5439c736cab70172c8dae92b2ae239b151987df22ba54891c",
+      "sha256": "0bbf1447afb4b4516c6d0a46d21f39e39cae94b4ddbb1729890e7d89a1fed326",
       "desktop_source": "talosThemes.ts",
-      "reconciliation": "ported; mobile-forked (calm preset is a mobile design-lead theme; R1 re-seeded it neutral grey)"
+      "reconciliation": "DIVERGED from frozen desktop revision 76a0aa9 on purpose (Model Lab mobile Phase 2, 2026-08-04): the desktop source still maps only radius literals; mobile additionally maps density and radius through the pinned @talos-mobile/design-tokens scales so every phone surface inherits one Theme Engine contract. The existing calm preset remains a mobile design-lead fork; no desktop-lane file is changed."
     }
   ]
 }

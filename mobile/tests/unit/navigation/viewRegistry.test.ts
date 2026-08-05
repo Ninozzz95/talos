@@ -128,12 +128,8 @@ describe('the view register', () => {
         expect(talosViewStorageKey('doctor')).toBe('talos.view.doctor')
     })
 
-    it('never activates automatically a surface whose panel is not already there', () => {
-        // The APG allows automatic activation only where panels can be shown
-        // instantly. Model Lab probes the local engine when its panel mounts,
-        // so arrowing across its tabs would fire a probe per keystroke.
-        const models = TALOS_VIEW_SURFACES.find((surface) => surface.id === 'models')
-        expect(models?.activation).toBe('manual')
+    it('does not register route-backed Model Lab pages as an inline tab surface', () => {
+        expect(TALOS_VIEW_SURFACES.find((surface) => surface.id === 'models')).toBeUndefined()
     })
 
     it('matches the views the screens actually render, so the register cannot drift', () => {
@@ -161,11 +157,6 @@ describe('the view register', () => {
             [
                 'appearance',
                 'src/components/talos/settings/TalosMobileSettingsAppearancePanel.vue',
-                /<TabsContent[^>]*?\svalue="([^"]+)"/g,
-            ],
-            [
-                'models',
-                'src/components/talos/settings/TalosMobileSettingsModelsPanel.vue',
                 /<TabsContent[^>]*?\svalue="([^"]+)"/g,
             ],
             // Doctor used to be read from `doctorSections.ts`, because it was the

@@ -40,10 +40,10 @@ const props = defineProps<{
  * indietro.
  */
 const COLORE = {
-    ok: 'var(--talos-success, #6FD09A)',
-    tight: 'var(--talos-warning, #E5B76B)',
-    over: 'var(--talos-danger, #E0716B)',
-    unknown: 'var(--talos-text-muted, #8C94A3)',
+    ok: 'var(--talos-success)',
+    tight: 'var(--talos-warning)',
+    over: 'var(--talos-danger)',
+    unknown: 'var(--talos-muted)',
 } as const
 
 /**
@@ -64,7 +64,7 @@ const segno = () => (
         data-testid="talos-model-fit"
         :data-fit-tone="tone"
         :data-fit-estimated="estimated ? 'true' : 'false'"
-        class="flex items-center gap-2"
+        class="flex items-center gap-[var(--talos-space-inline)]"
     >
         <!-- `overflow-visible`: il segno sporge di un pixel sopra e sotto la
              barra, ed e' proprio quel bordo che lo rende leggibile. Tagliarlo
@@ -72,7 +72,7 @@ const segno = () => (
         <span
             v-if="ratio !== null"
             data-testid="talos-model-fit-track"
-            class="relative h-1.5 min-w-16 flex-1 rounded-full bg-[var(--talos-active)]"
+            class="relative h-[calc(var(--talos-space-inline)/2)] min-w-[calc(var(--talos-touch-target)*1.5)] flex-1 rounded-full bg-[var(--talos-active)]"
         >
             <i
                 class="absolute inset-y-0 left-0 block rounded-full opacity-90"
@@ -88,7 +88,7 @@ const segno = () => (
             <b
                 v-if="ratio > 1"
                 data-testid="talos-model-fit-mark"
-                class="absolute -inset-y-1 w-0.5 rounded-full bg-[var(--talos-text)]"
+                class="absolute -inset-y-[calc(var(--talos-space-inline)/2)] w-[calc(var(--talos-space-inline)/4)] rounded-full bg-[var(--talos-text)]"
                 :style="{ left: `${segno()}%` }"
             ></b>
         </span>

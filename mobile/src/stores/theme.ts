@@ -21,6 +21,7 @@ import {
 import { exportTalosThemeIdentity, getTalosThemeIdentityV6 } from '@/motion-v6/themeIdentity'
 import { parseTalosMobileDesignTokens } from '@talos-mobile/design-tokens'
 import { applyTalosMobileDesignTokens } from '@/theme/applyDesignTokens'
+import { configureNativeFraming } from '@/services/nativeFraming'
 
 export const TALOS_MOBILE_THEME_KEY = 'talos.mobile.theme'
 const THEME_MODES: readonly TalosThemeMode[] = ['system', 'light', 'dark']
@@ -69,7 +70,9 @@ export function applyTalosTheme(
 ): TalosResolvedThemeMode {
     const resolved = effectiveTalosThemeMode(theme, mode, systemPrefersDark())
 
-    // shadcn bridge + fonts/radius/density + data attributes, from the canonical identity.
+    // Shadcn bridge plus live font, spacing, touch-target and component-radius
+    // tokens from the canonical identity. Re-running this on the same root is
+    // what lets already-mounted and lazy Model Lab pages change as one surface.
     const identitySource = getTalosThemeIdentityV6(theme)
     if (identitySource) {
         const identity = parseTalosMobileDesignTokens(exportTalosThemeIdentity(identitySource))
@@ -97,7 +100,20 @@ export function useThemeStore(): ThemeStore {
     const state = reactive<TalosMobileThemeState>({ ...DEFAULT_THEME_STATE })
 
     function applyCurrent(): void {
-        applyTalosTheme(state.theme, state.mode)
+        const resolved = applyTalosTheme(state.theme, state.mode)
+        // F2-RED-19 — the WebView tokens and native status-bar foreground are
+        // one visual transaction. Android 16 forces an edge-to-edge transparent
+        // bar, so configuring only at boot leaves light system icons stranded
+        // over Paper/light after a live theme change. The canonical background
+        // has just been written inline by applyTalosTheme(), so no second theme
+        // derivation (and no race with Vue rendering) is needed here.
+        const background = document.documentElement.style.getPropertyValue('--background').trim()
+            || (resolved === 'dark' ? '#0b0f11' : '#f1f8fa')
+        void configureNativeFraming({
+            scheme: resolved,
+            background,
+            onError: (error) => console.error(`[native-framing] ${error.code}: ${error.message}`),
+        })
     }
     async function persist(): Promise<void> {
         await talosBridgeCall('TALOS_THEME_PERSIST', () => Preferences.set({

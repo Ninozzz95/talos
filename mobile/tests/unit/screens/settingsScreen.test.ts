@@ -14,6 +14,12 @@ const routerCalls = vi.hoisted(() => ({ replace: vi.fn(() => Promise.resolve()),
 vi.mock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => routerCalls }))
 
 import SettingsScreen from '@/screens/SettingsScreen.vue'
+import SettingsModelsProvidersScreen from '@/screens/SettingsModelsProvidersScreen.vue'
+
+const routerLinkStub = { props: ['to'], template: '<a data-router-link-stub><slot /></a>' }
+function mountSettings() {
+    return mount(SettingsScreen, { global: { stubs: { RouterLink: routerLinkStub } } })
+}
 
 function makeController(opts: { secret?: boolean } = {}) {
     const secret = opts.secret === true
@@ -72,8 +78,8 @@ beforeEach(() => {
 
 describe('SettingsScreen (functional)', () => {
     it('renders the provider keys section with a password field per remote provider', () => {
-        const wrapper = mount(SettingsScreen)
-        expect(wrapper.get('[data-testid="mobile-screen-title"]').text()).toBe('Settings Center')
+        const wrapper = mount(SettingsModelsProvidersScreen)
+        expect(wrapper.get('[data-testid="settings-models-providers-screen"]').exists()).toBe(true)
         expect(wrapper.find('[data-testid="settings-provider-keys"]').exists()).toBe(true)
         const anthropicKey = wrapper.find('[aria-label="Anthropic API key"]')
         expect(anthropicKey.exists()).toBe(true)
@@ -83,7 +89,7 @@ describe('SettingsScreen (functional)', () => {
     it('saves an entered key to the keystore via the controller', async () => {
         const controller = makeController()
         mockState.controller = controller
-        const wrapper = mount(SettingsScreen)
+        const wrapper = mount(SettingsModelsProvidersScreen)
         await wrapper.get('[aria-label="Anthropic API key"]').setValue('sk-ant-xyz')
         await wrapper.get('[aria-label="Save Anthropic key"]').trigger('click')
         expect(controller.saveKey).toHaveBeenCalledWith('anthropic', 'sk-ant-xyz')
@@ -91,7 +97,7 @@ describe('SettingsScreen (functional)', () => {
 
     it('shows a "Key saved" badge and a remove control when the provider has a key', () => {
         mockState.controller = makeController({ secret: true })
-        const wrapper = mount(SettingsScreen)
+        const wrapper = mount(SettingsModelsProvidersScreen)
         expect(wrapper.find('[data-testid="key-present"]').exists()).toBe(true)
         expect(wrapper.find('[aria-label="Remove Anthropic key"]').exists()).toBe(true)
     })
@@ -99,7 +105,7 @@ describe('SettingsScreen (functional)', () => {
     it('pluralizes the discovered model count', async () => {
         const controller = makeController()
         mockState.controller = controller
-        const wrapper = mount(SettingsScreen)
+        const wrapper = mount(SettingsModelsProvidersScreen)
 
         expect(wrapper.text()).toContain('1 model available')
         expect(wrapper.text()).not.toContain('1 models available')
@@ -126,7 +132,7 @@ describe('SettingsScreen (functional)', () => {
     it.skip('selects the default model through the controller', async () => {
         const controller = makeController({ secret: true })
         mockState.controller = controller
-        const wrapper = mount(SettingsScreen)
+        const wrapper = mount(SettingsModelsProvidersScreen)
         expect(wrapper.find('[data-model-id]').exists()).toBe(false)
         const select = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
             .find((candidate) => candidate.props('ariaLabel') === 'Default chat model')
@@ -144,7 +150,7 @@ describe('SettingsScreen (functional)', () => {
             show_in_composer: false, capabilities: null, probe_ok: null,
         })
         mockState.controller = controller
-        const wrapper = mount(SettingsScreen)
+        const wrapper = mount(SettingsModelsProvidersScreen)
         const select = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
             .find((candidate) => candidate.props('ariaLabel') === 'Default chat model')
 
@@ -160,7 +166,7 @@ describe('SettingsScreen (functional)', () => {
         controller.catalogs.gemini.status = 'error'
         controller.catalogs.gemini.error = 'Gemini model discovery failed.'
         mockState.controller = controller
-        const wrapper = mount(SettingsScreen)
+        const wrapper = mount(SettingsModelsProvidersScreen)
 
         expect(wrapper.text()).toContain('Gemini model discovery failed.')
         await wrapper.get('[aria-label="Refresh Google Gemini models"]').trigger('click')
@@ -170,7 +176,7 @@ describe('SettingsScreen (functional)', () => {
     it('persists an explicit Ollama endpoint through the controller', async () => {
         const controller = makeController()
         mockState.controller = controller
-        const wrapper = mount(SettingsScreen)
+        const wrapper = mount(SettingsModelsProvidersScreen)
 
         await wrapper.get('[aria-label="Ollama endpoint"]').setValue('http://10.0.0.4:11434')
         await wrapper.get('[aria-label="Save Ollama Local runtime options"]').trigger('click')
@@ -178,79 +184,15 @@ describe('SettingsScreen (functional)', () => {
         expect(controller.saveEndpoint).toHaveBeenCalledWith('ollama', 'http://10.0.0.4:11434')
     })
 
-    it('opens the Models detail pane from the composer deep link', async () => {
+    it('canonicalizes the legacy Models deep link with replace and no history entry', async () => {
         routeState.query = { tab: 'models' }
-        const wrapper = mount(SettingsScreen)
-
-        expect(wrapper.get('[data-testid="settings-detail-pane"]').classes()).not.toContain('hidden')
-        expect(wrapper.get('[data-settings-panel="models"]').text()).toContain('Providers')
-    })
-
-    it('uses APG tabs and loads the heavy Catalog only when selected', async () => {
-        routeState.query = { tab: 'models' }
-        const wrapper = mount(SettingsScreen)
-        const tablist = wrapper.get('[aria-label="Model Lab sections"]')
-        const tabs = tablist.findAll('[role="tab"]')
-
-        expect(tabs.map((tab) => tab.text())).toEqual(['Providers', 'Catalog', 'Local'])
-        // The strip renders the names from the register; the icons come from
-        // the screen through a slot that cannot touch the name. Both, or the
-        // migration quietly cost the panel its icons.
-        expect(tabs.map((tab) => tab.find('svg').exists())).toEqual([true, true, true])
-        expect(wrapper.find('[aria-label="Search model catalog"]').exists()).toBe(false)
-        expect(wrapper.get('[data-model-lab-section="providers"]').classes())
-            .toContain('talos-motion-tab-panel')
-
-        await tabs[1]!.trigger('mousedown', { button: 0, ctrlKey: false })
-        await vi.dynamicImportSettled()
+        const wrapper = mountSettings()
         await flushPromises()
 
-        expect(tabs[1]!.attributes('data-state')).toBe('active')
-        expect(wrapper.get('[data-model-lab-section="catalog"]').classes())
-            .toContain('talos-motion-tab-panel')
-        expect(wrapper.get('[aria-label="Search model catalog"]').exists()).toBe(true)
-    })
-
-    /**
-     * The download centre lives HERE, as a section, rather than as a station of
-     * its own — owner 2026-07-31, on economising the surfaces that already
-     * exist. The Model Lab is where someone decides which model answers them,
-     * and a second destination would split one question across two places.
-     *
-     * This is the seam: the component is proved on its own, and this is what
-     * says it is actually reachable.
-     */
-    it('carries the on-device download centre as its third section', async () => {
-        routeState.query = { tab: 'models' }
-        const wrapper = mount(SettingsScreen)
-        const tabs = wrapper.get('[aria-label="Model Lab sections"]').findAll('[role="tab"]')
-
-        await tabs[2]!.trigger('mousedown', { button: 0, ctrlKey: false })
-        await vi.dynamicImportSettled()
-        await flushPromises()
-
-        expect(tabs[2]!.attributes('data-state')).toBe('active')
-        expect(wrapper.get('[data-model-lab-section="on-device"]').classes())
-            .toContain('talos-motion-tab-panel')
-        expect(wrapper.get('[data-testid="talos-models-section"]').exists()).toBe(true)
-    })
-
-    it('reopens Model Lab on the section you left, not always on Providers', async () => {
-        // Someone watching a download had to walk back to the on-device section
-        // after every visit. The proof is a second, independent mount.
-        routeState.query = { tab: 'models' }
-        const first = mount(SettingsScreen)
-        await first.get('[aria-label="Model Lab sections"]').findAll('[role="tab"]')[2]!
-            .trigger('mousedown', { button: 0, ctrlKey: false })
-        await vi.dynamicImportSettled()
-        await flushPromises()
-        first.unmount()
-
-        const second = mount(SettingsScreen)
-        await vi.dynamicImportSettled()
-        await flushPromises()
-        expect(second.get('[data-model-lab-section="on-device"]').attributes('data-state')).toBe('active')
-        expect(second.find('[data-model-lab-section="providers"]').attributes('data-state')).not.toBe('active')
+        expect(routerCalls.replace).toHaveBeenCalledTimes(1)
+        expect(routerCalls.replace).toHaveBeenCalledWith({ name: 'settings-models' })
+        expect(routerCalls.push).not.toHaveBeenCalled()
+        expect(wrapper.find('[data-testid="settings-list-detail"]').exists()).toBe(false)
     })
 
     /**
@@ -259,7 +201,7 @@ describe('SettingsScreen (functional)', () => {
      * list, and a deep link copied out of it reopened somewhere else.
      */
     it('writes the open category back into the address, and clears it on the way out', async () => {
-        const wrapper = mount(SettingsScreen)
+        const wrapper = mountSettings()
         await wrapper.get('[data-settings-tab="appearance"]').trigger('click')
         await flushPromises()
 
@@ -276,17 +218,9 @@ describe('SettingsScreen (functional)', () => {
         expect(routerCalls.replace).toHaveBeenLastCalledWith({ query: {} })
     })
 
-    it('leaves the address alone when the deep link already says where we are', async () => {
-        routeState.query = { tab: 'models' }
-        mount(SettingsScreen)
-        await flushPromises()
-
-        expect(routerCalls.replace).not.toHaveBeenCalled()
-    })
-
     it('opens a functional Browser panel from the exact settings deep link', () => {
         routeState.query = { tab: 'browser' }
-        const wrapper = mount(SettingsScreen)
+        const wrapper = mountSettings()
 
         const panel = wrapper.get('[data-settings-panel="browser"]')
         expect(panel.text()).toContain('Confirm sensitive only')

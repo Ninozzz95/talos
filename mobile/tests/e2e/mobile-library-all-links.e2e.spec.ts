@@ -1,48 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
-import { openAiCompletionFulfill, type FulfillPayload } from './completionMock'
+import { openAiCompletionFulfill, openAiToolCallFulfill } from './completionMock'
 import { closeToolSheet } from './toolSheet'
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 const MODEL = 'gpt-e2e-web-tools'
-
-function openAiToolCallFulfill(
-    request: Record<string, unknown>,
-    name: string,
-    args: Record<string, unknown>,
-): FulfillPayload {
-    const call = {
-        index: 0,
-        id: 'call-e2e-web-search',
-        type: 'function',
-        function: { name, arguments: JSON.stringify(args) },
-    }
-    if (request.stream === true) {
-        const delta = JSON.stringify({ choices: [{ delta: { tool_calls: [call] } }] })
-        const done = JSON.stringify({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] })
-        return {
-            status: 200,
-            contentType: 'text/event-stream',
-            body: `data: ${delta}\n\ndata: ${done}\n\ndata: [DONE]\n\n`,
-        }
-    }
-    return {
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-            model: MODEL,
-            choices: [{
-                finish_reason: 'tool_calls',
-                message: {
-                    role: 'assistant',
-                    content: null,
-                    tool_calls: [call],
-                },
-            }],
-        }),
-    }
-}
 
 async function setToolPermission(page: Page, kind: 'write' | 'outbound'): Promise<void> {
     const select = page.getByTestId(`talos-tool-permission-${kind}`)
@@ -78,11 +41,11 @@ test('LIB-ALL-LINK-E2E-01 carries a typoed web request through provider, Tavily,
             }),
         })
     })
-    await page.route('https://api.openai.com/v1/chat/completions', async (route) => {
+    await page.route('https://api.openai.com/v1/responses', async (route) => {
         const request = route.request().postDataJSON() as Record<string, unknown>
         providerRequests.push(request)
-        const messages = request.messages as Array<{ role?: string }> | undefined
-        const hasToolResult = messages?.some((message) => message.role === 'tool') ?? false
+        const input = request.input as Array<{ type?: string }> | undefined
+        const hasToolResult = input?.some((item) => item.type === 'function_call_output') ?? false
         const response = hasToolResult
             ? openAiCompletionFulfill(
                 request,
@@ -128,7 +91,9 @@ test('LIB-ALL-LINK-E2E-01 carries a typoed web request through provider, Tavily,
     await page.locator(MENU).click()
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
-    await page.locator('[data-settings-tab="models"]').click()
+    await page.getByTestId('settings-model-lab-link').click()
+    await page.getByTestId('talos-model-lab-destination').filter({ hasText: 'Providers and access' }).click()
+    await expect(page.getByTestId('settings-models-providers-screen')).toBeVisible()
     const provider = page.locator('[data-provider="openai"]')
     if (await provider.locator('button[aria-controls="provider-openai-body"]').getAttribute('aria-expanded') === 'false') {
         await provider.locator('button[aria-controls="provider-openai-body"]').click()
@@ -136,16 +101,23 @@ test('LIB-ALL-LINK-E2E-01 carries a typoed web request through provider, Tavily,
     await page.getByLabel('OpenAI API key').fill('e2e-library-openai-key')
     await page.getByLabel('Save OpenAI key').click()
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
-    await page.getByLabel('Default chat model').click()
-    await page.locator(`[data-testid="talos-themed-select-item"][data-value="openai:${MODEL}"]`).click()
 
     await page.getByTestId('talos-sheet-back').click()
+    await page.getByTestId('talos-model-lab-destination').filter({ hasText: 'Model catalog' }).click()
+    const model = page.locator(`[data-model-card][data-model-id="openai:${MODEL}"]`)
+    await expect(model).toBeVisible()
+    await model.getByRole('button', { name: /Use .* as default model/ }).click()
+    await page.getByTestId('talos-sheet-back').click()
+    await page.getByTestId('talos-sheet-back').click()
     await expect(page.getByTestId('settings-category-pane')).toBeVisible()
-    await page.locator('[data-settings-tab="ai_defaults"]').click()
+    await page.locator('[data-settings-tab="search"]').click()
     await page.getByTestId('talos-search-source-tavily').click()
     await page.getByTestId('talos-search-key').fill('tvly-e2e-library-key')
     await page.getByRole('button', { name: 'Save key', exact: true }).click()
     await expect(page.getByTestId('talos-search-key-set')).toBeVisible()
+    await page.getByTestId('talos-sheet-back').click()
+    await expect(page.getByTestId('settings-category-pane')).toBeVisible()
+    await page.locator('[data-settings-tab="agent_tools"]').click()
     await setToolPermission(page, 'write')
     await setToolPermission(page, 'outbound')
     await closeSettings(page)
@@ -170,14 +142,14 @@ test('LIB-ALL-LINK-E2E-01 carries a typoed web request through provider, Tavily,
     expect(providerRequests).toHaveLength(2)
     expect(JSON.stringify(providerRequests[0])).toContain(prompt)
     expect(JSON.stringify(providerRequests[0])).toContain('"name":"web_search"')
-    expect(JSON.stringify(providerRequests[1])).toContain('"role":"tool"')
+    expect(JSON.stringify(providerRequests[1])).toContain('"type":"function_call_output"')
     expect(JSON.stringify(providerRequests[1])).toContain('2 source links saved')
 
     // The default All surface aggregates semantic links and exposes no Markdown
     // transcript tile for the backing dossier.
     await page.getByLabel('Choose grounding context').click()
     await expect(page).toHaveURL(/\/context$/)
-    await expect(page.getByTestId('talos-library-type-all')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('talos-library-type-all')).toHaveAttribute('aria-checked', 'true')
     // Owner 2026-07-30: in All, links and files now share ONE section per chat.
     // The separate links list that used to hold them is gone, and with it the
     // box this scoped to. Same promise, asserted against the screen body — the
@@ -207,7 +179,7 @@ test('LIB-ALL-LINK-E2E-01 carries a typoed web request through provider, Tavily,
     await page.getByTestId('talos-library-type-all').click()
 
     await page.reload()
-    await expect(page.getByTestId('talos-library-type-all')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('talos-library-type-all')).toHaveAttribute('aria-checked', 'true')
     await expect(page.locator('[data-talos-saved-link-row]')).toHaveCount(2)
     await expect(page.locator('[data-vault-file-id]')).toHaveCount(0)
     await expect(page.getByText('2 across every chat', { exact: true })).toBeVisible()

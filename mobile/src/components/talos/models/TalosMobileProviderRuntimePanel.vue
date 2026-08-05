@@ -104,8 +104,8 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
 </script>
 
 <template>
-    <div data-testid="settings-provider-keys" class="space-y-4">
-        <p v-if="error" role="alert" class="rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
+    <div data-testid="settings-provider-keys" class="space-y-[var(--talos-space-section)]">
+        <p v-if="error" role="alert" class="rounded-[var(--talos-radius-control)] border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-[var(--talos-space-control)] text-sm text-[var(--talos-text)]">
             {{ error }}
         </p>
 
@@ -115,16 +115,16 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
             data-provider-runtime
             :data-provider="provider.id"
             :aria-labelledby="`provider-${provider.id}-title`"
-            class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)]"
+            class="rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]"
         >
             <button
                 type="button"
                 :aria-expanded="isExpanded(provider.id)"
                 :aria-controls="`provider-${provider.id}-body`"
-                class="talos-pressable flex w-full min-w-0 items-center gap-2 rounded-md p-3 text-left"
+                class="talos-pressable flex min-h-[var(--talos-touch-target)] w-full min-w-0 items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] p-[var(--talos-space-card)] text-left"
                 @click="toggleProvider(provider.id)"
             >
-                <TalosMobileProviderIcon :provider="provider.id" class="size-7 shrink-0" />
+                <TalosMobileProviderIcon :provider="provider.id" class="size-[calc(var(--talos-icon-size)*1.75)] shrink-0" />
                 <div class="min-w-0 flex-1">
                     <h5 :id="`provider-${provider.id}-title`" class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ provider.label }}</h5>
                     <p class="text-2xs text-[var(--talos-muted)]">
@@ -134,18 +134,18 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
                         <template v-else>{{ $t('models.notConfigured') }}</template>
                     </p>
                 </div>
-                <span v-if="controller.secrets[provider.id]" data-testid="key-present" class="inline-flex items-center gap-1 text-2xs font-semibold text-[var(--talos-success,var(--talos-accent))]">
-                    <BadgeCheck class="size-3.5" aria-hidden="true" /> {{ $t('models.keySaved') }}
+                <span v-if="controller.secrets[provider.id]" data-testid="key-present" class="inline-flex items-center gap-[var(--talos-space-inline)] text-2xs font-semibold text-[var(--talos-success)]">
+                    <BadgeCheck class="size-[var(--talos-icon-size)]" aria-hidden="true" /> {{ $t('models.keySaved') }}
                 </span>
                 <ChevronDown
-                    class="size-4 shrink-0 text-[var(--talos-muted)] transition-transform"
+                    class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)] transition-transform"
                     :class="isExpanded(provider.id) ? '' : '-rotate-90'"
                     aria-hidden="true"
                 />
             </button>
 
-            <div v-show="isExpanded(provider.id)" :id="`provider-${provider.id}-body`" class="px-3 pb-3">
-            <div v-if="provider.requiresSecret" class="flex gap-2">
+            <div v-show="isExpanded(provider.id)" :id="`provider-${provider.id}-body`" class="px-[var(--talos-space-card)] pb-[var(--talos-space-card)]">
+            <div v-if="provider.requiresSecret" class="flex gap-[var(--talos-space-inline)]">
                 <label class="min-w-0 flex-1">
                     <span class="sr-only">{{ $t('models.apiKey', { provider: provider.label }) }}</span>
                     <input
@@ -154,21 +154,21 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
                         autocomplete="new-password"
                         :aria-label="$t('models.apiKey', { provider: provider.label })"
                         :placeholder="controller.secrets[provider.id] ? $t('models.replacementKey') : $t('models.pasteApiKey')"
-                        class="h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+                        class="h-[var(--talos-touch-target)] w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-input)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                     >
                 </label>
-                <button type="button" :aria-label="$t('models.saveKey', { provider: provider.label })" :disabled="busyProvider === provider.id || !keyDrafts[provider.id]?.trim()" class="h-11 rounded-md bg-[var(--talos-accent)] px-3 text-sm font-medium text-[var(--talos-accent-contrast,var(--talos-accent-text))] disabled:opacity-50" @click="saveKey(provider.id)">
+                <button type="button" :aria-label="$t('models.saveKey', { provider: provider.label })" :disabled="busyProvider === provider.id || !keyDrafts[provider.id]?.trim()" class="h-[var(--talos-touch-target)] rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-sm font-medium text-[var(--talos-accent-text)] disabled:opacity-50" @click="saveKey(provider.id)">
                     {{ $t('common.save') }}
                 </button>
-                <button v-if="controller.secrets[provider.id]" type="button" :aria-label="$t('models.removeKey', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex size-11 items-center justify-center rounded-md border border-[var(--talos-border)] text-[var(--talos-muted)] disabled:opacity-50" @click="run(provider.id, () => controller.removeKey(provider.id))">
-                    <Trash2 class="size-4" aria-hidden="true" />
+                <button v-if="controller.secrets[provider.id]" type="button" :aria-label="$t('models.removeKey', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex size-[var(--talos-touch-target)] items-center justify-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] text-[var(--talos-muted)] disabled:opacity-50" @click="run(provider.id, () => controller.removeKey(provider.id))">
+                    <Trash2 class="size-[var(--talos-icon-size)]" aria-hidden="true" />
                 </button>
             </div>
 
-            <div class="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
+            <div class="mt-[var(--talos-space-section)] grid gap-[var(--talos-space-section)] sm:grid-cols-[minmax(0,1fr)_9rem]">
                 <label v-if="endpointProviders.has(provider.id)" class="min-w-0">
-                    <span class="mb-1 flex items-center gap-1 text-xs font-medium text-[var(--talos-muted)]">
-                        <Server class="size-3.5" aria-hidden="true" /> {{ provider.id === 'ollama' ? $t('models.endpoint') : $t('models.customEndpoint') }}
+                    <span class="mb-[var(--talos-space-inline)] flex items-center gap-[var(--talos-space-inline)] text-xs font-medium text-[var(--talos-muted)]">
+                        <Server class="size-[var(--talos-icon-size)]" aria-hidden="true" /> {{ provider.id === 'ollama' ? $t('models.endpoint') : $t('models.customEndpoint') }}
                     </span>
                     <input
                         v-model="endpointDrafts[provider.id]"
@@ -178,31 +178,31 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
                         autocomplete="url"
                         :aria-label="provider.id === 'ollama' ? 'Ollama endpoint' : $t('models.providerCustomEndpoint', { provider: provider.label })"
                         :placeholder="provider.id === 'ollama' ? 'http://192.168.1.20:11434' : $t('models.officialEndpoint')"
-                        class="h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+                        class="h-[var(--talos-touch-target)] w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-input)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                     >
                 </label>
                 <div :class="endpointProviders.has(provider.id) ? '' : 'sm:col-span-2'">
-                    <label :for="`provider-${provider.id}-timeout`" class="mb-1 block text-xs font-medium text-[var(--talos-muted)]">{{ $t('models.timeout') }}</label>
-                    <div class="flex items-center gap-2">
+                    <label :for="`provider-${provider.id}-timeout`" class="mb-[var(--talos-space-inline)] block text-xs font-medium text-[var(--talos-muted)]">{{ $t('models.timeout') }}</label>
+                    <div class="flex items-center gap-[var(--talos-space-inline)]">
                         <input :id="`provider-${provider.id}-timeout`" v-model.number="timeoutDrafts[provider.id]" type="range" min="5" max="300" step="5" class="min-w-0 flex-1 accent-[var(--talos-accent)]" :aria-label="$t('models.providerTimeout', { provider: provider.label })">
-                        <input v-model.number="timeoutDrafts[provider.id]" type="number" min="5" max="300" step="1" :aria-label="$t('models.providerTimeoutSeconds', { provider: provider.label })" class="h-11 w-20 rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-2 text-sm text-[var(--talos-text)]">
+                        <input v-model.number="timeoutDrafts[provider.id]" type="number" min="5" max="300" step="1" :aria-label="$t('models.providerTimeoutSeconds', { provider: provider.label })" class="h-[var(--talos-touch-target)] w-[calc(var(--talos-touch-target)*1.75)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-input)] px-[var(--talos-space-inline)] text-sm text-[var(--talos-text)]">
                     </div>
                 </div>
             </div>
 
-            <div class="mt-3 flex flex-wrap items-center gap-2">
-                <button type="button" :aria-label="$t('models.saveRuntimeOptions', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-10 items-center gap-1.5 rounded-md bg-[var(--talos-accent)] px-3 text-xs font-semibold text-[var(--talos-accent-contrast,var(--talos-accent-text))] disabled:opacity-50" @click="saveRuntime(provider.id)">
-                    <KeyRound class="size-3.5" aria-hidden="true" /> {{ $t('models.saveRuntime') }}
+            <div class="mt-[var(--talos-space-section)] flex flex-wrap items-center gap-[var(--talos-space-inline)]">
+                <button type="button" :aria-label="$t('models.saveRuntimeOptions', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-[var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-xs font-semibold text-[var(--talos-accent-text)] disabled:opacity-50" @click="saveRuntime(provider.id)">
+                    <KeyRound class="size-[var(--talos-icon-size)]" aria-hidden="true" /> {{ $t('models.saveRuntime') }}
                 </button>
-                <button type="button" :aria-label="$t('models.refreshProvider', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[var(--talos-border)] px-3 text-xs font-semibold text-[var(--talos-text)] disabled:opacity-50" @click="run(provider.id, () => controller.refreshProvider(provider.id))">
-                    <RefreshCw class="size-3.5" aria-hidden="true" /> {{ $t('chat.refresh') }}
+                <button type="button" :aria-label="$t('models.refreshProvider', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-[var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs font-semibold text-[var(--talos-text)] disabled:opacity-50" @click="run(provider.id, () => controller.refreshProvider(provider.id))">
+                    <RefreshCw class="size-[var(--talos-icon-size)]" aria-hidden="true" /> {{ $t('chat.refresh') }}
                 </button>
-                <button v-if="endpointProviders.has(provider.id) && controller.endpoints[provider.id]" type="button" :aria-label="$t('models.resetProviderEndpoint', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-10 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-[var(--talos-muted)] disabled:opacity-50" @click="resetEndpoint(provider.id)">
-                    <RotateCcw class="size-3.5" aria-hidden="true" /> {{ $t('models.resetEndpoint') }}
+                <button v-if="endpointProviders.has(provider.id) && controller.endpoints[provider.id]" type="button" :aria-label="$t('models.resetProviderEndpoint', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-[var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] px-[var(--talos-space-inline)] text-xs font-medium text-[var(--talos-muted)] disabled:opacity-50" @click="resetEndpoint(provider.id)">
+                    <RotateCcw class="size-[var(--talos-icon-size)]" aria-hidden="true" /> {{ $t('models.resetEndpoint') }}
                 </button>
             </div>
 
-            <p v-if="controller.catalogs[provider.id].error" role="status" class="mt-2 text-xs text-[var(--talos-danger,var(--talos-muted))]">
+            <p v-if="controller.catalogs[provider.id].error" role="status" class="mt-[var(--talos-space-inline)] text-xs text-[var(--talos-danger)]">
                 {{ controller.catalogs[provider.id].error }}
             </p>
             </div>

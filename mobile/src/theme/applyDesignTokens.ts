@@ -1,6 +1,7 @@
 import {
     parseTalosMobileDesignTokens,
     TALOS_THEME_IDENTITY_PALETTE_ROLES,
+    talosLayoutTokensFor,
     type TalosMobileDesignTokens,
     type TalosThemeIdentityPaletteRole,
     type TalosThemeTypographyFace,
@@ -49,8 +50,14 @@ export const TALOS_IDENTITY_FIELD_DISPOSITION: Readonly<Record<keyof TalosMobile
     id: { disposition: 'consumed', boundary: 'documentElement[data-talos-theme] + poster path prefix' },
     semantic_palette: { disposition: 'consumed', boundary: 'TALOS_SHADCN_VARIABLE_MAP css variables' },
     typography: { disposition: 'consumed', boundary: '--talos-font-ui/display/mono css variables' },
-    density: { disposition: 'consumed', boundary: '--talos-density-scale css variable' },
-    radius: { disposition: 'consumed', boundary: '--radius css variable' },
+    density: {
+        disposition: 'consumed',
+        boundary: '--talos-density-scale + --talos-space-page + --talos-space-section + --talos-space-card + --talos-space-control + --talos-space-inline + --talos-icon-size + --talos-touch-target css variables',
+    },
+    radius: {
+        disposition: 'consumed',
+        boundary: '--radius + --talos-radius-card + --talos-radius-control css variables',
+    },
     assets: { disposition: 'consumed', boundary: 'bundled poster served at assets.poster.path' },
     motion_intents: { disposition: 'deferred', boundary: 'data-talos-motion-* attributes; renderer deferred to a later milestone' },
     accessibility: { disposition: 'consumed', boundary: 'prefers-reduced-motion + :focus-visible ring + contrast tests' },
@@ -81,6 +88,16 @@ export function applyTalosMobileDesignTokens(
 
     target.style.setProperty('--radius', TALOS_RADIUS_SCALE[tokens.radius])
     target.style.setProperty('--talos-density-scale', TALOS_DENSITY_SCALE[tokens.density])
+    const layout = talosLayoutTokensFor(tokens.density, tokens.radius)
+    target.style.setProperty('--talos-space-page', layout.page)
+    target.style.setProperty('--talos-space-section', layout.section)
+    target.style.setProperty('--talos-space-card', layout.card)
+    target.style.setProperty('--talos-space-control', layout.control)
+    target.style.setProperty('--talos-space-inline', layout.inline)
+    target.style.setProperty('--talos-icon-size', layout.icon)
+    target.style.setProperty('--talos-touch-target', layout.touchTarget)
+    target.style.setProperty('--talos-radius-card', layout.radiusCard)
+    target.style.setProperty('--talos-radius-control', layout.radiusControl)
     target.style.setProperty('--talos-font-ui', fontStack(tokens.typography.ui))
     target.style.setProperty('--talos-font-display', fontStack(tokens.typography.display))
     target.style.setProperty('--talos-font-mono', fontStack(tokens.typography.mono))

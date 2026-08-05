@@ -6,10 +6,29 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import { TALOS_MOBILE_ROUTES } from '@/lib/mobileRoutes'
 import { __resetSettingsStoreForTests, useSettingsStore } from '@/stores/settings'
+import { __resetPreferencesStoreForTests, usePreferencesStore } from '@/stores/preferences'
 import { createDefaultTalosMotionV6Preferences } from '@/motion-v6/defaults'
 
 const mockState = vi.hoisted(() => ({ controller: null as unknown }))
 vi.mock('@/stores/chatController', () => ({ useChatController: () => mockState.controller }))
+const notificationSpy = vi.hoisted(() => ({ takeLaunchRoute: vi.fn(async () => null) }))
+vi.mock('@/services/doneNotification', () => ({
+    talosTakeLaunchRoute: notificationSpy.takeLaunchRoute,
+    talosOnNotificationRoute: vi.fn(() => () => undefined),
+}))
+vi.mock('@capacitor/preferences', () => ({
+    Preferences: {
+        get: vi.fn(async ({ key }: { key: string }) => ({
+            value: window.localStorage.getItem(`CapacitorStorage.${key}`),
+        })),
+        set: vi.fn(async ({ key, value }: { key: string; value: string }) => {
+            window.localStorage.setItem(`CapacitorStorage.${key}`, value)
+        }),
+        remove: vi.fn(async ({ key }: { key: string }) => {
+            window.localStorage.removeItem(`CapacitorStorage.${key}`)
+        }),
+    },
+}))
 
 /**
  * L'icona del launcher, spiata.
@@ -181,9 +200,11 @@ function makeController() {
     }
 }
 
-function makeRouter(): Router {
+function makeRouter(initialPath?: string): Router {
+    const history = createMemoryHistory()
+    if (initialPath) history.push(initialPath)
     return createRouter({
-        history: createMemoryHistory(),
+        history,
         routes: TALOS_MOBILE_ROUTES.map((r) => ({ path: r.path, name: r.name, component: r.component })),
     })
 }
@@ -193,7 +214,9 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         // Skip the native lifecycle listener in jsdom via the fail-closed switch.
         window.__TALOS_M1_DISABLE__ = ['lifecycle']
         mockState.controller = makeController()
+        notificationSpy.takeLaunchRoute.mockClear()
         __resetSettingsStoreForTests()
+        __resetPreferencesStoreForTests()
         // Owner #15 made immersive/drawer the DEFAULT: these journeys exercise
         // the still-supported classic shell, so seed an explicit classic choice.
         window.localStorage.setItem('CapacitorStorage.talos.mobile.settings', JSON.stringify({
@@ -370,7 +393,7 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         expect(router.currentRoute.value.name).toBe('chat')
     })
 
-    it('sidebar Model Lab deep-links to the real Models panel while Settings stays generic', async () => {
+    it('F2-RED-20 reaches Model Lab only through the Settings hierarchy', async () => {
         const router = makeRouter()
         router.push('/')
         await router.isReady()
@@ -384,20 +407,7 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         await vi.waitFor(() => {
             expect(document.body.querySelector(
                 '[data-testid="talos-mobile-sidebar"] [aria-label="Open Model Lab"]',
-            )).not.toBeNull()
-        })
-        ;(document.body.querySelector(
-            '[data-testid="talos-mobile-sidebar"] [aria-label="Open Model Lab"]',
-        ) as HTMLButtonElement).click()
-
-        await vi.waitFor(() => {
-            expect(router.currentRoute.value.name).toBe('settings')
-            expect(router.currentRoute.value.query.tab).toBe('models')
-        })
-
-        await router.push('/')
-        await wrapper.get('[aria-label="Open menu"]').trigger('click')
-        await vi.waitFor(() => {
+            )).toBeNull()
             expect(document.body.querySelector(
                 '[data-testid="talos-mobile-sidebar"] [aria-label="Open Settings"]',
             )).not.toBeNull()
@@ -405,9 +415,41 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         ;(document.body.querySelector(
             '[data-testid="talos-mobile-sidebar"] [aria-label="Open Settings"]',
         ) as HTMLButtonElement).click()
+
         await vi.waitFor(() => {
             expect(router.currentRoute.value.name).toBe('settings')
             expect(router.currentRoute.value.query.tab).toBeUndefined()
+        })
+        await vi.waitFor(() => {
+            expect(wrapper.find('[data-testid="settings-model-lab-link"]').exists()).toBe(true)
+        })
+        await wrapper.get('[data-testid="settings-model-lab-link"]').trigger('click')
+        await vi.waitFor(() => {
+            expect(router.currentRoute.value.name).toBe('settings-models')
+            expect(router.currentRoute.value.query.tab).toBeUndefined()
+        })
+        wrapper.unmount()
+    })
+
+    it('F2-RED-12 keeps an explicit Model Lab child deep link over the remembered hub on boot', async () => {
+        window.localStorage.setItem(
+            'CapacitorStorage.talos.mobile.preferences',
+            JSON.stringify({ schema_version: 1, presentation: 'drawer', last_route: 'settings-models' }),
+        )
+        // Match a browser cold boot whose history already carries the deep
+        // link before Vue Router is installed by main.ts.
+        const router = makeRouter('/settings/models/providers')
+
+        const wrapper = mount(App, { global: { plugins: [router] } })
+        await flushPromises()
+        // This boundary runs immediately after remembered-route restoration,
+        // so reaching it proves the bootstrap decision has completed.
+        await vi.waitFor(() => expect(notificationSpy.takeLaunchRoute).toHaveBeenCalledOnce())
+
+        await vi.waitFor(() => {
+            expect(usePreferencesStore().state.last_route).toBe('settings-models')
+            expect(router.currentRoute.value.name).toBe('settings-models-providers')
+            expect(wrapper.find('[data-testid="settings-models-providers-screen"]').exists()).toBe(true)
         })
         wrapper.unmount()
     })

@@ -9,6 +9,10 @@ import {
 } from './talosContrast'
 import { parseTalosMotionV6Preferences, type TalosMotionV6Preferences } from '../motion-v6/contracts'
 import { createDefaultTalosMotionV6Preferences } from '../motion-v6/defaults'
+import {
+    TALOS_COMPONENT_RADIUS_SCALE,
+    TALOS_LAYOUT_DENSITY_SCALE,
+} from '@talos-mobile/design-tokens'
 
 export const TALOS_THEME_IDS = [
     'forge',
@@ -1209,15 +1213,21 @@ export function talosThemeCustomizationStyle(customization: TalosThemeCustomizat
         style['--talos-font-display'] = '"Source Serif 4", "Instrument Sans", ui-serif, serif'
     }
 
-    if (customization.radius === 'sharp') {
-        style['--talos-radius-card'] = '4px'
-        style['--talos-radius-control'] = '3px'
-    } else if (customization.radius === 'balanced') {
-        style['--talos-radius-card'] = '8px'
-        style['--talos-radius-control'] = '6px'
-    } else if (customization.radius === 'soft') {
-        style['--talos-radius-card'] = '8px'
-        style['--talos-radius-control'] = '8px'
+    if (customization.density) {
+        const layout = TALOS_LAYOUT_DENSITY_SCALE[customization.density]
+        style['--talos-space-page'] = layout.page
+        style['--talos-space-section'] = layout.section
+        style['--talos-space-card'] = layout.card
+        style['--talos-space-control'] = layout.control
+        style['--talos-space-inline'] = layout.inline
+        style['--talos-icon-size'] = layout.icon
+        style['--talos-touch-target'] = layout.touchTarget
+    }
+
+    if (customization.radius) {
+        const radius = TALOS_COMPONENT_RADIUS_SCALE[customization.radius]
+        style['--talos-radius-card'] = radius.radiusCard
+        style['--talos-radius-control'] = radius.radiusControl
     }
 
     if (customization.scrollbar_track) {

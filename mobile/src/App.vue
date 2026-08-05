@@ -11,7 +11,7 @@ import TalosBootLogo from '@/components/brand/TalosBootLogo.vue'
 import TalosMobileHeader from '@/components/shell/TalosMobileHeader.vue'
 import TalosMobileToastRegion from '@/components/shell/TalosMobileToastRegion.vue'
 import ChatScreen from '@/screens/ChatScreen.vue'
-import { TALOS_MOBILE_ROUTES, talosMobileParentRoute, type TalosMobileRouteName } from '@/lib/mobileRoutes'
+import { TALOS_MOBILE_ROUTES, talosMobileParentRoute, talosMobileStationOf, type TalosMobileRouteName } from '@/lib/mobileRoutes'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useThemeStore } from '@/stores/theme'
 import { useSettingsStore } from '@/stores/settings'
@@ -544,8 +544,9 @@ watch(activeRoute, (to, from) => {
  *
  * The address travels on the notification itself, so this stays a dumb router
  * push: the thing that finished knows which page it belongs to, and nothing
- * here has to guess from a title. The query survives because the Model Lab is
- * `/settings?tab=models` rather than a route of its own.
+ * here has to guess from a title. Query parameters survive because other
+ * notification targets may legitimately carry filters; Model Lab itself now
+ * has dedicated routes.
  *
  * The sidebar closes on the way. Arriving from outside the app with the main
  * menu open over the page you asked for would be the notification landing
@@ -606,7 +607,7 @@ const stationParentTitle = computed(() => {
 })
 
 const tabletChatRailVisible = computed(() => (
-    tabletLayout.isTablet.value && activeRoute.value !== 'settings'
+    tabletLayout.isTablet.value && talosMobileStationOf(activeRoute.value) !== 'settings'
 ))
 
 const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
@@ -641,6 +642,10 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     runs: 'stations.runtimeCockpitTitle',
     context: 'navigation.library',
     settings: 'stations.settingsCenterTitle',
+    'settings-models': 'models.labTitle',
+    'settings-models-providers': 'models.providerAccessTitle',
+    'settings-models-catalog': 'models.catalogTitle',
+    'settings-models-local': 'models.localTitle',
 }
 const sheetTitle = computed(() => t(SHEET_TITLE_KEY[activeRoute.value]))
 
@@ -696,8 +701,15 @@ onMounted(async () => {
     // SF6-F13: a phone-persisted 'chats' route is redundant on tablet — the
     // embedded panel IS the chats list; restoring it would open the station
     // sheet right next to the identical panel.
+    // Router installation and App mount intentionally run without blocking the
+    // first paint. Synchronize only this restoration decision so a lazy initial
+    // deep link is no longer mistaken for the temporary START_LOCATION/chat.
+    await router.isReady()
     const lastRoute = preferences.state.last_route
-    if (lastRoute && lastRoute !== activeRoute.value
+    // A remembered station is a convenience only for the neutral launcher
+    // address. A copied/deep-linked URL is an explicit user request and must
+    // survive cold boot and reload, including Model Lab child pages.
+    if (activeRoute.value === 'chat' && lastRoute
         && !(tabletLayout.isTablet.value && lastRoute === 'chats')) {
         await router.replace(pathFor(lastRoute))
     }
@@ -959,7 +971,6 @@ onBeforeUnmount(async () => {
                 :cleanup-plan-for="cleanupPlanFor"
                 @delete="sidebarDelete"
                 @navigate="sidebarNavigate"
-                @open-model-lab="sidebarNavigate('settings', { tab: 'models' })"
                 @open-settings="sidebarNavigate('settings')"
             />
 

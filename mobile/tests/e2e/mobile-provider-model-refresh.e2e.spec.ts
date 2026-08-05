@@ -11,8 +11,9 @@ async function openModelSettings(page: Page): Promise<void> {
     await page.locator(MENU).click()
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
-    await page.locator('[data-settings-tab="models"]').click()
-    await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
+    await page.getByTestId('settings-model-lab-link').click()
+    await page.getByTestId('talos-model-lab-destination').filter({ hasText: 'Providers and access' }).click()
+    await expect(page.getByTestId('settings-models-providers-screen')).toBeVisible()
 }
 
 function geminiResponse(text: string) {
@@ -68,13 +69,17 @@ test('saving a key refreshes models immediately and preserves context across two
     await page.getByLabel('Save Google Gemini key').click()
 
     await expect(page.getByText('2 models available', { exact: true })).toBeVisible()
-    await page.getByLabel('Default chat model').click()
-    const liveModel = page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]')
-    const embedModel = page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-embed"]')
-    await expect(liveModel).toContainText('Gemini Live')
-    await expect(embedModel).toContainText('Gemini Embed')
-    await expect(embedModel).toHaveAttribute('data-disabled', '')
-    await liveModel.click()
+
+    await page.getByTestId('talos-sheet-back').click()
+    await page.getByTestId('talos-model-lab-destination').filter({ hasText: 'Model catalog' }).click()
+    const liveModel = page.locator('[data-model-card][data-model-id="gemini:gemini-live"]')
+    const embedModel = page.locator('[data-model-card][data-model-id="gemini:gemini-embed"]')
+    await expect(liveModel.getByRole('heading', { name: 'Gemini Live' })).toBeVisible()
+    await expect(embedModel.getByRole('heading', { name: 'Gemini Embed' })).toBeVisible()
+    await expect(embedModel.getByRole('button', { name: /Use .* as default model/ })).toBeDisabled()
+    await liveModel.getByRole('button', { name: /Use .* as default model/ }).click()
+    await page.getByTestId('talos-sheet-back').click()
+    await page.getByTestId('talos-sheet-back').click()
     await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
 
@@ -107,7 +112,7 @@ test('failed discovery keeps chat reachable and does not reopen Settings', async
     if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
     await page.getByLabel('Google Gemini API key').fill('e2e-rejected-key')
     await page.getByLabel('Save Google Gemini key').click()
-    await expect(page.locator('[data-settings-panel="models"]').getByRole('alert'))
+    await expect(page.getByTestId('settings-models-providers-screen').getByRole('alert'))
         .toContainText('The test credential was rejected.')
 
     await closeToolSheet(page)

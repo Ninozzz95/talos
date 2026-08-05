@@ -42,8 +42,14 @@ export async function configureNativeFraming(options: ConfigureNativeFramingOpti
     if (!Capacitor.isNativePlatform()) return
 
     try {
+        // Capacitor 8 names these values after the bar style, not the icon
+        // luminance: Dark = light text on a dark surface; Light = dark text on
+        // a light surface. This setter remains effective on Android 16 and must
+        // be re-run when the in-app theme changes.
         await StatusBar.setStyle({ style: options.scheme === 'dark' ? Style.Dark : Style.Light })
-        // setBackgroundColor / setOverlaysWebView are Android-only APIs.
+        // Android-only backward compatibility. Capacitor 8 documents both as
+        // no-ops once Android 16/API 36 enforces edge-to-edge; older supported
+        // Android releases still consume them.
         if (Capacitor.getPlatform() === 'android') {
             await StatusBar.setBackgroundColor({ color: options.background })
             await StatusBar.setOverlaysWebView({ overlay: false })

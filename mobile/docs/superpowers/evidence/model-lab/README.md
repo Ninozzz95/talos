@@ -55,7 +55,10 @@ phase-1/
 phase-2/
   hub-paper-light.png
   hub-terminal-dark.png
+  hub-tablet-native.png
   providers-no-device-duplicate.png
+  sidebar-without-model-lab.png
+  settings-single-model-lab-entry.png
   manifest.md
 phase-3/
   filters-combined-results.png
@@ -232,3 +235,9 @@ Una fase viene promossa soltanto dopo:
 
 L'owner ha autorizzato un commit locale dopo ogni fase verde. Nessun commit
 precede il gate fisico e nessun push remoto è autorizzato.
+
+Alla fine della Fase 5, oltre all'APK sorgente registrata nel manifest, una
+copia con nome univoco deve essere lasciata sul Desktop dell'owner. Il manifest
+e il passaggio di consegne riportano percorso assoluto, byte, timestamp UTC e
+SHA-256; una copia vecchia o non riconducibile al tree verde non soddisfa il
+requisito.

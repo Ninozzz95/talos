@@ -24,13 +24,21 @@ async function configureReasoningModel(page: Page): Promise<void> {
     await page.locator(MENU).click()
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
-    await page.locator('[data-settings-tab="models"]').click()
+    await page.getByTestId('settings-model-lab-link').click()
+    await page.getByTestId('talos-model-lab-destination').filter({ hasText: 'Providers and access' }).click()
+    await expect(page.getByTestId('settings-models-providers-screen')).toBeVisible()
     if (await page.locator('[data-provider="openai"] button[aria-controls="provider-openai-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="openai"] button[aria-controls="provider-openai-body"]').click()
     await page.getByLabel('OpenAI API key').fill('e2e-composer-openai-key')
     await page.getByLabel('Save OpenAI key').click()
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
-    await page.getByLabel('Default chat model').click()
-    await page.locator('[data-testid="talos-themed-select-item"][data-value="openai:gpt-e2e-reasoner"]').click()
+
+    await page.getByTestId('talos-sheet-back').click()
+    await page.getByTestId('talos-model-lab-destination').filter({ hasText: 'Model catalog' }).click()
+    const model = page.locator('[data-model-card][data-model-id="openai:gpt-e2e-reasoner"]')
+    await expect(model).toBeVisible()
+    await model.getByRole('button', { name: /Use .* as default model/ }).click()
+    await page.getByTestId('talos-sheet-back').click()
+    await page.getByTestId('talos-sheet-back').click()
     await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
 }
@@ -70,11 +78,9 @@ async function verifyDurableComposerState(page: Page, viewport: { width: number;
         .getByRole('button', { name: 'Open Model Lab', exact: true })
         .click()
 
-    await expect(page).toHaveURL(/\/settings\?tab=models$/)
+    await expect(page).toHaveURL(/\/settings\/models$/)
     await expect(page.locator(SHEET)).toHaveCount(1)
-    await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
-    await expect(page.locator('[data-testid="settings-detail-pane"]')).toBeVisible()
-    await expect(page.locator('[data-testid="settings-category-pane"]')).toBeHidden()
+    await expect(page.getByTestId('talos-model-lab-hub')).toBeVisible()
 
     const horizontalOverflow = await page.evaluate(() => (
         document.documentElement.scrollWidth - document.documentElement.clientWidth

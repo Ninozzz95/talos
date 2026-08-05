@@ -15,7 +15,7 @@ import {
     talosMobileParentRoute,
 } from '@/lib/mobileRoutes'
 
-// Each tab route must load its real parity screen, not the old title-only placeholder.
+// Each product route must load its real parity screen, not a title-only placeholder.
 const SCREEN_CONTRACT: Record<string, { file: string; component: string; markers: string[] }> = {
     chat: { file: 'ChatScreen.vue', component: 'ChatScreen', markers: ['data-testid="talos-chat-scroll"'] },
     chats: { file: 'ChatsScreen.vue', component: 'ChatsScreen', markers: ['data-testid="talos-chats-screen"'] },
@@ -27,6 +27,10 @@ const SCREEN_CONTRACT: Record<string, { file: string; component: string; markers
     runs: { file: 'RunsScreen.vue', component: 'RunsScreen', markers: ["t('stations.runtimeCockpitTitle')"] },
     context: { file: 'ContextScreen.vue', component: 'ContextScreen', markers: ['data-testid="talos-library-search"'] },
     settings: { file: 'SettingsScreen.vue', component: 'SettingsScreen', markers: ["t('stations.settingsCenterTitle')"] },
+    'settings-models': { file: 'SettingsModelsScreen.vue', component: 'SettingsModelsScreen', markers: ['data-testid="settings-models-screen"'] },
+    'settings-models-providers': { file: 'SettingsModelsProvidersScreen.vue', component: 'SettingsModelsProvidersScreen', markers: ['data-testid="settings-models-providers-screen"'] },
+    'settings-models-catalog': { file: 'SettingsModelsCatalogScreen.vue', component: 'SettingsModelsCatalogScreen', markers: ['data-testid="settings-models-catalog-screen"'] },
+    'settings-models-local': { file: 'SettingsModelsLocalScreen.vue', component: 'SettingsModelsLocalScreen', markers: ['data-testid="settings-models-local-screen"'] },
 }
 
 describe('router wiring', () => {
@@ -47,6 +51,8 @@ describe('router wiring', () => {
             'doctor',
             'research', 'research-new', 'research-report', 'research-claim', 'research-source',
             'runs', 'context', 'settings',
+            'settings-models', 'settings-models-providers',
+            'settings-models-catalog', 'settings-models-local',
         ])
 
         /**

@@ -153,7 +153,7 @@ IMPLEMENTED; altrimenti l'hub replicherebbe una capacità falsa.
 
 ## 2. Fase 2 — Theme Engine, hub e navigazione
 
-**Stato iniziale:** PLANNED; dipende da Fase 1 IMPLEMENTED.
+**Stato:** IMPLEMENTED — GREEN DEVICE il 2026-08-05; Fase 1 confermata.
 **Ledger:**
 `../ledgers/2026-08-04-model-lab-phase-2-hub-navigation-theme-ledger.md`
 
@@ -162,41 +162,46 @@ ogni area ha uno screen dedicato; il perimetro è 100% Theme Engine.
 
 ### Task 2.1 — Estendere il Theme Engine in TDD
 
-- [ ] Provare RED per scale semantiche di spazio/raggio e 48dp invarianti.
-- [ ] Aggiungere token centrali nel package design-tokens e applicatore DOM.
-- [ ] Aggiungere default di boot in `style.css`.
-- [ ] Creare il gate statico sulle sorgenti Model Lab e la matrice runtime per
+- [x] Provare RED per scale semantiche di spazio/raggio e 48dp invarianti.
+- [x] Aggiungere token centrali nel package design-tokens e applicatore DOM.
+- [x] Aggiungere default di boot in `style.css`.
+- [x] Creare il gate statico sulle sorgenti Model Lab e la matrice runtime per
       identità, mode, density, radius e reduced motion.
 
 ### Task 2.2 — Dichiarare il route tree
 
-- [ ] Provare RED per cinque route, parent e deep-link legacy.
-- [ ] Aggiungere hub e tre screen; il dettaglio repository viene dichiarato in
+- [x] Provare RED per cinque route, parent e deep-link legacy.
+- [x] Aggiungere hub e tre screen; il dettaglio repository viene dichiarato in
       Fase 4, non anticipato con una superficie finta.
-- [ ] Collegare route title, sidebar, chat event e System Back.
-- [ ] Canonicalizzare `/settings?tab=models` con `replace`.
+- [x] Collegare route title, Settings, chat event e System Back; dopo F2-RED-20
+      il drawer conserva un solo parent primario, `Impostazioni`.
+- [x] Canonicalizzare `/settings?tab=models` con `replace`.
 
 ### Task 2.3 — Separare Model Lab dalle tab Impostazioni
 
-- [ ] Conservare l'ID `models` soltanto come compatibilità legacy.
-- [ ] Rimuovere `models` dai gruppi del `tablist`.
-- [ ] Renderizzare Model Lab come `RouterLink` autonomo fuori dal ruolo tablist.
-- [ ] Portare il default inline a `ai_defaults` e aggiornare i test tablet/phone.
+- [x] Conservare l'ID `models` soltanto come compatibilità legacy.
+- [x] Rimuovere `models` dai gruppi del `tablist`.
+- [x] Renderizzare Model Lab come `RouterLink` autonomo fuori dal ruolo tablist.
+- [x] Portare il default inline a `ai_defaults` e aggiornare i test tablet/phone.
 
 ### Task 2.4 — Costruire hub e wrapper dedicati
 
-- [ ] Creare `TalosMobileDeviceCapacityCard` con soli dati reali/unknown.
-- [ ] Creare `TalosMobileModelLabHub` con tre link semantici.
-- [ ] Montare provider, catalogo e locale nei rispettivi screen lazy.
-- [ ] Eliminare il vecchio pannello a tre tab.
-- [ ] Rimuovere le schede dispositivo duplicate dalle pagine figlie.
+- [x] Creare `TalosMobileDeviceCapacityCard` con soli dati reali/unknown.
+- [x] Creare `TalosMobileModelLabHub` con tre link semantici.
+- [x] Montare provider, catalogo e locale nei rispettivi screen lazy.
+- [x] Eliminare il vecchio pannello a tre tab.
+- [x] Rimuovere le schede dispositivo duplicate dalle pagine figlie.
 
 ### Task 2.5 — Regressione e prova fisica
 
-- [ ] Eseguire route, Settings, shell, back, tema, chunk, E2E e gate globali.
-- [ ] Catturare hub Paper chiaro, hub Terminal scuro e pagina Provider senza
-      duplicato nelle tre immagini prescritte.
-- [ ] Compilare manifest e promuovere solo dopo ispezione fisica.
+- [x] Eseguire route, Settings, shell, back, tema, chunk, E2E e gate globali.
+- [x] Catturare hub Paper chiaro, hub Terminal scuro, pagina Provider senza
+      duplicato, drawer canonico, ingresso unico Settings e hub tablet nativo.
+- [x] Compilare manifest e promuovere solo dopo ispezione fisica.
+
+Esito osservato: suite completa 3593 pass / 9 skip, E2E estesi 37/37, build e
+Gradle verdi; APK SHA-256 `b6a24bc695127aaf912719f6a4d102e3f484aef71ddecc8d73fd32438406aa3d`.
+Le sei prove sono indicizzate nel manifest Fase 2. Nessun push eseguito.
 
 Checkpoint: la Fase 3 parte soltanto quando la nuova destinazione delle
 credenziali Hugging Face esiste davvero.
@@ -344,6 +349,10 @@ metodo realmente supportato.
 - [ ] Catturare stato pronto, connesso redatto e recupero da sessione scaduta.
 - [ ] Compilare manifest, eliminare dati personali e promuovere solo con il
       flusso end-to-end riuscito.
+- [ ] Dopo tutti i gate della Fase 5, compilare l'APK side-by-side dal tree
+      completo delle Fasi 1–5 e copiarne una copia con nome univoco sul Desktop
+      dell'owner. Registrare percorso assoluto, timestamp UTC, byte e SHA-256
+      nel manifest/handoff; non sostituire silenziosamente un APK preesistente.
 
 Se il client pubblico non è disponibile, il ledger registra `BLOCKED — external
 client registration` e la fase non è implementata. Le fasi 1–4 possono restare
@@ -415,6 +424,8 @@ l'owner non accetta esplicitamente un rischio residuo nominato.
       comandi, evidenze e blocchi residui.
 - [ ] La spedizione whole-app 5.5 ha ledger e dossier verdi, senza difetti
       aperti o rischi residui non accettati esplicitamente.
+- [ ] Sul Desktop dell'owner è presente l'APK finale Fase 5 corrispondente al
+      tree verificato; hash e percorso coincidono con manifest e handoff.
 
 ## 7. Rollback del programma
 

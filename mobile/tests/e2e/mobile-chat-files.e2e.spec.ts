@@ -30,7 +30,7 @@ async function configureVisionModel(page: Page): Promise<Array<Record<string, un
             }),
         })
     })
-    await page.route('https://api.openai.com/v1/chat/completions', async (route) => {
+    await page.route('https://api.openai.com/v1/responses', async (route) => {
         const request = route.request().postDataJSON() as Record<string, unknown>
         completions.push(request)
         await route.fulfill(openAiCompletionFulfill(
@@ -44,13 +44,21 @@ async function configureVisionModel(page: Page): Promise<Array<Record<string, un
     await page.locator(MENU).click()
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
-    await page.locator('[data-settings-tab="models"]').click()
+    await page.getByTestId('settings-model-lab-link').click()
+    await page.getByTestId('talos-model-lab-destination').filter({ hasText: 'Providers and access' }).click()
+    await expect(page.getByTestId('settings-models-providers-screen')).toBeVisible()
     if (await page.locator('[data-provider="openai"] button[aria-controls="provider-openai-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="openai"] button[aria-controls="provider-openai-body"]').click()
     await page.getByLabel('OpenAI API key').fill('e2e-files-openai-key')
     await page.getByLabel('Save OpenAI key').click()
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
-    await page.getByLabel('Default chat model').click()
-    await page.locator('[data-testid="talos-themed-select-item"][data-value="openai:gpt-e2e-vision"]').click()
+
+    await page.getByTestId('talos-sheet-back').click()
+    await page.getByTestId('talos-model-lab-destination').filter({ hasText: 'Model catalog' }).click()
+    const model = page.locator('[data-model-card][data-model-id="openai:gpt-e2e-vision"]')
+    await expect(model).toBeVisible()
+    await model.getByRole('button', { name: /Use .* as default model/ }).click()
+    await page.getByTestId('talos-sheet-back').click()
+    await page.getByTestId('talos-sheet-back').click()
     await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
     return completions
@@ -102,6 +110,10 @@ test('sends text and image evidence, downloads device copies, reuses Vault files
             buffer: ONE_PIXEL_PNG,
         },
     ])
+
+    const imageConsent = page.getByRole('dialog', { name: 'This image leaves the phone' })
+    await expect(imageConsent).toBeVisible()
+    await imageConsent.getByRole('button', { name: 'Just this once', exact: true }).click()
 
     const tray = page.getByTestId('talos-mobile-attachment-tray')
     await expect(tray.locator('[data-attachment-status="authorized"]')).toHaveCount(2, { timeout: 20_000 })
@@ -169,7 +181,7 @@ test('sends text and image evidence, downloads device copies, reuses Vault files
         '[data-talos-library-thumbnail][aria-label="Open release-brief.txt"]',
     )
     const chatThumbnailBox = await chatThumbnail.boundingBox()
-    const chatFilterBox = await chatMedia.getByRole('button', { name: 'Show All', exact: true }).boundingBox()
+    const chatFilterBox = await chatMedia.getByRole('radio', { name: 'Show All', exact: true }).boundingBox()
     const chatNameSize = await chatMedia.getByText('release-brief.txt', { exact: true })
         .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize))
     const chatFileGlyph = chatThumbnail.locator('[data-talos-library-file-glyph]')
@@ -181,10 +193,13 @@ test('sends text and image evidence, downloads device copies, reuses Vault files
     expect(chatIconKind).toBe('text')
     expect(chatExtension).toBe('TXT')
     await expectAndroidTouchTarget(chatMedia.getByTestId('talos-chat-media-close'))
-    await expectAndroidTouchTarget(chatMedia.getByRole('button', { name: 'Show All', exact: true }))
+    await expectAndroidTouchTarget(chatMedia.getByRole('radio', { name: 'Show All', exact: true }))
     const chatReleaseRow = chatMedia.locator('[data-talos-library-row]')
         .filter({ hasText: 'release-brief.txt' })
-    const chatActions = chatReleaseRow.locator('[data-talos-library-actions-trigger]')
+    const chatActions = chatReleaseRow.getByRole('button', {
+        name: 'Actions for release-brief.txt',
+        exact: true,
+    })
     await expectAndroidTouchTarget(chatActions)
     await expectAndroidTouchTarget(
         chatMedia.locator('[data-talos-library-name]').filter({ hasText: 'release-brief.txt' }).locator('..'),
@@ -232,12 +247,17 @@ test('sends text and image evidence, downloads device copies, reuses Vault files
     const turnSheet = page.getByTestId('talos-library-context-sheet')
     await expect(turnSheet).toBeVisible()
     await turnSheet.getByTestId('talos-library-turn-mode-agentic_on_demand_v1').click()
-    await expect(turnSheet.getByTestId('talos-library-turn-mode-agentic_on_demand_v1')).toHaveAttribute('aria-pressed', 'true')
-    await turnSheet.getByLabel('Include release-brief.txt in the next message').click()
-    await expect(turnSheet.getByLabel('Include release-brief.txt in the next message')).toHaveAttribute('aria-pressed', 'true')
+    await expect(turnSheet.getByTestId('talos-library-turn-mode-agentic_on_demand_v1')).toHaveAttribute('aria-checked', 'true')
+    const releaseContextGroup = turnSheet.getByRole('radiogroup', {
+        name: 'Context for release-brief.txt',
+        exact: true,
+    })
+    const includeRelease = releaseContextGroup.getByRole('radio', { name: 'Included', exact: true })
+    await includeRelease.click()
+    await expect(includeRelease).toHaveAttribute('aria-checked', 'true')
     await expect(turnSheet.getByTestId('talos-library-turn-reset')).toBeVisible()
     await turnSheet.getByTestId('talos-library-turn-reset').click()
-    await expect(turnSheet.getByTestId('talos-library-turn-mode-inherit')).toHaveAttribute('aria-pressed', 'true')
+    await expect(turnSheet.getByTestId('talos-library-turn-mode-inherit')).toHaveAttribute('aria-checked', 'true')
     await expect(turnSheet.getByTestId('talos-library-turn-reset')).toHaveCount(0)
     await turnSheet.getByRole('button', { name: 'Close' }).click()
     await expect(turnSheet).toHaveCount(0)
@@ -275,7 +295,10 @@ test('sends text and image evidence, downloads device copies, reuses Vault files
     expect(chatExtension).toBe(globalExtension)
     await expectAndroidTouchTarget(page.getByTestId('talos-library-type-all'))
     const releaseRow = vault.locator('[data-talos-library-row]').filter({ hasText: 'release-brief.txt' })
-    const globalActions = releaseRow.locator('[data-talos-library-actions-trigger]')
+    const globalActions = releaseRow.getByRole('button', {
+        name: 'Actions for release-brief.txt',
+        exact: true,
+    })
     await expectAndroidTouchTarget(globalActions)
     await expectAndroidTouchTarget(
         vault.locator('[data-talos-library-name]').filter({ hasText: 'release-brief.txt' }).locator('..'),

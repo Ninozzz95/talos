@@ -2,10 +2,10 @@
 
 **Lane posseduta:** `mobile` soltanto; nessuna ownership desktop.
 **Branch:** `lane/talos-mobile`
-**HEAD osservato:** `f7a88a599e48cb63727a4fc12f673cbecf9615fd`
-**Relazione con origin prima dei nuovi documenti:** 0 ahead / 0 behind.
-**Stato programma Model Lab:** Fase 1 IMPLEMENTED; review F1-RED-11…17,
-regressioni, nuova APK e nuova prova fisica sono verdi. Fase 2 è la prossima.
+**HEAD base incorporato nell'APK Fase 2:** `3b6a4fbc2e051b5f2769eed4176353c91174b50b`
+**Relazione con origin prima del commit Fase 2:** 1 ahead / 0 behind.
+**Stato programma Model Lab:** Fasi 1 e 2 IMPLEMENTED; F2-RED-01…20,
+regressioni, nuova APK e sei prove fisiche sono verdi. Fase 3 è la prossima.
 
 Questo è il punto di ripresa autosufficiente per Claude/Codex. Se contraddice
 un ledger più recente o il codice, vince l'evidenza fresca; il ledger va
@@ -19,7 +19,7 @@ emendato prima di modificare comportamento.
 2. `mobile/docs/superpowers/research/2026-08-04-model-lab-mobile-hub-research.md`
 3. `mobile/docs/superpowers/plans/2026-08-04-model-lab-mobile-hub-plan.md`
 4. il ledger della fase corrente:
-   `mobile/docs/superpowers/ledgers/2026-08-04-model-lab-phase-2-hub-navigation-theme-ledger.md`
+   `mobile/docs/superpowers/ledgers/2026-08-04-model-lab-phase-3-hugging-face-filters-ledger.md`
 5. `mobile/docs/superpowers/evidence/model-lab/README.md`
 6. `mobile/docs/superpowers/COMPETITIVE-ONE-UP-DOCTRINE.md`
 
@@ -188,14 +188,33 @@ Memory-blocked dopo disco:
 | Fase | Stato | Esito | Evidenza fisica minima |
 |---|---|---|---|
 | 1 · Capienza/HF | IMPLEMENTED | verdict unico, variante Q4, boundary/revision chiusi | storage + memory sulla APK `94b68d…` |
-| 2 · Hub/Theme | PLANNED | hub, 3 route, device unico, token-only | hub Paper/light + Terminal/dark + Provider |
+| 2 · Hub/Theme | IMPLEMENTED | hub, 3 route, device unico, token-only, ingresso unico sotto Settings | 6 PNG sulla APK `b6a24b…` |
 | 3 · Filtri | PLANNED | filtri veri, provider stabile, access card | combinazione + zero-state + HF access |
 | 4 · Coerenza/scala | PLANNED | dettaglio route, righe compatte, catalogo 40/+40 | Local + detail + catalog 40/80 |
 | 5 · OAuth | PLANNED/BLOCKED esterno | HF PKCE reale; altri provider motivati | ready + connected + disconnected |
 
-L'ordine è rigido. La Fase 2 non parte finché la capacità che l'hub mostra non
-è `IMPLEMENTED`. Ogni ledger enumera file, simboli, RED, comandi, upstream,
-screenshot e rollback.
+L'ordine è rigido. La Fase 3 parte soltanto dopo il commit locale della Fase 2.
+Ogni ledger enumera file, simboli, RED, comandi, upstream, screenshot e rollback.
+
+### Chiusura osservata Fase 2
+
+- il vecchio pannello a tre tab è eliminato; `/settings/models` è un hub con una
+  scheda dispositivo e tre route figlie lazy;
+- il duplicato segnalato dall'owner è chiuso da F2-RED-20: il drawer espone solo
+  `Impostazioni`, mentre il Centro impostazioni contiene un solo
+  `settings-model-lab-link`; le scorciatoie contestuali chat restano;
+- 3593 test unitari passano, 9 sono saltati; il batch E2E esteso passa 37/37;
+- build web, parity, `cap sync`, test Android e assemble side-by-side sono verdi;
+- APK: 31103284 byte, timestamp `2026-08-05T05:51:21.7394103Z`, SHA-256
+  `b6a24bc695127aaf912719f6a4d102e3f484aef71ddecc8d73fd32438406aa3d`;
+- cinque prove a 360×792 CSS/DPR 3 e una a 914×1292/DPR 2.625 sono tracciate
+  in `mobile/docs/superpowers/evidence/model-lab/phase-2/manifest.md`;
+- account originale e geometria tablet 2400×3392/density 420 sono ripristinati;
+  nessun override ADB resta attivo;
+- i due reviewer dedicati non hanno prodotto output perché bloccati in
+  `pending_init` dal limite crediti del workspace; il main agent ha eseguito
+  l'audit completo. Il batch indipendente obbligatorio della Fase 5.5 resta da
+  ritentare e non è considerato soddisfatto da questo fallback.
 
 ---
 
@@ -311,13 +330,19 @@ tablet è stato riconfermato a geometria nativa, rotazione automatica attiva.
 La prova sostitutiva usa l'APK SHA-256 `94b68dbf…174dc3f`; screenshot storage
 `7515693d…9fca52` e memory `0282e9ea…12e466`.
 
+Gate Fase 2 eseguito sullo stesso tablet con APK SHA-256 `b6a24bc6…06aa3d`.
+L'override telefono 1080×2376/density 480 ha prodotto 360×792 CSS/DPR 3; dopo
+cinque catture è stato rimosso. Un cold start a geometria nativa ha provato il
+layout 914×1292 CSS/DPR 2.625 e il contrasto della status bar Paper/chiaro.
+Stato finale verificato: 2400×3392, density 420, nessun override.
+
 ---
 
 ## 11. Pacco d'avvio e catalogo
 
-Misura fresca Fase 1: pacco JavaScript iniziale 597.055/600.000 byte e CSS
-iniziale 200.300/220.000 byte; typecheck, parity ledger e build sono verdi.
-Restano soltanto 2.945 byte di margine JavaScript iniziale: le fasi UI non
+Misura fresca Fase 2: pacco JavaScript iniziale 599.681/600.000 byte e CSS
+iniziale 203.928/220.000 byte; typecheck, parity ledger e build sono verdi.
+Restano soltanto 319 byte di margine JavaScript iniziale: le fasi UI non
 devono aggiungere import al bootstrap senza prima spostarli dietro lazy route.
 
 Il catalogo corrente rende 476 card, circa 141.839 CSS px. La Fase 4 usa 40
@@ -372,6 +397,12 @@ nominato, test permanente, fix e nuova prova fisica. Il go-out non parte con
 difetti aperti; un boundary esterno non disponibile viene dichiarato, mai
 simulato. Requisito completo nella sezione 5.5 del piano master.
 
+Direttiva owner 2026-08-05: alla fine della Fase 5 deve essere compilata dal
+tree completo una APK side-by-side e ne va lasciata una copia con nome univoco
+sul Desktop. Percorso, byte, timestamp UTC e SHA-256 entrano nel manifest e in
+questo handoff. Non basta l'APK intermedia usata per una fase precedente e non
+è autorizzato alcun push.
+
 ---
 
 ## 14. Regole operative per la prossima sessione
@@ -389,8 +420,10 @@ simulato. Requisito completo nella sezione 5.5 del piano master.
 
 ### Prossima azione esatta
 
-Creare il commit locale della Fase 1 senza push, poi aprire e seguire in TDD il
-ledger Fase 2 (Theme Engine, hub e navigazione). Non modificare la lane desktop.
+Creare il commit locale della Fase 2 senza push. Poi rileggere completamente il
+ledger Fase 3, riconfermare i pin Hugging Face correnti, emendare il ledger se
+l'ispezione invalida un file previsto e provare il primo RED sui cinque filtri.
+Non modificare la lane desktop.
 
 ---
 

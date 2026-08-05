@@ -66,7 +66,7 @@ test('tablet Settings replaces the chat rail with categories and restores it on 
     await expect(page.locator(DIVIDER)).toHaveCount(0)
     await expect(page.locator('[data-testid="settings-category-pane"]')).toBeVisible()
     await expect(page.locator('[data-testid="settings-detail-pane"]')).toBeVisible()
-    await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
+    await expect(page.locator('[data-settings-panel="ai_defaults"]')).toBeVisible()
 
     const sheetBox = (await page.locator(SHEET).boundingBox())!
     const categoriesBox = (await page.locator('[data-testid="settings-category-pane"]').boundingBox())!
@@ -91,8 +91,9 @@ test('tablet Settings category rail owns a real bounded vertical scrollport', as
     // pressure without substituting a synthetic DOM-only measurement.
     await page.setViewportSize({ width: 1024, height: 420 })
     const rail = page.locator('[data-testid="settings-category-pane"]')
+    const scroller = page.getByTestId('settings-category-list')
     const tablist = rail.getByRole('tablist')
-    const before = await tablist.evaluate((element) => ({
+    const before = await scroller.evaluate((element) => ({
         clientHeight: element.clientHeight,
         scrollHeight: element.scrollHeight,
         scrollTop: element.scrollTop,
@@ -102,9 +103,9 @@ test('tablet Settings category rail owns a real bounded vertical scrollport', as
     expect(before.scrollTop).toBe(0)
     expect(await rail.evaluate((element) => element.scrollTop)).toBe(0)
 
-    await tablist.hover()
+    await scroller.hover()
     await page.mouse.wheel(0, 1200)
-    await expect.poll(() => tablist.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
     expect(await rail.evaluate((element) => element.scrollTop)).toBe(0)
 
     await tablist.getByRole('tab', { name: 'System' }).click()
