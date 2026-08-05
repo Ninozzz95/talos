@@ -22,6 +22,9 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     notes_create: 'Writing a note',
     notes_update: 'Editing a note',
     notes_delete: 'Deleting a note',
+    tasks_create: 'Adding a task',
+    tasks_complete: 'Updating a task',
+    tasks_delete: 'Deleting a task',
     tasks_list: 'Looking at your tasks',
     memory_write: 'Saving something to memory',
     memory_search: 'Checking what it remembers',
@@ -47,6 +50,9 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     notes_create: 'toolActivity.notesCreate',
     notes_update: 'toolActivity.notesUpdate',
     notes_delete: 'toolActivity.notesDelete',
+    tasks_create: 'toolActivity.tasksCreate',
+    tasks_complete: 'toolActivity.tasksComplete',
+    tasks_delete: 'toolActivity.tasksDelete',
     tasks_list: 'toolActivity.tasksList',
     memory_write: 'toolActivity.memoryWrite',
     memory_search: 'toolActivity.memorySearch',
@@ -100,6 +106,18 @@ export const TALOS_TOOL_CONSENT_KEYS: Record<string, TalosToolConsentCopy> = {
     notes_delete: {
         title: 'toolConsent.notesDelete.title',
         description: 'toolConsent.notesDelete.description',
+    },
+    tasks_create: {
+        title: 'toolConsent.tasksCreate.title',
+        description: 'toolConsent.tasksCreate.description',
+    },
+    tasks_complete: {
+        title: 'toolConsent.tasksComplete.title',
+        description: 'toolConsent.tasksComplete.description',
+    },
+    tasks_delete: {
+        title: 'toolConsent.tasksDelete.title',
+        description: 'toolConsent.tasksDelete.description',
     },
     tasks_list: {
         title: 'toolConsent.tasksList.title',
@@ -209,6 +227,9 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     notes_create: 'note',
     notes_update: 'note',
     notes_delete: 'note',
+    tasks_create: 'task',
+    tasks_complete: 'task',
+    tasks_delete: 'task',
     tasks_list: 'task',
     memory_write: 'memory',
     memory_search: 'memory',

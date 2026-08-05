@@ -1,5 +1,6 @@
 import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
 import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
+import { createTalosTasksWriteTools } from '@/lib/tools/tasksWriteTools'
 import { talosBytesToBase64 } from '@/lib/bytesToBase64'
 import {
     createTalosReadTools,
@@ -96,6 +97,8 @@ export interface TalosToolsetDeps {
      * DUE porte, e questa aveva solo la lettura (`notes_list`).
      */
     notesWrite?(): import('@/lib/tools/notesWriteTools').TalosNotesWriteSources | null
+    /** Le attività, in scrittura: stesso buco delle note, funzione accanto. */
+    tasksWrite?(): import('@/lib/tools/tasksWriteTools').TalosTasksWriteSources | null
     /**
      * F1 — the web tools, present only when a search source is configured.
      *
@@ -450,6 +453,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ? null
                 : deps.memoryWrite?.() ?? null
             const notesWrite = deps.notesWrite?.() ?? null
+            const tasksWrite = deps.tasksWrite?.() ?? null
             const documents = deps.documents?.() ?? null
             const images = deps.images?.() ?? null
             return [
@@ -461,6 +465,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...(research ? createTalosResearchTools(research) : []),
                 ...(memoryWrite ? createTalosMemoryWriteTools(memoryWrite) : []),
                 ...(notesWrite ? createTalosNotesWriteTools(notesWrite) : []),
+                ...(tasksWrite ? createTalosTasksWriteTools(tasksWrite) : []),
                 ...(documents ? createTalosDocumentTools(documents) : []),
                 ...(images ? createTalosImageTools(images) : []),
             ]

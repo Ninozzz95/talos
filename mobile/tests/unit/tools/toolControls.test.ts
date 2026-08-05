@@ -4,6 +4,7 @@ import {
     createTalosReadTools,
 } from '@/lib/tools/readTools'
 import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
+import { createTalosTasksWriteTools } from '@/lib/tools/tasksWriteTools'
 import { createTalosWebTools } from '@/lib/search/webTools'
 import { createTalosDocumentTools } from '@/lib/documents/documentTools'
 import { createTalosImageTools } from '@/lib/images/imageTools'
@@ -41,6 +42,11 @@ function everyExecutableTool() {
         ...createTalosNotesWriteTools({
             create: vi.fn(async () => ({ id: 'n1', title: 'x' })),
             update: vi.fn(async () => ({ id: 'n1', title: 'x' })),
+            remove: vi.fn(async () => {}),
+        }),
+        ...createTalosTasksWriteTools({
+            create: vi.fn(async () => ({ id: 't1', title: 'x' })),
+            setStatus: vi.fn(async () => ({ id: 't1', title: 'x' })),
             remove: vi.fn(async () => {}),
         }),
         ...createTalosWebTools({
@@ -113,7 +119,7 @@ describe('Agent Tools control registry', () => {
         expect(parsed.web_search).toBe(true)
         expect(parsed).not.toHaveProperty('future_shell')
         expect(parsed.library_context_policy_update).toBe(false)
-        expect(Object.keys(parsed)).toHaveLength(23)
+        expect(Object.keys(parsed)).toHaveLength(26)
         expect(isTalosAgentToolEnabled('library_search', parsed)).toBe(false)
         expect(isTalosAgentToolEnabled('future_shell', parsed)).toBe(false)
     })
@@ -155,7 +161,12 @@ describe('Agent Tools control registry', () => {
          * exists to answer, and the reason the four are pinned separately.
          */
         /**
-         * Ri-fissati 2026-08-05 per i tre tool di SCRITTURA delle note —
+         * Ri-fissati 2026-08-05/06 per i SEI tool di scrittura di note e
+         * attività — `notes_*` prima, `tasks_*` subito dopo, per la stessa
+         * ragione: entrambe le funzioni si potevano solo elencare. Il blocco
+         * «senza i nuovi» qui sotto li esclude tutti e sei insieme.
+         *
+         * Nota storica dei tre tool di SCRITTURA delle note —
          * `notes_create`, `notes_update`, `notes_delete` — la seconda porta che
          * mancava alla funzione (owner: «devono avere i propri tool di lettura e
          * scrittura da chat»).
@@ -169,12 +180,13 @@ describe('Agent Tools control registry', () => {
          */
         const withoutNotesWrite = tools.filter((tool) => ![
             'notes_create', 'notes_update', 'notes_delete',
+            'tasks_create', 'tasks_complete', 'tasks_delete',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('294015f453d5a35d76e67d812e2327b59075c2af373c60054e88a930c2245880')
 
         expect(digestOf(controlPlane))
-            .toBe('037e5d08bf218dde33b644424759943689f7fa29475758fe189419a75227d168')
+            .toBe('f6ecf5bce9d1d2e170421b8d4f89ab283a9ca7fc252009a4dcaecdd2c321674f')
         /**
          * Re-pinned 2026-08-01 for the three DIALECT digests only — the control
          * plane above did not move, which is the proof that nothing structural
@@ -241,10 +253,10 @@ describe('Agent Tools control registry', () => {
 
         // E con i tre nuovi dentro: il contratto pubblico di oggi.
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('25aa10892aa1e31dd112b33890543e93478742d2f2646787203e3f34e5f331eb')
+            .toBe('5ec65a7afeeebe8982113fab254f081ed6c2ea5fdb0519eaceb3cee38a9a86fa')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('31800cc0cdda8ae6bd8daa527763499cd779bc098791bb0acc29f6240a6b5042')
+            .toBe('f92f97d7fe21454043bcb5faaf935ac1b38dffaae87a6bda8d951c0caea3008d')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('3acc019ed182ba8c752d1ca0fd67ddc2333d47ecea1bb0a5c3be822aaeff6b5b')
+            .toBe('86f0cbbe4e5fa5a16765ce7061e97e5eb6885852718f8f6e8fed7720a457261c')
     })
 })

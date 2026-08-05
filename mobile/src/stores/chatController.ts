@@ -2518,6 +2518,26 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         },
                         remove: (noteId: string) => notes.remove(noteId),
                     }),
+                    /**
+                     * Le attività, con le due porte.
+                     *
+                     * `run_id` resta a null: legare un'attività a una ricerca è
+                     * un gesto della stazione, dove si vede QUALE ricerca. Da
+                     * qui il modello dovrebbe indovinarlo, e un legame indovinato
+                     * è peggio di nessun legame — sposta un'attività sotto un
+                     * lavoro che non è il suo.
+                     */
+                    tasksWrite: () => ({
+                        create: async (input) => {
+                            const saved = await tasks.create({ ...input, run_id: null })
+                            return { id: saved.id, title: saved.title }
+                        },
+                        setStatus: async (taskId, status) => {
+                            const saved = await tasks.setStatus(taskId, status)
+                            return { id: saved.id, title: saved.title }
+                        },
+                        remove: (taskId: string) => tasks.remove(taskId),
+                    }),
                     libraryContextPolicy: policyToolSources,
                     /**
                      * F2 — making documents. Always available: unlike search it

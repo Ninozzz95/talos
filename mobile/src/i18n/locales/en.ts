@@ -834,6 +834,9 @@ export const TALOS_EN_MESSAGES = {
         notesCreate: 'Writing a note',
         notesUpdate: 'Editing a note',
         notesDelete: 'Deleting a note',
+        tasksCreate: 'Adding a task',
+        tasksComplete: 'Updating a task',
+        tasksDelete: 'Deleting a task',
         tasksList: 'Looking at your tasks',
         memoryWrite: 'Saving something to memory',
         memorySearch: 'Checking what it remembers',
@@ -881,6 +884,18 @@ export const TALOS_EN_MESSAGES = {
         notesDelete: {
             title: 'Delete a note',
             description: 'Permanently remove one of your notes from this device. This cannot be undone.',
+        },
+        tasksCreate: {
+            title: 'Add a task',
+            description: 'Add something to do to your task list on this device.',
+        },
+        tasksComplete: {
+            title: 'Mark a task done',
+            description: 'Change whether one of your tasks is done, started, or not started.',
+        },
+        tasksDelete: {
+            title: 'Delete a task',
+            description: 'Permanently remove one of your tasks from this device. This cannot be undone.',
         },
         tasksList: {
             title: 'View your tasks',
@@ -1771,6 +1786,9 @@ export const TALOS_EN_MESSAGES = {
             notes_create: { title: 'Write a note', description: 'Save a new note on this device for you to read later.' },
             notes_update: { title: 'Edit a note', description: 'Change the title or body of a note that already exists.' },
             notes_delete: { title: 'Delete a note', description: 'Permanently remove one of your notes. This cannot be undone.' },
+            tasks_create: { title: 'Add a task', description: 'Add something to do to your list on this device.' },
+            tasks_complete: { title: 'Mark a task done', description: 'Change whether a task is done, started or not started.' },
+            tasks_delete: { title: 'Delete a task', description: 'Permanently remove one of your tasks. This cannot be undone.' },
             tasks_list: { title: 'List tasks', description: 'Read tasks with their status and priority.' },
             memory_search: { title: 'Search memory', description: 'Search facts you explicitly asked TALOS to remember.' },
             time_now: { title: 'Current date and time', description: 'Read the device date and local time instead of guessing.' },
