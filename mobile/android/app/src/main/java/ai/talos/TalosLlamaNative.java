@@ -110,6 +110,21 @@ final class TalosLlamaNative {
 
     static native int nativeContextTokens(long handle);
 
+    /**
+     * La forma del modello aperto, dichiarata da lui:
+     * {@code [layers, kvHeads, headDim, trainedContext, weightBytes]}.
+     *
+     * Serve a calcolare quanto contesto QUESTO telefono può onestamente dare a
+     * QUESTO modello, invece del tetto scritto a mano che valeva per tutti. Il
+     * calcolo non è qui: sta in {@code fit.ts}, dove regge già la scheda di
+     * capienza, e averne una copia in Java vorrebbe dire due risposte alla
+     * stessa domanda.
+     *
+     * {@code null} quando non c'è nessun modello aperto — «non lo so», che non è
+     * un tetto di zero.
+     */
+    static native long[] nativeModelShape(long handle);
+
     /** Token count produced by the model tokenizer with the generation flags. */
     static native int nativePromptTokens(long handle, String prompt);
 

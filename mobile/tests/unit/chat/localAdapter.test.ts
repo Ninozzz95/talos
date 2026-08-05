@@ -37,6 +37,32 @@ const localEngine = vi.hoisted(() => {
 })
 vi.mock('@/services/localEngine', () => localEngine)
 
+const deviceCapacity = vi.hoisted(() => ({ talosMeasureDevice: vi.fn() }))
+vi.mock('@/services/deviceCapacity', () => deviceCapacity)
+
+const GIB = 1024 * 1024 * 1024
+
+/** Llama-3.2-3B-Instruct-IQ4_XS, come lo dichiara il file. */
+const LLAMA_3B_SHAPE = {
+    layers: 28,
+    kvHeads: 8,
+    headDim: 128,
+    trainedContext: 131072,
+    weightBytes: Math.round(1.75 * GIB),
+    kvBytesPerElement: 2,
+}
+
+/** Un telefono stretto: il caso in cui un tetto scritto a mano PROMETTE troppo. */
+const SMALL_PHONE = {
+    totalRamBytes: 4 * GIB,
+    availableRamBytes: Math.round(0.9 * GIB),
+    lowMemoryThresholdBytes: Math.round(0.35 * GIB),
+    freeStorageBytes: 8 * GIB,
+    memoryBandwidthBytesPerSecond: null,
+    thermal: 'none' as const,
+    abiSupported: true,
+}
+
 const { localAdapter } = await import('@/lib/chat/providers/localAdapter')
 
 /**
@@ -115,10 +141,16 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
         localEngine.talosLocalEngineChatPlan.mockReset()
         localEngine.talosLocalEngineChatPrompt.mockReset()
         localEngine.talosLocalEngineGenerate.mockReset()
+        deviceCapacity.talosMeasureDevice.mockReset()
+        // Il caso normale di questa suite: nessuna misura. Che è anche il caso
+        // reale di una build senza motore nativo — e deve LASCIAR PROVARE, non
+        // rifiutare.
+        deviceCapacity.talosMeasureDevice.mockResolvedValue(null)
         localEngine.talosLocalEngineStatus.mockResolvedValue({
             available: true,
             backends: 'CPU',
             loadedPath: null,
+            shape: null,
         })
         localEngine.talosLocalEngineChatPrompt.mockResolvedValue('templated prompt')
         localEngine.talosLocalEngineChatPlan.mockResolvedValue({
@@ -213,7 +245,22 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
         )
     })
 
-    it('refuses a prompt above 8192 with a localized action and without truncating or generating', async () => {
+    /**
+     * C45-RED-19D — il rifiuto adesso viene da una MISURA, non da un numero.
+     *
+     * Il telefono è stretto e il modello è grande: il tetto onesto sta sotto ciò
+     * che la conversazione chiede, quindi si rifiuta senza troncare e senza
+     * generare. È lo stesso esito di prima, ottenuto per la ragione giusta —
+     * e su un dispositivo capiente lo stesso codice non rifiuta più (sotto).
+     */
+    it('C45-RED-19D refuses above the MEASURED ceiling, without truncating or generating', async () => {
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true,
+            backends: 'CPU',
+            loadedPath: null,
+            shape: LLAMA_3B_SHAPE,
+        })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue(SMALL_PHONE)
         localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
         localEngine.talosLocalEngineChatPlan.mockResolvedValue({
             prompt: 'too-large',
@@ -231,5 +278,73 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
         })
         expect(localEngine.talosLocalEngineOpen).not.toHaveBeenCalled()
         expect(localEngine.talosLocalEngineGenerate).not.toHaveBeenCalled()
+    })
+
+    /**
+     * Lo STESSO prompt, su un tablet capiente, non si rifiuta più.
+     *
+     * È il difetto dell'owner: `PROVIDER_CHAT_FAILED` su un dispositivo da 12 GB
+     * per un contesto che reggeva senza fatica. Le due prove sono gemelle
+     * apposta — cambia solo il dispositivo, e cambia l'esito. Con un tetto
+     * scritto a mano non potrebbero esistere entrambe.
+     */
+    it('C45-RED-19D the same conversation is served on a device that can hold it', async () => {
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true,
+            backends: 'CPU',
+            loadedPath: null,
+            shape: LLAMA_3B_SHAPE,
+        })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue({
+            totalRamBytes: Math.round(11.2 * GIB),
+            availableRamBytes: Math.round(4.47 * GIB),
+            lowMemoryThresholdBytes: Math.round(0.5 * GIB),
+            freeStorageBytes: 46 * GIB,
+            memoryBandwidthBytesPerSecond: null,
+            thermal: 'none',
+            abiSupported: true,
+        })
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineOpen.mockResolvedValue({ contextTokens: 16384 })
+        localEngine.talosLocalEngineChatPlan
+            .mockResolvedValueOnce({ prompt: 'big-4096', promptTokens: 8000, contextTokens: 4096 })
+            .mockResolvedValueOnce({ prompt: 'big-16384', promptTokens: 8000, contextTokens: 16384 })
+
+        await localAdapter.complete(
+            input() as never,
+            { apiKey: null, endpoint: null },
+            (() => { throw new Error('local must not use transport') }) as never,
+        )
+
+        expect(localEngine.talosLocalEngineOpen).toHaveBeenCalledWith(
+            '/models/qwen.gguf',
+            { contextTokens: 16384 },
+        )
+        expect(localEngine.talosLocalEngineGenerate).toHaveBeenCalled()
+    })
+
+    /**
+     * Quando non c'è misura, l'ultima parola resta al motore.
+     *
+     * Rifiutare qui vorrebbe dire decidere al posto del dispositivo su un numero
+     * che non abbiamo — cioè rimettere il muro, solo più in basso.
+     */
+    it('C45-RED-19D asks the engine instead of refusing when nothing could be measured', async () => {
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineOpen.mockResolvedValue({ contextTokens: 16384 })
+        localEngine.talosLocalEngineChatPlan
+            .mockResolvedValueOnce({ prompt: 'p-4096', promptTokens: 8000, contextTokens: 4096 })
+            .mockResolvedValueOnce({ prompt: 'p-16384', promptTokens: 8000, contextTokens: 16384 })
+
+        await localAdapter.complete(
+            input() as never,
+            { apiKey: null, endpoint: null },
+            (() => { throw new Error('local must not use transport') }) as never,
+        )
+
+        expect(localEngine.talosLocalEngineOpen).toHaveBeenCalledWith(
+            '/models/qwen.gguf',
+            { contextTokens: 16384 },
+        )
     })
 })

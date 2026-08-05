@@ -596,6 +596,78 @@ Java_ai_talos_TalosLlamaNative_nativeContextTokens(JNIEnv *, jclass, jlong handl
 }
 
 /**
+ * La FORMA del modello che è in memoria, dichiarata da lui stesso.
+ *
+ * ## Perché esiste
+ *
+ * Il tetto di contesto della chat era `8192`, scritto a mano, uguale per ogni
+ * modello e ogni telefono. Su un tablet da 12 GB con un 3B quantizzato rifiutava
+ * conversazioni che il dispositivo reggeva comodamente; su un telefono da 4 GB
+ * con un 7B avrebbe promesso più di quanto potesse mantenere. Un numero solo non
+ * può essere giusto per entrambi, perché non è una politica: è un *fatto*, e i
+ * fatti si leggono.
+ *
+ * `fit.ts` sa già calcolare quel tetto — RAM disponibile, soglia di sfratto di
+ * Android, margine, peso dei pesi, byte di cache KV per token — e gli mancava
+ * solo la forma del modello. Sul catalogo del Hub la ricava da una lettura
+ * parziale del GGUF via HTTP; per un modello *installato* quella strada non
+ * c'è, perché il file è di gigabyte e il ponte dei file di Capacitor legge solo
+ * tutto-o-niente.
+ *
+ * Ma qui la lettura è già stata fatta: `llama_model_load_from_file` ha
+ * attraversato l'intestazione per costruire il modello. Chiedere a lui costa
+ * cinque accessi a campi già in memoria, e soprattutto risponde con ciò che il
+ * motore *userà davvero*, non con ciò che un secondo lettore avrebbe dedotto.
+ *
+ * ## L'ordine, e perché long
+ *
+ * `[layers, kvHeads, headDim, trainedContext, weightBytes]`. Long per tutti
+ * perché l'ultimo è un conteggio di byte che supera i due miliardi appena il
+ * modello passa i 2 GB — un `int` lo farebbe diventare negativo proprio sui
+ * modelli grandi, cioè quelli in cui il tetto conta di più.
+ *
+ * `weightBytes` è `llama_model_size`, i byte dei tensori residenti: più esatto
+ * della sottrazione «file meno intestazione» che fa il lettore GGUF, e giusto
+ * anche per un modello diviso in più file.
+ *
+ * `headDim` si ricava da `n_embd / n_head`, la stessa relazione che il lettore
+ * GGUF usa quando il file non dichiara `attention.key_length`. Per le
+ * architetture che quel campo lo dichiarano diverso l'API pubblica di llama.cpp
+ * non lo espone; il risultato resta dalla parte prudente perché sotto-stimare la
+ * cache alzerebbe il tetto, quindi chi chiama tratta un `n_head` non valido come
+ * «non lo so» invece di dividere per zero.
+ *
+ * Restituisce `nullptr` quando non c'è nessun modello aperto: «non lo so», che
+ * non è «zero» e non deve mai diventarlo.
+ */
+JNIEXPORT jlongArray JNICALL
+Java_ai_talos_TalosLlamaNative_nativeModelShape(JNIEnv * env, jclass, jlong handle) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr || session->model == nullptr) return nullptr;
+
+    const llama_model * model = session->model;
+    const int32_t embedding = llama_model_n_embd(model);
+    const int32_t heads     = llama_model_n_head(model);
+    // Non un caso da aggiustare con un valore di comodo: senza teste la
+    // divisione non ha senso, e uno zero qui diventerebbe una divisione per zero
+    // a valle. Passa come zero e chi legge lo riconosce come «non misurabile».
+    const jlong headDim = heads > 0 ? (jlong) (embedding / heads) : 0;
+
+    const jlong values[5] = {
+        (jlong) llama_model_n_layer(model),
+        (jlong) llama_model_n_head_kv(model),
+        headDim,
+        (jlong) llama_model_n_ctx_train(model),
+        (jlong) llama_model_size(model),
+    };
+
+    jlongArray result = env->NewLongArray(5);
+    if (result == nullptr) return nullptr;
+    env->SetLongArrayRegion(result, 0, 5, values);
+    return result;
+}
+
+/**
  * Conta il prompt con lo stesso tokenizer e gli stessi flag della generazione.
  * Il chiamante può così scegliere il contesto prima del decode senza stimare
  * token da byte o caratteri, che cambia risposta proprio tra famiglie diverse.

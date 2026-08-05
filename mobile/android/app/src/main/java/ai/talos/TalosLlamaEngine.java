@@ -175,6 +175,22 @@ public final class TalosLlamaEngine implements AutoCloseable {
         return TalosLlamaNative.nativeContextTokens(handle);
     }
 
+    /**
+     * La forma dichiarata dal modello in memoria, o {@code null} se il motore
+     * nativo di questa build non sa ancora rispondere.
+     *
+     * Null è un esito previsto, non un guasto: una build affiancata più vecchia
+     * — che è il modo normale di provare un APK qui — non ha il metodo, e chi
+     * chiama deve degradare a «tetto non misurabile» invece di andare in errore.
+     */
+    public long[] modelShape() {
+        try {
+            return TalosLlamaNative.nativeModelShape(handle);
+        } catch (UnsatisfiedLinkError older) {
+            return null;
+        }
+    }
+
     /** Exact prompt size according to this model, not a byte/character estimate. */
     public int promptTokens(String prompt) {
         return TalosLlamaNative.nativePromptTokens(handle, prompt);
