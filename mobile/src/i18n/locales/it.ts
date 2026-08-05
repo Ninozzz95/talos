@@ -1460,6 +1460,18 @@ export const TALOS_IT_MESSAGES = {
         thermal_critical: 'molto caldo',
         filterProvider: 'Filtra per autore',
         allProviders: 'Tutti gli autori',
+        filterWeight: 'Filtra per taglia del modello',
+        allWeights: 'Tutte le taglie',
+        // Le fasce dove le famiglie si separano davvero su un telefono.
+        // Owner 2026-08-05: «tipo 4 miliardi o 5 miliardi» — infatti un 4B e un
+        // 5B finiscono in due fasce diverse.
+        weight: {
+            'fino-1': 'Fino a 1 miliardo',
+            '1-4': 'Da 1 a 4 miliardi',
+            '4-8': 'Da 4 a 8 miliardi',
+            '8-16': 'Da 8 a 16 miliardi',
+            'oltre-16': 'Oltre 16 miliardi',
+        },
         providerCount: '{count} modelli',
         providerCountOne: '{count} modello',
         resultsCount: '{count} risultati',

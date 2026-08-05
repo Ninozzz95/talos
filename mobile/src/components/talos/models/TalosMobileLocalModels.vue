@@ -61,6 +61,11 @@ import {
     TALOS_BROWSE_FILTERS,
     type TalosBrowseFilterId,
 } from '@/lib/models/browseFilters'
+import {
+    TALOS_WEIGHT_BANDS,
+    talosModelPassesWeightBand,
+    type TalosWeightBandId,
+} from '@/lib/models/weightFilter'
 import { talosBrowsePublishers, talosGroupModelsByProvider } from '@/lib/models/providerGrouping'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import {
@@ -449,11 +454,31 @@ function commutaFiltro(id: TalosBrowseFilterId): void {
  * e' spento — owner 2026-08-04: «come etichetta che vedo sempre». Il filtro e'
  * un gesto in piu', non il modo normale di guardare la lista.
  */
-const risultatiVisibili = computed(() => talosApplyBrowseFilters(
-    store.results,
-    filtriAttivi.value,
-    store.device,
-))
+/**
+ * La fascia di peso scelta. Vuoto = tutte.
+ *
+ * Owner 2026-08-05: «filtro solo i pesi (tipo 4 miliardi o 5 miliardi) che
+ * vuole utente». E' a scelta SINGOLA — una taglia per volta — quindi vive coi
+ * selettori e non fra i chip, che sono interruttori che si sommano.
+ */
+const fasciaPeso = ref<TalosWeightBandId | ''>('')
+
+const fascePeso = computed(() => TALOS_WEIGHT_BANDS.map((id) => ({
+    value: id,
+    label: t(`localModels.weight.${id}`),
+})))
+
+const risultatiVisibili = computed(() => {
+    const filtrati = talosApplyBrowseFilters(store.results, filtriAttivi.value, store.device)
+    const banda = fasciaPeso.value
+    /*
+     * Il peso si applica DOPO gli altri: e' un restringimento sulla stessa
+     * lista, non un insieme diverso. E resta separato da «Ci sta» apposta —
+     * quello dice se il telefono ce la fa, questo quanto la si vuole grande, e
+     * c'e' chi vuole un modello piccolo anche quando il grande entra.
+     */
+    return banda === '' ? filtrati : filtrati.filter((m) => talosModelPassesWeightBand(m, banda))
+})
 
 const providerGroups = computed(() => talosGroupModelsByProvider(risultatiVisibili.value))
 
@@ -979,13 +1004,22 @@ function resultCountLabel(count: number): string {
                  the two halves of the Model Lab read alike. Its options are
                  derived from the results — there is no list of publishers in
                  this app, because that list would age. -->
-            <!-- Due comandi, una riga. Impilati a tutta larghezza mangiavano
-                 mezzo schermo prima che si vedesse un modello — misurato
-                 guardando la schermata sul telefono, non supposto. -->
-            <div class="flex min-w-0 gap-[var(--talos-space-inline)]">
+            <!-- Tre comandi, che vanno a capo invece di stringersi.
+                 Impilati a tutta larghezza mangiavano mezzo schermo prima che si
+                 vedesse un modello — misurato sul telefono, non supposto.
+
+                 Ma col terzo comando (la taglia) la riga sola non basta piu':
+                 MISURATO sul viewport telefono il 2026-08-05, tre selettori a
+                 411px si stringevano a 144 ciascuno e le etichette diventavano
+                 «Piu' sc…», «Tutti g…», «Tutte le tag…» — cioe' niente.
+
+                 `basis` invece di sola `flex-1`: sotto i 10rem a testa la riga
+                 preferisce andare a capo piuttosto che troncare. Su tablet
+                 restano affiancati, su telefono diventano 2+1. -->
+            <div class="flex min-w-0 flex-wrap gap-[var(--talos-space-inline)]">
             <TalosThemedSelect
                 data-testid="talos-models-sort"
-                class="min-w-0 flex-1"
+                class="min-w-0 flex-1 basis-[10rem]"
                 :model-value="store.sort"
                 :items="ordinamenti"
                 :aria-label="t('localModels.sortLabel')"
@@ -994,10 +1028,28 @@ function resultCountLabel(count: number): string {
             <TalosThemedSelect
                 v-model="providerFilter"
                 data-testid="talos-models-provider-filter"
-                class="min-w-0 flex-1"
+                class="min-w-0 flex-1 basis-[10rem]"
                 :items="providerItems"
                 :aria-label="t('localModels.filterProvider')"
                 :none-label="t('localModels.allProviders')"
+            />
+            <!-- La taglia. Owner 2026-08-05: «filtro solo i pesi (tipo 4
+                 miliardi o 5 miliardi) che vuole utente».
+
+                 Sta QUI e non fra i chip perche' e' a scelta singola: i chip
+                 sono interruttori che si sommano, la taglia e' una sola per
+                 volta — stessa grammatica di «provider».
+
+                 E la riga va a capo su schermo stretto: tre selettori affiancati
+                 su un telefono darebbero tre colonne da un centimetro, dove
+                 «Da 8 a 16 miliardi» non ci sta. -->
+            <TalosThemedSelect
+                v-model="fasciaPeso"
+                data-testid="talos-models-weight-filter"
+                class="min-w-0 flex-1 basis-[10rem]"
+                :items="fascePeso"
+                :aria-label="t('localModels.filterWeight')"
+                :none-label="t('localModels.allWeights')"
             />
             </div>
 

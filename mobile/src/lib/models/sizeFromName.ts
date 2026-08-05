@@ -43,6 +43,15 @@ const BITS: Record<string, number> = {
 const PARAMS = /(?:^|[-_.\s])(\d+(?:\.\d+)?)\s*b(?=[-_.\s]|$)/i
 
 export interface TalosEstimatedSize {
+    /**
+     * I parametri in miliardi, letti dal nome.
+     *
+     * E' il numero da cui discende tutto il resto, e serve anche da solo: il
+     * filtro di peso lo usa quando il Hub non e' riuscito ad aprire il file e
+     * quindi `gguf.total` non c'e'. Prima restava sepolto in una variabile
+     * locale, e chi ne aveva bisogno avrebbe dovuto rifare la stessa regex.
+     */
+    parametersB: number
     /** I byte che il file occupera' una volta scaricato. */
     fileBytes: number
     /**
@@ -110,6 +119,7 @@ export function talosEstimateSizeFromName(name: string): TalosEstimatedSize | nu
     // miliardi di pesi × bit per peso ÷ 8 = byte
     const fileBytes = (miliardi * 1e9 * BITS[chiave]!) / 8
     return {
+        parametersB: miliardi,
         fileBytes,
         workingBytes: fileBytes * MARGINE_DI_LAVORO,
         estimated: true,
