@@ -841,6 +841,9 @@ export const TALOS_IT_MESSAGES = {
         notesCreate: 'Scrittura di una nota',
         notesUpdate: 'Modifica di una nota',
         notesDelete: 'Eliminazione di una nota',
+        tasksCreate: 'Aggiunta di un’attività',
+        tasksComplete: 'Aggiornamento di un’attività',
+        tasksDelete: 'Eliminazione di un’attività',
         tasksList: 'Consultazione delle attività',
         memoryWrite: 'Salvataggio nella memoria',
         memorySearch: 'Ricerca nella memoria',
@@ -888,6 +891,18 @@ export const TALOS_IT_MESSAGES = {
         notesDelete: {
             title: 'Elimina una nota',
             description: 'Toglie per sempre una delle tue note da questo dispositivo. Non si può annullare.',
+        },
+        tasksCreate: {
+            title: 'Aggiungi un’attività',
+            description: 'Aggiunge una cosa da fare al tuo elenco su questo dispositivo.',
+        },
+        tasksComplete: {
+            title: 'Segna un’attività come fatta',
+            description: 'Cambia se un’attività è fatta, iniziata o da iniziare.',
+        },
+        tasksDelete: {
+            title: 'Elimina un’attività',
+            description: 'Toglie per sempre una delle tue attività da questo dispositivo. Non si può annullare.',
         },
         tasksList: {
             title: 'Consulta le attività',
@@ -1773,6 +1788,9 @@ export const TALOS_IT_MESSAGES = {
             notes_create: { title: 'Scrivi una nota', description: 'Salva una nota nuova su questo dispositivo, perché tu la rilegga.' },
             notes_update: { title: 'Modifica una nota', description: 'Cambia il titolo o il testo di una nota che esiste già.' },
             notes_delete: { title: 'Elimina una nota', description: 'Toglie per sempre una delle tue note. Non si può annullare.' },
+            tasks_create: { title: 'Aggiungi un’attività', description: 'Aggiunge una cosa da fare al tuo elenco su questo dispositivo.' },
+            tasks_complete: { title: 'Segna un’attività come fatta', description: 'Cambia se un’attività è fatta, iniziata o da iniziare.' },
+            tasks_delete: { title: 'Elimina un’attività', description: 'Toglie per sempre una delle tue attività. Non si può annullare.' },
             tasks_list: { title: 'Elenca attività', description: 'Legge le attività con stato e priorità.' },
             memory_search: { title: 'Cerca nella memoria', description: 'Cerca ciò che hai chiesto esplicitamente a TALOS di ricordare.' },
             time_now: { title: 'Data e ora correnti', description: 'Legge data e ora locali dal dispositivo senza indovinarle.' },
