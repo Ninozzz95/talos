@@ -1458,6 +1458,10 @@ export const TALOS_EN_MESSAGES = {
         allProviders: 'Every publisher',
         filterWeight: 'Filter by model size',
         allWeights: 'Any size',
+        transferStarted: 'Downloading {model}…',
+        transferFinished: '{model} is ready.',
+        transferFailed: 'Download of {model} stopped.',
+        transferInstalled: '{model} is on the phone.',
         weight: {
             'fino-1': 'Up to 1 billion',
             '1-4': '1 to 4 billion',
