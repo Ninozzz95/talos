@@ -1604,6 +1604,8 @@ export const TALOS_IT_MESSAGES = {
         storageFree: 'spazio libero',
     },
     notes: {
+        noMatches: 'Nessuna nota corrisponde a questa ricerca.',
+        viewLabel: 'Come si vedono le note',
         // La nota puo' essere stata cancellata altrove, o l'indirizzo copiato a mano.
         itemMissing: 'Questa nota non c’è più.',
         searchPlaceholder: 'Cerca fra le note',

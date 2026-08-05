@@ -188,6 +188,19 @@ export interface TalosMobileShellPreferences {
     image_attachment_consent: 'allow' | 'ask' | 'deny'
     library_view: 'grid' | 'list'
     /**
+     * Le note, in lista o a schede.
+     *
+     * Owner 2026-08-05: «le note sia in lista che in card, delle card come se
+     * fossero dei post, quindi col titolo sopra e la descrizione sotto». Cioè
+     * la stessa coppia che la Libreria ha già — e quindi la stessa
+     * preferenza, con lo stesso nome e lo stesso comportamento, invece di una
+     * seconda idea di «vista» che si comporta quasi uguale.
+     *
+     * Parte da `list` come la Libreria: una nota si riconosce dal testo, e in
+     * lista se ne legge di più a colpo d'occhio.
+     */
+    notes_view: 'grid' | 'list'
+    /**
      * Owner 2026-07-30. Grouping by origin chat was a plain `ref`, so it reset
      * on every visit — debt P6, and the reason a preference the owner set in
      * July never survived a single reopen. It is remembered now, and the sort
@@ -286,6 +299,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     memory_write_access: 'ask',
     image_attachment_consent: 'ask',
     library_view: 'list',
+    notes_view: 'list',
     // Owner 2026-07-25 set grouping on; it just never survived a reopen.
     library_group_by_chat: true,
     library_sort: 'recent',
@@ -346,6 +360,7 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
             ? record.library_access
             : (record.library_context_enabled === true ? 'allow' : DEFAULT_SHELL_PREFERENCES.library_access),
         library_view: record.library_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.library_view,
+        notes_view: record.notes_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.notes_view,
         library_group_by_chat: typeof record.library_group_by_chat === 'boolean'
             ? record.library_group_by_chat
             : DEFAULT_SHELL_PREFERENCES.library_group_by_chat,

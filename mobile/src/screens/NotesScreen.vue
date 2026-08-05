@@ -5,7 +5,9 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { ChevronRight, Search, StickyNote, Plus } from '@lucide/vue'
+import { ChevronRight, LayoutGrid, List, Search, StickyNote, Plus } from '@lucide/vue'
+import TalosMobileNoteTile from '@/components/talos/notes/TalosMobileNoteTile.vue'
+import { useSettingsStore } from '@/stores/settings'
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'vue-router'
 import { useChatController } from '@/stores/chatController'
@@ -14,6 +16,24 @@ import type { TalosLocalNote } from '@/repositories/chatRepository'
 
 const controller = useChatController()
 const { t } = useTalosI18n()
+const settings = useSettingsStore()
+
+/**
+ * Lista o schede, e la scelta si RICORDA.
+ *
+ * Owner 2026-08-05: le note vanno viste «sia in lista che in card». Passa dalla
+ * stessa preferenza della Libreria, con lo stesso nome e lo stesso predefinito,
+ * perche' due idee di «vista» che si comportano quasi uguale sono il modo in cui
+ * due schermate della stessa app iniziano a sembrare due app.
+ *
+ * Ricordata e non tenuta in un `ref`: il precedente e' documentato nel registro
+ * delle viste — la Libreria «non sopravviveva a una riapertura», e nessuno se ne
+ * accorgeva perche' riaprire e ritrovare il predefinito sembra normale.
+ */
+const viewMode = computed({
+    get: () => settings.state.shell.notes_view,
+    set: (value: 'grid' | 'list') => { void settings.setShell({ notes_view: value }) },
+})
 
 const entries = ref<TalosLocalNote[]>([])
 const router = useRouter()
@@ -108,6 +128,39 @@ async function submit(): Promise<void> {
             >
         </label>
 
+        <!-- Le due densita', con la stessa grammatica della Libreria: un
+             radiogroup, non due bottoni indipendenti — sono alternative, e
+             dirlo e' cio' che le rende comprensibili a chi naviga con lo
+             screen reader. -->
+        <div
+            role="radiogroup"
+            :aria-label="t('notes.viewLabel')"
+            class="flex items-center gap-1 self-end rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] p-1"
+        >
+            <button
+                type="button"
+                role="radio"
+                :aria-checked="viewMode === 'list'"
+                :aria-label="t('library.list')"
+                data-testid="talos-notes-view-list"
+                :class="['talos-pressable flex min-h-touch min-w-touch items-center justify-center rounded-full', viewMode === 'list' ? 'bg-[var(--talos-active)] text-[var(--talos-text)]' : 'text-[var(--talos-muted)]']"
+                @click="viewMode = 'list'"
+            >
+                <List class="size-4" aria-hidden="true" />
+            </button>
+            <button
+                type="button"
+                role="radio"
+                :aria-checked="viewMode === 'grid'"
+                :aria-label="t('library.grid')"
+                data-testid="talos-notes-view-grid"
+                :class="['talos-pressable flex min-h-touch min-w-touch items-center justify-center rounded-full', viewMode === 'grid' ? 'bg-[var(--talos-active)] text-[var(--talos-text)]' : 'text-[var(--talos-muted)]']"
+                @click="viewMode = 'grid'"
+            >
+                <LayoutGrid class="size-4" aria-hidden="true" />
+            </button>
+        </div>
+
         <p class="text-xs leading-5 text-[var(--talos-muted)]">
             {{ t('notes.intro') }}
         </p>
@@ -142,10 +195,37 @@ async function submit(): Promise<void> {
 
         <p v-if="error" role="alert" class="text-xs text-[var(--talos-danger,#dc5b5b)]">{{ error }}</p>
 
-        <p v-if="!entries.length" class="py-6 text-center text-sm text-[var(--talos-muted)]">
+        <!-- Due assenze diverse, due frasi diverse.
+             Prima ce n'era una sola e guardava `entries`, cioe' l'elenco NON
+             filtrato: filtrando via tutto si otteneva una schermata vuota senza
+             nemmeno una riga di testo, e chi guardava non poteva sapere se le
+             note fossero finite o se fosse il filtro a nasconderle. La seconda
+             frase dice quale delle due, ed e' l'unica che si puo' annullare. -->
+        <p v-if="!entries.length" data-testid="talos-notes-empty" class="py-6 text-center text-sm text-[var(--talos-muted)]">
             {{ t('notes.empty') }}
         </p>
-<ul v-else class="flex flex-col gap-2">
+        <p v-else-if="!shown.length" data-testid="talos-notes-no-matches" class="py-6 text-center text-sm text-[var(--talos-muted)]">
+            {{ t('notes.noMatches') }}
+        </p>
+        <!-- A schede: la stessa griglia a due colonne della Libreria, cosi'
+             le due superfici si riconoscono come parenti. -->
+        <div
+            v-else-if="viewMode === 'grid'"
+            role="list"
+            data-testid="talos-notes-grid"
+            class="grid grid-cols-2 gap-2"
+        >
+            <TalosMobileNoteTile
+                v-for="note in shown"
+                :key="note.id"
+                :note="note"
+                :updated-label="updatedAt(note.updated_at)"
+                :untrusted-label="t('notes.untrusted')"
+                @open="open(note)"
+            />
+        </div>
+
+        <ul v-else class="flex flex-col gap-2">
             <li
                 v-for="note in shown"
                 :key="note.id"
