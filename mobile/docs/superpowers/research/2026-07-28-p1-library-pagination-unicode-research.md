@@ -4,7 +4,7 @@ Date: 2026-07-28
 
 Subsystem: TALOS mobile local Library retrieval and read-only tools.
 
-Lane: `C:/Users/ninox/Desktop/AVM-lanes/kimi`
+Lane: `<corsia locale>`
 
 Baseline: `0e66f3b27f771e37f43b5b7502307c8ee34f6569`
 

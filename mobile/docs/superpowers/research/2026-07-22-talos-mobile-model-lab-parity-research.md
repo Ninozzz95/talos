@@ -2,7 +2,7 @@
 
 Date: 2026-07-22
 Owner: Codex mobile lane
-Frozen desktop reference: `C:/Users/ninox/Desktop/AVM` at `5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed`
+Frozen desktop reference: `<repo desktop>` at `5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed`
 Status: COMPLETE
 
 ## Local findings

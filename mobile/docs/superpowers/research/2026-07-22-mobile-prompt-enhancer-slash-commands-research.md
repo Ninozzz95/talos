@@ -2,7 +2,7 @@
 
 Date: 2026-07-22
 Owner: Codex mobile lane
-Desktop reference: `C:/Users/ninox/Desktop/AVM` at `5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed` (read-only)
+Desktop reference: `<repo desktop>` at `5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed` (read-only)
 Status: COMPLETE - implementation may proceed through the companion ledger
 
 ## Problem statement

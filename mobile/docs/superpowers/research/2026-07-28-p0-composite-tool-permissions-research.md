@@ -5,7 +5,7 @@ Date: 2026-07-28
 Subsystem: TALOS mobile tool authorization, web-source persistence, and AI
 Defaults permission copy.
 
-Lane: `C:/Users/ninox/Desktop/AVM-lanes/kimi`
+Lane: `<corsia locale>`
 
 Baseline: `0e66f3b27f771e37f43b5b7502307c8ee34f6569`
 

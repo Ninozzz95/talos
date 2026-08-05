@@ -5,7 +5,7 @@ Date: 2026-07-28
 Subsystem: TALOS mobile Library matching across agent retrieval, global Library
 UI, and per-chat media filtering.
 
-Lane: `C:/Users/ninox/Desktop/AVM-lanes/kimi`
+Lane: `<corsia locale>`
 
 Baseline: `0e66f3b27f771e37f43b5b7502307c8ee34f6569`
 
