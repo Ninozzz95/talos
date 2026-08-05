@@ -84,6 +84,8 @@ Route::middleware(['web', EnsureTalosApiAuthenticated::class])->group(function (
         Route::get('/capabilities', TalosCapabilityController::class);
         Route::get('/capability-policies', [TalosCapabilityPolicyController::class, 'index']);
         Route::put('/capability-policies/{capability}', [TalosCapabilityPolicyController::class, 'update']);
+        Route::post('/capability-policies/{capability}/grants', [TalosCapabilityPolicyController::class, 'createGrant']);
+        Route::delete('/capability-policies/grants/{grant}', [TalosCapabilityPolicyController::class, 'revokeGrant']);
         Route::post('/capability-policies/master-enable', [TalosCapabilityPolicyController::class, 'masterEnable']);
         Route::post('/capability-policies/revoke-all', [TalosCapabilityPolicyController::class, 'revokeAll']);
         Route::get('/browser/sessions', [TalosBrowserController::class, 'index']);

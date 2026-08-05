@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-final class TalosCapabilityPolicy extends Model
+final class TalosCapabilityGrant extends Model
 {
     use HasUuids;
 
@@ -19,16 +20,18 @@ final class TalosCapabilityPolicy extends Model
     protected $fillable = [
         'policy_set_id',
         'capability',
+        'tool_id',
         'actions',
-        'decision',
-        'source',
-        'talos_session_id',
+        'scope',
+        'scope_id',
+        'status',
+        'granted_at',
         'expires_at',
+        'risk_acknowledged',
         'last_used_at',
-        'legacy_decision',
-        'legacy_talos_session_id',
-        'legacy_expires_at',
-        'canonicalized_at',
+        'consumed_at',
+        'revoked_at',
+        'legacy_policy_id',
     ];
 
     /** @return BelongsTo<TalosCapabilityPolicySet, $this> */
@@ -37,10 +40,10 @@ final class TalosCapabilityPolicy extends Model
         return $this->belongsTo(TalosCapabilityPolicySet::class, 'policy_set_id');
     }
 
-    /** @return BelongsTo<TalosSession, $this> */
-    public function talosSession(): BelongsTo
+    /** @param Builder<TalosCapabilityGrant> $query */
+    public function scopeActive(Builder $query): Builder
     {
-        return $this->belongsTo(TalosSession::class, 'talos_session_id');
+        return $query->where('status', 'active');
     }
 
     /** @return array<string, string> */
@@ -48,10 +51,12 @@ final class TalosCapabilityPolicy extends Model
     {
         return [
             'actions' => 'array',
+            'granted_at' => 'immutable_datetime',
             'expires_at' => 'immutable_datetime',
+            'risk_acknowledged' => 'boolean',
             'last_used_at' => 'immutable_datetime',
-            'legacy_expires_at' => 'immutable_datetime',
-            'canonicalized_at' => 'immutable_datetime',
+            'consumed_at' => 'immutable_datetime',
+            'revoked_at' => 'immutable_datetime',
         ];
     }
 }
