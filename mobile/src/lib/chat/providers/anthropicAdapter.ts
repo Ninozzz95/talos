@@ -38,6 +38,23 @@ const modelSchema = z.object({
     display_name: z.string().min(1),
     type: z.string().optional(),
     created_at: z.string().optional(),
+    /**
+     * Quanti token di RISPOSTA questo modello regge — dichiarato da lui.
+     *
+     * Era il dato che mancava perché ogni risposta di Claude venisse tagliata a
+     * 4096 token: il client aveva quel numero scritto a mano come ripiego, e
+     * poiché nessuno gli passava mai un valore, il ripiego era diventato la
+     * regola per tutti. Sui modelli attuali il tetto vero sta a 128.000, cioè
+     * trentadue volte tanto — una risposta lunga si interrompeva a metà frase e
+     * sembrava un difetto del modello.
+     *
+     * Facoltativo perché non tutti i gateway compatibili lo dichiarano;
+     * `passthrough` lo lasciava già passare inosservato, che è precisamente il
+     * modo in cui un dato utile resta inutilizzato.
+     */
+    max_tokens: z.number().int().positive().optional(),
+    /** La finestra di contesto, dallo stesso posto e per lo stesso motivo. */
+    max_input_tokens: z.number().int().positive().optional(),
 }).passthrough()
 
 const listSchema = z.object({
@@ -113,6 +130,11 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
                 outputModalities: ['text'],
                 supportedParameters: ['thinking'],
                 createdAt: model.created_at ?? null,
+                // Nello stesso campo che Gemini popola già dal suo
+                // `outputTokenLimit`: un tetto di risposta è la stessa cosa per
+                // ogni fornitore, e tenerlo in un campo per provider sarebbe il
+                // modo di riscoprire questo difetto una volta per fornitore.
+                maxOutputTokens: model.max_tokens ?? null,
             })))
             if (!parsed.data.has_more) return { provider: 'anthropic', models }
             if (!parsed.data.last_id || parsed.data.last_id === afterId) throw malformedProviderResponse('anthropic', 'list_models', { received: response.data, note: 'pagination cursor missing or unchanged' })
@@ -138,6 +160,8 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
                 effort: input.effort,
                 thinking: input.thinking,
                 thinkingMode,
+                // Il tetto che il modello dichiara, non uno scelto da noi.
+                maxTokens: input.model.maxOutputTokens ?? undefined,
                 ...(input.tools?.length ? { tools: talosToolsForAnthropic(input.tools) } : {}),
             })
             return transport.request({
@@ -196,6 +220,8 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             effort: input.effort,
             thinking: input.thinking,
             thinkingMode,
+            // Il tetto che il modello dichiara, non uno scelto da noi.
+            maxTokens: input.model.maxOutputTokens ?? undefined,
             ...(input.tools?.length ? { tools: talosToolsForAnthropic(input.tools) } : {}),
         })
         const toolCalls = createAnthropicToolCallAccumulator()

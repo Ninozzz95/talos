@@ -9,6 +9,7 @@ import type {
 import {
     TalosLocalEngineGenerationError,
     TalosLocalEngineOpenError,
+    type TalosLocalEngineStatus,
     talosLocalEngineChatPlan,
     talosLocalEngineGenerate,
     talosLocalEngineOpen,
@@ -16,6 +17,8 @@ import {
     talosLocalEngineStatus,
     talosLocalInstalledModels,
 } from '@/services/localEngine'
+import { talosMeasureDevice } from '@/services/deviceCapacity'
+import { type TalosModelShape, talosMaxContextFor } from '@/lib/models/fit'
 import {
     TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
     talosLocalEscalatedContextTokens,
@@ -117,10 +120,10 @@ function actionableGenerationFailure(error: TalosLocalEngineGenerationError): Ta
  * another, and asking first avoids paying a reload for a message that is
  * already on the right one.
  */
-async function ensureLoaded(path: string): Promise<void> {
+async function ensureLoaded(path: string): Promise<TalosLocalEngineStatus> {
     const status = await talosLocalEngineStatus()
     if (!status.available) throw new Error('TALOS_LOCAL_ENGINE_UNAVAILABLE')
-    if (status.loadedPath === path) return
+    if (status.loadedPath === path) return status
     try {
         await talosLocalEngineOpenWithFallback(path, {
             contextTokens: TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
@@ -129,13 +132,88 @@ async function ensureLoaded(path: string): Promise<void> {
         if (error instanceof TalosLocalEngineOpenError) throw actionableOpenFailure(error)
         throw error
     }
+    // Richiesto di nuovo perché la risposta di prima descriveva la memoria
+    // com'era: senza modello aperto non c'era nessuna forma da dichiarare.
+    return talosLocalEngineStatus()
+}
+
+/**
+ * Quanto contesto QUESTO dispositivo può onestamente dare a QUESTO modello.
+ *
+ * ## Perché non è più un numero
+ *
+ * Era `8192`, scritto a mano, uguale per tutti — e su un tablet da 12 GB con un
+ * 3B rifiutava conversazioni che il dispositivo reggeva senza fatica. Il calcolo
+ * giusto era già in casa e già provato: `talosMaxContextFor` è la stessa
+ * funzione che disegna la barra di capienza nel centro modelli. Non la chiamava
+ * nessuno da qui.
+ *
+ * Riusarla — invece di scriverne una seconda — è il punto: se la scheda del
+ * modello dice «ci sta fino a 32k» e poi la chat rifiuta a 8k, una delle due sta
+ * mentendo, e non c'è modo di sapere quale finché le aritmetiche sono due.
+ *
+ * ## `null` è un esito, non un guasto
+ *
+ * Se il dispositivo non si lascia misurare, o il motore nativo di questa build
+ * non sa dichiarare la forma, non si inventa un tetto: si lascia rispondere il
+ * motore, che è l'unico ad avere l'ultima parola comunque. Un rifiuto nativo
+ * alla fase `context` resta gestito come sempre.
+ */
+async function localContextCeiling(shape: TalosModelShape | null): Promise<number | null> {
+    if (!shape) return null
+    const device = await talosMeasureDevice()
+    if (!device) return null
+    /**
+     * I pesi vanno RIMESSI nella memoria disponibile, e non è un trucco.
+     *
+     * `talosMaxContextFor` è nata per la domanda che si fa PRIMA di scaricare —
+     * «se caricassi questo modello, quanto contesto mi resterebbe?» — e quindi
+     * sottrae `weightBytes` dalla memoria libera. Qui la domanda arriva DOPO: il
+     * modello è già in memoria, e `availableRamBytes` lo ha già scontato.
+     * Passarla così com'è toglierebbe i pesi due volte.
+     *
+     * Non è un errore da poco: su un 3B da ~1,75 GB sono tre gigabytes e mezzo
+     * sottratti invece di uno e tre quarti, cioè un tetto più basso della metà
+     * del vero — proprio la forma di difetto che stiamo togliendo, riscritta in
+     * un altro punto.
+     *
+     * Sommandoli si ricostruisce la condizione che la funzione si aspetta, e
+     * l'aritmetica resta una sola invece di biforcarsi in una «versione per il
+     * catalogo» e una «versione per la chat» che poi si contraddicono.
+     *
+     * Con mmap una parte dei pesi può non essere residente, quindi la somma può
+     * restituire un pelo più di quanto il sistema stia davvero tenendo. È la
+     * direzione da sorvegliare, ed è esattamente ciò che `SAFETY_MARGIN` e
+     * `SAFE_SHARE` sono lì a coprire: sono politiche nostre, dichiarate, e
+     * questo è il caso per cui esistono.
+     */
+    /**
+     * Zero si restituisce COM'È, e la tentazione era di non farlo.
+     *
+     * `talosMaxContextFor` risponde zero quando per questo modello non resta
+     * memoria nemmeno per un token di cache. Tradurlo in `null` — «non
+     * misurato» — sembrava prudente e faceva l'opposto: toglieva ogni tetto
+     * proprio sul dispositivo che ne aveva più bisogno, e lo mandava a chiedere
+     * al motore un contesto che non poteva reggere. Il rifiuto sarebbe arrivato
+     * lo stesso, ma dopo aver tentato un'allocazione da gigabyte su un telefono
+     * già al limite, cioè col rischio di essere uccisi invece che di ricevere un
+     * no.
+     *
+     * Passato com'è, chi legge lo alza al contesto già aperto e non cresce oltre:
+     * si continua con ciò che c'è, e se il messaggio non ci sta lo si dice.
+     */
+    return talosMaxContextFor(shape, {
+        ...device,
+        availableRamBytes: device.availableRamBytes + shape.weightBytes,
+    })
 }
 
 async function run(
     input: TalosMobileCompletionInput,
     onChunk?: (text: string) => void,
 ): Promise<TalosMobileCompletionResult> {
-    await ensureLoaded(input.model.id)
+    const status = await ensureLoaded(input.model.id)
+    const ceiling = await localContextCeiling(status.shape)
     /**
      * I tool, nella STESSA forma che ricevono i provider di rete.
      *
@@ -156,6 +234,7 @@ async function run(
         plan.contextTokens,
         plan.promptTokens,
         MAX_TOKENS,
+        ceiling,
     )
     if (targetContext === null) throw promptTooLongFailure()
     if (targetContext > plan.contextTokens) {
@@ -172,6 +251,7 @@ async function run(
             plan.contextTokens,
             plan.promptTokens,
             MAX_TOKENS,
+            ceiling,
         )
         if (confirmed === null || confirmed > plan.contextTokens) throw promptTooLongFailure()
     }

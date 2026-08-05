@@ -3,6 +3,7 @@ import {
     talosLocalContextCandidates,
     talosShouldRetryLocalOpen,
 } from '@/lib/models/localContextPolicy'
+import type { TalosModelShape } from '@/lib/models/fit'
 
 /**
  * The on-device engine, from JavaScript's side of the bridge.
@@ -23,6 +24,21 @@ export interface TalosLocalEngineStatus {
     backends: string
     /** The model currently held in memory, or null. */
     loadedPath: string | null
+    /**
+     * La forma del modello caricato, dichiarata da lui — o null.
+     *
+     * È ciò che permette di chiedere a `talosMaxContextFor` quanto contesto
+     * QUESTO dispositivo può dare a QUESTO modello, invece del tetto scritto a
+     * mano che valeva per tutti (owner 2026-08-05: «una cosa scritta a mano non
+     * potrebbe mai esistere»).
+     *
+     * Null in tre casi diversi che qui collassano di proposito in uno: niente
+     * modello aperto, motore assente, oppure una build nativa più vecchia che
+     * non sa rispondere. Per chi legge sono la stessa cosa — «non lo so» — e
+     * l'unica reazione corretta è non imporre nessun tetto invece di inventarne
+     * uno.
+     */
+    shape: TalosModelShape | null
 }
 
 export interface TalosLocalEngineOpenResult {
@@ -66,7 +82,13 @@ export interface TalosLocalEngineChatPlan {
 }
 
 interface TalosLlamaPlugin {
-    available(): Promise<TalosLocalEngineStatus>
+    available(): Promise<{
+        available: boolean
+        backends: string
+        loadedPath: string | null
+        /** Assente sulle build native che non sanno ancora dichiararla. */
+        shape?: Record<string, unknown>
+    }>
     deleteInstalled(options: { path: string }): Promise<{ deleted: boolean }>
     open(options: {
         path: string
@@ -247,9 +269,59 @@ function generationErrorOf(error: unknown): TalosLocalEngineGenerationError {
  */
 export async function talosLocalEngineStatus(): Promise<TalosLocalEngineStatus> {
     try {
-        return await plugin.available()
+        const status = await plugin.available()
+        return {
+            available: status.available,
+            backends: status.backends,
+            loadedPath: status.loadedPath,
+            shape: talosModelShapeOf(status.shape),
+        }
     } catch {
-        return { available: false, backends: '', loadedPath: null }
+        return { available: false, backends: '', loadedPath: null, shape: null }
+    }
+}
+
+/** Positivo e finito, o niente. Zero e NaN non sono misure. */
+function positiveOf(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+/**
+ * La forma dichiarata dal motore, accettata solo se completa.
+ *
+ * Tutto o niente, deliberatamente: un solo campo mancante e il calcolo del
+ * tetto darebbe un numero comunque: `headDim` assente lo manderebbe all'infinito,
+ * `weightBytes` assente lo alzerebbe di quanto pesa il modello. Un tetto
+ * sbagliato è peggio di nessun tetto, perché nessun tetto lascia rispondere il
+ * dispositivo mentre uno sbagliato risponde al suo posto.
+ *
+ * Esportata perché è il confine dove un oggetto arrivato dal ponte diventa una
+ * misura, e quel confine merita una prova sua.
+ */
+export function talosModelShapeOf(raw: unknown): TalosModelShape | null {
+    if (raw === null || typeof raw !== 'object') return null
+    const record = raw as Record<string, unknown>
+    const layers = positiveOf(record.layers)
+    const kvHeads = positiveOf(record.kvHeads)
+    const headDim = positiveOf(record.headDim)
+    const trainedContext = positiveOf(record.trainedContext)
+    const weightBytes = positiveOf(record.weightBytes)
+    if (
+        layers === null || kvHeads === null || headDim === null
+        || trainedContext === null || weightBytes === null
+    ) return null
+    return {
+        layers,
+        kvHeads,
+        headDim,
+        trainedContext,
+        weightBytes,
+        // La NOSTRA scelta di esecuzione, non un fatto del modello: llama.cpp
+        // tiene la cache in f16 se non gli si chiede altro, e TALOS non gliela
+        // chiede. Sta scritta qui, con il perché, invece di arrivare dal ponte
+        // come se il file la dichiarasse — è la stessa assunzione che fa il
+        // lettore GGUF, e devono restare la stessa.
+        kvBytesPerElement: 2,
     }
 }
 

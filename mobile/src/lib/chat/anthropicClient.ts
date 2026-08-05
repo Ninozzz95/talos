@@ -13,7 +13,25 @@ import { CapacitorHttp } from '@capacitor/core'
 
 export const ANTHROPIC_MESSAGES_URL = 'https://api.anthropic.com/v1/messages'
 export const ANTHROPIC_VERSION = '2023-06-01'
-const DEFAULT_MAX_TOKENS = 4096
+/**
+ * Il pavimento di quando il modello NON dichiara un tetto — non il tetto.
+ *
+ * Era `DEFAULT_MAX_TOKENS = 4096` e nessuno passava mai un valore, quindi il
+ * ripiego era il tetto di ogni risposta di Claude. I modelli attuali ne reggono
+ * 128.000: una risposta lunga si fermava a un trentaduesimo di quel che poteva,
+ * a metà frase, e sembrava un difetto del modello invece che nostro. Il numero
+ * lo dichiara `GET /v1/models` nel campo `max_tokens`, e adesso il catalogo lo
+ * legge e lo porta fin qui.
+ *
+ * Resta un pavimento perché un gateway compatibile può non dichiarare niente, e
+ * `max_tokens` è obbligatorio nella richiesta: senza un numero non si può
+ * chiedere. Questo è dunque una politica nostra, e vale la regola delle
+ * politiche — sta scritto perché: 4096 è abbastanza per una risposta intera in
+ * quasi ogni caso, e sbagliare per difetto qui costa una risposta troncata,
+ * mentre sbagliare per eccesso su un modello che non li regge costa un 400 su
+ * ogni messaggio.
+ */
+const FALLBACK_MAX_TOKENS = 4096
 
 // effort level -> extended-thinking budget tokens (local map).
 const THINKING_BUDGET: Readonly<Record<string, number>> = Object.freeze({
@@ -167,7 +185,19 @@ export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicReque
     // is no budget to leave room for, and inflating max_tokens would quietly
     // raise the ceiling on every answer.
     const budgeted = useThinking && (input.thinkingMode ?? 'adaptive') === 'enabled'
-    const maxTokens = Math.max(input.maxTokens ?? DEFAULT_MAX_TOKENS, budgeted ? budget + 2048 : 0)
+    /**
+     * Il tetto dichiarato dal modello, e il ragionamento non lo sfonda.
+     *
+     * `Math.max` alza `max_tokens` per far spazio al budget di ragionamento, ed
+     * era giusto finché il primo termine era un ripiego basso. Adesso il primo
+     * termine può essere il tetto VERO del modello, e alzarlo oltre produrrebbe
+     * un 400 su ogni messaggio — quindi il risultato torna sotto il dichiarato
+     * quando c'è. Un ragionamento che non ci sta dentro il tetto del modello è
+     * un vincolo del modello, non qualcosa da negoziare da qui.
+     */
+    const declared = input.maxTokens ?? null
+    const wanted = Math.max(declared ?? FALLBACK_MAX_TOKENS, budgeted ? budget + 2048 : 0)
+    const maxTokens = declared === null ? wanted : Math.min(wanted, declared)
 
     const body: Record<string, unknown> = {
         model: input.model,

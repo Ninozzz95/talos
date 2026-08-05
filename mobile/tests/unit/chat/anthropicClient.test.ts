@@ -193,3 +193,59 @@ describe('extended thinking alongside tools', () => {
         })
     })
 })
+
+/**
+ * C45-RED-19E — il tetto di risposta lo dichiara il modello.
+ *
+ * `DEFAULT_MAX_TOKENS = 4096` era un numero scritto a mano, e poiché nessun
+ * adattatore passava mai `maxTokens` era diventato il tetto di OGNI risposta di
+ * Claude — un trentaduesimo di quello che i modelli attuali reggono. Le risposte
+ * lunghe si fermavano a metà frase e sembrava un limite del modello.
+ */
+describe('C45-RED-19E declared output ceiling', () => {
+    const turns = [{ role: 'user' as const, content: 'Scrivi un saggio lungo.' }]
+
+    it('asks for what the model declares, not the local fallback', () => {
+        const request = buildAnthropicRequest('k', {
+            model: 'claude-opus-5',
+            turns,
+            maxTokens: 128000,
+        })
+        expect(request.body.max_tokens).toBe(128000)
+    })
+
+    it('falls back only when nothing was declared', () => {
+        const request = buildAnthropicRequest('k', { model: 'claude-opus-5', turns })
+        expect(request.body.max_tokens).toBe(4096)
+    })
+
+    /**
+     * Il pezzo che senza prova si romperebbe in silenzio: lo spazio per il
+     * ragionamento alzava `max_tokens` con un `Math.max`, e su un modello che
+     * dichiara poco quello diventerebbe una richiesta oltre il suo limite —
+     * cioè un 400 a ogni messaggio invece di una risposta più corta.
+     */
+    it('never asks above the declared ceiling to make room for thinking', () => {
+        const request = buildAnthropicRequest('k', {
+            model: 'claude-haiku-4-5',
+            turns,
+            maxTokens: 8192,
+            thinking: true,
+            thinkingMode: 'enabled',
+            effort: 'high',
+        })
+        expect(request.body.max_tokens as number).toBeLessThanOrEqual(8192)
+    })
+
+    it('still reserves thinking headroom when the model declares plenty', () => {
+        const request = buildAnthropicRequest('k', {
+            model: 'claude-opus-5',
+            turns,
+            maxTokens: 128000,
+            thinking: true,
+            thinkingMode: 'enabled',
+            effort: 'high',
+        })
+        expect(request.body.max_tokens as number).toBeGreaterThan(4096)
+    })
+})

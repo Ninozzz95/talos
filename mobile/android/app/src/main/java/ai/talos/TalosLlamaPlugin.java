@@ -69,7 +69,47 @@ public class TalosLlamaPlugin extends Plugin {
         // nothing here concludes anything from them — that is the arbiter's job.
         result.put("backends", TalosLlamaEngine.backends(getContext()));
         result.put("loadedPath", openPath.get());
+        /**
+         * La forma del modello caricato viaggia con lo STATO, non su una porta
+         * sua.
+         *
+         * Perché è la stessa domanda: «cosa c'è in memoria adesso». Chi manda un
+         * messaggio interroga già lo stato per sapere se deve ricaricare, quindi
+         * la forma arriva senza un secondo passaggio sul ponte — e soprattutto
+         * arriva anche quando il modello era GIÀ aperto, che è il caso in cui una
+         * risposta legata al solo `open` non ci sarebbe mai.
+         */
+        JSObject shape = shapeOf(openEngine.get());
+        if (shape != null) result.put("shape", shape);
         call.resolve(result);
+    }
+
+    /**
+     * Traduce la forma nativa in campi con un nome, o null se non è misurabile.
+     *
+     * Un array di cinque numeri attraversa JNI a costo quasi nullo ma sarebbe
+     * illeggibile qui: al di là di questo confine ogni valore ha un nome, così
+     * uno scambio fra `kvHeads` e `headDim` diventa un errore che si vede invece
+     * di un tetto di contesto sbagliato di un fattore.
+     *
+     * Ogni misura non plausibile fa scartare l'intera forma. Metà forma sarebbe
+     * peggio di nessuna: chi legge la userebbe per un calcolo, e un `headDim` a
+     * zero è esattamente il valore che trasformerebbe il tetto in infinito.
+     */
+    private static JSObject shapeOf(TalosLlamaEngine engine) {
+        if (engine == null) return null;
+        long[] values = engine.modelShape();
+        if (values == null || values.length < 5) return null;
+        for (long value : values) {
+            if (value <= 0L) return null;
+        }
+        JSObject shape = new JSObject();
+        shape.put("layers", values[0]);
+        shape.put("kvHeads", values[1]);
+        shape.put("headDim", values[2]);
+        shape.put("trainedContext", values[3]);
+        shape.put("weightBytes", values[4]);
+        return shape;
     }
 
     /**

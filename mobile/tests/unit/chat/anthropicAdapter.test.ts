@@ -116,3 +116,67 @@ describe('Anthropic mobile adapter', () => {
         }))
     })
 })
+
+/**
+ * C45-RED-19E — il tetto di risposta viaggia dal catalogo alla richiesta.
+ *
+ * È il pezzo che mancava davvero: il client aveva un ripiego a 4096 e
+ * l'adattatore non gli passava MAI un tetto, quindi il ripiego valeva per ogni
+ * risposta di Claude. `GET /v1/models` dichiara `max_tokens` dal marzo 2026 e lo
+ * schema lo lasciava passare inosservato.
+ */
+describe('C45-RED-19E declared output ceiling flows from catalogue to request', () => {
+    it('reads max_tokens off the model list', async () => {
+        const { transport } = transportWith({
+            status: 200,
+            data: {
+                data: [{
+                    id: 'claude-opus-5',
+                    display_name: 'Claude Opus 5',
+                    max_tokens: 128000,
+                    max_input_tokens: 1000000,
+                }],
+                has_more: false,
+                last_id: 'claude-opus-5',
+            },
+        })
+
+        const catalog = await anthropicAdapter.listModels({ apiKey: 'k', endpoint: null }, transport)
+
+        expect(catalog.models[0]).toMatchObject({ maxOutputTokens: 128000 })
+    })
+
+    it('says «not declared» rather than inventing one', async () => {
+        const { transport } = transportWith({
+            status: 200,
+            data: {
+                data: [{ id: 'claude-legacy', display_name: 'Legacy' }],
+                has_more: false,
+                last_id: 'claude-legacy',
+            },
+        })
+
+        const catalog = await anthropicAdapter.listModels({ apiKey: 'k', endpoint: null }, transport)
+
+        expect(catalog.models[0].maxOutputTokens).toBeNull()
+    })
+
+    it('asks the API for the declared ceiling instead of the local fallback', async () => {
+        const { request, transport } = transportWith({
+            status: 200,
+            data: { model: 'claude-opus-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }] },
+        })
+
+        await anthropicAdapter.complete({
+            model: {
+                id: 'claude-opus-5', provider: 'anthropic', displayName: 'Claude Opus 5',
+                chatCompatibility: 'supported', inputModalities: ['text'],
+                outputModalities: ['text'], supportedParameters: [],
+                maxOutputTokens: 128000,
+            },
+            turns: [{ role: 'user', content: 'Scrivi a lungo.' }],
+        } as never, { apiKey: 'k', endpoint: null }, transport)
+
+        expect(request.mock.calls[0][0].data.max_tokens).toBe(128000)
+    })
+})
