@@ -50,6 +50,7 @@ import {
     talosOnModelImportProgress,
     talosPickModelFromDevice,
 } from '@/services/modelImport'
+import { talosAnnounceLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
 import type { TalosCatalogueRecommendation } from '@/lib/models/catalogue'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
 import TalosMobileLocalModelRow from '@/components/talos/models/TalosMobileLocalModelRow.vue'
@@ -177,6 +178,9 @@ async function confirmDelete(): Promise<void> {
         await settings.setShell({ local_model_aliases: aliases })
         deleteTarget.value = null
         await loadInstalled()
+        // Sparire vale quanto comparire: un modello cancellato che resta nel
+        // selettore della chat e' un'opzione che, scelta, non si apre.
+        talosAnnounceLocalCatalogueChange('deleted')
     } catch (failure) {
         crudError.value = failure instanceof Error ? failure.message : String(failure)
         deleteTarget.value = null
@@ -282,6 +286,7 @@ async function importFromDevice(): Promise<void> {
         // behind: the person changed their mind, which is allowed.
         if (picked.imported) {
             await loadInstalled()
+            talosAnnounceLocalCatalogueChange('imported')
             /*
              * Il terzo momento chiesto dall'owner, dopo inizio e fine del
              * download: l'INSTALLAZIONE. Qui il modello non arriva dalla rete —

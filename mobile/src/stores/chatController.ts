@@ -311,6 +311,7 @@ const unavailableFilePicker: TalosNativeFilePicker = {
     pickFiles: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
 }
 
+import { talosOnLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
 import { chooseTalosImageProvider } from '@/lib/images/imageProviderSelection'
 import type { TalosImageModelCandidate, TalosImageProvider } from '@/lib/images/imageGateway'
 
@@ -815,6 +816,16 @@ export interface ChatController {
     init(): Promise<void>
     refreshSecrets(): Promise<void>
     refreshProvider(provider: TalosMobileProviderId): Promise<TalosMobileProviderCatalog | null>
+    /**
+     * Scollega il controller dai segnali dell'app.
+     *
+     * Serve perché l'iscrizione al segnale «il disco dei modelli è cambiato»
+     * vive quanto il controller, e un controller sostituito senza scollegarsi
+     * lascerebbe dietro un ascoltatore che rilegge il catalogo di uno store
+     * ormai morto. In produzione il controller è uno solo e non muore mai; nei
+     * test se ne costruiscono molti, ed è lì che la differenza si vede.
+     */
+    dispose(): void
     refreshConfiguredProviders(): Promise<void>
     probeProvider(provider: TalosMobileProviderId): Promise<TalosMobileProviderProbeResult>
     probeModel(profileId: string): Promise<TalosMobileModelProbeRecord>
@@ -3676,6 +3687,28 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         }
     }
 
+    /**
+     * Il disco è cambiato: il selettore lo scopre da solo.
+     *
+     * Owner 2026-08-05: «bisogna caricare immediatamente i modelli locali nel
+     * composer appena vengono scaricati e installati, senza premere il pulsante
+     * refresh». Il pulsante resta — un elenco letto dal disco può cambiare anche
+     * per ragioni che nessuno annuncia — ma smette di essere l'unica strada.
+     *
+     * Si rilegge **solo il fornitore locale**. Un giro su tutti i fornitori
+     * costerebbe una chiamata di rete a ciascuno per una notizia che riguarda
+     * una cartella, e su una connessione lenta un download finito diventerebbe
+     * una pausa nell'interfaccia.
+     *
+     * L'errore si ignora perché `refreshProvider` tiene già il proprio stato di
+     * guasto, che la schermata dei modelli mostra: risollevarlo qui sostituirebbe
+     * un messaggio utile con un'eccezione dentro un ascoltatore che nessuno
+     * attende.
+     */
+    const releaseLocalCatalogueSignal = talosOnLocalCatalogueChange(() => {
+        void refreshProvider('local').catch(() => {})
+    })
+
     async function performInit(): Promise<void> {
         try {
             await deps.settings.hydrate()
@@ -5132,6 +5165,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         init,
         refreshSecrets,
         refreshProvider,
+        dispose: releaseLocalCatalogueSignal,
         refreshConfiguredProviders,
         probeProvider,
         probeModel,
@@ -5177,5 +5211,9 @@ export function useChatController(): ChatController {
 }
 
 export function __resetChatControllerForTests(): void {
+    // Prima scollegare, poi dimenticare: al contrario l'ascoltatore resterebbe
+    // agganciato a uno store che nessuno può più raggiungere, e il caso
+    // successivo lo vedrebbe reagire al posto del proprio.
+    singleton?.dispose()
     singleton = null
 }

@@ -170,3 +170,47 @@ describe('managed transfer actions', () => {
         expect(bridge.start).not.toHaveBeenCalled()
     })
 })
+
+/**
+ * C45-RED-19F — un download finito è un modello in più SUL DISCO.
+ *
+ * Owner 2026-08-05: il modello scaricato non compariva nel composer finché non
+ * si premeva «aggiorna». La notizia esisteva già e serviva solo a fare un
+ * toast; questa prova guarda che serva anche a chi mostra i modelli.
+ *
+ * Sta qui e non accanto alla funzione pura perché il difetto stava nella
+ * cucitura — esattamente come l'avviso di partenza, che i test unitari non
+ * potevano vedere.
+ */
+describe('C45-RED-19F a finished transfer tells the model surfaces', () => {
+    it('announces that the local catalogue changed', async () => {
+        const store = await import('@/stores/modelTransfers')
+        const signal = await import('@/lib/models/localCatalogueSignal')
+        await store.talosRefreshModelTransfer()
+
+        const heard: string[] = []
+        const release = signal.talosOnLocalCatalogueChange((reason) => { heard.push(reason) })
+
+        const previous = await bridge.status.mock.results[0]!.value
+        // Prima arriva in fondo: una riga sparita conta come «finita» solo se
+        // aveva scaricato tutto. Sparire a metà è un'altra storia — e tacerla è
+        // deliberato, non un caso dimenticato.
+        bridge.status.mockResolvedValue({
+            ...previous,
+            items: previous.items.map((item: { id: string; totalBytes: number }) => (
+                item.id === 'transfer-a' ? { ...item, haveBytes: item.totalBytes } : item
+            )),
+        })
+        await store.talosRefreshModelTransfer()
+
+        // Poi sparisce, senza essere stata annullata.
+        bridge.status.mockResolvedValue({
+            ...previous,
+            items: previous.items.filter((item: { id: string }) => item.id !== 'transfer-a'),
+        })
+        await store.talosRefreshModelTransfer()
+        release()
+
+        expect(heard).toContain('transfer-finished')
+    })
+})

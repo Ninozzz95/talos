@@ -14,6 +14,7 @@ import {
     talosTransferNotices,
     type TalosTransferNotice,
 } from '@/lib/models/transferNotices'
+import { talosAnnounceLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
 import { talosT } from '@/i18n'
 import { useTalosMobileToasts } from '@/stores/toasts'
 
@@ -84,7 +85,25 @@ function announce(prima: readonly TalosTransferItem[], dopo: readonly TalosTrans
         const vivi = new Set(dopo.map((item) => item.id))
         for (const id of [...annullati]) if (!vivi.has(id)) annullati.delete(id)
     }
-    for (const avviso of avvisi) (emitTransferNotice ?? pushToast)(avviso)
+    for (const avviso of avvisi) {
+        (emitTransferNotice ?? pushToast)(avviso)
+        /*
+         * Un download finito e' un modello IN PIU' SUL DISCO, e chi mostra i
+         * modelli deve saperlo senza che glielo si chieda.
+         *
+         * Owner 2026-08-05: il modello scaricato non compariva nel composer
+         * finche' non si premeva «aggiorna». La notizia c'era gia' — e' questa —
+         * e serviva solo a fare un toast. Il fatto che il disco sia cambiato
+         * pero' non riguarda solo chi guarda i trasferimenti.
+         *
+         * Annunciato QUI e non da chi ascolta i toast: un toast si puo'
+         * sostituire, mentre l'aggiornamento del catalogo non e' una questione
+         * di presentazione.
+         */
+        if (avviso.kind === 'finished') {
+            talosAnnounceLocalCatalogueChange('transfer-finished')
+        }
+    }
 }
 
 /**
