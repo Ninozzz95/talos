@@ -4,6 +4,7 @@ import type {
     CreateFileAuthorityGrantInput,
     CreateMemoryInput,
     CreateNoteInput,
+    UpdateNoteInput,
     CreateTaskInput,
     CreateVaultFileInput,
     CreateToolActivityInput,
@@ -175,6 +176,9 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         },
         async deleteResearchRun(runId: string) {
             return (await ready()).deleteResearchRun(runId)
+        },
+        async updateNote(input: UpdateNoteInput) {
+            return (await ready()).updateNote(input)
         },
         async deleteNote(noteId: string) {
             return (await ready()).deleteNote(noteId)

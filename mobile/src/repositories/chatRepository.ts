@@ -291,6 +291,26 @@ export interface CreateNoteInput {
     created_at: string
 }
 
+/**
+ * Cosa cambiare di una nota, e cosa lasciare com'è.
+ *
+ * I due campi sono facoltativi **separatamente** perché correggere il titolo di
+ * un appunto lungo e riscriverne il corpo sono due gesti diversi. Con un solo
+ * oggetto obbligatorio chi voleva cambiare il titolo avrebbe dovuto rimandare
+ * indietro tutto il testo — e chiunque lo dimenticasse avrebbe svuotato la nota
+ * senza volerlo. Il tool della chat è esattamente il chiamante che lo
+ * dimenticherebbe.
+ *
+ * `updated_at` non sta qui: lo mette il deposito. Una data di modifica decisa da
+ * chi scrive è una data che si può falsificare, e l'ordinamento della lista si
+ * regge su quella.
+ */
+export interface UpdateNoteInput {
+    id: string
+    title?: string
+    content?: string
+}
+
 
 /**
  * One entry of a research run's journal, as it sits on disk.
@@ -403,6 +423,19 @@ export interface TalosChatRepository {
     deleteTask(taskId: string): Promise<void>
     createNote(input: CreateNoteInput): Promise<TalosLocalNote>
     listNotes(): Promise<TalosLocalNote[]>
+    /**
+     * Corregge una nota che esiste già.
+     *
+     * Mancava del tutto: una nota si poteva creare e cancellare, mai
+     * modificare. L'entità portava `updated_at` fin dall'inizio e nessuno lo
+     * muoveva mai — un campo che raccontava una storia che non poteva accadere.
+     * Chi si accorgeva di un refuso doveva cancellare e riscrivere, cioè perdere
+     * la data di creazione e l'identità della nota.
+     *
+     * Solleva `TALOS_NOTE_NOT_FOUND` se non c'è: silenziare l'assenza
+     * trasformerebbe una modifica persa in un successo apparente.
+     */
+    updateNote(input: UpdateNoteInput): Promise<TalosLocalNote>
     /**
      * Appends one entry to a run's journal, or refuses.
      *

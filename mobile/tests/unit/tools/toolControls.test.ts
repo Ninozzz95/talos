@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import {
     createTalosReadTools,
 } from '@/lib/tools/readTools'
+import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
 import { createTalosWebTools } from '@/lib/search/webTools'
 import { createTalosDocumentTools } from '@/lib/documents/documentTools'
 import { createTalosImageTools } from '@/lib/images/imageTools'
@@ -33,6 +34,14 @@ function everyExecutableTool() {
             listTasks: vi.fn(async () => []),
             searchMemories: vi.fn(async () => []),
             now: () => '2026-07-28T00:00:00.000Z',
+        }),
+        // Le note in SCRITTURA: la seconda porta che mancava. Stanno qui
+        // subito dopo i tool di lettura perche' questo elenco e' ordinato, e
+        // l'ordine e' cio' che il catalogo deve rispecchiare.
+        ...createTalosNotesWriteTools({
+            create: vi.fn(async () => ({ id: 'n1', title: 'x' })),
+            update: vi.fn(async () => ({ id: 'n1', title: 'x' })),
+            remove: vi.fn(async () => {}),
         }),
         ...createTalosWebTools({
             search: vi.fn(async () => []),
@@ -104,7 +113,7 @@ describe('Agent Tools control registry', () => {
         expect(parsed.web_search).toBe(true)
         expect(parsed).not.toHaveProperty('future_shell')
         expect(parsed.library_context_policy_update).toBe(false)
-        expect(Object.keys(parsed)).toHaveLength(20)
+        expect(Object.keys(parsed)).toHaveLength(23)
         expect(isTalosAgentToolEnabled('library_search', parsed)).toBe(false)
         expect(isTalosAgentToolEnabled('future_shell', parsed)).toBe(false)
     })
@@ -128,11 +137,12 @@ describe('Agent Tools control registry', () => {
         const digestOf = (value: unknown): string =>
             createHash('sha256').update(JSON.stringify(value)).digest('hex')
 
-        const controlPlane = tools.map((tool) => ({
+        const controlPlaneOf = (list: typeof tools) => list.map((tool) => ({
             name: tool.name,
             title: tool.title,
             actions: talosToolRequiredActions(tool),
         }))
+        const controlPlane = controlPlaneOf(tools)
 
         /**
          * Re-pinned 2026-07-31, twice: first for `library_file_origin`, then
@@ -144,8 +154,27 @@ describe('Agent Tools control registry', () => {
          * pre-existing contracts moved — which is the only question this guard
          * exists to answer, and the reason the four are pinned separately.
          */
-        expect(digestOf(controlPlane))
+        /**
+         * Ri-fissati 2026-08-05 per i tre tool di SCRITTURA delle note —
+         * `notes_create`, `notes_update`, `notes_delete` — la seconda porta che
+         * mancava alla funzione (owner: «devono avere i propri tool di lettura e
+         * scrittura da chat»).
+         *
+         * **Dimostrato, non assunto**, come le due volte precedenti: togliendo i
+         * tre nuovi si riproducono TUTTI E SETTE i digest precedenti byte per
+         * byte. Cioè nessun contratto preesistente si è mosso, che è l'unica
+         * domanda a cui questa guardia serve a rispondere. La prova è qui sotto
+         * e resta eseguibile: se un giorno un tool vecchio cambiasse insieme a
+         * uno nuovo, sarebbe questo blocco a cadere, non quello in fondo.
+         */
+        const withoutNotesWrite = tools.filter((tool) => ![
+            'notes_create', 'notes_update', 'notes_delete',
+        ].includes(tool.name))
+        expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('294015f453d5a35d76e67d812e2327b59075c2af373c60054e88a930c2245880')
+
+        expect(digestOf(controlPlane))
+            .toBe('037e5d08bf218dde33b644424759943689f7fa29475758fe189419a75227d168')
         /**
          * Re-pinned 2026-08-01 for the three DIALECT digests only — the control
          * plane above did not move, which is the proof that nothing structural
@@ -190,7 +219,7 @@ describe('Agent Tools control registry', () => {
         const previousDownloadDescription = 'Start downloading one model file set onto this device. Call '
             + 'local_model_inspect first and tell the user what it will cost them in space and '
             + 'data before asking. Only one download runs at a time.'
-        const beforeDescriptionUpdate = tools.map((tool) => (
+        const beforeDescriptionUpdate = withoutNotesWrite.map((tool) => (
             tool.name === 'local_model_download'
                 ? { ...tool, description: previousDownloadDescription }
                 : tool
@@ -202,11 +231,20 @@ describe('Agent Tools control registry', () => {
         expect(digestOf(talosToolsForGemini(beforeDescriptionUpdate as never)))
             .toBe('2eb5fb9cf0724f880168279e9bdf480f7b3547d441b68726b2f773ccf32afd42')
 
-        expect(digestOf(talosToolsForAnthropic(tools as never)))
+        // Gli stessi tre dialetti SENZA i tool nuovi: identici a ieri.
+        expect(digestOf(talosToolsForAnthropic(withoutNotesWrite as never)))
             .toBe('a72503f2203b69edd23eabe7276758b40f46c962dda3f9a8aba5dc8f64ace484')
-        expect(digestOf(talosToolsForOpenAi(tools as never)))
+        expect(digestOf(talosToolsForOpenAi(withoutNotesWrite as never)))
             .toBe('d807f211a9c254e92dfa032dd1ea11e8d6fa76d12ac2b24217d80dab3bbfeef7')
-        expect(digestOf(talosToolsForGemini(tools as never)))
+        expect(digestOf(talosToolsForGemini(withoutNotesWrite as never)))
             .toBe('6aefb2a14ee5479f7459d789e5427cdbf6b83e9cdd25c9d3f15e99589a46a157')
+
+        // E con i tre nuovi dentro: il contratto pubblico di oggi.
+        expect(digestOf(talosToolsForAnthropic(tools as never)))
+            .toBe('25aa10892aa1e31dd112b33890543e93478742d2f2646787203e3f34e5f331eb')
+        expect(digestOf(talosToolsForOpenAi(tools as never)))
+            .toBe('31800cc0cdda8ae6bd8daa527763499cd779bc098791bb0acc29f6240a6b5042')
+        expect(digestOf(talosToolsForGemini(tools as never)))
+            .toBe('3acc019ed182ba8c752d1ca0fd67ddc2333d47ecea1bb0a5c3be822aaeff6b5b')
     })
 })
