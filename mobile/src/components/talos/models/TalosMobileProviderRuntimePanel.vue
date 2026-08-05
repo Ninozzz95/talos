@@ -121,7 +121,7 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
                 type="button"
                 :aria-expanded="isExpanded(provider.id)"
                 :aria-controls="`provider-${provider.id}-body`"
-                class="talos-pressable flex min-h-[var(--talos-touch-target)] w-full min-w-0 items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] p-[var(--talos-space-card)] text-left"
+                class="talos-pressable flex min-h-touch w-full min-w-0 items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] p-[var(--talos-space-card)] text-left"
                 @click="toggleProvider(provider.id)"
             >
                 <TalosMobileProviderIcon :provider="provider.id" class="size-[calc(var(--talos-icon-size)*1.75)] shrink-0" />
@@ -191,13 +191,13 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
             </div>
 
             <div class="mt-[var(--talos-space-section)] flex flex-wrap items-center gap-[var(--talos-space-inline)]">
-                <button type="button" :aria-label="$t('models.saveRuntimeOptions', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-[var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-xs font-semibold text-[var(--talos-accent-text)] disabled:opacity-50" @click="saveRuntime(provider.id)">
+                <button type="button" :aria-label="$t('models.saveRuntimeOptions', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-touch items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-xs font-semibold text-[var(--talos-accent-text)] disabled:opacity-50" @click="saveRuntime(provider.id)">
                     <KeyRound class="size-[var(--talos-icon-size)]" aria-hidden="true" /> {{ $t('models.saveRuntime') }}
                 </button>
-                <button type="button" :aria-label="$t('models.refreshProvider', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-[var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs font-semibold text-[var(--talos-text)] disabled:opacity-50" @click="run(provider.id, () => controller.refreshProvider(provider.id))">
+                <button type="button" :aria-label="$t('models.refreshProvider', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-touch items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs font-semibold text-[var(--talos-text)] disabled:opacity-50" @click="run(provider.id, () => controller.refreshProvider(provider.id))">
                     <RefreshCw class="size-[var(--talos-icon-size)]" aria-hidden="true" /> {{ $t('chat.refresh') }}
                 </button>
-                <button v-if="endpointProviders.has(provider.id) && controller.endpoints[provider.id]" type="button" :aria-label="$t('models.resetProviderEndpoint', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-[var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] px-[var(--talos-space-inline)] text-xs font-medium text-[var(--talos-muted)] disabled:opacity-50" @click="resetEndpoint(provider.id)">
+                <button v-if="endpointProviders.has(provider.id) && controller.endpoints[provider.id]" type="button" :aria-label="$t('models.resetProviderEndpoint', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-touch items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] px-[var(--talos-space-inline)] text-xs font-medium text-[var(--talos-muted)] disabled:opacity-50" @click="resetEndpoint(provider.id)">
                     <RotateCcw class="size-[var(--talos-icon-size)]" aria-hidden="true" /> {{ $t('models.resetEndpoint') }}
                 </button>
             </div>

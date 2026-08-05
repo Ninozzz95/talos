@@ -18,8 +18,30 @@
  * stringhe. Nessuno riscrive il binario a mano.
  */
 
-/** Il binario. Va su un `SwitchRoot` (o sull'elemento che lo rappresenta). */
-export const TALOS_SWITCH_TRACK_CLASS = 'relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border border-[var(--talos-border)] bg-[var(--talos-input)] transition-colors outline-none data-[state=checked]:border-[var(--talos-accent)] data-[state=checked]:bg-[var(--talos-accent)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--talos-panel)] disabled:cursor-not-allowed disabled:opacity-50 forced-colors:border-[ButtonBorder]'
+/**
+ * Il binario. Va su un `SwitchRoot` (o sull'elemento che lo rappresenta).
+ *
+ * ## Il disegno e' 24×44, il BERSAGLIO e' 48×48
+ *
+ * MISURATO sul tablet il 2026-08-05: tre interruttori nelle Impostazioni erano
+ * 44×24 reali, sotto il minimo Android di 48dp — e a differenza delle caselle,
+ * che stanno dentro una `label` da 408×48 e quindi erano gia' a norma, questi
+ * non avevano niente attorno.
+ *
+ * Ingrandire il binario era la correzione sbagliata: 24×44 **e'** l'aspetto
+ * giusto di un interruttore, e un interruttore quadrato da 48 sembrerebbe
+ * rotto. Quello che deve crescere e' l'area che raccoglie il dito.
+ *
+ * Percio' un pseudo-elemento centrato: invisibile, fuori dal flusso — quindi
+ * non sposta nulla — e grande quanto il token. E' la tecnica che Material
+ * indica proprio per i controlli il cui disegno e' piu' piccolo del bersaglio.
+ *
+ * ⚠️ **Non si misura con `getBoundingClientRect()`**: quello ignora gli
+ * pseudo-elementi e continuerebbe a riportare 44×24. Si misura con
+ * `elementFromPoint()` sugli angoli del quadrato da 48 — cioe' chiedendo al
+ * browser cosa colpirebbe davvero un dito.
+ */
+export const TALOS_SWITCH_TRACK_CLASS = 'relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border border-[var(--talos-border)] bg-[var(--talos-input)] transition-colors outline-none before:absolute before:left-1/2 before:top-1/2 before:h-touch before:w-touch before:-translate-x-1/2 before:-translate-y-1/2 before:content-[""] data-[state=checked]:border-[var(--talos-accent)] data-[state=checked]:bg-[var(--talos-accent)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--talos-panel)] disabled:cursor-not-allowed disabled:opacity-50 forced-colors:border-[ButtonBorder]'
 
 /**
  * Il pomello.

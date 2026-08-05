@@ -84,7 +84,7 @@ describe('TalosMobileSettingsCenter — on the phone, it is navigation', () => {
 
         const modelLab = wrapper.get('[data-testid="settings-model-lab-link"]')
         expect(modelLab.classes()).toEqual(expect.arrayContaining([
-            'min-h-[var(--talos-touch-target)]',
+            'min-h-touch',
             'gap-[var(--talos-space-inline)]',
             'px-[var(--talos-space-card)]',
         ]))

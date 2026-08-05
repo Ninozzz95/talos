@@ -120,7 +120,7 @@ async function cancel(id: string): Promise<void> {
                 type="button"
                 data-testid="talos-download-center-trigger"
                 :aria-label="triggerLabel"
-                class="talos-pressable pointer-events-auto relative inline-flex min-h-[var(--talos-touch-target)] min-w-[var(--talos-touch-target)] shrink-0 items-center justify-center rounded-[var(--talos-radius-control)] text-[var(--talos-muted)] hover:bg-[var(--talos-active)] hover:text-[var(--talos-text)]"
+                class="talos-pressable pointer-events-auto relative inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--talos-radius-control)] text-[var(--talos-muted)] hover:bg-[var(--talos-active)] hover:text-[var(--talos-text)]"
             >
                 <Download class="size-[var(--talos-icon-size)]" aria-hidden="true" />
                 <span
@@ -152,7 +152,7 @@ async function cancel(id: string): Promise<void> {
                     <button
                         type="button"
                         :aria-label="t('common.close')"
-                        class="talos-pressable grid min-h-[var(--talos-touch-target)] min-w-[var(--talos-touch-target)] place-items-center rounded-[var(--talos-radius-control)] text-[var(--talos-muted)] hover:bg-[var(--talos-active)]"
+                        class="talos-pressable grid min-h-touch min-w-touch place-items-center rounded-[var(--talos-radius-control)] text-[var(--talos-muted)] hover:bg-[var(--talos-active)]"
                         @click="open = false"
                     >
                         <X class="size-[var(--talos-icon-size)]" aria-hidden="true" />
@@ -184,7 +184,7 @@ async function cancel(id: string): Promise<void> {
                                     data-testid="talos-download-center-pause"
                                     :aria-label="t('localModels.downloadCenter.pauseModel', { model: modelName(item) })"
                                     :disabled="acting(item.id)"
-                                    class="talos-pressable grid min-h-[var(--talos-touch-target)] min-w-[var(--talos-touch-target)] place-items-center rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-contrast)] disabled:opacity-50"
+                                    class="talos-pressable grid min-h-touch min-w-touch place-items-center rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-contrast)] disabled:opacity-50"
                                     @click="pause(item.id)"
                                 >
                                     <Pause class="size-[var(--talos-icon-size)]" aria-hidden="true" />
@@ -195,7 +195,7 @@ async function cancel(id: string): Promise<void> {
                                     data-testid="talos-download-center-resume"
                                     :aria-label="t('localModels.downloadCenter.resumeModel', { model: modelName(item) })"
                                     :disabled="acting(item.id)"
-                                    class="talos-pressable grid min-h-[var(--talos-touch-target)] min-w-[var(--talos-touch-target)] place-items-center rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-contrast)] disabled:opacity-50"
+                                    class="talos-pressable grid min-h-touch min-w-touch place-items-center rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-contrast)] disabled:opacity-50"
                                     @click="resume(item.id)"
                                 >
                                     <Play class="size-[var(--talos-icon-size)]" aria-hidden="true" />
@@ -205,7 +205,7 @@ async function cancel(id: string): Promise<void> {
                                     data-testid="talos-download-center-cancel"
                                     :aria-label="t('localModels.downloadCenter.cancelModel', { model: modelName(item) })"
                                     :disabled="acting(item.id)"
-                                    class="talos-pressable grid min-h-[var(--talos-touch-target)] min-w-[var(--talos-touch-target)] place-items-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] text-[var(--talos-danger)] disabled:opacity-50"
+                                    class="talos-pressable grid min-h-touch min-w-touch place-items-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] text-[var(--talos-danger)] disabled:opacity-50"
                                     @click="confirmingCancelId = item.id"
                                 >
                                     <Trash2 class="size-[var(--talos-icon-size)]" aria-hidden="true" />
@@ -259,7 +259,7 @@ async function cancel(id: string): Promise<void> {
                                 <button
                                     type="button"
                                     :aria-label="t('localModels.downloadCenter.keepModel', { model: modelName(item) })"
-                                    class="talos-pressable min-h-[var(--talos-touch-target)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs"
+                                    class="talos-pressable min-h-touch rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs"
                                     @click="confirmingCancelId = null"
                                 >{{ t('localModels.downloadCenter.keep') }}</button>
                                 <button
@@ -267,7 +267,7 @@ async function cancel(id: string): Promise<void> {
                                     data-testid="talos-download-center-cancel-confirm"
                                     :aria-label="t('localModels.downloadCenter.confirmCancelModel', { model: modelName(item) })"
                                     :disabled="acting(item.id)"
-                                    class="talos-pressable min-h-[var(--talos-touch-target)] rounded-[var(--talos-radius-control)] border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] px-[var(--talos-space-control)] text-xs font-semibold text-[var(--talos-danger)] disabled:opacity-50"
+                                    class="talos-pressable min-h-touch rounded-[var(--talos-radius-control)] border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] px-[var(--talos-space-control)] text-xs font-semibold text-[var(--talos-danger)] disabled:opacity-50"
                                     @click="cancel(item.id)"
                                 >{{ t('localModels.downloadCenter.confirmCancel') }}</button>
                             </div>

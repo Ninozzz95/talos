@@ -83,7 +83,7 @@ describe('Model Lab Theme Engine boundary', () => {
             join(process.cwd(), 'src/components/talos/models/TalosMobileLocalModels.vue'),
             'utf8',
         )
-        const target = 'min-h-[var(--talos-touch-target)]'
+        const target = 'min-h-touch'
 
         for (const testId of [
             'talos-models-import',

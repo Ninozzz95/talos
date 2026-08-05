@@ -91,7 +91,7 @@ function modalityLabel(modality: string): string {
                 :aria-label="$t('models.useAsDefault', { name: profile.display_name })"
                 :aria-pressed="selected"
                 :disabled="profile.status === 'disabled' || busy"
-                class="inline-flex min-h-[var(--talos-touch-target)] min-w-0 items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border px-[var(--talos-space-inline)] text-xs font-semibold disabled:opacity-50"
+                class="inline-flex min-h-touch min-w-0 items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border px-[var(--talos-space-inline)] text-xs font-semibold disabled:opacity-50"
                 :class="selected ? 'border-[var(--talos-accent)] bg-[var(--talos-active)] text-[var(--talos-text)]' : 'border-[var(--talos-border)] text-[var(--talos-muted)]'"
                 @click="emit('select', profile.id)"
             >
@@ -105,7 +105,7 @@ function modalityLabel(modality: string): string {
                 :aria-checked="profile.show_in_composer"
                 :aria-label="$t('models.showInComposer', { name: profile.display_name })"
                 :disabled="profile.status === 'disabled' || busy"
-                class="inline-flex min-h-[var(--talos-touch-target)] min-w-0 items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-inline)] text-xs font-semibold text-[var(--talos-muted)] disabled:opacity-50"
+                class="inline-flex min-h-touch min-w-0 items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-inline)] text-xs font-semibold text-[var(--talos-muted)] disabled:opacity-50"
                 @click="emit('toggle-visibility', profile.id, !profile.show_in_composer)"
             >
                 <Eye v-if="profile.show_in_composer" class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
@@ -115,7 +115,7 @@ function modalityLabel(modality: string): string {
         </div>
 
         <details class="mt-[var(--talos-space-control)] border-t border-[var(--talos-border)] pt-[var(--talos-space-inline)]">
-            <summary class="flex min-h-[var(--talos-touch-target)] cursor-pointer items-center text-xs font-semibold text-[var(--talos-muted)]">{{ $t('models.catalogDetailsAndActions') }}</summary>
+            <summary class="flex min-h-touch cursor-pointer items-center text-xs font-semibold text-[var(--talos-muted)]">{{ $t('models.catalogDetailsAndActions') }}</summary>
             <div class="space-y-[var(--talos-space-control)] pb-[var(--talos-space-inline)]">
                 <div class="flex flex-wrap gap-[var(--talos-space-inline)] text-3xs font-medium text-[var(--talos-muted)]">
                     <span class="rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-inline)] py-[calc(var(--talos-space-inline)/2)]">
@@ -127,7 +127,7 @@ function modalityLabel(modality: string): string {
                     type="button"
                     :aria-label="$t('models.testCompletionFor', { name: profile.display_name })"
                     :disabled="profile.status === 'disabled' || busy"
-                    class="inline-flex min-h-[var(--talos-touch-target)] w-full items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-inline)] text-xs font-semibold text-[var(--talos-text)] disabled:opacity-50"
+                    class="inline-flex min-h-touch w-full items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-inline)] text-xs font-semibold text-[var(--talos-text)] disabled:opacity-50"
                     @click="emit('probe', profile.id)"
                 >
                     <Gauge class="size-[var(--talos-icon-size)]" aria-hidden="true" /> {{ busy ? $t('models.testing') : $t('models.testCompletion') }}
