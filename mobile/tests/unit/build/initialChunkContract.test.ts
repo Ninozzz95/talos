@@ -19,6 +19,8 @@ interface FixtureOptions {
     eagerModelCatalog?: boolean
     eagerModelAdvanced?: boolean
     eagerModelLocal?: boolean
+    eagerDownloadCenter?: boolean
+    eagerChatOptionsMenu?: boolean
     eagerToolset?: boolean
     eagerDocuments?: boolean
     eagerLauncherIconDialog?: boolean
@@ -47,6 +49,8 @@ function createFixture(options: FixtureOptions = {}): string {
     const modelCatalogKey = 'src/components/talos/models/TalosMobileModelCatalog.vue'
     const modelAdvancedKey = 'src/components/talos/models/TalosMobileModelAdvancedOptions.vue'
     const modelLocalKey = 'src/components/talos/models/TalosMobileLocalModels.vue'
+    const downloadCenterKey = 'src/components/shell/TalosMobileDownloadCenterTrigger.vue'
+    const chatOptionsMenuKey = 'src/components/shell/TalosMobileChatOptionsMenu.vue'
     // The tool suite: loaded on the first send, never at boot.
     const toolsetKey = 'src/lib/tools/toolset.ts'
     const agentLoopKey = 'src/lib/tools/agentLoop.ts'
@@ -79,6 +83,8 @@ function createFixture(options: FixtureOptions = {}): string {
     const modelCatalogIsDynamic = options.eagerModelCatalog !== true
     const modelAdvancedIsDynamic = options.eagerModelAdvanced !== true
     const modelLocalIsDynamic = options.eagerModelLocal !== true
+    const downloadCenterIsDynamic = options.eagerDownloadCenter !== true
+    const chatOptionsMenuIsDynamic = options.eagerChatOptionsMenu !== true
     const routeKeys = [
         'src/screens/ResearchScreen.vue',
         'src/screens/RunsScreen.vue',
@@ -111,6 +117,8 @@ function createFixture(options: FixtureOptions = {}): string {
                 ...(promptEnhancerIsDynamic ? [] : [promptEnhancerKey]),
                 ...(slashCommandMenuIsDynamic ? [] : [slashCommandMenuKey]),
                 ...(enhancerDrawerIsDynamic ? [] : [enhancerDrawerKey]),
+                ...(downloadCenterIsDynamic ? [] : [downloadCenterKey]),
+                ...(chatOptionsMenuIsDynamic ? [] : [chatOptionsMenuKey]),
                 ...(toolsetIsDynamic ? [] : [toolsetKey]),
                 ...(documentsAreDynamic ? [] : [documentGeneratorKey]),
                 ...(launcherIconDialogIsDynamic ? [] : [launcherIconDialogKey]),
@@ -129,6 +137,8 @@ function createFixture(options: FixtureOptions = {}): string {
                 ...(promptEnhancerIsDynamic ? [promptEnhancerKey] : []),
                 ...(slashCommandMenuIsDynamic ? [slashCommandMenuKey] : []),
                 ...(enhancerDrawerIsDynamic ? [enhancerDrawerKey] : []),
+                ...(downloadCenterIsDynamic ? [downloadCenterKey] : []),
+                ...(chatOptionsMenuIsDynamic ? [chatOptionsMenuKey] : []),
                 ...(toolsetIsDynamic ? [toolsetKey] : []),
                 agentLoopKey,
                 toolConsentKey,
@@ -178,6 +188,14 @@ function createFixture(options: FixtureOptions = {}): string {
         [modelLocalKey]: {
             file: 'assets/model-local.js',
             isDynamicEntry: modelLocalIsDynamic,
+        },
+        [downloadCenterKey]: {
+            file: 'assets/download-center.js',
+            isDynamicEntry: downloadCenterIsDynamic,
+        },
+        [chatOptionsMenuKey]: {
+            file: 'assets/chat-options-menu.js',
+            isDynamicEntry: chatOptionsMenuIsDynamic,
         },
         [toolsetKey]: {
             file: 'assets/toolset.js',
@@ -302,6 +320,8 @@ function createFixture(options: FixtureOptions = {}): string {
     writeFileSync(join(root, 'assets', 'model-catalog.js'), 'l'.repeat(64))
     writeFileSync(join(root, 'assets', 'model-advanced.js'), 'a'.repeat(64))
     writeFileSync(join(root, 'assets', 'model-local.js'), 'q'.repeat(64))
+    writeFileSync(join(root, 'assets', 'download-center.js'), 'd'.repeat(64))
+    writeFileSync(join(root, 'assets', 'chat-options-menu.js'), 'u'.repeat(64))
     writeFileSync(join(root, 'assets', 'launcher-icon-dialog.js'), 'i'.repeat(64))
     writeFileSync(join(root, 'assets', 'chat-screen.js'), 'h'.repeat(64))
     writeFileSync(join(root, 'assets', 'welcome-en.js'), 'e'.repeat(64))
@@ -367,6 +387,10 @@ describe('initial JavaScript chunk contract', () => {
             'src/screens/SettingsModelsLocalScreen.vue',
         ]) expect(report.dynamic_entries[route]).toBeDefined()
         expect(report.dynamic_entries['src/components/talos/models/TalosMobileLocalModels.vue'])
+            .toBeDefined()
+        expect(report.dynamic_entries['src/components/shell/TalosMobileDownloadCenterTrigger.vue'])
+            .toBeDefined()
+        expect(report.dynamic_entries['src/components/shell/TalosMobileChatOptionsMenu.vue'])
             .toBeDefined()
     })
 
@@ -462,6 +486,20 @@ describe('initial JavaScript chunk contract', () => {
         expect(advanced.stderr).toContain('TALOS_MODEL_ADVANCED_NOT_LAZY')
         expect(local.status).toBe(1)
         expect(local.stderr).toContain('TALOS_MODEL_LOCAL_NOT_LAZY')
+    })
+
+    it('rejects the global Download Center when it enters the static initial graph', () => {
+        const result = verify(createFixture({ eagerDownloadCenter: true }), 256)
+
+        expect(result.status).toBe(1)
+        expect(result.stderr).toContain('TALOS_DOWNLOAD_CENTER_NOT_LAZY')
+    })
+
+    it('rejects the chat options menu when it enters the static initial graph', () => {
+        const result = verify(createFixture({ eagerChatOptionsMenu: true }), 256)
+
+        expect(result.status).toBe(1)
+        expect(result.stderr).toContain('TALOS_CHAT_OPTIONS_NOT_LAZY')
     })
 
     it('accepts a reachable Vite synthetic key for a nested dynamic Settings entry', () => {

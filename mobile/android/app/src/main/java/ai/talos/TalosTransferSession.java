@@ -9,183 +9,511 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * The one transfer in flight, and everything both hosts need to run it.
+ * Process-local workers keyed by the durable transfer id.
  *
- * One at a time on purpose. Two four-gigabyte downloads on a phone share a link
- * and a disk and finish later than they would in sequence, while doubling the
- * chance of running out of space — and the queue that results is honest to show.
- *
- * Held statically because a `JobService` and a `Service` are two different
- * objects that must not both be transferring, and because the stop button on
- * the notification arrives at a third — a `BroadcastReceiver`. Nothing durable
- * lives here: the state that matters is on disk after every checkpoint, which
- * is what makes the Task Manager killing the process survivable.
+ * The map is a cache shared by JobService, foreground service and notification
+ * receiver. Authority remains the atomic journal plus each slot sidecar. No
+ * stop flag, progress counter or worker reference can cross transfer ids.
  */
 public final class TalosTransferSession {
 
-    /**
-     * What to fetch: a SET of files, not one.
-     *
-     * A large GGUF is published in pieces — `…-00001-of-00003.gguf` and its
-     * siblings are one model, and any two of the three are nothing. This used to
-     * carry a single path with the byte count of the whole set, so the job
-     * downloaded the first shard, asked for a window past its end, got a 416,
-     * read that as "the file changed upstream" and DELETED EVERY BYTE it had
-     * downloaded. Gigabytes of someone's data allowance, spent to arrive at an
-     * empty folder. Found by an adversarial review, 2026-08-01 — in the same
-     * commit that had just taught the interface to treat a set as one model.
-     *
-     * Never a token; see `resolve` below.
-     */
+    /** One model request may contain several GGUF shards; it is still one row. */
     public static final class Request {
         public final String repo;
         public final String revision;
         public final String[] paths;
-        /** Each piece's own length. The job asks for one file at a time. */
         public final long[] sizes;
-        /** Each piece's own sha256, or null where the repository published none. */
         public final String[] hashes;
         public final String modelName;
-        /** The sum, which is what the phone must find room for and the bar shows. */
         public final long totalBytes;
 
         public Request(String repo, String revision, String[] paths, long[] sizes,
                 String[] hashes, String modelName) {
             this.repo = repo;
             this.revision = revision;
-            this.paths = paths;
-            this.sizes = sizes;
-            this.hashes = hashes;
+            this.paths = paths.clone();
+            this.sizes = sizes.clone();
+            this.hashes = hashes.clone();
             this.modelName = modelName;
             long sum = 0;
-            for (long size : sizes) sum += size;
+            for (long size : sizes) sum = Math.addExact(sum, size);
             this.totalBytes = sum;
         }
     }
 
-    private static final AtomicBoolean STOPPING = new AtomicBoolean(false);
-    private static volatile Request active;
-    private static volatile long lastHave;
-    private static volatile long lastTotal;
+    public enum StopCause {
+        NONE,
+        SYSTEM_STOP,
+        USER_PAUSE,
+        USER_CANCEL
+    }
+
+    static final class Completion {
+        final TalosTransferJournal.Phase phase;
+        final boolean retry;
+        final boolean clear;
+
+        Completion(TalosTransferJournal.Phase phase, boolean retry, boolean clear) {
+            this.phase = phase;
+            this.retry = retry;
+            this.clear = clear;
+        }
+    }
+
+    private static final class State {
+        final Request request;
+        final AtomicReference<StopCause> stopCause =
+                new AtomicReference<>(StopCause.NONE);
+        volatile long lastHave;
+        volatile long lastTotal;
+        volatile boolean workerRunning;
+        volatile TalosTransferPlan.Runner runner;
+        volatile boolean networkBound;
+
+        State(
+                Request request,
+                TalosTransferPlan.Runner runner,
+                boolean networkBound,
+                long haveBytes) {
+            this.request = request;
+            this.runner = runner;
+            this.networkBound = networkBound;
+            this.lastHave = Math.max(0L, Math.min(request.totalBytes, haveBytes));
+            this.lastTotal = request.totalBytes;
+        }
+    }
+
+    private static final Object STATE_LOCK = new Object();
+    private static final ConcurrentHashMap<String, State> STATES = new ConcurrentHashMap<>();
 
     private TalosTransferSession() {}
 
-    public static void begin(Request request) {
-        active = request;
-        // Reset, or the download centre shows the PREVIOUS transfer's byte count
-        // against this model's total until the first chunk lands — a bar that
-        // starts at 61% of the wrong thing.
-        lastHave = 0;
-        lastTotal = request.totalBytes;
-        STOPPING.set(false);
+    /** JVM-test/legacy cache install; durable starts use the Context overload. */
+    public static String begin(Request request) {
+        String id = TalosTransferJournal.idFor(request);
+        synchronized (STATE_LOCK) {
+            install(id, request, null, false, 0L);
+        }
+        return id;
+    }
+
+    /** Persist ownership before asking Android to start work. */
+    public static TalosTransferJournal.Snapshot begin(
+            Context context,
+            Request request,
+            TalosTransferPlan.Runner runner,
+            boolean networkBound) {
+        synchronized (STATE_LOCK) {
+            TalosTransferJournal.Snapshot snapshot = TalosTransferJournal.forContext(context)
+                    .begin(request, runner, networkBound);
+            install(snapshot.id, request, runner, networkBound,
+                    progressFromDisk(rootFor(context), request));
+            return snapshot;
+        }
+    }
+
+    /** Restore every record independently; active foreground orphans wait. */
+    public static List<TalosTransferJournal.Snapshot> restoreAll(Context context) {
+        synchronized (STATE_LOCK) {
+            TalosTransferJournal journal = TalosTransferJournal.forContext(context);
+            List<TalosTransferJournal.Snapshot> records = journal.list();
+            List<TalosTransferJournal.Snapshot> restored = new ArrayList<>();
+            Set<String> durableIds = new HashSet<>();
+
+            for (TalosTransferJournal.Snapshot original : records) {
+                TalosTransferJournal.Snapshot snapshot = original;
+                durableIds.add(snapshot.id);
+                State existing = STATES.get(snapshot.id);
+                if (existing == null && isMoving(snapshot.phase)) {
+                    // A record occupies a slot only while Android still owns
+                    // its job. Foreground services never survive this process.
+                    TalosTransferJournal.Phase recovered =
+                            TalosTransferDispatcher.recoveredPhase(
+                                    snapshot.runner,
+                                    TalosTransferDispatcher.hasHost(context, snapshot));
+                    snapshot = journal.transition(snapshot.id, recovered, null);
+                }
+                if (snapshot == null) continue;
+                State state = STATES.get(snapshot.id);
+                if (state == null) {
+                    Request request = snapshot.request();
+                    install(snapshot.id, request, snapshot.runner, snapshot.networkBound,
+                            progressFromDisk(rootFor(context), request));
+                } else {
+                    state.lastHave = progressFromDisk(rootFor(context), state.request);
+                    state.lastTotal = state.request.totalBytes;
+                    state.runner = snapshot.runner;
+                    state.networkBound = snapshot.networkBound;
+                }
+                restored.add(snapshot);
+            }
+
+            for (String id : new HashSet<>(STATES.keySet())) {
+                State state = STATES.get(id);
+                if (!durableIds.contains(id) && state != null && !state.workerRunning) {
+                    STATES.remove(id, state);
+                }
+            }
+            return restored;
+        }
+    }
+
+    public static TalosTransferJournal.Snapshot restore(Context context, String id) {
+        for (TalosTransferJournal.Snapshot snapshot : restoreAll(context)) {
+            if (snapshot.id.equals(id)) return snapshot;
+        }
+        return null;
+    }
+
+    /** Compatibility view, intentionally null when more than one record exists. */
+    public static TalosTransferJournal.Snapshot restore(Context context) {
+        List<TalosTransferJournal.Snapshot> records = restoreAll(context);
+        return records.size() == 1 ? records.get(0) : null;
+    }
+
+    public static Request active(String id) {
+        State state = STATES.get(id);
+        return state == null ? null : state.request;
     }
 
     public static Request active() {
-        return active;
+        State state = soleState();
+        return state == null ? null : state.request;
     }
 
     public static void requestStop() {
-        STOPPING.set(true);
+        String id = soleId();
+        if (id != null) requestStop(id, StopCause.USER_PAUSE);
+    }
+
+    public static void requestStop(StopCause cause) {
+        String id = soleId();
+        if (id != null) requestStop(id, cause);
+    }
+
+    public static void requestStop(String id, StopCause cause) {
+        State state = STATES.get(id);
+        if (state == null || cause == null || cause == StopCause.NONE) return;
+        while (true) {
+            StopCause current = state.stopCause.get();
+            if (priority(current) >= priority(cause)) return;
+            if (state.stopCause.compareAndSet(current, cause)) return;
+        }
+    }
+
+    public static boolean stopRequested(String id) {
+        return stopCause(id) != StopCause.NONE;
     }
 
     public static boolean stopRequested() {
-        return STOPPING.get();
+        String id = soleId();
+        return id != null && stopRequested(id);
+    }
+
+    public static StopCause stopCause(String id) {
+        State state = STATES.get(id);
+        return state == null ? StopCause.NONE : state.stopCause.get();
+    }
+
+    public static StopCause stopCause() {
+        String id = soleId();
+        return id == null ? StopCause.NONE : stopCause(id);
+    }
+
+    public static void end(String id) {
+        if (id != null) STATES.remove(id);
     }
 
     public static void end() {
-        active = null;
-        lastHave = 0;
-        lastTotal = 0;
-        STOPPING.set(false);
+        STATES.clear();
     }
 
-    /**
-     * Ready to be picked up again, with the request left in place.
-     *
-     * The system stopping a job is not the user cancelling one: `onStopJob`
-     * returns true to ask for the job back, and the request has to still be
-     * here when it comes. Clearing the stop flag without clearing the request
-     * is the difference between resuming and abandoning.
-     */
+    public static void end(Context context, String id) {
+        synchronized (STATE_LOCK) {
+            TalosTransferJournal.forContext(context).remove(id);
+            STATES.remove(id);
+        }
+    }
+
+    /** Legacy all-clear; no multi-transfer production path calls this. */
+    public static void end(Context context) {
+        synchronized (STATE_LOCK) {
+            TalosTransferJournal.forContext(context).clear();
+            STATES.clear();
+        }
+    }
+
+    public static void clearStopRequest(String id) {
+        State state = STATES.get(id);
+        if (state != null) state.stopCause.set(StopCause.NONE);
+    }
+
     public static void clearStopRequest() {
-        STOPPING.set(false);
+        String id = soleId();
+        if (id != null) clearStopRequest(id);
+    }
+
+    public static long haveBytes(String id) {
+        State state = STATES.get(id);
+        return state == null ? 0L : state.lastHave;
     }
 
     public static long haveBytes() {
-        return lastHave;
+        String id = soleId();
+        return id == null ? 0L : haveBytes(id);
+    }
+
+    public static long totalBytes(String id) {
+        State state = STATES.get(id);
+        return state == null ? 0L : state.lastTotal;
     }
 
     public static long totalBytes() {
-        return lastTotal;
+        String id = soleId();
+        return id == null ? 0L : totalBytes(id);
     }
 
-    /** Told what happened, so the host can update or clear its notification. */
+    public static boolean workerRunning(String id) {
+        State state = STATES.get(id);
+        return state != null && state.workerRunning;
+    }
+
+    public static boolean workerRunning() {
+        String id = soleId();
+        return id != null && workerRunning(id);
+    }
+
+    public static TalosTransferPlan.Runner runner(String id) {
+        State state = STATES.get(id);
+        return state == null ? null : state.runner;
+    }
+
+    public static TalosTransferPlan.Runner runner() {
+        String id = soleId();
+        return id == null ? null : runner(id);
+    }
+
+    public static boolean networkBound(String id) {
+        State state = STATES.get(id);
+        return state != null && state.networkBound;
+    }
+
+    public static boolean networkBound() {
+        String id = soleId();
+        return id != null && networkBound(id);
+    }
+
+    static Completion completionFor(String reason, StopCause cause) {
+        StopCause effective = cause == null ? StopCause.NONE : cause;
+        if (effective == StopCause.USER_CANCEL) {
+            return new Completion(TalosTransferJournal.Phase.IDLE, false, true);
+        }
+        if (effective == StopCause.USER_PAUSE) {
+            return new Completion(TalosTransferJournal.Phase.PAUSED, false, false);
+        }
+        if (effective == StopCause.SYSTEM_STOP) {
+            return new Completion(TalosTransferJournal.Phase.QUEUED, true, false);
+        }
+        if (reason == null) {
+            return new Completion(TalosTransferJournal.Phase.IDLE, false, true);
+        }
+        if ("stopped".equals(reason) || "interrupted".equals(reason)) {
+            return new Completion(TalosTransferJournal.Phase.QUEUED, true, false);
+        }
+        return new Completion(TalosTransferJournal.Phase.FAILED, false, false);
+    }
+
+    static Completion completionForHost(
+            String reason,
+            StopCause cause,
+            TalosTransferPlan.Runner runner) {
+        Completion completion = completionFor(reason, cause);
+        if (cause == StopCause.SYSTEM_STOP
+                && runner == TalosTransferPlan.Runner.FOREGROUND_SERVICE) {
+            return new Completion(TalosTransferJournal.Phase.WAITING, true, false);
+        }
+        return completion;
+    }
+
+    /** Apply only this worker's outcome to disk before its host finishes. */
+    public static Completion finish(Context context, String id, String reason) {
+        synchronized (STATE_LOCK) {
+            State state = STATES.get(id);
+            StopCause cause = state == null ? StopCause.NONE : state.stopCause.get();
+            Completion completion = completionForHost(
+                    reason,
+                    cause,
+                    state == null ? null : state.runner);
+            if (state != null) {
+                state.lastHave = progressFromDisk(rootFor(context), state.request);
+                state.lastTotal = state.request.totalBytes;
+            }
+
+            TalosTransferJournal journal = TalosTransferJournal.forContext(context);
+            if (completion.clear) {
+                if (cause == StopCause.USER_CANCEL && state != null) {
+                    discardRequest(rootFor(context), state.request);
+                }
+                journal.remove(id);
+                STATES.remove(id);
+            } else {
+                journal.transition(
+                        id,
+                        completion.phase,
+                        completion.phase == TalosTransferJournal.Phase.FAILED ? reason : null);
+                if (state != null) {
+                    state.stopCause.set(StopCause.NONE);
+                    state.workerRunning = false;
+                }
+            }
+            return completion;
+        }
+    }
+
+    public static Completion finish(Context context, String reason) {
+        String id = soleId();
+        return id == null
+                ? completionFor(reason, StopCause.NONE)
+                : finish(context, id, reason);
+    }
+
+    /** Cancel immediately when this id has no worker owning a socket. */
+    public static boolean cancel(Context context, String id) {
+        requestStop(id, StopCause.USER_CANCEL);
+        synchronized (STATE_LOCK) {
+            State state = STATES.get(id);
+            if (state != null && state.workerRunning) return false;
+            if (state != null) discardRequest(rootFor(context), state.request);
+            TalosTransferJournal.forContext(context).remove(id);
+            STATES.remove(id);
+            return true;
+        }
+    }
+
+    public static boolean cancel(Context context) {
+        String id = soleId();
+        return id == null || cancel(context, id);
+    }
+
+    /** Progress reconstructed from completed pieces and durable sidecars. */
+    public static long progressFromDisk(File root, Request request) {
+        if (request == null) return 0L;
+        TalosModelStore store = new TalosModelStore(root);
+        long have = 0L;
+        for (int index = 0; index < request.paths.length; index += 1) {
+            try {
+                TalosModelStore.Slot slot = store.slot(
+                        request.repo, request.revision, request.paths[index]);
+                long part = slot.finished.isFile()
+                        && slot.finished.length() == request.sizes[index]
+                        ? request.sizes[index]
+                        : slot.resume(request.sizes[index]).haveBytes;
+                have = Math.addExact(have,
+                        Math.max(0L, Math.min(request.sizes[index], part)));
+            } catch (IllegalArgumentException | ArithmeticException invalid) {
+                return 0L;
+            }
+        }
+        return Math.min(have, request.totalBytes);
+    }
+
+    static void discardRequest(File root, Request request) {
+        TalosModelStore store = new TalosModelStore(root);
+        for (String path : request.paths) {
+            try {
+                TalosModelStore.Slot slot = store.slot(request.repo, request.revision, path);
+                slot.discard();
+                slot.finished.delete();
+            } catch (IllegalArgumentException hostile) {
+                // A legacy request still cannot escape the model root.
+            }
+        }
+    }
+
     public interface Report {
         void progress(long haveBytes, long totalBytes, TalosTransferProgress progress);
         void finished(String reason);
     }
 
-    /**
-     * Where the models live: app-private external storage.
-     *
-     * Not the internal data directory, which on many phones is a smaller
-     * partition that four gigabytes will not fit on. Not shared storage either
-     * — a model in Downloads is a model any other app can read or corrupt, and
-     * one the user will eventually delete by accident. App-private external is
-     * removed cleanly on uninstall, which is the honest contract for something
-     * this large.
-     */
     public static File rootFor(Context context) {
         File external = context.getExternalFilesDir(null);
         return external != null ? external : context.getFilesDir();
     }
 
-    /**
-     * Run to completion on the calling thread.
-     *
-     * The network is the one the host was granted — every socket goes through
-     * it, so a transfer started on Wi-Fi does not silently continue on the
-     * user's data allowance when the Wi-Fi drops.
-     */
+    public static void run(
+            Context context,
+            String id,
+            Request request,
+            Network network,
+            Report report) {
+        State state = STATES.get(id);
+        if (state == null) {
+            install(id, request, null, false, progressFromDisk(rootFor(context), request));
+            state = STATES.get(id);
+        }
+        final State owned = state;
+        owned.workerRunning = true;
+        TalosTransferJournal.forContext(context).transition(
+                id, TalosTransferJournal.Phase.RUNNING, null);
+        try {
+            runOwned(context, id, request, network, report, owned);
+        } finally {
+            owned.workerRunning = false;
+        }
+    }
+
     public static void run(Context context, Request request, Network network, Report report) {
+        String id = soleId();
+        if (id == null) id = begin(request);
+        run(context, id, request, network, report);
+    }
+
+    private static void runOwned(
+            Context context,
+            String id,
+            Request request,
+            Network network,
+            Report report,
+            State state) {
         TalosModelStore store = new TalosModelStore(rootFor(context));
         TalosTransferProgress progress = new TalosTransferProgress();
-        lastTotal = request.totalBytes;
+        state.lastTotal = request.totalBytes;
 
-        // One piece at a time, in order, with the bar reporting the WHOLE set:
-        // the user chose a model, not a file, and a bar that restarts at zero
-        // three times is a bar that is lying about what is happening.
+        try {
+            TalosStorageReservation.reserveAll(context, store, request);
+        } catch (IllegalArgumentException hostile) {
+            report.finished("bad-path");
+            return;
+        } catch (IOException noRoom) {
+            report.finished("no-space");
+            return;
+        }
+
         long done = 0;
         for (int index = 0; index < request.paths.length; index += 1) {
             final long already = done;
             final long size = request.sizes[index];
-
             TalosModelStore.Slot slot;
             try {
                 slot = store.slot(request.repo, request.revision, request.paths[index]);
             } catch (IllegalArgumentException hostile) {
-                // A path from a repository anyone in the world can publish to.
                 report.finished("bad-path");
                 return;
             }
 
-            // A piece already whole is skipped, which is what makes a set of
-            // three survive being interrupted between two of them.
             if (slot.finished.isFile() && slot.finished.length() == size) {
                 done += size;
-                lastHave = done;
+                state.lastHave = done;
                 report.progress(done, request.totalBytes, progress);
                 continue;
-            }
-
-            try {
-                slot.prepare(size, new TalosStorageReservation(context));
-            } catch (IOException noRoom) {
-                report.finished("no-space");
-                return;
             }
 
             final String path = request.paths[index];
@@ -201,24 +529,21 @@ public final class TalosTransferSession {
 
                         @Override
                         public void onProgress(long haveBytes, long totalBytes) {
-                            lastHave = already + haveBytes;
-                            lastTotal = request.totalBytes;
-                            progress.sample(lastHave, SystemClock.elapsedRealtime());
-                            report.progress(lastHave, request.totalBytes, progress);
+                            state.lastHave = already + haveBytes;
+                            state.lastTotal = request.totalBytes;
+                            progress.sample(state.lastHave, SystemClock.elapsedRealtime());
+                            report.progress(state.lastHave, request.totalBytes, progress);
                         }
 
                         @Override
                         public void onFinished(String reason) {
-                            // Swallowed on purpose: only the LAST piece may end
-                            // the transfer. Reporting here would tell the host
-                            // the download was over after the first shard.
                             ended[0] = true;
                             failure[0] = reason;
                         }
 
                         @Override
                         public boolean stopRequested() {
-                            return STOPPING.get();
+                            return TalosTransferSession.stopRequested(id);
                         }
                     }).run();
 
@@ -229,25 +554,10 @@ public final class TalosTransferSession {
             done += size;
         }
 
-        lastHave = request.totalBytes;
+        state.lastHave = request.totalBytes;
         report.finished(null);
     }
 
-    /**
-     * Ask the Hub where the bytes actually are.
-     *
-     * `/resolve/` answers with a redirect to a signed CDN address, and the
-     * redirect is followed BY HAND: swallowing it would hide the address whose
-     * signature is about to expire, and the expiry is the single most common
-     * thing that happens during a download this size.
-     *
-     * The token is FETCHED HERE, from the app's own Keystore, and never carried
-     * in the job's extras — the system persists those in the clear and this app
-     * will be distributed, so a credential must not sit anywhere a backup can
-     * reach. It is also not held in memory between resolves: the job may live
-     * for hours, and a token that exists only for the length of one request is
-     * a token a heap dump cannot find.
-     */
     private static TalosTransferRunner.Resolved resolveOn(
             Context context, Network network, Request request, String path) throws IOException {
         String address = "https://huggingface.co/" + request.repo + "/resolve/"
@@ -261,38 +571,20 @@ public final class TalosTransferSession {
             connection.setConnectTimeout(15_000);
             connection.setReadTimeout(15_000);
             connection.setRequestMethod("HEAD");
-
-            // Absent is the ordinary case and not a failure: most repositories
-            // are public. It is still worth having for an open one — anonymous
-            // Hub limits are per IP, and a carrier puts thousands of subscribers
-            // behind a single address, so without a token a user is throttled
-            // for traffic that was never theirs.
             String token = TalosSecretReader.providerKey(context, "huggingface");
             if (token != null) connection.setRequestProperty("Authorization", "Bearer " + token);
 
             int status = connection.getResponseCode();
             String location = connection.getHeaderField("Location");
-            String signed = (status >= 300 && status < 400 && location != null) ? location : address;
-
+            String signed = (status >= 300 && status < 400 && location != null)
+                    ? location
+                    : address;
             return new TalosTransferRunner.Resolved(signed, deadlineOf(connection, signed));
         } finally {
             connection.disconnect();
         }
     }
 
-    /**
-     * When the signature dies, as a MONOTONIC instant.
-     *
-     * Measured against the server's own `Date` rather than the phone's clock:
-     * the phone with the wrong clock is disproportionately the cheap phone this
-     * feature exists for, and a download that spans a night must not be
-     * confused by an NTP correction arriving in the middle of it.
-     *
-     * The same arithmetic exists in `huggingFace.ts`, and is deliberately NOT
-     * shared: if the two ever drift, the cost is one wasted request, because
-     * the 403 path re-resolves and keeps every byte. Returning "unknown" here
-     * simply means always taking that path.
-     */
     private static long deadlineOf(HttpURLConnection connection, String signed) {
         long expires = numberInQuery(signed, "Expires");
         if (expires <= 0) return Long.MIN_VALUE;
@@ -303,21 +595,12 @@ public final class TalosTransferSession {
         return SystemClock.elapsedRealtime() + lives * 1000L;
     }
 
-    /**
-     * Package-private so the two pure pieces of resolving can be proved without
-     * a device. Both fail silently when wrong — a bad encoding is a 404 that
-     * looks like a broken repository, and a misread expiry re-resolves an
-     * address that was alive, into the Hub's rate limiter.
-     */
     static long numberInQuery(String url, String key) {
         int at = -1;
         int from = 0;
         while (true) {
             int found = url.indexOf(key + "=", from);
             if (found < 0) break;
-            // A parameter that merely ENDS with this name is a different
-            // parameter, and reading its number as the deadline would put the
-            // download on a schedule nothing agreed to.
             char before = found == 0 ? '?' : url.charAt(found - 1);
             if (before == '?' || before == '&') {
                 at = found;
@@ -351,6 +634,43 @@ public final class TalosTransferSession {
             return URLEncoder.encode(value, "UTF-8").replace("+", "%20");
         } catch (IOException impossible) {
             return value;
+        }
+    }
+
+    private static void install(
+            String id,
+            Request request,
+            TalosTransferPlan.Runner runner,
+            boolean networkBound,
+            long haveBytes) {
+        STATES.put(id, new State(request, runner, networkBound, haveBytes));
+    }
+
+    private static boolean isMoving(TalosTransferJournal.Phase phase) {
+        return phase == TalosTransferJournal.Phase.QUEUED
+                || phase == TalosTransferJournal.Phase.RUNNING
+                || phase == TalosTransferJournal.Phase.PAUSING
+                || phase == TalosTransferJournal.Phase.VERIFYING;
+    }
+
+    private static String soleId() {
+        if (STATES.size() != 1) return null;
+        for (String id : STATES.keySet()) return id;
+        return null;
+    }
+
+    private static State soleState() {
+        String id = soleId();
+        return id == null ? null : STATES.get(id);
+    }
+
+    private static int priority(StopCause cause) {
+        switch (cause) {
+            case USER_CANCEL: return 3;
+            case USER_PAUSE: return 2;
+            case SYSTEM_STOP: return 1;
+            case NONE:
+            default: return 0;
         }
     }
 }

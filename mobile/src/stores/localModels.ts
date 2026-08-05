@@ -9,6 +9,7 @@ import {
 import { talosGroupGgufFiles, type TalosGgufSet } from '@/lib/models/ggufSet'
 import { TALOS_GGUF_FIRST_READ_BYTES, talosReadGgufHeader } from '@/lib/models/gguf'
 import { talosModelFit, type TalosModelFit } from '@/lib/models/fit'
+import { TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS } from '@/lib/models/localContextPolicy'
 import { talosMeasureDevice, type TalosMeasuredDevice } from '@/services/deviceCapacity'
 import { clearProviderKey, getProviderKey, setProviderKey } from '@/services/secureKeyStore'
 import { talosCreateHubTransport } from '@/services/hubTransport'
@@ -19,11 +20,14 @@ import {
 } from '@/lib/models/catalogue'
 import {
     talosModelTransferLeftovers,
-    talosModelTransferStatus,
-    talosStartModelTransfer,
-    talosStopModelTransfer,
-    type TalosTransferRunner,
 } from '@/services/modelTransfer'
+import {
+    talosBeginModelTransfer,
+    talosModelTransfers,
+    talosPauseManagedModelTransfer,
+    talosRefreshModelTransfer,
+    talosResumeManagedModelTransfer,
+} from '@/stores/modelTransfers'
 
 /**
  * The download centre, as state.
@@ -41,7 +45,7 @@ import {
  */
 
 /** A sane starting point on a phone; the counter-offer moves it. */
-export const TALOS_DEFAULT_LOCAL_CONTEXT = 4096
+export const TALOS_DEFAULT_LOCAL_CONTEXT = TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS
 
 /**
  * The Hugging Face token sits with the provider keys, in the same Keystore.
@@ -121,15 +125,7 @@ export interface TalosLocalModelsState {
         recommended: TalosCatalogueRecommendation[]
         rejected: TalosCatalogueRecommendation[]
     }
-    transfer: {
-        active: boolean
-        modelName: string | null
-        haveBytes: number
-        totalBytes: number
-        runner: TalosTransferRunner | null
-        networkBound: boolean
-        failure: string | null
-    }
+    transfer: typeof talosModelTransfers
     leftovers: { items: Array<{ path: string; bytes: number }>; totalBytes: number }
 }
 
@@ -163,15 +159,7 @@ const state = reactive<TalosLocalModelsState>({
         recommended: [],
         rejected: [],
     },
-    transfer: {
-        active: false,
-        modelName: null,
-        haveBytes: 0,
-        totalBytes: 0,
-        runner: null,
-        networkBound: true,
-        failure: null,
-    },
+    transfer: talosModelTransfers,
     leftovers: { items: [], totalBytes: 0 },
 })
 
@@ -179,6 +167,7 @@ export const talosLocalModels = readonly(state)
 
 let client: TalosHuggingFaceClient | null = null
 let transportInUse: typeof globalThis.fetch | null = null
+type TalosLocalTransferRequest = Parameters<typeof talosBeginModelTransfer>[0]
 
 /**
  * @param transport injected so the whole store is provable without a network.
@@ -415,6 +404,7 @@ export async function talosOpenModelRepo(id: string, revision = 'main'): Promise
 
 /** Back to the results. Not `open('')`, which would ask the Hub for nothing. */
 export function talosCloseModelRepo(): void {
+    repoGeneration += 1
     state.repo = null
 }
 
@@ -520,9 +510,7 @@ export async function talosDownloadSet(
     const set = repo.sets.find((candidate) => candidate.paths[0] === key)
     if (!set) return { ok: false, reason: 'no-transfer' }
     if (set.incomplete) return { ok: false, reason: 'incomplete-set' }
-    if (state.transfer.active) return { ok: false, reason: 'already-running' }
-
-    const started = await talosStartModelTransfer({
+    return startLocalTransfer({
         repo: repo.id,
         revision: repo.revision,
         // EVERY piece, each with its own length and its own hash. Handing over
@@ -539,30 +527,32 @@ export async function talosDownloadSet(
         })),
         modelName: modelName ?? `${repo.id.split('/').pop()} ${set.label}`,
     })
+}
+
+async function startLocalTransfer(
+    request: TalosLocalTransferRequest,
+): Promise<{ ok: true } | { ok: false; reason: TalosDownloadRefusal }> {
+    const started = await talosBeginModelTransfer(request)
 
     if (!started.ok) {
-        state.transfer.failure = started.reason
         return { ok: false, reason: started.reason }
     }
-
-    state.transfer.failure = null
-    state.transfer.runner = started.started.runner
-    state.transfer.networkBound = started.started.networkBound
-    await talosRefreshTransfer()
     return { ok: true }
 }
 
-export async function talosStopLocalDownload(): Promise<void> {
-    await talosStopModelTransfer()
-    await talosRefreshTransfer()
+export async function talosStopLocalDownload(id?: string): Promise<void> {
+    await talosPauseManagedModelTransfer(id)
+}
+
+/** Resume from the native journal even after the repository route unmounted. */
+export async function talosResumeLocalDownload(
+    id?: string,
+): Promise<{ ok: true } | { ok: false; reason: TalosDownloadRefusal }> {
+    return talosResumeManagedModelTransfer(id)
 }
 
 export async function talosRefreshTransfer(): Promise<void> {
-    const status = await talosModelTransferStatus()
-    state.transfer.active = status.active
-    state.transfer.modelName = status.modelName
-    state.transfer.haveBytes = status.haveBytes
-    state.transfer.totalBytes = status.totalBytes
+    await talosRefreshModelTransfer()
 }
 
 /**

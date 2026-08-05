@@ -11,6 +11,9 @@ import { Button } from '@/components/ui/button'
  * nessuno li vedesse mai.
  */
 const ChatsScreen = defineAsyncComponent(() => import('@/screens/ChatsScreen.vue'))
+const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
+)
 
 /**
  * F6 — persistent tablet chat panel (Claude split-view pattern, owner's
@@ -48,6 +51,7 @@ const emit = defineEmits<{
                 <Menu aria-hidden="true" />
             </Button>
             <span class="talos-orbitron-brand text-sm tracking-[0.2em] text-[var(--talos-text)]">TALOS</span>
+            <div class="ml-auto"><TalosMobileDownloadCenterTrigger /></div>
         </div>
         <ChatsScreen embedded class="min-h-0 flex-1" @activated="emit('activated')" />
     </aside>

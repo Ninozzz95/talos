@@ -82,6 +82,7 @@ test('manages a discovered Gemini model from Model Lab through the live Chat pic
 
     const card = page.locator('[data-model-card][data-model-id="gemini:gemini-live"]')
     await expect(card).toBeVisible()
+    await card.getByText('Details and actions', { exact: true }).click()
     await expect(card.getByText('Observed metadata', { exact: true })).toBeVisible()
 
     const visibility = card.getByRole('switch', { name: 'Show Gemini Live in composer' })
@@ -91,12 +92,12 @@ test('manages a discovered Gemini model from Model Lab through the live Chat pic
     await visibility.click()
     await expect(visibility).toHaveAttribute('aria-checked', 'true')
 
-    await card.getByText('Display name', { exact: true }).click()
     await card.getByRole('textbox', { name: 'Display name for Gemini Live', exact: true }).fill('Gemini Field')
     await card.getByLabel('Save display name for Gemini Live').click()
     await page.getByLabel('Search model catalog').fill('Gemini Field')
     await expect(card.getByRole('heading', { name: 'Gemini Field', exact: true })).toBeVisible()
 
+    await card.getByText('Details and actions', { exact: true }).click()
     await card.getByLabel('Test Gemini Field completion').click()
     await expect(card.getByText('Probe passed', { exact: true })).toBeVisible()
     expect(completionBodies).toHaveLength(1)
@@ -174,6 +175,7 @@ test('persists an OpenAI-compatible endpoint and timeout and recovers a manual m
     await page.getByLabel('Search model catalog').fill('Fallback Chat')
     const manualCard = page.locator('[data-model-card][data-model-id="openai:fallback-chat"]')
     await expect(manualCard).toBeVisible()
+    await manualCard.getByText('Details and actions', { exact: true }).click()
     await expect(manualCard.getByText('Declared capabilities', { exact: true })).toBeVisible()
     await expect(manualCard.getByText('reasoning', { exact: true })).toBeVisible()
 

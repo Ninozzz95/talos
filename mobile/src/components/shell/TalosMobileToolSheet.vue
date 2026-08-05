@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, provide, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, provide, ref } from 'vue'
 import { ArrowLeft, X } from '@lucide/vue'
 import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosI18n } from '@/i18n'
+
+const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
+)
 
 // Station sheet presented over the persistent chat base — mirror of the desktop
 // TalosMobileToolSheet (window/TalosMobileToolSheet.vue): Back-to-chat header,
@@ -134,6 +138,7 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
                     <p class="talos-title truncate text-md font-semibold text-[var(--talos-text)]">{{ subView ? subView.title : title }}</p>
                     <p v-if="!subView && description" class="truncate text-2xs text-[var(--talos-muted)]">{{ description }}</p>
                 </div>
+                <TalosMobileDownloadCenterTrigger />
                 <button
                     v-if="presentation === 'drawer'"
                     type="button"

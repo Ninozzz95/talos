@@ -1,6 +1,9 @@
 package ai.talos;
 
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -14,6 +17,14 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
 
 /**
  * Il motore locale su un telefono VERO.
@@ -24,24 +35,110 @@ import java.io.File;
  * eseguito» — debito dichiarato, non nascosto.
  *
  * Il modello non sta nel repository: sono centinaia di megabyte, e un file
- * grande in git è un file grande per sempre. Va spinto prima di eseguire:
+ * grande in git è un file grande per sempre. Il runner della matrice lo
+ * trasmette direttamente al solo namespace di campagna con l'UID del package
+ * debug, poi passa path, byte e SHA come argomenti instrumentation.
  *
- * <pre>
- * adb push modello.gguf /sdcard/Android/data/&lt;pacchetto&gt;/files/talos-probe.gguf
- * </pre>
- *
- * Senza, il test si SALTA con un messaggio che dice cosa manca — non passa
- * fingendo. Un test verde che non ha misurato niente è peggio di uno rosso.
+ * Senza una fixture il test generico si SALTA con un messaggio che dice cosa
+ * manca — non passa fingendo. Un test verde che non ha misurato niente è peggio
+ * di uno rosso.
  */
 @RunWith(AndroidJUnit4.class)
 public class TalosLlamaEngineDeviceTest {
 
     private static final String TAG = "TalosLlamaDeviceTest";
     private static final String FIXTURE = "talos-probe.gguf";
+    private static final String COMPATIBILITY_FILE = "talos-compat.gguf";
 
     private static File model(Context context) {
+        String selected = InstrumentationRegistry.getArguments().getString("talosModelPath", "");
+        if (selected != null && !selected.isEmpty()) return new File(selected);
         File directory = context.getExternalFilesDir(null);
         return directory == null ? null : new File(directory, FIXTURE);
+    }
+
+    private static String sha256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] buffer = new byte[1024 * 1024];
+        try (FileInputStream stream = new FileInputStream(file)) {
+            int read;
+            while ((read = stream.read(buffer)) >= 0) {
+                if (read > 0) digest.update(buffer, 0, read);
+            }
+        }
+        StringBuilder hexadecimal = new StringBuilder(64);
+        for (byte value : digest.digest()) {
+            hexadecimal.append(String.format("%02x", value & 0xff));
+        }
+        return hexadecimal.toString();
+    }
+
+    private static File compatibilityNativeFile(Context context) {
+        File root = context.getExternalFilesDir(null);
+        if (root == null) throw new IllegalStateException("external files dir assente");
+        return new File(new File(root, "talos-compat"), COMPATIBILITY_FILE);
+    }
+
+    private static File compatibilityUiFile(Context context, String caseId) {
+        if (caseId == null || !caseId.matches("^[A-Z][0-9]+$")) {
+            throw new IllegalArgumentException("talosCaseId non allowlisted");
+        }
+        File root = context.getExternalFilesDir(null);
+        if (root == null) throw new IllegalStateException("external files dir assente");
+        return new File(new File(new File(root, "models"), "__talos_compat__"),
+                caseId + File.separator + COMPATIBILITY_FILE);
+    }
+
+    private static void deleteIfPresent(File file) throws IOException {
+        if (file.exists() && !file.delete()) {
+            throw new IOException("fixture campagna non rimossa: " + file.getAbsolutePath());
+        }
+    }
+
+    private static void receiveFixtureFromHost(File target, int port) throws Exception {
+        File parent = target.getParentFile();
+        if (parent == null || (!parent.mkdirs() && !parent.isDirectory())) {
+            throw new IOException("directory campagna non creata");
+        }
+        deleteIfPresent(target);
+        boolean complete = false;
+        try (Socket socket = new Socket("127.0.0.1", port);
+             InputStream input = socket.getInputStream();
+             FileOutputStream output = new FileOutputStream(target)) {
+            socket.setSoTimeout(120_000);
+            byte[] buffer = new byte[1024 * 1024];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read > 0) output.write(buffer, 0, read);
+            }
+            output.getFD().sync();
+            complete = true;
+        } finally {
+            if (!complete) deleteIfPresent(target);
+        }
+    }
+
+    @Test
+    public void invalidGgufReportsModelLoadInsteadOfGenericOpenFailure() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File directory = new File(context.getFilesDir(), "talos-invalid-open");
+        assertTrue("directory fixture non creata", directory.mkdirs() || directory.isDirectory());
+        File invalid = new File(directory, "invalid.gguf");
+        try {
+            try (FileOutputStream stream = new FileOutputStream(invalid)) {
+                stream.write(new byte[] { 'n', 'o', 't', '-', 'g', 'g', 'u', 'f' });
+                stream.getFD().sync();
+            }
+
+            TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
+                    context, invalid.getAbsolutePath(), 4, 4096, 0, true);
+
+            assertNull("un file non GGUF non deve produrre un engine", attempt.engine());
+            assertEquals(TalosLlamaEngine.FailureStage.MODEL_LOAD, attempt.failureStage());
+        } finally {
+            assertFalse("fixture invalida non rimossa", invalid.exists() && !invalid.delete());
+            assertFalse("directory fixture non rimossa", directory.exists() && !directory.delete());
+        }
     }
 
     @Test
@@ -113,7 +210,7 @@ public class TalosLlamaEngineDeviceTest {
         // contro cui ogni altro backend viene misurato.
         // Contesto largo abbastanza da contenere il tetto della prova: è il
         // tempo a fermarla, e su un telefono veloce quel tempo sono molti token.
-        TalosLlamaEngine engine = TalosLlamaEngine.open(context, file.getAbsolutePath(), 4, 2048, 0, true);
+        TalosLlamaEngine engine = TalosLlamaEngine.open(context, file.getAbsolutePath(), 4, 4096, 0, true);
         assertNotNull("il modello non si è aperto — guarda logcat, tag TalosLlama", engine);
 
         try {
@@ -147,5 +244,99 @@ public class TalosLlamaEngineDeviceTest {
         } finally {
             engine.close();
         }
+    }
+
+    @Test
+    public void appliesEmbeddedTemplateAndGeneratesAVisibleReply() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File file = model(context);
+        String hostPort = InstrumentationRegistry.getArguments()
+                .getString("talosHostPort", "");
+        if (hostPort != null && !hostPort.isEmpty()) {
+            File campaignFile = compatibilityNativeFile(context);
+            assertNotNull("path fixture campagna assente", file);
+            assertEquals("lo stream può scrivere soltanto nel target nativo allowlisted",
+                    campaignFile.getCanonicalPath(), file.getCanonicalPath());
+            receiveFixtureFromHost(campaignFile, Integer.parseInt(hostPort));
+        }
+        Assume.assumeTrue(
+                "modello di prova assente: spingilo in " + (file == null ? "?" : file.getAbsolutePath()),
+                file != null && file.isFile());
+
+        String expectedBytes = InstrumentationRegistry.getArguments()
+                .getString("talosExpectedBytes", "");
+        String expectedSha256 = InstrumentationRegistry.getArguments()
+                .getString("talosExpectedSha256", "");
+        String caseId = InstrumentationRegistry.getArguments()
+                .getString("talosCaseId", "manual");
+        if (expectedBytes != null && !expectedBytes.isEmpty()) {
+            assertEquals("byte fixture diversi per " + caseId,
+                    Long.parseLong(expectedBytes), file.length());
+        }
+        if (expectedSha256 != null && !expectedSha256.isEmpty()) {
+            assertEquals("SHA-256 fixture diverso per " + caseId,
+                    expectedSha256.toLowerCase(), sha256(file));
+        }
+        Log.i(TAG, "fixture verificata: case=" + caseId + " bytes=" + file.length());
+
+        TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
+                context, file.getAbsolutePath(), 4, 4096, 0, false);
+        assertNotNull("il modello non si è aperto: " + attempt.failureStage(), attempt.engine());
+
+        try (TalosLlamaEngine engine = attempt.engine()) {
+            String prompt = engine.chatPrompt(
+                    new String[] { "system", "user" },
+                    new String[] {
+                            "Rispondi in modo breve e diretto.",
+                            "Scrivi soltanto la parola TALOS."
+                    });
+            assertNotNull("il GGUF non espone un chat template", prompt);
+            assertFalse("il GGUF espone un chat template vuoto", prompt.isEmpty());
+
+            String reply = engine.generateBlocking(prompt, 32, true);
+            assertNotNull("la generazione templata non è tornata", reply);
+            assertFalse("la generazione templata è vuota", reply.trim().isEmpty());
+            assertTrue("nessun token prodotto", engine.tokensProduced() > 0);
+            Log.i(TAG, "compatibilità chat: context=" + engine.contextTokens()
+                    + " tokens=" + engine.tokensProduced());
+        }
+
+        boolean projectToUi = "true".equals(InstrumentationRegistry.getArguments()
+                .getString("talosProjectToUi", "false"));
+        if (projectToUi) {
+            File uiFile = compatibilityUiFile(context, caseId);
+            File uiDirectory = uiFile.getParentFile();
+            assertNotNull("directory UI campagna assente", uiDirectory);
+            assertTrue("directory UI campagna non creata",
+                    uiDirectory.mkdirs() || uiDirectory.isDirectory());
+            deleteIfPresent(uiFile);
+            Files.move(file.toPath(), uiFile.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            assertFalse("la proiezione UI ha duplicato la fixture nativa", file.exists());
+            assertTrue("la proiezione UI non esiste", uiFile.isFile());
+        }
+    }
+
+    @Test
+    public void cleansCompatibilityCampaignFiles() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String caseId = InstrumentationRegistry.getArguments().getString("talosCaseId", "");
+        Assume.assumeTrue("cleanup campagna senza case ID allowlisted",
+                caseId != null && caseId.matches("^[A-Z][0-9]+$"));
+
+        File nativeFile = compatibilityNativeFile(context);
+        File uiFile = compatibilityUiFile(context, caseId);
+        deleteIfPresent(nativeFile);
+        deleteIfPresent(uiFile);
+
+        File uiCaseDirectory = uiFile.getParentFile();
+        if (uiCaseDirectory != null && uiCaseDirectory.isDirectory()) uiCaseDirectory.delete();
+        File uiRoot = uiCaseDirectory == null ? null : uiCaseDirectory.getParentFile();
+        if (uiRoot != null && uiRoot.isDirectory()) uiRoot.delete();
+        File nativeDirectory = nativeFile.getParentFile();
+        if (nativeDirectory != null && nativeDirectory.isDirectory()) nativeDirectory.delete();
+
+        assertFalse("fixture nativa residua", nativeFile.exists());
+        assertFalse("fixture UI residua per " + caseId, uiFile.exists());
     }
 }

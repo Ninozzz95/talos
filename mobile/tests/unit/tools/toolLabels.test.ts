@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
     TALOS_TOOL_ICONS,
     TALOS_TOOL_LABELS,
+    TALOS_TOOL_LABEL_KEYS,
     TALOS_TOOL_CONSENT_KEYS,
     talosToolConsentCopy,
     talosToolIconName,
@@ -15,6 +16,7 @@ import { createTalosImageTools } from '@/lib/images/imageTools'
 import { createTalosLocalModelTools } from '@/lib/models/modelTools'
 import { createTalosLibraryExportTools } from '@/lib/tools/libraryExportTools'
 import { createTalosLibraryContextPolicyTools } from '@/lib/tools/libraryContextPolicyTools'
+import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
 import { talosTestT } from '../../helpers/talosTestI18n'
 
 /**
@@ -75,7 +77,10 @@ function everyToolName(): string[] {
     // lesson keeps arriving in the same shape: a guard that enumerates by hand
     // goes stale the next time somebody adds a tool.
     const models = createTalosLocalModelTools()
-    return [...read, ...web, ...documents, ...images, ...exports, ...policy, ...models]
+    const memoryWrite = createTalosMemoryWriteTools({
+        create: vi.fn(async (input) => ({ title: input.title })),
+    })
+    return [...read, ...web, ...documents, ...images, ...exports, ...policy, ...models, ...memoryWrite]
         .map((tool) => tool.name)
 }
 
@@ -83,6 +88,16 @@ describe('tool activity labels', () => {
     it('P1-LIB-LABEL-01 owns a human label and icon for Library browsing', () => {
         expect(TALOS_TOOL_LABELS).toHaveProperty('library_list', 'Browsing your Library')
         expect(TALOS_TOOL_ICONS).toHaveProperty('library_list', 'library')
+    })
+
+    it('C45-RED-09D gives memory_write a natural localized activity boundary', () => {
+        expect(TALOS_TOOL_LABELS).toHaveProperty('memory_write', 'Saving something to memory')
+        expect(TALOS_TOOL_LABEL_KEYS).toHaveProperty('memory_write', 'toolActivity.memoryWrite')
+        expect(TALOS_TOOL_ICONS).toHaveProperty('memory_write', 'memory')
+        expect(talosToolActivityLabel(
+            { name: 'memory_write', detail: null },
+            talosTestT('it')('toolActivity.memoryWrite'),
+        )).toBe('Salvataggio nella memoria')
     })
 
     it('EVERY tool the app can run has a human label', () => {

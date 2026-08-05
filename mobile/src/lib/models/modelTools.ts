@@ -195,7 +195,8 @@ export function createTalosLocalModelTools(): TalosToolDefinition<never>[] {
             title: 'Downloading a model to this phone',
             description: 'Start downloading one model file set onto this device. Call '
                 + 'local_model_inspect first and tell the user what it will cost them in space and '
-                + 'data before asking. Only one download runs at a time.',
+                + 'data before asking. The app runs up to two downloads at once and keeps later '
+                + 'requests in a durable queue.',
             action: 'write',
             requiredActions: ['write', 'outbound'],
             /**
@@ -215,6 +216,9 @@ export function createTalosLocalModelTools(): TalosToolDefinition<never>[] {
             async run(input) {
                 const state = talosLocalModels
                 const revision = input.revision ?? 'main'
+                const existingTransferIds = new Set(
+                    state.transfer.items.map((transfer) => transfer.id),
+                )
                 // Open it if the model jumped straight here, so a download can
                 // never be started against a set nobody has looked at — and
                 // re-open when the REVISION differs, not only the repository.
@@ -239,6 +243,13 @@ export function createTalosLocalModelTools(): TalosToolDefinition<never>[] {
                         content: `The download did not start: ${result.reason}`,
                     }
                 }
+                const startedTransfer = state.transfer.items.find(
+                    (transfer) => !existingTransferIds.has(transfer.id),
+                ) ?? state.transfer.items.find((transfer) => (
+                    transfer.repo === input.repo
+                    && transfer.revision === revision
+                    && transfer.paths.includes(input.file)
+                ))
                 return {
                     ok: true,
                     content: JSON.stringify({
@@ -246,7 +257,8 @@ export function createTalosLocalModelTools(): TalosToolDefinition<never>[] {
                         size: format(set.totalBytes),
                         verifiable: !talosSetWarnings(set).unverifiable,
                         // The caveat that costs money if it goes unsaid.
-                        tiedToCurrentNetwork: state.transfer.networkBound,
+                        tiedToCurrentNetwork:
+                            startedTransfer?.networkBound ?? state.transfer.networkBound,
                     }),
                 }
             },
@@ -267,19 +279,33 @@ export function createTalosLocalModelTools(): TalosToolDefinition<never>[] {
                 // screen had ever asked.
                 await talosRefreshLeftovers()
                 const { transfer, leftovers } = talosLocalModels
+                const downloads = transfer.items.map((item) => ({
+                    id: item.id,
+                    model: item.modelName,
+                    phase: item.phase,
+                    active: item.active,
+                    done: format(item.haveBytes),
+                    total: format(item.totalBytes),
+                    percent: item.totalBytes > 0
+                        ? Math.round((item.haveBytes / item.totalBytes) * 100)
+                        : 0,
+                    tiedToCurrentNetwork: item.networkBound,
+                    failure: item.failure,
+                }))
+                const firstActive = downloads.find((item) => item.active)
                 return {
                     ok: true,
                     content: JSON.stringify({
-                        downloading: transfer.active
+                        downloading: firstActive
                             ? {
-                                model: transfer.modelName,
-                                done: format(transfer.haveBytes),
-                                total: format(transfer.totalBytes),
-                                percent: transfer.totalBytes > 0
-                                    ? Math.round((transfer.haveBytes / transfer.totalBytes) * 100)
-                                    : 0,
+                                model: firstActive.model,
+                                done: firstActive.done,
+                                total: firstActive.total,
+                                percent: firstActive.percent,
                             }
                             : null,
+                        downloads,
+                        maximumActive: 2,
                         // Space held by attempts nobody is watching. Worth
                         // surfacing here too: the user may only ever ask.
                         abandonedDownloads: leftovers.totalBytes > 0

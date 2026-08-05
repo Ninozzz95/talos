@@ -69,6 +69,40 @@ function setKeyOf(path: string): string {
 }
 
 /**
+ * Preserve a publisher's variant suffix after the quantisation.
+ *
+ * `Q4_K_M` and `Q4_K_M-hip-optimized` are different upstream files. Reducing
+ * both to the quantisation makes two rows, two sizes and two hashes look like
+ * accidental duplicates. Shard coordinates have already been removed by
+ * `setKeyOf`, so anything left after the final quantisation marker is stable
+ * publisher metadata rather than a part number.
+ */
+function variantSuffixOf(path: string, quantisation: string): string | null {
+    const name = setKeyOf(path).split('/').pop() ?? ''
+    const stem = name.replace(/\.gguf$/i, '')
+    const marker = `-${quantisation.toLocaleLowerCase('en-US')}`
+    const markerIndex = stem.toLocaleLowerCase('en-US').lastIndexOf(marker)
+    if (markerIndex < 0) return null
+    const suffix = stem.slice(markerIndex + marker.length).replace(/^[-_.]+/, '').trim()
+    return suffix === '' ? null : suffix
+}
+
+function humanVariantSuffix(suffix: string): string {
+    const acronyms: Readonly<Record<string, string>> = {
+        cuda: 'CUDA',
+        hip: 'HIP',
+        metal: 'Metal',
+        rocm: 'ROCm',
+        vulkan: 'Vulkan',
+    }
+    return suffix
+        .split(/[-_.]+/)
+        .filter(Boolean)
+        .map((part) => acronyms[part.toLocaleLowerCase('en-US')] ?? part)
+        .join(' ')
+}
+
+/**
  * Group a repository's GGUF files into the models it actually holds.
  *
  * @param files what `pathsInfo` returned — sizes and hashes, not names alone.
@@ -97,9 +131,14 @@ export function talosGroupGgufFiles(files: readonly TalosHuggingFaceFile[]): Tal
         const parsed = talosParseGgufFileName(first.path.split('/').pop() ?? '')
         const expectedShards = parsed?.shardCount ?? 1
         const name = key.split('/').pop() ?? key
+        const variantSuffix = parsed?.quantisation
+            ? variantSuffixOf(key, parsed.quantisation)
+            : null
 
         sets.push({
-            label: parsed?.quantisation ?? name.replace(/\.gguf$/i, ''),
+            label: parsed?.quantisation
+                ? `${parsed.quantisation}${variantSuffix ? ` · ${humanVariantSuffix(variantSuffix)}` : ''}`
+                : name.replace(/\.gguf$/i, ''),
             quantisation: parsed?.quantisation ?? null,
             paths: ordered.map((file) => file.path),
             sizes: ordered.map((file) => file.sizeBytes),

@@ -83,6 +83,17 @@ function set(over: Record<string, unknown> = {}) {
     }
 }
 
+function transferItem(over: Record<string, unknown> = {}) {
+    return {
+        id: 'transfer-a', phase: 'running', active: true,
+        repo: 'owner/model-a', revision: 'main', paths: ['a.gguf'],
+        modelName: 'Model A', haveBytes: 25, totalBytes: 100,
+        runner: 'USER_INITIATED_JOB', networkBound: true,
+        failure: null, resumable: true,
+        ...over,
+    }
+}
+
 function baseState(over: Record<string, unknown> = {}) {
     return reactive({
         query: '', searching: false, results: [], searchFailure: null,
@@ -97,7 +108,7 @@ function baseState(over: Record<string, unknown> = {}) {
         context: 4096,
         transfer: {
             active: false, modelName: null, haveBytes: 0, totalBytes: 0,
-            runner: null, networkBound: true, failure: null,
+            runner: null, networkBound: true, failure: null, items: [],
         },
         leftovers: { items: [], totalBytes: 0 },
         ...over,
@@ -123,6 +134,11 @@ describe('the permission each tool asks for', () => {
      */
     it('asks the human every single time before downloading', () => {
         expect(toolNamed('local_model_download').confirmation).toBe('always')
+    })
+
+    it('C45-RED-08H names the two active slots and durable queue honestly', () => {
+        expect(toolNamed('local_model_download').description).toContain('up to two')
+        expect(toolNamed('local_model_download').description).toContain('queue')
     })
 
     it('declares reaching the Hub as outbound, so the outbound policy governs it', () => {
@@ -338,8 +354,35 @@ describe('downloading', () => {
             transfer: {
                 active: true, modelName: 'x', haveBytes: 0, totalBytes: 1,
                 runner: 'FOREGROUND_SERVICE', networkBound: false, failure: null,
+                items: [transferItem({
+                    modelName: 'x', haveBytes: 0, totalBytes: 1,
+                    runner: 'FOREGROUND_SERVICE', networkBound: false,
+                })],
             },
         }) as never
+
+        const result = await call('local_model_download', { repo: 'a/b', file: 'model-Q4_K_M.gguf' })
+
+        expect(JSON.parse(result.content).tiedToCurrentNetwork).toBe(false)
+    })
+
+    it('C45-RED-08H attributes the second start to its own network policy', async () => {
+        const state = baseState({
+            repo: { id: 'a/b', revision: 'main', loading: false, sets: [set()] },
+            transfer: {
+                active: true, modelName: 'Model A', haveBytes: 25, totalBytes: 100,
+                runner: 'USER_INITIATED_JOB', networkBound: true, failure: null,
+                items: [transferItem()],
+            },
+        })
+        store.state = state as never
+        store.download.mockImplementationOnce(async () => {
+            state.transfer.items.push(transferItem({
+                id: 'transfer-b', repo: 'a/b', paths: ['model-Q4_K_M.gguf'],
+                modelName: 'Model B', networkBound: false,
+            }))
+            return { ok: true }
+        })
 
         const result = await call('local_model_download', { repo: 'a/b', file: 'model-Q4_K_M.gguf' })
 
@@ -366,6 +409,10 @@ describe('checking on it', () => {
                 active: true, modelName: 'Qwen3-4B Q4_K_M',
                 haveBytes: 1024 ** 3, totalBytes: 4 * 1024 ** 3,
                 runner: 'USER_INITIATED_JOB', networkBound: true, failure: null,
+                items: [transferItem({
+                    modelName: 'Qwen3-4B Q4_K_M',
+                    haveBytes: 1024 ** 3, totalBytes: 4 * 1024 ** 3,
+                })],
             },
         }) as never
 
@@ -380,6 +427,37 @@ describe('checking on it', () => {
         const result = await call('local_models_status', {})
 
         expect(JSON.parse(result.content).downloading).toBeNull()
+    })
+
+    it('C45-RED-08H reports every durable row and projects the first active one', async () => {
+        store.state = baseState({
+            transfer: {
+                active: true, modelName: 'Model A', haveBytes: 25, totalBytes: 100,
+                runner: 'USER_INITIATED_JOB', networkBound: true, failure: null,
+                items: [
+                    transferItem({ phase: 'paused', active: false }),
+                    transferItem({
+                        id: 'transfer-b', phase: 'running', active: true,
+                        modelName: 'Model B', haveBytes: 50, totalBytes: 200,
+                    }),
+                    transferItem({
+                        id: 'transfer-c', phase: 'waiting', active: false,
+                        modelName: 'Model C', haveBytes: 0, totalBytes: 300,
+                    }),
+                ],
+            },
+        }) as never
+
+        const result = await call('local_models_status', {})
+        const status = JSON.parse(result.content)
+
+        expect(status.downloading).toMatchObject({ model: 'Model B', percent: 25 })
+        expect(status.downloads).toEqual([
+            expect.objectContaining({ model: 'Model A', phase: 'paused', active: false }),
+            expect.objectContaining({ model: 'Model B', phase: 'running', active: true }),
+            expect.objectContaining({ model: 'Model C', phase: 'waiting', active: false }),
+        ])
+        expect(status.maximumActive).toBe(2)
     })
 
     /** Space held by attempts nobody is watching, surfaced here too. */

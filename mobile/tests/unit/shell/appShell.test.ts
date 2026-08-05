@@ -454,6 +454,32 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         wrapper.unmount()
     })
 
+    it('C45-RED-09B gives Model Lab child routes a tokenized directional transition boundary', async () => {
+        const router = makeRouter('/settings/models')
+        const wrapper = mount(App, { global: { plugins: [router] } })
+        await flushPromises()
+        await vi.waitFor(() => {
+            expect(wrapper.find('[data-testid="talos-model-lab-route-view"]').exists()).toBe(true)
+        })
+
+        await router.push('/settings/models/local')
+        await vi.waitFor(() => {
+            const view = wrapper.get('[data-testid="talos-model-lab-route-view"]')
+            expect(router.currentRoute.value.name).toBe('settings-models-local')
+            expect(view.attributes('data-transition-direction')).toBe('forward')
+            expect(view.attributes('data-motion-duration')).toBe('--talos-motion-duration-tab-change')
+            expect(view.classes()).toContain('motion-reduce:transform-none')
+        })
+
+        await router.push('/settings/models')
+        await vi.waitFor(() => {
+            expect(wrapper.get('[data-testid="talos-model-lab-route-view"]')
+                .attributes('data-transition-direction')).toBe('back')
+        })
+        expect(wrapper.findAll('[data-testid="talos-model-lab-route-view"]')).toHaveLength(1)
+        wrapper.unmount()
+    })
+
     // Owner 2026-07-24: New Chat now lives inside the header 3-dot options menu
     // (shared with the immersive chrome), not as a standalone button.
     /** The open menu's New chat entry, without pressing it. */

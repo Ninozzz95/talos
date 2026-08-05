@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { talosCreateHuggingFaceClient } from '@/lib/models/huggingFace'
+import { talosModelHasQ4Variant, talosModelIsChatCapable } from '@/lib/models/browseFilters'
+import { talosHasDeclaredPermissiveLicence } from '@/lib/models/licensePolicy'
 
 const enabled = process.env.TALOS_RUN_HF_UPSTREAM === '1'
 const OPENAPI_SHA256 = '92e1d8823c21541a993b28d0453b868bd0e42099d1090746a97ac3b84a8489f1'
@@ -91,6 +93,14 @@ describe.skipIf(!enabled)('Hugging Face browse contract, live', () => {
             estimated: true,
         })
         expect(model!.browseVariant?.fileBytes).not.toBe(qwen.gguf.totalFileSize)
+        expect(model!.hasChatTemplate).toBe(true)
+        expect(model!.tags).toContain('conversational')
+        expect(talosModelIsChatCapable(model!)).toBe(true)
+        expect(talosModelHasQ4Variant(model!)).toBe(true)
+        expect(model!.licence).toBe('apache-2.0')
+        expect(talosHasDeclaredPermissiveLicence(model!)).toBe(true)
+        expect(model!.downloads).toBeGreaterThan(0)
+        expect(model!.downloadsAllTime).toEqual(expect.any(Number))
 
         for (const [repo, revision, expected] of [
             ['unsloth/Qwen3.5-4B-GGUF', qwen.sha, {
@@ -117,4 +127,19 @@ describe.skipIf(!enabled)('Hugging Face browse contract, live', () => {
             })
         }
     }, 60_000)
+
+    it('does not turn a pinned text-generation model into Chat without evidence', async () => {
+        const client = talosCreateHuggingFaceClient({ fetch })
+        const models = await client.searchModels('antirez/deepseek-v4-gguf', 20)
+        const model = models.find((candidate) => candidate.id === 'antirez/deepseek-v4-gguf')
+
+        expect(model).toBeDefined()
+        expect(model!.revision).toBe('e7f04037032990db0346398d249baf9fb9df1ccc')
+        expect(model!.task).toBe('text-generation')
+        expect(model!.tags).not.toContain('conversational')
+        expect(model!.hasChatTemplate).toBe(false)
+        expect(talosModelIsChatCapable(model!)).toBe(false)
+        expect(model!.licence).toBe('mit')
+        expect(talosHasDeclaredPermissiveLicence(model!)).toBe(true)
+    }, 30_000)
 })

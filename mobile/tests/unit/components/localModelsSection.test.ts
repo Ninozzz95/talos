@@ -17,11 +17,13 @@ const store = vi.hoisted(() => ({
     examine: vi.fn(async () => undefined),
     download: vi.fn(async () => ({ ok: true as const })),
     stop: vi.fn(async () => undefined),
+    resume: vi.fn(async () => ({ ok: true as const })),
     close: vi.fn(),
     open: vi.fn(async () => undefined),
     search: vi.fn(async () => undefined),
     saveToken: vi.fn(async () => undefined),
     loadCatalogue: vi.fn(async () => undefined),
+    describe: vi.fn(async () => null),
     forgetToken: vi.fn(async () => undefined),
 }))
 
@@ -33,11 +35,14 @@ vi.mock('@/stores/localModels', () => ({
     talosExamineSet: store.examine,
     talosDownloadSet: store.download,
     talosStopLocalDownload: store.stop,
+    talosResumeLocalDownload: store.resume,
     talosRefreshTransfer: vi.fn(async () => undefined),
     talosRefreshDeviceCapacity: vi.fn(async () => undefined),
     talosRefreshLeftovers: vi.fn(async () => undefined),
     talosRefreshHuggingFaceToken: vi.fn(async () => undefined),
     talosLoadLocalCatalogue: store.loadCatalogue,
+    talosDescribeModelRepo: store.describe,
+    talosSetLocalContext: vi.fn(),
     talosSetHuggingFaceToken: store.saveToken,
     talosForgetHuggingFaceToken: store.forgetToken,
 }))
@@ -48,14 +53,16 @@ vi.mock('@/stores/localModels', () => ({
  */
 const engine = vi.hoisted(() => ({
     installed: [] as { path: string, name: string, bytes: number, modifiedAt: number }[],
+    list: vi.fn(),
 }))
 
 vi.mock('@/services/localEngine', () => ({
     talosLocalEngineStatus: vi.fn(async () => null),
-    talosLocalInstalledModels: vi.fn(async () => ({ models: engine.installed, unreadable: [] })),
+    talosLocalInstalledModels: engine.list,
 }))
 
 import TalosMobileLocalModels from '@/components/talos/models/TalosMobileLocalModels.vue'
+import TalosMobileLocalRepoDetail from '@/components/talos/models/TalosMobileLocalRepoDetail.vue'
 import { useSettingsStore } from '@/stores/settings'
 
 const MODELS_ROOT = '/storage/emulated/0/Android/data/ai.talos.dev/files/models'
@@ -136,6 +143,7 @@ function recommendation(family: string, displayName: string) {
 function baseState(over: Record<string, unknown> = {}) {
     return reactive({
         query: '',
+        sort: 'downloads',
         searching: false,
         results: [],
         searchFailure: null,
@@ -158,7 +166,7 @@ function baseState(over: Record<string, unknown> = {}) {
             recommended: [], rejected: [],
         },
         transfer: {
-            active: false, modelName: null, haveBytes: 0, totalBytes: 0,
+            active: false, paused: false, modelName: null, haveBytes: 0, totalBytes: 0,
             runner: null, networkBound: true, failure: null,
         },
         leftovers: { items: [], totalBytes: 0 },
@@ -168,8 +176,13 @@ function baseState(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
     engine.installed = []
+    engine.list.mockReset().mockImplementation(async () => ({ models: engine.installed, unreadable: [] }))
     store.examine.mockClear()
     store.download.mockClear().mockResolvedValue({ ok: true })
+    store.stop.mockClear().mockImplementation(async () => {
+        (store.state as { transfer: { paused: boolean } }).transfer.paused = true
+    })
+    store.resume.mockClear().mockResolvedValue({ ok: true })
     store.open.mockClear()
     store.saveToken.mockClear()
     store.forgetToken.mockClear()
@@ -178,7 +191,18 @@ beforeEach(() => {
 })
 
 async function screen() {
-    const wrapper = mount(TalosMobileLocalModels)
+    const currentRepo = (store.state as { repo?: { id: string, revision: string } | null }).repo
+    const wrapper = mount(currentRepo ? TalosMobileLocalRepoDetail : TalosMobileLocalModels, {
+        ...(currentRepo ? { props: { repoId: currentRepo.id, revision: currentRepo.revision } } : {}),
+        global: {
+            stubs: {
+                RouterLink: {
+                    props: ['to'],
+                    template: '<a :data-to="JSON.stringify(to)"><slot /></a>',
+                },
+            },
+        },
+    })
     await flushPromises()
     return wrapper
 }
@@ -203,6 +227,44 @@ async function searchScreen() {
  * to say four things pushes the list off the screen it is meant to fill.
  */
 describe('the space a row is allowed to cost', () => {
+    it('C45-RED-09C omits the whole installed section after a valid zero scan', async () => {
+        engine.installed = []
+        const wrapper = await screen()
+
+        expect(wrapper.find('[data-testid="talos-models-installed"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-models-installed-empty"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-models-import"]').exists()).toBe(true)
+    })
+
+    it('C45-RED-09C renders the installed section as soon as one model exists', async () => {
+        engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
+        const wrapper = await screen()
+
+        expect(wrapper.find('[data-testid="talos-models-installed"]').exists()).toBe(true)
+        expect(wrapper.findAll('[data-testid="talos-models-installed-row"]')).toHaveLength(1)
+    })
+
+    it('C45-RED-12A renders a singular count for one installed model and plural for two', async () => {
+        engine.installed = [installed('uno.gguf', 'imported')]
+        let wrapper = await screen()
+
+        expect(wrapper.get('[data-testid="talos-models-installed"]').text()).toContain('1 model')
+        expect(wrapper.get('[data-testid="talos-models-installed"]').text()).not.toContain('1 models')
+        wrapper.unmount()
+
+        engine.installed = [installed('uno.gguf', 'imported'), installed('due.gguf', 'main')]
+        wrapper = await screen()
+        expect(wrapper.get('[data-testid="talos-models-installed"]').text()).toContain('2 models')
+    })
+
+    it('C45-RED-09C does not misreport a failed scan as a valid empty device', async () => {
+        engine.list.mockRejectedValueOnce(new Error('filesystem refused'))
+        const wrapper = await screen()
+
+        expect(wrapper.find('[data-testid="talos-models-installed-empty"]').exists()).toBe(false)
+        expect(wrapper.get('[data-testid="talos-models-installed-error"]').attributes('role')).toBe('alert')
+    })
+
     it('drops the address every model shares and keeps the folder that differs', async () => {
         engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
         const wrapper = await screen()
@@ -296,6 +358,20 @@ describe('the space a row is allowed to cost', () => {
         expect(wrapper.find('[data-testid="talos-models-installed-sort-recent"]').exists()).toBe(true)
         expect(wrapper.find('[data-testid="talos-models-installed-layout"]').exists()).toBe(true)
     })
+
+    it('C45-RED-12 groups installed models into one continuous divided surface', async () => {
+        engine.installed = [installed('uno.gguf', 'imported'), installed('due.gguf', 'main')]
+        const wrapper = await screen()
+        const list = wrapper.get('[data-testid="talos-models-installed-list"]')
+
+        expect(list.classes()).toContain('overflow-hidden')
+        expect(list.classes()).toContain('border')
+        expect(list.classes()).toContain('divide-y')
+        for (const row of wrapper.findAll('[data-testid="talos-models-installed-row"]')) {
+            expect(row.classes()).not.toContain('rounded-[var(--talos-radius-card)]')
+            expect(row.classes()).not.toContain('border')
+        }
+    })
 })
 
 describe('an ordering the panel is allowed to remember', () => {
@@ -382,48 +458,13 @@ describe('device context belongs to the Model Lab hub', () => {
     })
 })
 
-describe('the Hugging Face token', () => {
-    /**
-     * The field is a password field and the draft is cleared the moment the
-     * value reaches the Keystore. A token left in a bound input is a token in a
-     * component's state — and in every snapshot, screenshot and heap dump of it.
-     */
-    it('takes the token and does not keep it', async () => {
+describe('the Hugging Face access boundary', () => {
+    it('keeps every secret control out of Local Models', async () => {
         const wrapper = await searchScreen()
 
-        await wrapper.get('[data-testid="talos-models-token-input"]').setValue('hf_secret')
-        await wrapper.get('[data-testid="talos-models-token-save"]').trigger('click')
-        await flushPromises()
-
-        expect(store.saveToken).toHaveBeenCalledWith('hf_secret')
-        expect((wrapper.get('[data-testid="talos-models-token-input"]').element as HTMLInputElement).value)
-            .toBe('')
-        expect(wrapper.get('[data-testid="talos-models-token-input"]').attributes('type'))
-            .toBe('password')
-    })
-
-    /**
-     * With a token saved, the screen says so and shows nothing back. There is
-     * nothing to show: the store carries `hasToken`, a boolean, and the value
-     * itself never leaves the Keystore — which is the property worth asserting,
-     * because a state field holding it would make every screenshot a leak.
-     */
-    it('reports that a token exists without ever holding one', async () => {
-        store.state = baseState({ hasToken: true }) as never
-        const wrapper = await searchScreen()
-
-        const panel = wrapper.get('[data-testid="talos-models-token"]')
-        expect(panel.text()).toContain('secure store')
-        expect(Object.keys(store.state)).not.toContain('token')
-        expect((wrapper.get('[data-testid="talos-models-token-input"]').element as HTMLInputElement).value)
-            .toBe('')
-        expect(wrapper.find('[data-testid="talos-models-token-forget"]').exists()).toBe(true)
-    })
-
-    it('offers nothing to forget when there is no token', async () => {
-        const wrapper = await screen()
-
-        expect(wrapper.find('[data-testid="talos-models-token-forget"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-models-token"]').exists()).toBe(false)
+        expect(wrapper.find('input[type="password"]').exists()).toBe(false)
+        expect(wrapper.html()).not.toContain('hf_secret')
     })
 })
 
@@ -451,7 +492,7 @@ describe('the results', () => {
         expect(result.attributes('aria-label')).toBe('Open unsloth/Qwen3-4B-GGUF')
     })
 
-    it('opens the immutable revision returned with the browse row', async () => {
+    it('routes to the immutable revision returned with the browse row', async () => {
         const revision = 'c'.repeat(40)
         store.state = baseState({
             query: 'qwen',
@@ -465,9 +506,13 @@ describe('the results', () => {
         }) as never
         const wrapper = await screen()
 
-        await wrapper.get('[data-testid="talos-models-result"]').trigger('click')
-
-        expect(store.open).toHaveBeenCalledWith('unsloth/Qwen3-4B-GGUF', revision)
+        const target = JSON.parse(wrapper.get('[data-testid="talos-models-result"]').attributes('data-to'))
+        expect(target).toEqual({
+            name: 'settings-models-local-repo',
+            params: { owner: 'unsloth', repo: 'Qwen3-4B-GGUF' },
+            query: { revision },
+        })
+        expect(store.open).not.toHaveBeenCalled()
     })
 
     /**
@@ -494,6 +539,8 @@ describe('the results', () => {
         expect(groups[0]!.text()).toContain('unsloth')
         expect(groups[0]!.findAll('[data-testid="talos-models-result"]')).toHaveLength(2)
         expect(groups[1]!.text()).toContain('bartowski')
+        expect(groups[1]!.text()).toContain('1 model')
+        expect(groups[1]!.text()).not.toContain('1 models')
     })
 
     /** The filter exists, and its options come from the results themselves. */
@@ -515,6 +562,89 @@ describe('the results', () => {
             { value: 'unsloth', label: 'unsloth (1)' },
             { value: 'bartowski', label: 'bartowski (1)' },
         ])
+    })
+
+    it('keeps publisher options from the unfiltered response when a facet removes rows', async () => {
+        store.state = baseState({
+            results: [
+                {
+                    id: 'unsloth/chat', downloads: 900, likes: 0, gated: false,
+                    tags: ['conversational'], hasChatTemplate: false,
+                },
+                {
+                    id: 'bartowski/plain', downloads: 400, likes: 0, gated: false,
+                    tags: [], hasChatTemplate: false,
+                },
+            ],
+        }) as never
+        const wrapper = await searchScreen()
+        await wrapper.get('[data-testid="talos-models-filter-chat"]').trigger('click')
+
+        const select = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
+            .find((candidate) => candidate.props('ariaLabel') === 'Filter by publisher')
+        expect(select?.props('items')).toEqual([
+            { value: 'unsloth', label: 'unsloth (1)' },
+            { value: 'bartowski', label: 'bartowski (1)' },
+        ])
+    })
+
+    it('keeps controls visible at zero and reset restores the rows', async () => {
+        store.state = baseState({
+            results: [{
+                id: 'bartowski/plain', downloads: 400, likes: 0, gated: false,
+                tags: [], hasChatTemplate: false,
+            }],
+        }) as never
+        const wrapper = await searchScreen()
+        await wrapper.get('[data-testid="talos-models-filter-chat"]').trigger('click')
+
+        expect(wrapper.find('[data-testid="talos-models-provider-filter"]').exists()).toBe(true)
+        expect(wrapper.get('[data-testid="talos-models-filter-empty"]').text()).toContain('0')
+        await wrapper.get('[data-testid="talos-models-filter-reset"]').trigger('click')
+        expect(wrapper.findAll('[data-testid="talos-models-result"]')).toHaveLength(1)
+    })
+
+    it('LOCAL-FILTER-RAIL-01 keeps every complete filter on one horizontally scrolling row', async () => {
+        store.state = baseState({
+            results: [{ id: 'x/y', downloads: 1, likes: 0, gated: false }],
+        }) as never
+        const wrapper = await searchScreen()
+        const filters = wrapper.get('[data-testid="talos-models-filters"]')
+
+        expect(filters.classes()).toContain('flex-nowrap')
+        expect(filters.classes()).toContain('overflow-x-auto')
+        expect(filters.classes()).toContain('overscroll-x-contain')
+        expect(filters.classes()).not.toContain('flex-wrap')
+        for (const chip of filters.findAll('button')) expect(chip.classes()).toContain('shrink-0')
+        expect(filters.text()).toContain('Code-oriented')
+        expect(filters.text()).toContain('Declared permissive licence')
+    })
+
+    it('C45-RED-13 groups each publisher into one compact divided result list', async () => {
+        store.state = baseState({
+            results: [
+                { id: 'unsloth/a', downloads: 900, likes: 4, gated: false },
+                { id: 'unsloth/b', downloads: 400, likes: 2, gated: false },
+            ],
+        }) as never
+        const wrapper = await searchScreen()
+        const list = wrapper.get('[data-testid="talos-models-provider-list"]')
+
+        expect(list.classes()).toContain('divide-y')
+        expect(list.findAll('[data-testid="talos-models-result"]')).toHaveLength(2)
+        for (const row of list.findAll('[data-testid="talos-models-result"]')) {
+            expect(row.classes()).not.toContain('rounded-[var(--talos-radius-card)]')
+            expect(row.classes()).not.toContain('border')
+        }
+    })
+
+    it('names the rolling download window on every result', async () => {
+        store.state = baseState({
+            results: [{ id: 'x/y', downloads: 4_900_000, likes: 0, gated: false }],
+        }) as never
+        const wrapper = await searchScreen()
+
+        expect(wrapper.get('[data-testid="talos-models-result"]').text()).toContain('last 30 days')
     })
 
     /** A gate is known from the search, not discovered after choosing. */
@@ -649,72 +779,26 @@ describe('what is refused and what is merely warned about', () => {
 })
 
 describe('a download in flight', () => {
-    it('shows how far it has got, in the units the phone uses', async () => {
+    it('leaves polling and transfer controls to the global Download Center', async () => {
         store.state = baseState({
             transfer: {
-                active: true, modelName: 'Qwen3-4B Q4_K_M',
+                active: true, paused: false, modelName: 'Qwen3-4B Q4_K_M',
                 haveBytes: 1024 ** 3, totalBytes: 4 * 1024 ** 3,
                 runner: 'USER_INITIATED_JOB', networkBound: true, failure: null,
             },
         }) as never
+        const interval = vi.spyOn(globalThis, 'setInterval')
         const wrapper = await screen()
 
-        const bar = wrapper.get('[data-testid="talos-models-transfer"]')
-        expect(bar.text()).toContain('Qwen3-4B Q4_K_M')
-        expect(bar.text()).toContain('1 GB of 4 GB')
-        expect(bar.html()).toContain('width: 25%')
-    })
-
-    /**
-     * The caveat that costs money if it stays hidden: below Android 14 the
-     * transfer is not tied to the network it started on.
-     */
-    it('warns when the download is not pinned to the network it began on', async () => {
-        store.state = baseState({
-            transfer: {
-                active: true, modelName: 'Something', haveBytes: 0, totalBytes: 100,
-                runner: 'FOREGROUND_SERVICE', networkBound: false, failure: null,
-            },
-        }) as never
-        const wrapper = await screen()
-
-        expect(wrapper.text()).toContain('can continue on mobile data')
-    })
-
-    /**
-     * Pause used to be a one-way door: the block is the transfer's only control
-     * and it rendered under `active`, so pausing erased the download from the
-     * screen with no way back — while the copy promised it would carry on where
-     * it left off. Found by an adversarial review, 2026-08-01.
-     */
-    it('keeps the transfer on screen after a pause, with a way to resume', async () => {
-        store.state = baseState({
-            repo: { id: 'a/b', revision: 'main', loading: false, failure: null, sets: [set()] },
-        }) as never
-        const wrapper = await screen()
-
-        // Start it, so the section knows what to resume.
-        await wrapper.get('[data-testid="talos-models-download"]').trigger('click')
-        await flushPromises()
-
-        // Now it is running.
-        store.state.transfer.active = true
-        store.state.transfer.modelName = 'b Q4_K_M'
-        await wrapper.vm.$nextTick()
-
-        await wrapper.get('[data-testid="talos-models-stop"]').trigger('click')
-        store.state.transfer.active = false
-        await flushPromises()
-
-        // The block is still there, and it offers the other half of the promise.
-        expect(wrapper.find('[data-testid="talos-models-transfer"]').exists()).toBe(true)
-        const resume = wrapper.get('[data-testid="talos-models-resume"]')
-
-        store.download.mockClear()
-        await resume.trigger('click')
-        await flushPromises()
-
-        expect(store.download).toHaveBeenCalledWith('model-Q4_K_M.gguf', 'b Q4_K_M')
+        try {
+            expect(interval).not.toHaveBeenCalled()
+            expect(wrapper.find('[data-testid="talos-models-transfer"]').exists()).toBe(false)
+            expect(wrapper.find('[data-testid="talos-models-stop"]').exists()).toBe(false)
+            expect(wrapper.find('[data-testid="talos-models-resume"]').exists()).toBe(false)
+        } finally {
+            wrapper.unmount()
+            interval.mockRestore()
+        }
     })
 
     /**
@@ -729,20 +813,6 @@ describe('a download in flight', () => {
         const wrapper = await screen()
 
         expect(wrapper.find('[data-testid="talos-models-reclaim"]').exists()).toBe(true)
-    })
-
-    it('is the only thing that can be paused, and pausing says it will resume', async () => {
-        store.state = baseState({
-            transfer: {
-                active: true, modelName: 'Something', haveBytes: 10, totalBytes: 100,
-                runner: 'USER_INITIATED_JOB', networkBound: true, failure: null,
-            },
-        }) as never
-        const wrapper = await screen()
-
-        await wrapper.get('[data-testid="talos-models-stop"]').trigger('click')
-
-        expect(store.stop).toHaveBeenCalled()
     })
 
     /**
@@ -792,6 +862,34 @@ describe('starting one', () => {
  * possibile, usiamo la grammatica dell'app già esistente».
  */
 describe('dare un nome a un modello, e toglierlo', () => {
+    it('C45-RED-12B keeps import and every installed-model dialog action on the 48dp token', async () => {
+        engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
+        const wrapper = await screen()
+        const target = 'min-h-[var(--talos-touch-target)]'
+
+        expect(wrapper.get('[data-testid="talos-models-import"]').classes()).toContain(target)
+
+        await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
+        await flushPromises()
+        document.querySelector<HTMLElement>('[data-testid^="talos-models-rename-"]')!
+            .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await flushPromises()
+        expect(document.querySelector('[data-testid="talos-models-cancel-rename"]')?.classList).toContain(target)
+        expect(document.querySelector('[data-testid="talos-models-rename-save"]')?.classList).toContain(target)
+        document.querySelector<HTMLElement>('[data-testid="talos-models-cancel-rename"]')?.click()
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
+        await flushPromises()
+        document.querySelector<HTMLElement>('[data-testid^="talos-models-delete-"]')!
+            .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await flushPromises()
+        expect(document.querySelector('[data-testid="talos-models-cancel-delete"]')?.classList).toContain(target)
+        expect(document.querySelector('[data-testid="talos-models-delete-confirm"]')?.classList).toContain(target)
+        document.querySelector<HTMLElement>('[data-testid="talos-models-cancel-delete"]')?.click()
+        await flushPromises()
+    })
+
     it('la riga offre rinomina, copia ed elimina — non solo la copia', async () => {
         engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
         const wrapper = await screen()

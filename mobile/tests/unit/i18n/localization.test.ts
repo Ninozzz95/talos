@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { createI18n } from 'vue-i18n'
 import {
     TALOS_INTRO_LANGUAGE_PAGE_ENABLED,
     parseTalosLocaleMode,
@@ -46,6 +47,20 @@ describe('TALOS locale policy', () => {
                 english.get(key)?.match(/\{[A-Za-z0-9_]+\}/g)?.sort() ?? [],
             )
         }
+    })
+
+    it('C45-RED-12A applies the installed-model singular and plural in both locales', () => {
+        const local = createI18n({
+            legacy: false,
+            locale: 'en',
+            messages: { en: TALOS_EN_MESSAGES, it: TALOS_IT_MESSAGES },
+        })
+
+        expect(local.global.t('localModels.installedCount', { count: 1 })).toBe('1 model')
+        expect(local.global.t('localModels.installedCount', { count: 2 })).toBe('2 models')
+        local.global.locale.value = 'it'
+        expect(local.global.t('localModels.installedCount', { count: 1 })).toBe('1 modello')
+        expect(local.global.t('localModels.installedCount', { count: 2 })).toBe('2 modelli')
     })
 
     it('ONBOARD-UNIFIED-01 keeps the first language page behind one reversible policy seam', () => {

@@ -6,11 +6,11 @@ import {
 } from '@/components/talos/settings/settingsTabs'
 
 describe('TALOS mobile settings registry', () => {
-    it('keeps the legacy models id parseable but removes it from inline groups', () => {
+    it('keeps the models compatibility id and places its routed row first in Intelligence', () => {
         expect(TALOS_MOBILE_SETTINGS_MODEL_LAB_TAB).toBe('models')
         expect(TALOS_MOBILE_SETTINGS_TABS.some((tab) => tab.id === 'models')).toBe(true)
-        expect(TALOS_MOBILE_SETTINGS_GROUPS.flatMap((group) => group.tabIds)).not.toContain('models')
-        expect(TALOS_MOBILE_SETTINGS_GROUPS[0]?.tabIds[0]).toBe('ai_defaults')
+        expect(TALOS_MOBILE_SETTINGS_GROUPS.flatMap((group) => group.tabIds)).toContain('models')
+        expect(TALOS_MOBILE_SETTINGS_GROUPS[0]?.tabIds[0]).toBe('models')
     })
 
     /**

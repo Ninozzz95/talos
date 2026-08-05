@@ -257,6 +257,15 @@ describe('tool activity in the streaming reply', () => {
         expect(activity.text()).not.toContain('library_export')
     })
 
+    it('C45-RED-09D renders memory_write as natural copy instead of the wire id', async () => {
+        const wrapper = mountStreaming(true, null, [{ name: 'memory_write', detail: null }])
+        await flushPromises()
+        const activity = wrapper.get('[data-testid="talos-tool-activity"]')
+
+        expect(activity.text()).toContain('Saving something to memory')
+        expect(activity.text()).not.toContain('memory_write')
+    })
+
     it('shows nothing when no tool is running', async () => {
         const wrapper = mountStreaming(true, 'testo')
         await flushPromises()

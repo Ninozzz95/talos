@@ -6,15 +6,19 @@ const SURFACES = [
     'src/components/talos/models/TalosMobileModelLabHub.vue',
     'src/components/talos/models/TalosMobileDeviceCapacityCard.vue',
     'src/components/talos/models/TalosMobileProviderRuntimePanel.vue',
+    'src/components/talos/models/TalosMobileHuggingFaceAccessCard.vue',
     'src/components/talos/models/TalosMobileModelCatalog.vue',
     'src/components/talos/models/TalosMobileLocalModels.vue',
     'src/components/talos/models/TalosModelFitBar.vue',
     'src/components/talos/models/TalosMobileModelAdvancedOptions.vue',
+    'src/components/shell/TalosMobileDownloadCenterTrigger.vue',
     'src/screens/SettingsModelsScreen.vue',
     'src/screens/SettingsModelsProvidersScreen.vue',
     'src/screens/SettingsModelsCatalogScreen.vue',
     'src/screens/SettingsModelsLocalScreen.vue',
 ] as const
+
+const SETTINGS_MODEL_LAB_ROUTE = 'src/components/talos/settings/TalosMobileSettingsCenter.vue'
 
 function withoutComments(source: string): string {
     const clean = source
@@ -47,6 +51,14 @@ export function modelLabThemeViolations(source: string): string[] {
     return violations
 }
 
+function settingsModelLabRouteSource(source: string): string {
+    const marker = source.indexOf('data-testid="settings-model-lab-link"')
+    const start = source.lastIndexOf('<RouterLink', marker)
+    const close = source.indexOf('</RouterLink>', marker)
+    if (marker < 0 || start < 0 || close < 0) return source
+    return source.slice(start, close + '</RouterLink>'.length)
+}
+
 describe('Model Lab Theme Engine boundary', () => {
     it('rejects every forbidden shortcut in isolation', () => {
         expect(modelLabThemeViolations('<div class="p-4" />')).toContain('literal spacing')
@@ -64,5 +76,31 @@ describe('Model Lab Theme Engine boundary', () => {
             return modelLabThemeViolations(source).map((violation) => `${file}: ${violation}`)
         })
         expect(failures).toEqual([])
+    })
+
+    it('C45-RED-12B names the touch-target token on all five local-model actions', () => {
+        const source = readFileSync(
+            join(process.cwd(), 'src/components/talos/models/TalosMobileLocalModels.vue'),
+            'utf8',
+        )
+        const target = 'min-h-[var(--talos-touch-target)]'
+
+        for (const testId of [
+            'talos-models-import',
+            'talos-models-cancel-rename',
+            'talos-models-rename-save',
+            'talos-models-cancel-delete',
+            'talos-models-delete-confirm',
+        ]) {
+            const start = source.indexOf(`data-testid="${testId}"`)
+            expect(start, testId).toBeGreaterThanOrEqual(0)
+            expect(source.slice(start, start + 260), testId).toContain(target)
+        }
+    })
+
+    it('keeps the routed Model Lab entry in Settings on the same token boundary', () => {
+        const source = readFileSync(join(process.cwd(), SETTINGS_MODEL_LAB_ROUTE), 'utf8')
+
+        expect(modelLabThemeViolations(settingsModelLabRouteSource(source))).toEqual([])
     })
 })

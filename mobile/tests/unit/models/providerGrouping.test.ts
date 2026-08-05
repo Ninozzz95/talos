@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+    talosBrowsePublishers,
     talosGroupModelsByProvider,
     talosProviderOf,
     talosProviderOptions,
@@ -90,6 +91,26 @@ describe('grouping the results', () => {
 })
 
 describe('the filter', () => {
+    it('derives options from unfiltered results and preserves an absent selection verbatim', () => {
+        const results = [
+            model('unsloth/a', 900),
+            model('bartowski/b', 400),
+        ]
+
+        expect(talosBrowsePublishers(results, 'unsloth')).toEqual([
+            { value: 'unsloth', label: 'unsloth (1)' },
+            { value: 'bartowski', label: 'bartowski (1)' },
+        ])
+        expect(talosBrowsePublishers(results, 'publisher-from-previous-query')).toEqual([
+            { value: 'unsloth', label: 'unsloth (1)' },
+            { value: 'bartowski', label: 'bartowski (1)' },
+            {
+                value: 'publisher-from-previous-query',
+                label: 'publisher-from-previous-query',
+            },
+        ])
+    })
+
     /**
      * A filter that does not say how much it will leave behind is a filter you
      * have to try in order to understand.

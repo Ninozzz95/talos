@@ -7,7 +7,7 @@ export type TalosMobileRouteName =
     | 'research' | 'research-new' | 'research-report' | 'research-claim' | 'research-source'
     | 'runs' | 'context' | 'settings'
     | 'settings-models' | 'settings-models-providers'
-    | 'settings-models-catalog' | 'settings-models-local'
+    | 'settings-models-catalog' | 'settings-models-local' | 'settings-models-local-repo'
 
 export interface TalosMobileRoute {
     name: TalosMobileRouteName
@@ -46,6 +46,10 @@ const loadSettingsModelsScreen = () => import('@/screens/SettingsModelsScreen.vu
 const loadSettingsModelsProvidersScreen = () => import('@/screens/SettingsModelsProvidersScreen.vue').then((module) => module.default)
 const loadSettingsModelsCatalogScreen = () => import('@/screens/SettingsModelsCatalogScreen.vue').then((module) => module.default)
 const loadSettingsModelsLocalScreen = () => import('@/screens/SettingsModelsLocalScreen.vue').then((module) => module.default)
+// Vue Router accepts an ES-module lazy result and unwraps its default export.
+// Keeping this new route in that native form avoids charging the initial entry
+// for a redundant `.then(default)` adapter.
+const loadSettingsModelsLocalRepoScreen = () => import('@/screens/SettingsModelsLocalRepoScreen.vue') as unknown as Promise<Component>
 /*
  * Le pagine di dettaglio delle tre stazioni-elenco.
  *
@@ -102,11 +106,10 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'settings-models-providers', path: '/settings/models/providers', desktop_station_id: 'settings', component: loadSettingsModelsProvidersScreen, parent: 'settings-models' },
     { name: 'settings-models-catalog', path: '/settings/models/catalog', desktop_station_id: 'settings', component: loadSettingsModelsCatalogScreen, parent: 'settings-models' },
     { name: 'settings-models-local', path: '/settings/models/local', desktop_station_id: 'settings', component: loadSettingsModelsLocalScreen, parent: 'settings-models' },
+    { name: 'settings-models-local-repo', path: '/settings/models/local/:owner/:repo', desktop_station_id: 'settings', component: loadSettingsModelsLocalRepoScreen, parent: 'settings-models-local' },
 ])
 
-export const TALOS_MOBILE_ROUTE_NAMES: readonly TalosMobileRouteName[] = Object.freeze(
-    TALOS_MOBILE_ROUTES.map((route) => route.name),
-)
+export const TALOS_MOBILE_ROUTE_NAMES: readonly TalosMobileRouteName[] = TALOS_MOBILE_ROUTES.map((route) => route.name)
 
 let routePreloadPromise: Promise<void> | null = null
 
@@ -181,21 +184,20 @@ export function talosMobileParentRoute(
 ): TalosMobileRouteTarget | null {
     const route = TALOS_MOBILE_ROUTES.find((entry) => entry.name === name)
     if (!route?.parent) return null
-    const parentName = route.parent
-    const parent = TALOS_MOBILE_ROUTES.find((entry) => entry.name === parentName)
+    const parent = TALOS_MOBILE_ROUTES.find((entry) => entry.name === route.parent)
     if (!parent) return null
 
     const wanted: Record<string, string> = {}
     for (const segment of parent.path.split('/')) {
-        if (!segment.startsWith(':')) continue
+        if (segment[0] !== ':') continue
         const key = segment.slice(1)
         const value = params[key]
         // A parent that needs a parameter we do not have is not a destination.
         // Better to fall through to the station rules than to push a broken URL.
-        if (typeof value !== 'string' || value.length === 0) return null
+        if (typeof value !== 'string' || !value) return null
         wanted[key] = value
     }
-    return { name: parentName, params: wanted }
+    return { name: route.parent, params: wanted }
 }
 
 // Compatibility symbol retained for test/consumer code that previously asked for

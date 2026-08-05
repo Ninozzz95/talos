@@ -13,7 +13,7 @@ export type TalosMobileSettingsTabId =
     | 'agent_tools'
     | 'system'
 
-/** Parse-only compatibility for `/settings?tab=models`; the UI is now routed. */
+/** Compatibility id for `/settings?tab=models`; its visible row is routed. */
 export const TALOS_MOBILE_SETTINGS_MODEL_LAB_TAB = 'models' as const
 
 export type TalosMobileSettingsTab = {
@@ -81,7 +81,7 @@ export interface TalosMobileSettingsGroup {
  * rather than pretend nobody asked.
  */
 export const TALOS_MOBILE_SETTINGS_GROUPS: readonly TalosMobileSettingsGroup[] = Object.freeze([
-    { label: 'Intelligence', tabIds: ['ai_defaults', 'agent_tools'] },
+    { label: 'Intelligence', tabIds: ['models', 'ai_defaults', 'agent_tools'] },
     { label: 'Connections', tabIds: ['search', 'browser'] },
     { label: 'Interface', tabIds: ['appearance', 'language'] },
     // Its own group: a privacy claim is TALOS's central promise, and burying it

@@ -26,6 +26,13 @@ import java.util.UUID;
  */
 public final class TalosStorageReservation implements TalosModelStore.Reservation {
 
+    private static final Object RESERVATION_LOCK = new Object();
+
+    @FunctionalInterface
+    interface ReservationWork {
+        void run() throws IOException;
+    }
+
     private final Context context;
 
     public TalosStorageReservation(Context context) {
@@ -34,6 +41,37 @@ public final class TalosStorageReservation implements TalosModelStore.Reservatio
 
     @Override
     public void reserve(RandomAccessFile file, long totalBytes) throws IOException {
+        serialized(() -> reserveUnlocked(file, totalBytes));
+    }
+
+    /**
+     * Claim every shard before any worker asks the network for its first byte.
+     * The outer lock spans all pieces, so another model cannot approve the same
+     * allocatable bytes between this model's first and second reservations.
+     */
+    static void reserveAll(
+            Context context,
+            TalosModelStore store,
+            TalosTransferSession.Request request) throws IOException {
+        serialized(() -> {
+            TalosStorageReservation reservation = new TalosStorageReservation(context);
+            for (int index = 0; index < request.paths.length; index += 1) {
+                TalosModelStore.Slot slot = store.slot(
+                        request.repo, request.revision, request.paths[index]);
+                if (slot.finished.isFile()
+                        && slot.finished.length() == request.sizes[index]) continue;
+                slot.prepare(request.sizes[index], reservation);
+            }
+        });
+    }
+
+    static void serialized(ReservationWork work) throws IOException {
+        synchronized (RESERVATION_LOCK) {
+            work.run();
+        }
+    }
+
+    private void reserveUnlocked(RandomAccessFile file, long totalBytes) throws IOException {
         long already = file.length();
         long wanted = totalBytes - already;
         if (wanted <= 0) return;

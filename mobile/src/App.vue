@@ -525,6 +525,46 @@ const activeRoute = computed<TalosMobileRouteName>(() => {
     return match ? match.name : 'chat'
 })
 
+/**
+ * Model Lab is a short hierarchy rather than four unrelated sheets.
+ *
+ * The depth is also the motion direction: entering one of the three dedicated
+ * pages moves forward, returning to the Lab moves back, and opening one model
+ * repository moves forward once more. Provider wire names never leak into this
+ * navigation boundary.
+ */
+const MODEL_LAB_ROUTE_DEPTH = {
+    'settings-models': 0,
+    'settings-models-providers': 1,
+    'settings-models-catalog': 1,
+    'settings-models-local': 1,
+    'settings-models-local-repo': 2,
+} satisfies Partial<Record<TalosMobileRouteName, number>>
+const modelLabTransitionDirection = ref<'forward' | 'back'>('forward')
+const modelLabTransitionActiveClass = 'transition-[transform,opacity] duration-[var(--talos-motion-duration-tab-change)] ease-[var(--talos-motion-ease-tab-change)] motion-reduce:transition-none'
+const modelLabTransitionEnterFromClass = computed(() => [
+    'opacity-[var(--talos-motion-tab-change-opacity)]',
+    modelLabTransitionDirection.value === 'forward'
+        ? 'translate-x-[var(--talos-motion-tab-change-x)]'
+        : '-translate-x-[var(--talos-motion-tab-change-x)]',
+    'motion-reduce:opacity-100 motion-reduce:transform-none',
+].join(' '))
+const modelLabTransitionLeaveToClass = computed(() => [
+    'opacity-[var(--talos-motion-tab-change-opacity)]',
+    modelLabTransitionDirection.value === 'forward'
+        ? '-translate-x-[var(--talos-motion-tab-change-x)]'
+        : 'translate-x-[var(--talos-motion-tab-change-x)]',
+    'motion-reduce:opacity-100 motion-reduce:transform-none',
+].join(' '))
+
+function isModelLabRouteName(name: unknown): name is keyof typeof MODEL_LAB_ROUTE_DEPTH {
+    return typeof name === 'string' && Object.prototype.hasOwnProperty.call(MODEL_LAB_ROUTE_DEPTH, name)
+}
+
+function focusModelLabRoute(element: Element): void {
+    if (element instanceof HTMLElement) element.focus({ preventScroll: true })
+}
+
 // Chat is the persistent base; every other tab presents its screen in a sheet
 // over it — the mobile mirror of the desktop windowed workspace.
 const isStation = computed(() => activeRoute.value !== 'chat')
@@ -535,6 +575,11 @@ const isStation = computed(() => activeRoute.value !== 'chat')
  * one would make Back navigate the list to itself.
  */
 watch(activeRoute, (to, from) => {
+    if (isModelLabRouteName(to) && isModelLabRouteName(from)) {
+        modelLabTransitionDirection.value = MODEL_LAB_ROUTE_DEPTH[to] >= MODEL_LAB_ROUTE_DEPTH[from]
+            ? 'forward'
+            : 'back'
+    }
     stationEntry.value = talosStationEntryAfter(stationEntry.value, { to, from, viaSidebar: enteringViaSidebar })
     enteringViaSidebar = false
 })
@@ -646,6 +691,7 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     'settings-models-providers': 'models.providerAccessTitle',
     'settings-models-catalog': 'models.catalogTitle',
     'settings-models-local': 'models.localTitle',
+    'settings-models-local-repo': 'models.localTitle',
 }
 const sheetTitle = computed(() => t(SHEET_TITLE_KEY[activeRoute.value]))
 
@@ -1051,7 +1097,31 @@ onBeforeUnmount(async () => {
                     :parent-title="stationParentTitle"
                     @close="navigate('chat')"
                 >
-                    <RouterView />
+                    <RouterView v-slot="{ Component, route: renderedRoute }">
+                        <Transition
+                            v-if="isModelLabRouteName(renderedRoute.name)"
+                            mode="out-in"
+                            :enter-active-class="modelLabTransitionActiveClass"
+                            :enter-from-class="modelLabTransitionEnterFromClass"
+                            enter-to-class="translate-x-0 opacity-100"
+                            :leave-active-class="modelLabTransitionActiveClass"
+                            leave-from-class="translate-x-0 opacity-100"
+                            :leave-to-class="modelLabTransitionLeaveToClass"
+                            @after-enter="focusModelLabRoute"
+                        >
+                            <div
+                                :key="renderedRoute.fullPath"
+                                data-testid="talos-model-lab-route-view"
+                                :data-transition-direction="modelLabTransitionDirection"
+                                data-motion-duration="--talos-motion-duration-tab-change"
+                                tabindex="-1"
+                                class="min-h-full outline-none motion-reduce:transform-none"
+                            >
+                                <component :is="Component" />
+                            </div>
+                        </Transition>
+                        <component :is="Component" v-else />
+                    </RouterView>
                 </TalosMobileToolSheet>
             </Transition>
         </template>

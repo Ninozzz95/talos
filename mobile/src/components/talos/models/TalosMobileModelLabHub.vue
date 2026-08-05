@@ -6,6 +6,7 @@ import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
 import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
 import { useChatController } from '@/stores/chatController'
 import { talosLocalInstalledModels } from '@/services/localEngine'
+import { talosLocalModels, talosRefreshHuggingFaceToken } from '@/stores/localModels'
 import TalosMobileDeviceCapacityCard from './TalosMobileDeviceCapacityCard.vue'
 
 const { t } = useTalosI18n()
@@ -13,7 +14,10 @@ const controller = useChatController()
 const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
 const installedCount = ref<number | null>(null)
 
-const configuredProviders = computed(() => Object.values(controller.secrets).filter(Boolean).length)
+const configuredProviders = computed(() => (
+    Object.values(controller.secrets).filter(Boolean).length
+    + (talosLocalModels.hasToken ? 1 : 0)
+))
 const profileCount = computed(() => controller.profiles.value.length)
 const destinations = computed<Array<{
     route: TalosMobileRouteName
@@ -50,6 +54,7 @@ const destinations = computed<Array<{
 onMounted(async () => {
     await Promise.all([
         controller.init().catch(() => undefined),
+        talosRefreshHuggingFaceToken().catch(() => undefined),
         talosLocalInstalledModels()
             .then((listing) => { installedCount.value = listing.models.length })
             .catch(() => { installedCount.value = null }),
