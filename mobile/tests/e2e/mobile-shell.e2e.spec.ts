@@ -77,13 +77,14 @@ test('header and sidebar actions expose accessible names and 44x44 touch targets
 
     await page.locator(MENU).click()
     await expect(page.locator(SIDEBAR)).toBeVisible()
-    for (const label of ['Open Research', 'Open Cockpit', 'Open Library', 'Open Model Lab', 'Open Settings']) {
+    for (const label of ['Open Research', 'Open Cockpit', 'Open Library', 'Open Settings']) {
         const entry = page.locator(`${SIDEBAR} [aria-label="${label}"]`)
         await expect(entry).toBeVisible()
         const box = await entry.boundingBox()
         expect(box, `${label} box`).not.toBeNull()
         expect(box!.height).toBeGreaterThanOrEqual(44)
     }
+    await expect(page.locator(`${SIDEBAR} [aria-label="Open Model Lab"]`)).toHaveCount(0)
 })
 
 test('a station opens from the sidebar in a tool-sheet over the chat base and returns to chat', async ({ page }) => {
@@ -103,14 +104,16 @@ test('a station opens from the sidebar in a tool-sheet over the chat base and re
     await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'chat')
 })
 
-test('Model Lab in the sidebar opens the real models detail instead of generic Settings', async ({ page }) => {
+test('F2-RED-20 Model Lab has one primary path through Settings', async ({ page }) => {
     await page.goto('/')
 
-    await openStation(page, 'Model Lab')
+    await openStation(page, 'Settings')
+    await page.getByTestId('settings-model-lab-link').click()
 
-    await expect(page).toHaveURL(/\/settings\?tab=models$/)
-    await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
-    await expect(page.getByRole('tablist', { name: 'Model Lab sections' })).toBeVisible()
+    await expect(page).toHaveURL(/\/settings\/models$/)
+    await expect(page.getByTestId('talos-model-lab-hub')).toBeVisible()
+    await expect(page.getByTestId('talos-model-lab-destination')).toHaveCount(3)
+    await expect(page.getByRole('tablist', { name: 'Model Lab sections' })).toHaveCount(0)
 })
 
 test('reload restores the active route and presentation preference', async ({ page }) => {

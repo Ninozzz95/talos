@@ -64,23 +64,6 @@ export type TalosViewSurface = {
 
 const SURFACES = [
     {
-        id: 'models',
-        grammar: 'tabs',
-        activation: 'manual', // the on-device panel probes the engine when it mounts
-        // Providers first because that is the order the panel renders, and the
-        // first view is the default: getting this backwards would silently
-        // change which tab the screen opens on.
-        views: [
-            { id: 'providers', labelKey: 'models.providers' },
-            { id: 'catalog', labelKey: 'models.catalog' },
-            // The download centre. It was rendered as value="onDevice", and the
-            // capital letter is why it sat outside the register for a release:
-            // the drift gate's charset was [a-z-] and simply did not see it.
-            // Kebab now, like the `data-model-lab-section` it has always had.
-            { id: 'on-device', labelKey: 'models.onDevice' },
-        ],
-    },
-    {
         id: 'appearance',
         grammar: 'tabs',
         activation: 'automatic',

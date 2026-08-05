@@ -1,15 +1,22 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { KeyRound } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import TalosMobileSettingsCenter from '@/components/talos/settings/TalosMobileSettingsCenter.vue'
+import { TALOS_MOBILE_SETTINGS_MODEL_LAB_TAB } from '@/components/talos/settings/settingsTabs'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useTalosI18n()
 const requestedTab = computed(() => typeof route.query.tab === 'string' ? route.query.tab : null)
+const legacyModelLab = computed(() => requestedTab.value === TALOS_MOBILE_SETTINGS_MODEL_LAB_TAB)
+
+watch(legacyModelLab, (legacy) => {
+    if (!legacy) return
+    void router.replace({ name: 'settings-models' }).catch(() => undefined)
+}, { immediate: true })
 
 /**
  * Keep `?tab=` telling the truth.
@@ -46,6 +53,10 @@ function rememberOpenTab(tab: string | null): void {
         <template #eyebrow-icon>
             <KeyRound class="h-4 w-4 text-[var(--talos-accent)]" aria-hidden="true" />
         </template>
-        <TalosMobileSettingsCenter :requested-tab="requestedTab" @update:open-tab="rememberOpenTab" />
+        <TalosMobileSettingsCenter
+            v-if="!legacyModelLab"
+            :requested-tab="requestedTab"
+            @update:open-tab="rememberOpenTab"
+        />
     </TalosMobileScreen>
 </template>

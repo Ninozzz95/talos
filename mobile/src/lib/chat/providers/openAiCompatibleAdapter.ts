@@ -134,6 +134,32 @@ function openAiTurnContent(turn: TalosMobileCompletionInput['turns'][number]): s
     return content
 }
 
+/**
+ * `/responses` uses a different multimodal vocabulary from the compatible
+ * Chat Completions wire: text is `input_text`, images are `input_image`, and
+ * `image_url` is the data URL itself rather than an object containing `url`.
+ */
+function openAiResponsesTurnContent(
+    turn: TalosMobileCompletionInput['turns'][number],
+): string | Array<Record<string, unknown>> {
+    if (!turn.parts?.length) return turn.content
+    const content: Array<Record<string, unknown>> = []
+    if (turn.content) content.push({ type: 'input_text', text: turn.content })
+    for (const part of turn.parts) {
+        if (part.type === 'image') {
+            content.push({
+                type: 'input_image',
+                image_url: `data:${part.mediaType};base64,${part.base64}`,
+            })
+        } else if (part.type === 'document_text') {
+            content.push({ type: 'input_text', text: untrustedDocument(part.name, part.text) })
+        } else {
+            content.push({ type: 'input_text', text: part.text })
+        }
+    }
+    return content
+}
+
 function requestTimeouts(credential: TalosMobileProviderCredential): { connectTimeout: number; readTimeout: number } | Record<string, never> {
     const timeout = credential.timeoutMs
     return Number.isInteger(timeout) && timeout! > 0
@@ -221,8 +247,10 @@ function responsesCompletionData(
             continue
         }
         if (turn.role !== 'user' && turn.role !== 'assistant') continue
-        const content = typeof turn.content === 'string' ? turn.content : ''
-        if (content !== '') items.push({ role: turn.role, content })
+        const content = openAiResponsesTurnContent(turn)
+        if (typeof content === 'string' ? content !== '' : content.length > 0) {
+            items.push({ role: turn.role, content })
+        }
         for (const call of turn.toolCalls ?? []) {
             items.push({
                 type: 'function_call',

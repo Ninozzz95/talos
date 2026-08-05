@@ -15,7 +15,7 @@ const SEEDED_SETTINGS = {
                 presentation_v2: true,
                 shell: { immersive_header: false, composer_drawer: false },
                 // Returning user: unified setup is already resolved.
-                onboarding: { intro_version: 2, intro_outcome: 'completed', setup_dismissed: true },
+                onboarding: { intro_version: 3, intro_outcome: 'completed', setup_dismissed: true },
             }),
         }],
     }],

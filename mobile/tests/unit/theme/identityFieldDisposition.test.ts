@@ -26,4 +26,21 @@ describe('identity field disposition', () => {
         const parsed = parseTalosMobileDesignTokens(identity) as Record<string, unknown>
         expect(Object.keys(TALOS_IDENTITY_FIELD_DISPOSITION).sort()).toEqual(Object.keys(parsed).sort())
     })
+
+    it('names the complete layout boundary instead of claiming density and radius are scalar-only', () => {
+        const densityBoundary = TALOS_IDENTITY_FIELD_DISPOSITION.density.boundary
+        for (const token of [
+            '--talos-space-page',
+            '--talos-space-section',
+            '--talos-space-card',
+            '--talos-space-control',
+            '--talos-space-inline',
+            '--talos-icon-size',
+            '--talos-touch-target',
+        ]) expect(densityBoundary).toContain(token)
+
+        const radiusBoundary = TALOS_IDENTITY_FIELD_DISPOSITION.radius.boundary
+        expect(radiusBoundary).toContain('--talos-radius-card')
+        expect(radiusBoundary).toContain('--talos-radius-control')
+    })
 })

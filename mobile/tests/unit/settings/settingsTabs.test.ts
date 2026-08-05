@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { TALOS_MOBILE_SETTINGS_TABS } from '@/components/talos/settings/settingsTabs'
+import {
+    TALOS_MOBILE_SETTINGS_GROUPS,
+    TALOS_MOBILE_SETTINGS_MODEL_LAB_TAB,
+    TALOS_MOBILE_SETTINGS_TABS,
+} from '@/components/talos/settings/settingsTabs'
 
 describe('TALOS mobile settings registry', () => {
+    it('keeps the legacy models id parseable but removes it from inline groups', () => {
+        expect(TALOS_MOBILE_SETTINGS_MODEL_LAB_TAB).toBe('models')
+        expect(TALOS_MOBILE_SETTINGS_TABS.some((tab) => tab.id === 'models')).toBe(true)
+        expect(TALOS_MOBILE_SETTINGS_GROUPS.flatMap((group) => group.tabIds)).not.toContain('models')
+        expect(TALOS_MOBILE_SETTINGS_GROUPS[0]?.tabIds[0]).toBe('ai_defaults')
+    })
+
     /**
      * Mobile-only categories, and why each one cannot come from the desktop.
      *

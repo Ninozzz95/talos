@@ -3,11 +3,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prefs = new Map<string, string>()
+const nativeFraming = vi.hoisted(() => ({
+    configure: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('@capacitor/preferences', () => ({
     Preferences: {
         get: async ({ key }: { key: string }) => ({ value: prefs.get(key) ?? null }),
         set: async ({ key, value }: { key: string; value: string }) => { prefs.set(key, value) },
     },
+}))
+vi.mock('@/services/nativeFraming', () => ({
+    configureNativeFraming: (options: unknown) => nativeFraming.configure(options),
 }))
 
 import {
@@ -21,6 +27,7 @@ import {
 
 beforeEach(() => {
     prefs.clear()
+    nativeFraming.configure.mockClear()
     __resetThemeStoreForTests()
 })
 afterEach(() => {
@@ -59,6 +66,27 @@ describe('applyTalosTheme', () => {
         applyTalosTheme('ember', 'light', b)
         expect(a.style.getPropertyValue('--talos-background')).not.toBe(b.style.getPropertyValue('--talos-background'))
     })
+
+    it('reapplies Model Lab spacing and radius live when identity and mode change', () => {
+        const target = document.createElement('div')
+        applyTalosTheme('paper', 'light', target)
+        const paper = {
+            page: target.style.getPropertyValue('--talos-space-page'),
+            card: target.style.getPropertyValue('--talos-space-card'),
+            radius: target.style.getPropertyValue('--talos-radius-card'),
+            background: target.style.getPropertyValue('--talos-background'),
+        }
+
+        applyTalosTheme('terminal', 'dark', target)
+
+        expect(target.style.getPropertyValue('--talos-space-page')).not.toBe(paper.page)
+        expect(target.style.getPropertyValue('--talos-space-card')).not.toBe(paper.card)
+        expect(target.style.getPropertyValue('--talos-radius-card')).not.toBe(paper.radius)
+        expect(target.style.getPropertyValue('--talos-background')).not.toBe(paper.background)
+        expect(target.style.getPropertyValue('--talos-touch-target')).toBe('3rem')
+        expect(target.getAttribute('data-theme-preset')).toBe('terminal')
+        expect(target.getAttribute('data-theme-mode')).toBe('dark')
+    })
 })
 
 describe('useThemeStore', () => {
@@ -79,6 +107,25 @@ describe('useThemeStore', () => {
         expect(store.state.mode).toBe('dark')
         // calm_migrated marks the one-shot pre-calm default migration as done.
         expect(JSON.parse(prefs.get(TALOS_MOBILE_THEME_KEY)!)).toEqual({ theme: 'violet', mode: 'dark', calm_migrated: true })
+    })
+
+    // F2-RED-19 — physical Android 16 proof: Paper/light changed the WebView
+    // background but left white status icons because native framing only ran at
+    // boot. Every live theme application must project the resolved scheme and
+    // the newly-applied canonical background into the native chrome.
+    it('synchronizes native framing whenever the resolved theme changes live', async () => {
+        const store = useThemeStore()
+        await store.setTheme('paper')
+        nativeFraming.configure.mockClear()
+
+        await store.setMode('light')
+
+        expect(nativeFraming.configure).toHaveBeenCalledOnce()
+        expect(nativeFraming.configure).toHaveBeenCalledWith(expect.objectContaining({
+            scheme: 'light',
+            background: document.documentElement.style.getPropertyValue('--background'),
+            onError: expect.any(Function),
+        }))
     })
 })
 

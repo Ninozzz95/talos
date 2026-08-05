@@ -173,6 +173,7 @@ beforeEach(() => {
     store.open.mockClear()
     store.saveToken.mockClear()
     store.forgetToken.mockClear()
+    store.loadCatalogue.mockClear()
     store.state = baseState() as never
 })
 
@@ -363,25 +364,21 @@ describe('a catalogue row that does not say the same word twice', () => {
     })
 })
 
-describe('what the phone is', () => {
-    it('states the device the fit answers are about', async () => {
+describe('device context belongs to the Model Lab hub', () => {
+    it('does not duplicate the shared device card on the Local Models page', async () => {
         const wrapper = await screen()
 
-        const line = wrapper.get('[data-testid="talos-models-device"]').text()
-        expect(line).toContain('Pixel 9')
-        expect(line).toContain('5 GB')
+        expect(wrapper.find('[data-testid="talos-models-device"]').exists()).toBe(false)
+        expect(wrapper.text()).not.toContain('Pixel 9')
     })
 
-    /**
-     * Without a measurement nothing below can be honest, so the screen says so
-     * rather than showing verdicts about a phone it never looked at.
-     */
-    it('admits when it has not measured the phone', async () => {
+    it('still measures capacity when the Local Models route is opened directly', async () => {
         store.state = baseState({ device: null }) as never
         const wrapper = await screen()
 
         expect(wrapper.find('[data-testid="talos-models-device"]').exists()).toBe(false)
-        expect(wrapper.text()).toContain('has not been measured')
+        expect(store.loadCatalogue).toHaveBeenCalledTimes(1)
+        expect(wrapper.text()).not.toContain('has not been measured')
     })
 })
 

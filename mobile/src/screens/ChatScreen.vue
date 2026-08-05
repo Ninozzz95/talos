@@ -744,7 +744,7 @@ function selectSlashCommand(commandId: TalosMobileCommandId): void {
             return
         }
         if (commandId === 'open_model_center') {
-            await router.push({ name: 'settings', query: { tab: 'models' } })
+            await router.push({ name: 'settings-models' })
         }
     })
 }
@@ -981,7 +981,7 @@ onBeforeUnmount(() => {
                             type="button"
                             data-testid="talos-setup-step-key"
                             class="talos-pressable mt-2 flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-left"
-                            @click="router.push({ name: 'settings', query: { tab: 'models' } })"
+                            @click="router.push({ name: 'settings-models-providers' })"
                         >
                             <CheckCircle2 v-if="setupHasKey" class="size-5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                             <Circle v-else class="size-5 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
@@ -991,7 +991,7 @@ onBeforeUnmount(() => {
                             type="button"
                             data-testid="talos-setup-step-model"
                             class="talos-pressable flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-left"
-                            @click="router.push({ name: 'settings', query: { tab: 'models' } })"
+                            @click="router.push({ name: 'settings-models-catalog' })"
                         >
                             <CheckCircle2 v-if="setupHasModel" class="size-5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                             <Circle v-else class="size-5 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
@@ -1123,7 +1123,7 @@ onBeforeUnmount(() => {
                 @select-effort="selectEffort"
                 @select-thinking="setThinking"
                 @refresh-models="controller.refreshConfiguredProviders()"
-                @open-model-lab="router.push({ name: 'settings', query: { tab: 'models' } })"
+                @open-model-lab="router.push({ name: 'settings-models' })"
                 @open-context="router.push({ name: 'context' })"
                 @enhance-prompt="requestPromptEnhancement"
                 @update-enhancer-depth="(value) => void setEnhancer({ depth: value })"

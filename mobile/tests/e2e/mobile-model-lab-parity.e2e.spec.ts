@@ -10,13 +10,18 @@ async function openModelSettings(page: Page): Promise<void> {
     await page.locator(MENU).click()
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
-    await page.locator('[data-settings-tab="models"]').click()
-    await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
+    await page.getByTestId('settings-model-lab-link').click()
+    await expect(page.getByTestId('talos-model-lab-hub')).toBeVisible()
+    await page.getByTestId('talos-model-lab-destination').filter({ hasText: 'Providers and access' }).click()
+    await expect(page.getByTestId('settings-models-providers-screen')).toBeVisible()
 }
 
 async function openCatalog(page: Page): Promise<void> {
-    const tablist = page.getByRole('tablist', { name: 'Model Lab sections' })
-    await tablist.getByRole('tab', { name: 'Catalog', exact: true }).click()
+    if (await page.getByTestId('talos-model-lab-hub').count() === 0) {
+        await page.getByTestId('talos-sheet-back').click()
+        await expect(page.getByTestId('talos-model-lab-hub')).toBeVisible()
+    }
+    await page.getByTestId('talos-model-lab-destination').filter({ hasText: 'Model catalog' }).click()
     await expect(page.getByLabel('Search model catalog')).toBeVisible()
 }
 
@@ -99,6 +104,10 @@ test('manages a discovered Gemini model from Model Lab through the live Chat pic
 
     await card.getByLabel('Use Gemini Field as default model').click()
     await expect(card.getByLabel('Use Gemini Field as default model')).toHaveAttribute('aria-pressed', 'true')
+    await page.getByTestId('talos-sheet-back').click()
+    await expect(page.getByTestId('talos-model-lab-hub')).toBeVisible()
+    await page.getByTestId('talos-sheet-back').click()
+    await expect(page).toHaveURL(/\/settings$/)
     await closeToolSheet(page)
     await expect(page.locator(SHEET)).toHaveCount(0)
 
@@ -168,12 +177,15 @@ test('persists an OpenAI-compatible endpoint and timeout and recovers a manual m
     await expect(manualCard.getByText('Declared capabilities', { exact: true })).toBeVisible()
     await expect(manualCard.getByText('reasoning', { exact: true })).toBeVisible()
 
+    await page.getByTestId('talos-sheet-back').click()
+    await expect(page.getByTestId('talos-model-lab-hub')).toBeVisible()
+    await page.getByTestId('talos-model-lab-destination').filter({ hasText: 'Providers and access' }).click()
+    await expect(page.getByTestId('settings-models-providers-screen')).toBeVisible()
     await page.reload()
-    await page.locator('[data-settings-tab="models"]').click()
-    await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
+    await expect(page.getByTestId('settings-models-providers-screen')).toBeVisible()
     await expect(page.getByLabel('OpenAI custom endpoint')).toHaveValue('https://models.example.test/v1')
     await expect(page.getByLabel('OpenAI timeout seconds')).toHaveValue('75')
-    await page.getByRole('tablist', { name: 'Model Lab sections' }).getByRole('tab', { name: 'Catalog', exact: true }).click()
+    await openCatalog(page)
     await expect(page.locator('[data-model-card][data-model-id="openai:fallback-chat"]')).toBeVisible()
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)

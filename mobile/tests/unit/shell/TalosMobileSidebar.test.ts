@@ -69,18 +69,18 @@ describe('TalosMobileSidebar (F1-T3)', () => {
         expect(wrapper.emitted('select')).toEqual([['chat-1']])
     })
 
-    it('exposes the four tool destinations and settings, forwarding navigation', async () => {
+    it('F2-RED-20 keeps Model Lab under Settings instead of duplicating it in primary navigation', async () => {
         const wrapper = mountSidebar()
         await flushPromises()
-        for (const label of ['Research', 'Cockpit', 'Library', 'Model Lab']) {
+        for (const label of ['Research', 'Cockpit', 'Library']) {
             expect(document.querySelector(`[data-testid="talos-mobile-sidebar"] [aria-label="Open ${label}"]`), label).toBeTruthy()
         }
+        expect(document.querySelector('[data-testid="talos-mobile-sidebar"] [aria-label="Open Model Lab"]')).toBeNull()
         ;(document.querySelector('[aria-label="Open Research"]') as HTMLElement).click()
-        ;(document.querySelector('[aria-label="Open Model Lab"]') as HTMLElement).click()
         ;(document.querySelector('[aria-label="Open Settings"]') as HTMLElement).click()
         await flushPromises()
         expect(wrapper.emitted('navigate')).toEqual([['research']])
-        expect(wrapper.emitted('openModelLab')).toHaveLength(1)
+        expect(wrapper.emitted('openModelLab')).toBeUndefined()
         expect(wrapper.emitted('openSettings')).toHaveLength(1)
     })
 

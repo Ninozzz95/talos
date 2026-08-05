@@ -6,7 +6,6 @@ import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosMediaQuery } from '@/composables/useTalosMediaQuery'
 import { useTalosAccountStore } from '@/stores/account'
 import TalosAccountAvatar from '@/components/talos/TalosAccountAvatar.vue'
-import TalosMobileSettingsModelsPanel from './TalosMobileSettingsModelsPanel.vue'
 import TalosMobileSettingsAiDefaultsPanel from './TalosMobileSettingsAiDefaultsPanel.vue'
 import TalosMobileSettingsAppearancePanel from './TalosMobileSettingsAppearancePanel.vue'
 import TalosMobileSettingsLanguagePanel from './TalosMobileSettingsLanguagePanel.vue'
@@ -44,7 +43,7 @@ const emit = defineEmits<{ 'update:openTab': [tab: TalosMobileSettingsTabId | nu
 
 const { t } = useTalosI18n()
 
-const activeTab = ref<TalosMobileSettingsTabId>('models')
+const activeTab = ref<TalosMobileSettingsTabId>('ai_defaults')
 const mobilePane = ref<'categories' | 'detail'>('categories')
 function localizedTab(tab: TalosMobileSettingsTab): TalosMobileSettingsTab {
     return {
@@ -265,7 +264,6 @@ function onRowKeydown(event: KeyboardEvent): void {
 }
 
 const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
-    models: TalosMobileSettingsModelsPanel,
     ai_defaults: TalosMobileSettingsAiDefaultsPanel,
     search: TalosMobileSettingsSearchPanel,
     appearance: TalosMobileSettingsAppearancePanel,
@@ -307,11 +305,27 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                  parity). Adding px here double-padded to 28px ("still too wide"). -->
             <div
                 data-testid="settings-category-list"
-                :role="isTabsGrammar ? 'tablist' : undefined"
-                :aria-orientation="isTabsGrammar ? 'vertical' : undefined"
-                :aria-label="isTabsGrammar ? t('settingsCenter.talosCategories') : undefined"
                 class="flex max-h-none w-full flex-col gap-5 px-0 py-2 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain md:px-0 md:py-0"
             >
+                <RouterLink
+                    :to="{ name: 'settings-models' }"
+                    data-testid="settings-model-lab-link"
+                    class="talos-pressable flex min-h-[var(--talos-touch-target)] w-full items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] p-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                >
+                    <Bot class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-sm font-semibold text-[var(--talos-text)]">{{ t('navigation.modelLab') }}</span>
+                        <span class="block text-xs text-[var(--talos-muted)]">{{ t('settingsCenter.tabs.models.description') }}</span>
+                    </span>
+                    <ChevronRight class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                </RouterLink>
+
+                <div
+                    :role="isTabsGrammar ? 'tablist' : undefined"
+                    :aria-orientation="isTabsGrammar ? 'vertical' : undefined"
+                    :aria-label="isTabsGrammar ? t('settingsCenter.talosCategories') : undefined"
+                    class="flex w-full flex-col gap-5"
+                >
                 <button
                     type="button"
                     :id="rowId(TALOS_MOBILE_SETTINGS_ACCOUNT_TAB)"
@@ -361,6 +375,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                             <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                         </button>
                     </div>
+                </div>
                 </div>
             </div>
         </component>

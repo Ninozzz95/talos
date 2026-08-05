@@ -2,9 +2,12 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+    TALOS_COMPONENT_RADIUS_SCALE,
+    TALOS_LAYOUT_DENSITY_SCALE,
     TALOS_THEME_IDENTITY_PALETTE_ROLES,
     TalosDesignTokenError,
     parseTalosMobileDesignTokens,
+    talosLayoutTokensFor,
 } from '../src/index.ts'
 
 function palette(seed: string) {
@@ -75,6 +78,20 @@ function canonicalIdentity() {
 }
 
 describe('talos mobile design tokens', () => {
+    it('derives every Model Lab layout value from density and radius without shrinking touch targets', () => {
+        assert.deepEqual(Object.keys(TALOS_LAYOUT_DENSITY_SCALE), ['compact', 'comfortable', 'spacious'])
+        assert.deepEqual(Object.keys(TALOS_COMPONENT_RADIUS_SCALE), ['sharp', 'balanced', 'soft'])
+
+        const compact = talosLayoutTokensFor('compact', 'sharp')
+        const spacious = talosLayoutTokensFor('spacious', 'soft')
+        assert.equal(compact.touchTarget, '3rem')
+        assert.equal(spacious.touchTarget, '3rem')
+        assert.notEqual(compact.page, spacious.page)
+        assert.notEqual(compact.card, spacious.card)
+        assert.notEqual(compact.radiusCard, spacious.radiusCard)
+        assert.notEqual(compact.radiusControl, spacious.radiusControl)
+    })
+
     it('accepts the canonical desktop theme identity shape', () => {
         const canonical = canonicalIdentity()
         assert.deepEqual(parseTalosMobileDesignTokens(canonical), canonical)

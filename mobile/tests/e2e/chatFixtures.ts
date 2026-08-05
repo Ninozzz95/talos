@@ -32,7 +32,7 @@ export const TALOS_IMMERSIVE_SEED = {
                 defaults_v3: true,
                 presentation_v2: true,
                 shell: { immersive_header: true, composer_drawer: false },
-                onboarding: { intro_version: 2, intro_outcome: 'completed', setup_dismissed: true },
+                onboarding: { intro_version: 3, intro_outcome: 'completed', setup_dismissed: true },
             }),
         }],
     }],
@@ -75,14 +75,36 @@ export async function configureChatProvider(page: Page, key = 'e2e-key'): Promis
     await page.locator(MENU).click()
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
-    await page.locator('[data-settings-tab="models"]').click()
+    await page.getByTestId('settings-model-lab-link').click()
+    await expect(page.getByTestId('talos-model-lab-hub')).toBeVisible()
+    await page.getByTestId('talos-model-lab-destination')
+        .filter({ hasText: 'Providers and access' })
+        .click()
+    await expect(page.getByTestId('settings-models-providers-screen')).toBeVisible()
     const expander = page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]')
     if (await expander.getAttribute('aria-expanded') === 'false') await expander.click()
     await page.getByLabel('Google Gemini API key').fill(key)
     await page.getByLabel('Save Google Gemini key').click()
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
-    await page.getByLabel('Default chat model').click()
-    await page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]').click()
+
+    // Provider is a route child now. Walk to the hub and choose the discovered
+    // model through the dedicated catalog before the fresh-install intro can
+    // reclaim focus when the station closes.
+    await page.getByTestId('talos-sheet-back').click()
+    await expect(page.getByTestId('talos-model-lab-hub')).toBeVisible()
+    await page.getByTestId('talos-model-lab-destination')
+        .filter({ hasText: 'Model catalog' })
+        .click()
+    const model = page.locator('[data-model-card][data-model-id="gemini:gemini-live"]')
+    await expect(model).toBeVisible()
+    await model.getByRole('button', { name: /Use .* as default model/ }).click()
+    await expect(model.getByRole('button', { name: /Use .* as default model/ }))
+        .toHaveAttribute('aria-pressed', 'true')
+
+    await page.getByTestId('talos-sheet-back').click()
+    await expect(page.getByTestId('talos-model-lab-hub')).toBeVisible()
+    await page.getByTestId('talos-sheet-back').click()
+    await expect(page).toHaveURL(/\/settings$/)
     await closeToolSheet(page)
 }
 

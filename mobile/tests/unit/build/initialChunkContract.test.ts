@@ -18,6 +18,7 @@ interface FixtureOptions {
     eagerEnhancerDrawer?: boolean
     eagerModelCatalog?: boolean
     eagerModelAdvanced?: boolean
+    eagerModelLocal?: boolean
     eagerToolset?: boolean
     eagerDocuments?: boolean
     eagerLauncherIconDialog?: boolean
@@ -45,6 +46,7 @@ function createFixture(options: FixtureOptions = {}): string {
     const enhancerDrawerKey = 'src/components/chat/TalosMobileEnhancerDrawer.vue'
     const modelCatalogKey = 'src/components/talos/models/TalosMobileModelCatalog.vue'
     const modelAdvancedKey = 'src/components/talos/models/TalosMobileModelAdvancedOptions.vue'
+    const modelLocalKey = 'src/components/talos/models/TalosMobileLocalModels.vue'
     // The tool suite: loaded on the first send, never at boot.
     const toolsetKey = 'src/lib/tools/toolset.ts'
     const agentLoopKey = 'src/lib/tools/agentLoop.ts'
@@ -76,11 +78,16 @@ function createFixture(options: FixtureOptions = {}): string {
     const enhancerDrawerIsDynamic = options.eagerEnhancerDrawer !== true
     const modelCatalogIsDynamic = options.eagerModelCatalog !== true
     const modelAdvancedIsDynamic = options.eagerModelAdvanced !== true
+    const modelLocalIsDynamic = options.eagerModelLocal !== true
     const routeKeys = [
         'src/screens/ResearchScreen.vue',
         'src/screens/RunsScreen.vue',
         'src/screens/ContextScreen.vue',
         'src/screens/SettingsScreen.vue',
+        'src/screens/SettingsModelsScreen.vue',
+        'src/screens/SettingsModelsProvidersScreen.vue',
+        'src/screens/SettingsModelsCatalogScreen.vue',
+        'src/screens/SettingsModelsLocalScreen.vue',
     ]
     const settingsSourceKey = 'src/screens/SettingsScreen.vue'
     const settingsManifestKey = options.syntheticSettingsEntry === true
@@ -168,6 +175,10 @@ function createFixture(options: FixtureOptions = {}): string {
             file: 'assets/model-advanced.js',
             isDynamicEntry: modelAdvancedIsDynamic,
         },
+        [modelLocalKey]: {
+            file: 'assets/model-local.js',
+            isDynamicEntry: modelLocalIsDynamic,
+        },
         [toolsetKey]: {
             file: 'assets/toolset.js',
             isDynamicEntry: toolsetIsDynamic,
@@ -254,14 +265,28 @@ function createFixture(options: FixtureOptions = {}): string {
             file,
             isDynamicEntry: sourceKey !== options.eagerRoute,
             ...(key === sourceKey ? { src: sourceKey } : {}),
-            ...(sourceKey === settingsSourceKey ? {
+            ...(sourceKey === 'src/screens/SettingsModelsCatalogScreen.vue' ? {
                 imports: [
                     ...(modelCatalogIsDynamic ? [] : [modelCatalogKey]),
-                    ...(modelAdvancedIsDynamic ? [] : [modelAdvancedKey]),
                 ],
                 dynamicImports: [
                     ...(modelCatalogIsDynamic ? [modelCatalogKey] : []),
+                ],
+            } : {}),
+            ...(sourceKey === 'src/screens/SettingsModelsProvidersScreen.vue' ? {
+                imports: [
+                    ...(modelAdvancedIsDynamic ? [] : [modelAdvancedKey]),
+                ],
+                dynamicImports: [
                     ...(modelAdvancedIsDynamic ? [modelAdvancedKey] : []),
+                ],
+            } : {}),
+            ...(sourceKey === 'src/screens/SettingsModelsLocalScreen.vue' ? {
+                imports: [
+                    ...(modelLocalIsDynamic ? [] : [modelLocalKey]),
+                ],
+                dynamicImports: [
+                    ...(modelLocalIsDynamic ? [modelLocalKey] : []),
                 ],
             } : {}),
         }
@@ -276,6 +301,7 @@ function createFixture(options: FixtureOptions = {}): string {
     writeFileSync(join(root, 'assets', 'slash-command-menu.js'), 'c'.repeat(64))
     writeFileSync(join(root, 'assets', 'model-catalog.js'), 'l'.repeat(64))
     writeFileSync(join(root, 'assets', 'model-advanced.js'), 'a'.repeat(64))
+    writeFileSync(join(root, 'assets', 'model-local.js'), 'q'.repeat(64))
     writeFileSync(join(root, 'assets', 'launcher-icon-dialog.js'), 'i'.repeat(64))
     writeFileSync(join(root, 'assets', 'chat-screen.js'), 'h'.repeat(64))
     writeFileSync(join(root, 'assets', 'welcome-en.js'), 'e'.repeat(64))
@@ -334,6 +360,14 @@ describe('initial JavaScript chunk contract', () => {
             .toBeDefined()
         expect(report.dynamic_entries['src/components/chat/TalosMobileEnhancerDrawer.vue'])
             .toBeDefined()
+        for (const route of [
+            'src/screens/SettingsModelsScreen.vue',
+            'src/screens/SettingsModelsProvidersScreen.vue',
+            'src/screens/SettingsModelsCatalogScreen.vue',
+            'src/screens/SettingsModelsLocalScreen.vue',
+        ]) expect(report.dynamic_entries[route]).toBeDefined()
+        expect(report.dynamic_entries['src/components/talos/models/TalosMobileLocalModels.vue'])
+            .toBeDefined()
     })
 
     it('rejects SQLite when it enters the static initial graph', () => {
@@ -382,6 +416,13 @@ describe('initial JavaScript chunk contract', () => {
         expect(result.stderr).toContain('TALOS_ROUTE_NOT_LAZY')
     })
 
+    it('rejects a dedicated Model Lab screen that re-enters the static initial graph', () => {
+        const result = verify(createFixture({ eagerRoute: 'src/screens/SettingsModelsLocalScreen.vue' }))
+
+        expect(result.status).toBe(1)
+        expect(result.stderr).toContain('TALOS_MODEL_LAB_ROUTE_NOT_LAZY')
+    })
+
     it('rejects the rich message renderer when it enters the static initial graph', () => {
         const result = verify(createFixture({ eagerMessageRenderer: true }))
 
@@ -410,14 +451,17 @@ describe('initial JavaScript chunk contract', () => {
         expect(result.stderr).toContain('TALOS_SLASH_COMMAND_MENU_NOT_LAZY')
     })
 
-    it('rejects Model Lab heavy descendants when they are folded into the Settings chunk', () => {
+    it('rejects Model Lab heavy descendants when they are folded into their route chunks', () => {
         const catalog = verify(createFixture({ eagerModelCatalog: true }), 256)
         const advanced = verify(createFixture({ eagerModelAdvanced: true }), 256)
+        const local = verify(createFixture({ eagerModelLocal: true }), 256)
 
         expect(catalog.status).toBe(1)
         expect(catalog.stderr).toContain('TALOS_MODEL_CATALOG_NOT_LAZY')
         expect(advanced.status).toBe(1)
         expect(advanced.stderr).toContain('TALOS_MODEL_ADVANCED_NOT_LAZY')
+        expect(local.status).toBe(1)
+        expect(local.stderr).toContain('TALOS_MODEL_LOCAL_NOT_LAZY')
     })
 
     it('accepts a reachable Vite synthetic key for a nested dynamic Settings entry', () => {

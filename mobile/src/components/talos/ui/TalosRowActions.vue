@@ -229,7 +229,7 @@ defineExpose({ close })
     <Teleport to="body">
         <div
             v-if="open"
-            class="fixed inset-0 z-[90]"
+            class="fixed inset-0 z-[110]"
             data-testid="talos-row-actions-scrim"
             @click="close()"
             @contextmenu.prevent

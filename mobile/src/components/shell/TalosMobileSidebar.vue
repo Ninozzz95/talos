@@ -2,7 +2,7 @@
 import { computed, nextTick, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import {
-    Activity, BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, FlaskConical, MessageSquareText,
+    Activity, BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, MessageSquareText,
     Pencil, Trash2, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -43,7 +43,6 @@ const emit = defineEmits<{
     rename: [sessionId: string, title: string]
     delete: [sessionId: string, choice: { deleteMedia: boolean }]
     navigate: [route: TalosMobileRouteName]
-    openModelLab: []
     openSettings: []
 }>()
 
@@ -230,17 +229,6 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                             >
                                 <component :is="tool.icon" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
                                 {{ tool.label }}
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                type="button"
-                                :aria-label="$t('shell.openItem', { item: $t('navigation.modelLab') })"
-                                class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
-                                @click="suppressSidebarFocusRestore(); emit('openModelLab')"
-                            >
-                                <FlaskConical class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                                {{ $t('navigation.modelLab') }}
                             </button>
                         </li>
                     </ul>

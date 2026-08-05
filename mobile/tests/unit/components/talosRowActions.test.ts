@@ -203,6 +203,17 @@ describe('the row actions button', () => {
         expect(menu()).toBeNull()
     })
 
+    it('F2-RED-18 paints a teleported menu above dialogs but below the lock screen', async () => {
+        const wrapper = open()
+        await wrapper.get('button').trigger('click')
+        await wrapper.vm.$nextTick()
+
+        const scrim = document.querySelector<HTMLElement>('[data-testid="talos-row-actions-scrim"]')!
+        // TALOS dialog/viewer = 95, select = 100, lock screen = 120.
+        expect(scrim.classList).toContain('z-[110]')
+        expect(scrim.classList).not.toContain('z-[90]')
+    })
+
     it('is what System Back closes first, and only while it is open', async () => {
         /**
          * Found on the tablet: with a layer open, Back walked past it to the

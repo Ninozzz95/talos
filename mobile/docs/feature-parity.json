@@ -161,7 +161,7 @@
                 "desktop_contract": "Model Center: profili provider server-side, create->probe persistito (createAndProbeModelProfile), has_secret mai il segreto, routing manuale",
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
-                "mobile_surface": "TalosMobileSettingsModelsPanel + TalosThemedSelect + TalosMobileComposerModelPicker + six-provider adapter registry",
+                "mobile_surface": "SettingsModelsScreen hub + dedicated provider/catalog/local routes + TalosMobileComposerModelPicker + six-provider adapter registry",
                 "execution_location": [
                     "local_mobile",
                     "remote_provider"

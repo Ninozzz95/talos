@@ -6,6 +6,8 @@ export type TalosMobileRouteName =
     | 'memory-item' | 'task-item' | 'note-item'
     | 'research' | 'research-new' | 'research-report' | 'research-claim' | 'research-source'
     | 'runs' | 'context' | 'settings'
+    | 'settings-models' | 'settings-models-providers'
+    | 'settings-models-catalog' | 'settings-models-local'
 
 export interface TalosMobileRoute {
     name: TalosMobileRouteName
@@ -40,6 +42,10 @@ const loadResearchSourceScreen = () => import('@/screens/ResearchSourceScreen.vu
 const loadRunsScreen = () => import('@/screens/RunsScreen.vue').then((module) => module.default)
 const loadContextScreen = () => import('@/screens/ContextScreen.vue').then((module) => module.default)
 const loadSettingsScreen = () => import('@/screens/SettingsScreen.vue').then((module) => module.default)
+const loadSettingsModelsScreen = () => import('@/screens/SettingsModelsScreen.vue').then((module) => module.default)
+const loadSettingsModelsProvidersScreen = () => import('@/screens/SettingsModelsProvidersScreen.vue').then((module) => module.default)
+const loadSettingsModelsCatalogScreen = () => import('@/screens/SettingsModelsCatalogScreen.vue').then((module) => module.default)
+const loadSettingsModelsLocalScreen = () => import('@/screens/SettingsModelsLocalScreen.vue').then((module) => module.default)
 /*
  * Le pagine di dettaglio delle tre stazioni-elenco.
  *
@@ -92,6 +98,10 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'runs', path: '/runs', desktop_station_id: 'tasks', component: loadRunsScreen },
     { name: 'context', path: '/context', desktop_station_id: 'context_vault', component: loadContextScreen },
     { name: 'settings', path: '/settings', desktop_station_id: 'settings', component: loadSettingsScreen },
+    { name: 'settings-models', path: '/settings/models', desktop_station_id: 'settings', component: loadSettingsModelsScreen, parent: 'settings' },
+    { name: 'settings-models-providers', path: '/settings/models/providers', desktop_station_id: 'settings', component: loadSettingsModelsProvidersScreen, parent: 'settings-models' },
+    { name: 'settings-models-catalog', path: '/settings/models/catalog', desktop_station_id: 'settings', component: loadSettingsModelsCatalogScreen, parent: 'settings-models' },
+    { name: 'settings-models-local', path: '/settings/models/local', desktop_station_id: 'settings', component: loadSettingsModelsLocalScreen, parent: 'settings-models' },
 ])
 
 export const TALOS_MOBILE_ROUTE_NAMES: readonly TalosMobileRouteName[] = Object.freeze(

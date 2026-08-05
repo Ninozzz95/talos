@@ -102,6 +102,13 @@ const DYNAMIC_BOUNDARIES = [
     { suffix: 'src/screens/RunsScreen.vue', code: 'TALOS_ROUTE_NOT_LAZY' },
     { suffix: 'src/screens/ContextScreen.vue', code: 'TALOS_ROUTE_NOT_LAZY' },
     { suffix: 'src/screens/SettingsScreen.vue', code: 'TALOS_ROUTE_NOT_LAZY' },
+    // Model Lab is four addressable mobile routes. Keeping only the old
+    // Settings route lazy would still allow the hub or a child page to drift
+    // into first paint as the navigation evolves.
+    { suffix: 'src/screens/SettingsModelsScreen.vue', code: 'TALOS_MODEL_LAB_ROUTE_NOT_LAZY' },
+    { suffix: 'src/screens/SettingsModelsProvidersScreen.vue', code: 'TALOS_MODEL_LAB_ROUTE_NOT_LAZY' },
+    { suffix: 'src/screens/SettingsModelsCatalogScreen.vue', code: 'TALOS_MODEL_LAB_ROUTE_NOT_LAZY' },
+    { suffix: 'src/screens/SettingsModelsLocalScreen.vue', code: 'TALOS_MODEL_LAB_ROUTE_NOT_LAZY' },
     {
         suffix: 'src/components/talos/models/TalosMobileModelCatalog.vue',
         code: 'TALOS_MODEL_CATALOG_NOT_LAZY',
@@ -109,6 +116,10 @@ const DYNAMIC_BOUNDARIES = [
     {
         suffix: 'src/components/talos/models/TalosMobileModelAdvancedOptions.vue',
         code: 'TALOS_MODEL_ADVANCED_NOT_LAZY',
+    },
+    {
+        suffix: 'src/components/talos/models/TalosMobileLocalModels.vue',
+        code: 'TALOS_MODEL_LOCAL_NOT_LAZY',
     },
     // The tool suite pulls zod and six tool bodies. It is loaded on the first
     // send, never at boot — and nothing was stopping it drifting into the entry

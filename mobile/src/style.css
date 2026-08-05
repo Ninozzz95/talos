@@ -97,6 +97,17 @@
     --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
     --talos-density-scale: 1;
     --radius: 0rem;
+    /* Model Lab and future compact mobile surfaces consume only these semantic
+       layout values. Runtime identities replace them before first interaction. */
+    --talos-space-page: 1rem;
+    --talos-space-section: 1rem;
+    --talos-space-card: 0.75rem;
+    --talos-space-control: 0.75rem;
+    --talos-space-inline: 0.5rem;
+    --talos-icon-size: 1rem;
+    --talos-touch-target: 3rem;
+    --talos-radius-card: 0rem;
+    --talos-radius-control: 0rem;
 
     --background: #f1f8fa;
     --foreground: #111827;

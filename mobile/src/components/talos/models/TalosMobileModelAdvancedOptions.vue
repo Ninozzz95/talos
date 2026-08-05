@@ -89,52 +89,52 @@ async function remove(id: string): Promise<void> {
 </script>
 
 <template>
-    <section aria-labelledby="manual-model-title" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
+    <section aria-labelledby="manual-model-title" class="rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] p-[var(--talos-space-card)]">
         <header>
-            <h5 id="manual-model-title" class="flex items-center gap-2 text-sm font-semibold text-[var(--talos-text)]">
-                <Wrench class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('models.manualRecovery') }}
+            <h5 id="manual-model-title" class="flex items-center gap-[var(--talos-space-inline)] text-sm font-semibold text-[var(--talos-text)]">
+                <Wrench class="size-[var(--talos-icon-size)] text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('models.manualRecovery') }}
             </h5>
-            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
+            <p class="mt-[var(--talos-space-inline)] text-xs leading-5 text-[var(--talos-muted)]">
                 {{ $t('models.manualRecoveryDetail') }}
             </p>
         </header>
 
-        <p v-if="error" role="alert" class="mt-3 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] px-3 py-2 text-xs text-[var(--talos-text)]">{{ error }}</p>
+        <p v-if="error" role="alert" class="mt-[var(--talos-space-section)] rounded-[var(--talos-radius-control)] border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-[var(--talos-space-control)] text-xs text-[var(--talos-text)]">{{ error }}</p>
 
-        <form class="mt-3 grid min-w-0 gap-3 sm:grid-cols-2" @submit.prevent="save">
+        <form class="mt-[var(--talos-space-section)] grid min-w-0 gap-[var(--talos-space-section)] sm:grid-cols-2" @submit.prevent="save">
             <label class="min-w-0">
-                <span class="mb-1 block text-xs font-medium text-[var(--talos-muted)]">{{ $t('models.provider') }}</span>
+                <span class="mb-[var(--talos-space-inline)] block text-xs font-medium text-[var(--talos-muted)]">{{ $t('models.provider') }}</span>
                 <TalosThemedSelect v-model="provider" :items="providerItems" :aria-label="$t('models.manualProvider')" />
             </label>
             <label class="min-w-0">
-                <span class="mb-1 block text-xs font-medium text-[var(--talos-muted)]">{{ $t('models.modelId') }}</span>
-                <input v-model="model" type="text" maxlength="512" autocapitalize="none" autocomplete="off" :aria-label="$t('models.manualModelId')" :placeholder="$t('models.modelIdPlaceholder')" class="h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]">
+                <span class="mb-[var(--talos-space-inline)] block text-xs font-medium text-[var(--talos-muted)]">{{ $t('models.modelId') }}</span>
+                <input v-model="model" type="text" maxlength="512" autocapitalize="none" autocomplete="off" :aria-label="$t('models.manualModelId')" :placeholder="$t('models.modelIdPlaceholder')" class="h-[var(--talos-touch-target)] w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-input)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]">
             </label>
             <label class="min-w-0 sm:col-span-2">
-                <span class="mb-1 block text-xs font-medium text-[var(--talos-muted)]">{{ $t('models.displayName') }}</span>
-                <input v-model="displayName" type="text" maxlength="255" :aria-label="$t('models.manualDisplayName')" :placeholder="$t('models.modelLabelPlaceholder')" class="h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]">
+                <span class="mb-[var(--talos-space-inline)] block text-xs font-medium text-[var(--talos-muted)]">{{ $t('models.displayName') }}</span>
+                <input v-model="displayName" type="text" maxlength="255" :aria-label="$t('models.manualDisplayName')" :placeholder="$t('models.modelLabelPlaceholder')" class="h-[var(--talos-touch-target)] w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-input)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]">
             </label>
-            <label class="flex min-h-11 items-center gap-2 text-xs font-medium text-[var(--talos-text)]">
-                <input v-model="reasoning" type="checkbox" :aria-label="$t('models.declareReasoning')" class="size-4 accent-[var(--talos-accent)]">
+            <label class="flex min-h-[var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)] text-xs font-medium text-[var(--talos-text)]">
+                <input v-model="reasoning" type="checkbox" :aria-label="$t('models.declareReasoning')" class="size-[var(--talos-icon-size)] accent-[var(--talos-accent)]">
                 {{ $t('models.declareReasoning') }}
             </label>
-            <label class="flex min-h-11 items-center gap-2 text-xs font-medium text-[var(--talos-text)]">
-                <input v-model="vision" type="checkbox" :aria-label="$t('models.declareImageInputSupport')" class="size-4 accent-[var(--talos-accent)]">
+            <label class="flex min-h-[var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)] text-xs font-medium text-[var(--talos-text)]">
+                <input v-model="vision" type="checkbox" :aria-label="$t('models.declareImageInputSupport')" class="size-[var(--talos-icon-size)] accent-[var(--talos-accent)]">
                 {{ $t('models.declareImageInput') }}
             </label>
-            <button type="submit" :aria-label="$t('models.saveManual')" :disabled="busy" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[var(--talos-accent)] px-3 text-sm font-semibold text-[var(--talos-accent-contrast,var(--talos-accent-text))] disabled:opacity-50 sm:col-span-2">
-                <Plus class="size-4" aria-hidden="true" /> {{ $t('models.addManual') }}
+            <button type="submit" :aria-label="$t('models.saveManual')" :disabled="busy" class="inline-flex min-h-[var(--talos-touch-target)] items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-accent-text)] disabled:opacity-50 sm:col-span-2">
+                <Plus class="size-[var(--talos-icon-size)]" aria-hidden="true" /> {{ $t('models.addManual') }}
             </button>
         </form>
 
-        <ul v-if="manualModels.length" class="mt-4 divide-y divide-[var(--talos-border)] border-y border-[var(--talos-border)]">
-            <li v-for="entry in manualModels" :key="entry.id" class="flex min-w-0 items-center gap-2 py-2">
+        <ul v-if="manualModels.length" class="mt-[var(--talos-space-section)] divide-y divide-[var(--talos-border)] border-y border-[var(--talos-border)]">
+            <li v-for="entry in manualModels" :key="entry.id" class="flex min-w-0 items-center gap-[var(--talos-space-inline)] py-[var(--talos-space-inline)]">
                 <div class="min-w-0 flex-1">
                     <div class="truncate text-sm font-medium text-[var(--talos-text)]">{{ entry.display_name }}</div>
                     <div class="truncate font-mono text-2xs text-[var(--talos-muted)]">{{ talosMobileProviderById(entry.provider).label }} / {{ entry.model }}</div>
                 </div>
-                <button type="button" :aria-label="$t('models.removeManual', { name: entry.display_name })" :disabled="busy" class="inline-flex size-10 items-center justify-center rounded-md border border-[var(--talos-border)] text-[var(--talos-muted)] disabled:opacity-50" @click="remove(entry.id)">
-                    <Trash2 class="size-4" aria-hidden="true" />
+                <button type="button" :aria-label="$t('models.removeManual', { name: entry.display_name })" :disabled="busy" class="inline-flex size-[var(--talos-touch-target)] items-center justify-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] text-[var(--talos-muted)] disabled:opacity-50" @click="remove(entry.id)">
+                    <Trash2 class="size-[var(--talos-icon-size)]" aria-hidden="true" />
                 </button>
             </li>
         </ul>

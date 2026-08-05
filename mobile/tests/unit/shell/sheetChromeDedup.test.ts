@@ -26,9 +26,7 @@ describe('sheet chrome dedup (F3-T3)', () => {
     })
 
     it('the settings category pane carries no duplicate heading block', () => {
-        const wrapper = mount(TalosMobileSettingsCenter, {
-            global: { stubs: { TalosMobileSettingsModelsPanel: true } },
-        })
+        const wrapper = mount(TalosMobileSettingsCenter)
         expect(wrapper.text()).not.toContain('Settings categories')
         expect(wrapper.text()).not.toContain('Local preferences and capability readiness.')
     })
