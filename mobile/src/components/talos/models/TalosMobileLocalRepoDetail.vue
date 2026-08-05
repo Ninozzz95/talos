@@ -13,6 +13,7 @@ import {
     talosRetryAfterSeconds,
     talosSetWarnings,
 } from '@/lib/models/presentation'
+import { talosModelSpeaks } from '@/lib/models/modelLanguages'
 import { talosReadmeSummary } from '@/lib/models/readmeSummary'
 import { talosDiscardModelTransfer } from '@/services/modelTransfer'
 import {
@@ -33,12 +34,13 @@ const props = defineProps<{
     revision: string
 }>()
 
-const { t } = useTalosI18n()
+const { t, locale } = useTalosI18n()
 const store = talosLocalModels
 const refused = ref<string | null>(null)
 const card = ref<{
     author: string | null
     license: string | null
+    languages: readonly string[]
     readme: string
     updatedAt: string | null
 } | null>(null)
@@ -48,6 +50,18 @@ const repo = computed(() => store.repo?.id === props.repoId ? store.repo : null)
 const summary = computed(() => talosReadmeSummary(card.value?.readme ?? ''))
 const cardTags = computed(() => [card.value?.author, card.value?.license]
     .filter((value): value is string => typeof value === 'string' && value.length > 0))
+
+/**
+ * Se questo modello dichiara di parlare la lingua dell'interfaccia.
+ *
+ * L'avviso si mostra QUI, sulla pagina del repository, perche' e' l'ultimo
+ * momento prima di impegnare due gigabyte. Owner 2026-08-05: aveva scaricato un
+ * modello coreano e gli aveva parlato italiano — e niente gliel'aveva detto.
+ *
+ * Solo `no` diventa un avviso: `unknown` non e' un'accusa, e `yes` non merita
+ * una riga su ogni schermata.
+ */
+const lingua = computed(() => talosModelSpeaks(card.value?.languages, locale.value))
 const freeMemory = computed(() => store.device?.availableRamBytes
     ? talosFormatBytes(store.device.availableRamBytes)
     : null)
@@ -141,6 +155,15 @@ async function reclaim(): Promise<void> {
             <div class="flex flex-wrap gap-[var(--talos-space-inline)]">
                 <span v-for="tag in cardTags" :key="tag" class="rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-inline)] py-[calc(var(--talos-space-inline)/2)] font-mono text-2xs text-[var(--talos-muted)]">{{ tag }}</span>
             </div>
+            <!-- L'avviso di lingua. Solo quando il modello DICHIARA le sue
+                 lingue e la tua non c'e': un «non si sa» qui sarebbe rumore, e
+                 un «si» una riga inutile su ogni schermata. -->
+            <p
+                v-if="lingua === 'no'"
+                role="status"
+                data-testid="talos-models-language-warning"
+                class="flex min-w-0 items-start gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-warning)]/40 bg-[var(--talos-warning)]/10 px-[var(--talos-space-inline)] py-[calc(var(--talos-space-inline)/2)] text-xs leading-5 text-[var(--talos-text)]"
+            >{{ t('localModels.languageWarning', { languages: (card?.languages ?? []).join(', ') }) }}</p>
             <p v-if="summary" data-testid="talos-models-readme-summary" class="line-clamp-2 text-xs leading-5 text-[var(--talos-text)]">{{ summary }}</p>
             <details v-if="card.readme" data-testid="talos-models-readme-full" class="border-t border-[var(--talos-border)] pt-[var(--talos-space-inline)]">
                 <summary class="flex min-h-touch cursor-pointer items-center text-xs font-semibold text-[var(--talos-accent)]">{{ t('localModels.fullReadme') }}</summary>

@@ -1462,6 +1462,7 @@ export const TALOS_EN_MESSAGES = {
         transferFinished: '{model} is ready.',
         transferFailed: 'Download of {model} stopped.',
         transferInstalled: '{model} is on the phone.',
+        languageWarning: 'This model does not list your language among the ones it speaks: {languages}. Its answers may come out garbled.',
         weight: {
             'fino-1': 'Up to 1 billion',
             '1-4': '1 to 4 billion',

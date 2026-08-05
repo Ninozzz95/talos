@@ -189,6 +189,15 @@ export interface TalosHuggingFaceModel {
     browseVariant: TalosBrowseVariant | null
     /** Le etichette del repo: da qui esce la licenza per il filtro. */
     tags: readonly string[]
+    /**
+     * Le lingue che la scheda DICHIARA, dalla `cardData`.
+     *
+     * Vuoto significa «non dichiara», che non e' «non le parla»: vedi
+     * `modelLanguages.ts`. Il dato arrivava gia' col `cardData` che serviva per
+     * la licenza, e nessuno lo leggeva — finche' un modello coreano non ha
+     * risposto in italiano finto.
+     */
+    languages: readonly string[]
     /** Declared model-card licence, before TALOS policy classification. */
     licence: string | null
 }
@@ -226,6 +235,11 @@ export interface TalosHuggingFaceClient {
 export interface TalosHuggingFaceCard {
     author: string | null
     license: string | null
+    /**
+     * Le lingue che la scheda DICHIARA. Vuoto = non le dichiara, che non e'
+     * «non le parla» — vedi `modelLanguages.ts`.
+     */
+    languages: readonly string[]
     /** Il README, per intero e non interpretato. */
     readme: string
     updatedAt: string | null
@@ -411,6 +425,11 @@ export function talosCreateHuggingFaceClient(
                     licence: typeof cardData?.license === 'string'
                         ? cardData.license.trim() || null
                         : null,
+                    // Il Hub la da' come stringa singola o come elenco: si
+                    // normalizza a elenco, cosi' chi legge non deve saperlo.
+                    languages: Array.isArray(cardData?.language)
+                        ? (cardData.language as unknown[]).filter((l): l is string => typeof l === 'string')
+                        : (typeof cardData?.language === 'string' ? [cardData.language] : []),
                     // The Hub answers `"auto"` or `"manual"` when a gate exists and
                     // OMITS the field otherwise, so absent means open. Reading it
                     // the cautious way round would mark nearly every model gated
@@ -448,6 +467,11 @@ export function talosCreateHuggingFaceClient(
             return {
                 author: typeof row.author === 'string' ? row.author : null,
                 license: typeof card.license === 'string' ? card.license : null,
+                // Stringa singola o elenco: si normalizza qui, cosi' chi legge
+                // non deve sapere che il Hub risponde in due forme.
+                languages: Array.isArray(card.language)
+                    ? (card.language as unknown[]).filter((l): l is string => typeof l === 'string')
+                    : (typeof card.language === 'string' ? [card.language] : []),
                 // Un README che manca non e' un guasto: certi repo non ne hanno.
                 readme: readme.ok ? await readme.text() : '',
                 updatedAt: typeof row.lastModified === 'string' ? row.lastModified : null,
