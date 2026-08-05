@@ -30,3 +30,21 @@ final/
 
 # scratch temporanei degli agenti di ricerca
 mobile/.tmp-research/
+
+# Documenti interni della corsia mobile.
+#
+# Stessa regola di `docs/superpowers/` qui sopra, che la corsia mobile non ha
+# mai ricevuto: per questo 343 file di lavoro interno erano finiti nell'indice.
+# TALOS diventera' pubblico CON la sua cronologia, quindi cio' che descrive come
+# lavoriamo — e il dispositivo su cui proviamo — non entra.
+#
+# `evidence/` e' anche un artefatto di test: il banco di compatibilita' locale
+# ci scrive dentro screenshot del dispositivo dell'owner a ogni esecuzione.
+mobile/docs/superpowers/evidence/
+mobile/docs/superpowers/ledgers/
+mobile/docs/superpowers/plans/
+mobile/docs/superpowers/handoffs/
+mobile/docs/PASSAGGIO-DI-CONSEGNE.md
+mobile/docs/desktop-mobile-delta-template.md
+mobile/docs/alignment/ORDINE-DI-LAVORO-DESKTOP.md
+.codex/
