@@ -1602,6 +1602,8 @@ export const TALOS_EN_MESSAGES = {
         storageFree: 'free space',
     },
     notes: {
+        noMatches: 'No note matches that search.',
+        viewLabel: 'How notes are shown',
         // The note may have been deleted elsewhere, or the address hand-typed.
         itemMissing: 'This note is gone.',
         searchPlaceholder: 'Search notes',
