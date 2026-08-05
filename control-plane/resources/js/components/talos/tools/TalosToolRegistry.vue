@@ -15,7 +15,8 @@ const {
     connectors,
     tools,
     planningContext,
-    planningToolNames,
+    planningToolIds,
+    legacyPlanningToolNames,
     loadingToolRegistry,
     toolRegistryError,
     refreshToolRegistry,
@@ -33,7 +34,7 @@ const visibleTools = computed(() => {
             return false
         }
 
-        if (!showExcluded.value && !planningToolNames.value.has(tool.name)) {
+        if (!showExcluded.value && !isPlanningTool(tool)) {
             return false
         }
 
@@ -42,7 +43,7 @@ const visibleTools = computed(() => {
 })
 const selectedTool = computed(() => visibleTools.value.find((tool) => tool.id === selectedToolId.value) ?? visibleTools.value[0] ?? null)
 const planningCount = computed(() => planningContext.value?.tools.length ?? 0)
-const excludedCount = computed(() => Math.max(0, tools.value.length - planningCount.value))
+const excludedCount = computed(() => tools.value.filter((tool) => !isPlanningTool(tool)).length)
 const registryState = computed(() => resolveTalosCollectionState({
     itemCount: connectors.value.length + tools.value.length,
     loading: loadingToolRegistry.value,
@@ -51,7 +52,7 @@ const registryState = computed(() => resolveTalosCollectionState({
 }))
 
 function selectConnector(connector: TalosConnector) {
-    selectedConnectorId.value = connector.id
+    selectedConnectorId.value = selectedConnectorId.value === connector.id ? null : connector.id
     selectedToolId.value = null
 }
 
@@ -63,13 +64,30 @@ async function refresh() {
     registryRequested.value = true
     await refreshToolRegistry()
 
-    if (!selectedConnectorId.value && connectors.value.length > 0) {
-        selectedConnectorId.value = connectors.value[0].id
-    }
-
     if (!selectedToolId.value && visibleTools.value.length > 0) {
         selectedToolId.value = visibleTools.value[0].id
     }
+}
+
+function isPlanningTool(tool: TalosTool) {
+    return planningToolIds.value.has(tool.id)
+        || legacyPlanningToolNames.value.has(tool.contract.name)
+}
+
+function lifecycleLabel(tool: TalosTool) {
+    return tool.contract.lifecycle.kind === 'bundled' ? 'Bundled' : 'Managed'
+}
+
+function availabilityLabel(tool: TalosTool) {
+    if (tool.availability.available) return 'Available'
+
+    return {
+        tool_disabled: 'Tool disabled',
+        planning_disabled: 'Planning disabled',
+        desktop_location_unsupported: 'Desktop location unsupported',
+        connector_disabled: 'Connector disabled',
+        connector_unhealthy: 'Connector unhealthy',
+    }[tool.availability.reason ?? ''] ?? 'Unavailable'
 }
 
 watch(visibleTools, (next) => {
@@ -143,7 +161,7 @@ onMounted(() => {
                 No connectors are registered in the control plane.
             </div>
 
-            <div v-if="registryState === 'ready'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+            <div v-if="registryState === 'ready'" class="min-w-0 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                 <div class="mb-3 flex items-center justify-between gap-3">
                     <div>
                         <div class="text-sm font-semibold text-[var(--talos-text)]">Tools</div>
@@ -155,20 +173,28 @@ onMounted(() => {
                     <button
                         v-for="tool in visibleTools"
                         :key="tool.id"
+                        data-testid="talos-tool-card"
+                        :data-tool-id="tool.id"
+                        :data-available="String(tool.availability.available)"
                         type="button"
-                        class="w-full rounded-md border px-3 py-2 text-left transition"
+                        class="min-w-0 w-full rounded-md border px-3 py-2 text-left transition"
                         :class="selectedTool?.id === tool.id
                             ? 'border-[var(--talos-accent)] bg-[var(--talos-active)]'
                             : 'border-[var(--talos-border)] bg-[var(--talos-panel)] hover:border-[var(--talos-border-strong)]'"
                         @click="selectTool(tool)"
                     >
                         <div class="flex items-center justify-between gap-3">
-                            <span class="truncate font-mono text-xs text-[var(--talos-text)]">{{ tool.name }}</span>
-                            <Badge :tone="planningToolNames.has(tool.name) ? 'success' : 'neutral'">
-                                {{ planningToolNames.has(tool.name) ? 'planning' : 'excluded' }}
+                            <span class="min-w-0 truncate font-mono text-xs text-[var(--talos-text)]">{{ tool.name }}</span>
+                            <Badge :tone="isPlanningTool(tool) ? 'success' : 'neutral'">
+                                {{ isPlanningTool(tool) ? 'planning' : 'excluded' }}
                             </Badge>
                         </div>
                         <div class="mt-1 truncate text-xs text-[var(--talos-muted)]">{{ tool.display_name }}</div>
+                        <div class="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                            <Badge tone="neutral">{{ lifecycleLabel(tool) }}</Badge>
+                            <span class="min-w-0 break-all font-mono text-[10px] text-[var(--talos-muted)]">{{ tool.contract.lifecycle.revision }}</span>
+                            <Badge :tone="tool.availability.available ? 'success' : 'warning'">{{ availabilityLabel(tool) }}</Badge>
+                        </div>
                     </button>
                      <div v-if="registryState === 'ready' && !visibleTools.length" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-sm leading-6 text-[var(--talos-muted)]">
                         No tools match the current registry filter.
@@ -179,7 +205,7 @@ onMounted(() => {
             <TalosToolSchemaViewer
                 v-if="registryState === 'ready'"
                 :tool="selectedTool"
-                :planning-enabled="selectedTool ? planningToolNames.has(selectedTool.name) : false"
+                :planning-enabled="selectedTool ? isPlanningTool(selectedTool) : false"
             />
         </div>
     </Surface>

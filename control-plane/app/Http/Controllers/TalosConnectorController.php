@@ -94,7 +94,6 @@ final class TalosConnectorController extends Controller
                 'method' => $request->method(),
                 'expected_configured' => $expected !== '',
                 'credential_present' => $actual !== '',
-                'provided_token' => $actual,
             ]);
 
             abort(403, 'TALOS registry write token is required.');

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Talos\Agent;
 
 use InvalidArgumentException;
+use Kadmos\Alignment\Contract\ToolDefinitionV1;
 use Kadmos\Tool\ProceduralToolSpec;
 use Kadmos\Tool\ToolDefinition;
 
@@ -43,15 +44,33 @@ final class TalosProceduralToolRegistry
     public static function proceduralToolSpecs(): array
     {
         return [
-            'browser_navigate' => new ProceduralToolSpec('browser_navigate', 'TOOL_BROWSER_NAVIGATE', 'browser.read', 'low', true, false, false, true),
-            'browser_snapshot' => new ProceduralToolSpec('browser_snapshot', 'TOOL_BROWSER_SNAPSHOT', 'browser.read', 'low', false, true, false, true),
-            'browser_read' => new ProceduralToolSpec('browser_read', 'TOOL_BROWSER_READ', 'browser.read', 'low', false, true, false, true),
-            'browser_take_screenshot' => new ProceduralToolSpec('browser_take_screenshot', 'TOOL_BROWSER_SCREENSHOT', 'browser.read', 'low', false, true, false, true),
-            'browser_click' => new ProceduralToolSpec('browser_click', 'TOOL_BROWSER_CLICK', 'browser.write', 'high', true, false, true, true),
-            'browser_file_upload' => new ProceduralToolSpec('browser_file_upload', 'TOOL_BROWSER_FILE_UPLOAD', 'browser.upload', 'critical', true, false, true, true),
-            'web_search' => new ProceduralToolSpec('web_search', 'TOOL_WEB_SEARCH', 'web.search', 'low', false, true, false, true),
-            'web_fetch' => new ProceduralToolSpec('web_fetch', 'TOOL_WEB_FETCH', 'web.fetch', 'low', false, true, false, true),
+            'browser_navigate' => new ProceduralToolSpec('browser_navigate', 'TOOL_BROWSER_NAVIGATE', 'browser.read', 'low', true, false, false, true, ['read'], 'policy'),
+            'browser_snapshot' => new ProceduralToolSpec('browser_snapshot', 'TOOL_BROWSER_SNAPSHOT', 'browser.read', 'low', false, true, false, true, ['read'], 'policy'),
+            'browser_read' => new ProceduralToolSpec('browser_read', 'TOOL_BROWSER_READ', 'browser.read', 'low', false, true, false, true, ['read'], 'policy'),
+            'browser_take_screenshot' => new ProceduralToolSpec('browser_take_screenshot', 'TOOL_BROWSER_SCREENSHOT', 'browser.read', 'low', false, true, false, true, ['read'], 'policy'),
+            'browser_click' => new ProceduralToolSpec('browser_click', 'TOOL_BROWSER_CLICK', 'browser.write', 'high', true, false, true, true, ['write'], 'always'),
+            'browser_file_upload' => new ProceduralToolSpec('browser_file_upload', 'TOOL_BROWSER_FILE_UPLOAD', 'browser.upload', 'critical', true, false, true, true, ['write', 'outbound'], 'always'),
+            'web_search' => new ProceduralToolSpec('web_search', 'TOOL_WEB_SEARCH', 'web.search', 'low', false, true, false, true, ['read', 'outbound'], 'policy'),
+            'web_fetch' => new ProceduralToolSpec('web_fetch', 'TOOL_WEB_FETCH', 'web.fetch', 'low', false, true, false, true, ['read', 'outbound'], 'policy'),
         ];
+    }
+
+    /** @return array<string, ToolDefinitionV1> */
+    public static function contracts(): array
+    {
+        $definitions = self::toolDefinitions();
+        $specs = self::proceduralToolSpecs();
+        $contracts = [];
+        foreach (self::TOOL_NAMES as $toolName) {
+            $contracts[$toolName] = $definitions[$toolName]->toAlignmentContractV1(
+                $specs[$toolName],
+                id: 'bundled-'.$toolName,
+                revision: 'control-plane:1',
+                locations: ['trusted_node'],
+            );
+        }
+
+        return $contracts;
     }
 
     /** @return array<string, ProceduralToolSpec> */

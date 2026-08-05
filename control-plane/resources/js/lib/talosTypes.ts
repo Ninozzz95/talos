@@ -818,6 +818,55 @@ export type TalosModelComparison = {
 
 export type TalosConnectorHealthStatus = 'unknown' | 'healthy' | 'degraded' | 'offline'
 export type TalosToolRiskLevel = 'low' | 'medium' | 'high' | 'critical'
+export type TalosToolAction = 'read' | 'write' | 'outbound'
+export type TalosToolConfirmation = 'policy' | 'always'
+export type TalosToolLifecycleKind = 'bundled' | 'managed_registry'
+export type TalosToolExecutionLocation = 'local_mobile' | 'trusted_node' | 'remote_provider'
+export type TalosToolAvailabilityReason =
+    | 'tool_disabled'
+    | 'planning_disabled'
+    | 'desktop_location_unsupported'
+    | 'connector_disabled'
+    | 'connector_unhealthy'
+
+export type TalosToolContractV1 = {
+    schema_version: 1
+    id: string
+    name: string
+    title: string
+    description: string
+    input_schema: Record<string, unknown>
+    output_schema: Record<string, unknown> | null
+    capabilities: string[]
+    actions: TalosToolAction[]
+    confirmation?: TalosToolConfirmation
+    risk: TalosToolRiskLevel
+    effects: {
+        mutates_state: boolean
+        parallel_safe: boolean
+        requires_approval: boolean
+        produces_evidence: boolean
+    }
+    lifecycle: {
+        kind: TalosToolLifecycleKind
+        revision: string
+        integrity_sha256?: string | null
+    }
+    execution: {
+        locations: TalosToolExecutionLocation[]
+        implementation_key: string
+    }
+    connector_id?: string | null
+    enabled: boolean
+    planning_enabled: boolean
+    annotations?: Record<string, unknown>
+    metadata?: Record<string, unknown>
+}
+
+export type TalosToolAvailability = {
+    available: boolean
+    reason: TalosToolAvailabilityReason | null
+}
 
 export type TalosConnector = {
     id: string
@@ -838,7 +887,7 @@ export type TalosConnector = {
 
 export type TalosTool = {
     id: string
-    connector_id: string
+    connector_id: string | null
     name: string
     display_name: string
     description?: string | null
@@ -848,9 +897,11 @@ export type TalosTool = {
     policy?: Record<string, unknown> | null
     is_enabled: boolean
     planning_enabled: boolean
+    contract: TalosToolContractV1
+    availability: TalosToolAvailability
     connector?: TalosConnector | null
-    created_at: string
-    updated_at: string
+    created_at: string | null
+    updated_at: string | null
 }
 
 export type TalosToolPlanningContext = {
@@ -874,6 +925,12 @@ export type TalosToolPlanningContext = {
             display_name?: string | null
             health_status?: string | null
         }
+        contract?: TalosToolContractV1
+    }>
+    excluded_tools: Array<{
+        name: string
+        reason: string
+        error_code?: string
     }>
 }
 

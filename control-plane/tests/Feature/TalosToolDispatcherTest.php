@@ -51,6 +51,59 @@ final class TalosToolDispatcherTest extends TestCase
         Storage::set('local', $fake);
     }
 
+    public function test_dispatch_rejects_a_plan_compiled_from_a_non_bundled_registry_before_side_effects(): void
+    {
+        [$user, $session, $run, $turn, $browser] = $this->context();
+        $context = new ProceduralCompileContext(
+            userId: (string) $user->id,
+            chatSessionId: (string) $session->id,
+            runId: (string) $run->id,
+            turnId: (string) $turn->id,
+            browserSessionId: (string) $browser->id,
+            stateVersion: 0,
+            deadlineAt: now()->addMinute()->toIso8601String(),
+            observedAt: now()->toIso8601String(),
+        );
+        $externalRegistry = [
+            ...$this->registry(),
+            'remote_only' => new ProceduralToolSpec(
+                'remote_only',
+                'TOOL_REMOTE_ONLY',
+                'remote.read',
+                'low',
+                false,
+                true,
+                false,
+                true,
+            ),
+        ];
+        [$plan, $checkpoint] = $this->compilePlan(
+            [new ToolCall('provider-remote-only', 'remote_only', [], null, [])],
+            $context,
+            registry: $externalRegistry,
+        );
+        $backend = new RecordingToolExecutionBackend;
+        $this->app->instance(TalosToolExecutionBackend::class, $backend);
+
+        try {
+            $this->app->make(TalosToolDispatcher::class)->dispatch(
+                $user->id,
+                $turn,
+                $this->claimTurnLease($user, $turn),
+                $plan,
+                $checkpoint,
+                $browser,
+            );
+            $this->fail('A non-bundled procedural plan must fail before dispatch.');
+        } catch (InvalidArgumentException $exception) {
+            $this->assertSame('Procedural plan contains a tool outside the bundled TALOS registry.', $exception->getMessage());
+        }
+
+        $this->assertSame([], $backend->executedTools);
+        $this->assertDatabaseCount('talos_tool_calls', 0);
+        $this->assertDatabaseCount('talos_tool_results', 0);
+    }
+
     public function test_server_browser_policy_denial_never_reaches_the_physical_backend(): void
     {
         [$user, $session, $run, $turn, $browser] = $this->context();
@@ -980,6 +1033,7 @@ final class TalosToolDispatcherTest extends TestCase
         ?ProceduralBudget $budget = null,
         ?TalosProceduralGuardCheckpoint $checkpoint = null,
         array $repairSourceProviderCallIds = [],
+        ?array $registry = null,
     ): array {
         $checkpoint ??= TalosProceduralGuardCheckpoint::fresh();
         $checkpoint->correlateCalls($calls, $repairSourceProviderCallIds);
@@ -987,7 +1041,7 @@ final class TalosToolDispatcherTest extends TestCase
         return [
             (new ProceduralToolCompiler)->compile(
                 $calls,
-                $this->registry(),
+                $registry ?? $this->registry(),
                 $context,
                 $budget ?? new ProceduralBudget,
                 $checkpoint->guard(),
