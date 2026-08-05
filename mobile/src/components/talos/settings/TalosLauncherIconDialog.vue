@@ -124,7 +124,7 @@ const markTransform = `translate(${finalFrame.mark.translateX} ${finalFrame.mark
                     <Button
                         type="button"
                         data-testid="talos-launcher-icon-restart"
-                        class="talos-pressable min-h-11 w-full rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+                        class="talos-pressable min-h-touch w-full rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                         @click="controller.confirmNow()"
                     >
                         {{ t('launcher.restartNow') }}
@@ -133,7 +133,7 @@ const markTransform = `translate(${finalFrame.mark.translateX} ${finalFrame.mark
                         type="button"
                         variant="outline"
                         data-testid="talos-launcher-icon-later"
-                        class="talos-pressable min-h-11 w-full rounded-full text-sm"
+                        class="talos-pressable min-h-touch w-full rounded-full text-sm"
                         @click="controller.later()"
                     >
                         {{ t('launcher.later') }}

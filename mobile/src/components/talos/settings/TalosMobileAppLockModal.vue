@@ -118,7 +118,7 @@ defineExpose({ clearAppLock })
             <button
                 type="button"
                 :aria-label="t('common.cancel')"
-                class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
+                class="talos-pressable flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-muted)]"
                 @click="emit('close')"
             >
                 <X class="size-5" aria-hidden="true" />
@@ -177,7 +177,7 @@ defineExpose({ clearAppLock })
                     type="button"
                     data-testid="talos-applock-verify-submit"
                     :disabled="verifyValue.length < 4"
-                    class="talos-pressable min-h-11 w-full max-w-xs rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
+                    class="talos-pressable min-h-touch w-full max-w-xs rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
                     @click="onVerifySubmit"
                 >
                     {{ t('lock.confirm') }}
@@ -187,7 +187,7 @@ defineExpose({ clearAppLock })
                     type="button"
                     variant="outline"
                     data-testid="talos-applock-verify-biometric"
-                    class="talos-pressable min-h-11 w-full max-w-xs gap-2"
+                    class="talos-pressable min-h-touch w-full max-w-xs gap-2"
                     @click="verifyWithBiometrics"
                 >
                     <Fingerprint class="size-4" aria-hidden="true" />

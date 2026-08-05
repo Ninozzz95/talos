@@ -94,6 +94,6 @@ describe('reasoning is a muted line that opens a drawer', () => {
 
     it('meets the 44px touch target the app enforces everywhere else', () => {
         const row = mountBlock().get('[data-testid="talos-reasoning-toggle"]')
-        expect(row.attributes('class') ?? '').toContain('min-h-11')
+        expect(row.attributes('class') ?? '').toContain('min-h-touch')
     })
 })

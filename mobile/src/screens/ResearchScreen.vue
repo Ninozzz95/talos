@@ -518,7 +518,7 @@ function when(iso: string): string {
                 data-testid="talos-research-selection-bar"
                 class="flex items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
             >
-                <Button type="button" size="icon" variant="ghost" class="min-h-11 min-w-11 rounded-full" :aria-label="t('research.cancelSelection')" data-testid="talos-research-selection-exit" @click="bulk.exit()">
+                <Button type="button" size="icon" variant="ghost" class="min-h-touch min-w-touch rounded-full" :aria-label="t('research.cancelSelection')" data-testid="talos-research-selection-exit" @click="bulk.exit()">
                     <X class="size-4" aria-hidden="true" />
                 </Button>
                 <span class="text-sm font-medium">{{ bulk.count.value === 1 ? t('research.selectedOne') : t('research.selected', { count: bulk.count.value }) }}</span>
@@ -529,7 +529,7 @@ function when(iso: string): string {
                     type="button"
                     size="icon"
                     variant="ghost"
-                    class="min-h-11 min-w-11 rounded-full text-[var(--talos-danger)]"
+                    class="min-h-touch min-w-touch rounded-full text-[var(--talos-danger)]"
                     data-testid="talos-research-bulk-delete"
                     :aria-label="t('research.deleteSelected')"
                     :disabled="bulk.count.value === 0"
@@ -717,7 +717,7 @@ function when(iso: string): string {
                 maxlength="120"
                 data-testid="talos-research-rename-field"
                 :placeholder="renameTarget.originalQuestion"
-                class="min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="min-h-touch w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 @keyup.enter="submitRename()"
             >
             <template #footer>

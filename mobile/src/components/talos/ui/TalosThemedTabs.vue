@@ -338,7 +338,7 @@ function onSwipeEnd(event: PointerEvent): void {
                 :key="view.id"
                 :value="view.id"
                 :data-talos-tab="view.id"
-                class="relative inline-flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap px-3 text-sm font-medium text-[var(--talos-muted)] outline-none transition-[color,transform] duration-[var(--talos-motion-duration-control,160ms)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 data-[state=active]:text-[var(--talos-text)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] focus-visible:ring-inset"
+                class="relative inline-flex min-h-touch shrink-0 items-center justify-center gap-2 whitespace-nowrap px-3 text-sm font-medium text-[var(--talos-muted)] outline-none transition-[color,transform] duration-[var(--talos-motion-duration-control,160ms)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 data-[state=active]:text-[var(--talos-text)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] focus-visible:ring-inset"
             >
                 <!-- Leading chrome only — Model Lab puts a key, a box and a
                      chip beside its three names. The label itself is never

@@ -71,7 +71,7 @@ describe('TalosThemedTabs', () => {
         // hand-drawn tabs had the press dip; a shared strip that replaces five
         // must not be worse than any of them.
         const tab = mountTabs().get('[data-talos-tab="design"]')
-        expect(tab.classes()).toContain('min-h-11')
+        expect(tab.classes()).toContain('min-h-touch')
         expect(tab.classes()).toContain('active:scale-[0.97]')
         expect(tab.classes()).toContain('motion-reduce:active:scale-100')
     })

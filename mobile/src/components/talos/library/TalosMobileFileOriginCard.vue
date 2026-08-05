@@ -61,7 +61,7 @@ const { t } = useTalosI18n()
             v-if="props.canOpenChat && props.card.originSessionId"
             type="button"
             data-testid="talos-file-origin-open-chat"
-            class="talos-pressable mt-1.5 min-h-11 text-xs underline underline-offset-2"
+            class="talos-pressable mt-1.5 min-h-touch text-xs underline underline-offset-2"
             :class="props.onDark ? 'text-white' : 'text-[var(--talos-accent)]'"
             @click="emit('openChat', props.card.originSessionId)"
         >{{ t('library.originOpenChat') }}</button>

@@ -102,7 +102,7 @@ const rawAvailable = computed(() => props.showUntrustedEvidence && snapshots.val
             <button
                 type="button"
                 data-testid="talos-mobile-browser-raw-trigger"
-                class="flex min-h-11 w-full items-center gap-2 rounded-md px-1 text-left font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="flex min-h-touch w-full items-center gap-2 rounded-md px-1 text-left font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 :aria-expanded="rawOpen"
                 @click="rawOpen = !rawOpen"
             >

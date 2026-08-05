@@ -34,7 +34,7 @@ const surfaceClass = computed(() =>
                 type="button"
                 :aria-label="$t('common.dismiss')"
                 data-testid="surface-dismiss"
-                class="min-h-11 min-w-11"
+                class="min-h-touch min-w-touch"
                 @click="emit('dismiss')"
             >
                 <X class="size-5" aria-hidden="true" />

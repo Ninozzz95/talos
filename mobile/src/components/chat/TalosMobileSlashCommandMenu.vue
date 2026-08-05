@@ -87,7 +87,7 @@ defineExpose({ activateSelected })
                 :data-command-id="command.id"
                 :aria-disabled="!isTalosMobileCommandEnabled(command)"
                 :aria-selected="index === activeIndex"
-                class="grid min-h-11 w-full gap-1 rounded-md px-3 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--talos-accent,var(--ring))]"
+                class="grid min-h-touch w-full gap-1 rounded-md px-3 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--talos-accent,var(--ring))]"
                 :class="[
                     isTalosMobileCommandEnabled(command)
                         ? 'text-[var(--talos-text,var(--foreground))] active:bg-[var(--talos-active,var(--accent))]'

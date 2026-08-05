@@ -105,8 +105,8 @@ describe('TalosMobileComposer', () => {
 
         for (const label of labels) {
             const control = view.get(`[aria-label="${label}"]`)
-            expect(control.classes()).toContain('min-h-11')
-            expect(control.classes()).toContain('min-w-11')
+            expect(control.classes()).toContain('min-h-touch')
+            expect(control.classes()).toContain('min-w-touch')
             expect(control.attributes('data-mobile-icon-only')).toBe('true')
         }
         expect(view.find('[aria-label="Minimize composer"]').exists()).toBe(false)
@@ -318,8 +318,8 @@ describe('TalosMobileComposer', () => {
         const view = mountComposer()
         const improve = view.get<HTMLButtonElement>('[aria-label="Improve prompt"]')
 
-        expect(improve.classes()).toContain('min-h-11')
-        expect(improve.classes()).toContain('min-w-11')
+        expect(improve.classes()).toContain('min-h-touch')
+        expect(improve.classes()).toContain('min-w-touch')
         await improve.trigger('click')
         // Il tocco apre il pannello delle scelte; la chiamata parte da li'.
         // Owner 2026-08-04: modello, ragionamento e livello si decidono PRIMA.

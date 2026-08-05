@@ -297,7 +297,7 @@ async function start(): Promise<void> {
                         :value="branch.question"
                         type="text"
                         :aria-label="t('research.branchLabel')"
-                        class="min-h-11 flex-1 rounded-lg border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                        class="min-h-touch flex-1 rounded-lg border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                         @change="reword(branch.id, ($event.target as HTMLInputElement).value)"
                     >
                     <span class="font-mono text-2xs text-[var(--talos-muted)]">{{ branch.estimate.pages }}p</span>
@@ -313,7 +313,7 @@ async function start(): Promise<void> {
                         data-testid="talos-research-add"
                         :placeholder="t('research.addBranch')"
                         :aria-label="t('research.addBranch')"
-                        class="min-h-11 flex-1 rounded-lg border border-dashed border-[var(--talos-border)] bg-transparent px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                        class="min-h-touch flex-1 rounded-lg border border-dashed border-[var(--talos-border)] bg-transparent px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                         @keyup.enter="addBranch()"
                     >
                     <Button variant="ghost" :aria-label="t('research.addBranch')" @click="addBranch()">

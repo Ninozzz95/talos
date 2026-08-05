@@ -42,7 +42,7 @@ const effortOptions = computed(() => effortLadder.value.map((level) => ({
  * this does not need to know which one is chosen.
  */
 function effortOptionClass(): string {
-    return `talos-mobile-effort-level min-h-11 rounded-md border px-3 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))]`
+    return `talos-mobile-effort-level min-h-touch rounded-md border px-3 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))]`
 }
 
 function chooseEffort(value: string): void {
@@ -102,7 +102,7 @@ function onKeydown(event: KeyboardEvent): void {
         -->
         <div
             v-if="supportsThinking"
-            class="flex min-h-11 items-center justify-between gap-3 border-t border-[var(--talos-border,var(--border))] pt-2 text-sm text-[var(--talos-text,var(--foreground))]"
+            class="flex min-h-touch items-center justify-between gap-3 border-t border-[var(--talos-border,var(--border))] pt-2 text-sm text-[var(--talos-text,var(--foreground))]"
         >
             <span class="min-w-0">{{ $t('chat.extendedThinking') }}</span>
             <TalosThemedSwitch

@@ -95,20 +95,20 @@ const rendered = computed(() => {
                 <Button
                     type="button"
                     data-testid="talos-tool-consent-deny"
-                    class="talos-pressable min-h-11 rounded-full border border-[var(--talos-border)] bg-transparent text-sm text-[var(--talos-text)]"
+                    class="talos-pressable min-h-touch rounded-full border border-[var(--talos-border)] bg-transparent text-sm text-[var(--talos-text)]"
                     @click="emit('deny')"
                 >{{ $t('chat.denyTool') }}</Button>
                 <Button
                     type="button"
                     data-testid="talos-tool-consent-allow-once"
-                    class="talos-pressable min-h-11 rounded-full bg-[var(--talos-accent)] text-sm font-medium text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+                    class="talos-pressable min-h-touch rounded-full bg-[var(--talos-accent)] text-sm font-medium text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                     @click="emit('allowOnce')"
                 >{{ $t('chat.consentOnce') }}</Button>
                 <Button
                     v-if="allowPersistent"
                     type="button"
                     data-testid="talos-tool-consent-always"
-                    class="talos-pressable col-span-2 min-h-11 rounded-full border border-[var(--talos-accent)] bg-transparent text-sm font-medium text-[var(--talos-accent)] sm:col-span-1"
+                    class="talos-pressable col-span-2 min-h-touch rounded-full border border-[var(--talos-accent)] bg-transparent text-sm font-medium text-[var(--talos-accent)] sm:col-span-1"
                     @click="emit('alwaysAllow')"
                 >{{ $t('chat.authorizationAlways') }}</Button>
             </div>

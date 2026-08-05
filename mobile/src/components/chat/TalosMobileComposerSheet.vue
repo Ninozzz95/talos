@@ -71,13 +71,13 @@ onMounted(() => {
                 <button
                     type="button"
                     :aria-label="$t('common.close')"
-                    class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
+                    class="talos-pressable flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-muted)]"
                     @click="requestClose"
                 >
                     <X class="size-5" aria-hidden="true" />
                 </button>
                 <h2 class="flex-1 text-center text-base font-semibold">{{ title }}</h2>
-                <span class="min-w-11" aria-hidden="true" />
+                <span class="min-w-touch" aria-hidden="true" />
             </header>
 
             <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pt-1">

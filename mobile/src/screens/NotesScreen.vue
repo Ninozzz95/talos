@@ -119,7 +119,7 @@ async function submit(): Promise<void> {
                 maxlength="255"
                 :aria-label="t('notes.title')"
                 :placeholder="t('notes.title')"
-                class="min-h-11 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="min-h-touch rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
             >
             <textarea
                 v-model="content"
@@ -133,7 +133,7 @@ async function submit(): Promise<void> {
                 type="submit"
                 data-testid="talos-note-save"
                 :disabled="!canCreate"
-                class="talos-pressable min-h-11 rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
+                class="talos-pressable min-h-touch rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
             >
                 <Plus class="size-4" aria-hidden="true" />
                 {{ t('notes.add') }}

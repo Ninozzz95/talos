@@ -72,7 +72,7 @@ const emit = defineEmits<{
                     type="button"
                     variant="ghost"
                     data-enhancement-decision="cancel"
-                    class="min-h-11 min-w-11"
+                    class="min-h-touch min-w-touch"
                     @click="emit('cancel')"
                 >
                     {{ $t('common.cancel') }}
@@ -81,7 +81,7 @@ const emit = defineEmits<{
                     type="button"
                     variant="outline"
                     data-enhancement-decision="insert"
-                    class="min-h-11 min-w-11"
+                    class="min-h-touch min-w-touch"
                     @click="emit('insert')"
                 >
                     {{ $t('chat.insertBelow') }}
@@ -89,7 +89,7 @@ const emit = defineEmits<{
                 <Button
                     type="button"
                     data-enhancement-decision="replace"
-                    class="min-h-11 min-w-11 bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+                    class="min-h-touch min-w-touch bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                     @click="emit('replace')"
                 >
                     {{ $t('chat.replacePrompt') }}

@@ -129,7 +129,7 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
                     data-testid="talos-sheet-back"
                     :data-back-target="subView ? 'subview' : (parentBack ? 'parent' : 'chat')"
                     :aria-label="backLabel"
-                    class="talos-pressable inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--talos-muted)]"
+                    class="talos-pressable inline-flex min-h-touch min-w-touch items-center justify-center rounded-md text-[var(--talos-muted)]"
                     @click="goBack"
                 >
                     <ArrowLeft class="h-4 w-4" aria-hidden="true" />
@@ -143,7 +143,7 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
                     v-if="presentation === 'drawer'"
                     type="button"
                     :aria-label="`Close ${title}`"
-                    class="talos-pressable inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--talos-muted)]"
+                    class="talos-pressable inline-flex min-h-touch min-w-touch items-center justify-center rounded-md text-[var(--talos-muted)]"
                     @click="emit('close')"
                 >
                     <X class="h-4 w-4" aria-hidden="true" />

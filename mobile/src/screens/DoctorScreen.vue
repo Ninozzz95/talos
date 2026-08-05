@@ -321,7 +321,7 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                             data-testid="talos-doctor-passing-toggle"
                             :aria-expanded="showPassing"
                             aria-controls="talos-doctor-passing"
-                            class="talos-pressable flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm text-[var(--talos-text)]"
+                            class="talos-pressable flex min-h-touch w-full items-center gap-2 px-3 text-left text-sm text-[var(--talos-text)]"
                             @click="showPassing = !showPassing"
                         >
                             <CircleCheck class="size-4 shrink-0 text-[var(--talos-success,#3f9d6b)]" aria-hidden="true" />
@@ -401,7 +401,7 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                     </div>
                     <button
                         type="button"
-                        class="talos-pressable min-h-11 rounded-xl border border-[var(--talos-border)] px-3 text-sm text-[var(--talos-muted)]"
+                        class="talos-pressable min-h-touch rounded-xl border border-[var(--talos-border)] px-3 text-sm text-[var(--talos-muted)]"
                         @click="controller.clearTraces()"
                     >
                         {{ t('doctor.clearTimings') }}
@@ -457,7 +457,7 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
         <button
             type="button"
             data-testid="talos-doctor-copy"
-            class="talos-pressable flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--talos-accent)] px-3 text-sm font-semibold text-[var(--talos-accent-contrast,#000)]"
+            class="talos-pressable flex min-h-touch w-full items-center justify-center gap-2 rounded-xl bg-[var(--talos-accent)] px-3 text-sm font-semibold text-[var(--talos-accent-contrast,#000)]"
             @click="copyReport"
         >
             <ClipboardCopy class="size-4" aria-hidden="true" />

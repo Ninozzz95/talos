@@ -182,10 +182,10 @@ async function toggleBiometric(): Promise<void> {
                             autocomplete="name"
                             :placeholder="t('account.yourName')"
                             :aria-label="t('account.displayName')"
-                            class="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+                            class="min-h-touch min-w-0 flex-1 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
                             @keydown.enter.prevent="saveName"
                         >
-                        <Button type="button" data-testid="talos-account-name-save" class="min-h-11 gap-1.5 rounded-xl" :disabled="!nameDraft.trim() || nameDraft.trim() === account.state.display_name" @click="saveName">
+                        <Button type="button" data-testid="talos-account-name-save" class="min-h-touch gap-1.5 rounded-xl" :disabled="!nameDraft.trim() || nameDraft.trim() === account.state.display_name" @click="saveName">
                             <Check class="size-4" aria-hidden="true" /> {{ nameSaved ? t('common.saved') : t('common.save') }}
                         </Button>
                     </div>
@@ -327,7 +327,7 @@ async function toggleBiometric(): Promise<void> {
                 type="button"
                 variant="outline"
                 data-testid="talos-setup-replay"
-                class="talos-pressable mt-2 min-h-11 gap-2"
+                class="talos-pressable mt-2 min-h-touch gap-2"
                 @click="replayIntroduction"
             >
                 <RotateCcw class="size-4" aria-hidden="true" />

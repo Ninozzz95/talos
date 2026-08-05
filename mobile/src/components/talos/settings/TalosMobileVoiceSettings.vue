@@ -113,7 +113,7 @@ function preview(): void {
                 <input type="range" min="0" max="2" step="0.1" :value="settings.state.voice.pitch" :aria-label="t('voice.pitchAria')" class="w-full accent-[var(--talos-accent)]" @input="setPitch">
             </label>
 
-            <Button type="button" variant="outline" data-testid="talos-voice-preview" class="talos-pressable mt-3 min-h-11 gap-2 rounded-xl" @click="preview">
+            <Button type="button" variant="outline" data-testid="talos-voice-preview" class="talos-pressable mt-3 min-h-touch gap-2 rounded-xl" @click="preview">
                 <Volume2 class="size-4" aria-hidden="true" /> {{ t('voice.preview') }}
             </Button>
         </div>

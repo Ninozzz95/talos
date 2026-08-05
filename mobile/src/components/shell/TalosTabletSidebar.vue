@@ -44,7 +44,7 @@ const emit = defineEmits<{
                 size="icon-lg"
                 variant="ghost"
                 data-testid="talos-tablet-menu"
-                class="min-h-11 min-w-11"
+                class="min-h-touch min-w-touch"
                 :aria-label="$t('navigation.openMenu')"
                 @click="emit('openMenu')"
             >

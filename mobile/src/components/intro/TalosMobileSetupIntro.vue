@@ -283,7 +283,7 @@ function onKeydown(event: KeyboardEvent): void {
             <button
                 type="button"
                 data-testid="talos-setup-skip"
-                class="talos-pressable -mr-2 min-h-11 rounded-full px-3 text-sm text-[var(--talos-muted)]"
+                class="talos-pressable -mr-2 min-h-touch rounded-full px-3 text-sm text-[var(--talos-muted)]"
                 @click="emit('close', 'skipped')"
             >{{ t('common.skipForNow') }}</button>
         </header>

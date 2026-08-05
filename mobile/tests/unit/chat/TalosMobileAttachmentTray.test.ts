@@ -32,7 +32,7 @@ describe('TalosMobileAttachmentTray', () => {
         expect(item.text()).toContain('Browser upload')
         expect(item.text()).not.toContain('talos-vault')
         expect(wrapper.get('[aria-label="Remove architecture.pdf"]').classes()).toEqual(
-            expect.arrayContaining(['min-h-11', 'min-w-11']),
+            expect.arrayContaining(['min-h-touch', 'min-w-touch']),
         )
     })
 

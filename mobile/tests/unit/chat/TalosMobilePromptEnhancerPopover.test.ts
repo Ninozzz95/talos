@@ -53,7 +53,7 @@ describe('TalosMobilePromptEnhancerPopover', () => {
             'Replace prompt',
         ])
         expect(decisions.every((decision) => (
-            decision.classes().includes('min-h-11') && decision.classes().includes('min-w-11')
+            decision.classes().includes('min-h-touch') && decision.classes().includes('min-w-touch')
         ))).toBe(true)
 
         await decisions[0]!.trigger('click')

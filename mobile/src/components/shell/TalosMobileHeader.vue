@@ -12,7 +12,7 @@ const TalosMobileChatOptionsMenu = defineAsyncComponent(
 )
 
 // Owner 2026-07-30: the non-immersive bar was too tall. 3rem (48px) is the
-// floor rather than a taste — the controls inside are min-h-11 (44px), the
+// floor rather than a taste — the controls inside are min-h-touch (44px), the
 // smallest a touch target may be before taps start missing. Anything shorter
 // would have to shrink them, and a slimmer header is not worth a button you
 // have to aim at.
@@ -66,14 +66,14 @@ const emit = defineEmits<{
             v-if="!hideMenu"
             type="button"
             size="icon-lg"
-            class="min-h-11 min-w-11"
+            class="min-h-touch min-w-touch"
             variant="ghost"
             :aria-label="$t('navigation.openMenu')"
             @click="emit('openMenu')"
         >
             <Menu aria-hidden="true" />
         </Button>
-        <span v-else class="min-w-11" aria-hidden="true" />
+        <span v-else class="min-w-touch" aria-hidden="true" />
 
         <!-- Owner 2026-07-26: the title opens this chat's media, the way a
              messaging app opens chat info. It is a button now, not a <p>: an
@@ -86,7 +86,7 @@ const emit = defineEmits<{
                 data-testid="talos-mobile-header-title"
                 aria-haspopup="dialog"
                 :aria-label="$t('chat.mediaIn', { title: title.trim() || $t('chat.thisChat') })"
-                class="talos-pressable talos-title min-h-11 max-w-full truncate rounded-lg px-2 text-md font-semibold leading-tight text-[var(--talos-text)]"
+                class="talos-pressable talos-title min-h-touch max-w-full truncate rounded-lg px-2 text-md font-semibold leading-tight text-[var(--talos-text)]"
                 @click="emit('media')"
             >
                 {{ title.trim() || $t('chat.newChat') }}
@@ -119,6 +119,6 @@ const emit = defineEmits<{
                 @media="emit('media')"
             />
         </div>
-        <span v-else class="min-w-11" aria-hidden="true" />
+        <span v-else class="min-w-touch" aria-hidden="true" />
     </header>
 </template>

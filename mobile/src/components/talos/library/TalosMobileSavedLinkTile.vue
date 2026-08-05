@@ -63,7 +63,7 @@ const emit = defineEmits<{
         <button
             type="button"
             data-testid="talos-library-link-open"
-            class="talos-pressable absolute bottom-1 right-1 flex min-h-11 min-w-11 items-center justify-center rounded-full bg-black/10 text-[var(--talos-text)]"
+            class="talos-pressable absolute bottom-1 right-1 flex min-h-touch min-w-touch items-center justify-center rounded-full bg-black/10 text-[var(--talos-text)]"
             :aria-label="`Open ${row.host} in the browser`"
             @click="emit('openBrowser')"
         >
