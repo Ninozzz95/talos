@@ -62,18 +62,74 @@ function invariant(condition, message) {
     if (!condition) throw new Error(message)
 }
 
+/**
+ * Il modello ha fatto quello che gli era stato chiesto?
+ *
+ * OSSERVAZIONE, non cancello. C6 ha caricato, generato in italiano e reso in
+ * chat senza crash, poi ha risposto «Scopri l'intero futuro.» ignorando la
+ * richiesta di includere `TALOS`. Chiamarlo FAIL significava dire «TALOS non e'
+ * compatibile con Llama 3.2», che e' falso: il runtime aveva funzionato in ogni
+ * suo strato.
+ *
+ * Sono due domande diverse e meritano due risposte diverse. La stessa cosa era
+ * gia' emersa su C2 e C4, ma era finita in prosa nel ledger invece che nel
+ * verdetto.
+ */
+export function compatibilityInstructionMarker(reply) {
+    return String(reply ?? '').includes('TALOS')
+}
+
+/**
+ * Le sole cose che possono ancora far fallire un caso sulla risposta.
+ *
+ * Vuoto: il modello non ha prodotto niente, quindi non c'e' compatibilita' da
+ * dichiarare. Eco di contesto: memorie dell'owner o prompt di sistema nel
+ * testo — `18O` — che e' privacy e non qualita'.
+ *
+ * Il marker `TALOS` **e' stato tolto da qui** (2026-08-05). Non riapre `18L`,
+ * il falso PASS: quella regressione e' impedita dal confine DOM in
+ * `exerciseRealChat`, che legge solo `talos-mobile-message-content` e mai il
+ * footer. Il marker la copriva per coincidenza, non per costruzione.
+ */
 export function validateCompatibilityReply(caseId, reply) {
     const normalized = String(reply ?? '').trim()
     invariant(normalized.length > 0,
         `TALOS_LOCAL_COMPATIBILITY_EMPTY_REPLY:${caseId}`)
-    invariant(normalized.includes('TALOS'),
-        `TALOS_LOCAL_COMPATIBILITY_REQUIRED_MARKER:${caseId}`)
     const foldedReply = normalized.toLocaleLowerCase('en-US')
     const echoedMarker = FORBIDDEN_REPLY_MARKERS.find((marker) =>
         foldedReply.includes(marker.toLocaleLowerCase('en-US')))
     invariant(!echoedMarker,
         `TALOS_LOCAL_COMPATIBILITY_CONTEXT_ECHO:${caseId}:${echoedMarker}`)
     return normalized
+}
+
+/** Oltre questo, una risposta non aggiunge diagnosi: aggiunge peso al report. */
+const DIAGNOSTIC_REPLY_LIMIT = 1000
+
+/**
+ * Cosa scrivere nel report quando un caso fallisce.
+ *
+ * C6 e' fallito sul marker e il report ha conservato soltanto `status: FAIL`.
+ * La frase che aveva causato il fallimento era stata letta e poi buttata, quindi
+ * capire il perche' costava un ciclo intero sul dispositivo per rileggerla.
+ *
+ * L'eccezione che conta: quando il fallimento **e' proprio** un eco di
+ * contesto, quel testo e' cio' che non deve entrare in un artefatto. Li' si
+ * registra la causa e si redige il contenuto — la stessa scelta fatta a mano
+ * per il PNG di C3, resa automatica cosi' non dipende piu' da chi guarda.
+ */
+export function compatibilityFailureDiagnostic(caseId, reply, error) {
+    const reason = String(error?.message ?? error ?? 'UNKNOWN')
+    if (reason.includes('TALOS_LOCAL_COMPATIBILITY_CONTEXT_ECHO')) {
+        return { reason, observedReply: '[REDACTED_CONTEXT_ECHO]' }
+    }
+    const text = String(reply ?? '').trim()
+    // Il troncamento si DICHIARA: uno silenzioso si legge come la risposta
+    // intera, ed e' il modo piu' facile di diagnosticare la cosa sbagliata.
+    const observedReply = text.length > DIAGNOSTIC_REPLY_LIMIT
+        ? `${text.slice(0, DIAGNOSTIC_REPLY_LIMIT)}… [troncata a ${DIAGNOSTIC_REPLY_LIMIT} caratteri]`
+        : text
+    return { reason, observedReply }
 }
 
 function slash(value) {
@@ -591,7 +647,21 @@ async function exerciseRealChat(context, entry) {
         const replyContent = lastAssistant.getByTestId('talos-mobile-message-content')
         invariant(await replyContent.count() === 1,
             `Expected one model content boundary for ${entry.id}`)
-        const modelReply = validateCompatibilityReply(entry.id, await replyContent.innerText())
+        /*
+         * La risposta grezza si legge PRIMA di validarla, e viaggia con
+         * l'errore: se la validazione fallisce, il report deve poter dire cosa
+         * era stato risposto. Prima veniva letta e persa, e la diagnosi
+         * costava un ciclo intero sul dispositivo per rileggere la stessa
+         * frase.
+         */
+        const rawReply = await replyContent.innerText()
+        let modelReply
+        try {
+            modelReply = validateCompatibilityReply(entry.id, rawReply)
+        } catch (error) {
+            error.observedReply = compatibilityFailureDiagnostic(entry.id, rawReply, error).observedReply
+            throw error
+        }
         await lastAssistant.scrollIntoViewIfNeeded()
         await textarea.evaluate((element) => element.blur())
         await page.waitForTimeout(500)
@@ -626,6 +696,14 @@ async function exerciseRealChat(context, entry) {
             pid,
             prompt,
             reply: modelReply.slice(0, 500),
+            /*
+             * Obbedienza all'istruzione, separata dalla compatibilita' runtime.
+             * `false` non e' un fallimento del caso: e' un fatto sul MODELLO, e
+             * su modelli da 350M-1B capita spesso. Registrarlo qui e' cio' che
+             * evita di doverlo raccontare a mano nel ledger, come e' successo
+             * per C2 e C4.
+             */
+            instructionMarker: compatibilityInstructionMarker(modelReply) ? 'met' : 'unmet',
             screenshot: screenshotName,
             screenshotBytes: screenshot.size,
             modelProfileId,
@@ -718,6 +796,15 @@ async function runCase(context, entry) {
             id: entry.id,
             status: 'FAIL',
             error: error instanceof Error ? error.message : String(error),
+            // Identificare il caso senza aprire il manifest: un FAIL nel report
+            // deve bastare a se stesso.
+            repository: entry.repository,
+            file: entry.file,
+            prompt: entry.prompt,
+            // Presente solo quando il fallimento e' avvenuto DOPO che il
+            // modello aveva risposto, e gia' redatto se il contenuto era il
+            // problema.
+            ...(error?.observedReply === undefined ? {} : { observedReply: error.observedReply }),
             startedAt,
             finishedAt: new Date().toISOString(),
         }
