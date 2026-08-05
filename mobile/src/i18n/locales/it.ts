@@ -1466,6 +1466,7 @@ export const TALOS_IT_MESSAGES = {
         transferFinished: '{model} è pronto.',
         transferFailed: 'Scaricamento di {model} interrotto.',
         transferInstalled: '{model} è sul telefono.',
+        languageWarning: 'Questo modello non dichiara la tua lingua fra quelle che parla: {languages}. Potrebbe risponderti in modo sconnesso.',
         // Le fasce dove le famiglie si separano davvero su un telefono.
         // Owner 2026-08-05: «tipo 4 miliardi o 5 miliardi» — infatti un 4B e un
         // 5B finiscono in due fasce diverse.
