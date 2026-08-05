@@ -57,7 +57,7 @@ const ITEM_CLASS = 'relative flex w-full cursor-pointer select-none items-center
             <SelectTrigger
                 data-testid="talos-themed-select-trigger"
                 :aria-label="ariaLabel"
-                class="flex min-h-11 w-full items-center justify-between gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-left text-sm text-[var(--talos-text)] outline-none transition-colors focus-visible:border-[var(--talos-accent)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+                class="flex min-h-touch w-full items-center justify-between gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-left text-sm text-[var(--talos-text)] outline-none transition-colors focus-visible:border-[var(--talos-accent)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring-soft)] disabled:cursor-not-allowed disabled:opacity-50"
             >
                 <span class="min-w-0 truncate" :class="selectedLabel ? '' : 'text-[var(--talos-muted)]'">
                     {{ selectedLabel || placeholder }}

@@ -35,7 +35,7 @@ const toasts = useTalosMobileToasts()
                     v-if="toast.action"
                     type="button"
                     data-testid="talos-toast-action"
-                    class="talos-pressable min-h-11 shrink-0 rounded-full bg-[var(--talos-accent,var(--primary))] px-3 text-xs font-medium text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+                    class="talos-pressable min-h-touch shrink-0 rounded-full bg-[var(--talos-accent,var(--primary))] px-3 text-xs font-medium text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                     @click="toasts.act(toast.id)"
                 >
                     {{ toast.action.label }}
@@ -43,7 +43,7 @@ const toasts = useTalosMobileToasts()
                 <button
                     type="button"
                     :aria-label="$t('accessibility.dismissNotification')"
-                    class="talos-pressable flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-[var(--talos-muted)]"
+                    class="talos-pressable flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-full text-[var(--talos-muted)]"
                     @click="toasts.dismiss(toast.id)"
                 >
                     <X class="size-4" aria-hidden="true" />

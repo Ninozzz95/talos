@@ -855,7 +855,7 @@ onBeforeUnmount(() => {
                 <div
                     v-if="browseMode"
                     data-testid="talos-mobile-browse-mode-status"
-                    class="mx-auto mt-3 flex min-h-11 w-[calc(100%-1.5rem)] max-w-[820px] items-center gap-2 rounded-md border border-[var(--talos-accent)]/45 bg-[var(--talos-accent-soft)] px-3 text-xs text-[var(--talos-text)]"
+                    class="mx-auto mt-3 flex min-h-touch w-[calc(100%-1.5rem)] max-w-[820px] items-center gap-2 rounded-md border border-[var(--talos-accent)]/45 bg-[var(--talos-accent-soft)] px-3 text-xs text-[var(--talos-text)]"
                     role="status"
                 >
                     <Globe2 class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
@@ -951,7 +951,7 @@ onBeforeUnmount(() => {
                         v-if="!composerExpanded"
                         type="button"
                         :data-testid="isTemporaryChat ? 'talos-make-permanent' : 'talos-make-temporary'"
-                        class="talos-pressable mt-5 inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)]/80 px-4 text-xs text-[var(--talos-muted)] backdrop-blur transition-colors duration-150 hover:text-[var(--talos-text)]"
+                        class="talos-pressable mt-5 inline-flex min-h-touch items-center gap-2 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)]/80 px-4 text-xs text-[var(--talos-muted)] backdrop-blur transition-colors duration-150 hover:text-[var(--talos-text)]"
                         @click="isTemporaryChat ? makePermanent() : makeAnonymous()"
                     >
                         <component :is="isTemporaryChat ? Eye : EyeOff" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
@@ -971,7 +971,7 @@ onBeforeUnmount(() => {
                                 type="button"
                                 data-testid="talos-setup-dismiss"
                                 :aria-label="t('chat.dismissSetup')"
-                                class="talos-pressable -mr-1.5 flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
+                                class="talos-pressable -mr-1.5 flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-muted)]"
                                 @click="dismissSetupChecklist"
                             >
                                 <X class="size-4" aria-hidden="true" />
@@ -980,7 +980,7 @@ onBeforeUnmount(() => {
                         <button
                             type="button"
                             data-testid="talos-setup-step-key"
-                            class="talos-pressable mt-2 flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-left"
+                            class="talos-pressable mt-2 flex min-h-touch w-full items-center gap-3 rounded-xl px-2 text-left"
                             @click="router.push({ name: 'settings-models-providers' })"
                         >
                             <CheckCircle2 v-if="setupHasKey" class="size-5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
@@ -990,7 +990,7 @@ onBeforeUnmount(() => {
                         <button
                             type="button"
                             data-testid="talos-setup-step-model"
-                            class="talos-pressable flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-left"
+                            class="talos-pressable flex min-h-touch w-full items-center gap-3 rounded-xl px-2 text-left"
                             @click="router.push({ name: 'settings-models-catalog' })"
                         >
                             <CheckCircle2 v-if="setupHasModel" class="size-5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
@@ -1054,7 +1054,7 @@ onBeforeUnmount(() => {
                     type="button"
                     data-testid="talos-back-to-bottom"
                     :aria-label="t('chat.backToLatest')"
-                    class="talos-pressable absolute -top-14 left-1/2 z-10 flex min-h-11 min-w-11 -translate-x-1/2 items-center justify-center gap-1.5 rounded-full border border-[var(--talos-border)] bg-[var(--talos-card)]/95 px-3 text-sm text-[var(--talos-text)] shadow-[0_4px_16px_rgba(0,0,0,0.14)] backdrop-blur"
+                    class="talos-pressable absolute -top-14 left-1/2 z-10 flex min-h-touch min-w-touch -translate-x-1/2 items-center justify-center gap-1.5 rounded-full border border-[var(--talos-border)] bg-[var(--talos-card)]/95 px-3 text-sm text-[var(--talos-text)] shadow-[0_4px_16px_rgba(0,0,0,0.14)] backdrop-blur"
                     @click="rejoinLiveEdge"
                 >
                     <ArrowDown class="size-4" aria-hidden="true" />

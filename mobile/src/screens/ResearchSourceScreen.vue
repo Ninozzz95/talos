@@ -56,7 +56,7 @@ function openClaim(at: number): void {
                     target="_blank"
                     rel="noreferrer noopener"
                     data-testid="talos-research-source-url"
-                    class="talos-pressable flex min-h-11 items-center gap-2 break-all rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 font-mono text-2xs text-[var(--talos-accent)]"
+                    class="talos-pressable flex min-h-touch items-center gap-2 break-all rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 font-mono text-2xs text-[var(--talos-accent)]"
                 >
                     <ExternalLink class="size-3.5 shrink-0" aria-hidden="true" />
                     {{ source.url }}

@@ -93,14 +93,14 @@ const emit = defineEmits<{
                 <Button
                     type="button"
                     data-testid="talos-tool-recovery-cancel"
-                    class="talos-pressable min-h-11 rounded-full border border-[var(--talos-border)] bg-transparent text-sm text-[var(--talos-text)]"
+                    class="talos-pressable min-h-touch rounded-full border border-[var(--talos-border)] bg-transparent text-sm text-[var(--talos-text)]"
                     :disabled="busy"
                     @click="emit('cancel')"
                 >{{ $t('chat.authorizationRecoveryCancel') }}</Button>
                 <Button
                     type="button"
                     data-testid="talos-tool-recovery-retry"
-                    class="talos-pressable min-h-11 rounded-full bg-[var(--talos-accent)] text-sm font-medium text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+                    class="talos-pressable min-h-touch rounded-full bg-[var(--talos-accent)] text-sm font-medium text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                     :disabled="busy"
                     @click="emit('retry')"
                 >

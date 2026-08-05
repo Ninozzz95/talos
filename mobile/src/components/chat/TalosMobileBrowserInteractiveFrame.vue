@@ -138,7 +138,7 @@ defineExpose({ openArtifact })
                     type="button"
                     size="sm"
                     variant="outline"
-                    class="ml-auto min-h-11"
+                    class="ml-auto min-h-touch"
                     @click="emit('openLive', activeArtifact.source_url)"
                 >
                     <ExternalLink class="size-4" aria-hidden="true" />

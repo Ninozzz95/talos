@@ -181,7 +181,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
                     type="button"
                     variant="outline"
                     data-testid="talos-permission-settings"
-                    class="mt-2 min-h-11 w-full rounded-xl text-sm"
+                    class="mt-2 min-h-touch w-full rounded-xl text-sm"
                     :disabled="busy === row.id"
                     @click="act(row)"
                 >{{ t('privacyPermissions.openSystemSettings') }}</Button>
@@ -191,7 +191,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
                 type="button"
                 variant="outline"
                 data-testid="talos-permission-allow"
-                class="mt-2 min-h-11 w-full rounded-xl text-sm"
+                class="mt-2 min-h-touch w-full rounded-xl text-sm"
                 :disabled="busy === row.id"
                 @click="act(row)"
             >{{ t('privacyPermissions.allow') }}</Button>

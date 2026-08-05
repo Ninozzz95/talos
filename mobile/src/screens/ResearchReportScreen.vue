@@ -632,7 +632,7 @@ function openSource(index: number): void {
                                 data-testid="talos-research-followup"
                                 :placeholder="t('research.followUpPlaceholder')"
                                 :aria-label="t('research.followUpTitle')"
-                                class="min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none"
+                                class="min-h-touch w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none"
                                 @keyup.enter="askFollowUp()"
                             >
                         </label>
@@ -666,7 +666,7 @@ function openSource(index: number): void {
                     the way GitHub Actions keeps a workflow's log.
                 -->
                 <details v-if="record.length" data-testid="talos-research-activity" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]">
-                    <summary class="talos-pressable min-h-11 cursor-pointer list-none px-3 py-3 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                    <summary class="talos-pressable min-h-touch cursor-pointer list-none px-3 py-3 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
                         {{ t('research.howItWasBuilt') }}
                     </summary>
                     <ul class="flex flex-col gap-2 px-3 pb-3">

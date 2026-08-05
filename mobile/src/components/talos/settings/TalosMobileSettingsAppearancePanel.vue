@@ -332,7 +332,7 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
             </div>
 
             <details data-testid="talos-appearance-advanced" class="mt-4 rounded-md border border-[var(--talos-border)] bg-[var(--talos-background)] p-3">
-                <summary class="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold text-[var(--talos-text)]">
+                <summary class="flex min-h-touch cursor-pointer items-center gap-2 text-sm font-semibold text-[var(--talos-text)]">
                     <SlidersHorizontal class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('appearance.advanced') }}
                 </summary>
                 <div class="mt-3 grid gap-4 sm:grid-cols-2">
@@ -393,7 +393,7 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
                     <h4 class="text-sm font-semibold text-[var(--talos-text)]">{{ t('appearance.motionEngine') }}</h4>
                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ t('appearance.motionEngineBody') }}</p>
                 </div>
-                <button type="button" :aria-label="t('appearance.resetMotion')" class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-[var(--talos-border)] text-[var(--talos-muted)]" @click="settings.resetMotionPreferences()">
+                <button type="button" :aria-label="t('appearance.resetMotion')" class="inline-flex min-h-touch min-w-touch items-center justify-center rounded-md border border-[var(--talos-border)] text-[var(--talos-muted)]" @click="settings.resetMotionPreferences()">
                     <RotateCcw class="h-4 w-4" aria-hidden="true" />
                 </button>
             </div>
@@ -439,7 +439,7 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
             <fieldset class="border-t border-[var(--talos-border)] pt-3">
                 <legend class="text-xs font-semibold uppercase text-[var(--talos-muted)]">{{ t('appearance.interfaceCategories') }}</legend>
                 <div class="mt-2 grid gap-2 sm:grid-cols-2">
-                    <div v-for="key in interfaceCategories" :key="key" class="flex min-h-11 items-center justify-between gap-3 border-b border-[var(--talos-border)] px-1 text-sm capitalize text-[var(--talos-text)]">
+                    <div v-for="key in interfaceCategories" :key="key" class="flex min-h-touch items-center justify-between gap-3 border-b border-[var(--talos-border)] px-1 text-sm capitalize text-[var(--talos-text)]">
                         {{ t(`appearance.categories.${key}`) }}
                         <TalosThemedSwitch class="mt-1" :aria-label="t('appearance.categoryMotion', { category: t(`appearance.categories.${key}`) })" :model-value="settings.state.motion_v6.interface.categories[key]" @update:model-value="setInterfaceCategory(key, $event)" @click.stop />
                     </div>

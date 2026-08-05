@@ -904,7 +904,7 @@ onBeforeUnmount(async () => {
                     :data-nav="item.name"
                     :aria-label="item.label"
                     :aria-current="item.name === activeRoute ? 'page' : undefined"
-                    class="min-h-11 min-w-11 flex-1 px-2 py-2 text-xs text-[var(--talos-muted)] aria-[current=page]:text-[var(--talos-accent)]"
+                    class="min-h-touch min-w-touch flex-1 px-2 py-2 text-xs text-[var(--talos-muted)] aria-[current=page]:text-[var(--talos-accent)]"
                     @click="navigate(item.name)"
                 >
                     {{ item.label }}
@@ -992,7 +992,7 @@ onBeforeUnmount(async () => {
                 v-else-if="toolAuthorizationReviewCount > 0"
                 type="button"
                 data-testid="talos-tool-authorization-reopen"
-                class="talos-pressable pointer-events-auto fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-3 z-[94] min-h-11 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] px-4 text-xs font-medium text-[var(--talos-text)] shadow-lg"
+                class="talos-pressable pointer-events-auto fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-3 z-[94] min-h-touch rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] px-4 text-xs font-medium text-[var(--talos-text)] shadow-lg"
                 @click="chatController.showToolAuthorization()"
             >
                 {{ $t('chat.reviewToolActions', {

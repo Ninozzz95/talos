@@ -162,7 +162,7 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
             :aria-label="$t('chat.chatOptions')"
             aria-haspopup="menu"
             :aria-expanded="optionsOpen"
-            class="talos-pressable min-h-11 min-w-11"
+            class="talos-pressable min-h-touch min-w-touch"
             :class="pill ? 'rounded-full border border-[var(--talos-border)]/60 bg-[var(--talos-card)]/85 backdrop-blur' : ''"
             @click="toggleOptions"
         >
@@ -196,7 +196,7 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                     guard — no toast, no spinner, nothing. That reads exactly
                     like "premo e non succede niente". It says so now instead.
                 -->
-                <button type="button" role="menuitem" data-testid="talos-chat-options-new" :disabled="props.busy" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)] disabled:opacity-50" @click="pressNewChat">
+                <button type="button" role="menuitem" data-testid="talos-chat-options-new" :disabled="props.busy" class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)] disabled:opacity-50" @click="pressNewChat">
                     <MessageSquarePlus class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.newChat') }}
                 </button>
                 <!--
@@ -211,24 +211,24 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                     normale" and takes you out. Pressing it always changes what
                     it says, which is the whole of what a switch owes you.
                 -->
-                <button v-if="incognito || props.canGoIncognito" type="button" role="menuitem" data-testid="talos-chat-options-temporary" :disabled="props.busy" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)] disabled:opacity-50" @click="pressSwitch">
+                <button v-if="incognito || props.canGoIncognito" type="button" role="menuitem" data-testid="talos-chat-options-temporary" :disabled="props.busy" class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)] disabled:opacity-50" @click="pressSwitch">
                     <component :is="incognito ? Eye : EyeOff" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
                     {{ incognito ? $t('chat.normalMode') : $t('chat.temporaryChat') }}
                 </button>
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="openRename">
+                <button type="button" role="menuitem" class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="openRename">
                     <Pencil class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.renameChat') }}
                 </button>
                 <!-- Owner 2026-07-26: reachable from the menu in BOTH header
                      modes. Tapping the title only works in the solid header —
                      the immersive chrome renders no title at all, and it is the
                      default, so the menu is the entry that always exists. -->
-                <button v-if="props.canOpenMedia" type="button" role="menuitem" data-testid="talos-chat-options-media" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('media')">
+                <button v-if="props.canOpenMedia" type="button" role="menuitem" data-testid="talos-chat-options-media" class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('media')">
                     <Images class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('library.thisChat') }}
                 </button>
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('export')">
+                <button type="button" role="menuitem" class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('export')">
                     <Download class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.exportChat') }}
                 </button>
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-danger,#dc5b5b)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; deleteOpen = true">
+                <button type="button" role="menuitem" class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-danger,#dc5b5b)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; deleteOpen = true">
                     <Trash2 class="size-4" aria-hidden="true" /> {{ $t('chat.deleteChat') }}
                 </button>
             </div>
@@ -244,7 +244,7 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                 ref="renameInput"
                 v-model="renameValue"
                 :aria-label="$t('chat.chatName')"
-                class="min-h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+                class="min-h-touch w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
                 @keydown.enter.prevent="submitRename"
             >
             <template #footer>

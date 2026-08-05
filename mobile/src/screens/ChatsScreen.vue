@@ -404,7 +404,7 @@ function act(
                     type="search"
                     :aria-label="t('chats.search')"
                     :placeholder="t('chats.search')"
-                    class="min-h-11 w-full rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                    class="min-h-touch w-full rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 >
             </div>
             <!-- Owner 2026-07-27, asked twice: entering selection only by
@@ -418,7 +418,7 @@ function act(
                 variant="ghost"
                 data-testid="talos-chats-select-header"
                 :aria-label="t('chats.selectChats')"
-                class="min-h-11 min-w-11 shrink-0 rounded-xl"
+                class="min-h-touch min-w-touch shrink-0 rounded-xl"
                 @click="bulk.enter()"
             >
                 <CheckSquare class="size-5" aria-hidden="true" />
@@ -431,7 +431,7 @@ function act(
                 type="button"
                 data-testid="talos-chats-new"
                 :aria-label="t('chat.newChat')"
-                class="talos-pressable min-h-11 gap-2 rounded-xl bg-[var(--talos-accent,var(--primary))] px-3 text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+                class="talos-pressable min-h-touch gap-2 rounded-xl bg-[var(--talos-accent,var(--primary))] px-3 text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                 @click="newChat"
             >
                 <MessageSquarePlus class="size-4" aria-hidden="true" />
@@ -446,7 +446,7 @@ function act(
             data-testid="talos-chats-selection-bar"
             class="mx-5 mt-2 flex items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
         >
-            <Button type="button" size="icon" variant="ghost" class="min-h-11 min-w-11 rounded-full" :aria-label="t('chats.cancelSelection')" @click="bulk.exit()"><X class="size-4" aria-hidden="true" /></Button>
+            <Button type="button" size="icon" variant="ghost" class="min-h-touch min-w-touch rounded-full" :aria-label="t('chats.cancelSelection')" @click="bulk.exit()"><X class="size-4" aria-hidden="true" /></Button>
             <span class="text-sm font-medium">{{ bulk.count.value === 1 ? t('chats.selectedOne') : t('chats.selected', { count: bulk.count.value }) }}</span>
             <Button type="button" variant="ghost" size="sm" class="ml-auto" @click="bulk.selectAll(selectableIds)">
                 {{ bulk.allSelected(selectableIds) ? t('common.none') : t('library.all') }}
@@ -455,7 +455,7 @@ function act(
                 type="button"
                 size="icon"
                 variant="ghost"
-                class="min-h-11 min-w-11 rounded-full text-[var(--talos-danger,#dc5b5b)]"
+                class="min-h-touch min-w-touch rounded-full text-[var(--talos-danger,#dc5b5b)]"
                 data-testid="talos-chats-bulk-delete"
                 :aria-label="t('chats.deleteSelected')"
                 :disabled="bulk.count.value === 0 || actionBusy"
@@ -527,7 +527,7 @@ function act(
                     type="button"
                     data-testid="talos-chats-archived-toggle"
                     :aria-expanded="showArchived"
-                    class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-xl px-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]"
+                    class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-xl px-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]"
                     @click="showArchived = !showArchived"
                 >
                     <ChevronDown class="size-4 transition-transform" :class="showArchived ? '' : '-rotate-90'" aria-hidden="true" />
@@ -604,7 +604,7 @@ function act(
                 ref="renameInput"
                 v-model="renameValue"
                 :aria-label="t('chat.chatName')"
-                class="min-h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+                class="min-h-touch w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
                 @keydown.enter.prevent="submitRename"
             >
             <p v-if="actionError" role="alert" class="text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ actionError }}</p>
@@ -633,7 +633,7 @@ function act(
         >
             <label
                 v-if="talosCleanupCount(bulkPlan) > 0"
-                class="talos-pressable flex min-h-11 items-start gap-3 rounded-lg px-1 py-2 text-left"
+                class="talos-pressable flex min-h-touch items-start gap-3 rounded-lg px-1 py-2 text-left"
                 :class="actionBusy ? 'pointer-events-none opacity-60' : ''"
                 data-testid="talos-chats-bulk-media"
             >

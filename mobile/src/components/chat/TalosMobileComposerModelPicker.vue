@@ -235,7 +235,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     :data-routing-profile-id="profile.id"
                     :aria-selected="profile.id === selectedRoutingProfileId"
                     :disabled="!routingIsSelectable(profile)"
-                    class="talos-mobile-model-option flex min-h-11 w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))] disabled:cursor-not-allowed disabled:opacity-50"
+                    class="talos-mobile-model-option flex min-h-touch w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))] disabled:cursor-not-allowed disabled:opacity-50"
                     :data-selected="profile.id === selectedRoutingProfileId ? 'true' : 'false'"
                     @click="chooseRoutingProfile(profile)"
                 >
@@ -314,7 +314,7 @@ function onListKeydown(event: KeyboardEvent): void {
                         data-testid="talos-model-search"
                         :aria-label="$t('chat.searchModels')"
                         :placeholder="$t('chat.searchModels')"
-                        class="min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-8 pr-2 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                        class="min-h-touch w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-8 pr-2 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                     >
                 </label>
 
@@ -330,7 +330,7 @@ function onListKeydown(event: KeyboardEvent): void {
                         type="button"
                         :data-testid="`talos-model-group-${group.provider}`"
                         :aria-expanded="openGroups.includes(group.provider)"
-                        class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left"
+                        class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-md px-2 text-left"
                         @click="toggleGroup(group.provider)"
                     >
                         <TalosMobileProviderIcon :provider="group.provider" class="size-5" />
@@ -355,7 +355,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     :data-model-profile-id="profile.id"
                     :aria-selected="profile.id === selectedModelProfileId"
                     :disabled="!talosMobileModelProfileIsCallable(profile)"
-                    class="talos-mobile-model-option flex min-h-11 w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))] disabled:cursor-not-allowed disabled:opacity-50"
+                    class="talos-mobile-model-option flex min-h-touch w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))] disabled:cursor-not-allowed disabled:opacity-50"
                     :data-selected="profile.id === selectedModelProfileId ? 'true' : 'false'"
                     @click="chooseModelProfile(profile)"
                 >
@@ -386,7 +386,7 @@ function onListKeydown(event: KeyboardEvent): void {
                 type="button"
                 :aria-label="$t('chat.refreshModelCatalog')"
                 :disabled="refreshingModels"
-                class="inline-flex min-h-11 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-[var(--talos-muted,var(--muted-foreground))] outline-none hover:bg-[var(--talos-active,var(--accent))] hover:text-[var(--talos-text,var(--foreground))] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))] disabled:opacity-50"
+                class="inline-flex min-h-touch items-center gap-2 rounded-md px-2.5 text-xs font-medium text-[var(--talos-muted,var(--muted-foreground))] outline-none hover:bg-[var(--talos-active,var(--accent))] hover:text-[var(--talos-text,var(--foreground))] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))] disabled:opacity-50"
                 @click="emit('refreshModels')"
             >
                 <RefreshCw :class="['size-4', refreshingModels ? 'animate-spin' : '']" aria-hidden="true" />
@@ -395,7 +395,7 @@ function onListKeydown(event: KeyboardEvent): void {
             <button
                 type="button"
                 :aria-label="$t('chat.openModelLab')"
-                class="inline-flex min-h-11 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-[var(--talos-text,var(--foreground))] outline-none hover:bg-[var(--talos-active,var(--accent))] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))]"
+                class="inline-flex min-h-touch items-center gap-2 rounded-md px-2.5 text-xs font-medium text-[var(--talos-text,var(--foreground))] outline-none hover:bg-[var(--talos-active,var(--accent))] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))]"
                 @click="emit('openModelLab')"
             >
                 <FlaskConical class="size-4 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />

@@ -45,7 +45,7 @@ defineEmits<{ open: [] }>()
         :type="interactive ? 'button' : undefined"
         :data-testid="testid"
         :aria-haspopup="interactive ? 'dialog' : undefined"
-        class="group flex min-h-11 w-full items-center gap-2 rounded-lg pr-1 text-left text-[var(--talos-muted)] transition-colors duration-150"
+        class="group flex min-h-touch w-full items-center gap-2 rounded-lg pr-1 text-left text-[var(--talos-muted)] transition-colors duration-150"
         :class="interactive ? 'talos-pressable hover:text-[var(--talos-text)]' : ''"
         v-on="interactive ? { click: () => $emit('open') } : {}"
     >

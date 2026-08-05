@@ -44,7 +44,7 @@ function isImage(mediaType: string): boolean {
                 type="button"
                 size="icon"
                 variant="ghost"
-                class="min-h-11 min-w-11 shrink-0"
+                class="min-h-touch min-w-touch shrink-0"
                 :aria-label="$t('chat.dismissAttachmentError')"
                 @click="emit('dismissError')"
             >
@@ -89,7 +89,7 @@ function isImage(mediaType: string): boolean {
                     type="button"
                     size="icon"
                     variant="ghost"
-                    class="min-h-11 min-w-11 shrink-0"
+                    class="min-h-touch min-w-touch shrink-0"
                     :aria-label="$t('chat.removeAttachment', { name: item.displayName })"
                     @click="emit('remove', item.id)"
                 >

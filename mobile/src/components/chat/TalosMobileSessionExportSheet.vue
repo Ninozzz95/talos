@@ -213,7 +213,7 @@ async function saveToLibrary(): Promise<void> {
                         type="button"
                         :aria-label="entry.action"
                         :disabled="!hasSession || exporting || copyingMarkdown"
-                        class="talos-pressable flex min-h-11 items-center gap-1.5 rounded-full bg-[var(--talos-accent,var(--primary))] px-3 text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
+                        class="talos-pressable flex min-h-touch items-center gap-1.5 rounded-full bg-[var(--talos-accent,var(--primary))] px-3 text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
                         @click="generate(entry.format)"
                     >
                         <Download class="size-4" aria-hidden="true" />
@@ -245,7 +245,7 @@ async function saveToLibrary(): Promise<void> {
                 type="button"
                 :aria-label="$t('export.copyMarkdown')"
                 :disabled="copyingMarkdown"
-                class="talos-pressable mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-[var(--talos-border)] text-sm text-[var(--talos-text)] disabled:opacity-60"
+                class="talos-pressable mt-3 flex min-h-touch w-full items-center justify-center gap-2 rounded-full border border-[var(--talos-border)] text-sm text-[var(--talos-text)] disabled:opacity-60"
                 @click="copyMarkdownTranscript"
             >
                 <Copy class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
@@ -263,7 +263,7 @@ async function saveToLibrary(): Promise<void> {
                 type="button"
                 data-testid="talos-export-share"
                 :disabled="exporting"
-                class="talos-pressable mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
+                class="talos-pressable mt-3 flex min-h-touch w-full items-center justify-center gap-2 rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
                 @click="share"
             >
                 <Share2 class="size-4" aria-hidden="true" />
@@ -273,7 +273,7 @@ async function saveToLibrary(): Promise<void> {
                 type="button"
                 data-testid="talos-export-save-library"
                 :disabled="savingToLibrary || savedToLibrary"
-                class="talos-pressable mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-[var(--talos-border)] text-sm text-[var(--talos-text)] disabled:opacity-60"
+                class="talos-pressable mt-2 flex min-h-touch w-full items-center justify-center gap-2 rounded-full border border-[var(--talos-border)] text-sm text-[var(--talos-text)] disabled:opacity-60"
                 @click="saveToLibrary"
             >
                 <Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />

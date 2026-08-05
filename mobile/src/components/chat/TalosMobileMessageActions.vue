@@ -30,11 +30,11 @@ function toggleSpeak(): void {
 </script>
 
 <template>
-    <div class="flex min-h-11 items-center gap-0.5" :aria-label="$t('chat.messageActions')">
-        <Button type="button" variant="ghost" size="icon" class="min-h-11 min-w-11" :aria-label="$t('chat.copyMessage')" :title="$t('chat.copyMessage')" @click="emit('copy', message)">
+    <div class="flex min-h-touch items-center gap-0.5" :aria-label="$t('chat.messageActions')">
+        <Button type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.copyMessage')" :title="$t('chat.copyMessage')" @click="emit('copy', message)">
             <Copy class="size-3.5" aria-hidden="true" />
         </Button>
-        <Button v-if="message.role === 'user'" type="button" variant="ghost" size="icon" class="min-h-11 min-w-11" :aria-label="$t('chat.resendMessage')" :title="$t('chat.resendMessage')" :disabled="busy" @click="emit('resend', message)">
+        <Button v-if="message.role === 'user'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.resendMessage')" :title="$t('chat.resendMessage')" :disabled="busy" @click="emit('resend', message)">
             <RefreshCcw class="size-3.5" aria-hidden="true" />
         </Button>
         <Button
@@ -42,7 +42,7 @@ function toggleSpeak(): void {
             type="button"
             variant="ghost"
             size="icon"
-            class="min-h-11 min-w-11"
+            class="min-h-touch min-w-touch"
             :aria-label="speech.speakingId.value === message.id ? $t('chat.stopSpeaking') : $t('chat.speakMessage')"
             :title="speech.speakingId.value === message.id ? $t('common.stop') : $t('chat.speak')"
             :aria-pressed="speech.speakingId.value === message.id"
@@ -51,12 +51,12 @@ function toggleSpeak(): void {
             <Square v-if="speech.speakingId.value === message.id" class="size-3.5" fill="currentColor" aria-hidden="true" />
             <Volume2 v-else class="size-3.5" aria-hidden="true" />
         </Button>
-        <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-11 min-w-11" :aria-label="$t('chat.retryAssistant')" :title="$t('chat.retryResponse')" :disabled="busy || !canRetry" @click="emit('retry', message)">
+        <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.retryAssistant')" :title="$t('chat.retryResponse')" :disabled="busy || !canRetry" @click="emit('retry', message)">
             <RotateCcw class="size-3.5" aria-hidden="true" />
         </Button>
         <!-- Owner 2026-07-25: the chat can't hand out download links; instead save
              the generated reply straight into the Library (origin='generated'). -->
-        <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-11 min-w-11" :aria-label="$t('chat.saveToLibrary')" :title="$t('chat.saveToLibrary')" @click="emit('saveToLibrary', message)">
+        <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.saveToLibrary')" :title="$t('chat.saveToLibrary')" @click="emit('saveToLibrary', message)">
             <Library class="size-3.5" aria-hidden="true" />
         </Button>
         <TalosMobileMessageOverflowMenu v-if="message.role === 'user'" :message="message" @reuse="emit('reuse', $event)" />

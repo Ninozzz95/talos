@@ -229,7 +229,7 @@ onMounted(() => {
             type="button"
             variant="ghost"
             data-testid="talos-lock-biometric"
-            class="talos-pressable min-h-11 gap-2 text-sm text-[var(--talos-muted,var(--muted-foreground))]"
+            class="talos-pressable min-h-touch gap-2 text-sm text-[var(--talos-muted,var(--muted-foreground))]"
             @click="tryBiometric"
         >
             <Fingerprint class="size-4" aria-hidden="true" />

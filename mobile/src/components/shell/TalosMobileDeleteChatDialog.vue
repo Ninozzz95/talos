@@ -117,7 +117,7 @@ function close(): void {
     >
         <label
             v-if="count > 0"
-            class="talos-pressable flex min-h-11 items-start gap-3 rounded-lg px-1 py-2 text-left"
+            class="talos-pressable flex min-h-touch items-start gap-3 rounded-lg px-1 py-2 text-left"
             :class="running ? 'pointer-events-none opacity-60' : ''"
             data-testid="talos-delete-chat-media"
         >

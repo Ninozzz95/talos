@@ -13,6 +13,25 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+    /*
+     * Il bersaglio tattile minimo, con un NOME.
+     *
+     * Android e Material chiedono 48dp con 8dp di spaziatura; WCAG 2.2 si
+     * accontenta di 24 (AA) o 44 (AAA). Su un'app Android vince la piattaforma,
+     * quindi 48.
+     *
+     * Ma il motivo per cui e' un token e non un numero e' un altro. Prima
+     * c'erano DUE grammatiche: il Model Lab a `min-h-[48px]` e chat e shell a
+     * `min-h-11` — cioe' 44px — per 191 occorrenze in 49 file. Nessuno l'aveva
+     * deciso: `min-h-11` non dice cosa sta promettendo, quindi nessuno si e'
+     * accorto che prometteva un'altra cosa.
+     *
+     * `min-h-touch` lo dice. Ed e' verificato da
+     * `tests/unit/theme/touchTargetContract.test.ts`, che diventa rosso se il
+     * 44 rientra da una porta laterale.
+     */
+    --spacing-touch: 48px;
+
     --font-sans: var(--talos-font-ui);
     --font-display: var(--talos-font-display);
     --font-mono: var(--talos-font-mono);

@@ -195,7 +195,7 @@ const readiness = computed(() => {
                 type="button"
                 variant="outline"
                 data-testid="talos-tavily-api-key-link"
-                class="mt-3 min-h-11 w-full justify-start"
+                class="mt-3 min-h-touch w-full justify-start"
                 :disabled="tavilyOpening"
                 @click="openTavilyPlatform"
             >
@@ -216,7 +216,7 @@ const readiness = computed(() => {
                     autocomplete="off"
                     data-testid="talos-search-key"
                     :placeholder="hasKey ? t('search.replaceKey') : t('search.pasteKey')"
-                    class="mt-1 min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-transparent px-3 text-sm text-[var(--talos-text)]"
+                    class="mt-1 min-h-touch w-full rounded-lg border border-[var(--talos-border)] bg-transparent px-3 text-sm text-[var(--talos-text)]"
                 >
                 <Button class="mt-2" :disabled="busy || !keyDraft.trim()" @click="saveKey">
                     <Loader2 v-if="busy" class="mr-1 size-3.5 animate-spin" aria-hidden="true" />
@@ -233,7 +233,7 @@ const readiness = computed(() => {
                     autocomplete="off"
                     data-testid="talos-search-endpoint"
                     :placeholder="t('search.endpointPlaceholder')"
-                    class="mt-1 min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-transparent px-3 text-sm text-[var(--talos-text)]"
+                    class="mt-1 min-h-touch w-full rounded-lg border border-[var(--talos-border)] bg-transparent px-3 text-sm text-[var(--talos-text)]"
                     @blur="saveEndpoint"
                 >
             </label>

@@ -151,7 +151,7 @@ function shortId(value: string | null): string {
                 maxlength="255"
                 :aria-label="t('tasks.title')"
                 :placeholder="t('tasks.title')"
-                class="min-h-11 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="min-h-touch rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
             >
             <textarea
                 v-model="description"
@@ -164,13 +164,13 @@ function shortId(value: string | null): string {
                 v-model="runId"
                 :aria-label="t('tasks.runIdOptional')"
                 :placeholder="t('tasks.runIdPlaceholder')"
-                class="min-h-11 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 font-mono text-xs text-[var(--talos-text)] outline-none"
+                class="min-h-touch rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 font-mono text-xs text-[var(--talos-text)] outline-none"
             >
             <Button
                 type="submit"
                 data-testid="talos-task-save"
                 :disabled="!canCreate"
-                class="talos-pressable min-h-11 rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
+                class="talos-pressable min-h-touch rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
             >
                 <Plus class="size-4" aria-hidden="true" />
                 {{ t('tasks.add') }}
@@ -213,7 +213,7 @@ function shortId(value: string | null): string {
                     <button
                         type="button"
                         :aria-label="t('tasks.cycleNamed', { title: task.title })"
-                        class="talos-pressable min-h-11 rounded-full bg-[var(--talos-active)] px-3 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]"
+                        class="talos-pressable min-h-touch rounded-full bg-[var(--talos-active)] px-3 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]"
                         @click="cycleStatus(task)"
                     >
                         {{ t(`tasks.status.${task.status}`) }}
@@ -221,7 +221,7 @@ function shortId(value: string | null): string {
                     <button
                         type="button"
                         :aria-label="t('tasks.deleteNamed', { title: task.title })"
-                        class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
+                        class="talos-pressable flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-muted)]"
                         @click="remove(task)"
                     >
                         <Trash2 class="size-4" aria-hidden="true" />

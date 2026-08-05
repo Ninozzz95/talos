@@ -214,7 +214,7 @@ function statusLabel(memory: TalosLocalMemory): string {
         <Button
             type="button"
             data-testid="talos-memory-new"
-            class="talos-pressable min-h-11 gap-2 rounded-xl bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+            class="talos-pressable min-h-touch gap-2 rounded-xl bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))]"
             @click="formOpen = !formOpen"
         >
             <Plus class="size-4" aria-hidden="true" />
@@ -228,7 +228,7 @@ function statusLabel(memory: TalosLocalMemory): string {
                 maxlength="255"
                 :aria-label="t('memory.memoryTitle')"
                 :placeholder="t('memory.titlePlaceholder')"
-                class="min-h-11 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="min-h-touch rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
             >
             <textarea
                 v-model="form.content"
@@ -261,13 +261,13 @@ function statusLabel(memory: TalosLocalMemory): string {
                 v-model="form.scope_id"
                 :aria-label="t('memory.projectId')"
                 :placeholder="t('memory.projectId')"
-                class="min-h-11 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none"
+                class="min-h-touch rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none"
             >
             <Button
                 type="submit"
                 data-testid="talos-memory-save"
                 :disabled="!canSave || saving"
-                class="talos-pressable min-h-11 rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
+                class="talos-pressable min-h-touch rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
             >
                 {{ t('memory.save') }}
             </Button>
@@ -317,7 +317,7 @@ function statusLabel(memory: TalosLocalMemory): string {
                     <button
                         type="button"
                         :aria-label="t(memory.status === 'active' ? 'memory.disableNamed' : 'memory.enableNamed', { title: memory.title })"
-                        class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
+                        class="talos-pressable flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-muted)]"
                         @click="toggleStatus(memory)"
                     >
                         <RotateCcw class="size-4" aria-hidden="true" />
@@ -325,7 +325,7 @@ function statusLabel(memory: TalosLocalMemory): string {
                     <button
                         type="button"
                         :aria-label="t('memory.deleteNamed', { title: memory.title })"
-                        class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
+                        class="talos-pressable flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-muted)]"
                         @click="deleteTarget = memory"
                     >
                         <Trash2 class="size-4" aria-hidden="true" />

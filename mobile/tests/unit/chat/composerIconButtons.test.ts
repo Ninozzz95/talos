@@ -56,8 +56,8 @@ describe('composer icon buttons', () => {
         // Removing a border is a visual choice; shrinking a 44px target is an
         // accessibility regression, and this project enforces 44px elsewhere.
         for (const button of buttonsLabelled(source, "$t('chat.addToChat')")) {
-            expect(button, button).toContain('min-h-11')
+            expect(button, button).toContain('min-h-touch')
         }
-        expect(source).toMatch(/rightActionLabel[\s\S]{0,400}?min-h-11/)
+        expect(source).toMatch(/rightActionLabel[\s\S]{0,400}?min-h-touch/)
     })
 })

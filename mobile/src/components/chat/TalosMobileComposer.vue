@@ -655,7 +655,7 @@ watch(() => props.prompt, () => {
                 type="button"
                 size="sm"
                 variant="ghost"
-                class="min-h-11 shrink-0 gap-1 px-2"
+                class="min-h-touch shrink-0 gap-1 px-2"
                 :disabled="browserBusy"
                 :aria-label="$t('chat.openDetectedLink', { url: browserSuggestionUrl })"
                 @click="emit('openBrowserUrl', browserSuggestionUrl)"
@@ -728,7 +728,7 @@ watch(() => props.prompt, () => {
                 :aria-label="$t('chat.addToChat')"
                 :aria-haspopup="plusUsesMenu ? 'menu' : 'dialog'"
                 :aria-expanded="plusUsesMenu ? plusMenuOpen : toolDrawerOpen"
-                class="talos-pressable absolute bottom-0.5 left-0.5 z-10 min-h-11 min-w-11 rounded-2xl"
+                class="talos-pressable absolute bottom-0.5 left-0.5 z-10 min-h-touch min-w-touch rounded-2xl"
                 @pointerdown.prevent
                 @click="openPlus"
             >
@@ -769,7 +769,7 @@ watch(() => props.prompt, () => {
                 :aria-pressed="rightAction === 'dictating'"
                 :disabled="rightActionDisabled"
                 @pointerdown.prevent
-                class="talos-pressable absolute right-1.5 min-h-11 min-w-11 rounded-2xl"
+                class="talos-pressable absolute right-1.5 min-h-touch min-w-touch rounded-2xl"
                 :class="[
                     'bottom-0.5',
                     // Owner 2026-07-26: the microphone is a bare icon at rest.
@@ -819,11 +819,11 @@ watch(() => props.prompt, () => {
                 class="absolute bottom-full left-1 z-[60] mb-2 min-w-52 origin-bottom-left overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl outline-none"
                 @keydown.escape="closePlusMenu"
             >
-                <button type="button" role="menuitem" data-testid="talos-plus-menu-attach" :disabled="!attachmentsAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('attach'); closePlusMenu()"><Paperclip class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.attachFile') }}</button>
-                <button type="button" role="menuitem" :disabled="!contextAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('openContext'); closePlusMenu()"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('navigation.library') }}</button>
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('openModelLab'); closePlusMenu()"><SlidersHorizontal class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('navigation.modelLab') }}</button>
-                <button type="button" role="menuitem" :aria-pressed="browseMode" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('toggleBrowse', !browseMode); closePlusMenu()"><Globe2 class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ browseMode ? $t('chat.browseOn') : $t('chat.browseWeb') }}</button>
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="closePlusMenu(); requestPromptEnhancement()"><Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.improvePrompt') }}</button>
+                <button type="button" role="menuitem" data-testid="talos-plus-menu-attach" :disabled="!attachmentsAvailable" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('attach'); closePlusMenu()"><Paperclip class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.attachFile') }}</button>
+                <button type="button" role="menuitem" :disabled="!contextAvailable" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('openContext'); closePlusMenu()"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('navigation.library') }}</button>
+                <button type="button" role="menuitem" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('openModelLab'); closePlusMenu()"><SlidersHorizontal class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('navigation.modelLab') }}</button>
+                <button type="button" role="menuitem" :aria-pressed="browseMode" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('toggleBrowse', !browseMode); closePlusMenu()"><Globe2 class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ browseMode ? $t('chat.browseOn') : $t('chat.browseWeb') }}</button>
+                <button type="button" role="menuitem" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="closePlusMenu(); requestPromptEnhancement()"><Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.improvePrompt') }}</button>
             </div>
             </Transition>
         </div>
@@ -846,7 +846,7 @@ watch(() => props.prompt, () => {
                 :aria-label="$t('chat.addToChat')"
                 :aria-haspopup="plusUsesMenu ? 'menu' : 'dialog'"
                 :aria-expanded="plusUsesMenu ? plusMenuOpen : toolDrawerOpen"
-                class="talos-pressable min-h-11 min-w-11 rounded-2xl"
+                class="talos-pressable min-h-touch min-w-touch rounded-2xl"
                 @click="openPlus"
             >
                 <Plus class="size-5" aria-hidden="true" />
@@ -859,7 +859,7 @@ watch(() => props.prompt, () => {
                 :title="modelTitle"
                 aria-haspopup="dialog"
                 :aria-expanded="modelPickerOpen"
-                class="talos-pressable flex min-h-11 min-w-0 items-center gap-2 rounded-2xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))]/80 px-3"
+                class="talos-pressable flex min-h-touch min-w-0 items-center gap-2 rounded-2xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))]/80 px-3"
                 @click="toggleModelPicker"
             >
                 <TalosMobileProviderIcon
@@ -891,7 +891,7 @@ watch(() => props.prompt, () => {
                 :aria-label="$t('library.contextForNextMessage')"
                 aria-haspopup="dialog"
                 :aria-expanded="librarySheetOpen"
-                class="talos-pressable flex min-h-11 max-w-40 shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs text-[var(--talos-muted)]"
+                class="talos-pressable flex min-h-touch max-w-40 shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs text-[var(--talos-muted)]"
                 @click="librarySheetOpen = true"
             >
                 <Database class="size-3.5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
@@ -934,7 +934,7 @@ watch(() => props.prompt, () => {
                     :title="modelTitle"
                     aria-haspopup="dialog"
                     :aria-expanded="modelPickerOpen"
-                    class="min-h-11 min-w-11"
+                    class="min-h-touch min-w-touch"
                     @click="toggleModelPicker"
                 >
                     <TalosMobileProviderIcon
@@ -955,7 +955,7 @@ watch(() => props.prompt, () => {
                     :title="$t('chat.effortValue', { effort: effortLabel(selectedEffort) })"
                     aria-haspopup="true"
                     :aria-expanded="modelPickerOpen"
-                    class="min-h-11 min-w-11"
+                    class="min-h-touch min-w-touch"
                     @click="toggleEffortPicker"
                 >
                     <Gauge class="size-4" aria-hidden="true" />
@@ -968,7 +968,7 @@ watch(() => props.prompt, () => {
                     :aria-label="$t('chat.improvePrompt')"
                     :title="enhanceUnavailableReason ?? $t('chat.improvePrompt')"
                     :disabled="sending || enhancingPrompt"
-                    class="min-h-11 min-w-11"
+                    class="min-h-touch min-w-touch"
                     @click="requestPromptEnhancement"
                 >
                     <Sparkles class="size-4" aria-hidden="true" />
@@ -981,7 +981,7 @@ watch(() => props.prompt, () => {
                     :aria-label="$t('chat.attachFile')"
                     :title="attachmentsAvailable ? $t('chat.attachFile') : attachmentReason"
                     :disabled="!attachmentsAvailable || sending || attachmentBusy"
-                    class="min-h-11 min-w-11"
+                    class="min-h-touch min-w-touch"
                     @click="emit('attach')"
                 >
                     <Paperclip class="size-4" aria-hidden="true" />
@@ -995,7 +995,7 @@ watch(() => props.prompt, () => {
                     :aria-label="$t('chat.chooseGroundingContext')"
                     :title="contextAvailable ? $t('chat.chooseGroundingContext') : contextReason"
                     :disabled="!contextAvailable"
-                    class="min-h-11 min-w-11"
+                    class="min-h-touch min-w-touch"
                     @click="emit('openContext')"
                 >
                     <Database class="size-4" aria-hidden="true" />
@@ -1008,7 +1008,7 @@ watch(() => props.prompt, () => {
                     :aria-label="$t('library.contextForNextMessage')"
                     aria-haspopup="dialog"
                     :aria-expanded="librarySheetOpen"
-                    class="talos-pressable flex min-h-11 shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs text-[var(--talos-muted)]"
+                    class="talos-pressable flex min-h-touch shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs text-[var(--talos-muted)]"
                     @click="librarySheetOpen = true"
                 >
                     <Database class="size-3.5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
@@ -1023,7 +1023,7 @@ watch(() => props.prompt, () => {
                     :title="browseMode ? $t('chat.disableBrowse') : $t('chat.enableBrowse')"
                     :aria-pressed="browseMode"
                     :disabled="browserBusy"
-                    class="min-h-11 min-w-11"
+                    class="min-h-touch min-w-touch"
                     :class="browseMode ? 'border-[var(--talos-accent)] bg-[var(--talos-accent-soft)] text-[var(--talos-accent)]' : ''"
                     @click="emit('toggleBrowse', !browseMode)"
                 >
@@ -1036,7 +1036,7 @@ watch(() => props.prompt, () => {
                     data-mobile-icon-only="true"
                     :aria-label="$t('chat.openModelLab')"
                     :title="$t('chat.openModelLab')"
-                    class="min-h-11 min-w-11"
+                    class="min-h-touch min-w-touch"
                     @click="emit('openModelLab')"
                 >
                     <SlidersHorizontal class="size-4" aria-hidden="true" />

@@ -153,7 +153,7 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                     <DrawerDescription class="text-xs text-[var(--talos-muted)]">{{ $t('shell.sidebarDescription') }}</DrawerDescription>
                 </div>
                 <TalosMobileDownloadCenterTrigger />
-                <Button type="button" size="icon-lg" variant="ghost" class="min-h-11 min-w-11" :aria-label="$t('navigation.closeMenu')" @click="emit('update:open', false)">
+                <Button type="button" size="icon-lg" variant="ghost" class="min-h-touch min-w-touch" :aria-label="$t('navigation.closeMenu')" @click="emit('update:open', false)">
                     <X aria-hidden="true" />
                 </Button>
             </DrawerHeader>
@@ -173,7 +173,7 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                     <button
                         type="button"
                         data-testid="talos-sidebar-chats-entry"
-                        class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
+                        class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-md px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
                         @click="emit('navigate', 'chats')"
                     >
                         <MessageSquareText class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
@@ -200,7 +200,7 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                                 type="button"
                                 :aria-label="$t('chat.openNamed', { title: sessionTitle(session) })"
                                 :aria-current="session.id === props.activeSessionId ? 'page' : undefined"
-                                class="talos-pressable min-h-11 min-w-0 flex-1 truncate rounded-md px-2 text-left text-sm"
+                                class="talos-pressable min-h-touch min-w-0 flex-1 truncate rounded-md px-2 text-left text-sm"
                                 :class="session.id === props.activeSessionId
                                     ? 'bg-[var(--talos-active)] text-[var(--talos-text)]'
                                     : 'text-[var(--talos-text)] hover:bg-[var(--talos-active)]'"
@@ -229,7 +229,7 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                             <button
                                 type="button"
                                 :aria-label="$t('shell.openItem', { item: tool.label })"
-                                class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
+                                class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-md px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
                                 @click="suppressSidebarFocusRestore(); emit('navigate', tool.route)"
                             >
                                 <component :is="tool.icon" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
@@ -248,7 +248,7 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                     <button
                         type="button"
                         :aria-label="$t('shell.openSettings')"
-                        class="talos-pressable flex min-h-11 items-center gap-2 rounded-full pr-3 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
+                        class="talos-pressable flex min-h-touch items-center gap-2 rounded-full pr-3 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
                         @click="suppressSidebarFocusRestore(); emit('openSettings')"
                     >
                         <TalosAccountAvatar size="sm" />
@@ -273,7 +273,7 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
             ref="renameInput"
             v-model="renameValue"
             :aria-label="$t('chat.chatName')"
-            class="min-h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+            class="min-h-touch w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
             @keydown.enter.prevent="submitRename"
         >
         <template #footer>

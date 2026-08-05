@@ -205,7 +205,7 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
                             :disabled="revokingTool !== null || savingTool !== null"
                             @click="revokeAuthorization(tool)"
                         >{{ t('agentTools.askAgain') }}</button>
-                        <div class="flex min-h-11 items-center">
+                        <div class="flex min-h-touch items-center">
                             <TalosThemedSwitch
                                 :id="`talos-agent-tool-${tool.id}`"
                                 :data-agent-tool-switch="tool.id"
