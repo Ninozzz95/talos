@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talo.sh/schemas/model-catalog-entry.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "family", "display_name", "publisher", "source", "files", "runtimes", "requirements", "status"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "family": { "type": "string", "minLength": 1 },
+    "display_name": { "type": "string", "minLength": 1 },
+    "publisher": { "type": "string", "minLength": 1 },
+    "license": { "type": ["string", "null"] },
+    "parameters_b": { "type": ["number", "null"], "minimum": 0 },
+    "quantization": { "type": ["string", "null"] },
+    "context_window": { "type": ["integer", "null"], "minimum": 1 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "repository", "revision"],
+      "properties": {
+        "provider": { "enum": ["huggingface", "ollama", "direct"] },
+        "repository": { "type": "string", "minLength": 1 },
+        "revision": { "type": "string", "minLength": 1 },
+        "url": { "type": ["string", "null"], "format": "uri" }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "size_bytes", "sha256"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "size_bytes": { "type": "integer", "minimum": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "format": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "runtimes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["engine", "locations"],
+        "properties": {
+          "engine": { "enum": ["ollama", "llama_cpp", "vllm"] },
+          "locations": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["local_mobile", "trusted_node"] }
+          }
+        }
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ram_bytes", "vram_bytes"],
+      "properties": {
+        "ram_bytes": { "type": ["integer", "null"], "minimum": 0 },
+        "vram_bytes": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "tags": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+    "status": { "enum": ["available", "disabled", "experimental"] },
+    "added_at": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

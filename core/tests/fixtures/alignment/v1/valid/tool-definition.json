@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "id": "browser-screenshot",
+  "name": "BROWSER_SCREENSHOT",
+  "title": "Capture screenshot",
+  "description": "Capture the current browser viewport as evidence.",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "output_schema": null,
+  "capabilities": ["browser.read"],
+  "actions": ["read"],
+  "confirmation": "policy",
+  "risk": "low",
+  "effects": {
+    "mutates_state": false,
+    "parallel_safe": true,
+    "requires_approval": false,
+    "produces_evidence": true
+  },
+  "lifecycle": {
+    "kind": "bundled",
+    "revision": "mobile-app:1"
+  },
+  "execution": {
+    "locations": ["local_mobile", "trusted_node"],
+    "implementation_key": "browser.screenshot"
+  },
+  "connector_id": null,
+  "enabled": true,
+  "planning_enabled": true,
+  "annotations": {},
+  "metadata": {}
+}
