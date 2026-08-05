@@ -288,10 +288,6 @@ describe('C45-RED-18 sequential local-model compatibility manifest', () => {
         )
         expect(() => runner.validateCompatibilityReply(
             'C3',
-            "Calo la risposta che risponde concettualmente all'utente.",
-        )).toThrow('TALOS_LOCAL_COMPATIBILITY_REQUIRED_MARKER:C3')
-        expect(() => runner.validateCompatibilityReply(
-            'C3',
             'TALOS_MEMORY_CONTEXT TALOS',
         )).toThrow('TALOS_LOCAL_COMPATIBILITY_CONTEXT_ECHO:C3:TALOS_MEMORY_CONTEXT')
         expect(runner.validateCompatibilityReply('C3', '  TALOS è operativo.  '))
@@ -307,5 +303,105 @@ describe('C45-RED-18 sequential local-model compatibility manifest', () => {
         expect(chatGate.indexOf('validateCompatibilityReply')).toBeLessThan(
             chatGate.indexOf("const screenshotName = SCREENSHOTS[entry.id]"),
         )
+    })
+
+    /**
+     * C45-RED-19C — compatibilita' e obbedienza sono DUE domande.
+     *
+     * C6 (Llama 3.2 1B) ha caricato, generato in italiano e reso in chat senza
+     * crash — poi ha risposto «Scopri l'intero futuro.», ignorando la richiesta
+     * di includere `TALOS`. Il banco l'ha chiamato FAIL, cioe' ha detto «TALOS
+     * non e' compatibile con Llama 3.2». **Non e' vero**, ed e' la stessa cosa
+     * gia' osservata su C2 (Qwen risponde in inglese) e C4 (Granite idem), dove
+     * pero' era finita in prosa nel ledger invece che nel verdetto.
+     *
+     * Quindi il marker smette di essere fatale e diventa **un'osservazione**.
+     *
+     * ## Perche' questo NON riapre la regressione 18L
+     *
+     * `18L` era il falso PASS: il runner leggeva `TALOS` dal **footer**
+     * dell'assistente invece che dal corpo. Quella regressione e' impedita dal
+     * **confine DOM** — si legge solo da `talos-mobile-message-content`, mai da
+     * `lastAssistant.innerText()` — che e' asserito qui sopra e resta intatto.
+     * Il marker non c'entrava: proteggeva per caso, non per costruzione.
+     *
+     * ## Cosa resta FATALE, e non si tocca
+     *
+     * Risposta vuota (il modello non ha prodotto niente) ed **eco di contesto**
+     * (`18O`: memorie o prompt di sistema nel testo). Sono integrita' e
+     * privacy, non qualita': li' un rosso deve restare rosso.
+     */
+    it('separa la compatibilita` runtime dall`obbedienza del modello', async () => {
+        // @ts-expect-error Node ESM runner module intentionally sits outside the app graph.
+        const runner = await import('../../../scripts/run-local-model-compatibility.mjs')
+
+        // Obbedienza: osservata, non imposta.
+        expect(runner.compatibilityInstructionMarker('TALOS è operativo.')).toBe(true)
+        expect(runner.compatibilityInstructionMarker("Scopri l'intero futuro.")).toBe(false)
+
+        // Una risposta senza marker NON fa piu' fallire il caso...
+        expect(() => runner.validateCompatibilityReply(
+            'C6',
+            "Scopri l'intero futuro.",
+        )).not.toThrow()
+
+        // ...ma vuoto ed eco restano fatali.
+        expect(() => runner.validateCompatibilityReply('C6', '   ')).toThrow(
+            'TALOS_LOCAL_COMPATIBILITY_EMPTY_REPLY:C6',
+        )
+        expect(() => runner.validateCompatibilityReply(
+            'C6',
+            'TALOS_MEMORY_CONTEXT qualcosa',
+        )).toThrow('TALOS_LOCAL_COMPATIBILITY_CONTEXT_ECHO:C6:TALOS_MEMORY_CONTEXT')
+    })
+
+    /**
+     * C45-RED-19B — un FAIL deve dire COSA e' stato risposto.
+     *
+     * C6 (Llama 3.2) e' fallito sul marker e il report ha conservato soltanto
+     * `status: FAIL`: niente risposta, niente contesto, niente nativo. Quindi
+     * la diagnosi costava un ciclo intero — 800 MB di download e una nuova
+     * apertura sul dispositivo — per rileggere una frase che il banco aveva
+     * gia' avuto in mano.
+     *
+     * E' la stessa lacuna di `18K`, su un altro fianco: la prova c'era e non e'
+     * stata trattenuta.
+     *
+     * Il vincolo che rende il caso non ovvio: la risposta **non si puo'
+     * conservare sempre**. Quando il fallimento e' un'eco di contesto, quel
+     * testo e' esattamente cio' che non deve finire in un artefatto — Codex ha
+     * gia' dovuto cancellare a mano un PNG per questo. Quindi: si registra la
+     * risposta, **tranne** quando e' proprio lei il problema.
+     */
+    it('conserva la risposta osservata quando il caso fallisce, ma mai un eco di contesto', async () => {
+        // @ts-expect-error Node ESM runner module intentionally sits outside the app graph.
+        const runner = await import('../../../scripts/run-local-model-compatibility.mjs')
+
+        const marker = runner.compatibilityFailureDiagnostic(
+            'C6',
+            'Mi dispiace, non posso aiutarti con questo.',
+            new Error('TALOS_LOCAL_COMPATIBILITY_REQUIRED_MARKER:C6'),
+        )
+        expect(marker.reason).toBe('TALOS_LOCAL_COMPATIBILITY_REQUIRED_MARKER:C6')
+        expect(marker.observedReply).toBe('Mi dispiace, non posso aiutarti con questo.')
+
+        const echo = runner.compatibilityFailureDiagnostic(
+            'C6',
+            'TALOS_MEMORY_CONTEXT il progetto dell utente',
+            new Error('TALOS_LOCAL_COMPATIBILITY_CONTEXT_ECHO:C6:TALOS_MEMORY_CONTEXT'),
+        )
+        expect(echo.observedReply).toBe('[REDACTED_CONTEXT_ECHO]')
+        expect(echo.observedReply).not.toContain('utente')
+
+        // Una risposta lunghissima non deve gonfiare il report: si tronca in
+        // modo dichiarato, perche' un troncamento silenzioso si legge come la
+        // risposta intera.
+        const lungo = runner.compatibilityFailureDiagnostic(
+            'C6',
+            'x'.repeat(4000),
+            new Error('TALOS_LOCAL_COMPATIBILITY_REQUIRED_MARKER:C6'),
+        )
+        expect(lungo.observedReply.length).toBeLessThan(1200)
+        expect(lungo.observedReply).toContain('…')
     })
 })
