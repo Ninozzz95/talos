@@ -11,23 +11,47 @@
  * when pressed.
  */
 const bridge = vi.hoisted(() => ({
-    start: vi.fn(async () => ({ runner: 'USER_INITIATED_JOB', networkBound: true })),
+    start: vi.fn(async () => ({
+        id: 'transfer-a', phase: 'queued',
+        runner: 'USER_INITIATED_JOB', networkBound: true,
+    })),
+    pause: vi.fn(async () => undefined),
+    resume: vi.fn(async () => ({
+        id: 'transfer-a', phase: 'queued',
+        runner: 'USER_INITIATED_JOB', networkBound: true,
+    })),
+    cancel: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
     status: vi.fn(async () => ({
         active: true,
+        phase: 'running',
+        repo: 'unsloth/Qwen3-4B-GGUF',
+        revision: 'pinned',
+        paths: ['Qwen3-4B-Q4_K_M.gguf'],
         modelName: 'Qwen3 4B',
         haveBytes: 1_000,
         totalBytes: 4_000,
+        runner: 'USER_INITIATED_JOB',
+        networkBound: true,
+        failure: null,
+        resumable: true,
     })),
     leftovers: vi.fn(async () => ({ items: [{ path: '/x.gguf.part', bytes: 42 }], totalBytes: 42 })),
     discard: vi.fn(async () => undefined),
     native: true,
+    available: true,
 }))
 
 vi.mock('@capacitor/core', () => ({
-    Capacitor: { isNativePlatform: () => bridge.native },
+    Capacitor: {
+        isNativePlatform: () => bridge.native,
+        isPluginAvailable: () => bridge.available,
+    },
     registerPlugin: () => ({
         start: bridge.start,
+        pause: bridge.pause,
+        resume: bridge.resume,
+        cancel: bridge.cancel,
         stop: bridge.stop,
         status: bridge.status,
         leftovers: bridge.leftovers,
@@ -36,14 +60,33 @@ vi.mock('@capacitor/core', () => ({
 }))
 
 beforeEach(() => {
+    vi.resetModules()
     bridge.native = true
-    bridge.start.mockReset().mockResolvedValue({ runner: 'USER_INITIATED_JOB', networkBound: true })
+    bridge.available = true
+    bridge.start.mockReset().mockResolvedValue({
+        id: 'transfer-a', phase: 'queued',
+        runner: 'USER_INITIATED_JOB', networkBound: true,
+    })
+    bridge.pause.mockReset().mockResolvedValue(undefined)
+    bridge.resume.mockReset().mockResolvedValue({
+        id: 'transfer-a', phase: 'queued',
+        runner: 'USER_INITIATED_JOB', networkBound: true,
+    })
+    bridge.cancel.mockReset().mockResolvedValue(undefined)
     bridge.stop.mockReset().mockResolvedValue(undefined)
     bridge.status.mockReset().mockResolvedValue({
         active: true,
+        phase: 'running',
+        repo: 'unsloth/Qwen3-4B-GGUF',
+        revision: 'pinned',
+        paths: ['Qwen3-4B-Q4_K_M.gguf'],
         modelName: 'Qwen3 4B',
         haveBytes: 1_000,
         totalBytes: 4_000,
+        runner: 'USER_INITIATED_JOB',
+        networkBound: true,
+        failure: null,
+        resumable: true,
     })
     bridge.leftovers.mockReset().mockResolvedValue({
         items: [{ path: '/x.gguf.part', bytes: 42 }],
@@ -82,14 +125,20 @@ describe('starting a model transfer', () => {
      * fact travels up rather than staying in the native layer.
      */
     it('reports honestly when the transfer is not pinned to its network', async () => {
-        bridge.start.mockResolvedValue({ runner: 'FOREGROUND_SERVICE', networkBound: false })
+        bridge.start.mockResolvedValue({
+            id: 'transfer-a', phase: 'queued',
+            runner: 'FOREGROUND_SERVICE', networkBound: false,
+        })
         const { talosStartModelTransfer } = await import('@/services/modelTransfer')
 
         const result = await talosStartModelTransfer(REQUEST)
 
         expect(result).toEqual({
             ok: true,
-            started: { runner: 'FOREGROUND_SERVICE', networkBound: false },
+            started: {
+                id: 'transfer-a', phase: 'queued',
+                runner: 'FOREGROUND_SERVICE', networkBound: false,
+            },
         })
     })
 
@@ -106,6 +155,16 @@ describe('starting a model transfer', () => {
 
     it('says plainly that a browser cannot do this', async () => {
         bridge.native = false
+        bridge.available = false
+        const { talosStartModelTransfer } = await import('@/services/modelTransfer')
+
+        expect(await talosStartModelTransfer(REQUEST)).toEqual({ ok: false, reason: 'unsupported' })
+        expect(bridge.start).not.toHaveBeenCalled()
+    })
+
+    it('fails closed when a native container did not register the transfer plugin', async () => {
+        bridge.native = true
+        bridge.available = false
         const { talosStartModelTransfer } = await import('@/services/modelTransfer')
 
         expect(await talosStartModelTransfer(REQUEST)).toEqual({ ok: false, reason: 'unsupported' })
@@ -119,22 +178,65 @@ describe('watching and cleaning up', () => {
 
         expect(await talosModelTransferStatus()).toEqual({
             active: true,
+            phase: 'running',
+            repo: 'unsloth/Qwen3-4B-GGUF',
+            revision: 'pinned',
+            paths: ['Qwen3-4B-Q4_K_M.gguf'],
             modelName: 'Qwen3 4B',
             haveBytes: 1_000,
             totalBytes: 4_000,
+            runner: 'USER_INITIATED_JOB',
+            networkBound: true,
+            failure: null,
+            resumable: true,
+            readFailure: null,
+            items: [{
+                id: 'legacy', jobId: null, createdAtMs: null,
+                active: true, phase: 'running',
+                repo: 'unsloth/Qwen3-4B-GGUF', revision: 'pinned',
+                paths: ['Qwen3-4B-Q4_K_M.gguf'], modelName: 'Qwen3 4B',
+                haveBytes: 1_000, totalBytes: 4_000,
+                runner: 'USER_INITIATED_JOB', networkBound: true,
+                failure: null, resumable: true,
+            }],
         })
     })
 
-    it('reports nothing in flight rather than throwing when the plugin is unhappy', async () => {
-        bridge.status.mockRejectedValue(new Error('boom'))
+    it('normalizes two native records without collapsing their identities', async () => {
+        bridge.status.mockResolvedValue({
+            items: [
+                {
+                    id: 'transfer-a', jobId: 100_101, createdAtMs: 1,
+                    active: true, phase: 'running', repo: 'owner/a', revision: 'pin-a',
+                    paths: ['a.gguf'], modelName: 'Model A', haveBytes: 25, totalBytes: 100,
+                    runner: 'USER_INITIATED_JOB', networkBound: true,
+                    failure: null, resumable: true,
+                },
+                {
+                    id: 'transfer-b', jobId: 100_102, createdAtMs: 2,
+                    active: false, phase: 'paused', repo: 'owner/b', revision: 'pin-b',
+                    paths: ['b.gguf'], modelName: 'Model B', haveBytes: 50, totalBytes: 200,
+                    runner: 'USER_INITIATED_JOB', networkBound: true,
+                    failure: null, resumable: true,
+                },
+            ],
+        } as never)
         const { talosModelTransferStatus } = await import('@/services/modelTransfer')
 
-        expect(await talosModelTransferStatus()).toEqual({
-            active: false,
-            modelName: null,
-            haveBytes: 0,
-            totalBytes: 0,
-        })
+        const status = await talosModelTransferStatus()
+
+        expect(status.items.map((item) => item.id)).toEqual(['transfer-a', 'transfer-b'])
+        expect(status.items[0]).toMatchObject({ phase: 'running', haveBytes: 25 })
+        expect(status.items[1]).toMatchObject({ phase: 'paused', haveBytes: 50 })
+        expect(status.modelName).toBe('Model A')
+    })
+
+    it('preserves the last known transfer and names a bridge read failure', async () => {
+        const { talosModelTransferStatus } = await import('@/services/modelTransfer')
+        const known = await talosModelTransferStatus()
+        bridge.status.mockRejectedValue(new Error('boom'))
+
+        expect(await talosModelTransferStatus()).toEqual({ ...known, readFailure: 'boom' })
     })
 
     /**
@@ -158,10 +260,35 @@ describe('watching and cleaning up', () => {
         expect(await talosDiscardModelTransfer('/somewhere/else')).toBe(false)
     })
 
-    it('stopping is a pause, and never fails loudly', async () => {
-        bridge.stop.mockRejectedValue(new Error('nothing running'))
-        const { talosStopModelTransfer } = await import('@/services/modelTransfer')
+    it('exposes typed pause, resume and cancel while keeping stop as a pause alias', async () => {
+        const {
+            talosPauseModelTransfer,
+            talosResumeModelTransfer,
+            talosCancelModelTransfer,
+            talosStopModelTransfer,
+        } = await import('@/services/modelTransfer')
 
+        expect(await talosPauseModelTransfer('transfer-a')).toEqual({ ok: true })
+        expect(await talosResumeModelTransfer('transfer-b')).toEqual({
+            ok: true,
+            started: {
+                id: 'transfer-a', phase: 'queued',
+                runner: 'USER_INITIATED_JOB', networkBound: true,
+            },
+        })
+        expect(await talosCancelModelTransfer('transfer-b')).toEqual({ ok: true })
         await expect(talosStopModelTransfer()).resolves.toBeUndefined()
+        expect(bridge.pause).toHaveBeenCalledTimes(2)
+        expect(bridge.pause).toHaveBeenNthCalledWith(1, { id: 'transfer-a' })
+        expect(bridge.resume).toHaveBeenCalledWith({ id: 'transfer-b' })
+        expect(bridge.cancel).toHaveBeenCalledWith({ id: 'transfer-b' })
+        expect(bridge.stop).not.toHaveBeenCalled()
+    })
+
+    it('returns an actionable pause refusal without throwing', async () => {
+        bridge.pause.mockRejectedValue(new Error('nothing running'))
+        const { talosPauseModelTransfer } = await import('@/services/modelTransfer')
+
+        expect(await talosPauseModelTransfer()).toEqual({ ok: false, reason: 'nothing running' })
     })
 })

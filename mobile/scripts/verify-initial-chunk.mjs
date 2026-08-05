@@ -121,6 +121,17 @@ const DYNAMIC_BOUNDARIES = [
         suffix: 'src/components/talos/models/TalosMobileLocalModels.vue',
         code: 'TALOS_MODEL_LOCAL_NOT_LAZY',
     },
+    // Every shell can expose this control, but the transfer UI and Reka
+    // popover are needed only while a durable transfer exists. Keep that
+    // global reachability without charging first chat paint for the panel.
+    {
+        suffix: 'src/components/shell/TalosMobileDownloadCenterTrigger.vue',
+        code: 'TALOS_DOWNLOAD_CENTER_NOT_LAZY',
+    },
+    {
+        suffix: 'src/components/shell/TalosMobileChatOptionsMenu.vue',
+        code: 'TALOS_CHAT_OPTIONS_NOT_LAZY',
+    },
     // The tool suite pulls zod and six tool bodies. It is loaded on the first
     // send, never at boot — and nothing was stopping it drifting into the entry
     // graph, which is exactly how the permission types ended up costing 25KB of

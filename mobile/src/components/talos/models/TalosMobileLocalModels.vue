@@ -15,28 +15,18 @@
  * rejection that ends the conversation is a worse product than one that moves
  * it. Nothing here is disabled without saying why.
  */
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { ChevronRight, Search, Download, Pause, AlertTriangle, ChevronLeft, ShieldAlert, LayoutGrid, List, FolderOpen } from '@lucide/vue'
+import { Search, LayoutGrid, List, FolderOpen } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import {
     talosLocalModels,
     talosSearchLocalModels,
-    talosOpenModelRepo,
-    talosCloseModelRepo,
-    talosExamineSet,
-    talosSetLocalContext,
-    talosDownloadSet,
-    talosStopLocalDownload,
-    talosRefreshTransfer,
     talosRefreshLeftovers,
     talosRefreshHuggingFaceToken,
-    talosDescribeModelRepo,
     talosLoadLocalCatalogue,
     talosSetLocalModelSort,
-    talosSetHuggingFaceToken,
-    talosForgetHuggingFaceToken,
 } from '@/stores/localModels'
 import { talosDiscardModelTransfer } from '@/services/modelTransfer'
 import {
@@ -61,6 +51,7 @@ import {
 } from '@/services/modelImport'
 import type { TalosCatalogueRecommendation } from '@/lib/models/catalogue'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
+import TalosMobileLocalModelRow from '@/components/talos/models/TalosMobileLocalModelRow.vue'
 import type { TalosHuggingFaceModel, TalosHuggingFaceSort } from '@/lib/models/huggingFace'
 import { talosFitBadge, type TalosFitTone } from '@/lib/models/fitBadge'
 import { talosEstimatedCapacity } from '@/lib/models/fit'
@@ -70,15 +61,11 @@ import {
     TALOS_BROWSE_FILTERS,
     type TalosBrowseFilterId,
 } from '@/lib/models/browseFilters'
-import { talosGroupModelsByProvider, talosProviderOptions } from '@/lib/models/providerGrouping'
+import { talosBrowsePublishers, talosGroupModelsByProvider } from '@/lib/models/providerGrouping'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import {
-    talosFailureKey,
-    talosFitVerdict,
     talosFormatBytes,
     talosModelInitials,
-    talosRetryAfterSeconds,
-    talosSetWarnings,
 } from '@/lib/models/presentation'
 
 const { t, locale } = useTalosI18n()
@@ -232,6 +219,7 @@ const installedSort = computed<TalosInstalledModelSort>({
     set: (value) => { void settings.setShell({ models_sort: value }) },
 })
 const installedLoading = ref(true)
+const installedReadFailure = ref(false)
 
 const installedView = computed(() => talosInstalledModelsView(installed.value, {
     query: installedQuery.value,
@@ -300,6 +288,7 @@ onUnmounted(() => { stopImportProgress?.() })
 
 async function loadInstalled(): Promise<void> {
     installedLoading.value = true
+    installedReadFailure.value = false
     try {
         const listing = await talosLocalInstalledModels()
         installed.value = listing.models
@@ -307,29 +296,14 @@ async function loadInstalled(): Promise<void> {
     } catch {
         // A refusal here is not the same as "no models": the list stays as it
         // was and the empty state below never claims the phone is bare.
-        installed.value = []
+        installedReadFailure.value = true
     } finally {
         installedLoading.value = false
     }
 }
-let poller: ReturnType<typeof setInterval> | null = null
-
 const store = talosLocalModels
 
-// The bar is driven by the native side, which keeps running when this screen
-// does not. Polling only while it is on screen costs nothing and stops cleanly.
-let mounted = true
-
 onMounted(async () => {
-    // Started BEFORE the probes, not after them.
-    //
-    // It was created after four awaits, so a section unmounted while they were
-    // still resolving ran its cleanup against a null timer — and then the
-    // interval was created anyway, with nothing left to clear it: a 1 Hz call
-    // into the native layer for the rest of the process's life, once per visit.
-    // Found by an adversarial review, 2026-08-01.
-    poller = setInterval(() => { void talosRefreshTransfer() }, 1000)
-
     // Measured on every visit, not once at start: free memory, free space and
     // heat all move, and a fit answer from an hour ago is about a different
     // phone.
@@ -337,11 +311,9 @@ onMounted(async () => {
         // A direct deep link still needs a fresh fit measurement. The shared
         // device summary is rendered by the Model Lab hub, not duplicated here.
         talosLoadLocalCatalogue(),
-        talosRefreshTransfer(),
         talosRefreshLeftovers(),
         talosRefreshHuggingFaceToken(),
     ])
-    if (!mounted) stopPolling()
 })
 
 onMounted(() => { void loadInstalled() })
@@ -401,38 +373,9 @@ const rejected = computed(() => store.catalogue.rejected.map(rowOf))
 /** The search door opens only when asked for: the list is the screen. */
 const searching = ref(false)
 
-function stopPolling(): void {
-    if (poller !== null) clearInterval(poller)
-    poller = null
-}
-
-onUnmounted(() => {
-    mounted = false
-    stopPolling()
-})
-
-
 async function search(): Promise<void> {
     refused.value = null
     await talosSearchLocalModels(query.value)
-}
-
-async function open(id: string, revision = 'main'): Promise<void> {
-    refused.value = null
-    await talosOpenModelRepo(id, revision)
-}
-
-async function start(key: string, label: string): Promise<void> {
-    refused.value = null
-    const result = await talosDownloadSet(key, label)
-    if (result.ok) {
-        started.value = { key, label }
-        paused.value = null
-        return
-    }
-    refused.value = result.reason === 'already-running'
-        ? t('localModels.alreadyRunning')
-        : `${t('localModels.refused')} ${explain(result.reason)}`
 }
 
 /**
@@ -444,11 +387,6 @@ async function start(key: string, label: string): Promise<void> {
  * at that context, because the verdict is only true of the number it was
  * computed at.
  */
-async function acceptCounterOffer(key: string, context: number): Promise<void> {
-    talosSetLocalContext(context)
-    await talosExamineSet(key)
-}
-
 /**
  * Give the space back.
  *
@@ -461,16 +399,6 @@ async function reclaim(): Promise<void> {
     }
     await talosRefreshLeftovers()
 }
-
-/** A slug turned into a sentence, or left as itself when we have no words. */
-function explain(reason: string): string {
-    const key = talosFailureKey(reason)
-    const seconds = talosRetryAfterSeconds(reason)
-    if (key === null) return reason
-    return seconds === null ? t(key) : `${t(key)} (${seconds}s)`
-}
-
-const tokenDraft = ref('')
 
 /**
  * Grouped by whoever published the GGUF.
@@ -493,41 +421,6 @@ const providerFilter = ref('')
  * Un elenco e non cinque booleani: si somma con `every`, si conta, e aggiungere
  * un filtro domani non aggiunge una variabile da ricordare.
  */
-/** L'autore, che nel Hub e' la prima meta' dell'identificativo. */
-function autoreDi(id: string): string {
-    return id.includes('/') ? id.slice(0, id.indexOf('/')) : id
-}
-
-/** La licenza, dall'etichetta `license:...` che il Hub mette fra i tag. */
-function licenzaDi(model: { tags?: readonly string[] }): string | null {
-    /*
-     * `tags` puo' mancare, e non e' un caso di scuola: una lista salvata da una
-     * versione precedente non ce l'ha, e una riga che manda in crash l'elenco
-     * per un campo assente e' peggio di una riga senza licenza.
-     */
-    const tag = model.tags?.find((x) => x.startsWith('license:'))
-    return tag ? tag.slice('license:'.length) : null
-}
-
-/**
- * I parametri come li scrive chi ne parla: `30B`, `2,8T`.
- *
- * E' il numero che dice davvero la taglia di un modello, e il Hub lo
- * restituisce esatto: mostrarlo per intero (30532122624) non lo direbbe a
- * nessuno.
- */
-function parametriDi(total: number): string {
-    if (total >= 1e12) return `${(total / 1e12).toFixed(1).replace('.', ',')}T`
-    if (total >= 1e9) return `${Math.round(total / 1e9)}B`
-    return `${Math.round(total / 1e6)}M`
-}
-
-/** «4,9 M scaricati» invece di «4685368 download». */
-function scaricatiDi(n: number): string {
-    const corto = n >= 1e6 ? `${(n / 1e6).toFixed(1).replace('.', ',')} M` : n >= 1e3 ? `${Math.round(n / 1e3)} K` : String(n)
-    return t('localModels.downloadsShort', { count: corto })
-}
-
 const filtriAttivi = ref<TalosBrowseFilterId[]>([])
 
 /**
@@ -623,210 +516,39 @@ function stimaDi(model: TalosHuggingFaceModel) {
     capienze.set(chiave, esito)
     return esito
 }
-const providerItems = computed(() => talosProviderOptions(providerGroups.value))
+
+function modelRowCapacity(model: TalosHuggingFaceModel) {
+    const capacity = stimaDi(model)
+    return {
+        tone: capacity.tone,
+        ratio: capacity.ratio,
+        label: t(capacity.labelKey),
+        size: capacity.size,
+        estimated: capacity.estimated,
+    }
+}
+const providerItems = computed(() => talosBrowsePublishers(store.results, providerFilter.value))
 const visibleGroups = computed(() => providerFilter.value === ''
     ? providerGroups.value
     : providerGroups.value.filter((group) => group.provider === providerFilter.value))
+const visibleResultCount = computed(() => visibleGroups.value.reduce(
+    (total, group) => total + group.models.length,
+    0,
+))
 
-/**
- * What was paused, so it can be started again.
- *
- * Pause used to be a one-way door: the block is the transfer's only control and
- * it hid on `active`, so pausing erased the download from the screen entirely
- * while the copy promised it would carry on. Remembering the set is what makes
- * the promise true — resuming costs one request, because every byte and its
- * hash are already on disk.
- */
-const paused = ref<{ key: string; label: string } | null>(null)
-/** Recorded when the download STARTS — never guessed from the list afterwards. */
-const started = ref<{ key: string; label: string } | null>(null)
-
-async function pause(): Promise<void> {
-    paused.value = started.value
-    await talosStopLocalDownload()
+function resetBrowseFilters(): void {
+    filtriAttivi.value = []
+    providerFilter.value = ''
 }
 
-async function resume(): Promise<void> {
-    const target = paused.value
-    paused.value = null
-    if (target) await start(target.key, target.label)
+function providerCountLabel(count: number): string {
+    return t(count === 1 ? 'localModels.providerCountOne' : 'localModels.providerCount', { count })
 }
 
-async function saveToken(): Promise<void> {
-    const value = tokenDraft.value.trim()
-    if (value === '') return
-    await talosSetHuggingFaceToken(value)
-    // Out of the field the moment it is in the Keystore: a token left in a
-    // bound input is a token in a component's state and in any snapshot of it.
-    tokenDraft.value = ''
+function resultCountLabel(count: number): string {
+    return t(count === 1 ? 'localModels.resultsCountOne' : 'localModels.resultsCount', { count })
 }
 
-const progressPercent = computed(() => {
-    const { haveBytes, totalBytes } = store.transfer
-    if (totalBytes <= 0) return 0
-    return Math.min(100, Math.round((haveBytes / totalBytes) * 100))
-})
-
-/**
- * Everything the list needs, worked out once.
- *
- * Computed here rather than called from the template: the warnings and the
- * verdict are each read three or four times per row, and a template that
- * recomputes them on every render is a list that stutters on the phone this
- * feature exists for.
- */
-/**
- * La scheda del repository aperto: chi, con che licenza, cosa dice di se'.
- *
- * Si carica quando il repository si apre e non prima: e' una richiesta in piu'
- * per modello, e farla per venti righe di lista sarebbe venti richieste per una
- * descrizione che nessuno sta leggendo.
- */
-const scheda = ref<{ author: string | null, license: string | null, readme: string, updatedAt: string | null } | null>(null)
-
-watch(() => store.repo?.id, async (id: string | undefined) => {
-    scheda.value = null
-    if (!id) return
-    /*
-     * La scheda e' un di piu': se non arriva, la pagina resta usabile.
-     *
-     * `try` e non solo `.catch`: la chiamata puo' fallire PRIMA di diventare
-     * una promessa — senza un client configurato lancia subito — e un
-     * `.catch()` non prende quello. La pagina del modello serve a scegliere una
-     * variante; una descrizione mancante non e' una ragione per non poterlo
-     * fare.
-     */
-    try {
-        scheda.value = await talosDescribeModelRepo(id)
-    } catch {
-        scheda.value = null
-    }
-}, { immediate: true })
-
-/**
- * La parte del README che si mostra.
- *
- * NON tutto: un README vero e' markdown con tabelle, badge e blocchi di codice,
- * e renderlo male e' peggio che non renderlo. Si prende il primo paragrafo di
- * prosa — saltando l'intestazione YAML e i titoli — e per il resto c'e' il
- * rimando alla scheda completa.
- */
-const descrizione = computed(() => {
-    const testo = scheda.value?.readme ?? ''
-    if (!testo) return null
-    // L'intestazione YAML in cima al README non e' prosa: e' metadati, e
-    // mostrarla al posto della descrizione direbbe «license: apache-2.0».
-    const senzaFrontmatter = testo.replace(/^---[\s\S]*?\n---\n/, '')
-    const paragrafo = senzaFrontmatter
-        .split(/\n\s*\n/)
-        .map((blocco) => blocco.trim())
-        /*
-         * PROSA, non un elenco.
-         *
-         * MISURATO guardando la pagina sul telefono: il primo blocco lungo di
-         * `Qwen3.5-4B` era una lista di link — «- You can now also fine-tune...
-         * [Unsloth](https://...)» — che come descrizione non dice niente e in
-         * markdown grezzo si legge peggio di niente.
-         *
-         * Si saltano elenchi, titoli, tabelle, codice e HTML: cio' che resta e'
-         * una frase scritta per essere letta.
-         */
-        .map(pulisci)
-        /*
-         * Si sceglie DOPO aver pulito, non prima.
-         *
-         * MISURATO due volte sul telefono. Al primo giro il blocco scelto era
-         * una lista di link; l'ho escluso col prefisso `-`. Al secondo era
-         * `![Qwen Chat](https://chat.qwen.ai)` — che non comincia con `!`,
-         * perche' nel README sta in fila ad altri badge.
-         *
-         * Il difetto era il metodo: elencare i prefissi da rifiutare e' una
-         * lista che si allunga a ogni README nuovo. Cosi' invece si toglie il
-         * markup e si guarda cosa RESTA: se non restano parole vere, non era
-         * una descrizione — qualunque forma avesse.
-         */
-        .find((testo) => testo.length > 40 && contaParole(testo) >= 8)
-    return paragrafo ? paragrafo.slice(0, 320) : null
-})
-
-/** Via il markup: immagini, link, enfasi, titoli, punti elenco. */
-function pulisci(blocco: string): string {
-    return blocco
-        // Le immagini per prime: `![x](y)` sparisce del tutto, e non diventa
-        // «x» — un badge non e' una frase.
-        .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-        // I link diventano il loro testo: l'indirizzo e' rumore su un telefono.
-        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-        .replace(/<[^>]*>/g, ' ')
-        .replace(/^[#>\s]*/, '')
-        .replace(/^[-*+]\s+/gm, '')
-        .replace(/[*_`]/g, '')
-        .replace(/https?:\/\/\S+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-}
-
-/**
- * Le parole vere: sequenze di lettere lunghe almeno tre.
- *
- * Serve a distinguere una frase da cio' che resta di una fila di badge —
- * «Qwen Chat Hugging Face Discord» ha parole ma non e' una descrizione, e otto
- * e' la soglia sotto cui non lo e' quasi mai.
- */
-function contaParole(testo: string): number {
-    return (testo.match(/[\p{L}]{3,}/gu) ?? []).length
-}
-
-/** I tag della scheda: solo quelli che aiutano a decidere. */
-const tagDellaScheda = computed(() => [
-    scheda.value?.author,
-    scheda.value?.license,
-    store.repo?.sets[0]?.label ? null : null,
-].filter((x): x is string => typeof x === 'string' && x.length > 0))
-
-/** La memoria libera, per il titolo della sezione varianti. */
-const memoriaLibera = computed(() => (store.device?.availableRamBytes
-    ? talosFormatBytes(store.device.availableRamBytes)
-    : null))
-
-function apriSchedaCompleta(): void {
-    if (store.repo) void open(store.repo.id, store.repo.revision)
-}
-
-const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
-    set,
-    key: set.paths[0]!,
-    size: talosFormatBytes(set.totalBytes),
-    warnings: talosSetWarnings(set),
-    verdict: set.examination.state === 'read'
-        ? talosFitVerdict(set.examination.fit, store.context)
-        : null,
-    /*
-     * La capienza della VARIANTE, come nel mockup: qui i byte sono quelli veri
-     * del set, non una stima — il repository e' aperto e i file sono stati
-     * contati. E' il momento in cui si sceglie fra Q4 e Q6, cioe' la decisione
-     * vera di chi installa un modello locale.
-     */
-    badge: (() => {
-        const fileBytes = set.incomplete ? null : set.totalBytes
-        const working = fileBytes === null ? null : fileBytes * 1.25
-        const capacity = talosEstimatedCapacity({
-            fileBytes,
-            workingBytes: working,
-            device: store.device,
-        })
-        const badge = talosFitBadge(capacity)
-        return {
-            ...badge,
-            /** Quanto resta dopo, o quanto manca: il numero azionabile. */
-            delta: capacity.state === 'unknown'
-                ? null
-                : talosFormatBytes(Math.abs(
-                    capacity.availableBytes - capacity.needsBytes)),
-            avanza: capacity.state === 'fits' || capacity.state === 'tight',
-        }
-    })(),
-})))
 </script>
 
 <template>
@@ -843,7 +565,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
              dispositivo» e la scheda del telefono faceva scorrere mezzo schermo
              prima di arrivare alle varianti, che sono il motivo per cui si e'
              entrati. -->
-        <p v-if="!store.repo" class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('localModels.intro') }}</p>
+        <p class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('localModels.intro') }}</p>
 
         <!--
             What is ALREADY here, before anything about getting more.
@@ -858,7 +580,11 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             one ordering picked from a radiogroup, a row per file with its size
             and when it arrived.
         -->
-        <section v-if="!store.repo" data-testid="talos-models-installed" class="flex flex-col gap-[var(--talos-space-section)]">
+        <section
+            v-if="installedLoading || installedView.total > 0 || unreadable.length > 0 || installedReadFailure"
+            data-testid="talos-models-installed"
+            class="flex flex-col gap-[var(--talos-space-section)]"
+        >
             <div class="flex items-baseline justify-between gap-[var(--talos-space-inline)]">
                 <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
                     {{ t('localModels.installedTitle') }}
@@ -916,31 +642,31 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
 
             <p v-if="installedLoading" class="text-xs text-[var(--talos-muted)]">{{ t('localModels.installedLoading') }}</p>
 
-            <!-- «Nessuno» and «nessuno che corrisponde» are different sentences,
-                 and saying the first when the second is true sends somebody to
-                 download a model they already have. -->
             <p
-                v-else-if="installedView.total === 0"
-                data-testid="talos-models-installed-empty"
-                class="rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] p-[var(--talos-space-card)] text-xs leading-5 text-[var(--talos-muted)]"
-            >{{ t('localModels.installedEmpty') }}</p>
+                v-else-if="installedReadFailure"
+                data-testid="talos-models-installed-error"
+                role="alert"
+                class="text-xs leading-5 text-[var(--talos-danger)]"
+            >{{ t('localModels.installedReadError') }}</p>
             <p
-                v-else-if="installedView.models.length === 0"
+                v-else-if="installedView.total > 0 && installedView.models.length === 0"
                 class="text-xs text-[var(--talos-muted)]"
             >{{ t('localModels.installedNoMatch') }}</p>
 
             <ul
-                v-else
+                v-else-if="installedView.models.length > 0"
                 data-testid="talos-models-installed-list"
                 :data-layout="layout"
-                class="min-w-0"
-                :class="layout === 'grid' ? 'grid grid-cols-2 gap-[var(--talos-space-inline)] sm:grid-cols-3' : 'flex flex-col gap-[var(--talos-space-inline)]'"
+                class="min-w-0 overflow-hidden rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]"
+                :class="layout === 'grid'
+                    ? 'grid grid-cols-2 gap-px bg-[var(--talos-border)] sm:grid-cols-3'
+                    : 'flex flex-col divide-y divide-[var(--talos-border)]'"
             >
                 <li
                     v-for="file in installedView.models"
                     :key="file.path"
                     data-testid="talos-models-installed-row"
-                    class="relative min-w-0 rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] p-[var(--talos-space-card)] pr-[var(--talos-touch-target)]"
+                    class="relative min-w-0 bg-[var(--talos-panel)] px-[var(--talos-space-control)] py-[var(--talos-space-inline)] pr-[var(--talos-touch-target)]"
                 >
                     <!-- Outside the row body and never nested in a button: two
                          hit areas that overlap mean one swallows the other. -->
@@ -987,6 +713,13 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                 :class="copyNotice.ok ? 'text-[var(--talos-muted)]' : 'text-[var(--talos-danger)]'"
             >{{ copyNotice.text }}</p>
 
+            <p
+                v-if="unreadable.length"
+                data-testid="talos-models-installed-unreadable"
+                class="text-2xs leading-5 text-[var(--talos-danger)]"
+            >{{ t('localModels.installedUnreadable', { count: unreadable.length }) }}</p>
+        </section>
+
             <!--
                 The door that opens inward.
 
@@ -997,9 +730,9 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             -->
             <div class="flex flex-col gap-[var(--talos-space-inline)]">
                 <Button
-                    v-if="!store.repo" data-testid="talos-models-import"
+                    data-testid="talos-models-import"
                     variant="outline"
-                    class="w-full"
+                    class="min-h-[var(--talos-touch-target)] w-full"
                     :disabled="importing"
                     @click="importFromDevice()"
                 >
@@ -1024,15 +757,6 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                 </p>
             </div>
 
-            <!-- A folder that refused to open makes the list above PARTIAL, and
-                 silence there reads as "you have no models". -->
-            <p
-                v-if="unreadable.length"
-                data-testid="talos-models-installed-unreadable"
-                class="text-2xs leading-5 text-[var(--talos-danger)]"
-            >{{ t('localModels.installedUnreadable', { count: unreadable.length }) }}</p>
-        </section>
-
         <!-- Measuring. A skeleton rather than an empty screen: the list is
              coming, and saying so is different from showing nothing. -->
         <div
@@ -1047,7 +771,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
 
         <!-- THE LIST. The screen is this, not a search box: the reader arrives
              and the models are already there, ranked for the phone above. -->
-        <template v-if="store.catalogue.state === 'ready' && !store.repo">
+        <template v-if="store.catalogue.state === 'ready'">
             <div v-if="recommended.length" class="flex items-baseline justify-between gap-[var(--talos-space-inline)] px-[var(--talos-space-inline)]">
                 <h5 class="text-xs font-bold uppercase tracking-wider text-[var(--talos-text)]">
                     {{ t('localModels.recommendedHere') }}
@@ -1151,7 +875,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             restringe cio' che gia' vedi invece di essere la porta d'ingresso.
         -->
         <button
-            v-if="!store.repo && !searching"
+            v-if="!searching"
             type="button"
             data-testid="talos-models-open-search"
             class="talos-pressable flex min-h-[var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[var(--talos-space-control)] py-[var(--talos-space-inline)] text-left"
@@ -1160,59 +884,6 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             <Search class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
             <span class="text-sm text-[var(--talos-muted)]">{{ t('localModels.searchLabel') }}</span>
         </button>
-
-        <!-- A download in flight, with the bar the native side is driving.
-             Shown while it is active OR paused: hiding it on pause erased every
-             trace of the transfer and left no way to resume, while the copy
-             promised it would carry on where it left off. -->
-        <div
-            v-if="store.transfer.active || paused"
-            data-testid="talos-models-transfer"
-            class="flex flex-col gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-[var(--talos-space-card)]"
-        >
-            <div class="flex items-center justify-between gap-[var(--talos-space-inline)]">
-                <span class="min-w-0 truncate text-sm text-[var(--talos-text)]">
-                    {{ t('localModels.downloading') }} {{ store.transfer.modelName }}
-                </span>
-                <button
-                    v-if="store.transfer.active"
-                    type="button"
-                    data-testid="talos-models-stop"
-                    :aria-label="t('localModels.stop')"
-                    class="talos-pressable flex min-h-[var(--talos-touch-target)] min-w-[var(--talos-touch-target)] items-center justify-center rounded-full text-[var(--talos-muted)]"
-                    @click="pause()"
-                >
-                    <Pause class="size-[var(--talos-icon-size)]" aria-hidden="true" />
-                </button>
-                <!-- The other half of the promise. Resuming costs a request,
-                     not a download: every byte and its hash are on disk. -->
-                <Button
-                    v-else
-                    type="button"
-                    data-testid="talos-models-resume"
-                    class="talos-pressable min-h-[var(--talos-touch-target)] rounded-full border border-[var(--talos-border)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)]"
-                    @click="resume()"
-                >
-                    {{ t('localModels.resume') }}
-                </Button>
-            </div>
-            <div class="h-[calc(var(--talos-space-inline)/2)] overflow-hidden rounded-full bg-[var(--talos-active)]">
-                <div
-                    class="h-full rounded-full bg-[var(--talos-accent)] transition-[width] duration-[var(--talos-motion-duration-activity-progress)]"
-                    :style="{ width: `${progressPercent}%` }"
-                />
-            </div>
-            <p class="text-2xs text-[var(--talos-muted)]">
-                {{ t('localModels.progress', {
-                    have: talosFormatBytes(store.transfer.haveBytes),
-                    total: talosFormatBytes(store.transfer.totalBytes),
-                }) }}
-            </p>
-            <!-- The caveat that costs money if it stays hidden. -->
-            <p v-if="!store.transfer.networkBound" class="text-2xs text-[var(--talos-muted)]">
-                {{ t('localModels.notNetworkBound') }}
-            </p>
-        </div>
 
         <!-- Space held by attempts nobody is watching. The reservation is taken
              up front, so an abandoned download still holds the whole file. -->
@@ -1239,56 +910,8 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             {{ refused }}
         </p>
 
-        <!-- The token. Optional, and worth having even for open models: the
-             anonymous limit is per IP, and a carrier puts thousands of people
-             behind one address. -->
-        <details v-if="!store.repo && searching" data-testid="talos-models-token" class="rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-[var(--talos-space-card)]">
-            <summary class="flex min-h-[var(--talos-touch-target)] cursor-pointer items-center justify-between gap-[var(--talos-space-inline)] text-sm font-semibold text-[var(--talos-text)]">
-                {{ t('localModels.tokenTitle') }}
-                <!-- A word, not a sentence: this is a badge pill at 10px with
-                     wide tracking, and the full explanation used to be crammed
-                     into it, wrapping over several lines and breaking the row. -->
-                <span v-if="store.hasToken" class="shrink-0 rounded-full bg-[var(--talos-active)] px-[var(--talos-space-inline)] py-[calc(var(--talos-space-inline)/2)] text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
-                    {{ t('localModels.tokenPresent') }}
-                </span>
-            </summary>
-            <p class="mt-[var(--talos-space-inline)] text-2xs leading-4 text-[var(--talos-muted)]">{{ t('localModels.tokenWhy') }}</p>
-            <p v-if="store.hasToken" class="mt-[var(--talos-space-inline)] text-2xs leading-4 text-[var(--talos-muted)]">
-                {{ t('localModels.tokenSaved') }}
-            </p>
-            <div class="mt-[var(--talos-space-inline)] flex gap-[var(--talos-space-inline)]">
-                <input
-                    v-model="tokenDraft"
-                    type="password"
-                    autocomplete="off"
-                    data-testid="talos-models-token-input"
-                    :aria-label="t('localModels.tokenTitle')"
-                    :placeholder="t('localModels.tokenPlaceholder')"
-                    class="min-h-[var(--talos-touch-target)] flex-1 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-background)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                >
-                <Button
-                    type="button"
-                    data-testid="talos-models-token-save"
-                    :disabled="tokenDraft.trim() === ''"
-                    class="talos-pressable min-h-[var(--talos-touch-target)] rounded-full border border-[var(--talos-border)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] disabled:opacity-50"
-                    @click="saveToken()"
-                >
-                    {{ t('localModels.tokenSave') }}
-                </Button>
-            </div>
-            <button
-                v-if="store.hasToken"
-                type="button"
-                data-testid="talos-models-token-forget"
-                class="talos-pressable mt-[var(--talos-space-inline)] min-h-[var(--talos-touch-target)] text-2xs text-[var(--talos-muted)] underline"
-                @click="talosForgetHuggingFaceToken()"
-            >
-                {{ t('localModels.tokenForget') }}
-            </button>
-        </details>
-
         <!-- Searching the Hub. -->
-        <form v-if="!store.repo && searching" class="flex gap-[var(--talos-space-inline)]" @submit.prevent="search">
+        <form v-if="searching" class="flex gap-[var(--talos-space-inline)]" @submit.prevent="search">
             <input
                 v-model="query"
                 data-testid="talos-models-query"
@@ -1317,11 +940,11 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             questo dispositivo.
         -->
         <div
-            v-if="!store.repo && store.results.length"
+            v-if="store.results.length"
             data-testid="talos-models-filters"
             role="group"
             :aria-label="t('localModels.filtersLabel')"
-            class="flex gap-[var(--talos-space-inline)] overflow-x-auto pb-[var(--talos-space-inline)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            class="flex min-w-0 flex-nowrap items-center gap-[var(--talos-space-inline)] overflow-x-auto overscroll-x-contain scroll-smooth pb-[var(--talos-space-inline)] motion-reduce:scroll-auto"
         >
             <button
                 v-for="id in TALOS_BROWSE_FILTERS"
@@ -1329,7 +952,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                 type="button"
                 :data-testid="`talos-models-filter-${id}`"
                 :aria-pressed="filtriAttivi.includes(id)"
-                class="talos-pressable min-h-[var(--talos-touch-target)] shrink-0 rounded-full border px-[var(--talos-space-control)] py-[var(--talos-space-inline)] text-2xs font-medium whitespace-nowrap transition-colors"
+                class="talos-pressable min-h-[var(--talos-touch-target)] shrink-0 whitespace-nowrap rounded-full border px-[var(--talos-space-control)] py-[var(--talos-space-inline)] text-2xs font-medium transition-colors"
                 :class="filtriAttivi.includes(id)
                     ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-accent-text)]'
                     : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]'"
@@ -1351,7 +974,7 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
         </p>
 
         <!-- Search results, under the organisation that published them. -->
-        <template v-else-if="!store.repo && store.results.length">
+        <template v-else-if="store.results.length">
             <!-- The same control the Catalog tab uses for remote providers, so
                  the two halves of the Model Lab read alike. Its options are
                  derived from the results — there is no list of publishers in
@@ -1359,21 +982,44 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             <!-- Due comandi, una riga. Impilati a tutta larghezza mangiavano
                  mezzo schermo prima che si vedesse un modello — misurato
                  guardando la schermata sul telefono, non supposto. -->
-            <div class="flex gap-[var(--talos-space-inline)]">
+            <div class="flex min-w-0 gap-[var(--talos-space-inline)]">
             <TalosThemedSelect
                 data-testid="talos-models-sort"
-                class="flex-1"
+                class="min-w-0 flex-1"
                 :model-value="store.sort"
                 :items="ordinamenti"
                 :aria-label="t('localModels.sortLabel')"
                 @update:model-value="(v) => talosSetLocalModelSort(v as TalosHuggingFaceSort)"
             />
-            <TalosThemedSelect     v-model="providerFilter"
+            <TalosThemedSelect
+                v-model="providerFilter"
                 data-testid="talos-models-provider-filter"
+                class="min-w-0 flex-1"
                 :items="providerItems"
                 :aria-label="t('localModels.filterProvider')"
                 :none-label="t('localModels.allProviders')"
             />
+            </div>
+
+            <p class="font-mono text-3xs text-[var(--talos-muted)]">
+                {{ resultCountLabel(visibleResultCount) }}
+            </p>
+
+            <div
+                v-if="visibleResultCount === 0"
+                data-testid="talos-models-filter-empty"
+                class="flex flex-col items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] p-[var(--talos-space-card)] text-center"
+            >
+                <p class="text-sm text-[var(--talos-text)]">{{ t('localModels.filteredEmpty') }}</p>
+                <p class="text-2xs leading-4 text-[var(--talos-muted)]">{{ t('localModels.filteredEmptyHint') }}</p>
+                <button
+                    type="button"
+                    data-testid="talos-models-filter-reset"
+                    class="talos-pressable min-h-[var(--talos-touch-target)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-text)]"
+                    @click="resetBrowseFilters"
+                >
+                    {{ t('localModels.resetFilters') }}
+                </button>
             </div>
 
             <section
@@ -1385,282 +1031,31 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
                 <h5 class="flex items-baseline justify-between gap-[var(--talos-space-inline)] px-[var(--talos-space-inline)]">
                     <span class="truncate text-xs font-semibold text-[var(--talos-text)]">{{ group.provider }}</span>
                     <span class="shrink-0 text-3xs text-[var(--talos-muted)]">
-                        {{ t('localModels.providerCount', { count: group.models.length }) }}
+                        {{ providerCountLabel(group.models.length) }}
                     </span>
                 </h5>
 
-                <button
-                    v-for="model in group.models"
-                    :key="model.id"
-                    type="button"
-                    data-testid="talos-models-result"
-                    :aria-label="`${t('localModels.open')} ${model.id}`"
-                    class="talos-pressable w-full rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-[var(--talos-space-card)] text-left"
-                    @click="open(model.id, model.revision ?? 'main')"
+                <div
+                    data-testid="talos-models-provider-list"
+                    class="min-w-0 overflow-hidden rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] divide-y divide-[var(--talos-border)]"
                 >
-                    <!--
-                        La card del mockup approvato: nome → autore · licenza →
-                        meta → barra, col chevron che dice che si apre.
-
-                        L'ordine non e' estetico. Il nome dice COSA, la riga
-                        sotto dice DI CHI e a quali condizioni, la meta dice se
-                        e' vivo, e la barra — ultima — dice se puoi averlo. E'
-                        la sequenza in cui si decide.
-                    -->
-                    <span class="flex items-start gap-[var(--talos-space-inline)]">
-                        <span class="min-w-0 flex-1">
-                            <span class="block truncate font-mono text-sm font-semibold text-[var(--talos-text)]">{{ model.id }}</span>
-                            <span class="mt-[calc(var(--talos-space-inline)/2)] flex flex-wrap items-center gap-x-[var(--talos-space-inline)] font-mono text-2xs text-[var(--talos-muted)]">
-                                <span>{{ autoreDi(model.id) }}</span>
-                                <template v-if="licenzaDi(model)">
-                                    <span class="opacity-40">·</span><span>{{ licenzaDi(model) }}</span>
-                                </template>
-                                <template v-if="model.gguf?.parameters">
-                                    <span class="opacity-40">·</span><span>{{ parametriDi(model.gguf.parameters) }}</span>
-                                </template>
-                            </span>
-                            <span class="mt-[calc(var(--talos-space-inline)/2)] flex flex-wrap items-center gap-x-[var(--talos-space-inline)] font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
-                                <span>{{ scaricatiDi(model.downloads) }}</span>
-                                <template v-if="model.likes"><span class="opacity-40">·</span><span>{{ model.likes }} ★</span></template>
-                                <span
-                                    v-if="model.gated"
-                                    class="rounded-full bg-[var(--talos-active)] px-[var(--talos-space-inline)] font-semibold uppercase tracking-wide"
-                                >{{ t('localModels.gated') }}</span>
-                            </span>
-                        </span>
-                        <ChevronRight class="mt-[calc(var(--talos-space-inline)/2)] size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
-                    </span>
-                    <TalosModelFitBar
-                        v-if="stimaDi(model)"
-                        class="mt-[var(--talos-space-inline)]"
-                        :tone="stimaDi(model)!.tone"
-                        :ratio="stimaDi(model)!.ratio"
-                        :label="t(stimaDi(model)!.labelKey)"
-                        :size="stimaDi(model)!.size"
-                        :estimated="stimaDi(model)!.estimated"
+                    <TalosMobileLocalModelRow
+                        v-for="model in group.models"
+                        :key="model.id"
+                        :model="model"
+                        :capacity="modelRowCapacity(model)"
                     />
-                </button>
+                </div>
             </section>
         </template>
 
         <p
-            v-else-if="!store.repo && store.query.trim() !== '' && !store.searching"
+            v-else-if="store.query.trim() !== '' && !store.searching"
             class="py-[var(--talos-space-page)] text-center text-sm text-[var(--talos-muted)]"
         >
             {{ t('localModels.noResults') }}
         </p>
 
-        <!-- One repository, as the models it actually holds. -->
-        <template v-if="store.repo">
-            <div class="flex items-center gap-[var(--talos-space-inline)]">
-                <button
-                    type="button"
-                    data-testid="talos-models-back"
-                    :aria-label="t('localModels.back')"
-                    class="talos-pressable flex min-h-[var(--talos-touch-target)] min-w-[var(--talos-touch-target)] items-center justify-center rounded-full text-[var(--talos-muted)]"
-                    @click="talosCloseModelRepo()"
-                >
-                    <ChevronLeft class="size-[var(--talos-icon-size)]" aria-hidden="true" />
-                </button>
-                <span class="min-w-0 truncate font-mono text-sm font-semibold text-[var(--talos-text)]">{{ store.repo.id }}</span>
-            </div>
-
-            <!-- La scheda, come nel mockup: chi l'ha fatto e a quali condizioni,
-                 poi cosa dice di se'. La descrizione e' il README dell'autore,
-                 non un riassunto nostro — inventarne uno sarebbe peggio che non
-                 mostrarne nessuno. -->
-            <div v-if="scheda" data-testid="talos-models-card" class="flex flex-col gap-[var(--talos-space-inline)]">
-                <div class="flex flex-wrap gap-[var(--talos-space-inline)]">
-                    <span
-                        v-for="tag in tagDellaScheda"
-                        :key="tag"
-                        class="rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[var(--talos-space-inline)] py-[calc(var(--talos-space-inline)/2)] font-mono text-2xs text-[var(--talos-muted)]"
-                    >{{ tag }}</span>
-                </div>
-                <p v-if="descrizione" class="text-xs leading-5 text-[var(--talos-text)]">{{ descrizione }}</p>
-                <button
-                    type="button"
-                    data-testid="talos-models-card-link"
-                    class="talos-pressable self-start font-mono text-2xs text-[var(--talos-accent)]"
-                    @click="apriSchedaCompleta()"
-                >{{ t('localModels.fullCard') }} →</button>
-            </div>
-
-            <!-- «VARIANTI · 4,1 GB LIBERI»: il titolo porta il numero contro cui
-                 si sta decidendo, così non va cercato altrove. -->
-            <p
-                v-if="store.repo.sets.length"
-                class="mt-[var(--talos-space-inline)] font-mono text-2xs uppercase tracking-wider text-[var(--talos-muted)]"
-            >
-                {{ t('localModels.variants') }}<template v-if="memoriaLibera"> · {{ t('models.fitFree', { free: memoriaLibera }) }}</template>
-            </p>
-
-            <p v-if="store.repo.loading" class="py-[var(--talos-space-page)] text-center text-sm text-[var(--talos-muted)]">
-                {{ t('localModels.loadingFiles') }}
-            </p>
-
-            <!-- A failure is said as a failure. It used to fall through to
-                 "this repository has no GGUF files a phone can open", which is
-                 a false statement about what was actually a rate limit. -->
-            <p
-                v-else-if="store.repo.failure"
-                role="alert"
-                data-testid="talos-models-repo-failed"
-                class="py-[var(--talos-space-page)] text-center text-sm text-[var(--talos-danger)]"
-            >
-                {{ t('localModels.repoFailed') }} {{ explain(store.repo.failure) }}
-            </p>
-
-            <p v-else-if="!store.repo.sets.length" class="py-[var(--talos-space-page)] text-center text-sm text-[var(--talos-muted)]">
-                {{ t('localModels.emptyRepo') }}
-            </p>
-
-            <ul v-else class="flex flex-col gap-[var(--talos-space-inline)]">
-                <li
-                    v-for="row in rows"
-                    :key="row.key"
-                    data-testid="talos-models-set"
-                    class="flex flex-col gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-[var(--talos-space-card)]"
-                >
-                    <div class="flex items-baseline justify-between gap-[var(--talos-space-inline)]">
-                        <span class="font-mono text-sm font-semibold text-[var(--talos-text)]">{{ row.set.label }}</span>
-                        <span class="font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ row.size }}</span>
-                    </div>
-
-                    <!-- La capienza della variante: qui i byte sono VERI, il
-                         repository è aperto e i file sono stati contati. È il
-                         momento in cui si sceglie fra Q4 e Q6. -->
-                    <template v-if="row.badge">
-                        <TalosModelFitBar
-                            :tone="row.badge.tone"
-                            :ratio="row.badge.ratio"
-                            :label="t(row.badge.labelKey)"
-                        />
-                        <p class="text-2xs leading-4 text-[var(--talos-muted)]">
-                            {{ t(row.badge.reasonKey, row.badge.delta === null
-                                ? {}
-                                : (row.badge.avanza
-                                    ? { left: row.badge.delta }
-                                    : { missing: row.badge.delta })) }}
-                        </p>
-                    </template>
-
-                    <!-- Cannot work at all: two of three shards is not a small
-                         model, it is nothing. -->
-                    <p
-                        v-if="row.warnings.incomplete"
-                        data-testid="talos-models-incomplete"
-                        class="flex items-start gap-[var(--talos-space-inline)] text-2xs text-[var(--talos-danger)]"
-                    >
-                        <AlertTriangle class="mt-[calc(var(--talos-space-inline)/4)] size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
-                        {{ t('localModels.incompleteSet', {
-                            missing: row.warnings.incomplete.missing,
-                            total: row.warnings.incomplete.total,
-                        }) }}
-                    </p>
-
-                    <p
-                        v-if="row.warnings.flagged"
-                        class="flex items-start gap-[var(--talos-space-inline)] text-2xs text-[var(--talos-danger)]"
-                    >
-                        <ShieldAlert class="mt-[calc(var(--talos-space-inline)/4)] size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
-                        {{ t('localModels.flagged') }} {{ row.warnings.flagged }}
-                    </p>
-
-                    <!-- The one download we cannot prove, said plainly rather
-                         than left for the user to assume otherwise. -->
-                    <p
-                        v-if="row.warnings.unverifiable"
-                        data-testid="talos-models-unverifiable"
-                        class="text-2xs text-[var(--talos-muted)]"
-                    >
-                        {{ t('localModels.unverifiable') }}
-                    </p>
-
-                    <!-- The verdict: the answer no competitor gives. -->
-                    <template v-if="row.verdict">
-                        <p
-                            data-testid="talos-models-verdict"
-                            class="text-xs font-semibold"
-                            :class="{
-                                'text-[var(--talos-success)]': row.verdict.tone === 'good',
-                                'text-[var(--talos-warning)]': row.verdict.tone === 'warn',
-                                'text-[var(--talos-danger)]': row.verdict.tone === 'bad',
-                            }"
-                        >
-                            {{ t(row.verdict.bandKey) }}
-                            <span class="font-normal text-[var(--talos-muted)]">
-                                ·
-                                {{ row.verdict.tokensPerSecond === null
-                                    ? t('localModels.speedUnknown')
-                                    : t('localModels.speed', { rate: row.verdict.tokensPerSecond }) }}
-                            </span>
-                        </p>
-                        <p v-if="row.verdict.reasonKey" class="text-2xs text-[var(--talos-muted)]">
-                            {{ t(row.verdict.reasonKey) }}
-                        </p>
-                        <!-- The context every verdict was computed at. It was
-                             hard-coded and unstated, so the counter-offer named
-                             a number against a baseline the user could not see
-                             and had no control to change. -->
-                        <p data-testid="talos-models-context" class="text-3xs text-[var(--talos-muted)]">
-                            {{ t('localModels.contextExplain', { context: store.context }) }}
-                        </p>
-                        <!-- The counter-offer. A refusal that ends the
-                             conversation is a worse product than one that
-                             moves it. -->
-                        <button
-                            v-if="row.verdict.counterOfferContext"
-                            type="button"
-                            data-testid="talos-models-counteroffer"
-                            class="talos-pressable min-h-[var(--talos-touch-target)] text-left text-2xs text-[var(--talos-accent)] underline"
-                            @click="acceptCounterOffer(row.key, row.verdict.counterOfferContext)"
-                        >
-                            {{ t('localModels.counterOffer', { context: row.verdict.counterOfferContext }) }}
-                        </button>
-                    </template>
-
-                    <p v-else-if="row.set.examination.state === 'reading'" class="text-2xs text-[var(--talos-muted)]">
-                        {{ t('localModels.examining') }}
-                    </p>
-
-                    <p
-                        v-else-if="row.set.examination.state === 'unreadable'"
-                        class="text-2xs text-[var(--talos-muted)]"
-                    >
-                        {{ t('localModels.unreadable') }} {{ explain(row.set.examination.reason) }}
-                    </p>
-
-                    <div class="flex gap-[var(--talos-space-inline)]">
-                        <!-- Offered while unread AND after a failure: it used to
-                             render only for `unread`, so one failed check
-                             removed the only way to try again. -->
-                        <Button
-                            v-if="row.set.examination.state !== 'reading'"
-                            type="button"
-                            data-testid="talos-models-examine"
-                            class="talos-pressable min-h-[var(--talos-touch-target)] flex-1 rounded-full border border-[var(--talos-border)] text-sm text-[var(--talos-text)]"
-                            @click="talosExamineSet(row.key)"
-                        >
-                            {{ row.set.examination.state === 'unread' ? t('localModels.examine') : t('localModels.recheck') }}
-                        </Button>
-                        <!-- Disabled ONLY for what cannot work. A model that
-                             will not fit stays offered: the card has said so,
-                             and it is the user's phone. -->
-                        <Button
-                            type="button"
-                            data-testid="talos-models-download"
-                            :disabled="row.set.incomplete"
-                            class="talos-pressable min-h-[var(--talos-touch-target)] flex-1 rounded-full bg-[var(--talos-accent)] text-sm text-[var(--talos-accent-text)] disabled:opacity-50"
-                            @click="start(row.key, `${store.repo!.id.split('/').pop()} ${row.set.label}`)"
-                        >
-                            <Download class="size-[var(--talos-icon-size)]" aria-hidden="true" />
-                            {{ t('localModels.download') }}
-                        </Button>
-                    </div>
-                </li>
-            </ul>
-        </template>
     </div>
 
     <!-- Rinomina: lo STESSO dialogo della Ricerca. Campo, e il campo vuoto
@@ -1680,8 +1075,17 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
             class="min-h-[var(--talos-touch-target)] w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
         >
         <template #footer>
-            <Button variant="ghost" @click="renameTarget = null">{{ t('common.cancel') }}</Button>
-            <Button data-testid="talos-models-rename-save" @click="void submitRename()">{{ t('common.save') }}</Button>
+            <Button
+                variant="ghost"
+                data-testid="talos-models-cancel-rename"
+                class="min-h-[var(--talos-touch-target)]"
+                @click="renameTarget = null"
+            >{{ t('common.cancel') }}</Button>
+            <Button
+                data-testid="talos-models-rename-save"
+                class="min-h-[var(--talos-touch-target)]"
+                @click="void submitRename()"
+            >{{ t('common.save') }}</Button>
         </template>
     </TalosMobileConfirmDialog>
 
@@ -1698,8 +1102,18 @@ const rows = computed(() => (store.repo?.sets ?? []).map((set) => ({
         @close="deleteTarget = null"
     >
         <template #footer>
-            <Button variant="ghost" @click="deleteTarget = null">{{ t('common.cancel') }}</Button>
-            <Button variant="destructive" data-testid="talos-models-delete-confirm" @click="void confirmDelete()">
+            <Button
+                variant="ghost"
+                data-testid="talos-models-cancel-delete"
+                class="min-h-[var(--talos-touch-target)]"
+                @click="deleteTarget = null"
+            >{{ t('common.cancel') }}</Button>
+            <Button
+                variant="destructive"
+                data-testid="talos-models-delete-confirm"
+                class="min-h-[var(--talos-touch-target)]"
+                @click="void confirmDelete()"
+            >
                 {{ t('localModels.deleteConfirm') }}
             </Button>
         </template>

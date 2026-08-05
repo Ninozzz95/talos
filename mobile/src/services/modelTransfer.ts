@@ -1,47 +1,50 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 
-/**
- * The JavaScript half of downloading a model: it asks, and it watches.
- *
- * It cannot do the work. Android suspends a backgrounded WebView, so a transfer
- * driven from `fetch` stops the moment the user leaves the app — which is most
- * of the hours four gigabytes take. Everything past this file runs natively and
- * writes its state to disk, which is also why the app can be killed outright
- * and still resume.
- *
- * Nothing here throws at a caller for being on a platform without the plugin. A
- * web build reports "unsupported" and the download centre says so, rather than
- * offering a button that fails when pressed.
- */
+type NativeTransferItem = {
+    id?: unknown
+    jobId?: unknown
+    createdAtMs?: unknown
+    active?: unknown
+    phase?: unknown
+    repo?: unknown
+    revision?: unknown
+    path?: unknown
+    paths?: unknown
+    modelName?: unknown
+    haveBytes?: unknown
+    totalBytes?: unknown
+    runner?: unknown
+    networkBound?: unknown
+    failure?: unknown
+    resumable?: unknown
+}
+
 interface TalosModelTransferPlugin {
     start(options: {
         repo: string
         revision: string
         files: Array<{ path: string; bytes: number; sha256: string | null }>
         modelName: string
-    }): Promise<{ runner: string; networkBound: boolean }>
-    stop(): Promise<void>
-    status(): Promise<{
-        active: boolean
-        repo?: string
-        path?: string
-        modelName?: string
-        haveBytes: number
-        totalBytes: number
+    }): Promise<{
+        id?: string
+        phase?: string
+        runner: string
+        networkBound: boolean
     }>
+    pause?(options?: { id: string }): Promise<void>
+    resume?(options?: { id: string }): Promise<{
+        id?: string
+        phase?: string
+        runner: string
+        networkBound: boolean
+    }>
+    cancel?(options?: { id: string }): Promise<void>
+    /** Compatibility with APKs built before the typed pause API. */
+    stop(options?: { id: string }): Promise<void>
+    status(): Promise<NativeTransferItem & { items?: unknown }>
     leftovers(): Promise<{
         items: Array<{ path: string; bytes: number }>
         totalBytes: number
-        /**
-         * Folders the walk could not open. Present because the native side now
-         * reports it and a boundary that drops it would hide the same failure
-         * the models list used to hide: `totalBytes` is offered as space that
-         * can be reclaimed, and a folder that refused to open makes it an
-         * understatement.
-         *
-         * Typed but not yet shown — the storage line still presents the total
-         * without the caveat. Recorded as owed rather than silently lost.
-         */
         unreadable?: Array<{ path: string; reason: string }>
     }>
     discard(options: { path: string }): Promise<void>
@@ -49,27 +52,60 @@ interface TalosModelTransferPlugin {
 
 const plugin = registerPlugin<TalosModelTransferPlugin>('TalosModelTransfer')
 
-/** How the transfer is being carried, which the user is entitled to know. */
 export type TalosTransferRunner = 'USER_INITIATED_JOB' | 'FOREGROUND_SERVICE' | 'DEFERRED_JOB'
+export type TalosTransferPhase =
+    | 'idle'
+    | 'waiting'
+    | 'queued'
+    | 'running'
+    | 'pausing'
+    | 'paused'
+    | 'verifying'
+    | 'failed'
 
 export interface TalosTransferStart {
+    id: string
+    phase: Exclude<TalosTransferPhase, 'idle'>
     runner: TalosTransferRunner
-    /**
-     * False below Android 14: the transfer is not tied to the network it began
-     * on and can follow the phone onto mobile data.
-     *
-     * Surfaced rather than buried. Someone starting a 4 GB download on a train
-     * has a right to know it may finish on their data allowance, and finding
-     * that out from a bill is not a design.
-     */
+    /** False on the foreground-service fallback, which may follow mobile data. */
     networkBound: boolean
 }
 
-export interface TalosTransferStatus {
+export interface TalosTransferItem {
+    id: string
+    jobId: number | null
+    createdAtMs: number | null
+    phase: Exclude<TalosTransferPhase, 'idle'>
     active: boolean
+    repo: string | null
+    revision: string | null
+    paths: readonly string[]
     modelName: string | null
     haveBytes: number
     totalBytes: number
+    runner: TalosTransferRunner | null
+    networkBound: boolean
+    failure: string | null
+    resumable: boolean
+}
+
+/** Collection plus the first-record projection kept for existing callers. */
+export interface TalosTransferStatus {
+    items: TalosTransferItem[]
+    phase: TalosTransferPhase
+    active: boolean
+    repo: string | null
+    revision: string | null
+    paths: string[]
+    modelName: string | null
+    haveBytes: number
+    totalBytes: number
+    runner: TalosTransferRunner | null
+    networkBound: boolean
+    failure: string | null
+    resumable: boolean
+    /** A status read failed; every other field remains the last known snapshot. */
+    readFailure: string | null
 }
 
 export interface TalosTransferLeftovers {
@@ -78,22 +114,13 @@ export interface TalosTransferLeftovers {
 }
 
 export function talosTransfersAreSupported(): boolean {
-    return Capacitor.isNativePlatform()
+    return Capacitor.isPluginAvailable('TalosModelTransfer')
 }
 
-/**
- * Begin, or explain.
- *
- * Takes the whole SET of files, because a large GGUF is published in pieces and
- * any subset of them is not a smaller model — it is nothing. Passing only the
- * first with the set's total byte count is what made the job download one shard,
- * ask for a window past its end, read the 416 as "the file changed" and delete
- * every byte it had downloaded.
- *
- * `sha256` is the Hub's `lfs.oid` and is what makes this download different from
- * every competitor's: each finished piece is proved, not assumed. Null is
- * allowed for repositories that publish none, and the centre says so plainly.
- */
+function actionFailure(refused: unknown): { ok: false; reason: string } {
+    return { ok: false, reason: refused instanceof Error ? refused.message : 'refused' }
+}
+
 export async function talosStartModelTransfer(request: {
     repo: string
     revision?: string
@@ -109,53 +136,112 @@ export async function talosStartModelTransfer(request: {
             files: request.files.map((file) => ({ ...file })),
             modelName: request.modelName ?? request.files[0]!.path,
         })
-        return {
-            ok: true,
-            started: {
-                runner: started.runner as TalosTransferRunner,
-                networkBound: started.networkBound,
-            },
-        }
+        return { ok: true, started: normalizeStart(started) }
     } catch (refused) {
-        return { ok: false, reason: refused instanceof Error ? refused.message : 'refused' }
+        return actionFailure(refused)
     }
 }
 
-/** Pause. The bytes and the hash state stay on disk and the transfer resumes. */
-export async function talosStopModelTransfer(): Promise<void> {
-    if (!talosTransfersAreSupported()) return
-    await plugin.stop().catch(() => undefined)
+export async function talosPauseModelTransfer(
+    id?: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+    if (!talosTransfersAreSupported()) return { ok: false, reason: 'unsupported' }
+    try {
+        if (plugin.pause) {
+            if (id) await plugin.pause({ id })
+            else await plugin.pause()
+        } else if (id) await plugin.stop({ id })
+        else await plugin.stop()
+        return { ok: true }
+    } catch (refused) {
+        return actionFailure(refused)
+    }
 }
 
-export async function talosModelTransferStatus(): Promise<TalosTransferStatus> {
-    const idle: TalosTransferStatus = {
+export async function talosResumeModelTransfer(
+    id?: string,
+): Promise<{ ok: true; started: TalosTransferStart } | { ok: false; reason: string }> {
+    if (!talosTransfersAreSupported()) return { ok: false, reason: 'unsupported' }
+    if (!plugin.resume) return { ok: false, reason: 'unsupported' }
+    try {
+        const started = id ? await plugin.resume({ id }) : await plugin.resume()
+        return { ok: true, started: normalizeStart(started, id) }
+    } catch (refused) {
+        return actionFailure(refused)
+    }
+}
+
+export async function talosCancelModelTransfer(
+    id?: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+    if (!talosTransfersAreSupported()) return { ok: false, reason: 'unsupported' }
+    if (!plugin.cancel) return { ok: false, reason: 'unsupported' }
+    try {
+        if (id) await plugin.cancel({ id })
+        else await plugin.cancel()
+        return { ok: true }
+    } catch (refused) {
+        return actionFailure(refused)
+    }
+}
+
+/** Compatibility alias: old callers named pause "stop". */
+export async function talosStopModelTransfer(id?: string): Promise<void> {
+    await talosPauseModelTransfer(id)
+}
+
+const TRANSFER_PHASES = new Set<TalosTransferPhase>([
+    'idle', 'waiting', 'queued', 'running', 'pausing', 'paused', 'verifying', 'failed',
+])
+const MOVING_PHASES = new Set<TalosTransferPhase>([
+    'queued', 'running', 'pausing', 'verifying',
+])
+const RUNNERS = new Set<TalosTransferRunner>([
+    'USER_INITIATED_JOB', 'FOREGROUND_SERVICE', 'DEFERRED_JOB',
+])
+
+function idleStatus(): TalosTransferStatus {
+    return {
+        items: [],
+        phase: 'idle',
         active: false,
+        repo: null,
+        revision: null,
+        paths: [],
         modelName: null,
         haveBytes: 0,
         totalBytes: 0,
-    }
-    if (!talosTransfersAreSupported()) return idle
-    try {
-        const status = await plugin.status()
-        return {
-            active: status.active,
-            modelName: status.modelName ?? null,
-            haveBytes: status.haveBytes,
-            totalBytes: status.totalBytes,
-        }
-    } catch {
-        return idle
+        runner: null,
+        networkBound: true,
+        failure: null,
+        resumable: false,
+        readFailure: null,
     }
 }
 
-/**
- * What abandoned attempts are costing the phone.
- *
- * Space is claimed before the first byte, so an attempt abandoned after ten
- * seconds still holds the whole four gigabytes. Without this the user watches
- * free space vanish with nothing to point at — which is precisely what happens
- * in the apps this one is measured against.
- */
+let lastKnownStatus = idleStatus()
+
+export async function talosModelTransferStatus(): Promise<TalosTransferStatus> {
+    if (!talosTransfersAreSupported()) {
+        lastKnownStatus = idleStatus()
+        return cloneStatus(lastKnownStatus)
+    }
+    try {
+        const native = await plugin.status()
+        const rows = Array.isArray(native.items) ? native.items : [native]
+        const items = rows
+            .map((row, index) => normalizeItem(row, index))
+            .filter((row): row is TalosTransferItem => row !== null)
+        lastKnownStatus = project(items, null)
+        return cloneStatus(lastKnownStatus)
+    } catch (failed) {
+        return cloneStatus({
+            ...lastKnownStatus,
+            readFailure: failed instanceof Error ? failed.message : 'status-unavailable',
+        })
+    }
+}
+
 export async function talosModelTransferLeftovers(): Promise<TalosTransferLeftovers> {
     if (!talosTransfersAreSupported()) return { items: [], totalBytes: 0 }
     try {
@@ -173,4 +259,108 @@ export async function talosDiscardModelTransfer(path: string): Promise<boolean> 
     } catch {
         return false
     }
+}
+
+function normalizeStart(
+    raw: { id?: string; phase?: string; runner: string; networkBound: boolean },
+    fallbackId?: string,
+): TalosTransferStart {
+    const candidate = phaseOf(raw.phase, 'queued')
+    return {
+        id: nonEmpty(raw.id) ?? fallbackId ?? 'legacy',
+        phase: candidate === 'idle' ? 'queued' : candidate,
+        runner: runnerOf(raw.runner),
+        networkBound: raw.networkBound ?? true,
+    }
+}
+
+function normalizeItem(raw: unknown, index: number): TalosTransferItem | null {
+    if (!raw || typeof raw !== 'object') return null
+    const row = raw as NativeTransferItem
+    const phase = phaseOf(row.phase, row.active === true ? 'running' : 'idle')
+    if (phase === 'idle') return null
+    const paths = Array.isArray(row.paths)
+        ? row.paths.filter((path): path is string => typeof path === 'string')
+        : (typeof row.path === 'string' ? [row.path] : [])
+    const runner = typeof row.runner === 'string' && RUNNERS.has(row.runner as TalosTransferRunner)
+        ? row.runner as TalosTransferRunner
+        : null
+    return {
+        id: nonEmpty(row.id) ?? (index === 0 ? 'legacy' : `legacy-${index}`),
+        jobId: positiveInteger(row.jobId),
+        createdAtMs: positiveNumber(row.createdAtMs),
+        phase,
+        active: typeof row.active === 'boolean' ? row.active : MOVING_PHASES.has(phase),
+        repo: nonEmpty(row.repo),
+        revision: nonEmpty(row.revision),
+        paths,
+        modelName: nonEmpty(row.modelName),
+        haveBytes: nonNegative(row.haveBytes),
+        totalBytes: nonNegative(row.totalBytes),
+        runner,
+        networkBound: typeof row.networkBound === 'boolean' ? row.networkBound : true,
+        failure: typeof row.failure === 'string' ? row.failure : null,
+        resumable: typeof row.resumable === 'boolean' ? row.resumable : true,
+    }
+}
+
+function project(items: TalosTransferItem[], readFailure: string | null): TalosTransferStatus {
+    const first = items[0]
+    if (!first) return { ...idleStatus(), readFailure }
+    return {
+        items: items.map(cloneItem),
+        phase: first.phase,
+        active: items.some((item) => item.active),
+        repo: first.repo,
+        revision: first.revision,
+        paths: [...first.paths],
+        modelName: first.modelName,
+        haveBytes: first.haveBytes,
+        totalBytes: first.totalBytes,
+        runner: first.runner,
+        networkBound: first.networkBound,
+        failure: first.failure,
+        resumable: items.some((item) => item.resumable),
+        readFailure,
+    }
+}
+
+function cloneItem(item: TalosTransferItem): TalosTransferItem {
+    return { ...item, paths: [...item.paths] }
+}
+
+function cloneStatus(status: TalosTransferStatus): TalosTransferStatus {
+    return {
+        ...status,
+        paths: [...status.paths],
+        items: status.items.map(cloneItem),
+    }
+}
+
+function phaseOf(value: unknown, fallback: TalosTransferPhase): TalosTransferPhase {
+    return typeof value === 'string' && TRANSFER_PHASES.has(value as TalosTransferPhase)
+        ? value as TalosTransferPhase
+        : fallback
+}
+
+function runnerOf(value: string): TalosTransferRunner {
+    return RUNNERS.has(value as TalosTransferRunner)
+        ? value as TalosTransferRunner
+        : 'DEFERRED_JOB'
+}
+
+function nonEmpty(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value : null
+}
+
+function nonNegative(value: unknown): number {
+    return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0
+}
+
+function positiveNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+function positiveInteger(value: unknown): number | null {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null
 }

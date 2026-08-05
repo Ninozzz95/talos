@@ -1,4 +1,8 @@
 import { registerPlugin } from '@capacitor/core'
+import {
+    talosLocalContextCandidates,
+    talosShouldRetryLocalOpen,
+} from '@/lib/models/localContextPolicy'
 
 /**
  * The on-device engine, from JavaScript's side of the bridge.
@@ -54,6 +58,13 @@ export interface TalosLocalEngineGeneration {
     toolCalls?: ReadonlyArray<{ name: string, arguments: string, id: string }>
 }
 
+/** Exact native plan for one templated local conversation. */
+export interface TalosLocalEngineChatPlan {
+    prompt: string
+    promptTokens: number
+    contextTokens: number
+}
+
 interface TalosLlamaPlugin {
     available(): Promise<TalosLocalEngineStatus>
     deleteInstalled(options: { path: string }): Promise<{ deleted: boolean }>
@@ -95,7 +106,7 @@ interface TalosLlamaPlugin {
          * grammatica che rende la chiamata valida per costruzione.
          */
         tools?: readonly unknown[]
-    }): Promise<{ prompt: string }>
+    }): Promise<TalosLocalEngineChatPlan>
     cancel(): Promise<void>
     close(): Promise<void>
     addListener(
@@ -105,6 +116,126 @@ interface TalosLlamaPlugin {
 }
 
 const plugin = registerPlugin<TalosLlamaPlugin>('TalosLlama')
+
+export type TalosLocalEngineOpenStage =
+    | 'path'
+    | 'model-load'
+    | 'context'
+    | 'sampler'
+    | 'template'
+    | 'generation'
+    | 'unknown'
+
+/** A stable, non-sensitive native failure that callers can act on. */
+export class TalosLocalEngineOpenError extends Error {
+    readonly stage: TalosLocalEngineOpenStage
+    readonly nativeCode: string
+
+    constructor(stage: TalosLocalEngineOpenStage, nativeCode: string) {
+        super(nativeCode)
+        this.name = 'TalosLocalEngineOpenError'
+        this.stage = stage
+        this.nativeCode = nativeCode
+    }
+}
+
+export type TalosLocalEngineGenerationStage = 'context-required' | 'generation'
+
+/** Stable, non-sensitive failure from the asynchronous generation boundary. */
+export class TalosLocalEngineGenerationError extends Error {
+    readonly stage: TalosLocalEngineGenerationStage
+    readonly nativeCode: string
+    readonly promptTokens: number | null
+    readonly contextTokens: number | null
+    readonly requiredContextTokens: number | null
+
+    constructor(options: {
+        stage: TalosLocalEngineGenerationStage
+        nativeCode: string
+        promptTokens?: number | null
+        contextTokens?: number | null
+        requiredContextTokens?: number | null
+    }) {
+        super(options.nativeCode)
+        this.name = 'TalosLocalEngineGenerationError'
+        this.stage = options.stage
+        this.nativeCode = options.nativeCode
+        this.promptTokens = options.promptTokens ?? null
+        this.contextTokens = options.contextTokens ?? null
+        this.requiredContextTokens = options.requiredContextTokens ?? null
+    }
+}
+
+type TalosLocalEngineOpenOptions = {
+    threads?: number
+    contextTokens?: number
+    gpuLayers?: number
+    deterministic?: boolean
+}
+
+function recordOf(value: unknown): Record<string, unknown> | null {
+    return value !== null && typeof value === 'object'
+        ? value as Record<string, unknown>
+        : null
+}
+
+function openStageOf(error: unknown): TalosLocalEngineOpenStage {
+    const failure = recordOf(error)
+    const data = recordOf(failure?.data)
+    const stage = data?.stage
+    if (
+        stage === 'path'
+        || stage === 'model-load'
+        || stage === 'context'
+        || stage === 'sampler'
+        || stage === 'template'
+        || stage === 'generation'
+        || stage === 'unknown'
+    ) return stage
+
+    const code = typeof failure?.code === 'string'
+        ? failure.code
+        : error instanceof Error ? error.message : ''
+    if (code === 'TALOS_LLAMA_PATH_REQUIRED' || code === 'TALOS_LLAMA_MODEL_MISSING') {
+        return 'path'
+    }
+    return 'unknown'
+}
+
+function nativeCodeOf(error: unknown): string {
+    const failure = recordOf(error)
+    if (typeof failure?.code === 'string' && failure.code) return failure.code
+    if (error instanceof Error && error.message) return error.message
+    return 'TALOS_LLAMA_OPEN_FAILED'
+}
+
+function integerOf(value: unknown): number | null {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+        ? value
+        : null
+}
+
+function generationErrorOf(error: unknown): TalosLocalEngineGenerationError {
+    if (error instanceof TalosLocalEngineGenerationError) return error
+    const failure = recordOf(error)
+    const data = recordOf(failure?.data)
+    const nativeCode = typeof failure?.code === 'string' && failure.code
+        ? failure.code
+        : error instanceof Error && error.message
+            ? error.message
+            : 'TALOS_LLAMA_GENERATION_FAILED'
+    const stage = data?.stage === 'context-required'
+        || nativeCode === 'TALOS_LLAMA_CONTEXT_REQUIRED'
+        ? 'context-required'
+        : 'generation'
+    return new TalosLocalEngineGenerationError({
+        stage,
+        nativeCode,
+        promptTokens: integerOf(data?.promptTokens),
+        contextTokens: integerOf(data?.contextTokens),
+        requiredContextTokens: integerOf(data?.requiredContextTokens),
+    })
+}
 
 /**
  * Absent on the web, and that is the honest answer rather than an inconvenience.
@@ -124,15 +255,36 @@ export async function talosLocalEngineStatus(): Promise<TalosLocalEngineStatus> 
 
 export async function talosLocalEngineOpen(
     path: string,
-    options: {
-        threads?: number
-        contextTokens?: number
-        gpuLayers?: number
-        /** Solo per il banco di prova — vedi la nota sull'interfaccia del plugin. */
-        deterministic?: boolean
-    } = {},
+    options: TalosLocalEngineOpenOptions = {},
 ): Promise<TalosLocalEngineOpenResult> {
-    return plugin.open({ path, ...options })
+    try {
+        return await plugin.open({ path, ...options })
+    } catch (error) {
+        if (error instanceof TalosLocalEngineOpenError) throw error
+        throw new TalosLocalEngineOpenError(openStageOf(error), nativeCodeOf(error))
+    }
+}
+
+/** Opens once at the requested context and retries only a native context fault. */
+export async function talosLocalEngineOpenWithFallback(
+    path: string,
+    options: TalosLocalEngineOpenOptions = {},
+): Promise<TalosLocalEngineOpenResult> {
+    const candidates = talosLocalContextCandidates(options.contextTokens)
+    for (let index = 0; index < candidates.length; index += 1) {
+        try {
+            return await talosLocalEngineOpen(path, {
+                ...options,
+                contextTokens: candidates[index],
+            })
+        } catch (error) {
+            const retry = error instanceof TalosLocalEngineOpenError
+                && talosShouldRetryLocalOpen(error.stage)
+                && index + 1 < candidates.length
+            if (!retry) throw error
+        }
+    }
+    throw new TalosLocalEngineOpenError('unknown', 'TALOS_LLAMA_OPEN_FAILED')
 }
 
 export interface TalosLocalModelFile {
@@ -207,12 +359,24 @@ export async function talosLocalInstalledModels(): Promise<TalosLocalModelListin
  * Rejects with `TALOS_LLAMA_NO_CHAT_TEMPLATE` when the file declares none. That
  * is a refusal to be shown, not a case to paper over.
  */
+export async function talosLocalEngineChatPlan(
+    turns: ReadonlyArray<{ role: string, content: string }>,
+    tools?: readonly unknown[],
+): Promise<TalosLocalEngineChatPlan> {
+    const plan = await plugin.chatPrompt({ turns, tools })
+    return {
+        prompt: plan.prompt,
+        promptTokens: integerOf(plan.promptTokens) ?? 0,
+        contextTokens: integerOf(plan.contextTokens) ?? 0,
+    }
+}
+
+/** Compatibility projection for callers that only need the formatted text. */
 export async function talosLocalEngineChatPrompt(
     turns: ReadonlyArray<{ role: string, content: string }>,
     tools?: readonly unknown[],
 ): Promise<string> {
-    const { prompt } = await plugin.chatPrompt({ turns, tools })
-    return prompt
+    return (await talosLocalEngineChatPlan(turns, tools)).prompt
 }
 
 export async function talosLocalEngineClose(): Promise<void> {
@@ -243,7 +407,11 @@ export async function talosLocalEngineGenerate(
         }
     })
     try {
-        return await plugin.generate({ prompt, ...options })
+        try {
+            return await plugin.generate({ prompt, ...options })
+        } catch (error) {
+            throw generationErrorOf(error)
+        }
     } finally {
         await subscription.remove()
     }

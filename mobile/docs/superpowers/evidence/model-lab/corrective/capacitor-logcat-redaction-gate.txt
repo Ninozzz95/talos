@@ -1,0 +1,27 @@
+TALOS Capacitor bridge logging security gate
+Timestamp UTC: 2026-08-05T17:35:09.7347519Z
+Package: ai.talos.dev
+Device: 2ea6573c (OnePlus OPD2415, Android 16 / API 36)
+APK SHA-256: 111ad3680e9056a7803a5e0214ee3cc95bc5a14ecfedd7dd832c4243034e0802
+Configuration: loggingBehavior=none
+
+Physical path exercised:
+- cold launch of the updated package
+- /settings/models/providers rendered on the physical tablet
+- OpenAI provider expanded and collapsed
+- Hugging Face access expanded and collapsed
+
+Observed counts after the provider path:
+- Capacitor log lines: 0
+- bridge payload signature lines (methodData/pluginId/methodName): 0
+- AndroidRuntime crash lines for ai.talos.dev: 0
+
+Synthetic bridge probe:
+- marker: TALOS_SYNTHETIC_LOG_PROBE_20260805
+- Preferences.set completed: yes
+- Preferences.remove completed: yes
+- marker occurrences in logcat: 0
+- bridge payload signature lines in logcat: 0
+
+No real credential value was queried, copied, or retained by this gate.
+Result: PASS

@@ -20,6 +20,7 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     library_file_origin: 'Checking where a file came from',
     notes_list: 'Looking at your notes',
     tasks_list: 'Looking at your tasks',
+    memory_write: 'Saving something to memory',
     memory_search: 'Checking what it remembers',
     time_now: 'Checking the time',
     web_search: 'Searching the web',
@@ -41,6 +42,7 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     library_file_origin: 'toolActivity.libraryFileOrigin',
     notes_list: 'toolActivity.notesList',
     tasks_list: 'toolActivity.tasksList',
+    memory_write: 'toolActivity.memoryWrite',
     memory_search: 'toolActivity.memorySearch',
     time_now: 'toolActivity.timeNow',
     web_search: 'toolActivity.webSearch',
@@ -84,6 +86,10 @@ export const TALOS_TOOL_CONSENT_KEYS: Record<string, TalosToolConsentCopy> = {
     tasks_list: {
         title: 'toolConsent.tasksList.title',
         description: 'toolConsent.tasksList.description',
+    },
+    memory_write: {
+        title: 'toolConsent.memoryWrite.title',
+        description: 'toolConsent.memoryWrite.description',
     },
     memory_search: {
         title: 'toolConsent.memorySearch.title',
@@ -183,6 +189,7 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     library_file_origin: 'library',
     notes_list: 'note',
     tasks_list: 'task',
+    memory_write: 'memory',
     memory_search: 'memory',
     time_now: 'clock',
     web_search: 'web',

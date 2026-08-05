@@ -108,10 +108,13 @@ public class TalosLlamaPlugin extends Plugin {
 
         worker.execute(() -> {
             closeOpenModel();
-            TalosLlamaEngine engine = TalosLlamaEngine.open(
+            TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
                     getContext(), path, threads, contextTokens, gpuLayers, deterministic);
+            TalosLlamaEngine engine = attempt.engine();
             if (engine == null) {
-                call.reject("TALOS_LLAMA_OPEN_FAILED");
+                JSObject failure = new JSObject();
+                failure.put("stage", attempt.failureStage().wireValue());
+                call.reject("TALOS_LLAMA_OPEN_FAILED", "TALOS_LLAMA_OPEN_FAILED", failure);
                 return;
             }
             openEngine.set(engine);
@@ -165,108 +168,98 @@ public class TalosLlamaPlugin extends Plugin {
         }
 
         worker.execute(() -> {
-            // THE DECODE RUNS HERE, on the thread that owns the engine.
-            //
-            // It used to run on a thread of its own while this one polled it,
-            // and that had a hole with teeth: if the poll loop was interrupted,
-            // `join()` was skipped, this task returned, and the next task on the
-            // worker — an `open`, which begins by closing what is loaded — freed
-            // the context out from under a decode still running on the orphan.
-            // A use-after-free that would land as a crash report from someone
-            // else's phone.
-            //
-            // The reference implementation in llama.cpp's own Android example
-            // does the same thing: a dispatcher of parallelism one, with load,
-            // generation and unload all on it — its `cleanUp()` even blocks on
-            // that queue rather than racing the generation it wants to stop.
-            // Watching is the only thing left outside, because watching touches
-            // no context: it reads text that was already published, under the
-            // lock that published it.
-            final AtomicBoolean done = new AtomicBoolean(false);
-            final AtomicInteger sent = new AtomicInteger(0);
-            Thread watcher = new Thread(() -> {
-                while (!done.get()) {
-                    sent.set(emitDelta(engine, sent.get()));
+            try {
+                final int promptTokens = engine.promptTokens(prompt);
+                final int contextTokens = engine.contextTokens();
+                final int completionTokens = maxTokens > 0 ? maxTokens : 64;
+                if (promptTokens <= 0) {
+                    JSObject failure = new JSObject();
+                    failure.put("stage", "generation");
+                    call.reject("TALOS_LLAMA_PROMPT_TOKENIZATION_FAILED",
+                            "TALOS_LLAMA_PROMPT_TOKENIZATION_FAILED", failure);
+                    return;
+                }
+                if (TalosLocalContextBudget.requiresLargerContext(
+                        promptTokens, completionTokens, contextTokens)) {
+                    JSObject failure = new JSObject();
+                    failure.put("stage", "context-required");
+                    failure.put("promptTokens", promptTokens);
+                    failure.put("contextTokens", contextTokens);
+                    failure.put("requiredContextTokens",
+                            TalosLocalContextBudget.requiredTokens(promptTokens, completionTokens));
+                    call.reject("TALOS_LLAMA_CONTEXT_REQUIRED",
+                            "TALOS_LLAMA_CONTEXT_REQUIRED", failure);
+                    return;
+                }
+
+                // THE DECODE RUNS HERE, on the thread that owns the engine.
+                // Watching is the only thing outside it: it reads already
+                // published text under the lock that published it.
+                final AtomicBoolean done = new AtomicBoolean(false);
+                final AtomicInteger sent = new AtomicInteger(0);
+                Thread watcher = new Thread(() -> {
+                    while (!done.get()) {
+                        try {
+                            sent.set(emitDelta(engine, sent.get()));
+                            Thread.sleep(POLL_INTERVAL_MS);
+                        } catch (InterruptedException interrupted) {
+                            Thread.currentThread().interrupt();
+                            return;
+                        } catch (RuntimeException bridgeFailure) {
+                            // A listener disappearing must not become a second
+                            // uncaught-exception path beside the worker below.
+                            return;
+                        }
+                    }
+                }, "talos-llama-watch");
+                watcher.start();
+
+                try {
+                    engine.generateBlocking(prompt, maxTokens, stopAtEnd);
+                } finally {
+                    done.set(true);
+                    watcher.interrupt();
                     try {
-                        Thread.sleep(POLL_INTERVAL_MS);
+                        watcher.join(1_000L);
                     } catch (InterruptedException interrupted) {
                         Thread.currentThread().interrupt();
-                        return;
                     }
+                    // One last read AFTER the generation has finished. The final
+                    // tokens land between the last poll and the end.
+                    emitDelta(engine, sent.get());
                 }
-            }, "talos-llama-watch");
-            watcher.start();
 
-            try {
-                engine.generateBlocking(prompt, maxTokens, stopAtEnd);
-            } finally {
-                done.set(true);
-                watcher.interrupt();
+                /**
+                 * Il testo grezzo viene separato qui, dallo stesso template che
+                 * sa dove finiscono ragionamento e tool call. Durante lo stream
+                 * resta grezzo: decidere prima della chiusura dei marker
+                 * richiederebbe indovinare.
+                 */
+                final String raw = engine.textSoFar();
+                JSObject result = new JSObject();
+                result.put("text", raw);
+                result.put("reasoning", "");
                 try {
-                    watcher.join(1_000L);
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
+                    JSONObject split = new JSONObject(engine.parseReply(raw));
+                    final String content = split.optString("content", "");
+                    JSONArray calls = split.optJSONArray("toolCalls");
+                    final boolean called = calls != null && calls.length() > 0;
+                    if (!content.isEmpty() || called) result.put("text", content);
+                    result.put("reasoning", split.optString("reasoning", ""));
+                    if (called) result.put("toolCalls", calls);
+                } catch (JSONException malformed) {
+                    android.util.Log.w("TalosLlama", "risposta non separabile", malformed);
                 }
-                // One last read AFTER the generation has finished. The final
-                // tokens land between the last poll and the end, and dropping
-                // them would clip a word or two off every answer — a defect that
-                // reads as the model being strange rather than as us losing text.
-                emitDelta(engine, sent.get());
+                result.put("tokens", engine.tokensProduced());
+                call.resolve(result);
+            } catch (RuntimeException failure) {
+                JSObject details = new JSObject();
+                details.put("stage", "generation");
+                call.reject("TALOS_LLAMA_GENERATION_FAILED",
+                        "TALOS_LLAMA_GENERATION_FAILED", details);
+            } finally {
                 generating.set(false);
             }
-
-            /**
-             * Il testo grezzo viene SEPARATO qui, non lasciato alla chat.
-             *
-             * Owner 2026-08-03: `<think></think>` stampati sopra la risposta.
-             * TALOS ha il cassetto «Ragionamento» e lo usa coi provider di
-             * rete; qui non riconosceva i tag di questo modello. Chi sa dove
-             * finisce il ragionamento è chi ha applicato il template — non un
-             * cercatore di stringhe a valle, che la documentazione di Qwen
-             * sconsiglia esplicitamente perché «the model may output stopwords
-             * in the thought section».
-             *
-             * Lo streaming resta grezzo di proposito: separare a metà frase
-             * vorrebbe dire indovinare dove finisce un tag non ancora chiuso.
-             * È alla fine che si decide che cosa era pensiero.
-             */
-            final String raw = engine.textSoFar();
-            JSObject result = new JSObject();
-            result.put("text", raw);
-            result.put("reasoning", "");
-            try {
-                JSONObject split = new JSONObject(engine.parseReply(raw));
-                final String content = split.optString("content", "");
-                // Un contenuto vuoto con del ragionamento dentro vuol dire che
-                // il modello ha SOLO pensato: in quel caso il testo grezzo è
-                // più onesto di una risposta vuota.
-                JSONArray calls = split.optJSONArray("toolCalls");
-                final boolean called = calls != null && calls.length() > 0;
-                /**
-                 * Il testo grezzo torna utile SOLO quando non c'e' nient'altro.
-                 *
-                 * Visto sul tablet il 2026-08-03: a una richiesta che il
-                 * modello ha risolto chiamando un tool, `content` e'
-                 * legittimamente vuoto — la risposta E' la chiamata — e la
-                 * ricaduta sul grezzo faceva comparire in chat
-                 * `<tool_call>{...}</tool_call>` come se fosse una frase.
-                 *
-                 * La ricaduta serve per un caso diverso e vero: un modello che
-                 * ha solo PENSATO, senza dire ne' chiamare niente. Li' il
-                 * grezzo e' piu' onesto di una bolla vuota.
-                 */
-                if (!content.isEmpty() || called) result.put("text", content);
-                result.put("reasoning", split.optString("reasoning", ""));
-                // Le chiamate, nella stessa forma degli altri provider: chi
-                // le esegue non deve andarsele a cercare dentro una stringa.
-                if (called) result.put("toolCalls", calls);
-            } catch (JSONException malformed) {
-                // Il testo resta quello grezzo: si perde la separazione, mai la
-                // risposta.
-                android.util.Log.w("TalosLlama", "risposta non separabile", malformed);
-            }
-            result.put("tokens", engine.tokensProduced());
-            call.resolve(result);
         });
     }
 
@@ -435,8 +428,15 @@ public class TalosLlamaPlugin extends Plugin {
             call.reject("TALOS_LLAMA_NO_CHAT_TEMPLATE");
             return;
         }
+        int promptTokens = engine.promptTokens(prompt);
+        if (promptTokens <= 0) {
+            call.reject("TALOS_LLAMA_PROMPT_TOKENIZATION_FAILED");
+            return;
+        }
         JSObject result = new JSObject();
         result.put("prompt", prompt);
+        result.put("promptTokens", promptTokens);
+        result.put("contextTokens", engine.contextTokens());
         call.resolve(result);
     }
 

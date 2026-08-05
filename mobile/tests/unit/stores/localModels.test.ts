@@ -23,9 +23,28 @@ const bridge = vi.hoisted(() => ({
         deviceModel: 'Pixel 9',
         androidSdk: 36,
     })),
-    start: vi.fn(async () => ({ ok: true as const, started: { runner: 'USER_INITIATED_JOB' as const, networkBound: true } })),
+    start: vi.fn(async () => ({
+        ok: true as const,
+        started: {
+            id: 'transfer-new', phase: 'queued' as const,
+            runner: 'USER_INITIATED_JOB' as const, networkBound: true,
+        },
+    })),
+    pause: vi.fn(async () => ({ ok: true as const })),
+    resume: vi.fn(async () => ({
+        ok: true as const,
+        started: {
+            id: 'transfer-new', phase: 'queued' as const,
+            runner: 'USER_INITIATED_JOB' as const, networkBound: true,
+        },
+    })),
+    cancel: vi.fn(async () => ({ ok: true as const })),
     stop: vi.fn(async () => undefined),
-    status: vi.fn(async () => ({ active: false, modelName: null, haveBytes: 0, totalBytes: 0 })),
+    status: vi.fn(async () => ({
+        phase: 'idle' as const, active: false, repo: null, revision: null, paths: [],
+        modelName: null, haveBytes: 0, totalBytes: 0, runner: null,
+        networkBound: true, failure: null, resumable: false, readFailure: null,
+    })),
     leftovers: vi.fn(async () => ({ items: [], totalBytes: 0 })),
     // Returns a transport that reaches nothing: the tests that care about the
     // network always inject their own, and this one only has to be identifiable.
@@ -53,6 +72,9 @@ vi.mock('@/services/deviceCapacity', () => ({
 
 vi.mock('@/services/modelTransfer', () => ({
     talosStartModelTransfer: bridge.start,
+    talosPauseModelTransfer: bridge.pause,
+    talosResumeModelTransfer: bridge.resume,
+    talosCancelModelTransfer: bridge.cancel,
     talosStopModelTransfer: bridge.stop,
     talosModelTransferStatus: bridge.status,
     talosModelTransferLeftovers: bridge.leftovers,
@@ -133,10 +155,23 @@ beforeEach(() => {
     vi.resetModules()
     bridge.measure.mockClear()
     bridge.start.mockClear().mockResolvedValue({
-        ok: true, started: { runner: 'USER_INITIATED_JOB', networkBound: true },
+        ok: true, started: {
+            id: 'transfer-new', phase: 'queued',
+            runner: 'USER_INITIATED_JOB', networkBound: true,
+        },
     })
+    bridge.pause.mockClear().mockResolvedValue({ ok: true })
+    bridge.resume.mockClear().mockResolvedValue({
+        ok: true, started: {
+            id: 'transfer-new', phase: 'queued',
+            runner: 'USER_INITIATED_JOB', networkBound: true,
+        },
+    })
+    bridge.cancel.mockClear().mockResolvedValue({ ok: true })
     bridge.status.mockClear().mockResolvedValue({
-        active: false, modelName: null, haveBytes: 0, totalBytes: 0,
+        phase: 'idle', active: false, repo: null, revision: null, paths: [],
+        modelName: null, haveBytes: 0, totalBytes: 0, runner: null,
+        networkBound: true, failure: null, resumable: false, readFailure: null,
     })
     bridge.hubTransport.mockClear()
     bridge.getKey.mockClear().mockResolvedValue(null)
@@ -191,6 +226,28 @@ describe('finding and opening a repository', () => {
         expect(store.talosLocalModels.repo?.sets.map((set) => set.label)).toEqual(['Q4_K_M', 'Q8_0'])
         // The split set is one model of six gigabytes, never two of three.
         expect(store.talosLocalModels.repo?.sets[1]!.totalBytes).toBe(6_000_000_000)
+    })
+
+    it('does not resurrect a repository when its response arrives after Back', async () => {
+        let releaseTree!: (response: Response) => void
+        const delayedTree = new Promise<Response>((resolve) => { releaseTree = resolve })
+        const fetch = vi.fn(async (input: RequestInfo | URL) => {
+            const url = String(input)
+            if (url.includes('/tree/')) return delayedTree
+            if (url.includes('/paths-info/')) return json(PATHS_INFO)
+            return json([])
+        }) as typeof globalThis.fetch
+        const store = await import('@/stores/localModels')
+        store.talosInitLocalModels(fetch)
+
+        const opening = store.talosOpenModelRepo('unsloth/Qwen3-4B-GGUF', 'pinned')
+        await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+        store.talosCloseModelRepo()
+        releaseTree(json(TREE))
+        await opening
+
+        expect(store.talosLocalModels.repo).toBeNull()
+        expect(fetch).toHaveBeenCalledTimes(1)
     })
 
     it('says why a search failed instead of showing an empty list', async () => {
@@ -359,16 +416,56 @@ describe('starting a download', () => {
         expect(bridge.start).not.toHaveBeenCalled()
     })
 
-    it('will not start a second download over the top of one already running', async () => {
+    it('allows a second distinct download while another one is running', async () => {
         bridge.status.mockResolvedValue({
-            active: true, modelName: 'Something', haveBytes: 10, totalBytes: 100,
+            phase: 'running', active: true, repo: 'a/b', revision: 'main', paths: ['x.gguf'],
+            modelName: 'Something', haveBytes: 10, totalBytes: 100,
+            runner: 'USER_INITIATED_JOB', networkBound: true,
+            failure: null, resumable: true, readFailure: null,
         })
         const store = await openedRepo()
         await store.talosRefreshTransfer()
 
-        expect(await store.talosDownloadSet(store.talosLocalModels.repo!.sets[0]!.paths[0]!)).toEqual({
-            ok: false, reason: 'already-running',
-        })
+        expect(await store.talosDownloadSet(
+            store.talosLocalModels.repo!.sets[0]!.paths[0]!,
+        )).toEqual({ ok: true })
+        expect(bridge.start).toHaveBeenCalledOnce()
+    })
+
+    it('resumes from native journal after its repository route has closed', async () => {
+        bridge.status
+            .mockResolvedValueOnce({
+                phase: 'running', active: true, repo: 'a/b', revision: 'main', paths: ['x.gguf'],
+                modelName: 'Qwen Q4', haveBytes: 10, totalBytes: 100,
+                runner: 'USER_INITIATED_JOB', networkBound: true,
+                failure: null, resumable: true, readFailure: null,
+            })
+            .mockResolvedValueOnce({
+                phase: 'paused', active: false, repo: 'a/b', revision: 'main', paths: ['x.gguf'],
+                modelName: 'Qwen Q4', haveBytes: 10, totalBytes: 100,
+                runner: 'USER_INITIATED_JOB', networkBound: true,
+                failure: null, resumable: true, readFailure: null,
+            })
+            .mockResolvedValue({
+                phase: 'running', active: true, repo: 'a/b', revision: 'main', paths: ['x.gguf'],
+                modelName: 'Qwen Q4', haveBytes: 10, totalBytes: 100,
+                runner: 'USER_INITIATED_JOB', networkBound: true,
+                failure: null, resumable: true, readFailure: null,
+            })
+        const store = await openedRepo()
+        const key = store.talosLocalModels.repo!.sets[0]!.paths[0]!
+
+        await store.talosDownloadSet(key, 'Qwen Q4')
+        const originalRequest = bridge.start.mock.calls[0]![0]
+        store.talosCloseModelRepo()
+        await store.talosStopLocalDownload()
+
+        expect(store.talosLocalModels.repo).toBeNull()
+        expect(store.talosLocalModels.transfer.paused).toBe(true)
+        expect(await store.talosResumeLocalDownload()).toEqual({ ok: true })
+        expect(bridge.start).toHaveBeenCalledTimes(1)
+        expect(bridge.start.mock.calls[0]![0]).toEqual(originalRequest)
+        expect(bridge.resume).toHaveBeenCalledOnce()
     })
 
     /**
@@ -378,7 +475,17 @@ describe('starting a download', () => {
      */
     it('carries the network caveat all the way from the platform to the screen', async () => {
         bridge.start.mockResolvedValue({
-            ok: true, started: { runner: 'FOREGROUND_SERVICE', networkBound: false },
+            ok: true, started: {
+                id: 'transfer-new', phase: 'queued',
+                runner: 'FOREGROUND_SERVICE', networkBound: false,
+            },
+        })
+        bridge.status.mockResolvedValue({
+            phase: 'queued', active: true, repo: 'unsloth/Qwen3-4B-GGUF',
+            revision: 'main', paths: ['model-Q4_K_M.gguf'], modelName: 'Qwen Q4',
+            haveBytes: 0, totalBytes: 2_500_000_000,
+            runner: 'FOREGROUND_SERVICE', networkBound: false,
+            failure: null, resumable: true, readFailure: null,
         })
         const store = await openedRepo()
 
@@ -398,4 +505,3 @@ describe('starting a download', () => {
         expect(store.talosLocalModels.transfer.failure).toBe('Android refused to start the transfer')
     })
 })
-

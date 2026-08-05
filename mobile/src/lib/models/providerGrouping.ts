@@ -81,3 +81,22 @@ export function talosProviderOptions(
         label: `${group.provider} (${group.models.length})`,
     }))
 }
+
+/**
+ * Stable publisher options for the browse filter.
+ *
+ * Callers pass the unfiltered Hub response, never the rows left by the active
+ * filters. An old selection is retained verbatim across a new query so the
+ * control cannot silently relabel or erase the state that produced zero rows.
+ */
+export function talosBrowsePublishers(
+    models: readonly TalosHuggingFaceModel[],
+    selectedPublisher: string,
+): Array<{ value: string; label: string }> {
+    const options = talosProviderOptions(talosGroupModelsByProvider(models))
+    const selected = selectedPublisher.trim()
+    if (selected && !options.some((option) => option.value === selected)) {
+        options.push({ value: selected, label: selected })
+    }
+    return options
+}

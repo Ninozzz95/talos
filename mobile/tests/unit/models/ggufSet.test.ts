@@ -31,6 +31,18 @@ describe('grouping a repository into models', () => {
         expect(sets.map((set) => set.quantisation)).toEqual(['Q2_K', 'Q4_K_M', 'Q8_0'])
     })
 
+    it('C45-RED-14B preserves a backend-specific suffix instead of drawing duplicate labels', () => {
+        const sets = talosGroupGgufFiles([
+            file('LFM2-350M-Q4_K_M.gguf', 229_309_376),
+            file('LFM2-350M-Q4_K_M-hip-optimized.gguf', 254_958_528),
+        ])
+
+        expect(sets.map((set) => ({ label: set.label, path: set.paths[0] }))).toEqual([
+            { label: 'Q4_K_M', path: 'LFM2-350M-Q4_K_M.gguf' },
+            { label: 'Q4_K_M · HIP optimized', path: 'LFM2-350M-Q4_K_M-hip-optimized.gguf' },
+        ])
+    })
+
     /**
      * THE rule. Three shards are one model, and the number the phone must find
      * room for is their sum — the size of one shard is not a smaller model, it

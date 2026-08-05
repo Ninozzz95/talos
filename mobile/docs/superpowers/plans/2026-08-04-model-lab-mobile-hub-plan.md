@@ -14,8 +14,8 @@ scalabile e OAuth provider valutato/implementato senza simulazioni.
 **Architettura:** rotte Vue nominate e lineari; componenti provider/catalogo/local
 riusati dietro screen dedicati; verdetto capienza puro e discriminato; metadati
 Hugging Face normalizzati dietro contratti AVM; token semantici derivati dal
-Theme Engine; OAuth Hugging Face pubblico Authorization Code + PKCE nel browser
-di sistema.
+Theme Engine; OAuth provider futuro soltanto per flussi ufficiali compatibili
+con native app, dietro adapter TALOS e callback su dominio verificato.
 
 **Stack pin:** Vue 3.5.40, vue-router 5.2.0, Reka UI 2.10.1, Capacitor 8.4.2,
 `@capacitor/app` 8.1.1, `@capacitor/inappbrowser` 4.0.1, secure storage 8.0.0,
@@ -35,9 +35,9 @@ Vite 7.3.6, Vitest 4.1.10, Playwright 1.61.1, TypeScript 5.9.3.
       validator o control-plane entra nel diff.
 - [ ] Non scartare, riscrivere o nascondere il WIP preesistente nei cinque file
       di capienza.
-- [ ] Creare un commit locale soltanto dopo il cancello fisico verde di ogni
-      fase, come autorizzato esplicitamente dall'owner il 2026-08-04; non
-      eseguire alcun push.
+- [x] Non creare commit né push: l'autorizzazione owner a un commit locale non
+      supera il vincolo non negoziabile più restrittivo del `AGENTS.md` root
+      (“Never commit on behalf of the user”).
 - [ ] Prima di ogni modifica di comportamento, leggere integralmente il ledger
       della fase e riconfermare le fonti/pin che instrada.
 - [ ] Ogni RED deve fallire per la ragione attesa prima del GREEN.
@@ -52,6 +52,25 @@ Vite 7.3.6, Vitest 4.1.10, Playwright 1.61.1, TypeScript 5.9.3.
       `git diff --check` e audit del diff.
 - [ ] Ogni fase resta non implementata finché gli screenshot freschi del
       telefono fisico e il relativo manifest non sono verdi.
+
+### Tooling operativo prioritario — RTK
+
+- [x] Verificare la release stabile ufficiale: `rtk-ai/rtk` v0.44.2, commit
+      `700bdde3343299ea06bbca18dc6670a80c88b289`.
+- [x] Verificare in memoria l'asset Windows contro il digest ufficiale
+      `3a1e114edce9080f8a10663e9c87488363a82f14a5ca8aab2ad416817f89d47c`.
+- [x] Confermare che entrambe le copie installate di `rtk.exe` coincidano con
+      il binario dell'archive ufficiale, SHA-256
+      `60640b970fdf10451813ab4d9d24deb5c6370e43a5192eb14c6ba101a15b633c`.
+- [x] Inizializzare Codex globalmente con `rtk init -g --codex` e Claude con il
+      hook nativo `rtk init -g --auto-patch`, preservando le impostazioni
+      esistenti.
+- [x] Provare `rtk --version`, `rtk gain`, `rtk init ... --show` e
+      `rtk git status --short` su questo repository.
+
+RTK è tooling globale e non una tranche Model Lab: non autorizza l'avvio della
+Fase 5 e non aggiunge file prodotto alla lane mobile. Le nuove sessioni
+Codex/Claude devono essere riavviate per caricare integralmente istruzioni/hook.
 
 ### Stato formale di una fase
 
@@ -210,7 +229,7 @@ credenziali Hugging Face esiste davvero.
 
 ## 3. Fase 3 — Filtri Hugging Face e semantica UI
 
-**Stato iniziale:** PLANNED; dipende da Fase 2 IMPLEMENTED.
+**Stato:** IMPLEMENTED — gate automatico, upstream e dispositivo fisico verdi.
 **Ledger:**
 `../ledgers/2026-08-04-model-lab-phase-3-hugging-face-filters-ledger.md`
 
@@ -219,46 +238,54 @@ controlli non spariscono, non si tagliano e hanno uno stato zero risultati.
 
 ### Task 3.1 — Policy licenze e metadati
 
-- [ ] Provare RED per allowlist conservativa e valori unknown/custom.
-- [ ] Implementare `licensePolicy.ts` come boundary puro e versionabile.
-- [ ] Esporre chat template, quantizzazione e download 30 giorni nel modello
+- [x] Provare RED per allowlist conservativa e valori unknown/custom.
+- [x] Implementare `licensePolicy.ts` come boundary puro e versionabile.
+- [x] Esporre chat template, quantizzazione e download 30 giorni nel modello
       normalizzato.
 
 ### Task 3.2 — Correggere i cinque filtri
 
-- [ ] `Gira qui` usa soltanto il verdetto centrale noto.
-- [ ] Chat usa conversational OR chat template.
-- [ ] Code diventa “Orientato al codice” e resta euristica dichiarata.
-- [ ] Q4 legge sibling/variante.
-- [ ] Licenza usa soltanto la policy dichiarata.
-- [ ] Le combinazioni restano AND e hanno test di intersezione.
+- [x] `Gira qui` usa soltanto il verdetto centrale noto.
+- [x] Chat usa conversational OR chat template.
+- [x] Code diventa “Orientato al codice” e resta euristica dichiarata.
+- [x] Q4 legge sibling/variante.
+- [x] Licenza usa soltanto la policy dichiarata.
+- [x] Le combinazioni restano AND e hanno test di intersezione.
 
 ### Task 3.3 — Rendere stabile la barra filtri
 
-- [ ] Derivare provider dai risultati non filtrati più la selezione corrente.
-- [ ] Sostituire qualsiasi label generica inglese con i18n esplicita.
-- [ ] Fare wrapping dei controlli a 360px.
-- [ ] Aggiungere zero-state e azione Reimposta filtri.
+- [x] Derivare provider dai risultati non filtrati più la selezione corrente.
+- [x] Sostituire qualsiasi label generica inglese con i18n esplicita.
+- [x] Fare wrapping dei controlli a 360px. **SUPERATO il 2026-08-05 dalla
+      direttiva owner 4.C:** i chip non devono più wrappare; il RED correttivo
+      impone una sola rail orizzontale scorrevole con label complete.
+- [x] Aggiungere zero-state e azione Reimposta filtri.
 
 ### Task 3.4 — Spostare accesso Hugging Face
 
-- [ ] Creare la access card nella pagina Provider.
-- [ ] Conservare key store e comportamento token manuale.
-- [ ] Rimuovere il controllo duplicato dalla pagina Locale.
-- [ ] Dichiarare il conteggio download “ultimi 30 giorni”.
+- [x] Creare la access card nella pagina Provider.
+- [x] Conservare key store e comportamento token manuale.
+- [x] Rimuovere il controllo duplicato dalla pagina Locale.
+- [x] Dichiarare il conteggio download “ultimi 30 giorni”.
 
 ### Task 3.5 — Gate
 
-- [ ] Eseguire unit, store, i18n, upstream pin, E2E e gate globali.
-- [ ] Catturare combinazione filtri con risultati, zero-state con provider
+- [x] Eseguire unit, store, i18n, upstream pin, E2E e gate globali.
+- [x] Catturare combinazione filtri con risultati, zero-state con provider
       stabile e access card HF nella pagina Provider.
-- [ ] Compilare manifest e promuovere solo dopo ispezione fisica.
+- [x] Compilare manifest e promuovere solo dopo ispezione fisica.
+
+Esito osservato: suite completa 3616 pass / 10 skip, E2E Model Lab 11/11,
+upstream live 3/3, build e 591 task Gradle verdi. F3-RED-13 e F3-RED-14,
+scoperti sul dispositivo, sono test permanenti e risultano verdi. Le tre prove
+fisiche e l'APK `c6716d…fcea45` sono indicizzate nel manifest Fase 3.
 
 ---
 
 ## 4. Fase 4 — Coerenza telefonica e scala
 
-**Stato iniziale:** PLANNED; dipende da Fase 3 IMPLEMENTED.
+**Stato:** IMPLEMENTED — GREEN DEVICE il 2026-08-05; Fase 3 confermata e
+F4-RED-01…15 chiusi sul tree corrente.
 **Ledger:**
 `../ledgers/2026-08-04-model-lab-phase-4-mobile-coherence-catalog-ledger.md`
 
@@ -267,72 +294,126 @@ compatta, URL propri, nessun mega-scroll iniziale e touch target accessibili.
 
 ### Task 4.1 — Dettaglio locale come pagina
 
-- [ ] Provare route/parent e parametri owner/repo.
-- [ ] Creare screen e componente dettaglio senza device/back duplicati.
-- [ ] Rendere titolo multilinea, README conciso/collassabile e varianti in righe
+- [x] Provare route/parent e parametri owner/repo.
+- [x] Creare screen e componente dettaglio senza device/back duplicati.
+- [x] Rendere titolo multilinea, README conciso/collassabile e varianti in righe
       compatte.
 
 ### Task 4.2 — Lista locale compatta
 
-- [ ] Estrarre una riga modello riusabile e token-only.
-- [ ] Conservare tutte le azioni reali, gli stati di download e i verdict.
-- [ ] Eliminare ridondanze testuali e verificare zoom/wrapping.
+- [x] Estrarre una riga modello riusabile e token-only.
+- [x] Conservare tutte le azioni reali, gli stati di download e i verdict.
+- [x] Eliminare ridondanze testuali e verificare zoom/wrapping.
 
 ### Task 4.3 — Catalogo progressivo
 
-- [ ] Provare RED su 476 profili: al primo render massimo 40 righe.
-- [ ] Implementare limite puro 40/+40 e reset su query/provider.
-- [ ] Creare riga profilo compatta; nessuna nuova dipendenza.
-- [ ] Provare raggiungibilità dell'ultimo elemento tramite Mostra altri.
+- [x] Provare RED sulla baseline fresca di 479 profili: al primo render massimo
+      40 righe.
+- [x] Implementare limite puro 40/+40 e reset su query/provider.
+- [x] Creare riga profilo compatta; nessuna nuova dipendenza.
+- [x] Provare raggiungibilità deterministica degli elementi tramite Mostra altri.
 
 ### Task 4.4 — Regressione e prestazioni
 
-- [ ] Eseguire componenti, route, back, shell, tema, chunk e E2E.
-- [ ] Misurare numero DOM iniziale e altezza pagina; registrare nel ledger.
-- [ ] Eseguire suite completa, build e bundle gate.
+- [x] Eseguire componenti, route, back, shell, tema, chunk e E2E.
+- [x] Misurare numero DOM iniziale e altezza pagina; registrare nel ledger.
+- [x] Eseguire suite completa, build e bundle gate.
 
 ### Task 4.5 — Prova fisica
 
-- [ ] Catturare elenco Locale, dettaglio repo, Catalogo 40 e Catalogo dopo
+- [x] Catturare elenco Locale, dettaglio repo, Catalogo 40 e Catalogo dopo
       Mostra altri.
-- [ ] Compilare manifest e verificare nessun overflow/taglio/duplicato.
-- [ ] Promuovere solo dopo ispezione fisica a 360×792.
+- [x] Compilare manifest e verificare nessun overflow/taglio/duplicato.
+- [x] Promuovere solo dopo ispezione fisica a 360×792.
+- [x] Compilare dal tree verificato l'APK side-by-side Fase 4, copiarlo sul
+      Desktop con nome univoco e registrare path, UTC, byte e SHA-256.
+
+Chiusura: unit 3633/3633 passati (10 skipped), Model Lab E2E 13/13, upstream
+HF 3/3, build iniziale JS 599981/600000 byte e Android 591 task verdi. Le
+quattro prove fisiche finali e le metriche 40→80/479 sono nel manifest Fase 4.
+L'APK consegnata è
+`C:\Users\Antonino\Desktop\TALOS-mobile-phase-4-20260805.apk`, 30574412 byte,
+SHA-256 `085e98242359d7bd03d5c2408eb638859f9421112ec92f8b31b264ccbb272e32`.
+La Fase 5 non è stata avviata.
 
 ---
 
-## 5. Fase 5 — OAuth provider, subito dopo la UI
+## 4.C. Tranche correttiva pre-Fase 5
 
-**Stato iniziale:** PLANNED; dipende da Fase 4 IMPLEMENTED e da un client
-pubblico Hugging Face registrato dall'owner.
+**Stato:** PLANNED — RESEARCH GREEN — PRODUCT UNTOUCHED.
+**Ricerca:**
+`../research/2026-08-05-model-lab-corrective-tranche-research.md`
+**Specifica:**
+`../specs/2026-08-05-model-lab-download-center-local-compatibility-design.md`
+**Piano esecutivo:**
+`2026-08-05-model-lab-corrective-tranche-plan.md`
+**Ledger:**
+`../ledgers/2026-08-05-model-lab-corrective-tranche-ledger.md`
+
+Questa tranche è un prerequisito nuovo e autonomo della Fase 5. Chiude quattro
+finding owner e il bug runtime esportato:
+
+- Model Lab primo elemento di Intelligenza, sotto account;
+- Download Center globale e trasferimento durevole/process-death-safe;
+- liste locali e varianti più compatte;
+- chip filtro single-line con horizontal scroll;
+- policy chat/fit unica a 4096, failure nativo tipizzato e fallback limitato;
+- matrice HF sequenziale su dispositivo fisico, una famiglia e un file
+  temporaneo alla volta.
+
+L'ordine interno, i 21 RED, i file, i simboli, gli upstream pin, gli screenshot
+e il rollback sono nel ledger dedicato. La tranche non autorizza OAuth, non
+alza il budget iniziale, non aggiunge dipendenze e non cancella i modelli già
+installati dall'owner.
+
+---
+
+## 5. Fase 5 — OAuth provider, rinviata
+
+**Stato:** DEFERRED — OWNER DECISION 2026-08-05. Fase 4 è IMPLEMENTED; la
+tranche 4.C deve ancora essere chiusa e il dominio verificato necessario ai
+callback non è disponibile. Non avviare ricerca operativa, RED o modifiche
+prodotto OAuth fino a 4.C IMPLEMENTED, dominio disponibile e nuova
+autorizzazione esplicita dell'owner.
 **Ledger:**
 `../ledgers/2026-08-04-model-lab-phase-5-provider-oauth-ledger.md`
 
-**Esito:** accesso Hugging Face reale tramite browser di sistema e PKCE, oppure
-fase esplicitamente bloccata senza UI finta. Gli altri provider conservano il
-metodo realmente supportato.
+**Esito futuro:** accesso tramite browser di sistema per tutti e soltanto i
+provider con OAuth ufficiale realmente implementabile in TALOS mobile. Ogni
+provider usa minimo privilegio; Hugging Face richiede soltanto `gated-repos`.
+Provider senza OAuth adatto conservano token/API key manuali.
 
-### Task 5.1 — Riconfermare la matrice provider
+Le task 5.1–5.5 sono una bozza storica da riconciliare al riavvio, non istruzioni
+eseguibili oggi. Il ledger lowest-level andrà riscritto provider per provider
+dopo ricerca ufficiale corrente, dominio e registrazione client reali.
 
-- [ ] Rileggere metadata OIDC HF e documentazione ufficiale di ogni provider.
-- [ ] Registrare drift e decisione adopt/adapt/reject.
-- [ ] Verificare presenza di `VITE_TALOS_HF_OAUTH_CLIENT_ID`; un valore assente
-      è un blocco reale, non una ragione per inventare un client.
+### Task 5.1 — Ricostruire la matrice provider dopo il dominio
 
-### Task 5.2 — PKCE e sessione sicura in TDD
+- [ ] Rileggere documentazione OAuth ufficiale corrente di ogni provider.
+- [ ] Ammettere soltanto flussi native/public-client senza secret nell'APK e con
+      redirect compatibile col dominio TALOS verificato.
+- [ ] Registrare per ogni provider adopt/adapt/reject, scope minimo, client ID,
+      callback esatta, licenza/provenienza e gate reale.
+- [ ] Per Hugging Face richiedere soltanto `gated-repos`; non richiedere
+      `openid`, `profile` o `email` senza nuova esigenza approvata.
+
+### Task 5.2 — PKCE e sessione sicura per provider in TDD
 
 - [ ] Provare verifier/challenge/state/scadenza e replay rejection.
 - [ ] Implementare Web Crypto S256 senza libreria nuova.
 - [ ] Persistire stato pendente e token nel secure store, mai nello store JSON.
 - [ ] Preservare compatibilità col token manuale.
 
-### Task 5.3 — Browser e callback Android
+### Task 5.3 — Browser e callback Android su dominio verificato
 
-- [ ] Aggiungere intent filter ristretto per
-      `ai.talos://oauth/huggingface`.
+- [ ] Definire soltanto dopo disponibilità del dominio l'HTTPS App Link e
+      l'intent filter ristretto esatti; vietati callback provvisori/demo.
 - [ ] Aprire il browser di sistema; vietare WebView embedded.
 - [ ] Gestire `appUrlOpen` e cold-start `getLaunchUrl`.
-- [ ] Verificare state prima del token exchange, scartare callback duplicate.
-- [ ] Gestire refresh quando restituito e re-login quando non possibile.
+- [ ] Verificare provider e state prima del token exchange, scartare callback
+      duplicate o indirizzate a un altro adapter.
+- [ ] Gestire refresh per provider quando documentato e re-login quando non
+      possibile.
 
 ### Task 5.4 — UI e failure states
 
@@ -342,10 +423,10 @@ metodo realmente supportato.
 - [ ] Rendere l'assenza client ID una spiegazione non interattiva onesta.
 - [ ] Conservare i flussi chiave per provider senza OAuth ufficiale adatto.
 
-### Task 5.5 — Gate reale
+### Task 5.5 — Gate reale per ogni provider ammesso
 
 - [ ] Eseguire unit sicurezza, manifest, store, E2E e suite globali.
-- [ ] Eseguire un accesso reale sul provider upstream, non soltanto mock.
+- [ ] Eseguire un accesso reale su ogni provider ammesso, non soltanto mock.
 - [ ] Catturare stato pronto, connesso redatto e recupero da sessione scaduta.
 - [ ] Compilare manifest, eliminare dati personali e promuovere solo con il
       flusso end-to-end riuscito.
@@ -354,9 +435,15 @@ metodo realmente supportato.
       dell'owner. Registrare percorso assoluto, timestamp UTC, byte e SHA-256
       nel manifest/handoff; non sostituire silenziosamente un APK preesistente.
 
-Se il client pubblico non è disponibile, il ledger registra `BLOCKED — external
-client registration` e la fase non è implementata. Le fasi 1–4 possono restare
-verdi; il programma in cinque fasi non viene dichiarato completo.
+Senza dominio verificato, callback esatta e client pubblico reale per ciascun
+provider, la fase resta `DEFERRED` e non è implementata. Le Fasi 1–4 restano
+verdi; token/API key manuali continuano a essere il comportamento reale.
+
+Direttiva owner 2026-08-05, successiva alla valutazione: OAuth verrà esteso in
+futuro a ogni provider con documentazione ufficiale implementabile in TALOS;
+Hugging Face userà il solo scope `gated-repos`. Poiché il dominio non è ancora
+disponibile, rinviare integralmente la fase. Nessuna ricerca operativa, RED o
+modifica prodotto riparte senza dominio e nuova autorizzazione owner.
 
 ---
 
@@ -370,6 +457,21 @@ dispositivo fisico come un utente umano, senza limitarsi a Model Lab. Prima di
 iniziare crea una specifica, un piano lowest-level, un ledger e una matrice di
 copertura dedicati, tracciati e non ignorati. La spedizione include almeno:
 
+**Emendamento owner 2026-08-05 — profondità obbligatoria:** questa fase è una
+campagna esaustiva di bug testing e stress testing, non un giro dimostrativo.
+Prima di scriverne spec o piano esecutivo il main agent svolge ricerca web
+just-in-time su fonti primarie e standard correnti di mobile exploratory
+testing, state-transition/negative testing, reliability/stress, accessibilità
+e Android quality; registra fonti, versioni e decisioni nel dossier dedicato.
+Memoria del modello o una checklist generica non soddisfano il gate.
+
+Il dispositivo fisico è una risorsa seriale: un solo agente/tester per volta
+può prenderne ownership, partendo da stato e fixture registrati e chiudendo con
+cleanup, log, screenshot e handoff prima del tester seguente. Il batch preflight
+può parallelizzare soltanto review read-only di codice e contratti che non
+mutano né condividono lo stato del device. Nessun agente fisico lavora in
+parallelo e nessun esito viene dedotto dal lavoro di un altro agente.
+
 - [ ] preflight statico/dinamico a batch prima dello stress test: dispatcher
       read-only distinti per chat, ricerca/memoria, file/libreria, shell e
       navigazione, Settings/provider/Model Lab, stato/persistenza e
@@ -381,12 +483,29 @@ copertura dedicati, tracciati e non ignorati. La spedizione include almeno:
       sul codice e sul dispositivo, assegnare severità e aprire uno scenario
       RED permanente prima di qualunque fix;
 - [ ] inventario di tutte le route, superfici, azioni, stati e boundary reali;
+- [ ] inventario enumerato di ogni controllo raggiungibile e di ogni prompt,
+      dialogo, menu, riga, gesture e stato vuoto/loading/success/error; ogni
+      voce ha un ID univoco, precondizioni, risultato atteso ed evidenza;
+- [ ] per ogni controllo verificare sia l'azione sia il suo contrario o
+      compensatore: apri/chiudi, conferma/annulla, abilita/disabilita,
+      concedi/nega/revoca, start/pausa/riprendi/cancella, salva/scarta,
+      online/offline/riconnessione, input valido/invalido/vuoto/limite,
+      successo/failure/retry e persistenza/non-persistenza dopo reload;
+- [ ] per ogni classe di prompt verificare formulazioni umane realistiche,
+      typo, ambiguità, follow-up contestuale, rifiuto/correzione, contenuti
+      minimi/massimi e prompt opposto/metamorfico; i prompt arbitrari vengono
+      coperti da un corpus versionato per classe, mentre ogni prompt fisso
+      dell'interfaccia viene provato individualmente;
 - [ ] onboarding, shell, navigazione, back/system back e deep link;
 - [ ] chat realistica multi-turno, retry, errori, typo, URL e persistenza;
 - [ ] ricerca, memoria, file/libreria, impostazioni, provider e Model Lab;
 - [ ] reload, cold start, background/foreground, perdita rete e sessioni
       scadute;
 - [ ] stress su liste, messaggi lunghi, input rapidi, azioni ripetute e storage;
+- [ ] comportamento umano avverso ma plausibile: doppio tap, tap rapidi,
+      scroll durante streaming/caricamento, cambio schermata durante lavoro,
+      background/foreground ripetuto, interruzione e ripresa, rotazione o
+      cambio viewport consentito e pressione Back nei punti intermedi;
 - [ ] accessibilità, tastiera/focus, reduced motion, tutte le identità/mode,
       viewport tablet nativo e telefono emulato sul tablet fisico;
 - [ ] screenshot per ogni charter e log sanitizzati, senza segreti o PII;
@@ -400,6 +519,12 @@ aperti. Se una funzione richiede autorità o credenziali esterne non disponibili
 si esauriscono i percorsi safe/in-scope e si registra il blocco senza simulare
 successo. Il go-out resta fermo finché il ledger whole-app non è verde o
 l'owner non accetta esplicitamente un rischio residuo nominato.
+
+La completezza viene misurata, non dichiarata: matrice route×stato×azione,
+copertura controlli 100%, copertura coppie azione/contrario 100%, corpus prompt
+eseguito 100%, zero righe senza evidenza o esito esplicito e zero difetti aperti.
+Le azioni distruttive usano soltanto dati di prova isolati e ripristinabili;
+account, modelli e file dell'owner non vengono cancellati o riscritti.
 
 ---
 

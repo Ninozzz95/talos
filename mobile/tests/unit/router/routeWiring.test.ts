@@ -31,6 +31,7 @@ const SCREEN_CONTRACT: Record<string, { file: string; component: string; markers
     'settings-models-providers': { file: 'SettingsModelsProvidersScreen.vue', component: 'SettingsModelsProvidersScreen', markers: ['data-testid="settings-models-providers-screen"'] },
     'settings-models-catalog': { file: 'SettingsModelsCatalogScreen.vue', component: 'SettingsModelsCatalogScreen', markers: ['data-testid="settings-models-catalog-screen"'] },
     'settings-models-local': { file: 'SettingsModelsLocalScreen.vue', component: 'SettingsModelsLocalScreen', markers: ['data-testid="settings-models-local-screen"'] },
+    'settings-models-local-repo': { file: 'SettingsModelsLocalRepoScreen.vue', component: 'SettingsModelsLocalRepoScreen', markers: ['data-testid="settings-models-local-repo-screen"'] },
 }
 
 describe('router wiring', () => {
@@ -52,7 +53,7 @@ describe('router wiring', () => {
             'research', 'research-new', 'research-report', 'research-claim', 'research-source',
             'runs', 'context', 'settings',
             'settings-models', 'settings-models-providers',
-            'settings-models-catalog', 'settings-models-local',
+            'settings-models-catalog', 'settings-models-local', 'settings-models-local-repo',
         ])
 
         /**
@@ -72,7 +73,8 @@ describe('router wiring', () => {
         const components = await Promise.all(contracted.map((route) => route.component()))
         for (const [index, route] of contracted.entries()) {
             const contract = SCREEN_CONTRACT[route.name]
-            const component = components[index] as { __name?: string }
+            const resolved = components[index] as { __name?: string, default?: { __name?: string } }
+            const component = resolved.default ?? resolved
             const source = readFileSync(resolve(process.cwd(), 'src/screens', contract.file), 'utf8')
             expect(component.__name, `${route.name} component`).toBe(contract.component)
             for (const marker of contract.markers) expect(source).toContain(marker)

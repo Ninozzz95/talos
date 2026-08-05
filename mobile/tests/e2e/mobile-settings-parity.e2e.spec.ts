@@ -20,18 +20,24 @@ async function openSettingsCategory(
     await expect(panel).toBeVisible()
 }
 
-test('Settings exposes twelve inline categories plus a standalone Model Lab destination', async ({ page }) => {
+test('Settings puts Account first and routed Model Lab first inside Intelligence', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openSettings(page)
 
     const settingsNavigation = page.getByRole('navigation', { name: 'TALOS settings categories' })
-    // Phone Settings is master/detail navigation; only tablet uses tabs.
+    // Settings remains navigation at every width; tablet changes layout only.
     await expect(settingsNavigation.locator('[data-settings-tab]')).toHaveCount(12)
     await expect(settingsNavigation.getByRole('tab')).toHaveCount(0)
     const modelLabLink = page.getByTestId('settings-model-lab-link')
     await expect(modelLabLink).toBeVisible()
     await expect(modelLabLink).toContainText('Model Lab')
     expect(await modelLabLink.evaluate((node) => node.closest('[role="tablist"]'))).toBeNull()
+    expect(await modelLabLink.evaluate((node) => node.parentElement?.previousElementSibling?.textContent?.trim()))
+        .toBe('Intelligence')
+    expect(await settingsNavigation.locator('[data-settings-tab], [data-settings-route]').evaluateAll((rows) => rows
+        .slice(0, 4)
+        .map((row) => (row as HTMLElement).dataset.settingsTab ?? (row as HTMLElement).dataset.settingsRoute)))
+        .toEqual(['account', 'models', 'ai_defaults', 'agent_tools'])
     await expect(page.locator('[data-settings-tab="language"]')).toBeVisible()
     await expect(page.locator('[data-settings-tab="privacy"]')).toBeVisible()
 
@@ -50,6 +56,31 @@ test('Settings exposes twelve inline categories plus a standalone Model Lab dest
     await expect(page.getByLabel('Browser interaction policy')).toContainText('Confirm every interaction')
     await expect(page.getByLabel('Open browser links in')).toContainText('System browser')
     await expect(page.getByLabel('Suggest Browse for links')).not.toBeChecked()
+})
+
+test('phone keyboard reaches every Intelligence destination and Enter opens Model Lab', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await openSettings(page)
+
+    const account = page.locator('[data-settings-tab="account"]')
+    const modelLab = page.getByTestId('settings-model-lab-link')
+    const aiDefaults = page.locator('[data-settings-tab="ai_defaults"]')
+    const agentTools = page.locator('[data-settings-tab="agent_tools"]')
+
+    await account.focus()
+    await page.keyboard.press('Tab')
+    await expect(modelLab).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(aiDefaults).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(agentTools).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await page.keyboard.press('Shift+Tab')
+    await expect(modelLab).toBeFocused()
+    await page.keyboard.press('Enter')
+
+    await expect(page).toHaveURL(/\/settings\/models$/)
+    await expect(page.getByTestId('talos-model-lab-hub')).toBeVisible()
 })
 
 test('Library context requires an explicit mode and persists the global additive policy', async ({ page }) => {

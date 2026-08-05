@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import {
     Activity, BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, MessageSquareText,
@@ -17,6 +17,10 @@ import {
 } from '@/components/ui/drawer'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
+
+const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
+)
 
 // F1-T3 (D5/D6): the full-width hamburger sidebar — the Claude chat-first
 // pattern: [New chat] -> Recents (sessions, rename/delete parity with the
@@ -148,6 +152,7 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                     <DrawerTitle class="talos-orbitron-brand text-base tracking-[0.2em] text-[var(--talos-text)]">TALOS</DrawerTitle>
                     <DrawerDescription class="text-xs text-[var(--talos-muted)]">{{ $t('shell.sidebarDescription') }}</DrawerDescription>
                 </div>
+                <TalosMobileDownloadCenterTrigger />
                 <Button type="button" size="icon-lg" variant="ghost" class="min-h-11 min-w-11" :aria-label="$t('navigation.closeMenu')" @click="emit('update:open', false)">
                     <X aria-hidden="true" />
                 </Button>

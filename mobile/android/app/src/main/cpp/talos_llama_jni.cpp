@@ -38,6 +38,8 @@
 
 namespace {
 
+thread_local std::string talos_last_open_error;
+
 struct talos_session {
     llama_model *       model   = nullptr;
     llama_context *     ctx     = nullptr;
@@ -210,12 +212,42 @@ void applyGrammar(talos_session * session) {
         }
     }
 
-    common_sampler * rebuilt = common_sampler_init(session->model, sampling);
+    common_sampler * rebuilt = nullptr;
+    try {
+        rebuilt = common_sampler_init(session->model, sampling);
+    } catch (const std::exception & failure) {
+        /**
+         * `common_sampler_init` NON segnala una GBNF non compilabile con
+         * `nullptr`: lancia `std::runtime_error`. Se esce da JNI, libc++ chiama
+         * terminate() e Android abbatte l'intera app — il tombstone C2 lo ha
+         * provato con Qwen3 e il toolset reale.
+         *
+         * Il server ufficiale dello stesso pin cattura questa eccezione al
+         * proprio confine. Qui il contratto di prodotto e' piu' tollerante: il
+         * template e il parser restano validi, quindi perdiamo soltanto il
+         * vincolo per costruzione e lasciamo che il modello risponda.
+         */
+        TALOS_LOGE("grammatica non applicabile (%s), riprovo senza vincolo", failure.what());
+    }
+
+    if (rebuilt == nullptr && !session->chat.grammar.empty()) {
+        // Ripartire dai parametri BASE e' importante: riusare `sampling`
+        // riproporrebbe la stessa grammatica; tenere il sampler precedente
+        // potrebbe invece trascinare la grammatica del turno prima.
+        common_params_sampling fallback = session->sampling;
+        try {
+            rebuilt = common_sampler_init(session->model, fallback);
+        } catch (const std::exception & fallback_failure) {
+            // Anche il piano B sta dentro il confine. In questo caso si tiene
+            // il sampler vivo precedente: una risposta puo' fallire, il
+            // processo no.
+            TALOS_LOGE("campionatore senza grammatica non costruibile (%s)", fallback_failure.what());
+            return;
+        }
+    }
+
     if (rebuilt == nullptr) {
-        // Un campionatore che non si costruisce e' quasi sempre una grammatica
-        // che non compila. Si tiene quello di prima: si perde la garanzia sulla
-        // chiamata, non la conversazione.
-        TALOS_LOGE("grammatica non applicabile, tengo il campionatore precedente");
+        TALOS_LOGE("campionatore non ricostruito, tengo quello precedente");
         return;
     }
     if (session->sampler != nullptr) common_sampler_free(session->sampler);
@@ -254,8 +286,10 @@ JNIEXPORT jlong JNICALL
 Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPath,
                                           jint threads, jint contextTokens, jint gpuLayers,
                                           jboolean deterministic) {
+    talos_last_open_error.clear();
     const std::string path = jstring_to_utf8(env, modelPath);
     if (path.empty()) {
+        talos_last_open_error = "path";
         TALOS_LOGE("percorso del modello vuoto");
         return 0;
     }
@@ -265,6 +299,7 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
 
     llama_model * model = llama_model_load_from_file(path.c_str(), model_params);
     if (model == nullptr) {
+        talos_last_open_error = "model-load";
         TALOS_LOGE("modello non caricato: %s", path.c_str());
         return 0;
     }
@@ -284,6 +319,7 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
 
     llama_context * ctx = llama_init_from_model(model, ctx_params);
     if (ctx == nullptr) {
+        talos_last_open_error = "context";
         TALOS_LOGE("contesto non creato");
         llama_model_free(model);
         return 0;
@@ -322,6 +358,7 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
     if (deterministic) sampling.temp = 0.0f;
     common_sampler * sampler = common_sampler_init(model, sampling);
     if (sampler == nullptr) {
+        talos_last_open_error = "sampler";
         TALOS_LOGE("campionatore non costruito");
         llama_free(ctx);
         llama_model_free(model);
@@ -348,6 +385,14 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
     TALOS_LOGI("modello aperto: %s (contesto %u, thread %d)",
                path.c_str(), llama_n_ctx(ctx), ctx_params.n_threads);
     return reinterpret_cast<jlong>(session);
+}
+
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeLastOpenError(JNIEnv * env, jclass) {
+    const char * stage = talos_last_open_error.empty()
+            ? "unknown"
+            : talos_last_open_error.c_str();
+    return env->NewStringUTF(stage);
 }
 
 JNIEXPORT jint JNICALL
@@ -548,6 +593,22 @@ JNIEXPORT jint JNICALL
 Java_ai_talos_TalosLlamaNative_nativeContextTokens(JNIEnv *, jclass, jlong handle) {
     talos_session * session = as_session(handle);
     return session == nullptr ? 0 : (jint) llama_n_ctx(session->ctx);
+}
+
+/**
+ * Conta il prompt con lo stesso tokenizer e gli stessi flag della generazione.
+ * Il chiamante può così scegliere il contesto prima del decode senza stimare
+ * token da byte o caratteri, che cambia risposta proprio tra famiglie diverse.
+ */
+JNIEXPORT jint JNICALL
+Java_ai_talos_TalosLlamaNative_nativePromptTokens(JNIEnv * env, jclass, jlong handle,
+                                                  jstring promptText) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr || promptText == nullptr) return 0;
+    const std::string prompt = jstring_to_utf8(env, promptText);
+    const int wanted = -llama_tokenize(session->vocab, prompt.c_str(), (int32_t) prompt.size(),
+                                       nullptr, 0, true, true);
+    return wanted > 0 ? (jint) wanted : 0;
 }
 
 /**

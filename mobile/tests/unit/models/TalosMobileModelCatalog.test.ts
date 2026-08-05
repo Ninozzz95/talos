@@ -47,19 +47,27 @@ function controller(count = 500) {
 beforeEach(() => { state.controller = controller() })
 
 describe('TalosMobileModelCatalog', () => {
-    it('keeps a 500-model catalog searchable and provider-filterable', async () => {
+    it('mounts forty of five hundred, advances by forty, and resets for every filter', async () => {
         const wrapper = mount(TalosMobileModelCatalog)
-        expect(wrapper.findAll('[data-model-card]')).toHaveLength(500)
+        expect(wrapper.findAll('[data-model-card]')).toHaveLength(40)
+        expect(wrapper.get('[role="status"]').text()).toContain('40 of 500 models')
+
+        await wrapper.get('[data-testid="talos-model-catalog-load-more"]').trigger('click')
+        expect(wrapper.findAll('[data-model-card]')).toHaveLength(80)
+        expect(wrapper.get('[role="status"]').text()).toContain('80 of 500 models')
 
         await wrapper.get('[aria-label="Search model catalog"]').setValue('Needle Reasoner')
         expect(wrapper.findAll('[data-model-card]')).toHaveLength(1)
+        expect(wrapper.get('[role="status"]').text()).toContain('1 of 500 models')
         expect(wrapper.text()).toContain('Needle Reasoner')
 
         await wrapper.get('[aria-label="Search model catalog"]').setValue('')
+        expect(wrapper.findAll('[data-model-card]')).toHaveLength(40)
         const filter = wrapper.findComponent({ name: 'TalosThemedSelect' })
         filter.vm.$emit('update:modelValue', 'openrouter')
         await wrapper.vm.$nextTick()
-        expect(wrapper.findAll('[data-model-card]')).toHaveLength(250)
+        expect(wrapper.findAll('[data-model-card]')).toHaveLength(40)
+        expect(wrapper.get('[role="status"]').text()).toContain('40 of 500 models')
     }, 15_000)
 
     it('connects selection, composer visibility, probe, and display-name controls', async () => {

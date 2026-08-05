@@ -228,31 +228,32 @@ come totale storico.
 
 ## 9. OAuth provider
 
-La sola integrazione approvata per implementazione condizionata è Hugging Face:
+Decisione owner 2026-08-05: la fase è rinviata finché TALOS non dispone di un
+dominio verificato. Non viene implementato il precedente callback private-use
+`ai.talos://oauth/huggingface`, né una UI OAuth parziale. Token e API key
+manuali restano il comportamento reale.
 
-- Authorization Code + PKCE S256;
-- browser di sistema tramite Capacitor InAppBrowser;
-- client pubblico senza secret nell'APK;
-- callback `ai.talos://oauth/huggingface` con intent filter ristretto;
-- verifica obbligatoria di `state`, scadenza e verifier;
-- ripresa via `appUrlOpen` e `getLaunchUrl`;
-- solo scope `gated-repos`: Model Lab deve leggere gated repo, non acquisire
-  identità, profilo o e-mail;
+Quando la fase verrà riaperta, lo scope comprende tutti e soltanto i provider
+la cui documentazione ufficiale corrente renda OAuth realmente implementabile
+in TALOS mobile. Ogni candidato deve avere:
+
+- flusso native/public-client senza client secret nell'APK;
+- browser di sistema, mai WebView embedded;
+- callback HTTPS/App Link sul dominio TALOS verificato;
+- verifica obbligatoria di provider, `state`, scadenza e PKCE quando previsto;
 - token e stato pendente soltanto nel secure storage;
-- Device Authorization Grant solo come fallback, non percorso primario su un
-  telefono con browser.
+- adapter TALOS provider-specifico e gate upstream end-to-end reale;
+- minimo privilegio documentato.
 
-L'implementazione resta bloccata finché l'owner non registra un client pubblico
-Hugging Face, verifica che il redirect custom scheme venga accettato realmente
-e fornisce il client ID tramite
-`VITE_TALOS_HF_OAUTH_CLIENT_ID`. L'assenza della configurazione mostra una
-spiegazione onesta, non un bottone finto.
+Per Hugging Face il minimo privilegio deciso è soltanto `gated-repos`: Model Lab
+deve leggere repository gated, non acquisire identità, profilo o e-mail. I
+provider che al momento della ripresa documentano soltanto API key conservano
+il flusso manuale e non vengono “OAuthizzati” per analogia.
 
-Per questa tranche si rifiuta o differisce OAuth per OpenAI, Anthropic,
-DeepSeek, Ollama, Gemini e OpenRouter: le fonti ufficiali non offrono un flusso
-end-user nativo direttamente compatibile con il confine attuale, oppure
-richiedono un App Link/backend non ancora progettato. Le chiavi manuali restano
-compatibili.
+Callback esatto, matrice provider, client registration, inventario, simboli,
+RED e prove fisiche devono essere ripianificati dopo la disponibilità del
+dominio e una nuova ricerca standards-first. La bozza HF-only precedente resta
+soltanto storico nel ledger Fase 5.
 
 ## 10. Accessibilità, telefono e scala
 
@@ -316,7 +317,9 @@ Restano stabili:
 
 Non fanno parte di queste cinque fasi:
 
-- runtime llama.cpp, download center completo o import GGUF;
+- import GGUF oltre il picker già consegnato. **Runtime llama.cpp e Download
+  Center non sono più fuori scope:** la tranche correttiva 4.C del 2026-08-05
+  li governa con una specifica dedicata;
 - accettazione in-app di licenze gated;
 - OAuth dell'account TALOS;
 - backend di intermediazione credenziali;
@@ -332,9 +335,17 @@ La tranche è chiusa solo quando:
 - ogni superficie Model Lab passa il contratto statico Theme Engine;
 - capienza, filtri e byte Hugging Face sono semanticamente veri;
 - il catalogo resta utilizzabile a scala telefonica;
-- OAuth Hugging Face è provato end-to-end con client pubblico reale oppure la
-  fase 5 è esplicitamente lasciata bloccata e la tranche non viene chiamata
-  completa;
+- la Fase 5 OAuth è implementata provider per provider con dominio/client reali
+  e prove end-to-end, oppure resta esplicitamente `DEFERRED` senza UI finta e la
+  tranche non viene chiamata completa;
 - test interessati, suite mobile, build, bundle gate e `git diff --check` sono
   verdi;
 - nessuna modifica desktop è entrata nel diff.
+
+## 14. Emendamento 4.C — 2026-08-05
+
+La specifica dedicata
+`2026-08-05-model-lab-download-center-local-compatibility-design.md` prevale
+per Settings, Download Center, trasferimento durevole, compattezza della pagina
+locale, rail filtri single-line, policy contesto e matrice GGUF fisica. La Fase
+5 resta deferred e non viene implicitamente autorizzata dall'emendamento.

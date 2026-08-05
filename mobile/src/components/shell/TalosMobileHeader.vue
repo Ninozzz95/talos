@@ -1,8 +1,15 @@
 <script setup lang="ts">
+import { defineAsyncComponent } from 'vue'
 import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import { Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import TalosMobileChatOptionsMenu from '@/components/shell/TalosMobileChatOptionsMenu.vue'
+
+const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
+)
+const TalosMobileChatOptionsMenu = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileChatOptionsMenu.vue'),
+)
 
 // Owner 2026-07-30: the non-immersive bar was too tall. 3rem (48px) is the
 // floor rather than a taste — the controls inside are min-h-11 (44px), the
@@ -94,22 +101,24 @@ const emit = defineEmits<{
         <!-- 3-dot chat options (shared with the immersive chrome). New chat
              lives inside it, so the tablet-panel case just hides the whole
              menu (the panel owns those actions). -->
-        <TalosMobileChatOptionsMenu
-            :incognito="incognito"
+        <div v-if="!hideMenu" class="flex shrink-0 items-center">
+            <TalosMobileDownloadCenterTrigger />
+            <TalosMobileChatOptionsMenu
+                :incognito="incognito"
                 :can-go-incognito="canGoIncognito"
-            :cleanup-plan="cleanupPlan"
-            v-if="!hideMenu"
-            :active-title="title"
-            :busy="sessionBusy ?? creatingSession"
-            @new-chat="emit('newChat')"
+                :cleanup-plan="cleanupPlan"
+                :active-title="title"
+                :busy="sessionBusy ?? creatingSession"
+                @new-chat="emit('newChat')"
                 @temporary-chat="emit('temporaryChat')"
                 @normal-mode="emit('normalMode')"
-            @rename="emit('rename', $event)"
-            @delete="(choice) => emit('delete', choice)"
-            :can-open-media="canOpenMedia"
-            @export="emit('export')"
-            @media="emit('media')"
-        />
+                @rename="emit('rename', $event)"
+                @delete="(choice) => emit('delete', choice)"
+                :can-open-media="canOpenMedia"
+                @export="emit('export')"
+                @media="emit('media')"
+            />
+        </div>
         <span v-else class="min-w-11" aria-hidden="true" />
     </header>
 </template>

@@ -24,6 +24,8 @@
  */
 import { talosEstimateSizeFromName } from './sizeFromName'
 import { talosEstimatedCapacity, type TalosDeviceCapacity } from './fit'
+import { TALOS_MOBILE_QUANTISATION_ORDER } from './browseVariant'
+import { talosHasDeclaredPermissiveLicence } from './licensePolicy'
 
 /** Le tre misure che decidono se un modello ci sta: due di memoria, una di disco. */
 export type TalosFilterDevice = Pick<TalosDeviceCapacity,
@@ -39,6 +41,9 @@ export interface TalosBrowsableModel {
     task?: string | null
     /** Puo' mancare: una lista salvata da una versione precedente non ce l'ha. */
     tags?: readonly string[]
+    hasChatTemplate?: boolean
+    /** Model-card licence metadata; it takes precedence over duplicated tags. */
+    licence?: string | null
     /**
      * Presente sulle righe normalizzate dal client corrente. `null` e'
      * informazione: il client ha cercato una Q4 reale e non l'ha trovata.
@@ -48,6 +53,7 @@ export interface TalosBrowsableModel {
         fileBytes: number
         workingBytes: number
         estimated?: boolean
+        quantisation?: string
     } | null
 }
 
@@ -57,8 +63,26 @@ export interface TalosBrowseCapacitySize {
     estimated: boolean
 }
 
-/** Le licenze che permettono di usare il modello senza chiedere niente a nessuno. */
-const LIBERE = /license:(apache-2\.0|mit|bsd|cc-by-4\.0|cc0|openrail|llama\d)/i
+const CODE_TAGS = new Set(['code', 'coder', 'code-generation', 'text-to-code'])
+const CODE_ID_TOKEN = /(?:^|[/_.-])(?:code|coder|starcoder|codestral|devstral|codellama|deepseek-coder|granite-code)(?=$|[/_.-])/iu
+
+export function talosModelIsChatCapable(model: TalosBrowsableModel): boolean {
+    return model.hasChatTemplate === true
+        || (model.tags ?? []).some((tag) => tag.trim().toLowerCase() === 'conversational')
+}
+
+/** Hugging Face has no canonical Code facet: this conservative heuristic is TALOS-owned. */
+export function talosModelIsCodeOriented(model: TalosBrowsableModel): boolean {
+    if (model.task && CODE_TAGS.has(model.task.trim().toLowerCase())) return true
+    if ((model.tags ?? []).some((tag) => CODE_TAGS.has(tag.trim().toLowerCase()))) return true
+    return CODE_ID_TOKEN.test(model.id)
+}
+
+export function talosModelHasQ4Variant(model: TalosBrowsableModel): boolean {
+    const quantisation = model.browseVariant?.quantisation?.trim().toUpperCase()
+    return quantisation !== undefined
+        && (TALOS_MOBILE_QUANTISATION_ORDER as readonly string[]).includes(quantisation)
+}
 
 /** The one byte source shared by the visible row and the positive fit filter. */
 export function talosBrowseCapacitySize(
@@ -122,18 +146,13 @@ export function talosModelPassesFilter(
             return verdict.state === 'fits' || verdict.state === 'tight'
         }
         case 'chat':
-            return model.task === 'text-generation' || /instruct|chat/i.test(model.id)
+            return talosModelIsChatCapable(model)
         case 'code':
-            return /coder|code|starcoder|deepseek-coder/i.test(model.id)
+            return talosModelIsCodeOriented(model)
         case 'q4':
-            // La quantizzazione piu' usata su un telefono: il compromesso fra
-            // qualita' e memoria che quasi sempre e' quello giusto.
-            return /[-_.]I?Q4(?:[-_.]|$)|[-_.]Q4_[KM01]/i.test(model.id)
-        case 'open-licence': {
-            const tags = model.tags ?? []
-            return tags.some((tag) => LIBERE.test(tag))
-                || !tags.some((tag) => tag.startsWith('license:'))
-        }
+            return talosModelHasQ4Variant(model)
+        case 'open-licence':
+            return talosHasDeclaredPermissiveLicence(model)
     }
 }
 

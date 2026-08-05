@@ -180,11 +180,33 @@ describe('Agent Tools control registry', () => {
          * lo stesso contratto tradotto tre volte. Il piano di controllo NO: se
          * si fosse mosso anche lui, la domanda da farsi sarebbe stata un'altra.
          */
-        expect(digestOf(talosToolsForAnthropic(tools as never)))
+        /**
+         * Ri-fissate 2026-08-05 per C45-RED-08K: il runtime ora ammette due
+         * download attivi più coda, quindi la descrizione data al modello non
+         * può continuare a dichiararne uno. Ricostruire la sola descrizione
+         * precedente deve riprodurre tutti e tre i digest precedenti: è la
+         * prova automatica che nomi e input schema non si sono mossi insieme.
+         */
+        const previousDownloadDescription = 'Start downloading one model file set onto this device. Call '
+            + 'local_model_inspect first and tell the user what it will cost them in space and '
+            + 'data before asking. Only one download runs at a time.'
+        const beforeDescriptionUpdate = tools.map((tool) => (
+            tool.name === 'local_model_download'
+                ? { ...tool, description: previousDownloadDescription }
+                : tool
+        ))
+        expect(digestOf(talosToolsForAnthropic(beforeDescriptionUpdate as never)))
             .toBe('84f55d186d855b53f4e8ec1858768c354fa4b055098f6e8a2299da8074968d4b')
-        expect(digestOf(talosToolsForOpenAi(tools as never)))
+        expect(digestOf(talosToolsForOpenAi(beforeDescriptionUpdate as never)))
             .toBe('5e286d09447ed927711db677e80f9e847f70d904ed522063f11b196859ce0d3f')
-        expect(digestOf(talosToolsForGemini(tools as never)))
+        expect(digestOf(talosToolsForGemini(beforeDescriptionUpdate as never)))
             .toBe('2eb5fb9cf0724f880168279e9bdf480f7b3547d441b68726b2f773ccf32afd42')
+
+        expect(digestOf(talosToolsForAnthropic(tools as never)))
+            .toBe('a72503f2203b69edd23eabe7276758b40f46c962dda3f9a8aba5dc8f64ace484')
+        expect(digestOf(talosToolsForOpenAi(tools as never)))
+            .toBe('d807f211a9c254e92dfa032dd1ea11e8d6fa76d12ac2b24217d80dab3bbfeef7')
+        expect(digestOf(talosToolsForGemini(tools as never)))
+            .toBe('6aefb2a14ee5479f7459d789e5427cdbf6b83e9cdd25c9d3f15e99589a46a157')
     })
 })

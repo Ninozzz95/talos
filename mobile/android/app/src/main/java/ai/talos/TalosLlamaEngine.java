@@ -19,6 +19,60 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class TalosLlamaEngine implements AutoCloseable {
 
+    public enum FailureStage {
+        PATH("path"),
+        MODEL_LOAD("model-load"),
+        CONTEXT("context"),
+        SAMPLER("sampler"),
+        TEMPLATE("template"),
+        GENERATION("generation"),
+        UNKNOWN("unknown");
+
+        private final String wire;
+
+        FailureStage(String wire) {
+            this.wire = wire;
+        }
+
+        String wireValue() {
+            return wire;
+        }
+
+        static FailureStage fromWire(String wire) {
+            if (wire == null) return UNKNOWN;
+            for (FailureStage stage : values()) {
+                if (stage.wire.equals(wire)) return stage;
+            }
+            return UNKNOWN;
+        }
+    }
+
+    public static final class OpenAttempt {
+        private final TalosLlamaEngine engine;
+        private final FailureStage failureStage;
+
+        private OpenAttempt(TalosLlamaEngine engine, FailureStage failureStage) {
+            this.engine = engine;
+            this.failureStage = failureStage;
+        }
+
+        static OpenAttempt success(TalosLlamaEngine engine) {
+            return new OpenAttempt(engine, null);
+        }
+
+        static OpenAttempt failure(FailureStage stage) {
+            return new OpenAttempt(null, stage == null ? FailureStage.UNKNOWN : stage);
+        }
+
+        public TalosLlamaEngine engine() {
+            return engine;
+        }
+
+        public FailureStage failureStage() {
+            return failureStage;
+        }
+    }
+
     /** Ogni mezzo secondo: sotto il massimo intervallo che l'harness accetta (1,5 s). */
     static final long SAMPLE_INTERVAL_MS = 500L;
 
@@ -100,15 +154,30 @@ public final class TalosLlamaEngine implements AutoCloseable {
     public static TalosLlamaEngine open(android.content.Context context, String modelPath,
                                         int threads, int contextTokens, int gpuLayers,
                                         boolean deterministic) {
-        if (!TalosLlamaNative.AVAILABLE) return null;
+        return tryOpen(context, modelPath, threads, contextTokens, gpuLayers, deterministic).engine();
+    }
+
+    /** Opens a model while preserving the native stage when construction fails. */
+    public static OpenAttempt tryOpen(android.content.Context context, String modelPath,
+                                      int threads, int contextTokens, int gpuLayers,
+                                      boolean deterministic) {
+        if (!TalosLlamaNative.AVAILABLE) return OpenAttempt.failure(FailureStage.UNKNOWN);
         TalosLlamaNative.ensureReady(context);
         long handle = TalosLlamaNative.nativeOpen(modelPath, threads, contextTokens, gpuLayers,
                                                   deterministic);
-        return handle == 0 ? null : new TalosLlamaEngine(handle);
+        if (handle == 0) {
+            return OpenAttempt.failure(FailureStage.fromWire(TalosLlamaNative.nativeLastOpenError()));
+        }
+        return OpenAttempt.success(new TalosLlamaEngine(handle));
     }
 
     public int contextTokens() {
         return TalosLlamaNative.nativeContextTokens(handle);
+    }
+
+    /** Exact prompt size according to this model, not a byte/character estimate. */
+    public int promptTokens(String prompt) {
+        return TalosLlamaNative.nativePromptTokens(handle, prompt);
     }
 
     /**

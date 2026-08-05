@@ -1,14 +1,8 @@
 package ai.talos;
 
-import android.app.job.JobInfo;
-import android.app.job.JobScheduler;
-import android.content.ComponentName;
-import android.content.Context;
-import android.content.Intent;
-import android.net.NetworkCapabilities;
-import android.net.NetworkRequest;
 import android.os.Build;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -17,51 +11,200 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.io.File;
 import java.util.List;
+import java.util.Locale;
 
-/**
- * The only way JavaScript can move four gigabytes.
- *
- * It cannot do it itself: Android suspends a backgrounded WebView, so a
- * download driven from `fetch` stops the moment the user leaves the app — which
- * is most of the hours a model takes. What crosses this boundary is a request
- * and a question, never the loop.
- *
- * The runner is chosen by `TalosTransferPlan`, which is proved on the JVM, and
- * the choice is REPORTED BACK rather than hidden. It matters to the interface:
- * on Android 13 and below there is no user-initiated job, so the transfer runs
- * on a foreground service with a six-hour daily budget and no bound network —
- * and the download centre has to be able to say so before someone starts a 4 GB
- * transfer on a train.
- */
+/** Capacitor boundary for a durable collection of model transfers. */
 @CapacitorPlugin(name = "TalosModelTransfer")
 public class TalosModelTransferPlugin extends Plugin {
 
-    private static final int JOB_ID = 4712;
-
-    /**
-     * Start, or say precisely why not.
-     *
-     * `totalBytes` and `sha256` come from the Hub's paths-info answer and are
-     * required: without the length there is nothing to reserve, and without the
-     * hash the file cannot be proved — which is the one thing this download
-     * does that no competitor does.
-     */
     @PluginMethod
     public void start(PluginCall call) {
-        if (TalosTransferSession.active() != null) {
-            call.reject("A download is already running");
+        TalosTransferSession.restoreAll(getContext());
+        TalosTransferSession.Request request = requestFrom(call);
+        if (request == null) return;
+
+        TalosTransferJournal.Snapshot created;
+        try {
+            created = TalosTransferSession.begin(
+                    getContext(),
+                    request,
+                    TalosTransferPlan.Runner.DEFERRED_JOB,
+                    true);
+        } catch (IllegalStateException duplicate) {
+            call.reject("duplicate-transfer".equals(duplicate.getMessage())
+                    ? "already-running"
+                    : "The transfer request could not be persisted");
+            return;
+        } catch (RuntimeException invalid) {
+            call.reject("The transfer request could not be persisted");
             return;
         }
 
+        TalosTransferPlan.Runner preferred =
+                TalosTransferPlan.runner(Build.VERSION.SDK_INT, true);
+        TalosTransferDispatcher.dispatch(getContext(), preferred);
+        TalosTransferJournal.Snapshot current = TalosTransferJournal
+                .forContext(getContext())
+                .read(created.id);
+        if (current == null) {
+            call.reject("The transfer disappeared before Android accepted it");
+            return;
+        }
+        call.resolve(startedResult(current));
+    }
+
+    @PluginMethod
+    public void pause(PluginCall call) {
+        String id = transferId(call);
+        if (id == null) return;
+        if (!TalosTransferControl.pause(getContext(), id)) {
+            call.reject("There is no model download with that id");
+            return;
+        }
+        call.resolve();
+    }
+
+    /** Compatibility symbol: Stop has always meant pause. */
+    @PluginMethod
+    public void stop(PluginCall call) {
+        pause(call);
+    }
+
+    @PluginMethod
+    public void resume(PluginCall call) {
+        String id = transferId(call);
+        if (id == null) return;
+        TalosTransferJournal journal = TalosTransferJournal.forContext(getContext());
+        TalosTransferJournal.Snapshot snapshot = TalosTransferSession.restore(getContext(), id);
+        if (snapshot == null) {
+            call.reject("There is no model download to resume");
+            return;
+        }
+        if (snapshot.phase == TalosTransferJournal.Phase.RUNNING
+                || snapshot.phase == TalosTransferJournal.Phase.PAUSING
+                || snapshot.phase == TalosTransferJournal.Phase.VERIFYING
+                || snapshot.phase == TalosTransferJournal.Phase.QUEUED) {
+            call.reject("That model download is already running");
+            return;
+        }
+
+        TalosTransferSession.clearStopRequest(id);
+        journal.transition(id, TalosTransferJournal.Phase.WAITING, null);
+        TalosTransferPlan.Runner preferred =
+                TalosTransferPlan.runner(Build.VERSION.SDK_INT, true);
+        TalosTransferDispatcher.dispatch(getContext(), preferred);
+        TalosTransferJournal.Snapshot current = journal.read(id);
+        if (current == null) {
+            call.reject("The model download could not be queued again");
+            return;
+        }
+        call.resolve(startedResult(current));
+    }
+
+    @PluginMethod
+    public void cancel(PluginCall call) {
+        String id = transferId(call);
+        if (id == null) return;
+        TalosTransferJournal.Snapshot snapshot = TalosTransferSession.restore(getContext(), id);
+        if (snapshot == null) {
+            call.resolve();
+            return;
+        }
+        boolean immediate = TalosTransferSession.cancel(getContext(), id);
+        TalosTransferDispatcher.stopHost(getContext(), snapshot);
+        if (immediate) TalosTransferDispatcher.dispatchAfterRelease(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void status(PluginCall call) {
+        TalosTransferSession.restoreAll(getContext());
+        // A foreground poll is also the safe point that revives waiting FGS
+        // records after process death.
+        TalosTransferDispatcher.dispatch(
+                getContext(), TalosTransferPlan.runner(Build.VERSION.SDK_INT, true));
+        List<TalosTransferJournal.Snapshot> records = TalosTransferSession
+                .restoreAll(getContext());
+        JSObject result = new JSObject();
+        JSArray items = new JSArray();
+        boolean anyMoving = false;
+        for (TalosTransferJournal.Snapshot snapshot : records) {
+            JSObject item = statusItem(snapshot);
+            items.put(item);
+            anyMoving = anyMoving || moving(snapshot.phase);
+        }
+        result.put("items", items);
+
+        if (records.isEmpty()) {
+            putIdle(result);
+            call.resolve(result);
+            return;
+        }
+
+        TalosTransferJournal.Snapshot primary = records.get(0);
+        copyStatus(statusItem(primary), result);
+        result.put("active", anyMoving);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void leftovers(PluginCall call) {
+        TalosModelStore store = new TalosModelStore(
+                TalosTransferSession.rootFor(getContext()));
+        TalosModelStore.Listing listing = store.leftovers();
+
+        JSArray items = new JSArray();
+        long total = 0;
+        for (TalosModelStore.Leftover leftover : listing.entries) {
+            JSObject item = new JSObject();
+            item.put("path", leftover.path);
+            item.put("bytes", leftover.bytes);
+            items.put(item);
+            total += leftover.bytes;
+        }
+        JSArray refused = new JSArray();
+        for (TalosModelStore.Unreadable entry : listing.unreadable) {
+            JSObject row = new JSObject();
+            row.put("path", entry.path);
+            row.put("reason", entry.reason);
+            refused.put(row);
+        }
+        JSObject result = new JSObject();
+        result.put("items", items);
+        result.put("totalBytes", total);
+        result.put("unreadable", refused);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void discard(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null) {
+            call.reject("path is required");
+            return;
+        }
+        File root = TalosTransferSession.rootFor(getContext());
+        File target = new File(path);
+        String inside = new File(root, "models").getAbsolutePath() + File.separator;
+        if (!target.getAbsolutePath().startsWith(inside)
+                || !target.getName().endsWith(TalosModelStore.PARTIAL_SUFFIX)) {
+            call.reject("that is not a download of ours");
+            return;
+        }
+        target.delete();
+        new File(target.getPath().substring(
+                0, target.getPath().length() - TalosModelStore.PARTIAL_SUFFIX.length())
+                + TalosModelStore.SIDECAR_SUFFIX).delete();
+        call.resolve();
+    }
+
+    private TalosTransferSession.Request requestFrom(PluginCall call) {
         String repo = call.getString("repo");
         String revision = call.getString("revision", "main");
-        // A SET of files, because a large GGUF is published in pieces and any
-        // subset of them is not a smaller model — it is nothing.
-        com.getcapacitor.JSArray files = call.getArray("files");
-
+        JSArray files = call.getArray("files");
         if (repo == null || files == null || files.length() == 0) {
             call.reject("repo and a non-empty files array are required");
-            return;
+            return null;
         }
 
         String[] paths = new String[files.length()];
@@ -74,194 +217,94 @@ public class TalosModelTransferPlugin extends Plugin {
                 Long size = file.getLong("bytes");
                 if (paths[index] == null || size == null || size <= 0) {
                     call.reject("every file needs a path and a positive byte count");
-                    return;
+                    return null;
                 }
                 sizes[index] = size;
                 hashes[index] = file.getString("sha256");
             }
         } catch (org.json.JSONException malformed) {
             call.reject("files must be objects with path, bytes and sha256");
-            return;
+            return null;
         }
+        return new TalosTransferSession.Request(
+                repo,
+                revision,
+                paths,
+                sizes,
+                hashes,
+                call.getString("modelName", paths[0]));
+    }
 
-        String modelName = call.getString("modelName", paths[0]);
-        TalosTransferSession.Request request = new TalosTransferSession.Request(
-                repo, revision, paths, sizes, hashes, modelName);
+    private String transferId(PluginCall call) {
+        String id = call.getString("id");
+        if (id != null) return id;
+        List<TalosTransferJournal.Snapshot> records =
+                TalosTransferSession.restoreAll(getContext());
+        if (records.size() == 1) return records.get(0).id;
+        call.reject("id is required when more than one download exists");
+        return null;
+    }
 
-        // Visible, because this call came from a WebView that is only running
-        // while the app is in front. Having an activity in Recents does not
-        // count, which is why this is not inferred from the task stack.
-        TalosTransferPlan.Runner runner =
-                TalosTransferPlan.runner(Build.VERSION.SDK_INT, true);
-
-        TalosTransferSession.begin(request);
-
-        boolean started;
-        switch (runner) {
-            case USER_INITIATED_JOB:
-            case DEFERRED_JOB:
-                started = schedule(runner == TalosTransferPlan.Runner.USER_INITIATED_JOB);
-                break;
-            default:
-                started = startService();
-                break;
-        }
-
-        if (!started) {
-            TalosTransferSession.end();
-            call.reject("Android refused to start the transfer");
-            return;
-        }
-
+    private static JSObject startedResult(TalosTransferJournal.Snapshot snapshot) {
         JSObject result = new JSObject();
-        result.put("runner", runner.name());
-        // The honest caveat, handed to the interface rather than buried: below
-        // API 34 the transfer is not bound to the network it started on and can
-        // follow the phone onto mobile data.
-        result.put("networkBound", runner == TalosTransferPlan.Runner.USER_INITIATED_JOB);
-        call.resolve(result);
+        result.put("id", snapshot.id);
+        result.put("phase", phase(snapshot));
+        result.put("runner", snapshot.runner.name());
+        result.put("networkBound", snapshot.networkBound);
+        return result;
     }
 
-    /** Pause. The bytes and the hash state stay on disk; it resumes where it was. */
-    @PluginMethod
-    public void stop(PluginCall call) {
-        TalosTransferSession.requestStop();
-        call.resolve();
+    private static JSObject statusItem(TalosTransferJournal.Snapshot snapshot) {
+        JSObject item = new JSObject();
+        item.put("id", snapshot.id);
+        item.put("jobId", snapshot.jobId);
+        item.put("createdAtMs", snapshot.createdAtMs);
+        item.put("phase", phase(snapshot));
+        item.put("active", moving(snapshot.phase));
+        item.put("repo", snapshot.repo);
+        item.put("revision", snapshot.revision);
+        JSArray paths = new JSArray();
+        for (String path : snapshot.paths) paths.put(path);
+        item.put("paths", paths);
+        item.put("path", snapshot.paths[0]);
+        item.put("parts", snapshot.paths.length);
+        item.put("modelName", snapshot.modelName);
+        item.put("runner", snapshot.runner.name());
+        item.put("networkBound", snapshot.networkBound);
+        item.put("failure", snapshot.failure);
+        item.put("resumable", true);
+        item.put("haveBytes", TalosTransferSession.haveBytes(snapshot.id));
+        item.put("totalBytes", snapshot.totalBytes);
+        return item;
     }
 
-    @PluginMethod
-    public void status(PluginCall call) {
-        TalosTransferSession.Request active = TalosTransferSession.active();
-        JSObject result = new JSObject();
-        result.put("active", active != null);
-        if (active != null) {
-            result.put("repo", active.repo);
-            result.put("path", active.paths[0]);
-            result.put("parts", active.paths.length);
-            result.put("modelName", active.modelName);
+    private static void copyStatus(JSObject from, JSObject to) {
+        for (String key : new String[] {
+                "id", "jobId", "createdAtMs", "phase", "active", "repo",
+                "revision", "paths", "path", "parts", "modelName", "runner",
+                "networkBound", "failure", "resumable", "haveBytes", "totalBytes"
+        }) {
+            to.put(key, from.opt(key));
         }
-        result.put("haveBytes", TalosTransferSession.haveBytes());
-        result.put("totalBytes", TalosTransferSession.totalBytes());
-        call.resolve(result);
     }
 
-    /**
-     * What abandoned attempts are costing.
-     *
-     * These matter here more than anywhere else: the space is claimed up front,
-     * so an attempt abandoned after ten seconds still holds the whole four
-     * gigabytes. Without this the user watches free space vanish with nothing
-     * to point at.
-     */
-    @PluginMethod
-    public void leftovers(PluginCall call) {
-        TalosModelStore store = new TalosModelStore(
-                TalosTransferSession.rootFor(getContext()));
-        TalosModelStore.Listing listing = store.leftovers();
-
-        com.getcapacitor.JSArray items = new com.getcapacitor.JSArray();
-        long total = 0;
-        for (TalosModelStore.Leftover leftover : listing.entries) {
-            JSObject item = new JSObject();
-            item.put("path", leftover.path);
-            item.put("bytes", leftover.bytes);
-            items.put(item);
-            total += leftover.bytes;
-        }
-
-        com.getcapacitor.JSArray refused = new com.getcapacitor.JSArray();
-        for (TalosModelStore.Unreadable entry : listing.unreadable) {
-            JSObject row = new JSObject();
-            row.put("path", entry.path);
-            row.put("reason", entry.reason);
-            refused.put(row);
-        }
-
-        JSObject result = new JSObject();
-        result.put("items", items);
-        result.put("totalBytes", total);
-        // The storage screen reports this total as space it can give back. A
-        // folder that refused to open makes that number an understatement, and
-        // a number presented as complete when it is not is worse than no number
-        // at all: the user frees two gigabytes, sees three still missing, and
-        // has nothing to point at.
-        result.put("unreadable", refused);
-        call.resolve(result);
+    private static void putIdle(JSObject result) {
+        result.put("phase", "idle");
+        result.put("active", false);
+        result.put("haveBytes", 0L);
+        result.put("totalBytes", 0L);
+        result.put("networkBound", true);
+        result.put("resumable", false);
     }
 
-    /**
-     * Give the space back.
-     *
-     * Only paths this store produced are accepted. A delete that takes any path
-     * JavaScript hands it is a delete that a compromised page can aim anywhere
-     * the app can write.
-     */
-    @PluginMethod
-    public void discard(PluginCall call) {
-        String path = call.getString("path");
-        if (path == null) {
-            call.reject("path is required");
-            return;
-        }
-        File root = TalosTransferSession.rootFor(getContext());
-        File target = new File(path);
-        String inside = new File(root, "models").getAbsolutePath() + File.separator;
-
-        if (!target.getAbsolutePath().startsWith(inside)
-                || !target.getName().endsWith(TalosModelStore.PARTIAL_SUFFIX)) {
-            call.reject("that is not a download of ours");
-            return;
-        }
-
-        target.delete();
-        new File(target.getPath().substring(
-                0, target.getPath().length() - TalosModelStore.PARTIAL_SUFFIX.length())
-                + TalosModelStore.SIDECAR_SUFFIX).delete();
-        call.resolve();
+    private static String phase(TalosTransferJournal.Snapshot snapshot) {
+        return snapshot.phase.name().toLowerCase(Locale.ROOT);
     }
 
-    private boolean schedule(boolean userInitiated) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false;
-
-        JobScheduler scheduler = getContext().getSystemService(JobScheduler.class);
-        if (scheduler == null) return false;
-
-        NetworkRequest network = new NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
-                .build();
-
-        TalosTransferSession.Request request = TalosTransferSession.active();
-        JobInfo.Builder builder = new JobInfo.Builder(
-                JOB_ID, new ComponentName(getContext(), TalosModelTransferJob.class))
-                .setRequiredNetwork(network)
-                // Told, not guessed: the system schedules a transfer it knows
-                // the size of far better than one it does not.
-                .setEstimatedNetworkBytes(
-                        request == null ? JobInfo.NETWORK_BYTES_UNKNOWN : request.totalBytes,
-                        0);
-
-        // setRequiresStorageNotLow stays off deliberately — see TalosTransferPlan.
-        if (userInitiated) builder.setUserInitiated(true);
-
-        return scheduler.schedule(builder.build()) == JobScheduler.RESULT_SUCCESS;
-    }
-
-    private boolean startService() {
-        Context context = getContext();
-        Intent intent = new Intent(context, TalosModelTransferService.class);
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent);
-            } else {
-                context.startService(intent);
-            }
-            return true;
-        } catch (RuntimeException refused) {
-            // Android 12+ refuses a foreground service started from the
-            // background. Reported rather than swallowed: a download that never
-            // starts and says nothing is the worst of the failures here.
-            return false;
-        }
+    private static boolean moving(TalosTransferJournal.Phase phase) {
+        return phase == TalosTransferJournal.Phase.QUEUED
+                || phase == TalosTransferJournal.Phase.RUNNING
+                || phase == TalosTransferJournal.Phase.PAUSING
+                || phase == TalosTransferJournal.Phase.VERIFYING;
     }
 }

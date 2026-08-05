@@ -10,6 +10,38 @@ const transferPlugin = readFileSync(
     resolve(process.cwd(), 'android/app/src/main/java/ai/talos/TalosModelTransferPlugin.java'),
     'utf8',
 )
+const transferSession = readFileSync(
+    resolve(process.cwd(), 'android/app/src/main/java/ai/talos/TalosTransferSession.java'),
+    'utf8',
+)
+const transferJob = readFileSync(
+    resolve(process.cwd(), 'android/app/src/main/java/ai/talos/TalosModelTransferJob.java'),
+    'utf8',
+)
+const transferService = readFileSync(
+    resolve(process.cwd(), 'android/app/src/main/java/ai/talos/TalosModelTransferService.java'),
+    'utf8',
+)
+const transferControl = readFileSync(
+    resolve(process.cwd(), 'android/app/src/main/java/ai/talos/TalosTransferControl.java'),
+    'utf8',
+)
+const transferNotification = readFileSync(
+    resolve(process.cwd(), 'android/app/src/main/java/ai/talos/TalosTransferNotification.java'),
+    'utf8',
+)
+const transferJournal = readFileSync(
+    resolve(process.cwd(), 'android/app/src/main/java/ai/talos/TalosTransferJournal.java'),
+    'utf8',
+)
+const transferDispatcher = readFileSync(
+    resolve(process.cwd(), 'android/app/src/main/java/ai/talos/TalosTransferDispatcher.java'),
+    'utf8',
+)
+const storageReservation = readFileSync(
+    resolve(process.cwd(), 'android/app/src/main/java/ai/talos/TalosStorageReservation.java'),
+    'utf8',
+)
 
 /**
  * The permissions the SCHEDULER demands, not the ones we thought we needed.
@@ -33,7 +65,7 @@ describe('the transfer job and the permissions its scheduler requires', () => {
         // The premise. If this ever stops being true the assertion below is
         // still harmless, but the test would be testing nothing — so it is
         // checked rather than assumed.
-        expect(transferPlugin).toContain('setRequiredNetwork(')
+        expect(transferDispatcher).toContain('setRequiredNetwork(')
 
         expect(manifest).toContain('android.permission.ACCESS_NETWORK_STATE')
     })
@@ -67,5 +99,72 @@ describe('the transfer job and the permissions its scheduler requires', () => {
         expect(manifest).toContain('ai.talos.TalosModelTransferService')
         expect(manifest).toContain('android:foregroundServiceType="dataSync"')
         expect(manifest).toContain('ai.talos.TalosModelTransferJob')
+    })
+
+    it('C45-RED-05/06 exposes pause, resume and cancel over the durable journal', () => {
+        for (const method of ['pause', 'resume', 'cancel', 'status']) {
+            expect(transferPlugin).toMatch(new RegExp(`@PluginMethod\\s+public void ${method}\\(`))
+        }
+        // The old bridge symbol remains a pause alias for installed WebViews.
+        expect(transferPlugin).toMatch(/@PluginMethod\s+public void stop\([^]*?pause\(call\)/)
+        expect(transferPlugin).toContain('TalosTransferSession.begin(')
+        expect(transferPlugin).toContain('TalosTransferPlan.Runner.DEFERRED_JOB')
+        expect(transferPlugin).toContain('TalosTransferDispatcher.dispatch(')
+        expect(transferPlugin).toContain('TalosTransferSession.restoreAll(getContext())')
+        for (const field of [
+            'phase', 'repo', 'revision', 'paths', 'modelName', 'runner',
+            'networkBound', 'failure', 'resumable', 'haveBytes', 'totalBytes',
+        ]) {
+            expect(transferPlugin).toContain(`item.put("${field}"`)
+        }
+    })
+
+    it('C45-RED-06 reconnects both Android hosts after process recreation', () => {
+        expect(transferJob).toContain('TalosTransferSession.restoreAll(')
+        expect(transferService).toContain('TalosTransferSession.restore(this, id)')
+        expect(transferSession).toContain('TalosTransferJournal.Phase.RUNNING')
+        expect(transferJob).toContain('TalosTransferSession.finish(')
+        expect(transferService).toContain('TalosTransferSession.finish(')
+        expect(transferJob).toContain('StopCause.SYSTEM_STOP')
+        expect(transferService).toContain('StopCause.SYSTEM_STOP')
+    })
+
+    it('C45-RED-05 gives the notification a real Pause action and local-model destination', () => {
+        expect(transferNotification).toContain('ACTION_PAUSE')
+        expect(transferNotification).toContain('.addAction(0, "Pause"')
+        expect(transferNotification).toContain('"/settings/models/local"')
+        expect(transferControl).toContain('ACTION_PAUSE')
+        expect(transferControl).toContain('StopCause.USER_PAUSE')
+    })
+
+    it('C45-RED-08A/08E persists unique job ids and routes controls by transfer id', () => {
+        expect(transferJournal).toContain('SCHEMA_VERSION = 2')
+        expect(transferJournal).toContain('public final int jobId')
+        expect(transferPlugin).not.toContain('private static final int JOB_ID = 4712')
+        expect(transferPlugin).toContain('result.put("items"')
+        expect(transferNotification).toContain('EXTRA_TRANSFER_ID')
+        expect(transferNotification).toContain('pause.putExtra(EXTRA_TRANSFER_ID')
+        expect(transferControl).toContain('getStringExtra(TalosTransferNotification.EXTRA_TRANSFER_ID)')
+        expect(transferJob).toContain('params.getJobId()')
+    })
+
+    it('C45-RED-08B admits only two hosts and leaves extra records waiting', () => {
+        expect(transferDispatcher).toContain('MAX_ACTIVE_TRANSFERS = 2')
+        expect(transferDispatcher).toContain('Phase.WAITING')
+        expect(transferSession).toContain('ConcurrentHashMap<String, State>')
+        expect(transferService).toContain('ConcurrentHashMap<String, Thread>')
+    })
+
+    it('C45-RED-08J reconciles a moving record with the Android host that owns it', () => {
+        expect(transferDispatcher).toContain('getPendingJob(snapshot.jobId)')
+        expect(transferDispatcher).toContain('recoveredPhase(')
+        expect(transferSession).toContain('TalosTransferDispatcher.hasHost(')
+        expect(transferSession).toContain('completionForHost(')
+    })
+
+    it('C45-RED-08D reserves a whole set behind one storage critical section', () => {
+        expect(storageReservation).toContain('RESERVATION_LOCK')
+        expect(storageReservation).toContain('reserveAll(')
+        expect(transferSession).toContain('TalosStorageReservation.reserveAll(')
     })
 })

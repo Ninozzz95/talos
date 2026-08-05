@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { talosApplyBrowseFilters, talosModelPassesFilter } from '@/lib/models/browseFilters'
+import {
+    talosApplyBrowseFilters,
+    talosModelHasQ4Variant,
+    talosModelIsChatCapable,
+    talosModelIsCodeOriented,
+    talosModelPassesFilter,
+} from '@/lib/models/browseFilters'
 
 const GB = 1024 * 1024 * 1024
 const LIBERA = 4.4 * GB
@@ -80,11 +86,53 @@ describe('i filtri della lista', () => {
         }, 'fits', DEVICE)).toBe(false)
     })
 
-    it('«licenza libera» non nasconde chi la licenza non la dichiara', () => {
-        // Stessa ragione: un silenzio non è un divieto.
-        expect(talosModelPassesFilter(m('x/y', null, []), 'open-licence', DEVICE)).toBe(true)
+    it('Chat richiede tag conversational oppure un chat template reale', () => {
+        expect(talosModelIsChatCapable(m('plain/generator', 'text-generation'))).toBe(false)
+        expect(talosModelIsChatCapable(m('plain/model', null, ['conversational']))).toBe(true)
+        expect(talosModelIsChatCapable({ ...m('plain/model'), hasChatTemplate: true })).toBe(true)
+        expect(talosModelIsChatCapable(m('owner/chat-in-name'))).toBe(false)
+    })
+
+    it('Orientato al codice resta una euristica TALOS conservativa', () => {
+        expect(talosModelIsCodeOriented(m('Qwen/Qwen2.5-Coder-7B-GGUF'))).toBe(true)
+        expect(talosModelIsCodeOriented(m('owner/model', null, ['code-generation']))).toBe(true)
+        expect(talosModelIsCodeOriented(m('owner/encode-model'))).toBe(false)
+        expect(talosModelIsCodeOriented(m('owner/codebook-model'))).toBe(false)
+    })
+
+    it('Q4 viene dalla variante sibling canonica e mai dal nome repository', () => {
+        expect(talosModelHasQ4Variant({
+            ...m('owner/model-Q4_K_M'),
+            browseVariant: {
+                fileBytes: GB,
+                workingBytes: 2 * GB,
+                estimated: false,
+                quantisation: 'Q8_0',
+            },
+        })).toBe(false)
+        expect(talosModelHasQ4Variant({
+            ...m('owner/model-without-quant-in-name'),
+            browseVariant: {
+                fileBytes: GB,
+                workingBytes: 2 * GB,
+                estimated: false,
+                quantisation: 'Q4_K_M',
+            },
+        })).toBe(true)
+        expect(talosModelHasQ4Variant({ ...m('owner/model-Q4_K_M'), browseVariant: null })).toBe(false)
+    })
+
+    it('licenza permissiva è una promessa positiva e fail-closed', () => {
+        expect(talosModelPassesFilter(m('x/y', null, []), 'open-licence', DEVICE)).toBe(false)
         expect(talosModelPassesFilter(m('x/y', null, ['license:apache-2.0']), 'open-licence', DEVICE)).toBe(true)
         expect(talosModelPassesFilter(m('x/y', null, ['license:other']), 'open-licence', DEVICE)).toBe(false)
+        expect(talosModelPassesFilter(m('x/y', null, ['license:openrail']), 'open-licence', DEVICE)).toBe(false)
+        expect(talosModelPassesFilter(m('x/y', null, ['license:llama3.1']), 'open-licence', DEVICE)).toBe(false)
+        expect(talosModelPassesFilter(m('x/y', null, ['license:cc-by-4.0']), 'open-licence', DEVICE)).toBe(false)
+        expect(talosModelPassesFilter({
+            ...m('x/y', null, ['license:apache-2.0']),
+            licence: 'other',
+        }, 'open-licence', DEVICE)).toBe(false)
     })
 
     it('i filtri si SOMMANO, non si uniscono', () => {

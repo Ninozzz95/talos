@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import TalosMobileHeader from '@/components/shell/TalosMobileHeader.vue'
 
 // F1-T3 — app-level header (D5): hamburger left, session title center.
@@ -9,7 +9,7 @@ import TalosMobileHeader from '@/components/shell/TalosMobileHeader.vue'
 // immersive chrome), New chat lives inside it.
 function mountHeader(props: Record<string, unknown> = {}) {
     return mount(TalosMobileHeader, {
-        props: { title: 'Release review', creatingSession: false, ...props },
+        props: { title: 'Release review', creatingSession: false, canGoIncognito: false, ...props },
         attachTo: document.body,
     })
 }
@@ -17,8 +17,10 @@ function mountHeader(props: Record<string, unknown> = {}) {
 afterEach(() => { document.body.innerHTML = '' })
 
 describe('TalosMobileHeader (F1-T3)', () => {
-    it('renders hamburger (Open menu), centered truncated title and the 3-dot options', () => {
+    it('renders hamburger (Open menu), centered truncated title and the 3-dot options', async () => {
         const wrapper = mountHeader()
+        await vi.dynamicImportSettled()
+        await flushPromises()
         expect(wrapper.find('[data-testid="talos-mobile-header"]').exists()).toBe(true)
         expect(wrapper.find('[aria-label="Open menu"]').exists()).toBe(true)
         expect(wrapper.get('[data-testid="talos-mobile-header-title"]').text()).toBe('Release review')
@@ -34,6 +36,8 @@ describe('TalosMobileHeader (F1-T3)', () => {
 
     it('emits openMenu from the hamburger and newChat from the options menu', async () => {
         const wrapper = mountHeader()
+        await vi.dynamicImportSettled()
+        await flushPromises()
         await wrapper.get('[aria-label="Open menu"]').trigger('click')
         expect(wrapper.emitted('openMenu')).toHaveLength(1)
 
@@ -45,8 +49,9 @@ describe('TalosMobileHeader (F1-T3)', () => {
         wrapper.unmount()
     })
 
-    it('hides the options menu on tablet (the panel owns those actions)', () => {
+    it('hides the options menu on tablet (the panel owns those actions)', async () => {
         const wrapper = mountHeader({ hideMenu: true })
+        await flushPromises()
         expect(wrapper.find('[aria-label="Chat options"]').exists()).toBe(false)
         wrapper.unmount()
     })

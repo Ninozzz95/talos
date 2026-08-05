@@ -10,6 +10,7 @@ import SettingsModelsLocalScreen from '@/screens/SettingsModelsLocalScreen.vue'
 const stubs = {
     TalosMobileModelLabHub: { template: '<main data-testid="hub" />' },
     TalosMobileProviderRuntimePanel: { template: '<main data-testid="providers" />' },
+    TalosMobileHuggingFaceAccessCard: { template: '<aside data-testid="hf-access" />' },
     TalosMobileModelAdvancedOptions: { template: '<div data-testid="advanced" />' },
     TalosMobileModelCatalog: { template: '<main data-testid="catalog" />' },
     TalosMobileLocalModels: { template: '<main data-testid="local" />' },
@@ -25,5 +26,6 @@ describe('dedicated Model Lab screens', () => {
         const wrapper = mount(screen, { global: { stubs } })
         expect(wrapper.get(`[data-testid="${testId}"]`).exists()).toBe(true)
         if (testId !== 'hub') expect(wrapper.find('[data-testid="talos-model-lab-device"]').exists()).toBe(false)
+        if (testId === 'providers') expect(wrapper.findAll('[data-testid="hf-access"]')).toHaveLength(1)
     })
 })

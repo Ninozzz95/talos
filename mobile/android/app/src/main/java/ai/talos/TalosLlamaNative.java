@@ -71,6 +71,9 @@ final class TalosLlamaNative {
     static native long nativeOpen(String modelPath, int threads, int contextTokens, int gpuLayers,
                                   boolean deterministic);
 
+    /** Stable failure stage from the immediately preceding open on this thread. */
+    static native String nativeLastOpenError();
+
     /** Token prodotti finora. Interrogabile da un altro thread durante la generazione. */
     static native int nativeTokensProduced(long handle);
 
@@ -106,6 +109,9 @@ final class TalosLlamaNative {
     static native void nativeCancel(long handle);
 
     static native int nativeContextTokens(long handle);
+
+    /** Token count produced by the model tokenizer with the generation flags. */
+    static native int nativePromptTokens(long handle, String prompt);
 
     /**
      * Il testo generato, oppure {@code null} se la generazione è fallita.

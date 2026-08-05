@@ -29,9 +29,11 @@ const RIGA = {
     id: 'deepreinforce-ai/Ornith-1.0-9B-GGUF',
     sha: 'c'.repeat(40),
     downloads: 4907682,
+    downloadsAllTime: 19407682,
     likes: 606,
     pipeline_tag: 'text-generation',
     tags: ['gguf', 'license:apache-2.0'],
+    cardData: { license: 'apache-2.0' },
     // I numeri veri, come li restituisce il Hub con `expand[]=gguf`.
     gguf: {
         total: 8953803264,
@@ -68,6 +70,9 @@ describe('sfogliare invece di cercare', () => {
         expect(m!.task).toBe('text-generation')
         expect(m!.tags).toContain('license:apache-2.0')
         expect(m!.hasChatTemplate).toBe(true)
+        expect(m!.licence).toBe('apache-2.0')
+        expect(m!.downloads).toBe(4907682)
+        expect(m!.downloadsAllTime).toBe(19407682)
     })
 })
 
@@ -110,6 +115,8 @@ describe('i numeri veri invece della stima', () => {
         expect(visti[0]).toContain('expand%5B%5D=gguf')
         expect(visti[0]).toContain('expand%5B%5D=siblings')
         expect(visti[0]).toContain('expand%5B%5D=sha')
+        expect(visti[0]).toContain('expand%5B%5D=cardData')
+        expect(visti[0]).toContain('expand%5B%5D=downloadsAllTime')
     })
 
     it('separa i byte repository dalla variante mobile stimata', async () => {

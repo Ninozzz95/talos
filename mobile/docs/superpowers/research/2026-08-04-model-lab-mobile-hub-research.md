@@ -474,3 +474,160 @@ contestuali, coerenti con la raccomandazione Android di porre le preferenze
 frequenti vicino al compito che le richiede. Il simbolo
 `TalosMobileSidebar.openModelLab` viene ritirato; nessuna route, API o package
 viene aggiunto.
+
+## 14. Refresh bloccante Fase 3 — 2026-08-05
+
+Prima di modificare i filtri sono state riconfermate le fonti primarie correnti
+e il boundary reale, come richiesto dal gate della sezione 9.
+
+### Contratti e pin
+
+- la documentazione ufficiale `HfApi` distingue ancora `downloads` (ultimi 30
+  giorni) da `downloadsAllTime` e consente di espandere `cardData`, `gguf`,
+  `pipeline_tag`, `siblings`, `tags` e revision;
+- la documentazione ufficiale Model Cards continua ad assegnare license e
+  pipeline ai metadata YAML; una licenza custom usa `other` e non può quindi
+  superare una policy permissiva positiva;
+- la lista licenze ufficiale conferma gli ID esatti dell'allowlist TALOS e
+  mantiene OpenRAIL, Llama, `other` e le famiglie copyleft/attribution come
+  contratti distinti;
+- SHA-256 OpenAPI canonico invariato:
+  `92e1d8823c21541a993b28d0453b868bd0e42099d1090746a97ac3b84a8489f1`;
+- metadata OIDC invariato: 890 byte, ETag
+  `W/"37a-dttZVZA3HSuAYFH2OCoyqXSlr3k"`, SHA-256
+  `fc57107dcf0d8a09890016ea57bdde0ccda12227d49d014fbb48dbf270bae435`,
+  PKCE S256, soli `client_secret_basic` e `client_secret_post` pubblicizzati.
+
+Il refresh OAuth non rimuove quindi il blocco esterno della Fase 5. Le guide
+ufficiali correnti di OpenRouter, Gemini, OpenAI e Anthropic non cambiano la
+matrice della sezione 5.2.
+
+### Probe live e fixture pin
+
+| Repository | Revision | Evidenza rilevante Fase 3 |
+|---|---|---|
+| `unsloth/Qwen3.5-4B-GGUF` | `e87f176479d0855a907a41277aca2f8ee7a09523` | 28 sibling, 7 Q4, conversational + chat template, `apache-2.0`; downloads rolling osservati 1.180.095 e all-time 4.551.364 |
+| `antirez/deepseek-v4-gguf` | `e7f04037032990db0346398d249baf9fb9df1ccc` | pipeline `text-generation`, nessun conversational e nessun chat template, licenza MIT |
+
+Il gate integration pre-modifica passa 2/2. I contatori sono osservazioni
+volatili e non diventano assertion numeriche; revision e semantica dei campi
+sono il pin. La seconda fixture dimostra perché `text-generation` non è prova
+di chat.
+
+### Decisione
+
+**ADAPT** i campi ufficiali dietro `TalosHuggingFaceModel` e helper puri TALOS.
+La licence della card prevale sul tag quando entrambe esistono; assente,
+conflittuale, `other`, custom o non riconosciuta resta fail-closed. Q4 proviene
+esclusivamente dalla variante sibling canonica. La facet Code resta
+esplicitamente un'euristica TALOS conservativa. Nessuna nuova dipendenza e
+nessun cambiamento fuori `mobile`.
+
+Dipendenze riconfermate: Vue 3.5.40, Router 5.2.0, reka-ui 2.10.1, Capacitor
+core/android 8.4.2, App 8.1.1, InAppBrowser 4.0.1, secure storage 8.0.0, Vite
+7.3.6, Vitest 4.1.10, Playwright 1.61.1 e TypeScript 5.9.3. Device presente:
+OnePlus OPD2415 `2ea6573c`, Android 16/API 36, 2400×3392/density 420 nativi,
+senza override.
+
+## 15. Refresh bloccante Fase 4 — 2026-08-05
+
+Prima di cambiare rendering o navigazione sono stati riletti il tree reale,
+misurato il prodotto sul dispositivo e riconfermati i contratti primari che
+governano lista, dettaglio e disclosure.
+
+### Navigazione e list-detail
+
+- [Vue Router — Programmatic Navigation](https://router.vuejs.org/guide/essentials/navigation)
+  prescrive l'uso di `name` + `params` per lasciare al router la codifica dei
+  segmenti; i `params` sono ignorati quando si passa un `path` manuale;
+- [Vue Router — Dynamic Route Matching](https://router.vuejs.org/guide/essentials/dynamic-matching.html)
+  mappa i segmenti dinamici in `route.params`, mentre la
+  [sintassi di matching](https://router.vuejs.org/guide/essentials/route-matching-syntax.html)
+  conferma che un parametro ordinario rappresenta un singolo segmento non `/`;
+- la guida Android corrente
+  [Build a list-detail layout](https://developer.android.com/develop/adaptive-apps/guides/list-detail)
+  assegna una sola pane alla compact width e usa Back per tornare alla lista;
+  [Canonical layouts](https://developer.android.com/develop/ui/views/layout/canonical-layouts)
+  richiede inoltre che un deep link possa aprire direttamente il detail;
+- [Android common layouts](https://developer.android.com/design/ui/mobile/guides/layout-and-content/common-layouts)
+  indica righe compatte per collezioni che conducono a un dettaglio.
+
+Decisione upstream: **ADOPT** named route e named params di Vue Router;
+**ADAPT** il list-detail Android al route stack TALOS. A 360 CSS px il dettaglio
+sostituisce la lista e usa esclusivamente il Back dell'header derivato dalla
+parent table. L'identità `owner/repo` è ricomposta soltanto dopo aver validato
+due parametri scalari non vuoti; nessuna concatenazione di URL e nessun nuovo
+router o package.
+
+### Rendering progressivo, chiavi e disclosure
+
+- [Vue — List Rendering](https://vuejs.org/guide/essentials/list) richiede una
+  `key` stabile e raccomanda una computed list per filtro/ordinamento;
+- il [WAI-ARIA Disclosure Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/)
+  definisce bottone, stato `aria-expanded` e attivazione Enter/Space;
+- il contratto nativo WHATWG di
+  [`details`/`summary`](https://html.spec.whatwg.org/dev/interactive-elements.html)
+  fornisce già disclosure, stato e tastiera senza ricostruirli in JavaScript.
+
+Decisione upstream: **ADAPT** una finestra progressiva AVM pura da 40 elementi
+con `slice`, ordine e key invariati, incremento +40 e reset su ogni cambio di
+query/provider. La scala osservata (479 profili) non giustifica una dipendenza
+di virtualizzazione. **ADOPT** `details`/`summary` per il README completo; la
+vista iniziale usa un sommario testuale deterministico e non usa `v-html`.
+
+### Boundary Hugging Face e pin locali
+
+La documentazione ufficiale
+[HfApi](https://huggingface.co/docs/huggingface_hub/en/package_reference/hf_api)
+continua a esporre metadata repository, sibling/LFS e interrogazione dei path;
+la [Hub API](https://huggingface.co/docs/hub/en/api) mantiene OpenAPI come
+contratto canonico. La Fase 4 non modifica il wire: riusa il client e le fixture
+pin della Fase 3, il cui gate live appena chiuso passa 3/3. Non viene aggiunta
+alcuna richiesta, libreria o inferenza di peso.
+
+Pin npm letti dal tree installato immediatamente prima del RED: Vue 3.5.40,
+Vue Router 5.2.0, Vite 7.3.6, Vitest 4.1.10, Playwright 1.61.1 e TypeScript
+5.9.3. Device presente: OnePlus OPD2415 `2ea6573c`, Android 16/API 36,
+2400×3392/density 420 nativi; l'override telefonico 1080×2376/density 480 è
+stato rimosso dopo la misura.
+
+Decisione complessiva: **ADAPT** i componenti esistenti dietro helper e route
+TALOS; **REJECT** dipendenze di virtualizzazione, markdown renderer e API nuove
+perché non aggiungono capacità necessarie a questa fase e allargherebbero bundle
+e superficie di sicurezza. Il limite iniziale resta 600.000 byte e non può
+essere alzato per assorbire il refactor.
+
+## 16. Decisione owner OAuth e rinvio — 2026-08-05
+
+Questo è un emendamento di prodotto, non un nuovo refresh delle fonti OAuth. La
+matrice della sezione 5 resta la fotografia della ricerca svolta il 2026-08-04,
+ma non è più una selezione eseguibile per la futura Fase 5.
+
+L'owner decide che, alla ripresa, verranno valutati tutti i provider con un
+flusso OAuth ufficiale realmente implementabile in TALOS mobile. L'ammissione
+richiederà per ciascun provider documentazione ufficiale corrente, client
+native/pubblico senza secret nell'APK, callback compatibile con il dominio
+verificato, scope minimo, adapter TALOS e prova upstream end-to-end. Un provider
+con sola API key resta manuale.
+
+Per Hugging Face lo scope deciso resta esclusivamente `gated-repos`; identità,
+profilo ed e-mail non fanno parte del caso d'uso approvato.
+
+Il dominio non è ancora disponibile. La fase viene quindi rinviata senza usare
+il custom scheme precedentemente ipotizzato, senza client demo e senza UI
+parziale. Quando il dominio sarà pronto, la ricerca OAuth dovrà essere ripetuta
+da fonti primarie correnti e produrre una nuova matrice/pin prima del piano e di
+qualsiasi modifica prodotto.
+
+## 17. Refresh correttivo pre-Fase 5 — 2026-08-05
+
+I finding owner successivi su posizione Settings, Download Center globale,
+compattezza locale, chip single-line e `TALOS_LLAMA_OPEN_FAILED` richiedono un
+boundary diverso da questa ricerca originaria. Il dossier corrente e
+autorevole è
+`2026-08-05-model-lab-corrective-tranche-research.md`; include Android UIDT,
+Settings/list-detail, ChipGroup+HorizontalScrollView, Reka Popover 2.10.1,
+Google AI Edge Gallery/PocketPal pin, llama.cpp Android e sette revision GGUF
+con byte/SHA. In caso di conflitto su wrapping filtri, runtime o trasferimenti,
+prevale il dossier 2026-08-05. La decisione OAuth della sezione 16 resta
+invariata.

@@ -1,8 +1,15 @@
 <script setup lang="ts">
+import { defineAsyncComponent } from 'vue'
 import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import { Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import TalosMobileChatOptionsMenu from '@/components/shell/TalosMobileChatOptionsMenu.vue'
+
+const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
+)
+const TalosMobileChatOptionsMenu = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileChatOptionsMenu.vue'),
+)
 
 // F2-T3.6 (owner, ChatGPT-style): immersive shell chrome — no solid header bar;
 // floating circular pills over a light top fade for scroll continuity. LEFT =
@@ -57,22 +64,26 @@ const emit = defineEmits<{
             </Button>
             <span v-else aria-hidden="true" />
 
-            <TalosMobileChatOptionsMenu
-            :incognito="incognito"
-            :can-go-incognito="canGoIncognito"
-            :cleanup-plan="cleanupPlan"
-                :active-title="activeTitle"
-                :busy="busy"
-                pill
-                @new-chat="emit('newChat')"
-                @temporary-chat="emit('temporaryChat')"
-                @normal-mode="emit('normalMode')"
-                @rename="emit('rename', $event)"
-                @delete="(choice) => emit('delete', choice)"
-                :can-open-media="canOpenMedia"
-                @export="emit('export')"
-                @media="emit('media')"
-            />
+            <div v-if="!hideMenu" class="pointer-events-auto flex shrink-0 items-center">
+                <TalosMobileDownloadCenterTrigger />
+                <TalosMobileChatOptionsMenu
+                    :incognito="incognito"
+                    :can-go-incognito="canGoIncognito"
+                    :cleanup-plan="cleanupPlan"
+                    :active-title="activeTitle"
+                    :busy="busy"
+                    pill
+                    @new-chat="emit('newChat')"
+                    @temporary-chat="emit('temporaryChat')"
+                    @normal-mode="emit('normalMode')"
+                    @rename="emit('rename', $event)"
+                    @delete="(choice) => emit('delete', choice)"
+                    :can-open-media="canOpenMedia"
+                    @export="emit('export')"
+                    @media="emit('media')"
+                />
+            </div>
+            <span v-else aria-hidden="true" />
         </div>
     </div>
 </template>

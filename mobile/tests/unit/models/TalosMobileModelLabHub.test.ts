@@ -14,6 +14,11 @@ vi.mock('@/stores/chatController', () => ({
 vi.mock('@/services/localEngine', () => ({
     talosLocalInstalledModels: vi.fn().mockResolvedValue({ models: [], unreadable: [] }),
 }))
+const refreshHuggingFaceToken = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+vi.mock('@/stores/localModels', () => ({
+    talosLocalModels: { hasToken: true },
+    talosRefreshHuggingFaceToken: refreshHuggingFaceToken,
+}))
 
 import TalosMobileModelLabHub from '@/components/talos/models/TalosMobileModelLabHub.vue'
 
@@ -41,5 +46,6 @@ describe('TalosMobileModelLabHub', () => {
         expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
         expect(wrapper.findAll('[data-testid="talos-model-lab-destination"]').map((link) => link.attributes('href')))
             .toEqual(['/settings/models/providers', '/settings/models/catalog', '/settings/models/local'])
+        expect(refreshHuggingFaceToken).toHaveBeenCalledTimes(1)
     })
 })

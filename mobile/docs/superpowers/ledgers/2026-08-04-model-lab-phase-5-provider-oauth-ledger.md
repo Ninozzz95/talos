@@ -1,56 +1,76 @@
-# Model Lab mobile — Fase 5: accesso OAuth provider
+# Model Lab mobile — Fase 5: accesso OAuth provider rinviato
 
 Data: 2026-08-04
+Decisione owner: 2026-08-05
 Owner: main agent della lane mobile
-Stato: PLANNED — NON IMPLEMENTATA; gate esterno client HF non ancora soddisfatto
-Prerequisito: Fase 4 `IMPLEMENTED` e client pubblico Hugging Face registrato
+Stato: DEFERRED — OWNER DECISION; dominio verificato non ancora disponibile
+Prerequisito futuro: tranche correttiva 4.C `IMPLEMENTED`, dominio/callback
+HTTPS reale, matrice provider riconfermata su fonti ufficiali correnti e client
+pubblici registrati per i provider ammessi
 Specifica: `../specs/2026-08-04-model-lab-mobile-hub-design.md`
 Ricerca: `../research/2026-08-04-model-lab-mobile-hub-research.md`
 Piano: `../plans/2026-08-04-model-lab-mobile-hub-plan.md`
 
+Prerequisito correttivo:
+`2026-08-05-model-lab-corrective-tranche-ledger.md`. Questo ledger non diventa
+eseguibile quando 4.C chiude: servono comunque dominio e nuova autorizzazione
+owner.
+
 ## 1. Decisione upstream
 
-Implementare soltanto Hugging Face con Authorization Code + PKCE S256 nel
-browser di sistema. Device Authorization Grant è fallback, non percorso
-primario. Non inserire client secret nell'APK. Non simulare OAuth per provider
-che documentano soltanto API key o richiedono un diverso confine applicativo.
+Decisione owner 2026-08-05: quando la fase verrà ripresa, OAuth non sarà
+limitato a Hugging Face. Saranno candidati **tutti e soltanto** i provider la
+cui documentazione ufficiale corrente descriva un flusso OAuth realmente
+implementabile in TALOS mobile: client pubblico/native app, nessun client
+secret nell'APK, redirect compatibile col dominio verificato e prova reale
+end-to-end. I provider che documentano soltanto API key restano sui flussi
+manuali; TALOS non imita OAuth per analogia.
+
+Ogni provider ammesso usa il minimo privilegio necessario dietro un adapter
+TALOS. Per Hugging Face lo scope deciso è soltanto `gated-repos`; `openid`,
+`profile` ed `email` restano esclusi salvo una futura esigenza prodotto
+esplicita e una nuova approvazione owner.
 
 Matrice iniziale:
 
 | Provider | Stato fase 5 | Motivo |
 |---|---|---|
-| Hugging Face | ADAPT/IMPLEMENT | client pubblico, PKCE e metadata OIDC ufficiali |
-| OpenRouter | DEFER | callback ufficiale HTTPS/localhost; custom scheme Android non documentato |
-| Gemini | DEFER | setup identità Google Cloud/Android separato |
-| OpenAI | REJECT | API key per questo contratto; nessun sign-in end-user provider |
-| Anthropic | REJECT | API key/WIF non è consumer OAuth diretto |
-| DeepSeek | REJECT | bearer API key |
-| Ollama | N/A | locale senza auth; cloud non coperto dal flusso scelto |
+| Hugging Face | CANDIDATE ON RESUME | scope minimo `gated-repos`; client e redirect reali da registrare |
+| OpenRouter | RESEARCH ON RESUME | includere soltanto se il flusso ufficiale corrente è compatibile con TALOS mobile e dominio verificato |
+| Gemini | RESEARCH ON RESUME | includere soltanto con configurazione ufficiale native/Android e callback reale |
+| OpenAI | RESEARCH ON RESUME | includere soltanto se esiste un OAuth ufficiale per l'accesso provider richiesto dall'app, non per analogia |
+| Anthropic | RESEARCH ON RESUME | stesso criterio; API key/WIF non vengono rinominati OAuth |
+| DeepSeek | RESEARCH ON RESUME | stesso criterio; bearer API key resta manuale se non esiste OAuth adatto |
+| Ollama | N/A / RESEARCH CLOUD | locale non richiede auth; rivalutare solo un eventuale flusso cloud ufficiale |
 
-La matrice va riconfermata su sole fonti ufficiali all'apertura della fase. Un
-nuovo upstream può cambiare una riga soltanto tramite emendamento.
+Questa matrice è un indice di ricerca, non un'approvazione preventiva. Va
+ricostruita su sole fonti ufficiali all'apertura della fase; ogni provider deve
+superare separatamente sicurezza, callback, scope, client registration e gate
+reale. Un nuovo upstream cambia una riga soltanto tramite emendamento.
 
 ## 2. Blocco esterno esplicito
 
-Serve un client pubblico HF registrato dall'owner con redirect esatto:
+Il dominio necessario al callback verificato non è ancora disponibile. Per
+decisione owner, TALOS non usa per ora il precedente private-use URI
+`ai.talos://oauth/huggingface` e non costruisce una soluzione intermedia.
+L'esatto HTTPS redirect/App Link verrà deciso soltanto quando esisterà il
+dominio.
 
-```text
-ai.talos://oauth/huggingface
-```
+Fino ad allora:
 
-Il client ID entra in build tramite `VITE_TALOS_HF_OAUTH_CLIENT_ID`. Non viene
-hardcoded nel source e non è un segreto. In assenza del valore:
+- la Fase 5 resta `DEFERRED`, non parzialmente implementata;
+- token e API key manuali esistenti restano il comportamento reale;
+- non vengono aggiunti pulsanti OAuth inattivi, client ID demo o callback
+  provvisori;
+- non si aprono RED né modifiche prodotto OAuth;
+- la ripresa richiede una nuova autorizzazione owner dopo dominio, ricerca
+  ufficiale aggiornata e registrazione dei client reali.
 
-- la card spiega che l'accesso rapido non è configurato;
-- il token manuale resta funzionante;
-- nessun pulsante avvia un URL con client fittizio;
-- il ledger può arrivare al massimo `BLOCKED — external client registration`,
-  mai `IMPLEMENTED`.
-
-La registrazione deve inoltre provare che Hugging Face accetti il private-use
-URI. La documentazione pubblica non lo garantisce esplicitamente. Se lo rifiuta,
-la fase resta bloccata finché non esiste un HTTPS App Link su dominio verificato
-e il ledger non viene emendato; non si sostituisce l'URI in silenzio.
+Le sezioni 3–12 qui sotto sono conservate come **bozza storica HF-only** per non
+perdere l'analisi già svolta, ma non sono più un ledger eseguibile. Assunzioni,
+inventario, simboli, callback e test dovranno essere riscritti provider per
+provider prima di qualunque implementazione; in caso di conflitto prevalgono
+questa decisione e il registro emendamenti.
 
 ## 3. Inventario esatto dei file
 
@@ -379,5 +399,25 @@ chiave viene stampata per il rollback.
 
 ## 13. Registro emendamenti
 
-Nessun emendamento al momento della stesura. Il client pubblico mancante è un
-gate esterno noto, non un elemento da riempire con un valore demo.
+### 2026-08-05 — scope multi-provider e rinvio per assenza dominio
+
+L'owner decide di:
+
+1. includere in futuro ogni provider con OAuth ufficiale realmente
+   implementabile nell'app TALOS, invece di limitare la fase a Hugging Face;
+2. mantenere per Hugging Face il solo permesso `gated-repos`;
+3. non usare ora il custom scheme privato e attendere un dominio reale;
+4. rinviare integralmente OAuth, conservando token/API key manuali;
+5. richiedere al riavvio una nuova ricerca standards-first, una matrice
+   provider aggiornata e un ledger lowest-level completamente riconciliato.
+
+Questa decisione documentale modifica esclusivamente:
+
+1. `mobile/docs/superpowers/ledgers/2026-08-04-model-lab-phase-5-provider-oauth-ledger.md`;
+2. `mobile/docs/superpowers/plans/2026-08-04-model-lab-mobile-hub-plan.md`;
+3. `mobile/docs/PASSAGGIO-DI-CONSEGNE.md`;
+4. `mobile/docs/superpowers/specs/2026-08-04-model-lab-mobile-hub-design.md`;
+5. `mobile/docs/superpowers/research/2026-08-04-model-lab-mobile-hub-research.md`.
+
+Stato conseguente: `DEFERRED — OWNER DECISION`. Nessun file prodotto Fase 5 è
+stato creato o modificato e nessuna UI suggerisce una connessione inesistente.

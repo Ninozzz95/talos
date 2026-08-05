@@ -52,14 +52,12 @@ afterEach(() => {
 })
 
 /**
- * The screen used to call itself a `tablist` at every width, and at one of them
- * that was untrue. The APG is explicit: tabs are panels in the SAME view with
- * the list visible beside them. Below 768px this screen hides the list, puts the
- * panel in its place and offers a Back — a master-detail flow, which is
- * navigation. These two blocks are the same screen at its two real widths.
+ * Settings destinations are navigation at every width. The tablet keeps the
+ * detail visible beside the list, but that layout change must not silently
+ * turn routed and inline destinations into two incompatible keyboard models.
  */
 describe('TalosMobileSettingsCenter — on the phone, it is navigation', () => {
-    it('offers one routed Model Lab link plus twelve inline destinations, not tabs', () => {
+    it('puts Account first, then Model Lab first inside Intelligence', () => {
         const wrapper = mountCenter()
 
         // No tablist, because tapping a row takes the list away.
@@ -72,6 +70,28 @@ describe('TalosMobileSettingsCenter — on the phone, it is navigation', () => {
         expect(wrapper.findAll('[data-settings-tab]')).toHaveLength(12)
         expect(wrapper.findAll('[data-testid="settings-model-lab-link"]')).toHaveLength(1)
         expect(wrapper.get('[data-testid="settings-model-lab-link"]').text()).toContain('Model Lab')
+
+        const destinations = Array.from(wrapper.get('[data-testid="settings-category-list"]').element
+            .querySelectorAll<HTMLElement>('[data-settings-tab], [data-settings-route]'))
+            .map((row) => row.dataset.settingsTab ?? row.dataset.settingsRoute)
+        expect(destinations.slice(0, 4)).toEqual(['account', 'models', 'ai_defaults', 'agent_tools'])
+
+        const intelligenceHeading = wrapper.findAll('[data-testid="settings-group-heading"]')
+            .find((heading) => heading.text() === 'Intelligence')
+        expect(intelligenceHeading).toBeDefined()
+        expect(intelligenceHeading!.element.nextElementSibling
+            ?.querySelector('[data-testid="settings-model-lab-link"]')).not.toBeNull()
+
+        const modelLab = wrapper.get('[data-testid="settings-model-lab-link"]')
+        expect(modelLab.classes()).toEqual(expect.arrayContaining([
+            'min-h-[var(--talos-touch-target)]',
+            'gap-[var(--talos-space-inline)]',
+            'px-[var(--talos-space-card)]',
+        ]))
+        expect(modelLab.element.parentElement?.classList)
+            .toContain('rounded-[var(--talos-radius-card)]')
+        expect(modelLab.findAll('svg').every((icon) => icon.classes()
+            .includes('size-[var(--talos-icon-size)]'))).toBe(true)
     })
 
     it('marks where you are with aria-current, and gives every row its own tab stop', async () => {
@@ -116,62 +136,46 @@ describe('TalosMobileSettingsCenter — on the phone, it is navigation', () => {
     })
 })
 
-describe('TalosMobileSettingsCenter — on the tablet, it really is tabs', () => {
-    it('renders one standalone Model Lab link beside a twelve-tab inline settings list', () => {
+describe('TalosMobileSettingsCenter — on the tablet, it remains navigation', () => {
+    it('keeps the same Account-first grouped navigation beside a region', () => {
         widenToTablet()
         const wrapper = mountCenter()
 
-        const tablist = wrapper.get('[role="tablist"]')
-        expect(tablist.attributes('aria-label')).toBe('TALOS settings categories')
-        expect(tablist.attributes('aria-orientation')).toBe('vertical')
-        expect(wrapper.get('[data-testid="settings-category-pane"]').element.tagName).toBe('ASIDE')
-        expect(wrapper.findAll('[role="tab"]')).toHaveLength(12)
-        expect(wrapper.get('[data-testid="settings-model-lab-link"]').element.closest('[role="tablist"]')).toBeNull()
-        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('AI Defaults')
-        expect(wrapper.get('[role="tabpanel"]').attributes('data-settings-panel')).toBe('ai_defaults')
-        expect(wrapper.get('[role="tabpanel"]').classes()).toContain('talos-motion-tab-panel')
+        expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
+        expect(wrapper.findAll('[role="tab"]')).toHaveLength(0)
+        expect(wrapper.get('[data-testid="settings-category-pane"]').element.tagName).toBe('NAV')
+        expect(wrapper.get('[data-testid="settings-category-pane"]').attributes('aria-label'))
+            .toBe('TALOS settings categories')
+        expect(wrapper.get('[data-settings-tab="account"]').element
+            .compareDocumentPosition(wrapper.get('[data-testid="settings-model-lab-link"]').element)
+            & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(wrapper.get('[data-settings-panel="ai_defaults"]').attributes('role')).toBe('region')
+        expect(wrapper.get('[data-settings-panel="ai_defaults"]').classes()).toContain('talos-motion-tab-panel')
         wrapper.unmount()
     })
 
-    it('is one tab stop, with the arrows moving inside it', () => {
+    it('gives every inline destination its natural tab stop', () => {
         widenToTablet()
         const wrapper = mountCenter()
 
-        const stops = wrapper.findAll('[role="tab"]').filter((tab) => tab.attributes('tabindex') === '0')
-        expect(stops).toHaveLength(1)
-        expect(stops[0]!.attributes('aria-selected')).toBe('true')
+        expect(wrapper.findAll('[data-settings-tab]')).toHaveLength(12)
+        expect(wrapper.findAll('[data-settings-tab]').every((row) => row.attributes('tabindex') === undefined))
+            .toBe(true)
         wrapper.unmount()
     })
 
-    it('moves selection with ArrowDown, Home, and End', async () => {
+    it('does not move selection with tab-pattern arrow keys', async () => {
         widenToTablet()
         const wrapper = mountCenter()
-        await nextTick()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        await nextTick()
-        // Account is first; Model Lab is navigation outside this tab sequence.
-        const first = wrapper.get('[role="tab"]')
-        expect(first.text()).toContain('Account')
+        const first = wrapper.get('[data-settings-tab="account"]')
         ;(first.element as HTMLElement).focus()
-        first.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
-        await nextTick()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        await nextTick()
-        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('AI Defaults')
+        for (const key of ['ArrowDown', 'ArrowUp', 'Home', 'End']) {
+            first.element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+            await nextTick()
+        }
 
-        wrapper.get('[role="tab"][aria-selected="true"]').element.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }))
-        await nextTick()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        await nextTick()
-        // The last entry is System now: the four "not in this build" ones were
-        // pulled out of the live groups into a declared section at the end.
-        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('System')
-
-        wrapper.get('[role="tab"][aria-selected="true"]').element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }))
-        await nextTick()
-        await new Promise((resolve) => setTimeout(resolve, 0))
-        await nextTick()
-        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('Account')
+        expect(wrapper.get('[data-settings-panel="ai_defaults"]').attributes('data-state')).toBe('active')
+        expect(document.activeElement).toBe(first.element)
         wrapper.unmount()
     })
 })

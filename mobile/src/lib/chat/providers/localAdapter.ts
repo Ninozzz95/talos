@@ -7,12 +7,19 @@ import type {
     TalosProviderStreamHandlers,
 } from '@/lib/chat/providerContracts'
 import {
-    talosLocalEngineChatPrompt,
+    TalosLocalEngineGenerationError,
+    TalosLocalEngineOpenError,
+    talosLocalEngineChatPlan,
     talosLocalEngineGenerate,
     talosLocalEngineOpen,
+    talosLocalEngineOpenWithFallback,
     talosLocalEngineStatus,
     talosLocalInstalledModels,
 } from '@/services/localEngine'
+import {
+    TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
+    talosLocalEscalatedContextTokens,
+} from '@/lib/models/localContextPolicy'
 import { talosToolsForOpenAi } from '@/lib/tools/registry'
 import { talosNormaliseLocalToolCalls } from '@/lib/chat/localToolCalls'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
@@ -62,21 +69,45 @@ function conversationOf(input: TalosMobileCompletionInput): Array<{ role: string
     return turns
 }
 
-/**
- * Quanto contesto si chiede al motore locale.
- *
- * Non chiederlo NON vuol dire «quello per cui il modello e' stato addestrato»:
- * misurato sul OnePlus Pad 3 il 2026-08-04, llama.cpp apriva a **4096** e lo
- * diceva da se' nel log — `n_ctx_seq (4096) < n_ctx_train (32768)`. Con quel
- * tetto la sintesi di una ricerca, che vale 11009 token, non entrava: il passo
- * falliva e sembrava che il modello non avesse risposto.
- *
- * 16384 e' una scelta, non un massimo: la cache KV cresce col contesto e su un
- * telefono la memoria e' il vincolo vero (~4 GB liberi a caldo sul tablet di
- * prova). Sedicimila token tengono una sintesi di ricerca con margine, e
- * costano circa la meta' del contesto pieno del modello.
- */
-const TALOS_LOCAL_CONTEXT_TOKENS = 16384
+/** Stable machine codes and localized actions for every native open stage. */
+const LOCAL_OPEN_FAILURE = {
+    path: ['TALOS_LOCAL_MODEL_OPEN_PATH', 'models.localModelOpenPath'],
+    'model-load': ['TALOS_LOCAL_MODEL_OPEN_LOAD', 'models.localModelOpenLoad'],
+    context: ['TALOS_LOCAL_MODEL_OPEN_CONTEXT', 'models.localModelOpenContext'],
+    sampler: ['TALOS_LOCAL_MODEL_OPEN_SAMPLER', 'models.localModelOpenSampler'],
+    template: ['TALOS_LOCAL_MODEL_OPEN_UNKNOWN', 'models.localModelOpenUnknown'],
+    generation: ['TALOS_LOCAL_MODEL_OPEN_UNKNOWN', 'models.localModelOpenUnknown'],
+    unknown: ['TALOS_LOCAL_MODEL_OPEN_UNKNOWN', 'models.localModelOpenUnknown'],
+} as const
+
+function actionableOpenFailure(error: TalosLocalEngineOpenError): TalosMobileProviderError {
+    const [message, uiMessageKey] = LOCAL_OPEN_FAILURE[error.stage]
+    return new TalosMobileProviderError({
+        provider: 'local',
+        operation: 'complete',
+        message,
+        uiMessageKey,
+    })
+}
+
+function promptTooLongFailure(): TalosMobileProviderError {
+    return new TalosMobileProviderError({
+        provider: 'local',
+        operation: 'complete',
+        message: 'TALOS_LOCAL_PROMPT_TOO_LONG',
+        uiMessageKey: 'models.localPromptTooLong',
+    })
+}
+
+function actionableGenerationFailure(error: TalosLocalEngineGenerationError): TalosMobileProviderError {
+    if (error.stage === 'context-required') return promptTooLongFailure()
+    return new TalosMobileProviderError({
+        provider: 'local',
+        operation: 'complete',
+        message: 'TALOS_LOCAL_GENERATION_FAILED',
+        uiMessageKey: 'models.localModelGenerationFailed',
+    })
+}
 
 /**
  * Makes sure the requested model is the one in memory.
@@ -90,7 +121,14 @@ async function ensureLoaded(path: string): Promise<void> {
     const status = await talosLocalEngineStatus()
     if (!status.available) throw new Error('TALOS_LOCAL_ENGINE_UNAVAILABLE')
     if (status.loadedPath === path) return
-    await talosLocalEngineOpen(path, { contextTokens: TALOS_LOCAL_CONTEXT_TOKENS })
+    try {
+        await talosLocalEngineOpenWithFallback(path, {
+            contextTokens: TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
+        })
+    } catch (error) {
+        if (error instanceof TalosLocalEngineOpenError) throw actionableOpenFailure(error)
+        throw error
+    }
 }
 
 async function run(
@@ -112,12 +150,45 @@ async function run(
      */
     const offered = talosModelSupportsToolCalling(input.model) ? input.tools : undefined
     const tools = offered?.length ? talosToolsForOpenAi(offered) : undefined
-    const prompt = await talosLocalEngineChatPrompt(conversationOf(input), tools)
-    const generation = await talosLocalEngineGenerate(
-        prompt,
-        (delta) => { onChunk?.(delta) },
-        { maxTokens: MAX_TOKENS, stopAtEndOfGeneration: true },
+    const turns = conversationOf(input)
+    let plan = await talosLocalEngineChatPlan(turns, tools)
+    const targetContext = talosLocalEscalatedContextTokens(
+        plan.contextTokens,
+        plan.promptTokens,
+        MAX_TOKENS,
     )
+    if (targetContext === null) throw promptTooLongFailure()
+    if (targetContext > plan.contextTokens) {
+        try {
+            // Exact by design: a known 6804-token requirement cannot recover
+            // by falling back to 2048 after an 8192 allocation failure.
+            await talosLocalEngineOpen(input.model.id, { contextTokens: targetContext })
+        } catch (error) {
+            if (error instanceof TalosLocalEngineOpenError) throw actionableOpenFailure(error)
+            throw error
+        }
+        plan = await talosLocalEngineChatPlan(turns, tools)
+        const confirmed = talosLocalEscalatedContextTokens(
+            plan.contextTokens,
+            plan.promptTokens,
+            MAX_TOKENS,
+        )
+        if (confirmed === null || confirmed > plan.contextTokens) throw promptTooLongFailure()
+    }
+
+    let generation
+    try {
+        generation = await talosLocalEngineGenerate(
+            plan.prompt,
+            (delta) => { onChunk?.(delta) },
+            { maxTokens: MAX_TOKENS, stopAtEndOfGeneration: true },
+        )
+    } catch (error) {
+        if (error instanceof TalosLocalEngineGenerationError) {
+            throw actionableGenerationFailure(error)
+        }
+        throw error
+    }
     const normalised = talosNormaliseLocalToolCalls(generation.toolCalls)
     return {
         text: generation.text,

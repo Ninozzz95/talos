@@ -151,6 +151,8 @@ export interface TalosHuggingFaceModel {
     /** Commit returned by the browse response; null is never replaced by main. */
     revision: string | null
     downloads: number
+    /** Distinct lifetime counter; `downloads` remains the rolling 30-day value. */
+    downloadsAllTime: number | null
     likes: number
     /**
      * Known from the search, so a gate is not discovered after someone has
@@ -187,6 +189,8 @@ export interface TalosHuggingFaceModel {
     browseVariant: TalosBrowseVariant | null
     /** Le etichette del repo: da qui esce la licenza per il filtro. */
     tags: readonly string[]
+    /** Declared model-card licence, before TALOS policy classification. */
+    licence: string | null
 }
 
 export type TalosHuggingFaceSort = 'downloads' | 'likes' | 'lastModified' | 'createdAt'
@@ -351,11 +355,13 @@ export function talosCreateHuggingFaceClient(
              */
             parameters.append('expand[]', 'gguf')
             parameters.append('expand[]', 'downloads')
+            parameters.append('expand[]', 'downloadsAllTime')
             parameters.append('expand[]', 'likes')
             parameters.append('expand[]', 'pipeline_tag')
             parameters.append('expand[]', 'tags')
             parameters.append('expand[]', 'siblings')
             parameters.append('expand[]', 'sha')
+            parameters.append('expand[]', 'cardData')
             const cercato = query.trim()
             if (cercato.length > 0) parameters.set('search', cercato)
             const response = await options.fetch(`${HUB}/api/models?${parameters}`, {
@@ -374,6 +380,11 @@ export function talosCreateHuggingFaceClient(
                 const gguf = leggiGguf(row.gguf)
                 const siblings = leggiSibling(row.siblings)
                 const rawRevision = row.sha
+                const cardData = row.cardData && typeof row.cardData === 'object'
+                    && !Array.isArray(row.cardData)
+                    ? row.cardData as Record<string, unknown>
+                    : null
+                const rawAllTime = Number(row.downloadsAllTime)
                 return [{
                     id,
                     revision: typeof rawRevision === 'string'
@@ -381,6 +392,9 @@ export function talosCreateHuggingFaceClient(
                         ? rawRevision.toLowerCase()
                         : null,
                     downloads: Number(row.downloads ?? 0),
+                    downloadsAllTime: Number.isFinite(rawAllTime) && rawAllTime >= 0
+                        ? rawAllTime
+                        : null,
                     likes: Number(row.likes ?? 0),
                     task: typeof row.pipeline_tag === 'string' ? row.pipeline_tag : null,
                     gguf,
@@ -394,6 +408,9 @@ export function talosCreateHuggingFaceClient(
                     tags: Array.isArray(row.tags)
                         ? row.tags.filter((t): t is string => typeof t === 'string')
                         : [],
+                    licence: typeof cardData?.license === 'string'
+                        ? cardData.license.trim() || null
+                        : null,
                     // The Hub answers `"auto"` or `"manual"` when a gate exists and
                     // OMITS the field otherwise, so absent means open. Reading it
                     // the cautious way round would mark nearly every model gated
