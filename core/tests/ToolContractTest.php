@@ -7,6 +7,7 @@ require_once __DIR__.'/../vendor/autoload.php';
 use Kadmos\Tool\ToolCall;
 use Kadmos\Tool\ToolDefinition;
 use Kadmos\Tool\ToolExecutionContext;
+use Kadmos\Tool\ProceduralToolSpec;
 use Kadmos\Tool\ToolResult;
 use Mcp\Schema\Tool as McpTool;
 use Mcp\Schema\Result\CallToolResult as McpCallToolResult;
@@ -83,6 +84,39 @@ function testMcpAlignedToolDefinitionRoundTripsWithoutShapeLoss(): void
     $definition = ToolDefinition::fromArray($raw);
 
     assertToolContract($definition->toArray() === $raw, 'MCP-aligned tool definitions must round-trip exactly.');
+}
+
+function testMcpDefinitionAdaptsToBundledAlignmentContractWithoutShapeLoss(): void
+{
+    $definition = ToolDefinition::fromStrictArray(browserNavigateDefinition());
+    $spec = new ProceduralToolSpec(
+        'browser_navigate',
+        'TOOL_BROWSER_NAVIGATE',
+        'browser.read',
+        'low',
+        true,
+        false,
+        false,
+        true,
+        actions: ['read'],
+        confirmation: 'policy',
+    );
+
+    $contract = $definition->toAlignmentContractV1(
+        $spec,
+        id: 'bundled-browser-navigate',
+        revision: 'core:1',
+        locations: ['trusted_node'],
+    )->toArray();
+
+    assertToolContract($contract['schema_version'] === 1, 'Bundled Tool contract schema version must be pinned.');
+    assertToolContract($contract['name'] === 'TOOL_BROWSER_NAVIGATE', 'Canonical Tool name must use the procedural node identifier.');
+    assertToolContract($contract['input_schema'] === $definition->inputSchema, 'Canonical input schema must preserve MCP JSON Schema bytes.');
+    assertToolContract($contract['output_schema'] === $definition->outputSchema, 'Canonical output schema must preserve MCP JSON Schema bytes.');
+    assertToolContract($contract['capabilities'] === ['browser.read'], 'Canonical capability must come from the procedural spec.');
+    assertToolContract($contract['actions'] === ['read'], 'Canonical actions must come from explicit procedural metadata.');
+    assertToolContract($contract['lifecycle'] === ['kind' => 'bundled', 'revision' => 'core:1'], 'Compiled tools must declare bundled lifecycle.');
+    assertToolContract($contract['execution']['implementation_key'] === 'browser_navigate', 'Implementation key must remain a local registry identifier.');
 }
 
 function testToolDefinitionSeparatesMcpCompatibilityFromStrictProceduralPolicy(): void
@@ -528,6 +562,7 @@ function testToolCallRedactedSerializationProtectsSecretsWithoutHidingBudgets():
 
 $tests = [
     'testMcpAlignedToolDefinitionRoundTripsWithoutShapeLoss',
+    'testMcpDefinitionAdaptsToBundledAlignmentContractWithoutShapeLoss',
     'testToolDefinitionSeparatesMcpCompatibilityFromStrictProceduralPolicy',
     'testOfficialMcpSdkAcceptsThePinnedDefinitionFixture',
     'testMcp20251125OptionalToolMetadataRoundTrips',

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Services\Talos\Agent\TalosProceduralToolRegistry;
+use Kadmos\Alignment\Contract\ToolDefinitionV1;
 use Kadmos\Tool\ProceduralToolSpec;
 use Kadmos\Tool\ToolDefinition;
 use InvalidArgumentException;
@@ -66,6 +67,26 @@ final class TalosProceduralToolRegistryTest extends TestCase
             ],
             array_map(static fn (ProceduralToolSpec $spec): string => $spec->nodeType, $specs),
         );
+    }
+
+    public function test_registry_emits_bundled_canonical_contracts_with_explicit_actions(): void
+    {
+        $contracts = TalosProceduralToolRegistry::contracts();
+
+        $this->assertSame(self::SUPPORTED_TOOLS, array_keys($contracts));
+        foreach ($contracts as $toolName => $contract) {
+            $this->assertInstanceOf(ToolDefinitionV1::class, $contract);
+            $payload = $contract->toArray();
+            $this->assertSame('bundled', $payload['lifecycle']['kind']);
+            $this->assertSame(['trusted_node'], $payload['execution']['locations']);
+            $this->assertSame($toolName, $payload['execution']['implementation_key']);
+        }
+
+        $this->assertSame(['read'], $contracts['browser_snapshot']->toArray()['actions']);
+        $this->assertSame(['write'], $contracts['browser_click']->toArray()['actions']);
+        $this->assertSame(['write', 'outbound'], $contracts['browser_file_upload']->toArray()['actions']);
+        $this->assertSame(['read', 'outbound'], $contracts['web_search']->toArray()['actions']);
+        $this->assertSame('always', $contracts['browser_click']->toArray()['confirmation']);
     }
 
     public function test_all_tool_schemas_are_closed_at_every_object_boundary(): void
