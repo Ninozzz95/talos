@@ -17,7 +17,7 @@ const TalosMobileModelAdvancedOptions = defineAsyncComponent(
         <TalosMobileHuggingFaceAccessCard />
         <TalosMobileProviderRuntimePanel />
         <details class="rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] p-[var(--talos-space-card)]">
-            <summary class="flex min-h-[var(--talos-touch-target)] cursor-pointer items-center gap-[var(--talos-space-inline)] text-sm font-semibold">
+            <summary class="flex min-h-touch cursor-pointer items-center gap-[var(--talos-space-inline)] text-sm font-semibold">
                 <SlidersHorizontal class="size-[var(--talos-icon-size)] text-[var(--talos-accent)]" aria-hidden="true" />
                 {{ t('models.advancedManualModels') }}
             </summary>

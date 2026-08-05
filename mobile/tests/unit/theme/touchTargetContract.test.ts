@@ -43,6 +43,19 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
  */
 const BANNED = /\b(min-)?([hw])-11\b/g
 
+/**
+ * La forma verbosa della STESSA cosa.
+ *
+ * `--talos-touch-target` esisteva gia' e valeva gia' 48px, scritta come
+ * `min-h-[var(--talos-touch-target)]` in 47 punti. Non era sbagliata nel
+ * valore — era una **seconda grammatica** per la stessa promessa, ed e' cosi'
+ * che nascono le divergenze: due modi di dirlo, e solo uno viene aggiornato.
+ *
+ * Ora `--spacing-touch` **punta** a quella variabile, quindi il valore ha una
+ * casa sola e `min-h-touch` e' il solo modo di chiederlo.
+ */
+const BANNED_VERBOSE = /min-[hw]-\[var\(--talos-touch-target\)\]/g
+
 function vueSources(): string[] {
     return globSync('src/**/*.vue', { cwd: ROOT })
 }
@@ -53,8 +66,8 @@ describe('il bersaglio tattile ha una grammatica sola', () => {
 
         for (const file of vueSources()) {
             const source = readFileSync(join(ROOT, file), 'utf8')
-            const found = source.match(BANNED)
-            if (found) violations.push(`${relative('.', file)} → ${[...new Set(found)].join(', ')}`)
+            const found = [...(source.match(BANNED) ?? []), ...(source.match(BANNED_VERBOSE) ?? [])]
+            if (found.length) violations.push(`${relative('.', file)} → ${[...new Set(found)].join(', ')}`)
         }
 
         expect(
@@ -73,6 +86,8 @@ describe('il bersaglio tattile ha una grammatica sola', () => {
          * rotto.
          */
         const style = readFileSync(join(ROOT, 'src/style.css'), 'utf8')
-        expect(style).toMatch(/--spacing-touch:\s*48px/)
+        // Punta alla variabile che esisteva gia', non a un secondo `48px`.
+        expect(style).toMatch(/--spacing-touch:\s*var\(--talos-touch-target\)/)
+        expect(style).toMatch(/--talos-touch-target:\s*3rem/)
     })
 })

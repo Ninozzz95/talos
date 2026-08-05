@@ -865,7 +865,7 @@ describe('dare un nome a un modello, e toglierlo', () => {
     it('C45-RED-12B keeps import and every installed-model dialog action on the 48dp token', async () => {
         engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
         const wrapper = await screen()
-        const target = 'min-h-[var(--talos-touch-target)]'
+        const target = 'min-h-touch'
 
         expect(wrapper.get('[data-testid="talos-models-import"]').classes()).toContain(target)
 

@@ -99,7 +99,7 @@ async function saveDisplayName(profileId: string, displayName: string): Promise<
             v-if="canLoadMore"
             type="button"
             data-testid="talos-model-catalog-load-more"
-            class="flex min-h-[var(--talos-touch-target)] w-full items-center justify-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-text)]"
+            class="flex min-h-touch w-full items-center justify-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-text)]"
             @click="loadMore"
         >
             {{ $t('common.loadMore') }}

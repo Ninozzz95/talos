@@ -613,7 +613,7 @@ function resultCountLabel(count: number): string {
                         data-testid="talos-models-installed-search"
                         :placeholder="t('localModels.installedSearch')"
                         :aria-label="t('localModels.installedSearch')"
-                        class="min-h-[var(--talos-touch-target)] w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-[calc(var(--talos-icon-size)+var(--talos-space-control)*2)] pr-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+                        class="min-h-touch w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-[calc(var(--talos-icon-size)+var(--talos-space-control)*2)] pr-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                     >
                 </label>
 
@@ -732,7 +732,7 @@ function resultCountLabel(count: number): string {
                 <Button
                     data-testid="talos-models-import"
                     variant="outline"
-                    class="min-h-[var(--talos-touch-target)] w-full"
+                    class="min-h-touch w-full"
                     :disabled="importing"
                     @click="importFromDevice()"
                 >
@@ -878,7 +878,7 @@ function resultCountLabel(count: number): string {
             v-if="!searching"
             type="button"
             data-testid="talos-models-open-search"
-            class="talos-pressable flex min-h-[var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[var(--talos-space-control)] py-[var(--talos-space-inline)] text-left"
+            class="talos-pressable flex min-h-touch items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[var(--talos-space-control)] py-[var(--talos-space-inline)] text-left"
             @click="searching = true"
         >
             <Search class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
@@ -899,7 +899,7 @@ function resultCountLabel(count: number): string {
             <button
                 type="button"
                 data-testid="talos-models-reclaim"
-                class="talos-pressable min-h-[var(--talos-touch-target)] rounded-full border border-[var(--talos-border)] px-[var(--talos-space-control)] text-[var(--talos-text)]"
+                class="talos-pressable min-h-touch rounded-full border border-[var(--talos-border)] px-[var(--talos-space-control)] text-[var(--talos-text)]"
                 @click="reclaim()"
             >
                 {{ t('localModels.reclaim') }}
@@ -917,13 +917,13 @@ function resultCountLabel(count: number): string {
                 data-testid="talos-models-query"
                 :aria-label="t('localModels.searchLabel')"
                 :placeholder="t('localModels.searchPlaceholder')"
-                class="min-h-[var(--talos-touch-target)] flex-1 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-background)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="min-h-touch flex-1 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-background)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
             >
             <Button
                 type="submit"
                 data-testid="talos-models-search"
                 :aria-label="t('localModels.searchLabel')"
-                class="talos-pressable min-h-[var(--talos-touch-target)] rounded-full bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-[var(--talos-accent-text)]"
+                class="talos-pressable min-h-touch rounded-full bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-[var(--talos-accent-text)]"
             >
                 <Search class="size-[var(--talos-icon-size)]" aria-hidden="true" />
             </Button>
@@ -952,7 +952,7 @@ function resultCountLabel(count: number): string {
                 type="button"
                 :data-testid="`talos-models-filter-${id}`"
                 :aria-pressed="filtriAttivi.includes(id)"
-                class="talos-pressable min-h-[var(--talos-touch-target)] shrink-0 whitespace-nowrap rounded-full border px-[var(--talos-space-control)] py-[var(--talos-space-inline)] text-2xs font-medium transition-colors"
+                class="talos-pressable min-h-touch min-w-touch shrink-0 whitespace-nowrap rounded-full border px-[var(--talos-space-control)] py-[var(--talos-space-inline)] text-2xs font-medium transition-colors"
                 :class="filtriAttivi.includes(id)
                     ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-accent-text)]'
                     : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]'"
@@ -1015,7 +1015,7 @@ function resultCountLabel(count: number): string {
                 <button
                     type="button"
                     data-testid="talos-models-filter-reset"
-                    class="talos-pressable min-h-[var(--talos-touch-target)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-text)]"
+                    class="talos-pressable min-h-touch rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-text)]"
                     @click="resetBrowseFilters"
                 >
                     {{ t('localModels.resetFilters') }}
@@ -1072,18 +1072,18 @@ function resultCountLabel(count: number): string {
             data-testid="talos-models-rename-field"
             :placeholder="renameTarget.name"
             :aria-label="t('localModels.renameLabel')"
-            class="min-h-[var(--talos-touch-target)] w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+            class="min-h-touch w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
         >
         <template #footer>
             <Button
                 variant="ghost"
                 data-testid="talos-models-cancel-rename"
-                class="min-h-[var(--talos-touch-target)]"
+                class="min-h-touch"
                 @click="renameTarget = null"
             >{{ t('common.cancel') }}</Button>
             <Button
                 data-testid="talos-models-rename-save"
-                class="min-h-[var(--talos-touch-target)]"
+                class="min-h-touch"
                 @click="void submitRename()"
             >{{ t('common.save') }}</Button>
         </template>
@@ -1105,13 +1105,13 @@ function resultCountLabel(count: number): string {
             <Button
                 variant="ghost"
                 data-testid="talos-models-cancel-delete"
-                class="min-h-[var(--talos-touch-target)]"
+                class="min-h-touch"
                 @click="deleteTarget = null"
             >{{ t('common.cancel') }}</Button>
             <Button
                 variant="destructive"
                 data-testid="talos-models-delete-confirm"
-                class="min-h-[var(--talos-touch-target)]"
+                class="min-h-touch"
                 @click="void confirmDelete()"
             >
                 {{ t('localModels.deleteConfirm') }}

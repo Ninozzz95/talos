@@ -70,7 +70,7 @@ onMounted(() => { void refresh() })
                 data-testid="talos-hf-access-toggle"
                 :aria-expanded="expanded"
                 aria-controls="talos-hf-access-panel"
-                class="talos-pressable flex min-h-[var(--talos-touch-target)] w-full min-w-0 items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] p-[var(--talos-space-card)] text-left"
+                class="talos-pressable flex min-h-touch w-full min-w-0 items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] p-[var(--talos-space-card)] text-left"
                 @click="expanded = !expanded"
             >
                 <span aria-hidden="true" class="grid size-[calc(var(--talos-icon-size)*1.75)] shrink-0 place-items-center text-[length:calc(var(--talos-icon-size)*1.25)]">🤗</span>
@@ -117,19 +117,19 @@ onMounted(() => { void refresh() })
                     :disabled="busy"
                     :aria-label="t('models.huggingFaceAccessInput')"
                     :placeholder="t('models.huggingFaceAccessPlaceholder')"
-                    class="min-h-[var(--talos-touch-target)] min-w-0 flex-1 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-background)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:opacity-50"
+                    class="min-h-touch min-w-0 flex-1 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-background)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:opacity-50"
                 >
                 <button
                     type="submit"
                     data-testid="talos-hf-access-save"
                     :disabled="busy || draft.trim() === ''"
-                    class="talos-pressable min-h-[var(--talos-touch-target)] rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-accent-text)] disabled:opacity-50"
+                    class="talos-pressable min-h-touch rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-accent-text)] disabled:opacity-50"
                 >
                     {{ busy ? t('models.huggingFaceAccessSaving') : t('models.huggingFaceAccessSave') }}
                 </button>
             </form>
 
-            <div class="flex min-h-[var(--talos-touch-target)] flex-wrap items-center justify-between gap-[var(--talos-space-inline)]">
+            <div class="flex min-h-touch flex-wrap items-center justify-between gap-[var(--talos-space-inline)]">
                 <p v-if="error" data-testid="talos-hf-access-error" role="alert" class="text-xs text-[var(--talos-danger)]">
                     {{ t('models.huggingFaceAccessError') }}
                 </p>
@@ -141,7 +141,7 @@ onMounted(() => { void refresh() })
                     type="button"
                     data-testid="talos-hf-access-forget"
                     :disabled="busy"
-                    class="talos-pressable min-h-[var(--talos-touch-target)] rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-2xs text-[var(--talos-muted)] underline disabled:opacity-50"
+                    class="talos-pressable min-h-touch rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-2xs text-[var(--talos-muted)] underline disabled:opacity-50"
                     @click="forget"
                 >
                     {{ t('models.huggingFaceAccessForget') }}

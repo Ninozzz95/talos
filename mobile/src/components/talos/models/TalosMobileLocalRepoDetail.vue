@@ -143,7 +143,7 @@ async function reclaim(): Promise<void> {
             </div>
             <p v-if="summary" data-testid="talos-models-readme-summary" class="line-clamp-2 text-xs leading-5 text-[var(--talos-text)]">{{ summary }}</p>
             <details v-if="card.readme" data-testid="talos-models-readme-full" class="border-t border-[var(--talos-border)] pt-[var(--talos-space-inline)]">
-                <summary class="flex min-h-[var(--talos-touch-target)] cursor-pointer items-center text-xs font-semibold text-[var(--talos-accent)]">{{ t('localModels.fullReadme') }}</summary>
+                <summary class="flex min-h-touch cursor-pointer items-center text-xs font-semibold text-[var(--talos-accent)]">{{ t('localModels.fullReadme') }}</summary>
                 <pre class="max-w-full whitespace-pre-wrap break-words font-sans text-xs leading-5 text-[var(--talos-text)]">{{ card.readme }}</pre>
             </details>
         </section>
@@ -192,7 +192,7 @@ async function reclaim(): Promise<void> {
                 <p v-else-if="row.set.examination.state === 'reading'" class="mt-[calc(var(--talos-space-inline)/2)] text-2xs text-[var(--talos-muted)]">{{ t('localModels.examining') }}</p>
 
                 <details data-testid="talos-models-variant-details" class="group mt-[calc(var(--talos-space-inline)/2)] border-t border-[var(--talos-border)]">
-                    <summary class="flex min-h-[var(--talos-touch-target)] cursor-pointer items-center justify-between gap-[var(--talos-space-inline)] text-2xs font-semibold text-[var(--talos-accent)]">
+                    <summary class="flex min-h-touch cursor-pointer items-center justify-between gap-[var(--talos-space-inline)] text-2xs font-semibold text-[var(--talos-accent)]">
                         {{ t('localModels.variantDetails') }}
                         <ChevronDown class="size-[var(--talos-icon-size)] shrink-0 transition-transform duration-[var(--talos-motion-duration-disclosure)] group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" />
                     </summary>
@@ -209,10 +209,10 @@ async function reclaim(): Promise<void> {
                         <template v-if="row.verdict">
                             <p v-if="row.verdict.reasonKey" class="text-2xs text-[var(--talos-muted)]">{{ t(row.verdict.reasonKey) }}</p>
                             <p data-testid="talos-models-context" class="text-3xs text-[var(--talos-muted)]">{{ t('localModels.contextExplain', { context: store.context }) }}</p>
-                            <button v-if="row.verdict.counterOfferContext" type="button" data-testid="talos-models-counteroffer" class="talos-pressable min-h-[var(--talos-touch-target)] text-left text-2xs text-[var(--talos-accent)] underline" @click="acceptCounterOffer(row.key, row.verdict.counterOfferContext)">{{ t('localModels.counterOffer', { context: row.verdict.counterOfferContext }) }}</button>
+                            <button v-if="row.verdict.counterOfferContext" type="button" data-testid="talos-models-counteroffer" class="talos-pressable min-h-touch text-left text-2xs text-[var(--talos-accent)] underline" @click="acceptCounterOffer(row.key, row.verdict.counterOfferContext)">{{ t('localModels.counterOffer', { context: row.verdict.counterOfferContext }) }}</button>
                         </template>
                         <p v-else-if="row.set.examination.state === 'unreadable'" class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.unreadable') }} {{ explain(row.set.examination.reason) }}</p>
-                        <Button v-if="row.set.examination.state !== 'reading'" type="button" data-testid="talos-models-examine" class="talos-pressable min-h-[var(--talos-touch-target)] self-start rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs text-[var(--talos-text)]" @click="talosExamineSet(row.key)">{{ row.set.examination.state === 'unread' ? t('localModels.examine') : t('localModels.recheck') }}</Button>
+                        <Button v-if="row.set.examination.state !== 'reading'" type="button" data-testid="talos-models-examine" class="talos-pressable min-h-touch self-start rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-xs text-[var(--talos-text)]" @click="talosExamineSet(row.key)">{{ row.set.examination.state === 'unread' ? t('localModels.examine') : t('localModels.recheck') }}</Button>
                     </div>
                 </details>
             </li>
@@ -220,7 +220,7 @@ async function reclaim(): Promise<void> {
 
         <div v-if="store.leftovers.totalBytes > 0" data-testid="talos-models-leftovers" class="flex flex-wrap items-center gap-[var(--talos-space-inline)] text-2xs text-[var(--talos-muted)]">
             <span>{{ t('localModels.leftovers', { size: talosFormatBytes(store.leftovers.totalBytes) }) }}</span>
-            <button type="button" data-testid="talos-models-reclaim" class="talos-pressable min-h-[var(--talos-touch-target)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-[var(--talos-text)]" @click="reclaim">{{ t('localModels.reclaim') }}</button>
+            <button type="button" data-testid="talos-models-reclaim" class="talos-pressable min-h-touch rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-control)] text-[var(--talos-text)]" @click="reclaim">{{ t('localModels.reclaim') }}</button>
         </div>
         <p v-if="refused" role="alert" data-testid="talos-models-refused" class="text-xs text-[var(--talos-danger)]">{{ refused }}</p>
     </div>

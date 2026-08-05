@@ -65,7 +65,7 @@ onMounted(async () => {
             <button
                 type="button"
                 data-testid="talos-device-capacity-retry"
-                class="talos-pressable inline-flex min-h-[var(--talos-touch-target)] min-w-[var(--talos-touch-target)] items-center justify-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] text-[var(--talos-muted)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:opacity-50"
+                class="talos-pressable inline-flex min-h-touch min-w-touch items-center justify-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] text-[var(--talos-muted)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:opacity-50"
                 :disabled="measuring"
                 :aria-label="t('models.measureAgain')"
                 @click="measure"

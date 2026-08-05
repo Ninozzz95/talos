@@ -29,8 +29,16 @@
      * `min-h-touch` lo dice. Ed e' verificato da
      * `tests/unit/theme/touchTargetContract.test.ts`, che diventa rosso se il
      * 44 rientra da una porta laterale.
+     *
+     * ## Punta alla variabile che ESISTEVA GIA'
+     *
+     * `--talos-touch-target: 3rem` era gia' in questo foglio, e valeva gia' 48.
+     * Scrivere `48px` qui avrebbe aggiunto una QUARTA grammatica accanto alle
+     * tre che c'erano — cioe' esattamente il difetto che questo token doveva
+     * chiudere. Il valore ha una sola casa; questo e' il nome con cui Tailwind
+     * lo serve.
      */
-    --spacing-touch: 48px;
+    --spacing-touch: var(--talos-touch-target);
 
     --font-sans: var(--talos-font-ui);
     --font-display: var(--talos-font-display);

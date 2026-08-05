@@ -273,7 +273,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                                 :to="{ name: 'settings-models' }"
                                 data-testid="settings-model-lab-link"
                                 :data-settings-route="tab.id"
-                                class="talos-pressable flex min-h-[var(--talos-touch-target)] w-full items-center gap-[var(--talos-space-inline)] px-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)]"
+                                class="talos-pressable flex min-h-touch w-full items-center gap-[var(--talos-space-inline)] px-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)]"
                             >
                                 <component :is="ICONS[tab.id]" class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                                 <span class="min-w-0 flex-1">
@@ -288,7 +288,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                                 :aria-current="activeTab === tab.id ? 'page' : undefined"
                                 :data-settings-tab="tab.id"
                                 :data-state="activeTab === tab.id ? 'active' : 'inactive'"
-                                class="talos-pressable flex min-h-[var(--talos-touch-target)] w-full items-center gap-[var(--talos-space-inline)] px-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)] data-[state=active]:bg-[var(--talos-active)]"
+                                class="talos-pressable flex min-h-touch w-full items-center gap-[var(--talos-space-inline)] px-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)] data-[state=active]:bg-[var(--talos-active)]"
                                 @click="selectRow(tab.id)"
                             >
                                 <component :is="ICONS[tab.id]" class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />

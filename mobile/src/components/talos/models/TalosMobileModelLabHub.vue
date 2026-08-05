@@ -77,7 +77,7 @@ onMounted(async () => {
                 :key="destination.route"
                 :to="{ name: destination.route }"
                 data-testid="talos-model-lab-destination"
-                class="talos-pressable flex min-h-[var(--talos-touch-target)] min-w-0 items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] p-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="talos-pressable flex min-h-touch min-w-0 items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] p-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
             >
                 <span class="grid size-[var(--talos-touch-target)] shrink-0 place-items-center rounded-[var(--talos-radius-control)] bg-[var(--talos-active)] text-[var(--talos-accent)]">
                     <component :is="destination.icon" class="size-[var(--talos-icon-size)]" aria-hidden="true" />

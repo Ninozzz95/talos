@@ -114,15 +114,15 @@ async function remove(id: string): Promise<void> {
                 <span class="mb-[var(--talos-space-inline)] block text-xs font-medium text-[var(--talos-muted)]">{{ $t('models.displayName') }}</span>
                 <input v-model="displayName" type="text" maxlength="255" :aria-label="$t('models.manualDisplayName')" :placeholder="$t('models.modelLabelPlaceholder')" class="h-[var(--talos-touch-target)] w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-input)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]">
             </label>
-            <label class="flex min-h-[var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)] text-xs font-medium text-[var(--talos-text)]">
+            <label class="flex min-h-touch items-center gap-[var(--talos-space-inline)] text-xs font-medium text-[var(--talos-text)]">
                 <input v-model="reasoning" type="checkbox" :aria-label="$t('models.declareReasoning')" class="size-[var(--talos-icon-size)] accent-[var(--talos-accent)]">
                 {{ $t('models.declareReasoning') }}
             </label>
-            <label class="flex min-h-[var(--talos-touch-target)] items-center gap-[var(--talos-space-inline)] text-xs font-medium text-[var(--talos-text)]">
+            <label class="flex min-h-touch items-center gap-[var(--talos-space-inline)] text-xs font-medium text-[var(--talos-text)]">
                 <input v-model="vision" type="checkbox" :aria-label="$t('models.declareImageInputSupport')" class="size-[var(--talos-icon-size)] accent-[var(--talos-accent)]">
                 {{ $t('models.declareImageInput') }}
             </label>
-            <button type="submit" :aria-label="$t('models.saveManual')" :disabled="busy" class="inline-flex min-h-[var(--talos-touch-target)] items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-accent-text)] disabled:opacity-50 sm:col-span-2">
+            <button type="submit" :aria-label="$t('models.saveManual')" :disabled="busy" class="inline-flex min-h-touch items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-sm font-semibold text-[var(--talos-accent-text)] disabled:opacity-50 sm:col-span-2">
                 <Plus class="size-[var(--talos-icon-size)]" aria-hidden="true" /> {{ $t('models.addManual') }}
             </button>
         </form>
