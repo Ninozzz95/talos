@@ -869,6 +869,8 @@ export interface ChatController {
     notes: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalNote[]>
         create(input: { title: string; content: string }): Promise<import('@/repositories/chatRepository').TalosLocalNote>
+        /** Titolo e corpo si cambiano separatamente: assente = non toccare. */
+        update(input: { id: string; title?: string; content?: string }): Promise<import('@/repositories/chatRepository').TalosLocalNote>
         remove(noteId: string): Promise<void>
     }
     /**
@@ -2491,6 +2493,30 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             })
                             return { title: saved.title }
                         },
+                    }),
+                    /**
+                     * Le note, con le DUE porte.
+                     *
+                     * Owner 2026-08-05: ogni funzione dev'essere raggiungibile
+                     * sia dalla sua stazione sia dalla chat, e le note avevano
+                     * solo la lettura. «Prendi nota che…» finiva in una risposta
+                     * cortese e in nessuna nota.
+                     *
+                     * Passa dalla stessa facciata della stazione, non dal
+                     * deposito: una nota scritta dalla chat e una scritta a mano
+                     * devono nascere identiche, altrimenti sono due funzioni che
+                     * si somigliano.
+                     */
+                    notesWrite: () => ({
+                        create: async (input) => {
+                            const saved = await notes.create(input)
+                            return { id: saved.id, title: saved.title }
+                        },
+                        update: async (input) => {
+                            const saved = await notes.update(input)
+                            return { id: saved.id, title: saved.title }
+                        },
+                        remove: (noteId: string) => notes.remove(noteId),
                     }),
                     libraryContextPolicy: policyToolSources,
                     /**

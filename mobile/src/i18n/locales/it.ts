@@ -838,6 +838,9 @@ export const TALOS_IT_MESSAGES = {
         libraryRead: 'Lettura di un documento',
         libraryFileOrigin: 'Controllo da dove viene un file',
         notesList: 'Consultazione delle note',
+        notesCreate: 'Scrittura di una nota',
+        notesUpdate: 'Modifica di una nota',
+        notesDelete: 'Eliminazione di una nota',
         tasksList: 'Consultazione delle attività',
         memoryWrite: 'Salvataggio nella memoria',
         memorySearch: 'Ricerca nella memoria',
@@ -873,6 +876,18 @@ export const TALOS_IT_MESSAGES = {
         notesList: {
             title: 'Consulta le note',
             description: 'Legge l’elenco delle note archiviate in questo spazio di lavoro locale.',
+        },
+        notesCreate: {
+            title: 'Scrivi una nota',
+            description: 'Salva una nota nuova in questo spazio di lavoro locale, perché tu la rilegga.',
+        },
+        notesUpdate: {
+            title: 'Modifica una nota',
+            description: 'Cambia il titolo o il testo di una nota che esiste già qui.',
+        },
+        notesDelete: {
+            title: 'Elimina una nota',
+            description: 'Toglie per sempre una delle tue note da questo dispositivo. Non si può annullare.',
         },
         tasksList: {
             title: 'Consulta le attività',
@@ -1753,6 +1768,9 @@ export const TALOS_IT_MESSAGES = {
             library_read: { title: 'Leggi un documento della Libreria', description: 'Apre un documento o un’immagine selezionata dalla Libreria.' },
             library_file_origin: { title: 'Da dove viene un file', description: 'Dice quale modello ha fatto un file della Libreria, quando, e da quale chat viene.' },
             notes_list: { title: 'Elenca note', description: 'Legge le note conservate su questo dispositivo.' },
+            notes_create: { title: 'Scrivi una nota', description: 'Salva una nota nuova su questo dispositivo, perché tu la rilegga.' },
+            notes_update: { title: 'Modifica una nota', description: 'Cambia il titolo o il testo di una nota che esiste già.' },
+            notes_delete: { title: 'Elimina una nota', description: 'Toglie per sempre una delle tue note. Non si può annullare.' },
             tasks_list: { title: 'Elenca attività', description: 'Legge le attività con stato e priorità.' },
             memory_search: { title: 'Cerca nella memoria', description: 'Cerca ciò che hai chiesto esplicitamente a TALOS di ricordare.' },
             time_now: { title: 'Data e ora correnti', description: 'Legge data e ora locali dal dispositivo senza indovinarle.' },

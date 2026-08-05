@@ -831,6 +831,9 @@ export const TALOS_EN_MESSAGES = {
         libraryRead: 'Reading a document',
         libraryFileOrigin: 'Checking where a file came from',
         notesList: 'Looking at your notes',
+        notesCreate: 'Writing a note',
+        notesUpdate: 'Editing a note',
+        notesDelete: 'Deleting a note',
         tasksList: 'Looking at your tasks',
         memoryWrite: 'Saving something to memory',
         memorySearch: 'Checking what it remembers',
@@ -866,6 +869,18 @@ export const TALOS_EN_MESSAGES = {
         notesList: {
             title: 'View your notes',
             description: 'Read the list of notes stored in this local workspace.',
+        },
+        notesCreate: {
+            title: 'Write a note',
+            description: 'Save a new note in this local workspace, for you to read later.',
+        },
+        notesUpdate: {
+            title: 'Edit a note',
+            description: 'Change the title or the body of a note that already exists here.',
+        },
+        notesDelete: {
+            title: 'Delete a note',
+            description: 'Permanently remove one of your notes from this device. This cannot be undone.',
         },
         tasksList: {
             title: 'View your tasks',
@@ -1751,6 +1766,9 @@ export const TALOS_EN_MESSAGES = {
             library_read: { title: 'Read a Library document', description: 'Open one document or image selected from the Library.' },
             library_file_origin: { title: 'Where a file came from', description: 'Report which model made one Library file, when, and which chat it came from.' },
             notes_list: { title: 'List notes', description: 'Read the notes stored on this device.' },
+            notes_create: { title: 'Write a note', description: 'Save a new note on this device for you to read later.' },
+            notes_update: { title: 'Edit a note', description: 'Change the title or body of a note that already exists.' },
+            notes_delete: { title: 'Delete a note', description: 'Permanently remove one of your notes. This cannot be undone.' },
             tasks_list: { title: 'List tasks', description: 'Read tasks with their status and priority.' },
             memory_search: { title: 'Search memory', description: 'Search facts you explicitly asked TALOS to remember.' },
             time_now: { title: 'Current date and time', description: 'Read the device date and local time instead of guessing.' },

@@ -72,6 +72,15 @@ export function createStationFacades(deps: TalosStationFacadesDeps) {
                 content: input.content,
                 created_at: new Date().toISOString(),
             }),
+        /**
+         * Correggere una nota, senza perderla e riscriverla.
+         *
+         * Prima non c'era: chi trovava un refuso doveva cancellare e ricreare,
+         * cioè cambiare identità alla nota e perderne la data di nascita. Il
+         * campo `updated_at` esisteva dall'inizio e non si muoveva mai.
+         */
+        update: (input: { id: string; title?: string; content?: string }) =>
+            deps.repository.updateNote(input),
         remove: (noteId: string) => deps.repository.deleteNote(noteId),
     }
 

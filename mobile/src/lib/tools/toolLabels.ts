@@ -19,6 +19,9 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     library_read: 'Reading a document',
     library_file_origin: 'Checking where a file came from',
     notes_list: 'Looking at your notes',
+    notes_create: 'Writing a note',
+    notes_update: 'Editing a note',
+    notes_delete: 'Deleting a note',
     tasks_list: 'Looking at your tasks',
     memory_write: 'Saving something to memory',
     memory_search: 'Checking what it remembers',
@@ -41,6 +44,9 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     library_read: 'toolActivity.libraryRead',
     library_file_origin: 'toolActivity.libraryFileOrigin',
     notes_list: 'toolActivity.notesList',
+    notes_create: 'toolActivity.notesCreate',
+    notes_update: 'toolActivity.notesUpdate',
+    notes_delete: 'toolActivity.notesDelete',
     tasks_list: 'toolActivity.tasksList',
     memory_write: 'toolActivity.memoryWrite',
     memory_search: 'toolActivity.memorySearch',
@@ -82,6 +88,18 @@ export const TALOS_TOOL_CONSENT_KEYS: Record<string, TalosToolConsentCopy> = {
     notes_list: {
         title: 'toolConsent.notesList.title',
         description: 'toolConsent.notesList.description',
+    },
+    notes_create: {
+        title: 'toolConsent.notesCreate.title',
+        description: 'toolConsent.notesCreate.description',
+    },
+    notes_update: {
+        title: 'toolConsent.notesUpdate.title',
+        description: 'toolConsent.notesUpdate.description',
+    },
+    notes_delete: {
+        title: 'toolConsent.notesDelete.title',
+        description: 'toolConsent.notesDelete.description',
     },
     tasks_list: {
         title: 'toolConsent.tasksList.title',
@@ -188,6 +206,9 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     library_read: 'library',
     library_file_origin: 'library',
     notes_list: 'note',
+    notes_create: 'note',
+    notes_update: 'note',
+    notes_delete: 'note',
     tasks_list: 'task',
     memory_write: 'memory',
     memory_search: 'memory',

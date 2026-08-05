@@ -20,6 +20,7 @@ import {
     type CreateFileAuthorityGrantInput,
     type CreateMemoryInput,
     type CreateNoteInput,
+    type UpdateNoteInput,
     type CreateTaskInput,
     type CreateVaultFileInput,
     type CreateToolActivityInput,
@@ -1191,6 +1192,37 @@ export function createSqliteChatRepository(
                  FROM talos_notes ORDER BY updated_at DESC, id DESC`,
             )
             return rows.map((row) => parseNote(row as TalosSqlRow))
+        },
+        async updateNote(input: UpdateNoteInput) {
+            return transaction(async (database) => {
+                const rows = await database.query(
+                    `SELECT id, title, content, trust_level, created_at, updated_at
+                     FROM talos_notes WHERE id = ? LIMIT 1`,
+                    [input.id],
+                )
+                if (rows.length !== 1) throw new Error('TALOS_NOTE_NOT_FOUND')
+                const current = parseNote(rows[0] as TalosSqlRow)
+                /*
+                 * Assente vuol dire «non toccarlo», non «svuotalo».
+                 *
+                 * La differenza pesa perché il chiamante tipico e' il tool della
+                 * chat, dove un modello che vuole correggere il titolo manda il
+                 * titolo e basta. Con un aggiornamento totale quella chiamata
+                 * cancellerebbe il corpo della nota — e la perdita si vedrebbe
+                 * solo aprendola.
+                 */
+                const title = input.title ?? current.title
+                const content = input.content ?? current.content
+                // La data di modifica la mette il deposito, non chi scrive:
+                // l'elenco si ordina su questa, e una data fornita da fuori
+                // potrebbe tenere una nota in cima per sempre.
+                const updatedAt = new Date().toISOString()
+                await database.run(
+                    'UPDATE talos_notes SET title = ?, content = ?, updated_at = ? WHERE id = ?',
+                    [title, content, updatedAt, input.id],
+                )
+                return { ...current, title, content, updated_at: updatedAt }
+            })
         },
         async deleteNote(noteId: string) {
             await transaction(async (database) => {

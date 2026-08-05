@@ -1,4 +1,5 @@
 import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
+import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
 import { talosBytesToBase64 } from '@/lib/bytesToBase64'
 import {
     createTalosReadTools,
@@ -90,6 +91,11 @@ export interface TalosToolsetDeps {
     /** Se il modello puo' scrivere in memoria: stessa grammatica di sopra. */
     memoryWriteAccess?(): 'allow' | 'ask' | 'deny'
     memoryWrite?(): import('@/lib/tools/memoryWriteTools').TalosMemoryWriteSources | null
+    /**
+     * Le note, in scrittura. Owner 2026-08-05: ogni funzione deve avere le
+     * DUE porte, e questa aveva solo la lettura (`notes_list`).
+     */
+    notesWrite?(): import('@/lib/tools/notesWriteTools').TalosNotesWriteSources | null
     /**
      * F1 — the web tools, present only when a search source is configured.
      *
@@ -443,6 +449,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             const memoryWrite = (deps.memoryWriteAccess?.() ?? 'ask') === 'deny'
                 ? null
                 : deps.memoryWrite?.() ?? null
+            const notesWrite = deps.notesWrite?.() ?? null
             const documents = deps.documents?.() ?? null
             const images = deps.images?.() ?? null
             return [
@@ -453,6 +460,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...(web ? createTalosWebTools(web) : []),
                 ...(research ? createTalosResearchTools(research) : []),
                 ...(memoryWrite ? createTalosMemoryWriteTools(memoryWrite) : []),
+                ...(notesWrite ? createTalosNotesWriteTools(notesWrite) : []),
                 ...(documents ? createTalosDocumentTools(documents) : []),
                 ...(images ? createTalosImageTools(images) : []),
             ]

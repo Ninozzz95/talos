@@ -18,6 +18,7 @@ import {
     type CreateFileAuthorityGrantInput,
     type CreateMemoryInput,
     type CreateNoteInput,
+    type UpdateNoteInput,
     type CreateTaskInput,
     type CreateVaultFileInput,
     type CreateToolActivityInput,
@@ -541,6 +542,21 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             return [...notes.values()]
                 .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.id.localeCompare(left.id))
                 .map((note) => ({ ...note }))
+        },
+        async updateNote(input: UpdateNoteInput) {
+            const current = notes.get(input.id)
+            if (!current) throw new Error('TALOS_NOTE_NOT_FOUND')
+            // Assente vuol dire «non toccarlo», non «svuotalo»: vedi la nota
+            // sull'implementazione SQLite, che deve comportarsi allo stesso modo
+            // o le prove passerebbero su un deposito e non sull'altro.
+            const updated = {
+                ...current,
+                title: input.title ?? current.title,
+                content: input.content ?? current.content,
+                updated_at: now(),
+            }
+            notes.set(input.id, updated)
+            return { ...updated }
         },
         async deleteNote(noteId: string) {
             if (!notes.delete(noteId)) throw new Error('TALOS_NOTE_NOT_FOUND')
