@@ -25,6 +25,29 @@ vi.mock('../../../composables/useTalosSettings', () => ({
     }),
 }))
 
+vi.mock('../../../composables/useTalosCapabilityPolicies', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../../composables/useTalosCapabilityPolicies')>()
+    return {
+        ...actual,
+        useTalosCapabilityPolicies: () => ({
+            contract: ref({ schema_version: 1, revision: 0, policies: [], grants: [] }),
+            meta: ref({ catalog: [], master_enable: { eligible: [], excluded: [] }, faults: [] }),
+            loadState: ref('loaded'),
+            policyError: ref(null),
+            conflictMessage: ref(null),
+            pendingOperation: ref(null),
+            mutating: ref(false),
+            catalogByCapability: ref(new Map()),
+            loadPolicies: () => Promise.resolve(null),
+            updateDecision: () => Promise.resolve(null),
+            createGrant: () => Promise.resolve(null),
+            revokeGrant: () => Promise.resolve(null),
+            masterEnable: () => Promise.resolve(null),
+            revokeAll: () => Promise.resolve(null),
+        }),
+    }
+})
+
 let app: ReturnType<typeof createApp> | undefined
 
 afterEach(() => {
@@ -108,5 +131,36 @@ describe('TalosSettingsCenter capability truth', () => {
         expect(runtime?.textContent).toContain('Roadmap')
         expect(runtime?.textContent).toContain('Local runtime is not promoted yet.')
         expect(runtime?.querySelector('button, a')).toBeNull()
+    })
+
+    it('opens a dedicated policy tab without the unrelated workspace save command', async () => {
+        const portal = document.createElement('div')
+        portal.id = 'talos-portal-root'
+        document.body.append(portal)
+        const mountPoint = document.createElement('div')
+        document.body.append(mountPoint)
+
+        app = createApp(defineComponent({
+            setup() {
+                return () => h(TalosSettingsCenter, {
+                    modelProfiles: [],
+                    contextSets: [],
+                    selectedModelProfileId: '',
+                    selectedContextSetId: '',
+                    focusedTab: 'policies',
+                    focusedTabRevision: 2,
+                    activeTalosSessionId: 'session-1',
+                })
+            },
+        }))
+        app.provide(TALOS_CAPABILITIES_KEY, capabilitiesContext())
+        app.mount(mountPoint)
+        await nextTick()
+        await nextTick()
+
+        expect(document.getElementById('talos-settings-tab-policies')).not.toBeNull()
+        const panel = document.getElementById('talos-settings-panel-policies')
+        expect(panel?.querySelector('[data-testid="talos-capability-policy-panel"]')).not.toBeNull()
+        expect([...panel?.querySelectorAll('button') ?? []].some((button) => button.textContent?.includes('Save settings'))).toBe(false)
     })
 })
