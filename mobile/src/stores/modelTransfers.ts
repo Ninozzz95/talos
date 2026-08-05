@@ -10,6 +10,12 @@ import {
     type TalosTransferRunner,
     type TalosTransferStatus,
 } from '@/services/modelTransfer'
+import {
+    talosTransferNotices,
+    type TalosTransferNotice,
+} from '@/lib/models/transferNotices'
+import { talosT } from '@/i18n'
+import { useTalosMobileToasts } from '@/stores/toasts'
 
 export interface TalosModelTransferState {
     items: TalosTransferItem[]
@@ -52,6 +58,69 @@ export const talosModelTransfers = readonly(state)
 
 let observers = 0
 let poller: ReturnType<typeof setInterval> | null = null
+/**
+ * Le stesse tre notizie che Android gia' dava fuori dall'app, dette anche
+ * dentro.
+ *
+ * Owner 2026-08-05: le notifiche di download devono andare «di pari passo col
+ * sistema di notifiche Android». Il nativo postava progresso e fine da mesi; il
+ * flusso dentro l'app non spingeva **nessun** toast, quindi chi guardava la
+ * schermata era l'unico a non essere avvisato.
+ *
+ * Usa la grammatica che c'e' gia' — lo store dei toast — invece di aggiungerne
+ * una seconda, come chiesto esplicitamente.
+ */
+function announce(prima: readonly TalosTransferItem[], dopo: readonly TalosTransferItem[]): void {
+    const avvisi = talosTransferNotices(prima, dopo, annullati)
+    /*
+     * Un id annullato serve finche' la sua riga non e' sparita davvero. Poi va
+     * dimenticato, altrimenti il registro cresce per tutta la sessione e — se
+     * l'id venisse riusato — zittirebbe l'annuncio di un download successivo.
+     *
+     * Si pulisce per ID, non per nome del modello: due download dello stesso
+     * repository hanno lo stesso nome e id diversi.
+     */
+    if (annullati.size) {
+        const vivi = new Set(dopo.map((item) => item.id))
+        for (const id of [...annullati]) if (!vivi.has(id)) annullati.delete(id)
+    }
+    for (const avviso of avvisi) (emitTransferNotice ?? pushToast)(avviso)
+}
+
+/**
+ * Dove finiscono le frasi.
+ *
+ * Le spinge lo STORE, non un ascoltatore registrato da `App.vue`. La prima
+ * versione faceva il contrario, ed e' costata il tetto d'avvio: importare
+ * questo store dentro `App.vue` tirava l'intero servizio di trasferimento nel
+ * grafo iniziale — **601.379 byte contro 600.000**, misurato dal cancello.
+ *
+ * Cosi' invece il costo resta dove il codice gia' viveva: chi carica i
+ * trasferimenti carica anche i loro avvisi, e chi non li apre non paga niente.
+ * `toasts` e' uno store di dati, non un disegno, ed e' gia' cio' che importa
+ * `chatController`.
+ *
+ * Resta iniettabile per i test — l'unico motivo per cui l'indirezione valeva.
+ */
+let emitTransferNotice: ((notice: TalosTransferNotice) => void) | null = null
+
+export function talosOnTransferNotice(sink: ((notice: TalosTransferNotice) => void) | null): void {
+    emitTransferNotice = sink
+}
+
+function pushToast(notice: TalosTransferNotice): void {
+    const chiave = notice.kind === 'started'
+        ? 'localModels.transferStarted'
+        : notice.kind === 'finished'
+            ? 'localModels.transferFinished'
+            : 'localModels.transferFailed'
+    useTalosMobileToasts().push({
+        message: talosT(chiave, { model: notice.modelName }),
+        // Il fallimento resta piu' a lungo: e' l'unico che chiede una decisione.
+        durationMs: notice.kind === 'failed' ? 8_000 : 4_000,
+    })
+}
+
 let refreshing: Promise<void> | null = null
 
 export function talosRefreshModelTransfer(): Promise<void> {
@@ -119,6 +188,24 @@ export async function talosBeginModelTransfer(request: StartRequest): Promise<Ma
     if (at >= 0) state.items.splice(at, 1, item)
     else state.items.push(item)
     projectItems()
+    /*
+     * L'avvio si annuncia QUI, non dal poller.
+     *
+     * MISURATO sul dispositivo il 2026-08-05: la riga viene inserita nello
+     * stato in modo ottimistico due istruzioni sopra, quindi quando il giro
+     * successivo del poller confronta le istantanee l'elemento **c'e' gia'** e
+     * non risulta nuovo — nessun avviso di partenza, mai.
+     *
+     * I test unitari non potevano vederlo: provavano la funzione pura, che era
+     * ed e' corretta. Il difetto stava nella cucitura.
+     *
+     * Ed e' anche il posto giusto: partire e' un COMANDO, e chi lo esegue lo
+     * sa. Il poller deve riportare solo cio' che SCOPRE.
+     */
+    if (at < 0) (emitTransferNotice ?? pushToast)({
+        kind: 'started',
+        modelName: item.modelName ?? item.id,
+    })
     await talosRefreshModelTransfer()
     return { ok: true }
 }
@@ -152,6 +239,8 @@ export async function talosCancelManagedModelTransfer(id?: string): Promise<Mana
     const result = rememberFailure(await talosCancelModelTransfer(id))
     if (result.ok) {
         if (id) {
+            // Dichiarato PRIMA di toglierlo: la sua sparizione non e` una fine.
+            annullati.add(id)
             const at = state.items.findIndex((item) => item.id === id)
             if (at >= 0) state.items.splice(at, 1)
             projectItems()
@@ -161,11 +250,23 @@ export async function talosCancelManagedModelTransfer(id?: string): Promise<Mana
     return result
 }
 
+/**
+ * Gli id che l'utente ha annullato.
+ *
+ * Servono perche' un download **riuscito** e uno **annullato** fanno la stessa
+ * cosa: spariscono dalla lista. Chi annulla pero' lo sa, e dichiararlo qui e'
+ * cio' che evita di annunciare «scaricato» a qualcosa che e' stato fermato.
+ * Vedi [[transferNotices]].
+ */
+const annullati = new Set<string>()
+
 function applyStatus(status: TalosTransferStatus): void {
     const rows = Array.isArray(status.items)
         ? status.items
         : legacyItems(status)
+    const prima = state.items
     state.items = rows.map((item) => ({ ...item, paths: [...item.paths] }))
+    announce(prima, state.items)
     state.phase = status.phase
     state.active = status.active
     state.paused = status.phase === 'paused'

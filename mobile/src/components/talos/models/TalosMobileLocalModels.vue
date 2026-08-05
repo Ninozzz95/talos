@@ -44,6 +44,7 @@ import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 import { talosSortChipClass } from '@/lib/sortChip'
 import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import { useSettingsStore } from '@/stores/settings'
+import { useTalosMobileToasts } from '@/stores/toasts'
 import {
     talosModelImportFailure,
     talosOnModelImportProgress,
@@ -75,6 +76,7 @@ import {
 
 const { t, locale } = useTalosI18n()
 const settings = useSettingsStore()
+const toasts = useTalosMobileToasts()
 
 /**
  * The SAME choice the Library and the research station store.
@@ -278,7 +280,25 @@ async function importFromDevice(): Promise<void> {
         const picked = await talosPickModelFromDevice()
         // Cancelling the picker is not a failure and must not leave a red line
         // behind: the person changed their mind, which is allowed.
-        if (picked.imported) await loadInstalled()
+        if (picked.imported) {
+            await loadInstalled()
+            /*
+             * Il terzo momento chiesto dall'owner, dopo inizio e fine del
+             * download: l'INSTALLAZIONE. Qui il modello non arriva dalla rete —
+             * viene copiato dal telefono — e la copia puo' durare minuti su un
+             * file da qualche giga, quindi finire in silenzio lascia chi guarda
+             * a chiedersi se sia successo davvero.
+             *
+             * Stesso toast globale del download: una grammatica sola per «il
+             * modello adesso c'e'», da qualunque porta sia entrato.
+             */
+            toasts.push({
+                message: t('localModels.transferInstalled', {
+                    model: picked.name ?? t('localModels.installedTitle'),
+                }),
+                durationMs: 4_000,
+            })
+        }
     } catch (failure) {
         const code = failure instanceof Error ? failure.message : String(failure)
         importError.value = t(talosModelImportFailure(code))
