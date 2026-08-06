@@ -950,7 +950,7 @@ export const TALOS_IT_MESSAGES = {
         },
         localModelInspect: {
             title: 'Controlla se un modello ci sta su questo telefono',
-            description: 'Legge dalla rete la prima parte del file del modello per capire se gira qui, e quanto veloce.',
+            description: 'Legge dalla rete la prima parte del file del modello per dire quanta memoria chiede, se entra in quella libera, e a quanti token al secondo andrebbe.',
         },
         localModelDownload: {
             title: 'Scarica un modello su questo telefono',
@@ -1021,19 +1021,24 @@ export const TALOS_IT_MESSAGES = {
         // La capienza: owner 2026-08-04, «come etichetta che vedo sempre».
         // Non un filtro che nasconde — nascondere toglie anche il motivo
         // per liberare memoria.
+        // Owner 2026-08-06: «gira bene, gira comodo ecc. sono troppo poco
+        // tecnici e generici: di cosa stiamo parlando? RAM? archiviazione?
+        // velocità?». Ogni etichetta adesso NOMINA la grandezza che decide,
+        // perché le tre si riparano in modi opposti — lo spazio si libera, la
+        // memoria no, la velocità dipende dal chip.
         fitLabel: {
-            'comfortable': 'Gira bene',
-            'tight': 'Al limite',
-            'will-crawl': 'Troppo lento',
-            'wont-run': 'Non gira qui',
+            'comfortable': 'Ci sta in memoria',
+            'tight': 'Memoria al limite',
+            'will-crawl': 'Lento: legge dal disco',
+            'wont-run': 'Memoria insufficiente',
             'no-memory': 'RAM insufficiente',
             'no-space': 'Spazio insufficiente',
-            'unknown': 'Da verificare',
+            'unknown': 'Non misurato',
         },
         fitReason: {
-            'comfortable': 'Entra in memoria comodo: restano {left} di RAM libera.',
+            'comfortable': 'Entra in memoria: restano {left} di RAM libera dopo averlo caricato.',
             'tight': 'Entra in memoria, ma restano solo {left} di RAM: sotto carico Android potrebbe chiudere TALOS.',
-            'will-crawl': 'Entra per un pelo, e il telefono passerebbe il tempo a leggere dal disco invece che a scrivere.',
+            'will-crawl': 'Entra in memoria, ma non abbastanza perché i pesi ci restino: il telefono li rileggerebbe dal disco a ogni parola. È la VELOCITÀ a farne le spese, non la memoria — e liberare spazio non la cambia.',
             'wont-run': 'Servono {missing} di RAM in più. Lo spazio su disco non c’entra: il modello deve stare in MEMORIA per generare.',
             'no-memory': 'Servono {missing} di RAM in più. Liberare spazio sul telefono non cambia questo limite.',
             'no-space': 'Mancano {missing} di spazio libero, inclusa la riserva di sicurezza da 1 GB.',
@@ -1444,7 +1449,8 @@ export const TALOS_IT_MESSAGES = {
         // fa chi mette un modello su un TELEFONO.
         filtersLabel: 'Filtri',
         filter: {
-            'fits': 'Gira qui',
+            // «Gira qui» non diceva PERCHÉ: il filtro guarda la memoria.
+            'fits': 'Entra in memoria',
             'chat': 'Chat',
             'code': 'Orientato al codice',
             'q4': 'Q4',
@@ -1541,10 +1547,11 @@ export const TALOS_IT_MESSAGES = {
         incompleteSet: 'A questo repository mancano {missing} parti su {total}, quindi il modello non si può ricomporre.',
         unverifiable: 'Questo repository non pubblica una somma di controllo per questo file, quindi il download non è dimostrabile.',
         flagged: 'Hugging Face ha segnalato questo file:',
-        bandComfortable: 'Gira comodo',
-        bandTight: 'Gira, con poco margine',
-        bandCrawl: 'Gira molto lentamente',
-        bandWontRun: 'Non gira su questo telefono',
+        // Owner 2026-08-06: ogni banda nomina la GRANDEZZA che la decide.
+        bandComfortable: 'Memoria: c’è margine',
+        bandTight: 'Memoria: poco margine',
+        bandCrawl: 'Velocità: legge dal disco',
+        bandWontRun: 'Memoria insufficiente',
         speed: 'circa {rate} token al secondo',
         speedUnknown: 'velocità non prevedibile su questo telefono',
         reasonStorage: 'Non c’è abbastanza spazio libero.',

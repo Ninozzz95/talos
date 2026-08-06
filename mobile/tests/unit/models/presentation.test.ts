@@ -222,3 +222,31 @@ describe('what has to be said before offering a download', () => {
         expect(talosSetWarnings({ ...clean, security: 'unsafe' }).flagged).toBe('unsafe')
     })
 })
+
+/**
+ * C45-RED-19P — nessuna velocità per un modello che non parte.
+ *
+ * Visto guardando una riga il 2026-08-06: «Memoria insufficiente · circa 13,8
+ * token/secondo». I due pezzi si contraddicono, e insieme suggeriscono che il
+ * modello quasi vada — mentre non parte affatto.
+ *
+ * Una stima di velocità è una previsione su un'esecuzione: se l'esecuzione non
+ * può avvenire, la previsione non è imprecisa, è priva di oggetto.
+ */
+describe('C45-RED-19P la velocità non si promette a chi non parte', () => {
+    const fit = (band: string) => ({
+        band,
+        reason: 'memory',
+        tokensPerSecond: 13.84,
+        maxContext: 4096,
+    }) as never
+
+    it('tace la velocità quando il modello non gira', () => {
+        expect(talosFitVerdict(fit('wont-run'), 8192).tokensPerSecond).toBeNull()
+    })
+
+    it('la dice quando il modello gira davvero', () => {
+        expect(talosFitVerdict(fit('comfortable'), 8192).tokensPerSecond).toBe(13.8)
+        expect(talosFitVerdict(fit('will-crawl'), 8192).tokensPerSecond).toBe(13.8)
+    })
+})

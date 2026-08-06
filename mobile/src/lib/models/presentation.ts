@@ -65,7 +65,20 @@ export function talosFitVerdict(fit: TalosModelFit, askedContext: number): Talos
     return {
         bandKey: BANDS[fit.band],
         reasonKey: REASONS[fit.reason],
-        tokensPerSecond: fit.tokensPerSecond === null ? null : Math.round(fit.tokensPerSecond * 10) / 10,
+        /**
+         * Nessuna velocità per un modello che non parte.
+         *
+         * Visto guardando una riga il 2026-08-06: diceva «Memoria insufficiente
+         * · circa 13,8 token/secondo». I due pezzi si contraddicono, e insieme
+         * suggeriscono che il modello quasi vada — mentre non parte affatto.
+         *
+         * Una stima di velocità è una previsione su un'esecuzione: se
+         * l'esecuzione non può avvenire, la previsione non è imprecisa, è
+         * priva di oggetto. Tacerla è più onesto che darla.
+         */
+        tokensPerSecond: fit.band === 'wont-run' || fit.tokensPerSecond === null
+            ? null
+            : Math.round(fit.tokensPerSecond * 10) / 10,
         counterOfferContext: counterOffer,
         tone: fit.band === 'comfortable' ? 'good' : (fit.band === 'wont-run' ? 'bad' : 'warn'),
     }
