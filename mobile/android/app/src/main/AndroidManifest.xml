@@ -24,6 +24,24 @@
     -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
+    <!--
+        Perche' un'attivita' programmata sopravviva a un riavvio.
+
+        MISURATO il 2026-08-06: senza questo permesso `setPersisted(true)` non
+        e' un'opzione ignorata, e' un'eccezione — «Requested job cannot be
+        persisted without holding RECEIVE_BOOT_COMPLETED» — che ha UCCISO il
+        processo dell'app.
+
+        E' un permesso NORMALE: nessun dialogo, nessuna decisione da chiedere.
+        Serve solo a non dimenticare un'attivita' perche' il telefono si e'
+        spento nella notte, che e' il modo piu' rapido di far smettere qualcuno
+        di fidarsi delle attivita' programmate.
+
+        Non registriamo nessun ricevitore di avvio: il permesso serve al
+        JobScheduler, non a noi.
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <application
         android:allowBackup="false"
         android:networkSecurityConfig="@xml/network_security_config"
@@ -276,6 +294,21 @@
         -->
         <service
             android:name="ai.talos.TalosModelTransferJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <!--
+            L'attivita' che si esegue da sola, all'ora giusta, con l'app chiusa.
+
+            Un JobService normale, non un servizio in primo piano: da Android 15
+            tutti i servizi in primo piano dell'app si dividono SEI ORE e da
+            Android 16 un lavoro lungo consuma la quota dell'app. Chiedere di
+            piu' costerebbe ai download. Il tetto di token e' calcolato per
+            stare dentro la finestra di circa dieci minuti che spetta a un
+            lavoro normale.
+        -->
+        <service
+            android:name="ai.talos.TalosTaskRunJob"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
 
