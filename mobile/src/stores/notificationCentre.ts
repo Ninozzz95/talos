@@ -35,6 +35,16 @@ interface Stato {
     entries: TalosNotificationEntry[]
     unread: number
     /**
+     * La superficie che si sta guardando adesso: `chat:42`, `job:8f2a`,
+     * `settings:providers`.
+     *
+     * Owner 2026-08-06: «sono su una funzione → non devo ricevere notifiche per
+     * quella funzione». Senza questo dato la regola può sapere soltanto «l'app
+     * è davanti», e con quello **non è possibile** distinguere la chat che stai
+     * scrivendo da quella accanto.
+     */
+    surface: string | null
+    /**
      * Falso quando l'app non è davanti. Lo aggiorna chi osserva il ciclo di vita
      * nativo; il valore iniziale è `true` perché all'avvio l'app è davanti per
      * definizione — nessuno legge un registro che non sta guardando.
@@ -42,7 +52,7 @@ interface Stato {
     appVisible: boolean
 }
 
-const state = reactive<Stato>({ entries: [], unread: 0, appVisible: true })
+const state = reactive<Stato>({ entries: [], unread: 0, surface: null, appVisible: true })
 
 export const talosNotifications = readonly(state)
 
@@ -67,6 +77,18 @@ export function talosSetAppVisible(visible: boolean): void {
 }
 
 /**
+ * Dichiara che cosa si sta guardando. Lo dice la schermata, quando si monta, e
+ * lo ritira quando se ne va.
+ *
+ * `null` significa «nessuna superficie in particolare», e allora vale la regola
+ * generale: è il caso giusto per un elenco o per la pagina iniziale, dove non si
+ * sta seguendo nessuna cosa specifica.
+ */
+export function talosSetActiveSurface(surface: string | null): void {
+    state.surface = surface
+}
+
+/**
  * Annuncia qualcosa. È l'unica porta.
  *
  * Un guasto di una superficie non ferma le altre: se il ponte nativo rifiuta, il
@@ -74,7 +96,10 @@ export function talosSetAppVisible(visible: boolean): void {
  * peggio di una notifica che non si può postare, perché nessuno se ne accorge.
  */
 export function talosNotify(event: TalosNotificationEvent): void {
-    const routing = talosRouteNotification(event, { appVisible: state.appVisible })
+    const routing = talosRouteNotification(event, {
+        appVisible: state.appVisible,
+        surface: state.surface,
+    })
 
     state.entries = talosAppendNotification(state.entries, event)
     state.unread = talosUnreadCount(state.entries)
@@ -98,6 +123,7 @@ export function talosResetNotificationCentre(): void {
     state.entries = []
     state.unread = 0
     state.appVisible = true
+    state.surface = null
     toastSink = null
     androidSink = null
 }
