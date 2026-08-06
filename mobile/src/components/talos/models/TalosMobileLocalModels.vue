@@ -15,7 +15,7 @@
  * rejection that ends the conversation is a worse product than one that moves
  * it. Nothing here is disabled without saying why.
  */
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { TabsContent } from 'reka-ui'
 import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
 import { useTalosI18n } from '@/i18n'
@@ -155,8 +155,58 @@ function scegliTab(scelta: unknown): void {
 const sentinellaPagina = ref<HTMLElement | null>(null)
 let osservatorePagina: IntersectionObserver | null = null
 
+/**
+ * Quante pagine di fila sono arrivate senza far crescere ciò che si VEDE.
+ *
+ * ⛔ MISURATO sul Pad in viewport telefono il 2026-08-06: col filtro «da 1 a 4
+ * miliardi» passavano **tre** risultati, e tre righe non riempiono uno schermo.
+ * La sentinella restava quindi sempre in vista, ogni pagina che arrivava ne
+ * chiedeva subito un'altra, e sotto la lista girava «Sto caricando altri
+ * modelli…» **senza fermarsi mai**.
+ *
+ * Il guardiano che c'era copriva solo il caso estremo — zero risultati visibili
+ * — e tre non è zero. Ma è lo stesso difetto visto da un'altra angolazione, e
+ * la cura è quella generalizzata: se il caricamento automatico non porta più
+ * niente da vedere, si ferma e lascia decidere a chi guarda. Il comando
+ * esplicito resta, e accanto c'è «Reimposta filtri», che è la risposta vera.
+ *
+ * Tre e non uno: una singola pagina magra è normale con filtri stretti, e
+ * fermarsi al primo tentativo renderebbe lo scorrimento inutile proprio dove
+ * serve di più.
+ */
+const PAGINE_A_VUOTO_PRIMA_DI_FERMARSI = 3
+let pagineSenzaGuadagno = 0
+let visibiliPrimaDiCaricare = -1
+
+/** L'automatismo si è arreso: non è un errore, è una lista che smette di inseguire. */
+const caricamentoAutomaticoEsausto = ref(false)
+
 function loadMore(): void {
+    visibiliPrimaDiCaricare = visibleResultCount.value
     void talosLoadMoreLocalModels()
+}
+
+/** Se la pagina arrivata ha fatto crescere ciò che si vede. */
+function contaGuadagno(): void {
+    if (visibiliPrimaDiCaricare < 0) return
+    if (visibleResultCount.value > visibiliPrimaDiCaricare) {
+        pagineSenzaGuadagno = 0
+    } else {
+        pagineSenzaGuadagno += 1
+        if (pagineSenzaGuadagno >= PAGINE_A_VUOTO_PRIMA_DI_FERMARSI) {
+            caricamentoAutomaticoEsausto.value = true
+            osservatorePagina?.disconnect()
+            osservatorePagina = null
+        }
+    }
+    visibiliPrimaDiCaricare = -1
+}
+
+/** Filtri diversi, partita nuova: l'automatismo torna a provarci. */
+function riprendiCaricamentoAutomatico(): void {
+    pagineSenzaGuadagno = 0
+    visibiliPrimaDiCaricare = -1
+    caricamentoAutomaticoEsausto.value = false
 }
 
 /**
@@ -189,6 +239,9 @@ function osserva(): void {
     osservatorePagina = null
     const sentinella = sentinellaPagina.value
     if (!sentinella) return
+    // Arreso: riosservare servirebbe solo a chiedere un'altra pagina che non
+    // porta niente da vedere.
+    if (caricamentoAutomaticoEsausto.value) return
     osservatorePagina = new IntersectionObserver((voci) => {
         if (!voci.some((voce) => voce.isIntersecting)) return
         /*
@@ -788,6 +841,57 @@ const visibleResultCount = computed(() => visibleGroups.value.reduce(
     (total, group) => total + group.models.length,
     0,
 ))
+
+/*
+ * ⛔ QUI e non accanto a `osserva()`, dove sarebbero stati più leggibili.
+ *
+ * Il getter di un `watch` viene valutato SUBITO, alla creazione: metterli sopra
+ * significa leggere `store` e `visibleResultCount` prima che esistano, e in
+ * `<script setup>` quello è un errore che il compilatore non vede e che
+ * compare solo montando il componente. Costato 35 test rossi per scoprirlo.
+ */
+/**
+ * ⛔ E SI RIOSSERVA quando cambia ciò che rende scorrevole il contenitore.
+ *
+ * La radice di un `IntersectionObserver` si sceglie **una volta sola**, alla
+ * costruzione. `contenitoreCheScorre` risale gli antenati cercando il primo che
+ * scorre DAVVERO — `scrollHeight > clientHeight` — e quella condizione dipende
+ * da quanto contenuto c'è dentro. Nell'istante in cui la sentinella compare il
+ * contenuto spesso non c'è ancora: nessun antenato scorre, la radice diventa la
+ * finestra, e resta la finestra per sempre anche dopo che il pannello ha
+ * cominciato a scorrere.
+ *
+ * MISURATO sul Pad il 2026-08-06, con la scheda Hugging Face aperta: la
+ * sentinella era **visibile a schermo** — un osservatore attaccato in quel
+ * momento scattava all'istante con `isIntersecting: true` — e quello dell'app
+ * non chiamava niente. Dieci risultati e il tasto «Carica altri» come unica
+ * strada, che è esattamente ciò che l'owner aveva segnalato.
+ *
+ * Riosservare costa un oggetto; non riosservare costa la funzione.
+ */
+watch(
+    () => [store.results.length, store.browseTab, visibleResultCount.value] as const,
+    () => {
+        contaGuadagno()
+        void nextTick(() => osserva())
+    },
+)
+
+/**
+ * Filtri, autore, taglia o scheda diversi: l'automatismo riparte da zero.
+ *
+ * Perché la domanda è cambiata. Essersi arresi su «da 1 a 4 miliardi» non dice
+ * niente su «tutte le taglie», e restare arresi sarebbe una lista corta per un
+ * motivo che non esiste più.
+ */
+watch(
+    () => [store.browseWeightBand, store.browseProvider, store.browseFilters.join(','),
+        store.browseTab, store.query] as const,
+    () => {
+        riprendiCaricamentoAutomatico()
+        void nextTick(() => osserva())
+    },
+)
 
 function resetBrowseFilters(): void {
     filtriAttivi.value = []

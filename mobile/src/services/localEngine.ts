@@ -122,7 +122,11 @@ interface TalosLlamaPlugin {
     lastTimings(): Promise<{ timings: string }>
     tuneThreads(options: { candidates: number[], probeTokens?: number }): Promise<{ tuning: string }>
     installed(): Promise<{
-        models: Array<{ path: string, bytes: number, name: string, modifiedAt?: number }>
+        models: Array<{
+            path: string, bytes: number, name: string, modifiedAt?: number,
+            /** Falso per un proiettore multimodale: e' un GGUF con cui non si parla. */
+            conversational?: boolean,
+        }>
         unreadable?: Array<{ path: string, reason: string }>
     }>
     chatPrompt(options: {
@@ -420,6 +424,18 @@ export interface TalosLocalModelFile {
     path: string
     bytes: number
     name: string
+    /**
+     * Se con questo file si puo' PARLARE.
+     *
+     * Falso per un proiettore multimodale: un GGUF valido, che pero' non genera
+     * un token. Resta nella lista dei file — occupa spazio e chi vuole liberarlo
+     * deve poterlo trovare — ma la chat non deve offrirlo.
+     *
+     * ⛔ `undefined` significa «non lo so», e nel dubbio si tratta come
+     * conversabile: un lato nativo piu' vecchio non risponde, e nascondere un
+     * modello vero e' un danno che l'utente non puo' riparare.
+     */
+    conversational?: boolean
     /**
      * Epoch milliseconds from the file itself. The question a person asks
      * right after a download is "which one did I just get", and a list that

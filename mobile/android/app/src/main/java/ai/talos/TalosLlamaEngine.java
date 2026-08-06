@@ -1,5 +1,8 @@
 package ai.talos;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -196,6 +199,30 @@ public final class TalosLlamaEngine implements AutoCloseable {
     public String kvCacheType() {
         String type = TalosLlamaNative.nativeKvCacheType(handle);
         return type == null ? "f16" : type;
+    }
+
+    /**
+     * Se questo file è un modello con cui si può PARLARE.
+     *
+     * Statico e senza aprire niente: legge i metadati del GGUF e chiede se
+     * dichiara degli strati. Un proiettore multimodale è un GGUF valido — e
+     * non genera un token.
+     *
+     * ⛔ Nel dubbio dice **sì**. Un modello vero nascosto è un danno che
+     * l'utente non può riparare; un file che non parla lo dirà aprendosi, con
+     * un errore che almeno si legge.
+     */
+    public static boolean isConversational(String modelPath) {
+        String json = TalosLlamaNative.AVAILABLE
+                ? TalosLlamaNative.nativeArchitectureOf(modelPath)
+                : null;
+        if (json == null) return true;
+        try {
+            JSONObject read = new JSONObject(json);
+            return read.optInt("layers", 0) > 0;
+        } catch (JSONException unreadable) {
+            return true;
+        }
     }
 
     public int contextTokens() {
