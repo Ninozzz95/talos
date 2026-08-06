@@ -84,8 +84,12 @@ describe('TalosMobileSettingsAgentToolsPanel', () => {
     it('AGENT-TOOLS-07 renders every real tool with persistent accessible switches', async () => {
         const wrapper = mount(TalosMobileSettingsAgentToolsPanel)
 
-        expect(wrapper.findAll('[data-agent-tool]')).toHaveLength(24)
-        expect(wrapper.text()).toContain('17 of 24 enabled')
+        // 26 dal 2026-08-06, non 24: `research_list` e `memory_write`
+        // esistevano da settimane e non comparivano in questo pannello, perché
+        // mancavano dal catalogo. Due tool che il modello poteva usare e che
+        // nessuno poteva spegnere.
+        expect(wrapper.findAll('[data-agent-tool]')).toHaveLength(26)
+        expect(wrapper.text()).toContain('17 of 26 enabled')
         /**
          * Found by an adversarial review, 2026-07-31: a tool was added to the
          * catalog with no strings, and this test still passed because it only
@@ -146,7 +150,7 @@ describe('TalosMobileSettingsAgentToolsPanel', () => {
         // Still announced ON: the save failed, and a controlled switch cannot
         // show a value that was never stored.
         expect(toggle.attributes('aria-checked')).toBe('true')
-        expect(wrapper.text()).toContain('17 of 24 enabled')
+        expect(wrapper.text()).toContain('17 of 26 enabled')
         expect(wrapper.get('[data-testid="agent-tools-save-error"]').attributes('role')).toBe('alert')
         expect(wrapper.get('[data-testid="agent-tools-save-error"]').text())
             .toBe('Could not save Search the Library. The previous setting is still active.')
