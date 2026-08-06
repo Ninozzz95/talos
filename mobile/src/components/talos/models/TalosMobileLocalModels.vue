@@ -723,7 +723,15 @@ function resultCountLabel(count: number): string {
              dispositivo» e la scheda del telefono faceva scorrere mezzo schermo
              prima di arrivare alle varianti, che sono il motivo per cui si e'
              entrati. -->
-        <p class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('localModels.intro') }}</p>
+        <!--
+            La riga «i modelli girano interamente su questo telefono» se n'è
+            andata il 2026-08-06, per decisione dell'owner.
+
+            Era una promessa ripetuta a chi l'aveva già capita: chi apre
+            «Modelli locali» sa dove girano i modelli locali. E costava la prima
+            riga della schermata — quella sopra le tab — cioè lo spazio migliore
+            che c'è, speso per non dire niente di nuovo.
+        -->
 
         <!--
             What is ALREADY here, before anything about getting more.
