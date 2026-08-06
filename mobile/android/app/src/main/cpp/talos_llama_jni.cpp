@@ -370,7 +370,8 @@ Java_ai_talos_TalosLlamaNative_nativeBackends(JNIEnv * env, jclass) {
 JNIEXPORT jlong JNICALL
 Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPath,
                                           jint threads, jint contextTokens, jint gpuLayers,
-                                          jboolean deterministic) {
+                                          jboolean deterministic, jint threadsBatch,
+                                          jint microBatch) {
     talos_last_open_error.clear();
     const std::string path = jstring_to_utf8(env, modelPath);
     if (path.empty()) {
@@ -398,8 +399,39 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
     // buffer di calcolo su un telefono; era pericolosa solo finché qualcuno
     // consegnava il prompt intero in una volta.
     ctx_params.n_batch         = 512;
+    /**
+     * ⛔ IL MICROBATCH, che finora non esisteva.
+     *
+     * `n_batch` è il batch LOGICO — quanti token si possono consegnare a
+     * `llama_decode` in una volta. `n_ubatch` è quello FISICO — quanti ne
+     * entrano davvero in un lancio di kernel. Erano lo stesso numero solo
+     * perché nessuno impostava il secondo, e la libreria lo lasciava al suo
+     * valore da scrivania.
+     *
+     * Contano due cose opposte: un microbatch grande fa correre il prefill e
+     * gonfia i buffer di calcolo; uno piccolo tiene bassa la memoria e rende
+     * Stop più pronto, perché l'attesa massima per fermarsi è **un microbatch
+     * intero**. Su un telefono con 4,5 GB liberi la seconda metà pesa quanto la
+     * prima, e va scelta guardando, non ereditata.
+     */
+    ctx_params.n_ubatch        = microBatch > 0 ? (uint32_t) microBatch : 256;
+    /**
+     * ⭐ DUE NUMERI, non uno.
+     *
+     * Erano lo stesso valore, e sono due carichi opposti. Il **prefill** macina
+     * matrici per matrici: si spalma sui core e vuole tutti quelli che il
+     * sistema concede. La **generazione** produce un token per volta ed è
+     * legata alla banda di memoria: oltre un certo punto i thread in più non
+     * calcolano di più, si contendono la stessa memoria e rubano tempo
+     * all'interfaccia.
+     *
+     * MISURATO sul Pad 2026-08-06: otto core, sei a capacità 792 e due a 1024,
+     * nessuno lento. Non è il classico big.LITTLE, e trattarlo come tale
+     * sarebbe stato sbagliato in entrambe le direzioni. Chi chiama passa i due
+     * numeri; qui non si indovina più.
+     */
     ctx_params.n_threads       = threads > 0 ? threads : 4;
-    ctx_params.n_threads_batch = ctx_params.n_threads;
+    ctx_params.n_threads_batch = threadsBatch > 0 ? threadsBatch : ctx_params.n_threads;
     ctx_params.no_perf         = true;
 
     /**
@@ -491,8 +523,9 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
         TALOS_LOGE("template non inizializzabile: %s", failure.what());
     }
 
-    TALOS_LOGI("modello aperto: %s (contesto %u, thread %d)",
-               path.c_str(), llama_n_ctx(ctx), ctx_params.n_threads);
+    TALOS_LOGI("modello aperto: %s (contesto %u, thread %d gen / %d prefill, microbatch %u)",
+               path.c_str(), llama_n_ctx(ctx), ctx_params.n_threads,
+               ctx_params.n_threads_batch, llama_n_ubatch(ctx));
     return reinterpret_cast<jlong>(session);
 }
 
@@ -1056,6 +1089,122 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
     }
 
     return env->NewStringUTF(answer.c_str());
+}
+
+/**
+ * ⭐ QUANTI THREAD, chiesto al telefono invece che deciso a tavolino.
+ *
+ * ## Perché non basta una regola
+ *
+ * Il numero giusto di thread non è una proprietà del chip: è una proprietà del
+ * **chip più questo modello più questa quantizzazione più la temperatura di
+ * adesso**. Una costante «ragionevole» è una previsione sul futuro, e sarà
+ * sbagliata per qualcuno — di solito per chi ha l'hardware che non avevamo in
+ * mano. Quindi si misura.
+ *
+ * ## Perché si può misurare gratis
+ *
+ * `llama_set_n_threads` cambia i due valori **su un contesto già aperto**.
+ * Senza quella funzione ogni combinazione costerebbe una riapertura del
+ * modello — secondi, e la KV buttata — e una taratura del genere non si
+ * potrebbe fare mentre qualcuno aspetta. Con quella, un giro completo costa
+ * qualche decina di prefill brevi.
+ *
+ * ## Le due misure sono separate perché i due carichi sono opposti
+ *
+ * Il **prefill** macina matrici: più core, più veloce, finché la memoria o il
+ * calore non dicono basta. La **generazione** fa un token per volta ed è legata
+ * alla banda: i thread in più si contendono la stessa memoria e non producono
+ * niente. Misurarle insieme e prendere un numero solo è il modo di perdere due
+ * volte.
+ *
+ * ⛔ Distrugge la conversazione in memoria — è un banco di prova, e come ogni
+ * banco di prova parte da zero. Chi lo chiama deve saperlo: si tara **prima**
+ * di parlare, non in mezzo a una chat.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeTuneThreads(JNIEnv * env, jclass, jlong handle,
+                                                 jintArray candidates, jint probeTokens) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr) return nullptr;
+
+    const jsize quanti = env->GetArrayLength(candidates);
+    if (quanti <= 0) return nullptr;
+    std::vector<jint> valori((size_t) quanti);
+    env->GetIntArrayRegion(candidates, 0, quanti, valori.data());
+
+    // Un token qualunque, ripetuto: qui si misura il MOTORE, non il modello.
+    // Il testo non conta, conta quanti token attraversano quanti core.
+    const int lunghezza = probeTokens > 0 ? probeTokens : 256;
+    const llama_token campione = llama_vocab_bos(session->vocab) >= 0
+        ? llama_vocab_bos(session->vocab)
+        : 0;
+    std::vector<llama_token> prova((size_t) lunghezza, campione);
+
+    llama_memory_t memoria = llama_get_memory(session->ctx);
+    const int32_t threads_prima = llama_n_threads(session->ctx);
+    const int32_t batch_prima   = llama_n_threads_batch(session->ctx);
+
+    std::string righe;
+    int   miglior_prefill = threads_prima;
+    int   miglior_decode  = threads_prima;
+    double top_prefill = 0.0;
+    double top_decode  = 0.0;
+
+    for (jint n : valori) {
+        if (n <= 0) continue;
+        // Ogni candidato parte dalla stessa condizione, o si misurerebbe
+        // l'ordine in cui li abbiamo provati.
+        llama_memory_clear(memoria, true);
+        llama_set_n_threads(session->ctx, n, n);
+
+        const auto inizio_pp = std::chrono::steady_clock::now();
+        const int passo = (int) llama_n_batch(session->ctx);
+        bool intero = true;
+        for (int fed = 0; fed < lunghezza && intero; ) {
+            const int pezzo = std::min(passo, lunghezza - fed);
+            llama_batch b = llama_batch_get_one(prova.data() + fed, (int32_t) pezzo);
+            if (llama_decode(session->ctx, b) != 0) intero = false;
+            fed += pezzo;
+        }
+        const double pp_ms = (double) talos_da(inizio_pp);
+        if (!intero || pp_ms <= 0.0) continue;
+        const double pp = (double) lunghezza * 1000.0 / pp_ms;
+
+        // Otto token generati bastano a separare i candidati e non fanno
+        // aspettare: qui si cerca un ordine, non un numero da pubblicare.
+        llama_token uno = campione;
+        const auto inizio_tg = std::chrono::steady_clock::now();
+        int generati = 0;
+        for (; generati < 8; generati++) {
+            llama_batch b = llama_batch_get_one(&uno, 1);
+            if (llama_decode(session->ctx, b) != 0) break;
+        }
+        const double tg_ms = (double) talos_da(inizio_tg);
+        const double tg = (generati > 0 && tg_ms > 0.0) ? (double) generati * 1000.0 / tg_ms : 0.0;
+
+        if (pp > top_prefill) { top_prefill = pp; miglior_prefill = n; }
+        if (tg > top_decode)  { top_decode  = tg; miglior_decode  = n; }
+
+        char riga[128];
+        snprintf(riga, sizeof(riga), "%s{\"threads\":%d,\"prefill\":%.1f,\"decode\":%.2f}",
+                 righe.empty() ? "" : ",", (int) n, pp, tg);
+        righe += riga;
+    }
+
+    // Il contesto torna com'era trovato, tranne la memoria: quella è persa per
+    // costruzione, e chi ha chiamato lo sa.
+    llama_memory_clear(memoria, true);
+    session->cached.clear();
+    llama_set_n_threads(session->ctx, threads_prima, batch_prima);
+
+    char json[1024];
+    snprintf(json, sizeof(json),
+             "{\"threads\":%d,\"threadsBatch\":%d,\"prefillPerSecond\":%.1f,"
+             "\"decodePerSecond\":%.2f,\"grid\":[%s]}",
+             miglior_decode, miglior_prefill, top_prefill, top_decode,
+             righe.c_str());
+    return env->NewStringUTF(json);
 }
 
 /**

@@ -93,6 +93,8 @@ interface TalosLlamaPlugin {
     open(options: {
         path: string
         threads?: number
+        threadsBatch?: number
+        microBatch?: number
         contextTokens?: number
         gpuLayers?: number
         /**
@@ -114,6 +116,7 @@ interface TalosLlamaPlugin {
         stopAtEndOfGeneration?: boolean
     }): Promise<TalosLocalEngineGeneration>
     lastTimings(): Promise<{ timings: string }>
+    tuneThreads(options: { candidates: number[], probeTokens?: number }): Promise<{ tuning: string }>
     installed(): Promise<{
         models: Array<{ path: string, bytes: number, name: string, modifiedAt?: number }>
         unreadable?: Array<{ path: string, reason: string }>
@@ -194,6 +197,21 @@ type TalosLocalEngineOpenOptions = {
     contextTokens?: number
     gpuLayers?: number
     deterministic?: boolean
+    /**
+     * I thread del PREFILL, separati da quelli della generazione.
+     *
+     * Erano lo stesso numero, e sono due carichi opposti: il prefill macina
+     * matrici e si spalma sui core, generare un token per volta è legato alla
+     * banda di memoria. Omesso significa «come prima», che è ciò che il banco
+     * di prova vuole perché misura apposta la configurazione di riferimento.
+     */
+    threadsBatch?: number
+    /**
+     * Il batch fisico. Grande fa correre il prefill e gonfia i buffer di
+     * calcolo; piccolo tiene bassa la memoria e rende Stop più pronto, perché
+     * l'attesa massima per fermarsi è un microbatch intero.
+     */
+    microBatch?: number
 }
 
 function recordOf(value: unknown): Record<string, unknown> | null {

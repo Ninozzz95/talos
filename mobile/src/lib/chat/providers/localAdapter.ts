@@ -20,6 +20,7 @@ import {
 } from '@/services/localEngine'
 import { talosMeasureDevice } from '@/services/deviceCapacity'
 import { type TalosModelShape, talosMaxContextFor } from '@/lib/models/fit'
+import { talosEngineTuning } from '@/lib/models/engineTuning'
 import {
     TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
     talosLocalEscalatedContextTokens,
@@ -152,6 +153,31 @@ function actionableGenerationFailure(error: TalosLocalEngineGenerationError): Ta
  * another, and asking first avoids paying a reload for a message that is
  * already on the right one.
  */
+/**
+ * Quanti thread e che microbatch, chiesti a QUESTO telefono.
+ *
+ * Il motore apriva ogni modello con quattro thread — una costante — e lo stesso
+ * numero per prefill e generazione, che sono carichi opposti. Sul Pad
+ * significava metà chip fermo mentre il prompt veniva macinato.
+ *
+ * Se il dispositivo non sa dire com'è fatto, non si inventa niente: si torna un
+ * oggetto vuoto e il nativo si comporta esattamente come prima. Un valore
+ * indovinato sarebbe peggio del comportamento noto.
+ */
+async function talosTuningFor(): Promise<{ threads?: number, threadsBatch?: number, microBatch?: number }> {
+    const device = await talosMeasureDevice()
+    if (!device?.cpuCores) return {}
+    const tuning = talosEngineTuning({
+        cores: device.cpuCores,
+        capacities: device.cpuCapacities,
+    })
+    return {
+        threads: tuning.threads,
+        threadsBatch: tuning.threadsBatch,
+        microBatch: tuning.microBatch,
+    }
+}
+
 async function ensureLoaded(path: string): Promise<TalosLocalEngineStatus> {
     const status = await talosLocalEngineStatus()
     if (!status.available) throw new Error('TALOS_LOCAL_ENGINE_UNAVAILABLE')
@@ -159,6 +185,7 @@ async function ensureLoaded(path: string): Promise<TalosLocalEngineStatus> {
     try {
         await talosLocalEngineOpenWithFallback(path, {
             contextTokens: TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
+            ...(await talosTuningFor()),
         })
     } catch (error) {
         if (error instanceof TalosLocalEngineOpenError) throw actionableOpenFailure(error)
@@ -278,7 +305,13 @@ async function run(
         try {
             // Exact by design: a known 6804-token requirement cannot recover
             // by falling back to 2048 after an 8192 allocation failure.
-            await talosLocalEngineOpen(input.model.id, { contextTokens: targetContext })
+            await talosLocalEngineOpen(input.model.id, {
+                contextTokens: targetContext,
+                // ⛔ Anche qui. Riaprire per allargare il contesto e nel farlo
+                // tornare ai quattro thread di prima significherebbe che una
+                // conversazione lunga diventa più lenta man mano che cresce.
+                ...(await talosTuningFor()),
+            })
         } catch (error) {
             if (error instanceof TalosLocalEngineOpenError) throw actionableOpenFailure(error)
             throw error
