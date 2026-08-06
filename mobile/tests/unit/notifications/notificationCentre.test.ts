@@ -34,7 +34,7 @@ function evento(patch: Partial<TalosNotificationEvent> = {}): TalosNotificationE
 describe('C45-RED-19K notification routing', () => {
     /** La promessa: nessuna azione resta senza traccia. */
     it('always writes to the feed, whatever the weight or the context', () => {
-        for (const weight of ['log', 'notable', 'demanding'] as const) {
+        for (const weight of ['log', 'away', 'notable', 'demanding'] as const) {
             for (const appVisible of [true, false]) {
                 expect(talosRouteNotification(evento({ weight }), { appVisible }).feed).toBe(true)
             }
@@ -62,6 +62,20 @@ describe('C45-RED-19K notification routing', () => {
     it('a demanding event reaches Android even with the app in front', () => {
         const rotta = talosRouteNotification(evento({ weight: 'demanding' }), { appVisible: true })
         expect(rotta).toMatchObject({ feed: true, toast: true, android: true })
+    })
+
+    /**
+     * Il buco trovato dal caso reale: la risposta di una chat.
+     *
+     * Se sei davanti la stai già leggendo, e un toast che annuncia una risposta
+     * mentre la risposta ti scorre sotto gli occhi è rumore puro. Se hai chiuso
+     * l'app, è l'unica cosa che ti fa sapere che è finita.
+     */
+    it('an away event never toasts, and only leaves the app when you are gone', () => {
+        expect(talosRouteNotification(evento({ weight: 'away' }), { appVisible: true }))
+            .toMatchObject({ feed: true, toast: false, android: false })
+        expect(talosRouteNotification(evento({ weight: 'away' }), { appVisible: false }))
+            .toMatchObject({ feed: true, toast: false, android: true })
     })
 
     it('a log-only event stays in the feed alone', () => {

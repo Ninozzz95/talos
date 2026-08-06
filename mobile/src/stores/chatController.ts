@@ -3524,6 +3524,61 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     ? { library_answer_guard: libraryAnswerGuardTrace }
                     : {}),
             }
+            /**
+             * La risposta e' arrivata: se non stai guardando, te lo diciamo.
+             *
+             * Owner 2026-08-06: «se chiudo la chat e finisce in bg deve spuntare
+             * una notifica con il messaggio, o un riassunto in poche parole».
+             *
+             * Il difetto che l'ha motivata l'ho misurato sul suo tablet lo
+             * stesso giorno: una generazione lunga era rimasta **senza risposta
+             * da nove ore**, senza errore e senza traccia. La conversazione
+             * finiva su un turno dell'utente e nessuno poteva sapere se fosse
+             * finita, fallita o persa.
+             *
+             * Peso `away`: MAI un toast. Se sei davanti la risposta ti sta
+             * scorrendo sotto gli occhi, e annunciartela sarebbe rumore. Se hai
+             * chiuso l'app, e' l'unica cosa che te lo fa sapere.
+             *
+             * La chiave e' la CHAT e non il messaggio: due risposte nella stessa
+             * conversazione sostituiscono la stessa notifica invece di
+             * impilarsi.
+             *
+             * Import dinamico e `void`: notificare non deve poter ritardare ne'
+             * far fallire la consegna della risposta, che e' la cosa vera.
+             */
+            void (async () => {
+                try {
+                    const testo = stripLibrarySaveMarkers(finalText).trim()
+                    if (testo.length === 0) return
+                    const { talosNotify } = await import('@/stores/notificationCentre')
+                    talosNotify({
+                        key: `chat:${sendIdentity.sessionId}`,
+                        channel: 'chat',
+                        weight: 'away',
+                        // Difensivo di proposito: il titolo e' una gentilezza, la
+                        // notifica e' la cosa. Una conversazione senza titolo non
+                        // deve costare la notifica — e' esattamente il genere di
+                        // dettaglio che fa perdere la notizia importante.
+                        title: chat.sessions.find(
+                            (session) => session.id === sendIdentity.sessionId,
+                        )?.title || deps.translate('chat.newChat'),
+                    // Poche parole, come chiesto: la notifica ANTICIPA, la chat
+                    // contiene. Un muro di testo nella tenda non si legge e
+                    // toglie spazio alle altre.
+                        body: testo.length > 180 ? `${testo.slice(0, 177)}…` : testo,
+                        at: Date.now(),
+                    })
+                } catch {
+                    /*
+                     * Notificare non deve MAI poter rompere una risposta gia'
+                     * consegnata. La risposta e' la cosa vera; l'avviso e' un
+                     * servizio attorno, e un servizio che fa cadere cio' che
+                     * serve e' peggio di un servizio assente.
+                     */
+                }
+            })()
+
             // Debt A1: the controller's completion returns the RESULT, carrying
             // finishReason (and any tool calls) through to the store's loop.
             return {
