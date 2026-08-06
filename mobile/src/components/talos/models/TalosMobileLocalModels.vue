@@ -26,6 +26,8 @@ import {
     talosLocalModels,
     talosSetBrowseFilters,
     talosSetBrowseSearchOpen,
+    talosSetBrowseTab,
+    talosSetInstalledFitsOnly,
     talosSearchLocalModels,
     talosRefreshLeftovers,
     talosRefreshHuggingFaceToken,
@@ -134,11 +136,14 @@ function chooseLayout(next: 'grid' | 'list'): void {
  * la domanda più frequente — «che modelli ho» viene prima di «cosa potrei
  * prendere», e chi apre per liberare spazio non deve attraversare un catalogo.
  */
-const tabAttiva = ref<string>('installed')
+const tabAttiva = computed({
+    get: () => store.browseTab,
+    set: (scelta: string) => { talosSetBrowseTab(scelta) },
+})
 
 /** Il padre possiede la scelta: la striscia riferisce, non decide. */
 function scegliTab(scelta: unknown): void {
-    if (typeof scelta === 'string') tabAttiva.value = scelta
+    if (typeof scelta === 'string') talosSetBrowseTab(scelta)
 }
 
 const sentinellaPagina = ref<HTMLElement | null>(null)
@@ -333,7 +338,10 @@ const installedReadFailure = ref(false)
  * occupa gigabyte e non serve a niente: è esattamente quello da cancellare, e
  * finora bisognava confrontare i numeri a mente.
  */
-const soloQuelliCheEntrano = ref(false)
+const soloQuelliCheEntrano = computed({
+    get: () => store.installedFitsOnly,
+    set: (only: boolean) => { talosSetInstalledFitsOnly(only) },
+})
 
 const installedView = computed(() => talosInstalledModelsView(installed.value, {
     query: installedQuery.value,

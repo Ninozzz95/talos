@@ -37,6 +37,12 @@ vi.mock('@/stores/localModels', () => ({
     talosSetBrowseSearchOpen: (open: boolean) => {
         (store.state as never as { browseSearchOpen: boolean }).browseSearchOpen = open
     },
+    talosSetBrowseTab: (tab: string) => {
+        (store.state as never as { browseTab: string }).browseTab = tab
+    },
+    talosSetInstalledFitsOnly: (only: boolean) => {
+        (store.state as never as { installedFitsOnly: boolean }).installedFitsOnly = only
+    },
     talosSearchLocalModels: store.search,
     talosOpenModelRepo: store.open,
     talosCloseModelRepo: store.close,
@@ -158,6 +164,8 @@ function baseState(over: Record<string, unknown> = {}) {
         // ritrovano com'erano invece di azzerarsi.
         browseFilters: [],
         browseSearchOpen: false,
+        browseTab: 'installed',
+        installedFitsOnly: false,
         searching: false,
         results: [],
         searchFailure: null,
