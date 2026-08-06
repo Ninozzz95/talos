@@ -134,3 +134,78 @@ describe('LOCAL-CONTEXT-PARITY-01 canonical local context policy', () => {
         expect(talosLocalEscalatedContextTokens(8192, 1200, 512, 4096)).toBe(8192)
     })
 })
+
+/**
+ * C45-RED-19M — l'arrotondamento non deve costare metà della memoria.
+ *
+ * MISURATO sul OnePlus Pad 3 il 2026-08-06, con Qwen3-1.7B-Q8_0 caricato: il
+ * budget dava 15.379 token e la potenza di due li tagliava a 8192. Il 47% della
+ * memoria utilizzabile buttato via — e su quel dispositivo era esattamente la
+ * differenza fra la conversazione dell'owner che passa e PROVIDER_CHAT_FAILED.
+ */
+describe('C45-RED-19M il tetto non si arrotonda a potenze di due', () => {
+    /** Qwen3-1.7B-Q8_0, come llama.cpp lo dichiara sul dispositivo. */
+    const QWEN_1_7B: TalosModelShape = {
+        layers: 28,
+        kvHeads: 8,
+        headDim: 128,
+        trainedContext: 40960,
+        weightBytes: 1_828_474_880,
+        kvBytesPerElement: 2,
+    }
+
+    /** Il tablet nel momento esatto della misura: 2,58 GB liberi. */
+    const TABLET_CARICO: TalosDeviceCapacity = {
+        totalRamBytes: Math.round(11.17 * GIB),
+        availableRamBytes: Math.round(2.58 * GIB),
+        lowMemoryThresholdBytes: Math.round(0.63 * GIB),
+        freeStorageBytes: 40 * GIB,
+        memoryBandwidthBytesPerSecond: null,
+        thermal: 'none',
+        abiSupported: true,
+    }
+
+    const tettoQui = () => talosMaxContextFor(QWEN_1_7B, {
+        // Come fa la chat: i pesi tornano nella memoria libera, perché il
+        // modello è già caricato e la misura li ha già scontati.
+        ...TABLET_CARICO,
+        availableRamBytes: TABLET_CARICO.availableRamBytes + QWEN_1_7B.weightBytes,
+    })
+
+    /**
+     * Il confronto FRA LE DUE REGOLE, non un numero derivato a mano.
+     *
+     * La prima versione di questa prova fissava «oltre 15.000», che era il
+     * valore letto sul dispositivo in quel preciso istante — con la memoria
+     * libera di quel momento. Su costanti arrotondate dà un altro numero, e la
+     * prova falliva pur essendo giusta la correzione: stava provando la mia
+     * aritmetica a mano invece del cambiamento.
+     *
+     * Ciò che deve valere sempre è questo: il passo da 256 non butta via più di
+     * un passo, mentre la potenza di due può buttarne via quasi metà.
+     */
+    it('recupera i token che la potenza di due buttava via', () => {
+        const tetto = tettoQui()
+        const potenzaDiDue = 2 ** Math.floor(Math.log2(tetto))
+
+        expect(tetto % 256).toBe(0)
+        expect(tetto).toBeGreaterThan(potenzaDiDue)
+        // Su questo caso reale il guadagno è di migliaia di token, non di unità.
+        expect(tetto - potenzaDiDue).toBeGreaterThan(1_000)
+    })
+
+    /** Tondo resta tondo: il costo dell'ordine è al massimo un passo. */
+    it('perde al massimo un passo, non la metà', () => {
+        const tetto = tettoQui()
+        // Il passo successivo sarebbe già oltre il budget: la perdita massima è
+        // quindi sotto i 256 token, per costruzione.
+        expect(tetto % 256).toBe(0)
+        expect(tetto).toBeGreaterThan(8192)
+    })
+
+    /** Il contesto addestrato resta il tetto del tetto. */
+    it('non supera mai quello che il modello dichiara', () => {
+        const enorme: TalosDeviceCapacity = { ...TABLET_CARICO, availableRamBytes: 60 * GIB, totalRamBytes: 64 * GIB }
+        expect(talosMaxContextFor(QWEN_1_7B, enorme)).toBe(QWEN_1_7B.trainedContext)
+    })
+})
