@@ -113,6 +113,7 @@ interface TalosLlamaPlugin {
         maxTokens?: number
         stopAtEndOfGeneration?: boolean
     }): Promise<TalosLocalEngineGeneration>
+    lastTimings(): Promise<{ timings: string }>
     installed(): Promise<{
         models: Array<{ path: string, bytes: number, name: string, modifiedAt?: number }>
         unreadable?: Array<{ path: string, reason: string }>
@@ -486,6 +487,48 @@ export async function talosLocalEngineGenerate(
         }
     } finally {
         await subscription.remove()
+    }
+}
+
+/**
+ * Gli stadi dell'ultima generazione locale.
+ *
+ * ⛔ È una DIAGNOSI, non una statistica da mostrare in chat. Serve a rispondere
+ * alla sola domanda che finora non aveva risposta: quando la prima parola tarda
+ * nove secondi, quale dei cinque stadi se li è presi.
+ *
+ * `reusedTokens` alto e `prefillMs` basso significa che il contesto sta
+ * lavorando: il turno nuovo rielabora solo ciò che è stato aggiunto.
+ * `reusedTokens` a zero su un turno che non è il primo significa che qualcosa
+ * ha invalidato il prefisso — template cambiato, tool diversi, un'altra chat —
+ * ed è la traccia da seguire.
+ *
+ * Torna `null` se il motore non è aperto: chiedere i tempi di una generazione
+ * che non c'è stata non è un errore, è una domanda senza risposta.
+ */
+export interface TalosLocalEngineTimings {
+    tokenizeMs: number
+    prefixMs: number
+    prefillMs: number
+    firstTokenMs: number
+    totalMs: number
+    promptTokens: number
+    reusedTokens: number
+    newTokens: number
+    producedTokens: number
+    reusedContext: boolean
+}
+
+export async function talosLocalEngineTimings(): Promise<TalosLocalEngineTimings | null> {
+    try {
+        const raw = (await plugin.lastTimings()).timings
+        if (typeof raw !== 'string' || raw === '') return null
+        const parsed: unknown = JSON.parse(raw)
+        return parsed && typeof parsed === 'object'
+            ? parsed as TalosLocalEngineTimings
+            : null
+    } catch {
+        return null
     }
 }
 

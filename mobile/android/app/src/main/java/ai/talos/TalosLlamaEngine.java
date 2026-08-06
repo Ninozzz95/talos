@@ -263,8 +263,45 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * Handing out a callback per token would put the JNI boundary in the
      * hot path for no gain.
      */
-    public String generateBlocking(String prompt, int maxTokens, boolean stopAtEndOfGeneration) {
-        return TalosLlamaNative.nativeGenerate(handle, prompt, maxTokens, stopAtEndOfGeneration);
+    /**
+     * Le due modalità in cui si può chiedere di generare.
+     *
+     * Non sono un dettaglio di implementazione: cambiano cosa il contesto
+     * ricorda fra una chiamata e l'altra, e servono due scopi opposti.
+     */
+    public enum Mode {
+        /**
+         * Una conversazione. Il contesto tiene ciò che ha già letto, e il turno
+         * nuovo rielabora solo i token aggiunti — che è quasi sempre una
+         * frazione minuscola di quelli che il modello vede. Il token di fine
+         * generazione ferma la risposta.
+         */
+        CHAT(true, true),
+        /**
+         * Una misura. Il contesto riparte da zero, perché due giri con stati
+         * diversi non sono confrontabili; e il token di fine non ferma niente,
+         * perché un modello che tace dopo un secondo non ha reso lento il
+         * telefono — misurerebbe la sua loquacità, non la nostra velocità.
+         */
+        BENCHMARK(false, false);
+
+        final boolean stopAtEndOfGeneration;
+        final boolean reusePrefix;
+
+        Mode(boolean stopAtEndOfGeneration, boolean reusePrefix) {
+            this.stopAtEndOfGeneration = stopAtEndOfGeneration;
+            this.reusePrefix = reusePrefix;
+        }
+    }
+
+    public String generateBlocking(String prompt, int maxTokens, Mode mode) {
+        return TalosLlamaNative.nativeGenerate(
+                handle, prompt, maxTokens, mode.stopAtEndOfGeneration, mode.reusePrefix);
+    }
+
+    /** Gli stadi dell'ultima generazione, in JSON. Vedi `nativeLastTimings`. */
+    public String lastTimings() {
+        return TalosLlamaNative.nativeLastTimings(handle);
     }
 
     /**
@@ -275,20 +312,20 @@ public final class TalosLlamaEngine implements AutoCloseable {
      *     misurare un'esecuzione fallita significa misurare il fallimento.
      */
     public Run run(String prompt, int maxTokens, ThermalSource thermal) throws InterruptedException {
-        return run(prompt, maxTokens, thermal, false);
+        return run(prompt, maxTokens, thermal, Mode.BENCHMARK);
     }
 
     /**
-     * @param stopAtEndOfGeneration vero per una risposta vera, falso per una
-     *     misura. Vedi {@link #MEASURE_FLOOR_MS}: un modello che smette di
-     *     parlare dopo un secondo non ha reso lento il telefono.
+     * @param mode {@link Mode#CHAT} per una risposta vera, {@link Mode#BENCHMARK}
+     *     per una misura. Vedi {@link #MEASURE_FLOOR_MS}: un modello che smette
+     *     di parlare dopo un secondo non ha reso lento il telefono.
      */
     public Run run(String prompt, int maxTokens, ThermalSource thermal,
-                   boolean stopAtEndOfGeneration) throws InterruptedException {
+                   Mode mode) throws InterruptedException {
         AtomicReference<String> produced = new AtomicReference<>(null);
         Thread worker = new Thread(
                 () -> produced.set(TalosLlamaNative.nativeGenerate(
-                        handle, prompt, maxTokens, stopAtEndOfGeneration)),
+                        handle, prompt, maxTokens, mode.stopAtEndOfGeneration, mode.reusePrefix)),
                 "talos-llama-run");
         worker.start();
 

@@ -135,9 +135,19 @@ final class TalosLlamaNative {
      *     sacro; falso durante una misura, dove fermarsi quando il modello ha
      *     finito significherebbe misurare quanto è loquace invece di quanto è
      *     veloce il telefono.
+     * @param reusePrefix vero in chat: il contesto tiene ciò che ha già letto e
+     *     rielabora solo i token aggiunti. Falso durante una misura, dove due
+     *     giri con stati diversi non sono confrontabili — e una misura non
+     *     confrontabile non è una misura.
      */
     static native String nativeGenerate(long handle, String prompt, int maxTokens,
-                                        boolean stopAtEndOfGeneration);
+                                        boolean stopAtEndOfGeneration, boolean reusePrefix);
+
+    /**
+     * Gli stadi dell'ultima generazione, in JSON: quale dei cinque si è preso
+     * il tempo. Vale {@code null} se la sessione non esiste più.
+     */
+    static native String nativeLastTimings(long handle);
 
     static native void nativeClose(long handle);
 }

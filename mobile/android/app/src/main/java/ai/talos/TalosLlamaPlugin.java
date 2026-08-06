@@ -190,9 +190,16 @@ public class TalosLlamaPlugin extends Plugin {
         // benchmark wants it to carry on regardless. Same engine, opposite
         // needs, so the caller says which of the two it is instead of one of
         // them quietly getting the other's behaviour.
-        final boolean stopAtEnd = call.getData().has("stopAtEndOfGeneration")
-                ? Boolean.TRUE.equals(call.getBoolean("stopAtEndOfGeneration"))
-                : true;
+        //
+        // Le due esigenze sono UNA scelta, non due booleani che devono essere
+        // d'accordo: chi misura vuole anche un contesto azzerato, chi chatta
+        // vuole anche il prefisso riusato. Tenerli separati significava poter
+        // chiedere «fermati alla fine ma ricomincia da zero», che non è
+        // nessuna delle due cose.
+        final TalosLlamaEngine.Mode mode = call.getData().has("stopAtEndOfGeneration")
+                && !Boolean.TRUE.equals(call.getBoolean("stopAtEndOfGeneration"))
+                ? TalosLlamaEngine.Mode.BENCHMARK
+                : TalosLlamaEngine.Mode.CHAT;
 
         // One generation at a time, refused rather than queued.
         //
@@ -255,7 +262,7 @@ public class TalosLlamaPlugin extends Plugin {
                 watcher.start();
 
                 try {
-                    engine.generateBlocking(prompt, maxTokens, stopAtEnd);
+                    engine.generateBlocking(prompt, maxTokens, mode);
                 } finally {
                     done.set(true);
                     watcher.interrupt();
@@ -478,6 +485,27 @@ public class TalosLlamaPlugin extends Plugin {
         result.put("promptTokens", promptTokens);
         result.put("contextTokens", engine.contextTokens());
         call.resolve(result);
+    }
+
+    /**
+     * Gli stadi dell'ultima generazione.
+     *
+     * «Nove secondi prima della prima parola» non è una diagnosi: è la somma di
+     * tokenizzazione, prefisso, prefill, prima decodifica e ponte, e le cinque
+     * si riparano in modi diversi. Questo metodo è come si scopre quale delle
+     * cinque li ha presi, senza collegare un profiler.
+     */
+    @PluginMethod
+    public void lastTimings(PluginCall call) {
+        TalosLlamaEngine engine = openEngine.get();
+        if (engine == null) {
+            call.reject("TALOS_LLAMA_NOT_OPEN");
+            return;
+        }
+        String json = engine.lastTimings();
+        JSObject payload = new JSObject();
+        payload.put("timings", json == null ? "" : json);
+        call.resolve(payload);
     }
 
     /** Stops the current generation. What was produced so far still stands. */

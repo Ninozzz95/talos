@@ -16,6 +16,7 @@
 #include <android/log.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <atomic>
 #include <cstring>
@@ -51,6 +52,28 @@ struct talos_session {
     std::atomic<bool> cancelled{false};
 
     /**
+     * I token che il contesto ha GIÀ elaborato, nell'ordine in cui li ha visti.
+     *
+     * ⭐ È la struttura che toglie la maggior parte dei 9-12 secondi. Fino a ieri
+     * ogni generazione cominciava con `llama_memory_clear`, e il commento diceva
+     * il perché: «ogni PROVA parte da zero». Vero per un banco di prova —
+     * misurare due giri con stati diversi non misura niente — ma questa funzione
+     * è anche la strada della chat, e lì significava ripagare il prefill
+     * dell'INTERA conversazione a ogni messaggio.
+     *
+     * In chat il prompt del turno nuovo comincia con tutto il turno vecchio.
+     * Sapendo quali token il contesto ha già visto si trova il prefisso comune
+     * e si decodifica solo la coda. Il pezzo difficile — un contesto che
+     * sopravvive fra due chiamate — c'era già: `ctx` vive fino a `nativeClose`.
+     *
+     * ⛔ Contiene anche i token GENERATI, non solo quelli del prompt: anche
+     * quelli sono finiti nella KV. Ometterli farebbe credere al giro successivo
+     * che la KV sia più corta di com'è, e il prefisso comune verrebbe calcolato
+     * su una bugia.
+     */
+    std::vector<llama_token> cached;
+
+    /**
      * Il testo prodotto finora, e il lucchetto che lo rende leggibile da fuori.
      *
      * Una chat deve mostrare le parole mentre arrivano, non alla fine. Il
@@ -65,6 +88,32 @@ struct talos_session {
      */
     std::mutex  text_lock;
     std::string text;
+
+    /**
+     * Il tempo fino alla prima parola, SPEZZATO.
+     *
+     * «Nove secondi» non è una diagnosi: è la somma di tokenizzazione, prefisso
+     * ricalcolato, prefill, prima decodifica e ponte. Senza separarle qualunque
+     * intervento ha una probabilità su cinque di toccare la parte giusta — e le
+     * cinque parti si riparano in modi completamente diversi.
+     *
+     * Millisecondi dall'ingresso in JNI, non orari assoluti: un orologio che
+     * l'utente può spostare non serve a misurare durate.
+     */
+    struct talos_cronometro {
+        long long tokenizzazione_ms = -1;
+        long long prefisso_ms       = -1;
+        long long prefill_ms        = -1;
+        long long primo_token_ms    = -1;
+        long long totale_ms         = -1;
+        int       token_prompt      = 0;
+        int       token_riusati     = 0;
+        int       token_nuovi       = 0;
+        int       token_prodotti    = 0;
+        bool      contesto_riusato  = false;
+    };
+    std::mutex       tempi_lock;
+    talos_cronometro tempi;
 
     /**
      * Il template VERO del modello, eseguito da un motore Jinja.
@@ -109,6 +158,42 @@ struct talos_session {
      */
     common_params_sampling sampling;
 };
+
+/**
+ * Quello che llama.cpp chiede MENTRE calcola: «devo fermarmi?».
+ *
+ * `noexcept` non è decorazione: viene invocata dall'interno di codice C, e
+ * un'eccezione che lo attraversasse porterebbe giù il processo. `relaxed`
+ * basta: l'unica cosa che conta è che il valore arrivi presto, e chi lo scrive
+ * non deve ordinare nient'altro attorno.
+ */
+bool talos_deve_fermarsi(void * opaco) noexcept {
+    auto * session = static_cast<talos_session *>(opaco);
+    return session != nullptr && session->cancelled.load(std::memory_order_relaxed);
+}
+
+/** Millisecondi da un istante, con un orologio che nessuno può spostare. */
+long long talos_da(const std::chrono::steady_clock::time_point & inizio) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - inizio).count();
+}
+
+/**
+ * Quanti token in testa sono gli stessi. È tutto il guadagno, in tre righe.
+ *
+ * ⛔ Non arriva MAI a coprire l'intero prompt nuovo: se combaciasse per intero
+ * non resterebbe niente da decodificare, e il campionatore lavorerebbe sui
+ * logit del turno precedente — cioè risponderebbe alla domanda di prima. Si
+ * lascia sempre almeno un token da rielaborare.
+ */
+size_t talos_prefisso_comune(const std::vector<llama_token> & vecchi,
+                             const std::vector<llama_token> & nuovi) {
+    const size_t tetto = std::min(vecchi.size(), nuovi.size());
+    size_t comune = 0;
+    while (comune < tetto && vecchi[comune] == nuovi[comune]) comune += 1;
+    if (comune >= nuovi.size() && comune > 0) comune = nuovi.size() - 1;
+    return comune;
+}
 
 std::once_flag g_init_once;
 
@@ -317,6 +402,25 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
     ctx_params.n_threads_batch = ctx_params.n_threads;
     ctx_params.no_perf         = true;
 
+    /**
+     * ⛔ FERMARE DAVVERO, non fra un pezzo e l'altro.
+     *
+     * Il flag `cancelled` c'era già, ma veniva letto SOLO fra un chunk di
+     * prefill e il successivo. Dentro una singola `llama_decode` non c'è niente
+     * che guardi: con un prompt lungo, premere Stop non fermava niente per
+     * secondi, ed è esattamente ciò che l'owner ha visto sul dispositivo.
+     *
+     * Questa callback llama.cpp la interroga MENTRE calcola. Quando dice sì,
+     * `llama_decode` torna 2 e il lavoro si ferma dov'è.
+     *
+     * ⚠️ L'header dichiara, testuale: «currently works only with CPU
+     * execution». Se un giorno accenderemo un backend GPU o NPU, questa strada
+     * smette di funzionare e Stop torna a essere quello di prima. Va saputo
+     * adesso, non scoperto allora.
+     */
+    ctx_params.abort_callback = nullptr;   // armata sotto, quando la sessione esiste
+    ctx_params.abort_callback_data = nullptr;
+
     llama_context * ctx = llama_init_from_model(model, ctx_params);
     if (ctx == nullptr) {
         talos_last_open_error = "context";
@@ -371,6 +475,11 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
     session->sampler = sampler;
     session->vocab   = llama_model_get_vocab(model);
     session->sampling = sampling;
+
+    // Armata QUI e non nei parametri del contesto: la callback ha bisogno
+    // dell'indirizzo della sessione, che un istante fa non esisteva ancora.
+    // `llama_set_abort_callback` fa esattamente questo, e senza ricreare niente.
+    llama_set_abort_callback(ctx, talos_deve_fermarsi, session);
 
     // Costruito una volta, all'apertura: compilare un template Jinja a ogni
     // messaggio sarebbe lavoro rifatto identico per tutta la conversazione.
@@ -691,10 +800,12 @@ Java_ai_talos_TalosLlamaNative_nativePromptTokens(JNIEnv * env, jclass, jlong ha
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle,
                                               jstring promptText, jint maxTokens,
-                                              jboolean stopAtEndOfGeneration) {
+                                              jboolean stopAtEndOfGeneration,
+                                              jboolean reusePrefix) {
     talos_session * session = as_session(handle);
     if (session == nullptr) return nullptr;
 
+    const auto        avvio  = std::chrono::steady_clock::now();
     const std::string prompt = jstring_to_utf8(env, promptText);
 
     session->produced.store(0, std::memory_order_relaxed);
@@ -705,9 +816,25 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         std::lock_guard<std::mutex> guard(session->text_lock);
         session->text.clear();
     }
-    // Ogni prova parte da zero: un contesto che si porta dietro la precedente
-    // misurerebbe una cosa diversa a ogni giro.
-    llama_memory_clear(llama_get_memory(session->ctx), true);
+    /**
+     * ⭐ LE DUE MODALITÀ, dichiarate invece che sottintese.
+     *
+     * Questa funzione serve due padroni con esigenze opposte, e per mesi ne ha
+     * servito uno solo. **Il banco di prova** deve partire da zero: due giri
+     * con stati diversi non sono confrontabili, e una misura non confrontabile
+     * non è una misura. **La chat** deve fare l'esatto contrario: il prompt del
+     * turno nuovo comincia con tutto il turno vecchio, e ricalcolarlo significa
+     * far aspettare una persona per un lavoro già fatto.
+     *
+     * Vinceva il banco di prova, perché il motore è nato per misurare. Da qui
+     * in poi la modalità si dichiara: `reusePrefix` è la chat, il suo contrario
+     * è la misura. Un `if` che si vede, e non due comportamenti che dipendono
+     * da chi ha chiamato.
+     */
+    if (!reusePrefix) {
+        llama_memory_clear(llama_get_memory(session->ctx), true);
+        session->cached.clear();
+    }
 
     const int wanted = -llama_tokenize(session->vocab, prompt.c_str(), (int32_t) prompt.size(),
                                        nullptr, 0, true, true);
@@ -722,6 +849,7 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         TALOS_LOGE("tokenizzazione fallita");
         return nullptr;
     }
+    const long long tempo_tokenizzazione = talos_da(avvio);
 
     const int budget = (int) llama_n_ctx(session->ctx);
     if (wanted >= budget) {
@@ -771,19 +899,81 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         TALOS_LOGE("batch di dimensione non valida");
         return nullptr;
     }
-    for (int fed = 0; fed < wanted; ) {
-        if (session->cancelled.load(std::memory_order_relaxed)) {
+    /**
+     * ⭐ QUANTO DI QUESTO PROMPT IL CONTESTO HA GIÀ VISTO.
+     *
+     * In una chat il prompt del turno nuovo è il turno vecchio più due
+     * messaggi. Il prefisso comune copre quasi tutto, e ciò che resta da
+     * decodificare sono le poche decine di token aggiunti.
+     *
+     * `llama_memory_seq_rm` dal punto di divergenza in avanti: la KV oltre quel
+     * punto descrive una conversazione che non è più quella. Se la rimozione
+     * parziale fallisce — l'API dice che per alcuni tipi di memoria può — si
+     * butta tutto e si ricomincia, che è lento ma sempre corretto. Il contrario
+     * (tenere una KV di cui non ci si fida) darebbe una risposta sbagliata
+     * senza dirlo a nessuno.
+     */
+    llama_memory_t memoria = llama_get_memory(session->ctx);
+    size_t riusati = reusePrefix ? talos_prefisso_comune(session->cached, tokens) : 0;
+    if (reusePrefix) {
+        if (riusati < session->cached.size()
+            && !llama_memory_seq_rm(memoria, 0, (llama_pos) riusati, -1)) {
+            TALOS_LOGI("taglio parziale rifiutato: si riparte da zero");
+            llama_memory_clear(memoria, true);
+            riusati = 0;
+        }
+        session->cached.resize(riusati);
+    }
+    const long long tempo_prefisso = talos_da(avvio);
+
+    for (size_t fed = riusati; fed < (size_t) wanted; ) {
+        const int chunk = std::min((size_t) slice, (size_t) wanted - fed);
+        llama_batch head = llama_batch_get_one(tokens.data() + fed, (int32_t) chunk);
+        const int32_t esito = llama_decode(session->ctx, head);
+        if (esito == 0) {
+            fed += chunk;
+            session->cached.insert(session->cached.end(),
+                                   tokens.begin() + (long) (fed - chunk),
+                                   tokens.begin() + (long) fed);
+            continue;
+        }
+        /**
+         * ⛔ 2 = interrotta. E qui sta la parte che è facile sbagliare: gli
+         * `ubatch` già elaborati **restano nella KV**. Andarsene senza pulire
+         * lascerebbe il contesto convinto di aver letto mezza domanda, e il
+         * turno successivo risponderebbe a una frase troncata.
+         *
+         * `session->cached` è la nostra verità su cosa c'è dentro; la KV va
+         * riportata esattamente lì. Se il taglio non riesce, si azzera: perdere
+         * il prefisso costa secondi, tenerne uno falso costa la risposta.
+         */
+        if (esito == 2) {
+            if (!llama_memory_seq_rm(memoria, 0, (llama_pos) session->cached.size(), -1)) {
+                llama_memory_clear(memoria, true);
+                session->cached.clear();
+            }
+            TALOS_LOGI("prefill interrotto a %zu/%d token", fed, wanted);
+            // Anche un lavoro interrotto lascia la sua traccia: «quanto ci ha
+            // messo a fermarsi» è una domanda legittima, e un blocco di tempi
+            // vuoto la renderebbe senza risposta.
+            {
+                std::lock_guard<std::mutex> guard(session->tempi_lock);
+                session->tempi = {
+                    tempo_tokenizzazione, tempo_prefisso, talos_da(avvio), -1,
+                    talos_da(avvio), wanted, (int) riusati, (int) (fed - riusati), 0,
+                    reusePrefix == JNI_TRUE,
+                };
+            }
             return env->NewStringUTF("");
         }
-        const int chunk = std::min(slice, wanted - fed);
-        llama_batch head = llama_batch_get_one(tokens.data() + fed, (int32_t) chunk);
-        if (llama_decode(session->ctx, head) != 0) {
-            TALOS_LOGE("decode del prompt fallito a %d/%d token", fed, wanted);
-            return nullptr;
-        }
-        fed += chunk;
+        TALOS_LOGE("decode del prompt fallito a %zu/%d token (esito %d)", fed, wanted, esito);
+        llama_memory_clear(memoria, true);
+        session->cached.clear();
+        return nullptr;
     }
-    TALOS_LOGI("prompt: %d token in pezzi da %d, contesto %d", wanted, slice, budget);
+    const long long tempo_prefill = talos_da(avvio);
+    TALOS_LOGI("prompt: %d token, %zu riusati, %zu nuovi (pezzi da %d, contesto %d)",
+               wanted, riusati, (size_t) wanted - riusati, slice, budget);
 
     std::string answer;
     char piece[256];
@@ -791,11 +981,13 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
     // llama_batch_get_one conserva il puntatore e lo legge alla decodifica
     // seguente, quindi ciò che punta deve sopravvivere all'iterazione.
     llama_token sampled = 0;
+    long long   tempo_primo_token = -1;
 
     for (int produced = 0; produced < limit; ) {
         if (session->cancelled.load(std::memory_order_relaxed)) break;
 
         sampled = common_sampler_sample(session->sampler, session->ctx, -1);
+        if (tempo_primo_token < 0) tempo_primo_token = talos_da(avvio);
         // Il token va DICHIARATO al campionatore, non solo campionato: le
         // penalità di ripetizione e la grammatica tengono uno stato, e senza
         // questa riga non vedono mai ciò che è stato prodotto — cioè sono
@@ -830,13 +1022,73 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         if (wanted + produced + 1 > budget) break;
 
         llama_batch next = llama_batch_get_one(&sampled, 1);
-        if (llama_decode(session->ctx, next) != 0) {
+        const int32_t esito = llama_decode(session->ctx, next);
+        if (esito != 0) {
+            // Interrotta o guasta, la KV va riportata su ciò che `cached` dice.
+            if (!llama_memory_seq_rm(memoria, 0, (llama_pos) session->cached.size(), -1)) {
+                llama_memory_clear(memoria, true);
+                session->cached.clear();
+            }
+            if (esito == 2) break;
             TALOS_LOGE("decode fallito dopo %d token", produced);
             return nullptr;
         }
+        // Anche il token appena generato ORA sta nella KV: se non lo si
+        // registra, il turno dopo calcolerebbe il prefisso comune su una
+        // fotografia più corta della realtà e taglierebbe nel posto sbagliato.
+        session->cached.push_back(sampled);
+    }
+
+    {
+        std::lock_guard<std::mutex> guard(session->tempi_lock);
+        session->tempi = {
+            tempo_tokenizzazione,
+            tempo_prefisso,
+            tempo_prefill,
+            tempo_primo_token,
+            talos_da(avvio),
+            wanted,
+            (int) riusati,
+            wanted - (int) riusati,
+            session->produced.load(std::memory_order_relaxed),
+            reusePrefix == JNI_TRUE,
+        };
     }
 
     return env->NewStringUTF(answer.c_str());
+}
+
+/**
+ * La cronometria dell'ultima generazione, in JSON.
+ *
+ * Serve a rispondere a una domanda sola, che finora non aveva risposta: quando
+ * il primo token tarda nove secondi, **quale** dei cinque stadi li ha presi.
+ * Prefisso alto e prefill basso vuol dire che si sta ricalcolando ciò che era
+ * già in memoria; prefill alto con prefisso a zero vuol dire che il prompt è
+ * grande davvero; primo token lontano dal prefill vuol dire scheduler o pesi
+ * ancora freddi. Sono tre malattie con tre cure diverse, e senza questi numeri
+ * si tirava a indovinare.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeLastTimings(JNIEnv * env, jclass, jlong handle) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr) return nullptr;
+    talos_session::talos_cronometro tempi;
+    {
+        std::lock_guard<std::mutex> guard(session->tempi_lock);
+        tempi = session->tempi;
+    }
+    char json[512];
+    snprintf(json, sizeof(json),
+             "{\"tokenizeMs\":%lld,\"prefixMs\":%lld,\"prefillMs\":%lld,"
+             "\"firstTokenMs\":%lld,\"totalMs\":%lld,\"promptTokens\":%d,"
+             "\"reusedTokens\":%d,\"newTokens\":%d,\"producedTokens\":%d,"
+             "\"reusedContext\":%s}",
+             tempi.tokenizzazione_ms, tempi.prefisso_ms, tempi.prefill_ms,
+             tempi.primo_token_ms, tempi.totale_ms, tempi.token_prompt,
+             tempi.token_riusati, tempi.token_nuovi, tempi.token_prodotti,
+             tempi.contesto_riusato ? "true" : "false");
+    return env->NewStringUTF(json);
 }
 
 JNIEXPORT void JNICALL
