@@ -8,7 +8,6 @@ import { useTalosI18n } from '@/i18n'
 import { ChevronRight, LayoutGrid, List, Search, StickyNote, Plus } from '@lucide/vue'
 import TalosMobileNoteTile from '@/components/talos/notes/TalosMobileNoteTile.vue'
 import { useSettingsStore } from '@/stores/settings'
-import { Button } from '@/components/ui/button'
 import { useRouter } from 'vue-router'
 import { useChatController } from '@/stores/chatController'
 import { talosRelativeTime } from '@/lib/relativeTime'
@@ -58,12 +57,11 @@ const shown = computed(() => {
     return entries.value.filter((note) => ((note.title ?? '').toLowerCase().includes(termine)) || ((note.content ?? '').toLowerCase().includes(termine)))
 })
 const error = ref<string | null>(null)
-const title = ref('')
-const content = ref('')
-const saving = ref(false)
 
-const canCreate = computed(() =>
-    title.value.trim().length > 0 && content.value.trim().length > 0 && !saving.value)
+/** La creazione è una PAGINA, non un modulo qui: vedi la nota nel modello. */
+function startNew(): void {
+    void router.push({ name: 'note-new' })
+}
 const relativeTimeLabels = computed(() => ({
     justNow: t('chat.justNow'),
     minutesAgo: (count: number) => t('chat.minutesAgo', { count }),
@@ -88,21 +86,6 @@ async function refresh(): Promise<void> {
 
 onMounted(refresh)
 
-async function submit(): Promise<void> {
-    if (!canCreate.value) return
-    saving.value = true
-    error.value = null
-    try {
-        await controller.notes.create({ title: title.value.trim(), content: content.value.trim() })
-        title.value = ''
-        content.value = ''
-        await refresh()
-    } catch (cause) {
-        error.value = describeError(cause)
-    } finally {
-        saving.value = false
-    }
-}
 
 </script>
 
@@ -165,33 +148,17 @@ async function submit(): Promise<void> {
             {{ t('notes.intro') }}
         </p>
 
-        <form class="flex flex-col gap-2 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3" @submit.prevent="submit">
-            <input
-                v-model="title"
-                data-testid="talos-note-title"
-                maxlength="255"
-                :aria-label="t('notes.title')"
-                :placeholder="t('notes.title')"
-                class="min-h-touch rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-            >
-            <textarea
-                v-model="content"
-                data-testid="talos-note-content"
-                :aria-label="t('notes.content')"
-                :placeholder="t('notes.content')"
-                rows="3"
-                class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 py-2 text-sm leading-5 text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-            />
-            <Button
-                type="submit"
-                data-testid="talos-note-save"
-                :disabled="!canCreate"
-                class="talos-pressable min-h-touch rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
-            >
-                <Plus class="size-4" aria-hidden="true" />
-                {{ t('notes.add') }}
-            </Button>
-        </form>
+        <!-- Il modulo di creazione NON sta più qui.
+
+             Visto sul tablet il 2026-08-06: titolo, corpo e pulsante restavano
+             aperti sopra l'elenco e rubavano un terzo dello schermo in
+             permanenza — anche a chi era entrato solo per rileggere una nota. Il
+             gesto raro toglieva spazio a quello frequente.
+
+             Adesso è il FAB in fondo alla pagina, che apre `/notes/new`: la
+             stessa grammatica della Ricerca, dove ogni voce è una pagina e
+             Indietro è lineare. Il commento in cima a questo file parlava di un
+             FAB fin dall'inizio; era stato descritto e non fatto. -->
 
         <p v-if="error" role="alert" class="text-xs text-[var(--talos-danger,#dc5b5b)]">{{ error }}</p>
 
@@ -274,5 +241,15 @@ async function submit(): Promise<void> {
                 </button>
             </li>
         </ul>
+
+        <button
+            type="button"
+            data-testid="talos-notes-new-fab"
+            :aria-label="t('notes.add')"
+            class="talos-pressable fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-5 z-20 inline-flex size-14 items-center justify-center rounded-full bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))] shadow-lg"
+            @click="startNew"
+        >
+            <Plus class="size-6" aria-hidden="true" />
+        </button>
     </div>
 </template>
