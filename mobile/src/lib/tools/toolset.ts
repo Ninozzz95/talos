@@ -482,6 +482,47 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
         // refusal, never an implicit yes.
         requestConsent: deps.requestConsent ?? (async () => false),
         async audit(row, sessionId) {
+            /*
+             * Il registro delle notifiche, dallo STESSO punto in cui si scrive
+             * la riga di audit.
+             *
+             * Owner 2026-08-06: «ogni funzione, TOOL, download, installazione
+             * deve avere notifica». Qui passa ogni esecuzione di ogni tool.
+             *
+             * Peso `log`: un tool andato a buon fine non interrompe nessuno.
+             * Una conversazione ne esegue anche dieci, e dieci toast sarebbero
+             * il muro che la ricerca dice di evitare — ma la TRACCIA c'è, ed è
+             * il punto: chi apre il campanello vede cosa ha fatto TALOS al posto
+             * suo. Un tool FALLITO invece si vede: è l'unico esito su cui
+             * qualcuno potrebbe dover fare qualcosa.
+             *
+             * PRIMA del `return` su `sessionId` assente: un tool eseguito fuori
+             * da una sessione è comunque un tool eseguito, e sparire perché non
+             * c'è una riga di audit da scrivere sarebbe la stessa disattenzione
+             * che ha lasciato metà delle azioni senza avviso.
+             *
+             * Agganciato QUI e non nell'esecutore: importare lo store da
+             * `executor.ts` tira il grafo delle notifiche nel chunk d'avvio —
+             * MISURATO, 656.667 byte contro 600.000. Questo file è già un chunk
+             * dinamico, quindi non costa niente.
+             */
+            void (async () => {
+                try {
+                    const { talosNotify } = await import('@/stores/notificationCentre')
+                    talosNotify({
+                        // Per TOOL e non per esecuzione: dieci letture della
+                        // Libreria restano una riga che dice «dieci volte».
+                        key: `tool:${row.tool}`,
+                        channel: 'jobs',
+                        weight: row.status === 'failed' ? 'notable' : 'log',
+                        title: row.tool,
+                        ...(row.status === 'failed' && row.error ? { body: row.error } : {}),
+                        at: Date.now(),
+                    })
+                } catch {
+                    // Notificare non puo' rompere un tool che ha gia' risposto.
+                }
+            })()
             if (!sessionId) return
             await deps.repository.appendToolActivity({
                 id: newTalosMobileId(),

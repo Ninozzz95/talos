@@ -4687,12 +4687,36 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 ])
                 const notice = talosResearchDoneNotice(run)
                 if (!notice) return
+                const testo = deps.translate(notice.text.key, notice.text.params)
                 await notifier.talosNotifyDone({
                     id: notifier.TALOS_DONE_RESEARCH_ID,
                     title: notice.title,
-                    text: deps.translate(notice.text.key, notice.text.params),
+                    text: testo,
                     route: notice.route,
                 })
+                /*
+                 * E nel registro, che e' l'unica superficie che non dimentica.
+                 *
+                 * La notifica di sistema c'era gia': quello che mancava e' la
+                 * traccia dopo che l'hai scartata. Una ricerca finita mentre non
+                 * guardavi, e la cui notifica hai chiuso col dito, oggi non
+                 * lasciava niente — e ritrovarla voleva dire ricordarsi di
+                 * averla avviata.
+                 *
+                 * Peso `log`: il sistema ha gia' interrotto una volta, e un
+                 * toast sopra la stessa notizia sarebbe dirla due volte.
+                 */
+                try {
+                    const { talosNotify } = await import('@/stores/notificationCentre')
+                    talosNotify({
+                        key: `research:${id}`,
+                        channel: 'jobs',
+                        weight: 'log',
+                        title: notice.title,
+                        body: testo,
+                        at: Date.now(),
+                    })
+                } catch { /* la ricerca e' finita comunque */ }
             }
             void running.then(
                 (run) => announce(run),
