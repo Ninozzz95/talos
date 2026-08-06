@@ -92,6 +92,21 @@ export interface TalosLocalModelSet extends TalosGgufSet {
 
 export interface TalosLocalModelsState {
     query: string
+    /**
+     * I filtri accesi nella scheda del Hub, e la vista aperta.
+     *
+     * Owner 2026-08-06: «quando vado su una scheda modello e torno indietro mi
+     * resetta i filtri». Vivevano nel componente e morivano con lui: aprire un
+     * modello e tornare indietro cancellava la ricerca appena costruita, che è
+     * il momento in cui costa di più — si è appena finito di restringere.
+     *
+     * Stanno qui accanto a `query` e `sort`, che sopravvivevano già: erano nel
+     * posto giusto da soli, e la metà mancante è ciò che rendeva il ritorno
+     * inutile.
+     */
+    browseFilters: string[]
+    /** Vero quando il campo di ricerca del Hub è aperto. */
+    browseSearchOpen: boolean
     /** Come ordinare la lista sfogliata. I nomi sono quelli del Hub. */
     sort: TalosHuggingFaceSort
     searching: boolean
@@ -142,6 +157,8 @@ export interface TalosLocalModelsState {
 }
 
 const state = reactive<TalosLocalModelsState>({
+    browseFilters: [],
+    browseSearchOpen: false,
     query: '',
     /*
      * L'ordinamento della lista sfogliata.
@@ -179,6 +196,23 @@ const state = reactive<TalosLocalModelsState>({
 })
 
 export const talosLocalModels = readonly(state)
+
+/**
+ * I filtri del Hub e l'apertura del campo, scritti dallo store e non dal
+ * componente.
+ *
+ * Lo stato è esposto in sola lettura — è la regola di questo file — quindi un
+ * componente che provasse a scriverci direttamente verrebbe ignorato in
+ * silenzio. Ci sono passato: la prima stesura usava un `computed` con setter, i
+ * filtri non si accendevano e niente lo diceva.
+ */
+export function talosSetBrowseFilters(filters: readonly string[]): void {
+    state.browseFilters = [...filters]
+}
+
+export function talosSetBrowseSearchOpen(open: boolean): void {
+    state.browseSearchOpen = open
+}
 
 let client: TalosHuggingFaceClient | null = null
 let transportInUse: typeof globalThis.fetch | null = null

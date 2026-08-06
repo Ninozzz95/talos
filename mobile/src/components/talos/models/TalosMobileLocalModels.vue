@@ -24,6 +24,8 @@ import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import {
     talosLocalModels,
+    talosSetBrowseFilters,
+    talosSetBrowseSearchOpen,
     talosSearchLocalModels,
     talosRefreshLeftovers,
     talosRefreshHuggingFaceToken,
@@ -322,9 +324,25 @@ const installedSort = computed<TalosInstalledModelSort>({
 const installedLoading = ref(true)
 const installedReadFailure = ref(false)
 
+/**
+ * «Solo quelli che ci stanno», sui modelli GIÀ scaricati.
+ *
+ * Owner 2026-08-06: «assenza filtri ordinamento pesi modelli locali». L'ordine
+ * c'era; mancava il filtro, che è la domanda vera davanti a questa lista —
+ * *quali di questi posso usare adesso?* Un modello che non entra in memoria
+ * occupa gigabyte e non serve a niente: è esattamente quello da cancellare, e
+ * finora bisognava confrontare i numeri a mente.
+ */
+const soloQuelliCheEntrano = ref(false)
+
 const installedView = computed(() => talosInstalledModelsView(installed.value, {
     query: installedQuery.value,
     sort: installedSort.value,
+    // La memoria misurata sul dispositivo, non una taglia dichiarata: senza
+    // misura il filtro non nasconde nessuno.
+    fitsWithinBytes: soloQuelliCheEntrano.value
+        ? (store.device?.availableRamBytes ?? null)
+        : null,
 }))
 
 const sortItems = computed(() => TALOS_INSTALLED_MODEL_SORTS.map((value) => ({
@@ -509,7 +527,16 @@ function rowOf(item: Readonly<TalosCatalogueRecommendation>) {
 const recommended = computed(() => store.catalogue.recommended.map(rowOf))
 const rejected = computed(() => store.catalogue.rejected.map(rowOf))
 /** The search door opens only when asked for: the list is the screen. */
-const searching = ref(false)
+/**
+ * Owner 2026-08-06: «quando vado su una scheda modello e torno indietro mi
+ * resetta i filtri». Anche l'apertura del campo di ricerca viveva qui e moriva
+ * col componente: tornando indietro la ricerca era chiusa e il testo invisibile,
+ * anche se lo store se lo ricordava.
+ */
+const searching = computed({
+    get: () => store.browseSearchOpen,
+    set: (valore: boolean) => { talosSetBrowseSearchOpen(valore) },
+})
 
 async function search(): Promise<void> {
     refused.value = null
@@ -559,7 +586,10 @@ const providerFilter = ref('')
  * Un elenco e non cinque booleani: si somma con `every`, si conta, e aggiungere
  * un filtro domani non aggiunge una variabile da ricordare.
  */
-const filtriAttivi = ref<TalosBrowseFilterId[]>([])
+const filtriAttivi = computed<TalosBrowseFilterId[]>({
+    get: () => store.browseFilters as TalosBrowseFilterId[],
+    set: (valore) => { talosSetBrowseFilters(valore) },
+})
 
 /**
  * Le voci dell'ordinamento.
@@ -818,6 +848,28 @@ function resultCountLabel(count: number): string {
                         :option-class="talosSortChipClass"
                         @update:model-value="installedSort = $event as TalosInstalledModelSort"
                     />
+                    <!--
+                        «Solo quelli che ci stanno»: la domanda vera davanti a
+                        una lista di modelli scaricati è quali si possono usare
+                        adesso. Sta accanto all'ordinamento perché è la stessa
+                        famiglia di gesto — restringere ciò che si vede — e
+                        compare solo se il dispositivo ha detto quanta memoria
+                        ha: senza misura, un filtro che nasconde è una bugia.
+                    -->
+                    <button
+                        v-if="store.device?.availableRamBytes"
+                        type="button"
+                        data-testid="talos-models-installed-fits"
+                        role="switch"
+                        :aria-checked="soloQuelliCheEntrano"
+                        class="talos-pressable min-h-touch shrink-0 rounded-full border px-[var(--talos-space-control)] text-xs font-semibold"
+                        :class="soloQuelliCheEntrano
+                            ? 'border-[var(--talos-accent)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)]'
+                            : 'border-[var(--talos-border)] text-[var(--talos-muted)]'"
+                        @click="soloQuelliCheEntrano = !soloQuelliCheEntrano"
+                    >
+                        {{ t('localModels.filter.fits') }}
+                    </button>
                     <button
                         type="button"
                         data-testid="talos-models-installed-layout"

@@ -137,6 +137,7 @@ async function cancel(id: string): Promise<void> {
                 align="end"
                 :side-offset="8"
                 :collision-padding="12"
+                data-talos-motion-intent="menu-open"
                 class="isolate z-[100] w-[min(24rem,calc(100vw-(var(--talos-space-page)*2)))] overflow-hidden rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)] outline-none"
             >
                 <header class="flex min-w-0 items-center gap-[var(--talos-space-inline)] p-[var(--talos-space-card)]">

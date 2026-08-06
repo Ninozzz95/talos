@@ -56,13 +56,45 @@ function compare(sort: TalosInstalledModelSort, left: TalosLocalModelFile, right
     return left.name.localeCompare(right.name)
 }
 
+/**
+ * Un modello «ci sta» se i suoi pesi entrano nella memoria disponibile.
+ *
+ * Owner 2026-08-06: «assenza filtri ordinamento pesi modelli locali». L'ordine
+ * c'era — recenti, nome, dimensione — e mancava il filtro, che è la domanda
+ * vera nel momento in cui si guarda questa lista: *quali di questi posso
+ * davvero usare adesso?* Un modello scaricato che non entra in memoria occupa
+ * gigabyte e non serve a niente, ed è esattamente quello da cancellare.
+ *
+ * Il confronto è sui pesi soltanto, non sul contesto: la cache KV dipende da
+ * quanti token si vogliono, e qui non c'è ancora una conversazione. È una
+ * risposta prudente per difetto — «non ci sta» qui significa «non ci sta di
+ * sicuro», mai il contrario.
+ */
+export function talosInstalledModelFits(
+    model: TalosLocalModelFile,
+    availableRamBytes: number | null | undefined,
+): boolean {
+    // Senza una misura non si esclude nessuno: un filtro che nasconde per
+    // ignoranza è peggio di un filtro assente.
+    if (typeof availableRamBytes !== 'number' || availableRamBytes <= 0) return true
+    return model.bytes > 0 && model.bytes <= availableRamBytes
+}
+
 export function talosInstalledModelsView(
     models: readonly TalosLocalModelFile[],
-    options: { readonly query?: string, readonly sort?: TalosInstalledModelSort } = {},
+    options: {
+        readonly query?: string
+        readonly sort?: TalosInstalledModelSort
+        /** Quando c'è, tiene solo i modelli che entrano in questa memoria. */
+        readonly fitsWithinBytes?: number | null
+    } = {},
 ): TalosInstalledModelsView {
     const needle = (options.query ?? '').trim().toLowerCase()
     const sort = options.sort ?? TALOS_INSTALLED_MODEL_SORT_DEFAULT
-    const kept = needle.length === 0 ? [...models] : models.filter((model) => matches(model, needle))
+    let kept = needle.length === 0 ? [...models] : models.filter((model) => matches(model, needle))
+    if (typeof options.fitsWithinBytes === 'number') {
+        kept = kept.filter((model) => talosInstalledModelFits(model, options.fitsWithinBytes))
+    }
     kept.sort((left, right) => compare(sort, left, right))
     return { models: kept, total: models.length }
 }

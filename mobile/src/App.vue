@@ -849,37 +849,7 @@ onMounted(async () => {
             },
         })
         lifecycle = registerNativeAppLifecycle({
-            onBack: (event) => {
-                // Owner 2026-07-24: the sidebar is the MAIN MENU. Back walks the
-                // stack (setup → sidebar → settings sub-view → station → chat).
-                // A station TOP returns to the sidebar, NOT straight to chat, so
-                // leaving Settings/a tool reopens the menu it was launched from.
-                const action = resolveTalosBackAction({
-                    composerOverlayOpen: talosOverlayBackActive(),
-                    wizardOpen: intro.introOpen.value,
-                    sidebarOpen: sidebarOpen.value,
-                    hasSheetSubView: sheetNav.subView.value !== null,
-                    isStationSubPage: stationParent.value !== null,
-                    isStation: isStation.value,
-                    canGoBack: event.canGoBack,
-                })
-                switch (action) {
-                    case 'close-overlay': handleTalosOverlayBack(); return 'handled'
-                    case 'dismiss-wizard': intro.handleBack(); return 'handled'
-                    case 'close-sidebar': sidebarOpen.value = false; return 'handled'
-                    case 'sheet-subview-back': sheetNav.subView.value?.back(); return 'handled'
-                    case 'station-subpage-parent': {
-                        // Only reached with nothing to undo, so this is a push
-                        // to the level above rather than a pop.
-                        const parent = stationParent.value
-                        if (parent) void router.push(parent)
-                        return 'handled'
-                    }
-                    case 'leave-station': leaveStation(); return 'handled'
-                    case 'history': return 'history'
-                    case 'exit': return 'exit'
-                }
-            },
+            onBack: (event) => talosIndietro(event.canGoBack),
             onError: (error) => {
                 console.error(`[native-lifecycle] ${error.code}: ${error.message}`)
             },
@@ -887,6 +857,52 @@ onMounted(async () => {
         await lifecycle.ready.catch(() => undefined)
     }
 })
+
+/**
+ * ⛔ Il gesto Indietro e il TASTO Indietro passano da qui, tutti e due.
+ *
+ * Owner 2026-08-06: «il pulsante indietro in alto a sinistra non si comporta
+ * come la gesture indietro».
+ *
+ * La decisione era già una funzione pura e provata — `resolveTalosBackAction` —
+ * ma la usava **solo il gesto di sistema**. Il tasto nel foglio aveva una
+ * logica sua, più povera: conosceva la sotto-vista e il genitore, e ignorava
+ * l'overlay del compositore, l'intro e la sidebar. Due strade per lo stesso
+ * atto che finivano in posti diversi, e che avrebbero continuato a divergere a
+ * ogni pagina nuova.
+ *
+ * La linea guida Android dice esattamente questo: gesto e tasto devono
+ * percorrere **lo stesso codice**, o il preview del gesto predittivo mostra una
+ * destinazione e il tasto ne raggiunge un'altra.
+ */
+function talosIndietro(canGoBack: boolean): 'handled' | 'history' | 'exit' {
+    const action = resolveTalosBackAction({
+        composerOverlayOpen: talosOverlayBackActive(),
+        wizardOpen: intro.introOpen.value,
+        sidebarOpen: sidebarOpen.value,
+        hasSheetSubView: sheetNav.subView.value !== null,
+        isStationSubPage: stationParent.value !== null,
+        isStation: isStation.value,
+        canGoBack,
+    })
+    switch (action) {
+        case 'close-overlay': handleTalosOverlayBack(); return 'handled'
+        case 'dismiss-wizard': intro.handleBack(); return 'handled'
+        case 'close-sidebar': sidebarOpen.value = false; return 'handled'
+        case 'sheet-subview-back': sheetNav.subView.value?.back(); return 'handled'
+        case 'station-subpage-parent': {
+            // Only reached with nothing to undo, so this is a push to the level
+            // above rather than a pop.
+            const parent = stationParent.value
+            if (parent) void router.push(parent)
+            return 'handled'
+        }
+        case 'leave-station': leaveStation(); return 'handled'
+        case 'history': return 'history'
+        case 'exit': return 'exit'
+    }
+}
+
 
 onBeforeUnmount(async () => {
     stopNotificationRoutes?.()
@@ -1136,6 +1152,7 @@ onBeforeUnmount(async () => {
                     :title="sheetTitle"
                     :presentation="settingsStore.state.chat_layout.mobile_window_presentation"
                     :parent-back="stationParent ? goToStationParent : null"
+                    :shell-back="talosIndietro"
                     :parent-title="stationParentTitle"
                     @close="navigate('chat')"
                 >
