@@ -3255,6 +3255,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         isToolEnabled: isEffectivelyEnabled,
                         requestConsent: async () => false,
                         audit: (row) => toolset.audit(row, sendIdentity.sessionId),
+                        /*
+                         * La catena della conversazione, che è ciò che rende
+                         * viva la regola della trifecta: senza queste due righe
+                         * l'esecutore la calcolerebbe sempre su un discorso
+                         * vuoto, e non scatterebbe mai in produzione.
+                         */
+                        chain: toolset.chainFor(sendIdentity.sessionId),
+                        onChain: (next) => toolset.setChain(sendIdentity.sessionId, next),
                         context: { sessionId: sendIdentity.sessionId, signal: stream?.signal },
                         authorizations: deps.settings.state.tool_authorizations
                             ?? TALOS_EMPTY_TOOL_AUTHORIZATIONS,
@@ -3279,6 +3287,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         isToolEnabled: isEffectivelyEnabled,
                         requestConsent: async () => false,
                         audit: (row) => toolset.audit(row, sendIdentity.sessionId),
+                        /*
+                         * La catena della conversazione, che è ciò che rende
+                         * viva la regola della trifecta: senza queste due righe
+                         * l'esecutore la calcolerebbe sempre su un discorso
+                         * vuoto, e non scatterebbe mai in produzione.
+                         */
+                        chain: toolset.chainFor(sendIdentity.sessionId),
+                        onChain: (next) => toolset.setChain(sendIdentity.sessionId, next),
                         context: { sessionId: sendIdentity.sessionId, signal: stream?.signal },
                         authorizations: deps.settings.state.tool_authorizations
                             ?? TALOS_EMPTY_TOOL_AUTHORIZATIONS,

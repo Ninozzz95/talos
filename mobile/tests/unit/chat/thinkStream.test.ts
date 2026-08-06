@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { talosCreateThinkSplitter } from '@/lib/chat/thinkStream'
+import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/thinkStream'
 
 /** Manda una risposta a pezzi e raccoglie le due metà. */
 function attraverso(pezzi: readonly string[]) {
@@ -94,3 +94,54 @@ describe('C45-RED-19N think splitter', () => {
         }
     })
 })
+
+/**
+ * Il testo FINALE, che è quello che finisce nel database e che si rilegge
+ * riaprendo la chat — cioè per sempre.
+ *
+ * Visto sul OnePlus Pad 3 il 2026-08-06 con **Qwen3-MoE-6x0.6B**: la sezione
+ * «Ragionamento» cominciava con `<think> Okay, let's look at the user's last
+ * message…`. Lo streaming era già stato corretto quella mattina; questo era il
+ * punto scoperto, perché il risultato finale arriva da `common_chat_parse` sul
+ * lato nativo e non passava dal separatore.
+ */
+describe('il testo finale, non solo lo stream', () => {
+    it('toglie il marcatore che il ponte nativo si è lasciato dietro', () => {
+        expect(talosSplitFinalThink('PRONTO', "<think> Okay, let's look…"))
+            .toEqual({ text: 'PRONTO', reasoning: " Okay, let's look…" })
+    })
+
+    it('separa un blocco rimasto dentro il testo, non solo dentro il ragionamento', () => {
+        expect(talosSplitFinalThink('<think>rifletto</think>ecco', null))
+            .toEqual({ text: 'ecco', reasoning: 'rifletto' })
+    })
+
+    /**
+     * Un blocco aperto e mai chiuso non deve finire nella bolla: è il caso in
+     * cui una `replace` dei due tag fallirebbe, e il motivo per cui qui si riusa
+     * lo stesso separatore dello stream invece di scrivere una regola nuova.
+     */
+    it('un blocco aperto e mai chiuso resta ragionamento', () => {
+        expect(talosSplitFinalThink('<think>sto pensando', null))
+            .toEqual({ text: '', reasoning: 'sto pensando' })
+    })
+
+    /** Il ragionamento nativo non si perde nemmeno per una riga. */
+    it('non butta via il testo che stava fuori dal blocco, nel canale ragionamento', () => {
+        const esito = talosSplitFinalThink('', 'prima<think>dentro</think>dopo')
+        expect(esito.text).toBe('')
+        expect(esito.reasoning).toContain('dentro')
+        expect(esito.reasoning).toContain('prima')
+        expect(esito.reasoning).toContain('dopo')
+    })
+
+    it('una risposta pulita resta identica', () => {
+        expect(talosSplitFinalThink('Ciao', 'ragiono'))
+            .toEqual({ text: 'Ciao', reasoning: 'ragiono' })
+    })
+
+    it('regge testo e ragionamento assenti', () => {
+        expect(talosSplitFinalThink(null, undefined)).toEqual({ text: '', reasoning: '' })
+    })
+})
+

@@ -39,6 +39,8 @@ import {
     parseVaultOrigin,
     talosLibraryFileType,
 } from '@/lib/vaultLibrary'
+import { talosChainFor, talosSetChain } from '@/lib/tools/chainStore'
+import type { TalosToolChainState } from '@/lib/tools/security'
 import { newTalosMobileId } from '@/lib/mobileIds'
 import type {
     TalosDeviceFileSaveInput,
@@ -160,6 +162,17 @@ export interface TalosToolset {
     ): TalosToolDefinition<never>[]
     requestConsent(request: TalosToolConsentRequest): Promise<boolean | 'busy'>
     audit(row: TalosToolAuditRow, sessionId: string | null): Promise<void>
+    /**
+     * La catena della conversazione, esposta DA QUI e non importata dal
+     * controller.
+     *
+     * Motivo misurato: `chatController` sta nel grafo d'avvio, e tirarci dentro
+     * anche il registro delle catene aveva ridotto il margine del tetto a **tre
+     * byte** — cioè alla prima riga scritta da chiunque, sfondato. Questo file
+     * è già un chunk dinamico: qui non costa niente.
+     */
+    chainFor(sessionId: string | null): TalosToolChainState
+    setChain(sessionId: string | null, next: TalosToolChainState): void
 }
 
 export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosToolset> {
@@ -481,6 +494,12 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
         // Fail CLOSED: with no consent surface wired, an "ask" permission is a
         // refusal, never an implicit yes.
         requestConsent: deps.requestConsent ?? (async () => false),
+        chainFor(sessionId) {
+            return talosChainFor(sessionId)
+        },
+        setChain(sessionId, next) {
+            talosSetChain(sessionId, next)
+        },
         async audit(row, sessionId) {
             /*
              * Il registro delle notifiche, dallo STESSO punto in cui si scrive

@@ -25,7 +25,7 @@ import {
 } from '@/lib/models/localContextPolicy'
 import { talosToolsForOpenAi } from '@/lib/tools/registry'
 import { talosNormaliseLocalToolCalls } from '@/lib/chat/localToolCalls'
-import { talosCreateThinkSplitter } from '@/lib/chat/thinkStream'
+import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/thinkStream'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 
 /**
@@ -333,14 +333,23 @@ async function run(
         throw error
     }
     const normalised = talosNormaliseLocalToolCalls(generation.toolCalls)
+    /*
+     * Anche il testo FINALE passa dal separatore, non solo lo stream.
+     *
+     * Visto sul tablet il 2026-08-06 con Qwen3-MoE-6x0.6B: la sezione
+     * «Ragionamento» cominciava con `<think> Okay, let's look at…`. Lo streaming
+     * era già corretto; era questo il punto scoperto, e proprio quello che
+     * finisce nel database — cioè quello che si rilegge riaprendo la chat.
+     */
+    const finale = talosSplitFinalThink(generation.text, generation.reasoning)
     return {
-        text: generation.text,
+        text: finale.text,
         model: input.model.id,
         finishReason: 'stop',
         // Nello stesso campo che usano i provider di rete, quindi nello stesso
         // cassetto: il ragionamento di un modello locale non è una cosa diversa
         // dal ragionamento di Claude, e non merita una seconda superficie.
-        reasoning: generation.reasoning || undefined,
+        reasoning: finale.reasoning || undefined,
         // E lo stesso vale per le chiamate: l'esecutore a valle non deve sapere
         // da dove arrivano.
         // Normalizzate una volta sola: il formato Hermes che Qwen usa non
