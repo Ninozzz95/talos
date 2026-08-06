@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import TalosMobileNotificationBell from '@/components/shell/TalosMobileNotificationBell.vue'
 import { defineAsyncComponent } from 'vue'
 import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import { Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 
+const TalosMobileNotificationBell = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileNotificationBell.vue'),
+)
 const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
 )

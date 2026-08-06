@@ -93,12 +93,42 @@ function actionableOpenFailure(error: TalosLocalEngineOpenError): TalosMobilePro
     })
 }
 
-function promptTooLongFailure(): TalosMobileProviderError {
+/**
+ * Il rifiuto, CON I NUMERI.
+ *
+ * ## Perché i numeri non sono un dettaglio
+ *
+ * Owner 2026-08-06, secondo `PROVIDER_CHAT_FAILED` (Qwen3-1.7B-Q8_0): il tetto
+ * dinamico funzionava — la conversazione superava davvero quello che il
+ * dispositivo poteva tenere. Ma il messaggio diceva soltanto «serve più contesto
+ * di quanto TALOS possa allocare», e consigliava di «disattivare gli strumenti
+ * che non servono» **senza dire quanti token servono né quanti ce ne sono**.
+ *
+ * Cioè chiedeva una decisione senza dare la misura su cui prenderla: chi legge
+ * non può sapere se spegnere due tool basti o se serva una chat nuova. Un
+ * rifiuto che non si può agire è un vicolo cieco con una frase gentile davanti.
+ *
+ * Adesso dice: quanto serve, quanto ce n'è, e da lì la scelta è possibile.
+ */
+function promptTooLongFailure(required?: number, ceiling?: number): TalosMobileProviderError {
+    const misurato = Number.isFinite(required) && Number.isFinite(ceiling)
+        && (required ?? 0) > 0 && (ceiling ?? 0) > 0
     return new TalosMobileProviderError({
         provider: 'local',
         operation: 'complete',
         message: 'TALOS_LOCAL_PROMPT_TOO_LONG',
-        uiMessageKey: 'models.localPromptTooLong',
+        // Due messaggi, non uno con i numeri opzionali: quando la misura non
+        // c'è — motore vecchio, dispositivo che non si lascia misurare — una
+        // frase con dei buchi al posto delle cifre è peggio della frase senza.
+        uiMessageKey: misurato ? 'models.localPromptTooLongMeasured' : 'models.localPromptTooLong',
+        ...(misurato
+            ? {
+                uiMessageParameters: {
+                    required: String(Math.round(required ?? 0)),
+                    available: String(Math.round(ceiling ?? 0)),
+                },
+            }
+            : {}),
     })
 }
 
@@ -236,7 +266,11 @@ async function run(
         MAX_TOKENS,
         ceiling,
     )
-    if (targetContext === null) throw promptTooLongFailure()
+    if (targetContext === null) {
+        // Il fabbisogno è prompt + risposta + un posto per il token finale: la
+        // stessa aritmetica del tetto, detta a chi legge invece che tenuta per sé.
+        throw promptTooLongFailure(plan.promptTokens + MAX_TOKENS + 1, ceiling ?? undefined)
+    }
     if (targetContext > plan.contextTokens) {
         try {
             // Exact by design: a known 6804-token requirement cannot recover
@@ -253,7 +287,9 @@ async function run(
             MAX_TOKENS,
             ceiling,
         )
-        if (confirmed === null || confirmed > plan.contextTokens) throw promptTooLongFailure()
+        if (confirmed === null || confirmed > plan.contextTokens) {
+            throw promptTooLongFailure(plan.promptTokens + MAX_TOKENS + 1, ceiling ?? undefined)
+        }
     }
 
     let generation

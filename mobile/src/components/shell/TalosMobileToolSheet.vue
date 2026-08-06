@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import TalosMobileNotificationBell from '@/components/shell/TalosMobileNotificationBell.vue'
 import { computed, defineAsyncComponent, onMounted, provide, ref } from 'vue'
 import { ArrowLeft, X } from '@lucide/vue'
 import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosI18n } from '@/i18n'
 
+const TalosMobileNotificationBell = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileNotificationBell.vue'),
+)
 const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
 )

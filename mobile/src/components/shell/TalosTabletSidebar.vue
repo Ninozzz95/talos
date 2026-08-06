@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import TalosMobileNotificationBell from '@/components/shell/TalosMobileNotificationBell.vue'
 import { defineAsyncComponent } from 'vue'
 import { Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -12,6 +11,9 @@ import { Button } from '@/components/ui/button'
  * nessuno li vedesse mai.
  */
 const ChatsScreen = defineAsyncComponent(() => import('@/screens/ChatsScreen.vue'))
+const TalosMobileNotificationBell = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileNotificationBell.vue'),
+)
 const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
 )

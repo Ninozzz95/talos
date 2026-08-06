@@ -1187,6 +1187,7 @@ export const TALOS_IT_MESSAGES = {
         localModelOpenSampler: 'Il motore locale non può preparare questo modello. Scegli un’altra variante compatibile.',
         localModelOpenUnknown: 'TALOS non è riuscito ad aprire il modello locale. Riavvia l’app oppure scegli un altro modello.',
         localPromptTooLong: 'Questa conversazione e i suoi strumenti richiedono più contesto di quanto TALOS possa allocare in sicurezza su questo dispositivo. Apri una nuova chat o disattiva gli strumenti che non servono.',
+        localPromptTooLongMeasured: 'Questa conversazione e i suoi strumenti chiedono circa {required} token, e questo dispositivo può darne {available} a questo modello in sicurezza. Apri una chat nuova, oppure spegni gli strumenti che non ti servono.',
         localModelGenerationFailed: 'Il modello locale si è fermato durante la risposta. Riprova una volta; se ricapita, scegli un altro modello compatibile.',
         invalidPreferences: 'TALOS ha rifiutato preferenze di Model Lab non valide.',
         selectedMissing: 'Il modello selezionato non esiste più.',
