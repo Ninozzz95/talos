@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TalosMobileNotificationBell from '@/components/shell/TalosMobileNotificationBell.vue'
 import { defineAsyncComponent } from 'vue'
 import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import { Menu } from '@lucide/vue'
@@ -65,7 +66,8 @@ const emit = defineEmits<{
             <span v-else aria-hidden="true" />
 
             <div v-if="!hideMenu" class="pointer-events-auto flex shrink-0 items-center">
-                <TalosMobileDownloadCenterTrigger />
+                <TalosMobileNotificationBell />
+            <TalosMobileDownloadCenterTrigger />
                 <TalosMobileChatOptionsMenu
                     :incognito="incognito"
                     :can-go-incognito="canGoIncognito"

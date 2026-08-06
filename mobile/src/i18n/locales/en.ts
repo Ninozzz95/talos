@@ -1405,6 +1405,8 @@ export const TALOS_EN_MESSAGES = {
     },
     localModels: {
         invalidRepo: 'This model repository address is invalid. Return to Local models and open it again.',
+        importedTitle: 'Model imported',
+        importFinished: 'The model has been copied onto this device and is ready.',
         loadingMore: 'Loading more models…',
         loadMore: 'Load more',
         loadMoreFailed: 'Could not load more. Tap to try again.',
@@ -1619,6 +1621,14 @@ export const TALOS_EN_MESSAGES = {
         engineMissing: 'No local engine in this build: models can be downloaded but not run.',
         ramFree: 'free memory',
         storageFree: 'free space',
+    },
+    notifications: {
+        title: 'Notifications',
+        open: 'Notifications, {count} unread',
+        unread: '{count} still to see',
+        allSeen: 'You have seen everything.',
+        markAll: 'Mark everything as seen',
+        repeats: 'updated {count} times',
     },
     notes: {
         noMatches: 'No note matches that search.',

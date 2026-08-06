@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TalosMobileNotificationBell from '@/components/shell/TalosMobileNotificationBell.vue'
 import { defineAsyncComponent } from 'vue'
 import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import { Menu } from '@lucide/vue'
@@ -102,6 +103,7 @@ const emit = defineEmits<{
              lives inside it, so the tablet-panel case just hides the whole
              menu (the panel owns those actions). -->
         <div v-if="!hideMenu" class="flex shrink-0 items-center">
+            <TalosMobileNotificationBell />
             <TalosMobileDownloadCenterTrigger />
             <TalosMobileChatOptionsMenu
                 :incognito="incognito"

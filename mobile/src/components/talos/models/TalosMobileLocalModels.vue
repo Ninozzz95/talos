@@ -327,6 +327,24 @@ async function importFromDevice(): Promise<void> {
             await loadInstalled()
             talosAnnounceLocalCatalogueChange('imported')
             /*
+             * Anche l'importazione entra nel registro.
+             *
+             * Owner 2026-08-06: «ogni funzione, tool, download, INSTALLAZIONE
+             * deve avere notifica». Questa copia un file da qualche giga e puo'
+             * durare minuti: finire in silenzio lascia chi guarda a chiedersi se
+             * sia successo davvero — e senza traccia, chi torna dopo non ha modo
+             * di saperlo.
+             */
+            const { talosNotify } = await import('@/stores/notificationCentre')
+            talosNotify({
+                key: `import:${picked.name ?? 'modello'}`,
+                channel: 'transfers',
+                weight: 'notable',
+                title: picked.name ?? t('localModels.importedTitle'),
+                body: t('localModels.importFinished'),
+                at: Date.now(),
+            })
+            /*
              * Il terzo momento chiesto dall'owner, dopo inizio e fine del
              * download: l'INSTALLAZIONE. Qui il modello non arriva dalla rete —
              * viene copiato dal telefono — e la copia puo' durare minuti su un

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TalosMobileNotificationBell from '@/components/shell/TalosMobileNotificationBell.vue'
 import { computed, defineAsyncComponent, onMounted, provide, ref } from 'vue'
 import { ArrowLeft, X } from '@lucide/vue'
 import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
@@ -138,7 +139,8 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
                     <p class="talos-title truncate text-md font-semibold text-[var(--talos-text)]">{{ subView ? subView.title : title }}</p>
                     <p v-if="!subView && description" class="truncate text-2xs text-[var(--talos-muted)]">{{ description }}</p>
                 </div>
-                <TalosMobileDownloadCenterTrigger />
+                <TalosMobileNotificationBell />
+            <TalosMobileDownloadCenterTrigger />
                 <button
                     v-if="presentation === 'drawer'"
                     type="button"

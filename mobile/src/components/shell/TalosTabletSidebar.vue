@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TalosMobileNotificationBell from '@/components/shell/TalosMobileNotificationBell.vue'
 import { defineAsyncComponent } from 'vue'
 import { Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -51,7 +52,8 @@ const emit = defineEmits<{
                 <Menu aria-hidden="true" />
             </Button>
             <span class="talos-orbitron-brand text-sm tracking-[0.2em] text-[var(--talos-text)]">TALOS</span>
-            <div class="ml-auto"><TalosMobileDownloadCenterTrigger /></div>
+            <div class="ml-auto"><TalosMobileNotificationBell />
+            <TalosMobileDownloadCenterTrigger /></div>
         </div>
         <ChatsScreen embedded class="min-h-0 flex-1" @activated="emit('activated')" />
     </aside>
