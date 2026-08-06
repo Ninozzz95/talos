@@ -6,12 +6,16 @@ import android.os.Build;
 import android.os.PowerManager;
 import android.os.storage.StorageManager;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.util.UUID;
 
 /**
@@ -62,6 +66,23 @@ public class TalosDeviceCapacityPlugin extends Plugin {
         result.put("memoryBandwidthBytesPerSecond",
                 measuredBandwidth == TalosBandwidthProbe.UNKNOWN ? null : measuredBandwidth);
 
+        /**
+         * I core VERI, con la loro capacità.
+         *
+         * `availableProcessors()` dice quanti sono e niente di più, e su un SoC
+         * moderno «quanti» è la metà della domanda: sei core a 3,5 GHz e due a
+         * 4,3 non sono otto core uguali, e non sono nemmeno il classico
+         * big.LITTLE con quattro core lenti.
+         *
+         * MISURATO sul OnePlus Pad 3 il 2026-08-06: capacità 792 su cpu0-5 e
+         * 1024 su cpu6-7. Chi decide quanti thread dare al prefill e quanti
+         * alla generazione ha bisogno di questo, non di un nome di chipset.
+         *
+         * Il file può non esistere: su quel dispositivo la lista torna vuota, e
+         * chi legge deve poterlo distinguere da «un core solo».
+         */
+        result.put("cpuCores", Runtime.getRuntime().availableProcessors());
+        result.put("cpuCapacities", cpuCapacities());
         result.put("deviceModel", Build.MODEL);
         result.put("androidSdk", Build.VERSION.SDK_INT);
         call.resolve(result);
@@ -119,5 +140,36 @@ public class TalosDeviceCapacityPlugin extends Plugin {
      */
     private static String thermal(Context context) {
         return TalosThermal.read(context);
+    }
+
+    /**
+     * La capacità di ogni core, come la dichiara il kernel.
+     *
+     * `cpu_capacity` è un numero relativo dove 1024 è il core più forte del
+     * sistema. È l'unico modo portabile di sapere che sei core valgono 792 e
+     * due 1024 senza conoscere il nome del chip — e riconoscere i nomi dei chip
+     * è una lista che invecchia a ogni telefono nuovo
+     * (vedi la regola: niente scritto a mano).
+     *
+     * Un file che non c'è o non si legge NON è un errore: alcuni kernel non lo
+     * espongono. In quel caso la lista resta vuota e chi decide sa di sapere
+     * soltanto quanti core ci sono.
+     */
+    private static JSArray cpuCapacities() {
+        JSArray capacities = new JSArray();
+        int cores = Runtime.getRuntime().availableProcessors();
+        for (int index = 0; index < cores; index++) {
+            File file = new File("/sys/devices/system/cpu/cpu" + index + "/cpu_capacity");
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                String line = reader.readLine();
+                if (line == null) return new JSArray();
+                capacities.put(Integer.parseInt(line.trim()));
+            } catch (Exception unreadable) {
+                // Mezza lista sarebbe peggio di nessuna: farebbe credere che i
+                // core mancanti non esistano.
+                return new JSArray();
+            }
+        }
+        return capacities;
     }
 }

@@ -140,6 +140,12 @@ public class TalosLlamaPlugin extends Plugin {
         final int threads = call.getInt("threads", 4);
         final int contextTokens = call.getInt("contextTokens", 4096);
         final int gpuLayers = call.getInt("gpuLayers", 0);
+        // Zero significa «come prima»: stesso numero di thread per prefill e
+        // generazione, microbatch implicito. Chi ha letto la forma della CPU
+        // manda due numeri veri; il banco di prova continua a non mandarli,
+        // perché misura apposta la configurazione di riferimento.
+        final int threadsBatch = call.getInt("threadsBatch", 0);
+        final int microBatch = call.getInt("microBatch", 0);
         // Chiedibile, e falso per difetto: la chat vuole un campionamento vero,
         // il banco di prova vuole l'argmax perché confronta due backend e
         // pretende lo stesso testo da entrambi. Erano la stessa cosa, ed è da
@@ -149,7 +155,8 @@ public class TalosLlamaPlugin extends Plugin {
         worker.execute(() -> {
             closeOpenModel();
             TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
-                    getContext(), path, threads, contextTokens, gpuLayers, deterministic);
+                    getContext(), path, threads, contextTokens, gpuLayers, deterministic,
+                    threadsBatch, microBatch);
             TalosLlamaEngine engine = attempt.engine();
             if (engine == null) {
                 JSObject failure = new JSObject();
@@ -506,6 +513,45 @@ public class TalosLlamaPlugin extends Plugin {
         JSObject payload = new JSObject();
         payload.put("timings", json == null ? "" : json);
         call.resolve(payload);
+    }
+
+    /**
+     * Tara i thread misurandoli, invece di ereditare una costante.
+     *
+     * ⛔ Azzera la conversazione in memoria e occupa il motore: si chiama prima
+     * di parlare, e non mentre una generazione è in corso.
+     */
+    @PluginMethod
+    public void tuneThreads(PluginCall call) {
+        TalosLlamaEngine engine = openEngine.get();
+        if (engine == null) {
+            call.reject("TALOS_LLAMA_NOT_OPEN");
+            return;
+        }
+        if (generating.get()) {
+            call.reject("TALOS_LLAMA_BUSY");
+            return;
+        }
+        JSArray raw = call.getArray("candidates");
+        if (raw == null || raw.length() == 0) {
+            call.reject("TALOS_LLAMA_CANDIDATES_REQUIRED");
+            return;
+        }
+        final int probeTokens = call.getInt("probeTokens", 256);
+        final int[] candidates = new int[raw.length()];
+        for (int index = 0; index < raw.length(); index++) {
+            candidates[index] = raw.optInt(index, 0);
+        }
+        worker.execute(() -> {
+            String json = engine.tuneThreads(candidates, probeTokens);
+            if (json == null) {
+                call.reject("TALOS_LLAMA_TUNE_FAILED");
+                return;
+            }
+            JSObject payload = new JSObject();
+            payload.put("tuning", json);
+            call.resolve(payload);
+        });
     }
 
     /** Stops the current generation. What was produced so far still stands. */

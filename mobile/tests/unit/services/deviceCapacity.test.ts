@@ -70,6 +70,14 @@ describe('measuring the phone', () => {
             memoryBandwidthBytesPerSecond: 12_000_000_000,
             deviceModel: 'Pixel 9',
             androidSdk: 36,
+            /**
+             * Un dispositivo che non dice com'è fatta la sua CPU non produce un
+             * numero inventato: `null` e una lista vuota sono un'informazione —
+             * «non lo sappiamo» — e chi sceglie i thread deve poterlo
+             * distinguere da «un core solo».
+             */
+            cpuCores: null,
+            cpuCapacities: [],
         })
     })
 

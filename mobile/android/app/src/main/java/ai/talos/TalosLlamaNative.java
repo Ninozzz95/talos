@@ -68,8 +68,25 @@ final class TalosLlamaNative {
      *     che sbaglia si vede solo sul telefono di chi la usa.
      * @return l'handle, oppure 0 se il modello non si è aperto.
      */
+    /**
+     * @param threadsBatch i thread del PREFILL, che è un carico diverso dalla
+     *     generazione: macina matrici e si spalma sui core, mentre generare un
+     *     token per volta è legato alla banda di memoria. Erano lo stesso
+     *     numero. 0 = usa {@code threads}, che è il comportamento di prima.
+     * @param microBatch il batch fisico. Grande fa correre il prefill e gonfia
+     *     i buffer; piccolo tiene bassa la memoria e rende Stop più pronto,
+     *     perché l'attesa massima per fermarsi è un microbatch intero.
+     */
     static native long nativeOpen(String modelPath, int threads, int contextTokens, int gpuLayers,
-                                  boolean deterministic);
+                                  boolean deterministic, int threadsBatch, int microBatch);
+
+    /**
+     * Prova i candidati sul contesto aperto e dice quali hanno vinto, in JSON.
+     *
+     * ⛔ Azzera la conversazione in memoria: è un banco di prova, e come ogni
+     * banco parte da zero. Si tara PRIMA di parlare, non in mezzo a una chat.
+     */
+    static native String nativeTuneThreads(long handle, int[] candidates, int probeTokens);
 
     /** Stable failure stage from the immediately preceding open on this thread. */
     static native String nativeLastOpenError();

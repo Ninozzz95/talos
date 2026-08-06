@@ -26,6 +26,8 @@ interface TalosDeviceCapacityPlugin {
         memoryBandwidthBytesPerSecond: number | null
         deviceModel: string
         androidSdk: number
+        cpuCores?: number
+        cpuCapacities?: number[]
     }>
     thermalState(): Promise<{ thermal: string | null }>
 }
@@ -41,6 +43,10 @@ function thermalOf(value: string | null): TalosThermalState | null {
 export interface TalosMeasuredDevice extends TalosDeviceCapacity {
     deviceModel: string
     androidSdk: number
+    /** Quanti core, o null se il dispositivo non l'ha detto. */
+    cpuCores: number | null
+    /** La capacità di ciascuno, 1024 = il più forte. Vuota se il kernel tace. */
+    cpuCapacities: readonly number[]
 }
 
 /** A refused or malformed StorageManager probe is absence, never zero space. */
@@ -74,6 +80,24 @@ export async function talosMeasureDevice(): Promise<TalosMeasuredDevice | null> 
                 : null,
             deviceModel: measured.deviceModel,
             androidSdk: measured.androidSdk,
+            /**
+             * La forma della CPU, non solo il suo numero.
+             *
+             * MISURATO sul Pad: otto core, sei a capacità 792 e due a 1024. Chi
+             * decide quanti thread dare al prefill e quanti alla generazione ha
+             * bisogno di questo — riconoscere i chip per nome sarebbe una lista
+             * che invecchia a ogni telefono nuovo.
+             *
+             * Una lista vuota è un'informazione: vuol dire che il kernel non
+             * espone `cpu_capacity`, e che di quel dispositivo sappiamo solo
+             * quanti core ci sono.
+             */
+            cpuCores: typeof measured.cpuCores === 'number' && measured.cpuCores > 0
+                ? measured.cpuCores
+                : null,
+            cpuCapacities: Array.isArray(measured.cpuCapacities)
+                ? measured.cpuCapacities.filter((n): n is number => typeof n === 'number' && n > 0)
+                : [],
         }
     } catch {
         return null

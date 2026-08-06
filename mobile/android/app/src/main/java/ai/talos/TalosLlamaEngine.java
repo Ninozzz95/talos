@@ -157,14 +157,26 @@ public final class TalosLlamaEngine implements AutoCloseable {
         return tryOpen(context, modelPath, threads, contextTokens, gpuLayers, deterministic).engine();
     }
 
-    /** Opens a model while preserving the native stage when construction fails. */
+    /**
+     * Il vecchio contratto: prefill e generazione con lo STESSO numero di
+     * thread, e nessun microbatch dichiarato. Resta perché il banco di prova lo
+     * usa e vuole misurare esattamente quella configurazione; per la chat, che
+     * i due numeri vuole diversi, c'è la forma sotto.
+     */
     public static OpenAttempt tryOpen(android.content.Context context, String modelPath,
                                       int threads, int contextTokens, int gpuLayers,
                                       boolean deterministic) {
+        return tryOpen(context, modelPath, threads, contextTokens, gpuLayers, deterministic, 0, 0);
+    }
+
+    /** Opens a model while preserving the native stage when construction fails. */
+    public static OpenAttempt tryOpen(android.content.Context context, String modelPath,
+                                      int threads, int contextTokens, int gpuLayers,
+                                      boolean deterministic, int threadsBatch, int microBatch) {
         if (!TalosLlamaNative.AVAILABLE) return OpenAttempt.failure(FailureStage.UNKNOWN);
         TalosLlamaNative.ensureReady(context);
         long handle = TalosLlamaNative.nativeOpen(modelPath, threads, contextTokens, gpuLayers,
-                                                  deterministic);
+                                                  deterministic, threadsBatch, microBatch);
         if (handle == 0) {
             return OpenAttempt.failure(FailureStage.fromWire(TalosLlamaNative.nativeLastOpenError()));
         }
@@ -302,6 +314,15 @@ public final class TalosLlamaEngine implements AutoCloseable {
     /** Gli stadi dell'ultima generazione, in JSON. Vedi `nativeLastTimings`. */
     public String lastTimings() {
         return TalosLlamaNative.nativeLastTimings(handle);
+    }
+
+    /**
+     * Misura i candidati sul contesto aperto e dice quali hanno vinto.
+     *
+     * ⛔ Azzera la conversazione in memoria. Si tara prima di parlare.
+     */
+    public String tuneThreads(int[] candidates, int probeTokens) {
+        return TalosLlamaNative.nativeTuneThreads(handle, candidates, probeTokens);
     }
 
     /**
