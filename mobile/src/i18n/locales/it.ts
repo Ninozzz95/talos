@@ -1409,6 +1409,8 @@ export const TALOS_IT_MESSAGES = {
     },
     localModels: {
         invalidRepo: 'L’indirizzo di questo repository non è valido. Torna ai modelli locali e riaprilo.',
+        importedTitle: 'Modello importato',
+        importFinished: 'Il modello è stato copiato su questo dispositivo ed è pronto.',
         loadingMore: 'Sto caricando altri modelli…',
         loadMore: 'Carica altri',
         loadMoreFailed: 'Non sono riuscito a caricarne altri. Tocca per riprovare.',
@@ -1621,6 +1623,14 @@ export const TALOS_IT_MESSAGES = {
         engineMissing: 'Motore locale non incluso in questa build: i modelli si possono scaricare ma non eseguire.',
         ramFree: 'memoria libera',
         storageFree: 'spazio libero',
+    },
+    notifications: {
+        title: 'Notifiche',
+        open: 'Notifiche, {count} da vedere',
+        unread: '{count} ancora da vedere',
+        allSeen: 'Hai visto tutto.',
+        markAll: 'Segna tutto come visto',
+        repeats: 'aggiornata {count} volte',
     },
     notes: {
         noMatches: 'Nessuna nota corrisponde a questa ricerca.',

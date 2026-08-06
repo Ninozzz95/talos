@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TalosMobileNotificationBell from '@/components/shell/TalosMobileNotificationBell.vue'
 import { computed, defineAsyncComponent, nextTick, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import {
@@ -152,7 +153,8 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                     <DrawerTitle class="talos-orbitron-brand text-base tracking-[0.2em] text-[var(--talos-text)]">TALOS</DrawerTitle>
                     <DrawerDescription class="text-xs text-[var(--talos-muted)]">{{ $t('shell.sidebarDescription') }}</DrawerDescription>
                 </div>
-                <TalosMobileDownloadCenterTrigger />
+                <TalosMobileNotificationBell />
+            <TalosMobileDownloadCenterTrigger />
                 <Button type="button" size="icon-lg" variant="ghost" class="min-h-touch min-w-touch" :aria-label="$t('navigation.closeMenu')" @click="emit('update:open', false)">
                     <X aria-hidden="true" />
                 </Button>
