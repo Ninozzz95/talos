@@ -15,7 +15,9 @@
  * rejection that ends the conversation is a worse product than one that moves
  * it. Nothing here is disabled without saying why.
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { TabsContent } from 'reka-ui'
+import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
 import { useTalosI18n } from '@/i18n'
 import { Search, LayoutGrid, List, FolderOpen, Loader2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -125,6 +127,18 @@ function chooseLayout(next: 'grid' | 'list'): void {
  * visibile vuol dire far vedere lo spinner a ogni pagina, che è il difetto che
  * fa sembrare lento uno scorrimento anche quando non lo è.
  */
+/**
+ * Quale delle due tab si sta guardando. Parte da «questo dispositivo» perché è
+ * la domanda più frequente — «che modelli ho» viene prima di «cosa potrei
+ * prendere», e chi apre per liberare spazio non deve attraversare un catalogo.
+ */
+const tabAttiva = ref<string>('installed')
+
+/** Il padre possiede la scelta: la striscia riferisce, non decide. */
+function scegliTab(scelta: unknown): void {
+    if (typeof scelta === 'string') tabAttiva.value = scelta
+}
+
 const sentinellaPagina = ref<HTMLElement | null>(null)
 let osservatorePagina: IntersectionObserver | null = null
 
@@ -132,15 +146,52 @@ function loadMore(): void {
     void talosLoadMoreLocalModels()
 }
 
-onMounted(() => {
+/**
+ * Il contenitore che scorre davvero, risalendo dall'elemento.
+ *
+ * Senza questo l'osservatore guarda la FINESTRA, e una lista che scorre dentro
+ * un pannello suo non la tocca mai: la sentinella entra e esce dal pannello
+ * mentre per la finestra non si è mossa nulla. È il motivo per cui, sul tablet,
+ * lo scorrimento infinito non è mai scattato — e il tasto «Carica altri»
+ * sembrava l'unico modo.
+ */
+function contenitoreCheScorre(dal: HTMLElement): HTMLElement | null {
+    let nodo: HTMLElement | null = dal.parentElement
+    while (nodo && nodo !== document.body) {
+        const stile = getComputedStyle(nodo)
+        const scorre = /(auto|scroll|overlay)/.test(stile.overflowY + stile.overflow)
+        if (scorre && nodo.scrollHeight > nodo.clientHeight) return nodo
+        nodo = nodo.parentElement
+    }
+    // `null` = la finestra, che è il comportamento predefinito e quello giusto
+    // quando la pagina intera scorre.
+    return null
+}
+
+function osserva(): void {
     // Assente su motori vecchi: senza, resta il comando esplicito — che è il
     // motivo per cui esiste, invece di essere un ripiego.
     if (typeof IntersectionObserver === 'undefined') return
+    osservatorePagina?.disconnect()
+    osservatorePagina = null
+    const sentinella = sentinellaPagina.value
+    if (!sentinella) return
     osservatorePagina = new IntersectionObserver((voci) => {
         if (voci.some((voce) => voce.isIntersecting)) loadMore()
-    }, { rootMargin: '600px 0px' })
-    if (sentinellaPagina.value) osservatorePagina.observe(sentinellaPagina.value)
-})
+    }, { root: contenitoreCheScorre(sentinella), rootMargin: '600px 0px' })
+    osservatorePagina.observe(sentinella)
+}
+
+/**
+ * Si osserva QUANDO la sentinella compare, non al montaggio.
+ *
+ * Al montaggio l'elenco è vuoto — i risultati devono ancora arrivare — quindi
+ * la sentinella non esiste e non c'era niente da osservare. È il secondo motivo
+ * per cui lo scorrimento infinito non scattava, e da solo bastava a spiegarlo.
+ */
+watch(sentinellaPagina, () => { osserva() })
+
+onMounted(() => { osserva() })
 
 onUnmounted(() => {
     osservatorePagina?.disconnect()
@@ -687,16 +738,41 @@ function resultCountLabel(count: number): string {
             one ordering picked from a radiogroup, a row per file with its size
             and when it arrived.
         -->
+        <!--
+            Due mestieri diversi, due tab.
+
+            Owner 2026-08-06: «dividere la sezione modelli locali con due tab,
+            questo dispositivo e Hugging Face; due tab pane semplici e compatte».
+
+            Da una parte quello che HAI — i gigabyte sul disco, la rinomina,
+            l'eliminazione — dall'altra quello che POTRESTI prendere, con la
+            ricerca e i filtri. Prima chi entrava per liberare spazio doveva
+            scorrere l'intero catalogo del Hub per arrivare ai propri file.
+
+            Registrate e non disegnate a mano: così hanno la stessa striscia, lo
+            stesso scorrimento e la stessa memoria di ogni altra tab dell'app.
+        -->
+        <TalosThemedTabs
+            class="flex min-w-0 flex-col gap-[var(--talos-space-section)]"
+            surface="local-models"
+            :model-value="tabAttiva"
+            :aria-label="t('localModels.tabsLabel')"
+            @update:model-value="scegliTab"
+        >
+            <TabsContent value="installed" class="talos-motion-tab-panel flex flex-col gap-[var(--talos-space-section)] outline-none">
         <section
             v-if="installedLoading || installedView.total > 0 || unreadable.length > 0 || installedReadFailure"
             data-testid="talos-models-installed"
             class="flex flex-col gap-[var(--talos-space-section)]"
         >
-            <div class="flex items-baseline justify-between gap-[var(--talos-space-inline)]">
-                <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
-                    {{ t('localModels.installedTitle') }}
-                </h3>
-                <span v-if="installedView.total" class="text-2xs tabular-nums text-[var(--talos-muted)]">
+            <!--
+                Il titolo se n'è andato con l'arrivo delle tab: «SU QUESTO
+                DISPOSITIVO» sotto una tab che si chiama «Questo dispositivo»
+                diceva due volte la stessa cosa e rubava una riga a uno schermo
+                che ne ha poche. Il conteggio resta — quello aggiunge un fatto.
+            -->
+            <div v-if="installedView.total" class="flex items-baseline justify-end">
+                <span class="text-2xs tabular-nums text-[var(--talos-muted)]">
                     {{ t('localModels.installedCount', { count: installedView.total }) }}
                 </span>
             </div>
@@ -826,7 +902,16 @@ function resultCountLabel(count: number): string {
                 class="text-2xs leading-5 text-[var(--talos-danger)]"
             >{{ t('localModels.installedUnreadable', { count: unreadable.length }) }}</p>
         </section>
+            <!--
+                «Aggiungi un modello dal telefono» sta con QUELLO CHE HAI, non con
+                quello che potresti prendere.
 
+                Owner 2026-08-06, dividendo la schermata in due tab: importare un
+                file è un modo di avere un modello **su questo dispositivo** senza
+                passare da Hugging Face. Metterlo nella tab del Hub avrebbe
+                significato chiedere di andare a cercare in rete per aggiungere una
+                cosa che si ha già in mano.
+            -->
             <!--
                 The door that opens inward.
 
@@ -863,6 +948,10 @@ function resultCountLabel(count: number): string {
                     {{ importError }}
                 </p>
             </div>
+
+            </TabsContent>
+
+            <TabsContent value="hub" class="talos-motion-tab-panel flex flex-col gap-[var(--talos-space-section)] outline-none">
 
         <!-- Measuring. A skeleton rather than an empty screen: the list is
              coming, and saying so is different from showing nothing. -->
@@ -1248,7 +1337,8 @@ function resultCountLabel(count: number): string {
         >
             {{ t('localModels.noResults') }}
         </p>
-
+            </TabsContent>
+        </TalosThemedTabs>
     </div>
 
     <!-- Rinomina: lo STESSO dialogo della Ricerca. Campo, e il campo vuoto

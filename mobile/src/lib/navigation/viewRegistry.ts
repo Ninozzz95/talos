@@ -64,6 +64,28 @@ export type TalosViewSurface = {
 
 const SURFACES = [
     {
+        /**
+         * Owner 2026-08-06: «dividere la sezione modelli locali con due tab,
+         * questo dispositivo e Hugging Face; organizza meglio visivamente, due
+         * tab pane semplici e compatte».
+         *
+         * Sono due mestieri diversi che dividevano una pagina sola: **quello
+         * che hai** — con i gigabyte sul disco, la rinomina, l'eliminazione — e
+         * **quello che potresti prendere**, con la ricerca, i filtri e lo
+         * scorrimento infinito. Chi entra per liberare spazio scorreva l'intero
+         * catalogo del Hub per arrivarci.
+         *
+         * Due, non tre: sono i due lati veri della domanda «che modelli ho».
+         */
+        id: 'local-models',
+        grammar: 'tabs',
+        activation: 'automatic',
+        views: [
+            { id: 'installed', labelKey: 'localModels.tabInstalled' },
+            { id: 'hub', labelKey: 'localModels.tabHub' },
+        ],
+    },
+    {
         id: 'appearance',
         grammar: 'tabs',
         activation: 'automatic',
