@@ -1409,6 +1409,10 @@ export const TALOS_IT_MESSAGES = {
     },
     localModels: {
         invalidRepo: 'L’indirizzo di questo repository non è valido. Torna ai modelli locali e riaprilo.',
+        loadingMore: 'Sto caricando altri modelli…',
+        loadMore: 'Carica altri',
+        loadMoreFailed: 'Non sono riuscito a caricarne altri. Tocca per riprovare.',
+        endOfList: 'Questi sono tutti i modelli che corrispondono.',
         variants: 'Varianti',
         fullCard: 'Scheda completa su Hugging Face',
         fullReadme: 'Leggi la scheda completa del modello',

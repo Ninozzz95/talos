@@ -207,13 +207,30 @@ async function submit(): Promise<void> {
         <p v-else-if="!shown.length" data-testid="talos-notes-no-matches" class="py-6 text-center text-sm text-[var(--talos-muted)]">
             {{ t('notes.noMatches') }}
         </p>
-        <!-- A schede: la stessa griglia a due colonne della Libreria, cosi'
-             le due superfici si riconoscono come parenti. -->
+        <!-- A schede: colonne decise dalla LARGHEZZA MINIMA LEGGIBILE, non da
+             un numero.
+
+             Corretto due volte sul tablet il 2026-08-06, e le due volte
+             insegnano la stessa cosa. Prima `grid-cols-2` fisse: sul riquadro
+             largo del tablet le schede diventavano enormi e mezze vuote. Poi le
+             soglie della Libreria (`md:4 xl:6`): schede da 116 px, con la
+             descrizione tagliata a metà parola e la data sparita del tutto.
+
+             Il punto è che quei conteggi sono giusti per la Libreria e sbagliati
+             qui: una scheda di file è una MINIATURA, che a 116 px si legge
+             benissimo; una nota è TESTO, e il testo ha una larghezza sotto la
+             quale smette di essere leggibile. Copiare il numero invece della
+             ragione è ciò che ha prodotto entrambi i difetti.
+
+             `auto-fill` + `minmax` lascia decidere alla griglia quante ne
+             stanno, dato che nessuno può conoscere in anticipo la larghezza di
+             ogni riquadro di ogni dispositivo — che è la stessa dottrina del
+             non-scritto-a-mano, applicata al disegno. -->
         <div
             v-else-if="viewMode === 'grid'"
             role="list"
             data-testid="talos-notes-grid"
-            class="grid grid-cols-2 gap-2"
+            class="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3"
         >
             <TalosMobileNoteTile
                 v-for="note in shown"

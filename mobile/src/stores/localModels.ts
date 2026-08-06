@@ -97,6 +97,18 @@ export interface TalosLocalModelsState {
     searching: boolean
     results: TalosHuggingFaceModel[]
     searchFailure: string | null
+    /**
+     * Come chiedere la pagina dopo, oppure `null` = **non c'e' una pagina dopo**.
+     *
+     * Owner 2026-08-06: «non possiamo dare solo 20 risultati, e' da pazzi». Il
+     * tetto era `searchModels(query, 20, sort)`: una pagina sola, e il resto del
+     * Hub invisibile.
+     */
+    nextCursor: string | null
+    /** Vero mentre arriva una pagina SUCCESSIVA, non la prima. */
+    loadingMore: boolean
+    /** Un guasto sulla pagina dopo NON cancella quelle gia' arrivate. */
+    moreFailure: string | null
     repo: {
         id: string
         revision: string
@@ -147,6 +159,9 @@ const state = reactive<TalosLocalModelsState>({
     searching: false,
     results: [],
     searchFailure: null,
+    nextCursor: null,
+    loadingMore: false,
+    moreFailure: null,
     repo: null,
     device: null,
     context: TALOS_DEFAULT_LOCAL_CONTEXT,
@@ -322,15 +337,78 @@ export async function talosSearchLocalModels(query: string): Promise<void> {
      */
     state.searching = true
     try {
-        const results = await requireClient().searchModels(query.trim(), 20, state.sort)
+        const page = await requireClient().searchModelsPage(query.trim(), {
+            limit: TALOS_MODEL_PAGE_SIZE,
+            sort: state.sort,
+        })
         if (generation !== searchGeneration) return
-        state.results = results
+        state.results = page.models
+        state.nextCursor = page.nextCursor
+        state.moreFailure = null
     } catch (failure) {
         if (generation !== searchGeneration) return
         state.results = []
+        state.nextCursor = null
         state.searchFailure = describe(failure)
     } finally {
         if (generation === searchGeneration) state.searching = false
+    }
+}
+
+/**
+ * Quanti per pagina.
+ *
+ * Cinquanta e non venti perche' venti erano il TETTO totale, non una pagina, e
+ * la prima schermata di un tablet ne mostra gia' piu' di venti: una pagina che
+ * finisce prima di riempire lo schermo fa partire subito la seconda, e lo
+ * scorrimento diventa una scala invece di un flusso.
+ *
+ * Non e' un numero sul modello ne' sul dispositivo, quindi non viola
+ * `nothing-hardcoded-must-adapt`: e' una nostra politica, e questo e' il perche'.
+ */
+export const TALOS_MODEL_PAGE_SIZE = 50
+
+/**
+ * La pagina successiva, aggiunta in fondo a quelle gia' arrivate.
+ *
+ * ## Le tre cose che rendono questo diverso da «rifai la ricerca»
+ *
+ * 1. **Si accumula.** I risultati precedenti restano dove sono: chi ha scorso
+ *    trecento righe non torna in cima perche' e' arrivata la pagina quattro.
+ * 2. **Un guasto qui non cancella niente.** `moreFailure` e' separato da
+ *    `searchFailure` proprio per questo: la rete che cade alla pagina tre non
+ *    deve svuotare lo schermo.
+ * 3. **Si ferma da sola.** `nextCursor` a null significa fine elenco, e chi
+ *    disegna lo dice — uno scorrimento infinito che non dichiara mai la fine
+ *    lascia tirare in basso per sempre una lista che non cresce piu'.
+ *
+ * Ignorata se una ricerca nuova e' partita nel frattempo: la generazione e' la
+ * stessa guardia che protegge la prima pagina.
+ */
+export async function talosLoadMoreLocalModels(): Promise<void> {
+    const cursor = state.nextCursor
+    if (!cursor || state.loadingMore || state.searching) return
+    const generation = searchGeneration
+    state.loadingMore = true
+    state.moreFailure = null
+    try {
+        const page = await requireClient().searchModelsPage(state.query.trim(), {
+            limit: TALOS_MODEL_PAGE_SIZE,
+            sort: state.sort,
+            cursor,
+        })
+        if (generation !== searchGeneration) return
+        // Per identificativo, non per posizione: il Hub riordina fra una pagina
+        // e l'altra quando i download si muovono, e un doppione in lista e' una
+        // riga che si puo' scaricare due volte.
+        const visti = new Set(state.results.map((row) => row.id))
+        state.results = [...state.results, ...page.models.filter((row) => !visti.has(row.id))]
+        state.nextCursor = page.nextCursor
+    } catch (failure) {
+        if (generation !== searchGeneration) return
+        state.moreFailure = describe(failure)
+    } finally {
+        if (generation === searchGeneration) state.loadingMore = false
     }
 }
 

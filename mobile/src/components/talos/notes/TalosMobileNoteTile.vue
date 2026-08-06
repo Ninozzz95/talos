@@ -16,12 +16,17 @@ import type { TalosLocalNote } from '@/repositories/chatRepository'
  * due condividono davvero — cosa apre, e come si formatta la data — sta fuori da
  * entrambe.
  *
- * ## Perché il quadrato
+ * ## Perché NON il quadrato, che era la prima idea
  *
- * Perché lo sono le schede della Libreria, e due griglie con proporzioni diverse
- * nella stessa app si notano subito anche senza saper dire perché. Il testo si
- * taglia a tre righe: una scheda che cresce col contenuto trasforma la griglia
- * in una scala.
+ * Le schede della Libreria sono quadrate e sembrava coerente copiarle. Provato
+ * sul tablet il 2026-08-06: sbagliato. Il quadrato lega l'altezza alla
+ * larghezza, quindi su una griglia stretta la scheda diventa bassa e amputa il
+ * testo — la descrizione finiva a metà parola e la data spariva.
+ *
+ * La differenza è nel contenuto: una scheda di file mostra una MINIATURA, che
+ * scala; una nota mostra TESTO, che ha bisogno di righe. Quindi altezza minima e
+ * non proporzione fissa: le schede della stessa riga si allineano comunque, ed è
+ * quello che fa leggere una griglia come una griglia.
  *
  * La data sta in fondo con `mt-auto`, non subito sotto la descrizione: così
  * tutte le schede allineano la data allo stesso punto anche quando i titoli
@@ -43,7 +48,7 @@ const emit = defineEmits<{ open: [] }>()
         :data-testid="`talos-note-tile-${note.id}`"
         data-talos-note-tile
         role="listitem"
-        class="relative flex aspect-square flex-col overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]"
+        class="relative flex min-h-[11rem] flex-col overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]"
     >
         <button
             type="button"
