@@ -14,6 +14,11 @@ import { TALOS_DISPLAY_NAME_MEMORY_ID } from '@/services/profileMemory'
 import { useTalosAccountStore } from '@/stores/account'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
+import TalosToolPermissionsBoard from '@/components/talos/permissions/TalosToolPermissionsBoard.vue'
+import {
+    TALOS_DEFAULT_TOOL_PERMISSIONS,
+    type TalosToolPermissions,
+} from '@/lib/tools/permissionTypes'
 import type { TalosMobileIntroOutcome } from '@/stores/settings'
 
 const props = withDefaults(defineProps<{ replay?: boolean }>(), {
@@ -81,18 +86,18 @@ const progress = computed(() => talosSetupProgress({
 }))
 
 const decidingAutonomy = ref(false)
-async function decideAutonomy(value: 'ask' | 'allow'): Promise<void> {
-    if (decidingAutonomy.value) return
-    decidingAutonomy.value = true
-    try {
-        // Gli STESSI tre valori che le Impostazioni leggono, non una copia:
-        // toccarli e sceglierli, e il magazzino lo registra da se.
-        await settings.setToolPermissions({ read: value, write: value, outbound: value })
-        next()
-    } finally {
-        decidingAutonomy.value = false
-    }
-}
+/**
+ * La scelta vive QUI finche' non si preme avanti.
+ *
+ * Owner 2026-08-06: i permessi dei tool si impostano «in one shot al primo
+ * accesso». Salvare a ogni tocco significherebbe scrivere tre volte per una
+ * decisione sola, e — peggio — registrare come SCELTO qualcosa che era solo un
+ * passaggio del dito: la differenza fra una preferenza e un valore ereditato e'
+ * l'unica cosa che permette all'app di aggiornare i suoi default senza
+ * calpestare chi ha deciso davvero.
+ */
+const toolPermissions = ref<TalosToolPermissions>({ ...TALOS_DEFAULT_TOOL_PERMISSIONS })
+
 
 const index = ref(0)
 const stage = ref<'language' | 'story' | 'setup'>(
@@ -107,11 +112,6 @@ const traits = computed(() => [
     { title: t('onboarding.traitMemoryTitle'), body: t('onboarding.traitMemoryBody') },
     { title: t('onboarding.traitTwoModelsTitle'), body: t('onboarding.traitTwoModelsBody') },
     { title: t('onboarding.traitFilesTitle'), body: t('onboarding.traitFilesBody') },
-])
-const autonomyExamples = computed(() => [
-    t('onboarding.autonomyRead'),
-    t('onboarding.autonomyWrite'),
-    t('onboarding.autonomyOutbound'),
 ])
 const coming = computed(() => [
     t('onboarding.comingZethos'),
@@ -176,7 +176,25 @@ function beginSetup(): void {
     stage.value = 'setup'
 }
 
-function next(): void {
+async function next(): Promise<void> {
+    /*
+     * La pagina dell'autonomia salva ANDANDO AVANTI, non con un tasto suo.
+     *
+     * Visto sul tablet il 2026-08-06: con un bottone dentro la pagina se ne
+     * vedevano DUE, uno sopra l'altro, che facevano la stessa cosa — e il primo
+     * salvava mentre il secondo no. Due comandi identici con esiti diversi è il
+     * modo più rapido di far perdere una scelta senza dirlo a nessuno.
+     */
+    if (step.value.id === 'autonomy') {
+        if (decidingAutonomy.value) return
+        decidingAutonomy.value = true
+        try {
+            // Gli STESSI tre valori che le Impostazioni leggono, non una copia.
+            await settings.setToolPermissions({ ...toolPermissions.value })
+        } finally {
+            decidingAutonomy.value = false
+        }
+    }
     if (!onLastStep.value) index.value += 1
 }
 
@@ -499,29 +517,23 @@ function onKeydown(event: KeyboardEvent): void {
                         {{ t('onboarding.autonomyBody') }}
                     </p>
 
-                    <ul class="mt-5 flex flex-col gap-3" data-testid="talos-setup-autonomy-list">
-                        <li v-for="line in autonomyExamples" :key="line" class="flex gap-2 text-md leading-7">
-                            <span class="mt-2.5 size-1.5 shrink-0 rounded-full bg-[var(--talos-accent)]" aria-hidden="true" />
-                            <span>{{ line }}</span>
-                        </li>
-                    </ul>
+                    <!--
+                        Al posto dei due bottoni: la scheda coi tre poteri,
+                        ciascuno coi suoi tre stati, e sotto ognuno l'elenco
+                        vero degli strumenti che ci ricadono.
 
-                    <div class="mt-7 flex flex-col gap-2">
-                        <button
-                            type="button"
-                            data-testid="talos-setup-autonomy-ask"
-                            :disabled="decidingAutonomy"
-                            class="talos-pressable flex min-h-12 items-center justify-center rounded-xl border border-[var(--talos-accent-border,var(--talos-border))] bg-[var(--talos-active,var(--talos-panel))] px-4 text-sm font-medium disabled:opacity-50"
-                            @click="decideAutonomy('ask')"
-                        >{{ t('onboarding.autonomyAsk') }}</button>
-                        <button
-                            type="button"
-                            data-testid="talos-setup-autonomy-allow"
-                            :disabled="decidingAutonomy"
-                            class="talos-pressable flex min-h-12 items-center justify-center rounded-xl border border-[var(--talos-border)] px-4 text-sm font-medium disabled:opacity-50"
-                            @click="decideAutonomy('allow')"
-                        >{{ t('onboarding.autonomyAllow') }}</button>
+                        Prima si sceglieva «chiedimelo» oppure «lascialo fare»
+                        per tutto insieme, senza sapere cosa fosse «tutto»: chi
+                        premeva il secondo autorizzava anche l'uscita in rete
+                        senza che gliel'avesse detto nessuno.
+                    -->
+                    <div class="mt-6">
+                        <TalosToolPermissionsBoard
+                            v-model="toolPermissions"
+                            :busy="decidingAutonomy"
+                        />
                     </div>
+
 
                     <p class="mt-4 text-sm leading-6 text-[var(--talos-muted)]">
                         {{ t('onboarding.autonomyLater') }}

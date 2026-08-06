@@ -20,7 +20,15 @@ import type { TalosMobileIntroOutcome, TalosMobileOnboardingState } from '@/stor
  * ([[permissions-onboarding-page-blocking]]) — e succede una volta sola, perché
  * la chiusura scrive comunque la versione anche se la persona rifiuta.
  */
-export const TALOS_MOBILE_INTRO_VERSION = 3
+/*
+ * **4 dal 2026-08-06.** La pagina dell'autonomia non è più due bottoni: adesso
+ * mostra i tre poteri separati, ciascuno coi suoi tre stati, e sotto ognuno
+ * l'elenco vero degli strumenti che ci ricadono. Chi ha già l'app ha deciso
+ * «tutto chiedi» o «tutto lascia fare» senza che nessuno gli dicesse cosa fosse
+ * «tutto» — e in particolare senza sapere che dentro c'era l'uscita in rete.
+ * Quella decisione va potuta rifare sapendo.
+ */
+export const TALOS_MOBILE_INTRO_VERSION = 4
 
 export interface TalosMobileIntroStateDependencies {
     hydrated: () => boolean

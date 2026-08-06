@@ -1664,6 +1664,30 @@ export const TALOS_IT_MESSAGES = {
         untrusted: 'non attendibile',
         deleteNamed: 'Elimina nota {title}',
     },
+    toolPermissions: {
+        allAtOnce: 'Decidi tutto in un colpo',
+        covers: 'Riguarda:',
+        changeLater: 'Si cambia quando vuoi, da Impostazioni › Strumenti agente.',
+        state: {
+            allow: 'Sempre',
+            ask: 'Chiedimelo',
+            deny: 'Mai',
+        },
+        action: {
+            read: {
+                title: 'Leggere quello che hai già',
+                body: 'Aprire i file della Libreria, le note, le attività e la memoria. Non cambia niente e non esce dal dispositivo.',
+            },
+            write: {
+                title: 'Scrivere sul dispositivo',
+                body: 'Creare e modificare note, attività, documenti e immagini. Resta tutto qui, ma qualcosa cambia.',
+            },
+            outbound: {
+                title: 'Uscire in rete',
+                body: 'Cercare sul web, leggere pagine, scaricare modelli. È l’unico potere che fa uscire qualcosa da questo dispositivo.',
+            },
+        },
+    },
     tasks: {
         itemMissing: 'Questa attività non c’è più.',
         searchPlaceholder: 'Cerca fra le attività',
