@@ -17,7 +17,7 @@
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Search, LayoutGrid, List, FolderOpen } from '@lucide/vue'
+import { Search, LayoutGrid, List, FolderOpen, Loader2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import {
@@ -26,6 +26,7 @@ import {
     talosRefreshLeftovers,
     talosRefreshHuggingFaceToken,
     talosLoadLocalCatalogue,
+    talosLoadMoreLocalModels,
     talosSetLocalModelSort,
 } from '@/stores/localModels'
 import { talosDiscardModelTransfer } from '@/services/modelTransfer'
@@ -108,6 +109,44 @@ function chooseLayout(next: 'grid' | 'list'): void {
  * reach by any other route. Compacting a screen is allowed to remove a line; it
  * is not allowed to remove the only copy of something.
  */
+/**
+ * La pagina dopo: da sola quando la sentinella entra in vista, o a comando.
+ *
+ * Owner 2026-08-06: «paginazione infinite scroll con loading e spinner
+ * stilisticamente coerenti … non possiamo dare solo 20 risultati».
+ *
+ * La ricerca però dice che lo scorrimento infinito PURO è sconsigliato per i
+ * compiti mirati — e cercare un modello da scaricare è mirato, non è sfogliare
+ * un feed. Quindi ibrido: la sentinella allunga la lista da sola, e il comando
+ * esplicito resta per chi naviga da tastiera o con lo screen reader, per cui una
+ * lista che cresce sotto le dita è un ostacolo e non una comodità.
+ *
+ * `rootMargin` anticipa di uno schermo: chiedere quando la sentinella è già
+ * visibile vuol dire far vedere lo spinner a ogni pagina, che è il difetto che
+ * fa sembrare lento uno scorrimento anche quando non lo è.
+ */
+const sentinellaPagina = ref<HTMLElement | null>(null)
+let osservatorePagina: IntersectionObserver | null = null
+
+function loadMore(): void {
+    void talosLoadMoreLocalModels()
+}
+
+onMounted(() => {
+    // Assente su motori vecchi: senza, resta il comando esplicito — che è il
+    // motivo per cui esiste, invece di essere un ripiego.
+    if (typeof IntersectionObserver === 'undefined') return
+    osservatorePagina = new IntersectionObserver((voci) => {
+        if (voci.some((voce) => voce.isIntersecting)) loadMore()
+    }, { rootMargin: '600px 0px' })
+    if (sentinellaPagina.value) osservatorePagina.observe(sentinellaPagina.value)
+})
+
+onUnmounted(() => {
+    osservatorePagina?.disconnect()
+    osservatorePagina = null
+})
+
 const copyNotice = ref<{ ok: boolean, text: string } | null>(null)
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -1124,6 +1163,65 @@ function resultCountLabel(count: number): string {
                     />
                 </div>
             </section>
+
+            <!--
+                LA FINE DELL'ELENCO, dichiarata — e la sentinella che lo allunga.
+
+                Owner 2026-08-06: «non possiamo dare solo 20 risultati, è da
+                pazzi». La ricerca chiedeva una pagina sola e il resto del Hub
+                restava invisibile.
+
+                Ibrido, non scorrimento infinito puro: la ricerca dice che
+                l'infinito puro è **sconsigliato per compiti mirati** — e cercare
+                un modello da scaricare è mirato, non è sfogliare un feed. Quindi
+                la sentinella carica da sola quando arriva a tiro, E resta un
+                comando esplicito per chi naviga da tastiera o con lo screen
+                reader, per cui una lista che cresce sotto le dita è un problema
+                e non una comodità.
+
+                Tre stati, tre frasi diverse: sta caricando / non c'è riuscito e
+                puoi riprovare senza perdere quello che c'è / è finito davvero.
+            -->
+            <div
+                ref="sentinellaPagina"
+                data-testid="talos-models-page-sentinel"
+                class="flex min-h-touch items-center justify-center py-[var(--talos-space-page)]"
+                aria-live="polite"
+            >
+                <span
+                    v-if="store.loadingMore"
+                    data-testid="talos-models-loading-more"
+                    class="flex items-center gap-[var(--talos-space-inline)] text-sm text-[var(--talos-muted)]"
+                >
+                    <Loader2 class="size-[var(--talos-icon-size)] animate-spin text-[var(--talos-accent)]" aria-hidden="true" />
+                    {{ t('localModels.loadingMore') }}
+                </span>
+                <button
+                    v-else-if="store.moreFailure"
+                    type="button"
+                    data-testid="talos-models-load-more-retry"
+                    class="talos-pressable min-h-touch rounded-full border border-[var(--talos-border)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)]"
+                    @click="loadMore()"
+                >
+                    {{ t('localModels.loadMoreFailed') }}
+                </button>
+                <button
+                    v-else-if="store.nextCursor"
+                    type="button"
+                    data-testid="talos-models-load-more"
+                    class="talos-pressable min-h-touch rounded-full border border-[var(--talos-border)] px-[var(--talos-space-control)] text-sm text-[var(--talos-text)]"
+                    @click="loadMore()"
+                >
+                    {{ t('localModels.loadMore') }}
+                </button>
+                <span
+                    v-else
+                    data-testid="talos-models-end-of-list"
+                    class="text-xs text-[var(--talos-muted)]"
+                >
+                    {{ t('localModels.endOfList') }}
+                </span>
+            </div>
         </template>
 
         <p

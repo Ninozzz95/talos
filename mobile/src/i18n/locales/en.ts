@@ -1405,6 +1405,10 @@ export const TALOS_EN_MESSAGES = {
     },
     localModels: {
         invalidRepo: 'This model repository address is invalid. Return to Local models and open it again.',
+        loadingMore: 'Loading more models…',
+        loadMore: 'Load more',
+        loadMoreFailed: 'Could not load more. Tap to try again.',
+        endOfList: 'That is every model that matches.',
         variants: 'Variants',
         fullCard: 'Full card on Hugging Face',
         fullReadme: 'Read the complete model card',

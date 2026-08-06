@@ -204,7 +204,65 @@ export interface TalosHuggingFaceModel {
 
 export type TalosHuggingFaceSort = 'downloads' | 'likes' | 'lastModified' | 'createdAt'
 
+/** Una pagina di risultati, con il modo di chiedere la successiva. */
+export interface TalosHuggingFaceModelPage {
+    models: TalosHuggingFaceModel[]
+    /**
+     * Il cursore per la pagina dopo, oppure `null` se questa era l'ultima.
+     *
+     * Null vuol dire **fine dell'elenco**, ed e' un'informazione da mostrare:
+     * uno scorrimento infinito che non dice mai «e' finito» lascia chi guarda a
+     * tirare in basso per sempre su una lista che non cresce piu'.
+     */
+    nextCursor: string | null
+}
+
+/**
+ * Il cursore della pagina successiva, letto dall'header `Link`.
+ *
+ * ## Perche' un cursore e non un numero di pagina
+ *
+ * **MISURATO contro l'API il 2026-08-06**: il Hub non accetta `skip` ne`
+ * `offset` sui modelli. Risponde con
+ *
+ *     Link: <https://huggingface.co/api/models?...&cursor=eyJ...>; rel="next"
+ *
+ * cioe' la paginazione a cursore, che e' anche quella giusta per una lista
+ * ordinata per download: fra una pagina e l'altra i contatori cambiano, e un
+ * offset numerico farebbe ricomparire o saltare righe.
+ *
+ * Assente = ultima pagina. Non e' un guasto.
+ */
+export function talosNextPageCursor(linkHeader: string | null | undefined): string | null {
+    if (!linkHeader) return null
+    for (const parte of linkHeader.split(',')) {
+        // `rel="next"` puo' arrivare con o senza virgolette, e in qualunque
+        // ordine rispetto all'URL: si cercano i due pezzi, non una forma.
+        if (!/rel\s*=\s*"?next"?/i.test(parte)) continue
+        const url = parte.match(/<([^>]+)>/)?.[1]
+        if (!url) continue
+        try {
+            const cursore = new URL(url).searchParams.get('cursor')
+            if (cursore) return cursore
+        } catch {
+            // Un URL che non si analizza e' una pagina che non si puo' chiedere:
+            // vale come fine elenco, non come errore da mostrare.
+            return null
+        }
+    }
+    return null
+}
+
 export interface TalosHuggingFaceClient {
+    /**
+     * Una pagina di modelli, e come chiedere la prossima.
+     *
+     * Owner 2026-08-06: «non possiamo dare solo 20 risultati, e' da pazzi».
+     */
+    searchModelsPage(
+        query: string,
+        options?: { limit?: number, sort?: TalosHuggingFaceSort, cursor?: string | null },
+    ): Promise<TalosHuggingFaceModelPage>
     searchModels(
         query: string,
         limit?: number,
@@ -338,6 +396,13 @@ export function talosCreateHuggingFaceClient(
          * a broken search.
          */
         async searchModels(query, limit = 20, sort = 'downloads') {
+            // La forma vecchia resta, e delega: chi vuole solo la prima pagina
+            // non deve imparare i cursori.
+            return (await this.searchModelsPage(query, { limit, sort })).models
+        },
+
+        async searchModelsPage(query, opzioni = {}) {
+            const { limit = 20, sort = 'downloads', cursor = null } = opzioni
             /*
              * Senza testo si SFOGLIA, non si cerca il vuoto.
              *
@@ -356,6 +421,16 @@ export function talosCreateHuggingFaceClient(
                 direction: '-1',
                 limit: String(limit),
             })
+            /*
+             * Il cursore, quando si chiede la pagina dopo.
+             *
+             * MISURATO contro l'API il 2026-08-06: il Hub NON accetta `skip` ne'
+             * `offset` sui modelli — pagina col cursore che mette lui
+             * nell'header `Link`. Ed e' la scelta giusta per una lista ordinata
+             * per download: fra una pagina e l'altra i contatori si muovono, e
+             * un offset numerico farebbe ricomparire o saltare righe.
+             */
+            if (cursor) parameters.set('cursor', cursor)
             /*
              * `expand[]=gguf` e' cio' che rende reale la capienza.
              *
@@ -386,7 +461,7 @@ export function talosCreateHuggingFaceClient(
 
             const payload = await response.json() as unknown
             const rows = Array.isArray(payload) ? payload : []
-            return rows.flatMap((raw): TalosHuggingFaceModel[] => {
+            const models = rows.flatMap((raw): TalosHuggingFaceModel[] => {
                 if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []
                 const row = raw as Record<string, unknown>
                 const id = String(row.id ?? row.modelId ?? '')
@@ -439,6 +514,22 @@ export function talosCreateHuggingFaceClient(
                     updatedAt: typeof row.lastModified === 'string' ? row.lastModified : null,
                 }]
             })
+            /*
+             * Gli header si chiedono con prudenza, e non e' pedanteria.
+             *
+             * Non tutte le implementazioni di `fetch` che questa app riceve
+             * espongono `headers`: il ponte HTTP di Capacitor e i doppi di prova
+             * restituiscono oggetti piu' magri. Senza questa guardia una
+             * ricerca che funzionava andava in `TypeError` — e per un motivo che
+             * non c'entra niente con i modelli.
+             *
+             * Assente significa «nessun cursore», cioe' «ultima pagina»: la
+             * lista si ferma dove sta invece di rompersi.
+             */
+            const link = typeof response.headers?.get === 'function'
+                ? response.headers.get('link')
+                : null
+            return { models, nextCursor: talosNextPageCursor(link) }
         },
 
         /**
