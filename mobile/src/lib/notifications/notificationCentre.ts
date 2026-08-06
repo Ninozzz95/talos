@@ -61,6 +61,19 @@ export type TalosNotificationChannel =
 export type TalosNotificationWeight =
     /** Va registrato e basta: il registro lo mostra, nessuno viene interrotto. */
     | 'log'
+    /**
+     * Da sapere solo se sei FUORI. Mai un toast.
+     *
+     * Il caso che l'ha resa necessaria è la risposta di una chat: se sei
+     * davanti, la stai già leggendo — un toast che ti dice «è arrivata una
+     * risposta» mentre la risposta ti scorre sotto gli occhi è rumore puro. Se
+     * invece hai chiuso l'app, è l'unica cosa che ti fa sapere che è finita.
+     *
+     * Le tre categorie che c'erano non coprivano questo: `log` non esce mai
+     * dall'app, `notable` fa un toast anche quando disturba. È un buco che ha
+     * trovato il caso reale, non un ripensamento.
+     */
+    | 'away'
     /** Vale un toast mentre si guarda, e una notifica se si è fuori. */
     | 'notable'
     /** Chiede una decisione: si vede comunque, dentro e fuori. */
@@ -132,11 +145,15 @@ export function talosRouteNotification(
     event: TalosNotificationEvent,
     context: TalosNotificationContext,
 ): TalosNotificationRouting {
-    const interrompe = event.weight !== 'log'
+    // `away` non interrompe MAI chi sta guardando: la sua ragione d'essere è
+    // esattamente il caso in cui chi guarda vedrebbe la cosa da sé.
+    const puoInterrompere = event.weight === 'notable' || event.weight === 'demanding'
+    const escePerForza = event.weight === 'demanding'
+    const esceSeSeiFuori = puoInterrompere || event.weight === 'away'
     return {
         feed: true,
-        toast: context.appVisible && interrompe,
-        android: event.weight === 'demanding' || (!context.appVisible && interrompe),
+        toast: context.appVisible && puoInterrompere,
+        android: escePerForza || (!context.appVisible && esceSeSeiFuori),
     }
 }
 
