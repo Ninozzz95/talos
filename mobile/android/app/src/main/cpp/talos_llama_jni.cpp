@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "llama.h"
+#include "gguf.h"
 #include "ggml-backend.h"
 #include "sampling.h"
 #include "chat.h"
@@ -796,6 +797,64 @@ Java_ai_talos_TalosLlamaNative_nativeContextTokens(JNIEnv *, jclass, jlong handl
  * ripiego silenzioso lascerebbe chi calcola il tetto di contesto convinto che
  * un token pesi la metà di quanto pesa.
  */
+/**
+ * ⭐ QUESTO FILE È UN MODELLO CON CUI SI PUÒ PARLARE?
+ *
+ * ## Il difetto
+ *
+ * Owner 2026-08-06: nel selettore compariva **`mmproj-F16.gguf`**, e sceglierlo
+ * dava «questo file non può essere aperto come modello GGUF compatibile». Non è
+ * un modello: è il **proiettore** che accompagna un modello visivo, e da solo
+ * non risponde a niente. Peggio: appena installato, all'avvio veniva scelto da
+ * solo — MISURATO sul Pad, chip a `mmproj-F16` su un'app appena aperta.
+ *
+ * ## Perché non si filtra il nome
+ *
+ * «Se si chiama mmproj» è una stringa scritta a mano, contro la regola che
+ * TALOS si adatta: un proiettore chiamato in un altro modo passerebbe lo
+ * stesso, e un modello vero che contenesse quella parola verrebbe nascosto.
+ *
+ * Si chiede al file. Un modello di linguaggio **dichiara quanti strati ha**;
+ * un proiettore dichiara l'architettura `clip` e non ha `<arch>.block_count`.
+ * Non serve enumerare le architetture buone — che sarebbe la stessa lista
+ * scritta a mano, spostata — basta chiedere se c'è ciò che serve per parlare.
+ *
+ * ## Perché costa quasi niente
+ *
+ * `gguf_init_from_file` con `no_alloc` legge **solo i metadati**: nessun
+ * tensore entra in memoria. È la differenza fra guardare la copertina e
+ * caricare in RAM otto gigabyte per scoprire che non era un libro.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeArchitectureOf(JNIEnv * env, jclass, jstring modelPath) {
+    const std::string path = jstring_to_utf8(env, modelPath);
+    if (path.empty()) return nullptr;
+
+    gguf_init_params params = { /*.no_alloc =*/ true, /*.ctx =*/ nullptr };
+    gguf_context * gguf = gguf_init_from_file(path.c_str(), params);
+    if (gguf == nullptr) return nullptr;
+
+    std::string architettura;
+    const int64_t chiave = gguf_find_key(gguf, "general.architecture");
+    if (chiave >= 0) architettura = gguf_get_val_str(gguf, chiave);
+
+    // Quanti strati: la domanda che separa un modello da tutto il resto. Un
+    // proiettore ha la sua architettura e non ha questo, e un file che non lo
+    // dichiara non puo' generare nemmeno un token.
+    int64_t strati = 0;
+    if (!architettura.empty()) {
+        const std::string chiaveStrati = architettura + ".block_count";
+        const int64_t indice = gguf_find_key(gguf, chiaveStrati.c_str());
+        if (indice >= 0) strati = (int64_t) gguf_get_val_u32(gguf, indice);
+    }
+    gguf_free(gguf);
+
+    char json[256];
+    snprintf(json, sizeof(json), "{\"architecture\":\"%s\",\"layers\":%lld}",
+             architettura.c_str(), (long long) strati);
+    return env->NewStringUTF(json);
+}
+
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeKvCacheType(JNIEnv * env, jclass, jlong handle) {
     talos_session * session = as_session(handle);

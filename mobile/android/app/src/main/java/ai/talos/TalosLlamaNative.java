@@ -92,6 +92,16 @@ final class TalosLlamaNative {
     static native String nativeKvCacheType(long handle);
 
     /**
+     * L'architettura dichiarata dal file e quanti strati ha, in JSON — oppure
+     * {@code null} se non è nemmeno un GGUF leggibile.
+     *
+     * Legge SOLO i metadati: nessun tensore entra in memoria. Serve a
+     * distinguere un modello di linguaggio da un proiettore multimodale, che è
+     * un GGUF valido con cui però non si può parlare.
+     */
+    static native String nativeArchitectureOf(String modelPath);
+
+    /**
      * Prova i candidati sul contesto aperto e dice quali hanno vinto, in JSON.
      *
      * ⛔ Azzera la conversazione in memoria: è un banco di prova, e come ogni

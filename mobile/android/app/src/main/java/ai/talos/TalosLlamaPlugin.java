@@ -421,6 +421,25 @@ public class TalosLlamaPlugin extends Plugin {
             // download is "which one did I just get" — owner 2026-08-03:
             // «ho appena scaricato un modello ma non ho idea di dove sia».
             row.put("modifiedAt", new File(entry.path).lastModified());
+            /**
+             * ⭐ Se con questo file si può PARLARE.
+             *
+             * Owner 2026-08-06: nel selettore compariva `mmproj-F16.gguf` — il
+             * proiettore che accompagna un modello visivo — e sceglierlo dava
+             * «questo file non può essere aperto come modello GGUF
+             * compatibile». Su un'app appena installata veniva perfino scelto
+             * da solo.
+             *
+             * Resta nella lista, perché occupa 672 MB e chi vuole liberarli
+             * deve poterlo trovare ed eliminare. Ma la chat non deve offrirlo:
+             * un modello che non può rispondere non è una scelta, è una
+             * trappola.
+             *
+             * La domanda la fa il FILE, non il suo nome: dichiara degli strati
+             * o no. Filtrare «mmproj» sarebbe una stringa scritta a mano che
+             * lascia passare il prossimo proiettore chiamato altrimenti.
+             */
+            row.put("conversational", TalosLlamaEngine.isConversational(entry.path));
             models.put(row);
         }
         JSObject result = new JSObject();

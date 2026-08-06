@@ -437,7 +437,25 @@ export const localAdapter: TalosMobileProviderAdapter = {
         }
         return {
             provider: 'local',
-            models: files.map((file) => ({
+            /**
+             * ⛔ SOLO i file con cui si puo' PARLARE.
+             *
+             * Owner 2026-08-06: nel selettore compariva `mmproj-F16.gguf` — il
+             * proiettore che accompagna un modello visivo — e sceglierlo dava
+             * «questo file non puo' essere aperto come modello GGUF
+             * compatibile». MISURATO su un'app appena avviata: veniva perfino
+             * scelto **da solo**, perche' era il primo della lista.
+             *
+             * Resta visibile fra i file sul dispositivo, dove occupa 672 MB e
+             * dove chi vuole liberarli deve poterlo trovare. Ma un modello che
+             * non puo' rispondere non e' una scelta: e' una trappola.
+             *
+             * `!== false` e non `=== true`: un lato nativo piu' vecchio non
+             * dichiara niente, e nel dubbio si mostra. Nascondere un modello
+             * vero e' un danno che l'utente non puo' riparare; offrirne uno che
+             * non parla lo dice aprendosi, con un errore che almeno si legge.
+             */
+            models: files.filter((file) => file.conversational !== false).map((file) => ({
                 // The path is the identity. Two models can share a filename
                 // across repositories, and a name that collides would load the
                 // wrong weights without anything looking wrong.
