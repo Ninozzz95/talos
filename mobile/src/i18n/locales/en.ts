@@ -1183,6 +1183,7 @@ export const TALOS_EN_MESSAGES = {
         localModelOpenSampler: 'The local engine cannot prepare this model. Choose another compatible variant.',
         localModelOpenUnknown: 'TALOS could not open the local model. Restart the app or choose another model.',
         localPromptTooLong: 'This conversation and its tools need more context than TALOS can safely allocate on this device. Start a new chat or disable tools you do not need.',
+        localPromptTooLongMeasured: 'This conversation and its tools need about {required} tokens, and this device can safely give this model {available}. Start a new chat, or turn off tools you do not need.',
         localModelGenerationFailed: 'The local model stopped while generating. Retry once; if it happens again, choose another compatible model.',
         invalidPreferences: 'TALOS rejected invalid Model Lab preferences.',
         selectedMissing: 'The selected model no longer exists.',

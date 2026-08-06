@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import TalosMobileNotificationBell from '@/components/shell/TalosMobileNotificationBell.vue'
 import { computed, defineAsyncComponent, nextTick, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import {
@@ -19,6 +18,9 @@ import {
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
 
+const TalosMobileNotificationBell = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileNotificationBell.vue'),
+)
 const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
 )

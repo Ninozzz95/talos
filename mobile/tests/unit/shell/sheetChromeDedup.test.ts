@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { h } from 'vue'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
@@ -10,6 +10,26 @@ import TalosMobileSettingsCenter from '@/components/talos/settings/TalosMobileSe
 // F3-T3 (owner #10 + SF-critic #10): ONE title per surface. Screens presented
 // inside the tool sheet drop their own duplicate header; standalone screens
 // keep it. The settings category pane no longer repeats a second heading.
+/*
+ * Le due icone della barra sono componenti ASINCRONI, e questi casi non le
+ * riguardano: montandole per davvero, il loro grafo di moduli continua a
+ * caricarsi mentre il caso e' gia' finito, e Vitest lo segnala come rifiuto non
+ * gestito («after the environment was torn down»).
+ *
+ * Si sostituisce il MODULO e non il componente: in `<script setup>` i componenti
+ * sono riferimenti diretti e non nomi, quindi `global.stubs` non li intercetta —
+ * provato, e infatti non funzionava.
+ *
+ * E sono asincroni per una ragione misurata: renderle sincrone per far tacere
+ * una prova costa **60 KB** nel grafo d'avvio, che ha meno di 3 KB di margine.
+ */
+vi.mock('@/components/shell/TalosMobileNotificationBell.vue', () => ({
+    default: { name: 'TalosMobileNotificationBell', render: () => null },
+}))
+vi.mock('@/components/shell/TalosMobileDownloadCenterTrigger.vue', () => ({
+    default: { name: 'TalosMobileDownloadCenterTrigger', render: () => null },
+}))
+
 describe('sheet chrome dedup (F3-T3)', () => {
     it('hides the screen header inside the tool sheet (sheet already titles it)', () => {
         const wrapper = mount(TalosMobileToolSheet, {

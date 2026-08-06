@@ -19,6 +19,26 @@ function sheet(props: Record<string, unknown> = {}) {
     })
 }
 
+/*
+ * Le due icone della barra sono componenti ASINCRONI, e questi casi non le
+ * riguardano: montandole per davvero, il loro grafo di moduli continua a
+ * caricarsi mentre il caso e' gia' finito, e Vitest lo segnala come rifiuto non
+ * gestito («after the environment was torn down»).
+ *
+ * Si sostituisce il MODULO e non il componente: in `<script setup>` i componenti
+ * sono riferimenti diretti e non nomi, quindi `global.stubs` non li intercetta —
+ * provato, e infatti non funzionava.
+ *
+ * E sono asincroni per una ragione misurata: renderle sincrone per far tacere
+ * una prova costa **60 KB** nel grafo d'avvio, che ha meno di 3 KB di margine.
+ */
+vi.mock('@/components/shell/TalosMobileNotificationBell.vue', () => ({
+    default: { name: 'TalosMobileNotificationBell', render: () => null },
+}))
+vi.mock('@/components/shell/TalosMobileDownloadCenterTrigger.vue', () => ({
+    default: { name: 'TalosMobileDownloadCenterTrigger', render: () => null },
+}))
+
 describe('il pulsante indietro in alto', () => {
     it('da una pagina di dettaglio risale di UN passo, non chiude tutto', async () => {
         const suGiu = vi.fn()
