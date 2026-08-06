@@ -12,13 +12,16 @@ import {
 describe('TALOS chat database schema', () => {
     it('AV-02 preserves version one and adds the independent Vault and authority schema in version two', () => {
         expect(TALOS_CHAT_DATABASE_NAME).toBe('talos_mobile')
-        expect(TALOS_CHAT_DATABASE_VERSION).toBe(5)
-        expect(TALOS_CHAT_DATABASE_UPGRADES).toHaveLength(5)
+        expect(TALOS_CHAT_DATABASE_VERSION).toBe(6)
+        expect(TALOS_CHAT_DATABASE_UPGRADES).toHaveLength(6)
         expect(TALOS_CHAT_DATABASE_UPGRADES[0]?.toVersion).toBe(1)
         expect(TALOS_CHAT_DATABASE_UPGRADES[1]?.toVersion).toBe(2)
         expect(TALOS_CHAT_DATABASE_UPGRADES[2]?.toVersion).toBe(3)
         expect(TALOS_CHAT_DATABASE_UPGRADES[3]?.toVersion).toBe(4)
         expect(TALOS_CHAT_DATABASE_UPGRADES[4]?.toVersion).toBe(5)
+        // La 6 insegna alle attività a ripetersi: tre colonne aggiunte a
+        // `talos_tasks`, nessuna tabella riscritta.
+        expect(TALOS_CHAT_DATABASE_UPGRADES[5]?.toVersion).toBe(6)
 
         const sql = TALOS_CHAT_DATABASE_UPGRADES.flatMap((upgrade) => upgrade.statements).join('\n')
         for (const table of [
@@ -93,7 +96,7 @@ describe('TALOS chat database schema', () => {
 
     it('keeps upgrades incremental and free of destructive database deletion', () => {
         const versions = TALOS_CHAT_DATABASE_UPGRADES.map((upgrade) => upgrade.toVersion)
-        expect(versions).toEqual([1, 2, 3, 4, 5])
+        expect(versions).toEqual([1, 2, 3, 4, 5, 6])
         const sql = TALOS_CHAT_DATABASE_UPGRADES.flatMap((upgrade) => upgrade.statements).join('\n')
         expect(sql).not.toMatch(/DROP\s+DATABASE/i)
         expect(sql).not.toMatch(/DELETE\s+FROM\s+talos_chat_sessions/i)

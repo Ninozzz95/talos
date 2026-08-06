@@ -862,6 +862,15 @@ export interface ChatController {
             description: string | null
             run_id: string | null
             priority: 'low' | 'normal' | 'high'
+            /**
+             * Facoltativi: senza, nasce un'attività come quelle di sempre. Con,
+             * TALOS la esegue da solo all'ora scelta — è la funzione
+             * «Pianificare», e vive sulla stessa entità perché «ricordami
+             * giovedì» e «ogni mattina alle 8» sono la stessa cosa vista due
+             * volte.
+             */
+            schedule_json?: string | null
+            instruction?: string | null
         }): Promise<import('@/repositories/chatRepository').TalosLocalTask>
         setStatus(taskId: string, status: 'todo' | 'doing' | 'done'): Promise<import('@/repositories/chatRepository').TalosLocalTask>
         remove(taskId: string): Promise<void>

@@ -49,13 +49,25 @@ export function createStationFacades(deps: TalosStationFacadesDeps) {
     // functional; the stations are the only writers).
     const tasks = {
         list: () => deps.repository.listTasks(),
-        create: (input: { title: string; description: string | null; run_id: string | null; priority: 'low' | 'normal' | 'high' }) =>
+        create: (input: {
+            title: string
+            description: string | null
+            run_id: string | null
+            priority: 'low' | 'normal' | 'high'
+            schedule_json?: string | null
+            instruction?: string | null
+        }) =>
             deps.repository.createTask({
                 id: newTalosMobileId(),
                 title: input.title,
                 description: input.description,
                 run_id: input.run_id,
                 priority: input.priority,
+                // Assente e nullo sono la stessa cosa: un'attività senza
+                // pianificazione. Il `?? null` lo dice una volta qui invece di
+                // lasciarlo decidere a ogni chiamante.
+                schedule_json: input.schedule_json ?? null,
+                instruction: input.instruction ?? null,
                 created_at: new Date().toISOString(),
             }),
         setStatus: (taskId: string, status: 'todo' | 'doing' | 'done') =>

@@ -1,7 +1,7 @@
 import type { capSQLiteVersionUpgrade } from '@capacitor-community/sqlite'
 
 export const TALOS_CHAT_DATABASE_NAME = 'talos_mobile'
-export const TALOS_CHAT_DATABASE_VERSION = 5
+export const TALOS_CHAT_DATABASE_VERSION = 6
 
 const VERSION_1_STATEMENTS = [
     `CREATE TABLE IF NOT EXISTS talos_chat_sessions (
@@ -248,6 +248,53 @@ const VERSION_5_STATEMENTS = [
         ON talos_research_events(run_id, seq);`,
 ] as const
 
+/**
+ * Le attività imparano a RIPETERSI.
+ *
+ * ## Cosa manca oggi
+ *
+ * Un'attività di TALOS è una riga con uno stato: da fare, in corso, fatta. È il
+ * modello di una lista della spesa, e va benissimo per quello. Ma l'owner ha
+ * chiesto la funzione «Pianificare» di ChatGPT, che è un'altra cosa: un'istruzione
+ * che TALOS esegue DA SOLO a un'ora stabilita, e il cui risultato arriva come
+ * notifica.
+ *
+ * ## Perché tre colonne e non una tabella nuova
+ *
+ * Perché sono la stessa entità vista due volte. «Ricordami di chiamare il
+ * commercialista giovedì» e «ogni mattina alle 8 riassumimi le notizie» sono
+ * tutte e due attività: la seconda ha in più un orario e un'istruzione. Una
+ * tabella separata avrebbe costretto ogni superficie — l'elenco, la ricerca, i
+ * tool della chat — a leggerne due e a fonderle a mano, per sempre.
+ *
+ * - `schedule_json`: NULL per un'attività normale. Quando c'è, dice quando
+ *   ripartire. JSON e non colonne separate perché la forma della ricorrenza
+ *   cambierà (giorni della settimana, fine, condizioni) e ogni cambiamento
+ *   sarebbe una migrazione; qui il contratto vive nel codice, dove è provato.
+ * - `instruction`: cosa chiedere al modello. Separata dalla descrizione perché
+ *   la descrizione la legge un umano e l'istruzione la esegue una macchina, e
+ *   confonderle significa mandare al modello degli appunti.
+ * - `last_run_at`: quando è partita l'ultima volta. Serve a NON rieseguire dopo
+ *   un riavvio, ed è l'unico modo di saperlo che sopravvive alla morte del
+ *   processo.
+ *
+ * `ALTER TABLE ADD COLUMN` con un default nullo non riscrive la tabella e non
+ * tocca una sola riga esistente: chi aggiorna trova le sue attività dov'erano.
+ */
+const VERSION_6_STATEMENTS = [
+    `ALTER TABLE talos_tasks ADD COLUMN schedule_json TEXT NULL;`,
+    `ALTER TABLE talos_tasks ADD COLUMN instruction TEXT NULL;`,
+    `ALTER TABLE talos_tasks ADD COLUMN last_run_at TEXT NULL;`,
+    /*
+     * L'indice guarda `schedule_json`, non lo stato: chi cerca «cosa deve
+     * partire» scorre solo le attività pianificate, che saranno sempre una
+     * frazione. Senza, ogni risveglio del programmatore leggerebbe l'intera
+     * tabella per scartarne quasi tutto.
+     */
+    `CREATE INDEX IF NOT EXISTS talos_tasks_scheduled_idx
+        ON talos_tasks(schedule_json, updated_at DESC, id);`,
+] as const
+
 export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = Object.freeze([
     Object.freeze({
         toVersion: 1,
@@ -268,5 +315,9 @@ export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = 
     Object.freeze({
         toVersion: 5,
         statements: [...VERSION_5_STATEMENTS],
+    }),
+    Object.freeze({
+        toVersion: 6,
+        statements: [...VERSION_6_STATEMENTS],
     }),
 ])

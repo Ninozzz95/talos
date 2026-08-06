@@ -262,6 +262,23 @@ export interface TalosLocalTask {
     run_id: string | null
     priority: TalosTaskPriority
     status: TalosTaskStatus
+    /**
+     * Quando ripartire da sola, in JSON — `null` per un'attività normale.
+     *
+     * Resta una stringa fin qui: il contratto della pianificazione vive in
+     * `lib/tasks/schedule.ts`, dov'è provato, e il repository non deve
+     * conoscerlo per salvarlo. Chi la legge la passa a `talosParseSchedule`,
+     * che risponde `null` a qualunque cosa non abbia capito.
+     */
+    schedule_json: string | null
+    /**
+     * Cosa chiedere al modello quando parte. Separata dalla descrizione perché
+     * la descrizione la legge un umano e questa la esegue una macchina:
+     * confonderle significa mandare al modello degli appunti.
+     */
+    instruction: string | null
+    /** Quando è partita l'ultima volta. Serve a NON rieseguire dopo un riavvio. */
+    last_run_at: string | null
     created_at: string
     updated_at: string
 }
@@ -273,6 +290,9 @@ export interface CreateTaskInput {
     run_id: string | null
     priority: TalosTaskPriority
     created_at: string
+    /** Facoltativi: senza, nasce un'attività come quelle di prima. */
+    schedule_json?: string | null
+    instruction?: string | null
 }
 
 export interface TalosLocalNote {

@@ -454,6 +454,9 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 run_id: input.run_id,
                 priority: input.priority,
                 status: 'todo',
+                schedule_json: input.schedule_json ?? null,
+                instruction: input.instruction ?? null,
+                last_run_at: null,
                 created_at: input.created_at,
                 updated_at: input.created_at,
             }
