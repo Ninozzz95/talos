@@ -46,8 +46,13 @@ describe('router wiring', () => {
             // Ogni stazione-elenco ha ora la sua pagina di dettaglio, come la
             // Ricerca. Owner 2026-08-04: «ogni scheda apre una pagina dedicata,
             // Indietro va alla precedente, dev'essere lineare».
-            'memory', 'memory-item',
-            'tasks', 'task-item',
+            // `/new` PRIMA di `/:id` ovunque: al contrario il parametro si
+            // mangia «new» e il ventaglio aprirebbe una scheda inesistente.
+            // Memoria e Attività hanno la loro pagina di creazione dal
+            // 2026-08-06, quando il FAB della sidebar è diventato un ventaglio
+            // che deve poter cominciare CIASCUNA delle cinque cose.
+            'memory', 'memory-new', 'memory-item',
+            'tasks', 'task-new', 'task-item',
             // `/notes/new` PRIMA di `/notes/:id`: al contrario il parametro si
             // mangia «new» e il FAB aprirebbe una nota che non esiste.
             'notes', 'note-new', 'note-item',

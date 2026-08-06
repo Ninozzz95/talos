@@ -678,7 +678,12 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     // each page titles itself, and repeating that title twice on a phone spends
     // the one line of chrome there is on saying the same thing.
     'research-new': 'research.newTitle',
+    // Le pagine di creazione dicono cosa STANNO creando, e non il nome della
+    // stazione: qui la cornice è l'unica cosa che distingue «una nota nuova»
+    // dall'elenco delle note che sta dietro.
     'note-new': 'notes.add',
+    'memory-new': 'memory.newMemory',
+    'task-new': 'tasks.add',
     'research-report': 'stations.deepResearchTitle',
     // These two DO name themselves: on the device the sheet header wins over
     // the screen's own title, so leaving the station's name there made a claim

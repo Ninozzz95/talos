@@ -1636,6 +1636,16 @@ export const TALOS_EN_MESSAGES = {
         markAll: 'Mark everything as seen',
         repeats: 'updated {count} times',
     },
+    speedDial: {
+        new: 'New',
+        open: 'Start something new',
+        close: 'Close the list',
+        chat: 'Chat',
+        research: 'Research',
+        note: 'Note',
+        memory: 'Memory',
+        task: 'Task',
+    },
     notes: {
         noMatches: 'No note matches that search.',
         viewLabel: 'How notes are shown',
