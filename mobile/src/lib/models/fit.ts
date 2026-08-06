@@ -206,9 +206,28 @@ export function talosMaxContextFor(
     const budget = Math.min(share, resident)
     if (budget <= 0) return 0
     const raw = Math.floor(budget / kvBytesPerToken(model))
-    // Rounded down to a power-of-two-ish step, because a context of 6143 is a
-    // number no one chose and every engine pads anyway.
-    const stepped = 2 ** Math.floor(Math.log2(Math.max(raw, 1)))
+    /**
+     * Arrotondato a un multiplo di 256, NON a una potenza di due.
+     *
+     * ## Quanto costava la vecchia regola
+     *
+     * MISURATO sul OnePlus Pad 3 il 2026-08-06, con Qwen3-1.7B-Q8_0 caricato:
+     * il budget dava **15.379 token**, e la potenza di due li tagliava a
+     * **8192**. Quarantasette per cento della memoria utilizzabile buttato via —
+     * e su quel dispositivo, in quel momento, era esattamente la differenza fra
+     * la conversazione dell'owner che passa e `PROVIDER_CHAT_FAILED`.
+     *
+     * Il commento che c'era diceva: «un contesto di 6143 è un numero che non ha
+     * scelto nessuno, e ogni motore fa padding comunque». La prima metà è vera,
+     * la seconda non giustifica il salto: llama.cpp non pretende potenze di due,
+     * e il padding riguarda i batch, non `n_ctx`.
+     *
+     * 256 tiene la cifra tonda — 15.360 invece di 15.379 — e costa al massimo
+     * 255 token invece di quasi la metà. La tidiness si paga con lo 0,2%, non
+     * con il 47%.
+     */
+    const PASSO = 256
+    const stepped = Math.floor(raw / PASSO) * PASSO
     return Math.max(0, Math.min(stepped, model.trainedContext))
 }
 
