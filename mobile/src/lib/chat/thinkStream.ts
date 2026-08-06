@@ -117,3 +117,47 @@ export function talosCreateThinkSplitter(): TalosThinkSplitter {
         },
     }
 }
+
+/**
+ * Ripulisce un testo GIÀ COMPLETO dai marcatori, e dice dove va ciascuna metà.
+ *
+ * Serve per il risultato **finale**, che non passa dallo stream: il ponte
+ * nativo restituisce `text` e `reasoning` separati da `common_chat_parse`, e su
+ * alcuni modelli quella separazione lascia il tag dentro.
+ *
+ * Visto sul tablet il 2026-08-06 con **Qwen3-MoE-6x0.6B**: la sezione
+ * «Ragionamento» cominciava con `<think> Okay, let's look at…`. Lo streaming era
+ * corretto — era il testo salvato a portarsi dietro il marcatore, e quello è
+ * ciò che si rilegge riaprendo la chat, cioè per sempre.
+ *
+ * Perché non basta una `replace` dei due tag: perché un `<think>` aperto e mai
+ * chiuso lascerebbe il ragionamento nella bolla della risposta. Qui si riusa lo
+ * stesso separatore dello stream, che quel caso lo sa già gestire — una regola
+ * sola, provata una volta.
+ */
+export function talosSplitFinalThink(
+    text: string | null | undefined,
+    reasoning: string | null | undefined,
+): TalosThinkSlice {
+    const separatore = talosCreateThinkSplitter()
+    const dallo = separatore.push(text ?? '')
+    const coda = separatore.flush()
+
+    /*
+     * Il ragionamento nativo passa dal separatore anche lui, e si tiene ENTRAMBE
+     * le metà: se `common_chat_parse` ha messo lì dentro un blocco `<think>`,
+     * quello che sta fuori dal blocco è ragionamento comunque — è arrivato sul
+     * canale del ragionamento, e buttarlo perderebbe testo.
+     */
+    const nativo = talosCreateThinkSplitter()
+    const dalNativo = nativo.push(reasoning ?? '')
+    const codaNativa = nativo.flush()
+    const ragionamentoNativo = dalNativo.reasoning + codaNativa.reasoning
+        + dalNativo.text + codaNativa.text
+
+    return {
+        text: dallo.text + coda.text,
+        reasoning: ragionamentoNativo + dallo.reasoning + coda.reasoning,
+    }
+}
+

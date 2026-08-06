@@ -13,6 +13,16 @@ import {
     type TalosToolDefinition,
     type TalosToolResult,
 } from '@/lib/tools/registry'
+import {
+    TALOS_EMPTY_CHAIN,
+    TALOS_TOOL_SECURITY_FALLBACK,
+    talosAdvanceChain,
+    talosEffectiveRisk,
+    talosForbidsPersistentGrant,
+    talosTrifectaVerdict,
+    type TalosToolChainState,
+} from '@/lib/tools/security'
+import { TALOS_TOOL_SECURITY } from '@/lib/tools/securityCatalog'
 
 /**
  * The permission gate and the one place a tool is ever executed.
@@ -44,6 +54,17 @@ export interface TalosToolConsentRequest {
     callId: string
     inputDigest: string
     allowPersistent: boolean
+    /**
+     * Perché si sta chiedendo, quando la ragione non è il permesso di base.
+     *
+     * `trifecta` significa: in questa conversazione sono già entrati dati tuoi
+     * e testo scritto da altri, e questo tool può far uscire qualcosa. La
+     * scheda deve DIRLO — una domanda in più senza una ragione in più è solo
+     * un'altra finestra da chiudere in fretta.
+     */
+    reason?: 'trifecta'
+    /** Il rischio EFFETTIVO, catena inclusa. Non quello dichiarato dal tool. */
+    risk?: 'R0' | 'R1' | 'R2' | 'R3' | 'R4'
 }
 
 export interface TalosToolAuditRow {
@@ -53,6 +74,10 @@ export interface TalosToolAuditRow {
     requiredActions: readonly TalosToolAction[]
     /** `refused_busy` is OURS, not the user's: see the consent bridge. */
     status: 'succeeded' | 'failed' | 'denied' | 'refused_busy'
+    /** Il rischio effettivo al momento della chiamata, catena inclusa. */
+    risk?: 'R0' | 'R1' | 'R2' | 'R3' | 'R4'
+    /** Vero quando le tre condizioni della trifecta erano tutte presenti. */
+    trifecta?: boolean
     input: unknown
     /** Kept for the record, not shown to the model. */
     evidence?: Record<string, unknown>
@@ -76,6 +101,27 @@ export interface TalosToolExecutionDeps {
     requestConsent(request: TalosToolConsentRequest): Promise<boolean | 'busy'>
     audit(row: TalosToolAuditRow): Promise<void>
     context: TalosToolContext
+    /**
+     * Che cosa è già passato in questa conversazione.
+     *
+     * Non è uno stato del tool: è uno stato del DISCORSO. Una pagina web letta
+     * dieci messaggi fa conta ancora, ed è esattamente il punto — se la
+     * provenienza non sopravvive, il sistema considera pulito un dato che non
+     * lo è.
+     */
+    chain?: TalosToolChainState
+    /** Chiamato dopo un'esecuzione RIUSCITA, con la catena aggiornata. */
+    onChain?(next: TalosToolChainState): void
+}
+
+/**
+ * Cosa questo tool fa davvero. Sconosciuto ⇒ il predefinito prudente, mai il
+ * permissivo: un tool che nessuno ha dichiarato non deve poter passare per
+ * innocuo solo perché non lo si conosce.
+ */
+function securityOf(name: string) {
+    return TALOS_TOOL_SECURITY[name as keyof typeof TALOS_TOOL_SECURITY]
+        ?? TALOS_TOOL_SECURITY_FALLBACK
 }
 
 export type TalosToolExecutionPreflight =
@@ -201,6 +247,25 @@ export async function preflightTalosToolExecution(
             },
         }
     }
+    /*
+     * La trifecta, calcolata QUI e non nel modello.
+     *
+     * Il rischio grave non appartiene a un tool: appartiene alla catena. Se in
+     * questa conversazione sono già entrati dati privati E contenuto scritto da
+     * altri, e adesso parte qualcosa che può farli uscire, il permesso di base
+     * non basta più — nemmeno un «consenti sempre» dato in un momento in cui
+     * quelle condizioni non c'erano.
+     *
+     * Si CHIEDE, non si blocca. Un blocco senza via d'uscita produce
+     * aggiramento: chi vuole davvero cercare sul web una cosa letta in una nota
+     * finirebbe per spegnere la protezione, e a quel punto non protegge niente.
+     * Ma la domanda deve dire PERCHÉ, o è solo un'altra finestra da chiudere.
+     */
+    const chain = deps.chain ?? TALOS_EMPTY_CHAIN
+    const security = securityOf(tool.name)
+    const trifecta = talosTrifectaVerdict(chain, security)
+    const effectiveRisk = talosEffectiveRisk(chain, security)
+
     const resolution = resolveTalosToolAuthorization({
         tool: tool.name,
         requiredActions,
@@ -209,7 +274,7 @@ export async function preflightTalosToolExecution(
         callId: deps.callId ?? `legacy:${tool.name}`,
         inputDigest,
         request: deps.authorizationRequest,
-        forceConfirmation: tool.confirmation === 'always',
+        forceConfirmation: tool.confirmation === 'always' || trifecta.closed,
     })
     if (resolution.status === 'denied' && resolution.source === 'policy') {
         const message = `Refused: "${tool.title}" requires ${requiredActions.join(' + ')} permission, and your policy denies ${resolution.actions.join(' + ')}. Ask the user to change it in Settings if it is really needed.`
@@ -255,7 +320,13 @@ export async function preflightTalosToolExecution(
                 input: parsed.value,
                 callId: deps.callId ?? `legacy:${tool.name}`,
                 inputDigest,
-                allowPersistent: resolution.allow_persistent,
+                // Su R4 «consenti sempre» non esiste, e vale anche quando a R4
+                // ci si arriva PER VIA DELLA CATENA — che è il caso che nessuno
+                // aveva previsto scrivendo il tool.
+                allowPersistent: resolution.allow_persistent
+                    && !talosForbidsPersistentGrant(effectiveRisk),
+                ...(trifecta.closed ? { reason: 'trifecta' as const } : {}),
+                risk: effectiveRisk,
             },
         }
     }
@@ -311,8 +382,22 @@ export async function executeTalosTool(
         }
     }
 
+    const security = securityOf(tool.name)
     try {
         const result = await tool.run(input as never, deps.context)
+        if (result.ok) {
+            /*
+             * La catena avanza SOLO se il tool è riuscito.
+             *
+             * Un tool fallito non ha portato dentro niente: contarlo
+             * significherebbe contaminare il discorso per una pagina che non si
+             * è riusciti a leggere, e far scattare la trifecta su un nulla.
+             */
+            const avanzata = talosAdvanceChain(deps.chain ?? TALOS_EMPTY_CHAIN, security)
+            if (avanzata !== (deps.chain ?? TALOS_EMPTY_CHAIN)) {
+                try { deps.onChain?.(avanzata) } catch { /* la catena non rompe il tool */ }
+            }
+        }
         const wrapped: TalosToolResult = result.ok
             ? { ...result, content: wrapUntrusted(result.content) }
             // A refusal or an error is OUR text, not the document's: wrapping it
