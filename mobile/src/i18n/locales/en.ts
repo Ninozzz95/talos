@@ -1408,6 +1408,9 @@ export const TALOS_EN_MESSAGES = {
         displayNameTitle: 'Display name',
     },
     localModels: {
+            tabsLabel: 'Models: where to look',
+            tabInstalled: 'This device',
+            tabHub: 'Hugging Face',
         invalidRepo: 'This model repository address is invalid. Return to Local models and open it again.',
         importedTitle: 'Model imported',
         importFinished: 'The model has been copied onto this device and is ready.',

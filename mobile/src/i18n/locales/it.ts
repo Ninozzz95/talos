@@ -1414,6 +1414,9 @@ export const TALOS_IT_MESSAGES = {
         displayNameTitle: 'Nome visualizzato',
     },
     localModels: {
+            tabsLabel: 'Modelli: dove guardare',
+            tabInstalled: 'Questo dispositivo',
+            tabHub: 'Hugging Face',
         invalidRepo: 'L’indirizzo di questo repository non è valido. Torna ai modelli locali e riaprilo.',
         importedTitle: 'Modello importato',
         importFinished: 'Il modello è stato copiato su questo dispositivo ed è pronto.',

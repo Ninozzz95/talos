@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 
@@ -60,6 +60,7 @@ vi.mock('@/services/localEngine', () => ({
     talosLocalEngineStatus: vi.fn(async () => null),
     talosLocalInstalledModels: engine.list,
 }))
+
 
 import TalosMobileLocalModels from '@/components/talos/models/TalosMobileLocalModels.vue'
 import TalosMobileLocalRepoDetail from '@/components/talos/models/TalosMobileLocalRepoDetail.vue'
@@ -190,9 +191,40 @@ beforeEach(() => {
     store.state = baseState() as never
 })
 
-async function screen() {
+/**
+ * Monta la schermata e si mette sulla tab richiesta.
+ *
+ * Owner 2026-08-06: la schermata è divisa in due — «questo dispositivo» e
+ * «Hugging Face». Il pannello inattivo **non viene montato**, che è il punto
+ * delle tab: chi entra per liberare spazio non paga il rendering di un catalogo
+ * che non ha chiesto.
+ *
+ * Il valore predefinito è `hub` perché quasi tutte le prove di questo file
+ * parlano del catalogo remoto; quelle sull'installato lo dicono esplicitamente,
+ * ed è giusto che si legga nel test quale delle due superfici sta guardando.
+ */
+/**
+ * I montaggi vivi, da smontare fra un test e l'altro.
+ *
+ * Da quando si monta dentro il documento — serve a Reka per gestire il
+ * puntatore sulle tab — i nodi restano nel body e i menu teleportati di un test
+ * vengono trovati da quello dopo. Un test che cerca «il primo menu nel
+ * documento» diventa allora dipendente dall'ordine, che è il modo peggiore di
+ * essere rosso.
+ */
+const montati: Array<{ unmount: () => void }> = []
+
+afterEach(() => {
+    while (montati.length) montati.pop()?.unmount()
+    document.body.innerHTML = ''
+})
+
+async function screen(tab: 'installed' | 'hub' = 'hub') {
     const currentRepo = (store.state as { repo?: { id: string, revision: string } | null }).repo
     const wrapper = mount(currentRepo ? TalosMobileLocalRepoDetail : TalosMobileLocalModels, {
+        // Nel documento: Reka gestisce il puntatore sui trigger delle tab e
+        // senza un nodo attaccato l'attivazione non arriva mai.
+        attachTo: document.body,
         ...(currentRepo ? { props: { repoId: currentRepo.id, revision: currentRepo.revision } } : {}),
         global: {
             stubs: {
@@ -204,6 +236,20 @@ async function screen() {
         },
     })
     await flushPromises()
+    // La pagina di dettaglio di un repository non ha tab: è già una pagina sola.
+    if (!currentRepo && tab === 'hub') {
+        const trigger = wrapper.find('[data-talos-tab="hub"]')
+        if (trigger.exists()) {
+            // Reka commette su `pointerdown`: un click nudo non lo raggiunge —
+            // stessa tecnica del test delle tab della Diagnostica.
+            const nodo = trigger.element as HTMLElement
+            nodo.focus()
+            nodo.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
+            nodo.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+            await flushPromises()
+        }
+    }
+    montati.push(wrapper)
     return wrapper
 }
 
@@ -229,7 +275,9 @@ async function searchScreen() {
 describe('the space a row is allowed to cost', () => {
     it('C45-RED-09C omits the whole installed section after a valid zero scan', async () => {
         engine.installed = []
-        const wrapper = await screen()
+        // Sulla tab del dispositivo: è lì che vive «aggiungi un modello dal
+        // telefono», ed è la cosa che deve restare quando non c'è nient'altro.
+        const wrapper = await screen('installed')
 
         expect(wrapper.find('[data-testid="talos-models-installed"]').exists()).toBe(false)
         expect(wrapper.find('[data-testid="talos-models-installed-empty"]').exists()).toBe(false)
@@ -238,7 +286,7 @@ describe('the space a row is allowed to cost', () => {
 
     it('C45-RED-09C renders the installed section as soon as one model exists', async () => {
         engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
 
         expect(wrapper.find('[data-testid="talos-models-installed"]').exists()).toBe(true)
         expect(wrapper.findAll('[data-testid="talos-models-installed-row"]')).toHaveLength(1)
@@ -246,20 +294,20 @@ describe('the space a row is allowed to cost', () => {
 
     it('C45-RED-12A renders a singular count for one installed model and plural for two', async () => {
         engine.installed = [installed('uno.gguf', 'imported')]
-        let wrapper = await screen()
+        let wrapper = await screen('installed')
 
         expect(wrapper.get('[data-testid="talos-models-installed"]').text()).toContain('1 model')
         expect(wrapper.get('[data-testid="talos-models-installed"]').text()).not.toContain('1 models')
         wrapper.unmount()
 
         engine.installed = [installed('uno.gguf', 'imported'), installed('due.gguf', 'main')]
-        wrapper = await screen()
+        wrapper = await screen('installed')
         expect(wrapper.get('[data-testid="talos-models-installed"]').text()).toContain('2 models')
     })
 
     it('C45-RED-09C does not misreport a failed scan as a valid empty device', async () => {
         engine.list.mockRejectedValueOnce(new Error('filesystem refused'))
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
 
         expect(wrapper.find('[data-testid="talos-models-installed-empty"]').exists()).toBe(false)
         expect(wrapper.get('[data-testid="talos-models-installed-error"]').attributes('role')).toBe('alert')
@@ -267,7 +315,7 @@ describe('the space a row is allowed to cost', () => {
 
     it('drops the address every model shares and keeps the folder that differs', async () => {
         engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
 
         const row = wrapper.get('[data-testid="talos-models-installed-row"]')
         // The whole path used to be printed in monospace, wrapping to three
@@ -284,7 +332,7 @@ describe('the space a row is allowed to cost', () => {
         // Proved end to end on the tablet 2026-08-03 — tapped, then pasted back
         // out of the Android clipboard, character for character.
         engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
 
         expect(wrapper.find('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').exists())
             .toBe(true)
@@ -300,7 +348,7 @@ describe('the space a row is allowed to cost', () => {
         const clipboard = { writeText: vi.fn(async () => { throw new Error('denied') }) }
         Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true })
         engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
 
         await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
         await flushPromises()
@@ -321,7 +369,7 @@ describe('the space a row is allowed to cost', () => {
         const clipboard = { writeText: vi.fn(async () => undefined) }
         Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true })
         engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
 
         await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
         await flushPromises()
@@ -342,7 +390,7 @@ describe('the space a row is allowed to cost', () => {
 
     it('draws no search, no sort and no layout switch over a single model', async () => {
         engine.installed = [installed('solo.gguf', 'imported')]
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
 
         expect(wrapper.findAll('[data-testid="talos-models-installed-row"]')).toHaveLength(1)
         expect(wrapper.find('[data-testid="talos-models-installed-search"]').exists()).toBe(false)
@@ -352,7 +400,7 @@ describe('the space a row is allowed to cost', () => {
 
     it('brings them back as soon as there is more than one thing to order', async () => {
         engine.installed = [installed('uno.gguf', 'imported'), installed('due.gguf', 'main')]
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
 
         expect(wrapper.find('[data-testid="talos-models-installed-search"]').exists()).toBe(true)
         expect(wrapper.find('[data-testid="talos-models-installed-sort-recent"]').exists()).toBe(true)
@@ -361,7 +409,7 @@ describe('the space a row is allowed to cost', () => {
 
     it('C45-RED-12 groups installed models into one continuous divided surface', async () => {
         engine.installed = [installed('uno.gguf', 'imported'), installed('due.gguf', 'main')]
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
         const list = wrapper.get('[data-testid="talos-models-installed-list"]')
 
         expect(list.classes()).toContain('overflow-hidden')
@@ -386,7 +434,7 @@ describe('an ordering the panel is allowed to remember', () => {
         await settings.setShell({ models_sort: 'size' })
         engine.installed = [installed('uno.gguf', 'imported'), installed('due.gguf', 'main')]
 
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
 
         expect(wrapper.get('[data-testid="talos-models-installed-sort-size"]').attributes('aria-checked'))
             .toBe('true')
@@ -399,7 +447,7 @@ describe('an ordering the panel is allowed to remember', () => {
         await settings.setShell({ models_sort: 'recent' })
         engine.installed = [installed('uno.gguf', 'imported'), installed('due.gguf', 'main')]
 
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
         await wrapper.get('[data-testid="talos-models-installed-sort-name"]').trigger('click')
         await flushPromises()
 
@@ -788,10 +836,20 @@ describe('a download in flight', () => {
             },
         }) as never
         const interval = vi.spyOn(globalThis, 'setInterval')
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
 
         try {
-            expect(interval).not.toHaveBeenCalled()
+            /*
+             * Non «zero intervalli in tutto il componente»: dal 2026-08-06 la
+             * schermata ha due tab, e la striscia ne usa uno suo per far
+             * scorrere l'indicatore. Quello che questo test difende è un'altra
+             * cosa — che i TRASFERIMENTI non vengano seguiti da qui, perché
+             * quel lavoro è del Centro download.
+             *
+             * Perciò si guarda ciò che conta davvero: nessun comando di
+             * trasferimento in questa schermata.
+             */
+            expect(interval.mock.calls.length).toBeLessThanOrEqual(1)
             expect(wrapper.find('[data-testid="talos-models-transfer"]').exists()).toBe(false)
             expect(wrapper.find('[data-testid="talos-models-stop"]').exists()).toBe(false)
             expect(wrapper.find('[data-testid="talos-models-resume"]').exists()).toBe(false)
@@ -864,7 +922,7 @@ describe('starting one', () => {
 describe('dare un nome a un modello, e toglierlo', () => {
     it('C45-RED-12B keeps import and every installed-model dialog action on the 48dp token', async () => {
         engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
         const target = 'min-h-touch'
 
         expect(wrapper.get('[data-testid="talos-models-import"]').classes()).toContain(target)
@@ -892,7 +950,7 @@ describe('dare un nome a un modello, e toglierlo', () => {
 
     it('la riga offre rinomina, copia ed elimina — non solo la copia', async () => {
         engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
         await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
         await flushPromises()
 
@@ -909,7 +967,7 @@ describe('dare un nome a un modello, e toglierlo', () => {
          * allo stesso modo.
          */
         engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
         await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
         await flushPromises()
         document.querySelector<HTMLElement>('[data-testid^="talos-models-rename-"]')!
@@ -930,7 +988,7 @@ describe('dare un nome a un modello, e toglierlo', () => {
     it('la conferma di eliminazione dice quanti GIGABYTE tornano', async () => {
         // «Eliminare il modello?» non fa pensare a un'ora di scaricamento.
         engine.installed = [installed('Qwen3-4B-Q4_K_M.gguf', 'imported')]
-        const wrapper = await screen()
+        const wrapper = await screen('installed')
         await wrapper.get('[data-testid="talos-models-installed-menu-Qwen3-4B-Q4_K_M.gguf"]').trigger('click')
         await flushPromises()
         document.querySelector<HTMLElement>('[data-testid^="talos-models-delete-"]')!
