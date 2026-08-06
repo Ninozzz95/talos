@@ -10,6 +10,18 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/non-fermarti.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Controllo che la fermata serva davvero..."
+          }
+        ]
+      }
     ]
   }
 }
