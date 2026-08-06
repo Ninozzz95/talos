@@ -28,6 +28,9 @@ import {
     talosSetBrowseSearchOpen,
     talosSetBrowseTab,
     talosSetInstalledFitsOnly,
+    talosSetBrowseProvider,
+    talosSetBrowseWeightBand,
+    talosSetInstalledQuery,
     talosSearchLocalModels,
     talosRefreshLeftovers,
     talosRefreshHuggingFaceToken,
@@ -184,7 +187,24 @@ function osserva(): void {
     const sentinella = sentinellaPagina.value
     if (!sentinella) return
     osservatorePagina = new IntersectionObserver((voci) => {
-        if (voci.some((voce) => voce.isIntersecting)) loadMore()
+        if (!voci.some((voce) => voce.isIntersecting)) return
+        /*
+         * ⛔ Non si insegue una pagina che i filtri nascondono comunque.
+         *
+         * Visto sul dispositivo in viewport telefono il 2026-08-06, con quattro
+         * filtri incastrati: la lista mostrava «0 risultati con questi filtri» e
+         * sotto girava «Sto caricando altri modelli…» **senza mai fermarsi**. La
+         * sentinella resta visibile proprio perché non c'è nulla sopra di lei,
+         * quindi ogni pagina che arriva ne chiede subito un'altra: un ciclo che
+         * consuma rete e batteria per non mostrare niente.
+         *
+         * Quando il filtro sta nascondendo TUTTO, il caricamento automatico si
+         * ferma e resta il comando esplicito — che è la scelta giusta anche dal
+         * punto di vista di chi guarda: la risposta non è «altri modelli», è
+         * «allarga i filtri», e infatti lì accanto c'è già «Reimposta filtri».
+         */
+        if (store.results.length > 0 && visibleResultCount.value === 0) return
+        loadMore()
     }, { root: contenitoreCheScorre(sentinella), rootMargin: '600px 0px' })
     osservatorePagina.observe(sentinella)
 }
@@ -313,7 +333,10 @@ const refused = ref<string | null>(null)
  */
 const installed = ref<readonly TalosLocalModelFile[]>([])
 const unreadable = ref<readonly { path: string, reason: string }[]>([])
-const installedQuery = ref('')
+const installedQuery = computed({
+    get: () => store.installedQuery,
+    set: (valore: string) => { talosSetInstalledQuery(valore) },
+})
 /**
  * Remembered, like the Library remembers its own.
  *
@@ -586,7 +609,10 @@ async function reclaim(): Promise<void> {
  * publishes GGUF changes every few months, and a list compiled into an APK is
  * wrong by the time somebody installs it.
  */
-const providerFilter = ref('')
+const providerFilter = computed({
+    get: () => store.browseProvider,
+    set: (valore: string) => { talosSetBrowseProvider(valore) },
+})
 
 /**
  * I filtri accesi. Owner 2026-08-04, dal mockup approvato.
@@ -632,7 +658,10 @@ function commutaFiltro(id: TalosBrowseFilterId): void {
  * vuole utente». E' a scelta SINGOLA — una taglia per volta — quindi vive coi
  * selettori e non fra i chip, che sono interruttori che si sommano.
  */
-const fasciaPeso = ref<TalosWeightBandId | ''>('')
+const fasciaPeso = computed<TalosWeightBandId | ''>({
+    get: () => store.browseWeightBand as TalosWeightBandId | '',
+    set: (valore) => { talosSetBrowseWeightBand(valore) },
+})
 
 const fascePeso = computed(() => TALOS_WEIGHT_BANDS.map((id) => ({
     value: id,

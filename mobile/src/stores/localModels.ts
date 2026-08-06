@@ -121,6 +121,23 @@ export interface TalosLocalModelsState {
      */
     browseTab: string
     installedFitsOnly: boolean
+    /**
+     * ⛔ **I DUE che l'owner usa davvero**: l'autore e la fascia di peso.
+     *
+     * Owner 2026-08-06, la seconda volta sullo stesso difetto: «vado sui
+     * modelli, sull'area Hugging Face, imposto che ne so, più scaricati, è da
+     * uno a quattro miliardi, clicco su un modello, poi torno indietro sia da
+     * gesture che dal pulsante in alto a sinistra e mi annulla i filtri».
+     *
+     * La prima correzione aveva spostato le PILLOLE e lasciato i due MENU A
+     * TENDINA — e i menu sono quelli che si usano per restringere sul serio.
+     * Provare metà di una schermata e dichiararla a posto è lo stesso errore
+     * di non provarla affatto.
+     */
+    browseProvider: string
+    browseWeightBand: string
+    /** La ricerca fra i modelli già scaricati, che si perdeva allo stesso modo. */
+    installedQuery: string
     /** Come ordinare la lista sfogliata. I nomi sono quelli del Hub. */
     sort: TalosHuggingFaceSort
     searching: boolean
@@ -175,6 +192,9 @@ const state = reactive<TalosLocalModelsState>({
     browseSearchOpen: false,
     browseTab: 'installed',
     installedFitsOnly: false,
+    browseProvider: '',
+    browseWeightBand: '',
+    installedQuery: '',
     query: '',
     /*
      * L'ordinamento della lista sfogliata.
@@ -236,6 +256,18 @@ export function talosSetBrowseTab(tab: string): void {
 
 export function talosSetInstalledFitsOnly(only: boolean): void {
     state.installedFitsOnly = only
+}
+
+export function talosSetBrowseProvider(provider: string): void {
+    state.browseProvider = provider
+}
+
+export function talosSetBrowseWeightBand(band: string): void {
+    state.browseWeightBand = band
+}
+
+export function talosSetInstalledQuery(query: string): void {
+    state.installedQuery = query
 }
 
 let client: TalosHuggingFaceClient | null = null

@@ -43,6 +43,12 @@ describe('quello che la schermata dei modelli ricorda', () => {
         store.talosSetBrowseSearchOpen(true)
         // …e sul dispositivo si tiene solo quello che ci sta.
         store.talosSetInstalledFitsOnly(true)
+        // ⛔ I DUE che l'owner usa davvero, e che la prima correzione aveva
+        // lasciato indietro: l'autore e la fascia di peso. Sono menu a tendina,
+        // non pillole — e sono quelli con cui si restringe sul serio.
+        store.talosSetBrowseProvider('unsloth')
+        store.talosSetBrowseWeightBand('1-4b')
+        store.talosSetInstalledQuery('qwen')
 
         // 2. Si apre la scheda di un modello e la si chiude — è la rotta che
         //    rimonta il componente, cioè il gesto che azzerava tutto.
@@ -53,6 +59,9 @@ describe('quello che la schermata dei modelli ricorda', () => {
         expect(store.talosLocalModels.browseFilters).toEqual(['fits', 'q4'])
         expect(store.talosLocalModels.browseSearchOpen).toBe(true)
         expect(store.talosLocalModels.installedFitsOnly).toBe(true)
+        expect(store.talosLocalModels.browseProvider).toBe('unsloth')
+        expect(store.talosLocalModels.browseWeightBand).toBe('1-4b')
+        expect(store.talosLocalModels.installedQuery).toBe('qwen')
     })
 
     /**
@@ -67,6 +76,9 @@ describe('quello che la schermata dei modelli ricorda', () => {
         expect(store.talosLocalModels.browseFilters).toEqual([])
         expect(store.talosLocalModels.browseSearchOpen).toBe(false)
         expect(store.talosLocalModels.installedFitsOnly).toBe(false)
+        expect(store.talosLocalModels.browseProvider).toBe('')
+        expect(store.talosLocalModels.browseWeightBand).toBe('')
+        expect(store.talosLocalModels.installedQuery).toBe('')
     })
 
     /**

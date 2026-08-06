@@ -43,6 +43,15 @@ vi.mock('@/stores/localModels', () => ({
     talosSetInstalledFitsOnly: (only: boolean) => {
         (store.state as never as { installedFitsOnly: boolean }).installedFitsOnly = only
     },
+    talosSetBrowseProvider: (provider: string) => {
+        (store.state as never as { browseProvider: string }).browseProvider = provider
+    },
+    talosSetBrowseWeightBand: (band: string) => {
+        (store.state as never as { browseWeightBand: string }).browseWeightBand = band
+    },
+    talosSetInstalledQuery: (query: string) => {
+        (store.state as never as { installedQuery: string }).installedQuery = query
+    },
     talosSearchLocalModels: store.search,
     talosOpenModelRepo: store.open,
     talosCloseModelRepo: store.close,
@@ -166,6 +175,9 @@ function baseState(over: Record<string, unknown> = {}) {
         browseSearchOpen: false,
         browseTab: 'installed',
         installedFitsOnly: false,
+        browseProvider: '',
+        browseWeightBand: '',
+        installedQuery: '',
         searching: false,
         results: [],
         searchFailure: null,
