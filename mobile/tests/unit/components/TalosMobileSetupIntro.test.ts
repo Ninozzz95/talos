@@ -307,7 +307,8 @@ describe('first-run setup', () => {
         await flushPromises()
         // L'autonomia si passa DECIDENDO, che e' il punto della pagina: la
         // scelta avanza da sola, e «chiedimelo» e' una risposta legittima.
-        await wrapper.get('[data-testid="talos-setup-autonomy-ask"]').trigger('click')
+        await wrapper.get('[data-testid="talos-tool-permissions-all-ask"]').trigger('click')
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         await flushPromises()
         // La scelta ha gia' portato al background, che e' l'ultima pagina:
         // da li' non c'e' un «avanti», c'e' il tasto per entrare.
@@ -358,7 +359,11 @@ describe('first-run setup', () => {
             await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
             await flushPromises()
         }
-        await wrapper.get('[data-testid="talos-setup-autonomy-allow"]').trigger('click')
+        // Owner 2026-08-06: la pagina decide TUTTI i permessi in un colpo, ma
+        // ora dice anche quali strumenti stanno dentro ciascuno. «Lascia fare
+        // tutto» è il tasto in cima, e la scelta si conferma andando avanti.
+        await wrapper.get('[data-testid="talos-tool-permissions-all-allow"]').trigger('click')
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         await flushPromises()
 
         expect(state.toolPermissions).toEqual([{ read: 'allow', write: 'allow', outbound: 'allow' }])
@@ -376,7 +381,8 @@ describe('first-run setup', () => {
             await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
             await flushPromises()
         }
-        await wrapper.get('[data-testid="talos-setup-autonomy-ask"]').trigger('click')
+        await wrapper.get('[data-testid="talos-tool-permissions-all-ask"]').trigger('click')
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         await flushPromises()
 
         expect(state.toolPermissions).toEqual([{ read: 'ask', write: 'ask', outbound: 'ask' }])
@@ -400,7 +406,8 @@ describe('first-run setup', () => {
         await flushPromises()
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         await flushPromises()
-        await wrapper.get('[data-testid="talos-setup-autonomy-ask"]').trigger('click')
+        await wrapper.get('[data-testid="talos-tool-permissions-all-ask"]').trigger('click')
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         await flushPromises()
 
         expect(wrapper.find('[data-testid="talos-setup-background"]').exists()).toBe(true)

@@ -1660,6 +1660,30 @@ export const TALOS_EN_MESSAGES = {
         untrusted: 'untrusted',
         deleteNamed: 'Delete note {title}',
     },
+    toolPermissions: {
+        allAtOnce: 'Decide everything at once',
+        covers: 'Covers:',
+        changeLater: 'You can change this any time, in Settings › Agent tools.',
+        state: {
+            allow: 'Always',
+            ask: 'Ask me',
+            deny: 'Never',
+        },
+        action: {
+            read: {
+                title: 'Read what you already have',
+                body: 'Open Library files, notes, tasks and memory. Nothing changes and nothing leaves the device.',
+            },
+            write: {
+                title: 'Write on this device',
+                body: 'Create and change notes, tasks, documents and images. It all stays here, but something changes.',
+            },
+            outbound: {
+                title: 'Go out to the network',
+                body: 'Search the web, read pages, download models. This is the only power that sends anything off this device.',
+            },
+        },
+    },
     tasks: {
         itemMissing: 'This task is gone.',
         searchPlaceholder: 'Search tasks',
