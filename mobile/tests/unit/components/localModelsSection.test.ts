@@ -672,7 +672,7 @@ describe('the verdict', () => {
         const wrapper = await screen()
 
         const verdict = wrapper.get('[data-testid="talos-models-verdict"]').text()
-        expect(verdict).toContain('Runs comfortably')
+        expect(verdict).toContain('Memory: room to spare')
         expect(verdict).toContain('13.8')
     })
 
@@ -699,7 +699,7 @@ describe('the verdict', () => {
         }) as never
         const wrapper = await screen()
 
-        expect(wrapper.get('[data-testid="talos-models-verdict"]').text()).toContain('Will not run')
+        expect(wrapper.get('[data-testid="talos-models-verdict"]').text()).toContain('Not enough memory')
         expect(wrapper.text()).toContain('more memory than this phone can give')
         expect(wrapper.get('[data-testid="talos-models-counteroffer"]').text()).toContain('8192')
     })
@@ -738,7 +738,7 @@ describe('what is refused and what is merely warned about', () => {
 
         expect(wrapper.get('[data-testid="talos-models-incomplete"]').text()).toContain('missing 2 of 3')
         expect(wrapper.get('[data-testid="talos-models-download"]').attributes('disabled')).toBeDefined()
-        expect(wrapper.get('[data-testid="talos-model-fit"]').text()).toContain('Needs checking')
+        expect(wrapper.get('[data-testid="talos-model-fit"]').text()).toContain('Not measured')
         expect(wrapper.get('[data-testid="talos-model-fit"]').text()).not.toContain('Runs well')
     })
 

@@ -1014,17 +1014,20 @@ export const TALOS_EN_MESSAGES = {
         // La capienza: owner 2026-08-04, «come etichetta che vedo sempre».
         // Non un filtro che nasconde — nascondere toglie anche il motivo
         // per liberare memoria.
+        // Owner 2026-08-06: vague words hide WHICH quantity decides, and the
+        // three are repaired in opposite ways — storage can be freed, memory
+        // cannot, speed depends on the chip. Every label names its quantity.
         fitLabel: {
-            'comfortable': 'Runs well',
-            'tight': 'Tight',
-            'will-crawl': 'Too slow',
-            'wont-run': 'Won’t run here',
+            'comfortable': 'Fits in memory',
+            'tight': 'Memory is tight',
+            'will-crawl': 'Fits in memory, but not enough for the weights to stay there: the phone would re-read them from disk for every word. It is the SPEED that pays, not the memory — and freeing storage will not change it.',
+            'wont-run': 'Not enough memory',
             'no-memory': 'Not enough RAM',
             'no-space': 'Not enough storage',
-            'unknown': 'Needs checking',
+            'unknown': 'Not measured',
         },
         fitReason: {
-            'comfortable': 'Fits in memory comfortably: {left} of RAM left.',
+            'comfortable': 'Fits in memory: {left} of RAM left once it is loaded.',
             'tight': 'Fits in memory, but only {left} of RAM is left: under load Android may close TALOS.',
             'will-crawl': 'It barely fits, and the phone would spend its time reading from disk instead of writing.',
             'wont-run': 'Needs {missing} more RAM. Disk space is not the issue: the model has to sit in MEMORY to generate.',
@@ -1440,7 +1443,8 @@ export const TALOS_EN_MESSAGES = {
         // fa chi mette un modello su un TELEFONO.
         filtersLabel: 'Filters',
         filter: {
-            'fits': 'Runs here',
+            // «Runs here» did not say WHY: the filter looks at memory.
+            'fits': 'Fits in memory',
             'chat': 'Chat',
             'code': 'Code-oriented',
             'q4': 'Q4',
@@ -1537,10 +1541,11 @@ export const TALOS_EN_MESSAGES = {
         unverifiable: 'This repository publishes no checksum for this file, so the download cannot be proved.',
         flagged: 'Hugging Face has flagged this file:',
         // The verdicts, in the user's own terms rather than as jargon.
-        bandComfortable: 'Runs comfortably',
-        bandTight: 'Runs, with little to spare',
-        bandCrawl: 'Runs very slowly',
-        bandWontRun: 'Will not run on this phone',
+        // Owner 2026-08-06: every band names the quantity that decides it.
+        bandComfortable: 'Memory: room to spare',
+        bandTight: 'Memory: little room',
+        bandCrawl: 'Speed: reads from disk',
+        bandWontRun: 'Not enough memory',
         speed: 'about {rate} tokens/second',
         speedUnknown: 'speed unknown on this phone',
         reasonStorage: 'There is not enough free space.',
