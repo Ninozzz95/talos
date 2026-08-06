@@ -112,8 +112,21 @@ describe('TalosMobileLocalRepoDetail', () => {
         expect(summary.classes()).toContain('line-clamp-2')
         const disclosure = wrapper.get('[data-testid="talos-models-readme-full"]')
         expect(disclosure.element.tagName).toBe('DETAILS')
-        expect(disclosure.text()).toContain('The complete card remains available here.')
-        expect(disclosure.find('pre').exists()).toBe(true)
+        // Chiusa, la scheda non costa niente: un README del Hub arriva a
+        // centomila caratteri e nessuno li ha ancora chiesti.
+        expect(disclosure.find('[data-testid="talos-mobile-message-content"]').exists()).toBe(false)
+
+        const dettagli = disclosure.element as HTMLDetailsElement
+        dettagli.open = true
+        await disclosure.trigger('toggle')
+
+        const scheda = disclosure.get('[data-testid="talos-mobile-message-content"]')
+        expect(scheda.text()).toContain('The complete card remains available here.')
+        // ⛔ Il difetto che questa prova sorveglia: la scheda si LEGGE. Niente
+        // sorgente in un `pre`, e i titoli sono titoli.
+        expect(disclosure.find('pre').exists()).toBe(false)
+        expect(scheda.find('h2').exists()).toBe(true)
+        expect(scheda.text()).not.toContain('## Full notes')
     })
 
     it('C45-RED-14 renders one continuous variant list with a primary row download', async () => {

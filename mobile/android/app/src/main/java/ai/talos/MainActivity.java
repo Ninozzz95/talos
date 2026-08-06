@@ -45,6 +45,10 @@ public class MainActivity extends BridgeActivity {
         // compiled into the APK, proven by an instrumented test, and unable to
         // answer a single message.
         registerPlugin(TalosLlamaPlugin.class);
+        // Accedere a un provider senza incollare una chiave. Il browser di
+        // sistema fa l'accesso e rientra su 127.0.0.1: mettersi in ascolto su
+        // una porta è l'unica parte che JavaScript non può fare.
+        registerPlugin(TalosOAuthLoopbackPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

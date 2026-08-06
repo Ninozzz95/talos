@@ -2,7 +2,7 @@
 import { reactive, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
-import { BadgeCheck, ChevronDown, KeyRound, RefreshCw, RotateCcw, Server, Trash2 } from '@lucide/vue'
+import { BadgeCheck, ChevronDown, KeyRound, LogIn, RefreshCw, RotateCcw, Server, Trash2 } from '@lucide/vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
 import type { TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
 import { TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
@@ -64,6 +64,41 @@ async function run(provider: TalosMobileProviderId, action: () => Promise<unknow
     } finally {
         busyProvider.value = null
     }
+}
+
+/**
+ * Chi si può far accedere senza incollare niente.
+ *
+ * ⛔ Uno solo, e non è una svista. TALOS è distribuita: chiunque abbia l'APK ha
+ * ogni byte che contiene, quindi un `client_secret` dentro non sarebbe un
+ * segreto. Anthropic, OpenAI, Gemini e DeepSeek offrono OAuth solo a client
+ * «riservati», cioè con quel segreto custodito su un server che non abbiamo e
+ * che local-first non vuole. OpenRouter pubblica un flusso PKCE per client
+ * pubblici, che di segreti non ne chiede. Per gli altri quattro la chiave
+ * incollata a mano resta l'unica strada onesta — e questa riga si tiene stretta
+ * fino a quando uno di loro non cambia idea.
+ */
+const oauthProviders = new Set<TalosMobileProviderId>(['openrouter'])
+const OAUTH_FAILURE_KEYS = {
+    port: 'models.oauthPortFailed',
+    browser: 'models.oauthBrowserFailed',
+    cancelled: 'models.oauthCancelled',
+    exchange: 'models.oauthExchangeFailed',
+} as const
+
+/**
+ * Caricato al tocco, non all'avvio: chi non accede da OpenRouter non deve
+ * pagare il codice che serve a farlo.
+ */
+async function loginWithOAuth(provider: TalosMobileProviderId): Promise<void> {
+    await run(provider, async () => {
+        const { talosLoginWithOpenRouter } = await import('@/services/openRouterLogin')
+        const result = await talosLoginWithOpenRouter()
+        if (!result.ok) throw new Error(t(OAUTH_FAILURE_KEYS[result.reason]))
+        // La stessa porta della chiave incollata: elenco modelli, stato
+        // «chiave salvata» e messaggi d'errore restano una cosa sola.
+        await controller.saveKey(provider, result.key)
+    })
 }
 
 async function saveKey(provider: TalosMobileProviderId): Promise<void> {
@@ -145,6 +180,21 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
             </button>
 
             <div v-show="isExpanded(provider.id)" :id="`provider-${provider.id}-body`" class="px-[var(--talos-space-card)] pb-[var(--talos-space-card)]">
+            <!-- L'accesso viene PRIMA della casella: incollare una chiave è la
+                 strada di riserva, non quella principale, per chi ce l'ha. -->
+            <div v-if="oauthProviders.has(provider.id)" class="mb-[var(--talos-space-control)]">
+                <button
+                    type="button"
+                    :data-testid="`talos-provider-oauth-${provider.id}`"
+                    :disabled="busyProvider === provider.id"
+                    class="talos-pressable flex h-[var(--talos-touch-target)] w-full items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-[var(--talos-space-control)] text-sm font-medium text-[var(--talos-accent-text)] disabled:opacity-50"
+                    @click="loginWithOAuth(provider.id)"
+                >
+                    <LogIn class="size-[var(--talos-icon-size)]" aria-hidden="true" />
+                    {{ $t('models.signInWith', { provider: provider.label }) }}
+                </button>
+                <p class="mt-[var(--talos-space-inline)] text-center text-2xs text-[var(--talos-muted)]">{{ $t('models.orPasteKey') }}</p>
+            </div>
             <div v-if="provider.requiresSecret" class="flex gap-[var(--talos-space-inline)]">
                 <label class="min-w-0 flex-1">
                     <span class="sr-only">{{ $t('models.apiKey', { provider: provider.label }) }}</span>
