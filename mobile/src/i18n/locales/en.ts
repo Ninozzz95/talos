@@ -1483,7 +1483,6 @@ export const TALOS_EN_MESSAGES = {
         installedNoMatch: 'No downloaded model matches.',
         installedUnreadable: 'A folder would not open, so this list may be incomplete. ({count})',
         dateUnknown: 'date unknown',
-        intro: 'Models run entirely on this phone. Nothing you type reaches a server.',
         searchLabel: 'Search Hugging Face',
         searchWhy: 'The whole GGUF universe, if you know what you want.',
         recommendedHere: 'Recommended for this phone',

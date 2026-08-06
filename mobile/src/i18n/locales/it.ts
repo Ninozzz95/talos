@@ -1489,7 +1489,6 @@ export const TALOS_IT_MESSAGES = {
         installedNoMatch: 'Nessun modello scaricato corrisponde.',
         installedUnreadable: 'Una cartella non si è lasciata aprire, quindi questo elenco potrebbe non essere completo. ({count})',
         dateUnknown: 'data sconosciuta',
-        intro: 'I modelli girano interamente su questo telefono. Niente di quello che scrivi raggiunge un server.',
         searchLabel: 'Cerca su Hugging Face',
         searchWhy: 'Tutto l’universo GGUF, se sai cosa vuoi.',
         recommendedHere: 'Consigliati per questo telefono',
