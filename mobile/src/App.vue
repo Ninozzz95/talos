@@ -711,6 +711,42 @@ async function navigate(name: TalosMobileRouteName, query: LocationQueryRaw = {}
 }
 
 onMounted(async () => {
+    /**
+     * Il centro notifiche prende le sue due superfici.
+     *
+     * Owner 2026-08-06: «ogni funzione, tool, download, installazione deve avere
+     * notifica toast E Android». Il registro sa gia' DOVE va ogni evento; qui gli
+     * si dice soltanto come si fa un toast e come si posta su Android.
+     *
+     * Importati in modo DINAMICO, e non e' pignoleria: importarli in testa li
+     * tirerebbe nel grafo d'avvio, che ha meno di 4 KB di margine — e importare
+     * i trasferimenti dentro questo stesso file lo ha gia' sfondato una volta,
+     * di 1.379 byte. La visibilita' si aggancia qui perche' cambia dove va un
+     * evento: a schermo spento un toast non lo vede nessuno.
+     */
+    void (async () => {
+        const [centro, ponte] = await Promise.all([
+            import('@/stores/notificationCentre'),
+            import('@/services/notificationBridge'),
+        ])
+        centro.talosOnNotificationToast((evento) => {
+            toastsStore.push({
+                message: evento.body ?? evento.title,
+                // Chi chiede una decisione resta piu' a lungo: e' l'unico che
+                // costa qualcosa se sfugge.
+                durationMs: evento.weight === 'demanding' ? 8_000 : 4_000,
+            })
+        })
+        centro.talosOnNotificationAndroid((evento) => {
+            void ponte.talosPostSystemNotification(evento)
+        })
+        const aggiornaVisibilita = () => {
+            centro.talosSetAppVisible(document.visibilityState === 'visible')
+        }
+        aggiornaVisibilita()
+        document.addEventListener('visibilitychange', aggiornaVisibilita)
+    })()
+
     await preferences.hydrate()
     // Identity must hydrate before the unified setup opens, otherwise a
     // returning user can briefly see an empty name and duplicate work.
