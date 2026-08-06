@@ -107,6 +107,20 @@ export interface TalosLocalModelsState {
     browseFilters: string[]
     /** Vero quando il campo di ricerca del Hub è aperto. */
     browseSearchOpen: boolean
+    /**
+     * Quale delle due tab si sta guardando, e il filtro «entra in memoria» sui
+     * modelli già scaricati.
+     *
+     * ⛔ Stessa lezione, imparata due volte nello stesso giorno: **tutto ciò che
+     * la schermata ricorda deve stare qui**. Aprire un modello è una ROTTA, e
+     * al ritorno il componente si rimonta da capo: qualunque `ref` locale
+     * riparte dal valore iniziale. Il 2026-08-06 avevo spostato filtri, ricerca
+     * e ordinamento e lasciato indietro questi due — e l'owner si è ritrovato
+     * riportato sulla tab del dispositivo con il filtro spento, che dal suo
+     * punto di vista è esattamente il difetto che avevo dichiarato chiuso.
+     */
+    browseTab: string
+    installedFitsOnly: boolean
     /** Come ordinare la lista sfogliata. I nomi sono quelli del Hub. */
     sort: TalosHuggingFaceSort
     searching: boolean
@@ -159,6 +173,8 @@ export interface TalosLocalModelsState {
 const state = reactive<TalosLocalModelsState>({
     browseFilters: [],
     browseSearchOpen: false,
+    browseTab: 'installed',
+    installedFitsOnly: false,
     query: '',
     /*
      * L'ordinamento della lista sfogliata.
@@ -212,6 +228,14 @@ export function talosSetBrowseFilters(filters: readonly string[]): void {
 
 export function talosSetBrowseSearchOpen(open: boolean): void {
     state.browseSearchOpen = open
+}
+
+export function talosSetBrowseTab(tab: string): void {
+    state.browseTab = tab
+}
+
+export function talosSetInstalledFitsOnly(only: boolean): void {
+    state.installedFitsOnly = only
 }
 
 let client: TalosHuggingFaceClient | null = null
