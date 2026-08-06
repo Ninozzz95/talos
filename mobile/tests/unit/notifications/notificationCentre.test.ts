@@ -138,3 +138,104 @@ describe('C45-RED-19K notification feed', () => {
         expect(talosUnreadCount(feed)).toBe(0)
     })
 })
+
+/**
+ * ⛔ La regola dell'owner, 2026-08-06: «sono su una funzione → NON devo
+ * ricevere notifiche per quella funzione. Sono fuori dalla funzione → devo
+ * riceverle. Sono fuori dall'app → devo riceverle in app e su Android».
+ *
+ * Il caso che l'ha fatta nascere lo ha visto lui sul dispositivo: scrivendo in
+ * una chat compariva la notifica della risposta *di quella stessa chat*.
+ * Annunciare una cosa che qualcuno ha davanti agli occhi è il modo più rapido
+ * di insegnargli a ignorare anche gli avvisi che contano.
+ */
+describe('un evento non interrompe chi sta già guardando la cosa di cui parla', () => {
+    const risposta = (surface: string) => ({
+        key: 'chat:risposta', channel: 'chat' as const, weight: 'notable' as const,
+        title: 'Risposta pronta', surface, at: 0,
+    })
+
+    it('sulla STESSA chat: solo il registro, niente toast e niente Android', () => {
+        const esito = talosRouteNotification(risposta('chat:42'), {
+            appVisible: true, attention: 'attended', surface: 'chat:42',
+        })
+        expect(esito).toEqual({ feed: true, toast: false, android: false })
+    })
+
+    /**
+     * Uguaglianza ESATTA, non «siamo entrambi nelle chat»: due conversazioni
+     * diverse sono due cose diverse, e la risposta arrivata nell'altra non la
+     * si sta vedendo.
+     */
+    it("su un'ALTRA chat: il toast arriva", () => {
+        const esito = talosRouteNotification(risposta('chat:42'), {
+            appVisible: true, attention: 'attended', surface: 'chat:7',
+        })
+        expect(esito.toast).toBe(true)
+        expect(esito.android).toBe(false)
+    })
+
+    it("in un'altra parte dell'app: il toast arriva lo stesso", () => {
+        const esito = talosRouteNotification(risposta('chat:42'), {
+            appVisible: true, attention: 'attended', surface: 'settings:providers',
+        })
+        expect(esito.toast).toBe(true)
+    })
+
+    it("fuori dall'app: esce su Android", () => {
+        const esito = talosRouteNotification(risposta('chat:42'), {
+            appVisible: false, attention: 'hidden', surface: 'chat:42',
+        })
+        expect(esito.toast).toBe(false)
+        expect(esito.android).toBe(true)
+    })
+
+    /**
+     * Il terzo stato, quello che «app in primo piano sì/no» non sa dire: la
+     * finestra si vede ma non ha l'attenzione — schermo diviso, pannello di
+     * sistema aperto, app sotto il blocco schermo. Nessuno sta leggendo, quindi
+     * l'unico modo di raggiungere quella persona è uscire dall'app.
+     */
+    it('visibile ma non atteso vale come assenza per la notifica di sistema', () => {
+        const esito = talosRouteNotification(risposta('chat:42'), {
+            appVisible: true, attention: 'visible', surface: 'chat:42',
+        })
+        expect(esito.toast).toBe(false)
+        expect(esito.android).toBe(true)
+    })
+
+    /**
+     * Nemmeno un evento «demanding» sfonda, se stai guardando proprio quello:
+     * un guasto della ricerca che stai guardando lo vedi nella pagina.
+     */
+    it('nemmeno un evento esigente interrompe chi lo sta già guardando', () => {
+        const esito = talosRouteNotification({
+            key: 'k', channel: 'attention', weight: 'demanding',
+            title: 'Guasto', surface: 'job:8f2a', at: 0,
+        }, { appVisible: true, attention: 'attended', surface: 'job:8f2a' })
+        expect(esito).toEqual({ feed: true, toast: false, android: false })
+    })
+
+    /** Un evento senza superficie vale la regola generale, come prima. */
+    it('un evento che non appartiene a nessuna superficie si comporta come prima', () => {
+        const esito = talosRouteNotification({
+            key: 'k', channel: 'jobs', weight: 'notable', title: 'x', at: 0,
+        }, { appVisible: true, attention: 'attended', surface: 'chat:42' })
+        expect(esito.toast).toBe(true)
+    })
+
+    /**
+     * Il registro NON cambia mai. Cambia chi viene interrotto, non cosa viene
+     * ricordato — ed è la sola parte di questa regola che non ha eccezioni.
+     */
+    it('il registro riceve tutto, in ogni caso', () => {
+        for (const contesto of [
+            { appVisible: true, attention: 'attended' as const, surface: 'chat:42' },
+            { appVisible: false, attention: 'hidden' as const, surface: null },
+            { appVisible: true, attention: 'visible' as const, surface: 'chat:42' },
+        ]) {
+            expect(talosRouteNotification(risposta('chat:42'), contesto).feed).toBe(true)
+        }
+    })
+})
+

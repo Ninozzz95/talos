@@ -3581,6 +3581,17 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         key: `chat:${sendIdentity.sessionId}`,
                         channel: 'chat',
                         weight: 'away',
+                        /*
+                         * A quale conversazione appartiene questa notizia.
+                         *
+                         * Owner 2026-08-06: «mentre faccio una chat non può
+                         * comparirmi una notifica di una risposta in quella
+                         * chat». Con questo la regola può confrontare la
+                         * conversazione dell'evento con quella che si sta
+                         * guardando, invece di sapere soltanto se l'app è
+                         * davanti — e due chat diverse restano due cose diverse.
+                         */
+                        surface: `chat:${sendIdentity.sessionId}`,
                         // Difensivo di proposito: il titolo e' una gentilezza, la
                         // notifica e' la cosa. Una conversazione senza titolo non
                         // deve costare la notifica — e' esattamente il genere di

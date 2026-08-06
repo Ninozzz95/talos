@@ -93,6 +93,16 @@ export interface TalosNotificationEvent {
     title: string
     /** Una riga, e dice l'ESITO. «Impostazioni salvate», non un paragrafo. */
     body?: string
+    /**
+     * A quale superficie appartiene questo evento: `chat:42`, `job:8f2a`,
+     * `transfer:qwen`, `settings:providers`.
+     *
+     * Senza, la regola può sapere soltanto «l'app è davanti», e con quel solo
+     * dato **non è possibile** non interrompere chi sta già guardando la cosa di
+     * cui l'evento parla. Assente = evento che non appartiene a nessuna
+     * superficie, e allora vale la regola generale.
+     */
+    surface?: string
     at: number
 }
 
@@ -111,9 +121,24 @@ export interface TalosNotificationRouting {
 }
 
 /** Quel che si sa del momento in cui l'evento capita. */
+/**
+ * Quanto l'utente sta davvero guardando, che sono TRE stati e non due.
+ *
+ * `visible` è il caso che «app in primo piano sì/no» non sa dire: la finestra
+ * si vede ma non ha l'attenzione — schermo diviso, pannello di sistema aperto,
+ * app sotto il blocco schermo. Ai fini della notifica Android va trattato come
+ * assenza, perché nessuno sta leggendo.
+ */
+export type TalosAttention = 'hidden' | 'visible' | 'attended'
+
 export interface TalosNotificationContext {
     /** Falso quando l'app è in background o lo schermo è spento. */
     appVisible: boolean
+    /**
+     * Lo stato di attenzione, quando chi osserva il ciclo di vita sa dirlo.
+     * Assente ⇒ si deduce da `appVisible`, che è il comportamento di prima.
+     */
+    attention?: TalosAttention
     /** La schermata che si sta guardando, se ce n'è una. */
     surface?: string | null
 }
@@ -150,10 +175,42 @@ export function talosRouteNotification(
     const puoInterrompere = event.weight === 'notable' || event.weight === 'demanding'
     const escePerForza = event.weight === 'demanding'
     const esceSeSeiFuori = puoInterrompere || event.weight === 'away'
+
+    const attenzione: TalosAttention = context.attention
+        ?? (context.appVisible ? 'attended' : 'hidden')
+    /*
+     * ⛔ La regola dell'owner, 2026-08-06: «sono su una funzione → NON devo
+     * ricevere notifiche per quella funzione».
+     *
+     * Il caso che l'ha fatta nascere: scrivendo in una chat compariva la
+     * notifica della risposta *di quella stessa chat*. Annunciare una cosa che
+     * qualcuno ha davanti agli occhi è il modo più rapido di insegnargli a
+     * ignorare anche gli avvisi che contano.
+     *
+     * Serve l'uguaglianza ESATTA — `chat:42` contro `chat:42` — e non «siamo
+     * entrambi nelle chat»: due conversazioni diverse sono due cose diverse, e
+     * la risposta arrivata nell'altra non la si sta vedendo.
+     */
+    const staGuardandoProprioQuesto = attenzione === 'attended'
+        && typeof event.surface === 'string'
+        && event.surface !== ''
+        && event.surface === context.surface
+
+    /*
+     * Visibile ma non atteso vale come assenza per la notifica di sistema: la
+     * finestra si vede e nessuno la sta leggendo, quindi l'unico modo di
+     * raggiungere quella persona è uscire dall'app.
+     */
+    const fuoriDaiGiochi = attenzione !== 'attended'
+
     return {
+        // Il registro non cambia MAI. Cambia chi viene interrotto, non cosa
+        // viene ricordato: è la sola parte di questa regola che non ha eccezioni.
         feed: true,
-        toast: context.appVisible && puoInterrompere,
-        android: escePerForza || (!context.appVisible && esceSeSeiFuori),
+        toast: attenzione === 'attended' && puoInterrompere && !staGuardandoProprioQuesto,
+        android: staGuardandoProprioQuesto
+            ? false
+            : escePerForza || (fuoriDaiGiochi && esceSeSeiFuori),
     }
 }
 

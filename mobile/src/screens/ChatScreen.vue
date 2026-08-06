@@ -162,6 +162,29 @@ const browserError = ref<string | null>(null)
 const browserBusy = ref(false)
 const browserStatus = ref('')
 const activeSessionId = computed(() => chat.activeSession.value?.id ?? null)
+
+/**
+ * Dichiara QUALE conversazione si sta guardando, e la ritira uscendo.
+ *
+ * Owner 2026-08-06: «mentre faccio una chat non può comparirmi una notifica di
+ * una risposta in quella chat». Il centro notifiche non può indovinarlo: la
+ * schermata è l'unica che lo sa, e deve dirlo — è lo stesso principio per cui i
+ * toast e il ponte nativo si iniettano invece di essere importati.
+ *
+ * Import dinamico perché `chatController` sta nel grafo d'avvio e il tetto è a
+ * poche centinaia di byte dal limite; dichiarare quale chat si guarda non vale
+ * un byte di quel budget.
+ */
+function dichiaraSuperficie(id: string | null): void {
+    // Dichiarare dove sei non può rompere la chat, e non vale un byte del
+    // budget d'avvio: import dinamico, una funzione sola per i due usi.
+    void import('@/stores/notificationCentre')
+        .then((centro) => centro.talosSetActiveSurface(id ? `chat:${id}` : null))
+        .catch(() => {})
+}
+
+watch(activeSessionId, dichiaraSuperficie, { immediate: true })
+onBeforeUnmount(() => dichiaraSuperficie(null))
 /** F-14: this chat is not being written down, and says so. */
 const isTemporaryChat = computed(() => talosIsEphemeralSessionId(activeSessionId.value ?? ''))
 
