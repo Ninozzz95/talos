@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { BookMarked, FileText } from '@lucide/vue'
+import { talosShortModelLabel } from '@/lib/models/modelLabel'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
 /*
@@ -149,7 +150,17 @@ function modelLabel(message: TalosMobileMessageView): string {
     if (message.role !== 'assistant') return ''
     const id = message.model_profile_id
     if (!id) return ''
-    return props.modelLabels?.[id] ?? id
+    /*
+     * Owner 2026-08-06: «spunta tutto il percorso del modello e non solo il
+     * nome, stampando una riga enorme sotto la risposta».
+     *
+     * Il ripiego sull'identificativo esiste per i casi in cui il profilo non
+     * c'è — un modello cancellato dopo aver risposto, una chat riaperta prima
+     * che il catalogo sia pronto — ed è lì che serve di più: sta dicendo con
+     * cosa è stata scritta una risposta che qualcuno rilegge mesi dopo. Deve
+     * restare leggibile.
+     */
+    return props.modelLabels?.[id] ?? talosShortModelLabel(id)
 }
 
 // R1-5 — precomputed once per messages change (was findIndex+slice+some PER
