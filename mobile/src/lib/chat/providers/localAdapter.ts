@@ -25,6 +25,7 @@ import {
 } from '@/lib/models/localContextPolicy'
 import { talosToolsForOpenAi } from '@/lib/tools/registry'
 import { talosNormaliseLocalToolCalls } from '@/lib/chat/localToolCalls'
+import { talosCreateThinkSplitter } from '@/lib/chat/thinkStream'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 
 /**
@@ -241,6 +242,7 @@ async function localContextCeiling(shape: TalosModelShape | null): Promise<numbe
 async function run(
     input: TalosMobileCompletionInput,
     onChunk?: (text: string) => void,
+    onReasoning?: (text: string) => void,
 ): Promise<TalosMobileCompletionResult> {
     const status = await ensureLoaded(input.model.id)
     const ceiling = await localContextCeiling(status.shape)
@@ -294,11 +296,36 @@ async function run(
 
     let generation
     try {
+        /**
+         * Il ragionamento si separa MENTRE arriva, non alla fine.
+         *
+         * Visto sul tablet il 2026-08-06 con Qwen3-1.7B-Q8_0: la bolla mostrava
+         * `<think> Okay, the user wants me to…` per tutta la generazione. Il
+         * lato nativo separa a risposta FINITA — ed è ciò che ha chiuso il
+         * difetto del 2026-08-03, sul testo finale. Ma su un modello locale la
+         * generazione dura decine di secondi, che è quasi tutto il tempo in cui
+         * qualcuno sta guardando: il marcatore era invisibile solo a chi lo
+         * cercava nel risultato salvato.
+         *
+         * Instradare e non cancellare: il cassetto «Ragionamento» esiste già e
+         * i provider di rete lo riempiono via `onReasoning`. Il modello locale
+         * era l'unico che non lo faceva.
+         */
+        const separatore = talosCreateThinkSplitter()
         generation = await talosLocalEngineGenerate(
             plan.prompt,
-            (delta) => { onChunk?.(delta) },
+            (delta) => {
+                const fetta = separatore.push(delta)
+                if (fetta.text) onChunk?.(fetta.text)
+                if (fetta.reasoning) onReasoning?.(fetta.reasoning)
+            },
             { maxTokens: MAX_TOKENS, stopAtEndOfGeneration: true },
         )
+        // La coda trattenuta va rilasciata: se la risposta finisce con un
+        // carattere che POTEVA iniziare un tag, quel carattere è testo.
+        const ultima = separatore.flush()
+        if (ultima.text) onChunk?.(ultima.text)
+        if (ultima.reasoning) onReasoning?.(ultima.reasoning)
     } catch (error) {
         if (error instanceof TalosLocalEngineGenerationError) {
             throw actionableGenerationFailure(error)
@@ -400,6 +427,6 @@ export const localAdapter: TalosMobileProviderAdapter = {
         // half-mapped, and the engine's own cancel covers the part that matters,
         // which is the generation.
         if (handlers.signal?.aborted) throw new Error('TALOS_LOCAL_ABORTED')
-        return run(input, handlers.onChunk)
+        return run(input, handlers.onChunk, handlers.onReasoning)
     },
 }
