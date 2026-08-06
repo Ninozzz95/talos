@@ -88,6 +88,29 @@ public class TalosLlamaPlugin extends Plugin {
         // forma: chi calcola quanto contesto ci sta lo chiede insieme al resto,
         // e deve leggere quello CREATO, non quello chiesto.
         if (aperto != null) result.put("kvCacheType", aperto.kvCacheType());
+        // Quante aperture da quando il processo e' partito: due in un invio solo
+        // vogliono dire che si stanno ricaricando pesi gia' in memoria.
+        if (TalosLlamaNative.AVAILABLE) {
+            result.put("opensSinceStart", TalosLlamaNative.nativeOpensSinceStart());
+        }
+        /*
+         * I numeri con cui il modello sta girando DAVVERO.
+         *
+         * Chiesti al contesto e non ripetuti da ciò che era stato chiesto: fra
+         * la richiesta e la realtà c'è un ripiego possibile — un contesto che non
+         * si alloca, una cache che il modello non regge — e una diagnostica che
+         * mostra la richiesta invece del risultato racconta la stessa bugia che
+         * esiste per scoprire.
+         */
+        if (aperto != null) {
+            result.put("contextTokens", aperto.contextTokens());
+            long[] runtime = aperto.runtimeConfig();
+            if (runtime != null && runtime.length >= 3) {
+                result.put("threads", runtime[0]);
+                result.put("threadsBatch", runtime[1]);
+                result.put("microBatch", runtime[2]);
+            }
+        }
         call.resolve(result);
     }
 

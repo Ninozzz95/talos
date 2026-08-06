@@ -21,6 +21,9 @@ import {
 import { talosMeasureDevice } from '@/services/deviceCapacity'
 import { type TalosModelShape, talosMaxContextFor } from '@/lib/models/fit'
 import { talosEngineTuning } from '@/lib/models/engineTuning'
+import type { TalosTuningKey } from '@/lib/models/tuningProfile'
+import { talosStoredTuning } from '@/services/tuningProfileStore'
+import { TALOS_APP_BUILD } from '@/lib/appBuild'
 import {
     TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
     talosLocalEscalatedContextTokens,
@@ -164,17 +167,64 @@ function actionableGenerationFailure(error: TalosLocalEngineGenerationError): Ta
  * oggetto vuoto e il nativo si comporta esattamente come prima. Un valore
  * indovinato sarebbe peggio del comportamento noto.
  */
-async function talosTuningFor(): Promise<{ threads?: number, threadsBatch?: number, microBatch?: number }> {
+async function talosTuningFor(
+    path?: string,
+): Promise<{ threads?: number, threadsBatch?: number, microBatch?: number }> {
     const device = await talosMeasureDevice()
     if (!device?.cpuCores) return {}
-    const tuning = talosEngineTuning({
+    const derivato = talosEngineTuning({
         cores: device.cpuCores,
         capacities: device.cpuCapacities,
     })
+
+    /**
+     * ⭐ Se questo telefono, con QUESTO modello, è già stato misurato, si usa la
+     * misura invece del punto di partenza.
+     *
+     * Il punto di partenza è dedotto dalla forma della CPU, e la deduzione è
+     * onesta ma resta una deduzione: MISURATO sul Pad, sulla generazione **due
+     * thread valgono quanto sei**, e nessuna regola sulla topologia lo avrebbe
+     * previsto. Il profilo esiste per non ridurre a un'ipotesi ciò che è stato
+     * osservato.
+     *
+     * ⛔ E vale solo per la situazione in cui è stato preso: altro modello,
+     * altro file, altra build dell'app e il profilo semplicemente non c'è. Un
+     * numero misurato ieri su un'altra cosa è peggio di nessun numero, perché ha
+     * l'aria di un fatto.
+     */
+    const chiave = path ? await talosTuningKeyFor(path, device) : null
+    const salvato = chiave ? await talosStoredTuning(chiave) : null
+
     return {
-        threads: tuning.threads,
-        threadsBatch: tuning.threadsBatch,
-        microBatch: tuning.microBatch,
+        threads: salvato?.threads ?? derivato.threads,
+        threadsBatch: salvato?.threadsBatch ?? derivato.threadsBatch,
+        // Il microbatch non si misura: cambiarlo richiede riaprire il modello,
+        // quindi non entra nella griglia e resta quello derivato.
+        microBatch: derivato.microBatch,
+    }
+}
+
+/**
+ * La chiave del profilo per questo modello su questo dispositivo.
+ *
+ * `null` quando il file non si trova più: senza dimensione e data non si può
+ * dire «è ancora lo stesso file», e applicare un profilo a un file che non si è
+ * potuto identificare è esattamente il modo di usare la misura sbagliata.
+ */
+async function talosTuningKeyFor(
+    path: string,
+    device: { deviceModel: string, cpuCores: number | null },
+): Promise<TalosTuningKey | null> {
+    const { models } = await talosLocalInstalledModels().catch(() => ({ models: [] }))
+    const file = models.find((candidate) => candidate.path === path)
+    if (!file || !device.cpuCores) return null
+    return {
+        deviceModel: device.deviceModel,
+        cpuCores: device.cpuCores,
+        appBuild: TALOS_APP_BUILD,
+        modelPath: file.path,
+        modelBytes: file.bytes,
+        modelModifiedAt: file.modifiedAt,
     }
 }
 
@@ -185,7 +235,7 @@ async function ensureLoaded(path: string): Promise<TalosLocalEngineStatus> {
     try {
         await talosLocalEngineOpenWithFallback(path, {
             contextTokens: TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
-            ...(await talosTuningFor()),
+            ...(await talosTuningFor(path)),
         })
     } catch (error) {
         if (error instanceof TalosLocalEngineOpenError) throw actionableOpenFailure(error)
@@ -310,7 +360,7 @@ async function run(
                 // ⛔ Anche qui. Riaprire per allargare il contesto e nel farlo
                 // tornare ai quattro thread di prima significherebbe che una
                 // conversazione lunga diventa più lenta man mano che cresce.
-                ...(await talosTuningFor()),
+                ...(await talosTuningFor(input.model.id)),
             })
         } catch (error) {
             if (error instanceof TalosLocalEngineOpenError) throw actionableOpenFailure(error)

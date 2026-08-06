@@ -419,12 +419,32 @@ function providerFault(
             model: identity.model,
         }
     }
+    /**
+     * ⛔ L'autorizzazione agli strumenti scaduta NON è un problema di rete.
+     *
+     * MISURATO dallo screenshot dell'owner del 2026-08-06:
+     * `TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID` compariva con «controlla il
+     * modello selezionato e la connessione, poi riprova» — un consiglio che non
+     * c'entra niente e che manda a cercare il guasto dove non c'è.
+     *
+     * Il checkpoint vale per UN invio con UN modello: se nel frattempo si è
+     * cambiato modello o riaperta la chat, l'autorizzazione data prima non copre
+     * più ciò che sta per succedere — ed è giusto che non copra, perché un
+     * permesso concesso a un modello non è un permesso concesso a un altro.
+     *
+     * Quindi la cosa da fare è **rimandare il messaggio**, non controllare il
+     * Wi-Fi. Un rifiuto che manda dalla parte sbagliata costa più del rifiuto.
+     */
+    const autorizzazioneScaduta = /TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID/
+        .test(error instanceof Error ? error.message : String(error))
     return {
         layer: 'system',
         code: 'CHAT_EXECUTION_FAILED',
         message: talosTranslatableErrorMessage(error, translate)
             ?? errorMessage(error, translate),
-        next_action: translate('chat.checkModelConnection'),
+        next_action: translate(autorizzazioneScaduta
+            ? 'chat.resendAfterAuthorizationLapsed'
+            : 'chat.checkModelConnection'),
         retryable: null,
         status: null,
         provider: identity.provider,

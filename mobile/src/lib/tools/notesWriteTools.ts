@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
+import { talosStripPromptEnvelope } from '@/lib/chat/promptEnvelope'
 
 /**
  * Le note si scrivono dalla chat, non solo si leggono.
@@ -75,8 +76,8 @@ export function createTalosNotesWriteTools(
             async run(input) {
                 try {
                     const saved = await sources.create({
-                        title: input.title.trim(),
-                        content: input.content.trim(),
+                        title: talosStripPromptEnvelope(input.title).trim(),
+                        content: talosStripPromptEnvelope(input.content).trim(),
                     })
                     return {
                         ok: true,
@@ -123,8 +124,8 @@ export function createTalosNotesWriteTools(
                 try {
                     const saved = await sources.update({
                         id: input.id,
-                        ...(input.title === undefined ? {} : { title: input.title.trim() }),
-                        ...(input.content === undefined ? {} : { content: input.content.trim() }),
+                        ...(input.title === undefined ? {} : { title: talosStripPromptEnvelope(input.title).trim() }),
+                        ...(input.content === undefined ? {} : { content: talosStripPromptEnvelope(input.content).trim() }),
                     })
                     return {
                         ok: true,

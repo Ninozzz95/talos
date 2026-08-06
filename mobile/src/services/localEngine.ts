@@ -591,6 +591,41 @@ export interface TalosLocalEngineTimings {
     reusedContext: boolean
 }
 
+/**
+ * Tara i thread di QUESTO modello su QUESTO telefono, e restituisce la misura.
+ *
+ * ⛔ Costa: prova ogni candidato con un prefill vero e **azzera la
+ * conversazione in memoria**. Per questo non si chiama da sola all'apertura —
+ * aggiungerebbe secondi al primo messaggio, che e' gia' la parte lenta — ma da
+ * un comando esplicito, dove chi lo tocca sa cosa sta chiedendo e vede i numeri
+ * che ne escono.
+ */
+export interface TalosMeasuredThreadTuning {
+    threads: number
+    threadsBatch: number
+    prefillPerSecond: number
+    decodePerSecond: number
+    grid: Array<{ threads: number, prefill: number, decode: number }>
+}
+
+export async function talosMeasureThreadTuning(
+    candidates: readonly number[],
+    probeTokens = 256,
+): Promise<TalosMeasuredThreadTuning | null> {
+    if (candidates.length === 0) return null
+    try {
+        const raw = (await plugin.tuneThreads({ candidates: [...candidates], probeTokens })).tuning
+        const parsed: unknown = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object') return null
+        const misura = parsed as TalosMeasuredThreadTuning
+        return Array.isArray(misura.grid) ? misura : null
+    } catch {
+        // Una taratura fallita non e' un guasto del modello: si continua col
+        // punto di partenza derivato, che e' esattamente cio' che c'era prima.
+        return null
+    }
+}
+
 export async function talosLocalEngineTimings(): Promise<TalosLocalEngineTimings | null> {
     try {
         const raw = (await plugin.lastTimings()).timings

@@ -207,6 +207,21 @@ size_t talos_prefisso_comune(const std::vector<llama_token> & vecchi,
     return comune;
 }
 
+/**
+ * Quante volte un modello e' stato aperto da quando il processo e' partito.
+ *
+ * ⛔ Sembra un dettaglio da niente ed e' la diagnosi che mancava. MISURATO dal
+ * registro dell'owner il 2026-08-06: il primo messaggio impiegava **111
+ * secondi** prima della prima parola, e i giri successivi 195 millisecondi.
+ * La causa era che il modello veniva aperto **due volte** — una col contesto
+ * predefinito, e subito dopo di nuovo per allargarlo, buttando gigabyte di pesi
+ * gia' caricati.
+ *
+ * Un numero che dice «2» dove dovrebbe dire «1» rende quel difetto visibile in
+ * un istante, invece che dopo aver letto una traccia di trecento righe.
+ */
+std::atomic<int> g_open_count{0};
+
 std::once_flag g_init_once;
 
 void talos_log_bridge(ggml_log_level level, const char * text, void * /*user*/) {
@@ -576,6 +591,7 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
         TALOS_LOGE("template non inizializzabile: %s", failure.what());
     }
 
+    g_open_count.fetch_add(1, std::memory_order_relaxed);
     TALOS_LOGI("modello aperto: %s (contesto %u, thread %d gen / %d prefill, microbatch %u)",
                path.c_str(), llama_n_ctx(ctx), ctx_params.n_threads,
                ctx_params.n_threads_batch, llama_n_ubatch(ctx));
@@ -853,6 +869,34 @@ Java_ai_talos_TalosLlamaNative_nativeArchitectureOf(JNIEnv * env, jclass, jstrin
     snprintf(json, sizeof(json), "{\"architecture\":\"%s\",\"layers\":%lld}",
              architettura.c_str(), (long long) strati);
     return env->NewStringUTF(json);
+}
+
+/**
+ * I numeri di esecuzione del contesto aperto, chiesti a lui.
+ *
+ * Non si ripete cio' che era stato CHIESTO: la cache q8_0 puo' non essere stata
+ * accettata, il contesto puo' essere stato ridotto. Una diagnostica che mostra
+ * la richiesta invece del risultato racconta la bugia che esiste per scoprire.
+ */
+JNIEXPORT jlongArray JNICALL
+Java_ai_talos_TalosLlamaNative_nativeRuntimeConfig(JNIEnv * env, jclass, jlong handle) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr || session->ctx == nullptr) return nullptr;
+    jlong valori[3] = {
+        (jlong) llama_n_threads(session->ctx),
+        (jlong) llama_n_threads_batch(session->ctx),
+        (jlong) llama_n_ubatch(session->ctx),
+    };
+    jlongArray fuori = env->NewLongArray(3);
+    if (fuori == nullptr) return nullptr;
+    env->SetLongArrayRegion(fuori, 0, 3, valori);
+    return fuori;
+}
+
+/** Quante volte un modello e' stato aperto da quando il processo e' partito. */
+JNIEXPORT jint JNICALL
+Java_ai_talos_TalosLlamaNative_nativeOpensSinceStart(JNIEnv *, jclass) {
+    return (jint) g_open_count.load(std::memory_order_relaxed);
 }
 
 JNIEXPORT jstring JNICALL

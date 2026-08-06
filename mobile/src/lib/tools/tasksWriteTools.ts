@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
+import { talosStripPromptEnvelope } from '@/lib/chat/promptEnvelope'
 
 /**
  * Le attività si creano e si chiudono dalla chat, non solo si elencano.
@@ -83,7 +84,7 @@ export function createTalosTasksWriteTools(
             async run(input) {
                 try {
                     const saved = await sources.create({
-                        title: input.title.trim(),
+                        title: talosStripPromptEnvelope(input.title).trim(),
                         // Vuoto e assente sono la stessa cosa qui, e diventano
                         // null: una descrizione fatta di spazi occuperebbe la
                         // riga del dettaglio senza dire niente.
