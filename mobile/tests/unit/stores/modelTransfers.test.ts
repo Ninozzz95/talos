@@ -17,6 +17,8 @@ const bridge = vi.hoisted(() => ({
         },
     })),
     cancel: vi.fn(async () => ({ ok: true as const })),
+    /** «Questi arrivi li ho raccontati»: il nativo può dimenticarli. */
+    acknowledge: vi.fn(async () => undefined),
     status: vi.fn(async () => ({
         phase: 'running' as const,
         active: true,
@@ -55,6 +57,7 @@ const bridge = vi.hoisted(() => ({
 }))
 
 vi.mock('@/services/modelTransfer', () => ({
+    talosAcknowledgeArrivals: bridge.acknowledge,
     talosStartModelTransfer: bridge.start,
     talosPauseModelTransfer: bridge.pause,
     talosResumeModelTransfer: bridge.resume,
@@ -172,45 +175,88 @@ describe('managed transfer actions', () => {
 })
 
 /**
- * C45-RED-19F — un download finito è un modello in più SUL DISCO.
+ * Un download finito è un modello in più SUL DISCO, e chi mostra i modelli deve
+ * saperlo senza che glielo si chieda.
  *
- * Owner 2026-08-05: il modello scaricato non compariva nel composer finché non
- * si premeva «aggiorna». La notizia esisteva già e serviva solo a fare un
- * toast; questa prova guarda che serva anche a chi mostra i modelli.
+ * ## La storia, perché vale più della regola
  *
- * Sta qui e non accanto alla funzione pura perché il difetto stava nella
- * cucitura — esattamente come l'avviso di partenza, che i test unitari non
- * potevano vedere.
+ * L'owner l'ha segnalato **tre volte**. Le prime due correzioni hanno allungato
+ * la vita dell'osservatore — il poller vive finché c'è chi guarda OPPURE un
+ * trasferimento in corso — e hanno lasciato intatta la cosa sbagliata: la fine
+ * veniva **dedotta** dalla sparizione di una riga fra due istantanee.
+ *
+ * MISURATO sul Pad il 2026-08-06: un modello da 214 MB è arrivato in meno di
+ * dodici secondi, la schermata «questo dispositivo» era aperta e visibile per
+ * tutto il tempo, e ha continuato a dire «3 modelli» mentre sul disco ce n'erano
+ * quattro.
+ *
+ * ⛔ Per questo la prova qui sotto **non fa mai comparire il trasferimento**:
+ * lo status dichiara direttamente un arrivo, come fa il nativo, e la
+ * conversazione fra le due istantanee non esiste. Una prova che prima mostrasse
+ * la riga in corsa passerebbe anche con la vecchia deduzione, e non morderebbe.
  */
-describe('C45-RED-19F a finished transfer tells the model surfaces', () => {
-    it('announces that the local catalogue changed', async () => {
+describe('un download finito lo dice chi lo ha fatto, non chi guardava', () => {
+    /** Uno stato senza niente in corsa: solo cio' che e' gia' arrivato. */
+    function statoConArrivi(completed: Array<{ id: string, modelName: string }>): unknown {
+        return {
+            items: [], phase: 'idle', active: false, repo: null, revision: null,
+            paths: [], modelName: null, haveBytes: 0, totalBytes: 0, runner: null,
+            networkBound: true, failure: null, resumable: false, readFailure: null,
+            completed,
+        }
+    }
+
+    it('annuncia il cambio di catalogo anche se il trasferimento non è mai comparso', async () => {
         const store = await import('@/stores/modelTransfers')
         const signal = await import('@/lib/models/localCatalogueSignal')
-        await store.talosRefreshModelTransfer()
 
         const heard: string[] = []
         const release = signal.talosOnLocalCatalogueChange((reason) => { heard.push(reason) })
 
-        const previous = await bridge.status.mock.results[0]!.value
-        // Prima arriva in fondo: una riga sparita conta come «finita» solo se
-        // aveva scaricato tutto. Sparire a metà è un'altra storia — e tacerla è
-        // deliberato, non un caso dimenticato.
-        bridge.status.mockResolvedValue({
-            ...previous,
-            items: previous.items.map((item: { id: string; totalBytes: number }) => (
-                item.id === 'transfer-a' ? { ...item, haveBytes: item.totalBytes } : item
-            )),
-        })
-        await store.talosRefreshModelTransfer()
-
-        // Poi sparisce, senza essere stata annullata.
-        bridge.status.mockResolvedValue({
-            ...previous,
-            items: previous.items.filter((item: { id: string }) => item.id !== 'transfer-a'),
-        })
+        // Nessun elemento in corsa, e un arrivo dichiarato: è esattamente ciò
+        // che il nativo consegna quando il download è finito mentre nessuno
+        // stava guardando.
+        bridge.status.mockResolvedValue(
+            statoConArrivi([{ id: 'transfer-a', modelName: 'Qwen3 4B' }]) as never)
         await store.talosRefreshModelTransfer()
         release()
 
         expect(heard).toContain('transfer-finished')
+    })
+
+    /**
+     * ⛔ Consegnato una volta sola dal nativo, raccontato una volta sola qui.
+     * Un download annunciato due volte fa perdere fiducia nel conteggio.
+     */
+    it('non racconta due volte lo stesso arrivo', async () => {
+        const store = await import('@/stores/modelTransfers')
+        const signal = await import('@/lib/models/localCatalogueSignal')
+
+        const heard: string[] = []
+        const release = signal.talosOnLocalCatalogueChange((reason) => { heard.push(reason) })
+
+        bridge.status.mockResolvedValue(
+            statoConArrivi([{ id: 'transfer-a', modelName: 'Qwen3 4B' }]) as never)
+        await store.talosRefreshModelTransfer()
+        // Il giro successivo: avvisato, il nativo non li ripropone.
+        expect(bridge.acknowledge).toHaveBeenCalledWith(['transfer-a'])
+        bridge.status.mockResolvedValue(statoConArrivi([]) as never)
+        await store.talosRefreshModelTransfer()
+        release()
+
+        expect(heard.filter((r) => r === 'transfer-finished')).toHaveLength(1)
+    })
+
+    /**
+     * Un lato nativo più vecchio di questo JavaScript non ha il campo: un APK
+     * aggiornato a metà è un caso reale, e un poller che gira ogni secondo non
+     * deve lanciare eccezioni per un campo che non c'è.
+     */
+    it('non si rompe se il lato nativo non sa ancora dichiarare gli arrivi', async () => {
+        const store = await import('@/stores/modelTransfers')
+        const { completed: _ignorato, ...senzaCampo } =
+            statoConArrivi([]) as Record<string, unknown>
+        bridge.status.mockResolvedValue(senzaCampo as never)
+        await expect(store.talosRefreshModelTransfer()).resolves.toBeUndefined()
     })
 })

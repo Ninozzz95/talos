@@ -27,8 +27,10 @@
  * tace, perche' annunciare «finito» un download interrotto e' peggio che non
  * annunciare niente.
  *
- * Sarebbe piu' pulito se il nativo dicesse «completato» — lo sa, visto che
- * `announceEnd` lo posta. Esporlo e' il seguito naturale di questo lavoro.
+ * ✅ FATTO il 2026-08-06: il nativo ORA lo dice. `TalosTransferSession.finish`
+ * registra l'arrivo e `status()` lo consegna una volta sola, quindi qui restano
+ * solo i due momenti che una istantanea puo' onestamente vedere — «e' partito»
+ * e «e' caduto». La fine non si deduce piu'.
  */
 
 /** Il minimo che serve sapere di un trasferimento per raccontarlo. */
@@ -49,11 +51,6 @@ function nome(item: TalosNoticeableTransfer): string {
     return item.modelName ?? item.id
 }
 
-/** Arrivato in fondo: tutti i byte, e ce n'era almeno uno da prendere. */
-function completo(item: TalosNoticeableTransfer): boolean {
-    return item.totalBytes > 0 && item.haveBytes >= item.totalBytes
-}
-
 /**
  * Cosa annunciare, confrontando due istantanee.
  *
@@ -61,16 +58,16 @@ function completo(item: TalosNoticeableTransfer): boolean {
  * decide dove finiscono le frasi — ed e' cio' che rende questa regola
  * verificabile senza un dispositivo.
  *
- * @param cancellati id che l'utente ha annullato: la loro sparizione non e' una
- *     fine, e va taciuta.
+ * ⛔ Niente piu' `cancellati`: serviva a tacere la sparizione di un download
+ * annullato, e le sparizioni qui non si guardano piu'. Chi annulla non deve
+ * dichiararlo a questa funzione — il che e' un obbligo in meno che si poteva
+ * dimenticare.
  */
 export function talosTransferNotices(
     prima: readonly TalosNoticeableTransfer[],
     dopo: readonly TalosNoticeableTransfer[],
-    cancellati: ReadonlySet<string> = new Set(),
 ): TalosTransferNotice[] {
     const precedenti = new Map(prima.map((item) => [item.id, item]))
-    const correnti = new Map(dopo.map((item) => [item.id, item]))
     const avvisi: TalosTransferNotice[] = []
 
     for (const item of dopo) {
@@ -86,15 +83,24 @@ export function talosTransferNotices(
         }
     }
 
-    for (const era of prima) {
-        if (correnti.has(era.id)) continue
-        if (cancellati.has(era.id)) continue
-        // Sparito senza essere stato annullato: e' finito solo se era arrivato
-        // in fondo. Altrimenti si tace — vedi la nota in testa al file.
-        if (era.phase !== 'failed' && completo(era)) {
-            avvisi.push({ kind: 'finished', modelName: nome(era) })
-        }
-    }
-
+    /**
+     * ⛔ E QUI non c'e' piu' niente.
+     *
+     * Fino al 2026-08-06 questo ciclo deduceva la fine di un download dalla
+     * SPARIZIONE di una riga: «c'era, non c'e' piu', ed era arrivata in fondo».
+     * Sembra ragionevole e ha un difetto che non si vede leggendolo — funziona
+     * **solo se qualcuno stava guardando nell'istante esatto** della sparizione.
+     *
+     * MISURATO sul Pad: 214 MB arrivati in meno di dodici secondi, la schermata
+     * «questo dispositivo» aperta e visibile per tutto il tempo, e il conteggio
+     * fermo a tre mentre sul disco i modelli erano quattro. L'owner l'aveva
+     * segnalato due volte, e due correzioni precedenti avevano allungato la vita
+     * dell'osservatore senza toccare la cosa sbagliata: non era chi guardava, era
+     * **il fatto che si dovesse guardare**.
+     *
+     * Adesso la fine la dichiara il nativo, che l'ha compiuta: `status()`
+     * riporta gli arrivi e li consegna una volta sola. Un fatto non si deduce da
+     * chi passava di li'.
+     */
     return avvisi
 }

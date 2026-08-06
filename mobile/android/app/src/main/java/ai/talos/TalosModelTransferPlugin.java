@@ -134,6 +134,28 @@ public class TalosModelTransferPlugin extends Plugin {
             anyMoving = anyMoving || moving(snapshot.phase);
         }
         result.put("items", items);
+        /**
+         * ⭐ I modelli ARRIVATI, dichiarati da chi li ha portati.
+         *
+         * Un trasferimento riuscito sparisce dal registro, quindi il lato
+         * JavaScript deduceva la fine confrontando due istantanee — e quella
+         * deduzione regge solo se qualcuno stava guardando nell'istante esatto
+         * della sparizione. MISURATO sul Pad: 214 MB arrivati in meno di dodici
+         * secondi, schermata aperta, e il conteggio è rimasto indietro.
+         *
+         * Leggerli NON li consuma: chi ne fa qualcosa lo dichiara con
+         * `acknowledgeCompleted`. Così una lettura dello stato fatta per un
+         * altro motivo non ruba la notizia a chi doveva riceverla — che è un
+         * errore già commesso, in fase di collaudo, da chi l'aveva scritta.
+         */
+        JSArray arrivals = new JSArray();
+        for (String[] arrivo : TalosTransferSession.arrivals()) {
+            JSObject voce = new JSObject();
+            voce.put("id", arrivo[0]);
+            voce.put("modelName", arrivo[1]);
+            arrivals.put(voce);
+        }
+        result.put("completed", arrivals);
 
         if (records.isEmpty()) {
             putIdle(result);
@@ -145,6 +167,31 @@ public class TalosModelTransferPlugin extends Plugin {
         copyStatus(statusItem(primary), result);
         result.put("active", anyMoving);
         call.resolve(result);
+    }
+
+    /**
+     * «Questi arrivi li ho raccontati»: si possono dimenticare.
+     *
+     * Separato da `status` di proposito. Fintanto che leggere consumava, la
+     * correttezza dipendeva dal fatto che esistesse **un solo lettore** — un
+     * vincolo invisibile che si rompe la prima volta che qualcuno chiede lo
+     * stato per un altro motivo. Con l'accusa di ricevuta esplicita, leggere è
+     * innocuo e dimenticare è una decisione.
+     */
+    @PluginMethod
+    public void acknowledgeCompleted(PluginCall call) {
+        JSArray raw = call.getArray("ids");
+        if (raw == null || raw.length() == 0) {
+            call.resolve();
+            return;
+        }
+        java.util.Set<String> ids = new java.util.HashSet<>();
+        for (int index = 0; index < raw.length(); index++) {
+            String id = raw.optString(index, null);
+            if (id != null && !id.isEmpty()) ids.add(id);
+        }
+        TalosTransferSession.acknowledgeArrivals(ids);
+        call.resolve();
     }
 
     @PluginMethod

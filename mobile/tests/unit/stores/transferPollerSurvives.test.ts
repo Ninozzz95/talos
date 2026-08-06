@@ -10,20 +10,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * composer.»
  *
  * Il segnale del catalogo esisteva già dal 2026-08-05 ed era giusto. Quello che
- * mancava è che **nessuno lo emetteva**: la transizione «finito» si scopre
- * confrontando due istantanee, e il confronto lo faceva un poller contato per
- * osservatori — vivo solo finché una delle superfici che mostrano i
- * trasferimenti era montata.
+ * mancava è che **nessuno lo emetteva** nel caso più comune di tutti.
  *
- * Chi fa la cosa più naturale del mondo — avvia il download e torna in chat ad
- * aspettare — smontava l'ultima superficie, e con lei il poller. Il download
- * finiva nel nativo e la notizia non veniva mai scoperta.
+ * ## Due correzioni, e solo la seconda ha toccato la causa
  *
- * Questo test riproduce ESATTAMENTE quello scenario: si osserva, parte un
- * trasferimento, si smette di osservare, e il trasferimento finisce.
+ * La prima (2026-08-06 mattina) ha allungato la vita del poller: vive finché
+ * c'è chi guarda **oppure** c'è un trasferimento in corso. Necessaria, e non
+ * sufficiente.
+ *
+ * MISURATO sul Pad la sera stessa: un modello da 214 MB è arrivato in meno di
+ * dodici secondi con la schermata «questo dispositivo» aperta e visibile, e il
+ * conteggio è rimasto a tre mentre sul disco erano quattro. Il difetto non era
+ * chi guardava: era **che si dovesse guardare**. La fine veniva dedotta dalla
+ * sparizione di una riga fra due istantanee, e fra due istantanee ci sta un
+ * download intero.
+ *
+ * Ora la fine la **dichiara il nativo**, che l'ha compiuta, e la consegna una
+ * volta sola. Il poller serve ancora — è chi va a ritirare la notizia — ed è
+ * per questo che questo test resta valido: si osserva, parte un trasferimento,
+ * si smette di osservare, e il trasferimento finisce.
  */
 
-const stato = vi.hoisted(() => ({ items: [] as unknown[] }))
+const stato = vi.hoisted(() => ({
+    items: [] as unknown[],
+    /** Gli arrivi che il nativo consegna, una volta sola. */
+    completed: [] as Array<{ id: string, modelName: string }>,
+}))
 
 vi.mock('@/services/modelTransfer', () => ({
     // La forma vera dello stato: `phase`, `active` e `paths` in cima, perché
@@ -37,6 +49,8 @@ vi.mock('@/services/modelTransfer', () => ({
         haveBytes: 0,
         totalBytes: 0,
         supported: true,
+        // Consegnati e svuotati, come fa il nativo: una lettura sola.
+        completed: stato.completed.splice(0, stato.completed.length),
     })),
     talosStartModelTransfer: vi.fn(async () => ({ ok: true })),
     talosCancelModelTransfer: vi.fn(async () => ({ ok: true })),
@@ -76,6 +90,7 @@ beforeEach(() => {
     vi.useFakeTimers()
     annunci.length = 0
     stato.items = []
+    stato.completed = []
 })
 
 afterEach(() => {
@@ -95,11 +110,12 @@ describe('il download che finisce mentre nessuno guarda', () => {
         // 2. Si torna in chat ad aspettare: l'ULTIMA superficie si smonta.
         rilascia()
 
-        // 3. Il download arriva in fondo e poi sparisce dalla lista, nel
-        //    nativo, mentre nessuno guarda.
+        // 3. Il download finisce nel nativo, mentre nessuno guarda: la riga
+        //    sparisce e al suo posto compare l'ARRIVO dichiarato.
         stato.items = [inFondo('t1')]
         await vi.advanceTimersByTimeAsync(1_100)
         stato.items = []
+        stato.completed = [{ id: 't1', modelName: 'Qwen' }]
         await vi.advanceTimersByTimeAsync(2_500)
 
         // 4. La notizia deve esserci comunque.
@@ -122,6 +138,7 @@ describe('il download che finisce mentre nessuno guarda', () => {
         stato.items = [inFondo('t1')]
         await vi.advanceTimersByTimeAsync(1_100)
         stato.items = []
+        stato.completed = [{ id: 't1', modelName: 'Qwen' }]
         await vi.advanceTimersByTimeAsync(1_100)
 
         const dopoLaFine = vi.mocked(servizio.talosModelTransferStatus).mock.calls.length
