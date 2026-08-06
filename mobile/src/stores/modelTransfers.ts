@@ -131,6 +131,12 @@ function announce(prima: readonly TalosTransferItem[], dopo: readonly TalosTrans
             talosAnnounceLocalCatalogueChange('transfer-finished')
         }
     }
+    /*
+     * E quando non resta più niente da scoprire, l'orologio si ferma da solo.
+     * Un `setInterval` al secondo che gira per sempre è una batteria che si
+     * consuma per guardare una lista vuota.
+     */
+    fermaPollerSeInutile()
 }
 
 /**
@@ -182,23 +188,74 @@ export function talosRefreshModelTransfer(): Promise<void> {
     return refreshing
 }
 
-/** One ref-counted poller shared by all five chrome surfaces. */
+/**
+ * Vero finché un trasferimento è ancora in corso.
+ *
+ * Serve a tenere vivo l'osservatore **quando nessuno sta guardando**, che è
+ * esattamente il caso che si rompeva.
+ */
+function trasferimentiInCorso(): boolean {
+    // `active` è il campo che il servizio dichiara già per questo: un
+    // trasferimento in pausa non sta lavorando, e non giustifica l'orologio.
+    return state.items.some((item) => item.active)
+}
+
+function avviaPoller(): void {
+    if (poller !== null) return
+    poller = setInterval(() => { void talosRefreshModelTransfer() }, 1_000)
+}
+
+function fermaPollerSeInutile(): void {
+    if (poller === null) return
+    if (observers > 0 || trasferimentiInCorso()) return
+    clearInterval(poller)
+    poller = null
+}
+
+/**
+ * L'osservatore che non dipende da chi guarda.
+ *
+ * ## Il difetto, riferito dall'owner il 2026-08-06
+ *
+ * «I modelli locali non vengono caricati subito nel composer appena dopo essere
+ * scaricati e installati: per farlo bisogna premere il pulsante refresh nel
+ * composer.»
+ *
+ * Il segnale del catalogo esisteva già ed era giusto. Quello che mancava è che
+ * **nessuno lo emetteva**: la transizione «finito» viene scoperta confrontando
+ * due istantanee, e il confronto lo faceva un poller **contato per osservatori**
+ * — vivo solo finché una delle cinque superfici che mostrano i trasferimenti
+ * era montata.
+ *
+ * Chi fa la cosa più naturale del mondo — avvia il download e torna in chat ad
+ * aspettare — smontava l'ultima superficie che guardava, e con lei il poller. Il
+ * download finiva nel nativo, la notizia non veniva mai scoperta, e il composer
+ * restava indietro fino al tocco su «aggiorna». La correzione del 2026-08-05
+ * funzionava solo restando fermi sulla schermata dei modelli, cioè nel caso in
+ * cui serviva meno.
+ *
+ * Adesso il poller vive finché **c'è un osservatore OPPURE c'è un
+ * trasferimento in corso**. Chi lavora giustifica l'orologio; lo schermo no.
+ */
 export function talosRetainModelTransferObserver(): () => void {
     observers += 1
-    if (observers === 1) {
-        void talosRefreshModelTransfer()
-        poller = setInterval(() => { void talosRefreshModelTransfer() }, 1_000)
-    }
+    if (observers === 1) void talosRefreshModelTransfer()
+    avviaPoller()
     let released = false
     return () => {
         if (released) return
         released = true
         observers = Math.max(0, observers - 1)
-        if (observers === 0 && poller !== null) {
-            clearInterval(poller)
-            poller = null
-        }
+        fermaPollerSeInutile()
     }
+}
+
+/**
+ * Da chiamare quando un trasferimento parte, perché da quel momento c'è
+ * qualcosa da scoprire anche se nessuna superficie è montata.
+ */
+export function talosKeepWatchingTransfers(): void {
+    avviaPoller()
 }
 
 type StartRequest = Parameters<typeof talosStartModelTransfer>[0]
