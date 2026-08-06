@@ -92,6 +92,22 @@ final class TalosLlamaNative {
     static native String nativeKvCacheType(long handle);
 
     /**
+     * Quante volte un modello e' stato aperto da quando il processo e' partito.
+     *
+     * Diagnostico: un invio che ne conta due sta ricaricando gigabyte di pesi
+     * gia' in memoria, ed e' cio' che ha reso il primo messaggio cento volte
+     * piu' lento dei successivi.
+     */
+    static native int nativeOpensSinceStart();
+
+    /**
+     * {@code [threads, threadsBatch, microBatch]} del contesto aperto, o
+     * {@code null}. Chiesti al contesto: fra cio' che si chiede e cio' che si
+     * ottiene c'e' un ripiego possibile.
+     */
+    static native long[] nativeRuntimeConfig(long handle);
+
+    /**
      * L'architettura dichiarata dal file e quanti strati ha, in JSON — oppure
      * {@code null} se non è nemmeno un GGUF leggibile.
      *

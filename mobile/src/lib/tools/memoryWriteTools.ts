@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
+import { talosStripPromptEnvelope } from '@/lib/chat/promptEnvelope'
 
 /**
  * Il modello puo' finalmente ANNOTARE, non solo ricordare.
@@ -69,8 +70,8 @@ export function createTalosMemoryWriteTools(
             async run(input) {
                 try {
                     const saved = await sources.create({
-                        title: input.title.trim(),
-                        content: input.content.trim(),
+                        title: talosStripPromptEnvelope(input.title).trim(),
+                        content: talosStripPromptEnvelope(input.content).trim(),
                         kind: input.kind,
                     })
                     // Si dice COSA e' stato scritto, non «fatto»: e' una cosa
@@ -78,7 +79,7 @@ export function createTalosMemoryWriteTools(
                     // correggere adesso se non e' quella che intendeva.
                     return {
                         ok: true,
-                        content: `Remembered as «${saved.title}»: ${input.content.trim()}`,
+                        content: `Remembered as «${saved.title}»: ${talosStripPromptEnvelope(input.content).trim()}`,
                         evidence: { title: saved.title, kind: input.kind },
                     }
                 } catch (failure) {

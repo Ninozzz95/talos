@@ -13,6 +13,7 @@ import {
     Activity, ChevronDown, CircleCheck, CircleX, ClipboardCopy, Stethoscope, Timer,
 } from '@lucide/vue'
 import { Capacitor } from '@capacitor/core'
+import { talosLocalEngineDoctorRows } from '@/services/localEngineDoctor'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import { talosDictationDiagnostics } from '@/services/dictation'
@@ -239,6 +240,24 @@ async function scan(): Promise<void> {
         value: navigator.onLine ? t('doctor.online') : t('doctor.offlineLocal'),
         ok: true,
     })
+
+    /**
+     * ⭐ Il motore locale, con tutto ciò che si misura da stamattina.
+     *
+     * Owner 2026-08-06: «dobbiamo espandere il doctor con funzioni diagnostiche
+     * avanzate, soprattutto per i modelli locali». La prova che serviva era
+     * arrivata poche ore prima dal suo registro: 111 secondi prima della prima
+     * parola e 195 millisecondi ai giri successivi dello stesso invio. Tutti i
+     * numeri per spiegarlo esistevano già e non erano leggibili da nessuna
+     * parte — e una misura che nessuno può leggere è una misura non presa.
+     *
+     * In fondo e non in cima: chi apre il Doctor per un problema di rete o di
+     * archivio non deve attraversare dodici righe sul motore. Chi lo apre per il
+     * motore, invece, sa già cosa sta cercando.
+     */
+    for (const row of await talosLocalEngineDoctorRows().catch(() => [])) {
+        collected.push({ id: row.id, label: t(row.labelKey), value: row.value, ok: row.ok })
+    }
 
     rows.value = collected
     issues.value = talosDeviceIssues()

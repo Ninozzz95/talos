@@ -225,6 +225,14 @@ public final class TalosLlamaEngine implements AutoCloseable {
         }
     }
 
+    /**
+     * I numeri di esecuzione VERI: thread di generazione, thread di prefill,
+     * microbatch. Chiesti al contesto, non ripetuti dalla richiesta.
+     */
+    public long[] runtimeConfig() {
+        return TalosLlamaNative.nativeRuntimeConfig(handle);
+    }
+
     public int contextTokens() {
         return TalosLlamaNative.nativeContextTokens(handle);
     }
