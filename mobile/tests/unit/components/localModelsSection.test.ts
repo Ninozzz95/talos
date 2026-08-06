@@ -29,6 +29,14 @@ const store = vi.hoisted(() => ({
 
 vi.mock('@/stores/localModels', () => ({
     talosLocalModels: new Proxy({}, { get: (_, key) => (store.state as never)[key] }),
+    // I filtri e l'apertura del campo si scrivono dallo STORE: lo stato è
+    // esposto in sola lettura, quindi il componente non può toccarlo.
+    talosSetBrowseFilters: (filters: readonly string[]) => {
+        (store.state as never as { browseFilters: string[] }).browseFilters = [...filters]
+    },
+    talosSetBrowseSearchOpen: (open: boolean) => {
+        (store.state as never as { browseSearchOpen: boolean }).browseSearchOpen = open
+    },
     talosSearchLocalModels: store.search,
     talosOpenModelRepo: store.open,
     talosCloseModelRepo: store.close,
@@ -145,6 +153,11 @@ function baseState(over: Record<string, unknown> = {}) {
     return reactive({
         query: '',
         sort: 'downloads',
+        // Dal 2026-08-06 i filtri del Hub e l'apertura del campo vivono nello
+        // store, non nel componente: tornando da una scheda modello si
+        // ritrovano com'erano invece di azzerarsi.
+        browseFilters: [],
+        browseSearchOpen: false,
         searching: false,
         results: [],
         searchFailure: null,

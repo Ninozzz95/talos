@@ -31,6 +31,13 @@ const props = withDefaults(defineProps<{
      * dentro qualcosa?».
      */
     parentBack?: (() => void) | null
+    /**
+     * La decisione UNICA del guscio, la stessa che esegue il gesto di sistema.
+     *
+     * Quando c'è, vince su tutto il resto: è il punto in cui il tasto e il gesto
+     * smettono di essere due strade.
+     */
+    shellBack?: ((canGoBack: boolean) => 'handled' | 'history' | 'exit') | null
     /** Il nome del posto dove si torna, per dirlo invece di farlo indovinare. */
     parentTitle?: string
 }>(), {
@@ -50,6 +57,31 @@ const { t } = useTalosI18n()
  * chiudere tutto da una pagina di dettaglio butta via due passi invece di uno.
  */
 function goBack(): void {
+    /*
+     * ⛔ Il tasto passa dalla STESSA decisione del gesto di sistema.
+     *
+     * Owner 2026-08-06: «il pulsante indietro in alto a sinistra non si comporta
+     * come la gesture indietro». La decisione era già una funzione pura e
+     * provata, ma la usava solo il gesto: questo tasto ne aveva una sua, che
+     * conosceva la sotto-vista e il genitore e ignorava l'overlay del
+     * compositore, l'intro e la sidebar.
+     *
+     * La linea guida Android dice la stessa cosa: gesto e tasto devono
+     * percorrere lo stesso codice, o l'anteprima del gesto predittivo mostra
+     * una destinazione e il tasto ne raggiunge un'altra.
+     *
+     * Il ripiego locale resta per il caso in cui la guscio non abbia passato
+     * l'handler — una schermata montata da sola nei test, per esempio: meglio un
+     * passo indietro imperfetto che un tasto morto.
+     */
+    if (props.shellBack) {
+        // L'esito lo gestisce QUI e non nel guscio: `history.back()` non serve
+        // all'avvio dell'app, e questo componente è un pezzo caricato a
+        // richiesta — misurato, il tetto d'avvio è già oltre il limite di 73
+        // byte quando la stessa riga sta in `App.vue`.
+        if (props.shellBack(window.history.length > 1) === 'history') window.history.back()
+        return
+    }
     if (subView.value) { subView.value.back(); return }
     if (props.parentBack) { props.parentBack(); return }
     emit('close')
