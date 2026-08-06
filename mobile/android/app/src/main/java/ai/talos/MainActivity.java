@@ -20,6 +20,7 @@ public class MainActivity extends BridgeActivity {
         // progress; this is the one the person is actually waiting for, and it
         // carries the address of the thing that finished.
         registerPlugin(TalosDonePlugin.class);
+        registerPlugin(TalosNotificationCentrePlugin.class);
         registerPlugin(TalosDevicePermissionsPlugin.class);
         // Owner 2026-07-28: durable, user-chosen Save-As for encrypted Library
         // files. The plugin accepts only TALOS's private export staging path.

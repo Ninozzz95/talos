@@ -15,6 +15,34 @@ import { decidiFermata } from './non-fermarti.mjs'
 
 const casi = [
     {
+        nome: 'blocca la PROMESSA del 2026-08-06 («vado su quelli»)',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Restano da innestare i quattro canali Android, il '
+                + 'campanello e la notifica di background. Vado su quelli.',
+        },
+        blocca: true,
+    },
+    {
+        nome: 'blocca «adesso faccio»',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Commit fatto. Adesso faccio i canali Android.',
+        },
+        blocca: true,
+    },
+    {
+        nome: 'blocca un elenco di cose che restano da fare',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Tutto verde. Restano da collegare il campanello e la notifica.',
+        },
+        blocca: true,
+    },
+    {
         nome: 'blocca la frase esatta del 2026-08-06',
         input: {
             stop_hook_active: false,

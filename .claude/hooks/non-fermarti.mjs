@@ -43,6 +43,34 @@
  * massimo un blocco per turno.
  */
 
+/**
+ * Le PROMESSE, che sono la seconda forma della stessa fermata.
+ *
+ * Owner, 2026-08-06, poche ore dopo la prima: «e ti sei fermato di nuovo».
+ * Avevo chiuso con «Restano da innestare i canali Android, il campanello e la
+ * notifica di background. **Vado su quelli**» — e poi ho chiuso il turno.
+ *
+ * La prima versione dell'hook guardava solo le OFFERTE («vuoi che», «salvo che
+ * tu voglia»), e questa passava indenne: non chiedevo permesso, dichiaravo
+ * un'intenzione. Ma una promessa su un lavoro non fatto è una fermata identica —
+ * anzi peggiore, perché sembra un proseguimento.
+ *
+ * È anche esattamente ciò che la guida di Anthropic per il lavoro autonomo dice
+ * di controllare: se l'ultimo paragrafo è un piano, un elenco di prossimi passi o
+ * una promessa («adesso faccio…», «vado su…»), quel lavoro va fatto ORA con
+ * delle chiamate, non annunciato.
+ */
+const PROMESSE = [
+    /\bvado (su|a|con|avanti con)\b/i,
+    /\b(adesso|ora|poi) (faccio|vado|passo|procedo|implemento|continuo|inizio)\b/i,
+    /\b(proseguo|procedo|continuo) (con|su|adesso|ora)\b/i,
+    /\brest(a|ano) da (fare|innestare|implementare|collegare|scrivere)\b/i,
+    /\bil prossimo (passo|blocco|pezzo)\b/i,
+    /\bnel prossimo (turno|passo|blocco)\b/i,
+    /\bmi metto (su|a)\b/i,
+    /\b(next up|next step|i'?ll (do|start|move|go)|moving on to)\b/i,
+]
+
 const OFFERTE = [
     // Il caso esatto del 2026-08-06.
     /salvo che tu (voglia|preferisca)/i,
@@ -116,10 +144,26 @@ export function decidiFermata(input) {
     // Si guarda la CODA, non tutto il testo: citare una domanda a metà di un
     // messaggio lungo è normale, chiuderci sopra il turno no.
     const coda = messaggio.slice(-600)
-    if (!OFFERTE.some((forma) => forma.test(coda))) return null
+    const offre = OFFERTE.some((forma) => forma.test(coda))
+    const promette = PROMESSE.some((forma) => forma.test(coda))
+    if (!offre && !promette) return null
 
-    return { decision: 'block', reason: RAGIONE }
+    return {
+        decision: 'block',
+        reason: promette && !offre ? RAGIONE_PROMESSA : RAGIONE,
+    }
 }
+
+const RAGIONE_PROMESSA = [
+    'Ti sei fermato di nuovo: il tuo ultimo messaggio finisce con una PROMESSA',
+    'su un lavoro che non hai fatto — «vado su quelli», «adesso faccio», «restano',
+    'da fare». Una promessa non è un proseguimento: è la stessa fermata scritta',
+    'al futuro, e per chi legge è peggio, perché sembra che tu stia continuando.',
+    '',
+    'Fai ORA quel lavoro, con delle chiamate, invece di annunciarlo. Se una parte',
+    'è davvero bloccata, fai tutto il resto e poi dichiara la fermata scrivendo',
+    '«⛔ FERMATA: <motivo>».',
+].join(' ')
 
 async function main() {
     let input = {}
