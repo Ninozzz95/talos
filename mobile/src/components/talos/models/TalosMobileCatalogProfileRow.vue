@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { CheckCircle2, CircleAlert, Eye, EyeOff, Gauge, Sparkles } from '@lucide/vue'
+import { CheckCircle2, CircleAlert, Gauge, Sparkles } from '@lucide/vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
+import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
 import { useTalosI18n } from '@/i18n'
 import { talosMobileProviderById } from '@/lib/mobileProviders'
@@ -98,20 +99,34 @@ function modalityLabel(modality: string): string {
                 <Sparkles class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
                 <span class="min-w-0">{{ selected ? $t('models.default') : $t('models.useModel') }}</span>
             </button>
-            <button
-                type="button"
-                role="switch"
+            <!--
+                L'ULTIMO interruttore fatto a mano dell'app.
+
+                Era un `<button role="switch">` con due icone e un'etichetta che
+                cambiava fra «Nel composer» e «Nascosto». Due difetti in uno: non
+                somigliava a nessun altro interruttore di TALOS, e il testo
+                visibile cambiava con lo stato mentre il nome accessibile no —
+                due segnali diversi sulla stessa cosa, e chi legge lo schermo ne
+                sentiva uno solo.
+
+                Adesso l'etichetta è FISSA e dice cosa si sta accendendo; lo
+                stato lo dice l'interruttore, che è ciò che la ricerca del
+                2026-08-02 prescrive (APG: il nome accessibile non cambia con lo
+                stato).
+            -->
+            <label
                 data-primary-model-action
-                :aria-checked="profile.show_in_composer"
-                :aria-label="$t('models.showInComposer', { name: profile.display_name })"
-                :disabled="profile.status === 'disabled' || busy"
-                class="inline-flex min-h-touch min-w-0 items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-inline)] text-xs font-semibold text-[var(--talos-muted)] disabled:opacity-50"
-                @click="emit('toggle-visibility', profile.id, !profile.show_in_composer)"
+                class="inline-flex min-h-touch min-w-0 items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-[var(--talos-space-inline)] text-xs font-semibold text-[var(--talos-muted)]"
             >
-                <Eye v-if="profile.show_in_composer" class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
-                <EyeOff v-else class="size-[var(--talos-icon-size)] shrink-0" aria-hidden="true" />
-                <span class="min-w-0">{{ profile.show_in_composer ? $t('models.inComposer') : $t('models.hidden') }}</span>
-            </button>
+                <span class="min-w-0 truncate">{{ $t('models.inComposer') }}</span>
+                <TalosThemedSwitch
+                    :model-value="profile.show_in_composer"
+                    :aria-label="$t('models.showInComposer', { name: profile.display_name })"
+                    :disabled="profile.status === 'disabled' || busy"
+                    test-id="talos-model-visibility-switch"
+                    @update:model-value="emit('toggle-visibility', profile.id, $event)"
+                />
+            </label>
         </div>
 
         <details class="mt-[var(--talos-space-control)] border-t border-[var(--talos-border)] pt-[var(--talos-space-inline)]">
