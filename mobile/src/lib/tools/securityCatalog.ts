@@ -1,0 +1,54 @@
+/**
+ * Cosa ogni tool fa DAVVERO, in termini di sicurezza.
+ *
+ * ## Perché in un file suo e non accanto a gruppo e azioni
+ *
+ * Perché si paga in due posti diversi. Il catalogo dei controlli lo leggono le
+ * **Impostazioni**, che stanno nel grafo d'avvio; questo lo legge
+ * l'**esecutore**, che è un chunk dinamico. Tenendoli insieme, ventisei
+ * descrittori finivano nel bundle iniziale di chi non ha ancora aperto una
+ * chat: **misurato, 601.709 byte contro un tetto di 600.000**. Separati, non
+ * costano niente a nessuno.
+ *
+ * ## Le tre bandiere sono la trifecta
+ *
+ * Dati privati, contenuto non attendibile, capacità di far uscire qualcosa. Un
+ * tool solo non è mai il problema; il problema è quando le tre si incontrano
+ * nella stessa conversazione — vedi `lib/tools/security.ts`, dove la regola è
+ * scritta una volta e provata.
+ *
+ * Chi aggiunge un tool e dimentica questa riga non rompe niente a runtime — il
+ * predefinito prudente lo copre — ma un test glielo dice il giorno stesso.
+ */
+
+import type { TalosAgentToolId } from '@/lib/tools/toolControls'
+import type { TalosToolSecurity } from '@/lib/tools/security'
+
+export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSecurity>> = Object.freeze({
+    library_list: { risk: 'R1', reversibility: 'read-only', readsPrivateData: true, readsUntrustedContent: true, canTransmit: false },
+    library_search: { risk: 'R1', reversibility: 'read-only', readsPrivateData: true, readsUntrustedContent: true, canTransmit: false },
+    library_read: { risk: 'R1', reversibility: 'read-only', readsPrivateData: true, readsUntrustedContent: true, canTransmit: false },
+    library_file_origin: { risk: 'R0', reversibility: 'read-only', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    notes_list: { risk: 'R1', reversibility: 'read-only', readsPrivateData: true, readsUntrustedContent: true, canTransmit: false },
+    tasks_list: { risk: 'R1', reversibility: 'read-only', readsPrivateData: true, readsUntrustedContent: true, canTransmit: false },
+    memory_search: { risk: 'R1', reversibility: 'read-only', readsPrivateData: true, readsUntrustedContent: true, canTransmit: false },
+    time_now: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    research_list: { risk: 'R1', reversibility: 'read-only', readsPrivateData: true, readsUntrustedContent: true, canTransmit: false },
+    memory_write: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    notes_create: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    notes_update: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    notes_delete: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    tasks_create: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    tasks_complete: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    tasks_delete: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    web_search: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
+    web_read: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
+    document_create: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    generate_image: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: true },
+    library_export: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    library_context_policy_update: { risk: 'R3', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    local_models_search: { risk: 'R1', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
+    local_model_inspect: { risk: 'R1', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
+    local_model_download: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
+    local_models_status: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+})

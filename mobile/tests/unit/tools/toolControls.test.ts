@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import {
     createTalosReadTools,
 } from '@/lib/tools/readTools'
+import { createTalosResearchTools } from '@/lib/tools/researchTools'
+import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
 import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
 import { createTalosTasksWriteTools } from '@/lib/tools/tasksWriteTools'
 import { createTalosWebTools } from '@/lib/search/webTools'
@@ -36,9 +38,25 @@ function everyExecutableTool() {
             searchMemories: vi.fn(async () => []),
             now: () => '2026-07-28T00:00:00.000Z',
         }),
-        // Le note in SCRITTURA: la seconda porta che mancava. Stanno qui
-        // subito dopo i tool di lettura perche' questo elenco e' ordinato, e
-        // l'ordine e' cio' che il catalogo deve rispecchiare.
+        /*
+         * `research_list` e `memory_write` mancavano da QUESTA lista, e per
+         * questo il test non si era mai accorto che mancassero anche dal
+         * catalogo — un controllo di copertura che non conosce due dei suoi
+         * oggetti non copre niente, e nel frattempo quei due tool non
+         * comparivano né fra gli interruttori né nella pagina dei permessi.
+         *
+         * Scovato il 2026-08-06 da un secondo test, che confronta il catalogo
+         * con l'elenco VERO degli id invece che con una lista scritta a mano.
+         *
+         * L'ordine è quello di `toolset.ts`, che è la fonte: lettura, ricerca,
+         * memoria, note, attività, documenti, immagini.
+         */
+        ...createTalosResearchTools({
+            list: vi.fn(async () => []),
+        } as never),
+        ...createTalosMemoryWriteTools({
+            create: vi.fn(async () => ({ id: 'm1', title: 'x' })),
+        } as never),
         ...createTalosNotesWriteTools({
             create: vi.fn(async () => ({ id: 'n1', title: 'x' })),
             update: vi.fn(async () => ({ id: 'n1', title: 'x' })),
@@ -181,12 +199,27 @@ describe('Agent Tools control registry', () => {
         const withoutNotesWrite = tools.filter((tool) => ![
             'notes_create', 'notes_update', 'notes_delete',
             'tasks_create', 'tasks_complete', 'tasks_delete',
+            // 2026-08-06: `research_list` e `memory_write` non erano MAI stati
+            // in questa lista, pur esistendo da settimane — quindi rispetto ai
+            // digest storici sono «nuovi» esattamente come lo erano gli altri.
+            'research_list', 'memory_write',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('294015f453d5a35d76e67d812e2327b59075c2af373c60054e88a930c2245880')
 
+        /*
+         * Ri-fissato 2026-08-06 per `research_list` e `memory_write`, che
+         * esistevano da settimane ma non erano MAI entrati in questa lista —
+         * quindi la guardia non li ha mai guardati, e nel frattempo non
+         * comparivano neppure fra gli interruttori né nell'elenco dei permessi.
+         *
+         * **Dimostrato, non assunto**, come le volte precedenti: il blocco qui
+         * sopra li esclude e riproduce `294015f4…` byte per byte. Nessun
+         * contratto preesistente si è mosso; è cresciuta la lista, non il
+         * contratto.
+         */
         expect(digestOf(controlPlane))
-            .toBe('f6ecf5bce9d1d2e170421b8d4f89ab283a9ca7fc252009a4dcaecdd2c321674f')
+            .toBe('c7762d0fb5a88051d27bb6d919e1d1dc1aa2ab2c326ae8e4d51f256731976a38')
         /**
          * Re-pinned 2026-08-01 for the three DIALECT digests only — the control
          * plane above did not move, which is the proof that nothing structural
@@ -253,10 +286,10 @@ describe('Agent Tools control registry', () => {
 
         // E con i tre nuovi dentro: il contratto pubblico di oggi.
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('5ec65a7afeeebe8982113fab254f081ed6c2ea5fdb0519eaceb3cee38a9a86fa')
+            .toBe('a9bfab7ced043e828208c8b2809f07935197038088ad4ed203867ee1b9c0b0c1')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('f92f97d7fe21454043bcb5faaf935ac1b38dffaae87a6bda8d951c0caea3008d')
+            .toBe('6505c3636e1dee48a3203f821a2fe3f3f8607f81fb5870b96e5c11cfe01174cc')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('86f0cbbe4e5fa5a16765ce7061e97e5eb6885852718f8f6e8fed7720a457261c')
+            .toBe('54f87e74f2a4092f36b61672feb5d286a1e0971ec8f0c46fba627710b4b60d5c')
     })
 })
