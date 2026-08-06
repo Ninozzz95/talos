@@ -348,3 +348,59 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
         )
     })
 })
+
+/**
+ * C45-RED-19N — la cucitura: il modello locale riempie il cassetto
+ * «Ragionamento» come fanno i provider di rete.
+ *
+ * La prova sta QUI e non solo accanto al separatore puro, perché il difetto era
+ * nella cucitura: il separatore non esisteva e l'adattatore mandava tutto in
+ * `onChunk`. È la stessa lezione dell'avviso di partenza dei download.
+ */
+describe('C45-RED-19N reasoning is routed while it streams', () => {
+    // `input()` dell'altro blocco e' fuori portata: qui serve il minimo.
+    const richiesta = () => ({
+        model: {
+            id: '/models/qwen.gguf', provider: 'local', displayName: 'Qwen',
+            chatCompatibility: 'unknown', supportedParameters: [],
+            inputModalities: ['text'], outputModalities: ['text'],
+        },
+        turns: [{ role: 'user', content: 'Rispondi con PRONTO.' }],
+        effort: 'low',
+        thinking: false,
+    })
+
+    it('non manda mai il marcatore nella bolla, e riempie il ragionamento', async () => {
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'p', promptTokens: 100, contextTokens: 4096,
+        })
+        // Il motore consegna a pezzi arbitrari, col tag spezzato in mezzo.
+        localEngine.talosLocalEngineGenerate.mockImplementation(
+            async (_prompt: string, onDelta: (delta: string) => void) => {
+                for (const pezzo of ['<thi', 'nk>rag', 'iono</th', 'ink>PRON', 'TO']) onDelta(pezzo)
+                return { text: 'PRONTO', tokens: 2 }
+            },
+        )
+
+        const testo: string[] = []
+        const ragionamento: string[] = []
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true, backends: 'CPU', loadedPath: null, shape: null,
+        })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue(null)
+        await localAdapter.streamComplete(
+            richiesta() as never,
+            { apiKey: null, endpoint: null },
+            {
+                onChunk: (t: string) => testo.push(t),
+                onReasoning: (t: string) => ragionamento.push(t),
+            } as never,
+        )
+
+        expect(testo.join('')).toBe('PRONTO')
+        expect(ragionamento.join('')).toBe('ragiono')
+        // Nessun pezzo intermedio contiene il marcatore: è il punto di tutto.
+        for (const pezzo of testo) expect(pezzo).not.toMatch(/<|>/)
+    })
+})
