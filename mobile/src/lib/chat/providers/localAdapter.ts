@@ -11,6 +11,7 @@ import {
     TalosLocalEngineOpenError,
     type TalosLocalEngineStatus,
     talosLocalEngineChatPlan,
+    talosLocalEngineCancel,
     talosLocalEngineGenerate,
     talosLocalEngineOpen,
     talosLocalEngineOpenWithFallback,
@@ -431,11 +432,42 @@ export const localAdapter: TalosMobileProviderAdapter = {
         _credential,
         handlers: TalosProviderStreamHandlers,
     ): Promise<TalosMobileCompletionResult> {
-        // The abort signal is honoured by not starting rather than by tearing
-        // down a load already in flight: cancelling mid-load leaves gigabytes
-        // half-mapped, and the engine's own cancel covers the part that matters,
-        // which is the generation.
+        /*
+         * Fermarsi vuol dire fermare il NATIVO, non smettere di ascoltarlo.
+         *
+         * Owner 2026-08-06: «il pulsante stop non funziona bene nei modelli
+         * locali, anzi non funziona proprio». Aveva ragione, e il difetto era
+         * qui: il commento che stava in queste righe diceva che «il cancel del
+         * motore copre la parte che conta, cioè la generazione» — ma
+         * `talosLocalEngineCancel` **non era chiamata da nessuno**, in tutto il
+         * progetto. La catena esisteva intera e finiva nel vuoto: flag atomico
+         * nel C++, metodo nel plugin Java, funzione in TypeScript, e nessun
+         * chiamante.
+         *
+         * Il risultato era la forma peggiore di finto annullamento: la chat
+         * smetteva di mostrare le parole e il telefono continuava a macinare
+         * token, con la CPU al massimo, finché il modello non finiva da solo.
+         *
+         * L'annullamento resta per la GENERAZIONE e non per il caricamento:
+         * interrompere un caricamento a metà lascia gigabyte mappati a metà, e
+         * quella è davvero la parte che non conviene toccare.
+         */
         if (handlers.signal?.aborted) throw new Error('TALOS_LOCAL_ABORTED')
-        return run(input, handlers.onChunk, handlers.onReasoning)
+        const fermaIlMotore = () => {
+            // Un annullamento che fallisce non deve rovesciare la risposta già
+            // ricevuta: il peggio che può capitare è che il motore finisca da
+            // solo, cioè esattamente com'era prima di questa correzione.
+            // `Promise.resolve` attorno: il ponte nativo può restituire
+            // `undefined` invece di una promessa, e un annullamento che va in
+            // eccezione mentre si sta annullando è il modo più stupido di
+            // perdere una risposta già ricevuta.
+            void Promise.resolve(talosLocalEngineCancel()).catch(() => {})
+        }
+        handlers.signal?.addEventListener('abort', fermaIlMotore, { once: true })
+        try {
+            return await run(input, handlers.onChunk, handlers.onReasoning)
+        } finally {
+            handlers.signal?.removeEventListener('abort', fermaIlMotore)
+        }
     },
 }

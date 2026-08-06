@@ -404,3 +404,97 @@ describe('C45-RED-19N reasoning is routed while it streams', () => {
         for (const pezzo of testo) expect(pezzo).not.toMatch(/<|>/)
     })
 })
+
+/** La stessa richiesta usata dagli altri gruppi, qui a portata di questo. */
+function richiestaLocale() {
+    return {
+        model: {
+            id: '/models/qwen.gguf', provider: 'local', displayName: 'Qwen',
+            chatCompatibility: 'unknown', supportedParameters: [],
+            inputModalities: ['text'], outputModalities: ['text'],
+        },
+        turns: [{ role: 'user', content: 'Rispondi con PRONTO.' }],
+        effort: 'low',
+        thinking: false,
+    }
+}
+
+/**
+ * Fermarsi vuol dire fermare il NATIVO, non smettere di ascoltarlo.
+ *
+ * Owner 2026-08-06: «il pulsante stop non funziona bene nei modelli locali,
+ * anzi non funziona proprio».
+ *
+ * Il difetto era che `talosLocalEngineCancel` **non era chiamata da nessuno**,
+ * in tutto il progetto: la catena esisteva intera — flag atomico nel C++,
+ * metodo nel plugin Java, funzione in TypeScript — e finiva nel vuoto. La chat
+ * smetteva di mostrare le parole e il telefono continuava a macinare token con
+ * la CPU al massimo finché il modello non finiva da solo.
+ */
+describe("lo Stop ferma il motore, non solo l'ascolto", () => {
+    it('chiama il cancel nativo quando il segnale scatta a metà generazione', async () => {
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ ok: true } as never)
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'p', promptTokens: 10, contextTokens: 4096,
+        })
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true, backends: 'CPU', loadedPath: null, shape: null,
+        })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue(null)
+        localEngine.talosLocalEngineCancel.mockClear()
+
+        const controller = new AbortController()
+        // Il motore parla, e a metà l'utente preme Stop.
+        localEngine.talosLocalEngineGenerate.mockImplementation(
+            async (_prompt: string, onDelta: (delta: string) => void) => {
+                onDelta('sto rispon')
+                controller.abort()
+                await Promise.resolve()
+                return { text: 'sto rispon', tokens: 2 }
+            },
+        )
+
+        await localAdapter.streamComplete(
+            richiestaLocale() as never,
+            { apiKey: null, endpoint: null },
+            { onChunk: () => {}, signal: controller.signal } as never,
+        )
+
+        expect(localEngine.talosLocalEngineCancel).toHaveBeenCalledTimes(1)
+    })
+
+    /**
+     * E non lo chiama quando nessuno ha premuto niente: un annullamento
+     * spontaneo a fine risposta fermerebbe la generazione SUCCESSIVA, che è un
+     * difetto molto più difficile da capire di quello che stiamo curando.
+     */
+    it('non chiama il cancel se lo Stop non è stato premuto', async () => {
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ ok: true } as never)
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'p', promptTokens: 10, contextTokens: 4096,
+        })
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true, backends: 'CPU', loadedPath: null, shape: null,
+        })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue(null)
+        localEngine.talosLocalEngineCancel.mockClear()
+        localEngine.talosLocalEngineGenerate.mockImplementation(
+            async (_p: string, onDelta: (d: string) => void) => {
+                onDelta('tutto bene')
+                return { text: 'tutto bene', tokens: 2 }
+            },
+        )
+
+        const controller = new AbortController()
+        await localAdapter.streamComplete(
+            richiestaLocale() as never,
+            { apiKey: null, endpoint: null },
+            { onChunk: () => {}, signal: controller.signal } as never,
+        )
+        // E nemmeno DOPO: l'ascoltatore va staccato, o il prossimo Stop di
+        // un'altra risposta fermerebbe anche questa.
+        controller.abort()
+        expect(localEngine.talosLocalEngineCancel).not.toHaveBeenCalled()
+    })
+})
+
