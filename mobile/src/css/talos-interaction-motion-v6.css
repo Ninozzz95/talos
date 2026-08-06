@@ -46,6 +46,41 @@
     }
 }
 
+/**
+ * Le voci di un ventaglio SALGONO, non compaiono.
+ *
+ * L'intento `menu-open` era dichiarato dal motore da sempre e non aveva ancora
+ * un movimento: la prima superficie che lo usa e' il FAB a ventaglio della
+ * sidebar. La distanza e' piccola di proposito — una colonna che arriva da
+ * lontano si legge come un pannello, una che si stacca di poco si legge come un
+ * gesto.
+ *
+ * Durata e curva restano quelle del motore (`surface-enter`), quindi le
+ * preferenze di movimento dell'utente continuano ad avere l'ultima parola, e
+ * `prefers-reduced-motion` e' gia' gestito una volta sola in fondo a questo
+ * file: non va riscritto da nessun componente.
+ */
+@keyframes talos-surface-rise {
+    from {
+        opacity: 0;
+        transform: translate3d(0, var(--talos-motion-surface-rise, 8px), 0) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+}
+
+[data-talos-motion-intent="menu-open"] {
+    animation: talos-surface-rise
+        var(--talos-motion-duration-surface-enter, 0ms)
+        /* Il motore chiama COSI' la curva di `menu-open`: verificato in
+           `interaction/style.ts`. Col nome sbagliato sarebbe sempre caduta
+           su `linear`, e il movimento non avrebbe seguito le preferenze. */
+        var(--talos-motion-ease, linear)
+        both;
+}
+
 [data-talos-motion-intent="composer-expand"] {
     animation: talos-composer-layout-expand
         var(--talos-motion-duration-composer-expand, 0ms)

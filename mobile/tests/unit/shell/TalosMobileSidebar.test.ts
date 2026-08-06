@@ -5,6 +5,15 @@ import { flushPromises, mount } from '@vue/test-utils'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import TalosMobileSidebar from '@/components/shell/TalosMobileSidebar.vue'
 import { DrawerContent } from '@/components/ui/drawer'
+import { createMemoryHistory, createRouter } from 'vue-router'
+
+// Il ventaglio in fondo alla sidebar naviga, quindi la sidebar ora vive dentro
+// un router. Basta la rotta jolly: qui non si preme nessuna voce che navighi —
+// le destinazioni hanno il loro test in `talosSpeedDial.test.ts`.
+const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/:pathMatch(.*)*', name: 'qualsiasi', component: { template: '<div />' } }],
+})
 
 // F1-T3 — full-width hamburger sidebar (D5/D6), chat-first Claude pattern:
 // [New chat] -> Recents (sessions) -> Tools -> Settings pinned bottom.
@@ -28,6 +37,7 @@ afterEach(() => {
 function mountSidebar(props: Record<string, unknown> = {}) {
     return mount(TalosMobileSidebar, {
         attachTo: document.body,
+        global: { plugins: [router] },
         props: {
             open: true,
             sessions,
@@ -43,6 +53,8 @@ describe('TalosMobileSidebar (F1-T3)', () => {
     it('opens as a full-width dialog with the chat-first section order', async () => {
         // Owner 2026-07-24: the single New-chat affordance is the bottom FAB
         // (inside the settings bar) — no duplicate outline button up top.
+        // Owner 2026-08-06: quel FAB è diventato un ventaglio, e resta comunque
+        // uno solo — la posizione è la stessa, cambia cosa sa cominciare.
         mountSidebar()
         await flushPromises()
         const sidebar = document.querySelector('[data-testid="talos-mobile-sidebar"]') as HTMLElement
@@ -51,7 +63,7 @@ describe('TalosMobileSidebar (F1-T3)', () => {
         const recents = html.indexOf('data-testid="talos-sidebar-recents"')
         const tools = html.indexOf('data-testid="talos-sidebar-tools"')
         const settings = html.indexOf('data-testid="talos-sidebar-settings"')
-        const fab = html.indexOf('data-testid="talos-new-chat-fab"')
+        const fab = html.indexOf('data-testid="talos-speed-dial-trigger"')
         expect(html.indexOf('data-testid="talos-sidebar-new-chat"')).toBe(-1)
         expect(recents).toBeGreaterThanOrEqual(0)
         expect(tools).toBeGreaterThan(recents)
@@ -101,12 +113,23 @@ describe('TalosMobileSidebar (F1-T3)', () => {
         expect(dismissalClose.defaultPrevented).toBe(false)
     })
 
-    it('emits newChat from the New chat FAB and closes via update:open', async () => {
+    /**
+     * La chat nasce ancora QUI, non dentro il ventaglio: il ventaglio la chiede
+     * e chi possiede il controller la crea, con il suo stato di attesa. Se un
+     * giorno il ventaglio chiamasse il controller da sé, questo test resterebbe
+     * verde mentre la sidebar smetterebbe di sapere che è successo — perciò
+     * l'asserzione sta sull'evento che ESCE, non sul click.
+     */
+    it('emits newChat from the speed dial and closes via update:open', async () => {
         const wrapper = mountSidebar()
         await flushPromises()
-        ;(document.querySelector('[data-testid="talos-new-chat-fab"]') as HTMLElement).click()
+        ;(document.querySelector('[data-testid="talos-speed-dial-trigger"]') as HTMLElement).click()
+        await flushPromises()
+        ;(document.querySelector('[data-testid="talos-speed-dial-chat"]') as HTMLElement).click()
         await flushPromises()
         expect(wrapper.emitted('newChat')).toHaveLength(1)
+        // E la sidebar si è chiusa da sola: `started` porta a `update:open` false.
+        expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
         const close = document.querySelector('[aria-label="Close menu"]') as HTMLElement
         expect(close).toBeTruthy()
         close.click()

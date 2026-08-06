@@ -29,6 +29,7 @@ import { Plus } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import { useChatController } from '@/stores/chatController'
+import { talosNotify } from '@/stores/notificationCentre'
 
 const controller = useChatController()
 const router = useRouter()
@@ -48,6 +49,19 @@ async function submit(): Promise<void> {
     error.value = null
     try {
         await controller.notes.create({ title: title.value.trim(), content: content.value.trim() })
+        // Peso `log`, come memoria e attività: le tre creazioni a mano lasciano
+        // la stessa traccia, e nessuna delle tre interrompe chi la sta facendo.
+        talosNotify({
+            // La chiave porta il TITOLO: il registro collassa per chiave, e con
+            // una chiave sola due creazioni diverse diventerebbero una riga
+            // con «×2» — cioè un registro che non dice cosa è stato creato.
+            key: `note:created:${title.value.trim()}`,
+            channel: 'jobs',
+            weight: 'log',
+            title: t('notes.add'),
+            body: title.value.trim(),
+            at: Date.now(),
+        })
         // Indietro all'elenco, che è dove la nota appena scritta si vede. Un
         // `push` lascerebbe la pagina di creazione nella cronologia, e Indietro
         // dall'elenco tornerebbe su un modulo vuoto.

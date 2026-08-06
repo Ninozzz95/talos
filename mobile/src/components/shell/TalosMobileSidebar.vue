@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
 import { type TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
-import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
+import TalosMobileSpeedDial from '@/components/shell/TalosMobileSpeedDial.vue'
 import TalosAccountAvatar from '@/components/talos/TalosAccountAvatar.vue'
 import { useTalosAccountStore } from '@/stores/account'
 import {
@@ -258,7 +258,24 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                         <TalosAccountAvatar size="sm" />
                         <span class="max-w-[120px] truncate text-[var(--talos-muted)]">{{ account.state.display_name || $t('navigation.account') }}</span>
                     </button>
-                    <TalosMobileNewChatFab :disabled="props.creatingSession" @click="emit('newChat')" />
+                    <!-- Il ventaglio al posto del tasto singolo.
+
+                         Owner 2026-08-06: la sidebar sapeva cominciare UNA cosa,
+                         e per ogni altra bisognava andare nella sua stazione a
+                         cercarne il FAB — cinque gesti diversi per cinque cose
+                         che sono lo stesso gesto.
+
+                         La chat resta la voce piu' vicina al pollice, cosi' chi
+                         premeva qui per aprire una chat continua a farlo con un
+                         tocco in piu' e nessuna ricerca. -->
+                    <!-- La sidebar si chiude appena qualcosa comincia: quello che
+                         si è chiesto sta per aprirsi sotto, e restare aperti lo
+                         coprirebbe. -->
+                    <TalosMobileSpeedDial
+                        :creating-chat="props.creatingSession"
+                        @started="emit('update:open', false)"
+                        @chat="emit('newChat')"
+                    />
                 </div>
             </div>
         </DrawerContent>
