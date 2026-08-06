@@ -34,7 +34,15 @@ const props = defineProps<{
 
 
 const showTrace = ref(false)
-const trimmed = computed(() => props.reasoning.trim())
+/**
+ * «Ha del contenuto», non «il contenuto ripulito».
+ *
+ * Era `props.reasoning.trim()`, e serviva solo a un `v-if`. Su un ragionamento
+ * che cresce a ogni token quel `trim` allocava una copia dell'intera traccia a
+ * ogni aggiornamento — costo quadratico su una cosa che deve solo rispondere
+ * sì o no. La ricerca esce al primo carattere non bianco, che è il primo.
+ */
+const trimmed = computed(() => /\S/.test(props.reasoning))
 
 /**
  * Owner 2026-07-26: "metti il tempo che è passato in secondi del ragionamento".

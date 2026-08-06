@@ -1,3 +1,5 @@
+import { talosStripReadmeFrontmatter } from '@/lib/models/modelCardMarkdown'
+
 const TALOS_README_SUMMARY_MAX_LENGTH = 320
 
 function talosCleanReadmeBlock(block: string): string {
@@ -19,7 +21,9 @@ function talosReadmeWordCount(text: string): number {
 
 export function talosReadmeSummary(markdown: string): string | null {
     if (typeof markdown !== 'string' || markdown.trim() === '') return null
-    const withoutFrontmatter = markdown.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, '')
+    // Lo stesso taglio che usa la scheda intera: il riassunto e la scheda devono
+    // essere d'accordo su dove comincia il testo.
+    const withoutFrontmatter = talosStripReadmeFrontmatter(markdown)
     const summary = withoutFrontmatter
         .split(/\r?\n\s*\r?\n/)
         .map((block) => block.trim())

@@ -80,6 +80,12 @@ const runningTools = computed(() => controller.toolActivity.value.map((activity)
 // first letter of the answer — which is exactly when it is most useful.
 const streamingReasoning = computed(() => state.streamingReasoning ?? '')
 /**
+ * Stesso motivo del blocco ragionamento: al `v-if` serve sapere se c'è
+ * qualcosa, non ottenere una copia ripulita della traccia intera a ogni
+ * aggiornamento.
+ */
+const haRagionamento = computed(() => /\S/.test(streamingReasoning.value))
+/**
  * Only while the in-flight reply belongs to the conversation on screen.
  *
  * Owner 2026-07-26: leaving a chat generating and opening a new one made a
@@ -306,7 +312,7 @@ onBeforeUnmount(() => {
 
 <template>
     <article
-        v-if="sending && (revealed || streamingReasoning.trim() || runningTools.length)"
+        v-if="sending && (revealed || haRagionamento || runningTools.length)"
         ref="contentHost"
         data-testid="talos-mobile-streaming"
         class="w-full max-w-full px-1 py-1 leading-6 text-[var(--talos-text,var(--foreground))]"

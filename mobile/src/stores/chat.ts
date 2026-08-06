@@ -11,6 +11,7 @@ import type {
 import { parseTalosMobileBrowserEvidenceEnvelope } from '@/lib/browser/browserContracts'
 import { stripLibrarySaveMarkers } from '@/lib/chat/librarySave'
 import { talosMessageReasoning } from '@/lib/chat/messageReasoning'
+import { talosCreateReasoningGate } from '@/lib/chat/reasoningGate'
 import type { TalosMobileInputPart } from '@/lib/chat/attachmentContracts'
 import {
     createTalosChatSendIdentity,
@@ -1143,19 +1144,26 @@ export function createChatStore<Runtime = undefined>(
 
             state.streamingSessionId = owner.id
             state.sendingSessionId = owner.id
+            // Il ragionamento arriva a token e non deve diventare DOM a token:
+            // vedi `reasoningGate`. Uno per invio, così non sopravvive a niente.
+            const ritmoRagionamento = talosCreateReasoningGate()
             const handlers: TalosStreamHandlers = {
                 onChunk: (text) => {
                     streamed += text
+                    // Il primo carattere della risposta dice che il ragionamento
+                    // è finito: quello che era trattenuto esce adesso, intero.
+                    if (ritmoRagionamento.release()) state.streamingReasoning = reasoned
                     state.streamingText = streamed.includes('[TALOS_SAVE_LIBRARY')
                         ? stripLibrarySaveMarkers(streamed)
                         : streamed
                 },
                 onReasoning: (text) => {
                     reasoned += text
-                    state.streamingReasoning = reasoned
+                    if (ritmoRagionamento.accept()) state.streamingReasoning = reasoned
                 },
                 onReasoningReset: () => {
                     reasoned = ''
+                    ritmoRagionamento.reset()
                     state.streamingReasoning = null
                 },
                 signal: abort.signal,
@@ -1419,10 +1427,14 @@ export function createChatStore<Runtime = undefined>(
 
         let streamed = ''
         let reasoned = ''
+        const ritmoRagionamento = talosCreateReasoningGate()
         try {
             const handlers: TalosStreamHandlers = {
                 onChunk: (text) => {
                     streamed += text
+                    // Il ragionamento trattenuto esce col primo carattere della
+                    // risposta — vedi `reasoningGate`.
+                    if (ritmoRagionamento.release()) state.streamingReasoning = reasoned
                     // Security review: never render raw save-markers mid-stream.
                     // Round 3: stripping the WHOLE buffer on every chunk was O(n²)
                     // (measured 8.3s for a marker-heavy reply). Only pay for it once
@@ -1433,10 +1445,11 @@ export function createChatStore<Runtime = undefined>(
                 },
                 onReasoning: (text) => {
                     reasoned += text
-                    state.streamingReasoning = reasoned
+                    if (ritmoRagionamento.accept()) state.streamingReasoning = reasoned
                 },
                 onReasoningReset: () => {
                     reasoned = ''
+                    ritmoRagionamento.reset()
                     state.streamingReasoning = null
                 },
                 signal: abort.signal,

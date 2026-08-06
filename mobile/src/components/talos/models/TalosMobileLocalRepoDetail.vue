@@ -3,7 +3,9 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { AlertTriangle, ChevronDown, Download, ShieldAlert } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
+import TalosMobileMessageContent from '@/components/chat/TalosMobileMessageContent.vue'
 import { useTalosI18n } from '@/i18n'
+import { talosModelCardMarkdown } from '@/lib/models/modelCardMarkdown'
 import { talosEstimatedCapacity } from '@/lib/models/fit'
 import { talosFitBadge } from '@/lib/models/fitBadge'
 import {
@@ -48,6 +50,8 @@ let loadGeneration = 0
 
 const repo = computed(() => store.repo?.id === props.repoId ? store.repo : null)
 const summary = computed(() => talosReadmeSummary(card.value?.readme ?? ''))
+const schedaAperta = ref(false)
+const schedaLeggibile = computed(() => talosModelCardMarkdown(card.value?.readme ?? ''))
 const cardTags = computed(() => [card.value?.author, card.value?.license]
     .filter((value): value is string => typeof value === 'string' && value.length > 0))
 
@@ -102,6 +106,8 @@ async function load(): Promise<void> {
     const generation = ++loadGeneration
     refused.value = null
     card.value = null
+    // Un altro modello è un'altra scheda: chiusa, come la si trova la prima volta.
+    schedaAperta.value = false
 
     const description = Promise.resolve()
         .then(() => talosDescribeModelRepo(props.repoId))
@@ -165,9 +171,18 @@ async function reclaim(): Promise<void> {
                 class="flex min-w-0 items-start gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-warning)]/40 bg-[var(--talos-warning)]/10 px-[var(--talos-space-inline)] py-[calc(var(--talos-space-inline)/2)] text-xs leading-5 text-[var(--talos-text)]"
             >{{ t('localModels.languageWarning', { languages: (card?.languages ?? []).join(', ') }) }}</p>
             <p v-if="summary" data-testid="talos-models-readme-summary" class="line-clamp-2 text-xs leading-5 text-[var(--talos-text)]">{{ summary }}</p>
-            <details v-if="card.readme" data-testid="talos-models-readme-full" class="border-t border-[var(--talos-border)] pt-[var(--talos-space-inline)]">
+            <!-- La scheda si legge, non si guarda in sorgente. Il contenuto si
+                 monta solo quando il pannello è aperto: un README del Hub arriva
+                 anche a centomila caratteri, e pagarne il rendering per chi non
+                 lo apre sarebbe pagarlo sempre. -->
+            <details
+                v-if="schedaLeggibile"
+                data-testid="talos-models-readme-full"
+                class="border-t border-[var(--talos-border)] pt-[var(--talos-space-inline)]"
+                @toggle="schedaAperta = ($event.target as HTMLDetailsElement).open"
+            >
                 <summary class="flex min-h-touch cursor-pointer items-center text-xs font-semibold text-[var(--talos-accent)]">{{ t('localModels.fullReadme') }}</summary>
-                <pre class="max-w-full whitespace-pre-wrap break-words font-sans text-xs leading-5 text-[var(--talos-text)]">{{ card.readme }}</pre>
+                <TalosMobileMessageContent v-if="schedaAperta" class="text-xs" :content="schedaLeggibile" />
             </details>
         </section>
 
