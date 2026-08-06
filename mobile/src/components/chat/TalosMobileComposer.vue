@@ -924,12 +924,24 @@ watch(() => props.prompt, () => {
 
         <div v-else-if="!composerCompact" class="mt-1 flex min-w-0 items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2" @mousedown.prevent>
             <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+                <!--
+                    Lo STESSO gancio del chip del compositore a cassetto.
+
+                    Owner 2026-08-06: «deve essere messo per tutti i layout, mi
+                    sembra ovvio». Qui il selettore c'era già — cambia la forma,
+                    non la capacità — ma **senza identificativo**: cercandolo per
+                    `talos-composer-model-chip` sul dispositivo non si trovava,
+                    e la conclusione sbagliata è stata che mancasse del tutto.
+                    Un comando che esiste e non si sa nominare è, per chiunque lo
+                    cerchi da fuori, un comando che non c'è.
+                -->
                 <Button
                     ref="modelTrigger"
                     type="button"
                     size="icon"
                     variant="outline"
                     data-mobile-icon-only="true"
+                    data-testid="talos-composer-model-chip"
                     :aria-label="$t('chat.chooseModelProfile')"
                     :title="modelTitle"
                     aria-haspopup="dialog"
