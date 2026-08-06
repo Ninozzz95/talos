@@ -8,11 +8,13 @@ import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
 import TalosMobileVoiceSettings from '@/components/talos/settings/TalosMobileVoiceSettings.vue'
 import {
-    TALOS_THEME_MODE_OPTIONS,
     TALOS_THEME_PRESETS,
     type TalosThemeId,
     type TalosThemeMode,
 } from '@/lib/talosThemes'
+import {
+    TALOS_THEME_MODE_OPTIONS,
+} from '@/lib/talosThemeOptions'
 import {
     TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
     TALOS_CHAT_MESSAGE_STYLE_OPTIONS,

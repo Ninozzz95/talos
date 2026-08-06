@@ -19,7 +19,18 @@ import { Loader2, ArrowUp,
     X, } from '@lucide/vue'
 import TalosMicWaveform from '@/components/brand/TalosMicWaveform.vue'
 import TalosMobileAttachmentTray from '@/components/chat/TalosMobileAttachmentTray.vue'
-import TalosMobileModelEffortDrawer from '@/components/chat/TalosMobileModelEffortDrawer.vue'
+/**
+ * Il cassetto del modello e dello sforzo si apre a richiesta, quindi si carica
+ * a richiesta.
+ *
+ * Misurato il 2026-08-06 sulla sourcemap: il selettore che porta dentro pesava
+ * **7,9 KB** nel pacchetto d'avvio, per una superficie che compare solo quando
+ * qualcuno tocca il chip del modello. Chi apre l'app e scrive un messaggio non
+ * la vede mai.
+ */
+const TalosMobileModelEffortDrawer = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileModelEffortDrawer.vue'),
+)
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
 import { Button } from '@/components/ui/button'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
