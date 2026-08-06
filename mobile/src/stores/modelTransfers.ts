@@ -15,6 +15,7 @@ import {
     type TalosTransferNotice,
 } from '@/lib/models/transferNotices'
 import { talosAnnounceLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
+import { talosNotify } from '@/stores/notificationCentre'
 import { talosT } from '@/i18n'
 import { useTalosMobileToasts } from '@/stores/toasts'
 
@@ -87,6 +88,32 @@ function announce(prima: readonly TalosTransferItem[], dopo: readonly TalosTrans
     }
     for (const avviso of avvisi) {
         (emitTransferNotice ?? pushToast)(avviso)
+        /*
+         * E la STESSA notizia entra nel registro, che e' l'unica delle tre
+         * superfici che non dimentica.
+         *
+         * Owner 2026-08-06: «ogni funzione, tool, download, installazione deve
+         * avere notifica toast E Android». Il toast qui sopra c'era gia' da
+         * ieri; quello che mancava e' che restasse una traccia dopo che il toast
+         * se n'e' andato, e che uscisse dall'app quando l'app non e' davanti.
+         *
+         * La chiave e' il MODELLO e non l'istante: un download che riferisce
+         * dieci volte resta una riga sola nel registro.
+         */
+        talosNotify({
+            key: `transfer:${avviso.modelName}`,
+            channel: 'transfers',
+            // Un guasto CHIEDE qualcosa: si vede anche a app aperta, perche' e'
+            // l'unico dei tre esiti in cui qualcuno deve decidere.
+            weight: avviso.kind === 'failed' ? 'demanding' : 'notable',
+            title: avviso.modelName,
+            body: talosT(avviso.kind === 'started'
+                ? 'localModels.transferStarted'
+                : avviso.kind === 'finished'
+                    ? 'localModels.transferFinished'
+                    : 'localModels.transferFailed', { model: avviso.modelName }),
+            at: Date.now(),
+        })
         /*
          * Un download finito e' un modello IN PIU' SUL DISCO, e chi mostra i
          * modelli deve saperlo senza che glielo si chieda.
