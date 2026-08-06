@@ -6,12 +6,33 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Search, CheckSquare, Plus, Trash2 } from '@lucide/vue'
-import { Button } from '@/components/ui/button'
+import { Search, CalendarClock, CheckSquare, Plus, Trash2 } from '@lucide/vue'
 import { useRouter } from 'vue-router'
 import { useChatController } from '@/stores/chatController'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import type { TalosLocalTask } from '@/repositories/chatRepository'
+import { talosNextRunAt, talosParseSchedule } from '@/lib/tasks/schedule'
+
+/**
+ * Quando ripartirà, in una riga sola — o `null` se non è pianificata.
+ *
+ * Senza questo, una pianificazione salvata è INVISIBILE: si accende
+ * l'interruttore, si salva, e l'elenco mostra una riga identica a tutte le
+ * altre. Chi l'ha scritta non ha modo di sapere se ha funzionato se non
+ * aspettando l'ora — cioè scoprendolo nel modo più lento possibile.
+ */
+function prossimaEsecuzione(task: TalosLocalTask): string | null {
+    const schedule = talosParseSchedule(task.schedule_json)
+    if (!schedule) return null
+    const quando = talosNextRunAt(
+        schedule,
+        Date.now(),
+        task.last_run_at ? Date.parse(task.last_run_at) : null,
+    )
+    if (quando === null) return null
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' })
+        .format(new Date(quando))
+}
 
 const controller = useChatController()
 const router = useRouter()
@@ -39,12 +60,11 @@ const shown = computed(() => {
     return entries.value.filter((task) => ((task.title ?? '').toLowerCase().includes(termine)))
 })
 const error = ref<string | null>(null)
-const title = ref('')
-const description = ref('')
-const runId = ref('')
-const saving = ref(false)
 
-const canCreate = computed(() => title.value.trim().length > 0 && !saving.value)
+/** Il FAB porta alla pagina, che è l'unico posto dove si crea un'attività. */
+function startNew(): void {
+    void router.push({ name: 'task-new' })
+}
 const relativeTimeLabels = computed(() => ({
     justNow: t('chat.justNow'),
     minutesAgo: (count: number) => t('chat.minutesAgo', { count }),
@@ -69,27 +89,6 @@ async function refresh(): Promise<void> {
 
 onMounted(refresh)
 
-async function submit(): Promise<void> {
-    if (!canCreate.value) return
-    saving.value = true
-    error.value = null
-    try {
-        await controller.tasks.create({
-            title: title.value.trim(),
-            description: description.value.trim() || null,
-            run_id: runId.value.trim() || null,
-            priority: 'normal',
-        })
-        title.value = ''
-        description.value = ''
-        runId.value = ''
-        await refresh()
-    } catch (cause) {
-        error.value = describeError(cause)
-    } finally {
-        saving.value = false
-    }
-}
 
 const NEXT_STATUS = { todo: 'doing', doing: 'done', done: 'todo' } as const
 
@@ -144,38 +143,6 @@ function shortId(value: string | null): string {
             {{ t('tasks.intro') }}
         </p>
 
-        <form class="flex flex-col gap-2 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3" @submit.prevent="submit">
-            <input
-                v-model="title"
-                data-testid="talos-task-title"
-                maxlength="255"
-                :aria-label="t('tasks.title')"
-                :placeholder="t('tasks.title')"
-                class="min-h-touch rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-            >
-            <textarea
-                v-model="description"
-                :aria-label="t('tasks.description')"
-                :placeholder="t('tasks.descriptionOptional')"
-                rows="2"
-                class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 py-2 text-sm leading-5 text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-            />
-            <input
-                v-model="runId"
-                :aria-label="t('tasks.runIdOptional')"
-                :placeholder="t('tasks.runIdPlaceholder')"
-                class="min-h-touch rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 font-mono text-xs text-[var(--talos-text)] outline-none"
-            >
-            <Button
-                type="submit"
-                data-testid="talos-task-save"
-                :disabled="!canCreate"
-                class="talos-pressable min-h-touch rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
-            >
-                <Plus class="size-4" aria-hidden="true" />
-                {{ t('tasks.add') }}
-            </Button>
-        </form>
 
         <p v-if="error" role="alert" class="text-xs text-[var(--talos-danger,#dc5b5b)]">{{ error }}</p>
 
@@ -209,6 +176,29 @@ function shortId(value: string | null): string {
                         <p class="mt-1 font-mono text-2xs text-[var(--talos-muted)]">
                             {{ t('tasks.runIdLabel') }} {{ shortId(task.run_id) }} · {{ updatedAt(task.updated_at) }}
                         </p>
+                        <!-- La riga esiste solo per le attività pianificate:
+                             una pillola vuota su tutte le altre sarebbe rumore
+                             su una lista che di solito è di promemoria. -->
+                        <template v-for="quando in [prossimaEsecuzione(task)]" :key="quando ?? 'mai'">
+                            <p
+                                v-if="quando"
+                                data-testid="talos-task-next-run"
+                                class="mt-1 inline-flex items-center gap-1 rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-2xs text-[var(--talos-muted)]"
+                            >
+                                <CalendarClock class="size-3 shrink-0" aria-hidden="true" />
+                                <!--
+                                    L'etichetta passa da `t()`, la data NO.
+                                    `escapeParameter` è acceso su tutta l'app —
+                                    ed è giusto, protegge da un parametro ostile
+                                    — ma riscrive anche le barre di una data
+                                    `07/08/26`, che sul tablet si leggeva
+                                    `07&#x2F;08&#x2F;26`. Una data formattata da
+                                    `Intl` non è un parametro ostile: non deve
+                                    attraversare l'escape.
+                                -->
+                                {{ t('tasks.schedule.nextRunLabel') }} {{ quando }}
+                            </p>
+                        </template>
                     </button>
                     <button
                         type="button"
@@ -229,5 +219,27 @@ function shortId(value: string | null): string {
                 </div>
             </li>
         </ul>
+
+        <!--
+            Il FAB al posto del modulo sempre aperto.
+
+            Visto sul tablet il 2026-08-06: il modulo occupava un terzo dello
+            schermo sopra l'elenco, e sapeva creare MENO della pagina — non
+            conosceva la pianificazione. Due porte per la stessa cosa, con
+            poteri diversi: chi passava da qui non poteva far ripetere niente e
+            non aveva modo di sapere perché.
+
+            Una porta sola, e va dove ci sono tutti i campi. È la stessa
+            grammatica delle Note e della Ricerca: FAB → pagina.
+        -->
+        <button
+            type="button"
+            data-testid="talos-tasks-new-fab"
+            :aria-label="t('tasks.add')"
+            class="talos-pressable fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-5 z-20 inline-flex size-14 items-center justify-center rounded-full bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))] shadow-lg"
+            @click="startNew"
+        >
+            <Plus class="size-6" aria-hidden="true" />
+        </button>
     </div>
 </template>

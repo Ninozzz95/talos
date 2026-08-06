@@ -121,6 +121,9 @@ function parseTask(row: TalosSqlRow): TalosLocalTask {
         run_id: nullableString(row, 'run_id'),
         priority: oneOf(requiredString(row, 'priority'), ['low', 'normal', 'high'] as const) as TalosTaskPriority,
         status: oneOf(requiredString(row, 'status'), ['todo', 'doing', 'done'] as const) as TalosTaskStatus,
+        schedule_json: nullableString(row, 'schedule_json'),
+        instruction: nullableString(row, 'instruction'),
+        last_run_at: nullableString(row, 'last_run_at'),
         created_at: requiredString(row, 'created_at'),
         updated_at: requiredString(row, 'updated_at'),
     }
@@ -1000,22 +1003,30 @@ export function createSqliteChatRepository(
                 run_id: input.run_id,
                 priority: input.priority,
                 status: 'todo',
+                schedule_json: input.schedule_json ?? null,
+                instruction: input.instruction ?? null,
+                // Mai eseguita, ed è diverso da «eseguita e senza esito»: una
+                // pianificazione il cui momento e' gia' passato parte comunque
+                // la prima volta, e questo `null` e' come fa a saperlo.
+                last_run_at: null,
                 created_at: input.created_at,
                 updated_at: input.created_at,
             }
             await transaction(async (database) => {
                 await database.run(
                     `INSERT INTO talos_tasks
-                        (id, title, description, run_id, priority, status, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [task.id, task.title, task.description, task.run_id, task.priority, task.status, task.created_at, task.updated_at],
+                        (id, title, description, run_id, priority, status,
+                         schedule_json, instruction, last_run_at, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [task.id, task.title, task.description, task.run_id, task.priority, task.status,
+                     task.schedule_json, task.instruction, task.last_run_at, task.created_at, task.updated_at],
                 )
             })
             return task
         },
         async listTasks() {
             const rows = await (await db()).query(
-                `SELECT id, title, description, run_id, priority, status, created_at, updated_at
+                `SELECT id, title, description, run_id, priority, status, schedule_json, instruction, last_run_at, created_at, updated_at
                  FROM talos_tasks ORDER BY updated_at DESC, id DESC`,
             )
             return rows.map((row) => parseTask(row as TalosSqlRow))
@@ -1030,7 +1041,7 @@ export function createSqliteChatRepository(
                 )
             })
             const rows = await (await db()).query(
-                `SELECT id, title, description, run_id, priority, status, created_at, updated_at
+                `SELECT id, title, description, run_id, priority, status, schedule_json, instruction, last_run_at, created_at, updated_at
                  FROM talos_tasks WHERE id = ? LIMIT 1`,
                 [taskId],
             )
