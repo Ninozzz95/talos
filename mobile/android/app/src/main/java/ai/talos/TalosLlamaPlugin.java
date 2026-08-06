@@ -1,5 +1,7 @@
 package ai.talos;
 
+import android.content.ComponentCallbacks2;
+
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -79,8 +81,13 @@ public class TalosLlamaPlugin extends Plugin {
          * arriva anche quando il modello era GIÀ aperto, che è il caso in cui una
          * risposta legata al solo `open` non ci sarebbe mai.
          */
-        JSObject shape = shapeOf(openEngine.get());
+        TalosLlamaEngine aperto = openEngine.get();
+        JSObject shape = shapeOf(aperto);
         if (shape != null) result.put("shape", shape);
+        // Il tipo di cache viaggia con lo stato per la stessa ragione della
+        // forma: chi calcola quanto contesto ci sta lo chiede insieme al resto,
+        // e deve leggere quello CREATO, non quello chiesto.
+        if (aperto != null) result.put("kvCacheType", aperto.kvCacheType());
         call.resolve(result);
     }
 
@@ -146,6 +153,11 @@ public class TalosLlamaPlugin extends Plugin {
         // perché misura apposta la configurazione di riferimento.
         final int threadsBatch = call.getInt("threadsBatch", 0);
         final int microBatch = call.getInt("microBatch", 0);
+        // La cache leggera si CHIEDE; se il modello non la regge, il contesto
+        // nasce in f16 e la risposta lo dice. Il predefinito resta f16 perché
+        // è la combinazione che regge sempre, e una chat che parte è meglio di
+        // una che ha più contesto e non si apre.
+        final String kvType = call.getString("kvCacheType", "f16");
         // Chiedibile, e falso per difetto: la chat vuole un campionamento vero,
         // il banco di prova vuole l'argmax perché confronta due backend e
         // pretende lo stesso testo da entrambi. Erano la stessa cosa, ed è da
@@ -156,7 +168,7 @@ public class TalosLlamaPlugin extends Plugin {
             closeOpenModel();
             TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
                     getContext(), path, threads, contextTokens, gpuLayers, deterministic,
-                    threadsBatch, microBatch);
+                    threadsBatch, microBatch, kvType);
             TalosLlamaEngine engine = attempt.engine();
             if (engine == null) {
                 JSObject failure = new JSObject();
@@ -168,6 +180,9 @@ public class TalosLlamaPlugin extends Plugin {
             openPath.set(path);
             JSObject result = new JSObject();
             result.put("contextTokens", engine.contextTokens());
+            // Quale cache ha VINTO, non quale era stata chiesta: il tetto di
+            // contesto si calcola su questo.
+            result.put("kvCacheType", engine.kvCacheType());
             call.resolve(result);
         });
     }
@@ -579,7 +594,74 @@ public class TalosLlamaPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         // Gigabytes do not free themselves when the activity goes away.
+        if (pressioneMemoria != null) {
+            getContext().getApplicationContext().unregisterComponentCallbacks(pressioneMemoria);
+            pressioneMemoria = null;
+        }
         closeOpenModel();
         worker.shutdownNow();
     }
+
+    /**
+     * ⭐ Quando Android chiede spazio, il modello lo restituisce.
+     *
+     * <h3>Il problema</h3>
+     *
+     * Un modello aperto sono due gigabyte di pesi più la cache. Restano lì
+     * finché qualcuno non chiude — e nessuno chiudeva. Il sistema, quando la
+     * memoria stringe, non chiede il permesso: uccide il processo, e con lui se
+     * ne va la risposta a metà. Meglio restituire noi ciò che possiamo, prima
+     * che ce lo prendano tutto.
+     *
+     * <h3>Perché due soglie e non una</h3>
+     *
+     * {@code TRIM_MEMORY_UI_HIDDEN} vuol dire «l'app non è più sullo schermo»:
+     * non è pressione di memoria, è un'occasione. A quel punto il modello non
+     * serve a nessuno e tenerlo è solo un motivo in più per essere uccisi.
+     * {@code TRIM_MEMORY_RUNNING_LOW} e peggio vogliono dire pressione vera
+     * mentre siamo ancora davanti: lì si lascia andare comunque, perché
+     * l'alternativa è che decida il sistema.
+     *
+     * ⛔ Ma MAI durante una generazione: liberare il contesto sotto i piedi di
+     * chi sta decodificando è un crash nativo, non un risparmio. Chi sta
+     * aspettando una risposta aspetta anche il rischio.
+     *
+     * ⚠️ Misurato dalla documentazione, non supposto: {@code onLowMemory} non
+     * viene più chiamato dall'API 34, e {@code TRIM_MEMORY_RUNNING_CRITICAL}
+     * non viene più recapitato. Una politica appesa a quei due sarebbe stata
+     * scritta e mai eseguita.
+     */
+    private ComponentCallbacks2 pressioneMemoria;
+
+    @Override
+    public void load() {
+        // Capacitor non ha un aggancio per la pressione di memoria: si ascolta
+        // il sistema direttamente, e ci si stacca quando l'Activity se ne va.
+        pressioneMemoria = new ComponentCallbacks2() {
+            @Override public void onTrimMemory(int level) { rilasciaSePossibile(level); }
+            @Override public void onLowMemory() { rilasciaSePossibile(TRIM_MEMORY_UI_HIDDEN); }
+            @Override public void onConfigurationChanged(android.content.res.Configuration c) { }
+        };
+        getContext().getApplicationContext().registerComponentCallbacks(pressioneMemoria);
+    }
+
+    private void rilasciaSePossibile(int level) {
+        if (openEngine.get() == null) return;
+        if (generating.get()) {
+            // Non è un rifiuto: è un rinvio. Alla fine della generazione il
+            // prossimo segnale ci ritroverà liberi.
+            return;
+        }
+        final boolean fuoriDallaVista = level >= TRIM_MEMORY_UI_HIDDEN;
+        final boolean sottoPressione = level >= TRIM_MEMORY_RUNNING_LOW;
+        if (!fuoriDallaVista && !sottoPressione) return;
+        worker.execute(this::closeOpenModel);
+    }
+
+    /**
+     * Le soglie di {@link android.content.ComponentCallbacks2}, dichiarate qui
+     * perché il plugin non estende una Activity e i nomi valgono più dei numeri.
+     */
+    private static final int TRIM_MEMORY_RUNNING_LOW = 10;
+    private static final int TRIM_MEMORY_UI_HIDDEN = 20;
 }

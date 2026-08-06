@@ -173,14 +173,29 @@ public final class TalosLlamaEngine implements AutoCloseable {
     public static OpenAttempt tryOpen(android.content.Context context, String modelPath,
                                       int threads, int contextTokens, int gpuLayers,
                                       boolean deterministic, int threadsBatch, int microBatch) {
+        return tryOpen(context, modelPath, threads, contextTokens, gpuLayers, deterministic,
+                       threadsBatch, microBatch, "f16");
+    }
+
+    /** Opens a model while preserving the native stage when construction fails. */
+    public static OpenAttempt tryOpen(android.content.Context context, String modelPath,
+                                      int threads, int contextTokens, int gpuLayers,
+                                      boolean deterministic, int threadsBatch, int microBatch,
+                                      String kvType) {
         if (!TalosLlamaNative.AVAILABLE) return OpenAttempt.failure(FailureStage.UNKNOWN);
         TalosLlamaNative.ensureReady(context);
         long handle = TalosLlamaNative.nativeOpen(modelPath, threads, contextTokens, gpuLayers,
-                                                  deterministic, threadsBatch, microBatch);
+                                                  deterministic, threadsBatch, microBatch, kvType);
         if (handle == 0) {
             return OpenAttempt.failure(FailureStage.fromWire(TalosLlamaNative.nativeLastOpenError()));
         }
         return OpenAttempt.success(new TalosLlamaEngine(handle));
+    }
+
+    /** La cache creata davvero — {@code "q8_0"} o {@code "f16"} —, non quella chiesta. */
+    public String kvCacheType() {
+        String type = TalosLlamaNative.nativeKvCacheType(handle);
+        return type == null ? "f16" : type;
     }
 
     public int contextTokens() {

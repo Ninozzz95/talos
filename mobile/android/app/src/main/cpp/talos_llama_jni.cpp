@@ -74,6 +74,17 @@ struct talos_session {
     std::vector<llama_token> cached;
 
     /**
+     * Il tipo di cache che è stato DAVVERO creato.
+     *
+     * `type_k`/`type_v` sono sperimentali e la compatibilità dipende dalla
+     * combinazione modello × backend × Flash Attention. Chiedere `q8_0` non
+     * garantisce di ottenerlo, e chi calcola quanto contesto ci sta deve
+     * leggere il risultato, non la richiesta: sbagliare qui vuol dire promettere
+     * una conversazione che poi non entra in memoria.
+     */
+    std::string kv_type = "f16";
+
+    /**
      * Il testo prodotto finora, e il lucchetto che lo rende leggibile da fuori.
      *
      * Una chat deve mostrare le parole mentre arrivano, non alla fine. Il
@@ -371,7 +382,7 @@ JNIEXPORT jlong JNICALL
 Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPath,
                                           jint threads, jint contextTokens, jint gpuLayers,
                                           jboolean deterministic, jint threadsBatch,
-                                          jint microBatch) {
+                                          jint microBatch, jstring kvType) {
     talos_last_open_error.clear();
     const std::string path = jstring_to_utf8(env, modelPath);
     if (path.empty()) {
@@ -453,7 +464,44 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
     ctx_params.abort_callback = nullptr;   // armata sotto, quando la sessione esiste
     ctx_params.abort_callback_data = nullptr;
 
+    /**
+     * ⭐ LA CACHE DELLE CHIAVI, più leggera — se questo modello lo permette.
+     *
+     * La KV è il secondo consumatore di memoria dopo i pesi, e su un contesto
+     * lungo diventa il primo: per un modello con 28 strati, 8 teste KV e testa
+     * da 128, in f16 sono **112 KiB per token** — cioè 1,63 GB a 14.202 token,
+     * su un telefono che ne ha 4,5 liberi. In `q8_0` scende del **47%**, e
+     * quello che si libera diventa contesto: quasi il doppio di conversazione
+     * nella stessa memoria.
+     *
+     * ⛔ Ma `type_k` e `type_v` sono marcati `[EXPERIMENTAL]` nell'header, e la
+     * compatibilità dipende dalla combinazione backend × modello × tipo K ×
+     * tipo V × Flash Attention. Non si deduce da una tabella: **la creazione
+     * del contesto È il collaudo**. Se fallisce, si riprova in f16 e si dice
+     * quale ha vinto — un modello che non regge la cache leggera deve
+     * funzionare comunque, solo con meno contesto.
+     */
+    const std::string tipoKv = jstring_to_utf8(env, kvType);
+    const bool vuoleLeggera = tipoKv == "q8_0";
+    if (vuoleLeggera) {
+        ctx_params.type_k = GGML_TYPE_Q8_0;
+        ctx_params.type_v = GGML_TYPE_Q8_0;
+        // Alcune combinazioni con V quantizzata passano solo per la strada
+        // della Flash Attention. `AUTO` lascia decidere alla libreria, che sa
+        // cosa questo backend sa fare; imporla sarebbe indovinare al posto suo.
+        ctx_params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
+    }
+
     llama_context * ctx = llama_init_from_model(model, ctx_params);
+    if (ctx == nullptr && vuoleLeggera) {
+        // Il collaudo ha risposto no. Non è un guasto: è il modo in cui si
+        // scopre, e l'unico che non richieda una tabella di modelli da tenere
+        // aggiornata a mano.
+        TALOS_LOGI("cache KV q8_0 rifiutata da questo modello: si torna a f16");
+        ctx_params.type_k = GGML_TYPE_F16;
+        ctx_params.type_v = GGML_TYPE_F16;
+        ctx = llama_init_from_model(model, ctx_params);
+    }
     if (ctx == nullptr) {
         talos_last_open_error = "context";
         TALOS_LOGE("contesto non creato");
@@ -507,6 +555,10 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
     session->sampler = sampler;
     session->vocab   = llama_model_get_vocab(model);
     session->sampling = sampling;
+    // Quale cache ha VINTO, non quale era stata chiesta. Chi calcola quanto
+    // contesto ci sta deve sapere quanto pesa un token davvero, e dopo un
+    // ripiego silenzioso i due numeri sarebbero diversi.
+    session->kv_type = ctx_params.type_k == GGML_TYPE_Q8_0 ? "q8_0" : "f16";
 
     // Armata QUI e non nei parametri del contesto: la callback ha bisogno
     // dell'indirizzo della sessione, che un istante fa non esisteva ancora.
@@ -735,6 +787,20 @@ JNIEXPORT jint JNICALL
 Java_ai_talos_TalosLlamaNative_nativeContextTokens(JNIEnv *, jclass, jlong handle) {
     talos_session * session = as_session(handle);
     return session == nullptr ? 0 : (jint) llama_n_ctx(session->ctx);
+}
+
+/**
+ * La cache che è stata creata davvero: `"q8_0"` oppure `"f16"`.
+ *
+ * Chiedere non è ottenere — la creazione del contesto è il collaudo, e un
+ * ripiego silenzioso lascerebbe chi calcola il tetto di contesto convinto che
+ * un token pesi la metà di quanto pesa.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeKvCacheType(JNIEnv * env, jclass, jlong handle) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr) return nullptr;
+    return env->NewStringUTF(session->kv_type.c_str());
 }
 
 /**

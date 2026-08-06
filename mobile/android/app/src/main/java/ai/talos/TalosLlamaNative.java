@@ -77,8 +77,19 @@ final class TalosLlamaNative {
      *     i buffer; piccolo tiene bassa la memoria e rende Stop più pronto,
      *     perché l'attesa massima per fermarsi è un microbatch intero.
      */
+    /**
+     * @param kvType {@code "q8_0"} per la cache delle chiavi più leggera, che
+     *     su un contesto lungo libera quasi metà della memoria che serve — o
+     *     qualunque altra cosa per la f16. ⛔ Chiedere non è ottenere: se il
+     *     modello non la regge il contesto si crea in f16 e
+     *     {@link #nativeKvCacheType} dice quale ha vinto.
+     */
     static native long nativeOpen(String modelPath, int threads, int contextTokens, int gpuLayers,
-                                  boolean deterministic, int threadsBatch, int microBatch);
+                                  boolean deterministic, int threadsBatch, int microBatch,
+                                  String kvType);
+
+    /** La cache creata DAVVERO: {@code "q8_0"} oppure {@code "f16"}. */
+    static native String nativeKvCacheType(long handle);
 
     /**
      * Prova i candidati sul contesto aperto e dice quali hanno vinto, in JSON.

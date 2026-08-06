@@ -88,6 +88,8 @@ interface TalosLlamaPlugin {
         loadedPath: string | null
         /** Assente sulle build native che non sanno ancora dichiararla. */
         shape?: Record<string, unknown>
+        /** La cache creata DAVVERO, non quella chiesta. */
+        kvCacheType?: string
     }>
     deleteInstalled(options: { path: string }): Promise<{ deleted: boolean }>
     open(options: {
@@ -109,6 +111,8 @@ interface TalosLlamaPlugin {
          * si chiude da sola in 112 token invece di 160.
          */
         deterministic?: boolean
+        /** `q8_0` per la cache leggera. Chiedere non e' ottenere: vedi `open`. */
+        kvCacheType?: string
     }): Promise<TalosLocalEngineOpenResult>
     generate(options: {
         prompt: string
@@ -212,6 +216,17 @@ type TalosLocalEngineOpenOptions = {
      * l'attesa massima per fermarsi è un microbatch intero.
      */
     microBatch?: number
+    /**
+     * `q8_0` chiede la cache delle chiavi piu' leggera: su un contesto lungo
+     * libera quasi meta' della memoria che serve, e quello che si libera
+     * diventa contesto.
+     *
+     * ⛔ Chiedere non e' ottenere. `type_k`/`type_v` sono sperimentali e la
+     * compatibilita' dipende dalla combinazione modello × backend × Flash
+     * Attention: la creazione del contesto E' il collaudo, e se fallisce il
+     * motore ripiega in f16 e lo dichiara.
+     */
+    kvCacheType?: string
 }
 
 function recordOf(value: unknown): Record<string, unknown> | null {
@@ -293,7 +308,7 @@ export async function talosLocalEngineStatus(): Promise<TalosLocalEngineStatus> 
             available: status.available,
             backends: status.backends,
             loadedPath: status.loadedPath,
-            shape: talosModelShapeOf(status.shape),
+            shape: talosModelShapeOf(status.shape, status.kvCacheType),
         }
     } catch {
         return { available: false, backends: '', loadedPath: null, shape: null }
@@ -317,7 +332,29 @@ function positiveOf(value: unknown): number | null {
  * Esportata perché è il confine dove un oggetto arrivato dal ponte diventa una
  * misura, e quel confine merita una prova sua.
  */
-export function talosModelShapeOf(raw: unknown): TalosModelShape | null {
+/**
+ * Quanto pesa un elemento della cache, per tipo.
+ *
+ * ⛔ Numeri esatti, non arrotondati. `q8_0` è un blocco da **34 byte ogni 32
+ * elementi** — 1,0625, non 1. Sembra pedanteria e non lo è: questo numero
+ * moltiplica strati × teste × dimensione × contesto, e su un modello da 28
+ * strati a 14.000 token l'arrotondamento a 1 sottostima la cache di quasi cento
+ * megabyte. Un tetto di contesto ottimista non dà un errore: dà una chat che si
+ * apre e poi muore quando la conversazione cresce.
+ */
+export const TALOS_KV_BYTES_PER_ELEMENT: Readonly<Record<string, number>> = {
+    f16: 2,
+    q8_0: 34 / 32,
+}
+
+export function talosKvBytesPerElement(type: string | null | undefined): number {
+    // La f16 è il ripiego, ed è anche quello che llama.cpp fa da sé quando non
+    // gli si chiede altro: un tipo che non conosciamo è un tipo che non abbiamo
+    // chiesto, e sovrastimare la cache è l'errore innocuo dei due.
+    return TALOS_KV_BYTES_PER_ELEMENT[type ?? ''] ?? TALOS_KV_BYTES_PER_ELEMENT.f16!
+}
+
+export function talosModelShapeOf(raw: unknown, kvCacheType?: string | null): TalosModelShape | null {
     if (raw === null || typeof raw !== 'object') return null
     const record = raw as Record<string, unknown>
     const layers = positiveOf(record.layers)
@@ -335,12 +372,13 @@ export function talosModelShapeOf(raw: unknown): TalosModelShape | null {
         headDim,
         trainedContext,
         weightBytes,
-        // La NOSTRA scelta di esecuzione, non un fatto del modello: llama.cpp
-        // tiene la cache in f16 se non gli si chiede altro, e TALOS non gliela
-        // chiede. Sta scritta qui, con il perché, invece di arrivare dal ponte
-        // come se il file la dichiarasse — è la stessa assunzione che fa il
-        // lettore GGUF, e devono restare la stessa.
-        kvBytesPerElement: 2,
+        // La NOSTRA scelta di esecuzione, non un fatto del modello — e ora la
+        // legge dal motore invece di darla per scontata: chiedere `q8_0` non
+        // è ottenerlo, perché la creazione del contesto è il collaudo e può
+        // ripiegare in silenzio sulla f16. Calcolare il tetto sul tipo CHIESTO
+        // invece che su quello ottenuto vuol dire promettere una conversazione
+        // che poi non entra in memoria.
+        kvBytesPerElement: talosKvBytesPerElement(kvCacheType),
     }
 }
 
