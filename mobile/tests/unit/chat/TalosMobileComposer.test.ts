@@ -186,6 +186,14 @@ describe('TalosMobileComposer', () => {
         const modelTrigger = view.get<HTMLButtonElement>('[aria-label="Choose model profile"]')
 
         await modelTrigger.trigger('click')
+        // Dal 2026-08-06 il cassetto è caricato a richiesta — pesava 30 KB nel
+        // pacchetto d'avvio per una superficie che si apre solo toccando il
+        // chip. Quindi qui si aspetta il chunk, come fa chi lo apre davvero.
+        // Il cassetto è caricato a richiesta dal 2026-08-06: `vi` sa aspettare
+        // che gli import dinamici siano risolti, e senza questo il test
+        // guarderebbe il DOM di un componente che sta ancora arrivando.
+        await vi.dynamicImportSettled()
+        await flushPromises()
         // F4-#26: model + effort live in one dedicated bottom drawer.
         expect(view.get('[data-testid="talos-model-drawer"]').exists()).toBe(true)
         expect(view.get('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(true)
@@ -218,6 +226,9 @@ describe('TalosMobileComposer', () => {
         })
         await view.get('[aria-label="Choose grounding context"]').trigger('click')
         await view.get('[aria-label="Choose model profile"]').trigger('click')
+        // Il cassetto arriva a richiesta: si aspetta, come chi lo apre.
+        await vi.dynamicImportSettled()
+        await flushPromises()
         await view.get('[aria-label="Refresh model catalog"]').trigger('click')
         await view.get('[aria-label="Open Model Lab"]').trigger('click')
 

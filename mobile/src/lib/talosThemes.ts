@@ -135,86 +135,15 @@ export type TalosThemeExportV2 = {
 
 export const TALOS_DEFAULT_THEME: TalosThemeId = 'calm'
 
-export const TALOS_BACKGROUND_EFFECTS: Array<{ value: TalosBackgroundEffect; label: string; description: string }> = [
-    { value: 'dag-flow', label: 'DAG Flow', description: 'Execution graph pulses for normal AVM work.' },
-    { value: 'kahn-grid', label: 'Kahn Grid', description: 'Layered scheduling bands for topological planning.' },
-    { value: 'trace-rain', label: 'Trace Rain', description: 'Vertical trace streams for replay and telemetry.' },
-    { value: 'signal-mesh', label: 'Signal Mesh', description: 'Low-noise node mesh for command-center mode.' },
-    { value: 'none', label: 'Solid', description: 'Static background with no procedural motion.' },
-]
 
-export const TALOS_THEME_MOTION_OPTIONS: Array<{ value: TalosThemeMotionMode; label: string; description: string }> = [
-    { value: 'system', label: 'System', description: 'Follow browser and workspace reduced-motion settings.' },
-    { value: 'off', label: 'Off', description: 'Disable procedural background motion.' },
-    { value: 'subtle', label: 'Subtle', description: 'Low-intensity motion for long sessions.' },
-    { value: 'normal', label: 'Normal', description: 'Default TALOS motion intensity.' },
-    { value: 'cinematic', label: 'Cinematic', description: 'High-contrast motion for demos and review rooms.' },
-]
 
-export const TALOS_THEME_MODE_OPTIONS: Array<{ value: TalosThemeMode; label: string; description: string }> = [
-    { value: 'system', label: 'System', description: 'Follow the operating system color preference.' },
-    { value: 'dark', label: 'Dark', description: 'Force the high-contrast operator variant for every preset.' },
-    { value: 'light', label: 'Light', description: 'Force the bright review variant for every preset.' },
-]
 
-export const TALOS_UI_ANIMATION_PROFILE_OPTIONS: Array<{ value: TalosUiAnimationProfile; label: string; description: string }> = [
-    { value: 'preset', label: 'Preset', description: 'Use the motion personality attached to the active theme.' },
-    { value: 'minimal', label: 'Minimal', description: 'Short fades and almost no transform for long sessions.' },
-    { value: 'expressive', label: 'Expressive', description: 'Higher-depth motion for demos while staying bounded.' },
-    { value: 'custom', label: 'Custom', description: 'Use the controls below for panels, commands, feedback and focus.' },
-    { value: 'off', label: 'Off', description: 'Disable nonessential interface action motion.' },
-]
 
-export const TALOS_UI_ANIMATION_OPEN_CLOSE_OPTIONS: Array<{ value: TalosUiAnimationOpenClose; label: string }> = [
-    { value: 'instant', label: 'Instant' },
-    { value: 'standard', label: 'Standard' },
-    { value: 'depth', label: 'Depth' },
-    { value: 'terminal-snap', label: 'Terminal snap' },
-    { value: 'soft-fade', label: 'Soft fade' },
-]
 
-export const TALOS_UI_ANIMATION_SURFACE_OPTIONS: Array<{ value: TalosUiAnimationSurfaceTransition; label: string }> = [
-    { value: 'fade', label: 'Fade' },
-    { value: 'slide-fade', label: 'Slide fade' },
-    { value: 'scale-fade', label: 'Scale fade' },
-    { value: 'scanline', label: 'Scanline' },
-    { value: 'axis-shift', label: 'Axis shift' },
-]
 
-export const TALOS_UI_ANIMATION_FEEDBACK_OPTIONS: Array<{ value: TalosUiAnimationFeedback; label: string }> = [
-    { value: 'none', label: 'None' },
-    { value: 'pulse', label: 'Pulse' },
-    { value: 'trace', label: 'Trace' },
-    { value: 'edge-flash', label: 'Edge flash' },
-    { value: 'status-lock', label: 'Status lock' },
-]
 
-export const TALOS_UI_ANIMATION_HOVER_OPTIONS: Array<{ value: TalosUiAnimationHover; label: string }> = [
-    { value: 'none', label: 'None' },
-    { value: 'lift', label: 'Lift' },
-    { value: 'edge-glow', label: 'Edge glow' },
-    { value: 'underline', label: 'Underline' },
-    { value: 'node-glow', label: 'Node glow' },
-]
 
-export const TALOS_UI_ANIMATION_EASING_OPTIONS: Array<{ value: TalosUiAnimationEasing; label: string }> = [
-    { value: 'precise', label: 'Precise' },
-    { value: 'soft', label: 'Soft' },
-    { value: 'elastic-light', label: 'Elastic light' },
-    { value: 'linear', label: 'Linear' },
-    { value: 'cinematic', label: 'Cinematic' },
-]
 
-export const TALOS_THEME_AREA_OPTIONS: Array<{ value: TalosThemeAreaId; label: string }> = [
-    { value: 'sidebar', label: 'Sidebar' },
-    { value: 'chat', label: 'Chat' },
-    { value: 'composer', label: 'Composer' },
-    { value: 'window', label: 'Floating windows' },
-    { value: 'header', label: 'Header' },
-    { value: 'button', label: 'Buttons' },
-    { value: 'card', label: 'Cards and panels' },
-    { value: 'code', label: 'Code blocks' },
-]
 
 export const TALOS_THEME_AREA_TOKEN_OPTIONS: Array<{ value: TalosThemeAreaTokenKey; label: string }> = [
     { value: 'background', label: 'Background' },
@@ -526,7 +455,7 @@ export function talosThemeIsLight(theme: TalosThemeId) {
 }
 
 export function resolveTalosThemeMode(value: unknown): TalosThemeMode {
-    return TALOS_THEME_MODE_OPTIONS.some((option) => option.value === value) ? value as TalosThemeMode : 'system'
+    return MODE_VALUES.has(value as TalosThemeMode) ? value as TalosThemeMode : 'system'
 }
 
 export function effectiveTalosThemeMode(
@@ -770,19 +699,19 @@ export function talosThemeNormalTextContrast(
 }
 
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i
-const BACKGROUND_EFFECTS = new Set(TALOS_BACKGROUND_EFFECTS.map((effect) => effect.value))
+const BACKGROUND_EFFECTS = new Set<TalosBackgroundEffect>(['dag-flow', 'kahn-grid', 'trace-rain', 'signal-mesh', 'none'])
 const FONT_VALUES = new Set(TALOS_THEME_FONT_OPTIONS.map((font) => font.value))
 const DENSITY_VALUES = new Set(TALOS_THEME_DENSITY_OPTIONS.map((density) => density.value))
 const RADIUS_VALUES = new Set(TALOS_THEME_RADIUS_OPTIONS.map((radius) => radius.value))
-const MODE_VALUES = new Set(TALOS_THEME_MODE_OPTIONS.map((mode) => mode.value))
-const MOTION_VALUES = new Set(TALOS_THEME_MOTION_OPTIONS.map((motion) => motion.value))
-const UI_ANIMATION_PROFILE_VALUES = new Set(TALOS_UI_ANIMATION_PROFILE_OPTIONS.map((profile) => profile.value))
-const UI_ANIMATION_OPEN_CLOSE_VALUES = new Set(TALOS_UI_ANIMATION_OPEN_CLOSE_OPTIONS.map((option) => option.value))
-const UI_ANIMATION_SURFACE_VALUES = new Set(TALOS_UI_ANIMATION_SURFACE_OPTIONS.map((option) => option.value))
-const UI_ANIMATION_FEEDBACK_VALUES = new Set(TALOS_UI_ANIMATION_FEEDBACK_OPTIONS.map((option) => option.value))
-const UI_ANIMATION_HOVER_VALUES = new Set(TALOS_UI_ANIMATION_HOVER_OPTIONS.map((option) => option.value))
-const UI_ANIMATION_EASING_VALUES = new Set(TALOS_UI_ANIMATION_EASING_OPTIONS.map((option) => option.value))
-const AREA_VALUES = new Set(TALOS_THEME_AREA_OPTIONS.map((area) => area.value))
+const MODE_VALUES = new Set<TalosThemeMode>(['system', 'dark', 'light'])
+const MOTION_VALUES = new Set<TalosThemeMotionMode>(['system', 'off', 'subtle', 'normal', 'cinematic'])
+const UI_ANIMATION_PROFILE_VALUES = new Set<TalosUiAnimationProfile>(['preset', 'minimal', 'expressive', 'custom', 'off'])
+const UI_ANIMATION_OPEN_CLOSE_VALUES = new Set<TalosUiAnimationOpenClose>(['instant', 'standard', 'depth', 'terminal-snap', 'soft-fade'])
+const UI_ANIMATION_SURFACE_VALUES = new Set<TalosUiAnimationSurfaceTransition>(['fade', 'slide-fade', 'scale-fade', 'scanline', 'axis-shift'])
+const UI_ANIMATION_FEEDBACK_VALUES = new Set<TalosUiAnimationFeedback>(['none', 'pulse', 'trace', 'edge-flash', 'status-lock'])
+const UI_ANIMATION_HOVER_VALUES = new Set<TalosUiAnimationHover>(['none', 'lift', 'edge-glow', 'underline', 'node-glow'])
+const UI_ANIMATION_EASING_VALUES = new Set<TalosUiAnimationEasing>(['precise', 'soft', 'elastic-light', 'linear', 'cinematic'])
+const AREA_VALUES = new Set<TalosThemeAreaId>(['sidebar', 'chat', 'composer', 'window', 'header', 'button', 'card', 'code'])
 const AREA_TOKEN_VALUES = new Set(TALOS_THEME_AREA_TOKEN_OPTIONS.map((token) => token.value))
 
 function isRecord(value: unknown): value is Record<string, unknown> {
