@@ -49,6 +49,10 @@ public class MainActivity extends BridgeActivity {
         // sistema fa l'accesso e rientra su 127.0.0.1: mettersi in ascolto su
         // una porta è l'unica parte che JavaScript non può fare.
         registerPlugin(TalosOAuthLoopbackPlugin.class);
+        // Le attivita' che si eseguono da sole. Il modello gira nel processo
+        // dell'app SENZA interfaccia: chiedere qualcosa alla WebView vorrebbe
+        // dire aspettare che qualcuno apra l'app, cioe' non essere automatici.
+        registerPlugin(TalosTaskRunPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
