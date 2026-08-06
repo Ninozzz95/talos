@@ -60,7 +60,10 @@ import {
     talosOnModelImportProgress,
     talosPickModelFromDevice,
 } from '@/services/modelImport'
-import { talosAnnounceLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
+import {
+    talosAnnounceLocalCatalogueChange,
+    talosOnLocalCatalogueChange,
+} from '@/lib/models/localCatalogueSignal'
 import type { TalosCatalogueRecommendation } from '@/lib/models/catalogue'
 import TalosModelFitBar from '@/components/talos/models/TalosModelFitBar.vue'
 import TalosMobileLocalModelRow from '@/components/talos/models/TalosMobileLocalModelRow.vue'
@@ -471,7 +474,32 @@ async function importFromDevice(): Promise<void> {
     }
 }
 
-onUnmounted(() => { stopImportProgress?.() })
+/**
+ * ⭐ La lista si rilegge quando il disco cambia, non solo quando si entra.
+ *
+ * ## Il difetto, riferito dall'owner TRE volte
+ *
+ * «Il modello appena scaricato non viene aggiornato né la lista modelli sul
+ * dispositivo locale in Model Hub e nel compositore. Avevi pensato di
+ * risolverlo, ma invece no, perché non hai provato.»
+ *
+ * Aveva ragione su entrambe le cose. Questa schermata leggeva i modelli
+ * `onMounted` e **basta**: un download che finiva mentre la schermata era
+ * aperta le passava accanto senza che se ne accorgesse.
+ *
+ * MISURATO sul Pad il 2026-08-06: 214 MB arrivati in meno di dodici secondi con
+ * questa schermata aperta e visibile, e il conteggio è rimasto a «3 modelli»
+ * mentre sul disco ce n'erano quattro.
+ *
+ * Il segnale esisteva già — questa schermata lo **emetteva**, quando si importa
+ * o si elimina — e non lo ascoltava nessuno per conto suo. Ora sì.
+ */
+const smettiAscoltareCatalogo = talosOnLocalCatalogueChange(() => { void loadInstalled() })
+
+onUnmounted(() => {
+    stopImportProgress?.()
+    smettiAscoltareCatalogo()
+})
 
 async function loadInstalled(): Promise<void> {
     installedLoading.value = true

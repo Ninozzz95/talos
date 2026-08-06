@@ -41,7 +41,8 @@ interface TalosModelTransferPlugin {
     cancel?(options?: { id: string }): Promise<void>
     /** Compatibility with APKs built before the typed pause API. */
     stop(options?: { id: string }): Promise<void>
-    status(): Promise<NativeTransferItem & { items?: unknown }>
+    status(): Promise<NativeTransferItem & { items?: unknown, completed?: unknown }>
+    acknowledgeCompleted(options: { ids: string[] }): Promise<void>
     leftovers(): Promise<{
         items: Array<{ path: string; bytes: number }>
         totalBytes: number
@@ -106,6 +107,21 @@ export interface TalosTransferStatus {
     resumable: boolean
     /** A status read failed; every other field remains the last known snapshot. */
     readFailure: string | null
+    /**
+     * I modelli ARRIVATI da quando si e' guardato l'ultima volta.
+     *
+     * ⛔ Si svuotano nel leggerli, dal lato nativo: questa risposta e' l'unica
+     * occasione, e un secondo lettore troverebbe la lista vuota. Per questo il
+     * lettore e' uno solo — lo store dei trasferimenti — ed e' un vincolo, non
+     * un caso.
+     *
+     * Esiste perche' un trasferimento riuscito **non ha uno stato**: sparisce.
+     * Dedurre la fine da «c'era, non c'e' piu'» funziona solo se qualcuno stava
+     * guardando in quell'istante, e MISURATO sul Pad il 2026-08-06 non e'
+     * bastato: 214 MB arrivati in meno di dodici secondi, schermata aperta, e
+     * il conteggio e' rimasto a tre mentre sul disco erano quattro.
+     */
+    completed: ReadonlyArray<{ id: string, modelName: string }>
 }
 
 export interface TalosTransferLeftovers {
@@ -216,6 +232,7 @@ function idleStatus(): TalosTransferStatus {
         failure: null,
         resumable: false,
         readFailure: null,
+        completed: [],
     }
 }
 
@@ -232,13 +249,33 @@ export async function talosModelTransferStatus(): Promise<TalosTransferStatus> {
         const items = rows
             .map((row, index) => normalizeItem(row, index))
             .filter((row): row is TalosTransferItem => row !== null)
-        lastKnownStatus = project(items, null)
+        lastKnownStatus = { ...project(items, null), completed: arrivals(native) }
         return cloneStatus(lastKnownStatus)
     } catch (failed) {
         return cloneStatus({
             ...lastKnownStatus,
+            // Una lettura fallita non ha scoperto nessun arrivo, e ripetere
+            // quelli di prima li racconterebbe due volte.
+            completed: [],
             readFailure: failed instanceof Error ? failed.message : 'status-unavailable',
         })
+    }
+}
+
+/**
+ * «Questi arrivi li ho raccontati»: il nativo puo' dimenticarli.
+ *
+ * ⛔ Da chiamare DOPO averne fatto qualcosa, non prima. Dichiararli raccontati e
+ * poi fallire vuol dire perderli per sempre — e un modello scaricato di cui
+ * nessuno dice niente e' il difetto da cui tutto questo e' partito.
+ */
+export async function talosAcknowledgeArrivals(ids: readonly string[]): Promise<void> {
+    if (!talosTransfersAreSupported() || ids.length === 0) return
+    try {
+        await plugin.acknowledgeCompleted({ ids: [...ids] })
+    } catch {
+        // Un'accusa di ricevuta persa fa ripetere l'annuncio al giro dopo, e
+        // ripetere e' molto meglio che tacere. Non vale un errore.
     }
 }
 
@@ -304,10 +341,31 @@ function normalizeItem(raw: unknown, index: number): TalosTransferItem | null {
     }
 }
 
+/**
+ * Gli arrivi dichiarati dal nativo, ripuliti.
+ *
+ * Una voce senza `id` non serve a niente — l'id e' cio' che impedisce di
+ * raccontare due volte lo stesso download — quindi si scarta invece di
+ * inventarne uno.
+ */
+function arrivals(native: { completed?: unknown }): ReadonlyArray<{ id: string, modelName: string }> {
+    if (!Array.isArray(native.completed)) return []
+    return native.completed
+        .map((row) => (row !== null && typeof row === 'object' ? row as Record<string, unknown> : null))
+        .filter((row): row is Record<string, unknown> => row !== null && typeof row.id === 'string' && row.id !== '')
+        .map((row) => ({
+            id: row.id as string,
+            modelName: typeof row.modelName === 'string' && row.modelName !== '' ? row.modelName : row.id as string,
+        }))
+}
+
 function project(items: TalosTransferItem[], readFailure: string | null): TalosTransferStatus {
     const first = items[0]
     if (!first) return { ...idleStatus(), readFailure }
     return {
+        // La proiezione descrive cio' che e' IN CORSA. Gli arrivi non sono una
+        // proiezione degli elementi: li mette chi legge lo stato dal nativo.
+        completed: [],
         items: items.map(cloneItem),
         phase: first.phase,
         active: items.some((item) => item.active),

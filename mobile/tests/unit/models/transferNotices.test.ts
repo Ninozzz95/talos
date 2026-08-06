@@ -19,26 +19,25 @@ describe('i tre momenti di un modello che arriva', () => {
             .toEqual([{ kind: 'started', modelName: 'Qwen3-0.6B' }])
     })
 
-    it('annuncia la fine quando sparisce DOPO essere arrivato in fondo', () => {
-        // Non esiste una fase «completato»: un download riuscito sparisce.
+    /**
+     * ⛔ IL CAMBIO DI CONTRATTO del 2026-08-06.
+     *
+     * Prima una riga sparita «arrivata in fondo» veniva annunciata come finita.
+     * Quella deduzione regge solo se qualcuno stava guardando nell'istante
+     * esatto della sparizione, e MISURATO sul Pad non è bastato: 214 MB in meno
+     * di dodici secondi con la schermata aperta, e nessuna superficie se n'è
+     * accorta.
+     *
+     * Ora la fine la dichiara il nativo — che l'ha compiuta — e qui restano
+     * soltanto i due momenti che un'istantanea può onestamente vedere.
+     */
+    it('NON deduce più la fine da una riga sparita', () => {
         const finito = item({ haveBytes: 100, totalBytes: 100 })
-        expect(talosTransferNotices([finito], []))
-            .toEqual([{ kind: 'finished', modelName: 'Qwen3-0.6B' }])
+        expect(talosTransferNotices([finito], [])).toEqual([])
     })
 
-    it('TACE quando sparisce senza essere arrivato in fondo', () => {
-        /*
-         * Sparire e' anche cio' che fa un download interrotto. Annunciare
-         * «finito» a qualcosa che non lo e' e' peggio che non annunciare
-         * niente: manda a cercare un file che non c'e'.
-         */
+    it('e nemmeno da una sparita a metà, che è sempre stato giusto tacere', () => {
         expect(talosTransferNotices([item({ haveBytes: 30, totalBytes: 100 })], []))
-            .toEqual([])
-    })
-
-    it('tace su ciò che l`utente ha annullato', () => {
-        const annullato = item({ haveBytes: 100, totalBytes: 100 })
-        expect(talosTransferNotices([annullato], [], new Set(['a'])))
             .toEqual([])
     })
 
@@ -54,11 +53,10 @@ describe('i tre momenti di un modello che arriva', () => {
     it('non confonde due trasferimenti diversi', () => {
         const uno = item({ id: 'uno', modelName: 'Uno', haveBytes: 100, totalBytes: 100 })
         const due = item({ id: 'due', modelName: 'Due' })
-        // «uno» finisce mentre «due» parte: due avvisi distinti, non uno.
-        const avvisi = talosTransferNotices([uno], [due])
-        expect(avvisi).toContainEqual({ kind: 'started', modelName: 'Due' })
-        expect(avvisi).toContainEqual({ kind: 'finished', modelName: 'Uno' })
-        expect(avvisi).toHaveLength(2)
+        // «uno» sparisce mentre «due» parte: la partenza si vede, la fine di
+        // «uno» la racconta il nativo e non questa istantanea.
+        expect(talosTransferNotices([uno], [due]))
+            .toEqual([{ kind: 'started', modelName: 'Due' }])
     })
 
     it('usa l`id quando il nome del modello non c`è', () => {

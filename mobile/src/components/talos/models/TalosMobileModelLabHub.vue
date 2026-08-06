@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, type Component } from 'vue'
+import { computed, inject, onMounted, onUnmounted, ref, type Component } from 'vue'
 import { Boxes, ChevronRight, Cpu, KeyRound } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
 import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
 import { useChatController } from '@/stores/chatController'
 import { talosLocalInstalledModels } from '@/services/localEngine'
+import { talosOnLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
 import { talosLocalModels, talosRefreshHuggingFaceToken } from '@/stores/localModels'
 import TalosMobileDeviceCapacityCard from './TalosMobileDeviceCapacityCard.vue'
 
@@ -51,13 +52,31 @@ const destinations = computed<Array<{
     },
 ])
 
+async function contaModelliLocali(): Promise<void> {
+    try {
+        installedCount.value = (await talosLocalInstalledModels()).models.length
+    } catch {
+        installedCount.value = null
+    }
+}
+
+/**
+ * ⭐ Il conteggio si aggiorna quando il disco cambia, non solo all'ingresso.
+ *
+ * Owner 2026-08-06: «il modello appena scaricato non viene aggiornato né la
+ * lista modelli sul dispositivo locale in Model Hub». Questa riga leggeva una
+ * volta al montaggio, quindi un download finito mentre l'Hub era aperto
+ * lasciava scritto un numero vecchio — e un numero vecchio è peggio di nessun
+ * numero, perché sembra una risposta.
+ */
+const smettiAscoltareCatalogo = talosOnLocalCatalogueChange(() => { void contaModelliLocali() })
+onUnmounted(() => { smettiAscoltareCatalogo() })
+
 onMounted(async () => {
     await Promise.all([
         controller.init().catch(() => undefined),
         talosRefreshHuggingFaceToken().catch(() => undefined),
-        talosLocalInstalledModels()
-            .then((listing) => { installedCount.value = listing.models.length })
-            .catch(() => { installedCount.value = null }),
+        contaModelliLocali(),
     ])
 })
 </script>

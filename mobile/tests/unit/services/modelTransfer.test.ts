@@ -177,6 +177,10 @@ describe('watching and cleaning up', () => {
         const { talosModelTransferStatus } = await import('@/services/modelTransfer')
 
         expect(await talosModelTransferStatus()).toEqual({
+            // Nessun arrivo da raccontare: questo status descrive un download
+            // ancora in corso. La lista e' vuota, non assente — chi legge non
+            // deve distinguere «niente» da «campo che non c'e'».
+            completed: [],
             active: true,
             phase: 'running',
             repo: 'unsloth/Qwen3-4B-GGUF',

@@ -311,6 +311,67 @@ public final class TalosTransferSession {
         return id != null && networkBound(id);
     }
 
+    /**
+     * I modelli arrivati e non ancora raccontati.
+     *
+     * ## Perché una lista e non un evento
+     *
+     * Perché chi deve ascoltare può non esserci. La WebView si ricarica, la
+     * schermata si smonta, l'app va in secondo piano: un evento sparato in quel
+     * momento non lo raccoglie nessuno, ed è esattamente il modo in cui il
+     * difetto si presentava. Una lista invece **aspetta**, e chi arriva la
+     * trova.
+     *
+     * Limitata a poche voci: è un passaggio di consegne, non un archivio. Chi
+     * vuole la storia dei download ha il registro delle notifiche.
+     *
+     * ⚠️ Vive in memoria, quindi non sopravvive alla morte del processo. È un
+     * limite accettato e non nascosto: chi mostra i modelli li rilegge comunque
+     * quando l'app torna in primo piano, che è il caso in cui il processo era
+     * morto.
+     */
+    private static final int MAX_ARRIVI = 16;
+    private static final java.util.ArrayDeque<String[]> ARRIVI = new java.util.ArrayDeque<>();
+
+    private static void ricordaArrivo(String id, String modelName) {
+        synchronized (ARRIVI) {
+            while (ARRIVI.size() >= MAX_ARRIVI) ARRIVI.pollFirst();
+            ARRIVI.addLast(new String[] { id, modelName == null ? "" : modelName });
+        }
+    }
+
+    /**
+     * Gli arrivi da raccontare. Leggerli NON li consuma.
+     *
+     * ## Perché non si svuota qui
+     *
+     * La prima versione svuotava nel leggere, e sembrava elegante: consegnati
+     * una volta, raccontati una volta. Ma legava la correttezza a un fatto
+     * fragile — «esiste un solo lettore» — e bastava che qualcuno chiedesse lo
+     * stato per un altro motivo per rubare la notizia a chi doveva riceverla.
+     *
+     * ⛔ Non è un rischio teorico: mi è successo mentre PROVAVO questa funzione
+     * sul Pad il 2026-08-06. Una lettura diagnostica dello stato ha consumato
+     * l'arrivo, e per qualche minuto è sembrato che la correzione non
+     * funzionasse. Se inganna chi l'ha appena scritta, ingannerà chiunque.
+     *
+     * Ora leggere è innocuo e togliere è esplicito: chi ha fatto qualcosa della
+     * notizia lo dichiara con {@link #acknowledgeArrivals}.
+     */
+    public static List<String[]> arrivals() {
+        synchronized (ARRIVI) {
+            return new ArrayList<>(ARRIVI);
+        }
+    }
+
+    /** Questi arrivi sono stati raccontati: si possono dimenticare. */
+    public static void acknowledgeArrivals(Set<String> ids) {
+        if (ids == null || ids.isEmpty()) return;
+        synchronized (ARRIVI) {
+            ARRIVI.removeIf((voce) -> ids.contains(voce[0]));
+        }
+    }
+
     static Completion completionFor(String reason, StopCause cause) {
         StopCause effective = cause == null ? StopCause.NONE : cause;
         if (effective == StopCause.USER_CANCEL) {
@@ -361,6 +422,33 @@ public final class TalosTransferSession {
             if (completion.clear) {
                 if (cause == StopCause.USER_CANCEL && state != null) {
                     discardRequest(rootFor(context), state.request);
+                } else {
+                    /**
+                     * ⭐ QUI un modello è arrivato, e finora nessuno lo diceva.
+                     *
+                     * `clear` è vero in due casi soli — l'utente ha annullato,
+                     * oppure il lavoro è finito senza motivo di guasto — e il
+                     * ramo sopra ha già preso il primo. Questo è il secondo:
+                     * un download riuscito.
+                     *
+                     * <h3>Perché serviva dichiararlo</h3>
+                     *
+                     * Un trasferimento riuscito **non ha uno stato**: sparisce
+                     * dal registro. Il lato JavaScript deduceva la fine
+                     * confrontando due istantanee — «c'era, non c'è più» — e
+                     * quella deduzione funziona **solo se qualcuno stava
+                     * guardando nell'istante esatto** in cui la riga è sparita.
+                     *
+                     * MISURATO sul Pad il 2026-08-06: un modello da 214 MB è
+                     * arrivato in meno di dodici secondi, la schermata «questo
+                     * dispositivo» era aperta e visibile per tutto il tempo, e
+                     * ha continuato a dire «3 modelli» mentre sul disco ce
+                     * n'erano quattro. L'owner l'aveva segnalato due volte.
+                     *
+                     * Un fatto non si deduce da chi passava di lì: lo dichiara
+                     * chi l'ha compiuto.
+                     */
+                    ricordaArrivo(id, state == null ? null : state.request.modelName);
                 }
                 journal.remove(id);
                 STATES.remove(id);

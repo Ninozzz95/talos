@@ -1,5 +1,6 @@
 import { reactive, readonly } from 'vue'
 import {
+    talosAcknowledgeArrivals,
     talosCancelModelTransfer,
     talosModelTransferStatus,
     talosPauseModelTransfer,
@@ -73,7 +74,7 @@ let poller: ReturnType<typeof setInterval> | null = null
  * una seconda, come chiesto esplicitamente.
  */
 function announce(prima: readonly TalosTransferItem[], dopo: readonly TalosTransferItem[]): void {
-    const avvisi = talosTransferNotices(prima, dopo, annullati)
+    const avvisi = talosTransferNotices(prima, dopo)
     /*
      * Un id annullato serve finche' la sua riga non e' sparita davvero. Poi va
      * dimenticato, altrimenti il registro cresce per tutta la sessione e — se
@@ -127,9 +128,6 @@ function announce(prima: readonly TalosTransferItem[], dopo: readonly TalosTrans
          * sostituire, mentre l'aggiornamento del catalogo non e' una questione
          * di presentazione.
          */
-        if (avviso.kind === 'finished') {
-            talosAnnounceLocalCatalogueChange('transfer-finished')
-        }
     }
     /*
      * E quando non resta più niente da scoprire, l'orologio si ferma da solo.
@@ -173,6 +171,31 @@ function pushToast(notice: TalosTransferNotice): void {
     })
 }
 
+/**
+ * Un modello e' arrivato: si dice, si registra, e si avvisa chi mostra i modelli.
+ *
+ * Le tre cose insieme e in un posto solo, perche' sono la stessa notizia detta a
+ * tre pubblici diversi: chi sta guardando adesso (il toast), chi guardera' dopo
+ * (il registro), e le schermate che elencano i modelli sul dispositivo.
+ *
+ * ⛔ L'ultima riga e' quella che mancava davvero. Il segnale del catalogo
+ * esisteva gia' — e nessuno lo emetteva nel caso piu' comune di tutti, cioe' un
+ * download che finisce mentre non lo si sta fissando.
+ */
+function annunciaArrivo(modelName: string): void {
+    const avviso: TalosTransferNotice = { kind: 'finished', modelName }
+    ;(emitTransferNotice ?? pushToast)(avviso)
+    talosNotify({
+        key: `transfer:${modelName}`,
+        channel: 'transfers',
+        weight: 'notable',
+        title: modelName,
+        body: talosT('localModels.transferFinished', { model: modelName }),
+        at: Date.now(),
+    })
+    talosAnnounceLocalCatalogueChange('transfer-finished')
+}
+
 let refreshing: Promise<void> | null = null
 
 export function talosRefreshModelTransfer(): Promise<void> {
@@ -184,6 +207,32 @@ export function talosRefreshModelTransfer(): Promise<void> {
             return
         }
         applyStatus(status)
+        /**
+         * ⭐ Gli arrivi, DICHIARATI dal nativo invece che dedotti.
+         *
+         * Prima la fine di un download si scopriva confrontando due istantanee
+         * — «c'era, non c'e' piu'» — e quella deduzione regge solo se il poller
+         * stava girando nell'istante esatto della sparizione. MISURATO sul Pad
+         * il 2026-08-06: un modello da 214 MB e' arrivato in meno di dodici
+         * secondi con la schermata aperta, e nessuna delle tre superfici se n'e'
+         * accorta.
+         *
+         * ⛔ Il nativo li consegna UNA VOLTA SOLA: qui non si puo' uscire prima
+         * di averne fatto qualcosa, o quell'arrivo e' perso per sempre.
+         */
+        // `?? []` non e' prudenza generica: il lato nativo puo' essere piu'
+        // vecchio di questo JavaScript — un APK aggiornato a meta' e' un caso
+        // reale — e li' il campo non esiste. Meglio nessun annuncio che
+        // un'eccezione dentro un poller che gira ogni secondo.
+        const raccontati: string[] = []
+        for (const arrivo of status.completed ?? []) {
+            if (!annullati.has(arrivo.id)) annunciaArrivo(arrivo.modelName)
+            raccontati.push(arrivo.id)
+        }
+        // ⛔ L'accusa di ricevuta arriva DOPO: se qualcosa fosse andato storto
+        // qui sopra, l'arrivo resta nella lista del nativo e si riprova al giro
+        // successivo. Ripetere un annuncio e' molto meglio che perderlo.
+        if (raccontati.length) await talosAcknowledgeArrivals(raccontati)
     })().finally(() => { refreshing = null })
     return refreshing
 }
