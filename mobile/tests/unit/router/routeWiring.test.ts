@@ -48,7 +48,9 @@ describe('router wiring', () => {
             // Indietro va alla precedente, dev'essere lineare».
             'memory', 'memory-item',
             'tasks', 'task-item',
-            'notes', 'note-item',
+            // `/notes/new` PRIMA di `/notes/:id`: al contrario il parametro si
+            // mangia «new» e il FAB aprirebbe una nota che non esiste.
+            'notes', 'note-new', 'note-item',
             'doctor',
             'research', 'research-new', 'research-report', 'research-claim', 'research-source',
             'runs', 'context', 'settings',
@@ -64,7 +66,7 @@ describe('router wiring', () => {
          * navigazione dell'owner esiste per togliere.
          */
         for (const [figlio, genitore] of [
-            ['memory-item', 'memory'], ['task-item', 'tasks'], ['note-item', 'notes'],
+            ['memory-item', 'memory'], ['task-item', 'tasks'], ['note-item', 'notes'], ['note-new', 'notes'],
         ] as const) {
             expect(talosMobileParentRoute(figlio, { id: 'x1' }))
                 .toEqual({ name: genitore, params: {} })

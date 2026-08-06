@@ -3,7 +3,7 @@ import type { Component } from 'vue'
 export type TalosMobileRouteName =
     | 'chat' | 'chats' | 'memory' | 'tasks' | 'notes' | 'doctor'
     // Le pagine di dettaglio: voce → pagina → dettaglio, come la Ricerca.
-    | 'memory-item' | 'task-item' | 'note-item'
+    | 'memory-item' | 'task-item' | 'note-item' | 'note-new'
     | 'research' | 'research-new' | 'research-report' | 'research-claim' | 'research-source'
     | 'runs' | 'context' | 'settings'
     | 'settings-models' | 'settings-models-providers'
@@ -63,6 +63,7 @@ const loadSettingsModelsLocalRepoScreen = () => import('@/screens/SettingsModels
  * esiste perche' il testo lungo abbia dove stare.
  */
 const loadNoteItemScreen = () => import('@/screens/NoteItemScreen.vue').then((module) => module.default)
+const loadNoteNewScreen = () => import('@/screens/NoteNewScreen.vue').then((module) => module.default)
 const loadMemoryItemScreen = () => import('@/screens/MemoryItemScreen.vue').then((module) => module.default)
 const loadTaskItemScreen = () => import('@/screens/TaskItemScreen.vue').then((module) => module.default)
 
@@ -80,6 +81,9 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'tasks', path: '/tasks', desktop_station_id: 'tasks', component: loadTasksScreen },
     { name: 'task-item', path: '/tasks/:id', desktop_station_id: 'tasks', component: loadTaskItemScreen, parent: 'tasks' },
     { name: 'notes', path: '/notes', desktop_station_id: 'notes', component: loadNotesScreen },
+    // Prima di `/notes/:id`, altrimenti il parametro si mangia «new» e la
+    // creazione aprirebbe una nota che non esiste.
+    { name: 'note-new', path: '/notes/new', desktop_station_id: 'notes', component: loadNoteNewScreen, parent: 'notes' },
     { name: 'note-item', path: '/notes/:id', desktop_station_id: 'notes', component: loadNoteItemScreen, parent: 'notes' },
     { name: 'doctor', path: '/doctor', desktop_station_id: 'doctor', component: loadDoctorScreen },
     /**
