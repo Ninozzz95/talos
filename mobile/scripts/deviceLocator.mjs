@@ -34,6 +34,18 @@
  * per cui i framework seri lo fanno — un test che tocca «uno dei tre» passa
  * finché un giorno tocca quello sbagliato, e nessuno capisce perché.
  *
+ * ## ⛔ Il limite: quello che CDP non può vedere
+ *
+ * Il controllo del bersaglio legge il DOM, quindi copre l'occlusione **dentro
+ * l'app**. Una finestra flottante di un'ALTRA app — misurato il 2026-08-07 con
+ * **Whisper**, un trascrittore di terze parti — sta sopra tutto, non compare in
+ * nessun DOM, e si prende il tocco.
+ *
+ * Non c'è modo di accorgersene da qui. Ciò che si può fare, e che `fill` fa, è
+ * **rileggere il risultato**: se dopo l'azione il campo non contiene quello che
+ * ho scritto, qualcosa si è messo in mezzo e ci si ferma. Vale la stessa
+ * regola di sempre — l'esito, non la chiamata.
+ *
  * ## Il punto d'azione
  *
  * Il centro dell'**intersezione fra il riquadro e lo schermo**, non il centro
