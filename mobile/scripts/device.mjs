@@ -195,7 +195,29 @@ async function principale() {
         if (perScrivere) {
             const testo = resto[resto.length - 1] ?? ''
             await new Promise((r) => setTimeout(r, 400))
+            // ⛔ SVUOTARE PRIMA. `input text` scrive in coda: senza questo passo
+            // il campo conserva quello che c'era e la prova gira su una frase
+            // che nessuno ha scritto. Successo il 2026-08-07 — il compositore
+            // aveva ancora una dettatura accidentale, e il messaggio inviato
+            // era «Adesso elenca di nuovo le mie ricerche. Hello. All right.»
+            //
+            // CTRL+A poi CANC, cioè quello che farebbe un dito su una tastiera
+            // vera. `keycombination` esiste da Android 11; se manca, il campo
+            // resta pieno e il controllo qui sotto lo dice invece di andare
+            // avanti facendo finta di niente.
+            adb('shell', 'input', 'keycombination', '113', '29')
+            await new Promise((r) => setTimeout(r, 150))
+            adb('shell', 'input', 'keyevent', '67')
+            await new Promise((r) => setTimeout(r, 150))
             adb('shell', 'input', 'text', testo.replace(/ /g, '%s'))
+            await new Promise((r) => setTimeout(r, 300))
+            const dentro = await valuta(`(() => {
+                const e = document.querySelector(${JSON.stringify(criterio.selettore ?? 'textarea')})
+                return e ? (e.value ?? e.innerText ?? '') : null
+            })()`)
+            if (typeof dentro === 'string' && dentro.trim() !== testo.trim()) {
+                throw new Error(`il campo contiene «${dentro}», non «${testo}»`)
+            }
             console.log(`scritto: ${testo}`)
         }
         return

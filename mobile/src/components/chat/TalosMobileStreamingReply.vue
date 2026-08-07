@@ -14,6 +14,7 @@ import {
     ListTodo,
     NotebookPen,
     Sparkles,
+    Telescope,
     Wrench,
 } from '@lucide/vue'
 import {
@@ -60,6 +61,7 @@ const TOOL_ICONS: Record<TalosToolIconName, unknown> = {
     memory: Sparkles,
     clock: Clock,
     web: Globe,
+    research: Telescope,
     document: FileText,
     image: ImageIcon,
     download: Download,

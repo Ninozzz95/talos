@@ -891,6 +891,14 @@ export const TALOS_IT_MESSAGES = {
         localModelInspect: 'Controllo se un modello ci sta su questo telefono',
         localModelDownload: 'Scarico un modello su questo telefono',
         localModelsStatus: 'Controllo un download in corso',
+        researchList: 'Consultazione delle ricerche',
+        researchStart: 'Avvio di una ricerca',
+        researchRead: 'Lettura di un rapporto',
+        researchRename: 'Rinomina di una ricerca',
+        researchPause: 'Pausa di una ricerca',
+        researchResume: 'Ripresa di una ricerca',
+        researchCancel: 'Interruzione di una ricerca',
+        researchDelete: 'Rimozione di una ricerca',
     },
     toolConsent: {
         libraryList: {
@@ -1012,6 +1020,38 @@ export const TALOS_IT_MESSAGES = {
         localModelsStatus: {
             title: 'Controlla un download in corso',
             description: 'Riporta cosa si sta scaricando adesso e a che punto è. Legge solo questo dispositivo.',
+        },
+        researchList: {
+            title: 'Consulta le tue ricerche',
+            description: 'Elenca le ricerche approfondite che hai avviato, com’è finita ciascuna e a che punto è arrivata. Legge solo questo dispositivo.',
+        },
+        researchStart: {
+            title: 'Avvia una ricerca approfondita',
+            description: 'Apre una ricerca che consulta il web per diversi minuti e ne salva il rapporto nella Libreria. Consuma rete e crediti del modello.',
+        },
+        researchRead: {
+            title: 'Leggi un rapporto di ricerca',
+            description: 'Apre il rapporto di una ricerca già conclusa, salvato su questo dispositivo.',
+        },
+        researchRename: {
+            title: 'Rinomina una ricerca',
+            description: 'Cambia il titolo con cui la ricerca compare nell’elenco. Non tocca il rapporto.',
+        },
+        researchPause: {
+            title: 'Metti in pausa una ricerca',
+            description: 'Ferma una ricerca in corso lasciandola riprendibile. Quello che ha già trovato resta.',
+        },
+        researchResume: {
+            title: 'Riprendi una ricerca',
+            description: 'Fa ripartire da dov’era una ricerca in pausa. Torna a consultare il web.',
+        },
+        researchCancel: {
+            title: 'Interrompi una ricerca',
+            description: 'Chiude per sempre una ricerca in corso. Quello che ha già trovato resta, ma non riprenderà.',
+        },
+        researchDelete: {
+            title: 'Elimina una ricerca',
+            description: 'Toglie la ricerca e il suo rapporto da questo dispositivo. Non torna indietro.',
         },
     },
     export: {
