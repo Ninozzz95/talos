@@ -145,6 +145,24 @@ export interface TalosPlanCandidate {
     /** `false` quando il permesso nega: il passo entra come `denied`. */
     allowed: boolean
     /**
+     * ⛔ Questo passo, da solo, avrebbe fatto comparire una scheda?
+     *
+     * È la condizione che rende il piano un guadagno netto invece di un costo,
+     * e nasce da una misura sul dispositivo: per disegnare un gatto il modello
+     * chiama `library_search`, `library_read` e `generate_image` — cioè **tre
+     * schede** con i permessi su «chiedi ogni volta». Il piano non ne aggiunge
+     * una: ne toglie due.
+     *
+     * Ma chi ha messo tutto su «consenti sempre» ha già detto «non chiedermelo»,
+     * e mostrargli un piano contraddirebbe la sua impostazione — sarebbe una
+     * seconda grammatica dei permessi mascherata da comodità, e l'owner ne ha
+     * dichiarata una sola.
+     *
+     * Quindi il piano compare **solo se almeno un passo avrebbe chiesto**. In
+     * ogni altro caso non c'è niente da risparmiare e non si disturba nessuno.
+     */
+    asks: boolean
+    /**
      * Un passo che va confermato uno per uno e **non entra** nel piano.
      *
      * Sono i critici: `R4`, o ciò che il tool marca `confirmation: 'always'`.
@@ -206,6 +224,14 @@ export function talosPlanNeedsApproval(
 ): boolean {
     const ammessi = candidati.filter((candidato) => candidato.allowed && !candidato.critical)
     if (ammessi.length < 2) return false
+    /*
+     * Niente da risparmiare, niente da chiedere.
+     *
+     * Se nessuno di questi passi avrebbe fatto comparire una scheda, il piano
+     * sarebbe una scheda in PIÙ invece di quattro in meno — cioè l'esatto
+     * contrario di ciò per cui esiste.
+     */
+    if (!ammessi.some((candidato) => candidato.asks)) return false
     if (ammessi.some((candidato) => candidato.security.reversibility === 'irreversible')) return true
     return SCALA.indexOf(talosPlanRisk(ammessi, chain))
         >= SCALA.indexOf(TALOS_PLAN_RISK_THRESHOLD)

@@ -41,6 +41,7 @@ function passo(patch: Partial<TalosPlanCandidate> = {}): TalosPlanCandidate {
         security: sicurezza(),
         actions: ['read'],
         allowed: true,
+        asks: true,
         critical: false,
         ...patch,
     }
@@ -251,5 +252,60 @@ describe('la SECONDA PORTA — owner 2026-08-07: «porte, non muri»', () => {
 
     it('il predefinito e per TURNO: la porta si apre, non si trova aperta', () => {
         expect(talosBuildPlan('x', [passo()]).scope).toBe('turn')
+    })
+})
+
+describe('il piano e un GUADAGNO netto, mai un costo', () => {
+    /**
+     * MISURATO sul Pad il 2026-08-07: per disegnare un gatto il modello chiama
+     * `library_search`, `library_read` e `generate_image` — cioe' TRE schede
+     * con i permessi su «chiedi ogni volta». Il piano non ne aggiunge una: ne
+     * toglie due.
+     *
+     * Ma chi ha messo tutto su «consenti sempre» ha gia' detto «non
+     * chiedermelo», e mostrargli un piano contraddirebbe la sua impostazione —
+     * sarebbe una seconda grammatica dei permessi mascherata da comodita'.
+     */
+    const pesante = sicurezza({ risk: 'R2', canTransmit: true })
+
+    it('con i permessi su CHIEDI: tre schede diventano un piano', () => {
+        const candidati = [
+            passo({ id: 'a', tool: 'library_search', asks: true }),
+            passo({ id: 'b', tool: 'library_read', asks: true }),
+            passo({ id: 'c', tool: 'generate_image', asks: true, security: pesante }),
+        ]
+        expect(talosPlanNeedsApproval(candidati)).toBe(true)
+    })
+
+    it('⛔ con tutto su CONSENTI SEMPRE: nessun piano, perche non c e niente da risparmiare', () => {
+        const candidati = [
+            passo({ id: 'a', tool: 'library_search', asks: false }),
+            passo({ id: 'b', tool: 'library_read', asks: false }),
+            passo({ id: 'c', tool: 'generate_image', asks: false, security: pesante }),
+        ]
+        expect(talosPlanNeedsApproval(candidati)).toBe(false)
+    })
+
+    it('basta UN passo che avrebbe chiesto perche il piano valga la pena', () => {
+        const candidati = [
+            passo({ id: 'a', asks: false }),
+            passo({ id: 'b', asks: true, security: pesante }),
+        ]
+        expect(talosPlanNeedsApproval(candidati)).toBe(true)
+    })
+
+    it('e nemmeno un passo irreversibile fa comparire il piano se nessuno chiedeva', () => {
+        // Chi ha detto «consenti sempre» sulle scritture ha accettato anche
+        // questo. La difesa che resta e' quella che NON si puo' disattivare:
+        // R4 e la trifecta, che passano dall'esecutore.
+        const candidati = [
+            passo({ id: 'a', asks: false }),
+            passo({
+                id: 'b',
+                asks: false,
+                security: sicurezza({ risk: 'R2', reversibility: 'irreversible' }),
+            }),
+        ]
+        expect(talosPlanNeedsApproval(candidati)).toBe(false)
     })
 })
