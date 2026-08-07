@@ -1,0 +1,274 @@
+import type { TalosToolAction } from '@/lib/tools/permissionTypes'
+import type {
+    TalosToolChainState,
+    TalosToolReversibility,
+    TalosToolRisk,
+    TalosToolSecurity,
+} from '@/lib/tools/security'
+import { TALOS_EMPTY_CHAIN, talosAdvanceChain, talosEffectiveRisk } from '@/lib/tools/security'
+
+/**
+ * Il piano: quello che TALOS sta per fare, detto PRIMA di farlo.
+ *
+ * ## Perché esiste, e perché non è «una conferma più grande»
+ *
+ * Una conferma per tool arriva sempre **a metà**: hai già speso il tempo dei
+ * primi tre passi quando il quarto ti chiede il permesso, e a quel punto dire
+ * di no costa. Un piano ribalta il conto — niente è ancora stato toccato,
+ * quindi **rifiutarlo costa zero**. È la lezione del plan mode di Claude Code,
+ * ed è la ragione per cui un piano non è una conferma in più: è una conferma
+ * *al posto* di quattro, spostata dove serve.
+ *
+ * ## ⛔ La soglia, e perché non è «più di un tool»
+ *
+ * Owner 2026-08-07, dopo la ricerca: il piano compare **sulla soglia di
+ * rischio**, non sul numero di strumenti. La ragione è misurata e ha un nome —
+ * *affaticamento da conferme*: alla cinquantesima richiesta il revisore tocca
+ * «approva» prima di aver finito di leggere la frase, e venti richieste a basso
+ * rischio all'ora bastano a far smettere di leggere. Una difesa che scatta
+ * sempre viene spenta: è lo stesso difetto che la trifecta aveva prima di A8,
+ * e sarebbe stupido riprodurlo nel piano il giorno dopo averlo curato.
+ *
+ * Quindi: «leggi questa nota e riassumila» parte. «Cerca sul web, scrivi un
+ * PDF, mandalo in Libreria e cancella la bozza» si ferma e si mostra.
+ *
+ * ## Le altre tre regole, decise lo stesso giorno
+ *
+ * - **I passi si tolgono, non si riscrivono.** Chi toglie un passo dice «no» a
+ *   quello e sì al resto. Non può cambiare gli argomenti: quelli restano del
+ *   modello, che risponde di ciò che ha proposto — e una riga di audit deve
+ *   poter dire chi ha scritto cosa.
+ * - **Una deviazione ferma e ripropone.** Ciò che è già stato fatto resta
+ *   fatto; per il resto serve una nuova approvazione. Un piano che cresce da
+ *   solo mentre gira non è più il piano che hai letto.
+ * - **L'approvazione si lega all'impronta degli argomenti.** Se cambiano fra la
+ *   proposta e l'esecuzione, il permesso non vale più. Senza, un'iniezione che
+ *   colpisce in quella finestra userebbe un consenso dato per altro.
+ */
+
+/** Il posto in cui un passo si trova, dal momento in cui viene proposto. */
+export type TalosPlanStepState =
+    /** Proposto e non ancora deciso. */
+    | 'pending'
+    /** L'utente l'ha tolto dal piano prima di approvare. */
+    | 'removed'
+    /** Escluso perché il permesso lo nega: non viene nemmeno mostrato come scelta. */
+    | 'denied'
+    | 'running'
+    | 'done'
+    | 'failed'
+
+export interface TalosPlanStep {
+    /** Stabile per tutta la vita del piano: la superficie lo usa come chiave. */
+    id: string
+    tool: string
+    /** Il nome leggibile, quello della scheda di consenso. */
+    title: string
+    input: unknown
+    /**
+     * ⛔ L'impronta degli argomenti al momento della proposta.
+     *
+     * È ciò che rende l'approvazione una firma su QUESTA cosa e non
+     * sull'intenzione. Al momento di eseguire si ricalcola e si confronta: se
+     * non torna, il passo non parte e si richiede.
+     */
+    digest: string
+    risk: TalosToolRisk
+    reversibility: TalosToolReversibility
+    actions: readonly TalosToolAction[]
+    state: TalosPlanStepState
+}
+
+export type TalosPlanState = 'proposed' | 'approved' | 'running' | 'finished' | 'cancelled'
+
+export interface TalosPlan {
+    id: string
+    steps: readonly TalosPlanStep[]
+    /** Il rischio del passo peggiore, catena inclusa. */
+    risk: TalosToolRisk
+    state: TalosPlanState
+}
+
+/** Quello che serve sapere di una chiamata per metterla in un piano. */
+export interface TalosPlanCandidate {
+    id: string
+    tool: string
+    title: string
+    input: unknown
+    digest: string
+    security: TalosToolSecurity
+    actions: readonly TalosToolAction[]
+    /** `false` quando il permesso nega: il passo entra come `denied`. */
+    allowed: boolean
+    /**
+     * Un passo che va confermato uno per uno e **non entra** nel piano.
+     *
+     * Sono i critici: `R4`, o ciò che il tool marca `confirmation: 'always'`.
+     * Metterli in un elenco approvato in blocco significherebbe far passare per
+     * routine la cosa che di routine non è.
+     */
+    critical: boolean
+}
+
+const SCALA: readonly TalosToolRisk[] = ['R0', 'R1', 'R2', 'R3', 'R4']
+
+function peggiore(sinistra: TalosToolRisk, destra: TalosToolRisk): TalosToolRisk {
+    return SCALA.indexOf(destra) > SCALA.indexOf(sinistra) ? destra : sinistra
+}
+
+/**
+ * La soglia: da `R2` in su si mostra il piano.
+ *
+ * Non è un numero scelto a occhio. `R0` e `R1` sono le letture e le scritture
+ * che si annullano da sole; `R2` è dove comincia ciò che esce dal dispositivo o
+ * che l'utente dovrebbe poter fermare. Sotto, chiedere sarebbe rumore — e il
+ * rumore è ciò che fa spegnere la difesa.
+ */
+export const TALOS_PLAN_RISK_THRESHOLD: TalosToolRisk = 'R2'
+
+/**
+ * Il rischio del gruppo, calcolato **sulla catena** e non sui singoli.
+ *
+ * Un passo alla volta ognuno può sembrare innocuo: è la sequenza a essere
+ * pericolosa, ed è la stessa ragione per cui la trifecta guarda la catena
+ * invece del tool. Qui si simula: si fa avanzare la catena passo per passo come
+ * farebbe l'esecutore, e si prende il rischio effettivo peggiore che si incontra.
+ */
+export function talosPlanRisk(
+    candidati: readonly TalosPlanCandidate[],
+    chain: TalosToolChainState = TALOS_EMPTY_CHAIN,
+): TalosToolRisk {
+    let corrente = chain
+    let massimo: TalosToolRisk = 'R0'
+    for (const candidato of candidati) {
+        if (!candidato.allowed) continue
+        massimo = peggiore(massimo, talosEffectiveRisk(corrente, candidato.security))
+        corrente = talosAdvanceChain(corrente, candidato.security)
+    }
+    return massimo
+}
+
+/**
+ * Il piano va mostrato?
+ *
+ * Vero quando c'è **almeno un passo irreversibile** oppure quando il rischio
+ * del gruppo raggiunge la soglia. Falso per un solo passo: un piano di un passo
+ * è una scheda di consenso con un vestito diverso, e ne avremmo due che dicono
+ * la stessa cosa.
+ */
+export function talosPlanNeedsApproval(
+    candidati: readonly TalosPlanCandidate[],
+    chain: TalosToolChainState = TALOS_EMPTY_CHAIN,
+): boolean {
+    const ammessi = candidati.filter((candidato) => candidato.allowed && !candidato.critical)
+    if (ammessi.length < 2) return false
+    if (ammessi.some((candidato) => candidato.security.reversibility === 'irreversible')) return true
+    return SCALA.indexOf(talosPlanRisk(ammessi, chain))
+        >= SCALA.indexOf(TALOS_PLAN_RISK_THRESHOLD)
+}
+
+/**
+ * Costruisce il piano da proporre.
+ *
+ * ⛔ I passi negati entrano come `denied` e **non spariscono**: nasconderli
+ * darebbe l'impressione che il modello non li avesse chiesti, e la pagina dei
+ * permessi diventerebbe una cosa che agisce di nascosto. Si vedono, si dice che
+ * sono esclusi, e non partono.
+ *
+ * I critici invece restano **fuori del tutto**: hanno la loro conferma, una per
+ * una, ed è l'unico modo di non farli passare per routine.
+ */
+export function talosBuildPlan(
+    id: string,
+    candidati: readonly TalosPlanCandidate[],
+    chain: TalosToolChainState = TALOS_EMPTY_CHAIN,
+): TalosPlan {
+    const steps: TalosPlanStep[] = candidati
+        .filter((candidato) => !candidato.critical)
+        .map((candidato) => ({
+            id: candidato.id,
+            tool: candidato.tool,
+            title: candidato.title,
+            input: candidato.input,
+            digest: candidato.digest,
+            risk: candidato.security.risk,
+            reversibility: candidato.security.reversibility,
+            actions: candidato.actions,
+            state: candidato.allowed ? 'pending' : 'denied',
+        }))
+    return {
+        id,
+        steps,
+        risk: talosPlanRisk(candidati.filter((candidato) => !candidato.critical), chain),
+        state: 'proposed',
+    }
+}
+
+/**
+ * Toglie un passo, e ricalcola il rischio di ciò che resta.
+ *
+ * Ricalcolare non è un dettaglio: se l'utente toglie proprio il passo che
+ * portava il gruppo sopra la soglia, il piano che resta è un'altra cosa e deve
+ * dirlo. Un rischio che non scende quando togli il pezzo pericoloso è un numero
+ * che nessuno crederà una seconda volta.
+ */
+export function talosPlanWithout(piano: TalosPlan, stepId: string): TalosPlan {
+    const steps = piano.steps.map((step) => (
+        step.id === stepId && step.state === 'pending'
+            ? { ...step, state: 'removed' as const }
+            : step
+    ))
+    return { ...piano, steps, risk: talosPlanRiskOfSteps(steps) }
+}
+
+/** Il rischio dichiarato dei passi ancora vivi. Nessuna catena: qui i passi sono già fissati. */
+function talosPlanRiskOfSteps(steps: readonly TalosPlanStep[]): TalosToolRisk {
+    return steps
+        .filter((step) => step.state !== 'removed' && step.state !== 'denied')
+        .reduce<TalosToolRisk>((massimo, step) => peggiore(massimo, step.risk), 'R0')
+}
+
+/** I passi che partiranno davvero: né tolti, né negati. */
+export function talosPlanLiveSteps(piano: TalosPlan): readonly TalosPlanStep[] {
+    return piano.steps.filter((step) => step.state !== 'removed' && step.state !== 'denied')
+}
+
+export type TalosPlanAdmission =
+    /** È nel piano, con gli stessi argomenti: parte. */
+    | { admitted: true, step: TalosPlanStep }
+    /** Non era nel piano affatto. */
+    | { admitted: false, reason: 'not-in-plan' }
+    /** C'era, ma l'utente l'aveva tolto. */
+    | { admitted: false, reason: 'removed' }
+    /** C'era, ma gli argomenti non sono più quelli approvati. */
+    | { admitted: false, reason: 'arguments-changed', step: TalosPlanStep }
+
+/**
+ * ⛔ Questa chiamata è dentro il piano che l'utente ha letto?
+ *
+ * Le tre risposte negative sono distinte di proposito, perché portano a tre
+ * frasi diverse verso la persona: «non l'avevi approvato», «l'avevi tolto»,
+ * «l'avevi approvato ma con altri argomenti». Un «non consentito» solo non
+ * direbbe niente di utile a nessuno dei tre.
+ *
+ * Il confronto sull'impronta è il pezzo che rende l'approvazione una firma su
+ * QUESTA cosa: senza, un'iniezione che colpisce fra la proposta e l'esecuzione
+ * userebbe un consenso dato per altro.
+ */
+export function talosPlanAdmits(
+    piano: TalosPlan,
+    tool: string,
+    digest: string,
+): TalosPlanAdmission {
+    const candidati = piano.steps.filter((step) => step.tool === tool)
+    if (candidati.length === 0) return { admitted: false, reason: 'not-in-plan' }
+
+    const esatto = candidati.find((step) => step.digest === digest)
+    if (esatto) {
+        if (esatto.state === 'removed') return { admitted: false, reason: 'removed' }
+        if (esatto.state === 'denied') return { admitted: false, reason: 'removed' }
+        return { admitted: true, step: esatto }
+    }
+    // Il tool c'è, l'impronta no: gli argomenti sono cambiati per strada.
+    return { admitted: false, reason: 'arguments-changed', step: candidati[0]! }
+}
