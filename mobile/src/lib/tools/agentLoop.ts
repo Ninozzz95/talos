@@ -63,6 +63,25 @@ export interface TalosAgentLoopDeps {
         /** Vault bindings to keep on the final assistant message. */
         messageAttachments?: AppendChatAttachmentInput[]
     }>
+    /**
+     * ⛔ B2 — il piano, chiesto PRIMA che qualsiasi cosa parta.
+     *
+     * Riceve le chiamate del giro e risponde quali sono ammesse. Chi decide se
+     * un piano serva davvero non è il loop: è chi implementa questo gancio, che
+     * conosce rischio, reversibilità e la soglia. Qui dentro resta una regola
+     * sola, ed è quella che conta — **nessuna chiamata parte prima che la
+     * risposta sia arrivata**.
+     *
+     * `cancelled` non è un errore: è una persona che ha detto no dopo aver
+     * letto. Il giro finisce, ogni chiamata riceve la sua riga, e il modello
+     * risponde con quello che ha.
+     */
+    plan?(calls: readonly TalosToolCall[]): Promise<{
+        /** Gli id delle chiamate che possono partire, nell'ordine del provider. */
+        admitted: readonly string[]
+        /** Vero se la persona ha rifiutato il piano invece di ridurlo. */
+        cancelled: boolean
+    }>
     /** Fired when a round of calls starts, so the UI can show what is running. */
     onToolRound?(calls: TalosToolCall[]): void
     /**
@@ -355,8 +374,47 @@ async function continueTalosAgentLoop(
             })
         }
 
-        deps.onToolRound?.(requested)
-        const outcomes = await runCallsTogether(runnable, deps.execute, maxParallel)
+        /*
+         * ⛔ Il cancello del piano.
+         *
+         * Sta DOPO la barriera delle autorizzazioni e PRIMA dell'esecuzione,
+         * che è l'unico punto in cui ha senso: prima si sa quali chiamate sono
+         * eseguibili, poi si chiede il permesso su quell'elenco. Chiederlo
+         * prima significherebbe mostrare un piano che contiene passi che il
+         * permesso avrebbe tolto comunque.
+         */
+        const decisione = deps.plan
+            ? await deps.plan(runnable)
+            : { admitted: runnable.map((call) => call.id), cancelled: false }
+        const ammesse = new Set(decisione.admitted)
+        const eseguibili = decisione.cancelled
+            ? []
+            : runnable.filter((call) => ammesse.has(call.id))
+
+        deps.onToolRound?.(eseguibili)
+        const risultati = await runCallsTogether(eseguibili, deps.execute, maxParallel)
+        /*
+         * I risultati tornano nelle posizioni del giro INTERO, non in quelle
+         * degli eseguibili: chi è stato tolto dal piano deve comunque ricevere
+         * la sua riga, perché un id senza risposta produce una richiesta non
+         * valida per i provider severi.
+         */
+        const outcomes = new Array<(typeof risultati)[number] | undefined>(runnable.length)
+        let scorrimento = 0
+        for (let indice = 0; indice < runnable.length; indice += 1) {
+            const call = runnable[indice]!
+            if (!decisione.cancelled && ammesse.has(call.id)) {
+                outcomes[indice] = risultati[scorrimento]
+                scorrimento += 1
+            } else {
+                outcomes[indice] = {
+                    ok: false,
+                    content: decisione.cancelled
+                        ? 'Not run: the user did not approve the plan for this message. Answer with what you have, and do not try again.'
+                        : 'Not run: the user removed this step from the plan. Answer with what you have, and do not try it again.',
+                }
+            }
+        }
         const results: ChatTurn[] = requested.map((call, index) => {
             const outcome = outcomes[index]
             if (!outcome) {
