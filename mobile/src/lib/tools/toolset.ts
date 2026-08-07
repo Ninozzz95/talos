@@ -199,6 +199,8 @@ export interface TalosToolset {
         actions: readonly TalosToolAction[]
         /** Falso quando un permesso lo nega o l'interruttore è spento. */
         allowed: boolean
+        /** Vero se, da solo, avrebbe fatto comparire una scheda di consenso. */
+        asks: boolean
         /** Da confermare uno per uno: fuori dal piano. */
         critical: boolean
     } | null
@@ -544,7 +546,15 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
              */
             const critical = tool.confirmation === 'always'
                 || talosForbidsPersistentGrant(security.risk)
-            return { title: tool.title, security, actions, allowed, critical }
+            /*
+             * «Avrebbe chiesto?» si legge dalla STESSA funzione che decide
+             * davvero, non da una regola parallela: se un giorno la grammatica
+             * cambiasse, due letture diverse diventerebbero due comportamenti
+             * diversi, e quello che nessuno guarda resterebbe indietro.
+             */
+            const asks = tool.confirmation === 'always'
+                || actions.some((action) => decideTalosToolPermission(action, permissions) === 'ask')
+            return { title: tool.title, security, actions, allowed, asks, critical }
         },
         offer(permissions, enabledTools) {
             // Evaluated per send, like the permissions: the toolset is memoised,

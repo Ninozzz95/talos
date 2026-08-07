@@ -3578,6 +3578,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             security: descrittore?.security ?? PIANO_SICUREZZA_PRUDENTE,
                             actions: descrittore?.actions ?? ['write'],
                             allowed: descrittore?.allowed ?? false,
+                            asks: descrittore?.asks ?? true,
                             critical: descrittore?.critical ?? true,
                         }
                     }))
