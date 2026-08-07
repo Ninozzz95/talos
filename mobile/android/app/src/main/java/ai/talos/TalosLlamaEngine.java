@@ -218,8 +218,8 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * Costa zero calcolo: il prefisso è già in cache dopo il primo messaggio.
      * In cambio, il turno successivo di QUESTA chat riprocessa i suoi token.
      */
-    public long trimAndSaveState(String path, int quanti) {
-        return TalosLlamaNative.nativeTrimAndSaveState(handle, path, quanti);
+    public long trimAndSaveState(String path, String prefisso) {
+        return TalosLlamaNative.nativeTrimAndSaveState(handle, path, prefisso);
     }
 
     /**

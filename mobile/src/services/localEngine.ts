@@ -142,13 +142,21 @@ interface TalosLlamaPlugin {
     saveState(options: {
         path: string
         /**
-         * ⭐ Quanti token tenere. Assente = tutto.
+         * ⭐ Il TESTO del prefisso da tenere. Assente = si salva tutto.
          *
-         * Il prefisso da congelare è un PREFISSO di ciò che la cache contiene
-         * già dopo il primo messaggio: potarlo e salvarlo costa **zero
-         * calcolo**, mentre riscaldarlo a parte lo rifarebbe da capo.
+         * Il prefisso da congelare è già dentro la cache dopo il primo
+         * messaggio: potarlo e salvarlo costa **zero calcolo**, mentre
+         * riscaldarlo a parte lo rifarebbe da capo — altri 150 secondi.
+         *
+         * ⛔ Il testo, non un conteggio: il template mette il marcatore
+         * dell'assistente in fondo (`add_generation_prompt`), quindi il
+         * rendering del solo sistema NON è un prefisso di quello completo, e un
+         * numero ricavato da lì taglierebbe dentro il turno dell'utente — una
+         * briciola di conversazione finirebbe nel file e ogni chat nuova la
+         * erediterebbe come se l'avesse scritta lei. Il confine lo trova il
+         * tokenizzatore, dall'altra parte del ponte.
          */
-        keepTokens?: number
+        prefixPrompt?: string
     }): Promise<{
         bytes: number
         saved: boolean
@@ -730,13 +738,13 @@ export async function talosMeasureThreadTuning(
  * calcolare, che è ciò che si faceva prima. Far cadere un invio perché non si è
  * potuto scrivere una cache sarebbe scambiare il rimedio per la cura.
  */
-export async function talosFreezePrefix(path: string, keepTokens?: number): Promise<{
+export async function talosFreezePrefix(path: string, prefixPrompt?: string): Promise<{
     bytes: number
     ms: number
 }> {
     try {
         const esito = await plugin.saveState(
-            keepTokens === undefined ? { path } : { path, keepTokens },
+            prefixPrompt === undefined ? { path } : { path, prefixPrompt },
         )
         return { bytes: esito.saved ? esito.bytes : 0, ms: esito.ms }
     } catch {

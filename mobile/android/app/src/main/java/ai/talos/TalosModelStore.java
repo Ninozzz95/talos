@@ -39,6 +39,19 @@ public final class TalosModelStore {
 
     public static final String PARTIAL_SUFFIX = ".part";
     public static final String SIDECAR_SUFFIX = ".talosdl";
+    /**
+     * ⛔ Un prefisso congelato NON è un modello.
+     *
+     * È la cache del prompt di sistema più i trentotto schemi dei tool, e a
+     * f16 pesa quasi un gigabyte: senza questa riga comparirebbe nell'elenco
+     * dei modelli dell'utente, dove sembrerebbe un modello scaricato per
+     * sbaglio — e chi lo cancellasse si troverebbe la chat improvvisamente più
+     * lenta senza sapere perché.
+     *
+     * Lo spazio non è nascosto: va mostrato dove si mostrano le cache, non
+     * dove si mostrano i modelli.
+     */
+    public static final String PREFIX_CACHE_SUFFIX = ".prefix";
 
     private static final String MAGIC = "talos-dl 1";
     private static final String TERMINATOR = "end";
@@ -319,7 +332,9 @@ public final class TalosModelStore {
      * step with the disk, and the disk always wins that argument.
      */
     public Listing finished() {
-        return walk((name) -> !name.endsWith(PARTIAL_SUFFIX) && !name.endsWith(SIDECAR_SUFFIX));
+        return walk((name) -> !name.endsWith(PARTIAL_SUFFIX)
+                && !name.endsWith(SIDECAR_SUFFIX)
+                && !name.endsWith(PREFIX_CACHE_SUFFIX));
     }
 
     /** Which filenames a walk keeps. The two walks differ by nothing else. */

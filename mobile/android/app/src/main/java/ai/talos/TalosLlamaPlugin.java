@@ -324,12 +324,17 @@ public class TalosLlamaPlugin extends Plugin {
         // `keepTokens` assente = salva tutto cio' che c'e'. Presente = pota
         // prima, che e' la strada normale: il prefisso da congelare e' un
         // pezzo iniziale di cio' che la cache contiene dopo il primo messaggio.
-        Integer keep = call.getInt("keepTokens");
+        // Il TESTO del prefisso, non un conteggio: il template mette il
+        // marcatore dell'assistente in fondo, quindi il rendering del solo
+        // sistema NON e' un prefisso di quello completo, e un numero ricavato
+        // da li' taglierebbe dentro il turno dell'utente. Il confine lo trova
+        // il tokenizzatore, dall'altra parte del ponte.
+        String prefisso = call.getString("prefixPrompt");
         worker.execute(() -> {
             long inizio = System.nanoTime();
-            long byteScritti = keep == null
+            long byteScritti = prefisso == null || prefisso.isEmpty()
                     ? engine.saveState(path)
-                    : engine.trimAndSaveState(path, keep);
+                    : engine.trimAndSaveState(path, prefisso);
             JSObject result = new JSObject();
             result.put("bytes", byteScritti);
             result.put("saved", byteScritti > 0);
