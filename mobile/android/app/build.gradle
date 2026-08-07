@@ -1,4 +1,6 @@
 apply plugin: 'com.android.application'
+// C0 (fase 9): il codice nuovo nasce in Kotlin, i plugin Java restano Java.
+apply plugin: 'kotlin-android'
 
 android {
     namespace = "ai.talos"
