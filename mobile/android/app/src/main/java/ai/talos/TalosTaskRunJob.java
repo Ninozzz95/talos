@@ -131,7 +131,8 @@ public class TalosTaskRunJob extends JobService {
             String prompt = engine.chatPrompt(
                     new String[] { "user" },
                     new String[] { entry.instruction },
-                    null);
+                    null,
+                    true);
             if (prompt == null || prompt.isEmpty()) return true;
             risultato = engine.generateBlocking(prompt, MAX_TOKENS, TalosLlamaEngine.Mode.CHAT);
         } finally {

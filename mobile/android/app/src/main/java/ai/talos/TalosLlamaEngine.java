@@ -255,9 +255,9 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * invece di aprire due volte.
      */
     public static String planPrompt(String modelPath, String[] roles, String[] contents,
-                                    String toolsJson) {
+                                    String toolsJson, boolean pensa) {
         return TalosLlamaNative.AVAILABLE
-                ? TalosLlamaNative.nativePlanPrompt(modelPath, roles, contents, toolsJson)
+                ? TalosLlamaNative.nativePlanPrompt(modelPath, roles, contents, toolsJson, pensa)
                 : null;
     }
 
@@ -346,7 +346,11 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * prompt.
      */
     public String chatPrompt(String[] roles, String[] contents) {
-        return chatPrompt(roles, contents, null);
+        // Senza tool e col ragionamento acceso: e' la forma di prima, e questi
+        // due chiamanti non sono la chat — non c'e' un'impostazione da
+        // rispettare, e cambiarla in silenzio sarebbe una modifica che nessuno
+        // ha chiesto.
+        return chatPrompt(roles, contents, null, true);
     }
 
     /**
@@ -357,8 +361,8 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * sintassi che QUESTO modello e stato addestrato a produrre, e restituisce
      * anche la grammatica che rende la chiamata valida per costruzione.
      */
-    public String chatPrompt(String[] roles, String[] contents, String toolsJson) {
-        return TalosLlamaNative.nativeApplyChatTemplate(handle, roles, contents, toolsJson);
+    public String chatPrompt(String[] roles, String[] contents, String toolsJson, boolean pensa) {
+        return TalosLlamaNative.nativeApplyChatTemplate(handle, roles, contents, toolsJson, pensa);
     }
 
     /**

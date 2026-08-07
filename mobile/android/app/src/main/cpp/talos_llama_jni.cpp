@@ -302,7 +302,7 @@ std::string jstring_to_utf8(JNIEnv * env, jstring value) {
  */
 std::string talos_apply_chat_template(common_chat_templates * templates, JNIEnv * env,
                                       jobjectArray roles, jobjectArray contents,
-                                      jstring toolsJson) {
+                                      jstring toolsJson, bool pensa) {
     if (templates == nullptr || roles == nullptr || contents == nullptr) return {};
     const jsize count = env->GetArrayLength(roles);
     if (count != env->GetArrayLength(contents) || count <= 0) return {};
@@ -322,6 +322,20 @@ std::string talos_apply_chat_template(common_chat_templates * templates, JNIEnv 
     }
     inputs.use_jinja = true;
     inputs.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+    /**
+     * ⛔ IL RAGIONAMENTO SI CHIEDE, e non lo chiedevamo mai.
+     *
+     * `enable_thinking` nasce a `true` in llama.cpp e noi non lo toccavamo:
+     * quindi TALOS domandava a Qwen3 di ragionare **anche per «ciao»**,
+     * ignorando l'impostazione della persona. MISURATO sul Pad il 2026-08-08:
+     * per rispondere «Ciao! Come posso aiutarti oggi?» il modello ha prodotto
+     * **105 token**, di cui una decina di risposta e il resto di pensiero — a
+     * 4,3 token al secondo sono venticinque secondi spesi per non dire niente.
+     *
+     * Non e' censura del ragionamento: e' non pagarlo dove nessuno l'ha
+     * chiesto. Chi lo accende continua ad averlo.
+     */
+    inputs.enable_thinking = pensa;
     inputs.messages.reserve((size_t) count);
     for (jsize index = 0; index < count; index += 1) {
         auto role = (jstring) env->GetObjectArrayElement(roles, index);
@@ -690,7 +704,7 @@ Java_ai_talos_TalosLlamaNative_nativeTokensProduced(JNIEnv *, jclass, jlong hand
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlong handle,
                                                        jobjectArray roles, jobjectArray contents,
-                                                       jstring toolsJson) {
+                                                       jstring toolsJson, jboolean pensa) {
     talos_session * session = as_session(handle);
     if (session == nullptr) return env->NewStringUTF("");
 
@@ -733,6 +747,20 @@ Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlo
     // Il ragionamento lo gestisce il template, e quindi il parser: è così che
     // i tag smettono di comparire nel corpo della risposta.
     inputs.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+    /**
+     * ⛔ IL RAGIONAMENTO SI CHIEDE, e non lo chiedevamo mai.
+     *
+     * `enable_thinking` nasce a `true` in llama.cpp e noi non lo toccavamo:
+     * quindi TALOS domandava a Qwen3 di ragionare **anche per «ciao»**,
+     * ignorando l'impostazione della persona. MISURATO sul Pad il 2026-08-08:
+     * per rispondere «Ciao! Come posso aiutarti oggi?» il modello ha prodotto
+     * **105 token**, di cui una decina di risposta e il resto di pensiero — a
+     * 4,3 token al secondo sono venticinque secondi spesi per non dire niente.
+     *
+     * Non e' censura del ragionamento: e' non pagarlo dove nessuno l'ha
+     * chiesto. Chi lo accende continua ad averlo.
+     */
+    inputs.enable_thinking = pensa == JNI_TRUE;
     inputs.messages.reserve((size_t) count);
     for (jsize index = 0; index < count; index += 1) {
         auto role = (jstring) env->GetObjectArrayElement(roles, index);
@@ -1040,7 +1068,7 @@ static talos_forma_gguf talos_forma_dai_metadati(const std::string & path) {
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativePlanPrompt(JNIEnv * env, jclass, jstring modelPath,
                                                 jobjectArray roles, jobjectArray contents,
-                                                jstring toolsJson) {
+                                                jstring toolsJson, jboolean pensa) {
     const std::string path = jstring_to_utf8(env, modelPath);
     if (path.empty()) return nullptr;
 
@@ -1060,7 +1088,8 @@ Java_ai_talos_TalosLlamaNative_nativePlanPrompt(JNIEnv * env, jclass, jstring mo
         return nullptr;
     }
     if (templates) {
-        prompt = talos_apply_chat_template(templates.get(), env, roles, contents, toolsJson);
+        prompt = talos_apply_chat_template(templates.get(), env, roles, contents, toolsJson,
+                                           pensa == JNI_TRUE);
     }
     if (!prompt.empty()) {
         const llama_vocab * vocab = llama_model_get_vocab(model);

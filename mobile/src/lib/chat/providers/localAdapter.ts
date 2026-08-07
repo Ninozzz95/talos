@@ -329,13 +329,20 @@ async function identitaFileDi(path: string): Promise<{ bytes: number, modifiedAt
 async function prefissoResoDi(
     system: string | undefined,
     tools: readonly unknown[] | undefined,
+    pensa: boolean,
 ): Promise<string | null> {
     if (!system) return null
-    const chiave = `${system}\0${JSON.stringify(tools ?? [])}`
+    // ⛔ Il ragionamento entra nella chiave: `enable_thinking` cambia cio' che
+    // il template rende, quindi due prefissi con impostazioni diverse sono due
+    // testi diversi — e un solo posto in memoria per entrambi restituirebbe
+    // quello dell'altro.
+    const chiave = `${system}\0${JSON.stringify(tools ?? [])}\0${pensa}`
     const memo = PREFISSO_RESO.get(chiave)
     if (memo !== undefined) return memo
     try {
-        const piano = await talosLocalEngineChatPlan([{ role: 'system', content: system }], tools)
+        const piano = await talosLocalEngineChatPlan(
+            [{ role: 'system', content: system }], tools, pensa,
+        )
         PREFISSO_RESO.set(chiave, piano.prompt)
         return piano.prompt
     } catch {
@@ -368,10 +375,11 @@ async function prefissoCongelatoDi(
     tools: readonly unknown[] | undefined,
     status: TalosLocalEngineStatus,
     contextTokens: number,
+    pensa: boolean,
 ): Promise<TalosPrefissoCongelato | null> {
     const [file, prompt] = await Promise.all([
         identitaFileDi(modelPath),
-        prefissoResoDi(system, tools),
+        prefissoResoDi(system, tools, pensa),
     ])
     if (!file || !prompt) return null
     const identita: TalosPrefixIdentity = {
@@ -650,10 +658,24 @@ async function run(
      * vecchia — `anticipo` è `null` e si riparte col predefinito, esattamente
      * come prima.
      */
-    const anticipo = await talosLocalEnginePlanPrompt(input.model.id, turns, tools)
+    /**
+     * ⛔ IL RAGIONAMENTO SI CHIEDE, e non lo chiedevamo mai.
+     *
+     * `enable_thinking` nasce acceso in llama.cpp, e la parola «thinking» in
+     * questo file non compariva: l'impostazione della persona non arrivava mai
+     * al motore locale. MISURATO sul Pad il 2026-08-08 — per rispondere «Ciao!
+     * Come posso aiutarti oggi?» il modello ha prodotto **105 token**, di cui
+     * una decina di risposta: a 4,3 token al secondo sono venticinque secondi
+     * spesi per non dire niente.
+     *
+     * Non è censura del ragionamento — chi lo accende continua ad averlo. È non
+     * pagarlo dove nessuno l'ha chiesto.
+     */
+    const pensa = input.thinking !== false
+    const anticipo = await talosLocalEnginePlanPrompt(input.model.id, turns, tools, pensa)
     const status = await ensureLoaded(input.model.id, await pianoDiApertura(anticipo))
     const ceiling = await localContextCeiling(status.shape)
-    let plan = await talosLocalEngineChatPlan(turns, tools)
+    let plan = await talosLocalEngineChatPlan(turns, tools, pensa)
     const targetContext = talosLocalEscalatedContextTokens(
         plan.contextTokens,
         plan.promptTokens,
@@ -690,7 +712,7 @@ async function run(
             if (error instanceof TalosLocalEngineOpenError) throw actionableOpenFailure(error)
             throw error
         }
-        plan = await talosLocalEngineChatPlan(turns, tools)
+        plan = await talosLocalEngineChatPlan(turns, tools, pensa)
         const confirmed = talosLocalEscalatedContextTokens(
             plan.contextTokens,
             plan.promptTokens,
@@ -714,7 +736,7 @@ async function run(
      * che è ciò che si faceva prima di tutto questo.
      */
     const congelato = await prefissoCongelatoDi(
-        input.model.id, input.system, tools, status, plan.contextTokens,
+        input.model.id, input.system, tools, status, plan.contextTokens, pensa,
     )
     if (congelato) await talosThawPrefix(congelato.percorso)
 
