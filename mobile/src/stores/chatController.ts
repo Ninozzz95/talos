@@ -3625,6 +3625,22 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     }
                     return decisione
                 },
+                /**
+                 * ⛔ Rimette i byte delle immagini che il checkpoint non porta.
+                 *
+                 * Il checkpoint salva `attachmentId` e lascia il base64 fuori,
+                 * altrimenti due immagini generate superano gli 8 MB e il turno
+                 * muore con un codice in faccia all'utente — successo davvero,
+                 * sul telefono dell'owner, il 2026-08-07.
+                 *
+                 * I byte tornano da dove sono sempre stati: la Libreria.
+                 */
+                rehydrateImage: async (attachmentId) => {
+                    const file = await vaultService.readFilePreview(attachmentId).catch(() => null)
+                    if (!file) return null
+                    const { talosBytesToBase64 } = await import('@/lib/bytesToBase64')
+                    return { base64: talosBytesToBase64(file.bytes), mediaType: file.mediaType }
+                },
                 onToolRound: (calls) => {
                     // A tool round means pages, documents or searches: long by
                     // definition, so the keeper starts now rather than waiting.
