@@ -68,7 +68,64 @@ export interface TalosToolDefinition<Input = unknown> {
     confirmation?: 'policy' | 'always'
     input: ZodType<Input>
     run(input: Input, context: TalosToolContext): Promise<TalosToolResult>
+    /**
+     * ⛔ La postcondizione: «l'effetto c'è davvero?», chiesta DOPO.
+     *
+     * ## Perché non basta guardare com'è andata la chiamata
+     *
+     * Esiste una classe di guasti in cui **l'effetto avviene e la risposta si
+     * perde**: il ponte va in timeout dopo aver consegnato, Android uccide
+     * l'app fra la scrittura e la conferma, un'eccezione scatta dopo il commit.
+     * La letteratura la chiama fallimento **non atomico** e la misura: chi
+     * ritenta senza controllare produce doppioni nel **72%** dei casi, che
+     * scendono al **20%** verificando lo stato prima — e l'ablazione dice che
+     * quasi tutto il guadagno viene dalla sola verifica, non dal ritentativo
+     * (arXiv 2608.02645, «Verified Tool Calls Improve LLM Agent Reliability
+     * Under Non-Atomic Failures»).
+     *
+     * Da noi il ritentativo automatico non esiste — l'esecutore non ne ha — ma
+     * lo fa il **modello**, appena legge `ok: false`. Stesso effetto, un piano
+     * sopra: dire «non è andata» quando invece è andata **è** l'istruzione che
+     * crea il doppione.
+     *
+     * ## Cosa fa l'esecutore con la risposta
+     *
+     * Va in **due direzioni**, e la seconda è quella che vale:
+     *
+     * - `run` è riuscito ma `verify` dice `held: false` ⇒ l'esito **si degrada**
+     *   a fallimento, nominando la postcondizione che non regge. Un «fatto» su
+     *   una cosa non fatta è peggio di un errore.
+     * - `run` è fallito ma `verify` dice `held: true` ⇒ l'esito **si promuove** a
+     *   riuscita, con `verified` nell'audit. È il caso non atomico.
+     *
+     * Facoltativo di proposito: si dichiara solo dove la verifica è **gratis**,
+     * cioè dove basta rileggere quello che si è appena scritto. Una verifica che
+     * costa una seconda chiamata di rete non è una verifica: è un altro tool.
+     */
+    verify?(
+        input: Input,
+        /**
+         * Cosa ha restituito `run`, oppure **null** se ha sollevato.
+         *
+         * Il null e' il caso interessante: e' li' che si scopre se l'effetto
+         * c'e' lo stesso. Chi verifica deve quindi poter lavorare col solo
+         * input — di solito un id — e non dipendere dal risultato.
+         */
+        result: TalosToolResult | null,
+        context: TalosToolContext,
+    ): Promise<TalosToolVerdict>
 }
+
+/**
+ * L'esito di una verifica di postcondizione.
+ *
+ * `reason` è obbligatorio quando non regge, e non è una cortesia: finisce nel
+ * messaggio che il modello legge, e un modello a cui si dice «non ha funzionato»
+ * senza dire cosa non ha funzionato riprova identico.
+ */
+export type TalosToolVerdict =
+    | { held: true }
+    | { held: false, reason: string }
 
 export function defineTalosTool<Input>(definition: TalosToolDefinition<Input>): TalosToolDefinition<Input> {
     return definition

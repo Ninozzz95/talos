@@ -2660,6 +2660,16 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             return { id: saved.id, title: saved.title }
                         },
                         remove: (noteId: string) => notes.remove(noteId),
+                        // A5 — la rilettura che l'esecutore usa come
+                        // postcondizione. Passa dall'elenco della stazione,
+                        // che e' gia' l'unica fonte.
+                        find: async (noteId: string) => {
+                            const righe = await notes.list()
+                            const riga = righe.find((row) => row.id === noteId)
+                            return riga
+                                ? { id: riga.id, title: riga.title, content: riga.content }
+                                : null
+                        },
                     }),
                     /**
                      * Le attività, con le due porte.
