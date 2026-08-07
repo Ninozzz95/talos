@@ -26,6 +26,13 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     { id: 'time_now', group: 'personal', actions: ['read'] },
     // Stessa storia di `memory_write`: esisteva e il catalogo non lo sapeva.
     { id: 'research_list', group: 'personal', actions: ['read'] },
+    { id: 'research_start', group: 'personal', actions: ['write', 'outbound'] },
+    { id: 'research_read', group: 'personal', actions: ['read'] },
+    { id: 'research_rename', group: 'personal', actions: ['write'] },
+    { id: 'research_pause', group: 'personal', actions: ['write'] },
+    { id: 'research_resume', group: 'personal', actions: ['write', 'outbound'] },
+    { id: 'research_cancel', group: 'personal', actions: ['write'] },
+    { id: 'research_delete', group: 'personal', actions: ['write'] },
     // Scovato dal test di copertura il 2026-08-06: esisteva come tool ma NON
     // era nel catalogo, quindi non compariva né fra gli interruttori né
     // nell'elenco «Riguarda:» della pagina dei permessi. Un tool invisibile ai
@@ -37,6 +44,7 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     { id: 'notes_delete', group: 'personal', actions: ['write'] },
     { id: 'tasks_create', group: 'personal', actions: ['write'] },
     { id: 'tasks_complete', group: 'personal', actions: ['write'] },
+    { id: 'tasks_update', group: 'personal', actions: ['write'] },
     { id: 'tasks_delete', group: 'personal', actions: ['write'] },
     // Esce dal dispositivo E porta dentro testo di altri: due terzi della trifecta in un tool solo.
     { id: 'web_search', group: 'web', actions: ['outbound','write'] },

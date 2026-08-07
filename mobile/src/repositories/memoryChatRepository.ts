@@ -35,6 +35,7 @@ import {
     type TalosLocalTask,
     type TalosMemoryStatus,
     type TalosTaskStatus,
+    type UpdateTaskPatch,
     type TalosLocalVaultFile,
     type UpdateChatSessionInput,
     type UpdateVaultFileInput,
@@ -472,6 +473,21 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             const task = tasks.get(taskId)
             if (!task) throw new Error('TALOS_TASK_NOT_FOUND')
             const updated: TalosLocalTask = { ...task, status, updated_at: now() }
+            tasks.set(taskId, updated)
+            return { ...updated }
+        },
+        async updateTask(taskId: string, patch: UpdateTaskPatch) {
+            const task = tasks.get(taskId)
+            if (!task) throw new Error('TALOS_TASK_NOT_FOUND')
+            const updated: TalosLocalTask = {
+                ...task,
+                ...(patch.title === undefined ? {} : { title: normalizeStationTitle(patch.title) }),
+                ...(patch.description === undefined ? {} : { description: patch.description }),
+                ...(patch.priority === undefined ? {} : { priority: patch.priority }),
+                ...(patch.schedule_json === undefined ? {} : { schedule_json: patch.schedule_json }),
+                ...(patch.instruction === undefined ? {} : { instruction: patch.instruction }),
+                updated_at: now(),
+            }
             tasks.set(taskId, updated)
             return { ...updated }
         },

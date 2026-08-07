@@ -11,6 +11,7 @@ import type {
     TalosChatRepository,
     TalosMemoryStatus,
     TalosTaskStatus,
+    UpdateTaskPatch,
     UpdateChatSessionInput,
     UpdateVaultFileInput,
     UpdateToolActivityInput,
@@ -152,6 +153,9 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         },
         async setTaskStatus(taskId: string, status: TalosTaskStatus) {
             return (await ready()).setTaskStatus(taskId, status)
+        },
+        async updateTask(taskId: string, patch: UpdateTaskPatch) {
+            return (await ready()).updateTask(taskId, patch)
         },
         async deleteTask(taskId: string) {
             return (await ready()).deleteTask(taskId)

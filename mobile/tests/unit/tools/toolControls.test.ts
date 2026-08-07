@@ -137,7 +137,7 @@ describe('Agent Tools control registry', () => {
         expect(parsed.web_search).toBe(true)
         expect(parsed).not.toHaveProperty('future_shell')
         expect(parsed.library_context_policy_update).toBe(false)
-        expect(Object.keys(parsed)).toHaveLength(26)
+        expect(Object.keys(parsed)).toHaveLength(34)
         expect(isTalosAgentToolEnabled('library_search', parsed)).toBe(false)
         expect(isTalosAgentToolEnabled('future_shell', parsed)).toBe(false)
     })
@@ -205,7 +205,7 @@ describe('Agent Tools control registry', () => {
             'research_list', 'memory_write',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
-            .toBe('294015f453d5a35d76e67d812e2327b59075c2af373c60054e88a930c2245880')
+            .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
 
         /*
          * Ri-fissato 2026-08-06 per `research_list` e `memory_write`, che
@@ -219,7 +219,7 @@ describe('Agent Tools control registry', () => {
          * contratto.
          */
         expect(digestOf(controlPlane))
-            .toBe('c7762d0fb5a88051d27bb6d919e1d1dc1aa2ab2c326ae8e4d51f256731976a38')
+            .toBe('695e00014a662d6eeb3440a53a36eb310b1491de9e588e6084a33fe9552587e4')
         /**
          * Re-pinned 2026-08-01 for the three DIALECT digests only — the control
          * plane above did not move, which is the proof that nothing structural
@@ -270,26 +270,26 @@ describe('Agent Tools control registry', () => {
                 : tool
         ))
         expect(digestOf(talosToolsForAnthropic(beforeDescriptionUpdate as never)))
-            .toBe('84f55d186d855b53f4e8ec1858768c354fa4b055098f6e8a2299da8074968d4b')
+            .toBe('75d9782cd2c555ac0fd7ca0fa9eb59b666ea0e834d7d0907615a919bd7e46ec6')
         expect(digestOf(talosToolsForOpenAi(beforeDescriptionUpdate as never)))
-            .toBe('5e286d09447ed927711db677e80f9e847f70d904ed522063f11b196859ce0d3f')
+            .toBe('b0681b4eb5360b75fef3ed62c5db431e0976098c1cf89aec9e3745003de25819')
         expect(digestOf(talosToolsForGemini(beforeDescriptionUpdate as never)))
-            .toBe('2eb5fb9cf0724f880168279e9bdf480f7b3547d441b68726b2f773ccf32afd42')
+            .toBe('be971a4fccdb1a4ce451a12783f87a84b5e721b9fa7a4f4361508bb1508336c0')
 
         // Gli stessi tre dialetti SENZA i tool nuovi: identici a ieri.
         expect(digestOf(talosToolsForAnthropic(withoutNotesWrite as never)))
-            .toBe('a72503f2203b69edd23eabe7276758b40f46c962dda3f9a8aba5dc8f64ace484')
+            .toBe('8903bcf9aad1954b61d2bed23eacc170c0259b78fa0a293cef0927129373d3f5')
         expect(digestOf(talosToolsForOpenAi(withoutNotesWrite as never)))
-            .toBe('d807f211a9c254e92dfa032dd1ea11e8d6fa76d12ac2b24217d80dab3bbfeef7')
+            .toBe('9291e14e238147c8459bef3a66a0f9dae841130b40fb67f927bcf67e9969b058')
         expect(digestOf(talosToolsForGemini(withoutNotesWrite as never)))
-            .toBe('6aefb2a14ee5479f7459d789e5427cdbf6b83e9cdd25c9d3f15e99589a46a157')
+            .toBe('61745afe6d79da05fa2d982bc4cc3bd9256305f66d4caaa15f3d386772565e62')
 
         // E con i tre nuovi dentro: il contratto pubblico di oggi.
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('a9bfab7ced043e828208c8b2809f07935197038088ad4ed203867ee1b9c0b0c1')
+            .toBe('93acd6b8b8939ecaaf9b140acbbfa30f43a5aaf4ea7400df067af6ca2c89d55e')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('6505c3636e1dee48a3203f821a2fe3f3f8607f81fb5870b96e5c11cfe01174cc')
+            .toBe('34a3b23679ba860c822a69418c3be0abac6a8f7953234b18fcc6401580c4b0f9')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('54f87e74f2a4092f36b61672feb5d286a1e0971ec8f0c46fba627710b4b60d5c')
+            .toBe('d15af88ca43d2ea3bdb1d9401bb0759ef6ad18fdb4ff7687a0028aa51445635a')
     })
 })

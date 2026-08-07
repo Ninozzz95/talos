@@ -35,6 +35,7 @@ import {
 import {
     createTalosToolAuthorizationCoordinator,
     parseTalosToolAuthorizationCheckpoint,
+    type TalosCheckpointRejection,
     type TalosToolAuthorizationCheckpointV1,
     type TalosToolAuthorizationPendingView,
     type TalosToolAuthorizationRecoveryView,
@@ -873,6 +874,11 @@ export interface ChatController {
             instruction?: string | null
         }): Promise<import('@/repositories/chatRepository').TalosLocalTask>
         setStatus(taskId: string, status: 'todo' | 'doing' | 'done'): Promise<import('@/repositories/chatRepository').TalosLocalTask>
+        /** Cambia i campi di un'attività. Omesso lascia com'è, `null` cancella. */
+        update(
+            taskId: string,
+            patch: import('@/repositories/chatRepository').UpdateTaskPatch,
+        ): Promise<import('@/repositories/chatRepository').TalosLocalTask>
         remove(taskId: string): Promise<void>
     }
     notes: {
@@ -1704,6 +1710,16 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     }): TalosToolAuthorizationCheckpointV1 {
         const checkpointId = newTalosMobileId()
         const createdAt = new Date().toISOString()
+        /*
+         * ⭐ Il motivo del rifiuto viaggia col codice d'errore.
+         *
+         * `CHECKPOINT_INVALID` copriva una quindicina di cause diverse e l'owner
+         * l'ha visto due volte in due giorni senza che si potesse dire da che
+         * parte guardare. Adesso l'errore porta con sé quale controllo ha morso
+         * — `loop_too_large`, `duplicate_call_id`, `runtime_shape` — e resta un
+         * codice chiuso, quindi può finire nel Doctor e negli appunti.
+         */
+        const motivo: { reason: TalosCheckpointRejection | null } = { reason: null }
         const checkpoint = parseTalosToolAuthorizationCheckpoint({
             schema_version: 1,
             id: checkpointId,
@@ -1735,9 +1751,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             } satisfies TalosToolAuthorizationRequestV1)),
             created_at: createdAt,
             updated_at: createdAt,
-        })
+        }, motivo)
         if (!checkpoint) {
-            throw new Error('TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID')
+            throw new Error(
+                `TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID:${motivo.reason ?? 'unknown'}`,
+            )
         }
         return checkpoint
     }
@@ -2475,6 +2493,61 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     research: () => ({
                         list: () => research.list(),
                         isRunning: (id: string) => research.registry.isRunning(id),
+                        /**
+                         * Il piano lo costruisce la STESSA funzione della
+                         * stazione, non una seconda che possa pianificare
+                         * diversamente. Owner: «non dobbiamo inventarci nulla».
+                         *
+                         * Dalla chat il piano non si approva a mano — non c'è
+                         * una schermata dove guardarlo — quindi parte quello
+                         * proposto, che è ciò che la stazione mostra prima che
+                         * qualcuno lo tocchi.
+                         */
+                        start: async (input) => {
+                            // A richiesta, come fa gia' il resto del file: il
+                            // pianificatore non deve entrare nel grafo d'avvio
+                            // di chi non avvia ricerche dalla chat.
+                            const { talosResearchPlanFor } = await import('@/lib/research/researchPlan')
+                            const branches = talosResearchPlanFor(input.question, input.depth, false)
+                            const { id } = await research.start({
+                                question: input.question,
+                                depth: input.depth,
+                                branches,
+                            })
+                            return { id }
+                        },
+                        /**
+                         * Il rapporto ridotto a TESTO qui e non nel tool: il
+                         * tool non deve conoscere la forma di un rapporto di
+                         * ricerca, e questa è l'unica riga che sa dove sta il
+                         * riferimento al file.
+                         */
+                        report: async (runId: string) => {
+                            const [{ talosResearchReportRefOf }, runs] = await Promise.all([
+                                import('@/lib/research/researchCard'),
+                                research.list(),
+                            ])
+                            const run = runs.find((candidate) => candidate.id === runId)
+                            if (!run) return null
+                            const ref = talosResearchReportRefOf(run)
+                            if (!ref) return null
+                            const record = await research.report(ref).catch(() => null)
+                            if (!record) return null
+                            return [
+                                `# ${run.title ?? run.question}`,
+                                '',
+                                record.summary,
+                                '',
+                                ...record.claims.map((claim, index) => `${index + 1}. ${claim.text}`),
+                            ].join('\n')
+                        },
+                        rename: async (runId: string, title: string | null) => {
+                            await research.rename(runId, title)
+                        },
+                        pause: async (runId: string) => { await research.pause(runId) },
+                        resume: async (runId: string) => { await research.resume(runId) },
+                        cancel: async (runId: string) => { await research.cancel(runId) },
+                        remove: async (runId: string) => { await research.remove(runId) },
                     }),
                     memoryWriteAccess: () => deps.settings.state.shell?.memory_write_access ?? 'ask',
                     /**
@@ -2543,6 +2616,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         },
                         setStatus: async (taskId, status) => {
                             const saved = await tasks.setStatus(taskId, status)
+                            return { id: saved.id, title: saved.title }
+                        },
+                        update: async (taskId, patch) => {
+                            const saved = await tasks.update(taskId, patch)
                             return { id: saved.id, title: saved.title }
                         },
                         remove: (taskId: string) => tasks.remove(taskId),

@@ -386,6 +386,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
         },
         async listNotes() {
             return (await deps.repository.listNotes()).map((note) => ({
+                id: note.id,
                 title: note.title,
                 content: note.content,
                 updated_at: note.updated_at,
@@ -393,9 +394,11 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
         },
         async listTasks() {
             return (await deps.repository.listTasks()).map((task) => ({
+                id: task.id,
                 title: task.title,
                 status: task.status,
                 priority: task.priority,
+                description: task.description,
             }))
         },
         async searchMemories(query) {

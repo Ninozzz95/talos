@@ -35,6 +35,7 @@ import {
     type TalosLocalTask,
     type TalosTaskPriority,
     type TalosTaskStatus,
+    type UpdateTaskPatch,
     type TalosMemoryKind,
     type TalosMemoryScopeType,
     type TalosMemoryStatus,
@@ -1038,6 +1039,55 @@ export function createSqliteChatRepository(
                 await database.run(
                     'UPDATE talos_tasks SET status = ?, updated_at = ? WHERE id = ?',
                     [status, now(), taskId],
+                )
+            })
+            const rows = await (await db()).query(
+                `SELECT id, title, description, run_id, priority, status, schedule_json, instruction, last_run_at, created_at, updated_at
+                 FROM talos_tasks WHERE id = ? LIMIT 1`,
+                [taskId],
+            )
+            if (rows.length !== 1) throw new Error('TALOS_TASK_NOT_FOUND')
+            return parseTask(rows[0] as TalosSqlRow)
+        },
+        async updateTask(taskId: string, patch: UpdateTaskPatch) {
+            /*
+             * Le colonne si compongono, invece di scrivere cinque UPDATE o uno
+             * solo che riscrive tutto. Riscrivere tutto sembra più semplice ed
+             * è il modo di perdere un campo che il chiamante non aveva in mano:
+             * chi cambia la priorità dalla chat non ha mai visto `instruction`.
+             */
+            const colonne: string[] = []
+            const valori: (string | number | null)[] = []
+            if (patch.title !== undefined) {
+                colonne.push('title = ?')
+                valori.push(normalizeStationTitle(patch.title))
+            }
+            if (patch.description !== undefined) {
+                colonne.push('description = ?')
+                valori.push(patch.description)
+            }
+            if (patch.priority !== undefined) {
+                colonne.push('priority = ?')
+                valori.push(patch.priority)
+            }
+            if (patch.schedule_json !== undefined) {
+                colonne.push('schedule_json = ?')
+                valori.push(patch.schedule_json)
+            }
+            if (patch.instruction !== undefined) {
+                colonne.push('instruction = ?')
+                valori.push(patch.instruction)
+            }
+
+            await transaction(async (database) => {
+                const exists = await database.query('SELECT id FROM talos_tasks WHERE id = ? LIMIT 1', [taskId])
+                if (exists.length !== 1) throw new Error('TALOS_TASK_NOT_FOUND')
+                // Una patch vuota tocca comunque `updated_at`: chi ha chiesto di
+                // salvare deve vedere l'attività risalire in cima, altrimenti
+                // sembra che il salvataggio non sia avvenuto.
+                await database.run(
+                    `UPDATE talos_tasks SET ${[...colonne, 'updated_at = ?'].join(', ')} WHERE id = ?`,
+                    [...valori, now(), taskId],
                 )
             })
             const rows = await (await db()).query(
