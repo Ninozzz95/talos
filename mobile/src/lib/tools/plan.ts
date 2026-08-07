@@ -381,3 +381,40 @@ export function talosPlanAdmits(
     }
     return { admitted: false, reason: 'arguments-changed', step: candidati[0]! }
 }
+
+/**
+ * ⛔ Un piano approvato basta, al posto della scheda di questo passo?
+ *
+ * ## Perché sta QUI e non nel controller
+ *
+ * Perché una regola di sicurezza scritta in due posti è una regola che un
+ * giorno vale in un posto solo. La prima versione viveva nel controller e il
+ * test se la riscriveva accanto per provarla: due copie identiche il primo
+ * giorno, e la copia nel test sarebbe rimasta verde mentre il prodotto
+ * sbagliava. Una funzione sola, usata da entrambi.
+ *
+ * ## I due pavimenti, e perché non si attraversano
+ *
+ * L'approvazione di un piano non compra ciò che nemmeno «consenti sempre»
+ * compra:
+ *
+ * - **la trifecta chiusa** — dati privati, contenuto non fidato e un modo per
+ *   farlo uscire, tutti e tre insieme. Non è una domanda sul singolo tool: è su
+ *   ciò che è successo prima nel discorso, e il piano è stato letto **prima**
+ *   che succedesse. Approvarlo non poteva includere una cosa che non era ancora
+ *   accaduta.
+ * - **`R4`** — le azioni che non si ritirano. Non entrano nemmeno nel piano
+ *   (`critical`); questo è il secondo controllo, per quando ci si arriva **per
+ *   via della catena** — cioè il caso che nessuno aveva previsto scrivendo il
+ *   tool.
+ */
+export function talosPlanReplacesConsent(
+    piano: TalosPlan | null,
+    richiesta: { tool: string, digest: string, reason?: string, risk?: string },
+    chain: TalosToolChainState,
+): boolean {
+    if (!piano || piano.state !== 'approved') return false
+    if (richiesta.reason === 'trifecta') return false
+    if (richiesta.risk === 'R4') return false
+    return talosPlanAdmits(piano, richiesta.tool, richiesta.digest, chain).admitted
+}

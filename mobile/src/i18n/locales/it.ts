@@ -487,6 +487,9 @@ export const TALOS_IT_MESSAGES = {
         plan: {
             title: 'TALOS sta per fare {count} cose',
             nothingDoneYet: 'Niente è stato ancora fatto: se dici di no, non si perde nulla.',
+            approvedTitle: 'Piano approvato',
+            cancelledTitle: 'Piano rifiutato',
+            approvedBody: '{count} passi in corso.',
             deniedByPolicy: 'Escluso dai tuoi permessi. Non partirà.',
             irreversible: 'Non si torna indietro.',
             irreversibleCount: '{count} di questi passi non si annullano.',
