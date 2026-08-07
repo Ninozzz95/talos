@@ -1,3 +1,4 @@
+import { TALOS_CONTENT_ORIGIN_FALLBACK } from '@/lib/tools/security'
 import {
     cloneJsonObject,
     normalizeChatTitle,
@@ -457,6 +458,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 run_id: input.run_id,
                 priority: input.priority,
                 status: 'todo',
+                content_origin: input.content_origin ?? TALOS_CONTENT_ORIGIN_FALLBACK,
                 schedule_json: input.schedule_json ?? null,
                 instruction: input.instruction ?? null,
                 last_run_at: null,
@@ -502,6 +504,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 title: normalizeStationTitle(input.title),
                 content: input.content,
                 trust_level: 'untrusted',
+                content_origin: input.content_origin ?? TALOS_CONTENT_ORIGIN_FALLBACK,
                 created_at: input.created_at,
                 updated_at: input.created_at,
             }
@@ -594,6 +597,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 source: input.source,
                 metadata: cloneJsonObject(input.metadata),
                 trust_level: 'untrusted',
+                content_origin: input.content_origin ?? TALOS_CONTENT_ORIGIN_FALLBACK,
                 last_used_at: null,
                 created_at: input.created_at,
                 updated_at: input.created_at,
@@ -610,6 +614,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 scope_id: input.scope_id,
                 kind: input.kind,
                 status: 'active',
+                content_origin: input.content_origin ?? TALOS_CONTENT_ORIGIN_FALLBACK,
                 title: input.title,
                 content: input.content,
                 source: input.source,

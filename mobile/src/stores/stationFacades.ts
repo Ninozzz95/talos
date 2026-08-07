@@ -1,4 +1,5 @@
 import type { TalosChatRepository, UpdateTaskPatch } from '@/repositories/chatRepository'
+import type { TalosContentOrigin } from '@/lib/tools/security'
 import { newTalosMobileId } from '@/lib/mobileIds'
 import { upsertTalosDisplayNameMemory } from '@/services/profileMemory'
 
@@ -25,7 +26,18 @@ export function createStationFacades(deps: TalosStationFacadesDeps) {
             kind: 'preference' | 'project_fact' | 'procedure' | 'policy_note'
             scope_type: 'global' | 'project' | 'session'
             scope_id: string | null
+            /**
+             * ⛔ A8 — da dove viene il testo, deciso da CHI CHIAMA.
+             *
+             * La stazione non lo passa e resta `user-direct` implicito: quello
+             * che l'utente scrive a mano viene dall'utente. Lo passa invece il
+             * tool della chat, che lo prende dallo stato della catena — perche'
+             * una memoria annotata dopo aver letto una pagina web viene da li',
+             * e il modello la rileggera' in ogni conversazione futura.
+             */
+            content_origin?: TalosContentOrigin
         }) => deps.repository.createMemory({
+            content_origin: input.content_origin ?? 'user-direct',
             id: newTalosMobileId(),
             scope_type: input.scope_type,
             scope_id: input.scope_type === 'session'
@@ -73,9 +85,12 @@ export function createStationFacades(deps: TalosStationFacadesDeps) {
             priority: 'low' | 'normal' | 'high'
             schedule_json?: string | null
             instruction?: string | null
+            /** A8 — vedi la memoria qui sopra. */
+            content_origin?: TalosContentOrigin
         }) =>
             deps.repository.createTask({
                 id: newTalosMobileId(),
+                content_origin: input.content_origin ?? 'user-direct',
                 title: input.title,
                 description: input.description,
                 run_id: input.run_id,
@@ -104,11 +119,17 @@ export function createStationFacades(deps: TalosStationFacadesDeps) {
 
     const notes = {
         list: () => deps.repository.listNotes(),
-        create: (input: { title: string; content: string }) =>
+        create: (input: {
+            title: string
+            content: string
+            /** A8 — vedi la memoria qui sopra: la passa il tool, non la stazione. */
+            content_origin?: TalosContentOrigin
+        }) =>
             deps.repository.createNote({
                 id: newTalosMobileId(),
                 title: input.title,
                 content: input.content,
+                content_origin: input.content_origin ?? 'user-direct',
                 created_at: new Date().toISOString(),
             }),
         /**

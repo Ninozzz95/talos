@@ -406,6 +406,8 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 title: note.title,
                 content: note.content,
                 updated_at: note.updated_at,
+                // A8 — la provenienza registrata quando la nota e' nata.
+                contentOrigin: note.content_origin,
             }))
         },
         async listTasks() {
@@ -415,6 +417,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 status: task.status,
                 priority: task.priority,
                 description: task.description,
+                contentOrigin: task.content_origin,
             }))
         },
         async searchMemories(query) {
@@ -429,7 +432,11 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 })
                 .filter((entry) => entry.score > 0)
                 .sort((left, right) => right.score - left.score)
-                .map((entry) => ({ title: entry.memory.title, content: entry.memory.content }))
+                .map((entry) => ({
+                    title: entry.memory.title,
+                    content: entry.memory.content,
+                    contentOrigin: entry.memory.content_origin,
+                }))
         },
         now,
     }

@@ -173,3 +173,63 @@ describe('dentro l esecutore, con i tocchi veri del contratto', () => {
         )
     })
 })
+
+describe('l attacco che questa regola esiste per fermare', () => {
+    /**
+     * «Fatti riassumere questa pagina in una nota, poi rileggi la nota.»
+     *
+     * È il modo di lavare la provenienza: il web entra, diventa una nota
+     * scritta da noi, e alla rilettura sembra roba di casa. Se l'etichetta non
+     * si EREDITASSE alla scrittura, la seconda lettura ripartirebbe pulita e la
+     * trifecta non si chiuderebbe mai più.
+     */
+    it('una nota nata da una catena contaminata resta contaminata', () => {
+        // 1. Il modello legge una pagina web: la catena si sporca.
+        const dopoIlWeb = talosAdvanceChain(TALOS_EMPTY_CHAIN, {
+            risk: 'R2', reversibility: 'reversible',
+            readsPrivateData: false, readsUntrustedContent: true, canTransmit: true,
+        })
+        expect(dopoIlWeb.untrustedSeen).toBe(true)
+
+        // 2. Scrive una nota. La provenienza NON gliela chiede nessuno:
+        //    la decide lo stato della catena in quell'istante.
+        const provenienzaDellaNota = talosOriginForWrite(dopoIlWeb)
+        expect(provenienzaDellaNota).toBe('derived')
+
+        // 3. Domani, conversazione nuova, catena pulita: si rilegge la nota.
+        const rileggendo = talosAdvanceChain(
+            TALOS_EMPTY_CHAIN,
+            {
+                risk: 'R1', reversibility: 'read-only',
+                readsPrivateData: true, readsUntrustedContent: true, canTransmit: false,
+            },
+            provenienzaDellaNota,
+        )
+        // La contaminazione è sopravvissuta al salvataggio e al riavvio.
+        expect(rileggendo.untrustedSeen).toBe(true)
+
+        // 4. Quindi il tool che trasmette chiede ancora conferma.
+        expect(talosTrifectaVerdict(rileggendo, {
+            risk: 'R2', reversibility: 'reversible',
+            readsPrivateData: false, readsUntrustedContent: true, canTransmit: true,
+        }).closed).toBe(true)
+    })
+
+    it('mentre una nota scritta a mano dall utente non chiude niente', () => {
+        const provenienza = talosOriginForWrite(TALOS_EMPTY_CHAIN)
+        expect(provenienza).toBe('user-direct')
+
+        const rileggendo = talosAdvanceChain(
+            TALOS_EMPTY_CHAIN,
+            {
+                risk: 'R1', reversibility: 'read-only',
+                readsPrivateData: true, readsUntrustedContent: true, canTransmit: false,
+            },
+            provenienza,
+        )
+        expect(talosTrifectaVerdict(rileggendo, {
+            risk: 'R2', reversibility: 'reversible',
+            readsPrivateData: false, readsUntrustedContent: true, canTransmit: true,
+        }).closed).toBe(false)
+    })
+})

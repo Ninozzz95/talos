@@ -1,3 +1,4 @@
+import type { TalosContentOrigin } from '@/lib/tools/security'
 export type TalosLocalChatSurface = 'chat' | 'browse'
 export type TalosLocalChatMode = 'answer_only' | 'verified_execution'
 export type TalosLocalChatPersistenceMode = 'persistent' | 'temporary'
@@ -243,6 +244,8 @@ export interface TalosLocalMemory {
     source: string | null
     metadata: Record<string, unknown>
     trust_level: 'untrusted'
+    /** A8 — la provenienza registrata quando la riga e' nata. */
+    content_origin: TalosContentOrigin
     last_used_at: string | null
     created_at: string
     updated_at: string
@@ -258,6 +261,18 @@ export interface CreateMemoryInput {
     source: string | null
     metadata: Record<string, unknown>
     created_at: string
+    /**
+     * ⛔ A8 — da dove viene il testo di questa riga.
+     *
+     * Non lo decide chi scrive: lo decide lo **stato della catena** nel momento
+     * in cui la riga nasce (`talosOriginForWrite`). Una memoria che il modello
+     * ha annotato dopo aver letto una pagina web viene da quella pagina, e
+     * quando verra' riletta dovra' contaminare come farebbe la pagina.
+     *
+     * Assente = riga nata prima che la colonna esistesse, e si legge
+     * **external**: il predefinito prudente non regala fiducia.
+     */
+    content_origin?: TalosContentOrigin
 }
 
 /** Solo cio' che l'utente puo' davvero voler correggere. */
@@ -277,6 +292,8 @@ export interface TalosLocalTask {
     run_id: string | null
     priority: TalosTaskPriority
     status: TalosTaskStatus
+    /** A8 — la provenienza registrata quando la riga e' nata. */
+    content_origin: TalosContentOrigin
     /**
      * Quando ripartire da sola, in JSON — `null` per un'attività normale.
      *
@@ -317,6 +334,20 @@ export interface CreateTaskInput {
     /** Facoltativi: senza, nasce un'attività come quelle di prima. */
     schedule_json?: string | null
     instruction?: string | null
+    /**
+     * ⛔ A8 — da dove viene il testo di questa riga.
+     *
+     * Non lo decide chi scrive: lo decide lo **stato della catena** nel momento
+     * in cui la riga nasce (`talosOriginForWrite`). Una nota che il modello ha
+     * scritto dopo aver letto una pagina web viene da quella pagina, e quando
+     * verra' riletta dovra' contaminare la conversazione come farebbe la
+     * pagina.
+     *
+     * Assente = riga nata prima che la colonna esistesse, e si legge
+     * **external**: il predefinito prudente non regala fiducia a righe di cui
+     * non sappiamo la storia.
+     */
+    content_origin?: TalosContentOrigin
 }
 
 export interface TalosLocalNote {
@@ -324,6 +355,8 @@ export interface TalosLocalNote {
     title: string
     content: string
     trust_level: 'untrusted'
+    /** A8 — la provenienza registrata quando la riga e' nata. */
+    content_origin: TalosContentOrigin
     created_at: string
     updated_at: string
 }
@@ -333,6 +366,20 @@ export interface CreateNoteInput {
     title: string
     content: string
     created_at: string
+    /**
+     * ⛔ A8 — da dove viene il testo di questa riga.
+     *
+     * Non lo decide chi scrive: lo decide lo **stato della catena** nel momento
+     * in cui la riga nasce (`talosOriginForWrite`). Una nota che il modello ha
+     * scritto dopo aver letto una pagina web viene da quella pagina, e quando
+     * verra' riletta dovra' contaminare la conversazione come farebbe la
+     * pagina.
+     *
+     * Assente = riga nata prima che la colonna esistesse, e si legge
+     * **external**: il predefinito prudente non regala fiducia a righe di cui
+     * non sappiamo la storia.
+     */
+    content_origin?: TalosContentOrigin
 }
 
 /**
