@@ -84,13 +84,34 @@ export const LOCALIZZA = (criterio) => `
 
     const fotogramma = () => new Promise((r) => requestAnimationFrame(() => r()))
 
+    /** L'altezza utile: con la tastiera aperta NON e' \`innerHeight\`. */
+    const altezzaUtile = () => Math.round(
+        (window.visualViewport && window.visualViewport.height) || window.innerHeight,
+    )
+
+    /**
+     * ⛔ Il riquadro fermo NON basta. Playwright confronta due fotogrammi
+     * consecutivi, che coprono un'animazione CSS; la TASTIERA di Android e' un
+     * altro ordine di grandezza — scorre per ~300 ms, cioe' una ventina di
+     * fotogrammi — e in quel tempo il riquadro puo' essere gia' fermo mentre il
+     * layout sta ancora salendo.
+     *
+     * Successo il 2026-08-07: il tocco su «Invia messaggio» e' partito verso
+     * coordinate giuste al momento della localizzazione e arrivato, un decimo
+     * di secondo dopo, su quello che nel frattempo occupava quel punto.
+     *
+     * Quindi si guarda anche l'ALTEZZA UTILE: finche' cambia, il layout si sta
+     * muovendo, e non importa quanto sia fermo il singolo riquadro.
+     */
     const stabile = async (elemento) => {
         const primo = elemento.getBoundingClientRect()
+        const primaAltezza = altezzaUtile()
         await fotogramma()
         await fotogramma()
         const secondo = elemento.getBoundingClientRect()
         return primo.x === secondo.x && primo.y === secondo.y
             && primo.width === secondo.width && primo.height === secondo.height
+            && primaAltezza === altezzaUtile()
     }
 
     const etichettaDi = (elemento) => (

@@ -40,6 +40,14 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     generate_image: 'Generating an image',
     library_export: 'Saving a file to your device',
     library_context_policy_update: 'Changing Library context policy',
+    research_list: 'Looking at your researches',
+    research_start: 'Starting a deep research',
+    research_read: 'Reading a research report',
+    research_rename: 'Renaming a research',
+    research_pause: 'Pausing a research',
+    research_resume: 'Resuming a research',
+    research_cancel: 'Stopping a research',
+    research_delete: 'Deleting a research',
     local_models_search: 'Looking for models this phone can run',
     local_model_inspect: 'Checking whether a model fits this phone',
     local_model_download: 'Downloading a model to this phone',
@@ -73,6 +81,14 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     generate_image: 'toolActivity.generateImage',
     library_export: 'toolActivity.libraryExport',
     library_context_policy_update: 'toolActivity.libraryContextPolicyUpdate',
+    research_list: 'toolActivity.researchList',
+    research_start: 'toolActivity.researchStart',
+    research_read: 'toolActivity.researchRead',
+    research_rename: 'toolActivity.researchRename',
+    research_pause: 'toolActivity.researchPause',
+    research_resume: 'toolActivity.researchResume',
+    research_cancel: 'toolActivity.researchCancel',
+    research_delete: 'toolActivity.researchDelete',
     local_models_search: 'toolActivity.localModelsSearch',
     local_model_inspect: 'toolActivity.localModelInspect',
     local_model_download: 'toolActivity.localModelDownload',
@@ -189,6 +205,38 @@ export const TALOS_TOOL_CONSENT_KEYS: Record<string, TalosToolConsentCopy> = {
         title: 'toolConsent.libraryContextPolicyUpdate.title',
         description: 'toolConsent.libraryContextPolicyUpdate.description',
     },
+    research_list: {
+        title: 'toolConsent.researchList.title',
+        description: 'toolConsent.researchList.description',
+    },
+    research_start: {
+        title: 'toolConsent.researchStart.title',
+        description: 'toolConsent.researchStart.description',
+    },
+    research_read: {
+        title: 'toolConsent.researchRead.title',
+        description: 'toolConsent.researchRead.description',
+    },
+    research_rename: {
+        title: 'toolConsent.researchRename.title',
+        description: 'toolConsent.researchRename.description',
+    },
+    research_pause: {
+        title: 'toolConsent.researchPause.title',
+        description: 'toolConsent.researchPause.description',
+    },
+    research_resume: {
+        title: 'toolConsent.researchResume.title',
+        description: 'toolConsent.researchResume.description',
+    },
+    research_cancel: {
+        title: 'toolConsent.researchCancel.title',
+        description: 'toolConsent.researchCancel.description',
+    },
+    research_delete: {
+        title: 'toolConsent.researchDelete.title',
+        description: 'toolConsent.researchDelete.description',
+    },
     local_models_search: {
         title: 'toolConsent.localModelsSearch.title',
         description: 'toolConsent.localModelsSearch.description',
@@ -243,6 +291,7 @@ export type TalosToolIconName =
     | 'memory'
     | 'clock'
     | 'web'
+    | 'research'
     | 'document'
     | 'image'
     | 'download'
@@ -275,6 +324,18 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     generate_image: 'image',
     library_export: 'download',
     library_context_policy_update: 'library',
+    // ⛔ Una ricerca approfondita raggiunge il web, ma NON è una ricerca web:
+    // dura minuti, si mette in pausa, e finisce in un rapporto. Darle il globo
+    // direbbe una cosa falsa su cosa sta succedendo — lo stesso difetto del
+    // documento che mostrava il globo, al contrario.
+    research_list: 'research',
+    research_start: 'research',
+    research_read: 'research',
+    research_rename: 'research',
+    research_pause: 'research',
+    research_resume: 'research',
+    research_cancel: 'research',
+    research_delete: 'research',
     // Searching and inspecting reach the network; downloading is a download.
     local_models_search: 'web',
     local_model_inspect: 'web',

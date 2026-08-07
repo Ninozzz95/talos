@@ -884,6 +884,14 @@ export const TALOS_EN_MESSAGES = {
         localModelInspect: 'Checking whether a model fits this phone',
         localModelDownload: 'Downloading a model to this phone',
         localModelsStatus: 'Checking on a model download',
+        researchList: 'Looking at your researches',
+        researchStart: 'Starting a deep research',
+        researchRead: 'Reading a research report',
+        researchRename: 'Renaming a research',
+        researchPause: 'Pausing a research',
+        researchResume: 'Resuming a research',
+        researchCancel: 'Stopping a research',
+        researchDelete: 'Deleting a research',
     },
     toolConsent: {
         libraryList: {
@@ -1005,6 +1013,38 @@ export const TALOS_EN_MESSAGES = {
         localModelsStatus: {
             title: 'Check on a model download',
             description: 'Report what is downloading right now and how far it has got. Reads this device only.',
+        },
+        researchList: {
+            title: 'Browse your researches',
+            description: 'List the deep researches you have run, how each one ended and how far it got. Reads this device only.',
+        },
+        researchStart: {
+            title: 'Start a deep research',
+            description: 'Opens a research that reads the web for several minutes and saves its report to the Library. Uses network and model credit.',
+        },
+        researchRead: {
+            title: 'Read a research report',
+            description: 'Opens the report of a finished research, saved on this device.',
+        },
+        researchRename: {
+            title: 'Rename a research',
+            description: 'Changes the title the research appears under. Leaves the report untouched.',
+        },
+        researchPause: {
+            title: 'Pause a research',
+            description: 'Stops a running research so it can be resumed. What it has already found stays.',
+        },
+        researchResume: {
+            title: 'Resume a research',
+            description: 'Restarts a paused research where it left off. Goes back to reading the web.',
+        },
+        researchCancel: {
+            title: 'Stop a research for good',
+            description: 'Closes a running research permanently. What it has already found stays, but it will not resume.',
+        },
+        researchDelete: {
+            title: 'Delete a research',
+            description: 'Removes the research and its report from this device. This cannot be undone.',
         },
     },
     export: {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
     TALOS_TOOL_ICONS,
     TALOS_TOOL_LABELS,
@@ -9,14 +9,7 @@ import {
     talosToolActivityDetail,
     talosToolActivityLabel,
 } from '@/lib/tools/toolLabels'
-import { createTalosReadTools } from '@/lib/tools/readTools'
-import { createTalosWebTools } from '@/lib/search/webTools'
-import { createTalosDocumentTools } from '@/lib/documents/documentTools'
-import { createTalosImageTools } from '@/lib/images/imageTools'
-import { createTalosLocalModelTools } from '@/lib/models/modelTools'
-import { createTalosLibraryExportTools } from '@/lib/tools/libraryExportTools'
-import { createTalosLibraryContextPolicyTools } from '@/lib/tools/libraryContextPolicyTools'
-import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
+import { TALOS_AGENT_TOOL_IDS } from '@/lib/tools/toolControls'
 import { talosTestT } from '../../helpers/talosTestI18n'
 
 /**
@@ -25,63 +18,26 @@ import { talosTestT } from '../../helpers/talosTestI18n'
  * hint of which page. Two failures at once: the label map still only knew the
  * original six tools, and the activity carried no detail at all.
  *
- * The first test is the one that matters. It fails when a tool is ADDED without
- * a label, rather than when somebody happens to look at the screen — which is
- * how this shipped in the first place.
+ * The coverage tests are the ones that matter. They fail when a tool is ADDED
+ * without a face, rather than when somebody happens to look at the screen —
+ * which is how this shipped in the first place.
+ *
+ * ## ⛔ Perché non si enumerano più le FABBRICHE a mano
+ *
+ * Questa funzione costruiva ogni famiglia di tool chiamandone la fabbrica, e
+ * l'elenco delle fabbriche era scritto a mano. È andato stantìo **tre volte**:
+ * mancavano i documenti (e proprio il documento aveva l'icona sbagliata), poi i
+ * modelli, e infine — trovato dall'owner il 2026-08-07 — **tutti e otto i tool
+ * della Ricerca**, che mostravano `research_start` sulla scheda di consenso.
+ *
+ * Tre volte lo stesso difetto è un difetto della guardia, non di chi scrive i
+ * tool. Ora si legge da `TALOS_AGENT_TOOL_IDS`, che è l'autorità unica: altri
+ * due test (`toolSecurityDeclared`) provano che il catalogo dei permessi e
+ * quello della sicurezza le corrispondono id per id, quindi un tool che nasce
+ * senza volto **non ha più nessun elenco in cui nascondersi**.
  */
-function everyToolName(): string[] {
-    const read = createTalosReadTools({
-        listLibraryEntries: vi.fn(async () => []),
-        listLibraryDocs: vi.fn(async () => []),
-        readLibraryDoc: vi.fn(async () => null),
-        listNotes: vi.fn(async () => []),
-        listTasks: vi.fn(async () => []),
-        searchMemories: vi.fn(async () => []),
-        now: () => '2026-07-26T00:00:00.000Z',
-    })
-    const web = createTalosWebTools({
-        search: vi.fn(async () => []),
-        read: vi.fn(async () => null),
-        rememberSearch: vi.fn(async () => ({
-            policy: 'stored',
-            saved: 0,
-            skipped: 0,
-            failed: 0,
-        })),
-        remember: vi.fn(async () => {}),
-    })
-    // The DOCUMENT tools were missing from this list, which made the guards
-    // above vacuous for exactly the tool whose icon was wrong. A guard that does
-    // not cover the case that failed is not a guard.
-    const documents = createTalosDocumentTools({
-        generate: vi.fn(),
-        verify: vi.fn(),
-        save: vi.fn(),
-        diagnostics: () => false,
-    } as never)
-    const images = createTalosImageTools({
-        provider: vi.fn(() => 'gemini'),
-        generate: vi.fn(),
-        save: vi.fn(),
-    })
-    const exports = createTalosLibraryExportTools({
-        listCandidates: vi.fn(async () => []),
-        exportById: vi.fn(),
-    } as never)
-    const policy = createTalosLibraryContextPolicyTools({
-        read: vi.fn(),
-        replace: vi.fn(),
-    } as never)
-    // And the MODEL tools were missing in their turn, so the same guard went
-    // vacuous again for the four newest tools — none of which had an icon. The
-    // lesson keeps arriving in the same shape: a guard that enumerates by hand
-    // goes stale the next time somebody adds a tool.
-    const models = createTalosLocalModelTools()
-    const memoryWrite = createTalosMemoryWriteTools({
-        create: vi.fn(async (input) => ({ title: input.title })),
-    })
-    return [...read, ...web, ...documents, ...images, ...exports, ...policy, ...models, ...memoryWrite]
-        .map((tool) => tool.name)
+function everyToolName(): readonly string[] {
+    return TALOS_AGENT_TOOL_IDS
 }
 
 describe('tool activity labels', () => {
@@ -118,6 +74,63 @@ describe('tool activity labels', () => {
         const missing = everyToolName().filter((name) => !(name in TALOS_TOOL_CONSENT_KEYS))
 
         expect(missing, `no consent copy for: ${missing.join(', ')}`).toEqual([])
+    })
+
+    it('EVERY tool has a localized activity key too', () => {
+        const missing = everyToolName().filter((name) => !(name in TALOS_TOOL_LABEL_KEYS))
+        expect(missing, `no activity key for: ${missing.join(', ')}`).toEqual([])
+    })
+
+    /**
+     * ⛔ Il difetto più insidioso di questa superficie: la chiave c'è nella
+     * mappa, ma la frase manca nel dizionario. Allora la scheda mostra
+     * `toolConsent.researchStart.title` — che è PEGGIO del nome interno del
+     * tool, perché almeno quello era una parola.
+     *
+     * Il traduttore di prova restituisce la chiave quando non la trova, quindi
+     * «tradotto diverso dalla chiave» è la prova che la frase esiste davvero.
+     */
+    it('e OGNI chiave risolve in una frase vera, in tutte e due le lingue', () => {
+        const rotte: string[] = []
+        for (const locale of ['it', 'en'] as const) {
+            const t = talosTestT(locale)
+            for (const nome of everyToolName()) {
+                const chiavi = [
+                    TALOS_TOOL_CONSENT_KEYS[nome]?.title,
+                    TALOS_TOOL_CONSENT_KEYS[nome]?.description,
+                    TALOS_TOOL_LABEL_KEYS[nome],
+                ]
+                for (const chiave of chiavi) {
+                    if (!chiave) continue
+                    const frase = t(chiave)
+                    if (frase === chiave || frase.trim() === '') {
+                        rotte.push(`${locale}: ${chiave}`)
+                    }
+                }
+            }
+        }
+        expect(rotte, `chiavi senza frase: ${rotte.join(', ')}`).toEqual([])
+    })
+
+    /**
+     * Una scheda di consenso non deve MAI mostrare il nome sul filo. Owner
+     * 2026-08-07: `research_start` compariva come titolo, perché il fallback
+     * di `talosToolConsentCopy` restituisce il titolo dello schema — inglese,
+     * e a volte proprio l'id.
+     */
+    it('nessuna scheda di consenso mostra un nome sul filo', () => {
+        const t = talosTestT('it')
+        const colpevoli: string[] = []
+        for (const nome of everyToolName()) {
+            const copia = talosToolConsentCopy(
+                { name: nome, title: nome, description: nome },
+                t,
+            )
+            if (copia.title === nome || /^[a-z0-9]+_[a-z0-9_]+$/.test(copia.title)) {
+                colpevoli.push(nome)
+            }
+        }
+        expect(colpevoli, `mostrano il nome interno: ${colpevoli.join(', ')}`).toEqual([])
     })
 
     it('TOOL-CONSENT-I18N-02 resolves Italian human copy without changing protocol input', () => {
