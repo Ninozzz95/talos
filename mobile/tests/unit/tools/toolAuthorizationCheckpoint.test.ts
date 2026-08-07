@@ -530,3 +530,99 @@ describe('talos.tool.authorization-checkpoint/1', () => {
         expect(JSON.stringify(persisted?.loop)).toContain('CONTRACT_SENTINEL')
     })
 })
+
+describe('⛔⭐ l\'id del profilo modello, che ha rotto i tool su tutto OpenRouter', () => {
+    /**
+     * ## Il difetto, riprodotto sul Pad il 2026-08-07 con GPT-5.6 Luna
+     *
+     * Il validatore degli id era `/^[A-Za-z0-9][A-Za-z0-9._:-]{0,256}$/`: niente
+     * barra. Ma un id OpenRouter **è** `openai/gpt-5.6-luna`, e un modello
+     * locale è un percorso che comincia con `/`.
+     *
+     * Quindi `parseIdentity` rifiutava, il checkpoint non nasceva, e ogni
+     * richiesta di consenso a uno strumento moriva con
+     * `TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID` — cioè **nessun modello
+     * OpenRouter poteva usare uno strumento che richiede il permesso**.
+     *
+     * L'owner l'ha visto due volte in due giorni, sempre con OpenRouter, e dal
+     * codice d'errore non si poteva dire da che parte guardare: quello stesso
+     * codice copriva una quindicina di cause diverse. La riga
+     * `CHECKPOINT_INVALID:identity` — aggiunta poche ore prima — è ciò che ha
+     * permesso di trovarlo in un minuto invece che per esclusione.
+     */
+    it('accetta un id con la BARRA, che è la forma di ogni modello OpenRouter', async () => {
+        const identity = {
+            sendId: 'send-1',
+            sessionId: 'session-1',
+            sessionTitle: 'Q2 plan',
+            surface: 'chat' as const,
+            modelProfileId: 'openai/gpt-5.6-luna',
+            acceptedAt: NOW,
+        }
+        const request = await makeRequest({ model_profile_id: 'openai/gpt-5.6-luna' })
+        const checkpoint = await makeCheckpoint([request], { send_identity: identity })
+
+        expect(parseTalosToolAuthorizationCheckpoint(checkpoint)).not.toBeNull()
+    })
+
+    it('e un PERCORSO, che è la forma di ogni modello locale', async () => {
+        const path = '/storage/emulated/0/Android/data/ai.talos/files/models/Qwen3-1.7B-Q8_0.gguf'
+        const identity = {
+            sendId: 'send-1',
+            sessionId: 'session-1',
+            sessionTitle: 'Q2 plan',
+            surface: 'chat' as const,
+            modelProfileId: path,
+            acceptedAt: NOW,
+        }
+        const request = await makeRequest({ model_profile_id: path })
+        const checkpoint = await makeCheckpoint([request], { send_identity: identity })
+
+        expect(parseTalosToolAuthorizationCheckpoint(checkpoint)).not.toBeNull()
+    })
+
+    /**
+     * ⛔ Ma resta limitato e senza caratteri di controllo: questo id finisce in
+     * JSON e nei registri diagnostici che si copiano in una chat di supporto.
+     */
+    it('rifiuta un id con caratteri di controllo, o troppo lungo', async () => {
+        for (const cattivo of ['openai/gpt\u0000luna', 'x'.repeat(257), '']) {
+            const identity = {
+                sendId: 'send-1',
+                sessionId: 'session-1',
+                sessionTitle: 'Q2 plan',
+                surface: 'chat' as const,
+                modelProfileId: cattivo,
+                acceptedAt: NOW,
+            }
+            const request = await makeRequest({ model_profile_id: cattivo })
+            const checkpoint = await makeCheckpoint([request], { send_identity: identity })
+            expect(parseTalosToolAuthorizationCheckpoint(checkpoint), cattivo).toBeNull()
+        }
+    })
+
+    /**
+     * ⭐ E il motivo del rifiuto si LEGGE, invece di essere uno fra quindici.
+     *
+     * È la riga che ha trasformato «succede una cosa» in «succede questa cosa»:
+     * senza, questo difetto sarebbe costato un'altra giornata.
+     */
+    it('dice QUALE controllo ha morso, non solo che ha morso', async () => {
+        const checkpoint = await makeCheckpoint()
+        const motivo: { reason: TalosCheckpointRejection | null } = { reason: null }
+
+        parseTalosToolAuthorizationCheckpoint(
+            { ...checkpoint, send_identity: { ...checkpoint.send_identity, acceptedAt: 'ieri' } },
+            motivo,
+        )
+        expect(motivo.reason).toBe('identity')
+
+        parseTalosToolAuthorizationCheckpoint({ ...checkpoint, runtime: 'non un oggetto' }, motivo)
+        expect(motivo.reason).toBe('runtime_shape')
+
+        // E su un checkpoint sano il motivo si azzera, invece di restare
+        // l'ultimo rifiuto visto — che sarebbe un falso indizio.
+        parseTalosToolAuthorizationCheckpoint(checkpoint, motivo)
+        expect(motivo.reason).toBeNull()
+    })
+})
