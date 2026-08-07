@@ -1,4 +1,5 @@
 import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
+import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
 import { createTalosTasksWriteTools } from '@/lib/tools/tasksWriteTools'
 import { talosBytesToBase64 } from '@/lib/bytesToBase64'
@@ -94,6 +95,14 @@ export interface TalosToolsetDeps {
     /** Se il modello puo' scrivere in memoria: stessa grammatica di sopra. */
     memoryWriteAccess?(): 'allow' | 'ask' | 'deny'
     memoryWrite?(): import('@/lib/tools/memoryWriteTools').TalosMemoryWriteSources | null
+    /**
+     * La Libreria, in scrittura: rinominare e togliere.
+     *
+     * Owner 2026-08-07: la chat sapeva solo INSERIRE e leggere. Sta dietro allo
+     * stesso interruttore della lettura (`libraryAccess`), perche' un modello
+     * che non puo' vedere la Libreria non deve poterla nemmeno svuotare.
+     */
+    libraryWrite?(): import('@/lib/tools/libraryWriteTools').TalosLibraryWriteSources | null
     /**
      * Le note, in scrittura. Owner 2026-08-05: ogni funzione deve avere le
      * DUE porte, e questa aveva solo la lettura (`notes_list`).
@@ -468,6 +477,11 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             const memoryWrite = (deps.memoryWriteAccess?.() ?? 'ask') === 'deny'
                 ? null
                 : deps.memoryWrite?.() ?? null
+            // Sotto lo stesso opt-out della lettura: `libraryAccess` su
+            // «nega» toglie il gruppo intero, non solo meta'.
+            const libraryWrite = (deps.libraryAccess?.() ?? 'ask') === 'deny'
+                ? null
+                : deps.libraryWrite?.() ?? null
             const notesWrite = deps.notesWrite?.() ?? null
             const tasksWrite = deps.tasksWrite?.() ?? null
             const documents = deps.documents?.() ?? null
@@ -480,6 +494,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...(web ? createTalosWebTools(web) : []),
                 ...(research ? createTalosResearchTools(research) : []),
                 ...(memoryWrite ? createTalosMemoryWriteTools(memoryWrite) : []),
+                ...(libraryWrite ? createTalosLibraryWriteTools(libraryWrite) : []),
                 ...(notesWrite ? createTalosNotesWriteTools(notesWrite) : []),
                 ...(tasksWrite ? createTalosTasksWriteTools(tasksWrite) : []),
                 ...(documents ? createTalosDocumentTools(documents) : []),

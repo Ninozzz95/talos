@@ -1,4 +1,9 @@
-import type { TalosSqlConnection, TalosSqlRow, TalosSqliteRuntime } from '@/persistence/sqliteTypes'
+import type {
+    TalosSqlConnection,
+    TalosSqlRow,
+    TalosSqlValue,
+    TalosSqliteRuntime,
+} from '@/persistence/sqliteTypes'
 import { talosWithTimeout } from '@/lib/talosDeviceLog'
 import {
     cloneJsonObject,
@@ -35,6 +40,7 @@ import {
     type TalosLocalTask,
     type TalosTaskPriority,
     type TalosTaskStatus,
+    type UpdateMemoryPatch,
     type UpdateTaskPatch,
     type TalosMemoryKind,
     type TalosMemoryScopeType,
@@ -846,6 +852,7 @@ export function createSqliteChatRepository(
             const current = parseVaultFile(currentRows[0] as TalosSqlRow)
             const updated: TalosLocalVaultFile = {
                 ...current,
+                display_name: input.display_name ?? current.display_name,
                 status: input.status ?? current.status,
                 private_uri: input.private_uri ?? current.private_uri,
                 sha256: input.sha256 === undefined ? current.sha256 : normalizeVaultSha256(input.sha256),
@@ -862,10 +869,11 @@ export function createSqliteChatRepository(
                 if (exists.length !== 1) throw new Error('TALOS_VAULT_FILE_NOT_FOUND')
                 await database.run(
                     `UPDATE talos_vault_files
-                     SET private_uri = ?, status = ?, sha256 = ?, extracted_text = ?,
-                         failure_code = ?, metadata_json = ?, updated_at = ?
+                     SET display_name = ?, private_uri = ?, status = ?, sha256 = ?,
+                         extracted_text = ?, failure_code = ?, metadata_json = ?, updated_at = ?
                      WHERE id = ? AND status != 'revoked'`,
                     [
+                        updated.display_name,
                         updated.private_uri,
                         updated.status,
                         updated.sha256,
@@ -1378,6 +1386,35 @@ export function createSqliteChatRepository(
                  ORDER BY updated_at DESC, id DESC`,
             )
             return rows.map((row) => parseMemory(row as TalosSqlRow))
+        },
+        async updateMemory(memoryId: string, patch: UpdateMemoryPatch) {
+            const campi: string[] = []
+            const valori: TalosSqlValue[] = []
+            if (patch.title !== undefined) { campi.push('title = ?'); valori.push(patch.title) }
+            if (patch.content !== undefined) { campi.push('content = ?'); valori.push(patch.content) }
+            if (patch.kind !== undefined) { campi.push('kind = ?'); valori.push(patch.kind) }
+            // Una patch vuota non e' un aggiornamento a zero campi: e' una
+            // chiamata che chi l'ha scritta credeva facesse qualcosa.
+            if (campi.length === 0) throw new Error('TALOS_MEMORY_UPDATE_EMPTY')
+
+            await transaction(async (database) => {
+                const exists = await database.query(
+                    'SELECT id FROM talos_memories WHERE id = ? LIMIT 1',
+                    [memoryId],
+                )
+                if (exists.length !== 1) throw new Error('TALOS_MEMORY_NOT_FOUND')
+                await database.run(
+                    `UPDATE talos_memories SET ${campi.join(', ')}, updated_at = ? WHERE id = ?`,
+                    [...valori, now(), memoryId],
+                )
+            })
+            const rows = await (await db()).query(
+                `SELECT id, scope_type, scope_id, kind, status, title, content, source, metadata_json, last_used_at, created_at, updated_at
+                 FROM talos_memories WHERE id = ? LIMIT 1`,
+                [memoryId],
+            )
+            if (rows.length !== 1) throw new Error('TALOS_MEMORY_NOT_FOUND')
+            return parseMemory(rows[0] as TalosSqlRow)
         },
         async updateMemoryStatus(memoryId: string, status: TalosMemoryStatus) {
             // Driver-independent (F4-#22 pattern): guard by SELECT, never

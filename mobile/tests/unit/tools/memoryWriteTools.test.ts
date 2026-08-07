@@ -8,7 +8,21 @@ import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
  * risposte brevi» finiva nel nulla.
  */
 function tool(create = vi.fn(async () => ({ title: 'Risposte brevi' }))) {
-    return { def: createTalosMemoryWriteTools({ create })[0]!, create }
+    /*
+     * Le tre sorgenti nuove (2026-08-07) servono anche a `memory_write`:
+     * `findByTitle` e' il controllo che evita il doppione, e senza di essa il
+     * tool non arriverebbe nemmeno a chiamare `create`.
+     */
+    return {
+        def: createTalosMemoryWriteTools({
+            create,
+            update: async () => ({ id: 'm1', title: 'x' }),
+            remove: async () => undefined,
+            find: async () => null,
+            findByTitle: async () => null,
+        })[0]!,
+        create,
+    }
 }
 
 const INPUT = { title: 'Risposte brevi', content: 'Preferisce risposte brevi.', kind: 'preference' } as never
@@ -52,6 +66,10 @@ describe('memory_write', () => {
          */
         const rotto = createTalosMemoryWriteTools({
             create: async () => { throw new Error('disco pieno') },
+            update: async () => ({ id: 'm1', title: 'x' }),
+            remove: async () => undefined,
+            find: async () => null,
+            findByTitle: async () => null,
         })[0]!
         const esito = await rotto.run(INPUT, {} as never)
         expect(esito.ok).toBe(false)

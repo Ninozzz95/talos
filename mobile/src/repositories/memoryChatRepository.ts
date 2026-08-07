@@ -35,6 +35,7 @@ import {
     type TalosLocalTask,
     type TalosMemoryStatus,
     type TalosTaskStatus,
+    type UpdateMemoryPatch,
     type UpdateTaskPatch,
     type TalosLocalVaultFile,
     type UpdateChatSessionInput,
@@ -356,6 +357,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
         },
         async updateVaultFile(fileId: string, input: UpdateVaultFileInput) {
             const file = requireVaultFile(fileId)
+            if (input.display_name !== undefined) file.display_name = input.display_name
             if (input.status !== undefined) file.status = input.status
             if (input.private_uri !== undefined) file.private_uri = input.private_uri
             if (input.sha256 !== undefined) file.sha256 = normalizeVaultSha256(input.sha256)
@@ -624,6 +626,22 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             return [...memories.values()]
                 .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.id.localeCompare(left.id))
                 .map((memory) => ({ ...memory }))
+        },
+        async updateMemory(memoryId: string, patch: UpdateMemoryPatch) {
+            const memory = memories.get(memoryId)
+            if (!memory) throw new Error('TALOS_MEMORY_NOT_FOUND')
+            if (patch.title === undefined && patch.content === undefined && patch.kind === undefined) {
+                throw new Error('TALOS_MEMORY_UPDATE_EMPTY')
+            }
+            const updated: TalosLocalMemory = {
+                ...memory,
+                title: patch.title ?? memory.title,
+                content: patch.content ?? memory.content,
+                kind: patch.kind ?? memory.kind,
+                updated_at: now(),
+            }
+            memories.set(memoryId, updated)
+            return { ...updated }
         },
         async updateMemoryStatus(memoryId: string, status: TalosMemoryStatus) {
             const memory = memories.get(memoryId)

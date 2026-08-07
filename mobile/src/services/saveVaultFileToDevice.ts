@@ -69,6 +69,17 @@ export interface TalosDeviceFileSaveRuntime {
 
 const FALLBACK_MEDIA_TYPE = 'application/octet-stream'
 const MAX_DISPLAY_NAME = 180
+
+/**
+ * Quanto grande e' un pezzo dello staging: 3 MiB.
+ *
+ * Due vincoli lo scelgono, e nessuno dei due e' un gusto personale. Dev'essere
+ * **multiplo di 3**, perche' base64 impacchetta 3 byte in 4 caratteri e solo
+ * cosi' un pezzo non porta riempimento — 3 MiB lo e' (3 × 1.048.576). E deve
+ * stare largo sotto il muro dei ~26 MB oltre il quale la WebView di Android
+ * muore: 3 MiB di byte diventano 4 MiB di base64, cioe' 8 MiB in memoria.
+ */
+export const STAGE_CHUNK_BYTES = 3 * 1024 * 1024
 let bridge: TalosFileExportBridge | null = null
 let saveActive = false
 
@@ -127,6 +138,48 @@ function safeMediaType(value: string): string {
         : FALLBACK_MEDIA_TYPE
 }
 
+/** Chi sa scrivere: il primo pezzo crea il file, i successivi si accodano. */
+export interface TalosStageWriter {
+    write: (base64: string) => Promise<void>
+    append: (base64: string) => Promise<void>
+}
+
+/**
+ * Mette i byte nella cache **a pezzi**, non in un colpo solo.
+ *
+ * `writeFile` vuole i byte in base64, e il base64 di un file grosso e' una
+ * stringa piu' grande del file stesso: la WebView di Android va in out-of-memory
+ * **intorno ai 26 MB** (ionic-team/capacitor#6624). Un allegato della Libreria
+ * ci stava dentro; un backup dell'intero workspace no — sul Pad di prova sono
+ * gia' 13 MB di dati con due chat sole, e un utente vero ne avrebbe centinaia.
+ *
+ * Il rimedio e' quello che usa `capacitor-blob-writer` nella sua modalita' di
+ * ripiego: si concatena su disco. Tre dettagli decidono se funziona.
+ *
+ * 1. Il primo pezzo passa da `write`, perche' `appendFile` **non ha
+ *    `recursive`**: la cartella `talos-export/` non esisterebbe.
+ * 2. Ogni pezzo e' lungo un **multiplo di 3**: base64 impacchetta 3 byte in 4
+ *    caratteri, quindi cosi' nessun pezzo porta riempimento (`=`) e i pezzi si
+ *    incollano senza rovinarsi. Solo l'ultimo puo' averlo, ed e' l'ultimo.
+ * 3. Un file **vuoto** va comunque creato: senza questo il salvataggio di zero
+ *    byte fallirebbe con «file assente» invece di produrre un file vuoto.
+ */
+export async function talosStageInChunks(
+    bytes: Uint8Array,
+    writer: TalosStageWriter,
+    chunkBytes: number = STAGE_CHUNK_BYTES,
+): Promise<void> {
+    if (bytes.byteLength === 0) {
+        await writer.write('')
+        return
+    }
+    for (let inizio = 0; inizio < bytes.byteLength; inizio += chunkBytes) {
+        const pezzo = base64FromBytes(bytes.subarray(inizio, inizio + chunkBytes))
+        if (inizio === 0) await writer.write(pezzo)
+        else await writer.append(pezzo)
+    }
+}
+
 function defaultRuntime(): TalosDeviceFileSaveRuntime {
     return {
         isNative: () => Capacitor.isNativePlatform(),
@@ -134,11 +187,18 @@ function defaultRuntime(): TalosDeviceFileSaveRuntime {
             // Random name only: a user-controlled display name must never
             // become part of a private path.
             const path = `talos-export/${newTalosMobileId()}.bin`
-            await Filesystem.writeFile({
-                path,
-                data: base64FromBytes(input.bytes),
-                directory: Directory.Cache,
-                recursive: true,
+            await talosStageInChunks(input.bytes, {
+                write: (data) => Filesystem.writeFile({
+                    path,
+                    data,
+                    directory: Directory.Cache,
+                    recursive: true,
+                }).then(() => undefined),
+                append: (data) => Filesystem.appendFile({
+                    path,
+                    data,
+                    directory: Directory.Cache,
+                }).then(() => undefined),
             })
             const { uri } = await Filesystem.getUri({
                 path,
@@ -177,10 +237,22 @@ export async function saveTalosVaultFileToDevice(
     input: TalosDeviceFileSaveInput,
     runtime: TalosDeviceFileSaveRuntime = defaultRuntime(),
 ): Promise<TalosDeviceFileSaveResult> {
-    if (!(input.bytes instanceof Uint8Array)
-        || typeof input.displayName !== 'string'
-        || typeof input.mediaType !== 'string') {
-        throw new Error('TALOS_FILE_EXPORT_INVALID_INPUT')
+    /*
+     * ⛔ Ogni campo ha il suo codice.
+     *
+     * Prima erano tre cause dietro un nome solo — e lo stesso nome lo usava il
+     * lato nativo, per altre tre. Sei strade, una stringa: dal lato di chi
+     * chiama non c'era modo di sapere nemmeno se il rifiuto fosse arrivato da
+     * qui o dal telefono. Stessa cura del checkpoint di autorizzazione.
+     */
+    if (!(input.bytes instanceof Uint8Array)) {
+        throw new Error('TALOS_FILE_EXPORT_INVALID_BYTES')
+    }
+    if (typeof input.displayName !== 'string') {
+        throw new Error('TALOS_FILE_EXPORT_INVALID_NAME')
+    }
+    if (typeof input.mediaType !== 'string') {
+        throw new Error('TALOS_FILE_EXPORT_INVALID_MEDIA_TYPE')
     }
     if (saveActive) throw new Error('TALOS_FILE_EXPORT_BUSY')
 

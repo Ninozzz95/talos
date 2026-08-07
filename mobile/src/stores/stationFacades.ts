@@ -38,6 +38,23 @@ export function createStationFacades(deps: TalosStationFacadesDeps) {
             metadata: { created_from: 'talos_mobile_station' },
             created_at: new Date().toISOString(),
         }),
+        /**
+         * Correggere una memoria, senza toccare la decisione dell'utente.
+         *
+         * Passa da `updateMemory` e non da `upsertMemory` di proposito: il
+         * secondo rimette `status = 'active'`, quindi una correzione al testo
+         * risveglierebbe una memoria che l'utente aveva spento.
+         */
+        update: (input: {
+            id: string
+            title?: string
+            content?: string
+            kind?: 'preference' | 'project_fact' | 'procedure' | 'policy_note'
+        }) => deps.repository.updateMemory(input.id, {
+            title: input.title,
+            content: input.content,
+            kind: input.kind,
+        }),
         upsertDisplayName: (displayName: string) =>
             upsertTalosDisplayNameMemory(deps.repository, displayName),
         setStatus: (memoryId: string, status: 'active' | 'disabled' | 'quarantined' | 'rejected') =>

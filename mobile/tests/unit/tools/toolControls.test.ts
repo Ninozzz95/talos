@@ -11,6 +11,7 @@ import { createTalosWebTools } from '@/lib/search/webTools'
 import { createTalosDocumentTools } from '@/lib/documents/documentTools'
 import { createTalosImageTools } from '@/lib/images/imageTools'
 import { createTalosLibraryExportTools } from '@/lib/tools/libraryExportTools'
+import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosLibraryContextPolicyTools } from '@/lib/tools/libraryContextPolicyTools'
 import { createTalosLocalModelTools } from '@/lib/models/modelTools'
 import {
@@ -93,6 +94,9 @@ function everyExecutableTool() {
             listCandidates: vi.fn(async () => []),
             exportById: vi.fn(),
         } as never),
+        ...createTalosLibraryWriteTools({
+            describe: vi.fn(async () => ({ id: 'f1', name: 'x' })),
+        } as never),
         ...createTalosLibraryContextPolicyTools({
             read: vi.fn(),
             replace: vi.fn(),
@@ -137,7 +141,10 @@ describe('Agent Tools control registry', () => {
         expect(parsed.web_search).toBe(true)
         expect(parsed).not.toHaveProperty('future_shell')
         expect(parsed.library_context_policy_update).toBe(false)
-        expect(Object.keys(parsed)).toHaveLength(34)
+        // 34 → 38: `memory_update`, `memory_delete`, `library_rename`,
+        // `library_delete` (owner 2026-08-07: la chat sapeva solo inserire e
+        // leggere su Memoria e Libreria).
+        expect(Object.keys(parsed)).toHaveLength(38)
         expect(isTalosAgentToolEnabled('library_search', parsed)).toBe(false)
         expect(isTalosAgentToolEnabled('future_shell', parsed)).toBe(false)
     })
@@ -203,6 +210,10 @@ describe('Agent Tools control registry', () => {
             // in questa lista, pur esistendo da settimane — quindi rispetto ai
             // digest storici sono «nuovi» esattamente come lo erano gli altri.
             'research_list', 'memory_write',
+            // 2026-08-07: i quattro che completano il CRUD di Memoria e
+            // Libreria. Se togliendoli il digest storico NON tornasse, vorrebbe
+            // dire che ho mosso anche un contratto vecchio senza accorgermene.
+            'memory_update', 'memory_delete', 'library_rename', 'library_delete',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -218,8 +229,23 @@ describe('Agent Tools control registry', () => {
          * contratto preesistente si è mosso; è cresciuta la lista, non il
          * contratto.
          */
+        /*
+         * Ri-fissato 2026-08-07 per i QUATTRO che completano il CRUD di Memoria
+         * e Libreria: `memory_update`, `memory_delete`, `library_rename`,
+         * `library_delete`.
+         *
+         * Owner, quel giorno: «la libreria e la memoria non hanno un tool crud
+         * completo, hanno solo inserimento e read». Vero — e la conseguenza era
+         * che «no, ricordati invece che...» creava una SECONDA memoria accanto
+         * alla prima, e da li' in poi il modello ne rileggeva due che si
+         * contraddicevano.
+         *
+         * **Dimostrato, non assunto**, come tutte le volte precedenti: il
+         * blocco qui sopra esclude i quattro e riproduce `369a6d…` byte per
+         * byte. Nessun contratto preesistente si e' mosso.
+         */
         expect(digestOf(controlPlane))
-            .toBe('695e00014a662d6eeb3440a53a36eb310b1491de9e588e6084a33fe9552587e4')
+            .toBe('e39ccd733094a4a5b842978f6c90584e0ac95a28d7cb799a1ac1e84e7029ed3f')
         /**
          * Re-pinned 2026-08-01 for the three DIALECT digests only — the control
          * plane above did not move, which is the proof that nothing structural
@@ -284,12 +310,13 @@ describe('Agent Tools control registry', () => {
         expect(digestOf(talosToolsForGemini(withoutNotesWrite as never)))
             .toBe('61745afe6d79da05fa2d982bc4cc3bd9256305f66d4caaa15f3d386772565e62')
 
-        // E con i tre nuovi dentro: il contratto pubblico di oggi.
+        // E con i nuovi dentro: il contratto pubblico di oggi.
+        // Ri-fissati 2026-08-07 per i quattro del CRUD di Memoria e Libreria.
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('93acd6b8b8939ecaaf9b140acbbfa30f43a5aaf4ea7400df067af6ca2c89d55e')
+            .toBe('ccb34d55976f8ad8d9d0fca28b3fed011319b2a93acfeca1cb4b8c95712b30bc')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('34a3b23679ba860c822a69418c3be0abac6a8f7953234b18fcc6401580c4b0f9')
+            .toBe('400aaca7f53279972cf8d76943fad02f0358b0106f920c0d633b27a9063a4fc3')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('d15af88ca43d2ea3bdb1d9401bb0759ef6ad18fdb4ff7687a0028aa51445635a')
+            .toBe('8e3dc19e72feadc085aa36153957ab5faedf6a225ece4baf6fa7a766c3c75e32')
     })
 })

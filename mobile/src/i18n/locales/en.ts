@@ -841,6 +841,10 @@ export const TALOS_EN_MESSAGES = {
         tasksDelete: 'Deleting a task',
         tasksList: 'Looking at your tasks',
         memoryWrite: 'Saving something to memory',
+        memoryUpdate: 'Correcting a memory',
+        memoryDelete: 'Forgetting something',
+        libraryRename: 'Renaming a file',
+        libraryDelete: 'Removing a file',
         memorySearch: 'Checking what it remembers',
         timeNow: 'Checking the time',
         webSearch: 'Searching the web',
@@ -910,6 +914,22 @@ export const TALOS_EN_MESSAGES = {
         memoryWrite: {
             title: 'Remember something',
             description: 'Save what you explicitly asked TALOS to remember for future conversations.',
+        },
+        memoryUpdate: {
+            title: 'Correct a memory',
+            description: 'Rewrites something TALOS already remembers, instead of saving a second one that contradicts it.',
+        },
+        memoryDelete: {
+            title: 'Forget something',
+            description: 'Removes one memory from this device. A backup exported earlier still holds a copy.',
+        },
+        libraryRename: {
+            title: 'Rename a Library file',
+            description: 'Changes only the name you read. The contents stay exactly as they are.',
+        },
+        libraryDelete: {
+            title: 'Delete a Library file',
+            description: 'Removes the file from the Library and from the chats that referenced it. It does not come back.',
         },
         memorySearch: {
             title: 'Search memory',
@@ -1925,6 +1945,10 @@ export const TALOS_EN_MESSAGES = {
         },
         tools: {
             memory_write: { title: 'Remember something', description: 'Writes to memory what you ask it to remember for future conversations.' },
+            memory_update: { title: 'Correct a memory', description: 'Rewrites a memory that already exists, instead of creating a second one that contradicts it.' },
+            memory_delete: { title: 'Forget something', description: 'Permanently removes one memory from this device.' },
+            library_rename: { title: 'Rename a file', description: 'Changes a Library file’s name. The contents are untouched.' },
+            library_delete: { title: 'Delete a file', description: 'Permanently removes a file from the Library. This cannot be undone.' },
             research_list: { title: 'Your researches', description: 'List the deep researches you have run, how each ended and how far it got.' },
             research_start: { title: 'Start a deep research', description: 'Plans several lines of enquiry, searches, reads the sources and writes a report. It takes minutes and spends search credit.' },
             research_read: { title: 'Read a research report', description: 'Reads what a finished research found, with its claims and how each one was verified.' },

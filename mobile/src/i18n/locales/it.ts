@@ -848,6 +848,10 @@ export const TALOS_IT_MESSAGES = {
         tasksDelete: 'Eliminazione di un’attività',
         tasksList: 'Consultazione delle attività',
         memoryWrite: 'Salvataggio nella memoria',
+        memoryUpdate: 'Correzione di una memoria',
+        memoryDelete: 'Rimozione di una memoria',
+        libraryRename: 'Rinomina di un file',
+        libraryDelete: 'Rimozione di un file',
         memorySearch: 'Ricerca nella memoria',
         timeNow: 'Verifica dell’ora',
         webSearch: 'Ricerca sul web',
@@ -917,6 +921,22 @@ export const TALOS_IT_MESSAGES = {
         memoryWrite: {
             title: 'Ricorda qualcosa',
             description: 'Salva ciò che hai chiesto esplicitamente a TALOS di ricordare per le conversazioni future.',
+        },
+        memoryUpdate: {
+            title: 'Correggi una memoria',
+            description: 'Riscrive una cosa che TALOS ricorda già, invece di salvarne una seconda che dice il contrario.',
+        },
+        memoryDelete: {
+            title: 'Dimentica una cosa',
+            description: 'Toglie una memoria da questo dispositivo. Un backup esportato prima ne conserva comunque una copia.',
+        },
+        libraryRename: {
+            title: 'Rinomina un file della Libreria',
+            description: 'Cambia solo il nome che leggi. Il contenuto resta identico.',
+        },
+        libraryDelete: {
+            title: 'Elimina un file dalla Libreria',
+            description: 'Toglie il file dalla Libreria e dalle chat che lo citavano. Non torna indietro.',
         },
         memorySearch: {
             title: 'Cerca nella memoria',
@@ -1929,6 +1949,10 @@ export const TALOS_IT_MESSAGES = {
         },
         tools: {
             memory_write: { title: 'Ricorda una cosa', description: 'Scrive in memoria quello che gli chiedi di ricordare per le conversazioni future.' },
+            memory_update: { title: 'Correggi una memoria', description: 'Riscrive una memoria che esiste già, invece di crearne una seconda che la contraddice.' },
+            memory_delete: { title: 'Dimentica una cosa', description: 'Rimuove definitivamente una memoria da questo dispositivo.' },
+            library_rename: { title: 'Rinomina un file', description: 'Cambia il nome di un file della Libreria. Il contenuto non si tocca.' },
+            library_delete: { title: 'Elimina un file', description: 'Rimuove definitivamente un file dalla Libreria. Non si annulla.' },
             research_list: { title: 'Le tue ricerche', description: 'Elenca le ricerche approfondite che hai avviato, come sono finite e a che punto sono.' },
             research_start: { title: 'Avvia una ricerca approfondita', description: 'Pianifica più filoni, cerca, legge le fonti e scrive un rapporto. Dura minuti e consuma crediti di ricerca.' },
             research_read: { title: 'Leggi un rapporto di ricerca', description: 'Legge cosa ha trovato una ricerca finita, con le affermazioni e come sono state verificate.' },

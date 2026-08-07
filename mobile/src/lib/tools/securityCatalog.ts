@@ -42,6 +42,10 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     research_cancel: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     research_delete: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     memory_write: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    // Correggere si annulla riscrivendo; dimenticare no — non c'e' un cestino
+    // della memoria, e il backup di ieri e' fuori dalla portata di questo tool.
+    memory_update: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    memory_delete: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     notes_create: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     notes_update: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     notes_delete: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
@@ -54,6 +58,10 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     document_create: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     generate_image: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: true },
     library_export: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    library_rename: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    // L'unico di questo gruppo che distrugge: il file esce dalla Libreria e
+    // dalle chat che lo citavano, e non torna.
+    library_delete: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     library_context_policy_update: { risk: 'R3', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     local_models_search: { risk: 'R1', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
     local_model_inspect: { risk: 'R1', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
