@@ -44,12 +44,32 @@ beforeEach(() => {
     }
 })
 
+/**
+ * ⛔ Si aspetta l'ESITO, non venti millisecondi.
+ *
+ * Qui c'era `setTimeout(r, 20)`. Sotto carico — la suite intera, tutti i worker
+ * insieme — venti millisecondi a volte non bastano perché il componente legga i
+ * blocchi del PNG, e il test falliva **a caso**: passava da solo, cadeva in
+ * mezzo agli altri. Il 2026-08-07 e' successo, e la seconda esecuzione era
+ * verde: una suite che a volte mente e' peggio di un test che manca, perche'
+ * insegna a rilanciare invece di guardare.
+ *
+ * Stessa lezione del telecomando sul dispositivo, lo stesso giorno: un'attesa a
+ * tempo misura la macchina su cui gira, non la cosa che deve provare.
+ */
 async function monta(bytes: Uint8Array) {
     previewBytes.mockResolvedValue(bytes)
     const { mount } = await import('@vue/test-utils')
     const C = (await import('@/components/chat/TalosMobileMessageImage.vue')).default
     const wrapper = mount(C, { props: { fileId: 'f1', name: 'foto.png' } })
-    await new Promise((r) => setTimeout(r, 20))
+    // L'immagine e' la cosa che compare per ULTIMA: quando c'e' lei, la lettura
+    // dei blocchi e' finita e la targhetta ha gia' deciso se esistere.
+    const scade = Date.now() + 2_000
+    while (Date.now() < scade) {
+        await wrapper.vm.$nextTick()
+        if (wrapper.find('[data-testid="talos-message-image"]').exists()) break
+        await new Promise((r) => setTimeout(r, 5))
+    }
     await wrapper.vm.$nextTick()
     return wrapper
 }

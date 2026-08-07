@@ -37,6 +37,8 @@ const SANO: TalosEngineFacts = {
     microBatch: 512,
     contextTokens: 8_192,
     contextCeiling: 14_202,
+    lastOpenMs: 118,
+    lastOpenReusedWeights: true,
     timings: {
         tokenizeMs: 1, prefixMs: 1, prefillMs: 126, firstTokenMs: 126, totalMs: 600,
         promptTokens: 366, reusedTokens: 342, newTokens: 24, producedTokens: 12,
@@ -51,6 +53,61 @@ const SANO: TalosEngineFacts = {
 function riga(facts: TalosEngineFacts, id: string) {
     return talosEngineDiagnosticRows(facts).find((row) => row.id === id)
 }
+
+/**
+ * ⛔ IL TERZO CRONOMETRO — quello che spiega i due minuti.
+ *
+ * Owner 2026-08-07, sul suo OnePlus 13 con un 1,7B Q4/Q5: due minuti prima di
+ * una risposta a «ciao». Il numero contraddiceva le nostre misure — primo token
+ * a 126 ms dopo 8A/8B/8C — e la contraddizione era tutta in ciò che NON
+ * misuravamo: le nostre erano a modello già caricato.
+ *
+ * Il motore contava le aperture ma non il loro costo, cioè sapeva dire «è
+ * successo due volte» e non «è costato cento secondi».
+ */
+describe('il costo dell’apertura, che nessuno misurava', () => {
+    it('mostra i millisecondi e DICE se i pesi erano già in memoria', () => {
+        expect(riga(SANO, 'engine-open-time')?.value).toBe('118ms · pesi già in memoria')
+        expect(riga({ ...SANO, lastOpenMs: 96_400, lastOpenReusedWeights: false },
+            'engine-open-time')?.value).toBe('96.4s · letto dal disco')
+    })
+
+    /**
+     * Senza il riuso accanto, la cifra non si può interpretare: 800 ms è ottimo
+     * per rileggere un gigabyte dal disco e pessimo per un contesto rifatto. È
+     * la stessa ragione per cui la riga degli stadi esiste — un numero solo non
+     * è una diagnosi.
+     */
+    it('e diventa ROSSA solo quando è lenta CON i pesi già in memoria', () => {
+        expect(riga({ ...SANO, lastOpenMs: 2_001, lastOpenReusedWeights: true },
+            'engine-open-time')?.ok).toBe(false)
+        expect(riga({ ...SANO, lastOpenMs: 2_000, lastOpenReusedWeights: true },
+            'engine-open-time')?.ok).toBe(true)
+        // Dal disco, novantasei secondi sono lenti ma NON sono un guasto: è il
+        // costo vero di leggere un gigabyte. Dipingerlo di rosso insegnerebbe a
+        // ignorare il rosso.
+        expect(riga({ ...SANO, lastOpenMs: 96_400, lastOpenReusedWeights: false },
+            'engine-open-time')?.ok).toBe(true)
+    })
+
+    it('zero è una misura VERA, non un campo mancante', () => {
+        // Un contesto rifatto può costare meno di un millisecondo. Se lo zero
+        // sparisse, la riga scomparirebbe proprio nel caso migliore.
+        expect(riga({ ...SANO, lastOpenMs: 0 }, 'engine-open-time')?.value)
+            .toBe('0ms · pesi già in memoria')
+    })
+
+    it('e la riga NON compare quando il modello non è mai stato aperto', () => {
+        expect(riga({ ...SANO, lastOpenMs: null }, 'engine-open-time')).toBeUndefined()
+        // ⛔ `undefined` deve sparire come `null`. I test non passano dal
+        // typecheck, quindi un oggetto a cui manca il campo arriva davvero fin
+        // qui — e con un `!== null` mostrerebbe «NaNms».
+        const senzaCampo = { ...SANO } as Record<string, unknown>
+        delete senzaCampo.lastOpenMs
+        expect(riga(senzaCampo as unknown as TalosEngineFacts, 'engine-open-time'))
+            .toBeUndefined()
+    })
+})
 
 describe('il conto che ridimensiona ogni discussione sul contesto', () => {
     /**
