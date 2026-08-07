@@ -131,3 +131,54 @@ describe('il peso del checkpoint', () => {
         expect(turniMandati[0]!.parts).toHaveLength(0)
     })
 })
+
+describe('un modello che non vede non riceve immagini', () => {
+    /**
+     * MISURATO sul Pad il 2026-08-07 con `deepseek-v4-flash`: si chiede
+     * «disegna un gatto», il tool disegna e salva, e poi il giro passa
+     * l'immagine al modello «da guardare». Il modello non ha la vista, e il
+     * turno moriva con un riquadro rosso — DOPO aver fatto tutto il lavoro e
+     * DOPO che l'utente aveva dato il consenso.
+     *
+     * L'immagine esiste lo stesso ed e' in Libreria: meglio un modello che non
+     * guarda che un turno che muore.
+     */
+    function conImmagine(patch: Partial<TalosAgentLoopDeps> = {}): TalosAgentLoopDeps {
+        const complete = vi.fn()
+            .mockResolvedValueOnce({
+                text: '',
+                toolCalls: [{ id: 'c1', name: 'generate_image', arguments: {} }],
+            })
+            .mockResolvedValue({ text: 'ecco il gatto', toolCalls: [] })
+        return deps({ complete: complete as never, preflight: undefined, ...patch })
+    }
+
+    it('senza vista: nessun turno con l immagine, e il giro FINISCE', async () => {
+        const deps0 = conImmagine({ modelSeesImages: () => false })
+        const esito = await runTalosAgentLoop([{ role: 'user', content: 'disegna' }], deps0)
+
+        const turniMandati = (deps0.complete as ReturnType<typeof vi.fn>).mock.calls[1]![0] as
+            Array<{ parts?: unknown[] }>
+        expect(turniMandati.some((turno) => (turno.parts?.length ?? 0) > 0)).toBe(false)
+        // E soprattutto: il giro arriva in fondo invece di morire.
+        expect(esito.text).toContain('ecco il gatto')
+    })
+
+    it('con la vista: l immagine arriva, come prima', async () => {
+        const deps0 = conImmagine({ modelSeesImages: () => true })
+        await runTalosAgentLoop([{ role: 'user', content: 'disegna' }], deps0)
+
+        const turniMandati = (deps0.complete as ReturnType<typeof vi.fn>).mock.calls[1]![0] as
+            Array<{ parts?: unknown[] }>
+        expect(turniMandati.some((turno) => (turno.parts?.length ?? 0) > 0)).toBe(true)
+    })
+
+    it('e senza il gancio si passa comunque: nessun chiamante regredisce', async () => {
+        const deps0 = conImmagine()
+        await runTalosAgentLoop([{ role: 'user', content: 'disegna' }], deps0)
+
+        const turniMandati = (deps0.complete as ReturnType<typeof vi.fn>).mock.calls[1]![0] as
+            Array<{ parts?: unknown[] }>
+        expect(turniMandati.some((turno) => (turno.parts?.length ?? 0) > 0)).toBe(true)
+    })
+})

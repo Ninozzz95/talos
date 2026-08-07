@@ -3635,6 +3635,17 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                  *
                  * I byte tornano da dove sono sempre stati: la Libreria.
                  */
+                /**
+                 * ⛔ Il modello che risponde può guardare un'immagine?
+                 *
+                 * Stessa domanda che si fa `chatCompletion`, sulla stessa
+                 * fonte — le modalità dichiarate dal modello — perché due
+                 * risposte diverse alla stessa domanda sono il modo in cui il
+                 * giro passa un'immagine che poi viene rifiutata.
+                 */
+                modelSeesImages: () => (providerModel?.inputModalities ?? []).some(
+                    (modalita) => ['image', 'images'].includes(modalita.toLowerCase()),
+                ),
                 rehydrateImage: async (attachmentId) => {
                     const file = await vaultService.readFilePreview(attachmentId).catch(() => null)
                     if (!file) return null
