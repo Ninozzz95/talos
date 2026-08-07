@@ -309,3 +309,57 @@ describe('il piano e un GUADAGNO netto, mai un costo', () => {
         expect(talosPlanNeedsApproval(candidati)).toBe(false)
     })
 })
+
+describe('DURATA e ARGOMENTI sono due assi, non uno', () => {
+    /**
+     * ⛔ Il difetto che questa separazione ha evitato, per iscritto.
+     *
+     * «Per questa richiesta» deve MORIRE col turno ma ACCETTARE argomenti
+     * nuovi — i passi successivi dello stesso strumento ne avranno di diversi.
+     * Con un asse solo non era esprimibile: messo su `conversation` per
+     * allentare l'impronta, sarebbe sopravvissuto al turno. Cioe' «per questa
+     * richiesta» sarebbe diventato «per sempre», che e' la bugia peggiore che
+     * una scheda di consenso possa dire.
+     */
+    const pulita = { privateDataSeen: false, untrustedSeen: false }
+    const sporca = { privateDataSeen: true, untrustedSeen: true }
+
+    function perQuestaRichiesta() {
+        return {
+            ...talosBuildPlan('t', [passo({ tool: 'web_search', digest: 'la-prima' })], pulita, 'turn'),
+            state: 'approved' as const,
+            matchArguments: false,
+        }
+    }
+
+    it('vive quanto il TURNO: e la promessa della scheda', () => {
+        expect(perQuestaRichiesta().scope).toBe('turn')
+    })
+
+    it('ma accetta argomenti NUOVI: altrimenti non aprirebbe su niente', () => {
+        expect(talosPlanAdmits(perQuestaRichiesta(), 'web_search', 'la-seconda', pulita).admitted)
+            .toBe(true)
+    })
+
+    it('⛔ e decade sulla contaminazione, perche non guarda gli argomenti', () => {
+        // L'accoppiamento non negoziabile: se non guardi cosa passa, devi
+        // almeno guardare da dove viene il discorso.
+        expect(talosPlanAdmits(perQuestaRichiesta(), 'web_search', 'la-prima', sporca))
+            .toEqual({ admitted: false, reason: 'chain-contaminated' })
+    })
+
+    it('un piano normale per turno resta STRETTO sugli argomenti', () => {
+        const normale = {
+            ...talosBuildPlan('n', [passo({ tool: 'web_search', digest: 'la-prima' })], pulita, 'turn'),
+            state: 'approved' as const,
+        }
+        expect(normale.matchArguments).toBe(true)
+        expect(talosPlanAdmits(normale, 'web_search', 'la-seconda', pulita))
+            .toMatchObject({ admitted: false, reason: 'arguments-changed' })
+    })
+
+    it('e un tool mai chiesto resta fuori anche «per questa richiesta»', () => {
+        expect(talosPlanAdmits(perQuestaRichiesta(), 'notes_delete', 'x', pulita))
+            .toEqual({ admitted: false, reason: 'not-in-plan' })
+    })
+})

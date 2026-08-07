@@ -1095,6 +1095,65 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
          * rispondere anche per quelle che restano.
          */
         toolAuthorizationPromptVisible.value = false
+        /*
+         * ⛔ «Per questa richiesta»: l'allargamento vive nel PIANO, non nel
+         * contratto persistito.
+         *
+         * Nel contratto `allow_turn` e' identica a `allow_once` — consente
+         * questa chiamata e non scrive nessuna concessione permanente. Qui
+         * accanto nasce un piano **legato al turno** che contiene lo stesso
+         * tool: da quel momento `talosPlanReplacesConsent` lascia passare i
+         * passi successivi dello stesso strumento senza richiedere.
+         *
+         * I due pavimenti restano in piedi, perche' e' la stessa funzione a
+         * decidere: la **trifecta chiusa** e **R4** riportano la scheda anche
+         * dentro un turno gia' consentito. Ed e' giusto: un permesso dato prima
+         * non puo' coprire un pericolo nato dopo.
+         *
+         * `scope: 'conversation'` sul piano NON vuol dire «per sempre»: la
+         * portata governa come si confrontano gli argomenti, e la VITA del
+         * piano la decide `talosEndTurnPlan`, che lo chiude quando il messaggio
+         * finisce. Senza questa distinzione l'impronta esatta lo renderebbe
+         * inutile — sarebbe una porta che non apre su niente.
+         */
+        if (decision === 'allow_turn') {
+            const inAttesa = pendingToolAuthorizations.value
+                .find((riga) => riga.request_id === requestId)
+            const sessione = chat.activeSession.value?.id ?? null
+            if (inAttesa) {
+                const { talosBuildPlan } = await import('@/lib/tools/plan')
+                const { talosSetPlan } = await import('@/lib/tools/planStore')
+                const base = talosBuildPlan(
+                    `turno:${requestId}`,
+                    [{
+                        id: requestId,
+                        tool: inAttesa.tool,
+                        title: inAttesa.title,
+                        input: inAttesa.input,
+                        digest: '',
+                        security: PIANO_SICUREZZA_PRUDENTE,
+                        actions: inAttesa.actions,
+                        allowed: true,
+                        asks: true,
+                        critical: false,
+                    }],
+                    // La catena si legge dal suo deposito: qui il toolset non
+                    // e' in scope, e passare da lui non aggiungerebbe niente.
+                    talosChainFor(sessione),
+                    // ⛔ `turn` e' la DURATA: muore col messaggio, ed e' cio'
+                    // che la scheda promette. Il confronto degli argomenti si
+                    // allenta a parte, perche' i passi successivi dello stesso
+                    // strumento avranno argomenti diversi — altrimenti la porta
+                    // non aprirebbe su niente.
+                    'turn',
+                )
+                talosSetPlan(sessione, {
+                    ...base,
+                    state: 'approved',
+                    matchArguments: false,
+                })
+            }
+        }
         const decided = await authorizationCoordinator.decide(requestId, decision)
         syncToolAuthorizations()
         // Il prossimo in coda torna visibile da se': `sync` non riaccende la
@@ -3832,6 +3891,19 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             }
             const completion = loop
             keeper.release()
+            /*
+             * ⛔ Il turno finisce: il piano legato al turno muore con lui.
+             *
+             * Senza questa riga «per questa richiesta» diventerebbe «per
+             * sempre», che e' la bugia peggiore che una scheda di consenso
+             * possa dire. `talosEndTurnPlan` chiude solo cio' che vale per il
+             * turno; un piano che l'utente ha esteso alla conversazione resta,
+             * ed e' la contaminazione a farlo decadere.
+             */
+            {
+                const { talosEndTurnPlan } = await import('@/lib/tools/planStore')
+                talosEndTurnPlan(sendIdentity.sessionId)
+            }
             toolActivity.value = []
             if (loop.suspension) {
                 const next = createAuthorizationCheckpoint({

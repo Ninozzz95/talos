@@ -17,7 +17,37 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-    allowOnce: []
+    /**
+     * ⛔ «Consenti» vale per QUESTO MESSAGGIO, non per la singola chiamata.
+     *
+     * Owner 2026-08-07: «qual è la differenza tra "consenti una volta" e "per
+     * questa richiesta"? Non possiamo unirli?»
+     *
+     * Aveva ragione: la differenza era NOSTRA, non sua. «Una volta» copriva una
+     * chiamata con quegli argomenti esatti; «per questa richiesta» tutto il
+     * messaggio. Ma chi legge pensa al messaggio che ha appena scritto — le
+     * chiamate interne sono un dettaglio di come lavoriamo, ed esporlo come
+     * scelta è la stessa famiglia di difetti del nome interno di un tool
+     * mostrato al posto di una frase.
+     *
+     * E la grana fine non serviva a nessuno: chi vuole «solo questa e poi
+     * richiedimelo» sta in realtà dicendo di no, e ha già il suo bottone.
+     *
+     * Restano TRE scelte, che sono una scala vera: no / per questo messaggio /
+     * sempre. La scheda dice a voce quanto dura quella di mezzo.
+     */
+    /**
+     * ⛔ «Per questa richiesta»: copre i passi che restano di QUESTO messaggio.
+     *
+     * Nasce da una misura: `deepseek-v4-flash` chiama gli strumenti pesanti
+     * **uno per giro**, quindi una richiesta sola produce quattro schede in
+     * fila. Il piano non puo' aiutare, perche' non vede mai piu' di un passo
+     * alla volta.
+     *
+     * Non e' «sempre» travestito: muore quando il messaggio finisce, e la
+     * trifecta e `R4` riportano la scheda anche dentro un turno gia' consentito.
+     */
+    allowTurn: []
     alwaysAllow: []
     deny: []
     later: []
@@ -42,9 +72,26 @@ const rendered = computed(() => {
             role="dialog"
             aria-labelledby="talos-tool-authorization-title"
             tabindex="-1"
-            class="pointer-events-auto fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[95] mx-auto w-auto max-w-[560px] rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4 shadow-2xl"
+            class="pointer-events-auto fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[95] mx-auto flex max-h-[85dvh] w-auto max-w-[560px] flex-col rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4 shadow-2xl"
             @keydown.esc.stop="emit('later')"
         >
+            <!--
+                ⛔ La parte che si LEGGE scorre; i bottoni restano fermi.
+
+                MISURATO sul Pad il 2026-08-07, telefono in orizzontale con la
+                tastiera aperta: la scheda cresceva verso l'alto e usciva dallo
+                schermo. Restavano visibili **solo i quattro bottoni** — senza
+                titolo, senza descrizione, senza argomenti.
+
+                Cioe' si poteva approvare senza vedere COSA. E' il difetto
+                peggiore che una scheda di consenso possa avere: non e' brutta,
+                e' una firma in bianco.
+
+                `max-h-[85dvh]` piu' il corpo scorrevole tengono la testa sempre
+                dentro; `dvh` e non `vh` perche' con la tastiera aperta sono due
+                numeri diversi, ed e' proprio quel caso.
+            -->
+            <div class="min-h-0 flex-1 overflow-y-auto">
             <div class="flex items-start gap-3">
                 <ShieldAlert
                     class="mt-0.5 size-5 shrink-0 text-[var(--talos-accent)]"
@@ -85,13 +132,42 @@ const rendered = computed(() => {
                     {{ $t('chat.pendingAuthorizationCount', { count: pendingCount }) }}
                 </span>
             </div>
+            <!--
+                ⛔ Quanto dura un «sì» va DETTO, non dedotto dal nome del bottone.
+                «Consenti» da solo si legge come «consenti per sempre» a chi non
+                ha mai visto questa scheda, e chi lo scopre dopo non fida piu'.
+            -->
+            <div class="mt-2">
+                <p class="text-2xs leading-4 text-[var(--talos-muted)]">
+                    {{ $t('chat.consentScopeNote') }}
+                </p>
+            </div>
 
             <pre
                 data-testid="talos-tool-consent-input"
                 class="mt-3 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-2 text-2xs leading-4 text-[var(--talos-muted)]"
             >{{ rendered }}</pre>
 
-            <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <!--
+                ⛔ Quattro scelte sono una SCALA, e vanno lette come tale:
+                no → questa chiamata → questa richiesta → sempre.
+
+                La griglia e' 2×2 OVUNQUE, e non una riga sola sul largo.
+
+                ⛔ Visto sul Pad il 2026-08-07: con quattro colonne le etichette
+                italiane **uscivano dalle pillole** — «Consenti una volta»
+                sbordava da entrambi i lati, «Per questa richiesta» toccava i
+                bordi. Una riga da quattro sta larga in inglese e stretta in
+                italiano, e la lingua non e' un dettaglio da sistemare dopo.
+                Meta' larghezza a testa ci sta in tutte e due.
+
+                La primaria resta «una volta»: e' il gradino piu' basso che
+                risolve il problema, ed e' quello che si tocca senza pensarci.
+                Una scelta piu' larga si prende apposta, non per inerzia.
+            -->
+            </div>
+
+            <div class="mt-4 grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-3">
                 <Button
                     type="button"
                     data-testid="talos-tool-consent-deny"
@@ -102,7 +178,7 @@ const rendered = computed(() => {
                     type="button"
                     data-testid="talos-tool-consent-allow-once"
                     class="talos-pressable min-h-touch rounded-full bg-[var(--talos-accent)] text-sm font-medium text-[var(--talos-accent-contrast,var(--primary-foreground))]"
-                    @click="emit('allowOnce')"
+                    @click="emit('allowTurn')"
                 >{{ $t('chat.consentOnce') }}</Button>
                 <Button
                     v-if="allowPersistent"
