@@ -195,16 +195,25 @@ async function principale() {
         if (perScrivere) {
             const testo = resto[resto.length - 1] ?? ''
             await new Promise((r) => setTimeout(r, 400))
-            // ⛔ SVUOTARE PRIMA. `input text` scrive in coda: senza questo passo
-            // il campo conserva quello che c'era e la prova gira su una frase
-            // che nessuno ha scritto. Successo il 2026-08-07 — il compositore
-            // aveva ancora una dettatura accidentale, e il messaggio inviato
-            // era «Adesso elenca di nuovo le mie ricerche. Hello. All right.»
+            // ⛔ SVUOTARE PRIMA, e poi VERIFICARE. `input text` scrive in coda,
+            // quindi il campo conserva quello che c'era; ma il caso che ha reso
+            // evidente il buco era peggio — un'ALTRA APP scriveva nel campo
+            // mentre lo usavo.
+            //
+            // 2026-08-07: il compositore conteneva «Adesso elenca di nuovo le
+            // mie ricerche. Hello. All right. Okay. Thank you.» Le tre frasi in
+            // inglese le stava dettando **Whisper**, un'app di trascrizione di
+            // terze parti attiva sul dispositivo, che ascoltava l'ambiente e
+            // scriveva nel campo a fuoco. Non era TALOS, e non era nemmeno
+            // questa funzione: era il mondo esterno.
+            //
+            // Da cui la regola: svuotare non basta, bisogna RILEGGERE. Il
+            // controllo qui sotto è ciò che rende la prova onesta — se nel
+            // campo c'è finito altro, ci si ferma invece di inviare una frase
+            // che non ho scritto io e poi ragionare sulla risposta.
             //
             // CTRL+A poi CANC, cioè quello che farebbe un dito su una tastiera
-            // vera. `keycombination` esiste da Android 11; se manca, il campo
-            // resta pieno e il controllo qui sotto lo dice invece di andare
-            // avanti facendo finta di niente.
+            // vera. `keycombination` esiste da Android 11.
             adb('shell', 'input', 'keycombination', '113', '29')
             await new Promise((r) => setTimeout(r, 150))
             adb('shell', 'input', 'keyevent', '67')
