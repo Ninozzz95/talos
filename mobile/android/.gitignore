@@ -53,9 +53,18 @@ captures/
 .idea/navEditor.xml
 
 # Keystore files
-# Uncomment the following lines if you do not want to check your keystore files in.
-#*.jks
-#*.keystore
+# ⛔ Le chiavi di firma NON entrano nel repository. Mai.
+#
+# Queste righe arrivavano COMMENTATE dal template di Android, e una chiave
+# lasciata cadere in questa cartella sarebbe finita in un commit. TALOS sara'
+# pubblico e FOSS: una chiave nella storia di git e' pubblica per sempre, e la
+# storia non si riscrive dopo che qualcuno ha clonato.
+#
+# Fuori dal Play Store non esiste rotazione: chi ha la chiave puo' pubblicare
+# aggiornamenti che il telefono accetta come nostri.
+*.jks
+*.keystore
+keystore.properties
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild
