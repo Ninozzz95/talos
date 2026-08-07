@@ -39,6 +39,8 @@ const SANO: TalosEngineFacts = {
     contextCeiling: 14_202,
     lastOpenMs: 118,
     lastOpenReusedWeights: true,
+    prefixCacheCount: 2,
+    prefixCacheBytes: 1_882_982_264,
     timings: {
         tokenizeMs: 1, prefixMs: 1, prefillMs: 126, firstTokenMs: 126, totalMs: 600,
         promptTokens: 366, reusedTokens: 342, newTokens: 24, producedTokens: 12,
@@ -53,6 +55,31 @@ const SANO: TalosEngineFacts = {
 function riga(facts: TalosEngineFacts, id: string) {
     return talosEngineDiagnosticRows(facts).find((row) => row.id === id)
 }
+
+describe('lo spazio dei prefissi congelati si VEDE', () => {
+    /**
+     * Un prefisso toglie 150 secondi di attesa a ogni chat nuova e in cambio
+     * occupa quasi un gigabyte. È un baratto che conviene, ma è un baratto:
+     * nasconderlo sarebbe prendersi lo spazio di qualcuno senza dirglielo.
+     */
+    it('dice quanti sono e quanto pesano', () => {
+        expect(riga(SANO, 'engine-prefix-cache')?.value).toBe('2 · 1.88 GB')
+    })
+
+    it('e diventa ROSSA quando lo sfratto non sta facendo il suo mestiere', () => {
+        expect(riga(SANO, 'engine-prefix-cache')?.ok).toBe(true)
+        expect(riga({ ...SANO, prefixCacheBytes: 4_000_000_001 }, 'engine-prefix-cache')?.ok)
+            .toBe(false)
+    })
+
+    it('la riga NON compare quando non ce n’è nessuno', () => {
+        // Zero prefissi è la condizione di chi non usa modelli locali: una riga
+        // che dice «0» sarebbe rumore in una schermata che si legge per trovare
+        // ciò che non va.
+        expect(riga({ ...SANO, prefixCacheCount: 0 }, 'engine-prefix-cache')).toBeUndefined()
+        expect(riga({ ...SANO, prefixCacheCount: null }, 'engine-prefix-cache')).toBeUndefined()
+    })
+})
 
 /**
  * ⛔ IL TERZO CRONOMETRO — quello che spiega i due minuti.

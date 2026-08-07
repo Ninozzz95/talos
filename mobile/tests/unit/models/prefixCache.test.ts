@@ -6,6 +6,7 @@ import {
     talosPrefixCacheBytes,
     talosPrefixCacheFileName,
     talosPrefixFingerprint,
+    talosPrefixesToEvict,
     talosShouldFreezePrefix,
     type TalosPrefixIdentity,
 } from '@/lib/models/prefixCache'
@@ -98,6 +99,84 @@ describe('l’impronta distingue OGNI campo che la invaliderebbe', () => {
         // caratteri che il filesystem non accetta, e la scrittura fallirebbe
         // per un motivo che nessuno collegherebbe alla cache.
         expect(talosPrefixCacheFileName(BASE)).toMatch(/^[0-9a-f]{16}\.prefix$/)
+    })
+})
+
+/**
+ * ⛔ Lo sfratto è la metà mancante del congelamento.
+ *
+ * Senza, usare TALOS riempie il telefono **in silenzio** — quasi un gigabyte
+ * per ogni combinazione di modello, contesto, cache e interruttore del
+ * ragionamento. È il difetto peggiore di tutti: nessun segnale finché non è
+ * tardi, e chi lo subisce dà la colpa a qualcos'altro.
+ */
+describe('lo sfratto toglie il MENO UTILE, non il più vecchio', () => {
+    const G = 900_000_000
+    const voce = (path: string, giorno: number, bytes = G) => ({
+        path, bytes, modifiedAt: Date.parse(`2026-08-${String(giorno).padStart(2, '0')}`),
+    })
+
+    it('sotto i due tetti non sfratta niente', () => {
+        expect(talosPrefixesToEvict([voce('/a', 1), voce('/b', 2)])).toEqual([])
+    })
+
+    /**
+     * Il cuore della cosa. Il file più ANTICO è quello usato oggi — il modello
+     * di sempre — e quello nato ieri è una prova che nessuno riaprirà.
+     * Sfrattare per età toglierebbe esattamente il file che serve.
+     */
+    it('tiene quello usato OGGI anche se è il più antico di data di nascita', () => {
+        const usatoOggi = { path: '/preferito', bytes: G, modifiedAt: Date.parse('2026-08-08') }
+        const provaDiIeri = { path: '/prova', bytes: G, modifiedAt: Date.parse('2026-08-07') }
+        const sfrattati = talosPrefixesToEvict(
+            [usatoOggi, provaDiIeri, voce('/c', 6), voce('/d', 5), voce('/e', 4)],
+            4, Number.MAX_SAFE_INTEGER,
+        )
+        expect(sfrattati).toEqual(['/e'])
+        expect(sfrattati).not.toContain('/preferito')
+    })
+
+    it('oltre il numero, sfratta i meno recenti — in ordine', () => {
+        const sfrattati = talosPrefixesToEvict(
+            [voce('/a', 1), voce('/b', 2), voce('/c', 3), voce('/d', 4), voce('/e', 5), voce('/f', 6)],
+            2, Number.MAX_SAFE_INTEGER,
+        )
+        expect(sfrattati).toEqual(['/d', '/c', '/b', '/a'])
+    })
+
+    /**
+     * Il tetto di spazio vede il caso che il numero non vede: un modello grande
+     * i cui prefissi pesano tre gigabyte l'uno, dove perfino due file sono
+     * troppi.
+     */
+    it('e sfratta per SPAZIO anche quando i file sono pochi', () => {
+        const enorme = 3_000_000_000
+        const sfrattati = talosPrefixesToEvict(
+            [voce('/a', 3, enorme), voce('/b', 2, enorme), voce('/c', 1, enorme)],
+            10, 4_000_000_000,
+        )
+        expect(sfrattati).toEqual(['/b', '/c'])
+    })
+
+    it('⛔ e toglie perfino il PRIMO se da solo sfonda il totale', () => {
+        // Tenerlo sarebbe tenere il difetto: un file più grande di quanto sia
+        // ammesso spendere non diventa accettabile per il fatto di essere solo.
+        expect(talosPrefixesToEvict([voce('/gigante', 1, 9_000_000_000)], 10, 4_000_000_000))
+            .toEqual(['/gigante'])
+    })
+
+    it('due esecuzioni identiche sfrattano gli STESSI file', () => {
+        // Senza uno spareggio stabile, due file con la stessa data si
+        // ordinerebbero a caso e lo sfratto sarebbe irriproducibile — cioè
+        // impossibile da provare e da spiegare a chi ha perso una cache.
+        const pari = [voce('/z', 5), voce('/a', 5), voce('/m', 5)]
+        const primo = talosPrefixesToEvict(pari, 1, Number.MAX_SAFE_INTEGER)
+        const secondo = talosPrefixesToEvict([...pari].reverse(), 1, Number.MAX_SAFE_INTEGER)
+        expect(primo).toEqual(secondo)
+    })
+
+    it('un elenco vuoto non è un caso da trattare a parte', () => {
+        expect(talosPrefixesToEvict([])).toEqual([])
     })
 })
 

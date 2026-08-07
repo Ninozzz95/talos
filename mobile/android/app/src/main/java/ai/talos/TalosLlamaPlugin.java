@@ -95,6 +95,11 @@ public class TalosLlamaPlugin extends Plugin {
         // The registered ggml backends, verbatim. The interface may show them;
         // nothing here concludes anything from them — that is the arbiter's job.
         result.put("backends", TalosLlamaEngine.backends(getContext()));
+        // La build del MOTORE: e' cio' che invalida un prefisso congelato, e
+        // non cambia quando cambia l'app.
+        if (TalosLlamaNative.AVAILABLE) {
+            result.put("engineBuild", TalosLlamaNative.nativeEngineBuild());
+        }
         result.put("loadedPath", openPath.get());
         /**
          * La forma del modello caricato viaggia con lo STATO, non su una porta
@@ -365,11 +370,55 @@ public class TalosLlamaPlugin extends Plugin {
         worker.execute(() -> {
             long inizio = System.nanoTime();
             int token = engine.loadState(path);
+            if (token > 0) {
+                /*
+                 * ⛔ La data diventa quella di ULTIMO USO.
+                 *
+                 * Senza, lo sfratto potrebbe solo togliere il piu' VECCHIO — e
+                 * il piu' vecchio e' spesso quello che si usa ogni giorno,
+                 * mentre quello nato ieri da una prova non lo riaprira'
+                 * nessuno. Un tocco alla data trasforma «il piu' antico» in
+                 * «il meno utile», che e' la domanda giusta.
+                 */
+                new File(path).setLastModified(System.currentTimeMillis());
+            }
             JSObject result = new JSObject();
             result.put("restoredTokens", token);
             result.put("ms", (System.nanoTime() - inizio) / 1_000_000L);
             call.resolve(result);
         });
+    }
+
+    /**
+     * I prefissi congelati sul disco, con quanto occupano e quando sono stati
+     * usati l'ultima volta.
+     *
+     * ⛔ Esiste perché nessuno li cancellava. Ne nasce uno per ogni
+     * combinazione di modello, contesto, tipo di cache e interruttore del
+     * ragionamento, e a `f16` pesano quasi un gigabyte l'uno.
+     *
+     * `modifiedAt` è la data di ULTIMO USO, non di creazione: `loadState` la
+     * aggiorna a ogni rilettura riuscita. È la differenza fra sfrattare il meno
+     * utile e sfrattare il più vecchio — e il più vecchio può benissimo essere
+     * quello che si usa ogni giorno.
+     */
+    @PluginMethod
+    public void prefixCaches(PluginCall call) {
+        TalosModelStore store = new TalosModelStore(TalosTransferSession.rootFor(getContext()));
+        JSArray caches = new JSArray();
+        long totale = 0;
+        for (TalosModelStore.Leftover entry : store.prefixCaches().entries) {
+            JSObject row = new JSObject();
+            row.put("path", entry.path);
+            row.put("bytes", entry.bytes);
+            row.put("modifiedAt", new File(entry.path).lastModified());
+            caches.put(row);
+            totale += entry.bytes;
+        }
+        JSObject result = new JSObject();
+        result.put("caches", caches);
+        result.put("totalBytes", totale);
+        call.resolve(result);
     }
 
     /**

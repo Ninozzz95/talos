@@ -317,6 +317,25 @@ public final class TalosModelStore {
     }
 
     /**
+     * I prefissi congelati: la cache del prompt di sistema piu' gli schemi dei
+     * tool.
+     *
+     * ⛔ Serve perche' nessuno li cancellava. Ne nasce uno per ogni combinazione
+     * di modello, contesto, tipo di cache e interruttore del ragionamento, e a
+     * f16 pesano quasi un gigabyte l'uno: senza uno sfratto, usare TALOS
+     * riempie il telefono in silenzio. Il difetto peggiore di tutti — quello
+     * che non da' nessun segnale finche' non e' tardi.
+     *
+     * Elencati a parte da {@link #finished()} apposta: **non sono modelli**, e
+     * mostrarli fra i modelli farebbe cancellare all'utente una cache credendo
+     * di liberare un modello, ritrovandosi la chat piu' lenta senza capire
+     * perche'.
+     */
+    public Listing prefixCaches() {
+        return walk((name) -> name.endsWith(PREFIX_CACHE_SUFFIX));
+    }
+
+    /**
      * The models that finished arriving — the ones that can actually be run.
      *
      * The mirror of {@link #leftovers()}, and needed for the same reason it was:

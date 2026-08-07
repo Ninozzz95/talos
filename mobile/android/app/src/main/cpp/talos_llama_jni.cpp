@@ -30,6 +30,25 @@
 #include "ggml-backend.h"
 #include "sampling.h"
 #include "chat.h"
+
+/**
+ * ⛔ L'identita' della BUILD di llama.cpp, non dell'app.
+ *
+ * Il formato dello stato di una sequenza e' interno a llama.cpp e non promette
+ * compatibilita' fra versioni: e' quella, la cosa che invalida un prefisso
+ * congelato. L'impronta usava `TALOS_APP_BUILD`, che cambia a **ogni**
+ * compilazione — e MISURATO il 2026-08-08 questo butta via un gigabyte di
+ * lavoro a ogni aggiornamento, facendo ripagare 150 secondi al primo messaggio
+ * per una ragione che non esiste.
+ *
+ * Dichiarata a mano perche' `build-info` non ha un header pubblico: la
+ * definizione arriva dalla libreria comune con cui siamo gia' linkati.
+ */
+// ⛔ SENZA `extern "C"`: `build-info.cpp` e' C++, quindi il simbolo e'
+// decorato. Dichiararlo con linkage C fa cercare al linker un nome che non
+// esiste, e l'errore — `undefined symbol` — non dice affatto che il problema
+// e' la decorazione.
+const char * llama_build_info(void);
 // `chat.h` si accontenta della dichiarazione anticipata (`json_fwd.hpp`); qui il
 // tipo va COSTRUITO, quindi serve l'intestazione intera. È la stessa copia
 // vendorizzata che compila `common`, non una dipendenza nuova.
@@ -451,6 +470,13 @@ extern "C" {
 JNIEXPORT void JNICALL
 Java_ai_talos_TalosLlamaNative_nativeInit(JNIEnv * env, jclass, jstring libraryDir) {
     talos_init_once(jstring_to_utf8(env, libraryDir));
+}
+
+/** La build di llama.cpp, per l'impronta dei prefissi congelati. */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeEngineBuild(JNIEnv * env, jclass) {
+    const char * info = llama_build_info();
+    return env->NewStringUTF(info == nullptr ? "" : info);
 }
 
 JNIEXPORT jstring JNICALL

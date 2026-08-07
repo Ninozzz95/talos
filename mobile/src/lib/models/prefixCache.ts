@@ -148,6 +148,71 @@ export const TALOS_PREFIX_MAX_BYTES = 2_000_000_000
 /** Il margine da lasciare libero sul dispositivo, sempre. */
 export const TALOS_PREFIX_FREE_SPACE_MARGIN = 2_000_000_000
 
+/**
+ * ⛔ LO SFRATTO, che è la metà mancante del congelamento.
+ *
+ * Un prefisso congelato pesa quasi un gigabyte, e ne nasce uno per ogni
+ * combinazione di modello, contesto, tipo di cache e interruttore del
+ * ragionamento. Senza sfratto, usare TALOS riempie il telefono **in silenzio**:
+ * il difetto peggiore di tutti, quello che non dà nessun segnale finché non è
+ * tardi, e che chi lo subisce attribuisce a qualcos'altro.
+ *
+ * ## Perché per ULTIMO USO e non per età
+ *
+ * Il più antico è spesso quello che si usa ogni giorno — il modello preferito,
+ * con le impostazioni di sempre — mentre quello nato ieri da una prova non lo
+ * riaprirà nessuno. Sfrattare per età toglierebbe esattamente il file che serve
+ * e terrebbe quello che non serve. Per questo `loadState` aggiorna la data a
+ * ogni rilettura riuscita: la domanda giusta è «il meno utile», non «il più
+ * vecchio».
+ *
+ * ## Due tetti, perché due cose diverse possono andare storte
+ *
+ * Il **numero** protegge dal caso normale: un utente con due modelli e
+ * l'interruttore del ragionamento arriva a quattro file, e va bene. Lo **spazio**
+ * protegge dal caso che il numero non vede: un modello grande i cui prefissi
+ * pesano tre gigabyte l'uno, dove perfino due file sono troppi.
+ */
+export interface TalosPrefixCacheEntry {
+    path: string
+    bytes: number
+    /** Ultimo USO, non creazione: `loadState` la aggiorna a ogni rilettura. */
+    modifiedAt: number
+}
+
+/** Quanti prefissi si tengono: due modelli × ragionamento acceso e spento. */
+export const TALOS_PREFIX_KEEP = 4
+/** E comunque non più di questo, per un modello i cui prefissi sono enormi. */
+export const TALOS_PREFIX_TOTAL_BYTES = 4_000_000_000
+
+export function talosPrefixesToEvict(
+    entries: readonly TalosPrefixCacheEntry[],
+    keep = TALOS_PREFIX_KEEP,
+    totalBytes = TALOS_PREFIX_TOTAL_BYTES,
+): string[] {
+    // Dal più recentemente usato al meno. `path` come spareggio: due file con
+    // la stessa data devono dare sempre lo stesso ordine, o due esecuzioni
+    // identiche sfratterebbero file diversi.
+    const ordinati = [...entries].sort((a, b) => (
+        b.modifiedAt - a.modifiedAt || a.path.localeCompare(b.path)
+    ))
+    const sfratta: string[] = []
+    let occupato = 0
+    for (let indice = 0; indice < ordinati.length; indice += 1) {
+        const voce = ordinati[indice]!
+        // ⛔ Il tetto di spazio si applica anche al PRIMO: se un solo prefisso
+        // supera da solo il totale ammesso, tenerlo sarebbe tenere il difetto.
+        const troppiFile = indice >= keep
+        const troppoSpazio = occupato + voce.bytes > totalBytes
+        if (troppiFile || troppoSpazio) {
+            sfratta.push(voce.path)
+            continue
+        }
+        occupato += voce.bytes
+    }
+    return sfratta
+}
+
 export function talosShouldFreezePrefix(input: {
     tokens: number
     kvBytesPerToken: number

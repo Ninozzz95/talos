@@ -2197,6 +2197,7 @@ export const TALOS_IT_MESSAGES = {
         engineKvCost: 'Costo della cache',
         engineOpens: 'Aperture del modello',
         engineOpenTime: 'Costo dell’ultima apertura',
+        enginePrefixCache: 'Prefissi congelati',
         engineThreads: 'Thread',
         engineContext: 'Contesto (in uso / tetto)',
         engineStages: 'Ultima generazione, per stadi',

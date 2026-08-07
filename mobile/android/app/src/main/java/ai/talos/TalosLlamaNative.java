@@ -58,6 +58,15 @@ final class TalosLlamaNative {
     static native String nativeBackends();
 
     /**
+     * La build di llama.cpp, tipo {@code "b10218-<commit>"}.
+     *
+     * ⛔ Serve all'impronta dei prefissi congelati: cio' che invalida uno stato
+     * salvato e' la versione del MOTORE, non quella dell'app. Usare la build
+     * dell'app buttava via un gigabyte di lavoro a ogni aggiornamento.
+     */
+    static native String nativeEngineBuild();
+
+    /**
      * @param gpuLayers quanti strati spingere sulla GPU. 0 = tutto su CPU, che
      *     è il pavimento contro cui ogni altro backend viene misurato.
      * @param deterministic vero solo per MISURARE. La prova di un backend è che
