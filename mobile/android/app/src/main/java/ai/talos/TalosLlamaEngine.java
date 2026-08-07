@@ -202,6 +202,31 @@ public final class TalosLlamaEngine implements AutoCloseable {
     }
 
     /**
+     * Congela su disco il prefisso già calcolato, coi suoi token.
+     *
+     * @return i byte scritti, 0 se non c'era niente da salvare o la scrittura
+     *     è fallita. Entrambi i casi si trattano allo stesso modo — la volta
+     *     dopo si ricalcola — quindi non serve distinguerli qui.
+     */
+    public long saveState(String path) {
+        return TalosLlamaNative.nativeSaveState(handle, path);
+    }
+
+    /**
+     * Rilegge un prefisso congelato.
+     *
+     * ⛔ Chi chiama ha già verificato che il file appartenga a QUESTO modello
+     * con QUESTI parametri: qui non è verificabile, e uno stato sbagliato non
+     * dà errore — dà risposte sbagliate.
+     *
+     * @return quanti token sono tornati, 0 se il file non c'era o non
+     *     combaciava — la condizione normale la prima volta.
+     */
+    public int loadState(String path) {
+        return TalosLlamaNative.nativeLoadState(handle, path);
+    }
+
+    /**
      * Se questo file è un modello con cui si può PARLARE.
      *
      * Statico e senza aprire niente: legge i metadati del GGUF e chiede se

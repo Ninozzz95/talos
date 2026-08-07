@@ -126,6 +126,48 @@ final class TalosLlamaNative {
     static native int nativeContextRebuilds();
 
     /**
+     * ⭐ IL PREFISSO CONGELATO — scrive su disco la cache di cio' che il
+     * contesto ha gia' letto, insieme ai token che l'hanno prodotta.
+     *
+     * ## Perche' esiste
+     *
+     * MISURATO il 2026-08-07 sul Pad: per rispondere «ciao» mandiamo **8.410
+     * token**, di cui circa 8.250 sono i trentotto schemi dei tool. Calcolarli
+     * costa **150 secondi** — l'88% dell'attesa — e sono **identici in ogni
+     * conversazione**: stesso modello, stessi tool, stesso testo, ricalcolato
+     * da zero ogni volta come se fosse informazione nuova.
+     *
+     * Si calcolano una volta, si salvano, e ogni chat nuova li **rilegge**.
+     * Centocinquanta secondi diventano la lettura di un file.
+     *
+     * ⛔ Non e' una potatura: al modello arrivano tutti e trentotto gli
+     * strumenti, esattamente come prima. Cambia solo chi paga, e quante volte.
+     *
+     * ## Perche' salva anche i TOKEN
+     *
+     * `llama_state_seq_save_file` scrive i token accanto alla cache, ed e'
+     * esattamente cio' che serve a `session->cached`: al ritorno il prefisso
+     * comune di 8A funziona da subito, senza un secondo file da tenere in
+     * sincronia — e due file che possono divergere sono un difetto in attesa.
+     *
+     * @return i byte scritti, 0 se non ha potuto.
+     */
+    static native long nativeSaveState(long handle, String path);
+
+    /**
+     * Rilegge un prefisso congelato dentro il contesto aperto.
+     *
+     * ⛔ Chi chiama DEVE aver gia' verificato che il file appartenga a questo
+     * modello e a questi parametri. Qui non si puo' controllare: il formato di
+     * llama.cpp non porta l'impronta del nostro prompt, e uno stato caricato
+     * su un modello diverso non da' errore — da' risposte sbagliate, che e'
+     * il modo peggiore di fallire.
+     *
+     * @return quanti token sono stati ripristinati, 0 se non ha potuto.
+     */
+    static native int nativeLoadState(long handle, String path);
+
+    /**
      * Quanti token servono per questa conversazione — chiesto PRIMA di caricare
      * i pesi, con {@code vocab_only}.
      *

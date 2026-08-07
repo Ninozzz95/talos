@@ -300,6 +300,68 @@ public class TalosLlamaPlugin extends Plugin {
     }
 
     /**
+     * ⭐ Congela il prefisso: scrive su disco la cache di ciò che il contesto
+     * ha già letto.
+     *
+     * ⛔ L'IMPRONTA È DI CHI CHIAMA, e non è pignoleria: uno stato caricato sul
+     * modello sbagliato **non dà errore** — dà risposte sbagliate, e nessuno va
+     * a cercare la causa in un file di cache. Il nome del file deve quindi
+     * portare tutto ciò che lo rende valido: modello, contesto, tipo di cache,
+     * build del motore, e il testo esatto del prefisso.
+     */
+    @PluginMethod
+    public void saveState(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null || path.isEmpty()) {
+            call.reject("TALOS_LLAMA_PATH_REQUIRED");
+            return;
+        }
+        TalosLlamaEngine engine = openEngine.get();
+        if (engine == null) {
+            call.reject("TALOS_LLAMA_NO_MODEL");
+            return;
+        }
+        worker.execute(() -> {
+            long inizio = System.nanoTime();
+            long byteScritti = engine.saveState(path);
+            JSObject result = new JSObject();
+            result.put("bytes", byteScritti);
+            result.put("saved", byteScritti > 0);
+            result.put("ms", (System.nanoTime() - inizio) / 1_000_000L);
+            call.resolve(result);
+        });
+    }
+
+    /**
+     * Rilegge un prefisso congelato dentro il contesto aperto.
+     *
+     * `restored: 0` non è un guasto: la prima volta, e dopo ogni cambio di
+     * modello o di parametri, il file non c'è o non combacia. Si torna a
+     * calcolare — cioè a fare quello che si faceva prima.
+     */
+    @PluginMethod
+    public void loadState(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null || path.isEmpty()) {
+            call.reject("TALOS_LLAMA_PATH_REQUIRED");
+            return;
+        }
+        TalosLlamaEngine engine = openEngine.get();
+        if (engine == null) {
+            call.reject("TALOS_LLAMA_NO_MODEL");
+            return;
+        }
+        worker.execute(() -> {
+            long inizio = System.nanoTime();
+            int token = engine.loadState(path);
+            JSObject result = new JSObject();
+            result.put("restoredTokens", token);
+            result.put("ms", (System.nanoTime() - inizio) / 1_000_000L);
+            call.resolve(result);
+        });
+    }
+
+    /**
      * Generates, emitting the answer as it grows.
      *
      * The listener receives only what is NEW since the last emission. Sending
