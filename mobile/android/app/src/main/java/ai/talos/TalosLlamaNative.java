@@ -169,7 +169,7 @@ final class TalosLlamaNative {
      *
      * @return i byte scritti, 0 se non ha potuto.
      */
-    static native long nativeTrimAndSaveState(long handle, String path, int quanti);
+    static native long nativeTrimAndSaveState(long handle, String path, String prefisso);
 
     /**
      * Rilegge un prefisso congelato dentro il contesto aperto.

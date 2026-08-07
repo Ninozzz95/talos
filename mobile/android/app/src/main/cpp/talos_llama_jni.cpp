@@ -1784,15 +1784,50 @@ Java_ai_talos_TalosLlamaNative_nativeSaveState(JNIEnv * env, jclass, jlong handl
  *
  * Per questo si chiama a risposta CONSEGNATA, mai prima: chi sta leggendo ha
  * gia' tutto, e la potatura non gli toglie niente che stia aspettando.
+ *
+ * ## ⛔ Perche' prende il PROMPT e non un numero di token
+ *
+ * La prima versione prendeva `quanti`, calcolato da chi chiama. Sbagliato, e il
+ * motivo si vede solo guardando il template: `add_generation_prompt` e' **true**
+ * ovunque, quindi il rendering del solo sistema finisce con il marcatore
+ * dell'assistente — `<|im_start|>assistant` — mentre quello completo, in quel
+ * punto, ha il turno dell'utente.
+ *
+ * ⇒ Il rendering del solo sistema **non e' un prefisso** di quello completo, e
+ * un numero ricavato da li' avrebbe tagliato DENTRO il turno dell'utente: nel
+ * file sarebbe finita una briciola di conversazione, e ogni chat nuova
+ * l'avrebbe ereditata come se l'avesse scritta lei.
+ *
+ * Un difetto silenzioso: nessun errore, nessun crash, solo un modello che
+ * ricorda una frase che nessuno gli ha detto.
+ *
+ * Qui il confine lo trova il tokenizzatore, con la stessa `talos_prefisso_comune`
+ * che 8A usa fra un turno e l'altro. Una macchina sola per una domanda sola.
  */
 JNIEXPORT jlong JNICALL
 Java_ai_talos_TalosLlamaNative_nativeTrimAndSaveState(JNIEnv * env, jclass, jlong handle,
-                                                      jstring pathJ, jint quanti) {
+                                                      jstring pathJ, jstring prefissoJ) {
     talos_session * session = as_session(handle);
     if (session == nullptr || session->ctx == nullptr) return 0;
-    if (quanti <= 0 || (size_t) quanti > session->cached.size()) {
-        TALOS_LOGI("pota e congela: %d token chiesti su %zu in cache, non si fa",
-                   (int) quanti, session->cached.size());
+    const std::string prefisso = jstring_to_utf8(env, prefissoJ);
+    if (prefisso.empty() || session->cached.empty()) return 0;
+
+    // Il prefisso, tokenizzato con lo stesso vocabolario della conversazione.
+    const int voluti = -llama_tokenize(session->vocab, prefisso.c_str(),
+                                       (int32_t) prefisso.size(),
+                                       nullptr, 0, /*add_special*/ true,
+                                       /*parse_special*/ true);
+    if (voluti <= 0) return 0;
+    std::vector<llama_token> token_prefisso(voluti);
+    if (llama_tokenize(session->vocab, prefisso.c_str(), (int32_t) prefisso.size(),
+                       token_prefisso.data(), voluti, true, true) < 0) {
+        return 0;
+    }
+
+    const size_t quanti = talos_prefisso_comune(session->cached, token_prefisso);
+    if (quanti == 0 || quanti > session->cached.size()) {
+        TALOS_LOGI("pota e congela: nessun prefisso comune fra la cache (%zu) e il "
+                   "testo dato (%d)", session->cached.size(), voluti);
         return 0;
     }
     const std::string path = jstring_to_utf8(env, pathJ);
@@ -1821,8 +1856,8 @@ Java_ai_talos_TalosLlamaNative_nativeTrimAndSaveState(JNIEnv * env, jclass, jlon
         TALOS_LOGE("pota e congela: scrittura fallita su %s", path.c_str());
         return 0;
     }
-    TALOS_LOGI("pota e congela: %d token, %zu byte su %s",
-               (int) quanti, scritti, path.c_str());
+    TALOS_LOGI("pota e congela: %zu token su %d del testo dato, %zu byte su %s",
+               quanti, voluti, scritti, path.c_str());
     return (jlong) scritti;
 }
 
