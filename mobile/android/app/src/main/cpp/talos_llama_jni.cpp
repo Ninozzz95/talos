@@ -1720,6 +1720,94 @@ Java_ai_talos_TalosLlamaNative_nativeLastTimings(JNIEnv * env, jclass, jlong han
     return env->NewStringUTF(json);
 }
 
+/**
+ * ⭐ IL PREFISSO CONGELATO — si scrive la cache su disco, coi suoi token.
+ *
+ * MISURATO il 2026-08-07 sul Pad: «ciao» costa **8.410 token di prompt**, di
+ * cui ~8.250 sono i trentotto schemi dei tool. Calcolarli costa **150
+ * secondi**, l'88% dell'attesa, e sono **identici in ogni conversazione**.
+ *
+ * Si calcolano una volta e si rileggono. Non e' una potatura: al modello
+ * arrivano tutti e trentotto gli strumenti come prima — cambia solo quante
+ * volte li paghiamo.
+ *
+ * ⭐ Si salvano anche i TOKEN, e non e' un dettaglio: `session->cached` e' cio'
+ * su cui 8A calcola il prefisso comune. Tenendoli nello stesso file di
+ * llama.cpp non esiste un secondo file da mantenere in sincronia — e due file
+ * che possono divergere sono un difetto in attesa di succedere.
+ */
+JNIEXPORT jlong JNICALL
+Java_ai_talos_TalosLlamaNative_nativeSaveState(JNIEnv * env, jclass, jlong handle,
+                                               jstring pathJ) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr || session->ctx == nullptr) return 0;
+    // Una cache vuota si salverebbe benissimo e non servirebbe a nulla: il giro
+    // dopo si rileggerebbe zero token credendo di aver risparmiato.
+    if (session->cached.empty()) {
+        TALOS_LOGI("prefisso congelato: niente da salvare, la cache e' vuota");
+        return 0;
+    }
+    const std::string path = jstring_to_utf8(env, pathJ);
+    if (path.empty()) return 0;
+
+    const size_t scritti = llama_state_seq_save_file(
+            session->ctx, path.c_str(), /* seq_id */ 0,
+            session->cached.data(), session->cached.size());
+    if (scritti == 0) {
+        TALOS_LOGE("prefisso congelato: scrittura fallita su %s", path.c_str());
+        return 0;
+    }
+    TALOS_LOGI("prefisso congelato: %zu token, %zu byte su %s",
+               session->cached.size(), scritti, path.c_str());
+    return (jlong) scritti;
+}
+
+/**
+ * Rilegge un prefisso congelato nel contesto aperto.
+ *
+ * ⛔ Chi chiama DEVE aver gia' verificato che il file appartenga a questo
+ * modello e a questi parametri. Qui non e' verificabile: il formato di
+ * llama.cpp non porta l'impronta del nostro prompt, e uno stato caricato sul
+ * modello sbagliato **non da' errore** — da' risposte sbagliate, che e' il modo
+ * peggiore di fallire, perche' nessuno va a cercare la causa nella cache.
+ *
+ * La capienza e' il contesto: un file piu' grande di cosi' non ci starebbe
+ * comunque, e chiederlo a llama.cpp con una capienza onesta e' meglio che
+ * scoprirlo con una scrittura fuori dai limiti.
+ */
+JNIEXPORT jint JNICALL
+Java_ai_talos_TalosLlamaNative_nativeLoadState(JNIEnv * env, jclass, jlong handle,
+                                               jstring pathJ) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr || session->ctx == nullptr) return 0;
+    const std::string path = jstring_to_utf8(env, pathJ);
+    if (path.empty()) return 0;
+
+    const size_t capienza = (size_t) llama_n_ctx(session->ctx);
+    std::vector<llama_token> token(capienza);
+    size_t quanti = 0;
+    const size_t letti = llama_state_seq_load_file(
+            session->ctx, path.c_str(), /* dest_seq_id */ 0,
+            token.data(), capienza, &quanti);
+    if (letti == 0 || quanti == 0) {
+        // Non e' un guasto: un file che non c'e' o che non combacia col
+        // contesto e' la condizione normale la prima volta, e dopo ogni
+        // cambio. Si torna a calcolare, che e' cio' che si faceva prima.
+        TALOS_LOGI("prefisso congelato: %s non utilizzabile, si ricalcola", path.c_str());
+        // ⛔ Un caricamento fallito puo' aver lasciato la sequenza a meta'.
+        // Ripartire da una cache mezza scritta darebbe un prefisso comune
+        // calcolato su token che il contesto non ha davvero.
+        llama_memory_clear(llama_get_memory(session->ctx), true);
+        session->cached.clear();
+        return 0;
+    }
+    token.resize(quanti);
+    session->cached = std::move(token);
+    TALOS_LOGI("prefisso congelato: %zu token ripristinati da %s (%zu byte)",
+               quanti, path.c_str(), letti);
+    return (jint) quanti;
+}
+
 JNIEXPORT void JNICALL
 Java_ai_talos_TalosLlamaNative_nativeClose(JNIEnv *, jclass, jlong handle) {
     talos_session * session = as_session(handle);
