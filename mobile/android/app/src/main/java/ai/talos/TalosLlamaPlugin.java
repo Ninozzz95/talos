@@ -622,7 +622,13 @@ public class TalosLlamaPlugin extends Plugin {
                 call.reject("TALOS_LLAMA_TURNS_INVALID");
                 return;
             }
-            String json = TalosLlamaEngine.planPrompt(path, roles, contents, toolsJson);
+        // ⛔ Il ragionamento si CHIEDE. `enable_thinking` nasce acceso in
+        // llama.cpp e non lo toccavamo: TALOS domandava a Qwen3 di ragionare
+        // anche per «ciao», ignorando l'impostazione della persona. Il
+        // predefinito qui è ACCESO — chi non manda il campo ha il
+        // comportamento di prima, e nessun invio cambia senza dirlo.
+        boolean pensa = !Boolean.FALSE.equals(call.getBoolean("thinking", Boolean.TRUE));
+            String json = TalosLlamaEngine.planPrompt(path, roles, contents, toolsJson, pensa);
             if (json == null) {
                 call.reject("TALOS_LLAMA_PLAN_FAILED");
                 return;
@@ -740,7 +746,13 @@ public class TalosLlamaPlugin extends Plugin {
          */
         JSArray tools = call.getArray("tools");
         String toolsJson = tools == null || tools.length() == 0 ? null : tools.toString();
-        String prompt = engine.chatPrompt(roles, contents, toolsJson);
+        // ⛔ Il ragionamento si CHIEDE. `enable_thinking` nasce acceso in
+        // llama.cpp e non lo toccavamo: TALOS domandava a Qwen3 di ragionare
+        // anche per «ciao», ignorando l'impostazione della persona. Il
+        // predefinito qui è ACCESO — chi non manda il campo ha il
+        // comportamento di prima, e nessun invio cambia senza dirlo.
+        boolean pensa = !Boolean.FALSE.equals(call.getBoolean("thinking", Boolean.TRUE));
+        String prompt = engine.chatPrompt(roles, contents, toolsJson, pensa);
         if (prompt == null || prompt.isEmpty()) {
             // Named, so the interface can say WHY instead of producing a worse
             // answer that looks like the model's fault.

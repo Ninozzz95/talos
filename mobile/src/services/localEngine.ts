@@ -178,6 +178,19 @@ interface TalosLlamaPlugin {
         path: string
         turns: ReadonlyArray<{ role: string, content: string }>
         tools?: readonly unknown[]
+        /**
+         * ⛔ Se il modello deve RAGIONARE. Assente = sì, come prima.
+         *
+         * `enable_thinking` nasce acceso in llama.cpp e non glielo dicevamo
+         * mai: TALOS chiedeva a Qwen3 di ragionare **anche per «ciao»**,
+         * ignorando l'impostazione della persona. MISURATO sul Pad il
+         * 2026-08-08: 105 token prodotti per rispondere «Ciao! Come posso
+         * aiutarti oggi?», di cui una decina di risposta.
+         *
+         * Non è censura del ragionamento: è non pagarlo dove nessuno l'ha
+         * chiesto. Chi lo accende continua ad averlo.
+         */
+        thinking?: boolean
     }): Promise<{ plan: string }>
     tuneThreads(options: { candidates: number[], probeTokens?: number }): Promise<{ tuning: string }>
     installed(): Promise<{
@@ -190,6 +203,8 @@ interface TalosLlamaPlugin {
     }>
     chatPrompt(options: {
         turns: ReadonlyArray<{ role: string, content: string }>
+        /** Vedi `planPrompt.thinking`: assente = sì, come prima. */
+        thinking?: boolean
         /**
          * I tool, in forma OpenAI, passati al TEMPLATE del modello.
          *
@@ -567,8 +582,9 @@ export async function talosLocalInstalledModels(): Promise<TalosLocalModelListin
 export async function talosLocalEngineChatPlan(
     turns: ReadonlyArray<{ role: string, content: string }>,
     tools?: readonly unknown[],
+    thinking = true,
 ): Promise<TalosLocalEngineChatPlan> {
-    const plan = await plugin.chatPrompt({ turns, tools })
+    const plan = await plugin.chatPrompt({ turns, tools, thinking })
     return {
         prompt: plan.prompt,
         promptTokens: integerOf(plan.promptTokens) ?? 0,
@@ -604,9 +620,10 @@ export async function talosLocalEnginePlanPrompt(
     path: string,
     turns: ReadonlyArray<{ role: string, content: string }>,
     tools?: readonly unknown[],
+    thinking = true,
 ): Promise<{ promptTokens: number, shape: TalosModelShape | null } | null> {
     try {
-        const risposta = await plugin.planPrompt({ path, turns, tools })
+        const risposta = await plugin.planPrompt({ path, turns, tools, thinking })
         const grezzo: unknown = JSON.parse(risposta.plan)
         const record = grezzo as Record<string, unknown>
         const promptTokens = integerOf(record.promptTokens)

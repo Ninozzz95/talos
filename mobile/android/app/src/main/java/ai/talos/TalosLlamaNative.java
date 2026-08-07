@@ -196,7 +196,7 @@ final class TalosLlamaNative {
      * @return JSON {@code {promptTokens, trainedContext}}, oppure null.
      */
     static native String nativePlanPrompt(String modelPath, String[] roles, String[] contents,
-                                          String toolsJson);
+                                          String toolsJson, boolean pensa);
 
     /**
      * L'architettura dichiarata dal file e quanti strati ha, in JSON — oppure
@@ -240,7 +240,7 @@ final class TalosLlamaNative {
      * un modello locale apparentemente scadente.
      */
     static native String nativeApplyChatTemplate(long handle, String[] roles, String[] contents,
-                                                 String toolsJson);
+                                                 String toolsJson, boolean pensa);
 
     /**
      * Separa il ragionamento dal contenuto, secondo il formato del modello.
