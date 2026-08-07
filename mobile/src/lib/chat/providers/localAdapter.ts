@@ -19,9 +19,17 @@ import {
     talosLocalEngineOpenWithFallback,
     talosLocalEngineStatus,
     talosLocalInstalledModels,
+    talosFreezePrefix,
+    talosThawPrefix,
 } from '@/services/localEngine'
+import {
+    talosPrefixCacheFileName,
+    talosShouldFreezePrefix,
+    type TalosPrefixIdentity,
+} from '@/lib/models/prefixCache'
 import { talosMeasureDevice } from '@/services/deviceCapacity'
 import { type TalosModelShape, talosMaxContextFor } from '@/lib/models/fit'
+import { talosKvBytesPerTokenOf } from '@/lib/models/engineDiagnostics'
 import { talosEngineTuning } from '@/lib/models/engineTuning'
 import type { TalosTuningKey } from '@/lib/models/tuningProfile'
 import { talosStoredTuning } from '@/services/tuningProfileStore'
@@ -271,6 +279,158 @@ async function talosTuningKeyFor(
         modelPath: file.path,
         modelBytes: file.bytes,
         modelModifiedAt: file.modifiedAt,
+    }
+}
+
+/**
+ * ⭐ IL PREFISSO CONGELATO, agganciato all'invio.
+ *
+ * MISURATO sul Pad il 2026-08-07: «ciao» costa **8.410 token**, di cui ~8.250
+ * sono i trentotto schemi dei tool. Centocinquanta secondi, l'88% dell'attesa,
+ * per un testo **identico in ogni conversazione**.
+ *
+ * Si calcola una volta, si scrive su disco, e ogni chat nuova lo rilegge — in
+ * 0-1 ms, misurato. Al modello arrivano tutti e trentotto gli strumenti come
+ * prima: la parità con i provider cloud non si tocca.
+ *
+ * ⛔ Le due letture stanno in una memoria di modulo perché il percorso di invio
+ * è caldo: elencare i file installati e renderizzare il template a ogni
+ * messaggio pagherebbe in I/O ciò che si risparmia in calcolo. Cambiano solo
+ * quando cambia il modello o il testo del sistema, e in quel caso l'impronta è
+ * diversa e la chiave nella mappa pure.
+ */
+const IDENTITA_FILE = new Map<string, { bytes: number, modifiedAt: number }>()
+const PREFISSO_RESO = new Map<string, string>()
+
+async function identitaFileDi(path: string): Promise<{ bytes: number, modifiedAt: number } | null> {
+    const memo = IDENTITA_FILE.get(path)
+    if (memo) return memo
+    try {
+        const { models } = await talosLocalInstalledModels()
+        for (const file of models) {
+            IDENTITA_FILE.set(file.path, { bytes: file.bytes, modifiedAt: file.modifiedAt })
+        }
+    } catch {
+        // Senza identità non si congela: meglio ricalcolare che rischiare di
+        // rileggere lo stato di un altro modello.
+        return null
+    }
+    return IDENTITA_FILE.get(path) ?? null
+}
+
+/**
+ * Il testo del prefisso: il template applicato al SOLO sistema, con i tool.
+ *
+ * ⛔ Lo stesso identico calcolo deve avvenire quando si congela e quando si
+ * rilegge, o le impronte non corrispondono e non se ne accorge nessuno — la
+ * ricerca su llama.cpp dice che il riuso salta **in silenzio**. Per questo è
+ * una funzione sola, chiamata da entrambe le parti.
+ */
+async function prefissoResoDi(
+    system: string | undefined,
+    tools: readonly unknown[] | undefined,
+): Promise<string | null> {
+    if (!system) return null
+    const chiave = `${system} ${JSON.stringify(tools ?? [])}`
+    const memo = PREFISSO_RESO.get(chiave)
+    if (memo !== undefined) return memo
+    try {
+        const piano = await talosLocalEngineChatPlan([{ role: 'system', content: system }], tools)
+        PREFISSO_RESO.set(chiave, piano.prompt)
+        return piano.prompt
+    } catch {
+        return null
+    }
+}
+
+/** Dove vive il file: accanto al modello, con l'impronta per nome. */
+function accantoAlModello(modelPath: string, nomeFile: string): string {
+    const taglio = modelPath.lastIndexOf('/')
+    return taglio < 0 ? nomeFile : `${modelPath.slice(0, taglio + 1)}${nomeFile}`
+}
+
+interface TalosPrefissoCongelato {
+    percorso: string
+    prompt: string
+    identita: TalosPrefixIdentity
+}
+
+/**
+ * L'identità completa, o `null` se manca un pezzo.
+ *
+ * `null` non è un guasto: è «non si congela questa volta». Un'impronta
+ * incompleta sarebbe peggio di nessuna — riconoscerebbe come uguali due
+ * situazioni che non lo sono.
+ */
+async function prefissoCongelatoDi(
+    modelPath: string,
+    system: string | undefined,
+    tools: readonly unknown[] | undefined,
+    status: TalosLocalEngineStatus,
+    contextTokens: number,
+): Promise<TalosPrefissoCongelato | null> {
+    const [file, prompt] = await Promise.all([
+        identitaFileDi(modelPath),
+        prefissoResoDi(system, tools),
+    ])
+    if (!file || !prompt) return null
+    const identita: TalosPrefixIdentity = {
+        modelPath,
+        modelBytes: file.bytes,
+        modelModifiedAt: file.modifiedAt,
+        contextTokens,
+        // Quella OTTENUTA, mai quella chiesta: la cache è allocata su questa.
+        kvCacheType: status.kvCacheType ?? 'f16',
+        engineBuild: TALOS_APP_BUILD,
+        prefixText: prompt,
+    }
+    return {
+        percorso: accantoAlModello(modelPath, talosPrefixCacheFileName(identita)),
+        prompt,
+        identita,
+    }
+}
+
+/** Le impronte gia' scritte in questa sessione: evita di riscrivere un GB. */
+const GIA_CONGELATI = new Set<string>()
+
+/**
+ * Congela, se ne vale la pena e se c'e' spazio.
+ *
+ * Il verdetto lo da' `talosShouldFreezePrefix`, non questa funzione: qui si
+ * scrive o non si scrive. Tre no possibili — prefisso corto, file troppo
+ * grande, spazio insufficiente — e ognuno e' una ragione che vale la pena
+ * mostrare, non un silenzio.
+ *
+ * ⛔ Non solleva mai, ed e' deliberato: una risposta gia' consegnata non puo'
+ * fallire perche' una cache non si e' scritta.
+ */
+async function congelaSePossibile(
+    congelato: TalosPrefissoCongelato,
+    promptTokens: number,
+    shape: TalosModelShape | null,
+): Promise<void> {
+    try {
+        if (GIA_CONGELATI.has(congelato.percorso)) return
+        if (!shape) return
+        // ⛔ La stessa aritmetica del Doctor, non una seconda: due conti sulla
+        // KV che divergono sono due schermate che si contraddicono, e nessun
+        // modo di sapere quale mente.
+        const perToken = talosKvBytesPerTokenOf(shape)
+        const device = await talosMeasureDevice()
+        const verdetto = talosShouldFreezePrefix({
+            // Il prefisso e' una parte del prompt, mai piu' lungo di lui: il
+            // conto vero lo fa il tokenizzatore dall'altra parte del ponte, ma
+            // per decidere se vale la pena basta questo limite superiore.
+            tokens: promptTokens,
+            kvBytesPerToken: perToken,
+            freeBytes: device?.freeStorageBytes ?? 0,
+        })
+        if (!verdetto.freeze) return
+        const esito = await talosFreezePrefix(congelato.percorso, congelato.prompt)
+        if (esito.bytes > 0) GIA_CONGELATI.add(congelato.percorso)
+    } catch {
+        // Vedi sopra: e' un'ottimizzazione, non una promessa.
     }
 }
 
@@ -542,6 +702,22 @@ async function run(
         }
     }
 
+    /**
+     * ⭐ Si prova a RILEGGERE il prefisso prima di generare.
+     *
+     * Qui e non prima: sopra il contesto può essere stato riaperto per fargli
+     * spazio, e riaprire azzera la cache — un prefisso caricato prima sarebbe
+     * stato buttato senza che nessuno lo dicesse.
+     *
+     * Un `null` o uno zero non sono guasti: sono la condizione normale la prima
+     * volta e dopo ogni cambio di modello, di contesto o di testo. Si calcola,
+     * che è ciò che si faceva prima di tutto questo.
+     */
+    const congelato = await prefissoCongelatoDi(
+        input.model.id, input.system, tools, status, plan.contextTokens,
+    )
+    if (congelato) await talosThawPrefix(congelato.percorso)
+
     let generation
     try {
         /**
@@ -580,6 +756,24 @@ async function run(
         }
         throw error
     }
+    /**
+     * ⭐ E ora si CONGELA, a risposta consegnata.
+     *
+     * Qui e non prima: la potatura toglie dalla cache i turni di questa
+     * conversazione, e chi sta leggendo li ha già ricevuti — lo streaming è
+     * finito due righe sopra. Farlo prima significherebbe rallentare la persona
+     * che aspetta per far comodo alla prossima.
+     *
+     * ⛔ E non si sovrascrive: se il file c'è già, quel prefisso è identico per
+     * costruzione — l'impronta è il nome — quindi riscriverlo sarebbe quasi un
+     * gigabyte speso per ottenere gli stessi byte.
+     *
+     * `void`: congelare è un'ottimizzazione, e una risposta consegnata non deve
+     * aspettare che una cache si scriva. Se fallisce, la prossima volta si
+     * calcola — cioè si fa quello che si faceva prima.
+     */
+    if (congelato) void congelaSePossibile(congelato, plan.promptTokens, status.shape)
+
     const normalised = talosNormaliseLocalToolCalls(generation.toolCalls)
     /*
      * Anche il testo FINALE passa dal separatore, non solo lo stream.
