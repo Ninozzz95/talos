@@ -43,6 +43,20 @@ export interface TalosTasksWriteSources {
         priority?: 'low' | 'normal' | 'high'
     }): Promise<{ id: string; title: string }>
     remove(taskId: string): Promise<void>
+    /**
+     * Rilegge un'attivita' per id. Null se non c'e' piu'.
+     *
+     * ⛔ Serve alla POSTCONDIZIONE (A5), non al modello: e' la rilettura con cui
+     * l'esecutore decide se l'effetto c'e' davvero quando la chiamata ha detto
+     * il contrario. Vedi `verify` in `lib/tools/registry.ts`.
+     */
+    find(taskId: string): Promise<{
+        id: string
+        title: string
+        status: 'todo' | 'doing' | 'done'
+        priority: 'low' | 'normal' | 'high'
+        description: string | null
+    } | null>
 }
 
 const PRIORITIES = ['low', 'normal', 'high'] as const
@@ -121,6 +135,21 @@ export function createTalosTasksWriteTools(
                 status: z.enum(STATUSES).default('done')
                     .describe('done = finished; doing = started; todo = back to not started.'),
             }),
+            /**
+             * A5 — la postcondizione: **lo stato e' quello chiesto**.
+             *
+             * Costa una rilettura per id. Vale nelle due direzioni: se la
+             * chiamata e' fallita ma lo stato e' gia' quello giusto, era
+             * riuscita e si e' persa la conferma — e dire «fallito» li' e'
+             * l'istruzione che fa ritentare.
+             */
+            async verify(input) {
+                const attivita = await sources.find(input.id)
+                if (!attivita) return { held: false, reason: 'that task no longer exists' }
+                return attivita.status === input.status
+                    ? { held: true }
+                    : { held: false, reason: `it is still "${attivita.status}"` }
+            },
             async run(input) {
                 try {
                     const saved = await sources.setStatus(input.id, input.status)
@@ -231,6 +260,13 @@ export function createTalosTasksWriteTools(
             input: z.object({
                 id: z.string().min(1).describe('The task id, from tasks_list.'),
             }),
+            /** A5 — la postcondizione di una cancellazione: **non c'e' piu'**. */
+            async verify(input) {
+                const resta = await sources.find(input.id)
+                return resta
+                    ? { held: false, reason: `the task "${resta.title}" is still there` }
+                    : { held: true }
+            },
             async run(input) {
                 try {
                     await sources.remove(input.id)

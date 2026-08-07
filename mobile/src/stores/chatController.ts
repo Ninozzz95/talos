@@ -2704,7 +2704,15 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      */
                     tasksWrite: () => ({
                         create: async (input) => {
-                            const saved = await tasks.create({ ...input, run_id: null })
+                            const saved = await tasks.create({
+                                ...input,
+                                run_id: null,
+                                // A8 — eredita: un'attività creata da una pagina
+                                // web viene da quella pagina.
+                                content_origin: talosOriginForWrite(
+                                    talosChainFor(sendIdentity.sessionId),
+                                ),
+                            })
                             return { id: saved.id, title: saved.title }
                         },
                         setStatus: async (taskId, status) => {
@@ -2716,6 +2724,21 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             return { id: saved.id, title: saved.title }
                         },
                         remove: (taskId: string) => tasks.remove(taskId),
+                        // A5 — la rilettura che l'esecutore usa come
+                        // postcondizione. Passa dall'elenco della stazione.
+                        find: async (taskId: string) => {
+                            const righe = await tasks.list()
+                            const riga = righe.find((row) => row.id === taskId)
+                            return riga
+                                ? {
+                                    id: riga.id,
+                                    title: riga.title,
+                                    status: riga.status,
+                                    priority: riga.priority,
+                                    description: riga.description,
+                                }
+                                : null
+                        },
                     }),
                     libraryContextPolicy: policyToolSources,
                     /**
