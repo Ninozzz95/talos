@@ -170,6 +170,19 @@ describe('parseTalosMobileSettings', () => {
     })
 })
 describe('useSettingsStore', () => {
+
+    it('PIANO — la porta nasce CHIUSA, e un valore inventato non la apre', async () => {
+        const store = useSettingsStore()
+        // Owner 2026-08-07: «porte che l'utente sceglie consapevolmente di
+        // aprire». Una porta che si trova aperta non e' una scelta.
+        expect(store.state.shell?.plan_scope).toBe('turn')
+
+        await store.setShell({ plan_scope: 'qualunque-cosa' as never })
+        expect(store.state.shell?.plan_scope).toBe('turn')
+
+        await store.setShell({ plan_scope: 'conversation' })
+        expect(store.state.shell?.plan_scope).toBe('conversation')
+    })
     it('TOOL-AUTH-04 persists and rehydrates an exact per-tool grant', async () => {
         const store = useSettingsStore()
 

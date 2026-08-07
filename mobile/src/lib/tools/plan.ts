@@ -81,12 +81,56 @@ export interface TalosPlanStep {
 
 export type TalosPlanState = 'proposed' | 'approved' | 'running' | 'finished' | 'cancelled'
 
+/**
+ * ⛔ Fin dove arriva un'approvazione. Owner 2026-08-07: **una porta, non un muro**.
+ *
+ * ## Perché la seconda porta ha avuto bisogno di essere ridisegnata
+ *
+ * Con l'impronta esatta degli argomenti (decisione 4), un piano che sopravvive
+ * al turno **non aprirebbe su niente**: il messaggio dopo ha argomenti diversi,
+ * l'impronta non torna, e si richiede lo stesso. Sarebbe un interruttore che
+ * non cambia nulla — cioè peggio di non averlo, perché la persona crede di aver
+ * scelto qualcosa.
+ *
+ * Quindi in `conversation` l'impronta smette di essere il vincolo: conta che il
+ * **tool** fosse nel piano. E al posto dell'impronta subentra un vincolo che
+ * protegge di più, non di meno.
+ *
+ * ## Il vincolo che tiene onesta la porta aperta
+ *
+ * L'approvazione permanente **decade da sola nel momento in cui entra contenuto
+ * non fidato**. Una pagina web, un documento scaricato, una nota che viene da
+ * lì: da quel punto la catena è contaminata, il piano approvato non vale più, e
+ * si richiede.
+ *
+ * È la stessa proprietà della trifecta, applicata alla durata di un consenso
+ * invece che a una singola chiamata — e risolve il vero pericolo di un permesso
+ * lungo: non è che duri, è che duri **attraverso** il momento in cui arriva
+ * l'istruzione di qualcun altro.
+ *
+ * La porta si chiude quando la stanza diventa pericolosa, e la scheda lo dice
+ * PRIMA di farla aprire.
+ */
+export type TalosPlanScope =
+    /** Vale per questo messaggio. Argomenti esatti. È il predefinito. */
+    | 'turn'
+    /** Vale finché non entra contenuto non fidato. Argomenti liberi sui tool approvati. */
+    | 'conversation'
+
 export interface TalosPlan {
     id: string
     steps: readonly TalosPlanStep[]
     /** Il rischio del passo peggiore, catena inclusa. */
     risk: TalosToolRisk
     state: TalosPlanState
+    scope: TalosPlanScope
+    /**
+     * Com'era la catena quando l'utente ha approvato.
+     *
+     * Serve a una cosa sola e importante: accorgersi che da allora è entrato
+     * contenuto non fidato, e far **decadere** l'approvazione permanente.
+     */
+    approvedChain: TalosToolChainState
 }
 
 /** Quello che serve sapere di una chiamata per metterla in un piano. */
@@ -182,6 +226,7 @@ export function talosBuildPlan(
     id: string,
     candidati: readonly TalosPlanCandidate[],
     chain: TalosToolChainState = TALOS_EMPTY_CHAIN,
+    scope: TalosPlanScope = 'turn',
 ): TalosPlan {
     const steps: TalosPlanStep[] = candidati
         .filter((candidato) => !candidato.critical)
@@ -201,6 +246,8 @@ export function talosBuildPlan(
         steps,
         risk: talosPlanRisk(candidati.filter((candidato) => !candidato.critical), chain),
         state: 'proposed',
+        scope,
+        approvedChain: chain,
     }
 }
 
@@ -242,6 +289,11 @@ export type TalosPlanAdmission =
     | { admitted: false, reason: 'removed' }
     /** C'era, ma gli argomenti non sono più quelli approvati. */
     | { admitted: false, reason: 'arguments-changed', step: TalosPlanStep }
+    /**
+     * Il piano valeva per la conversazione, ma **è entrato contenuto non
+     * fidato** da quando l'hai approvato: l'approvazione permanente è decaduta.
+     */
+    | { admitted: false, reason: 'chain-contaminated' }
 
 /**
  * ⛔ Questa chiamata è dentro il piano che l'utente ha letto?
@@ -259,16 +311,47 @@ export function talosPlanAdmits(
     piano: TalosPlan,
     tool: string,
     digest: string,
+    /** Com'è la catena ADESSO. Serve solo alla portata `conversation`. */
+    chain: TalosToolChainState = piano.approvedChain,
 ): TalosPlanAdmission {
+    /*
+     * ⛔ Prima di tutto: l'approvazione permanente è ancora viva?
+     *
+     * Se da quando l'utente ha approvato è entrato contenuto non fidato, decade.
+     * Il controllo sta in cima di proposito: deve valere anche per un passo che
+     * corrisponde perfettamente, perché il pericolo non è l'argomento sbagliato
+     * — è che l'argomento giusto venga eseguito dopo che qualcun altro ha
+     * parlato dentro la conversazione.
+     */
+    if (piano.scope === 'conversation'
+        && chain.untrustedSeen
+        && !piano.approvedChain.untrustedSeen) {
+        return { admitted: false, reason: 'chain-contaminated' }
+    }
+
     const candidati = piano.steps.filter((step) => step.tool === tool)
     if (candidati.length === 0) return { admitted: false, reason: 'not-in-plan' }
 
+    const vivo = (step: TalosPlanStep) => step.state !== 'removed' && step.state !== 'denied'
+
     const esatto = candidati.find((step) => step.digest === digest)
     if (esatto) {
-        if (esatto.state === 'removed') return { admitted: false, reason: 'removed' }
-        if (esatto.state === 'denied') return { admitted: false, reason: 'removed' }
-        return { admitted: true, step: esatto }
+        return vivo(esatto)
+            ? { admitted: true, step: esatto }
+            : { admitted: false, reason: 'removed' }
     }
-    // Il tool c'è, l'impronta no: gli argomenti sono cambiati per strada.
+
+    /*
+     * Il tool c'è, l'impronta no.
+     *
+     * Su `turn` è una deviazione e si ferma. Su `conversation` è precisamente
+     * ciò che la porta serve a permettere: lo stesso strumento su un argomento
+     * nuovo, che è come sono fatti i messaggi successivi.
+     */
+    if (piano.scope === 'conversation') {
+        const utilizzabile = candidati.find(vivo)
+        if (utilizzabile) return { admitted: true, step: utilizzabile }
+        return { admitted: false, reason: 'removed' }
+    }
     return { admitted: false, reason: 'arguments-changed', step: candidati[0]! }
 }

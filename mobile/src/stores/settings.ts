@@ -174,6 +174,24 @@ export interface TalosMobileShellPreferences {
      */
     memory_write_access: 'allow' | 'ask' | 'deny'
     /**
+     * ⛔ Fin dove vale l'approvazione di un piano.
+     *
+     * Owner 2026-08-07, testuale: «il segreto di un sistema come il nostro non
+     * e' mai mettere dei muri e dei paletti, ma delle porte che l'utente sceglie
+     * consapevolmente di aprire».
+     *
+     * `turn` — vale per il messaggio che hai mandato, con gli argomenti esatti.
+     * `conversation` — vale finche' non entra contenuto non fidato: nel momento
+     * in cui una pagina web o un documento esterno arriva nel discorso,
+     * l'approvazione **decade da sola** e si richiede.
+     *
+     * Non e' una quarta grammatica dei permessi: sempre / chiedi / nega restano
+     * quelli e decidono COSA si puo' fare. Questo decide per QUANTO vale un
+     * «si'» che hai gia' dato — e nasce sulla porta chiusa, perche' una porta si
+     * apre, non si trova aperta.
+     */
+    plan_scope: 'turn' | 'conversation'
+    /**
      * Se un'immagine puo' lasciare il telefono.
      *
      * Owner 2026-08-04: «quando carichi una tua immagine questo potrebbe essere
@@ -297,6 +315,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     library_autosave_generated: true,
     library_access: 'ask',
     memory_write_access: 'ask',
+    plan_scope: 'turn',
     image_attachment_consent: 'ask',
     library_view: 'list',
     notes_view: 'list',
@@ -356,6 +375,11 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         memory_write_access: record.memory_write_access === 'allow' || record.memory_write_access === 'deny'
             ? record.memory_write_access
             : DEFAULT_SHELL_PREFERENCES.memory_write_access,
+        // Solo il valore che APRE va riconosciuto: qualunque altra cosa —
+        // compreso un valore inventato o corrotto — ricade sulla porta chiusa.
+        plan_scope: record.plan_scope === 'conversation'
+            ? 'conversation'
+            : DEFAULT_SHELL_PREFERENCES.plan_scope,
         library_access: record.library_access === 'allow' || record.library_access === 'deny'
             ? record.library_access
             : (record.library_context_enabled === true ? 'allow' : DEFAULT_SHELL_PREFERENCES.library_access),
