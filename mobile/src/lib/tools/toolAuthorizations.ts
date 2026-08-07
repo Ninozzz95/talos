@@ -27,6 +27,32 @@ export interface TalosToolAuthorizationGrantsV1 {
 export type TalosToolAuthorizationDecision =
     | 'pending'
     | 'allow_once'
+    /**
+     * ⛔ «Per questa richiesta» — vale finche' dura il messaggio che l'ha
+     * generato, e non un istante di piu'.
+     *
+     * ## Perche' esiste
+     *
+     * MISURATO sul Pad il 2026-08-07: `deepseek-v4-flash` parallelizza le
+     * letture leggere ma **serializza sempre scrittura e rete**. Con un modello
+     * cosi' il piano non compare mai — la soglia vuole due passi pesanti
+     * insieme, e due pesanti insieme non arrivano — e la persona riceve quattro
+     * schede in fila per una richiesta sola.
+     *
+     * Il piano dichiarato costerebbe un giro di rete a OGNI messaggio. Questa
+     * costa zero e funziona qualunque sia il raggruppamento del modello.
+     *
+     * ## ⛔ Perche' qui dentro NON aggiunge nessun potere
+     *
+     * In questo contratto si comporta **identica a `allow_once`**: consente la
+     * chiamata che l'ha chiesta e non scrive nessuna concessione permanente.
+     * Tutto l'allargamento vive nel piano IN MEMORIA, che muore col turno.
+     *
+     * E' una scelta di sicurezza, non di comodita': se un giorno un difetto
+     * portasse questa strada fuori strada, al peggio si comporterebbe come
+     * «una volta» — mai come «sempre».
+     */
+    | 'allow_turn'
     | 'always_allow'
     | 'deny'
 
@@ -53,7 +79,7 @@ export interface TalosToolAuthorizationRequestV1 {
 export type TalosToolAuthorizationResolution =
     | {
         readonly status: 'allowed'
-        readonly source: 'baseline' | 'persistent' | 'allow_once' | 'always_allow'
+        readonly source: 'baseline' | 'persistent' | 'allow_once' | 'allow_turn' | 'always_allow'
         readonly actions: readonly TalosToolAction[]
     }
     | {
@@ -268,9 +294,12 @@ export function resolveTalosToolAuthorization(input: {
     if (
         requestMatches
         && (request.decision === 'allow_once'
+            || request.decision === 'allow_turn'
             || request.decision === 'always_allow')
     ) {
-        if (request.decision === 'allow_once') {
+        // `allow_turn` passa dalla porta di `allow_once`: nessuna concessione
+        // permanente, nessun potere in piu' in questo contratto.
+        if (request.decision === 'allow_once' || request.decision === 'allow_turn') {
             return {
                 status: 'allowed',
                 source: request.decision,

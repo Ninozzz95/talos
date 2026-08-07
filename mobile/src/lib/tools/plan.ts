@@ -123,7 +123,24 @@ export interface TalosPlan {
     /** Il rischio del passo peggiore, catena inclusa. */
     risk: TalosToolRisk
     state: TalosPlanState
+    /** Quanto **vive**: il messaggio, o la conversazione. */
     scope: TalosPlanScope
+    /**
+     * ⛔ Se gli argomenti devono corrispondere ESATTAMENTE.
+     *
+     * Separato dalla durata di proposito, perche' sono due assi e confonderli
+     * produce difetti che si vedono solo dopo. La prima versione li teneva
+     * insieme: un piano «per questa richiesta» — che deve morire col turno ma
+     * accettare argomenti nuovi — non era esprimibile, e messo su
+     * `conversation` per allentare l'impronta sarebbe **sopravvissuto al
+     * turno**. Cioe' «per questa richiesta» sarebbe diventato «per sempre»: la
+     * bugia peggiore che una scheda di consenso possa dire.
+     *
+     * ⛔ E c'e' un accoppiamento che non e' negoziabile: **un piano che NON
+     * controlla gli argomenti deve decadere sulla contaminazione**. Se non
+     * guardi cosa passa, devi almeno guardare da dove viene il discorso.
+     */
+    matchArguments: boolean
     /**
      * Com'era la catena quando l'utente ha approvato.
      *
@@ -273,6 +290,10 @@ export function talosBuildPlan(
         risk: talosPlanRisk(candidati.filter((candidato) => !candidato.critical), chain),
         state: 'proposed',
         scope,
+        // Il turno controlla gli argomenti; la conversazione no, altrimenti non
+        // aprirebbe su niente. Chi vuole una combinazione diversa la imposta
+        // dopo, ed e' il caso di «per questa richiesta».
+        matchArguments: scope === 'turn',
         approvedChain: chain,
     }
 }
@@ -349,7 +370,7 @@ export function talosPlanAdmits(
      * — è che l'argomento giusto venga eseguito dopo che qualcun altro ha
      * parlato dentro la conversazione.
      */
-    if (piano.scope === 'conversation'
+    if (!piano.matchArguments
         && chain.untrustedSeen
         && !piano.approvedChain.untrustedSeen) {
         return { admitted: false, reason: 'chain-contaminated' }
@@ -374,7 +395,7 @@ export function talosPlanAdmits(
      * ciò che la porta serve a permettere: lo stesso strumento su un argomento
      * nuovo, che è come sono fatti i messaggi successivi.
      */
-    if (piano.scope === 'conversation') {
+    if (!piano.matchArguments) {
         const utilizzabile = candidati.find(vivo)
         if (utilizzabile) return { admitted: true, step: utilizzabile }
         return { admitted: false, reason: 'removed' }

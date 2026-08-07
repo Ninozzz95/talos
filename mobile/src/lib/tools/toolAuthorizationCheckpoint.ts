@@ -206,7 +206,7 @@ function parseRequest(value: unknown): TalosToolAuthorizationRequestV1 | null {
         || !actions
         || typeof record.allow_persistent !== 'boolean'
         || !SHA256.test(typeof record.input_digest === 'string' ? record.input_digest : '')
-        || !['pending', 'allow_once', 'always_allow', 'deny'].includes(
+        || !['pending', 'allow_once', 'allow_turn', 'always_allow', 'deny'].includes(
             typeof decision === 'string' ? decision : '',
         )
         || !timestamp(record.created_at)

@@ -34,7 +34,7 @@ describe('TalosMobileToolConsentSheet', () => {
         wrapper.unmount()
     })
 
-    it('TOOL-AUTH-18 exposes deny, allow once, always allow, and later as distinct outcomes', async () => {
+    it('TOOL-AUTH-18 expone tre scelte distinte, piu il rimandare', async () => {
         const wrapper = mountCard()
 
         await wrapper.get('[data-testid="talos-tool-consent-deny"]').trigger('click')
@@ -43,9 +43,26 @@ describe('TalosMobileToolConsentSheet', () => {
         await wrapper.get('[data-testid="talos-tool-consent-later"]').trigger('click')
 
         expect(wrapper.emitted('deny')).toHaveLength(1)
-        expect(wrapper.emitted('allowOnce')).toHaveLength(1)
+        /*
+         * ⛔ «Consenti» emette `allowTurn`, non `allowOnce`.
+         *
+         * Owner 2026-08-07: «qual è la differenza tra "consenti una volta" e
+         * "per questa richiesta"? Non possiamo unirli?» — sì, ed erano due
+         * perché noi distinguiamo la chiamata dal messaggio. Chi legge pensa al
+         * messaggio che ha appena scritto.
+         */
+        expect(wrapper.emitted('allowTurn')).toHaveLength(1)
+        expect(wrapper.emitted('allowOnce')).toBeUndefined()
         expect(wrapper.emitted('alwaysAllow')).toHaveLength(1)
         expect(wrapper.emitted('later')).toHaveLength(1)
+        wrapper.unmount()
+    })
+
+    it('e dice a voce quanto dura un si, invece di lasciarlo dedurre', () => {
+        // «Consenti» da solo si legge come «per sempre» a chi non ha mai visto
+        // questa scheda, e chi lo scopre dopo non si fida piu'.
+        const wrapper = mountCard()
+        expect(wrapper.text()).toContain('covers this message')
         wrapper.unmount()
     })
 
