@@ -2,6 +2,39 @@ apply plugin: 'com.android.application'
 // C0 (fase 9): il codice nuovo nasce in Kotlin, i plugin Java restano Java.
 apply plugin: 'kotlin-android'
 
+/**
+ * ⛔ La firma di rilascio, letta da FUORI il repository.
+ *
+ * ## Perche' non e' un dettaglio di configurazione
+ *
+ * Fuori dal Play Store non esiste rotazione delle chiavi. Il telefono accetta
+ * un aggiornamento solo se e' firmato dalla STESSA chiave dell'installazione
+ * che ha gia': perderla significa che nessuno potra' piu' aggiornare, e
+ * l'unica via sarebbe disinstallare — cioe' cancellare chat, Libreria e
+ * memoria di chi ci aveva creduto.
+ *
+ * E TALOS sara' pubblico e FOSS: una chiave finita nella storia di git e'
+ * pubblica per sempre, e la storia non si riscrive dopo che qualcuno ha
+ * clonato. Chi ce l'ha puo' pubblicare aggiornamenti che il telefono accetta
+ * come nostri.
+ *
+ * Quindi: il file della chiave vive fuori dal repository, e qui entra solo il
+ * PERCORSO, scritto in `keystore.properties` che il `.gitignore` esclude.
+ *
+ * ## Cosa succede se il file non c'e'
+ *
+ * Niente di rotto: il blocco `signingConfigs` non viene creato e il build di
+ * rilascio resta non firmato, come prima. Chi clona il repository per leggerlo
+ * o per contribuire non deve procurarsi una chiave per compilare.
+ */
+def proprietaFirma = new Properties()
+def fileFirma = rootProject.file('keystore.properties')
+if (fileFirma.exists()) {
+    fileFirma.withInputStream { proprietaFirma.load(it) }
+}
+def firmaDisponibile = proprietaFirma.containsKey('storeFile') &&
+        file(proprietaFirma['storeFile']).exists()
+
 android {
     namespace = "ai.talos"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -50,6 +83,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // ⛔ PRIMA di `buildTypes`: Gradle risolve i nomi nell'ordine in cui
+    // legge il file, e un blocco di firma dichiarato dopo non esiste ancora
+    // quando il tipo di build lo cerca.
+    if (firmaDisponibile) {
+        signingConfigs {
+            rilascio {
+                storeFile file(proprietaFirma['storeFile'])
+                storePassword proprietaFirma['storePassword']
+                keyAlias proprietaFirma['keyAlias']
+                keyPassword proprietaFirma['keyPassword']
+                // Entrambi gli schemi: v2 e' il minimo per Android 7+, v3
+                // permette la sostituzione della chiave se un giorno servisse.
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
     buildTypes {
         debug {
             // Copia affiancata. Il computer nuovo ha una chiave di debug diversa
@@ -68,6 +118,9 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (firmaDisponibile) {
+                signingConfig signingConfigs.rilascio
+            }
         }
     }
     externalNativeBuild {
