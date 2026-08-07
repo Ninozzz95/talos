@@ -1,4 +1,19 @@
 ext {
+    /**
+     * Kotlin, fissato e non "l'ultimo".
+     *
+     * Fase 9 D5: il codice nuovo nasce in Kotlin, i plugin Java esistenti non si
+     * toccano. Questa e' la riga C0 del ledger: prima si fa compilare un file
+     * VUOTO, poi ci si scrive dentro. Se la catena si rompe, si rompe qui e non
+     * a meta' del policy engine.
+     *
+     * 2.3.21 e non 2.4: la tabella ufficiale di Android colloca Kotlin 2.3
+     * nell'intervallo AGP 8.2.2-8.13, e il nostro AGP e' 8.13.0 — cioe' l'ultimo
+     * punto dichiarato compatibile. Kotlin 2.4 vuole R8 9.1.29, che AGP 8.13 non
+     * porta. Verificato su developer.android.com/build/kotlin-support il
+     * 2026-08-07.
+     */
+    kotlinVersion = '2.3.21'
     minSdkVersion = 26
     compileSdkVersion = 36
     targetSdkVersion = 36
