@@ -9,6 +9,7 @@ export type TalosMobileSettingsTabId =
     | 'appearance'
     | 'language'
     | 'privacy'
+    | 'backup'
     | 'account'
     | 'agent_tools'
     | 'system'
@@ -43,6 +44,7 @@ export const TALOS_MOBILE_SETTINGS_TABS: readonly TalosMobileSettingsTab[] = Obj
     { id: 'appearance', label: 'Appearance', description: '', availability: 'available' },
     { id: 'language', label: 'Language', description: 'The language used by TALOS menus, settings and controls.', availability: 'available' },
     { id: 'privacy', label: 'Privacy and permissions', description: 'What TALOS can ask the device for, and what leaves it.', availability: 'available' },
+    { id: 'backup', label: 'Backup and restore', description: 'Take everything with you, and bring it back.', availability: 'available' },
     { id: 'account', label: 'Account', description: 'Local workspace identity, app lock and introduction replay.', availability: 'available' },
     { id: 'agent_tools', label: 'Agent Tools', description: 'Choose which capabilities the chat agent may use.', availability: 'available', group: 'Admin' },
     // The gate reason used to say "Doctor and backup services are not
@@ -86,6 +88,6 @@ export const TALOS_MOBILE_SETTINGS_GROUPS: readonly TalosMobileSettingsGroup[] =
     { label: 'Interface', tabIds: ['appearance', 'language'] },
     // Its own group: a privacy claim is TALOS's central promise, and burying it
     // under Interface would say the opposite.
-    { label: 'Privacy', tabIds: ['privacy'] },
+    { label: 'Privacy', tabIds: ['privacy', 'backup'] },
     { label: 'Unavailable', tabIds: ['integrations', 'email', 'reminders', 'system'] },
 ])

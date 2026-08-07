@@ -33,13 +33,25 @@ describe('TALOS mobile settings registry', () => {
         const desktopIds = TALOS_MOBILE_SETTINGS_TABS
             .map((tab) => tab.id)
             .filter((id) => !(id in MOBILE_ONLY))
-        expect(desktopIds).toHaveLength(11)
+        expect(desktopIds).toHaveLength(12)
         for (const id of Object.keys(MOBILE_ONLY)) {
             expect(TALOS_MOBILE_SETTINGS_TABS.some((tab) => tab.id === id)).toBe(true)
         }
     })
 
-    it('exposes the exact eleven desktop settings categories in order (F4-#25: no Shortcuts on a phone)', () => {
+    /**
+     * ⛔ `backup` e' entrato qui, e NON in MOBILE_ONLY, di proposito.
+     *
+     * MOBILE_ONLY e' per le categorie che il desktop **non puo' avere** — i
+     * permessi runtime di Android, la lingua per-app. Il backup il desktop lo
+     * puo' avere eccome, e lo deve avere: e' la parita' che D21 impone («mobile
+     * prima, e a ogni fase chiusa un ticket formale per il desktop»).
+     *
+     * Metterlo fra i mobile-only avrebbe nascosto un debito dentro l'elenco che
+     * esiste per far emergere i debiti. Sta qui, e finche' il desktop non ce
+     * l'ha questa riga E' il ticket.
+     */
+    it('exposes the exact twelve desktop settings categories in order (F4-#25: no Shortcuts on a phone)', () => {
         expect(TALOS_MOBILE_SETTINGS_TABS
             .map((tab) => tab.id)
             .filter((id) => !(id in MOBILE_ONLY))).toEqual([
@@ -51,6 +63,7 @@ describe('TALOS mobile settings registry', () => {
             'email',
             'reminders',
             'appearance',
+            'backup',
             'account',
             'agent_tools',
             'system',
@@ -66,6 +79,7 @@ describe('TALOS mobile settings registry', () => {
             'Email',
             'Reminders',
             'Appearance',
+            'Backup and restore',
             'Account',
             'Agent Tools',
             'System',
@@ -81,6 +95,11 @@ describe('TALOS mobile settings registry', () => {
         // gated on a worker it never needed, while the source picker and its
         // key sat under AI Defaults doing the job.
         expect(available.map((tab) => tab.id))
-            .toEqual(['models', 'ai_defaults', 'search', 'browser', 'appearance', 'language', 'privacy', 'account', 'agent_tools'])
+            // 2026-08-07: Backup joined them. It is a real local panel — it reads
+            // the durable repository and writes through the system file picker —
+            // and it exists because the APK signing key was lost: reinstalling
+            // means uninstalling, and uninstalling without an export means
+            // losing the chats, the Library, the memories and the keys.
+            .toEqual(['models', 'ai_defaults', 'search', 'browser', 'appearance', 'language', 'privacy', 'backup', 'account', 'agent_tools'])
     })
 })
