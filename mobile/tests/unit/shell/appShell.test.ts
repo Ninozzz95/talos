@@ -88,6 +88,12 @@ function makeController() {
         pendingToolAuthorizations: ref([]),
         toolAuthorizationRecoveries: ref([]),
         toolAuthorizationPromptVisible: ref(false),
+        // B2 — il piano: assente vuol dire «nessun piano in attesa», ed è lo
+        // stato normale. La scheda ha la precedenza su quella del singolo
+        // tool, quindi senza questa riga la finta si comporta come se ce ne
+        // fosse sempre uno.
+        planRequest: ref(null),
+        answerPlan: vi.fn(),
         decideToolAuthorization: vi.fn().mockResolvedValue(true),
         dismissToolAuthorization: vi.fn(),
         showToolAuthorization: vi.fn(),
