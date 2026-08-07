@@ -805,6 +805,8 @@ export const TALOS_IT_MESSAGES = {
         checkProviderHealth: 'Controlla lo stato del provider e riprova a inviare il messaggio.',
         checkModelConnection: 'Controlla il modello selezionato e la connessione, poi riprova.',
         resendAfterAuthorizationLapsed: 'Il permesso dato agli strumenti valeva per l’invio precedente. Rimanda il messaggio: te lo richiederà una volta sola.',
+        storageHiccup: 'C’è stato un intoppo salvando questa risposta sul dispositivo.',
+        storageHiccupNext: 'Quello che TALOS ha fatto è al suo posto — controlla la Libreria. Se il messaggio è incompleto, rimandalo.',
         authorizationLapsed: 'Il permesso che avevi dato valeva per l’invio di prima.',
         authorizationTooBig: 'Questa conversazione è diventata troppo grande per portarsi dietro il permesso.',
         startFreshAfterTooBig: 'Apri una chat nuova, oppure chiedi la stessa cosa in un messaggio più corto. Quello che hai già non si perde.',

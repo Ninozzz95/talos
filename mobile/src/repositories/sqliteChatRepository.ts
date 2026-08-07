@@ -632,7 +632,28 @@ export function createSqliteChatRepository(
                 )
                 for (const binding of bindings) {
                     await database.run(
-                        `INSERT INTO talos_chat_attachments
+                        /*
+                         * ⛔ `OR IGNORE`: legare due volte lo stesso allegato
+                         * non e' un errore, e' la stessa cosa detta due volte.
+                         *
+                         * MISURATO sul Pad il 2026-08-07, generando un'immagine
+                         * con il consenso da dare: il turno si interrompe per
+                         * chiedere, riprende dal checkpoint, e la stessa
+                         * associazione viene scritta di nuovo. Fino a qui
+                         * SQLite rispondeva `UNIQUE constraint failed:
+                         * talos_chat_attachments.id (code 1555)` — un errore
+                         * del database mostrato dentro un riquadro rosso a chi
+                         * aveva chiesto un gatto.
+                         *
+                         * L'id di un'associazione LA identifica: se e' lo
+                         * stesso, e' la stessa. Rifiutare la seconda scrittura
+                         * non protegge niente e rompe un turno riuscito.
+                         *
+                         * E' la stessa idempotenza che la ricerca di stamattina
+                         * chiedeva per i tool: un'operazione ripetuta con la
+                         * stessa identita' deve essere innocua.
+                         */
+                        `INSERT OR IGNORE INTO talos_chat_attachments
                             (id, session_id, message_id, vault_file_id, grant_id,
                              display_name, media_type, size_bytes, created_at)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,

@@ -104,6 +104,27 @@ export interface TalosAgentLoopDeps {
      * rifiuta, ed è il modo peggiore di perdere un turno.
      */
     rehydrateImage?(attachmentId: string): Promise<{ base64: string, mediaType: string } | null>
+    /**
+     * ⛔ Il modello che risponde può GUARDARE un'immagine?
+     *
+     * MISURATO sul Pad il 2026-08-07, con `deepseek-v4-flash`: si chiede
+     * «disegna un gatto», il tool disegna e salva, e poi il giro passa
+     * l'immagine al modello «da guardare». Il modello non ha la vista, e il
+     * turno moriva con un riquadro rosso — dopo aver fatto tutto il lavoro e
+     * dopo che l'utente aveva dato il consenso.
+     *
+     * Il guardiano che rifiutava è **giusto** per un'immagine allegata da una
+     * persona: hai appena allegato qualcosa che questo modello non può vedere,
+     * ed è meglio dirtelo che farti pagare una risposta sul nulla. Ma qui non
+     * ha allegato niente nessuno: l'ha prodotta il tool.
+     *
+     * Quindi non gliela si passa. L'immagine esiste lo stesso, è salvata in
+     * Libreria e l'utente la vede; il modello riceve il testo del risultato e
+     * risponde. Meglio un modello che non guarda che un turno che muore.
+     *
+     * Assente = si passa, come sempre: nessun chiamante regredisce.
+     */
+    modelSeesImages?(): boolean
     /** Fired when a round of calls starts, so the UI can show what is running. */
     onToolRound?(calls: TalosToolCall[]): void
     /**
@@ -531,7 +552,7 @@ async function continueTalosAgentLoop(
              * Anything a tool handed back to LOOK at, on a user turn. Results
              * come first and an empty visual turn is never emitted.
              */
-            ...(seen.length
+            ...(seen.length && (deps.modelSeesImages?.() ?? true)
                 ? [{
                     role: 'user' as const,
                     content: 'The images the tools returned, for you to look at.',

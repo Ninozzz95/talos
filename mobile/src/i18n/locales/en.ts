@@ -797,6 +797,8 @@ export const TALOS_EN_MESSAGES = {
         updateProviderCredential: 'Update the provider credential in Settings, then retry.',
         checkProviderHealth: 'Check provider health and retry the message.',
         checkModelConnection: 'Check the selected model and connection, then retry.',
+        storageHiccup: 'Something went wrong while saving this reply on the device.',
+        storageHiccupNext: 'What TALOS did is in place — check the Library. If the message looks incomplete, send it again.',
         authorizationLapsed: 'The permission you gave was for the previous send.',
         authorizationTooBig: 'This conversation has grown too large to carry the permission across.',
         startFreshAfterTooBig: 'Start a new chat, or ask the same thing in a shorter message. Nothing you already have is lost.',

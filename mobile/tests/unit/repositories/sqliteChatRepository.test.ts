@@ -384,7 +384,11 @@ describe('createSqliteChatRepository', () => {
         const writes = vi.mocked(connection.run).mock.calls
         expect(writes.map(([sql]) => sql)).toEqual([
             expect.stringContaining('INSERT INTO talos_chat_messages'),
-            expect.stringContaining('INSERT INTO talos_chat_attachments'),
+            // `OR IGNORE` dal 2026-08-07: legare due volte lo stesso
+            // allegato non e' un errore, e' la stessa cosa detta due volte.
+            // Sul Pad l'utente vedeva `UNIQUE constraint failed` dopo che
+            // l'immagine era stata generata e salvata benissimo.
+            expect.stringContaining('INSERT OR IGNORE INTO talos_chat_attachments'),
             expect.stringContaining('UPDATE talos_chat_sessions'),
         ])
         expect(writes[1]?.[1]).toEqual([

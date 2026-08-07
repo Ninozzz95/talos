@@ -457,6 +457,19 @@ function providerFault(
      * l'abbiamo insegnato a dirlo.
      */
     const messaggioGrezzo = error instanceof Error ? error.message : String(error)
+    /*
+     * ⛔ Un errore del DATABASE non e' una frase per una persona.
+     *
+     * MISURATO sul Pad il 2026-08-07: `Run: UNIQUE constraint failed:
+     * talos_chat_attachments.id (code 1555)` dentro un riquadro rosso, in una
+     * chat in cui l'immagine era stata generata e salvata benissimo.
+     *
+     * Chi legge non ha modo di farci niente, e nemmeno di capire che il lavoro
+     * era riuscito. Il codice resta nella traccia diagnostica, dove serve; qui
+     * si dice cosa e' successo in una lingua umana.
+     */
+    const guastoDelDeposito = /SQLITE|constraint failed|\(code \d+\)|database is locked/i
+        .test(messaggioGrezzo)
     const checkpointRotto = messaggioGrezzo.includes('TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID')
     const troppoGrande = checkpointRotto && /too_large/.test(messaggioGrezzo)
     return {
@@ -466,13 +479,17 @@ function providerFault(
             ? translate(troppoGrande
                 ? 'chat.authorizationTooBig'
                 : 'chat.authorizationLapsed')
-            : talosTranslatableErrorMessage(error, translate)
-                ?? errorMessage(error, translate),
+            : guastoDelDeposito
+                ? translate('chat.storageHiccup')
+                : talosTranslatableErrorMessage(error, translate)
+                    ?? errorMessage(error, translate),
         next_action: translate(troppoGrande
             ? 'chat.startFreshAfterTooBig'
             : checkpointRotto
                 ? 'chat.resendAfterAuthorizationLapsed'
-                : 'chat.checkModelConnection'),
+                : guastoDelDeposito
+                    ? 'chat.storageHiccupNext'
+                    : 'chat.checkModelConnection'),
         retryable: null,
         status: null,
         provider: identity.provider,
