@@ -3,7 +3,7 @@ import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
 import { rankLibraryDocs, type LibraryDoc } from '@/lib/chat/libraryContext'
 import { newTalosMobileId } from '@/lib/mobileIds'
 import type { TalosLibraryFileType, TalosVaultOrigin } from '@/lib/vaultLibrary'
-import type { TalosContentOrigin } from '@/lib/tools/security'
+import { TALOS_CONTENT_ORIGIN_FALLBACK, type TalosContentOrigin } from '@/lib/tools/security'
 import type { TalosFileOrigin } from '@/lib/files/provenance'
 export type { TalosLibraryFileType } from '@/lib/vaultLibrary'
 
@@ -130,15 +130,34 @@ export interface TalosToolSources {
      * mano — è il punto cieco tipico del provare i pezzi senza provare la
      * catena.
      */
-    listNotes(): Promise<Array<{ id: string; title: string; content: string; updated_at: string }>>
+    /**
+     * A8 — ogni riga porta la propria provenienza.
+     *
+     * Prima queste tre superfici tingevano la conversazione **sempre**, per
+     * bandiera statica del tool. Con la provenienza per riga, un elenco di note
+     * scritte dall'utente smette di contaminare — e la trifecta smette di
+     * chiudersi su ogni «elenca le mie note».
+     */
+    listNotes(): Promise<Array<{
+        id: string
+        title: string
+        content: string
+        updated_at: string
+        contentOrigin?: TalosContentOrigin
+    }>>
     listTasks(): Promise<Array<{
         id: string
         title: string
         status: string
         priority: string
         description: string | null
+        contentOrigin?: TalosContentOrigin
     }>>
-    searchMemories(query: string): Promise<Array<{ title: string; content: string }>>
+    searchMemories(query: string): Promise<Array<{
+        title: string
+        content: string
+        contentOrigin?: TalosContentOrigin
+    }>>
     now(): string
 }
 
@@ -605,12 +624,18 @@ ${doc.text}`),
         input: z.object({ limit: z.number().int().min(1).max(50).default(20) }),
         async run(input) {
             const notes = (await sources.listNotes()).slice(0, input.limit)
-            if (notes.length === 0) return { ok: true, content: 'There are no notes.' }
+            if (notes.length === 0) {
+                return { ok: true, content: 'There are no notes.', contentOrigin: 'user-direct' }
+            }
             return {
                 ok: true,
                 content: clip(notes
                     .map((note) => `- ${note.title}: ${note.content.slice(0, 200)} — id ${note.id}`)
                     .join('\n')),
+                // A8 — vale quanto la nota peggiore fra quelle elencate.
+                contentOrigin: talosWorstOrigin(
+                    notes.map((riga) => riga.contentOrigin ?? TALOS_CONTENT_ORIGIN_FALLBACK),
+                ),
                 evidence: { listed: notes.map((note) => note.id), returned: notes.length },
             }
         },
@@ -631,7 +656,9 @@ ${doc.text}`),
                 ? all
                 : all.filter((task) => (input.status === 'done' ? task.status === 'done' : task.status !== 'done'))
             const tasks = filtered.slice(0, input.limit)
-            if (tasks.length === 0) return { ok: true, content: 'There are no matching tasks.' }
+            if (tasks.length === 0) {
+                return { ok: true, content: 'There are no matching tasks.', contentOrigin: 'user-direct' }
+            }
             return {
                 ok: true,
                 /*
@@ -645,6 +672,10 @@ ${doc.text}`),
                         + (task.description ? ` — ${task.description.slice(0, 160)}` : '')
                         + ` — id ${task.id}`)
                     .join('\n')),
+                // A8 — vale quanto la riga peggiore fra quelle elencate.
+                contentOrigin: talosWorstOrigin(
+                    tasks.map((riga) => riga.contentOrigin ?? TALOS_CONTENT_ORIGIN_FALLBACK),
+                ),
                 evidence: { listed: tasks.map((task) => task.id), returned: tasks.length },
             }
         },
@@ -658,10 +689,24 @@ ${doc.text}`),
         input: z.object({ query: z.string().min(1), limit: z.number().int().min(1).max(20).default(5) }),
         async run(input) {
             const found = (await sources.searchMemories(input.query)).slice(0, input.limit)
-            if (found.length === 0) return { ok: true, content: 'Nothing remembered matches that.' }
+            if (found.length === 0) {
+                return { ok: true, content: 'Nothing remembered matches that.', contentOrigin: 'user-direct' }
+            }
             return {
                 ok: true,
                 content: clip(found.map((entry) => `- ${entry.title}: ${entry.content.slice(0, 300)}`).join('\n')),
+                /*
+                 * A8, e qui pesa piu' che altrove.
+                 *
+                 * Quello che sta in memoria il modello lo rilegge **da solo** in
+                 * ogni conversazione futura: una memoria annotata mentre la
+                 * catena era contaminata e' un'istruzione altrui che torna ogni
+                 * volta. Dichiararne la provenienza e' l'unico modo di non
+                 * fidarsene per sempre.
+                 */
+                contentOrigin: talosWorstOrigin(
+                    found.map((riga) => riga.contentOrigin ?? TALOS_CONTENT_ORIGIN_FALLBACK),
+                ),
             }
         },
     })

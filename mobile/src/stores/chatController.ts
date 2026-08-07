@@ -312,6 +312,8 @@ const unavailableFilePicker: TalosNativeFilePicker = {
     pickFiles: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
 }
 
+import { talosChainFor } from '@/lib/tools/chainStore'
+import { talosOriginForWrite } from '@/lib/tools/security'
 import { talosOnLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
 import { chooseTalosImageProvider } from '@/lib/images/imageProviderSelection'
 import type { TalosImageModelCandidate, TalosImageProvider } from '@/lib/images/imageGateway'
@@ -2572,6 +2574,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                 kind: input.kind,
                                 scope_type: 'global',
                                 scope_id: null,
+                                /*
+                                 * ⛔ A8 — la provenienza si EREDITA, non si chiede.
+                                 *
+                                 * Se il modello ha letto una pagina web prima di
+                                 * annotare questa memoria, la memoria viene da
+                                 * quella pagina — e verrà riletta in ogni
+                                 * conversazione futura come se l'avesse detta
+                                 * l'utente. È il posto in cui un'iniezione
+                                 * diventa permanente, quindi è il posto in cui
+                                 * l'etichetta conta di più.
+                                 */
+                                content_origin: talosOriginForWrite(
+                                    talosChainFor(sendIdentity.sessionId),
+                                ),
                             })
                             return { title: saved.title }
                         },
@@ -2652,7 +2668,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      */
                     notesWrite: () => ({
                         create: async (input) => {
-                            const saved = await notes.create(input)
+                            const saved = await notes.create({
+                                ...input,
+                                // A8 — eredita: una nota riassunta dal web viene dal web.
+                                content_origin: talosOriginForWrite(
+                                    talosChainFor(sendIdentity.sessionId),
+                                ),
+                            })
                             return { id: saved.id, title: saved.title }
                         },
                         update: async (input) => {

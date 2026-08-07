@@ -1,3 +1,4 @@
+import { TALOS_CONTENT_ORIGIN_FALLBACK, talosContentOrigin } from '@/lib/tools/security'
 import type {
     TalosSqlConnection,
     TalosSqlRow,
@@ -128,6 +129,7 @@ function parseTask(row: TalosSqlRow): TalosLocalTask {
         run_id: nullableString(row, 'run_id'),
         priority: oneOf(requiredString(row, 'priority'), ['low', 'normal', 'high'] as const) as TalosTaskPriority,
         status: oneOf(requiredString(row, 'status'), ['todo', 'doing', 'done'] as const) as TalosTaskStatus,
+        content_origin: talosContentOrigin(row.content_origin),
         schedule_json: nullableString(row, 'schedule_json'),
         instruction: nullableString(row, 'instruction'),
         last_run_at: nullableString(row, 'last_run_at'),
@@ -142,6 +144,9 @@ function parseNote(row: TalosSqlRow): TalosLocalNote {
         title: requiredString(row, 'title'),
         content: requiredString(row, 'content'),
         trust_level: 'untrusted',
+        // A8 — `NULL` (riga nata prima della colonna) cade su `external`:
+        // il predefinito prudente non regala fiducia.
+        content_origin: talosContentOrigin(row.content_origin),
         created_at: requiredString(row, 'created_at'),
         updated_at: requiredString(row, 'updated_at'),
     }
@@ -159,6 +164,7 @@ function parseMemory(row: TalosSqlRow): TalosLocalMemory {
         source: nullableString(row, 'source'),
         metadata: jsonObject(row.metadata_json),
         trust_level: 'untrusted',
+        content_origin: talosContentOrigin(row.content_origin),
         last_used_at: nullableString(row, 'last_used_at'),
         created_at: requiredString(row, 'created_at'),
         updated_at: requiredString(row, 'updated_at'),
@@ -1012,6 +1018,7 @@ export function createSqliteChatRepository(
                 run_id: input.run_id,
                 priority: input.priority,
                 status: 'todo',
+                content_origin: input.content_origin ?? TALOS_CONTENT_ORIGIN_FALLBACK,
                 schedule_json: input.schedule_json ?? null,
                 instruction: input.instruction ?? null,
                 // Mai eseguita, ed è diverso da «eseguita e senza esito»: una
@@ -1024,10 +1031,11 @@ export function createSqliteChatRepository(
             await transaction(async (database) => {
                 await database.run(
                     `INSERT INTO talos_tasks
-                        (id, title, description, run_id, priority, status,
+                        (id, title, description, run_id, priority, status, content_origin,
                          schedule_json, instruction, last_run_at, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [task.id, task.title, task.description, task.run_id, task.priority, task.status,
+                        task.content_origin,
                      task.schedule_json, task.instruction, task.last_run_at, task.created_at, task.updated_at],
                 )
             })
@@ -1035,7 +1043,7 @@ export function createSqliteChatRepository(
         },
         async listTasks() {
             const rows = await (await db()).query(
-                `SELECT id, title, description, run_id, priority, status, schedule_json, instruction, last_run_at, created_at, updated_at
+                `SELECT id, title, description, run_id, priority, status, content_origin, schedule_json, instruction, last_run_at, created_at, updated_at
                  FROM talos_tasks ORDER BY updated_at DESC, id DESC`,
             )
             return rows.map((row) => parseTask(row as TalosSqlRow))
@@ -1050,7 +1058,7 @@ export function createSqliteChatRepository(
                 )
             })
             const rows = await (await db()).query(
-                `SELECT id, title, description, run_id, priority, status, schedule_json, instruction, last_run_at, created_at, updated_at
+                `SELECT id, title, description, run_id, priority, status, content_origin, schedule_json, instruction, last_run_at, created_at, updated_at
                  FROM talos_tasks WHERE id = ? LIMIT 1`,
                 [taskId],
             )
@@ -1099,7 +1107,7 @@ export function createSqliteChatRepository(
                 )
             })
             const rows = await (await db()).query(
-                `SELECT id, title, description, run_id, priority, status, schedule_json, instruction, last_run_at, created_at, updated_at
+                `SELECT id, title, description, run_id, priority, status, content_origin, schedule_json, instruction, last_run_at, created_at, updated_at
                  FROM talos_tasks WHERE id = ? LIMIT 1`,
                 [taskId],
             )
@@ -1119,14 +1127,17 @@ export function createSqliteChatRepository(
                 title: normalizeStationTitle(input.title),
                 content: input.content,
                 trust_level: 'untrusted',
+                content_origin: input.content_origin ?? TALOS_CONTENT_ORIGIN_FALLBACK,
                 created_at: input.created_at,
                 updated_at: input.created_at,
             }
             await transaction(async (database) => {
                 await database.run(
-                    `INSERT INTO talos_notes (id, title, content, trust_level, created_at, updated_at)
-                     VALUES (?, ?, ?, 'untrusted', ?, ?)`,
-                    [note.id, note.title, note.content, note.created_at, note.updated_at],
+                    `INSERT INTO talos_notes
+                        (id, title, content, trust_level, content_origin, created_at, updated_at)
+                     VALUES (?, ?, ?, 'untrusted', ?, ?, ?)`,
+                    [note.id, note.title, note.content, note.content_origin,
+                        note.created_at, note.updated_at],
                 )
             })
             return note
@@ -1257,7 +1268,7 @@ export function createSqliteChatRepository(
         },
         async listNotes() {
             const rows = await (await db()).query(
-                `SELECT id, title, content, trust_level, created_at, updated_at
+                `SELECT id, title, content, trust_level, content_origin, created_at, updated_at
                  FROM talos_notes ORDER BY updated_at DESC, id DESC`,
             )
             return rows.map((row) => parseNote(row as TalosSqlRow))
@@ -1265,7 +1276,7 @@ export function createSqliteChatRepository(
         async updateNote(input: UpdateNoteInput) {
             return transaction(async (database) => {
                 const rows = await database.query(
-                    `SELECT id, title, content, trust_level, created_at, updated_at
+                    `SELECT id, title, content, trust_level, content_origin, created_at, updated_at
                      FROM talos_notes WHERE id = ? LIMIT 1`,
                     [input.id],
                 )
@@ -1312,6 +1323,7 @@ export function createSqliteChatRepository(
                 source: input.source,
                 metadata: cloneJsonObject(input.metadata),
                 trust_level: 'untrusted',
+                content_origin: input.content_origin ?? TALOS_CONTENT_ORIGIN_FALLBACK,
                 last_used_at: null,
                 created_at: input.created_at,
                 updated_at: input.created_at,
@@ -1320,12 +1332,12 @@ export function createSqliteChatRepository(
                 await database.run(
                     `INSERT INTO talos_memories
                         (id, scope_type, scope_id, kind, status, title, content, source,
-                         metadata_json, trust_level, last_used_at, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'untrusted', NULL, ?, ?)`,
+                         metadata_json, trust_level, content_origin, last_used_at, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'untrusted', ?, NULL, ?, ?)`,
                     [
                         memory.id, memory.scope_type, memory.scope_id, memory.kind, memory.status,
                         memory.title, memory.content, memory.source, JSON.stringify(memory.metadata),
-                        memory.created_at, memory.updated_at,
+                        memory.content_origin, memory.created_at, memory.updated_at,
                     ],
                 )
             })
@@ -1343,6 +1355,7 @@ export function createSqliteChatRepository(
                 source: input.source,
                 metadata: cloneJsonObject(input.metadata),
                 trust_level: 'untrusted',
+                content_origin: input.content_origin ?? TALOS_CONTENT_ORIGIN_FALLBACK,
                 last_used_at: null,
                 created_at: input.created_at,
                 updated_at: input.created_at,
@@ -1351,8 +1364,8 @@ export function createSqliteChatRepository(
                 await database.run(
                     `INSERT INTO talos_memories
                         (id, scope_type, scope_id, kind, status, title, content, source,
-                         metadata_json, trust_level, last_used_at, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, 'untrusted', NULL, ?, ?)
+                         metadata_json, trust_level, content_origin, last_used_at, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, 'untrusted', ?, NULL, ?, ?)
                      ON CONFLICT(id) DO UPDATE SET
                          scope_type = excluded.scope_type,
                          scope_id = excluded.scope_id,
@@ -1367,12 +1380,12 @@ export function createSqliteChatRepository(
                     [
                         memory.id, memory.scope_type, memory.scope_id, memory.kind,
                         memory.title, memory.content, memory.source, JSON.stringify(memory.metadata),
-                        memory.created_at, memory.updated_at,
+                        memory.content_origin, memory.created_at, memory.updated_at,
                     ],
                 )
             })
             const rows = await (await db()).query(
-                `SELECT id, scope_type, scope_id, kind, status, title, content, source, metadata_json, last_used_at, created_at, updated_at
+                `SELECT id, scope_type, scope_id, kind, status, title, content, source, metadata_json, content_origin, last_used_at, created_at, updated_at
                  FROM talos_memories WHERE id = ? LIMIT 1`,
                 [memory.id],
             )
@@ -1381,7 +1394,7 @@ export function createSqliteChatRepository(
         },
         async listMemories() {
             const rows = await (await db()).query(
-                `SELECT id, scope_type, scope_id, kind, status, title, content, source, metadata_json, last_used_at, created_at, updated_at
+                `SELECT id, scope_type, scope_id, kind, status, title, content, source, metadata_json, content_origin, last_used_at, created_at, updated_at
                  FROM talos_memories
                  ORDER BY updated_at DESC, id DESC`,
             )
@@ -1409,7 +1422,7 @@ export function createSqliteChatRepository(
                 )
             })
             const rows = await (await db()).query(
-                `SELECT id, scope_type, scope_id, kind, status, title, content, source, metadata_json, last_used_at, created_at, updated_at
+                `SELECT id, scope_type, scope_id, kind, status, title, content, source, metadata_json, content_origin, last_used_at, created_at, updated_at
                  FROM talos_memories WHERE id = ? LIMIT 1`,
                 [memoryId],
             )
@@ -1431,7 +1444,7 @@ export function createSqliteChatRepository(
                 )
             })
             const rows = await (await db()).query(
-                `SELECT id, scope_type, scope_id, kind, status, title, content, source, metadata_json, last_used_at, created_at, updated_at
+                `SELECT id, scope_type, scope_id, kind, status, title, content, source, metadata_json, content_origin, last_used_at, created_at, updated_at
                  FROM talos_memories WHERE id = ? LIMIT 1`,
                 [memoryId],
             )
