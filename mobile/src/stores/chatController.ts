@@ -2575,6 +2575,67 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             })
                             return { title: saved.title }
                         },
+                        /*
+                         * Correggere e dimenticare, dalla stessa porta.
+                         *
+                         * Owner 2026-08-07: la chat sapeva solo INSERIRE e
+                         * leggere, quindi «no, ricordati invece che...»
+                         * produceva una seconda memoria accanto alla prima e da
+                         * li' in avanti il modello ne rileggeva due che si
+                         * contraddicevano.
+                         */
+                        update: async (input) => {
+                            const saved = await memories.update(input)
+                            return { id: saved.id, title: saved.title }
+                        },
+                        remove: async (memoryId) => {
+                            await memories.remove(memoryId)
+                        },
+                        /*
+                         * Le due letture che servono a VERIFICARE, non a
+                         * leggere per il modello: passano dall'elenco della
+                         * stazione, che e' gia' l'unica fonte.
+                         */
+                        find: async (memoryId) => {
+                            const righe = await memories.list()
+                            const riga = righe.find((row) => row.id === memoryId)
+                            return riga
+                                ? { id: riga.id, title: riga.title, content: riga.content }
+                                : null
+                        },
+                        findByTitle: async (title) => {
+                            const cercato = title.trim().toLowerCase()
+                            const righe = await memories.list()
+                            const riga = righe.find((row) => row.status === 'active'
+                                && row.title.trim().toLowerCase() === cercato)
+                            return riga ? { id: riga.id, title: riga.title } : null
+                        },
+                    }),
+                    /*
+                     * La Libreria, in scrittura.
+                     *
+                     * Passa dal servizio del vault e non dal deposito: un file
+                     * tolto dalla chat deve sparire esattamente come uno tolto
+                     * dalla stazione, incluse le concessioni che lo legavano ai
+                     * messaggi. Due strade verso la stessa cancellazione sono
+                     * due cancellazioni diverse.
+                     */
+                    libraryWrite: () => ({
+                        describe: async (fileId) => {
+                            const files = await deps.chatRepository.listVaultFileSummaries()
+                            const file = files.find((row) => row.id === fileId
+                                && row.status !== 'revoked')
+                            return file ? { id: file.id, name: file.display_name } : null
+                        },
+                        rename: async (fileId, displayName) => {
+                            const saved = await deps.chatRepository.updateVaultFile(fileId, {
+                                display_name: displayName,
+                            })
+                            return { id: saved.id, name: saved.display_name }
+                        },
+                        remove: async (fileId) => {
+                            await vaultService.deleteFile(fileId)
+                        },
                     }),
                     /**
                      * Le note, con le DUE porte.

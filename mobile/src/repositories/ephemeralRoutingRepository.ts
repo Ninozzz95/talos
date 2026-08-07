@@ -130,6 +130,9 @@ const ROUTES: Readonly<Record<keyof TalosChatRepository, Rule>> = {
     createMemory: 'durable',
     upsertMemory: 'durable',
     listMemories: 'durable',
+    // Durevole come tutta la memoria: una memoria vive fuori dalla chat che
+    // l'ha scritta, quindi anche la sua correzione.
+    updateMemory: 'durable',
     updateMemoryStatus: 'durable',
     touchMemories: 'durable',
     deleteMemory: 'durable',

@@ -38,6 +38,10 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     // nell'elenco «Riguarda:» della pagina dei permessi. Un tool invisibile ai
     // permessi è un tool che nessuno ha autorizzato consapevolmente.
     { id: 'memory_write', group: 'personal', actions: ['write'] },
+    // Correggere una memoria e' una scrittura come un'altra; toglierla no —
+    // sta nello stesso gruppo ma la sua scheda di consenso lo dice.
+    { id: 'memory_update', group: 'personal', actions: ['write'] },
+    { id: 'memory_delete', group: 'personal', actions: ['write'] },
     { id: 'notes_create', group: 'personal', actions: ['write'] },
     { id: 'notes_update', group: 'personal', actions: ['write'] },
     // Cancellare una nota non si annulla: non esiste un cestino.
@@ -54,6 +58,10 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     { id: 'generate_image', group: 'create', actions: ['write','outbound'] },
     // Esce dalla sandbox ma resta sul dispositivo. Canale obliquo noto: un file esportato può finire in una cartella sincronizzata — da rivedere se nasce la sincronizzazione.
     { id: 'library_export', group: 'library', actions: ['write','read'] },
+    // Nel gruppo `library` e non in `personal`: chi toglie l'accesso alla
+    // Libreria toglie ANCHE il permesso di svuotarla, in un colpo solo.
+    { id: 'library_rename', group: 'library', actions: ['write'] },
+    { id: 'library_delete', group: 'library', actions: ['write'] },
     // Cambia CHI può vedere cosa: è una modifica di sicurezza, non di contenuto.
     { id: 'library_context_policy_update', group: 'library', actions: ['write'] },
     // Le schede dei modelli su Hugging Face sono testo scritto da estranei.

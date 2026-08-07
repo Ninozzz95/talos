@@ -10,6 +10,8 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     library_search: true,
     library_read: true,
     library_file_origin: true,
+    library_rename: true,
+    library_delete: true,
     notes_list: true,
     notes_create: true,
     notes_update: true,
@@ -54,6 +56,8 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
      * di serie avrebbe nascosto la funzione a chi non sa di doverla cercare.
      */
     memory_write: true,
+    memory_update: true,
+    memory_delete: true,
 })
 
 export type TalosAgentToolId = keyof typeof TALOS_DEFAULT_AGENT_TOOL_ENABLED

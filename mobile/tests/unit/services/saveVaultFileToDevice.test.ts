@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+    STAGE_CHUNK_BYTES,
     saveTalosVaultFileToDevice,
     talosSafeExportName,
+    talosStageInChunks,
     type TalosDeviceFileSaveRuntime,
 } from '@/services/saveVaultFileToDevice'
 
@@ -164,5 +166,74 @@ describe('saveTalosVaultFileToDevice', () => {
         expect(talosSafeExportName('family-👨‍👩‍👧‍👦.png'))
             .toBe('family-👨‍👩‍👧‍👦.png')
         expect(talosSafeExportName('نامه\u200cها.txt')).toBe('نامه\u200cها.txt')
+    })
+})
+
+describe('talosStageInChunks', () => {
+    function scrittore() {
+        const pezzi: Array<{ modo: 'write' | 'append', data: string }> = []
+        return {
+            pezzi,
+            write: async (data: string) => { pezzi.push({ modo: 'write', data }) },
+            append: async (data: string) => { pezzi.push({ modo: 'append', data }) },
+        }
+    }
+
+    /** Rimette insieme i pezzi come farebbe il disco: decodifica e concatena. */
+    function ricomposto(pezzi: Array<{ data: string }>): Uint8Array {
+        const parti = pezzi.map((pezzo) => {
+            const binario = atob(pezzo.data)
+            return Uint8Array.from(binario, (carattere) => carattere.charCodeAt(0))
+        })
+        const totale = parti.reduce((somma, parte) => somma + parte.byteLength, 0)
+        const fuori = new Uint8Array(totale)
+        let scritto = 0
+        for (const parte of parti) { fuori.set(parte, scritto); scritto += parte.byteLength }
+        return fuori
+    }
+
+    it('il primo pezzo crea il file e i successivi si accodano', async () => {
+        const w = scrittore()
+        await talosStageInChunks(new Uint8Array(25), w, 6)
+
+        expect(w.pezzi.map((pezzo) => pezzo.modo)).toEqual([
+            'write', 'append', 'append', 'append', 'append',
+        ])
+    })
+
+    it('rimesso insieme, il file e byte per byte quello di partenza', async () => {
+        // Lunghezza NON multipla del pezzo: l'ultimo blocco e' quello corto.
+        const originale = new Uint8Array(5_000)
+        for (let indice = 0; indice < originale.length; indice += 1) {
+            originale[indice] = (indice * 7 + 13) % 256
+        }
+
+        const w = scrittore()
+        await talosStageInChunks(originale, w, 300)
+
+        expect(ricomposto(w.pezzi)).toEqual(originale)
+    })
+
+    it('solo l ultimo pezzo puo portare riempimento', async () => {
+        const w = scrittore()
+        // 3.001 byte: i pezzi da 300 sono pieni, l'ultimo e' di 1 byte.
+        await talosStageInChunks(new Uint8Array(3_001), w, 300)
+
+        const conRiempimento = w.pezzi
+            .map((pezzo, indice) => ({ indice, riempito: pezzo.data.includes('=') }))
+            .filter((riga) => riga.riempito)
+            .map((riga) => riga.indice)
+        expect(conRiempimento).toEqual([w.pezzi.length - 1])
+    })
+
+    it('un file vuoto viene comunque creato', async () => {
+        const w = scrittore()
+        await talosStageInChunks(new Uint8Array(0), w, 300)
+
+        expect(w.pezzi).toEqual([{ modo: 'write', data: '' }])
+    })
+
+    it('la misura scelta e un multiplo di 3, o base64 spezzerebbe i byte', () => {
+        expect(STAGE_CHUNK_BYTES % 3).toBe(0)
     })
 })

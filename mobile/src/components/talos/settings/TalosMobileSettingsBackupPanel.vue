@@ -188,7 +188,6 @@ async function confermaRipristino(): Promise<void> {
 
 <template>
     <div class="flex flex-col gap-5 px-1 pb-4" data-testid="talos-settings-backup-panel">
-        <p class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('backup.intro') }}</p>
 
         <!-- ── esportare ─────────────────────────────────────────────────── -->
         <section class="flex flex-col gap-3 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/60 p-4">

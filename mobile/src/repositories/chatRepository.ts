@@ -191,6 +191,14 @@ export interface CreateVaultFileInput {
 }
 
 export interface UpdateVaultFileInput {
+    /**
+     * Il nome che si legge nella Libreria.
+     *
+     * Mancava, e la sua assenza rendeva impossibile rinominare un file: la riga
+     * lo aveva da sempre (`display_name`), ma nessuno poteva cambiarlo. Un file
+     * che nasce «documento (1).pdf» restava «documento (1).pdf» per sempre.
+     */
+    display_name?: string
     status?: TalosVaultFileStatus
     private_uri?: string
     sha256?: string | null
@@ -250,6 +258,13 @@ export interface CreateMemoryInput {
     source: string | null
     metadata: Record<string, unknown>
     created_at: string
+}
+
+/** Solo cio' che l'utente puo' davvero voler correggere. */
+export interface UpdateMemoryPatch {
+    title?: string
+    content?: string
+    kind?: TalosMemoryKind
 }
 
 export type TalosTaskStatus = 'todo' | 'doing' | 'done'
@@ -506,6 +521,22 @@ export interface TalosChatRepository {
     deleteNote(noteId: string): Promise<void>
     createMemory(input: CreateMemoryInput): Promise<TalosLocalMemory>
     upsertMemory(input: CreateMemoryInput): Promise<TalosLocalMemory>
+    /**
+     * Cambia il TESTO di una memoria, lasciando stare tutto il resto.
+     *
+     * ⛔ Non e' `upsertMemory` con meno campi, ed e' il motivo per cui esiste.
+     *
+     * `upsertMemory` rimette `status = 'active'` e `trust_level = 'untrusted'`
+     * a ogni scrittura, perche' nasce per far ENTRARE una riga. Usarlo per una
+     * correzione avrebbe un effetto che nessuno chiede e nessuno vede: una
+     * memoria che l'utente aveva **disattivato** tornerebbe viva perche' il
+     * modello ne ha corretto una virgola. Lo stato di una memoria e' una
+     * decisione dell'utente, e una modifica al testo non la revoca.
+     *
+     * Restituisce la riga aggiornata. Solleva `TALOS_MEMORY_NOT_FOUND` se l'id
+     * non esiste, invece di crearla: chi chiama credeva che ci fosse.
+     */
+    updateMemory(memoryId: string, patch: UpdateMemoryPatch): Promise<TalosLocalMemory>
     listMemories(): Promise<TalosLocalMemory[]>
     updateMemoryStatus(memoryId: string, status: TalosMemoryStatus): Promise<TalosLocalMemory>
     touchMemories(memoryIds: string[], usedAt: string): Promise<void>
