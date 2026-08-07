@@ -1,4 +1,4 @@
-import type { TalosChatRepository } from '@/repositories/chatRepository'
+import type { TalosChatRepository, UpdateTaskPatch } from '@/repositories/chatRepository'
 import { newTalosMobileId } from '@/lib/mobileIds'
 import { upsertTalosDisplayNameMemory } from '@/services/profileMemory'
 
@@ -72,6 +72,16 @@ export function createStationFacades(deps: TalosStationFacadesDeps) {
             }),
         setStatus: (taskId: string, status: 'todo' | 'doing' | 'done') =>
             deps.repository.setTaskStatus(taskId, status),
+        /**
+         * Correggere un'attività, senza cancellarla e rifarla.
+         *
+         * Stessa forma della nota qui sotto, e per la stessa ragione: rifare
+         * un'attività le cambia l'identità, e con l'identità se ne vanno lo
+         * storico, la pianificazione e il legame con l'esecuzione che l'ha
+         * generata. Un refuso nel titolo non deve costare tutto questo.
+         */
+        update: (taskId: string, patch: UpdateTaskPatch) =>
+            deps.repository.updateTask(taskId, patch),
         remove: (taskId: string) => deps.repository.deleteTask(taskId),
     }
 

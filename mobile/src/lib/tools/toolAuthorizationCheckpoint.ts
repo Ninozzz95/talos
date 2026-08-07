@@ -85,18 +85,41 @@ function timestamp(value: unknown): value is string {
         && Number.isFinite(Date.parse(value))
 }
 
+/**
+ * ⭐ PERCHÉ un checkpoint è stato rifiutato — non solo CHE è stato rifiutato.
+ *
+ * ## Il difetto che questo esiste per chiudere
+ *
+ * `TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID` è **una sola stringa per una
+ * quindicina di cause diverse**: un campo mancante, un digest che non torna, un
+ * `call_id` ripetuto, un runtime troppo grande, un loop troppo grande, un tool
+ * che il catalogo non conosce. L'owner l'ha visto due volte in due giorni — la
+ * seconda con GPT-5.6 Luna via OpenRouter, il 2026-08-07 — e da quel codice non
+ * si poteva dire nemmeno da che parte cominciare a guardare.
+ *
+ * Una diagnosi che vale per quindici malattie non è una diagnosi. Il motivo
+ * resta un codice corto e chiuso — finisce nel Doctor e negli appunti di
+ * supporto, quindi non può contenere testo di conversazione.
+ */
+export type TalosCheckpointRejection =
+    | 'not_object' | 'schema_version' | 'id' | 'session_id' | 'timestamps' | 'phase'
+    | 'requests_not_array' | 'identity' | 'runtime_shape' | 'runtime_too_large'
+    | 'loop_shape' | 'loop_too_large' | 'request_invalid' | 'no_requests'
+    | 'duplicate_request_id' | 'duplicate_call_id' | 'request_mismatch'
+    | 'session_mismatch'
+
 function cloneBoundedObject(
     value: unknown,
     maxLength: number,
-): Record<string, unknown> | null {
+): Record<string, unknown> | 'shape' | 'too_large' {
     const record = objectOf(value)
-    if (!record) return null
+    if (!record) return 'shape'
     try {
         const encoded = JSON.stringify(record)
-        if (encoded.length > maxLength) return null
+        if (encoded.length > maxLength) return 'too_large'
         return cloneJsonObject(record)
     } catch {
-        return null
+        return 'shape'
     }
 }
 
@@ -204,48 +227,60 @@ function parseRequest(value: unknown): TalosToolAuthorizationRequestV1 | null {
 
 export function parseTalosToolAuthorizationCheckpoint(
     value: unknown,
+    sink?: { reason: TalosCheckpointRejection | null },
 ): TalosToolAuthorizationCheckpointV1 | null {
+    const rifiuta = (reason: TalosCheckpointRejection): null => {
+        if (sink) sink.reason = reason
+        return null
+    }
     const record = objectOf(value)
-    if (
-        !record
-        || record.schema_version !== 1
-        || !boundedId(record.id)
-        || !boundedId(record.session_id)
-        || !timestamp(record.created_at)
-        || !timestamp(record.updated_at)
-        || !['before_tools', 'running_tools', 'before_model'].includes(
-            typeof record.phase === 'string' ? record.phase : '',
-        )
-        || !Array.isArray(record.requests)
-    ) {
-        return null
-    }
+    if (!record) return rifiuta('not_object')
+    if (record.schema_version !== 1) return rifiuta('schema_version')
+    if (!boundedId(record.id)) return rifiuta('id')
+    if (!boundedId(record.session_id)) return rifiuta('session_id')
+    if (!timestamp(record.created_at) || !timestamp(record.updated_at)) return rifiuta('timestamps')
+    if (!['before_tools', 'running_tools', 'before_model'].includes(
+        typeof record.phase === 'string' ? record.phase : '',
+    )) return rifiuta('phase')
+    if (!Array.isArray(record.requests)) return rifiuta('requests_not_array')
+
     const identity = parseIdentity(record.send_identity)
+    if (!identity) return rifiuta('identity')
     const runtime = cloneBoundedObject(record.runtime, MAX_RUNTIME_JSON)
+    if (runtime === 'shape') return rifiuta('runtime_shape')
+    if (runtime === 'too_large') return rifiuta('runtime_too_large')
     const loop = cloneBoundedObject(record.loop, MAX_LOOP_JSON)
+    if (loop === 'shape') return rifiuta('loop_shape')
+    if (loop === 'too_large') return rifiuta('loop_too_large')
     const requests = record.requests.map(parseRequest)
-    if (!identity || !runtime || !loop || requests.some((request) => request === null)) {
-        return null
-    }
+    if (requests.some((request) => request === null)) return rifiuta('request_invalid')
+
     const parsedRequests = requests as TalosToolAuthorizationRequestV1[]
-    if (record.phase === 'before_tools' && parsedRequests.length === 0) return null
+    if (record.phase === 'before_tools' && parsedRequests.length === 0) return rifiuta('no_requests')
     const requestIds = new Set<string>()
     const callIds = new Set<string>()
     for (const request of parsedRequests) {
+        if (requestIds.has(request.id)) return rifiuta('duplicate_request_id')
+        /*
+         * ⛔ Due chiamate con lo stesso `call_id` nello stesso giro.
+         * Sospettato numero uno quando il modello ne emette diverse insieme e
+         * l'adattatore del provider non le distingue: qui diventa un motivo
+         * leggibile invece di un rifiuto muto.
+         */
+        if (callIds.has(request.call_id)) return rifiuta('duplicate_call_id')
         if (
-            requestIds.has(request.id)
-            || callIds.has(request.call_id)
-            || request.checkpoint_id !== record.id
+            request.checkpoint_id !== record.id
             || request.session_id !== record.session_id
             || request.send_id !== identity.sendId
             || request.model_profile_id !== identity.modelProfileId
         ) {
-            return null
+            return rifiuta('request_mismatch')
         }
         requestIds.add(request.id)
         callIds.add(request.call_id)
     }
-    if (identity.sessionId !== record.session_id) return null
+    if (identity.sessionId !== record.session_id) return rifiuta('session_mismatch')
+    if (sink) sink.reason = null
 
     return Object.freeze({
         schema_version: 1,

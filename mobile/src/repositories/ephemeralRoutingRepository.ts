@@ -101,6 +101,7 @@ const ROUTES: Readonly<Record<keyof TalosChatRepository, Rule>> = {
     createTask: 'durable',
     listTasks: 'durable',
     setTaskStatus: 'durable',
+    updateTask: 'durable',
     deleteTask: 'durable',
     /**
      * The research journal is `durable`, and that is a decision with a cost.

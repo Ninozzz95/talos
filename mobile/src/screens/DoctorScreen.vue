@@ -112,6 +112,77 @@ const buildId = computed(() => rows.value.find((row) => row.id === 'build')?.val
  * and an await can consume it. The native plugin, tried first, has no such
  * dependency.
  */
+/**
+ * ⭐ 8B-2 — il comando che misura i thread e RICORDA la scelta.
+ *
+ * Owner 2026-08-07: «metti il comando che misura 8b-2».
+ *
+ * Sta nel Doctor e non fra le impostazioni perché è una misura, non una
+ * preferenza: produce numeri, e i numeri di questo dispositivo stanno qui.
+ *
+ * ⛔ Ed è un comando, non un avvio automatico: misurare **azzera la
+ * conversazione in memoria** e costa qualche secondo per candidato. Chi lo
+ * tocca sa cosa sta comprando; chi voleva solo scrivere un messaggio non deve
+ * pagarlo a sua insaputa.
+ */
+const tuning = ref<{ running: boolean, summary: string | null, ok: boolean }>({
+    running: false,
+    summary: null,
+    ok: false,
+})
+
+async function measureThreads(): Promise<void> {
+    if (tuning.value.running) return
+    tuning.value = { running: true, summary: null, ok: false }
+    try {
+        const [{ talosRunThreadTuning }, { talosLocalEngineStatus, talosLocalInstalledModels },
+            { talosMeasureDevice }, { TALOS_APP_BUILD }] = await Promise.all([
+            import('@/services/threadTuningRun'),
+            import('@/services/localEngine'),
+            import('@/services/deviceCapacity'),
+            import('@/lib/appBuild'),
+        ])
+        const [stato, device, installati] = await Promise.all([
+            talosLocalEngineStatus(),
+            talosMeasureDevice(),
+            talosLocalInstalledModels().catch(() => ({ models: [] })),
+        ])
+        /*
+         * Serve un modello APERTO: la sonda misura questo modello su questo
+         * dispositivo, e senza non c'è niente da misurare. Dirlo è meglio che
+         * aprirne uno d'ufficio — sarebbero gigabyte caricati da un pulsante
+         * che prometteva una misura.
+         */
+        const file = installati.models.find((candidate) => candidate.path === stato.loadedPath)
+        if (!stato.loadedPath || !device?.cpuCores || !file) {
+            tuning.value = {
+                running: false,
+                ok: false,
+                summary: t('doctor.threadTuningNeedsModel'),
+            }
+            return
+        }
+        const esito = await talosRunThreadTuning({
+            modelPath: file.path,
+            modelBytes: file.bytes,
+            modelModifiedAt: file.modifiedAt ?? 0,
+            deviceModel: device.deviceModel,
+            cpuCores: device.cpuCores,
+            appBuild: TALOS_APP_BUILD,
+        })
+        tuning.value = { running: false, ok: esito.ok, summary: esito.summary }
+        // La misura cambia le righe del motore: si rilegge, invece di lasciare
+        // a schermo numeri che la misura ha appena smentito.
+        await runScan()
+    } catch (failure) {
+        tuning.value = {
+            running: false,
+            ok: false,
+            summary: failure instanceof Error ? failure.message : String(failure),
+        }
+    }
+}
+
 async function copyReport(): Promise<void> {
     copyError.value = null
     const report = buildTalosDiagnosticsReport({
@@ -482,6 +553,23 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
             <ClipboardCopy class="size-4" aria-hidden="true" />
             {{ copied ? t('common.copied') : t('doctor.copyDiagnostics') }}
         </button>
+        <button
+            type="button"
+            data-testid="talos-doctor-tune-threads"
+            :disabled="tuning.running"
+            class="talos-pressable mt-2 flex min-h-touch w-full items-center justify-center gap-2 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm font-semibold text-[var(--talos-text)] disabled:opacity-60"
+            @click="measureThreads"
+        >
+            {{ tuning.running ? t('doctor.threadTuningRunning') : t('doctor.threadTuning') }}
+        </button>
+        <p class="text-2xs leading-4 text-[var(--talos-muted)]">{{ t('doctor.threadTuningHint') }}</p>
+        <p
+            v-if="tuning.summary"
+            data-testid="talos-doctor-tune-threads-result"
+            aria-live="polite"
+            class="text-xs"
+            :class="tuning.ok ? 'text-[var(--talos-text)]' : 'text-[var(--talos-danger,#dc5b5b)]'"
+        >{{ tuning.summary }}</p>
         <p aria-live="polite" class="sr-only">{{ copied ? t('doctor.diagnosticsCopied') : '' }}</p>
         <p v-if="copyError" role="alert" class="text-xs text-[var(--talos-danger,#dc5b5b)]">{{ copyError }}</p>
 

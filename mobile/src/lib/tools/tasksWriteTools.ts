@@ -37,6 +37,11 @@ export interface TalosTasksWriteSources {
         priority: 'low' | 'normal' | 'high'
     }): Promise<{ id: string; title: string }>
     setStatus(taskId: string, status: 'todo' | 'doing' | 'done'): Promise<{ id: string; title: string }>
+    update(taskId: string, patch: {
+        title?: string
+        description?: string | null
+        priority?: 'low' | 'normal' | 'high'
+    }): Promise<{ id: string; title: string }>
     remove(taskId: string): Promise<void>
 }
 
@@ -125,6 +130,78 @@ export function createTalosTasksWriteTools(
                             ? `Marked «${saved.title}» as done.`
                             : `Moved «${saved.title}» to ${input.status}.`,
                         evidence: { id: saved.id, title: saved.title, status: input.status },
+                    }
+                } catch (failure) {
+                    return missingTask(failure)
+                        ? {
+                            ok: false,
+                            content: 'There is no task with that id. Call tasks_list to see the current ones.',
+                            evidence: { error_code: 'TALOS_TASK_NOT_FOUND', id: input.id },
+                        }
+                        : failed('TALOS_TASK_UPDATE_FAILED', 'That task could not be updated on this device.', failure)
+                }
+            },
+        }) as TalosToolDefinition<never>,
+
+        defineTalosTool({
+            name: 'tasks_update',
+            title: 'Edit a task',
+            /**
+             * ⛔ La descrizione dice per differenza quando NON usarlo, perché
+             * l'errore che il modello fa da solo è scegliere questo per
+             * spuntare un'attività — «cambia lo stato» è pur sempre una
+             * modifica. `tasks_complete` esiste apposta e dice cosa fa nel nome.
+             */
+            description: [
+                'Change the title, the detail or the priority of a task that already exists.',
+                'Call tasks_list first to get the task id — do not guess it from the title, because two tasks can share a name.',
+                'Do NOT use this to mark something done or started: that is tasks_complete.',
+                'Send only the fields that change. What you omit stays as it is.',
+            ].join(' '),
+            action: 'write',
+            input: z.object({
+                id: z.string().min(1).describe('The task id, from tasks_list.'),
+                title: z.string().min(1).max(200).optional()
+                    .describe('The new action to take. Omit to leave the title alone.'),
+                description: z.string().max(2000).nullable().optional()
+                    .describe('The new detail. Send null to clear it, omit to leave it alone.'),
+                priority: z.enum(PRIORITIES).optional()
+                    .describe('Use high only when the user said it is urgent — do not infer urgency from tone.'),
+            }),
+            async run(input) {
+                /*
+                 * Una chiamata che non cambia niente si rifiuta invece di
+                 * riuscire: «ho aggiornato l'attività» detto dopo aver toccato
+                 * zero campi è la forma di conferma che insegna a non fidarsi
+                 * delle conferme. E succede davvero — un modello che vuole
+                 * spuntare un'attività manda l'id e basta.
+                 */
+                if (input.title === undefined && input.description === undefined
+                    && input.priority === undefined) {
+                    return {
+                        ok: false,
+                        content: 'Nothing to change: send at least a title, a description or a priority. '
+                            + 'To mark a task done, use tasks_complete.',
+                        evidence: { error_code: 'TALOS_TASK_UPDATE_EMPTY', id: input.id },
+                    }
+                }
+                try {
+                    const saved = await sources.update(input.id, {
+                        ...(input.title === undefined
+                            ? {}
+                            : { title: talosStripPromptEnvelope(input.title).trim() }),
+                        ...(input.description === undefined
+                            ? {}
+                            // Vuoto e null sono la stessa cosa qui, come in
+                            // creazione: una descrizione di soli spazi
+                            // occuperebbe la riga del dettaglio senza dire nulla.
+                            : { description: input.description?.trim() || null }),
+                        ...(input.priority === undefined ? {} : { priority: input.priority }),
+                    })
+                    return {
+                        ok: true,
+                        content: `Updated the task «${saved.title}».`,
+                        evidence: { id: saved.id, title: saved.title },
                     }
                 } catch (failure) {
                     return missingTask(failure)

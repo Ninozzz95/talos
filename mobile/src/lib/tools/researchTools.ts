@@ -36,6 +36,49 @@ export interface TalosResearchToolSources {
     list(): Promise<readonly TalosResearchRun[]>
     /** Se una sta girando adesso: il giornale non lo sa, il registro si'. */
     isRunning(id: string): boolean
+    /**
+     * Avvia e torna SUBITO con l'id, come fa la stazione.
+     *
+     * ⛔ Non aspetta la fine, ed e' l'unica scelta possibile: una ricerca dura
+     * minuti, e un tool che restituisce fra dieci minuti tiene occupato il giro
+     * di conversazione per tutto quel tempo — la chat sembrerebbe bloccata e il
+     * modello non potrebbe dire nemmeno «l'ho avviata».
+     */
+    start(input: { question: string, depth: 'quick' | 'deep' | 'exhaustive' }): Promise<{ id: string }>
+    /** Il rapporto, gia' ridotto a testo. `null` se non c'e' o non si legge. */
+    report(runId: string): Promise<string | null>
+    /** L'etichetta mostrata nell'elenco. `null` rimette la domanda. */
+    rename(runId: string, title: string | null): Promise<void>
+    /** Ferma e tiene tutto: si riprende. */
+    pause(runId: string): Promise<void>
+    /** Riprende una ricerca messa in pausa. */
+    resume(runId: string): Promise<void>
+    /** Ferma per sempre. Cio' che e' stato raccolto resta leggibile. */
+    cancel(runId: string): Promise<void>
+    /** Elimina la ricerca e i dossier che ha scritto. */
+    remove(runId: string): Promise<void>
+}
+
+const DEPTHS = ['quick', 'deep', 'exhaustive'] as const
+
+/** L'assenza si dice per quello che e', o il modello riprova identico. */
+function mancante(id: string) {
+    return {
+        ok: false as const,
+        content: 'There is no research with that id. Call research_list to see the current ones.',
+        evidence: { error_code: 'TALOS_RESEARCH_NOT_FOUND', id },
+    }
+}
+
+function fallito(code: string, message: string, failure: unknown) {
+    return {
+        ok: false as const,
+        content: message,
+        evidence: {
+            error_code: code,
+            detail: failure instanceof Error ? failure.message : String(failure),
+        },
+    }
 }
 
 /** Il vocabolario della stazione, non uno nuovo: sono le stesse linguette. */
@@ -124,6 +167,250 @@ export function createTalosResearchTools(
                             ? input.offset + pagina.length
                             : null,
                     },
+                }
+            },
+        }) as TalosToolDefinition<never>,
+
+        defineTalosTool({
+            name: 'research_start',
+            title: 'Start a deep research',
+            /**
+             * ⛔ La descrizione deve distinguerlo da `web_search`, ed e' la
+             * riga che decide se questo tool serve o fa danni: una ricerca
+             * approfondita costa minuti e chiamate a pagamento, e usarla per
+             * «che tempo fa» sarebbe sprecare entrambi.
+             */
+            description: [
+                'Start a deep research: TALOS plans several lines of enquiry, searches, reads the sources and writes a report with verified claims.',
+                'It takes MINUTES and spends real search credit. Use it only when the user asks to investigate, compare or produce a documented answer — "research this", "dig into", "write me a report on".',
+                'For a single fact or a quick check, use web_search instead: it answers in seconds and costs almost nothing.',
+                'This returns as soon as the research has started, not when it is finished. Tell the user it is running and that they can ask about it later.',
+            ].join(' '),
+            action: 'write',
+            /*
+             * ⛔ Anche `outbound`, e non e' una formalita': avviare una ricerca
+             * manda la DOMANDA a un motore di ricerca esterno. Chi ha messo i
+             * permessi di rete su «chiedi» deve essere chiesto qui, non
+             * scoprire dopo che la sua domanda e' uscita dal dispositivo.
+             */
+            requiredActions: ['outbound'],
+            input: z.object({
+                question: z.string().min(1).max(500)
+                    .describe('What to investigate, as a question. This is also the name the research will carry.'),
+                depth: z.enum(DEPTHS).default('deep')
+                    .describe('quick = a few lines of enquiry; deep = the usual; exhaustive = many, and much slower. Do not choose exhaustive unless the user asked for thoroughness.'),
+            }),
+            async run(input) {
+                try {
+                    const { id } = await sources.start({
+                        question: input.question.trim(),
+                        depth: input.depth,
+                    })
+                    return {
+                        ok: true,
+                        content: `Started the research «${input.question.trim()}» (id ${id}). `
+                            + 'It runs in the background and keeps going even if the app is closed.',
+                        evidence: { id, depth: input.depth },
+                    }
+                } catch (failure) {
+                    return fallito('TALOS_RESEARCH_START_FAILED', 'That research could not be started on this device.', failure)
+                }
+            },
+        }) as TalosToolDefinition<never>,
+
+        defineTalosTool({
+            name: 'research_read',
+            title: 'Read a research report',
+            description: [
+                'Read the report a finished deep research wrote, with its claims and how each one was verified.',
+                'Call research_list first to get the research id.',
+                'Use this when the user asks what a research found — do not answer from the title alone, which says what was asked and not what was learnt.',
+            ].join(' '),
+            action: 'read',
+            input: z.object({
+                id: z.string().min(1).describe('The research id, from research_list.'),
+            }),
+            async run(input) {
+                let testo: string | null
+                try {
+                    testo = await sources.report(input.id)
+                } catch (failure) {
+                    return fallito('TALOS_RESEARCH_READ_FAILED', 'That report could not be read on this device.', failure)
+                }
+                if (testo === null) {
+                    /*
+                     * Tre casi diversi che qui arrivano identici — non c'e', non
+                     * ha finito, non si legge — e dirne uno solo manderebbe a
+                     * rifare una ricerca che magari sta ancora girando. Quindi
+                     * si dice cosa fare, non cosa e' successo.
+                     */
+                    return {
+                        ok: false,
+                        content: 'There is no readable report for that research: it may still be running, '
+                            + 'or it may have stopped before writing one. Call research_list to see how it ended.',
+                        evidence: { error_code: 'TALOS_RESEARCH_REPORT_UNAVAILABLE', id: input.id },
+                    }
+                }
+                return { ok: true, content: testo, evidence: { id: input.id } }
+            },
+        }) as TalosToolDefinition<never>,
+
+        defineTalosTool({
+            name: 'research_rename',
+            title: 'Rename a research',
+            description: [
+                'Change the label a research carries in the list.',
+                'Call research_list first to get the research id.',
+                'This changes the name only — it does not change what was investigated or re-run anything.',
+            ].join(' '),
+            action: 'write',
+            input: z.object({
+                id: z.string().min(1).describe('The research id, from research_list.'),
+                title: z.string().min(1).max(200).nullable()
+                    .describe('The new label. Send null to go back to showing the question.'),
+            }),
+            async run(input) {
+                try {
+                    await sources.rename(input.id, input.title === null ? null : input.title.trim())
+                    return {
+                        ok: true,
+                        content: input.title === null
+                            ? 'That research shows its question again.'
+                            : `Renamed that research to «${input.title.trim()}».`,
+                        evidence: { id: input.id, title: input.title },
+                    }
+                } catch (failure) {
+                    return failure instanceof Error && failure.message.includes('NOT_FOUND')
+                        ? mancante(input.id)
+                        : fallito('TALOS_RESEARCH_RENAME_FAILED', 'That research could not be renamed.', failure)
+                }
+            },
+        }) as TalosToolDefinition<never>,
+
+        defineTalosTool({
+            name: 'research_pause',
+            title: 'Pause a research',
+            /**
+             * ⛔ Separato da `research_cancel` e non un `mode` dentro un tool
+             * solo: «mettila in pausa» e «annullala» sono due intenzioni che una
+             * persona esprime in modo diverso, e un tool che chiede quale delle
+             * due sceglierebbe male proprio quando conta — annullare non si
+             * disfa. Stessa ragione per cui `tasks_complete` esiste accanto a
+             * `tasks_update`.
+             */
+            description: [
+                'Stop a running research, keeping everything it has collected so far. It can be resumed later with research_resume.',
+                'Call research_list first to get the research id.',
+                'Use this when the user wants it to stop for now. If they want it stopped for good, use research_cancel.',
+            ].join(' '),
+            action: 'write',
+            input: z.object({
+                id: z.string().min(1).describe('The research id, from research_list.'),
+            }),
+            async run(input) {
+                try {
+                    await sources.pause(input.id)
+                    return {
+                        ok: true,
+                        content: 'That research is paused. Everything it collected is kept, and it can be resumed.',
+                        evidence: { id: input.id },
+                    }
+                } catch (failure) {
+                    return failure instanceof Error && failure.message.includes('NOT_FOUND')
+                        ? mancante(input.id)
+                        : fallito('TALOS_RESEARCH_PAUSE_FAILED', 'That research could not be paused.', failure)
+                }
+            },
+        }) as TalosToolDefinition<never>,
+
+        defineTalosTool({
+            name: 'research_resume',
+            title: 'Resume a research',
+            description: [
+                'Carry on a research that was paused or left unfinished, from where it stopped.',
+                'Call research_list first to get the research id: the ones worth resuming show as paused or unfinished.',
+                'It does not start over — what was already collected is not searched again.',
+            ].join(' '),
+            action: 'write',
+            // Riprendere significa continuare a cercare: esce dal dispositivo
+            // come l'avvio, e chiede lo stesso permesso.
+            requiredActions: ['outbound'],
+            input: z.object({
+                id: z.string().min(1).describe('The research id, from research_list.'),
+            }),
+            async run(input) {
+                try {
+                    await sources.resume(input.id)
+                    return {
+                        ok: true,
+                        content: 'That research is running again, from where it had stopped.',
+                        evidence: { id: input.id },
+                    }
+                } catch (failure) {
+                    return failure instanceof Error && failure.message.includes('NOT_FOUND')
+                        ? mancante(input.id)
+                        : fallito('TALOS_RESEARCH_RESUME_FAILED', 'That research could not be resumed.', failure)
+                }
+            },
+        }) as TalosToolDefinition<never>,
+
+        defineTalosTool({
+            name: 'research_cancel',
+            title: 'Stop a research for good',
+            description: [
+                'Stop a research for good. What it already collected stays readable; nothing more is searched or paid for.',
+                'Call research_list first to get the research id.',
+                'Prefer research_pause when the user only wants it to stop for now: a cancelled research cannot be resumed.',
+            ].join(' '),
+            action: 'write',
+            input: z.object({
+                id: z.string().min(1).describe('The research id, from research_list.'),
+            }),
+            async run(input) {
+                try {
+                    await sources.cancel(input.id)
+                    return {
+                        ok: true,
+                        content: 'That research is stopped for good. What it collected is still readable.',
+                        evidence: { id: input.id },
+                    }
+                } catch (failure) {
+                    return failure instanceof Error && failure.message.includes('NOT_FOUND')
+                        ? mancante(input.id)
+                        : fallito('TALOS_RESEARCH_CANCEL_FAILED', 'That research could not be stopped.', failure)
+                }
+            },
+        }) as TalosToolDefinition<never>,
+
+        defineTalosTool({
+            name: 'research_delete',
+            title: 'Delete a research',
+            description: [
+                'Delete a research and the report it wrote, permanently.',
+                'Call research_list first to get the research id, and say which one you are about to delete before doing it.',
+                'Prefer research_cancel for one that is merely unwanted: a stopped research is still a record, a deleted one is gone along with its sources.',
+            ].join(' '),
+            action: 'write',
+            input: z.object({
+                id: z.string().min(1).describe('The research id, from research_list.'),
+            }),
+            async run(input) {
+                try {
+                    await sources.remove(input.id)
+                    return {
+                        ok: true,
+                        content: 'That research and its report have been deleted.',
+                        evidence: { id: input.id },
+                    }
+                } catch (failure) {
+                    return failure instanceof Error && failure.message.includes('NOT_FOUND')
+                        // Gia' assente e' l'esito voluto, ottenuto da altri.
+                        ? {
+                            ok: true,
+                            content: 'There was no research with that id — nothing to delete.',
+                            evidence: { id: input.id, already_absent: true },
+                        }
+                        : fallito('TALOS_RESEARCH_DELETE_FAILED', 'That research could not be deleted.', failure)
                 }
             },
         }) as TalosToolDefinition<never>,

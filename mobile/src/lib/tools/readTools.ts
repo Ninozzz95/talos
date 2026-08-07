@@ -57,8 +57,28 @@ export interface TalosToolSources {
         originSessionTitle: string | null
         sourceUrl: string | null
     } | null>
-    listNotes(): Promise<Array<{ title: string; content: string; updated_at: string }>>
-    listTasks(): Promise<Array<{ title: string; status: string; priority: string }>>
+    /**
+     * ⛔ L'`id` NON è un dettaglio di implementazione da nascondere al modello.
+     *
+     * `notes_update`, `notes_delete`, `tasks_complete`, `tasks_update` e
+     * `tasks_delete` dicono tutti, nella loro descrizione, «chiama prima la
+     * lista per prendere l'id». Per settimane le liste non lo hanno mai emesso:
+     * cinque strumenti di scrittura che chiedevano un dato che nessuno poteva
+     * ottenere, e il modello finiva per inventarlo o per rinunciare.
+     *
+     * Trovato leggendo il codice il 2026-08-07, mentre si completava il CRUD
+     * delle attività. Nessun test lo copriva perché ogni test passava l'id a
+     * mano — è il punto cieco tipico del provare i pezzi senza provare la
+     * catena.
+     */
+    listNotes(): Promise<Array<{ id: string; title: string; content: string; updated_at: string }>>
+    listTasks(): Promise<Array<{
+        id: string
+        title: string
+        status: string
+        priority: string
+        description: string | null
+    }>>
     searchMemories(query: string): Promise<Array<{ title: string; content: string }>>
     now(): string
 }
@@ -487,7 +507,10 @@ export function createTalosReadTools(sources: TalosToolSources): TalosToolDefini
             if (notes.length === 0) return { ok: true, content: 'There are no notes.' }
             return {
                 ok: true,
-                content: clip(notes.map((note) => `- ${note.title}: ${note.content.slice(0, 200)}`).join('\n')),
+                content: clip(notes
+                    .map((note) => `- ${note.title}: ${note.content.slice(0, 200)} — id ${note.id}`)
+                    .join('\n')),
+                evidence: { listed: notes.map((note) => note.id), returned: notes.length },
             }
         },
     })
@@ -510,7 +533,18 @@ export function createTalosReadTools(sources: TalosToolSources): TalosToolDefini
             if (tasks.length === 0) return { ok: true, content: 'There are no matching tasks.' }
             return {
                 ok: true,
-                content: clip(tasks.map((task) => `- [${task.status}] ${task.title} (${task.priority})`).join('\n')),
+                /*
+                 * L'id in coda e non in testa: la riga si legge come una lista
+                 * di cose da fare, e l'identificativo serve solo a chi deve
+                 * agirci. In testa spingerebbe fuori il titolo su uno schermo
+                 * stretto, che è ciò che una persona legge davvero.
+                 */
+                content: clip(tasks
+                    .map((task) => `- [${task.status}] ${task.title} (${task.priority})`
+                        + (task.description ? ` — ${task.description.slice(0, 160)}` : '')
+                        + ` — id ${task.id}`)
+                    .join('\n')),
+                evidence: { listed: tasks.map((task) => task.id), returned: tasks.length },
             }
         },
     })

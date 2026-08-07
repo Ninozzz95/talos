@@ -16,6 +16,7 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     notes_delete: true,
     tasks_create: true,
     tasks_complete: true,
+    tasks_update: true,
     tasks_delete: true,
     tasks_list: true,
     memory_search: true,
@@ -39,6 +40,14 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
      * l'utente ha creato lui, e senza di essa la domanda non ha risposta.
      */
     research_list: true,
+    research_start: true,
+    research_read: true,
+    research_rename: true,
+    research_pause: true,
+    research_resume: true,
+    research_cancel: true,
+    research_delete: true,
+
     /**
      * Acceso di serie, ma il permesso e' `ask`: il modello lo VEDE e lo puo'
      * proporre, e chi decide se scrivere davvero e' il cartellino. Spegnerlo

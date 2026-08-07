@@ -60,10 +60,10 @@ function sources(overrides: Record<string, unknown> = {}) {
         readLibraryDoc: vi.fn(async (id: string) => (id === 'd1'
             ? { name: 'Fattura_novembre.txt', text: 'Totale 2196 euro.' }
             : null)),
-        listNotes: vi.fn(async () => [{ title: 'Idee', content: 'comprare il pane', updated_at: '2026-07-26T08:00:00.000Z' }]),
+        listNotes: vi.fn(async () => [{ id: 'note-1', title: 'Idee', content: 'comprare il pane', updated_at: '2026-07-26T08:00:00.000Z' }]),
         listTasks: vi.fn(async () => [
-            { title: 'Chiamare avvocato', status: 'open', priority: 'high' },
-            { title: 'Pagare bolletta', status: 'done', priority: 'normal' },
+            { id: 'task-1', title: 'Chiamare avvocato', status: 'open', priority: 'high', description: 'per la pratica' },
+            { id: 'task-2', title: 'Pagare bolletta', status: 'done', priority: 'normal', description: null },
         ]),
         searchMemories: vi.fn(async () => [{ title: 'Preferenze', content: 'Preferisce risposte brevi.' }]),
         now: vi.fn(() => '2026-07-26T10:30:00.000Z'),
@@ -455,6 +455,45 @@ describe('read-only tool set', () => {
         const open = await executeTalosTool(byName(tools, 'tasks_list'), '{"status":"open"}', deps())
         expect(open.content).toContain('Chiamare avvocato')
         expect(open.content).not.toContain('Pagare bolletta')
+    })
+
+    /**
+     * ⛔⭐ IL DIFETTO CHE RENDEVA INUTILIZZABILI CINQUE TOOL.
+     *
+     * `notes_update`, `notes_delete`, `tasks_complete`, `tasks_update` e
+     * `tasks_delete` dicono tutti, nella loro descrizione, «chiama prima la
+     * lista per prendere l'id — non indovinarlo dal titolo». Per settimane le
+     * due liste non hanno emesso l'id da nessuna parte: né nel testo né
+     * nell'evidenza. Cinque strumenti di scrittura che chiedevano un dato che
+     * nessuno poteva ottenere.
+     *
+     * Nessun test lo copriva perché ogni test dei tool di scrittura passava
+     * l'id a mano — è il punto cieco di chi prova i pezzi senza provare la
+     * catena. Trovato leggendo il codice il 2026-08-07, mentre si completava il
+     * CRUD delle attività per l'owner.
+     */
+    it('tasks_list emette l\'id, perché senza non si può cambiare niente', async () => {
+        const tools = createTalosReadTools(sources())
+        const result = await executeTalosTool(byName(tools, 'tasks_list'), '{}', deps())
+
+        expect(result.content).toContain('task-1')
+        expect(result.content).toContain('task-2')
+        expect(result.evidence).toMatchObject({ listed: ['task-1', 'task-2'] })
+    })
+
+    it('e anche il dettaglio, che prima si vedeva solo aprendo l\'app', async () => {
+        const tools = createTalosReadTools(sources())
+        const result = await executeTalosTool(byName(tools, 'tasks_list'), '{}', deps())
+
+        expect(result.content).toContain('per la pratica')
+    })
+
+    it('notes_list emette l\'id, per la stessa ragione', async () => {
+        const tools = createTalosReadTools(sources())
+        const result = await executeTalosTool(byName(tools, 'notes_list'), '{}', deps())
+
+        expect(result.content).toContain('note-1')
+        expect(result.evidence).toMatchObject({ listed: ['note-1'] })
     })
 
     it('time_now takes no arguments and answers from the device clock', async () => {

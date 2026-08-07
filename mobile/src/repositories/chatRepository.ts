@@ -283,6 +283,15 @@ export interface TalosLocalTask {
     updated_at: string
 }
 
+/** Cosa si può cambiare di un'attività, senza toccarne lo stato. */
+export interface UpdateTaskPatch {
+    title?: string
+    description?: string | null
+    priority?: TalosTaskPriority
+    schedule_json?: string | null
+    instruction?: string | null
+}
+
 export interface CreateTaskInput {
     id: string
     title: string
@@ -440,6 +449,19 @@ export interface TalosChatRepository {
     createTask(input: CreateTaskInput): Promise<TalosLocalTask>
     listTasks(): Promise<TalosLocalTask[]>
     setTaskStatus(taskId: string, status: TalosTaskStatus): Promise<TalosLocalTask>
+    /**
+     * Cambia i campi di un'attività che esiste. I campi omessi restano.
+     *
+     * ⛔ Separata da `setTaskStatus` e non fusa con lei: lo stato si cambia
+     * cento volte più spesso di tutto il resto, e chiederlo dentro una patch
+     * generica costringerebbe chi spunta un'attività a mandare anche il titolo.
+     * Vedi la nota su `tasks_complete` in `lib/tools/tasksWriteTools.ts`.
+     *
+     * `null` esplicito cancella il campo; assente lo lascia com'è — la
+     * differenza serve, perché «togli la scadenza» e «non toccare la scadenza»
+     * sono due richieste diverse.
+     */
+    updateTask(taskId: string, patch: UpdateTaskPatch): Promise<TalosLocalTask>
     deleteTask(taskId: string): Promise<void>
     createNote(input: CreateNoteInput): Promise<TalosLocalNote>
     listNotes(): Promise<TalosLocalNote[]>
