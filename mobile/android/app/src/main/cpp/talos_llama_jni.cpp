@@ -1763,6 +1763,70 @@ Java_ai_talos_TalosLlamaNative_nativeSaveState(JNIEnv * env, jclass, jlong handl
 }
 
 /**
+ * ⭐⭐ POTA E CONGELA: tiene i primi `quanti` token e salva SOLO quelli.
+ *
+ * ## Perche' esiste, invece di un riscaldamento a parte
+ *
+ * Il prefisso da congelare — prompt di sistema piu' i trentotto schemi — e' un
+ * PREFISSO di cio' che la cache contiene gia' dopo il primo messaggio. Un
+ * riscaldamento dedicato lo ricalcolerebbe da zero: altri 150 secondi, un altro
+ * gigabyte riletto dal disco, e due modelli in memoria insieme.
+ *
+ * Qui invece si potano i token della conversazione e si salva cio' che resta.
+ * **Costo aggiuntivo: zero.** Il calcolo e' gia' stato fatto per rispondere.
+ *
+ * ## Il prezzo, che va detto
+ *
+ * ⛔ Dopo la potatura la cache non contiene piu' i turni della conversazione:
+ * il messaggio SUCCESSIVO di questa stessa chat li riprocessa. Sono qualche
+ * centinaio di token contro gli ottomila che si risparmiano a ogni chat nuova
+ * — un baratto che conviene, ma e' un baratto, non un pasto gratis.
+ *
+ * Per questo si chiama a risposta CONSEGNATA, mai prima: chi sta leggendo ha
+ * gia' tutto, e la potatura non gli toglie niente che stia aspettando.
+ */
+JNIEXPORT jlong JNICALL
+Java_ai_talos_TalosLlamaNative_nativeTrimAndSaveState(JNIEnv * env, jclass, jlong handle,
+                                                      jstring pathJ, jint quanti) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr || session->ctx == nullptr) return 0;
+    if (quanti <= 0 || (size_t) quanti > session->cached.size()) {
+        TALOS_LOGI("pota e congela: %d token chiesti su %zu in cache, non si fa",
+                   (int) quanti, session->cached.size());
+        return 0;
+    }
+    const std::string path = jstring_to_utf8(env, pathJ);
+    if (path.empty()) return 0;
+
+    // ⛔ Prima la cache, poi l'elenco. Se la potatura fallisce si esce senza
+    // aver toccato `cached`: un elenco piu' corto della KV vera farebbe
+    // calcolare il prefisso comune su token che il contesto ha ancora, e il
+    // turno dopo risponderebbe a partire da uno stato che nessuno ha chiesto.
+    llama_memory_t memoria = llama_get_memory(session->ctx);
+    if (!llama_memory_seq_rm(memoria, 0, (llama_pos) quanti, -1)) {
+        // Non tutti i tipi di cache sanno potare a meta'. Si azzera: perdere il
+        // riuso e' un rallentamento, tenere una KV incoerente e' una risposta
+        // sbagliata.
+        TALOS_LOGE("pota e congela: potatura rifiutata, azzero");
+        llama_memory_clear(memoria, true);
+        session->cached.clear();
+        return 0;
+    }
+    session->cached.resize((size_t) quanti);
+
+    const size_t scritti = llama_state_seq_save_file(
+            session->ctx, path.c_str(), /* seq_id */ 0,
+            session->cached.data(), session->cached.size());
+    if (scritti == 0) {
+        TALOS_LOGE("pota e congela: scrittura fallita su %s", path.c_str());
+        return 0;
+    }
+    TALOS_LOGI("pota e congela: %d token, %zu byte su %s",
+               (int) quanti, scritti, path.c_str());
+    return (jlong) scritti;
+}
+
+/**
  * Rilegge un prefisso congelato nel contesto aperto.
  *
  * ⛔ Chi chiama DEVE aver gia' verificato che il file appartenga a questo
