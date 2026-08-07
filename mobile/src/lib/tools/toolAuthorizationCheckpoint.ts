@@ -79,6 +79,38 @@ function boundedId(value: unknown): value is string {
     return typeof value === 'string' && ID.test(value)
 }
 
+/**
+ * ⛔⭐ L'id del profilo modello NON è un identificativo «pulito», e pretenderlo
+ * ha rotto i tool su OGNI modello OpenRouter.
+ *
+ * ## Il difetto, riprodotto sul Pad il 2026-08-07
+ *
+ * `ID` è `/^[A-Za-z0-9][A-Za-z0-9._:-]{0,256}$/`: niente barra. Ma un id
+ * OpenRouter È `openai/gpt-5.6-luna`, e un modello locale è un percorso che
+ * comincia con `/`. Quindi `parseIdentity` rifiutava, il checkpoint non si
+ * creava, e ogni richiesta di autorizzazione a un tool moriva con
+ * `TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID` — cioè **nessun modello
+ * OpenRouter poteva usare uno strumento che richiede il consenso**.
+ *
+ * L'owner l'ha visto due volte in due giorni, e le due volte con OpenRouter.
+ * MISURATO: `openai/gpt-5.6-luna` → `false`, `gpt-5.6-luna` → `true`.
+ *
+ * ## Perché la regola giusta è questa e non «aggiungiamo la barra»
+ *
+ * Perché non sappiamo quali caratteri useranno i cataloghi di domani, e ogni
+ * carattere dimenticato è un altro provider che smette di funzionare in modo
+ * illeggibile. Questo id lo produciamo noi e lo confrontiamo **solo per
+ * uguaglianza**: non è un percorso, non è una chiave, non finisce in una query.
+ * Le uniche proprietà che servono davvero sono che sia limitato e che non
+ * contenga caratteri di controllo — quelli sì, perché finisce in JSON e nei
+ * registri diagnostici.
+ */
+const MODEL_PROFILE_ID = /^[^\p{C}]{1,256}$/u
+
+function boundedModelProfileId(value: unknown): value is string {
+    return typeof value === 'string' && MODEL_PROFILE_ID.test(value)
+}
+
 function timestamp(value: unknown): value is string {
     return typeof value === 'string'
         && value.length <= 64
@@ -132,7 +164,7 @@ function parseIdentity(value: unknown): Readonly<TalosChatSendIdentity> | null {
         || typeof record.sessionTitle !== 'string'
         || record.sessionTitle.length > 255
         || (record.surface !== 'chat' && record.surface !== 'browse')
-        || !(record.modelProfileId === null || boundedId(record.modelProfileId))
+        || !(record.modelProfileId === null || boundedModelProfileId(record.modelProfileId))
         || !timestamp(record.acceptedAt)
     ) {
         return null
@@ -168,7 +200,7 @@ function parseRequest(value: unknown): TalosToolAuthorizationRequestV1 | null {
         || !boundedId(record.checkpoint_id)
         || !boundedId(record.session_id)
         || !boundedId(record.send_id)
-        || !(record.model_profile_id === null || boundedId(record.model_profile_id))
+        || !(record.model_profile_id === null || boundedModelProfileId(record.model_profile_id))
         || !boundedId(record.call_id)
         || typeof record.tool !== 'string'
         || !actions
