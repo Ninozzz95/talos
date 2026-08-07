@@ -181,3 +181,75 @@ describe('decisione 4 — l approvazione si lega all impronta', () => {
         expect(talosPlanAdmits(conNegato, 'web_search', 'ddd').admitted).toBe(false)
     })
 })
+
+describe('la SECONDA PORTA — owner 2026-08-07: «porte, non muri»', () => {
+    const contaminata = { privateDataSeen: true, untrustedSeen: true }
+    const pulita = { privateDataSeen: false, untrustedSeen: false }
+
+    function pianoConversazione() {
+        return talosBuildPlan(
+            'x',
+            [passo({ id: 'a', tool: 'web_search', digest: 'la-pasta' })],
+            pulita,
+            'conversation',
+        )
+    }
+
+    it('PER TURNO, argomenti nuovi: si ferma — e deve', () => {
+        const perTurno = talosBuildPlan(
+            'x',
+            [passo({ id: 'a', tool: 'web_search', digest: 'la-pasta' })],
+            pulita,
+            'turn',
+        )
+        expect(talosPlanAdmits(perTurno, 'web_search', 'un-altra-cosa'))
+            .toMatchObject({ admitted: false, reason: 'arguments-changed' })
+    })
+
+    it('PER CONVERSAZIONE, argomenti nuovi: passa — altrimenti la porta non aprirebbe su niente', () => {
+        const piano = pianoConversazione()
+        expect(talosPlanAdmits(piano, 'web_search', 'un-altra-cosa', pulita).admitted).toBe(true)
+    })
+
+    it('⛔ ma DECADE nel momento in cui entra contenuto non fidato', () => {
+        const piano = pianoConversazione()
+        const esito = talosPlanAdmits(piano, 'web_search', 'la-pasta', contaminata)
+
+        expect(esito).toEqual({ admitted: false, reason: 'chain-contaminated' })
+    })
+
+    it('e decade ANCHE su un passo che corrisponde perfettamente', () => {
+        // Il pericolo non e' l'argomento sbagliato: e' l'argomento giusto
+        // eseguito dopo che qualcun altro ha parlato dentro la conversazione.
+        const piano = pianoConversazione()
+        expect(talosPlanAdmits(piano, 'web_search', 'la-pasta', contaminata).admitted).toBe(false)
+    })
+
+    it('se la catena era GIA contaminata quando hai approvato, non decade', () => {
+        // Hai approvato sapendolo: non si puo' revocare per una condizione che
+        // c'era gia' e che la scheda ti aveva mostrato.
+        const piano = talosBuildPlan(
+            'x',
+            [passo({ id: 'a', tool: 'web_search', digest: 'la-pasta' })],
+            contaminata,
+            'conversation',
+        )
+        expect(talosPlanAdmits(piano, 'web_search', 'altro', contaminata).admitted).toBe(true)
+    })
+
+    it('un tool MAI proposto resta fuori anche per conversazione', () => {
+        const piano = pianoConversazione()
+        expect(talosPlanAdmits(piano, 'notes_delete', 'x', pulita))
+            .toEqual({ admitted: false, reason: 'not-in-plan' })
+    })
+
+    it('e un passo TOLTO resta tolto anche per conversazione', () => {
+        const senza = talosPlanWithout(pianoConversazione(), 'a')
+        expect(talosPlanAdmits(senza, 'web_search', 'qualunque', pulita))
+            .toEqual({ admitted: false, reason: 'removed' })
+    })
+
+    it('il predefinito e per TURNO: la porta si apre, non si trova aperta', () => {
+        expect(talosBuildPlan('x', [passo()]).scope).toBe('turn')
+    })
+})
