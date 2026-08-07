@@ -132,6 +132,38 @@ interface TalosLlamaPlugin {
         maxTokens?: number
         stopAtEndOfGeneration?: boolean
     }): Promise<TalosLocalEngineGeneration>
+    /**
+     * ⭐ Congela su disco il prefisso gia' calcolato, coi suoi token.
+     *
+     * MISURATO 2026-08-07: «ciao» costa 8.410 token di prompt, ~8.250 dei quali
+     * sono i trentotto schemi dei tool — 150 secondi, l'88% dell'attesa, e sono
+     * identici in ogni conversazione.
+     */
+    saveState(options: {
+        path: string
+        /**
+         * ⭐ Quanti token tenere. Assente = tutto.
+         *
+         * Il prefisso da congelare è un PREFISSO di ciò che la cache contiene
+         * già dopo il primo messaggio: potarlo e salvarlo costa **zero
+         * calcolo**, mentre riscaldarlo a parte lo rifarebbe da capo.
+         */
+        keepTokens?: number
+    }): Promise<{
+        bytes: number
+        saved: boolean
+        ms: number
+    }>
+    /**
+     * Rilegge un prefisso congelato nel contesto aperto.
+     *
+     * ⛔ Il percorso DEVE venire da `talosPrefixCacheFileName`: uno stato
+     * caricato sul modello sbagliato non da' errore, da' risposte sbagliate.
+     */
+    loadState(options: { path: string }): Promise<{
+        restoredTokens: number
+        ms: number
+    }>
     lastTimings(): Promise<{ timings: string }>
     /** Il fabbisogno e la forma, letti senza caricare i pesi. */
     planPrompt(options: {
@@ -684,6 +716,54 @@ export async function talosMeasureThreadTuning(
         // Una taratura fallita non e' un guasto del modello: si continua col
         // punto di partenza derivato, che e' esattamente cio' che c'era prima.
         return null
+    }
+}
+
+/**
+ * ⭐ Congela il prefisso, se ne vale la pena.
+ *
+ * Il verdetto lo dà `talosShouldFreezePrefix` e non questa funzione: qui si
+ * scrive o non si scrive, e il perché torna a chi ha chiesto. Un motivo che
+ * resta dentro è un motivo che il Doctor non può mostrare.
+ *
+ * ⛔ Non solleva mai. Congelare è un'ottimizzazione: se fallisce si torna a
+ * calcolare, che è ciò che si faceva prima. Far cadere un invio perché non si è
+ * potuto scrivere una cache sarebbe scambiare il rimedio per la cura.
+ */
+export async function talosFreezePrefix(path: string, keepTokens?: number): Promise<{
+    bytes: number
+    ms: number
+}> {
+    try {
+        const esito = await plugin.saveState(
+            keepTokens === undefined ? { path } : { path, keepTokens },
+        )
+        return { bytes: esito.saved ? esito.bytes : 0, ms: esito.ms }
+    } catch {
+        return { bytes: 0, ms: 0 }
+    }
+}
+
+/**
+ * Rilegge un prefisso congelato.
+ *
+ * ⛔ Il percorso deve venire da `talosPrefixCacheFileName`. Qui non si può
+ * verificare: il formato di llama.cpp non porta l'impronta del nostro prompt, e
+ * uno stato caricato sul modello sbagliato **non dà errore** — dà risposte
+ * sbagliate, che è il modo peggiore di fallire.
+ *
+ * `0` è la condizione NORMALE la prima volta e dopo ogni cambio: il file non
+ * c'è, e si calcola.
+ */
+export async function talosThawPrefix(path: string): Promise<{
+    tokens: number
+    ms: number
+}> {
+    try {
+        const esito = await plugin.loadState({ path })
+        return { tokens: esito.restoredTokens, ms: esito.ms }
+    } catch {
+        return { tokens: 0, ms: 0 }
     }
 }
 

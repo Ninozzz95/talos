@@ -213,6 +213,16 @@ public final class TalosLlamaEngine implements AutoCloseable {
     }
 
     /**
+     * Pota la cache ai primi {@code quanti} token e salva solo quelli.
+     *
+     * Costa zero calcolo: il prefisso è già in cache dopo il primo messaggio.
+     * In cambio, il turno successivo di QUESTA chat riprocessa i suoi token.
+     */
+    public long trimAndSaveState(String path, int quanti) {
+        return TalosLlamaNative.nativeTrimAndSaveState(handle, path, quanti);
+    }
+
+    /**
      * Rilegge un prefisso congelato.
      *
      * ⛔ Chi chiama ha già verificato che il file appartenga a QUESTO modello

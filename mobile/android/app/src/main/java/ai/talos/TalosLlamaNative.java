@@ -155,6 +155,23 @@ final class TalosLlamaNative {
     static native long nativeSaveState(long handle, String path);
 
     /**
+     * ⭐⭐ Tiene i primi {@code quanti} token e salva SOLO quelli.
+     *
+     * Il prefisso da congelare e' un PREFISSO di cio' che la cache contiene
+     * gia' dopo il primo messaggio: potarlo e salvarlo costa **zero calcolo**,
+     * mentre un riscaldamento a parte lo rifarebbe da capo — altri 150 secondi
+     * e un altro gigabyte letto dal disco.
+     *
+     * ⛔ Il prezzo: dopo la potatura il messaggio SUCCESSIVO di questa stessa
+     * chat riprocessa i suoi turni. Qualche centinaio di token contro gli
+     * ottomila risparmiati a ogni chat nuova — conviene, ma e' un baratto.
+     * Si chiama a risposta CONSEGNATA, mai prima.
+     *
+     * @return i byte scritti, 0 se non ha potuto.
+     */
+    static native long nativeTrimAndSaveState(long handle, String path, int quanti);
+
+    /**
      * Rilegge un prefisso congelato dentro il contesto aperto.
      *
      * ⛔ Chi chiama DEVE aver gia' verificato che il file appartenga a questo

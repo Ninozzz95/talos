@@ -321,9 +321,15 @@ public class TalosLlamaPlugin extends Plugin {
             call.reject("TALOS_LLAMA_NO_MODEL");
             return;
         }
+        // `keepTokens` assente = salva tutto cio' che c'e'. Presente = pota
+        // prima, che e' la strada normale: il prefisso da congelare e' un
+        // pezzo iniziale di cio' che la cache contiene dopo il primo messaggio.
+        Integer keep = call.getInt("keepTokens");
         worker.execute(() -> {
             long inizio = System.nanoTime();
-            long byteScritti = engine.saveState(path);
+            long byteScritti = keep == null
+                    ? engine.saveState(path)
+                    : engine.trimAndSaveState(path, keep);
             JSObject result = new JSObject();
             result.put("bytes", byteScritti);
             result.put("saved", byteScritti > 0);
