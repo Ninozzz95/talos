@@ -39,6 +39,14 @@ export interface TalosNotesWriteSources {
     create(input: { title: string; content: string }): Promise<{ id: string; title: string }>
     update(input: { id: string; title?: string; content?: string }): Promise<{ id: string; title: string }>
     remove(noteId: string): Promise<void>
+    /**
+     * Rilegge una nota per id. Null se non c'e' piu'.
+     *
+     * ⛔ Serve alla POSTCONDIZIONE (A5), non al modello: e' la rilettura con cui
+     * l'esecutore decide se l'effetto c'e' davvero quando la chiamata ha detto
+     * il contrario. Vedi `verify` in `lib/tools/registry.ts`.
+     */
+    find(noteId: string): Promise<{ id: string; title: string; content: string } | null>
 }
 
 /** Un guasto detto per nome: «va bene» su una nota mai scritta è peggio. */
@@ -110,6 +118,24 @@ export function createTalosNotesWriteTools(
                 content: z.string().min(1).max(8000).optional()
                     .describe('The new body, replacing the old one. Omit to leave the body alone.'),
             }),
+            /**
+             * A5 — la postcondizione di una modifica: **il testo e' quello nuovo**.
+             *
+             * Si confrontano solo i campi mandati: chi non ha chiesto di
+             * cambiare il titolo non puo' vedersi bocciare la chiamata perche'
+             * il titolo e' rimasto quello di prima.
+             */
+            async verify(input) {
+                const nota = await sources.find(input.id)
+                if (!nota) return { held: false, reason: 'that note no longer exists' }
+                if (input.title !== undefined && nota.title !== input.title) {
+                    return { held: false, reason: 'the title is still the old one' }
+                }
+                if (input.content !== undefined && nota.content !== input.content) {
+                    return { held: false, reason: 'the body is still the old one' }
+                }
+                return { held: true }
+            },
             async run(input) {
                 // Rifiutato QUI e non nello schema: `zod` può dire «almeno uno
                 // dei due», ma il messaggio che ne esce parla di forme e non di
@@ -183,6 +209,21 @@ export function createTalosNotesWriteTools(
             input: z.object({
                 id: z.string().min(1).describe('The note id, from notes_list.'),
             }),
+            /**
+             * A5 — la postcondizione di una cancellazione: **non c'e' piu'**.
+             *
+             * Costa una rilettura per id, cioe' niente, ed e' la sola prova che
+             * distingue «cancellata» da «credo di averla cancellata». Vale in
+             * entrambe le direzioni: se `run` e' fallito ma la nota non c'e',
+             * era riuscita e la risposta si e' persa — e dire «fallito» li'
+             * sarebbe l'istruzione che fa ritentare.
+             */
+            async verify(input) {
+                const resta = await sources.find(input.id)
+                return resta
+                    ? { held: false, reason: `the note "${resta.title}" is still there` }
+                    : { held: true }
+            },
             async run(input) {
                 try {
                     await sources.remove(input.id)

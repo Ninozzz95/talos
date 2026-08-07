@@ -12,6 +12,7 @@ import {
     type TalosToolContext,
     type TalosToolDefinition,
     type TalosToolResult,
+    type TalosToolVerdict,
 } from '@/lib/tools/registry'
 import {
     TALOS_EMPTY_CHAIN,
@@ -78,6 +79,15 @@ export interface TalosToolAuditRow {
     risk?: 'R0' | 'R1' | 'R2' | 'R3' | 'R4'
     /** Vero quando le tre condizioni della trifecta erano tutte presenti. */
     trifecta?: boolean
+    /**
+     * Se una postcondizione e' stata chiesta e cosa ha risposto.
+     *
+     * Assente = il tool non ne dichiara una. `true` = l'effetto e' stato
+     * riletto. `false` = e' stato chiesto e non reggeva. La differenza fra
+     * «assente» e `false` conta: la prima e' una lacuna, la seconda una difesa
+     * che ha morso.
+     */
+    verified?: boolean
     input: unknown
     /** Kept for the record, not shown to the model. */
     evidence?: Record<string, unknown>
@@ -383,8 +393,57 @@ export async function executeTalosTool(
     }
 
     const security = securityOf(tool.name)
+    // Lo stesso numero che il preflight ha mostrato nella scheda: l'audit deve
+    // registrare il rischio con cui la chiamata e' stata AUTORIZZATA, catena
+    // inclusa, non quello dichiarato a tavolino.
+    const effectiveRisk = talosEffectiveRisk(deps.chain ?? TALOS_EMPTY_CHAIN, security)
+    /**
+     * Chiede la postcondizione, e non lascia che sia lei a rompere il tool.
+     *
+     * Se `verify` stessa fallisce si restituisce `null` — «non lo so» — e il
+     * risultato di `run` resta l'ultima parola. Una verifica che trasforma un
+     * successo in errore perche' e' andata storta LEI sarebbe la cura peggiore
+     * della malattia.
+     */
+    async function postcondizione(
+        result: TalosToolResult | null,
+    ): Promise<TalosToolVerdict | null> {
+        if (!tool.verify) return null
+        try {
+            return await tool.verify(input as never, result, deps.context)
+        } catch {
+            return null
+        }
+    }
+
     try {
         const result = await tool.run(input as never, deps.context)
+        /*
+         * ⛔ A5 — la verifica DEGRADA un successo che non regge.
+         *
+         * Un «fatto» su una cosa non fatta e' peggio di un errore: l'utente
+         * smette di controllare, e il modello riferisce come compiuto qualcosa
+         * che non esiste.
+         */
+        const verdetto = result.ok ? await postcondizione(result) : null
+        if (verdetto && !verdetto.held) {
+            await record(deps, {
+                tool: tool.name,
+                action: tool.action,
+                requiredActions,
+                status: 'failed',
+                risk: effectiveRisk,
+                verified: false,
+                input,
+                evidence: result.evidence,
+                error: verdetto.reason,
+            })
+            return {
+                ok: false,
+                code: 'TALOS_TOOL_POSTCONDITION_FAILED',
+                content: `"${tool.title}" reported success but the change is not there: ${verdetto.reason}`,
+            }
+        }
         if (result.ok) {
             /*
              * La catena avanza SOLO se il tool è riuscito.
@@ -408,6 +467,8 @@ export async function executeTalosTool(
             action: tool.action,
             requiredActions,
             status: result.ok ? 'succeeded' : 'failed',
+            risk: effectiveRisk,
+            ...(verdetto ? { verified: true } : {}),
             input,
             evidence: result.evidence,
             ...(result.ok ? {} : { error: result.content }),
@@ -430,11 +491,44 @@ export async function executeTalosTool(
             return { ok: false, content: 'Not available: the storage on this device is locked. Ask the user to unlock the app, then try again.', code: 'TALOS_DB_KEY_LOCKED' }
         }
         const detail = error instanceof Error && error.message ? error.message : String(error)
+        /*
+         * ⛔ A5, la seconda direzione — ed e' quella che vale.
+         *
+         * `run` ha sollevato, ma l'effetto potrebbe esserci lo stesso: il ponte
+         * ha consegnato e poi e' scaduto, Android ha ucciso l'app fra la
+         * scrittura e la conferma. E' il fallimento **non atomico**, e dire
+         * «fallito» qui e' l'istruzione che fa ritentare al modello — cioe'
+         * esattamente cio' che produce il doppione.
+         *
+         * Si chiede alla postcondizione. Se l'effetto c'e', l'esito si PROMUOVE
+         * a riuscita, e l'audit lo dice (`verified`) perche' chi legge il
+         * registro deve poter distinguere «riuscito» da «riuscito ma l'abbiamo
+         * scoperto dopo».
+         */
+        const salvato = await postcondizione(null)
+        if (salvato?.held) {
+            await record(deps, {
+                tool: tool.name,
+                action: tool.action,
+                requiredActions,
+                status: 'succeeded',
+                risk: effectiveRisk,
+                verified: true,
+                input,
+                evidence: { recovered_from_error: detail },
+            })
+            return {
+                ok: true,
+                content: `"${tool.title}" completed. The call reported an error, but the change is there.`,
+            }
+        }
         await record(deps, {
             tool: tool.name,
             action: tool.action,
             requiredActions,
             status: 'failed',
+            risk: effectiveRisk,
+            ...(salvato ? { verified: false } : {}),
             input,
             error: detail,
         })
