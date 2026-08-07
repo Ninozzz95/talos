@@ -42,6 +42,19 @@ export interface TalosToolResult {
     messageAttachments?: import('@/repositories/chatRepository').AppendChatAttachmentInput[]
     /** Anything the audit row should keep that the model does not need. */
     evidence?: Record<string, unknown>
+    /**
+     * ⛔ A8 — da dove viene il testo che sta in `content`.
+     *
+     * Facoltativo, e quando manca si ricade sulla bandiera statica del tool. Va
+     * dichiarato da chi PUÒ saperlo davvero: `library_read` conosce l'origine
+     * del file che ha aperto, `notes_list` conosce quella di ogni nota. Un tool
+     * che non lo sa non deve indovinare — indovinare qui vorrebbe dire regalare
+     * fiducia, ed è l'unico errore che non si vede finché non fa danno.
+     *
+     * Quando più elementi tornano insieme vince il PEGGIORE: un elenco di
+     * quindici note di cui una viene dal web è un elenco che viene dal web.
+     */
+    contentOrigin?: import('@/lib/tools/security').TalosContentOrigin
 }
 
 export interface TalosToolContext {

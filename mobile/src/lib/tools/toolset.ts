@@ -342,6 +342,12 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             const summaries = await librarySummaries()
             const summary = summaries.find((entry) => entry.id === id)
             if (!summary) return null
+            // A8 — l'origine viaggia col documento: e' l'unica cosa che
+            // distingue un file tuo da uno preso dalla rete, e finora si
+            // fermava qui.
+            const origine = parseTalosFileProvenance(
+                (summary.metadata as { provenance?: unknown } | undefined)?.provenance,
+            )?.origin
 
             // An image has no extracted text, and returning null for it is what
             // made the Library able to FIND a photo and not look at it.
@@ -352,6 +358,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                     return {
                         name: summary.display_name,
                         text: '',
+                        origin: origine ?? null,
                         image: { base64: talosBytesToBase64(file.bytes), mediaType: file.mediaType },
                     }
                 }
@@ -359,7 +366,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
 
             const text = await deps.readVaultFileText(id)
             requireLibraryEnabled()
-            return text === null ? null : { name: summary.display_name, text }
+            return text === null ? null : { name: summary.display_name, text, origin: origine ?? null }
         },
         /**
          * The second door of famiglia B, over the same Library the other tools

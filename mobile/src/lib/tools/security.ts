@@ -85,6 +85,81 @@ export interface TalosToolSecurity {
     canTransmit: boolean
 }
 
+/**
+ * ⛔ A8 — da dove viene il CONTENUTO, non da dove viene il tool.
+ *
+ * ## Il difetto che questo tipo esiste per curare, con il numero
+ *
+ * `readsUntrustedContent` è una bandiera **statica per tool**: `notes_list`
+ * dichiara di portare dentro contenuto non attendibile, e lo dichiara sempre —
+ * che le note le abbia scritte l'utente a mano o gliele abbia riassunte il
+ * modello da una pagina web.
+ *
+ * MISURATO sul catalogo di oggi: **15 tool su 38** tingono la conversazione, e
+ * fra questi ci sono `notes_list`, `tasks_list`, `memory_search` e
+ * `library_list`. Quindi dopo la **prima lettura qualsiasi** la catena è
+ * contaminata e tutti e otto i tool che possono trasmettere chiudono la
+ * trifecta. Ogni volta.
+ *
+ * La ricerca lo chiama **label creep** ed è il modo tipico in cui queste difese
+ * falliscono: non perché non scattino, ma perché scattano sempre e vengono
+ * spente (arXiv 2604.23374). Questo file lo scriveva già in fondo alla regola —
+ * «una difesa che scatta sempre viene disattivata dopo tre giorni» — mentre il
+ * resto del codice la costruiva proprio così.
+ *
+ * ## I tre valori, e perché tre e non due
+ *
+ * La decisione che conta è binaria — questo testo può contenere istruzioni
+ * altrui? — ma il **registro** deve tenerne tre, perché `derived` è l'unico che
+ * spiega perché una cosa scritta da noi è comunque sospetta.
+ */
+export type TalosContentOrigin =
+    /** L'utente l'ha scritto o portato lui. Non è un vettore di iniezione. */
+    | 'user-direct'
+    /**
+     * Il modello l'ha prodotto **mentre la catena era già contaminata**.
+     *
+     * Sospetto per eredità, non per natura: il testo viene da lì. È il valore
+     * che rende la regola corretta invece che ottimista — un riassunto di una
+     * pagina ostile è ostile quanto la pagina.
+     */
+    | 'derived'
+    /** Arriva da fuori: una pagina, un documento scaricato, un'altra app. */
+    | 'external'
+
+/**
+ * Cosa vale una riga di cui non sappiamo la storia.
+ *
+ * `NULL` in banca dati significa «scritta prima che la colonna esistesse», e si
+ * legge **external**: il predefinito prudente non regala fiducia. Una riga
+ * vecchia potrebbe benissimo essere un riassunto del web fatto il mese scorso.
+ */
+export const TALOS_CONTENT_ORIGIN_FALLBACK: TalosContentOrigin = 'external'
+
+/** Riconosce un valore scritto in banca dati, e non si fida di quello che trova. */
+export function talosContentOrigin(value: unknown): TalosContentOrigin {
+    return value === 'user-direct' || value === 'derived' || value === 'external'
+        ? value
+        : TALOS_CONTENT_ORIGIN_FALLBACK
+}
+
+/** La proiezione sulla domanda che la trifecta pone: contamina o no? */
+export function talosOriginIsUntrusted(origin: TalosContentOrigin): boolean {
+    return origin !== 'user-direct'
+}
+
+/**
+ * Che provenienza dare a una riga che sto scrivendo ADESSO.
+ *
+ * Non la decide chi scrive: la decide lo **stato della catena** in questo
+ * istante. È l'unica cosa che sa da dove arriva il testo, e chiederlo a chi
+ * chiama vorrebbe dire fidarsi di una dichiarazione — cioè della cosa che in
+ * sicurezza non si fa mai.
+ */
+export function talosOriginForWrite(chain: TalosToolChainState): TalosContentOrigin {
+    return chain.untrustedSeen ? 'derived' : 'user-direct'
+}
+
 /** Il predefinito è il PIÙ prudente: un tool che non dichiara è un tool sospetto. */
 export const TALOS_TOOL_SECURITY_FALLBACK: TalosToolSecurity = Object.freeze({
     risk: 'R3',
@@ -114,13 +189,28 @@ export const TALOS_EMPTY_CHAIN: TalosToolChainState = Object.freeze({
     untrustedSeen: false,
 })
 
-/** Aggiorna la catena dopo che un tool è stato eseguito **con successo**. */
+/**
+ * Aggiorna la catena dopo che un tool è stato eseguito **con successo**.
+ *
+ * `declaredOrigin` è la provenienza di ciò che il tool ha DAVVERO restituito, e
+ * quando c'è vince sulla bandiera statica del catalogo (A8). È la differenza
+ * fra «`library_read` legge cose non attendibili» e «questo file l'ha caricato
+ * l'utente»: la prima è vera per il tool, la seconda per il dato, e solo la
+ * seconda serve a decidere.
+ *
+ * Assente, si ricade sul catalogo. Nessun tool regredisce mentre le superfici
+ * imparano a dichiarare.
+ */
 export function talosAdvanceChain(
     chain: TalosToolChainState,
     security: TalosToolSecurity,
+    declaredOrigin?: TalosContentOrigin,
 ): TalosToolChainState {
+    const portaNonFidato = declaredOrigin === undefined
+        ? security.readsUntrustedContent
+        : talosOriginIsUntrusted(declaredOrigin)
     const privateDataSeen = chain.privateDataSeen || security.readsPrivateData
-    const untrustedSeen = chain.untrustedSeen || security.readsUntrustedContent
+    const untrustedSeen = chain.untrustedSeen || portaNonFidato
     if (privateDataSeen === chain.privateDataSeen && untrustedSeen === chain.untrustedSeen) {
         return chain
     }
