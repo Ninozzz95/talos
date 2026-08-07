@@ -1,7 +1,7 @@
 import type { capSQLiteVersionUpgrade } from '@capacitor-community/sqlite'
 
 export const TALOS_CHAT_DATABASE_NAME = 'talos_mobile'
-export const TALOS_CHAT_DATABASE_VERSION = 6
+export const TALOS_CHAT_DATABASE_VERSION = 7
 
 const VERSION_1_STATEMENTS = [
     `CREATE TABLE IF NOT EXISTS talos_chat_sessions (
@@ -295,6 +295,53 @@ const VERSION_6_STATEMENTS = [
         ON talos_tasks(schedule_json, updated_at DESC, id);`,
 ] as const
 
+/**
+ * ⛔ Versione 7 — la provenienza del contenuto, riga per riga (A8).
+ *
+ * ## Il difetto che cura, misurato
+ *
+ * La difesa contro l'iniezione indiretta guardava una bandiera **statica per
+ * tool**: `notes_list` dichiara «porta dentro contenuto non attendibile», e lo
+ * dichiara sempre, che le note le abbia scritte l'utente o gliele abbia
+ * riassunte il modello da una pagina web.
+ *
+ * Il conto sul catalogo di oggi: **15 tool su 38** tingono la conversazione, e
+ * fra questi ci sono `notes_list`, `tasks_list`, `memory_search`,
+ * `library_list` — le letture più banali. Quindi dopo la **prima** lettura
+ * qualsiasi, tutti e otto i tool che possono trasmettere chiudono la trifecta e
+ * chiedono conferma. Ogni volta.
+ *
+ * La ricerca lo chiama **label creep** e dice che è il modo tipico in cui
+ * queste difese falliscono: non perché non scattino, ma perché scattano sempre
+ * e vengono spente (arXiv 2604.23374, «Ghost in the Agent»). `security.ts` se
+ * lo diceva già da solo — «una difesa che scatta sempre viene disattivata dopo
+ * tre giorni» — e intanto il codice la costruiva così.
+ *
+ * ## Cosa cambia
+ *
+ * L'etichetta smette di essere una proprietà del **tool** e diventa una
+ * proprietà del **dato**, registrata quando il dato nasce. La Libreria ce
+ * l'aveva già (`origin: uploaded | generated | downloaded`); qui la prendono le
+ * altre quattro superfici che portano testo.
+ *
+ * ## Perché si eredita, e non si chiede
+ *
+ * Una nota scritta dal modello **mentre la conversazione era già contaminata**
+ * è contaminata: il testo viene da lì. Quindi il valore non lo decide chi
+ * scrive — lo decide lo stato della catena in quell'istante, che è l'unica
+ * cosa che sa da dove arriva il contenuto.
+ *
+ * `NULL` significa «scritta prima che questa colonna esistesse», e va letta
+ * come **non attendibile**: il predefinito prudente è quello che non regala
+ * fiducia a righe di cui non sappiamo la storia.
+ */
+const VERSION_7_STATEMENTS = [
+    `ALTER TABLE talos_notes ADD COLUMN content_origin TEXT NULL;`,
+    `ALTER TABLE talos_tasks ADD COLUMN content_origin TEXT NULL;`,
+    `ALTER TABLE talos_memories ADD COLUMN content_origin TEXT NULL;`,
+    `ALTER TABLE talos_research_runs ADD COLUMN content_origin TEXT NULL;`,
+] as const
+
 export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = Object.freeze([
     Object.freeze({
         toVersion: 1,
@@ -319,5 +366,9 @@ export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = 
     Object.freeze({
         toVersion: 6,
         statements: [...VERSION_6_STATEMENTS],
+    }),
+    Object.freeze({
+        toVersion: 7,
+        statements: [...VERSION_7_STATEMENTS],
     }),
 ])

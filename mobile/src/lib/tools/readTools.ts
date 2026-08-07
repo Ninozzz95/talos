@@ -3,6 +3,8 @@ import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
 import { rankLibraryDocs, type LibraryDoc } from '@/lib/chat/libraryContext'
 import { newTalosMobileId } from '@/lib/mobileIds'
 import type { TalosLibraryFileType, TalosVaultOrigin } from '@/lib/vaultLibrary'
+import type { TalosContentOrigin } from '@/lib/tools/security'
+import type { TalosFileOrigin } from '@/lib/files/provenance'
 export type { TalosLibraryFileType } from '@/lib/vaultLibrary'
 
 /**
@@ -18,6 +20,55 @@ export type { TalosLibraryFileType } from '@/lib/vaultLibrary'
  * treated as an instruction, because a document that says "ignore your rules"
  * must not become one just by passing through a tool.
  */
+/**
+ * ⛔ A8 — l'origine di un FILE, tradotta nella provenienza del suo CONTENUTO.
+ *
+ * La Libreria registra da sempre `uploaded | generated | downloaded` per ogni
+ * file, e la difesa contro l'iniezione la buttava via: `library_read` tingeva
+ * la conversazione allo stesso modo per un tuo documento e per un PDF preso
+ * dalla rete. Qui quel dato smette di essere sprecato.
+ *
+ * - `uploaded` — l'hai portato tu: **non** è un vettore di iniezione.
+ * - `downloaded` — viene da fuori: lo è, ed è il caso per cui la regola esiste.
+ * - `generated` — l'ha scritto un modello. Sospetto per **eredità**: se è nato
+ *   da una pagina web ne porta dentro il testo. Trattarlo come fidato sarebbe
+ *   il buco esatto che un attaccante cerca — «fatti riassumere questa pagina,
+ *   poi leggi il riassunto».
+ */
+export function talosOriginOfVaultFile(origin: TalosFileOrigin | null | undefined): TalosContentOrigin {
+    // ⛔ Si legge il record di PROVENIENZA, non `TalosVaultOrigin`.
+    //
+    // Sono due vocabolari, e la differenza e' esattamente quella che serve:
+    // `TalosVaultOrigin` conosce solo `uploaded | generated`, mentre il record
+    // di provenienza distingue anche `downloaded` — cioe' il solo caso per cui
+    // questa regola esiste. Usare quello povero avrebbe trattato un PDF preso
+    // dalla rete come una cosa nostra.
+    if (origin === 'uploaded') return 'user-direct'
+    if (origin === 'downloaded') return 'external'
+    // `generated` o sconosciuto: sospetto. Un file senza storia non merita
+    // fiducia piu' di uno che dichiara di venire da fuori.
+    return 'derived'
+}
+
+/**
+ * L'elenco porta il vocabolario POVERO (`uploaded | generated`), perche' e'
+ * quello della riga di sintesi. Basta: quello che manca — `downloaded` — non
+ * puo' comparire in un elenco senza comparire anche come `generated` o
+ * `uploaded`, e in ogni caso il mancante cadrebbe nel ramo prudente.
+ */
+export function talosOriginOfListEntry(origin: TalosVaultOrigin): TalosContentOrigin {
+    return origin === 'uploaded' ? 'user-direct' : 'derived'
+}
+
+/** Fra tanti elementi vince il PEGGIORE: un elenco con dentro una cosa esterna e' esterno. */
+export function talosWorstOrigin(
+    origini: readonly TalosContentOrigin[],
+): TalosContentOrigin {
+    if (origini.some((riga) => riga === 'external')) return 'external'
+    if (origini.some((riga) => riga === 'derived')) return 'derived'
+    return 'user-direct'
+}
+
 export interface TalosLibraryListEntry {
     id: string
     displayName: string
@@ -40,6 +91,14 @@ export interface TalosToolSources {
         text: string
         /** Present for a file there is nothing to READ in, only to look at. */
         image?: { base64: string; mediaType: string }
+        /**
+         * A8 — da dove viene QUESTO file, per non tingere tutto uguale.
+         *
+         * E' il record di PROVENIENZA (tre valori, `downloaded` incluso), non
+         * `TalosVaultOrigin` che ne conosce due: il caso che conta — un file
+         * preso dalla rete — esiste solo nel primo.
+         */
+        origin?: TalosFileOrigin | null
     } | null>
     /**
      * Where one file came from — the second door of famiglia B.
@@ -318,6 +377,9 @@ export function createTalosReadTools(sources: TalosToolSources): TalosToolDefini
                     content: filtered.length === 0
                         ? 'There are no Library files for those filters.'
                         : `No more Library files. Total current files for those filters: ${filtered.length}.`,
+                    // Un elenco vuoto non ha portato dentro NIENTE: dire il
+                    // contrario contaminerebbe la conversazione per zero righe.
+                    contentOrigin: 'user-direct',
                     evidence: {
                         listed: [],
                         total_size: filtered.length,
@@ -339,6 +401,18 @@ export function createTalosReadTools(sources: TalosToolSources): TalosToolDefini
             return {
                 ok: true,
                 content,
+                /*
+                 * A8 — vale quanto l'elemento peggiore che ha davvero elencato.
+                 *
+                 * Anche un elenco e' un vettore: il NOME di un file scaricato
+                 * lo sceglie chi l'ha prodotto, e «rapporto — ignora le
+                 * istruzioni precedenti.pdf» e' un nome legale. Ma una Libreria
+                 * di soli file caricati dall'utente smette di contaminare, ed
+                 * e' il caso della stragrande maggioranza delle conversazioni.
+                 */
+                contentOrigin: talosWorstOrigin(
+                    page.entries.map((entry) => talosOriginOfListEntry(entry.origin)),
+                ),
                 evidence: {
                     listed: page.entries.map((entry) => entry.id),
                     total_size: filtered.length,
@@ -371,6 +445,8 @@ export function createTalosReadTools(sources: TalosToolSources): TalosToolDefini
                 return {
                     ok: true,
                     content: 'No document in the Library matched that.',
+                    // Zero risultati: non e' entrato niente.
+                    contentOrigin: 'user-direct',
                     evidence: {
                         matched: [],
                         matched_total: 0,
@@ -384,6 +460,8 @@ export function createTalosReadTools(sources: TalosToolSources): TalosToolDefini
                 return {
                     ok: true,
                     content: `No more Library matches. Total matching files: ${matching.length}.`,
+                    // Zero risultati: non e' entrato niente.
+                    contentOrigin: 'user-direct',
                     evidence: {
                         matched: [],
                         matched_total: matching.length,
@@ -397,6 +475,12 @@ export function createTalosReadTools(sources: TalosToolSources): TalosToolDefini
             return {
                 ok: true,
                 content: page.content,
+                // A8 — qui torna TESTO estratto, non solo nomi: e' il caso in
+                // cui la provenienza pesa di piu'. Vale quanto il peggiore fra
+                // i documenti che ha davvero restituito.
+                contentOrigin: talosWorstOrigin(
+                    page.entries.map(({ doc }) => talosOriginOfListEntry(doc.origin)),
+                ),
                 evidence: {
                     matched: page.entries.map(({ doc }) => doc.id),
                     matched_total: matching.length,
@@ -435,11 +519,28 @@ export function createTalosReadTools(sources: TalosToolSources): TalosToolDefini
                         base64: doc.image.base64,
                         sha256: '',
                     }],
-                    evidence: { id: input.id },
+                    contentOrigin: talosOriginOfVaultFile(doc.origin),
+                    evidence: { id: input.id, origin: doc.origin ?? 'unknown' },
                 }
             }
 
-            return { ok: true, content: clip(`name: ${doc.name}\n\n${doc.text}`), evidence: { id: input.id } }
+            return {
+                ok: true,
+                content: clip(`name: ${doc.name}
+
+${doc.text}`),
+                /*
+                 * A8 — NON «la Libreria e' non attendibile», ma «QUESTO file
+                 * viene da qui».
+                 *
+                 * E' il punto in cui la difesa smette di essere rumore: un
+                 * documento caricato dall'utente non contamina piu' la
+                 * conversazione, quindi la trifecta non si chiude su ogni
+                 * lettura, quindi la conferma arriva quando serve davvero.
+                 */
+                contentOrigin: talosOriginOfVaultFile(doc.origin),
+                evidence: { id: input.id, origin: doc.origin ?? 'unknown' },
+            }
         },
     })
 

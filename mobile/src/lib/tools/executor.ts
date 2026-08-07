@@ -452,7 +452,11 @@ export async function executeTalosTool(
              * significherebbe contaminare il discorso per una pagina che non si
              * è riusciti a leggere, e far scattare la trifecta su un nulla.
              */
-            const avanzata = talosAdvanceChain(deps.chain ?? TALOS_EMPTY_CHAIN, security)
+            const avanzata = talosAdvanceChain(
+                deps.chain ?? TALOS_EMPTY_CHAIN,
+                security,
+                result.contentOrigin,
+            )
             if (avanzata !== (deps.chain ?? TALOS_EMPTY_CHAIN)) {
                 try { deps.onChain?.(avanzata) } catch { /* la catena non rompe il tool */ }
             }
