@@ -313,7 +313,8 @@ const unavailableFilePicker: TalosNativeFilePicker = {
 }
 
 import { talosChainFor } from '@/lib/tools/chainStore'
-import type { TalosPlan } from '@/lib/tools/plan'
+import { talosPlanReplacesConsent, type TalosPlan } from '@/lib/tools/plan'
+import { talosPlanFor } from '@/lib/tools/planStore'
 import { TALOS_TOOL_SECURITY_FALLBACK as PIANO_SICUREZZA_PRUDENTE } from '@/lib/tools/security'
 import { talosOriginForWrite } from '@/lib/tools/security'
 import { talosOnLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
@@ -3501,9 +3502,57 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         authorizationRequest: authorizationFor(call.id),
                         callId: call.id,
                     })
-                    return result.status === 'authorization_required'
-                        ? { status: 'authorization_required' as const, request: result.request }
-                        : { status: 'ready' as const }
+                    if (result.status !== 'authorization_required') {
+                        return { status: 'ready' as const }
+                    }
+                    /*
+                     * ⛔ B5 — un piano approvato SOSTITUISCE la scheda del passo.
+                     *
+                     * E' il punto in cui il piano guadagna davvero: senza questo,
+                     * la persona vedrebbe il piano E POI le quattro conferme,
+                     * cioe' una in piu' invece di quattro in meno, e tutto il
+                     * lavoro del macroblocco B sarebbe rumore aggiunto.
+                     *
+                     * ## I due pavimenti che NON si attraversano
+                     *
+                     * L'approvazione di un piano non puo' comprare cio' che
+                     * nemmeno «consenti sempre» compra:
+                     *
+                     * - **la trifecta chiusa**: dati privati + contenuto non
+                     *   fidato + un modo per farlo uscire. Quando il preflight
+                     *   dice `trifecta`, la scheda si mostra comunque, perche'
+                     *   quella non e' una domanda sul singolo tool — e' su cosa
+                     *   e' successo prima nel discorso, e il piano e' stato
+                     *   letto prima che succedesse;
+                     * - **R4**: le azioni che non si ritirano. Non entrano
+                     *   nemmeno nel piano (`critical`), e questo e' il secondo
+                     *   controllo, nel caso ci arrivassero per via della catena.
+                     *
+                     * E l'impronta deve corrispondere: e' cio' che rende
+                     * l'approvazione una firma su QUESTA cosa e non
+                     * sull'intenzione.
+                     */
+                    const richiesta = result.request as {
+                        inputDigest?: string
+                        reason?: string
+                        risk?: string
+                    }
+                    // La regola vive in `lib/tools/plan.ts`, dov'e' provata: una
+                    // regola di sicurezza scritta in due posti e' una regola che
+                    // un giorno vale in un posto solo.
+                    if (talosPlanReplacesConsent(
+                        talosPlanFor(sendIdentity.sessionId),
+                        {
+                            tool: call.name,
+                            digest: richiesta.inputDigest ?? '',
+                            reason: richiesta.reason,
+                            risk: richiesta.risk,
+                        },
+                        toolset.chainFor(sendIdentity.sessionId),
+                    )) {
+                        return { status: 'ready' as const }
+                    }
+                    return { status: 'authorization_required' as const, request: result.request }
                 },
                 execute: async (call) => {
                     const timing = round.open?.tool(call.name)
@@ -3621,9 +3670,44 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             planRequest.value = piano
                         },
                     )
+                    /*
+                     * ⛔ B8 — la notifica, e i due pesi.
+                     *
+                     * Il piano si propone mentre la persona potrebbe non essere
+                     * davanti: e' proprio il caso in cui un lavoro lungo si
+                     * ferma ad aspettare, ed e' il caso in cui il silenzio costa
+                     * di piu' — TALOS resta bloccato senza che nessuno lo sappia.
+                     *
+                     * `demanding` sulla richiesta, perche' senza risposta non va
+                     * avanti nulla. `notable` sull'esito, perche' e' una notizia
+                     * e non una domanda.
+                     */
+                    const { talosNotify } = await import('@/stores/notificationCentre')
+                    talosNotify({
+                        key: `plan:${piano.id}`,
+                        channel: 'chat',
+                        weight: 'demanding',
+                        title: deps.translate('chat.plan.title', { count: piano.steps.length }),
+                        body: deps.translate('chat.plan.nothingDoneYet'),
+                        surface: `chat:${sendIdentity.sessionId}`,
+                        at: Date.now(),
+                    })
                     if (!decisione.cancelled) {
                         talosSetPlan(sendIdentity.sessionId, { ...piano, state: 'approved' })
                     }
+                    talosNotify({
+                        key: `plan:${piano.id}`,
+                        channel: 'chat',
+                        weight: 'notable',
+                        title: deps.translate(decisione.cancelled
+                            ? 'chat.plan.cancelledTitle'
+                            : 'chat.plan.approvedTitle'),
+                        body: deps.translate('chat.plan.approvedBody', {
+                            count: decisione.admitted.length,
+                        }),
+                        surface: `chat:${sendIdentity.sessionId}`,
+                        at: Date.now(),
+                    })
                     return decisione
                 },
                 /**
