@@ -3193,7 +3193,41 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     + 'an action, state this limitation and suggest selecting an OpenRouter model that '
                     + 'supports tools.'
                 : ''
+            /**
+             * ⛔ Il parallelismo si CHIEDE, altrimenti non arriva.
+             *
+             * MISURATO sul Pad il 2026-08-07: chiedendo quattro cose in un
+             * messaggio, `deepseek-v4-flash` ha emesso i tool **uno o due per
+             * giro**. Ogni giro e' un viaggio di rete, una scheda di consenso e
+             * un'attesa: la persona vede quattro conferme in fila invece di una,
+             * ed e' esattamente il problema che il piano doveva risolvere.
+             *
+             * Tutti i provider maggiori supportano le chiamate parallele, e la
+             * letteratura ne misura l'effetto: fino a **3,7 volte** meno latenza
+             * end-to-end (LLMCompiler, ICML 2024), 40-70% di costo in meno,
+             * con l'ottimo intorno a tre strumenti per turno. Ma nessuno dei due
+             * grandi la impone: OpenAI lascia `parallel_tool_calls` a `true` e
+             * Anthropic decide da se' guardando se gli strumenti sembrano
+             * indipendenti. Cioe': **e' il prompt che deve dirlo**.
+             *
+             * Costa zero — nessun giro in piu', nessun token in piu' di rilievo —
+             * e migliora tre cose insieme: la velocita', il conto, e il fatto
+             * che il piano possa vedere il lavoro tutto insieme invece che a
+             * pezzi.
+             *
+             * L'ultima frase e' la piu' importante: dipendenti vuol dire in
+             * fila. Chiedere di parallelizzare cose che si passano il risultato
+             * l'una all'altra farebbe partire la seconda con le mani vuote.
+             */
+            const parallelInstruction = modelSupportsTools
+                ? '\nWhen a request needs several tools that do NOT depend on each other, '
+                    + 'call them together in the same turn instead of one at a time: it is faster '
+                    + 'for the user and cheaper. Around three at once is a good target. '
+                    + 'Call them one after another only when a tool genuinely needs the result of '
+                    + 'the previous one.'
+                : ''
             const tonePrompt = baseTonePrompt
+                + parallelInstruction
                 + (autosaveGenerated && modelSupportsTools && !documentToolOffered
                     ? '\n' + librarySaveInstruction()
                     : '')
