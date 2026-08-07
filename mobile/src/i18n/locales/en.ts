@@ -2193,6 +2193,7 @@ export const TALOS_EN_MESSAGES = {
         engineKvCost: 'Cache cost',
         engineOpens: 'Model opens',
         engineOpenTime: 'Last open cost',
+        enginePrefixCache: 'Frozen prefixes',
         engineThreads: 'Threads',
         engineContext: 'Context (in use / ceiling)',
         engineStages: 'Last generation, by stage',

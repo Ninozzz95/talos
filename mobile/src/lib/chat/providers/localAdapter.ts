@@ -21,6 +21,7 @@ import {
     talosLocalInstalledModels,
     talosFreezePrefix,
     talosThawPrefix,
+    talosEvictPrefixes,
 } from '@/services/localEngine'
 import {
     talosPrefixCacheFileName,
@@ -389,7 +390,21 @@ async function prefissoCongelatoDi(
         contextTokens,
         // Quella OTTENUTA, mai quella chiesta: la cache è allocata su questa.
         kvCacheType: status.kvCacheType ?? 'f16',
-        engineBuild: TALOS_APP_BUILD,
+        /**
+         * ⛔ La build del MOTORE, non quella dell'app.
+         *
+         * Ciò che rende illeggibile uno stato salvato è la versione di
+         * llama.cpp: il formato è interno e non promette compatibilità. La
+         * build dell'app cambia a **ogni** compilazione, e MISURATO il
+         * 2026-08-08 questo buttava via un gigabyte di lavoro a ogni
+         * aggiornamento, facendo ripagare 150 secondi al primo messaggio per
+         * una ragione che non esiste.
+         *
+         * Il ripiego sulla build dell'app è per il lato nativo più vecchio, che
+         * non sa dichiararla: lì si resta prudenti, cioè si invalida troppo
+         * invece che troppo poco.
+         */
+        engineBuild: status.engineBuild ?? TALOS_APP_BUILD,
         prefixText: prompt,
     }
     return {
@@ -436,7 +451,22 @@ async function congelaSePossibile(
         })
         if (!verdetto.freeze) return
         const esito = await talosFreezePrefix(congelato.percorso, congelato.prompt)
-        if (esito.bytes > 0) GIA_CONGELATI.add(congelato.percorso)
+        if (esito.bytes > 0) {
+            GIA_CONGELATI.add(congelato.percorso)
+            /*
+             * ⛔ Lo sfratto SUBITO DOPO aver scritto, non prima e non a parte.
+             *
+             * Prima sarebbe inutile — il file che sta per nascere non e' ancora
+             * contato. A parte, in un lavoro periodico, vorrebbe dire che fra
+             * una pulizia e l'altra il disco puo' crescere senza limite, che e'
+             * esattamente il difetto che questo esiste per chiudere.
+             *
+             * Qui invece il numero di file non puo' superare il tetto per piu'
+             * del tempo di una cancellazione: si scrive uno, si toglie
+             * l'eccesso.
+             */
+            await talosEvictPrefixes()
+        }
     } catch {
         // Vedi sopra: e' un'ottimizzazione, non una promessa.
     }

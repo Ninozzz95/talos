@@ -1,4 +1,5 @@
 import type { TalosModelShape } from '@/lib/models/fit'
+import { TALOS_PREFIX_TOTAL_BYTES } from '@/lib/models/prefixCache'
 
 /**
  * Il motore locale, raccontato a chi deve capire perché è lento.
@@ -73,6 +74,17 @@ export interface TalosEngineFacts {
      */
     lastOpenMs: number | null
     lastOpenReusedWeights: boolean | null
+    /**
+     * ⭐ I prefissi congelati: quanti e quanto occupano.
+     *
+     * Sta nel Doctor e NON fra i modelli, di proposito: un file da quasi un
+     * gigabyte nell'elenco dei modelli sembrerebbe un modello scaricato per
+     * sbaglio, e chi lo cancellasse si troverebbe la chat più lenta senza
+     * capire perché. Lo spazio va mostrato — nascosto sarebbe peggio — ma
+     * dove si mostrano le cache.
+     */
+    prefixCacheCount: number | null
+    prefixCacheBytes: number | null
     contextCeiling: number | null
     /** Gli stadi dell'ultima generazione, se ce n'è stata una. */
     timings: {
@@ -208,6 +220,24 @@ export function talosEngineDiagnosticRows(facts: TalosEngineFacts): TalosEngineD
                     ? ''
                     : riuso ? ' · pesi già in memoria' : ' · letto dal disco'),
             ok: !riuso || facts.lastOpenMs <= 2_000,
+        })
+    }
+
+    /**
+     * ⛔ La riga che rende visibile lo spazio che ci prendiamo.
+     *
+     * Un prefisso congelato toglie 150 secondi di attesa a ogni chat nuova e in
+     * cambio occupa quasi un gigabyte. È un baratto che conviene, ma è un
+     * baratto: chi lo paga deve poterlo vedere, e la riga diventa rossa quando
+     * supera il tetto che ci siamo dati — cioè quando lo sfratto non sta
+     * facendo il suo mestiere.
+     */
+    if (facts.prefixCacheCount !== null && facts.prefixCacheCount > 0) {
+        rows.push({
+            id: 'engine-prefix-cache',
+            labelKey: 'doctor.enginePrefixCache',
+            value: `${facts.prefixCacheCount} · ${byteLeggibili(facts.prefixCacheBytes ?? 0)}`,
+            ok: (facts.prefixCacheBytes ?? 0) <= TALOS_PREFIX_TOTAL_BYTES,
         })
     }
 

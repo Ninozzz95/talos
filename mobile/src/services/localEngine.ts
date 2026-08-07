@@ -4,6 +4,7 @@ import {
     talosShouldRetryLocalOpen,
 } from '@/lib/models/localContextPolicy'
 import type { TalosModelShape } from '@/lib/models/fit'
+import { talosPrefixesToEvict } from '@/lib/models/prefixCache'
 
 /**
  * The on-device engine, from JavaScript's side of the bridge.
@@ -52,6 +53,18 @@ export interface TalosLocalEngineStatus {
      * vecchia che non sa rispondere.
      */
     kvCacheType: string | null
+    /**
+     * La build di llama.cpp, tipo `b10218-<commit>`, o `null` su una build
+     * nativa più vecchia.
+     *
+     * ⛔ Sta qui e non solo nel Doctor perché serve al PERCORSO CALDO:
+     * l'impronta di un prefisso congelato deve invalidarsi quando cambia il
+     * motore — è la versione di llama.cpp che decide se uno stato salvato è
+     * ancora leggibile — e **non** quando cambia l'app. Usare la build dell'app
+     * buttava via un gigabyte di lavoro a ogni aggiornamento, per una ragione
+     * che non esiste.
+     */
+    engineBuild: string | null
 }
 
 export interface TalosLocalEngineOpenResult {
@@ -103,6 +116,8 @@ interface TalosLlamaPlugin {
         shape?: Record<string, unknown>
         /** La cache creata DAVVERO, non quella chiesta. */
         kvCacheType?: string
+        /** La build di llama.cpp: cio' che invalida un prefisso congelato. */
+        engineBuild?: string
     }>
     deleteInstalled(options: { path: string }): Promise<{ deleted: boolean }>
     open(options: {
@@ -171,6 +186,14 @@ interface TalosLlamaPlugin {
     loadState(options: { path: string }): Promise<{
         restoredTokens: number
         ms: number
+    }>
+    /**
+     * I prefissi congelati sul disco. `modifiedAt` è l'ULTIMO USO, non la
+     * creazione: `loadState` la aggiorna a ogni rilettura riuscita.
+     */
+    prefixCaches(): Promise<{
+        caches: Array<{ path: string, bytes: number, modifiedAt: number }>
+        totalBytes: number
     }>
     lastTimings(): Promise<{ timings: string }>
     /** Il fabbisogno e la forma, letti senza caricare i pesi. */
@@ -388,9 +411,15 @@ export async function talosLocalEngineStatus(): Promise<TalosLocalEngineStatus> 
             loadedPath: status.loadedPath,
             shape: talosModelShapeOf(status.shape, status.kvCacheType),
             kvCacheType: typeof status.kvCacheType === 'string' ? status.kvCacheType : null,
+            engineBuild: typeof status.engineBuild === 'string' && status.engineBuild !== ''
+                ? status.engineBuild
+                : null,
         }
     } catch {
-        return { available: false, backends: '', loadedPath: null, shape: null, kvCacheType: null }
+        return {
+            available: false, backends: '', loadedPath: null,
+            shape: null, kvCacheType: null, engineBuild: null,
+        }
     }
 }
 
@@ -789,6 +818,50 @@ export async function talosThawPrefix(path: string): Promise<{
         return { tokens: esito.restoredTokens, ms: esito.ms }
     } catch {
         return { tokens: 0, ms: 0 }
+    }
+}
+
+/**
+ * ⛔ LO SFRATTO, che è la metà mancante del congelamento.
+ *
+ * Un prefisso pesa quasi un gigabyte e ne nasce uno per ogni combinazione di
+ * modello, contesto, cache e interruttore del ragionamento. Senza questo,
+ * usare TALOS riempie il telefono **in silenzio**.
+ *
+ * La politica sta in `prefixCache.ts`, pura e provata; qui si legge il disco e
+ * si cancella. Non solleva mai: se lo sfratto fallisce si è occupato spazio,
+ * non si è rotto niente, e la volta dopo si riprova.
+ *
+ * @returns quanti file sono stati tolti e quanti byte liberati.
+ */
+export async function talosEvictPrefixes(): Promise<{ removed: number, bytes: number }> {
+    try {
+        const { caches } = await plugin.prefixCaches()
+        const daTogliere = new Set(talosPrefixesToEvict(caches))
+        if (daTogliere.size === 0) return { removed: 0, bytes: 0 }
+        let bytes = 0
+        let removed = 0
+        for (const voce of caches) {
+            if (!daTogliere.has(voce.path)) continue
+            const { deleted } = await plugin.deleteInstalled({ path: voce.path })
+            if (deleted) {
+                removed += 1
+                bytes += voce.bytes
+            }
+        }
+        return { removed, bytes }
+    } catch {
+        return { removed: 0, bytes: 0 }
+    }
+}
+
+/** Quanto occupano i prefissi congelati, per il Doctor. */
+export async function talosPrefixCacheUsage(): Promise<{ count: number, bytes: number } | null> {
+    try {
+        const { caches, totalBytes } = await plugin.prefixCaches()
+        return { count: caches.length, bytes: totalBytes }
+    } catch {
+        return null
     }
 }
 

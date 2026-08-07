@@ -26,7 +26,8 @@ import {
 export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosticRow[]> {
     if (!Capacitor.isNativePlatform()) return []
 
-    const [{ talosLocalEngineStatus, talosLocalEngineTimings, talosLocalInstalledModels },
+    const [{ talosLocalEngineStatus, talosLocalEngineTimings, talosLocalInstalledModels,
+        talosPrefixCacheUsage },
         { talosMeasureDevice },
         { talosMaxContextFor }] = await Promise.all([
         import('@/services/localEngine'),
@@ -40,13 +41,18 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
      * già alle altre — una schermata diagnostica che muore per una misura è la
      * cosa meno utile che possa esistere.
      */
-    const [statoEsito, tempiEsito, deviceEsito, installatiEsito, statoGrezzoEsito] =
+    const [statoEsito, tempiEsito, deviceEsito, installatiEsito, statoGrezzoEsito,
+        prefissiEsito] =
         await Promise.allSettled([
             talosLocalEngineStatus(),
             talosLocalEngineTimings(),
             talosMeasureDevice(),
             talosLocalInstalledModels(),
             rawEngineState(),
+            // Quanto spazio ci stiamo prendendo con i prefissi congelati. Va
+            // mostrato: un baratto che conviene resta un baratto, e chi lo
+            // paga deve poterlo vedere.
+            talosPrefixCacheUsage(),
         ])
 
     const stato = statoEsito.status === 'fulfilled' ? statoEsito.value : null
@@ -56,6 +62,7 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
         ? installatiEsito.value.models
         : []
     const grezzo = statoGrezzoEsito.status === 'fulfilled' ? statoGrezzoEsito.value : null
+    const prefissi = prefissiEsito.status === 'fulfilled' ? prefissiEsito.value : null
 
     /**
      * ⛔ I pesi vanno RIMESSI nella memoria disponibile prima di chiedere il
@@ -97,6 +104,8 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
         contextTokens: grezzo?.contextTokens ?? null,
         lastOpenMs: grezzo?.lastOpenMs ?? null,
         lastOpenReusedWeights: grezzo?.lastOpenReusedWeights ?? null,
+        prefixCacheCount: prefissi?.count ?? null,
+        prefixCacheBytes: prefissi?.bytes ?? null,
         contextCeiling: ceiling,
         timings: tempi,
         cpuCores: device?.cpuCores ?? null,
@@ -118,6 +127,7 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
  */
 async function rawEngineState(): Promise<{
     kvCacheType: string | null
+    engineBuild: string | null
     opensSinceStart: number | null
     contextRebuilds: number | null
     threads: number | null
@@ -135,6 +145,9 @@ async function rawEngineState(): Promise<{
             typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
         return {
             kvCacheType: typeof raw.kvCacheType === 'string' ? raw.kvCacheType : null,
+            engineBuild: typeof raw.engineBuild === 'string' && raw.engineBuild !== ''
+                ? raw.engineBuild
+                : null,
             opensSinceStart: typeof raw.opensSinceStart === 'number' ? raw.opensSinceStart : null,
             contextRebuilds: typeof raw.contextRebuilds === 'number' ? raw.contextRebuilds : null,
             // ⛔ Zero è un valore VERO qui — un contesto rifatto può costare
