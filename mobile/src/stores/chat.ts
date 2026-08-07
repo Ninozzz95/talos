@@ -435,16 +435,44 @@ function providerFault(
      * Quindi la cosa da fare è **rimandare il messaggio**, non controllare il
      * Wi-Fi. Un rifiuto che manda dalla parte sbagliata costa più del rifiuto.
      */
-    const autorizzazioneScaduta = /TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID/
-        .test(error instanceof Error ? error.message : String(error))
+    /*
+     * ⛔ Un codice interno NON si mostra a una persona. Mai.
+     *
+     * Owner 2026-08-07, dal suo telefono, testuale: «un avviso del genere
+     * farebbe chiudere l'applicazione dal 99% degli utenti. L'utente non
+     * riproverebbe neanche. Inaccettabile.»
+     *
+     * Aveva sotto gli occhi
+     * `TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID:loop_too_large` dentro un
+     * riquadro rosso — cioè il nome che ci siamo dati fra noi per dire dove il
+     * controllo è caduto, sbattuto in faccia a chi voleva solo un'immagine di
+     * un gatto. Ed è colpa NOSTRA, non sua: non ha sbagliato niente.
+     *
+     * Peggio: il consiglio sotto diceva «rimanda il messaggio», che è giusto
+     * per una causa sola di quella famiglia e sbagliato per questa. Rimandare
+     * un giro troppo grande lo fa sbattere contro lo stesso muro.
+     *
+     * Quindi da qui: la famiglia intera diventa una frase umana, e il consiglio
+     * cambia a seconda del PERCHÉ — che il codice conosce già, perché stamattina
+     * l'abbiamo insegnato a dirlo.
+     */
+    const messaggioGrezzo = error instanceof Error ? error.message : String(error)
+    const checkpointRotto = messaggioGrezzo.includes('TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID')
+    const troppoGrande = checkpointRotto && /too_large/.test(messaggioGrezzo)
     return {
         layer: 'system',
         code: 'CHAT_EXECUTION_FAILED',
-        message: talosTranslatableErrorMessage(error, translate)
-            ?? errorMessage(error, translate),
-        next_action: translate(autorizzazioneScaduta
-            ? 'chat.resendAfterAuthorizationLapsed'
-            : 'chat.checkModelConnection'),
+        message: checkpointRotto
+            ? translate(troppoGrande
+                ? 'chat.authorizationTooBig'
+                : 'chat.authorizationLapsed')
+            : talosTranslatableErrorMessage(error, translate)
+                ?? errorMessage(error, translate),
+        next_action: translate(troppoGrande
+            ? 'chat.startFreshAfterTooBig'
+            : checkpointRotto
+                ? 'chat.resendAfterAuthorizationLapsed'
+                : 'chat.checkModelConnection'),
         retryable: null,
         status: null,
         provider: identity.provider,

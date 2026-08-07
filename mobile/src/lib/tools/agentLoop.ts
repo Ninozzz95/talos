@@ -1,5 +1,8 @@
 import type { ChatTurn, TalosToolCall } from '@/stores/chat'
-import type { TalosMobileInputPart } from '@/lib/chat/attachmentContracts'
+import type {
+    TalosMobileImageInputPart,
+    TalosMobileInputPart,
+} from '@/lib/chat/attachmentContracts'
 import type { AppendChatAttachmentInput } from '@/repositories/chatRepository'
 
 /**
@@ -82,6 +85,25 @@ export interface TalosAgentLoopDeps {
         /** Vero se la persona ha rifiutato il piano invece di ridurlo. */
         cancelled: boolean
     }>
+    /**
+     * ⛔ Rimette i byte di un'immagine che il checkpoint NON ha salvato.
+     *
+     * MISURATO dallo screenshot dell'owner del 2026-08-07, sul suo telefono:
+     * `TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID:loop_too_large` dentro un
+     * riquadro rosso, in una conversazione che generava immagini. Il
+     * checkpoint copiava i turni **con il base64 dentro**, e due immagini
+     * generate bastano a superare gli 8 MB.
+     *
+     * La cura non è alzare il tetto: è non metterci i byte. Le immagini sono
+     * già nella Libreria e ogni parte porta il suo `attachmentId`, quindi il
+     * checkpoint salva il riferimento e questo gancio rimette il contenuto
+     * quando il turno riparte.
+     *
+     * Assente, o se risponde `null`, la parte viene **tolta** invece di essere
+     * rimandata vuota: un'immagine senza byte è un allegato che il provider
+     * rifiuta, ed è il modo peggiore di perdere un turno.
+     */
+    rehydrateImage?(attachmentId: string): Promise<{ base64: string, mediaType: string } | null>
     /** Fired when a round of calls starts, so the UI can show what is running. */
     onToolRound?(calls: TalosToolCall[]): void
     /**
@@ -260,7 +282,7 @@ function checkpointOf(
     return {
         schema_version: 1,
         stage,
-        turns: [...state.turns],
+        turns: state.turns.map(alleggerisci),
         completion: stage === 'before_tools' ? state.completion : null,
         spoken: [...state.spoken],
         executed: state.executed.map((entry) => ({ ...entry })),
@@ -268,6 +290,59 @@ function checkpointOf(
         stoppedByLimit: state.stoppedByLimit,
         messageAttachments: state.messageAttachments.map((entry) => ({ ...entry })),
     }
+}
+
+/**
+ * Toglie i byte delle immagini da un turno, lasciando il riferimento.
+ *
+ * Il `base64: ''` invece del campo assente è voluto: la forma della parte non
+ * cambia, quindi chi la legge senza sapere niente di questo meccanismo non
+ * incontra una struttura diversa dal solito — trova un'immagine vuota, che è
+ * esattamente ciò che è finché non viene ripresa.
+ */
+function alleggerisci(turno: ChatTurn): ChatTurn {
+    if (!turno.parts?.length) return turno
+    return {
+        ...turno,
+        parts: turno.parts.map((parte) => (
+            parte.type === 'image' && parte.base64 && parte.attachmentId
+                ? { ...parte, base64: '' }
+                : parte
+        )),
+    }
+}
+
+/**
+ * Rimette i byte prima di ripartire, e scarta ciò che non si riesce a rimettere.
+ *
+ * Una parte senza byte non si manda: il provider la rifiuterebbe e il turno
+ * morirebbe per una ragione che nessuno riuscirebbe a spiegare.
+ */
+async function reidrata(
+    turni: readonly ChatTurn[],
+    rehydrate: NonNullable<TalosAgentLoopDeps['rehydrateImage']>,
+): Promise<ChatTurn[]> {
+    return Promise.all(turni.map(async (turno) => {
+        if (!turno.parts?.length) return turno
+        const parti = await Promise.all(turno.parts.map(async (parte): Promise<
+            TalosMobileInputPart | null
+        > => {
+            if (parte.type !== 'image') return parte
+            if (parte.base64 || !parte.attachmentId) return parte
+            const ripreso = await rehydrate(parte.attachmentId).catch(() => null)
+            if (!ripreso) return null
+            const ripieno: TalosMobileImageInputPart = {
+                ...parte,
+                base64: ripreso.base64,
+                mediaType: ripreso.mediaType as TalosMobileImageInputPart['mediaType'],
+            }
+            return ripieno
+        }))
+        return {
+            ...turno,
+            parts: parti.filter((parte): parte is TalosMobileInputPart => parte !== null),
+        }
+    }))
 }
 
 function outcomeOf(
@@ -491,8 +566,15 @@ export async function resumeTalosAgentLoop(
     deps: TalosAgentLoopDeps,
 ): Promise<TalosAgentLoopOutcome> {
     assertCheckpoint(checkpoint)
+    const turni = deps.rehydrateImage
+        ? await reidrata(checkpoint.turns, deps.rehydrateImage)
+        : checkpoint.turns.map((turno) => (turno.parts?.length
+            // Senza il gancio si tolgono comunque le immagini svuotate: mandarle
+            // vuote sarebbe peggio che non mandarle.
+            ? { ...turno, parts: turno.parts.filter((parte) => parte.type !== 'image' || parte.base64) }
+            : turno))
     const state: MutableAgentLoopState = {
-        turns: [...checkpoint.turns],
+        turns: [...turni],
         completion: checkpoint.completion,
         spoken: [...checkpoint.spoken],
         executed: checkpoint.executed.map((entry) => ({ ...entry })),
