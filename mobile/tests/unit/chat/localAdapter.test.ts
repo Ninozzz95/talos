@@ -29,6 +29,17 @@ const localEngine = vi.hoisted(() => {
         talosLocalEngineOpen: vi.fn(),
         talosLocalEngineOpenWithFallback: vi.fn(),
         talosLocalEngineChatPlan: vi.fn(),
+        talosLocalEnginePlanPrompt: vi.fn(),
+        /*
+         * Non una spia: il valore VERO, perche' l'aritmetica del tetto ci si
+         * appoggia e una spia che risponde `undefined` non farebbe fallire il
+         * conto — lo farebbe rispondere un numero sbagliato in silenzio.
+         * I due valori sono fissati da `tests/unit/models/kvCacheType.test.ts`,
+         * dove `q8_0` vale 34/32 e non 1: un blocco q8_0 porta con se' la sua
+         * scala.
+         */
+        talosKvBytesPerElement: (type: string | null | undefined) =>
+            (type === 'q8_0' ? 34 / 32 : 2),
         talosLocalEngineChatPrompt: vi.fn(),
         talosLocalEngineGenerate: vi.fn(),
         talosLocalEngineCancel: vi.fn(),
@@ -139,6 +150,10 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
         localEngine.talosLocalEngineOpen.mockReset()
         localEngine.talosLocalEngineOpenWithFallback.mockReset()
         localEngine.talosLocalEngineChatPlan.mockReset()
+        localEngine.talosLocalEnginePlanPrompt.mockReset()
+        // Il lato nativo che NON sa contare prima di aprire: è la build più
+        // vecchia, ed è il caso che deve continuare a funzionare com'era.
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue(null)
         localEngine.talosLocalEngineChatPrompt.mockReset()
         localEngine.talosLocalEngineGenerate.mockReset()
         deviceCapacity.talosMeasureDevice.mockReset()
@@ -189,9 +204,104 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
 
         expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
             '/models/qwen.gguf',
-            { contextTokens: 4096 },
+            { contextTokens: 4096, kvCacheType: 'f16' },
         )
         expect(localEngine.talosLocalEngineOpen).not.toHaveBeenCalled()
+    })
+
+    /**
+     * ⛔ La cache leggera va CHIESTA — e per due giorni nessuno l'ha fatto.
+     *
+     * Il motore sa crearla dall'8C, collaudo e ripiego in `f16` compresi, e il
+     * predefinito nativo è `f16`. Visto sul Pad il 2026-08-07: una conversazione
+     * da 8470 token girava con `kvCacheType: "f16"`, cioè 1,72 GB di cache dove
+     * ne bastavano 0,91.
+     *
+     * ⭐ Ma la misura successiva ha cambiato la conclusione: **la leggera costa
+     * il 40% del prefill** — 72,2 contro 43,6 token/s a parità di contesto e di
+     * prompt, stesso modello e stessa sessione. Quindi non si chiede sempre: si
+     * chiede la pesante finché ci sta, ed è quello che queste due prove fissano.
+     */
+    it('con margine chiede la cache PESANTE, che è la veloce', async () => {
+        deviceCapacity.talosMeasureDevice.mockResolvedValue({
+            totalRamBytes: 12 * GIB,
+            availableRamBytes: 6 * GIB,
+            lowMemoryThresholdBytes: Math.round(0.35 * GIB),
+            freeStorageBytes: 8 * GIB,
+            memoryBandwidthBytesPerSecond: null,
+            thermal: 'none' as const,
+            abiSupported: true,
+        })
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue({
+            promptTokens: 5779,
+            shape: LLAMA_3B_SHAPE,
+        })
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 8192 })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'qwen-8192',
+            promptTokens: 5779,
+            contextTokens: 8192,
+        })
+
+        await localAdapter.complete(
+            input() as never,
+            { apiKey: null, endpoint: null },
+            (() => { throw new Error('local must not use transport') }) as never,
+        )
+
+        expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
+            '/models/qwen.gguf',
+            expect.objectContaining({ kvCacheType: 'f16' }),
+        )
+    })
+
+    /**
+     * ⭐ E la leggera solo quando è l'unico modo di avere la conversazione.
+     *
+     * I numeri sono la differenza fra le due cache su questo modello e questo
+     * dispositivo, calcolati e non scelti: con 3,4 GiB liberi il tetto è **6144**
+     * token in `f16` e **11776** in `q8_0`. Il fabbisogno è 6804. Cioè con la
+     * cache veloce il messaggio verrebbe rifiutato, con la lenta passa — ed è
+     * esattamente il caso in cui il 40% di prefill in più è il prezzo giusto.
+     */
+    it('e la leggera solo quando è l\'unico modo di avere la conversazione', async () => {
+        deviceCapacity.talosMeasureDevice.mockResolvedValue({
+            totalRamBytes: 12 * GIB,
+            availableRamBytes: Math.round(3.4 * GIB),
+            lowMemoryThresholdBytes: Math.round(0.35 * GIB),
+            freeStorageBytes: 8 * GIB,
+            memoryBandwidthBytesPerSecond: null,
+            thermal: 'none' as const,
+            abiSupported: true,
+        })
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue({
+            promptTokens: 5779,
+            shape: LLAMA_3B_SHAPE,
+        })
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 8192 })
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true,
+            backends: 'CPU',
+            loadedPath: null,
+            shape: LLAMA_3B_SHAPE,
+            kvCacheType: 'q8_0',
+        })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'qwen-8192',
+            promptTokens: 5779,
+            contextTokens: 8192,
+        })
+
+        await localAdapter.complete(
+            input() as never,
+            { apiKey: null, endpoint: null },
+            (() => { throw new Error('local must not use transport') }) as never,
+        )
+
+        expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
+            '/models/qwen.gguf',
+            { contextTokens: 8192, kvCacheType: 'q8_0' },
+        )
     })
 
     it('turns a final context failure into actionable localized provider metadata', async () => {
@@ -209,6 +319,120 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
             message: 'TALOS_LOCAL_MODEL_OPEN_CONTEXT',
             uiMessageKey: 'models.localModelOpenContext',
         })
+    })
+
+    /**
+     * ⭐⭐ IL CERCHIO SPEZZATO: si conta prima, si apre una volta sola.
+     *
+     * Il test sopra (`C45-RED-18H`) descrive il mondo di prima: apri a 4096,
+     * scopri che servono 6804 token, riapri a 8192. Due aperture per un
+     * messaggio — MISURATE sul Pad il 2026-08-07 a **2938 ms** la prima su un
+     * modello da 1,8 GB, e molte di più su uno grande.
+     *
+     * Adesso il fabbisogno si conosce prima di caricare i pesi: `vocab_only`
+     * carica il solo vocabolario, applica il template e conta, in **~200 ms**.
+     * Stesso prompt, stessa aritmetica, **una** apertura.
+     */
+    it('con il piano anticipato apre UNA volta, già a 8192, per lo stesso prompt da 6804', async () => {
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue({
+            promptTokens: 5779,
+            shape: LLAMA_3B_SHAPE,
+        })
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 8192 })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'qwen-8192',
+            promptTokens: 5779,
+            contextTokens: 8192,
+        })
+
+        await localAdapter.complete(
+            input() as never,
+            { apiKey: null, endpoint: null },
+            (() => { throw new Error('local must not use transport') }) as never,
+        )
+
+        expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
+            '/models/qwen.gguf',
+            { contextTokens: 8192, kvCacheType: 'f16' },
+        )
+        // ⛔ La riga che vale il lavoro: la seconda apertura non c'è più.
+        expect(localEngine.talosLocalEngineOpen).not.toHaveBeenCalled()
+    })
+
+    /**
+     * ⛔ Il SEGNO del tetto, prima di aprire.
+     *
+     * `talosMaxContextFor` sottrae i pesi dalla memoria libera, perché nasce per
+     * la domanda «se caricassi questo modello, quanto contesto mi resterebbe?».
+     * Dopo l'apertura i pesi vanno RIMESSI — `availableRamBytes` li ha già
+     * scontati — ed è la correzione che il Doctor e la chat documentano
+     * entrambi. Prima dell'apertura no: il modello non è in memoria, e rimetterli
+     * regalerebbe un tetto che il dispositivo non può onorare.
+     *
+     * I numeri di questa prova sono la differenza fra i due segni, calcolata su
+     * un dispositivo con 3,5 GiB liberi e un 3B da 1,75 GiB: **7168** col segno
+     * giusto, **23552** con quello sbagliato. Il fabbisogno è 6804, quindi col
+     * segno sbagliato si aprirebbe a 8192 — cioè oltre ciò che la memoria regge.
+     */
+    it('prima di aprire NON rimette i pesi nella memoria libera', async () => {
+        deviceCapacity.talosMeasureDevice.mockResolvedValue({
+            totalRamBytes: 12 * GIB,
+            availableRamBytes: Math.round(3.5 * GIB),
+            lowMemoryThresholdBytes: Math.round(0.35 * GIB),
+            freeStorageBytes: 8 * GIB,
+            memoryBandwidthBytesPerSecond: null,
+            thermal: 'none' as const,
+            abiSupported: true,
+        })
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue({
+            promptTokens: 5779,
+            shape: LLAMA_3B_SHAPE,
+        })
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 7168 })
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true,
+            backends: 'CPU',
+            loadedPath: null,
+            shape: LLAMA_3B_SHAPE,
+        })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'qwen-7168',
+            promptTokens: 5779,
+            contextTokens: 7168,
+        })
+
+        await localAdapter.complete(
+            input() as never,
+            { apiKey: null, endpoint: null },
+            (() => { throw new Error('local must not use transport') }) as never,
+        )
+
+        expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
+            '/models/qwen.gguf',
+            { contextTokens: 7168, kvCacheType: 'f16' },
+        )
+    })
+
+    /**
+     * Il lato nativo più vecchio — caso reale con le installazioni affiancate —
+     * non sa contare prima di aprire. Deve tornare al comportamento di prima,
+     * non rifiutare: una funzione che serve a RISPARMIARE un lavoro non deve
+     * poter impedire quel lavoro.
+     */
+    it('senza piano anticipato riparte dal predefinito, come prima', async () => {
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue(null)
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+
+        await localAdapter.complete(
+            input() as never,
+            { apiKey: null, endpoint: null },
+            (() => { throw new Error('local must not use transport') }) as never,
+        )
+
+        expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
+            '/models/qwen.gguf',
+            { contextTokens: 4096, kvCacheType: 'f16' },
+        )
     })
 
     it('C45-RED-18H reopens the same model exactly once at 8192 for the measured Qwen tool prompt', async () => {
@@ -235,7 +459,7 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
         expect(localEngine.talosLocalEngineOpen).toHaveBeenCalledTimes(1)
         expect(localEngine.talosLocalEngineOpen).toHaveBeenCalledWith(
             '/models/qwen.gguf',
-            { contextTokens: 8192 },
+            { contextTokens: 8192, kvCacheType: 'f16' },
         )
         expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(2)
         expect(localEngine.talosLocalEngineGenerate).toHaveBeenCalledWith(
@@ -318,7 +542,7 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
 
         expect(localEngine.talosLocalEngineOpen).toHaveBeenCalledWith(
             '/models/qwen.gguf',
-            { contextTokens: 16384 },
+            { contextTokens: 16384, kvCacheType: 'f16' },
         )
         expect(localEngine.talosLocalEngineGenerate).toHaveBeenCalled()
     })
@@ -344,7 +568,7 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
 
         expect(localEngine.talosLocalEngineOpen).toHaveBeenCalledWith(
             '/models/qwen.gguf',
-            { contextTokens: 16384 },
+            { contextTokens: 16384, kvCacheType: 'f16' },
         )
     })
 })

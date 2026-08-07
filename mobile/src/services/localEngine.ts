@@ -39,6 +39,19 @@ export interface TalosLocalEngineStatus {
      * uno.
      */
     shape: TalosModelShape | null
+    /**
+     * La cache KV creata DAVVERO — non quella chiesta.
+     *
+     * ⛔ Sta qui, e non solo nel lettore grezzo del Doctor, perche' il percorso
+     * caldo ne ha bisogno: allargare un contesto senza sapere con quale cache
+     * sta girando significherebbe cambiarla sotto i piedi alla conversazione, e
+     * il tipo vero puo' gia' essere diverso da quello chiesto — un modello che
+     * non regge la `q8_0` riceve `f16` e lo dichiara.
+     *
+     * `null` quando non c'e' un modello aperto, o contro una build nativa piu'
+     * vecchia che non sa rispondere.
+     */
+    kvCacheType: string | null
 }
 
 export interface TalosLocalEngineOpenResult {
@@ -120,6 +133,12 @@ interface TalosLlamaPlugin {
         stopAtEndOfGeneration?: boolean
     }): Promise<TalosLocalEngineGeneration>
     lastTimings(): Promise<{ timings: string }>
+    /** Il fabbisogno e la forma, letti senza caricare i pesi. */
+    planPrompt(options: {
+        path: string
+        turns: ReadonlyArray<{ role: string, content: string }>
+        tools?: readonly unknown[]
+    }): Promise<{ plan: string }>
     tuneThreads(options: { candidates: number[], probeTokens?: number }): Promise<{ tuning: string }>
     installed(): Promise<{
         models: Array<{
@@ -313,9 +332,10 @@ export async function talosLocalEngineStatus(): Promise<TalosLocalEngineStatus> 
             backends: status.backends,
             loadedPath: status.loadedPath,
             shape: talosModelShapeOf(status.shape, status.kvCacheType),
+            kvCacheType: typeof status.kvCacheType === 'string' ? status.kvCacheType : null,
         }
     } catch {
-        return { available: false, backends: '', loadedPath: null, shape: null }
+        return { available: false, backends: '', loadedPath: null, shape: null, kvCacheType: null }
     }
 }
 
@@ -513,6 +533,47 @@ export async function talosLocalEngineChatPlan(
         prompt: plan.prompt,
         promptTokens: integerOf(plan.promptTokens) ?? 0,
         contextTokens: integerOf(plan.contextTokens) ?? 0,
+    }
+}
+
+/**
+ * ⭐⭐ QUANTO SERVE, chiesto PRIMA di caricare i pesi.
+ *
+ * ## Il cerchio che questa funzione spezza
+ *
+ * Il contesto giusto per una conversazione si conosce solo dopo aver applicato
+ * il template del modello e contato i token — e applicare il template richiedeva
+ * un modello aperto, mentre aprirlo richiede di sapere quanto contesto dargli.
+ * La soluzione era: apri col predefinito, scopri che serve di più, riapri.
+ * **Due aperture per un messaggio.**
+ *
+ * `vocab_only` carica il solo vocabolario, e con quello si applica il template e
+ * si conta. La forma arriva dai metadati GGUF, che si leggono senza caricare
+ * niente. MISURATO sul Pad il 2026-08-07: **~200 ms** contro **2938 ms** di
+ * apertura, e la forma letta dai metadati è risultata IDENTICA a quella
+ * dichiarata dal modello aperto.
+ *
+ * ## `null` non è un guasto
+ *
+ * Contro un lato nativo più vecchio — caso reale, le installazioni affiancate —
+ * il metodo non esiste. Chi chiama torna al comportamento di prima: apre col
+ * predefinito e allarga se serve. Una funzione che serve a **risparmiare** un
+ * lavoro non deve poter impedire quel lavoro.
+ */
+export async function talosLocalEnginePlanPrompt(
+    path: string,
+    turns: ReadonlyArray<{ role: string, content: string }>,
+    tools?: readonly unknown[],
+): Promise<{ promptTokens: number, shape: TalosModelShape | null } | null> {
+    try {
+        const risposta = await plugin.planPrompt({ path, turns, tools })
+        const grezzo: unknown = JSON.parse(risposta.plan)
+        const record = grezzo as Record<string, unknown>
+        const promptTokens = integerOf(record.promptTokens)
+        if (promptTokens === null || promptTokens <= 0) return null
+        return { promptTokens, shape: talosModelShapeOf(record) }
+    } catch {
+        return null
     }
 }
 
