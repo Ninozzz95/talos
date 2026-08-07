@@ -330,6 +330,27 @@ async function scan(): Promise<void> {
         collected.push({ id: row.id, label: t(row.labelKey), value: row.value, ok: row.ok })
     }
 
+    /*
+     * ⛔ L'agente: la catena, il piano, e il conto che ha fatto nascere A8.
+     *
+     * Owner 2026-08-07, direttiva permanente: ogni cosa nuova si aggancia al
+     * Doctor. Qui serve piu' che altrove, perche' le regole del piano e della
+     * trifecta sono INVISIBILI quando funzionano — si notano solo quando
+     * sbagliano, e a quel punto non c'e' modo di sapere perche'.
+     *
+     * I valori possono essere chiavi di traduzione (`doctor.agent.*`) oppure
+     * numeri gia' pronti: `t()` su una stringa che non e' una chiave
+     * restituisce la stringa, quindi la stessa riga serve entrambi i casi.
+     */
+    const { talosAgentPlanDoctorRows } = await import('@/services/agentPlanDoctor')
+    const agente = await talosAgentPlanDoctorRows({
+        sessionId: controller.chat.activeSession.value?.id ?? null,
+        scope: settings.state.shell?.plan_scope ?? 'turn',
+    }).catch(() => [])
+    for (const row of agente) {
+        collected.push({ id: row.id, label: t(row.labelKey), value: t(row.value), ok: row.ok })
+    }
+
     rows.value = collected
     issues.value = talosDeviceIssues()
 }

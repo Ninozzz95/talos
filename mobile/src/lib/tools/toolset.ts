@@ -41,7 +41,14 @@ import {
     talosLibraryFileType,
 } from '@/lib/vaultLibrary'
 import { talosChainFor, talosSetChain } from '@/lib/tools/chainStore'
-import type { TalosToolChainState } from '@/lib/tools/security'
+import {
+    TALOS_TOOL_SECURITY_FALLBACK,
+    talosForbidsPersistentGrant,
+    type TalosToolChainState,
+    type TalosToolSecurity,
+} from '@/lib/tools/security'
+import { TALOS_TOOL_SECURITY } from '@/lib/tools/securityCatalog'
+import type { TalosToolAction } from '@/lib/tools/permissionTypes'
 import { newTalosMobileId } from '@/lib/mobileIds'
 import type {
     TalosDeviceFileSaveInput,
@@ -170,6 +177,31 @@ export interface TalosToolset {
         enabledTools: Readonly<TalosAgentToolEnabled>,
     ): TalosToolDefinition<never>[]
     requestConsent(request: TalosToolConsentRequest): Promise<boolean | 'busy'>
+    /**
+     * ⛔ B2 — quello che serve sapere di un tool per METTERLO IN UN PIANO.
+     *
+     * Sta qui e non nel controller perché qui vivono già le tre cose che
+     * servono insieme: la definizione del tool, il catalogo di sicurezza e i
+     * permessi vivi. Ricostruirle altrove significherebbe tenere allineate due
+     * risposte alla stessa domanda — e la prima che si disallinea è quella che
+     * nessuno guarda.
+     *
+     * `null` per un nome che non esiste: chi chiede lo tratterà come il caso
+     * più prudente, che è l'unico modo sicuro di non sapere.
+     */
+    describe(
+        name: string,
+        permissions: Partial<TalosToolPermissions> | undefined,
+        enabledTools: Readonly<TalosAgentToolEnabled>,
+    ): {
+        title: string
+        security: TalosToolSecurity
+        actions: readonly TalosToolAction[]
+        /** Falso quando un permesso lo nega o l'interruttore è spento. */
+        allowed: boolean
+        /** Da confermare uno per uno: fuori dal piano. */
+        critical: boolean
+    } | null
     audit(row: TalosToolAuditRow, sessionId: string | null): Promise<void>
     /**
      * La catena della conversazione, esposta DA QUI e non importata dal
@@ -477,9 +509,43 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
      * and in the notification — one of everything, and no seam to get wrong.
      */
     const modelTools = createTalosLocalModelTools()
+    const tutti = [...all, ...libraryExports, ...policyTools, ...modelTools]
     return {
-        tools: [...all, ...libraryExports, ...policyTools, ...modelTools],
+        tools: tutti,
         isEnabled,
+        describe(name, permissions, enabledTools) {
+            const tool = tutti.find((riga) => riga.name === name)
+            if (!tool) return null
+            const actions = talosToolRequiredActions(tool)
+            /*
+             * Il catalogo di sicurezza si legge QUI e non dall'esecutore: il
+             * predefinito prudente vale anche per un tool che non l'ha
+             * dichiarato, e un piano che mostrasse come innocuo un tool
+             * sconosciuto sarebbe la bugia peggiore di questa schermata.
+             */
+            const security: TalosToolSecurity =
+                TALOS_TOOL_SECURITY[name as keyof typeof TALOS_TOOL_SECURITY]
+                ?? TALOS_TOOL_SECURITY_FALLBACK
+            /*
+             * `allowed` guarda ENTRAMBE le porte, come fa l'esecutore:
+             * l'interruttore del tool e i tre stati del permesso. Se ne
+             * guardasse una sola, il piano mostrerebbe come approvabile un
+             * passo che poi verrebbe rifiutato — cioè una promessa che il
+             * codice non mantiene.
+             */
+            const allowed = isEnabled(name, enabledTools)
+                && actions.every((action) => decideTalosToolPermission(action, permissions) !== 'deny')
+            /*
+             * Critico = si conferma uno per uno, e non entra nel piano.
+             *
+             * Due strade portano qui: il rischio effettivo più alto, e un tool
+             * che chiede conferma SEMPRE per contratto. La seconda esiste
+             * perché alcune cose sono gravi a prescindere dal numero.
+             */
+            const critical = tool.confirmation === 'always'
+                || talosForbidsPersistentGrant(security.risk)
+            return { title: tool.title, security, actions, allowed, critical }
+        },
         offer(permissions, enabledTools) {
             // Evaluated per send, like the permissions: the toolset is memoised,
             // so a search source configured a minute ago must govern THIS

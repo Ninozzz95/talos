@@ -313,6 +313,8 @@ const unavailableFilePicker: TalosNativeFilePicker = {
 }
 
 import { talosChainFor } from '@/lib/tools/chainStore'
+import type { TalosPlan } from '@/lib/tools/plan'
+import { TALOS_TOOL_SECURITY_FALLBACK as PIANO_SICUREZZA_PRUDENTE } from '@/lib/tools/security'
 import { talosOriginForWrite } from '@/lib/tools/security'
 import { talosOnLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
 import { chooseTalosImageProvider } from '@/lib/images/imageProviderSelection'
@@ -662,6 +664,8 @@ export interface ChatControllerDeps {
                 /** I tool della Libreria seguono QUESTO, non l iniezione ambientale. */
                 readonly library_access?: 'allow' | 'ask' | 'deny'
                 readonly memory_write_access?: 'allow' | 'ask' | 'deny'
+                /** Fin dove vale l'approvazione di un piano. Vedi `lib/tools/plan.ts`. */
+                readonly plan_scope?: 'turn' | 'conversation'
                 readonly image_attachment_consent?: 'allow' | 'ask' | 'deny'
                 readonly prompt_enhancer?: {
                     readonly model: string | null
@@ -770,6 +774,10 @@ export interface ChatController {
     /** La domanda in attesa sull'immagine che sta per uscire, o null. */
     readonly imageConsentRequest: Readonly<Ref<{ count: number, provider: string } | null>>
     answerImageConsent(answer: 'allow' | 'once' | 'deny'): Promise<void>
+    /** Il piano in attesa, o `null`. La schermata lo disegna e basta. */
+    readonly planRequest: Readonly<Ref<TalosPlan | null>>
+    /** `null` = non farlo. Un elenco vuoto sarebbe «approva zero passi». */
+    answerPlan(stepIds: readonly string[] | null): void
     readonly selectedModelId: Ref<string | null>
     readonly selectedProfile: ComputedRef<TalosMobileModelProfileView | null>
     readonly selectedProviderModel: ComputedRef<TalosMobileProviderModel | null>
@@ -1166,6 +1174,37 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // una scelta di questo tipo si alza, non si abbassa da sola.
         if (answer === 'allow') await deps.settings.setShell?.({ image_attachment_consent: 'allow' })
         resolve?.(answer)
+    }
+
+    /**
+     * ⛔ B2/B6 — il piano in attesa di una risposta.
+     *
+     * Stessa forma del consenso immagini, e per la stessa ragione: il
+     * controller **non disegna niente**, tiene la domanda e chi risponde.
+     *
+     * Non passa dal sistema dei checkpoint persistenti come le autorizzazioni
+     * per tool, ed e' una scelta: un piano vive quanto il messaggio che l'ha
+     * generato, e se il processo muore il turno riparte dal suo checkpoint —
+     * il piano verra' riproposto identico. Persisterlo aggiungerebbe uno stato
+     * da tenere allineato senza rispondere a nessuna domanda in piu'.
+     */
+    const planRequest = ref<TalosPlan | null>(null)
+    let planResolve: ((decisione: { admitted: readonly string[], cancelled: boolean }) => void) | null = null
+
+    /**
+     * Risponde al piano.
+     *
+     * `null` come `stepIds` significa «non farlo»: e' diverso da un elenco
+     * vuoto, che vorrebbe dire «approva zero passi» — e sono due frasi che chi
+     * legge la scheda ha detto in due modi diversi.
+     */
+    function answerPlan(stepIds: readonly string[] | null): void {
+        planRequest.value = null
+        const resolve = planResolve
+        planResolve = null
+        resolve?.(stepIds === null
+            ? { admitted: [], cancelled: true }
+            : { admitted: stepIds, cancelled: false })
     }
 
     const attachments = useTalosMobileAttachments({
@@ -3506,6 +3545,86 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         messageAttachments: result.messageAttachments,
                     }
                 },
+                /**
+                 * ⛔ B2 — il piano, chiesto una volta sola per messaggio.
+                 *
+                 * Qui vive la soglia: chi decide se un piano serva davvero e'
+                 * questo posto, che conosce rischio e reversibilita' di ogni
+                 * tool. Il giro dell'agente non ne sa niente e non deve.
+                 */
+                plan: async (calls) => {
+                    const tutti = calls.map((call) => call.id)
+                    const { talosBuildPlan, talosPlanNeedsApproval } = await import('@/lib/tools/plan')
+                    const { talosPlanFor, talosSetPlan } = await import('@/lib/tools/planStore')
+                    const { digestTalosToolAuthorizationInput } = await import('@/lib/tools/toolAuthorizations')
+                    const catena = talosChainFor(sendIdentity.sessionId)
+                    const portata = deps.settings.state.shell?.plan_scope ?? 'turn'
+
+                    const candidati = await Promise.all(calls.map(async (call) => {
+                        const descrittore = toolset.describe(
+                            call.name,
+                            sendRuntime.toolPermissions,
+                            sendRuntime.agentTools,
+                        )
+                        return {
+                            id: call.id,
+                            tool: call.name,
+                            title: descrittore?.title ?? call.name,
+                            input: call.arguments,
+                            // L'impronta e' la stessa che usa l'autorizzazione
+                            // per tool: una sola definizione di «questa cosa».
+                            digest: await digestTalosToolAuthorizationInput(call.arguments)
+                                .catch(() => ''),
+                            security: descrittore?.security ?? PIANO_SICUREZZA_PRUDENTE,
+                            actions: descrittore?.actions ?? ['write'],
+                            allowed: descrittore?.allowed ?? false,
+                            critical: descrittore?.critical ?? true,
+                        }
+                    }))
+
+                    /*
+                     * Un piano gia' approvato che copre questo giro non si
+                     * richiede: e' esattamente la porta «per conversazione», e
+                     * decade da sola se la catena si e' contaminata.
+                     */
+                    const gia = talosPlanFor(sendIdentity.sessionId)
+                    if (gia && gia.state === 'approved') {
+                        const { talosPlanAdmits } = await import('@/lib/tools/plan')
+                        const ammesse = candidati
+                            .filter((c) => talosPlanAdmits(gia, c.tool, c.digest, catena).admitted)
+                            .map((c) => c.id)
+                        if (ammesse.length === candidati.length) {
+                            return { admitted: ammesse, cancelled: false }
+                        }
+                    }
+
+                    if (!talosPlanNeedsApproval(candidati, catena)) {
+                        // Sotto soglia: si va, e le singole schede di consenso
+                        // restano quelle di sempre.
+                        return { admitted: tutti, cancelled: false }
+                    }
+
+                    const piano = talosBuildPlan(
+                        newTalosMobileId(),
+                        candidati,
+                        catena,
+                        portata === 'conversation' ? 'conversation' : 'turn',
+                    )
+                    const decisione = await new Promise<{ admitted: readonly string[], cancelled: boolean }>(
+                        (resolve) => {
+                            // Se una seconda domanda arrivasse mentre la prima
+                            // e' aperta, si rifiuta: e' l'esito prudente, ed e'
+                            // la stessa regola del consenso immagini.
+                            if (planResolve) { resolve({ admitted: [], cancelled: true }); return }
+                            planResolve = resolve
+                            planRequest.value = piano
+                        },
+                    )
+                    if (!decisione.cancelled) {
+                        talosSetPlan(sendIdentity.sessionId, { ...piano, state: 'approved' })
+                    }
+                    return decisione
+                },
                 onToolRound: (calls) => {
                     // A tool round means pages, documents or searches: long by
                     // definition, so the keeper starts now rather than waiting.
@@ -5478,6 +5597,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         profiles,
         imageConsentRequest,
         answerImageConsent,
+        planRequest,
+        answerPlan,
         selectedModelId,
         selectedProfile,
         selectedProviderModel,

@@ -404,6 +404,16 @@ async function openChatMedia(): Promise<void> {
 // is open — it would keep showing a chat that no longer exists.
 watch(() => chatController.chat.activeSession.value?.id, () => { mediaPanelOpen.value = false })
 // The write-consent sheet: loaded only when a tool actually asks.
+/**
+ * ⛔ Il piano ha la PRECEDENZA sulla scheda del singolo tool.
+ *
+ * Se comparissero insieme, la persona vedrebbe una conferma in piu' invece di
+ * quattro in meno — e il guadagno del piano si annullerebbe esattamente nel
+ * momento in cui doveva vedersi. Vedi il `v-if` piu' sotto.
+ */
+const TalosMobilePlanSheet = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobilePlanSheet.vue'),
+)
 const TalosMobileToolConsentSheet = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileToolConsentSheet.vue'),
 )
@@ -1031,6 +1041,14 @@ onBeforeUnmount(async () => {
                 @retry="void retryToolAuthorizationRecovery(activeToolAuthorizationRecovery.checkpoint_id)"
                 @cancel="void cancelToolAuthorizationRecovery(activeToolAuthorizationRecovery.checkpoint_id)"
                 @later="chatController.dismissToolAuthorization()"
+            />
+            <TalosMobilePlanSheet
+                v-else-if="chatController.planRequest.value"
+                :plan="chatController.planRequest.value"
+                :session-title="chatController.chat.activeSession.value?.title ?? ''"
+                @approve="(stepIds) => chatController.answerPlan(stepIds)"
+                @cancel="chatController.answerPlan(null)"
+                @later="chatController.answerPlan(null)"
             />
             <TalosMobileToolConsentSheet
                 v-else-if="activeToolAuthorization && chatController.toolAuthorizationPromptVisible.value"
