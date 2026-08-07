@@ -2196,6 +2196,7 @@ export const TALOS_IT_MESSAGES = {
         engineShape: 'Forma (strati×testeKV×testa)',
         engineKvCost: 'Costo della cache',
         engineOpens: 'Aperture del modello',
+        engineOpenTime: 'Costo dell’ultima apertura',
         engineThreads: 'Thread',
         engineContext: 'Contesto (in uso / tetto)',
         engineStages: 'Ultima generazione, per stadi',

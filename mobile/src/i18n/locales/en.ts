@@ -2192,6 +2192,7 @@ export const TALOS_EN_MESSAGES = {
         engineShape: 'Shape (layers×kvHeads×headDim)',
         engineKvCost: 'Cache cost',
         engineOpens: 'Model opens',
+        engineOpenTime: 'Last open cost',
         engineThreads: 'Threads',
         engineContext: 'Context (in use / ceiling)',
         engineStages: 'Last generation, by stage',

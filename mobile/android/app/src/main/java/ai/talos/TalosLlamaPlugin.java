@@ -63,6 +63,31 @@ public class TalosLlamaPlugin extends Plugin {
     /** True from the moment a generation is accepted until it has finished. */
     private final AtomicBoolean generating = new AtomicBoolean(false);
 
+    /**
+     * ⛔ IL TERZO CRONOMETRO: quanto è costata l'ultima apertura.
+     *
+     * Owner 2026-08-07, sul suo OnePlus 13 con un 1,7B quantizzato a 4-5: «prima
+     * di ricevere una risposta a un prompt semplicissimo tipo "ciao" ho aspettato
+     * DUE MINUTI». Quel numero contraddice le nostre misure — dopo 8A/8B/8C il
+     * primo token era a 126 ms — e la contraddizione si spiega da sé: le nostre
+     * erano tutte a **modello già caricato**.
+     *
+     * Il motore cronometrava tokenizzazione, prefisso, prefill e primo token.
+     * Non cronometrava l'unica cosa che può valere due minuti: leggere un
+     * gigabyte dal disco e mapparlo. Contava le aperture (`opensSinceStart`) ma
+     * non quanto costano — cioè sapeva DIRE «è successo due volte» e non «è
+     * costato cento secondi».
+     *
+     * Senza questa misura, progettare un acceleratore è tirare a indovinare su
+     * quale metà del tempo si sta ottimizzando.
+     *
+     * `volatile` e non atomico: sono due scritture indipendenti fatte da un
+     * worker solo, e chi legge vuole l'ultimo valore, non una coppia coerente.
+     */
+    private volatile long lastOpenMs = -1L;
+    /** True quando i pesi erano già in memoria: costa millisecondi, non secondi. */
+    private volatile boolean lastOpenReusedWeights = false;
+
     @PluginMethod
     public void available(PluginCall call) {
         JSObject result = new JSObject();
@@ -96,6 +121,17 @@ public class TalosLlamaPlugin extends Plugin {
             // un modello riaperto costa i gigabyte. Sommarli nasconderebbe
             // proprio la differenza che questo lavoro esiste per creare.
             result.put("contextRebuilds", TalosLlamaNative.nativeContextRebuilds());
+        }
+        /*
+         * Quanto e' costata l'ULTIMA apertura, e se i pesi erano gia' in
+         * memoria. Le due cose viaggiano insieme perche' separate non
+         * significano niente: «800 ms» e' ottimo per una rilettura dal disco e
+         * pessimo per un contesto rifatto, e senza il secondo campo chi legge
+         * non sa quale delle due sta guardando.
+         */
+        if (lastOpenMs >= 0L) {
+            result.put("lastOpenMs", lastOpenMs);
+            result.put("lastOpenReusedWeights", lastOpenReusedWeights);
         }
         /*
          * I numeri con cui il modello sta girando DAVVERO.
@@ -192,6 +228,9 @@ public class TalosLlamaPlugin extends Plugin {
         final boolean deterministic = Boolean.TRUE.equals(call.getBoolean("deterministic", false));
 
         worker.execute(() -> {
+            // Il cronometro parte QUI, non prima della coda: chi legge vuole
+            // sapere quanto costa aprire, non quanto ha aspettato il suo turno.
+            final long inizioApertura = System.nanoTime();
             /**
              * ⭐ STESSO MODELLO: si rifà il contesto, non si ricarica il file.
              *
@@ -218,9 +257,16 @@ public class TalosLlamaPlugin extends Plugin {
                 int ottenuto = aperto.reopenContext(
                         threads, contextTokens, threadsBatch, microBatch, kvType, deterministic);
                 if (ottenuto > 0) {
+                    lastOpenMs = (System.nanoTime() - inizioApertura) / 1_000_000L;
+                    lastOpenReusedWeights = true;
                     JSObject rifatto = new JSObject();
                     rifatto.put("contextTokens", ottenuto);
                     rifatto.put("kvCacheType", aperto.kvCacheType());
+                    // La stessa misura torna anche a chi ha chiamato, non solo
+                    // al doctor: chi manda un messaggio puo' dire «sto
+                    // caricando» invece di lasciare uno schermo fermo.
+                    rifatto.put("openMs", lastOpenMs);
+                    rifatto.put("reusedWeights", true);
                     call.resolve(rifatto);
                     return;
                 }
@@ -240,7 +286,11 @@ public class TalosLlamaPlugin extends Plugin {
             }
             openEngine.set(engine);
             openPath.set(path);
+            lastOpenMs = (System.nanoTime() - inizioApertura) / 1_000_000L;
+            lastOpenReusedWeights = false;
             JSObject result = new JSObject();
+            result.put("openMs", lastOpenMs);
+            result.put("reusedWeights", false);
             result.put("contextTokens", engine.contextTokens());
             // Quale cache ha VINTO, non quale era stata chiesta: il tetto di
             // contesto si calcola su questo.

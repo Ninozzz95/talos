@@ -58,6 +58,21 @@ export interface TalosEngineFacts {
     threadsBatch: number | null
     microBatch: number | null
     contextTokens: number | null
+    /**
+     * ⛔ IL TERZO CRONOMETRO. Quanto è costata l'ultima apertura, e se i pesi
+     * erano già in memoria.
+     *
+     * Owner 2026-08-07: due minuti per «ciao» con un 1,7B Q4 su un OnePlus 13.
+     * Il numero contraddiceva le nostre misure — primo token a 126 ms dopo
+     * 8A/8B/8C — e la contraddizione era tutta qui: le nostre erano a modello
+     * GIÀ CARICATO, e il caricamento non lo cronometrava nessuno.
+     *
+     * I due campi stanno insieme perché separati non dicono niente: 800 ms è
+     * ottimo per rileggere un gigabyte dal disco e pessimo per un contesto
+     * rifatto.
+     */
+    lastOpenMs: number | null
+    lastOpenReusedWeights: boolean | null
     contextCeiling: number | null
     /** Gli stadi dell'ultima generazione, se ce n'è stata una. */
     timings: {
@@ -160,6 +175,39 @@ export function talosEngineDiagnosticRows(facts: TalosEngineFacts): TalosEngineD
             value: String(facts.opensSinceStart)
                 + (facts.contextRebuilds ? ` · ${facts.contextRebuilds} contesti rifatti` : ''),
             ok: true,
+        })
+    }
+
+    /**
+     * ⛔ Il tempo che nessuno misurava, e che vale i due minuti.
+     *
+     * Le cinque fasi qui sotto partono tutte da un modello **già in memoria**.
+     * Chi manda il primo messaggio dopo aver scelto un modello paga prima di
+     * tutto questo — leggere un gigabyte dal disco e mapparlo — e finora quel
+     * tempo non compariva da nessuna parte: si vedeva solo un contatore che
+     * diceva QUANTE aperture, mai quanto costano.
+     *
+     * Va letto insieme al riuso: la stessa cifra è ottima o pessima a seconda
+     * che i pesi fossero già lì. Per questo la riga lo dice, invece di lasciare
+     * un numero nudo che ognuno interpreta come vuole.
+     *
+     * ⛔ E la soglia: **oltre due secondi con i pesi già in memoria** non è
+     * lentezza, è un contesto che si sta ricostruendo quando non dovrebbe.
+     */
+    // ⛔ `!== null` NON basta: `undefined` lo supera, e da lì la riga mostra
+    // «NaNms». Sembra pedanteria e non lo è — i test non passano dal typecheck
+    // (`tsconfig.app.json` include solo `src/**`), quindi un oggetto di prova a
+    // cui manca un campo non lo segnala nessuno, e questa riga l'ha scoperto.
+    if (typeof facts.lastOpenMs === 'number' && Number.isFinite(facts.lastOpenMs)) {
+        const riuso = facts.lastOpenReusedWeights === true
+        rows.push({
+            id: 'engine-open-time',
+            labelKey: 'doctor.engineOpenTime',
+            value: millisecondi(facts.lastOpenMs)
+                + (facts.lastOpenReusedWeights === null
+                    ? ''
+                    : riuso ? ' · pesi già in memoria' : ' · letto dal disco'),
+            ok: !riuso || facts.lastOpenMs <= 2_000,
         })
     }
 

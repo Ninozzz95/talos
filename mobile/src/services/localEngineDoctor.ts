@@ -95,6 +95,8 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
         threadsBatch: grezzo?.threadsBatch ?? null,
         microBatch: grezzo?.microBatch ?? null,
         contextTokens: grezzo?.contextTokens ?? null,
+        lastOpenMs: grezzo?.lastOpenMs ?? null,
+        lastOpenReusedWeights: grezzo?.lastOpenReusedWeights ?? null,
         contextCeiling: ceiling,
         timings: tempi,
         cpuCores: device?.cpuCores ?? null,
@@ -122,6 +124,8 @@ async function rawEngineState(): Promise<{
     threadsBatch: number | null
     microBatch: number | null
     contextTokens: number | null
+    lastOpenMs: number | null
+    lastOpenReusedWeights: boolean | null
 } | null> {
     try {
         const { registerPlugin } = await import('@capacitor/core')
@@ -133,6 +137,16 @@ async function rawEngineState(): Promise<{
             kvCacheType: typeof raw.kvCacheType === 'string' ? raw.kvCacheType : null,
             opensSinceStart: typeof raw.opensSinceStart === 'number' ? raw.opensSinceStart : null,
             contextRebuilds: typeof raw.contextRebuilds === 'number' ? raw.contextRebuilds : null,
+            // ⛔ Zero è un valore VERO qui — un contesto rifatto può costare
+            // meno di un millisecondo — quindi non passa da `numero()`, che
+            // scarta lo zero perché per un conteggio di thread è un guasto.
+            lastOpenMs: typeof raw.lastOpenMs === 'number' && Number.isFinite(raw.lastOpenMs)
+                && raw.lastOpenMs >= 0
+                ? raw.lastOpenMs
+                : null,
+            lastOpenReusedWeights: typeof raw.lastOpenReusedWeights === 'boolean'
+                ? raw.lastOpenReusedWeights
+                : null,
             threads: numero(raw.threads),
             threadsBatch: numero(raw.threadsBatch),
             microBatch: numero(raw.microBatch),
