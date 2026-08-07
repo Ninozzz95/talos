@@ -11,6 +11,8 @@ import {
     TalosLocalEngineOpenError,
     type TalosLocalEngineStatus,
     talosLocalEngineChatPlan,
+    talosLocalEnginePlanPrompt,
+    talosKvBytesPerElement,
     talosLocalEngineCancel,
     talosLocalEngineGenerate,
     talosLocalEngineOpen,
@@ -53,6 +55,50 @@ import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 
 /** Long enough for a real answer; a phone is not the place for an unbounded one. */
 const MAX_TOKENS = 1024
+
+/**
+ * ⭐⭐ LA CACHE SI SCEGLIE, e non è gratis.
+ *
+ * ## Le due cose misurate sul Pad il 2026-08-07
+ *
+ * La prima: il motore sa creare la cache KV in `q8_0` dall'8C — con collaudo e
+ * ripiego in `f16` per i modelli che non la reggono — e per due giorni nessuno
+ * gliel'ha chiesta. Il predefinito nativo è `f16`, quindi una conversazione da
+ * 8470 token girava a **112 KiB per token** invece di 61: 1,72 GB di cache dove
+ * ne bastavano 0,91.
+ *
+ * La seconda, che ha cambiato la conclusione: **la cache leggera costa il 40%
+ * del prefill**. A parità di contesto (8192) e di prompt (5475 token), sullo
+ * stesso modello e nella stessa sessione:
+ *
+ * ```text
+ * f16   →  75.843 ms → 72,2 token/s
+ * q8_0  → 125.668 ms → 43,6 token/s
+ * ```
+ *
+ * Non è una sorpresa una volta vista: chiavi e valori vanno dequantizzati a ogni
+ * accesso, e l'attenzione li accede molte volte per token.
+ *
+ * ## Perché quindi NON è una costante
+ *
+ * Perché entrambe le risposte fisse sono sbagliate. Sempre `f16` dimezza il
+ * contesto massimo — ed è il difetto appena tolto. Sempre `q8_0` fa pagare il
+ * 40% del prefill a chi non aveva bisogno di quella memoria, cioè alla
+ * maggioranza delle conversazioni.
+ *
+ * La regola è quella che i numeri sostengono: **la cache pesante finché ci sta,
+ * la leggera quando è l'unico modo di avere la conversazione**. Un prefill più
+ * lento è meglio di un messaggio rifiutato; un prefill più lento senza motivo è
+ * solo un prefill più lento.
+ *
+ * ⛔ Chiedere non è ottenere, e va bene così: se il modello non regge la cache
+ * leggera il motore ripiega in `f16` da solo e lo dichiara in `kvCacheType`. Il
+ * tetto si ricalcola sul tipo VERO, non su quello chiesto.
+ */
+interface TalosPianoDiApertura {
+    contextTokens: number
+    kvCacheType: string
+}
 
 /**
  * Turns the conversation into what the engine expects.
@@ -228,13 +274,20 @@ async function talosTuningKeyFor(
     }
 }
 
-async function ensureLoaded(path: string): Promise<TalosLocalEngineStatus> {
+async function ensureLoaded(
+    path: string,
+    piano: TalosPianoDiApertura = {
+        contextTokens: TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
+        kvCacheType: 'f16',
+    },
+): Promise<TalosLocalEngineStatus> {
     const status = await talosLocalEngineStatus()
     if (!status.available) throw new Error('TALOS_LOCAL_ENGINE_UNAVAILABLE')
     if (status.loadedPath === path) return status
     try {
         await talosLocalEngineOpenWithFallback(path, {
-            contextTokens: TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
+            contextTokens: piano.contextTokens,
+            kvCacheType: piano.kvCacheType,
             ...(await talosTuningFor(path)),
         })
     } catch (error) {
@@ -268,7 +321,10 @@ async function ensureLoaded(path: string): Promise<TalosLocalEngineStatus> {
  * motore, che è l'unico ad avere l'ultima parola comunque. Un rifiuto nativo
  * alla fase `context` resta gestito come sempre.
  */
-async function localContextCeiling(shape: TalosModelShape | null): Promise<number | null> {
+async function localContextCeiling(
+    shape: TalosModelShape | null,
+    opzioni: { inMemoria: boolean } = { inMemoria: true },
+): Promise<number | null> {
     if (!shape) return null
     const device = await talosMeasureDevice()
     if (!device) return null
@@ -311,10 +367,97 @@ async function localContextCeiling(shape: TalosModelShape | null): Promise<numbe
      * Passato com'è, chi legge lo alza al contesto già aperto e non cresce oltre:
      * si continua con ciò che c'è, e se il messaggio non ci sta lo si dice.
      */
+    /*
+     * ⛔ E i pesi si RIMETTONO solo se ci sono davvero.
+     *
+     * Quando la domanda arriva PRIMA di aprire — il piano `vocab_only` — il
+     * modello non è in memoria, `availableRamBytes` non lo ha scontato, e
+     * sommarlo regalerebbe un tetto che il dispositivo non può onorare. È lo
+     * stesso errore di segno di prima, guardato dall'altro lato.
+     */
     return talosMaxContextFor(shape, {
         ...device,
-        availableRamBytes: device.availableRamBytes + shape.weightBytes,
+        availableRamBytes: opzioni.inMemoria
+            ? device.availableRamBytes + shape.weightBytes
+            : device.availableRamBytes,
     })
+}
+
+/**
+ * ⭐⭐ Con quanto contesto E con quale cache aprire, deciso PRIMA di aprire.
+ *
+ * ## Perché non basta il predefinito
+ *
+ * Perché il predefinito è una scommessa che si perde spesso: `4096` token
+ * bastano per «ciao» e non per una conversazione di venti turni. Quando non
+ * bastano il motore riapriva — e riaprire un modello da 1,8 GB costa **2938 ms**
+ * MISURATI sul Pad, che diventano molti di più su un modello grande.
+ *
+ * Adesso il fabbisogno si sa prima: `talosLocalEnginePlanPrompt` applica il
+ * template e conta i token caricando il solo vocabolario, in **~200 ms**. Il
+ * modello si apre una volta sola, già della misura giusta.
+ *
+ * ## L'ordine delle due domande
+ *
+ * Prima si chiede se la conversazione ci sta con la cache **pesante**, che è la
+ * veloce. Se ci sta, finisce lì. Solo se non ci sta si passa alla leggera, che
+ * quasi raddoppia il tetto al prezzo del 40% di prefill — le misure stanno su
+ * `TalosPianoDiApertura`.
+ *
+ * L'ordine È la decisione: al contrario si farebbe pagare il pedaggio anche a
+ * chi non aveva bisogno di passare il ponte.
+ *
+ * ## Perché il tetto qui è PRUDENTE, e va bene così
+ *
+ * Il conto assume che si ottenga la cache chiesta, e potrebbe non essere vero:
+ * un modello che rifiuta la `q8_0` riceve `f16` e una cache doppia del previsto.
+ * Ma il tetto qui non è l'ultima parola — dopo l'apertura si ricalcola sul tipo
+ * VERO — e nel frattempo un contesto sottostimato costa una ricostruzione, non
+ * un processo ucciso.
+ *
+ * ## Perché un fabbisogno impossibile NON viene rifiutato qui
+ *
+ * Perché il rifiuto va detto col tetto vero — quello di dopo l'apertura — e non
+ * con la stima. Si apre col predefinito e a rifiutare, se serve, ci pensa chi ha
+ * il numero giusto.
+ */
+async function pianoDiApertura(
+    anticipo: { promptTokens: number, shape: TalosModelShape | null } | null,
+): Promise<TalosPianoDiApertura> {
+    const forma = anticipo?.shape
+    if (!anticipo || !forma) {
+        return { contextTokens: TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS, kvCacheType: 'f16' }
+    }
+
+    const conCache = async (tipo: string): Promise<number | null> => {
+        const tetto = await localContextCeiling(
+            { ...forma, kvBytesPerElement: talosKvBytesPerElement(tipo) },
+            { inMemoria: false },
+        )
+        // Il predefinito resta il PAVIMENTO, non il punto di partenza da
+        // superare: aprire a misura esatta farebbe ricostruire il contesto a
+        // ogni turno.
+        const pavimento = tetto === null
+            ? TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS
+            : Math.min(TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS, tetto)
+        return talosLocalEscalatedContextTokens(
+            pavimento,
+            anticipo.promptTokens,
+            MAX_TOKENS,
+            tetto,
+        )
+    }
+
+    const pesante = await conCache('f16')
+    if (pesante !== null) return { contextTokens: pesante, kvCacheType: 'f16' }
+
+    const leggera = await conCache('q8_0')
+    return leggera !== null
+        ? { contextTokens: leggera, kvCacheType: 'q8_0' }
+        // Non ci sta nemmeno con la leggera: si apre col predefinito e con la
+        // leggera comunque, perché è quella che dà più margine, e il rifiuto —
+        // se serve — arriva dopo l'apertura, col tetto vero.
+        : { contextTokens: TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS, kvCacheType: 'q8_0' }
 }
 
 async function run(
@@ -322,8 +465,6 @@ async function run(
     onChunk?: (text: string) => void,
     onReasoning?: (text: string) => void,
 ): Promise<TalosMobileCompletionResult> {
-    const status = await ensureLoaded(input.model.id)
-    const ceiling = await localContextCeiling(status.shape)
     /**
      * I tool, nella STESSA forma che ricevono i provider di rete.
      *
@@ -339,6 +480,19 @@ async function run(
     const offered = talosModelSupportsToolCalling(input.model) ? input.tools : undefined
     const tools = offered?.length ? talosToolsForOpenAi(offered) : undefined
     const turns = conversationOf(input)
+
+    /**
+     * ⭐ Prima si conta, poi si apre. UNA volta.
+     *
+     * Questo è l'unico punto in cui l'ordine conta: il piano `vocab_only` deve
+     * precedere l'apertura, altrimenti il fabbisogno si scopre di nuovo troppo
+     * tardi e si torna a riaprire. Se il lato nativo non lo sa fare — build più
+     * vecchia — `anticipo` è `null` e si riparte col predefinito, esattamente
+     * come prima.
+     */
+    const anticipo = await talosLocalEnginePlanPrompt(input.model.id, turns, tools)
+    const status = await ensureLoaded(input.model.id, await pianoDiApertura(anticipo))
+    const ceiling = await localContextCeiling(status.shape)
     let plan = await talosLocalEngineChatPlan(turns, tools)
     const targetContext = talosLocalEscalatedContextTokens(
         plan.contextTokens,
@@ -357,6 +511,16 @@ async function run(
             // by falling back to 2048 after an 8192 allocation failure.
             await talosLocalEngineOpen(input.model.id, {
                 contextTokens: targetContext,
+                /*
+                 * ⛔ La cache che c'è ADESSO, non quella che si era chiesta.
+                 *
+                 * Allargare il contesto cambiando anche il tipo di cache
+                 * significherebbe muovere due cose insieme e non sapere quale
+                 * abbia causato un rifiuto. E il tipo vero può già essere
+                 * diverso da quello chiesto: un modello che non regge la `q8_0`
+                 * riceve `f16` e lo dichiara.
+                 */
+                kvCacheType: status.kvCacheType ?? 'f16',
                 // ⛔ Anche qui. Riaprire per allargare il contesto e nel farlo
                 // tornare ai quattro thread di prima significherebbe che una
                 // conversazione lunga diventa più lenta man mano che cresce.

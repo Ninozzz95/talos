@@ -90,6 +90,7 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
         shape: stato?.shape ?? null,
         kvCacheType: grezzo?.kvCacheType ?? null,
         opensSinceStart: grezzo?.opensSinceStart ?? null,
+        contextRebuilds: grezzo?.contextRebuilds ?? null,
         threads: grezzo?.threads ?? null,
         threadsBatch: grezzo?.threadsBatch ?? null,
         microBatch: grezzo?.microBatch ?? null,
@@ -116,6 +117,7 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
 async function rawEngineState(): Promise<{
     kvCacheType: string | null
     opensSinceStart: number | null
+    contextRebuilds: number | null
     threads: number | null
     threadsBatch: number | null
     microBatch: number | null
@@ -130,6 +132,7 @@ async function rawEngineState(): Promise<{
         return {
             kvCacheType: typeof raw.kvCacheType === 'string' ? raw.kvCacheType : null,
             opensSinceStart: typeof raw.opensSinceStart === 'number' ? raw.opensSinceStart : null,
+            contextRebuilds: typeof raw.contextRebuilds === 'number' ? raw.contextRebuilds : null,
             threads: numero(raw.threads),
             threadsBatch: numero(raw.threadsBatch),
             microBatch: numero(raw.microBatch),

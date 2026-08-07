@@ -31,6 +31,7 @@ const SANO: TalosEngineFacts = {
     },
     kvCacheType: 'f16',
     opensSinceStart: 1,
+    contextRebuilds: 0,
     threads: 4,
     threadsBatch: 7,
     microBatch: 512,
@@ -141,6 +142,18 @@ describe('quello che le righe dicono', () => {
     it('quante volte il modello è stato aperto', () => {
         expect(riga(SANO, 'engine-opens')?.value).toBe('1')
         expect(riga({ ...SANO, opensSinceStart: 2 }, 'engine-opens')?.value).toBe('2')
+    })
+
+    /**
+     * ⭐ I contesti rifatti accanto alle aperture, perché sono la CURA: allargare
+     * il contesto non ricarica più i pesi. MISURATO sul Pad: 1 apertura + 1
+     * contesto rifatto dove prima erano 2 aperture.
+     */
+    it('e quanti contesti sono stati rifatti senza ricaricare il modello', () => {
+        expect(riga({ ...SANO, contextRebuilds: 1 }, 'engine-opens')?.value)
+            .toBe('1 · 1 contesti rifatti')
+        // Zero non si mostra: una riga che dice sempre «0» è rumore.
+        expect(riga(SANO, 'engine-opens')?.value).toBe('1')
     })
 
     it('il modello per NOME, non per percorso', () => {

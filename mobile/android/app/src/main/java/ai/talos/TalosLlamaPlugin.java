@@ -92,6 +92,10 @@ public class TalosLlamaPlugin extends Plugin {
         // vogliono dire che si stanno ricaricando pesi gia' in memoria.
         if (TalosLlamaNative.AVAILABLE) {
             result.put("opensSinceStart", TalosLlamaNative.nativeOpensSinceStart());
+            // Distinto dalle aperture: un contesto rifatto costa millisecondi,
+            // un modello riaperto costa i gigabyte. Sommarli nasconderebbe
+            // proprio la differenza che questo lavoro esiste per creare.
+            result.put("contextRebuilds", TalosLlamaNative.nativeContextRebuilds());
         }
         /*
          * I numeri con cui il modello sta girando DAVVERO.
@@ -188,6 +192,41 @@ public class TalosLlamaPlugin extends Plugin {
         final boolean deterministic = Boolean.TRUE.equals(call.getBoolean("deterministic", false));
 
         worker.execute(() -> {
+            /**
+             * ⭐ STESSO MODELLO: si rifà il contesto, non si ricarica il file.
+             *
+             * MISURATO dal registro dell'owner il 2026-08-06: **111 secondi**
+             * prima della prima parola al primo messaggio, e **195
+             * millisecondi** ai giri successivi dello stesso invio. La causa non
+             * era il prefill — era che il modello veniva aperto **due volte**.
+             *
+             * Succede per una ragione onesta: il contesto che serve si conosce
+             * solo dopo aver applicato il template del modello, e applicarlo
+             * richiede un modello già aperto. Quindi si apre col predefinito, si
+             * scopre che serve di più, e si riapre.
+             *
+             * ⛔ Ma «riaprire» non doveva voler dire rileggere due gigabyte dal
+             * disco. `llama_model` e `llama_context` sono separati: i pesi da una
+             * parte, la cache dall'altra. Erano i nostri `open()` a liberarli
+             * insieme, non llama.cpp a pretenderlo.
+             *
+             * Se la ricostruzione fallisce si torna alla strada intera: lenta,
+             * ma è quella che c'era prima e funziona.
+             */
+            TalosLlamaEngine aperto = openEngine.get();
+            if (aperto != null && path.equals(openPath.get())) {
+                int ottenuto = aperto.reopenContext(
+                        threads, contextTokens, threadsBatch, microBatch, kvType, deterministic);
+                if (ottenuto > 0) {
+                    JSObject rifatto = new JSObject();
+                    rifatto.put("contextTokens", ottenuto);
+                    rifatto.put("kvCacheType", aperto.kvCacheType());
+                    call.resolve(rifatto);
+                    return;
+                }
+                // Fallita: la sessione è rimasta senza contesto e non si può
+                // usare. Si chiude e si riapre tutto, sotto.
+            }
             closeOpenModel();
             TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
                     getContext(), path, threads, contextTokens, gpuLayers, deterministic,
@@ -423,6 +462,52 @@ public class TalosLlamaPlugin extends Plugin {
         } catch (Exception failure) {
             call.reject("TALOS_LOCAL_MODEL_DELETE_FAILED", failure);
         }
+    }
+
+    /**
+     * Quanto contesto serve, chiesto PRIMA di caricare i pesi.
+     *
+     * ⛔ Non richiede un modello aperto — è proprio il punto. Il contesto giusto
+     * si conosce solo dopo aver applicato il template, applicarlo richiedeva un
+     * modello aperto, e aprirlo richiede sapere il contesto: un cerchio che
+     * costava DUE aperture per messaggio.
+     */
+    @PluginMethod
+    public void planPrompt(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null || path.isEmpty()) {
+            call.reject("TALOS_LLAMA_PATH_REQUIRED");
+            return;
+        }
+        JSArray turns = call.getArray("turns");
+        if (turns == null || turns.length() == 0) {
+            call.reject("TALOS_LLAMA_TURNS_REQUIRED");
+            return;
+        }
+        JSArray tools = call.getArray("tools");
+        final String toolsJson = tools == null || tools.length() == 0 ? null : tools.toString();
+        worker.execute(() -> {
+            String[] roles = new String[turns.length()];
+            String[] contents = new String[turns.length()];
+            try {
+                for (int index = 0; index < turns.length(); index += 1) {
+                    JSONObject turn = turns.getJSONObject(index);
+                    roles[index] = turn.optString("role", "user");
+                    contents[index] = turn.optString("content", "");
+                }
+            } catch (JSONException malformed) {
+                call.reject("TALOS_LLAMA_TURNS_INVALID");
+                return;
+            }
+            String json = TalosLlamaEngine.planPrompt(path, roles, contents, toolsJson);
+            if (json == null) {
+                call.reject("TALOS_LLAMA_PLAN_FAILED");
+                return;
+            }
+            JSObject result = new JSObject();
+            result.put("plan", json);
+            call.resolve(result);
+        });
     }
 
     @PluginMethod

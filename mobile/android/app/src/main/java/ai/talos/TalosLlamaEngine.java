@@ -212,6 +212,20 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * l'utente non può riparare; un file che non parla lo dirà aprendosi, con
      * un errore che almeno si legge.
      */
+    /**
+     * Quanti token servono per questa conversazione, SENZA caricare i pesi.
+     *
+     * Statico e senza sessione: usa `vocab_only`, quindi entra in memoria il
+     * vocabolario e nient'altro. Serve a decidere il contesto PRIMA di aprire,
+     * invece di aprire due volte.
+     */
+    public static String planPrompt(String modelPath, String[] roles, String[] contents,
+                                    String toolsJson) {
+        return TalosLlamaNative.AVAILABLE
+                ? TalosLlamaNative.nativePlanPrompt(modelPath, roles, contents, toolsJson)
+                : null;
+    }
+
     public static boolean isConversational(String modelPath) {
         String json = TalosLlamaNative.AVAILABLE
                 ? TalosLlamaNative.nativeArchitectureOf(modelPath)
@@ -223,6 +237,18 @@ public final class TalosLlamaEngine implements AutoCloseable {
         } catch (JSONException unreadable) {
             return true;
         }
+    }
+
+    /**
+     * Rifa' il contesto tenendo il modello in memoria.
+     *
+     * @return il contesto ottenuto, o 0 se e' fallita — e allora questo motore
+     *     non e' piu' utilizzabile e va chiuso e riaperto.
+     */
+    public int reopenContext(int threads, int contextTokens, int threadsBatch,
+                             int microBatch, String kvType, boolean deterministic) {
+        return TalosLlamaNative.nativeReopenContext(
+                handle, threads, contextTokens, threadsBatch, microBatch, kvType, deterministic);
     }
 
     /**

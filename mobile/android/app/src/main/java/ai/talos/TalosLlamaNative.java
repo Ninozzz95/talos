@@ -108,6 +108,38 @@ final class TalosLlamaNative {
     static native long[] nativeRuntimeConfig(long handle);
 
     /**
+     * Rifa' il CONTESTO tenendo il modello in memoria.
+     *
+     * ⛔ Allargare il contesto non richiede rileggere gigabyte dal disco: i pesi
+     * e la cache sono due cose separate, ed erano i nostri `open()` a liberarle
+     * insieme. MISURATO: il primo messaggio costava 111 secondi perche' il
+     * modello veniva aperto due volte.
+     *
+     * @return il contesto ottenuto, o 0 se la ricostruzione e' fallita — nel
+     *     qual caso la sessione resta senza contesto e va riaperta tutta.
+     */
+    static native int nativeReopenContext(long handle, int threads, int contextTokens,
+                                          int threadsBatch, int microBatch,
+                                          String kvType, boolean deterministic);
+
+    /** Quante volte il contesto e' stato rifatto senza ricaricare il modello. */
+    static native int nativeContextRebuilds();
+
+    /**
+     * Quanti token servono per questa conversazione — chiesto PRIMA di caricare
+     * i pesi, con {@code vocab_only}.
+     *
+     * ⛔ Spezza il cerchio che costava una doppia apertura: il contesto giusto
+     * si conosce solo dopo aver applicato il template, e applicarlo richiedeva
+     * un modello aperto. Il vocabolario da solo basta, e sono megabyte invece
+     * di gigabyte.
+     *
+     * @return JSON {@code {promptTokens, trainedContext}}, oppure null.
+     */
+    static native String nativePlanPrompt(String modelPath, String[] roles, String[] contents,
+                                          String toolsJson);
+
+    /**
      * L'architettura dichiarata dal file e quanti strati ha, in JSON — oppure
      * {@code null} se non è nemmeno un GGUF leggibile.
      *

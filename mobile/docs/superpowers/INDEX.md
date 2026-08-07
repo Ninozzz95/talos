@@ -29,6 +29,17 @@ Nothing that governs the program may live only on one machine, and no phase is
 0. `../PASSAGGIO-DI-CONSEGNE.md` — the live mobile restart point. For the
    current Model Lab work it links the approved spec, upstream dossier, master
    plan and all five executable ledgers.
+0. `research/2026-08-07-talos-accelerator-backend-technical-design.md` — **the
+   accelerator-backend design** (owner-supplied, 2026-08-07): a full technical
+   specification for a Talos-owned inference runtime on Qualcomm Hexagon/HTP via
+   QAIRT/QNN — own IR, prefill/decode separation, KV and prefix cache as
+   first-class primitives, AOT context binaries, thermal/UI governor, and ten
+   primary sources ([S1]–[S10]). It belongs to the **Zethos** phase (the last
+   one), but four of its sections describe cures for defects measured on the Pad
+   **today**: §8 chunked prefill, §7.4 prefill shape buckets, §12 zero heap
+   allocation in the decode loop, and §26 reserving a UI budget — the last of
+   which independently arrives at the same 3% rule this repository already
+   implements in `talosPreferFewerThreads`.
 1. `plans/2026-08-04-model-lab-mobile-hub-plan.md` — **the active Model Lab
    programme**: five strictly ordered phases. A phase is not implemented until
    its fresh screenshots from the connected physical phone and `manifest.md`

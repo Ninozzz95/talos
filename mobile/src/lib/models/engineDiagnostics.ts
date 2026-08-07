@@ -52,6 +52,8 @@ export interface TalosEngineFacts {
     shape: TalosModelShape | null
     kvCacheType: string | null
     opensSinceStart: number | null
+    /** Quante volte il contesto è stato rifatto tenendo il modello in memoria. */
+    contextRebuilds: number | null
     threads: number | null
     threadsBatch: number | null
     microBatch: number | null
@@ -155,7 +157,8 @@ export function talosEngineDiagnosticRows(facts: TalosEngineFacts): TalosEngineD
         rows.push({
             id: 'engine-opens',
             labelKey: 'doctor.engineOpens',
-            value: String(facts.opensSinceStart),
+            value: String(facts.opensSinceStart)
+                + (facts.contextRebuilds ? ` · ${facts.contextRebuilds} contesti rifatti` : ''),
             ok: true,
         })
     }

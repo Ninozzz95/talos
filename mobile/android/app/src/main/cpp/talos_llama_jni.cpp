@@ -14,6 +14,7 @@
 
 #include <jni.h>
 #include <android/log.h>
+#include <sys/stat.h>
 
 #include <algorithm>
 #include <chrono>
@@ -222,6 +223,15 @@ size_t talos_prefisso_comune(const std::vector<llama_token> & vecchi,
  */
 std::atomic<int> g_open_count{0};
 
+/**
+ * Quante volte il CONTESTO e' stato ricostruito tenendo il modello in memoria.
+ *
+ * Distinto dalle aperture apposta: un contesto ricostruito costa millisecondi,
+ * un modello riaperto costa i gigabyte. Sommarli nasconderebbe la differenza
+ * che questo lavoro esiste per creare.
+ */
+std::atomic<int> g_context_rebuild_count{0};
+
 std::once_flag g_init_once;
 
 void talos_log_bridge(ggml_log_level level, const char * text, void * /*user*/) {
@@ -280,6 +290,56 @@ std::string jstring_to_utf8(JNIEnv * env, jstring value) {
     env->ReleaseStringUTFChars(value, raw);
     return out;
 }
+
+/**
+ * Il prompt formattato dal template del modello, senza toccare una sessione.
+ *
+ * Estratto perche' serve in due posti che non condividono niente: la chat, che
+ * ha un modello aperto, e il PIANIFICATORE, che ha solo un vocabolario. Le
+ * regole del formato — Jinja eseguito, tool passati al template, ragionamento
+ * gestito dal template — devono essere le stesse in entrambi, o il conteggio
+ * fatto prima descriverebbe un prompt diverso da quello che parte.
+ */
+std::string talos_apply_chat_template(common_chat_templates * templates, JNIEnv * env,
+                                      jobjectArray roles, jobjectArray contents,
+                                      jstring toolsJson) {
+    if (templates == nullptr || roles == nullptr || contents == nullptr) return {};
+    const jsize count = env->GetArrayLength(roles);
+    if (count != env->GetArrayLength(contents) || count <= 0) return {};
+
+    common_chat_templates_inputs inputs;
+    inputs.add_generation_prompt = true;
+    const std::string tools = jstring_to_utf8(env, toolsJson);
+    if (!tools.empty()) {
+        try {
+            inputs.tools = common_chat_tools_parse_oaicompat(nlohmann::ordered_json::parse(tools));
+            inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
+        } catch (const std::exception &) {
+            // Un tool illeggibile non spegne il conteggio: si procede senza,
+            // e il numero sara' un po' piu' basso del vero — che e' la
+            // direzione innocua, perche' il tetto si controlla comunque dopo.
+        }
+    }
+    inputs.use_jinja = true;
+    inputs.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+    inputs.messages.reserve((size_t) count);
+    for (jsize index = 0; index < count; index += 1) {
+        auto role = (jstring) env->GetObjectArrayElement(roles, index);
+        auto content = (jstring) env->GetObjectArrayElement(contents, index);
+        common_chat_msg message;
+        message.role = jstring_to_utf8(env, role);
+        message.content = jstring_to_utf8(env, content);
+        inputs.messages.push_back(std::move(message));
+        env->DeleteLocalRef(role);
+        env->DeleteLocalRef(content);
+    }
+    try {
+        return common_chat_templates_apply(templates, inputs).prompt;
+    } catch (const std::exception &) {
+        return {};
+    }
+}
+
 
 talos_session * as_session(jlong handle) {
     return reinterpret_cast<talos_session *>(handle);
@@ -869,6 +929,257 @@ Java_ai_talos_TalosLlamaNative_nativeArchitectureOf(JNIEnv * env, jclass, jstrin
     snprintf(json, sizeof(json), "{\"architecture\":\"%s\",\"layers\":%lld}",
              architettura.c_str(), (long long) strati);
     return env->NewStringUTF(json);
+}
+
+/**
+ * La forma del modello, letta dai METADATI e senza aprire niente.
+ *
+ * ⛔ Non da `llama_model_n_ctx_train` & co. quando si e' aperto con
+ * `vocab_only`: upstream `load_hparams` esce alla riga «everything past this
+ * point is not vocab-related» e gli iperparametri restano a zero. Non e' un
+ * difetto nostro ne' loro — un modello di solo vocabolario non ha iperparametri
+ * per definizione. I numeri pero' esistono lo stesso, nelle chiavi
+ * `<arch>.*`, e leggerli dai metadati non costa niente.
+ *
+ * MISURATO il 2026-08-07: senza questa lettura il piano rispondeva
+ * `trainedContext: 0`, cioe' avrebbe fatto aprire ogni modello al minimo.
+ *
+ * `headDim` si ricava da `n_embd / n_head`, la stessa relazione che usa la
+ * sonda a modello aperto: una relazione sola, non due che poi divergono.
+ */
+struct talos_forma_gguf {
+    int64_t layers          = 0;
+    int64_t kvHeads         = 0;
+    int64_t headDim         = 0;
+    int64_t trainedContext  = 0;
+    int64_t weightBytes     = 0;
+};
+
+/** Un intero dai metadati, qualunque larghezza abbia dichiarato chi ha scritto il file. */
+static int64_t talos_gguf_intero(const gguf_context * gguf, const std::string & chiave) {
+    const int64_t indice = gguf_find_key(gguf, chiave.c_str());
+    if (indice < 0) return 0;
+    switch (gguf_get_kv_type(gguf, indice)) {
+        case GGUF_TYPE_UINT32: return (int64_t) gguf_get_val_u32(gguf, indice);
+        case GGUF_TYPE_INT32:  return (int64_t) gguf_get_val_i32(gguf, indice);
+        case GGUF_TYPE_UINT64: return (int64_t) gguf_get_val_u64(gguf, indice);
+        case GGUF_TYPE_INT64:  return (int64_t) gguf_get_val_i64(gguf, indice);
+        case GGUF_TYPE_UINT16: return (int64_t) gguf_get_val_u16(gguf, indice);
+        default: return 0;
+    }
+}
+
+static talos_forma_gguf talos_forma_dai_metadati(const std::string & path) {
+    talos_forma_gguf forma;
+
+    gguf_init_params params = { /*.no_alloc =*/ true, /*.ctx =*/ nullptr };
+    gguf_context * gguf = gguf_init_from_file(path.c_str(), params);
+    if (gguf == nullptr) return forma;
+
+    std::string architettura;
+    const int64_t chiave = gguf_find_key(gguf, "general.architecture");
+    if (chiave >= 0) architettura = gguf_get_val_str(gguf, chiave);
+
+    if (!architettura.empty()) {
+        forma.layers         = talos_gguf_intero(gguf, architettura + ".block_count");
+        forma.kvHeads        = talos_gguf_intero(gguf, architettura + ".attention.head_count_kv");
+        forma.trainedContext = talos_gguf_intero(gguf, architettura + ".context_length");
+
+        // La testa: dichiarata quando c'e', altrimenti dedotta come fa il
+        // lettore ufficiale. Zero resta zero — «non misurabile» e' un esito.
+        forma.headDim = talos_gguf_intero(gguf, architettura + ".attention.key_length");
+        if (forma.headDim <= 0) {
+            const int64_t embedding = talos_gguf_intero(gguf, architettura + ".embedding_length");
+            const int64_t teste     = talos_gguf_intero(gguf, architettura + ".attention.head_count");
+            if (teste > 0) forma.headDim = embedding / teste;
+        }
+    }
+    gguf_free(gguf);
+
+    /*
+     * Il peso e' quello del FILE, non la somma dei tensori: con `vocab_only`
+     * nessun tensore e' stato caricato, e cio' che occupera' la memoria e'
+     * comunque quello che sta sul disco.
+     */
+    struct stat info {};
+    if (stat(path.c_str(), &info) == 0) forma.weightBytes = (int64_t) info.st_size;
+
+    return forma;
+}
+
+/**
+ * ⭐⭐ QUANTO CONTESTO SERVE — chiesto PRIMA di caricare i pesi.
+ *
+ * ## Perche' esiste
+ *
+ * Il contesto giusto per una conversazione si conosce solo dopo aver applicato
+ * il template del modello e contato i token. Ma applicare il template richiedeva
+ * un modello aperto, e aprirlo richiede di sapere quanto contesto dargli: un
+ * cerchio. La soluzione era: apri col predefinito, scopri che serve di piu',
+ * riapri. **Due aperture per un messaggio.**
+ *
+ * La prima cura ha tolto la seconda LETTURA DAL DISCO ricostruendo il solo
+ * contesto — MISURATO: 2875 ms risparmiati su un modello da 1,8 GB, e molti di
+ * piu' su uno grande. Restava comunque un contesto costruito e buttato, che su
+ * un prompt lungo vale un altro secondo e mezzo di allocazione di cache.
+ *
+ * ## La cura vera: `vocab_only`
+ *
+ * `llama_model_params.vocab_only` carica **soltanto il vocabolario, nessun
+ * tensore** — l'header lo dice in una riga, e la discussione upstream #7783
+ * conferma che i metadati restano leggibili. Cioe' si puo' applicare il
+ * template, tokenizzare e contare **senza toccare i gigabyte**.
+ *
+ * Con questo il cerchio si spezza: prima si conta, poi si apre UNA volta col
+ * contesto giusto. Nessun contesto costruito per essere buttato.
+ *
+ * ⛔ E si chiude subito. Un vocabolario e' qualche megabyte, ma tenerlo aperto
+ * accanto al modello vero sarebbe una seconda copia della stessa cosa che
+ * nessuno usa.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativePlanPrompt(JNIEnv * env, jclass, jstring modelPath,
+                                                jobjectArray roles, jobjectArray contents,
+                                                jstring toolsJson) {
+    const std::string path = jstring_to_utf8(env, modelPath);
+    if (path.empty()) return nullptr;
+
+    llama_model_params model_params = llama_model_default_params();
+    // Solo il vocabolario: nessun tensore entra in memoria.
+    model_params.vocab_only = true;
+    llama_model * model = llama_model_load_from_file(path.c_str(), model_params);
+    if (model == nullptr) return nullptr;
+
+    std::string prompt;
+    int32_t token = -1;
+    common_chat_templates_ptr templates;
+    try {
+        templates = common_chat_templates_init(model, "");
+    } catch (const std::exception &) {
+        llama_model_free(model);
+        return nullptr;
+    }
+    if (templates) {
+        prompt = talos_apply_chat_template(templates.get(), env, roles, contents, toolsJson);
+    }
+    if (!prompt.empty()) {
+        const llama_vocab * vocab = llama_model_get_vocab(model);
+        token = -llama_tokenize(vocab, prompt.c_str(), (int32_t) prompt.size(),
+                                nullptr, 0, true, true);
+    }
+    llama_model_free(model);
+    const talos_forma_gguf forma = talos_forma_dai_metadati(path);
+
+    if (token <= 0) return nullptr;
+    char json[384];
+    snprintf(json, sizeof(json),
+             "{\"promptTokens\":%d,\"trainedContext\":%lld,\"layers\":%lld,"
+             "\"kvHeads\":%lld,\"headDim\":%lld,\"weightBytes\":%lld}",
+             (int) token, (long long) forma.trainedContext, (long long) forma.layers,
+             (long long) forma.kvHeads, (long long) forma.headDim,
+             (long long) forma.weightBytes);
+    return env->NewStringUTF(json);
+}
+
+/**
+ * ⭐ IL CONTESTO SI RIFA', IL MODELLO RESTA.
+ *
+ * ## Il difetto, letto dal registro dell'owner
+ *
+ * MISURATO il 2026-08-06: **111 secondi** prima della prima parola al primo
+ * messaggio, e **195 millisecondi** ai giri successivi dello stesso invio. La
+ * causa non era il prefill: era che il modello veniva aperto **due volte**. Una
+ * col contesto predefinito, e subito dopo di nuovo per allargarlo — perche' il
+ * fabbisogno vero si conosce solo dopo aver applicato il template, che richiede
+ * un modello gia' aperto.
+ *
+ * ## Perche' era evitabile
+ *
+ * `llama_model` e `llama_context` sono due cose separate: i pesi da una parte, la
+ * cache e i buffer dall'altra. Allargare il contesto **non** richiede rileggere
+ * due gigabyte dal disco — richiede buttare il contesto e farne uno nuovo. Erano
+ * i nostri `open()` a liberarli insieme, non llama.cpp a pretenderlo.
+ *
+ * ⛔ Il campionatore invece va rifatto: e' costruito sul modello ma tiene lo
+ * stato delle penalita' di ripetizione, e uno stato che sopravvive a un contesto
+ * azzerato parla di una conversazione che non esiste piu'.
+ *
+ * @return il contesto ottenuto, o 0 se la ricostruzione e' fallita — nel qual
+ *     caso la sessione resta **senza contesto** e chi chiama deve riaprire tutto.
+ */
+JNIEXPORT jint JNICALL
+Java_ai_talos_TalosLlamaNative_nativeReopenContext(JNIEnv * env, jclass, jlong handle,
+                                                   jint threads, jint contextTokens,
+                                                   jint threadsBatch, jint microBatch,
+                                                   jstring kvType, jboolean deterministic) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr || session->model == nullptr) return 0;
+
+    llama_context_params ctx_params = llama_context_default_params();
+    ctx_params.n_ctx           = contextTokens > 0 ? (uint32_t) contextTokens : 0;
+    ctx_params.n_batch         = 512;
+    ctx_params.n_ubatch        = microBatch > 0 ? (uint32_t) microBatch : 256;
+    ctx_params.n_threads       = threads > 0 ? threads : 4;
+    ctx_params.n_threads_batch = threadsBatch > 0 ? threadsBatch : ctx_params.n_threads;
+    ctx_params.no_perf         = true;
+
+    const std::string tipoKv = jstring_to_utf8(env, kvType);
+    const bool vuoleLeggera = tipoKv == "q8_0";
+    if (vuoleLeggera) {
+        ctx_params.type_k = GGML_TYPE_Q8_0;
+        ctx_params.type_v = GGML_TYPE_Q8_0;
+        ctx_params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
+    }
+
+    llama_context * nuovo = llama_init_from_model(session->model, ctx_params);
+    if (nuovo == nullptr && vuoleLeggera) {
+        ctx_params.type_k = GGML_TYPE_F16;
+        ctx_params.type_v = GGML_TYPE_F16;
+        nuovo = llama_init_from_model(session->model, ctx_params);
+    }
+    if (nuovo == nullptr) {
+        TALOS_LOGE("contesto non ricostruito a %d token", contextTokens);
+        return 0;
+    }
+
+    common_params_sampling sampling;
+    if (deterministic) sampling.temp = 0.0f;
+    common_sampler * campionatore = common_sampler_init(session->model, sampling);
+    if (campionatore == nullptr) {
+        // Meglio nessun contesto nuovo che un contesto senza chi sceglie i
+        // token: chi chiama riapre tutto, che e' lento ma corretto.
+        llama_free(nuovo);
+        TALOS_LOGE("campionatore non ricostruito");
+        return 0;
+    }
+
+    // Da qui in poi si sostituisce, e l'ordine conta: prima si stacca il
+    // vecchio dalla sessione, poi lo si libera. Un contesto liberato ma ancora
+    // puntato e' un uso dopo la liberazione che si manifesta a caso.
+    llama_context * vecchio = session->ctx;
+    common_sampler * vecchioCampionatore = session->sampler;
+    session->ctx     = nuovo;
+    session->sampler = campionatore;
+    session->sampling = sampling;
+    session->kv_type = ctx_params.type_k == GGML_TYPE_Q8_0 ? "q8_0" : "f16";
+    // ⛔ La cache e' nuova, quindi VUOTA. Non azzerare qui vorrebbe dire che il
+    // turno successivo calcola il prefisso comune su token che non esistono piu'.
+    session->cached.clear();
+    if (vecchioCampionatore != nullptr) common_sampler_free(vecchioCampionatore);
+    if (vecchio != nullptr) llama_free(vecchio);
+
+    llama_set_abort_callback(nuovo, talos_deve_fermarsi, session);
+    g_context_rebuild_count.fetch_add(1, std::memory_order_relaxed);
+    TALOS_LOGI("contesto rifatto: %u token, thread %d gen / %d prefill, cache %s (modello NON ricaricato)",
+               llama_n_ctx(nuovo), ctx_params.n_threads, ctx_params.n_threads_batch,
+               session->kv_type.c_str());
+    return (jint) llama_n_ctx(nuovo);
+}
+
+/** Quante volte il contesto e' stato rifatto tenendo il modello in memoria. */
+JNIEXPORT jint JNICALL
+Java_ai_talos_TalosLlamaNative_nativeContextRebuilds(JNIEnv *, jclass) {
+    return (jint) g_context_rebuild_count.load(std::memory_order_relaxed);
 }
 
 /**
