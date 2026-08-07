@@ -331,7 +331,7 @@ async function prefissoResoDi(
     tools: readonly unknown[] | undefined,
 ): Promise<string | null> {
     if (!system) return null
-    const chiave = `${system} ${JSON.stringify(tools ?? [])}`
+    const chiave = `${system}\0${JSON.stringify(tools ?? [])}`
     const memo = PREFISSO_RESO.get(chiave)
     if (memo !== undefined) return memo
     try {
