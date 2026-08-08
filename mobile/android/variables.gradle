@@ -14,6 +14,12 @@ ext {
      * 2026-08-07.
      */
     kotlinVersion = '2.3.21'
+    /**
+     * Shizuku: il ponte verso le API di sistema con l'identita' della shell.
+     * Fissata, non `+`: una libreria che cambia da sola sotto un ponte
+     * privilegiato e' un aggiornamento che nessuno ha letto.
+     */
+    shizukuVersion = '13.1.5'
     minSdkVersion = 26
     compileSdkVersion = 36
     targetSdkVersion = 36
