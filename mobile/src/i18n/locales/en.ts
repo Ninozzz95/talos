@@ -1141,7 +1141,7 @@ export const TALOS_EN_MESSAGES = {
             title: 'Turn Bluetooth on or off',
             description: 'Like Wi-Fi. Turning it off disconnects earbuds and watch.',
         },
-        deviceDnd: {
+        deviceDoNotDisturb: {
             title: 'Set or clear Do Not Disturb',
             description: '⛔ Total silence hides alarms and calls too. TALOS prefers “only what matters”, which is nearly always what you want.',
         },
