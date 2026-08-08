@@ -27,6 +27,11 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ai.talos.agent.TalosPrivilegePlugin.class);
         // Il primo tool che tocca il telefono senza chiedere niente a nessuno.
         registerPlugin(ai.talos.agent.TalosDevicePlugin.class);
+        // ⭐ Le notifiche: leggerle e risponderle e' meta' di cio' che fa
+        // Gemini, e non passa da nessun ponte privilegiato — si accende dalla
+        // pagina di sistema. ⛔ I codici OTP restano oscurati da Android 15 in
+        // poi, e TALOS lo dichiara invece di far finta.
+        registerPlugin(ai.talos.agent.TalosNotificationsPlugin.class);
         // ⭐ TALOS che parla. Nessun permesso, e la capacita' col rapporto
         // valore/costo piu' alto di tutto l'inventario.
         registerPlugin(ai.talos.agent.TalosSpeechPlugin.class);

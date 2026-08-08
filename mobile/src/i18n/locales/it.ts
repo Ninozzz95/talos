@@ -956,6 +956,9 @@ export const TALOS_IT_MESSAGES = {
         deviceSystemSetting: 'Impostazione del telefono',
         deviceAppUsage: 'Uso del telefono',
         deviceListApps: 'Le tue app',
+        deviceNotificationsList: 'Le tue notifiche',
+        deviceNotificationReply: 'Risposta a una notifica',
+        deviceNotificationDismiss: 'Notifica tolta',
         researchList: 'Consultazione delle ricerche',
         researchStart: 'Avvio di una ricerca',
         researchRead: 'Lettura di un rapporto',
@@ -1147,6 +1150,18 @@ export const TALOS_IT_MESSAGES = {
         deviceAppUsage: {
             title: 'Guarda come hai usato il telefono',
             description: '⛔ Quali app e per quanto tempo: e’ il ritratto di una giornata. Resta sul telefono, e al modello arriva solo cio’ che serve alla domanda.',
+        },
+        deviceNotificationsList: {
+            title: 'Leggi le notifiche a schermo',
+            description: '⛔ Legge titolo e testo delle notifiche in corso. Android tiene NASCOSTI i codici di accesso e quelli a due fattori: TALOS non li vede e non li vedra’ mai.',
+        },
+        deviceNotificationReply: {
+            title: 'Rispondi a una notifica',
+            description: '⛔ Manda un messaggio VERO a una persona vera, dal campo di risposta rapida della notifica. Non si annulla.',
+        },
+        deviceNotificationDismiss: {
+            title: 'Togli una notifica',
+            description: 'La toglie dalla tendina. Quelle di qualcosa che sta girando non si possono togliere: nasconderle nasconderebbe che sta girando.',
         },
         deviceListApps: {
             title: 'Guarda quali app hai',
@@ -2215,6 +2230,9 @@ export const TALOS_IT_MESSAGES = {
             device_system_setting: { title: 'Leggi o cambia un’impostazione', description: 'Luminosita’, spegnimento dello schermo e rotazione automatica: le tre che TALOS sa spiegare.' },
             device_app_usage: { title: 'Guarda come hai usato il telefono', description: 'Quali app hai usato e per quanto, negli ultimi giorni. Utile quando chiedi delle tue abitudini.' },
             device_list_apps: { title: 'Guarda quali app hai', description: 'Elenca le app installate col nome che vedi tu e quello tecnico, cosi’ TALOS apre quella giusta senza indovinare.' },
+            device_notifications_list: { title: 'Leggi le notifiche a schermo', description: '⛔ Android tiene nascosti i codici di accesso e quelli a due fattori: TALOS non li vede e non li vedra’ mai.' },
+            device_notification_reply: { title: 'Rispondi a una notifica', description: 'Manda un messaggio VERO dal campo di risposta rapida. Chiede sempre, e non si annulla.' },
+            device_notification_dismiss: { title: 'Togli una notifica', description: 'La toglie dalla tendina. Quelle di qualcosa che sta girando non si tolgono.' },
         },
     },
     lock: {

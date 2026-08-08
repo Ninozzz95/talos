@@ -938,6 +938,9 @@ export const TALOS_EN_MESSAGES = {
         deviceSystemSetting: 'Phone setting',
         deviceAppUsage: 'Phone usage',
         deviceListApps: 'Your apps',
+        deviceNotificationsList: 'Your notifications',
+        deviceNotificationReply: 'Replying to a notification',
+        deviceNotificationDismiss: 'Dismissing a notification',
         researchList: 'Looking at your researches',
         researchStart: 'Starting a deep research',
         researchRead: 'Reading a research report',
@@ -1129,6 +1132,18 @@ export const TALOS_EN_MESSAGES = {
         deviceAppUsage: {
             title: 'Look at how you used the phone',
             description: '⛔ Which apps and for how long is a portrait of your day. It stays on the phone, and the model only gets what the question needs.',
+        },
+        deviceNotificationsList: {
+            title: 'Read the notifications on screen',
+            description: '⛔ Reads the title and text of current notifications. Android HIDES passcodes and two-factor codes: TALOS cannot see them and never will.',
+        },
+        deviceNotificationReply: {
+            title: 'Reply to a notification',
+            description: '⛔ Sends a REAL message to a real person, through the notification’s quick-reply field. It cannot be undone.',
+        },
+        deviceNotificationDismiss: {
+            title: 'Dismiss a notification',
+            description: 'Removes it from the shade. Notifications for something still running cannot be removed: hiding them would hide that it is running.',
         },
         deviceListApps: {
             title: 'Look at which apps you have',
@@ -2200,6 +2215,9 @@ export const TALOS_EN_MESSAGES = {
             device_system_setting: { title: 'Read or change a setting', description: 'Brightness, screen timeout and auto-rotate: the three TALOS can explain.' },
             device_app_usage: { title: 'Look at how you used the phone', description: 'Which apps you have been on and for how long, over the last few days.' },
             device_list_apps: { title: 'Look at which apps you have', description: 'Lists installed apps with the name you see and the technical one, so TALOS opens the right one without guessing.' },
+            device_notifications_list: { title: 'Read the notifications on screen', description: '⛔ Android hides passcodes and two-factor codes: TALOS cannot see them and never will.' },
+            device_notification_reply: { title: 'Reply to a notification', description: 'Sends a REAL message through the quick-reply field. Always asks, and cannot be undone.' },
+            device_notification_dismiss: { title: 'Dismiss a notification', description: 'Removes it from the shade. Notifications for something still running cannot be removed.' },
         },
     },
     lock: {

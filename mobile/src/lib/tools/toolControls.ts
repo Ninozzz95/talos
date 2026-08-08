@@ -80,6 +80,9 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     device_system_setting: true,
     device_app_usage: true,
     device_list_apps: true,
+    device_notifications_list: true,
+    device_notification_reply: true,
+    device_notification_dismiss: true,
 })
 
 export type TalosAgentToolId = keyof typeof TALOS_DEFAULT_AGENT_TOOL_ENABLED

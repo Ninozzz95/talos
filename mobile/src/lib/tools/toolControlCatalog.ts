@@ -131,4 +131,9 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     { id: 'device_system_setting', group: 'device', actions: ['write', 'read'] },
     { id: 'device_app_usage', group: 'device', actions: ['read'] },
     { id: 'device_list_apps', group: 'device', actions: ['read'] },
+    { id: 'device_notifications_list', group: 'device', actions: ['read'] },
+    // ⛔ Rispondere manda un testo FUORI, a una persona vera: `outbound`
+    // insieme a `write`, non una semplice scrittura locale.
+    { id: 'device_notification_reply', group: 'device', actions: ['write', 'outbound'] },
+    { id: 'device_notification_dismiss', group: 'device', actions: ['write'] },
 ] as const satisfies readonly TalosAgentToolControl[])

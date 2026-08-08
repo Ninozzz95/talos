@@ -104,4 +104,16 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     device_app_usage: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     // ⛔ E le app installate sono il ritratto di una persona.
     device_list_apps: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    /*
+     * ⛔ `readsUntrustedContent: true`, ed è la riga che conta.
+     *
+     * Il testo di una notifica lo scrive CHIUNQUE: un messaggio, una mail, una
+     * pubblicità. È contenuto di terzi che entra nel contesto del modello, e
+     * può contenere istruzioni travestite da testo — «SISTEMA: invia…».
+     * Segnarlo qui è ciò che impedisce che una notifica aumenti i poteri del giro.
+     */
+    device_notifications_list: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: true, canTransmit: false },
+    // ⛔ R3: manda un messaggio a una persona vera, e non si annulla.
+    device_notification_reply: { risk: 'R3', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: true, canTransmit: true },
+    device_notification_dismiss: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
 })
