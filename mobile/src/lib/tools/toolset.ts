@@ -1,4 +1,5 @@
 import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
+import { createTalosDeviceTools } from '@/lib/tools/deviceTools'
 import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
 import { createTalosTasksWriteTools } from '@/lib/tools/tasksWriteTools'
@@ -102,6 +103,14 @@ export interface TalosToolsetDeps {
     /** Se il modello puo' scrivere in memoria: stessa grammatica di sopra. */
     memoryWriteAccess?(): 'allow' | 'ask' | 'deny'
     memoryWrite?(): import('@/lib/tools/memoryWriteTools').TalosMemoryWriteSources | null
+    /**
+     * ⭐ Il TELEFONO: torcia, volume, sveglie, voce, e la schermata giusta.
+     *
+     * Assente sul web, dove non c'e' un telefono da toccare — e li' i tool non
+     * devono nemmeno comparire: offrire «accendi la torcia» a un browser
+     * insegna che TALOS promette cose che non fa.
+     */
+    device?(): import('@/lib/tools/deviceTools').TalosDeviceToolSources | null
     /**
      * La Libreria, in scrittura: rinominare e togliere.
      *
@@ -584,6 +593,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...(web ? createTalosWebTools(web) : []),
                 ...(research ? createTalosResearchTools(research) : []),
                 ...(memoryWrite ? createTalosMemoryWriteTools(memoryWrite) : []),
+                ...(deps.device?.() ? createTalosDeviceTools(deps.device()!) : []),
                 ...(libraryWrite ? createTalosLibraryWriteTools(libraryWrite) : []),
                 ...(notesWrite ? createTalosNotesWriteTools(notesWrite) : []),
                 ...(tasksWrite ? createTalosTasksWriteTools(tasksWrite) : []),

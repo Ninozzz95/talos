@@ -14,6 +14,7 @@ import { createTalosLibraryExportTools } from '@/lib/tools/libraryExportTools'
 import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosLibraryContextPolicyTools } from '@/lib/tools/libraryContextPolicyTools'
 import { createTalosLocalModelTools } from '@/lib/models/modelTools'
+import { createTalosDeviceTools } from '@/lib/tools/deviceTools'
 import {
     talosToolRequiredActions,
     talosToolsForAnthropic,
@@ -105,6 +106,14 @@ function everyExecutableTool() {
         // drives the same store the Model Lab section drives, which is what
         // makes a download started from chat land in both places.
         ...createTalosLocalModelTools(),
+        // Il telefono. Assente sul web — li' non c'e' niente da toccare — ma
+        // qui l'elenco deve contenerlo, o il confronto col catalogo mentirebbe
+        // proprio sul gruppo appena aggiunto.
+        ...createTalosDeviceTools({
+            vibrate: vi.fn(), torch: vi.fn(), volume: vi.fn(), alarm: vi.fn(),
+            openApp: vi.fn(), openSettings: vi.fn(), compose: vi.fn(),
+            status: vi.fn(), speak: vi.fn(),
+        } as never),
     ]
 }
 
@@ -144,7 +153,7 @@ describe('Agent Tools control registry', () => {
         // 34 → 38: `memory_update`, `memory_delete`, `library_rename`,
         // `library_delete` (owner 2026-08-07: la chat sapeva solo inserire e
         // leggere su Memoria e Libreria).
-        expect(Object.keys(parsed)).toHaveLength(38)
+        expect(Object.keys(parsed)).toHaveLength(TALOS_AGENT_TOOL_CONTROLS.length)
         expect(isTalosAgentToolEnabled('library_search', parsed)).toBe(false)
         expect(isTalosAgentToolEnabled('future_shell', parsed)).toBe(false)
     })
@@ -214,6 +223,13 @@ describe('Agent Tools control registry', () => {
             // Libreria. Se togliendoli il digest storico NON tornasse, vorrebbe
             // dire che ho mosso anche un contratto vecchio senza accorgermene.
             'memory_update', 'memory_delete', 'library_rename', 'library_delete',
+            // 2026-08-08: i nove del TELEFONO. Se togliendoli il digest storico
+            // non tornasse, vorrebbe dire che ho mosso un contratto vecchio
+            // insieme ai nuovi — ed e' esattamente la domanda a cui questa
+            // guardia serve a rispondere.
+            'device_status', 'device_torch', 'device_vibrate', 'device_volume',
+            'device_alarm', 'device_open_app', 'device_open_settings',
+            'device_compose', 'device_speak',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -244,8 +260,17 @@ describe('Agent Tools control registry', () => {
          * blocco qui sopra esclude i quattro e riproduce `369a6d…` byte per
          * byte. Nessun contratto preesistente si e' mosso.
          */
+        /*
+         * Ri-fissato 2026-08-08 per i NOVE tool del telefono. Il blocco qui
+         * sopra li esclude e riproduce `369a6d…` byte per byte: nessuno dei 38
+         * contratti preesistenti si e' mosso, che e' l'unica cosa che questa
+         * impronta deve garantire. Questo secondo numero e' invece lo stato
+         * corrente, e cambiare qui e' il gesto DELIBERATO con cui si dichiara
+         * «ho aggiunto qualcosa». Se cadesse senza che io abbia aggiunto nulla,
+         * vorrebbe dire che un contratto e' cambiato da solo.
+         */
         expect(digestOf(controlPlane))
-            .toBe('e39ccd733094a4a5b842978f6c90584e0ac95a28d7cb799a1ac1e84e7029ed3f')
+            .toBe('d5ecbba93fd458ca5110ce551fcfeba47ccde578bce917b9245f59b2f8f5270b')
         /**
          * Re-pinned 2026-08-01 for the three DIALECT digests only — the control
          * plane above did not move, which is the proof that nothing structural
@@ -311,12 +336,14 @@ describe('Agent Tools control registry', () => {
             .toBe('61745afe6d79da05fa2d982bc4cc3bd9256305f66d4caaa15f3d386772565e62')
 
         // E con i nuovi dentro: il contratto pubblico di oggi.
-        // Ri-fissati 2026-08-07 per i quattro del CRUD di Memoria e Libreria.
+        // Ri-fissati 2026-08-08 per i NOVE del telefono. I tre dialetti si
+        // muovono INSIEME, come dev'essere: e' lo stesso contratto tradotto tre
+        // volte. Se se ne muovesse uno solo, sarebbe un traduttore rotto.
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('ccb34d55976f8ad8d9d0fca28b3fed011319b2a93acfeca1cb4b8c95712b30bc')
+            .toBe('3ba06a9ba52d0aea691c73ff81d17d492f480232c6385f9174e91b50cecb663b')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('400aaca7f53279972cf8d76943fad02f0358b0106f920c0d633b27a9063a4fc3')
+            .toBe('71a05bc0de18d9dbcaf5083a393898bee17c471d5159384ec4dffa0eb454f460')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('8e3dc19e72feadc085aa36153957ab5faedf6a225ece4baf6fa7a766c3c75e32')
+            .toBe('d44bebc864738ae3050ac93ac2be4f6ea27716dd3f53b5f9fc5a41d6150e2f30')
     })
 })

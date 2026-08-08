@@ -67,6 +67,26 @@ const settings = vi.hoisted(() => ({
 vi.mock('@/stores/settings', () => ({ useSettingsStore: () => settings }))
 
 import TalosMobileSettingsAgentToolsPanel from '@/components/talos/settings/TalosMobileSettingsAgentToolsPanel.vue'
+import { TALOS_AGENT_TOOL_CONTROLS } from '@/lib/tools/toolControlCatalog'
+
+/*
+ * ⛔ Contati dal CATALOGO, non scritti a mano.
+ *
+ * Il numero a mano era 38 e diceva la cosa giusta finche' i tool erano 38: da
+ * quel momento in poi cadeva ogni volta che ne aggiungevamo uno, anche quando
+ * il pannello funzionava perfettamente — cioe' proprio quando il pannello
+ * FUNZIONAVA, visto che il suo lavoro e' mostrarli TUTTI. Un test che codifica
+ * l'implementazione impedisce di migliorarla.
+ *
+ * L'invariante vero e' un altro, e non ha numeri dentro: **una riga per ogni
+ * voce del catalogo**, e **il contatore d'accordo con gli interruttori accesi**
+ * — calcolato qui con la stessa regola del pannello, cosi' se la regola cambia
+ * da una parte sola il test se ne accorge.
+ */
+const righeAttese = TALOS_AGENT_TOOL_CONTROLS.length
+const accesiAttesi = TALOS_AGENT_TOOL_CONTROLS.filter(
+    (control) => (enabled as Record<string, boolean>)[control.id],
+).length
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -88,8 +108,8 @@ describe('TalosMobileSettingsAgentToolsPanel', () => {
         // esistevano da settimane e non comparivano in questo pannello, perché
         // mancavano dal catalogo. Due tool che il modello poteva usare e che
         // nessuno poteva spegnere.
-        expect(wrapper.findAll('[data-agent-tool]')).toHaveLength(38)
-        expect(wrapper.text()).toContain('17 of 38 enabled')
+        expect(wrapper.findAll('[data-agent-tool]')).toHaveLength(righeAttese)
+        expect(wrapper.text()).toContain(`${accesiAttesi} of ${righeAttese} enabled`)
         /**
          * Found by an adversarial review, 2026-07-31: a tool was added to the
          * catalog with no strings, and this test still passed because it only
@@ -150,7 +170,7 @@ describe('TalosMobileSettingsAgentToolsPanel', () => {
         // Still announced ON: the save failed, and a controlled switch cannot
         // show a value that was never stored.
         expect(toggle.attributes('aria-checked')).toBe('true')
-        expect(wrapper.text()).toContain('17 of 38 enabled')
+        expect(wrapper.text()).toContain(`${accesiAttesi} of ${righeAttese} enabled`)
         expect(wrapper.get('[data-testid="agent-tools-save-error"]').attributes('role')).toBe('alert')
         expect(wrapper.get('[data-testid="agent-tools-save-error"]').text())
             .toBe('Could not save Search the Library. The previous setting is still active.')

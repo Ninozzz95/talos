@@ -8,7 +8,7 @@ import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import type { TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
 import {
     TALOS_AGENT_TOOL_CONTROLS,
-    type TalosAgentToolGroup,
+    TALOS_AGENT_TOOL_GROUP_ORDER,
 } from '@/lib/tools/toolControlCatalog'
 import type { TalosAgentToolId } from '@/lib/tools/toolControls'
 
@@ -18,8 +18,11 @@ type AgentToolControl = typeof TALOS_AGENT_TOOL_CONTROLS[number]
 // Hand-ordered, so a group added to the catalogue and forgotten here is a set
 // of tools nobody can switch off. `models` arrived 2026-07-31 with the
 // on-device download tools.
-const groupOrder: readonly TalosAgentToolGroup[] = ['library', 'personal', 'web', 'create', 'models']
-const groups = computed(() => groupOrder.map((id) => ({
+// ⛔ L'ordine viene dal catalogo, dove un test lo confronta con i gruppi
+// realmente usati. Qui era un elenco privato che nessuno poteva controllare, e
+// un gruppo dimenticato non rompeva niente: faceva solo sparire i suoi tool
+// dalla pagina — tool che il modello può usare e che nessuno può spegnere.
+const groups = computed(() => TALOS_AGENT_TOOL_GROUP_ORDER.map((id) => ({
     id,
     tools: TALOS_AGENT_TOOL_CONTROLS.filter((tool) => tool.group === id),
 })))

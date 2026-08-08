@@ -7,14 +7,18 @@ import TalosMobileRunningToolRow from '@/components/chat/TalosMobileRunningToolR
 import {
     BookMarked,
     Clock,
+    AudioLines,
     Download,
     FileText,
+    Flashlight,
     Globe,
     Image as ImageIcon,
     ListTodo,
     NotebookPen,
+    Smartphone,
     Sparkles,
     Telescope,
+    Volume2,
     Wrench,
 } from '@lucide/vue'
 import {
@@ -62,6 +66,12 @@ const TOOL_ICONS: Record<TalosToolIconName, unknown> = {
     clock: Clock,
     web: Globe,
     research: Telescope,
+    // Il telefono ha i suoi segni: dargli quello del web o dei modelli direbbe
+    // una cosa falsa su cosa sta succedendo.
+    phone: Smartphone,
+    torch: Flashlight,
+    volume: Volume2,
+    voice: AudioLines,
     document: FileText,
     image: ImageIcon,
     download: Download,

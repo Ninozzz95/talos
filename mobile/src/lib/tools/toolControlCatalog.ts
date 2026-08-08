@@ -1,7 +1,26 @@
 import type { TalosToolAction } from '@/lib/tools/permissionTypes'
 import type { TalosAgentToolId } from '@/lib/tools/toolControls'
 
-export type TalosAgentToolGroup = 'library' | 'personal' | 'web' | 'create' | 'models'
+export type TalosAgentToolGroup = 'library' | 'personal' | 'web' | 'create' | 'models' | 'device'
+
+/**
+ * L'ordine in cui i gruppi si leggono nelle impostazioni.
+ *
+ * ⛔ Vive QUI, non nel pannello, per una ragione precisa: finché era un `const`
+ * privato dentro il componente **non era controllabile da nessun test**, e un
+ * gruppo dimenticato in quell'elenco non fa cadere niente — semplicemente i
+ * suoi tool spariscono dalla pagina. Cioè un insieme di tool che il modello può
+ * usare e che nessuno può spegnere, esattamente il difetto che il test di
+ * copertura aveva già scovato due volte (`memory_write`, `research_list`).
+ *
+ * Spostarlo qui rende possibile la guardia; la guardia sta in
+ * `tests/unit/tools/toolControlCatalog.test.ts` e vale nei due sensi: ogni
+ * gruppo usato dal catalogo compare qui, e ogni gruppo elencato qui ha almeno
+ * un tool.
+ */
+export const TALOS_AGENT_TOOL_GROUP_ORDER = Object.freeze([
+    'library', 'personal', 'web', 'create', 'models', 'device',
+]) as readonly TalosAgentToolGroup[]
 
 export interface TalosAgentToolControl {
     id: TalosAgentToolId
@@ -69,4 +88,30 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     { id: 'local_model_inspect', group: 'models', actions: ['outbound'] },
     { id: 'local_model_download', group: 'models', actions: ['write','outbound'] },
     { id: 'local_models_status', group: 'models', actions: ['read'] },
+    /**
+     * ⭐ Il telefono. Non sono dati: sono cose che SUCCEDONO nel mondo.
+     *
+     * Tutte in regime «chiedi» o «leggi» — un intent, un'API pubblica — mai
+     * «indovina». Il 43% di riuscita dell'automazione UI e' il soffitto di chi
+     * deduce dai pixel, ed e' la misura di un metodo che qui non si usa.
+     */
+    { id: 'device_status', group: 'device', actions: ['read'] },
+    { id: 'device_torch', group: 'device', actions: ['write'] },
+    { id: 'device_vibrate', group: 'device', actions: ['write'] },
+    { id: 'device_volume', group: 'device', actions: ['write'] },
+    { id: 'device_alarm', group: 'device', actions: ['write'] },
+    { id: 'device_open_app', group: 'device', actions: ['write'] },
+    { id: 'device_open_settings', group: 'device', actions: ['write'] },
+    /*
+     * ⛔ `outbound` anche se e' la persona a premere: il testo ESCE dal
+     * telefono se lo fa, e chi ha chiuso «mai in uscita» dev'essere fermato
+     * qui — non davanti al pulsante di un'altra app.
+     */
+    { id: 'device_compose', group: 'device', actions: ['write', 'outbound'] },
+    /*
+     * ⛔ PARLARE E' UN'USCITA. Un documento privato letto ad alta voce e'
+     * uscito dal dispositivo senza toccare la rete, e chiunque sia nella
+     * stanza l'ha sentito. Il canale non e' un cavo, ma il dato e' fuori.
+     */
+    { id: 'device_speak', group: 'device', actions: ['write', 'outbound'] },
 ] as const satisfies readonly TalosAgentToolControl[])

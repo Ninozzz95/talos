@@ -67,4 +67,24 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     local_model_inspect: { risk: 'R1', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
     local_model_download: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
     local_models_status: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    device_status: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    // Accendere un LED si spegne premendo di nuovo: reversibile per costruzione.
+    device_torch: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    // Una vibrazione non si disfa — ed e' un fatto sul mondo, non sui dati.
+    device_vibrate: { risk: 'R1', reversibility: 'irreversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    device_volume: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    device_alarm: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    device_open_app: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    device_open_settings: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    /*
+     * ⛔ R2 e canTransmit: PREPARA un messaggio verso l'esterno. Non lo manda
+     * — quella e' la persona — ma il testo esce dal dispositivo se lei preme,
+     * e la trifecta deve poterlo vedere come un'uscita.
+     */
+    device_compose: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: true },
+    /*
+     * ⛔ Parlare e' un'USCITA: chiunque sia nella stanza sente. Un documento
+     * privato letto ad alta voce e' uscito dal telefono senza toccare la rete.
+     */
+    device_speak: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: true },
 })
