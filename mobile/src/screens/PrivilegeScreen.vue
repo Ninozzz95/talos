@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { useTalosI18n } from '@/i18n'
 import { Check, ChevronRight, RefreshCw, ShieldAlert, Smartphone, X } from '@lucide/vue'
@@ -54,6 +54,9 @@ function plugin() {
         request(): Promise<{ outcome: string }>
         open(options: { target: string }): Promise<{ opened: boolean }>
         bridgeStatus(): Promise<{ packaged: boolean, connected: boolean }>
+        overlayStatus(): Promise<{ allowed: boolean, open: boolean }>
+        overlayRequest(): Promise<{ opened: boolean }>
+        overlayPair(options: Record<string, string>): Promise<{ shown: boolean, reason?: string }>
         bridgePair(options: { code: string, address?: string }): Promise<RispostaPonte>
         bridgeConnect(options: { address?: string }): Promise<RispostaPonte>
     }>('TalosPrivilege')
@@ -70,11 +73,13 @@ const ricollegamentoFallito = ref(false)
 const ponteInCorso = ref(false)
 const codice = ref('')
 const ponteMotivo = ref<string | null>(null)
+const overlayConsentito = ref(false)
 
 const ponte = computed(() => talosPonteGuida({
     packaged: pontePresente.value,
     connected: ponteCollegato.value,
     reconnectFailed: ricollegamentoFallito.value,
+    overlayAllowed: overlayConsentito.value,
 }))
 
 const codiceValido = computed(() => talosCodiceValido(codice.value))
@@ -84,6 +89,7 @@ async function leggiPonte(): Promise<void> {
         const stato = await plugin().bridgeStatus()
         pontePresente.value = stato.packaged === true
         ponteCollegato.value = stato.connected === true
+        overlayConsentito.value = (await plugin().overlayStatus()).allowed === true
     } catch {
         // Build web: il ponte non esiste, e la sezione lo dice invece di fingere.
         pontePresente.value = false
@@ -179,9 +185,83 @@ async function agisci(): Promise<void> {
     } catch { /* la pagina dice già il percorso a parole */ }
 }
 
+/**
+ * ⭐⭐ La strada che chiude davvero il giro: il campo GALLEGGIA sopra
+ * Impostazioni.
+ *
+ * ⛔ Perché serve, misurato sul Pad il 2026-08-08 alle 22:24: la finestrella
+ * «Accoppia con codice» muore quando esci da Impostazioni, e con lei il servizio
+ * `_adb-tls-pairing._tcp`. Chi passa a TALOS per scrivere le sei cifre trova un
+ * annuncio che non c'è più — e il campo qui nella pagina non può funzionare.
+ *
+ * ⇒ Si mostra PRIMA la finestra flottante e POI si aprono le impostazioni: se si
+ * facesse il contrario, l'app andrebbe in secondo piano prima di aver disegnato
+ * niente, e non ci sarebbe più nessuno a disegnarlo.
+ */
+async function apriFlottante(): Promise<void> {
+    if (ponte.value.floatNeedsPermission) {
+        try { await plugin().overlayRequest() } catch { /* la pagina lo dice a parole */ }
+        return
+    }
+    ponteMotivo.value = null
+    try {
+        const esito = await plugin().overlayPair({
+            title: t('ponte.floatTitle'),
+            instruction: t('ponte.floatInstruction'),
+            action: t('ponte.pairAction'),
+            notHeard: t('ponte.reasonPairingNotAnnounced'),
+            failed: t('ponte.reasonGeneric'),
+        })
+        if (!esito.shown) {
+            ponteMotivo.value = talosPonteMotivo(esito.reason)
+            return
+        }
+        await plugin().open({ target: 'developer' })
+    } catch {
+        ponteMotivo.value = talosPonteMotivo(undefined)
+    }
+}
+
 onMounted(() => {
     void rileggi()
     void leggiPonte()
+
+    /*
+     * ⛔ La finestra flottante vive FUORI dalla pagina, e mentre lavora questa
+     * schermata non è nemmeno a schermo: la persona è dentro Impostazioni.
+     * Quindi l'esito non può tornare come valore di ritorno — torna come
+     * evento. Senza questo ascolto, chi rientra in TALOS troverebbe ancora
+     * «accoppia» dopo essersi accoppiato.
+     */
+    const p = plugin() as unknown as {
+        addListener?: (evento: string, cb: (dati: { connected?: boolean }) => void) => void
+    }
+    p.addListener?.('talosPonteChanged', (dati) => {
+        ponteCollegato.value = dati.connected === true
+        if (dati.connected === true) ponteMotivo.value = null
+    })
+
+    /*
+     * ⛔⛔ SI RILEGGE AL RIENTRO, e non è un dettaglio di comodità.
+     *
+     * Il permesso della finestra flottante si concede in una pagina di SISTEMA:
+     * la persona esce da TALOS, tocca un interruttore, e torna. Senza questa
+     * riga la schermata continuerebbe a offrire «Consenti la finestra
+     * flottante» a chi l'ha appena consentita — che è esattamente il difetto
+     * chiuso col compito #33, un pannello che racconta uno stato vecchio.
+     *
+     * `visibilitychange` e non un plugin: è la stessa cosa e non aggiunge una
+     * dipendenza a una schermata che ne ha già abbastanza.
+     */
+    document.addEventListener('visibilitychange', quandoTorna)
+})
+
+function quandoTorna(): void {
+    if (document.visibilityState === 'visible') void leggiPonte()
+}
+
+onUnmounted(() => {
+    document.removeEventListener('visibilitychange', quandoTorna)
 })
 </script>
 
@@ -285,7 +365,27 @@ onMounted(() => {
                 scarica sull'utente, tre numeri copiati da due schermate mentre
                 una finestrella scade.
             -->
+            <!--
+                ⭐⭐ LA STRADA CHE CHIUDE IL GIRO, e sta per prima perché è
+                l'unica che funziona: il campo galleggia sopra Impostazioni,
+                così la finestrella col codice non muore mentre scrivi.
+            -->
+            <button
+                v-if="ponte.floatKey"
+                type="button"
+                data-testid="talos-ponte-float"
+                :data-needs-permission="ponte.floatNeedsPermission ? 'yes' : 'no'"
+                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-4 text-sm font-semibold text-[var(--talos-accent-contrast)]"
+                @click="void apriFlottante()"
+            >
+                {{ t(ponte.floatKey) }}
+                <ChevronRight class="size-4" aria-hidden="true" />
+            </button>
+
             <template v-if="ponte.wantsCode">
+                <p class="text-2xs leading-4 text-[var(--talos-muted)]">
+                    {{ t('ponte.fallbackNote') }}
+                </p>
                 <button
                     type="button"
                     data-testid="talos-ponte-open"
@@ -371,7 +471,7 @@ onMounted(() => {
             type="button"
             data-testid="talos-privilege-refresh"
             class="flex min-h-touch items-center justify-center gap-2 self-start rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-4 text-xs text-[var(--talos-text)]"
-            @click="void rileggi()"
+            @click="void rileggi(); void leggiPonte()"
         >
             <RefreshCw class="size-3.5" aria-hidden="true" />
             {{ t('privilege.refresh') }}

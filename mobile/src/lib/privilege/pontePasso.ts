@@ -26,6 +26,8 @@ export interface TalosPonteStato {
     connected: boolean
     /** Se un tentativo silenzioso di ricollegarsi è già stato fatto e fallito. */
     reconnectFailed: boolean
+    /** Se il sistema ci lascia disegnare sopra le altre app. */
+    overlayAllowed: boolean
 }
 
 export type TalosPontePasso = 'unavailable' | 'reconnect' | 'pair' | 'ready'
@@ -39,6 +41,18 @@ export interface TalosPonteGuida {
     /** Se va mostrato il campo del codice a sei cifre. */
     wantsCode: boolean
     ready: boolean
+    /**
+     * ⭐ La strada CONSIGLIATA per accoppiarsi, quando ce n'è una.
+     *
+     * ⛔ Non è un ornamento: senza la finestra flottante il giro **non si
+     * chiude**. Misurato il 2026-08-08 alle 22:24 — la finestrella «Accoppia con
+     * codice» muore quando esci da Impostazioni, e con lei l'annuncio del
+     * servizio. Il campo qui nella pagina resta come ripiego per chi il permesso
+     * non lo vuole dare, ma va detto che è la strada in salita.
+     */
+    floatKey: string | null
+    /** Se il permesso manca, il pulsante porta alla pagina di sistema. */
+    floatNeedsPermission: boolean
 }
 
 export function talosPonteGuida(stato: TalosPonteStato): TalosPonteGuida {
@@ -50,6 +64,8 @@ export function talosPonteGuida(stato: TalosPonteStato): TalosPonteGuida {
             actionKey: null,
             wantsCode: false,
             ready: false,
+            floatKey: null,
+            floatNeedsPermission: false,
         }
     }
     if (stato.connected) {
@@ -60,6 +76,8 @@ export function talosPonteGuida(stato: TalosPonteStato): TalosPonteGuida {
             actionKey: null,
             wantsCode: false,
             ready: true,
+            floatKey: null,
+            floatNeedsPermission: false,
         }
     }
     if (!stato.reconnectFailed) {
@@ -70,6 +88,8 @@ export function talosPonteGuida(stato: TalosPonteStato): TalosPonteGuida {
             actionKey: 'ponte.reconnectAction',
             wantsCode: false,
             ready: false,
+            floatKey: null,
+            floatNeedsPermission: false,
         }
     }
     return {
@@ -79,6 +99,8 @@ export function talosPonteGuida(stato: TalosPonteStato): TalosPonteGuida {
         actionKey: 'ponte.pairAction',
         wantsCode: true,
         ready: false,
+        floatKey: stato.overlayAllowed ? 'ponte.floatAction' : 'ponte.allowOverlay',
+        floatNeedsPermission: !stato.overlayAllowed,
     }
 }
 
@@ -108,6 +130,7 @@ export function talosPonteMotivo(reason: string | undefined): string {
         case 'connect-refused': return 'ponte.reasonConnectRefused'
         case 'bridge-not-packaged': return 'ponte.unavailableBody'
         case 'bridge-timeout': return 'ponte.reasonTimeout'
+        case 'overlay-not-allowed': return 'ponte.reasonOverlayNotAllowed'
         default: return 'ponte.reasonGeneric'
     }
 }
