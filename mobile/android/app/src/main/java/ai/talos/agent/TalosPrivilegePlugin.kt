@@ -118,7 +118,19 @@ class TalosPrivilegePlugin : Plugin() {
                 return
             }
         }
-        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        /*
+         * ⛔ CLEAR_TASK, e non solo NEW_TASK.
+         *
+         * Misurato il 2026-08-08 alle 22:54: Impostazioni era gia' aperta su
+         * un'altra pagina (quella del permesso della finestra flottante), e
+         * `startActivity` con il solo NEW_TASK ha RIPRESO quel compito invece di
+         * navigare — la persona si e' ritrovata davanti la pagina sbagliata,
+         * col nostro campo che le chiedeva un codice che li' non c'era.
+         */
+        intent.addFlags(
+            android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK,
+        )
         val esito = JSObject()
         runCatching { context.startActivity(intent) }
             .onSuccess { esito.put("opened", true) }
@@ -422,6 +434,118 @@ class TalosPrivilegePlugin : Plugin() {
     fun bridgeStop(call: PluginCall) {
         val esito = TalosPonteAdb.spegni(context)
         call.resolve(JSObject().put("ok", esito.ok))
+    }
+
+    /** Se il sistema ci lascia disegnare sopra le altre app. */
+    @PluginMethod
+    fun overlayStatus(call: PluginCall) {
+        call.resolve(
+            JSObject().put("allowed", TalosPonteOverlay.consentito(context))
+                .put("open", TalosPonteOverlay.aperta()),
+        )
+    }
+
+    /**
+     * Apre la pagina di sistema del permesso.
+     *
+     * ⛔ Nativo e non un launcher generico: l'intent vuole `package:` col NOSTRO
+     * nome, altrimenti si apre l'elenco di tutte le app e la persona deve
+     * cercarci dentro — che è il modo più rapido di far abbandonare un permesso.
+     */
+    @PluginMethod
+    fun overlayRequest(call: PluginCall) {
+        val intent = android.content.Intent(
+            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            android.net.Uri.parse("package:${context.packageName}"),
+        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        val esito = JSObject()
+        runCatching { context.startActivity(intent) }
+            .onSuccess { esito.put("opened", true) }
+            .onFailure { esito.put("opened", false) }
+        call.resolve(esito)
+    }
+
+    /**
+     * ⭐⭐ Il campo che galleggia sopra Impostazioni.
+     *
+     * Le parole arrivano da JavaScript perché è lì che vivono i dizionari: una
+     * finestra di sistema scritta in italiano dentro il Kotlin sarebbe l'unica
+     * superficie di TALOS che non parla la lingua scelta dalla persona.
+     */
+    @PluginMethod
+    fun overlayPair(call: PluginCall) {
+        if (!TalosPonteOverlay.consentito(context)) {
+            call.resolve(JSObject().put("shown", false).put("reason", "overlay-not-allowed"))
+            return
+        }
+        val attivita = activity
+        if (attivita == null) {
+            call.resolve(JSObject().put("shown", false).put("reason", "no-activity"))
+            return
+        }
+        val titolo = call.getString("title") ?: "Pairing code"
+        val istruzione = call.getString("instruction") ?: ""
+        val pulsante = call.getString("action") ?: "Pair"
+
+        attivita.runOnUiThread {
+            val mostrata = TalosPonteOverlay.mostra(
+                context,
+                titolo,
+                istruzione,
+                pulsante,
+                accoppia = { codice, risposta ->
+                    /*
+                     * ⛔ Su un thread a parte: qui si scopre un servizio di rete
+                     * e si lancia un processo. Farlo sul thread principale
+                     * bloccherebbe la finestrella di sistema che stiamo
+                     * cercando di tenere viva — cioè romperebbe esattamente la
+                     * cosa che questa finestra esiste per proteggere.
+                     */
+                    Thread {
+                        val indirizzi = TalosPonteAdb.scopri(
+                            context,
+                            TalosPonteAdb.ANNUNCIO_ACCOPPIAMENTO,
+                        )
+                        if (indirizzi.isEmpty()) {
+                            risposta(false, call.getString("notHeard") ?: "pairing-not-announced")
+                            return@Thread
+                        }
+                        var ultimo = ""
+                        for (indirizzo in indirizzi) {
+                            val esito = TalosPonteAdb.accoppia(context, indirizzo, codice)
+                            if (esito.ok) {
+                                // ⭐ Subito il collegamento: è l'ALTRA porta, e
+                                // chiedere un secondo tocco qui sarebbe far fare
+                                // alla persona un passo che sappiamo già.
+                                val collegato = TalosPonteAdb.scopri(
+                                    context,
+                                    TalosPonteAdb.ANNUNCIO_COLLEGAMENTO,
+                                ).firstOrNull { TalosPonteAdb.collega(context, it).ok }
+                                notifyListeners(
+                                    "talosPonteChanged",
+                                    JSObject().put("connected", collegato != null),
+                                )
+                                risposta(true, collegato ?: "")
+                                return@Thread
+                            }
+                            ultimo = esito.motivo ?: esito.errore
+                        }
+                        risposta(false, ultimo.ifBlank { call.getString("failed") ?: "pair-failed" })
+                    }.start()
+                },
+                quandoFinisce = { riuscito, _ ->
+                    notifyListeners("talosPonteChanged", JSObject().put("connected", riuscito))
+                },
+            )
+            call.resolve(JSObject().put("shown", mostrata))
+        }
+    }
+
+    /** Toglie la finestra flottante. */
+    @PluginMethod
+    fun overlayClose(call: PluginCall) {
+        activity?.runOnUiThread { TalosPonteOverlay.chiudi(context) }
+        call.resolve(JSObject().put("closed", true))
     }
 
     /**

@@ -452,6 +452,27 @@
          da limite del produttore.
     -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+    <!--
+        ⭐⭐ DISEGNARE SOPRA LE ALTRE APP — e la ragione precisa per cui serve.
+
+        Non è «il pulsante flottante» in generale: è l'unico modo per chiudere
+        l'accoppiamento del ponte ADB. Misurato sul Pad il 2026-08-08 alle
+        22:24: la finestrella «Accoppia con codice» di Impostazioni muore quando
+        esci da Impostazioni, e con lei il servizio `_adb-tls-pairing._tcp`. Chi
+        passa a TALOS per scrivere le sei cifre trova un annuncio che non c'è
+        più.
+
+        Una finestra flottante NON manda Impostazioni in secondo piano: la
+        finestrella resta viva e la persona scrive senza uscire.
+
+        ⛔ Non è concesso all'installazione: vuole un viaggio in una pagina di
+        sistema, che TALOS apre con `package:` sul proprio nome — senza quello si
+        apre l'elenco di tutte le app e bisogna cercarsi dentro.
+
+        Lo stesso permesso serve poi al pulsante flottante che chiama TALOS da
+        fuori (compito #29): uno, due funzioni.
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Il volume dei flussi audio. Normale: nessun dialogo. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />

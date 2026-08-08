@@ -9,7 +9,13 @@ import {
 } from '@/lib/privilege/pontePasso'
 
 function stato(parziale: Partial<TalosPonteStato> = {}): TalosPonteStato {
-    return { packaged: true, connected: false, reconnectFailed: false, ...parziale }
+    return {
+        packaged: true,
+        connected: false,
+        reconnectFailed: false,
+        overlayAllowed: true,
+        ...parziale,
+    }
 }
 
 describe('il ponte mostra UN passo alla volta', () => {
@@ -43,6 +49,33 @@ describe('il ponte mostra UN passo alla volta', () => {
         expect(g.actionKey).toBe('ponte.pairAction')
     })
 
+    it('⛔ e la strada CONSIGLIATA è la finestra flottante, non il campo', () => {
+        /*
+         * Non è preferenza estetica: il campo nella pagina NON PUÒ funzionare.
+         * Misurato il 2026-08-08 alle 22:24 — uscire da Impostazioni per venire
+         * a scrivere qui chiude la finestrella di sistema e uccide l'annuncio
+         * `_adb-tls-pairing._tcp`. Se un giorno questa riga sparisse, resterebbe
+         * una schermata che chiede una cosa impossibile.
+         */
+        const g = talosPonteGuida(stato({ reconnectFailed: true }))
+        expect(g.floatKey).toBe('ponte.floatAction')
+        expect(g.floatNeedsPermission).toBe(false)
+    })
+
+    it('senza il permesso, il pulsante porta a CHIEDERLO invece di fallire', () => {
+        const g = talosPonteGuida(stato({ reconnectFailed: true, overlayAllowed: false }))
+        expect(g.floatKey).toBe('ponte.allowOverlay')
+        expect(g.floatNeedsPermission).toBe(true)
+    })
+
+    it('negli altri passi la finestra flottante non si propone', () => {
+        // Offrirla a chi deve solo ricollegarsi sarebbe chiedere un permesso
+        // invasivo per un passo che non ne ha bisogno.
+        for (const s of [stato(), stato({ connected: true }), stato({ packaged: false })]) {
+            expect(talosPonteGuida(s).floatKey).toBeNull()
+        }
+    })
+
     it('«collegato» vince su «ricollegamento fallito»: lo stato vivo batte la memoria', () => {
         // Un fallimento di mezz'ora fa non deve nascondere un telefono che
         // adesso è collegato — è la stessa regola per cui non teniamo flag.
@@ -69,6 +102,7 @@ describe('i motivi sono scritti in ENTRAMBE le lingue', () => {
         'connect-refused',
         'bridge-not-packaged',
         'bridge-timeout',
+        'overlay-not-allowed',
         undefined,
         'un-motivo-che-non-esiste',
     ]
@@ -102,6 +136,16 @@ describe('i motivi sono scritti in ENTRAMBE le lingue', () => {
         // Anche quelle scritte a mano nel template.
         usate.add('ponte.openDeveloper')
         usate.add('ponte.codeLabel')
+        usate.add('ponte.fallbackNote')
+        usate.add('ponte.floatTitle')
+        usate.add('ponte.floatInstruction')
+        for (const s of [
+            stato({ reconnectFailed: true }),
+            stato({ reconnectFailed: true, overlayAllowed: false }),
+        ]) {
+            const f = talosPonteGuida(s).floatKey
+            if (f) usate.add(f)
+        }
 
         for (const chiave of usate) {
             const corta = chiave.replace(/^ponte\./, '')
