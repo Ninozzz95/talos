@@ -831,6 +831,7 @@ export const TALOS_IT_MESSAGES = {
         generatedFilesSavedAfterAuthorization: 'Salvati {count} file nella Libreria: {names}.',
         generatedFilesNotSavedAfterAuthorization: 'Nessun file generato è stato salvato ({count} ignorati).',
         toolAuthorizationPending: '{count} richiesta di autorizzazione per uno strumento è in attesa. Puoi continuare a usare la chat.',
+        toolAuthorizationSettled: 'La richiesta di autorizzazione è stata gestita.',
         libraryAnswerGuardAbstention: 'Non sono riuscito a produrre una risposta affidabile che restasse sul tema corrente della conversazione. Riformula la domanda o indica la fonte da usare.',
         composerPreferencesSaveFailed: 'TALOS non ha potuto salvare le preferenze del compositore. {detail}',
         selectModelBeforeSending: 'Seleziona un modello prima di inviare.',
@@ -965,6 +966,8 @@ export const TALOS_IT_MESSAGES = {
         researchDelete: 'Rimozione di una ricerca',
     },
     toolConsent: {
+        /* ⛔ Il ripiego quando un'etichetta manca: mai il nome interno. */
+        unknownTool: 'Uno strumento di TALOS',
         libraryList: {
             title: 'Esplora la Libreria',
             description: 'Mostra nomi, tipi, date e provenienza dei file della Libreria disponibili per questa chat.',

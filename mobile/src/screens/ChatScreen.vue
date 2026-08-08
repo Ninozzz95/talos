@@ -55,6 +55,22 @@ const emit = defineEmits<{ export: [] }>()
 const router = useRouter()
 const { t, locale } = useTalosI18n()
 const controller = useChatController()
+
+/**
+ * ⛔ Le attese ANCORA aperte, per identificativo del punto di ripresa.
+ *
+ * La riga in chat che annuncia un'attesa e' un messaggio scritto una volta: da
+ * sola non sa se quella richiesta e' stata poi risolta. Questo elenco e' la
+ * verita' di adesso, e la riga la usa per non mentire e per portare alla scheda
+ * invece di limitarsi ad annunciarla.
+ *
+ * Le due sorgenti stanno INSIEME perche' la persona non distingue — e non deve
+ * distinguere — fra una richiesta nuova e una ripresa dopo un'interruzione.
+ */
+const attesePendenti = computed<readonly string[]>(() => [
+    ...controller.pendingToolAuthorizations.value.map((pending) => pending.checkpoint_id),
+    ...controller.toolAuthorizationRecoveries.value.map((recovery) => recovery.checkpoint_id),
+].filter((id): id is string => typeof id === 'string' && id.length > 0))
 const settings = useSettingsStore()
 // Two stored choices — the bar's shape and where the "+" opens — expanded here
 // into the three flags the composer speaks. The mapping lives in one module, so
@@ -1053,10 +1069,12 @@ onBeforeUnmount(() => {
                     :text-scale="settings.state.chat_layout.bubble_scale"
                     :has-older-messages="chat.state.hasOlderMessages"
                     :loading-older-messages="chat.state.loadingOlderMessages"
+                    :pending-authorization-ids="attesePendenti"
                     @reuse="reuseMessage"
                     @resend="resendMessage"
                     @retry="retryAssistantMessage"
                     @save-to-library="saveMessageToLibrary"
+                    @review-authorization="controller.showToolAuthorization()"
                 />
                 </template>
             </div>

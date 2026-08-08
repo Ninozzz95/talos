@@ -349,7 +349,39 @@ export function talosToolConsentCopy(
     translate: TalosTranslate,
 ): TalosToolConsentCopy {
     const keys = tool.name ? TALOS_TOOL_CONSENT_KEYS[tool.name] : undefined
-    if (!keys) return { title: tool.title, description: tool.description }
+    if (!keys) {
+        /*
+         * ⛔ UN NOME INTERNO NON COMPARE MAI IN UNA RICHIESTA DI PERMESSO.
+         *
+         * Visto sul Pad il 2026-08-08 alle 06:22: la richiesta annunciava
+         * `device_status` nudo. Il chiamante in `chatController` passa
+         * `title: pending.tool`, cioe' l'identificativo, e questo ripiego lo
+         * rimandava indietro tale e quale.
+         *
+         * La guardia in `ogniToolHaUnNomeUmano` rende improbabile arrivarci —
+         * ma «improbabile» non basta sulla schermata dove una persona decide
+         * se fidarsi. Chi legge `device_status` non sa cosa sta autorizzando, e
+         * di fronte a una parola che non capisce fa una delle due cose
+         * sbagliate: nega tutto, o accetta tutto.
+         *
+         * Quindi: se il titolo che ci arriva ha la FORMA di un identificativo
+         * interno, si dice una cosa vera e generica invece di esibirlo. E lo si
+         * grida nel registro, perche' è un difetto nostro da correggere, non
+         * una condizione normale.
+         */
+        const sembraUnIdentificativo = /^[a-z0-9]+(_[a-z0-9]+)+$/.test(tool.title)
+        if (sembraUnIdentificativo) {
+            console.error(
+                `[talos] nessuna etichetta umana per lo strumento "${tool.title}": `
+                + 'la richiesta di consenso mostrerebbe il nome interno',
+            )
+            return {
+                title: translate('toolConsent.unknownTool'),
+                description: tool.description,
+            }
+        }
+        return { title: tool.title, description: tool.description }
+    }
     return {
         title: translate(keys.title),
         description: translate(keys.description),

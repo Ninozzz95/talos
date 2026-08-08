@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { BookMarked, FileText } from '@lucide/vue'
+import { BookMarked, ChevronRight, FileText, ShieldQuestion } from '@lucide/vue'
 import { talosShortModelLabel } from '@/lib/models/modelLabel'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
@@ -36,6 +36,18 @@ const props = defineProps<{
     /** Defect #4: true while pages above the window remain unloaded. */
     hasOlderMessages?: boolean
     loadingOlderMessages?: boolean
+    /**
+     * ⛔ Quali richieste di autorizzazione sono ANCORA in attesa, adesso.
+     *
+     * Serve perche' la riga «una richiesta e' in attesa» e' un messaggio
+     * scritto nella trascrizione: una frase CONGELATA che descrive uno stato
+     * VIVO. Appena la richiesta viene risolta, la frase resta li' a dire che si
+     * sta aspettando — e chi la legge cerca una scheda che non c'e' piu'.
+     *
+     * Con questo elenco la riga puo' dire la verita' di adesso invece di quella
+     * del momento in cui fu scritta.
+     */
+    pendingAuthorizationIds?: readonly string[]
 }>()
 
 const emit = defineEmits<{
@@ -43,7 +55,24 @@ const emit = defineEmits<{
     resend: [messageId: string]
     retry: [messageId: string]
     saveToLibrary: [messageId: string]
+    /** La riga dell'attesa e' essa stessa il modo di rispondere. */
+    reviewAuthorization: []
 }>()
+
+/**
+ * L'identificativo del punto di ripresa che questo messaggio annunciava, se
+ * questo messaggio annunciava un'attesa.
+ */
+function checkpointDi(message: TalosMobileMessageView): string | null {
+    const id = message.metadata?.tool_authorization_pending_checkpoint_id
+    return typeof id === 'string' && id.length > 0 ? id : null
+}
+
+/** Vero se quella richiesta e' ancora li' ad aspettare una risposta. */
+function attesaViva(message: TalosMobileMessageView): boolean {
+    const id = checkpointDi(message)
+    return id !== null && (props.pendingAuthorizationIds ?? []).includes(id)
+}
 
 const { t } = useTalosI18n()
 const PlainMessage = defineComponent({
@@ -303,7 +332,46 @@ function messageStateLabel(state: string): string {
                         v-if="message.role === 'assistant' && message.reasoning"
                         :reasoning="message.reasoning"
                     />
+                    <!--
+                        ⛔ L'attesa si disegna da cio' che e' VERO ADESSO.
+
+                        ## Il difetto, riprodotto sul Pad il 2026-08-08
+
+                        In chat c'era «una richiesta di autorizzazione e' in
+                        attesa» e sullo schermo non c'era ne' la scheda ne' il
+                        pulsante per richiamarla. Il turno non si chiudeva e lo
+                        strumento non partiva.
+
+                        La causa non era una condizione sbagliata: era che
+                        quella frase e' un MESSAGGIO, scritto una volta e mai
+                        piu' toccato, mentre la scheda e il pulsante vivono
+                        sullo stato corrente. Risolta la richiesta, la frase
+                        resta — e manda a cercare qualcosa che non esiste.
+
+                        ## Le due meta' della cura
+
+                        Se l'attesa e' viva, la riga e' un BOTTONE: e' la porta,
+                        non l'annuncio di una porta altrove. Se non lo e' piu',
+                        la riga parla al passato e nessuno la insegue.
+                    -->
+                    <button
+                        v-if="attesaViva(message)"
+                        type="button"
+                        data-testid="talos-authorization-pending-open"
+                        class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-xl border border-[var(--talos-accent)]/50 bg-[var(--talos-active)] px-3 text-left text-sm"
+                        @click="emit('reviewAuthorization')"
+                    >
+                        <ShieldQuestion class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                        <span class="min-w-0 flex-1">{{ message.content }}</span>
+                        <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                    </button>
+                    <p
+                        v-else-if="checkpointDi(message)"
+                        data-testid="talos-authorization-pending-done"
+                        class="text-xs leading-5 text-[var(--talos-muted)]"
+                    >{{ $t('chat.toolAuthorizationSettled') }}</p>
                     <TalosMobileMessageContent
+                        v-else
                         :content="message.content"
                     />
                     <!-- Owner 2026-07-26: the "Sources" pill, under the answer
