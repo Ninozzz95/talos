@@ -506,6 +506,49 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                     }
                 }
             }
+
         },
     }
+
+    /*
+     * ⛔⛔ QUI C'ERA UNA DIFESA CHE FACEVA PIÙ DANNO DEL DIFETTO. RITIRATA.
+     *
+     * ## Cosa doveva fare
+     *
+     * Accorgersi delle righe della Libreria il cui file non c'è più — il caso
+     * di `button_a.png`, quattro righe e tre file, contato sul Pad il
+     * 2026-08-08 — e marcarle `failed` così che l'elenco lo dicesse.
+     *
+     * ## Cosa ha fatto davvero, MISURATO sul dispositivo
+     *
+     * **22 righe marcate** su una Libreria quasi tutta sana. I nomi lo
+     * spiegano: erano DOCUMENTI creati dentro l'app, che una riga ce l'hanno e
+     * un file su disco no — per costruzione, non per guasto. Vivono come testo
+     * estratto. `existsPrivate` dice il vero: quel percorso non esiste. È la
+     * DOMANDA a essere sbagliata.
+     *
+     * ## Perché ritirata e non aggiustata al volo
+     *
+     * Una Libreria che grida «il file non c'è più» su ventidue voci sane è
+     * peggio di una che tace su una guasta: chi la legge impara che l'avviso
+     * mente, e il giorno che dice il vero non gli crede più. Un allarme che
+     * sbaglia è un allarme spento.
+     *
+     * ## E la lezione sul test, che è la parte da ricordare
+     *
+     * `ORFANA-02` esiste apposta per impedire questo, e PASSAVA. Passava perché
+     * la mia finzione di `existsPrivate` rispondeva «sì» per ogni file sano,
+     * mentre quella vera risponde «no» anche per le righe che un file non
+     * l'hanno mai avuto. Il test difendeva l'idea che avevo del mondo, non il
+     * mondo.
+     *
+     * ## Cosa serve prima di riprovare
+     *
+     * Un modo per sapere quali righe DEVONO avere un file: probabilmente un
+     * campo che distingua un file acquisito da un documento generato. Va
+     * cercato nei dati veri del dispositivo, non dedotto. Solo allora la
+     * domanda è giusta, e solo allora il segno in `TalosMobileLibraryFileRow`
+     * — che resta, ed è corretto quando lo stato è davvero `failed` — dirà il
+     * vero.
+     */
 }
