@@ -726,7 +726,24 @@ async function navigate(name: TalosMobileRouteName, query: LocationQueryRaw = {}
     await preferences.setLastRoute(name)
 }
 
+/**
+ * ⛔ Il guardiano delle capacità: si stacca quando l'app se ne va.
+ *
+ * Owner 2026-08-07: «ogni volta che i permessi si spengono per colpa dell'OS
+ * dobbiamo segnalarlo in maniera efficace». Shizuku muore a ogni riavvio del
+ * telefono, quindi non è un caso limite: è la normalità di ogni mattina.
+ */
+let staccaGuardiano: (() => void) | null = null
+
 onMounted(async () => {
+    /*
+     * Importato in modo DINAMICO come gli altri: il grafo d'avvio ha meno di
+     * 4 KB di margine, e questo file l'ha già sfondato una volta.
+     */
+    void import('@/services/capabilityWatchService')
+        .then((modulo) => { staccaGuardiano = modulo.talosStartCapabilityWatch() })
+        .catch(() => { /* un guardiano che non parte non deve fermare l'app */ })
+
     /**
      * Il centro notifiche prende le sue due superfici.
      *
@@ -916,6 +933,8 @@ function talosIndietro(canGoBack: boolean): 'handled' | 'history' | 'exit' {
 
 
 onBeforeUnmount(async () => {
+    staccaGuardiano?.()
+    staccaGuardiano = null
     stopNotificationRoutes?.()
     await resumeRelock?.dispose()
     await lifecycle?.dispose()
