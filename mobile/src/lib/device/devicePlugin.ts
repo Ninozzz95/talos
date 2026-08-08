@@ -35,6 +35,15 @@ interface PonteDispositivo {
     status(): Promise<Record<string, unknown>>
     wallpaper(options: { imageBase64: string, where: string }): Promise<{ done: boolean, reason?: string, appliedTo: string }>
     keepAwake(options: { on: boolean }): Promise<{ done: boolean, reason?: string, on: boolean }>
+    /**
+     * ⭐ Media: `playing` è la parte che conta.
+     *
+     * Non è un `done` travestito — è lo stato **riletto dopo** l'invio del tasto.
+     * Un tasto media senza sessione attiva va nel vuoto senza fallire, quindi
+     * chi chiama deve poter dire «l'ho chiesto, e adesso non suona» invece di
+     * «fatto». Vedi il commento nel plugin nativo.
+     */
+    media(options: { action: string }): Promise<{ done: boolean, reason?: string, playing: boolean, action?: string }>
 }
 
 interface PonteVoce {
@@ -153,6 +162,16 @@ export function createTalosDeviceSources(): TalosDeviceHardwareSources | null {
             }
             catch {
                 return nonQui({ on })
+            }
+        },
+        async media(action) {
+            try {
+                return await TalosDeviceBridge.media({ action })
+            }
+            catch {
+                // ⛔ Fuori dal telefono non suona niente, e dirlo `playing: false`
+                // e' vero: non e' un ripiego, e' la risposta giusta.
+                return nonQui({ playing: false })
             }
         },
         async speak(text) {

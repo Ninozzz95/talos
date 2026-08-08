@@ -46,6 +46,7 @@ export interface TalosDeviceToolSources {
     status(): Promise<Record<string, unknown>>
     wallpaper(imageBase64: string, where: string): Promise<Esito & { appliedTo: string }>
     keepAwake(on: boolean): Promise<Esito & { on: boolean }>
+    media(action: string): Promise<Esito & { playing: boolean }>
     /**
      * ⛔ La risoluzione del nome e' del CONTROLLER, non di qui: e' la stessa che
      * usa la modifica delle immagini, e due copie vorrebbero dire che un giorno
@@ -118,6 +119,59 @@ export function createTalosDeviceTools(
             input: z.object({ on: z.boolean() }),
             async run(input) {
                 return esitoDi(await sources.torch(input.on), input.on ? 'Torch on.' : 'Torch off.')
+            },
+        }) as TalosToolDefinition<never>,
+
+        /**
+         * ⭐⭐ L'UNICA RIGA DOVE GEMINI VINCEVA SENZA UN CANCELLO.
+         *
+         * Dal censimento del 2026-08-09 (compito #34): per accendere il Wi-Fi o
+         * la torcia, Gemini pretende che l'app Google sia **l'assistente
+         * predefinito del telefono**. Per il controllo media, no: quella la fa e
+         * basta. Era l'unica casella dove perdevamo a parità di condizioni.
+         *
+         * ⇒ E si chiude a **costo zero**: `dispatchMediaKeyEvent` è la porta dei
+         * telecomandi Bluetooth, non chiede permessi e non chiede nemmeno il
+         * ponte. Non serviva la strada difficile.
+         *
+         * ⛔ La descrizione dice al modello di NON promettere quale brano parte:
+         * il cambio traccia non è verificabile da qui, e una promessa che non si
+         * può controllare è il primo passo verso «fatto» senza aver fatto niente.
+         */
+        defineTalosTool({
+            name: 'device_media',
+            action: 'write',
+            title: 'Control what is playing',
+            description: [
+                'Control media playback on the phone: pause, resume, stop, or skip.',
+                'It works with whatever app is currently playing — music, podcast, video.',
+                'If nothing is playing, say so plainly instead of claiming it worked.',
+                'IMPORTANT: after next or previous you cannot know which track started,',
+                'so never name the new track — say the skip was sent and let the person look.',
+            ].join(' '),
+            input: z.object({
+                action: z.enum(['play_pause', 'play', 'pause', 'next', 'previous', 'stop']),
+            }),
+            async run(input) {
+                const esito = await sources.media(input.action)
+                /*
+                 * ⛔ Si riporta lo stato RILETTO, non l'azione chiesta. È la
+                 * lezione del 2026-08-09: un'API muta che non fallisce produce
+                 * un «fatto» falso, e la sola difesa è dire cosa si vede dopo.
+                 */
+                if (!esito.done) {
+                    return {
+                        ok: false,
+                        content: esito.reason === 'nothing-playing'
+                            ? 'Nothing is playing on the phone right now.'
+                            : `Could not control playback: ${esito.reason ?? 'no media app took it'}.`,
+                        code: `TALOS_MEDIA_${(esito.reason ?? 'failed').toUpperCase().replace(/-/g, '_')}`,
+                    }
+                }
+                return {
+                    ok: true,
+                    content: esito.playing ? 'Playing.' : 'Paused.',
+                }
             },
         }) as TalosToolDefinition<never>,
 

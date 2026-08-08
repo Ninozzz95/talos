@@ -50,6 +50,7 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     research_delete: 'Deleting a research',
     device_status: 'Checking the phone',
     device_torch: 'Using the torch',
+    device_media: 'Controlling playback',
     device_vibrate: 'Buzzing the phone',
     device_volume: 'Changing the volume',
     device_alarm: 'Setting an alarm',
@@ -111,6 +112,7 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     research_delete: 'toolActivity.researchDelete',
     device_status: 'toolActivity.deviceStatus',
     device_torch: 'toolActivity.deviceTorch',
+    device_media: 'toolActivity.deviceMedia',
     device_vibrate: 'toolActivity.deviceVibrate',
     device_volume: 'toolActivity.deviceVolume',
     device_alarm: 'toolActivity.deviceAlarm',
@@ -270,6 +272,7 @@ export type TalosToolIconName =
     | 'phone'
     | 'torch'
     | 'volume'
+    | 'audio'
     | 'voice'
     | 'document'
     | 'image'
@@ -324,6 +327,10 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     device_status: 'phone',
     device_torch: 'torch',
     device_vibrate: 'phone',
+    // ⛔ NON `volume`: alzare il volume e mettere in pausa sono due cose diverse,
+    // e due strumenti che mostrano lo stesso segno raccontano la stessa cosa
+    // mentre ne stanno facendo due. Il segno del suono che SUONA e' l'audio.
+    device_media: 'audio',
     device_volume: 'volume',
     device_alarm: 'clock',
     device_open_app: 'phone',

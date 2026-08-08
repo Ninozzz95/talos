@@ -69,6 +69,8 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     local_models_status: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     device_status: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     // Accendere un LED si spegne premendo di nuovo: reversibile per costruzione.
+    // Mettere in pausa si disfa premendo di nuovo, e non tocca nessun dato.
+    device_media: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     device_torch: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     // Una vibrazione non si disfa — ed e' un fatto sul mondo, non sui dati.
     device_vibrate: { risk: 'R1', reversibility: 'irreversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },

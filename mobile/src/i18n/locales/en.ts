@@ -948,6 +948,7 @@ export const TALOS_EN_MESSAGES = {
         localModelDownload: 'Downloading a model to this phone',
         localModelsStatus: 'Checking on a model download',
         deviceStatus: 'Checking the phone',
+        deviceMedia: 'Playback',
         deviceTorch: 'Torch',
         deviceVibrate: 'Vibration',
         deviceVolume: 'Volume',
@@ -1102,6 +1103,10 @@ export const TALOS_EN_MESSAGES = {
         deviceStatus: {
             title: 'Check how the phone is',
             description: 'Reads battery, storage, memory, ringer mode and network type. It reads nothing that identifies you or the device.',
+        },
+        deviceMedia: {
+            title: 'Pause or resume what you are listening to',
+            description: 'Acts on whichever app is playing right now — music, podcast, video. It opens nothing and does not read what you are listening to.',
         },
         deviceTorch: {
             title: 'Turn the torch on or off',
@@ -2225,6 +2230,7 @@ export const TALOS_EN_MESSAGES = {
             local_model_download: { title: 'Download a model', description: 'Download a model onto this device. Asks you every time, however large.' },
             local_models_status: { title: 'Check on a download', description: 'Report what is downloading and how far it has got. This device only.' },
             device_status: { title: 'Check the phone', description: 'Reads battery, storage, memory, ringer mode and network type. Nothing that identifies you or this phone.' },
+            device_media: { title: 'Pause or resume playback', description: 'Acts on whichever app is playing right now — music, podcast, video. It opens nothing and does not read what you are listening to.' },
             device_torch: { title: 'Turn the torch on or off', description: 'Switches the phone torch. Needs no permission from you.' },
             device_vibrate: { title: 'Vibrate the phone', description: 'A short buzz as a physical signal. Not for announcing replies — notifications do that.' },
             device_volume: { title: 'Read or set the volume', description: 'Reads a volume or sets it, as a percentage. Real silent mode needs a permission you grant yourself.' },
