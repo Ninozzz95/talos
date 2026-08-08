@@ -48,6 +48,15 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     research_resume: 'Resuming a research',
     research_cancel: 'Stopping a research',
     research_delete: 'Deleting a research',
+    device_status: 'Checking the phone',
+    device_torch: 'Using the torch',
+    device_vibrate: 'Buzzing the phone',
+    device_volume: 'Changing the volume',
+    device_alarm: 'Setting an alarm',
+    device_open_app: 'Opening an app',
+    device_open_settings: 'Opening a settings screen',
+    device_compose: 'Preparing a message',
+    device_speak: 'Speaking out loud',
     local_models_search: 'Looking for models this phone can run',
     local_model_inspect: 'Checking whether a model fits this phone',
     local_model_download: 'Downloading a model to this phone',
@@ -89,6 +98,15 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     research_resume: 'toolActivity.researchResume',
     research_cancel: 'toolActivity.researchCancel',
     research_delete: 'toolActivity.researchDelete',
+    device_status: 'toolActivity.deviceStatus',
+    device_torch: 'toolActivity.deviceTorch',
+    device_vibrate: 'toolActivity.deviceVibrate',
+    device_volume: 'toolActivity.deviceVolume',
+    device_alarm: 'toolActivity.deviceAlarm',
+    device_open_app: 'toolActivity.deviceOpenApp',
+    device_open_settings: 'toolActivity.deviceOpenSettings',
+    device_compose: 'toolActivity.deviceCompose',
+    device_speak: 'toolActivity.deviceSpeak',
     local_models_search: 'toolActivity.localModelsSearch',
     local_model_inspect: 'toolActivity.localModelInspect',
     local_model_download: 'toolActivity.localModelDownload',
@@ -237,6 +255,42 @@ export const TALOS_TOOL_CONSENT_KEYS: Record<string, TalosToolConsentCopy> = {
         title: 'toolConsent.researchDelete.title',
         description: 'toolConsent.researchDelete.description',
     },
+    device_status: {
+        title: 'toolConsent.deviceStatus.title',
+        description: 'toolConsent.deviceStatus.description',
+    },
+    device_torch: {
+        title: 'toolConsent.deviceTorch.title',
+        description: 'toolConsent.deviceTorch.description',
+    },
+    device_vibrate: {
+        title: 'toolConsent.deviceVibrate.title',
+        description: 'toolConsent.deviceVibrate.description',
+    },
+    device_volume: {
+        title: 'toolConsent.deviceVolume.title',
+        description: 'toolConsent.deviceVolume.description',
+    },
+    device_alarm: {
+        title: 'toolConsent.deviceAlarm.title',
+        description: 'toolConsent.deviceAlarm.description',
+    },
+    device_open_app: {
+        title: 'toolConsent.deviceOpenApp.title',
+        description: 'toolConsent.deviceOpenApp.description',
+    },
+    device_open_settings: {
+        title: 'toolConsent.deviceOpenSettings.title',
+        description: 'toolConsent.deviceOpenSettings.description',
+    },
+    device_compose: {
+        title: 'toolConsent.deviceCompose.title',
+        description: 'toolConsent.deviceCompose.description',
+    },
+    device_speak: {
+        title: 'toolConsent.deviceSpeak.title',
+        description: 'toolConsent.deviceSpeak.description',
+    },
     local_models_search: {
         title: 'toolConsent.localModelsSearch.title',
         description: 'toolConsent.localModelsSearch.description',
@@ -292,6 +346,10 @@ export type TalosToolIconName =
     | 'clock'
     | 'web'
     | 'research'
+    | 'phone'
+    | 'torch'
+    | 'volume'
+    | 'voice'
     | 'document'
     | 'image'
     | 'download'
@@ -337,6 +395,20 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     research_cancel: 'research',
     research_delete: 'research',
     // Searching and inspecting reach the network; downloading is a download.
+    /*
+     * ⛔ Il telefono ha un segno SUO. Dargli quello dei modelli o del web
+     * direbbe una cosa falsa su cosa sta succedendo — e' il difetto del
+     * documento col globo, di nuovo.
+     */
+    device_status: 'phone',
+    device_torch: 'torch',
+    device_vibrate: 'phone',
+    device_volume: 'volume',
+    device_alarm: 'clock',
+    device_open_app: 'phone',
+    device_open_settings: 'phone',
+    device_compose: 'phone',
+    device_speak: 'voice',
     local_models_search: 'web',
     local_model_inspect: 'web',
     local_model_download: 'download',

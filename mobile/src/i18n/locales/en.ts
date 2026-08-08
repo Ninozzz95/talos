@@ -920,6 +920,15 @@ export const TALOS_EN_MESSAGES = {
         localModelInspect: 'Checking whether a model fits this phone',
         localModelDownload: 'Downloading a model to this phone',
         localModelsStatus: 'Checking on a model download',
+        deviceStatus: 'Checking the phone',
+        deviceTorch: 'Torch',
+        deviceVibrate: 'Vibration',
+        deviceVolume: 'Volume',
+        deviceAlarm: 'Alarm',
+        deviceOpenApp: 'Opening an app',
+        deviceOpenSettings: 'Opening settings',
+        deviceCompose: 'Preparing a message',
+        deviceSpeak: 'Speaking out loud',
         researchList: 'Looking at your researches',
         researchStart: 'Starting a deep research',
         researchRead: 'Reading a research report',
@@ -1049,6 +1058,42 @@ export const TALOS_EN_MESSAGES = {
         localModelsStatus: {
             title: 'Check on a model download',
             description: 'Report what is downloading right now and how far it has got. Reads this device only.',
+        },
+        deviceStatus: {
+            title: 'Check how the phone is',
+            description: 'Reads battery, storage, memory, ringer mode and network type. It reads nothing that identifies you or the device.',
+        },
+        deviceTorch: {
+            title: 'Turn the torch on or off',
+            description: 'Uses the phone LED. It does not open the camera and takes nothing.',
+        },
+        deviceVibrate: {
+            title: 'Vibrate the phone',
+            description: 'A signal you feel in your hand, two seconds at most.',
+        },
+        deviceVolume: {
+            title: 'Read or change the volume',
+            description: 'Reads or sets the volume for music, ringer, alarm or notifications. As a percentage, because the number of steps differs between phones.',
+        },
+        deviceAlarm: {
+            title: 'Set an alarm or a timer',
+            description: 'The phone clock app owns it, so it rings even if TALOS is closed.',
+        },
+        deviceOpenApp: {
+            title: 'Open an app',
+            description: 'Brings an already installed app to the front. It installs nothing.',
+        },
+        deviceOpenSettings: {
+            title: 'Open a settings screen',
+            description: 'Takes you exactly where the thing you asked for is done, when TALOS cannot do it itself.',
+        },
+        deviceCompose: {
+            title: 'Prepare a message or a call',
+            description: '⛔ It only prepares: the number stays dialled and the message written, and you press the button. TALOS never calls or sends by itself.',
+        },
+        deviceSpeak: {
+            title: 'Read out loud',
+            description: '⛔ Anyone in the room hears it. With the phone silenced it says nothing, and tells you so.',
         },
         researchList: {
             title: 'Browse your researches',
@@ -2040,6 +2085,7 @@ export const TALOS_EN_MESSAGES = {
             web: 'Web',
             create: 'Create',
             models: 'Models on this phone',
+            device: 'This phone',
         },
         actions: {
             read: 'Read',
@@ -2085,6 +2131,15 @@ export const TALOS_EN_MESSAGES = {
             local_model_inspect: { title: 'Check a model against this phone', description: 'Read a model header from the network and work out whether it runs here, and how fast.' },
             local_model_download: { title: 'Download a model', description: 'Download a model onto this device. Asks you every time, however large.' },
             local_models_status: { title: 'Check on a download', description: 'Report what is downloading and how far it has got. This device only.' },
+            device_status: { title: 'Check the phone', description: 'Reads battery, storage, memory, ringer mode and network type. Nothing that identifies you or this phone.' },
+            device_torch: { title: 'Turn the torch on or off', description: 'Switches the phone torch. Needs no permission from you.' },
+            device_vibrate: { title: 'Vibrate the phone', description: 'A short buzz as a physical signal. Not for announcing replies — notifications do that.' },
+            device_volume: { title: 'Read or set the volume', description: 'Reads a volume or sets it, as a percentage. Real silent mode needs a permission you grant yourself.' },
+            device_alarm: { title: 'Set an alarm or a timer', description: 'Hands it to your clock app, so it still rings when TALOS is closed.' },
+            device_open_app: { title: 'Open an app', description: 'Opens an app already installed on this phone.' },
+            device_open_settings: { title: 'Open a settings screen', description: 'Takes you straight to the exact Android screen instead of saying it cannot help.' },
+            device_compose: { title: 'Prepare a call, a message or a share', description: 'Fills it in and hands it to you. TALOS never calls or sends by itself: you press the button.' },
+            device_speak: { title: 'Say something out loud', description: 'Reads a short answer through the speaker. Anyone in the room hears it, so it counts as leaving this phone. A silenced phone stays silent.' },
         },
     },
     lock: {

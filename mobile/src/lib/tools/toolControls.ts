@@ -58,6 +58,20 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     memory_write: true,
     memory_update: true,
     memory_delete: true,
+    /*
+     * Accesi di serie, ma il permesso resta il cartellino: il modello li VEDE e
+     * li puo' proporre, e chi decide se succede davvero e' la scheda. Spegnerli
+     * di serie avrebbe nascosto la funzione a chi non sa di doverla cercare.
+     */
+    device_status: true,
+    device_torch: true,
+    device_vibrate: true,
+    device_volume: true,
+    device_alarm: true,
+    device_open_app: true,
+    device_open_settings: true,
+    device_compose: true,
+    device_speak: true,
 })
 
 export type TalosAgentToolId = keyof typeof TALOS_DEFAULT_AGENT_TOOL_ENABLED

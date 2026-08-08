@@ -319,6 +319,7 @@ import { TALOS_TOOL_SECURITY_FALLBACK as PIANO_SICUREZZA_PRUDENTE } from '@/lib/
 import { talosOriginForWrite } from '@/lib/tools/security'
 import { talosOnLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
 import { chooseTalosImageProvider } from '@/lib/images/imageProviderSelection'
+import { createTalosDeviceSources } from '@/lib/device/devicePlugin'
 import type { TalosImageModelCandidate, TalosImageProvider } from '@/lib/images/imageGateway'
 
 export type ProviderCatalogStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
@@ -2856,6 +2857,17 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * advertised at all, which is what stops a model calling it
                      * five times and being refused five times.
                     */
+                    /**
+                     * I nove tool che toccano il TELEFONO.
+                     *
+                     * ⛔ La funzione restituisce `null` fuori da Android, e il
+                     * toolset allora salta l'intero gruppo: il modello non
+                     * riceve nemmeno gli schemi. Un tool offerto e sempre
+                     * fallimentare costa token a ogni turno e insegna al
+                     * modello a ignorare una capacita' che sul telefono
+                     * funziona davvero.
+                     */
+                    device: () => createTalosDeviceSources(),
                     images: () => {
                         const drawer = sendRuntime.imageProvider
                         if (!drawer) return null

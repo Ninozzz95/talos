@@ -938,6 +938,15 @@ export const TALOS_IT_MESSAGES = {
         localModelInspect: 'Controllo se un modello ci sta su questo telefono',
         localModelDownload: 'Scarico un modello su questo telefono',
         localModelsStatus: 'Controllo un download in corso',
+        deviceStatus: 'Controllo del telefono',
+        deviceTorch: 'Torcia',
+        deviceVibrate: 'Vibrazione',
+        deviceVolume: 'Volume',
+        deviceAlarm: 'Sveglia',
+        deviceOpenApp: 'Apertura di un’app',
+        deviceOpenSettings: 'Apertura delle impostazioni',
+        deviceCompose: 'Preparazione di un messaggio',
+        deviceSpeak: 'Lettura ad alta voce',
         researchList: 'Consultazione delle ricerche',
         researchStart: 'Avvio di una ricerca',
         researchRead: 'Lettura di un rapporto',
@@ -1067,6 +1076,42 @@ export const TALOS_IT_MESSAGES = {
         localModelsStatus: {
             title: 'Controlla un download in corso',
             description: 'Riporta cosa si sta scaricando adesso e a che punto è. Legge solo questo dispositivo.',
+        },
+        deviceStatus: {
+            title: 'Controlla come sta il telefono',
+            description: 'Legge batteria, spazio, memoria, suoneria e tipo di rete. Non legge niente che identifichi te o il dispositivo.',
+        },
+        deviceTorch: {
+            title: 'Accendi o spegni la torcia',
+            description: 'Usa il LED del telefono. Non accede alla fotocamera e non scatta niente.',
+        },
+        deviceVibrate: {
+            title: 'Fai vibrare il telefono',
+            description: 'Un segnale che si sente in mano, al massimo di due secondi.',
+        },
+        deviceVolume: {
+            title: 'Leggi o cambia il volume',
+            description: 'Legge o imposta il volume di musica, suoneria, sveglia o notifiche. In percentuale, perché le tacche cambiano da telefono a telefono.',
+        },
+        deviceAlarm: {
+            title: 'Metti una sveglia o un timer',
+            description: 'La crea l’app orologio del telefono, quindi suona anche se TALOS è chiuso.',
+        },
+        deviceOpenApp: {
+            title: 'Apri un’app',
+            description: 'Porta in primo piano un’app già installata. Non ne installa nessuna.',
+        },
+        deviceOpenSettings: {
+            title: 'Apri una schermata delle impostazioni',
+            description: 'Ti porta esattamente dove si fa la cosa che hai chiesto, quando TALOS non può farla da sé.',
+        },
+        deviceCompose: {
+            title: 'Prepara un messaggio o una chiamata',
+            description: '⛔ Prepara e basta: il numero resta composto e il messaggio scritto, e a premere sei tu. TALOS non chiama e non manda niente da solo.',
+        },
+        deviceSpeak: {
+            title: 'Leggi ad alta voce',
+            description: '⛔ Chiunque sia nella stanza sente. Con il telefono in silenzioso non parla, e te lo dice.',
         },
         researchList: {
             title: 'Consulta le tue ricerche',
@@ -2055,6 +2100,7 @@ export const TALOS_IT_MESSAGES = {
             web: 'Web',
             create: 'Creazione',
             models: 'Modelli su questo telefono',
+            device: 'Questo telefono',
         },
         actions: {
             read: 'Lettura',
@@ -2100,6 +2146,15 @@ export const TALOS_IT_MESSAGES = {
             local_model_inspect: { title: 'Controlla un modello su questo telefono', description: 'Legge dalla rete l’intestazione di un modello e capisce se gira qui, e quanto veloce.' },
             local_model_download: { title: 'Scarica un modello', description: 'Scarica un modello su questo dispositivo. Chiede sempre, qualunque sia la taglia.' },
             local_models_status: { title: 'Controlla un download', description: 'Riporta cosa si sta scaricando e a che punto è. Solo questo dispositivo.' },
+            device_status: { title: 'Guarda com’è il telefono', description: 'Legge batteria, spazio, memoria, suoneria e tipo di rete. Niente che identifichi te o questo telefono.' },
+            device_torch: { title: 'Accendi o spegni la torcia', description: 'Accende e spegne la torcia. Non chiede nessun permesso.' },
+            device_vibrate: { title: 'Fai vibrare il telefono', description: 'Un colpo breve, come segnale fisico. Non per annunciare le risposte: a quello servono le notifiche.' },
+            device_volume: { title: 'Leggi o imposta il volume', description: 'Legge un volume o lo imposta, in percentuale. Il silenzioso vero vuole un permesso che dai tu.' },
+            device_alarm: { title: 'Metti una sveglia o un timer', description: 'La passa alla tua app orologio, così suona anche con TALOS chiuso.' },
+            device_open_app: { title: 'Apri un’app', description: 'Apre un’app già installata su questo telefono.' },
+            device_open_settings: { title: 'Apri una schermata delle impostazioni', description: 'Ti porta esattamente sulla schermata di Android, invece di dirti che non può.' },
+            device_compose: { title: 'Prepara una chiamata, un messaggio o una condivisione', description: 'La compila e te la passa. TALOS non chiama e non manda da solo: il pulsante lo premi tu.' },
+            device_speak: { title: 'Dì qualcosa ad alta voce', description: 'Legge una risposta breve dall’altoparlante. La sente chiunque sia nella stanza, quindi conta come uscire da questo telefono. Se il telefono è silenzioso, resta silenzioso.' },
         },
     },
     lock: {

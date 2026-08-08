@@ -20,6 +20,7 @@ import {
 } from '@/stores/settings'
 import { createDefaultTalosMotionV6Preferences } from '@/motion-v6/defaults'
 import { TALOS_DEFAULT_MODEL_LAB_PREFERENCES } from '@/lib/modelLabContracts'
+import { TALOS_AGENT_TOOL_CONTROLS } from '@/lib/tools/toolControlCatalog'
 import { TALOS_DEFAULT_MOBILE_BROWSER_PREFERENCES } from '@/lib/browser/browserContracts'
 
 beforeEach(() => {
@@ -376,7 +377,11 @@ describe('useSettingsStore', () => {
         expect(store.state.agent_tools.library_search).toBe(false)
         expect(store.state.agent_tools).not.toHaveProperty('future_shell')
         expect(store.state.agent_tools.library_context_policy_update).toBe(false)
-        expect(Object.keys(store.state.agent_tools)).toHaveLength(38)
+        // ⛔ Contro il CATALOGO, non contro un numero: un conteggio scritto a
+        // mano fissa l'implementazione invece dell'invariante, e cade ogni
+        // volta che si aggiunge un tool anche quando niente e' rotto. Cio' che
+        // deve valere e' che lo store rispecchi il catalogo, uno a uno.
+        expect(Object.keys(store.state.agent_tools)).toHaveLength(TALOS_AGENT_TOOL_CONTROLS.length)
 
         await store.setAgentToolEnabled('library_search', true)
 

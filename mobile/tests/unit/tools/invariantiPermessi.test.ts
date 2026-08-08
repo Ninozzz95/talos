@@ -283,6 +283,8 @@ describe('la copertura è REALE, non simbolica', () => {
     it('gli invarianti girano su tutti i tool del catalogo, non su un campione', () => {
         // Se un giorno il catalogo cresce e questo numero non si muove, vuol
         // dire che i cicli qui sopra hanno smesso di vedere qualcosa.
+        // Il pavimento sale quando il catalogo cresce: serve a dire «gli
+        // invarianti girano su TUTTI», non a fissare un numero.
         expect(TOOLS.length).toBeGreaterThanOrEqual(38)
         expect(new Set(TOOLS).size).toBe(TOOLS.length)
     })

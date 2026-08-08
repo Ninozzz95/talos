@@ -395,6 +395,15 @@
          autorizzarci, quindi e' la prima che TALOS puo' fare davvero.
     -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Il volume dei flussi audio. Normale: nessun dialogo. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Lo sfondo: TALOS disegna un'immagine e la mette sul telefono. Normale,
+         nessun dialogo. Alcuni produttori lo disattivano lo stesso, e il codice
+         lo chiede PRIMA (isSetWallpaperAllowed) invece di scoprirlo fallendo. -->
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <!-- La sveglia la CREA l'app orologio; questo permesso e' solo il diritto
+         di chiederglielo. Normale. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- F5.3: explicit — the mic permission dialog can never depend on manifest merging. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
