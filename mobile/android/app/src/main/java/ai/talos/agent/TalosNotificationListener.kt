@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
 
 /**
@@ -45,6 +46,9 @@ class TalosNotificationListener : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         vivo = false
+        // Scollegati: le azioni catturate non valgono piu' niente, e tenerle
+        // sarebbe custodire riferimenti a conversazioni che non guardiamo piu'.
+        synchronized(azioniCatturate) { azioniCatturate.clear() }
         super.onListenerDisconnected()
     }
 
@@ -73,6 +77,24 @@ class TalosNotificationListener : NotificationListenerService() {
         /** L'istanza viva, quando c'è. Il sistema ne tiene una sola. */
         @Volatile
         private var istanza: TalosNotificationListener? = null
+
+        /**
+         * Le azioni di risposta catturate al momento della lettura.
+         *
+         * ⛔ Volatile e limitato: NON e' un archivio di cio' che passa sul
+         * telefono. Si svuota quando il sistema ci scollega e quando supera il
+         * tetto — tenere di piu' vorrebbe dire custodire i `PendingIntent` di
+         * conversazioni che nessuno riaprira'.
+         */
+        private val azioniCatturate = LinkedHashMap<String, Presa>()
+        private const val TETTO_AZIONI = 60
+        private var contatoreManiglie = 0
+
+        /** Cio' che serve per rispondere, tenuto insieme. */
+        private data class Presa(
+            val chiaveVera: String,
+            val azione: Notification.Action?,
+        )
     }
 
     override fun onCreate() {
@@ -94,13 +116,87 @@ class TalosNotificationListener : NotificationListenerService() {
      */
     fun elenca(limite: Int): List<Map<String, Any?>> {
         val attive = runCatching { activeNotifications }.getOrNull() ?: return emptyList()
-        return attive.take(limite).map { sbn -> descrivi(sbn) }
+        val scelte = attive.take(limite)
+
+        /*
+         * ⭐⭐ L'AZIONE SI CATTURA ADESSO, e si usa dopo. E' la correzione che
+         * fa sparire la gara.
+         *
+         * ## Il difetto, provato quattro volte di fila sul Pad il 2026-08-08
+         *
+         * Chiesto di rispondere a una conversazione WhatsApp viva, la risposta
+         * falliva SEMPRE. TALOS l'aveva diagnosticato da solo: «la notifica e'
+         * stata sostituita proprio nell'istante tra la lettura e l'invio». Ogni
+         * messaggio nuovo ne crea una e butta la precedente, e cercarla di nuovo
+         * al momento dell'invio significa cercare qualcosa che non c'e' piu'.
+         *
+         * ## La cura, che non era riprovare piu' in fretta
+         *
+         * Owner, dopo il quarto tentativo: «quando fallisci piu' volte, ricerca
+         * web documentazione, best practices — REGOLA D'ORO». Cercando si
+         * scopre che chi fa questo da anni non cerca affatto la notifica al
+         * momento della risposta: cattura l'azione QUANDO LA LEGGE.
+         *
+         * Il `PendingIntent` appartiene all'app che ha creato la notifica, non
+         * alla notifica: resta valido anche quando quella viene rimpiazzata. Con
+         * l'azione gia' in mano la finestra temporale non si stringe —
+         * SPARISCE, perche' non c'e' piu' niente da ritrovare.
+         *
+         * ## ⛔ Ed e' anche la semantica giusta
+         *
+         * E' esattamente cio' che fa una persona che tocca «Rispondi» su una
+         * notifica di dieci minuti fa: l'app instrada verso la CONVERSAZIONE,
+         * non verso quel singolo messaggio.
+         *
+         * Il magazzino e' limitato e volatile: solo le ultime letture, e si
+         * svuota quando il sistema ci scollega. Non e' un archivio di cio' che
+         * passa sul telefono — quello non lo teniamo, per scelta.
+         */
+        val maniglie = HashMap<String, String>()
+        synchronized(azioniCatturate) {
+            if (azioniCatturate.size > TETTO_AZIONI) azioniCatturate.clear()
+            for (sbn in scelte) {
+                val maniglia = "n" + (++contatoreManiglie)
+                maniglie[sbn.key] = maniglia
+                azioniCatturate[maniglia] = Presa(sbn.key, azioneDiRisposta(sbn))
+            }
+        }
+
+        return scelte.map { sbn -> descrivi(sbn, maniglie[sbn.key] ?: sbn.key) }
     }
 
-    private fun descrivi(sbn: StatusBarNotification): Map<String, Any?> {
+    /**
+     * ⛔⛔ AL MODELLO SI DA' UNA MANIGLIA CORTA, MAI LA CHIAVE DI ANDROID.
+     *
+     * ## Il difetto, visto nella scheda di consenso il 2026-08-08
+     *
+     * La chiave vera di una notifica WhatsApp e':
+     *
+     *     0|com.whatsapp|1|XqA328IiWblASGe+saGx8BixiMVGByTEJR9F64Rtwwo=|10329
+     *
+     * Il modello, dovendola riportare, ne ha passato solo il pezzo di mezzo. Il
+     * nostro codice non l'ha riconosciuta e ha risposto «la notifica non c'e'
+     * piu'» — che oltre a fallire era pure FALSO: la notifica c'era, era la
+     * chiave a non essere stata abbinata.
+     *
+     * ## Perche' la cura non e' tollerare la chiave storpiata
+     *
+     * Si potrebbe accettare una corrispondenza parziale. Ma su un'azione che
+     * manda un messaggio a una persona vera, «somiglia abbastanza» e' il
+     * criterio sbagliato: due conversazioni con chiavi simili diventerebbero
+     * intercambiabili.
+     *
+     * La cura e' non mettere mai il modello nella condizione di sbagliare:
+     * riceve `n1`, `n2`, `n3` — corte, non ambigue, impossibili da troncare per
+     * sbaglio — e la chiave vera resta da questa parte del ponte.
+     *
+     * E' lo stesso principio del debito #19 sugli identificativi opachi: cio'
+     * che il modello maneggia dev'essere fatto per essere maneggiato da lui.
+     */
+    private fun descrivi(sbn: StatusBarNotification, maniglia: String): Map<String, Any?> {
         val extras: Bundle? = sbn.notification?.extras
         return mapOf(
-            "key" to sbn.key,
+            "key" to maniglia,
             "package" to sbn.packageName,
             "postedAt" to sbn.postTime,
             "title" to extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
@@ -122,10 +218,43 @@ class TalosNotificationListener : NotificationListenerService() {
      * la porta che l'app ha lasciato aperta apposta.
      */
     private fun azioneDiRisposta(sbn: StatusBarNotification): Notification.Action? {
-        val azioni = sbn.notification?.actions ?: return null
-        return azioni.firstOrNull { azione ->
+        val notifica = sbn.notification ?: return null
+
+        val diretta = notifica.actions?.firstOrNull { azione ->
             azione.remoteInputs?.any { it.resultKey.isNotEmpty() } == true
         }
+        if (diretta != null) return diretta
+
+        /*
+         * ⭐ In ricaduta: le azioni per l'OROLOGIO.
+         *
+         * Trovato leggendo chi scrive app di notifiche da anni (Polidea, «How
+         * to respond to any messaging notification on Android»): parecchie app
+         * di messaggistica mettono la risposta rapida SOLO fra le azioni
+         * «wearable», perche' nasce come funzione per l'orologio. Guardare solo
+         * `notification.actions` significa dichiarare «non si puo' rispondere»
+         * a notifiche a cui un orologio risponde benissimo.
+         */
+        return runCatching {
+            val compat = NotificationCompat.WearableExtender(notifica).actions
+                .firstOrNull { azione ->
+                    azione.remoteInputs?.any { it.resultKey.isNotEmpty() } == true
+                } ?: return@runCatching null
+
+            val costruttore = Notification.Action.Builder(
+                null as android.graphics.drawable.Icon?,
+                compat.title,
+                compat.actionIntent,
+            )
+            for (campo in compat.remoteInputs.orEmpty()) {
+                costruttore.addRemoteInput(
+                    android.app.RemoteInput.Builder(campo.resultKey)
+                        .setLabel(campo.label)
+                        .build(),
+                )
+            }
+            costruttore.build()
+        }.getOrNull()
     }
 
     /**
@@ -187,8 +316,23 @@ class TalosNotificationListener : NotificationListenerService() {
     fun rispondi(chiave: String, testo: String): String? {
         val attive = runCatching { activeNotifications }.getOrNull()
             ?: return "listener-not-connected"
-        val sbn = stessaConversazione(attive, chiave) ?: return "notification-gone"
-        val azione = azioneDiRisposta(sbn) ?: return "no-reply-field"
+        /*
+         * ⭐ La maniglia data alla lettura, che porta con se' l'azione gia'
+         * catturata: e' quella che non invecchia.
+         */
+        val presa = synchronized(azioniCatturate) { azioniCatturate[chiave] }
+        val chiaveVera = presa?.chiaveVera ?: chiave
+
+        val azione = presa?.azione
+            // Ricaduta per chi risponde senza aver elencato: si cerca ancora,
+            // ma e' il percorso fragile ed e' solo una cortesia.
+            ?: stessaConversazione(attive, chiaveVera)?.let { azioneDiRisposta(it) }
+            ?: return if (presa == null && stessaConversazione(attive, chiaveVera) == null) {
+                "notification-gone"
+            } else {
+                "no-reply-field"
+            }
+        val sbn = stessaConversazione(attive, chiaveVera)
         val campi = azione.remoteInputs ?: return "no-reply-field"
 
         return runCatching {
@@ -219,7 +363,9 @@ class TalosNotificationListener : NotificationListenerService() {
     fun scarta(chiave: String): String? {
         val attive = runCatching { activeNotifications }.getOrNull()
             ?: return "listener-not-connected"
-        val sbn = attive.firstOrNull { it.key == chiave } ?: return "notification-gone"
+        // La stessa maniglia dell'elenco: il modello non maneggia chiavi vere.
+        val vera = synchronized(azioniCatturate) { azioniCatturate[chiave]?.chiaveVera } ?: chiave
+        val sbn = attive.firstOrNull { it.key == vera } ?: return "notification-gone"
         // ⛔ Una notifica non scartabile è quella di un servizio in primo piano:
         // toglierla vorrebbe dire nascondere che qualcosa sta girando.
         if (!sbn.isClearable) return "not-clearable"
