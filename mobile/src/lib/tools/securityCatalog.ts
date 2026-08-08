@@ -92,4 +92,16 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     // lo conosciamo — disfare non e' rimettere le cose com'erano.
     device_wallpaper: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     device_keep_awake: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    // ⛔ Spegnere il Wi-Fi mentre qualcosa scarica e' reversibile come
+    // interruttore e non come conseguenza: R2, e la scheda lo dice.
+    device_wifi: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    device_bluetooth: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    // Zittire il telefono puo' far perdere una chiamata: e' la ragione per cui
+    // il tool spinge su `priority` invece che su `none`.
+    device_do_not_disturb: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    device_system_setting: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    // ⛔ Cosa usi e per quanto e' il ritratto di una giornata: dato privato.
+    device_app_usage: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    // ⛔ E le app installate sono il ritratto di una persona.
+    device_list_apps: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
 })

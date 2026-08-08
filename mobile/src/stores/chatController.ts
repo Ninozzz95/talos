@@ -320,6 +320,7 @@ import { talosOriginForWrite } from '@/lib/tools/security'
 import { talosOnLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
 import { chooseTalosImageProvider } from '@/lib/images/imageProviderSelection'
 import { createTalosDeviceSources } from '@/lib/device/devicePlugin'
+import { createTalosPrivilegedSources } from '@/lib/device/privilegedSources'
 import type { TalosImageModelCandidate, TalosImageProvider } from '@/lib/images/imageGateway'
 
 export type ProviderCatalogStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
@@ -2912,6 +2913,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * modello a ignorare una capacita' che sul telefono
                      * funziona davvero.
                      */
+                    /**
+                     * T2 — la strada privilegiata, e il pannello quando non
+                     * c'è. ⛔ Ogni risposta dice PER QUALE delle due è passata:
+                     * «l'ho fatto io» e «te l'ho aperto» non sono la stessa
+                     * cosa per chi legge.
+                     */
+                    privileged: () => createTalosPrivilegedSources(),
                     device: () => {
                         const fonti = createTalosDeviceSources()
                         if (!fonti) return null

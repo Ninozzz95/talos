@@ -1,5 +1,6 @@
 import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
 import { createTalosDeviceTools } from '@/lib/tools/deviceTools'
+import { createTalosPrivilegedTools } from '@/lib/tools/privilegedTools'
 import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
 import { createTalosTasksWriteTools } from '@/lib/tools/tasksWriteTools'
@@ -111,6 +112,12 @@ export interface TalosToolsetDeps {
      * insegna che TALOS promette cose che non fa.
      */
     device?(): import('@/lib/tools/deviceTools').TalosDeviceToolSources | null
+    /**
+     * T2 — le capacità che passano dalla shell via Shizuku, o dal pannello di
+     * sistema quando la shell non c'è. Assente fuori da Android, e allora il
+     * gruppo sparisce intero invece di offrire sei tool che falliranno sempre.
+     */
+    privileged?(): import('@/lib/tools/privilegedTools').TalosPrivilegedToolSources | null
     /**
      * La Libreria, in scrittura: rinominare e togliere.
      *
@@ -594,6 +601,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...(research ? createTalosResearchTools(research) : []),
                 ...(memoryWrite ? createTalosMemoryWriteTools(memoryWrite) : []),
                 ...(deps.device?.() ? createTalosDeviceTools(deps.device()!) : []),
+                ...(deps.privileged?.() ? createTalosPrivilegedTools(deps.privileged()!) : []),
                 ...(libraryWrite ? createTalosLibraryWriteTools(libraryWrite) : []),
                 ...(notesWrite ? createTalosNotesWriteTools(notesWrite) : []),
                 ...(tasksWrite ? createTalosTasksWriteTools(tasksWrite) : []),

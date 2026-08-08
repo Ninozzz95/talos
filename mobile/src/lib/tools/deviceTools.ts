@@ -72,6 +72,7 @@ const MOTIVO: Record<string, string> = {
     'not-available-here': 'This phone does not offer that screen. Tell the user; do not retry.',
     'needs-dnd-access': 'Changing that volume needs Do Not Disturb access, which only the user can grant. Offer to open it with device_open_settings.',
     'unknown-kind': 'Unsupported kind. Use call, sms, share, search or url.',
+    'not-a-number': 'That is not a phone number — there is not a single digit in it. If you meant a contact by name, say you cannot look up contacts yet.',
     silenced: 'The phone is silenced, so nothing was said aloud. The answer is still on screen.',
     unavailable: 'Speech is not available on this device. Tell the user; do not retry.',
     'no-image': 'No image was given. Name one from the Library.',

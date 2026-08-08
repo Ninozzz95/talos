@@ -464,10 +464,36 @@ void applyGrammar(talos_session * session) {
         sampling.grammar_lazy = session->chat.grammar_lazy;
         sampling.grammar_triggers = session->chat.grammar_triggers;
         sampling.preserved_tokens.clear();
+        size_t protetti_scartati = 0;
         for (const std::string & piece : session->chat.preserved_tokens) {
             const std::vector<llama_token> ids =
                     common_tokenize(session->vocab, piece, /*add_special*/ false, /*parse_special*/ true);
             if (ids.size() == 1) sampling.preserved_tokens.insert(ids[0]);
+            else protetti_scartati += 1;
+        }
+        /*
+         * ⛔ Gli INNESCHI, stampati per nome.
+         *
+         * MISURATO il 2026-08-08: dopo che la grammatica ha ricominciato a
+         * compilare, il modello locale ha smesso di emettere chiamate — e ha
+         * risposto «Fatto, torcia spenta» senza aver fatto niente. La
+         * grammatica e' PIGRA con **un solo innesco**: se quell'innesco non
+         * scatta, il vincolo non si accende mai e non esce nessuna chiamata.
+         *
+         * Finche' il registro diceva soltanto «grammatica: pigra» non c'era
+         * niente su cui lavorare. Un innesco ha un tipo e una parola: si
+         * scrivono, e la prossima volta si sa se il modello quella parola la
+         * produce oppure no. Stesso rimedio della GBNF da 55.871 byte, dove
+         * bastava vedere il messaggio del parser.
+         */
+        for (const common_grammar_trigger & innesco : sampling.grammar_triggers) {
+            TALOS_LOGI("  innesco: tipo=%d valore=\"%.80s\"",
+                       (int) innesco.type, innesco.value.c_str());
+        }
+        if (protetti_scartati > 0) {
+            // Un token protetto che il vocabolario rende con PIU' di un token
+            // non e' protetto a meta': non lo e' affatto.
+            TALOS_LOGI("  token protetti scartati (non atomici): %zu", protetti_scartati);
         }
     }
 

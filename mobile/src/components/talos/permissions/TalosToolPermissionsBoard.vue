@@ -36,14 +36,17 @@
  */
 import { computed, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { BookOpen, Globe, PencilLine } from '@lucide/vue'
+import { BookOpen, ChevronRight, Globe, PencilLine } from '@lucide/vue'
 import {
     TALOS_TOOL_ACTIONS,
     type TalosToolAction,
     type TalosToolPermission,
     type TalosToolPermissions,
 } from '@/lib/tools/permissionTypes'
-import { TALOS_AGENT_TOOL_CONTROLS } from '@/lib/tools/toolControlCatalog'
+import {
+    TALOS_AGENT_TOOL_CONTROLS,
+    TALOS_AGENT_TOOL_GROUP_ORDER,
+} from '@/lib/tools/toolControlCatalog'
 import { TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
 
 const { t } = useTalosI18n()
@@ -66,21 +69,61 @@ const ICONE = { read: BookOpen, write: PencilLine, outbound: Globe } as const
  * nessuno se ne accorgerebbe: una pagina di permessi che dimentica uno
  * strumento non sbaglia in modo visibile, sbaglia in silenzio.
  */
-const strumentiPer = computed<Record<TalosToolAction, string[]>>(() => {
-    const per: Record<TalosToolAction, string[]> = { read: [], write: [], outbound: [] }
+/**
+ * ⛔ Gli strumenti di ogni potere, RAGGRUPPATI PER CATEGORIA e non in fila.
+ *
+ * Owner 2026-08-08: «voglio che le categorie vengano raggruppate in un
+ * collapse». Qui la ragione è più forte che nelle impostazioni: questa pagina
+ * si incontra **al primo accesso**, e prima diceva
+ *
+ * > Copre: Aprire un'app · Aprire una schermata di sistema · Chiamata…
+ *
+ * — cinquantacinque nomi separati da un punto, tre volte. Un elenco così non si
+ * legge: si salta. E una pagina di permessi che si salta ha ottenuto un
+ * consenso senza lettura, che è esattamente l'antipattern per cui questa pagina
+ * era stata scritta ([[permissions-single-global-grammar]]).
+ *
+ * Le categorie sono le STESSE delle impostazioni, prese dallo stesso ordine: chi
+ * decide qui e poi va a cambiare idea là ritrova le stesse parole nello stesso
+ * ordine. Un nome diverso per la stessa cosa nelle due schermate farebbe pensare
+ * a due impostazioni diverse.
+ */
+const strumentiPer = computed<Record<TalosToolAction, {
+    gruppo: string
+    nomi: string[]
+}[]>>(() => {
+    const per: Record<TalosToolAction, Map<string, string[]>> = {
+        read: new Map(), write: new Map(), outbound: new Map(),
+    }
     for (const controllo of TALOS_AGENT_TOOL_CONTROLS) {
         for (const azione of controllo.actions) {
             const chiave = TALOS_TOOL_LABEL_KEYS[controllo.id]
             // Senza etichetta si mostra il nome tecnico: brutto, ma onesto —
             // meglio di uno strumento che sparisce dall'elenco dei permessi.
-            per[azione].push(chiave ? t(chiave) : controllo.id)
+            const nome = chiave ? t(chiave) : controllo.id
+            const dentro = per[azione].get(controllo.group) ?? []
+            if (!dentro.includes(nome)) dentro.push(nome)
+            per[azione].set(controllo.group, dentro)
         }
     }
+    const finale = {} as Record<TalosToolAction, { gruppo: string, nomi: string[] }[]>
     for (const azione of TALOS_TOOL_ACTIONS) {
-        per[azione] = [...new Set(per[azione])].sort((a, b) => a.localeCompare(b))
+        // ⛔ L'ordine viene dal catalogo, non dalla mappa: le categorie devono
+        // apparire nella stessa sequenza delle impostazioni, sempre.
+        finale[azione] = TALOS_AGENT_TOOL_GROUP_ORDER
+            .filter((gruppo) => (per[azione].get(gruppo)?.length ?? 0) > 0)
+            .map((gruppo) => ({
+                gruppo,
+                nomi: [...per[azione].get(gruppo)!].sort((a, b) => a.localeCompare(b)),
+            }))
     }
-    return per
+    return finale
 })
+
+/** Quanti strumenti in tutto ricadono in questo potere. Si legge da CHIUSO. */
+function quanti(azione: TalosToolAction): number {
+    return strumentiPer.value[azione].reduce((somma, riga) => somma + riga.nomi.length, 0)
+}
 
 /**
  * L'ultimo valore EMESSO, che non è sempre quello che si legge nel modello.
@@ -193,13 +236,43 @@ function tuttoSu(stato: TalosToolPermission): boolean {
                     Quali strumenti stanno dentro questo potere. È la cosa che
                     mancava: senza, «scrivere» è una parola, e chi decide non sa
                     su cosa sta decidendo.
+
+                    ⛔ Chiuso di suo, e col NUMERO sulla riga chiusa: «copre 24
+                    strumenti» dice quanto pesa la decisione anche a chi non
+                    apre. Nascondere l'elenco senza dire quanto è lungo sarebbe
+                    peggio del muro che sostituisce.
+
+                    <details> nativo e non un nostro interruttore: la tastiera,
+                    TalkBack e la ricerca-nella-pagina del browser lo conoscono
+                    già, e su Android apre e chiude senza una riga di JavaScript.
                 -->
-                <p
+                <details
                     :data-testid="`talos-tool-permission-${azione}-tools`"
-                    class="text-2xs leading-5 text-[var(--talos-muted)]"
+                    class="group/covers"
                 >
-                    {{ t('toolPermissions.covers') }} {{ strumentiPer[azione].join(' · ') }}
-                </p>
+                    <summary
+                        class="talos-pressable flex min-h-touch cursor-pointer list-none items-center gap-1.5 text-2xs text-[var(--talos-muted)]"
+                    >
+                        <ChevronRight
+                            class="size-3 shrink-0 transition-transform group-open/covers:rotate-90 motion-reduce:transition-none"
+                            aria-hidden="true"
+                        />
+                        {{ t('toolPermissions.coversCount', {
+                            tools: quanti(azione),
+                            groups: strumentiPer[azione].length,
+                        }) }}
+                    </summary>
+                    <ul class="mt-1 flex flex-col gap-1.5 pl-4">
+                        <li v-for="riga in strumentiPer[azione]" :key="riga.gruppo">
+                            <p class="text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                                {{ t(`agentTools.groups.${riga.gruppo}`) }}
+                            </p>
+                            <p class="text-2xs leading-5 text-[var(--talos-muted)]">
+                                {{ riga.nomi.join(' · ') }}
+                            </p>
+                        </li>
+                    </ul>
+                </details>
             </li>
         </ul>
 

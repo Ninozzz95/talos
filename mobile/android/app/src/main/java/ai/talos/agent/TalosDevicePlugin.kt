@@ -281,9 +281,23 @@ class TalosDevicePlugin : Plugin() {
             // che sia la persona a premere «chiama». Chiamare per conto suo
             // vorrebbe il permesso del telefono e, soprattutto, sarebbe una
             // telefonata che non ha deciso lei.
-            "call" -> Intent(Intent.ACTION_DIAL, Uri.parse("tel:$valore"))
-            "sms" -> Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$valore"))
-                .putExtra("sms_body", call.getString("text").orEmpty())
+            "call" -> {
+                val numero = numeroPerTelefono(valore)
+                if (numero == null) {
+                    call.resolve(JSObject().put("done", false).put("reason", "not-a-number"))
+                    return
+                }
+                Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", numero, null))
+            }
+            "sms" -> {
+                val numero = numeroPerTelefono(valore)
+                if (numero == null) {
+                    call.resolve(JSObject().put("done", false).put("reason", "not-a-number"))
+                    return
+                }
+                Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", numero, null))
+                    .putExtra("sms_body", call.getString("text").orEmpty())
+            }
             "share" -> Intent(Intent.ACTION_SEND)
                 .setType("text/plain")
                 .putExtra(Intent.EXTRA_TEXT, valore)
@@ -373,9 +387,45 @@ class TalosDevicePlugin : Plugin() {
      * un errore vero è ciò che permette di dire «su questo telefono non c'è»
      * invece di «qualcosa è andato storto».
      */
+    /**
+     * ⛔ `FLAG_ACTIVITY_CLEAR_TOP` non è ornamento: senza, la SECONDA volta non
+     * succede niente.
+     *
+     * Difetto dell'owner, 2026-08-08: «ho provato a far digitare un numero,
+     * prima funzionava, adesso no, è altalenante». Riprodotto in due comandi:
+     *
+     * ```
+     * am start -a android.intent.action.DIAL -d tel:3331234567   → Starting
+     * am start -a android.intent.action.DIAL -d tel:+39…         → Warning:
+     *     Activity not started, intent has been delivered to currently
+     *     running top-most instance.
+     * ```
+     *
+     * Col solo `NEW_TASK`, se l'app telefono è **già aperta** Android consegna
+     * l'intent all'istanza viva invece di riavviarla — e quella, a seconda di
+     * come è scritta, il numero nuovo non lo guarda nemmeno. Da fuori sembra
+     * capriccio: la prima volta funziona, la seconda no. Non è capriccio, è lo
+     * stato in cui si trovava il telefono.
+     *
+     * `CLEAR_TOP` insieme a `NEW_TASK` porta l'attività in cima **con il nuovo
+     * intent**, ed è ciò che rende il gesto ripetibile: «componi QUESTO
+     * numero» deve valere anche la decima volta di fila.
+     */
     private fun avvia(intent: Intent): JSObject {
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val result = JSObject()
+        /*
+         * ⛔ Si CHIEDE prima se qualcuno risponde a questo intent, invece di
+         * scoprirlo da un'eccezione. `ActivityNotFoundException` arriva solo
+         * quando non c'è proprio nessuno; ci sono casi in mezzo — un'app
+         * disabilitata, un profilo di lavoro — in cui `startActivity` non
+         * lancia e non succede niente, e allora si direbbe «fatto» a vuoto.
+         */
+        if (intent.resolveActivity(context.packageManager) == null) {
+            result.put("done", false)
+            result.put("reason", "not-available-here")
+            return result
+        }
         try {
             context.startActivity(intent)
             result.put("done", true)
@@ -387,6 +437,41 @@ class TalosDevicePlugin : Plugin() {
             result.put("reason", "refused")
         }
         return result
+    }
+
+    /**
+     * Il numero come lo scrive un MODELLO, ridotto a quello che `tel:` accetta.
+     *
+     * ## Perché serve, e perché è l'altra metà dello stesso difetto
+     *
+     * `Uri.parse("tel:$valore")` prende la stringa così com'è. Ma un modello
+     * scrive `+39 333 123 4567` una volta e `3331234567` un'altra, a seconda di
+     * come gliel'ha detto la persona — e negli URI:
+     *
+     * - gli **spazi** non sono ammessi e rompono l'analisi;
+     * - il **cancelletto** apre il frammento, quindi `*111#` diventa `*111` e
+     *   il codice non è più quello.
+     *
+     * Si tengono le cifre, il `+` iniziale, e `*` `#` `,` `;` che nella
+     * telefonia significano qualcosa (codici brevi, pause). Tutto il resto —
+     * spazi, trattini, parentesi, punti — è ornamento umano e si toglie.
+     *
+     * `Uri.fromParts` invece di `parse`: costruisce l'URI dai pezzi e codifica
+     * lui ciò che va codificato, che è esattamente la parte che sbagliavamo.
+     */
+    private fun numeroPerTelefono(grezzo: String): String? {
+        val pulito = buildString {
+            for ((indice, carattere) in grezzo.trim().withIndex()) {
+                when {
+                    carattere.isDigit() -> append(carattere)
+                    carattere == '+' && indice == 0 -> append(carattere)
+                    carattere in "*#,;" -> append(carattere)
+                }
+            }
+        }
+        // Un numero senza nemmeno una cifra non è un numero: meglio dirlo che
+        // aprire il telefono su niente.
+        return if (pulito.any { it.isDigit() }) pulito else null
     }
     // ─────────────────────────────────────────────── sfondo
 

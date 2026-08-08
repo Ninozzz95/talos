@@ -1,0 +1,111 @@
+import { registerPlugin } from '@capacitor/core'
+import { Capacitor } from '@capacitor/core'
+
+/**
+ * La strada privilegiata: si **agisce** con l'identità della shell, non ci si
+ * fa **concedere** niente.
+ *
+ * ## La misura che decide tutto quello che c'è qui dentro
+ *
+ * Sul Pad dell'owner il 2026-08-08, OxygenOS 16.0.9.400. Il monitoraggio
+ * permessi di Oppo blocca **una cosa sola** — che la shell conceda permessi ad
+ * altre app — e non blocca che la shell faccia le cose:
+ *
+ * | comando | esito |
+ * |---|---|
+ * | `pm grant` · `appops set` | ⛔ SecurityException, uid 2000 |
+ * | `cmd wifi set-wifi-enabled` | ✅ spento e riacceso davvero |
+ * | `cmd bluetooth_manager disable`/`enable` | ✅ Success |
+ * | `cmd notification set_dnd` | ✅ eseguito |
+ * | `cmd notification allow_listener` | ✅ senza il viaggio nelle impostazioni |
+ * | `settings put system`/`secure` | ✅ scritto e riletto |
+ * | `dumpsys usagestats` · `cmd package list` | ✅ leggibili |
+ *
+ * ⇒ Quasi tutte le app che usano Shizuku se lo fanno **concedere** una volta e
+ * poi lavorano da sole; su questi telefoni quella è l'unica strada chiusa. Noi
+ * passiamo di qui **ogni volta**.
+ *
+ * ## ⛔ Il ripiego non è un dettaglio: è metà del contratto
+ *
+ * Shizuku non c'è sempre, e non sopravvive al riavvio. Ogni capacità qui dentro
+ * ha una **seconda strada** senza privilegi — quasi sempre il pannello di
+ * sistema che galleggia sopra l'app — e ogni risposta dice **quale delle due**
+ * ha usato. «L'ho fatto io» e «te l'ho aperto» non sono la stessa cosa per chi
+ * legge, e confonderle è il modo più rapido di far credere che una cosa sia
+ * successa quando non è successa.
+ */
+
+interface PontePrivilegiato {
+    exec(options: { command: string[] }): Promise<{
+        ok: boolean
+        reason?: string
+        program?: string
+        exitCode?: number
+        output?: string
+        error?: string
+    }>
+}
+
+export const TalosPrivilegeBridge = registerPlugin<PontePrivilegiato>('TalosPrivilege')
+
+/** Com'è andata, e soprattutto **per quale strada**. */
+export interface TalosPrivilegedOutcome {
+    done: boolean
+    /** `shell` = l'abbiamo fatto noi. `panel` = abbiamo aperto la porta giusta. */
+    via: 'shell' | 'panel' | 'none'
+    output?: string
+    reason?: string
+}
+
+/**
+ * I motivi, scritti come **istruzioni** per il modello e non come diagnosi.
+ *
+ * Un modello che riceve «Shizuku non è in esecuzione» riprova; uno che riceve
+ * «dillo alla persona e offri la pagina» fa la cosa utile. È la stessa lezione
+ * dei tool del telefono, dove «no-vibrator» da solo faceva riprovare.
+ */
+const MOTIVO: Record<string, string> = {
+    'shizuku-not-running': 'The privileged bridge is not running on this phone right now. Tell the user, and offer to open the Shizuku page in TALOS so they can start it. Do not retry.',
+    'shizuku-not-authorised': 'Shizuku is running but has not authorised TALOS yet. Offer to open the Shizuku page so the user can allow it. Do not retry.',
+    'denied-by-system': 'The phone manufacturer refused this even through the privileged bridge. Tell the user plainly; there is nothing to retry.',
+    'program-not-allowed': 'That program is not on the allowed list. This is a bug in TALOS, not something the user can fix.',
+    'exec-unavailable': 'The privileged bridge cannot run commands on this build of Shizuku. Tell the user; do not retry.',
+    'not-on-this-platform': 'There is no phone to act on here.',
+}
+
+export function talosPrivilegedReason(reason: string | undefined): string {
+    return MOTIVO[reason ?? ''] ?? 'The privileged bridge did not manage it. Tell the user rather than retrying.'
+}
+
+/**
+ * Esegue un comando con l'identità della shell.
+ *
+ * ⛔ Un **elenco di parole**, mai una riga da interpretare: gli argomenti li
+ * sceglie il modello, e un testo di risposta con dentro uno spazio o un punto e
+ * virgola diventerebbe un secondo comando.
+ */
+export async function talosRunAsShell(command: readonly string[]): Promise<{
+    ok: boolean
+    output: string
+    reason?: string
+}> {
+    if (!Capacitor.isNativePlatform()) {
+        return { ok: false, output: '', reason: 'not-on-this-platform' }
+    }
+    try {
+        const esito = await TalosPrivilegeBridge.exec({ command: [...command] })
+        return { ok: esito.ok, output: esito.output ?? '', reason: esito.reason }
+    }
+    catch {
+        return { ok: false, output: '', reason: 'exec-unavailable' }
+    }
+}
+
+/** Se la strada privilegiata è aperta adesso — non se lo era prima. */
+export async function talosPrivilegedReady(): Promise<boolean> {
+    // Si chiede al ponte una cosa innocua e si guarda se risponde. ⛔ Non si
+    // tiene un flag: Shizuku muore al riavvio e un flag ricorderebbe un mondo
+    // che non c'è più.
+    const esito = await talosRunAsShell(['settings', 'get', 'system', 'screen_brightness'])
+    return esito.ok
+}

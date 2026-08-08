@@ -15,6 +15,7 @@ import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosLibraryContextPolicyTools } from '@/lib/tools/libraryContextPolicyTools'
 import { createTalosLocalModelTools } from '@/lib/models/modelTools'
 import { createTalosDeviceTools } from '@/lib/tools/deviceTools'
+import { createTalosPrivilegedTools } from '@/lib/tools/privilegedTools'
 import {
     talosToolRequiredActions,
     talosToolsForAnthropic,
@@ -113,6 +114,18 @@ function everyExecutableTool() {
             vibrate: vi.fn(), torch: vi.fn(), volume: vi.fn(), alarm: vi.fn(),
             openApp: vi.fn(), openSettings: vi.fn(), compose: vi.fn(),
             status: vi.fn(), speak: vi.fn(),
+        } as never),
+        /*
+         * T2 — le capacita' che passano dalla shell privilegiata. Vivono in una
+         * fabbrica loro perche' hanno una FONTE loro: il ponte Shizuku, che
+         * puo' non esserci. Questo elenco e' l'unico posto in cui il catalogo e
+         * le fabbriche si guardano negli occhi, ed e' per questo che dimenticare
+         * una riga qui produce un tool che nessuno puo' spegnere.
+         */
+        ...createTalosPrivilegedTools({
+            wifi: vi.fn(), bluetooth: vi.fn(), doNotDisturb: vi.fn(),
+            systemSetting: vi.fn(), appUsage: vi.fn(), listApps: vi.fn(),
+            ready: vi.fn(), reasonOf: vi.fn(),
         } as never),
     ]
 }
@@ -232,6 +245,9 @@ describe('Agent Tools control registry', () => {
             'device_compose', 'device_speak',
             // 2026-08-08, seconda tornata: le due che completavano le dieci.
             'device_wallpaper', 'device_keep_awake',
+            // 2026-08-08, T2: le sei che passano dalla shell privilegiata.
+            'device_wifi', 'device_bluetooth', 'device_do_not_disturb',
+            'device_system_setting', 'device_app_usage', 'device_list_apps',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -272,7 +288,7 @@ describe('Agent Tools control registry', () => {
          * vorrebbe dire che un contratto e' cambiato da solo.
          */
         expect(digestOf(controlPlane))
-            .toBe('b73673e9ab0cfa8b6aecdd2c3a7b8f858161d163ab68e678aee9d57b638e9426')
+            .toBe('512bbf966c1b495715297eb37cb5909d4207de2c66e7f209dfad9d08911953e3')
         /**
          * Re-pinned 2026-08-01 for the three DIALECT digests only — the control
          * plane above did not move, which is the proof that nothing structural
@@ -342,10 +358,10 @@ describe('Agent Tools control registry', () => {
         // muovono INSIEME, come dev'essere: e' lo stesso contratto tradotto tre
         // volte. Se se ne muovesse uno solo, sarebbe un traduttore rotto.
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('b2c6280a705de8a87966bf05f82b357c36ac03ea6ee5d9632afec2ae7303c412')
+            .toBe('10feee4f78bd9b64d9946802273b47fea78190f77dd574ee3975bec72927edb9')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('1d2bcf0f89e754327564923ddfdf7e0c903bd17da881098a75c08e3277bbee20')
+            .toBe('9dfae32eb780dc4a017c5649f3e7a8428b94ddf3483b63502feca3bdcdcb9af3')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('cadde4e497692fe85092589322a322fe47551795cc192933249cc9e347542122')
+            .toBe('d602ab9ee22ebe5ee1b8d198e7b1ea9d30a0e028da9239e46ac08863a2176335')
     })
 })

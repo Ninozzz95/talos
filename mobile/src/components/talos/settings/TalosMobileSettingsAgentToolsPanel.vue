@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ShieldCheck } from '@lucide/vue'
+import { ChevronRight, ShieldCheck } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { useSettingsStore } from '@/stores/settings'
 import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
@@ -26,6 +26,67 @@ const groups = computed(() => TALOS_AGENT_TOOL_GROUP_ORDER.map((id) => ({
     id,
     tools: TALOS_AGENT_TOOL_CONTROLS.filter((tool) => tool.group === id),
 })))
+/**
+ * ⛔ Ciò che VALE, non ciò che è rimasto scritto.
+ *
+ * ## Il difetto, riferito dall'owner il 2026-08-08
+ *
+ * Guardando questa schermata sul suo telefono leggeva «Consenti sempre» su
+ * tutte e tre le voci. Nel file delle preferenze c'era davvero
+ * `{read: allow, write: allow, outbound: allow}` — valori di un default
+ * vecchio, mai scelti da nessuno.
+ *
+ * Ma la chat NON li usa: passa da `effectiveToolPermissions()`, che applica
+ * la regola scritta in `talosEffectiveToolPermissions` — «un valore che
+ * nessuno ha scelto è il default di OGGI, non quello del giorno in cui l'app è
+ * stata installata». Quindi il modello chiedeva, correttamente, mentre la
+ * schermata diceva che non avrebbe chiesto.
+ *
+ * ⇒ Non era un buco di sicurezza: era una **bugia a schermo**, nella direzione
+ * innocua e per questo più difficile da scoprire. Chi legge «sempre» e vede
+ * comparire una richiesta pensa che l'app sia rotta; chi legge «sempre» e non
+ * la vede comparire si fida di un permesso che non ha.
+ *
+ * Un pannello dei permessi ha un solo lavoro: dire la verità su cosa succede.
+ */
+const permessiEffettivi = computed(() => settings.effectiveToolPermissions())
+
+/**
+ * ⛔ Le categorie sono RICHIUDIBILI, e la testata parla anche da chiusa.
+ *
+ * Owner 2026-08-08: «voglio che le categorie vengano raggruppate in un
+ * collapse». La ragione è misurata: con 55 strumenti questo elenco arriva a
+ * y≈13.000 sul Pad — tredici schermate. Una pagina che si scorre senza leggere
+ * non è una pagina di controllo, è un muro con degli interruttori dentro.
+ *
+ * ## Perché tutte chiuse tranne una
+ *
+ * Aperte tutte, il collapse non serve a niente. Chiuse tutte, chi arriva qui la
+ * prima volta vede sei titoli e nessuno strumento, e non capisce cosa può
+ * spegnere. Aperta la PRIMA: si vede subito com'è fatta una riga, e le altre
+ * cinque restano a un tocco.
+ *
+ * ## ⛔ E il conto sulla testata, che è la parte che conta
+ *
+ * «Questo telefono — 6 di 17 accesi» si legge **senza aprire**. Senza quel
+ * numero, richiudere una categoria significherebbe nasconderne lo stato, e una
+ * pagina di permessi che nasconde lo stato è peggio di una lunga: chi la chiude
+ * non sa più cosa ha lasciato acceso.
+ */
+const aperte = ref<Set<string>>(new Set([TALOS_AGENT_TOOL_GROUP_ORDER[0] ?? '']))
+
+function commuta(gruppo: string): void {
+    const prossime = new Set(aperte.value)
+    if (prossime.has(gruppo)) prossime.delete(gruppo)
+    else prossime.add(gruppo)
+    aperte.value = prossime
+}
+
+/** Quanti accesi su quanti, per categoria. Si legge a categoria chiusa. */
+function accesiIn(tools: readonly AgentToolControl[]): number {
+    return tools.filter((tool) => settings.state.agent_tools[tool.id]).length
+}
+
 const enabledCount = computed(() => TALOS_AGENT_TOOL_CONTROLS.filter(
     (tool) => settings.state.agent_tools[tool.id],
 ).length)
@@ -117,7 +178,7 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
                 <TalosThemedSelect
                     class="mt-1"
                     data-testid="talos-tool-permission-read"
-                    :model-value="settings.state.tools.read"
+                    :model-value="permessiEffettivi.read"
                     :items="toolChoices"
                     :aria-label="t('agentTools.readPermission')"
                     @update:model-value="setToolPermission('read', $event)"
@@ -129,7 +190,7 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
                 <TalosThemedSelect
                     class="mt-1"
                     data-testid="talos-tool-permission-write"
-                    :model-value="settings.state.tools.write"
+                    :model-value="permessiEffettivi.write"
                     :items="toolChoices"
                     :aria-label="t('agentTools.writePermission')"
                     @update:model-value="setToolPermission('write', $event)"
@@ -141,7 +202,7 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
                 <TalosThemedSelect
                     class="mt-1"
                     data-testid="talos-tool-permission-outbound"
-                    :model-value="settings.state.tools.outbound"
+                    :model-value="permessiEffettivi.outbound"
                     :items="toolChoices"
                     :aria-label="t('agentTools.outboundPermission')"
                     @update:model-value="setToolPermission('outbound', $event)"
@@ -164,10 +225,45 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
         >{{ saveError }}</p>
 
         <section v-for="group in groups" :key="group.id">
-            <h4 class="mb-1.5 px-1 text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
-                {{ t(`agentTools.groups.${group.id}`) }}
-            </h4>
-            <div class="divide-y divide-[var(--talos-border)] overflow-hidden rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70">
+            <!--
+                ⛔ La testata è il TETTO della scheda, non un titolo sopra di
+                essa. Visto nello scatto del 2026-08-08 col viewport
+                telefono: a categorie chiuse restavano sei scritte
+                galleggianti su un fondo vuoto, e la pagina sembrava
+                incompiuta — mentre da aperta il contenuto aveva la sua
+                cornice e la testata no. Chiusa si arrotonda tutta; aperta
+                perde il bordo di sotto e si attacca al corpo, così le due
+                parti sono una cosa sola invece di due.
+            -->
+            <button
+                type="button"
+                class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 px-3 text-left"
+                :class="aperte.has(group.id) ? 'rounded-b-none border-b-0' : ''"
+                :data-agent-tool-group="group.id"
+                :aria-expanded="aperte.has(group.id)"
+                @click="commuta(group.id)"
+            >
+                <ChevronRight
+                    class="size-3.5 shrink-0 text-[var(--talos-muted)] transition-transform motion-reduce:transition-none"
+                    :class="aperte.has(group.id) ? 'rotate-90' : ''"
+                    aria-hidden="true"
+                />
+                <h4 class="text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                    {{ t(`agentTools.groups.${group.id}`) }}
+                </h4>
+                <!-- ⛔ Il conto si legge anche da CHIUSA: nascondere lo stato di
+                     un permesso sarebbe peggio di una pagina lunga. -->
+                <span class="ml-auto text-3xs tabular-nums text-[var(--talos-muted)]">
+                    {{ t('agentTools.groupCount', {
+                        enabled: accesiIn(group.tools),
+                        total: group.tools.length,
+                    }) }}
+                </span>
+            </button>
+            <div
+                v-show="aperte.has(group.id)"
+                :data-agent-tool-group-body="group.id"
+                class="divide-y divide-[var(--talos-border)] overflow-hidden rounded-xl rounded-t-none border border-t-0 border-[var(--talos-border)] bg-[var(--talos-panel)]/70">
                 <div
                     v-for="tool in group.tools"
                     :key="tool.id"

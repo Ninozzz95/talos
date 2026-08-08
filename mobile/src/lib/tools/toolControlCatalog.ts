@@ -119,4 +119,16 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     // guardi il telefono vede. Quindi `read` insieme a `write`.
     { id: 'device_wallpaper', group: 'device', actions: ['write', 'read'] },
     { id: 'device_keep_awake', group: 'device', actions: ['write'] },
+    /*
+     * T2 — le capacita' che passano dalla shell via Shizuku, o dal pannello
+     * che galleggia quando la shell non c'e'. Misurato il 2026-08-08: il
+     * monitoraggio del produttore blocca solo il CONCEDERE permessi.
+     */
+    { id: 'device_wifi', group: 'device', actions: ['write'] },
+    { id: 'device_bluetooth', group: 'device', actions: ['write'] },
+    { id: 'device_do_not_disturb', group: 'device', actions: ['write'] },
+    // Senza valore LEGGE, con un valore SCRIVE: servono entrambe.
+    { id: 'device_system_setting', group: 'device', actions: ['write', 'read'] },
+    { id: 'device_app_usage', group: 'device', actions: ['read'] },
+    { id: 'device_list_apps', group: 'device', actions: ['read'] },
 ] as const satisfies readonly TalosAgentToolControl[])

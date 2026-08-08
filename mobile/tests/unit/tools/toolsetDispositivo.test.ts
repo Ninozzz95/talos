@@ -24,13 +24,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createTalosToolset } from '@/lib/tools/toolset'
 import { TALOS_DEFAULT_AGENT_TOOL_ENABLED } from '@/lib/tools/toolControls'
-import { TALOS_AGENT_TOOL_CONTROLS } from '@/lib/tools/toolControlCatalog'
-import type { TalosDeviceToolSources } from '@/lib/tools/deviceTools'
+import { createTalosDeviceTools, type TalosDeviceToolSources } from '@/lib/tools/deviceTools'
 
-/** I nomi vengono dal CATALOGO: aggiungerne un decimo non richiede toccare qui. */
-const NOMI_DISPOSITIVO = TALOS_AGENT_TOOL_CONTROLS
-    .filter((control) => control.group === 'device')
-    .map((control) => control.id)
 
 const fonti = (): TalosDeviceToolSources => ({
     vibrate: vi.fn(async () => ({ done: true, appliedMs: 200 })),
@@ -52,6 +47,22 @@ async function suite(device: (() => TalosDeviceToolSources | null) | undefined) 
         device,
     } as never)
 }
+
+/**
+ * ⛔ I nomi vengono dalla FABBRICA, non dal gruppo del catalogo.
+ *
+ * All'inizio li prendevo dal gruppo `device`, ed era giusto finché quel gruppo
+ * aveva una fonte sola. Poi è arrivato T2 — Wi-Fi, Bluetooth, Non disturbare —
+ * che sta nello stesso gruppo (per chi legge le impostazioni è tutto «questo
+ * telefono») ma ha una **fonte diversa**: il ponte privilegiato, che può non
+ * esserci.
+ *
+ * Il test è caduto subito, ed era nel giusto: stava affermando che i tool
+ * privilegiati arrivano da `deps.device`, che è falso. La lezione è che il
+ * gruppo è una scelta di **presentazione** e la fabbrica è una scelta di
+ * **architettura**, e un test non deve confonderle.
+ */
+const NOMI_DISPOSITIVO = createTalosDeviceTools(fonti()).map((tool) => tool.name)
 
 const TUTTO_CONSENTITO = { read: 'allow', write: 'allow', outbound: 'allow' } as const
 
