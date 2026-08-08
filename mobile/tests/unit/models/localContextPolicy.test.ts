@@ -57,8 +57,63 @@ describe('LOCAL-CONTEXT-PARITY-01 canonical local context policy', () => {
         }
     })
 
+    /**
+     * ⛔ Chiede la PROPRIETÀ, non il numero.
+     *
+     * Prima pretendeva `8192`, cioè la potenza di due — e quel numero era la
+     * politica travestita da aspettativa: cambiando la politica per una ragione
+     * misurata, il test cadeva senza che niente fosse rotto. Un test che
+     * codifica l'implementazione impedisce di migliorarla.
+     *
+     * Ciò che deve valere sempre è: **ci sta**, con margine per un altro
+     * scambio, senza sprecare.
+     */
     it('C45-RED-18H raises the measured Qwen tool prompt once, under a measured ceiling', () => {
-        expect(talosLocalEscalatedContextTokens(4096, 5779, 1024, 16384)).toBe(8192)
+        const ottenuto = talosLocalEscalatedContextTokens(4096, 5779, 1024, 16384)!
+        const necessario = 5779 + 1024 + 1
+        expect(ottenuto).toBeGreaterThanOrEqual(necessario)
+        // Margine per un altro scambio intero, non per il doppio: allocare il
+        // doppio costa ~10% della generazione, perché ogni token prodotto
+        // rilegge l'intera cache.
+        expect(ottenuto).toBeLessThan(necessario * 1.5)
+        expect(ottenuto % 512).toBe(0)
+    })
+
+    /**
+     * ⛔ IL MOTIVO per cui non si arrotonda più alla potenza di due.
+     *
+     * MISURATO sul Pad il 2026-08-08: per un prompt di 6.607 token si allocava
+     * 8.192 invece di 6.667 — **23% di cache in più** — e costava ~**10% della
+     * generazione**, perché ogni token prodotto rilegge l'intera cache KV.
+     *
+     * Il margine serve ancora — rifare il contesto azzera la cache — ma basta
+     * che copra un altro scambio, non che raddoppi: il prefisso congelato si
+     * rilegge dopo ogni ricostruzione, quindi rifarla non costa più il prefill
+     * degli ottomila token degli schemi.
+     */
+    it('non spreca: il margine copre uno scambio, non il doppio', () => {
+        const sprechi: string[] = []
+        for (const prompt of [1000, 3000, 6607, 12000, 30000]) {
+            const richiesto = prompt + 1024 + 1
+            const ottenuto = talosLocalEscalatedContextTokens(512, prompt, 1024, null)!
+            if (ottenuto < richiesto) sprechi.push(`${prompt}: NON CI STA (${ottenuto})`)
+            // La potenza di due successiva è il tetto da NON raggiungere.
+            let potenza = 1
+            while (potenza < richiesto) potenza *= 2
+            if (ottenuto >= potenza && potenza > richiesto * 1.2) {
+                sprechi.push(`${prompt}: ${ottenuto} ≥ potenza di due ${potenza}`)
+            }
+        }
+        expect(sprechi, sprechi.join(' · ')).toEqual([])
+    })
+
+    it('ma il margine c’è: un altro scambio ci sta senza rifare il contesto', () => {
+        // Rifare il contesto azzera la cache. Se il margine sparisse, ogni
+        // messaggio ne innescherebbe uno — e la cura sarebbe peggio del male.
+        const primo = talosLocalEscalatedContextTokens(512, 3000, 1024, null)!
+        // Il turno dopo: la risposta di prima è entrata nel prompt.
+        const dopo = talosLocalEscalatedContextTokens(primo, 3000 + 1024, 1024, null)!
+        expect(dopo, 'un secondo scambio non deve far riallocare').toBe(primo)
     })
 
     it('keeps an ordinary prompt in its current context', () => {
@@ -114,8 +169,17 @@ describe('LOCAL-CONTEXT-PARITY-01 canonical local context policy', () => {
      * che non abbiamo.
      */
     it('C45-RED-19D an unmeasured ceiling lets the engine answer instead of refusing', () => {
-        expect(talosLocalEscalatedContextTokens(4096, 60000, 1024, null)).toBe(65536)
-        expect(talosLocalEscalatedContextTokens(4096, 5779, 1024, null)).toBe(8192)
+        const ottenuto = talosLocalEscalatedContextTokens(4096, 60000, 1024, null)!
+        // Un tetto NON misurato non è «illimitato»: è «non lo so», e la
+        // reazione giusta è lasciar rispondere il motore invece di rifiutare al
+        // suo posto. Qui conta che il fabbisogno ci stia, non quale numero
+        // tondo esca.
+        expect(ottenuto).toBeGreaterThanOrEqual(60000 + 1024 + 1)
+        expect(ottenuto).toBeLessThan((60000 + 1024 + 1) * 1.5)
+        // E anche il caso piccolo cresce quanto basta, senza tetto che lo fermi.
+        const piccolo = talosLocalEscalatedContextTokens(4096, 5779, 1024, null)!
+        expect(piccolo).toBeGreaterThanOrEqual(5779 + 1024 + 1)
+        expect(piccolo).toBeLessThan((5779 + 1024 + 1) * 1.5)
     })
 
     /**
