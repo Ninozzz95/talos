@@ -382,6 +382,65 @@ function outcomeOf(
     }
 }
 
+/**
+ * ⛔ LA RETE: la stessa identica chiamata non riparte dopo il proprio risultato.
+ *
+ * ## Cosa è successo davvero
+ *
+ * MISURATO sul Pad il 2026-08-08 con Qwen3-1.7B: a un solo «Accendi la torcia»,
+ * e a un solo «sì», il tool è partito **cinque volte** — cinque accensioni nel
+ * registro della fotocamera di sistema, con il PID di TALOS. Con Claude Sonnet 5
+ * la stessa frase ne produce una. La causa sta nel motore locale (la grammatica
+ * pigra non si carica, quindi niente vincola la FINE della chiamata), ma la
+ * garanzia non può dipendere da quale modello si è scelto: qui era la torcia,
+ * la stessa forma vale per un messaggio da mandare o una scrittura in Libreria.
+ *
+ * ## La regola, e perché ha questa forma esatta
+ *
+ * Vale **fra un giro e l'altro**, non dentro lo stesso giro. Due chiamate
+ * identiche nello stesso giro sono una richiesta esplicita del modello — «fallo
+ * due volte» — e vanno rispettate. Una chiamata identica DOPO aver già letto il
+ * proprio risultato non è mai un'intenzione: è un ciclo.
+ *
+ * Il confronto è sul nome più gli argomenti resi in forma canonica, con le
+ * chiavi ordinate: `{"on":true}` e `{ "on" : true }` sono la stessa cosa per
+ * chiunque, e devono esserlo anche qui.
+ */
+function chiaveDiChiamata(call: TalosToolCall): string {
+    const canonico = (valore: unknown): unknown => {
+        if (Array.isArray(valore)) return valore.map(canonico)
+        if (valore && typeof valore === 'object') {
+            return Object.fromEntries(
+                Object.entries(valore as Record<string, unknown>)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([chiave, dentro]) => [chiave, canonico(dentro)]),
+            )
+        }
+        return valore
+    }
+    try {
+        /*
+         * ⛔ Gli argomenti arrivano come STRINGA JSON dal provider. Confrontare
+         * le stringhe cosi' come sono farebbe passare per diverse due chiamate
+         * identiche scritte con una spaziatura diversa — e i modelli locali,
+         * che rigenerano la chiamata da capo ogni volta, la spaziatura la
+         * cambiano. Si analizza e si rende in forma canonica; se non e' JSON,
+         * la stringa grezza e' comunque meglio di niente.
+         */
+        const grezzi: unknown = typeof call.arguments === 'string'
+            ? JSON.parse(call.arguments)
+            : call.arguments
+        return `${call.name} ${JSON.stringify(canonico(grezzi))}`
+    } catch {
+        if (typeof call.arguments === 'string') {
+            return `${call.name} ${call.arguments.trim()}`
+        }
+        // Argomenti non serializzabili: meglio lasciar passare che bloccare per
+        // un motivo che non c'entra.
+        return `${call.name} ${String(Math.random())}`
+    }
+}
+
 async function pendingPreflights(
     calls: readonly TalosToolCall[],
     preflight: NonNullable<TalosAgentLoopDeps['preflight']>,
@@ -457,10 +516,23 @@ async function continueTalosAgentLoop(
         const runnable = requested.slice(0, budget)
         if (runnable.length < requested.length) state.stoppedByLimit = true
 
+        /*
+         * ⛔ Le ripetizioni si tolgono QUI, prima della barriera: una chiamata
+         * gia' fatta non deve nemmeno far comparire una seconda scheda di
+         * consenso. Sul Pad se ne erano accumulate cinque per la stessa torcia.
+         */
+        const giaFatte = new Map<string, boolean>()
+        for (const passato of state.executed) {
+            giaFatte.set(chiaveDiChiamata(passato.call), passato.ok)
+        }
+        const ripetuta = (call: TalosToolCall): boolean =>
+            giaFatte.has(chiaveDiChiamata(call))
+        const nuove = runnable.filter((call) => !ripetuta(call))
+
         // Whole-round barrier: one unresolved sibling means NO sibling runs.
         // This is what makes a durable before-tools checkpoint replayable.
         const requests = deps.preflight
-            ? await pendingPreflights(runnable, deps.preflight)
+            ? await pendingPreflights(nuove, deps.preflight)
             : []
         if (requests.length) {
             state.completion = completion
@@ -480,12 +552,12 @@ async function continueTalosAgentLoop(
          * permesso avrebbe tolto comunque.
          */
         const decisione = deps.plan
-            ? await deps.plan(runnable)
-            : { admitted: runnable.map((call) => call.id), cancelled: false }
+            ? await deps.plan(nuove)
+            : { admitted: nuove.map((call) => call.id), cancelled: false }
         const ammesse = new Set(decisione.admitted)
         const eseguibili = decisione.cancelled
             ? []
-            : runnable.filter((call) => ammesse.has(call.id))
+            : nuove.filter((call) => ammesse.has(call.id))
 
         deps.onToolRound?.(eseguibili)
         const risultati = await runCallsTogether(eseguibili, deps.execute, maxParallel)
@@ -499,7 +571,21 @@ async function continueTalosAgentLoop(
         let scorrimento = 0
         for (let indice = 0; indice < runnable.length; indice += 1) {
             const call = runnable[indice]!
-            if (!decisione.cancelled && ammesse.has(call.id)) {
+            if (ripetuta(call)) {
+                /*
+                 * Non si finge un successo e non si finge un errore: si dice
+                 * cosa e' gia' successo, e si dice cosa fare adesso. Un modello
+                 * che riceve «fatto» senza istruzioni riprova; questo sa che il
+                 * risultato ce l'ha gia' sopra.
+                 */
+                const andataBene = giaFatte.get(chiaveDiChiamata(call)) === true
+                outcomes[indice] = {
+                    ok: andataBene,
+                    content: andataBene
+                        ? 'Already done in this message, with exactly these arguments. It was NOT run again. Use the earlier result above and answer the user.'
+                        : 'Already attempted in this message, with exactly these arguments, and it failed. It was NOT retried. Tell the user what went wrong instead of trying again.',
+                }
+            } else if (!decisione.cancelled && ammesse.has(call.id)) {
                 outcomes[indice] = risultati[scorrimento]
                 scorrimento += 1
             } else {

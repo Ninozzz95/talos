@@ -23,6 +23,8 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <thread>
+#include <unistd.h>
 #include <vector>
 
 #include "llama.h"
@@ -269,6 +271,57 @@ void talos_log_bridge(ggml_log_level level, const char * text, void * /*user*/) 
     }
     __android_log_print(priority, TALOS_TAG, "%s", text);
 }
+/**
+ * ⛔ Porta `stderr` dentro logcat, una volta sola.
+ *
+ * ## Perche' serve, con un caso vero
+ *
+ * llama.cpp scrive i propri errori di dettaglio con `fprintf(stderr, ...)`. Su
+ * Android `stderr` non va da nessuna parte: il messaggio esiste, e nessuno lo
+ * legge mai. MISURATO il 2026-08-08: la grammatica per 46 tool non si compila e
+ * il registro dice soltanto «failed to parse grammar» — che e' il testo
+ * dell'eccezione, non la diagnosi. La diagnosi vera, con la regola e il punto in
+ * cui il parser si e' fermato, la scrive il parser su `stderr` e finiva nel
+ * nulla. Lo stesso era gia' successo con `ggml_abort` dentro `llama_decode`:
+ * l'app moriva e il tombstone non diceva perche'.
+ *
+ * ## Come
+ *
+ * Una pipe: `stderr` scrive dentro, un filo legge fuori e ripete su logcat. E'
+ * il metodo che usa l'esempio Android di llama.cpp. Il filo e' `detach`ato e
+ * vive quanto il processo — non c'e' niente da chiudere, e chiuderlo
+ * significherebbe tornare a perdere i messaggi.
+ */
+void portaStderrNelLog() {
+    static bool gia_fatto = false;
+    if (gia_fatto) return;
+    gia_fatto = true;
+
+    static int tubo[2];
+    if (pipe(tubo) != 0) return;
+    // Senza buffer: un errore che arriva a meta' e' peggio di uno che tarda.
+    setvbuf(stderr, nullptr, _IONBF, 0);
+    dup2(tubo[1], STDERR_FILENO);
+
+    std::thread([] {
+        char pezzo[512];
+        std::string riga;
+        for (;;) {
+            const ssize_t letti = read(tubo[0], pezzo, sizeof(pezzo) - 1);
+            if (letti <= 0) return;
+            pezzo[letti] = '\0';
+            riga += pezzo;
+            size_t fine;
+            while ((fine = riga.find('\n')) != std::string::npos) {
+                if (fine > 0) TALOS_LOGE("%s", riga.substr(0, fine).c_str());
+                riga.erase(0, fine + 1);
+            }
+            // Una riga senza fine riga non si perde: si tiene per il pezzo dopo.
+            if (riga.size() > 4096) { TALOS_LOGE("%s", riga.c_str()); riga.clear(); }
+        }
+    }).detach();
+}
+
 
 void talos_init_once(const std::string & library_dir) {
     std::call_once(g_init_once, [&library_dir]() {
@@ -280,6 +333,7 @@ void talos_init_once(const std::string & library_dir) {
         // `/system/bin/app_process` e `/`: nessuna delle due contiene niente.
         // Quindi il percorso glielo diciamo noi, ed è quello che Android
         // riserva alle librerie di QUESTA applicazione.
+        portaStderrNelLog();
         if (!library_dir.empty()) {
             ggml_backend_load_all_from_path(library_dir.c_str());
         } else {
@@ -432,7 +486,22 @@ void applyGrammar(talos_session * session) {
          * template e il parser restano validi, quindi perdiamo soltanto il
          * vincolo per costruzione e lasciamo che il modello risponda.
          */
+        /*
+         * ⛔ Il MOTIVO, non solo il fatto. MISURATO sul Pad il 2026-08-08: la
+         * GBNF pigra non si carica, e senza vincolo il modello riscrive la
+         * chiamata come testo libero — cinque volte per una torcia sola. Finche'
+         * il registro diceva soltanto «failed to parse grammar» non c'era niente
+         * su cui lavorare: ne' quanto e' lunga, ne' da dove comincia, ne' se e'
+         * arrivata vuota. Ora la prima riga si vede, e con quella si va avanti.
+         */
+        const std::string & gbnf = session->chat.grammar;
         TALOS_LOGE("grammatica non applicabile (%s), riprovo senza vincolo", failure.what());
+        TALOS_LOGE("  GBNF: %zu byte, pigra=%s, %zu inneschi, %zu token protetti",
+                   gbnf.size(),
+                   session->chat.grammar_lazy ? "si" : "no",
+                   session->chat.grammar_triggers.size(),
+                   session->chat.preserved_tokens.size());
+        TALOS_LOGE("  inizio: %.200s", gbnf.empty() ? "(vuota)" : gbnf.c_str());
     }
 
     if (rebuilt == nullptr && !session->chat.grammar.empty()) {
@@ -897,6 +966,57 @@ Java_ai_talos_TalosLlamaNative_nativeParseReply(JNIEnv * env, jclass, jlong hand
 }
 
 /**
+ * ⛔ Quanti byte di `testo` si possono consegnare a Java SENZA tagliare a metà
+ * un carattere.
+ *
+ * ## Il difetto, con il messaggio della macchina virtuale
+ *
+ * RIPRODOTTO sul Pad il 2026-08-08. L'app muore, e il tombstone dice:
+ *
+ * ```
+ * JNI DETECTED ERROR IN APPLICATION: input is not valid Modified UTF-8:
+ * illegal continuation byte 0
+ * ```
+ * sul filo `talos-llama-watch`, cioe' quello che fotografa il testo mentre la
+ * generazione va avanti per mostrarlo in chat.
+ *
+ * La causa e' semplice e inevitabile: un token non e' un carattere. «è» sta in
+ * due byte, un'emoji in quattro, e llama.cpp li puo' emettere in token
+ * diversi. Se la fotografia cade in mezzo, l'ultimo carattere e' monco —
+ * `NewStringUTF` lo rifiuta e la macchina virtuale **abbatte il processo**.
+ * Non e' un carattere sbagliato a schermo: e' l'app che sparisce, e sparisce
+ * piu' spesso quanto piu' si scrive in italiano.
+ *
+ * ## Perche' TAGLIARE e non aggiustare
+ *
+ * I byte che mancano non sono persi: arrivano col token successivo, e la
+ * fotografia dopo li conterra' tutti. Trattenere una coda incompleta per
+ * qualche decina di millisecondi e' invisibile; consegnarla e' fatale.
+ *
+ * Il conto e' quello di UTF-8 e basta: un byte iniziale dice quanti byte segue
+ * (110xxxxx due, 1110xxxx tre, 11110xxx quattro), e se dall'ultimo inizio non
+ * ce ne sono abbastanza, il carattere non e' ancora arrivato.
+ */
+size_t talos_utf8_intero(const std::string & testo) {
+    const size_t n = testo.size();
+    // Si guardano al massimo gli ultimi tre byte: piu' indietro un carattere
+    // non puo' cominciare.
+    const size_t minimo = n >= 3 ? n - 3 : 0;
+    for (size_t i = n; i > minimo; --i) {
+        const unsigned char b = (unsigned char) testo[i - 1];
+        if ((b & 0xC0) == 0x80) continue;          // byte di continuazione
+        const size_t attesi = (b & 0x80) == 0x00 ? 1
+                            : (b & 0xE0) == 0xC0 ? 2
+                            : (b & 0xF0) == 0xE0 ? 3
+                            : (b & 0xF8) == 0xF0 ? 4
+                            : 1;                    // byte invalido: passa e basta
+        const size_t disponibili = n - (i - 1);
+        return disponibili >= attesi ? n : i - 1;
+    }
+    return n;
+}
+
+/**
  * Il testo prodotto finora. Interrogabile mentre la generazione è in corso: è
  * così che la chat mostra le parole mentre arrivano.
  */
@@ -905,7 +1025,8 @@ Java_ai_talos_TalosLlamaNative_nativeTextSoFar(JNIEnv * env, jclass, jlong handl
     talos_session * session = as_session(handle);
     if (session == nullptr) return env->NewStringUTF("");
     std::lock_guard<std::mutex> guard(session->text_lock);
-    return env->NewStringUTF(session->text.c_str());
+    // ⛔ Mai un carattere a meta': la macchina virtuale non lo perdona.
+    return env->NewStringUTF(session->text.substr(0, talos_utf8_intero(session->text)).c_str());
 }
 
 JNIEXPORT void JNICALL

@@ -39,7 +39,7 @@ import {
     TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
     talosLocalEscalatedContextTokens,
 } from '@/lib/models/localContextPolicy'
-import { talosToolsForOpenAi } from '@/lib/tools/registry'
+import { talosToolsForLocalEngine } from '@/lib/tools/registry'
 import { talosNormaliseLocalToolCalls } from '@/lib/chat/localToolCalls'
 import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/thinkStream'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
@@ -676,7 +676,7 @@ async function run(
      * decide se questo modello può chiamare qualcosa, e non qui.
      */
     const offered = talosModelSupportsToolCalling(input.model) ? input.tools : undefined
-    const tools = offered?.length ? talosToolsForOpenAi(offered) : undefined
+    const tools = offered?.length ? talosToolsForLocalEngine(offered) : undefined
     const turns = conversationOf(input)
 
     /**

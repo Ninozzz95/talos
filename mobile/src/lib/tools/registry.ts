@@ -208,6 +208,80 @@ export function talosToolsForOpenAiResponses(
     }))
 }
 
+/**
+ * ⭐ Le clausole che fanno ESPLODERE una grammatica, e che il motore locale non
+ * deve ricevere.
+ *
+ * ## Il difetto, con il messaggio del parser in mano
+ *
+ * MISURATO sul Pad il 2026-08-08. Con 46 tool offerti, la GBNF che llama.cpp
+ * costruisce dal nostro schema pesa **55.871 byte** e non compila:
+ *
+ * ```
+ * parse: error parsing grammar: number of rules that are going to be repeated
+ * multiplied by the new repetition exceeds sane defaults, please reduce the
+ * number of repetitions or rule complexity
+ * ```
+ *
+ * Non e' un errore di sintassi: e' una difesa del parser contro l'esplosione
+ * delle regole. E la causa siamo noi: `z.string().max(2000)` diventa
+ * `maxLength: 2000`, e la grammatica lo traduce in una regola **ripetuta fino a
+ * duemila volte**. Moltiplicato per i campi di 46 tool, si sfonda il tetto.
+ *
+ * Conseguenza a valle, e non piccola: senza grammatica niente vincola la forma
+ * **ne' la fine** della chiamata, quindi il modello locale la riscrive come
+ * testo libero — cinque esecuzioni per una torcia sola, e la sintassi interna
+ * leggibile in chat.
+ *
+ * ## ⛔ Perche' togliere questi limiti NON allenta niente
+ *
+ * La grammatica non e' il posto dove si validano gli argomenti: quello e' Zod,
+ * all'esecuzione, e resta identico. Un `max(2000)` violato produce lo stesso
+ * errore di prima, con lo stesso messaggio. Qui si toglie soltanto la pretesa
+ * di far **contare i caratteri al campionatore** — che e' un uso della
+ * grammatica sbagliato in partenza: costa un'esplosione di regole per garantire
+ * una cosa che il livello sotto garantisce meglio.
+ *
+ * ⇒ Restano i tipi, i campi obbligatori e gli `enum`, che sono la parte che
+ * serve davvero: dicono al modello COSA scrivere, non quanto lungo.
+ */
+const CLAUSOLE_CHE_ESPLODONO = new Set([
+    'maxLength', 'minLength',
+    'maxItems', 'minItems',
+    'pattern',
+    // I limiti numerici diventano regole per intervallo di cifre: piu' piccole
+    // delle stringhe, ma dello stesso genere, e non servono al campionatore.
+    'maximum', 'minimum', 'exclusiveMaximum', 'exclusiveMinimum',
+    'multipleOf',
+])
+
+function senzaEsplosioni(valore: unknown): unknown {
+    if (Array.isArray(valore)) return valore.map(senzaEsplosioni)
+    if (valore && typeof valore === 'object') {
+        return Object.fromEntries(
+            Object.entries(valore as Record<string, unknown>)
+                .filter(([chiave]) => !CLAUSOLE_CHE_ESPLODONO.has(chiave))
+                .map(([chiave, dentro]) => [chiave, senzaEsplosioni(dentro)]),
+        )
+    }
+    return valore
+}
+
+/**
+ * ⭐ Il MOTORE SU QUESTO TELEFONO: stessi tool, stessa descrizione, stessi nomi.
+ *
+ * Cambia una cosa sola rispetto a `talosToolsForOpenAi`, ed e' quella che
+ * decide se la grammatica si compila: gli schemi arrivano senza le clausole di
+ * lunghezza e di intervallo. Nient'altro si muove — la parita' con i provider a
+ * chiave e' un vincolo, non un obiettivo, e un tool non puo' avere due
+ * descrizioni a seconda di chi lo esegue.
+ */
+export function talosToolsForLocalEngine(
+    tools: ReadonlyArray<TalosToolDefinition<never>>,
+): unknown[] {
+    return talosToolsForOpenAi(tools).map(senzaEsplosioni)
+}
+
 /** OpenAI, DeepSeek, OpenRouter and Ollama all speak this shape. */
 export function talosToolsForOpenAi(tools: ReadonlyArray<TalosToolDefinition<never>>): unknown[] {
     return tools.map((tool) => ({
