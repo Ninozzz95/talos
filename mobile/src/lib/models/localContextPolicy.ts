@@ -88,17 +88,37 @@ export function talosLocalEscalatedContextTokens(
     if (required > ceiling) return null
 
     /**
-     * Potenza di due, ma mai a costo del contesto che c'è.
+     * ⛔ IL FABBISOGNO PIÙ UN MARGINE — non la potenza di due successiva.
      *
-     * Si arrotonda per eccesso perché un contesto di 6143 è un numero che non ha
-     * scelto nessuno e che ogni motore riempie comunque. Quando però la potenza
-     * di due successiva sfonda il tetto **e il fabbisogno no**, si prende il
-     * tetto: rifiutare lì butterebbe via contesto che il dispositivo stava
-     * offrendo, per un'estetica. Non è un caso di scuola — il tetto è spesso il
-     * `trainedContext` dichiarato dal modello, che non è quasi mai una potenza
-     * di due.
+     * ## Cosa c'era prima, e perché sembrava giusto
+     *
+     * Si arrotondava alla potenza di due, con una ragione dichiarata estetica:
+     * «un contesto di 6143 è un numero che non ha scelto nessuno». Ma sotto
+     * l'estetica ce n'era una vera e non scritta: il margine. Un contesto
+     * allocato esatto costringe a **rifarlo** al messaggio dopo, e rifarlo
+     * **azzera la cache** — cioè ripaga il prefill di tutta la conversazione.
+     *
+     * ## Perché adesso si può stringere
+     *
+     * MISURATO il 2026-08-08: per un prompt di 6.607 token si allocava 8.192
+     * invece di 6.667 — **23% di cache in più**, che costa ~**10% della
+     * generazione**, perché ogni token prodotto rilegge l'intera cache.
+     *
+     * E il margine non serve più così largo: il **prefisso congelato** si
+     * rilegge dopo ogni ricostruzione del contesto, quindi rifarlo non costa
+     * più il prefill degli ottomila token degli schemi — costa solo quello dei
+     * turni della conversazione, un paio di secondi.
+     *
+     * ⇒ Margine per **un altro scambio intero** invece che per il doppio. La
+     * granularità resta grossa (512) perché un numero tondo non costa niente e
+     * evita di riallocare per una manciata di token.
      */
-    let candidate = 1
-    while (candidate < required) candidate *= 2
-    return candidate <= ceiling ? candidate : ceiling
+    const margine = completion + 512
+    const arrotondato = Math.ceil((required + margine) / 512) * 512
+    // ⛔ Mai sotto il fabbisogno, e mai sopra il tetto. Se il margine sfonda il
+    // tetto **e il fabbisogno no**, si prende il tetto: rifiutare lì
+    // butterebbe via contesto che il dispositivo stava offrendo, per un
+    // margine. Il tetto è spesso il `trainedContext` del modello, che non è
+    // quasi mai un numero tondo.
+    return Math.min(Math.max(arrotondato, required), ceiling)
 }

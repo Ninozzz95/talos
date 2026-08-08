@@ -144,6 +144,31 @@ describe('local provider catalogue', () => {
     })
 })
 
+
+/**
+ * ⛔ Il contesto aperto si controlla per PROPRIETÀ, non per numero esatto.
+ *
+ * Questi test pretendevano `8192`, che era la politica di allocazione
+ * travestita da aspettativa: cambiandola per una ragione misurata — allocare
+ * il doppio costa ~10% della generazione, perché ogni token rilegge la cache —
+ * cadevano cinque test senza che niente fosse rotto.
+ *
+ * Ciò che devono proteggere è un'altra cosa, e resta: si apre **una volta
+ * sola**, con un contesto che **regge** il fabbisogno e **non spreca**.
+ */
+function contestoAperto(finto: { mock: { calls: unknown[][] } }): number {
+    const chiamate = finto.mock.calls
+    const opzioni = chiamate[chiamate.length - 1]?.[1] as { contextTokens?: number } | undefined
+    return opzioni?.contextTokens ?? 0
+}
+
+function reggeSenzaSprecare(ottenuto: number, promptTokens: number, completion = 1024): void {
+    const necessario = promptTokens + completion + 1
+    expect(ottenuto, 'il contesto deve REGGERE il fabbisogno').toBeGreaterThanOrEqual(necessario)
+    expect(ottenuto, 'e non deve sprecare: il doppio costa il 10% della generazione')
+        .toBeLessThan(necessario * 1.5)
+}
+
 describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
     beforeEach(() => {
         localEngine.talosLocalEngineStatus.mockReset()
@@ -300,8 +325,9 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
 
         expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
             '/models/qwen.gguf',
-            { contextTokens: 8192, kvCacheType: 'q8_0' },
+            expect.objectContaining({ kvCacheType: 'q8_0' }),
         )
+        reggeSenzaSprecare(contestoAperto(localEngine.talosLocalEngineOpenWithFallback as never), 5779)
     })
 
     it('turns a final context failure into actionable localized provider metadata', async () => {
@@ -353,8 +379,9 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
 
         expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
             '/models/qwen.gguf',
-            { contextTokens: 8192, kvCacheType: 'f16' },
+            expect.objectContaining({ kvCacheType: 'f16' }),
         )
+        reggeSenzaSprecare(contestoAperto(localEngine.talosLocalEngineOpenWithFallback as never), 5779)
         // ⛔ La riga che vale il lavoro: la seconda apertura non c'è più.
         expect(localEngine.talosLocalEngineOpen).not.toHaveBeenCalled()
     })
@@ -409,8 +436,9 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
 
         expect(localEngine.talosLocalEngineOpenWithFallback).toHaveBeenCalledWith(
             '/models/qwen.gguf',
-            { contextTokens: 7168, kvCacheType: 'f16' },
+            expect.objectContaining({ kvCacheType: 'f16' }),
         )
+        reggeSenzaSprecare(contestoAperto(localEngine.talosLocalEngineOpenWithFallback as never), 5779)
     })
 
     /**
@@ -459,8 +487,9 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
         expect(localEngine.talosLocalEngineOpen).toHaveBeenCalledTimes(1)
         expect(localEngine.talosLocalEngineOpen).toHaveBeenCalledWith(
             '/models/qwen.gguf',
-            { contextTokens: 8192, kvCacheType: 'f16' },
+            expect.objectContaining({ kvCacheType: 'f16' }),
         )
+        reggeSenzaSprecare(contestoAperto(localEngine.talosLocalEngineOpen as never), 5779)
         expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(2)
         expect(localEngine.talosLocalEngineGenerate).toHaveBeenCalledWith(
             'qwen-8192',
@@ -542,8 +571,9 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
 
         expect(localEngine.talosLocalEngineOpen).toHaveBeenCalledWith(
             '/models/qwen.gguf',
-            { contextTokens: 16384, kvCacheType: 'f16' },
+            expect.objectContaining({ kvCacheType: 'f16' }),
         )
+        reggeSenzaSprecare(contestoAperto(localEngine.talosLocalEngineOpen as never), 8000)
         expect(localEngine.talosLocalEngineGenerate).toHaveBeenCalled()
     })
 
@@ -568,8 +598,9 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
 
         expect(localEngine.talosLocalEngineOpen).toHaveBeenCalledWith(
             '/models/qwen.gguf',
-            { contextTokens: 16384, kvCacheType: 'f16' },
+            expect.objectContaining({ kvCacheType: 'f16' }),
         )
+        reggeSenzaSprecare(contestoAperto(localEngine.talosLocalEngineOpen as never), 8000)
     })
 })
 
