@@ -1,8 +1,11 @@
 package ai.talos.agent
 
 import android.content.Context
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
 import android.system.Os
 import java.io.File
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
@@ -212,6 +215,104 @@ object TalosPonteAdb {
 
     /** Chiude il server, e con esso la porta locale che teneva aperta. */
     fun spegni(context: Context): Esito = esegui(context, listOf("kill-server"), attesaMs = 10_000)
+
+    /**
+     * ⭐⭐ LE PORTE SE LE TROVA DA SÉ. La persona digita solo il codice.
+     *
+     * ## Il problema, e perché tutti gli altri lo scaricano sull'utente
+     *
+     * Il Debug wireless apre **due** porte: una per l'accoppiamento, che vive
+     * quanto la finestrella e cambia ogni volta, e una per il collegamento. La
+     * finestra ne mostra una, la schermata dietro l'altra, e nessuna delle due
+     * è indovinabile — sono assegnate a caso a ogni accensione.
+     *
+     * LADB e le app simili chiedono di trascriverle a mano. È il pezzo che fa
+     * abbandonare la procedura: tre numeri copiati da due schermate diverse,
+     * mentre una finestrella scade.
+     *
+     * ## ⛔ E il modo ovvio non funziona: misurato
+     *
+     * ```
+     * adb mdns services  →  error: unknown host service 'mdns:services'
+     * getprop | grep adb →  nessuna service.adb.tls.port
+     * ```
+     *
+     * La build Termux di `adb` è compilata **senza** mDNS, e questa ROM non
+     * pubblica la porta fra le proprietà di sistema.
+     *
+     * ## La cura: chiederlo ad Android, che lo sa
+     *
+     * Il telefono **annuncia da sé** `_adb-tls-pairing._tcp` (mentre la
+     * finestrella è aperta) e `_adb-tls-connect._tcp`. `NsdManager` è dentro
+     * Android dal 2012, non chiede permessi, e non aggiunge una riga di
+     * dipendenze. ⇒ Le porte le troviamo noi, e alla persona resta da leggere
+     * **un numero solo**: quello che la finestrella le sta già mostrando.
+     */
+    /**
+     * ## ⛔ E perché torna un ELENCO e non un indirizzo
+     *
+     * Perché gli annunci **invecchiano**, e l'ho misurato prima di scrivere una
+     * riga di schermata. Interrogando la rete il 2026-08-08:
+     *
+     * ```
+     * _adb-tls-connect._tcp → adb-2ea6573c-1yc9eU        porta 38737
+     *                       → adb-2ea6573c-1yc9eU (2)    ← il «(2)» dice tutto
+     * ```
+     *
+     * Il porto vero era **43053**: quello annunciato dal nome senza suffisso era
+     * un residuo di una sessione precedente ancora in cache, e collegarcisi dava
+     * `Connection refused`. Il `(2)` compare proprio perché adbd si è
+     * ri-registrato trovando il vecchio nome ancora occupato.
+     *
+     * ⇒ Prendere «il primo che risponde» avrebbe dato un ponte che fallisce a
+     * caso, in un modo che alla persona sembra colpa sua. Si raccolgono tutti i
+     * candidati e si prova finché uno apre.
+     */
+    fun scopri(context: Context, tipo: String, attesaMs: Long = 6_000): List<String> {
+        val nsd = context.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return emptyList()
+        val trovati = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+        val calma = CountDownLatch(1)
+
+        val risolutore = object : NsdManager.ResolveListener {
+            override fun onResolveFailed(info: NsdServiceInfo?, codice: Int) = Unit
+            override fun onServiceResolved(info: NsdServiceInfo?) {
+                val porta = info?.port ?: return
+                val ospite = info.host?.hostAddress ?: return
+                // ⛔ Solo IPv4: `adb connect` con un IPv6 senza parentesi non sa
+                // dove finisce l'indirizzo e dove comincia la porta.
+                if (ospite.contains(':')) return
+                trovati.add("$ospite:$porta")
+            }
+        }
+
+        val cercatore = object : NsdManager.DiscoveryListener {
+            override fun onStartDiscoveryFailed(t: String?, codice: Int) = calma.countDown()
+            override fun onStopDiscoveryFailed(t: String?, codice: Int) = Unit
+            override fun onDiscoveryStarted(t: String?) = Unit
+            override fun onDiscoveryStopped(t: String?) = Unit
+            override fun onServiceLost(info: NsdServiceInfo?) = Unit
+            override fun onServiceFound(info: NsdServiceInfo?) {
+                if (info != null) runCatching { @Suppress("DEPRECATION") nsd.resolveService(info, risolutore) }
+            }
+        }
+
+        return runCatching {
+            nsd.discoverServices(tipo, NsdManager.PROTOCOL_DNS_SD, cercatore)
+            // Si aspetta la finestra intera: chi arriva per secondo e' spesso
+            // quello vivo, e fermarsi al primo e' esattamente l'errore misurato.
+            calma.await(attesaMs, TimeUnit.MILLISECONDS)
+            runCatching { nsd.stopServiceDiscovery(cercatore) }
+            // ⭐ In coda per ultimo l'annuncio piu' recente: adbd si ri-registra
+            // in fondo, e quello vecchio resta davanti nella cache.
+            trovati.toList().reversed()
+        }.getOrElse { emptyList() }
+    }
+
+    /** Il servizio che il telefono annuncia mentre la finestrella è aperta. */
+    const val ANNUNCIO_ACCOPPIAMENTO = "_adb-tls-pairing._tcp"
+
+    /** Quello che resta, e serve per collegarsi. */
+    const val ANNUNCIO_COLLEGAMENTO = "_adb-tls-connect._tcp"
 
     /** nome che il caricatore cerca → nome col quale l'abbiamo spedito. */
     private val NOMI_VERI = mapOf(
