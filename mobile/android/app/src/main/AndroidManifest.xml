@@ -388,6 +388,13 @@
          download was attempted on a real device. Everything else about the
          transfer was already right; this one line is what stood between forty
          commits and a model actually arriving. -->
+    <!--
+         La vibrazione: un permesso NORMALE, concesso all'installazione, e
+         l'unica cosa della lista dell'owner («permessi, vibrazioni, WiFi»)
+         che non passa da Shizuku. Su ColorOS Shizuku non riesce nemmeno ad
+         autorizzarci, quindi e' la prima che TALOS puo' fare davvero.
+    -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- F5.3: explicit — the mic permission dialog can never depend on manifest merging. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
