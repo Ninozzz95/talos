@@ -4,6 +4,7 @@ export type TalosMobileRouteName =
     | 'chat' | 'chats' | 'memory' | 'tasks' | 'notes' | 'doctor'
     // Le pagine di dettaglio: voce → pagina → dettaglio, come la Ricerca.
     | 'memory-item' | 'memory-new' | 'task-item' | 'task-new' | 'note-item' | 'note-new'
+    | 'settings-privilege'
     | 'research' | 'research-new' | 'research-report' | 'research-claim' | 'research-source'
     | 'runs' | 'context' | 'settings'
     | 'settings-models' | 'settings-models-providers'
@@ -46,6 +47,14 @@ const loadSettingsModelsScreen = () => import('@/screens/SettingsModelsScreen.vu
 const loadSettingsModelsProvidersScreen = () => import('@/screens/SettingsModelsProvidersScreen.vue').then((module) => module.default)
 const loadSettingsModelsCatalogScreen = () => import('@/screens/SettingsModelsCatalogScreen.vue').then((module) => module.default)
 const loadSettingsModelsLocalScreen = () => import('@/screens/SettingsModelsLocalScreen.vue').then((module) => module.default)
+/**
+ * ⭐ La pagina del controllo del telefono, e sta sotto le IMPOSTAZIONI.
+ *
+ * Non e' una stazione: non ci si va per fare qualcosa, ci si va per capire se
+ * si puo'. Metterla fra le stazioni la offrirebbe come una funzione, e finche'
+ * il produttore blocca non e' una funzione — e' una spiegazione.
+ */
+const loadPrivilegeScreen = () => import('@/screens/PrivilegeScreen.vue').then((module) => module.default)
 // Vue Router accepts an ES-module lazy result and unwraps its default export.
 // Keeping this new route in that native form avoids charging the initial entry
 // for a redundant `.then(default)` adapter.
@@ -116,6 +125,7 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'settings-models-catalog', path: '/settings/models/catalog', desktop_station_id: 'settings', component: loadSettingsModelsCatalogScreen, parent: 'settings-models' },
     { name: 'settings-models-local', path: '/settings/models/local', desktop_station_id: 'settings', component: loadSettingsModelsLocalScreen, parent: 'settings-models' },
     { name: 'settings-models-local-repo', path: '/settings/models/local/:owner/:repo', desktop_station_id: 'settings', component: loadSettingsModelsLocalRepoScreen, parent: 'settings-models-local' },
+    { name: 'settings-privilege', path: '/settings/privilege', desktop_station_id: 'settings', component: loadPrivilegeScreen, parent: 'settings' },
 ])
 
 export const TALOS_MOBILE_ROUTE_NAMES: readonly TalosMobileRouteName[] = TALOS_MOBILE_ROUTES.map((route) => route.name)

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch, type Component } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Languages, Mail, Palette, Search, Settings, Shield, ShieldCheck, DatabaseBackup, User, Wrench } from '@lucide/vue'
+import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Languages, Mail, Palette, Search, Settings, Shield, ShieldCheck, Smartphone, DatabaseBackup, User, Wrench } from '@lucide/vue'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosMediaQuery } from '@/composables/useTalosMediaQuery'
 import { useTalosAccountStore } from '@/stores/account'
@@ -265,6 +265,32 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                     </span>
                     <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                 </button>
+
+                <!--
+                    ⭐ Il controllo del telefono, e sta QUI e non fra le stazioni.
+
+                    Non ci si va per fare qualcosa: ci si va per capire se si
+                    può. Offrirla come stazione la presenterebbe come una
+                    funzione, e finché il produttore del telefono blocca non è
+                    una funzione — è una spiegazione. Misurato sul Pad il
+                    2026-08-08: su ColorOS Shizuku non riesce nemmeno ad
+                    autorizzarci.
+                -->
+                <div class="w-full">
+                    <div class="divide-y divide-[var(--talos-border)] overflow-hidden rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]">
+                        <RouterLink
+                            :to="{ name: 'settings-privilege' }"
+                            data-testid="settings-privilege-link"
+                            class="talos-pressable flex min-h-touch w-full items-center gap-[var(--talos-space-inline)] px-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)]"
+                        >
+                            <Smartphone class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate text-sm text-[var(--talos-text)]">{{ t('privilege.pageTitle') }}</span>
+                            </span>
+                            <ChevronRight class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                        </RouterLink>
+                    </div>
+                </div>
 
                 <div v-for="group in resolvedGroups" :key="group.label" class="w-full">
                     <p data-testid="settings-group-heading" class="mb-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ group.label }}</p>

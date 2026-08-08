@@ -666,6 +666,7 @@ const tabletChatRailVisible = computed(() => (
 ))
 
 const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
+    'settings-privilege': 'privilege.pageTitle',
     chat: 'navigation.chat',
     chats: 'navigation.chats',
     memory: 'navigation.memory',
