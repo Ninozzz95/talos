@@ -114,4 +114,9 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
      * stanza l'ha sentito. Il canale non e' un cavo, ma il dato e' fuori.
      */
     { id: 'device_speak', group: 'device', actions: ['write', 'outbound'] },
+    // Lo sfondo LEGGE un file della Libreria per poterlo applicare: e' un dato
+    // privato che esce dalla Libreria e finisce su una superficie che chiunque
+    // guardi il telefono vede. Quindi `read` insieme a `write`.
+    { id: 'device_wallpaper', group: 'device', actions: ['write', 'read'] },
+    { id: 'device_keep_awake', group: 'device', actions: ['write'] },
 ] as const satisfies readonly TalosAgentToolControl[])

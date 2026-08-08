@@ -87,4 +87,9 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
      * privato letto ad alta voce e' uscito dal telefono senza toccare la rete.
      */
     device_speak: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: true },
+    // ⛔ `readsPrivateData`: legge un file della Libreria. E `irreversible` non
+    // perche' non si possa rimettere l'altro, ma perche' lo sfondo di prima non
+    // lo conosciamo — disfare non e' rimettere le cose com'erano.
+    device_wallpaper: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    device_keep_awake: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
 })

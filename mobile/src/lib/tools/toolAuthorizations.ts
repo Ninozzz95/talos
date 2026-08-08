@@ -230,12 +230,41 @@ export function revokeTalosToolAuthorizationGrant(
     return freezeGrants(current.revision + 1, grants)
 }
 
-function sameActions(
-    left: readonly TalosToolAction[],
-    right: readonly TalosToolAction[],
+/**
+ * La richiesta decisa **copre** ciò che va chiesto adesso?
+ *
+ * ## ⛔ Il difetto che questa funzione sostituisce
+ *
+ * Prima il confronto era `sameActions`: stessa lunghezza, stessi elementi
+ * **nella stessa posizione**. Due cose lo rompevano, ed entrambe sono normali.
+ *
+ * 1. **L'ordine.** Chi legge la scheda vede due bollini, non una sequenza.
+ *    `['write','read']` e `['read','write']` sono lo stesso permesso per lui, e
+ *    chi costruisce l'elenco sta in un altro file.
+ * 2. ⛔ **La lunghezza.** Con «Leggi le tue cose» su *consenti sempre* — la
+ *    configurazione dell'owner — un tool che scrive E legge chiede una sola
+ *    azione, la scrittura. Ma la richiesta memorizzata ne porta due. Uguaglianza
+ *    fallita, richiesta scartata, e l'esecutore ricade sul «chiedi»: nella chat
+ *    quella porta risponde `false`, quindi un rifiuto **silenzioso**.
+ *
+ * RIPRODOTTO sul Pad il 2026-08-08 con Claude Sonnet 5: si tocca **Consenti**,
+ * il plugin nativo non viene chiamato nemmeno una volta, lo sfondo non cambia e
+ * il modello dice «ho annullato». Un «sì» che diventa «no» è peggio di un
+ * rifiuto: attribuisce alla persona una decisione che non ha preso.
+ *
+ * ## La regola giusta, e perché è sicura in un verso solo
+ *
+ * Vale se la richiesta decisa contiene **almeno** ciò che si sta chiedendo.
+ * Concedere di meno di quanto la scheda nominava è sicuro: la persona ha visto
+ * di più e ha detto sì. Il contrario no — una scheda che parlava solo di
+ * scrittura non può autorizzare anche una lettura, e infatti resta un
+ * disallineamento.
+ */
+function coversActions(
+    granted: readonly TalosToolAction[],
+    asked: readonly TalosToolAction[],
 ): boolean {
-    return left.length === right.length
-        && left.every((action, index) => action === right[index])
+    return asked.every((action) => granted.includes(action))
 }
 
 function exactRequest(
@@ -251,7 +280,7 @@ function exactRequest(
         && request.call_id === callId
         && request.input_digest === inputDigest
         && SHA256.test(request.input_digest)
-        && sameActions(request.actions, actions)
+        && coversActions(request.actions, actions)
 }
 
 export function resolveTalosToolAuthorization(input: {

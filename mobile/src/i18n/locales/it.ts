@@ -947,6 +947,8 @@ export const TALOS_IT_MESSAGES = {
         deviceOpenSettings: 'Apertura delle impostazioni',
         deviceCompose: 'Preparazione di un messaggio',
         deviceSpeak: 'Lettura ad alta voce',
+        deviceWallpaper: 'Cambio dello sfondo',
+        deviceKeepAwake: 'Schermo tenuto acceso',
         researchList: 'Consultazione delle ricerche',
         researchStart: 'Avvio di una ricerca',
         researchRead: 'Lettura di un rapporto',
@@ -1112,6 +1114,14 @@ export const TALOS_IT_MESSAGES = {
         deviceSpeak: {
             title: 'Leggi ad alta voce',
             description: '⛔ Chiunque sia nella stanza sente. Con il telefono in silenzioso non parla, e te lo dice.',
+        },
+        deviceWallpaper: {
+            title: 'Metti l’immagine come sfondo',
+            description: '⛔ Lo sfondo lo vede chiunque guardi il telefono, anche da bloccato. Lo sfondo di prima non si può rimettere: TALOS non sa qual era.',
+        },
+        deviceKeepAwake: {
+            title: 'Tieni acceso lo schermo',
+            description: 'Lo schermo resta acceso finché TALOS è in primo piano, e si rispegne da solo appena non lo è. Consuma batteria.',
         },
         researchList: {
             title: 'Consulta le tue ricerche',
@@ -2155,6 +2165,8 @@ export const TALOS_IT_MESSAGES = {
             device_open_settings: { title: 'Apri una schermata delle impostazioni', description: 'Ti porta esattamente sulla schermata di Android, invece di dirti che non può.' },
             device_compose: { title: 'Prepara una chiamata, un messaggio o una condivisione', description: 'La compila e te la passa. TALOS non chiama e non manda da solo: il pulsante lo premi tu.' },
             device_speak: { title: 'Dì qualcosa ad alta voce', description: 'Legge una risposta breve dall’altoparlante. La sente chiunque sia nella stanza, quindi conta come uscire da questo telefono. Se il telefono è silenzioso, resta silenzioso.' },
+            device_wallpaper: { title: 'Metti un’immagine come sfondo', description: 'Prende un’immagine della Libreria e la mette come sfondo del telefono, sulla schermata iniziale, su quella di blocco o su entrambe.' },
+            device_keep_awake: { title: 'Tieni acceso lo schermo', description: 'Impedisce allo schermo di spegnersi mentre segui qualcosa: una ricetta, delle indicazioni. Vale finché TALOS è aperto.' },
         },
     },
     lock: {
