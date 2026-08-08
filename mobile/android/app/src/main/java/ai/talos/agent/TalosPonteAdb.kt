@@ -85,8 +85,39 @@ object TalosPonteAdb {
         val lib = librerie(context)
         for ((vero, spedito) in NOMI_VERI) {
             val collegamento = File(cartella, vero)
-            if (collegamento.exists()) continue
-            runCatching { Os.symlink(File(lib, spedito).absolutePath, collegamento.absolutePath) }
+            val bersaglio = File(lib, spedito).absolutePath
+
+            /*
+             * ⛔⛔ SI CONTROLLA DOVE PUNTA, non se c'è.
+             *
+             * ## Il difetto, visto sul Pad il 2026-08-08 alle 23:08
+             *
+             * Dopo un aggiornamento dell'app il ponte moriva con:
+             *
+             *     CANNOT LINK EXECUTABLE ".../libadb.so":
+             *     library "libz.so.1" not found: needed by main executable
+             *
+             * Perché `nativeLibraryDir` **cambia nome a ogni installazione**:
+             * `…/ai.talos.dev-0Y5YRZEd6IJ…` diventa `…-XNoQ4E1FJOrS…`. I
+             * collegamenti restavano a puntare alla cartella vecchia, che non
+             * esiste più.
+             *
+             * E la vecchia riga `if (collegamento.exists()) continue` non
+             * bastava: `exists()` **segue** il collegamento, quindi su uno rotto
+             * dice «no» — ma `Os.symlink` fallisce lo stesso con `EEXIST`,
+             * perché il file del collegamento c'è eccome. Il `runCatching` si
+             * mangiava l'errore e il ponte restava rotto in silenzio.
+             *
+             * ⇒ Colpisce **ogni aggiornamento dell'app**: non un caso di
+             * laboratorio, la cosa più normale che possa capitare a una persona.
+             */
+            val giaGiusto = runCatching { Os.readlink(collegamento.absolutePath) == bersaglio }
+                .getOrDefault(false)
+            if (giaGiusto) continue
+
+            // Si toglie SEMPRE prima di rifare: rotto, vecchio o copiato che sia.
+            runCatching { collegamento.delete() }
+            runCatching { Os.symlink(bersaglio, collegamento.absolutePath) }
                 .onFailure {
                     // Se il collegamento non si può fare, si COPIA. Costa spazio
                     // ma il ponte resta in piedi, ed è l'unica cosa che conta.
