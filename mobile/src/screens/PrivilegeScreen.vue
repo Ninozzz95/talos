@@ -8,6 +8,11 @@ import {
     talosShizukuReach,
     type TalosShizukuSnapshot,
 } from '@/lib/privilege/shizukuGuidance'
+import {
+    talosCodiceValido,
+    talosPonteGuida,
+    talosPonteMotivo,
+} from '@/lib/privilege/pontePasso'
 
 /**
  * La pagina che dice se TALOS può toccare il telefono, e che cosa fare adesso.
@@ -41,12 +46,92 @@ const caricando = ref(true)
 /** Se in QUESTA sessione abbiamo già chiesto. È un fatto sulla sessione. */
 const haChiesto = ref(false)
 
+interface RispostaPonte { ok: boolean, reason?: string, address?: string, tried?: number }
+
 function plugin() {
     return Capacitor.registerPlugin<{
         snapshot(): Promise<TalosShizukuSnapshot>
         request(): Promise<{ outcome: string }>
         open(options: { target: string }): Promise<{ opened: boolean }>
+        bridgeStatus(): Promise<{ packaged: boolean, connected: boolean }>
+        bridgePair(options: { code: string, address?: string }): Promise<RispostaPonte>
+        bridgeConnect(options: { address?: string }): Promise<RispostaPonte>
     }>('TalosPrivilege')
+}
+
+/* ------------------------------------------------------------------------ *
+ * IL PONTE IN CASA
+ * ------------------------------------------------------------------------ */
+
+const pontePresente = ref(false)
+const ponteCollegato = ref(false)
+/** Se un tentativo silenzioso di ricollegarsi è già stato fatto e fallito. */
+const ricollegamentoFallito = ref(false)
+const ponteInCorso = ref(false)
+const codice = ref('')
+const ponteMotivo = ref<string | null>(null)
+
+const ponte = computed(() => talosPonteGuida({
+    packaged: pontePresente.value,
+    connected: ponteCollegato.value,
+    reconnectFailed: ricollegamentoFallito.value,
+}))
+
+const codiceValido = computed(() => talosCodiceValido(codice.value))
+
+async function leggiPonte(): Promise<void> {
+    try {
+        const stato = await plugin().bridgeStatus()
+        pontePresente.value = stato.packaged === true
+        ponteCollegato.value = stato.connected === true
+    } catch {
+        // Build web: il ponte non esiste, e la sezione lo dice invece di fingere.
+        pontePresente.value = false
+        ponteCollegato.value = false
+    }
+}
+
+async function ricollega(): Promise<void> {
+    if (ponteInCorso.value) return
+    ponteInCorso.value = true
+    ponteMotivo.value = null
+    try {
+        const esito = await plugin().bridgeConnect({})
+        ponteCollegato.value = esito.ok === true
+        // ⛔ Il fallimento del ricollegamento NON è un errore da mostrare in
+        // rosso: è la scoperta che non siamo ancora accoppiati, ed è il passo
+        // successivo. Mostrarlo come guasto manderebbe a cercare una causa che
+        // non c'è.
+        if (!esito.ok) ricollegamentoFallito.value = true
+    } catch {
+        ricollegamentoFallito.value = true
+    } finally {
+        ponteInCorso.value = false
+    }
+}
+
+async function accoppia(): Promise<void> {
+    if (ponteInCorso.value || !codiceValido.value) return
+    ponteInCorso.value = true
+    ponteMotivo.value = null
+    try {
+        const paio = await plugin().bridgePair({ code: codice.value.trim() })
+        if (!paio.ok) {
+            ponteMotivo.value = talosPonteMotivo(paio.reason)
+            return
+        }
+        // ⭐ Accoppiati: il collegamento è l'ALTRA porta, e la si cerca subito.
+        // Chiedere alla persona di premere un secondo pulsante qui sarebbe farle
+        // fare un passo che sappiamo già di dover fare.
+        codice.value = ''
+        const collegato = await plugin().bridgeConnect({})
+        ponteCollegato.value = collegato.ok === true
+        if (!collegato.ok) ponteMotivo.value = talosPonteMotivo(collegato.reason)
+    } catch {
+        ponteMotivo.value = talosPonteMotivo(undefined)
+    } finally {
+        ponteInCorso.value = false
+    }
 }
 
 async function rileggi(): Promise<void> {
@@ -94,7 +179,10 @@ async function agisci(): Promise<void> {
     } catch { /* la pagina dice già il percorso a parole */ }
 }
 
-onMounted(() => { void rileggi() })
+onMounted(() => {
+    void rileggi()
+    void leggiPonte()
+})
 </script>
 
 <template>
@@ -158,6 +246,90 @@ onMounted(() => { void rileggi() })
                 {{ t(guida.actionKey) }}
                 <ChevronRight class="size-4" aria-hidden="true" />
             </button>
+        </section>
+
+        <!--
+            ⭐⭐ IL PONTE IN CASA — la seconda strada, e su questa ROM l'unica.
+
+            Sta SOTTO il passo di Shizuku e non al posto suo: dove Shizuku
+            funziona è più rapido e non chiede niente. Ma quando il produttore lo
+            blocca — misurato su OxygenOS 16 — questa è la sola che resta, e una
+            pagina che finisse lì direbbe «non si può» avendo in tasca il modo.
+        -->
+        <section
+            v-if="pontePresente"
+            data-testid="talos-ponte"
+            :data-ponte-passo="ponte.passo"
+            class="flex flex-col gap-3 rounded-[var(--talos-radius-card)] border p-4"
+            :class="ponte.ready
+                ? 'border-[var(--talos-accent)]/40 bg-[var(--talos-accent)]/5'
+                : 'border-[var(--talos-border)]'"
+        >
+            <h2 class="flex items-start gap-2 text-sm font-semibold text-[var(--talos-text)]">
+                <Check
+                    v-if="ponte.ready"
+                    class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]"
+                    aria-hidden="true"
+                />
+                <Smartphone v-else class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                <span data-testid="talos-ponte-title">{{ t(ponte.titleKey) }}</span>
+            </h2>
+
+            <p class="text-xs leading-5 text-[var(--talos-muted)]" data-testid="talos-ponte-body">
+                {{ t(ponte.bodyKey) }}
+            </p>
+
+            <!--
+                ⭐ Il campo chiede SOLO il codice. Le due porte le trova TALOS
+                con gli annunci di rete: è il pezzo che nelle app simili si
+                scarica sull'utente, tre numeri copiati da due schermate mentre
+                una finestrella scade.
+            -->
+            <template v-if="ponte.wantsCode">
+                <button
+                    type="button"
+                    data-testid="talos-ponte-open"
+                    class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-4 text-xs text-[var(--talos-text)]"
+                    @click="void plugin().open({ target: 'developer' })"
+                >
+                    {{ t('ponte.openDeveloper') }}
+                    <ChevronRight class="size-4" aria-hidden="true" />
+                </button>
+                <label class="flex flex-col gap-1">
+                    <span class="font-mono text-2xs uppercase tracking-wider text-[var(--talos-muted)]">
+                        {{ t('ponte.codeLabel') }}
+                    </span>
+                    <input
+                        v-model="codice"
+                        data-testid="talos-ponte-code"
+                        type="text"
+                        inputmode="numeric"
+                        autocomplete="off"
+                        maxlength="6"
+                        :aria-label="t('ponte.codeLabel')"
+                        class="min-h-touch rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-transparent px-3 font-mono text-lg tracking-[0.3em] text-[var(--talos-text)]"
+                    >
+                </label>
+            </template>
+
+            <button
+                v-if="ponte.actionKey"
+                type="button"
+                data-testid="talos-ponte-action"
+                :disabled="ponteInCorso || (ponte.wantsCode && !codiceValido)"
+                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-4 text-sm font-semibold text-[var(--talos-accent-contrast)] disabled:opacity-40"
+                @click="void (ponte.wantsCode ? accoppia() : ricollega())"
+            >
+                {{ ponteInCorso ? `${t('privilege.refresh')}…` : t(ponte.actionKey) }}
+            </button>
+
+            <p
+                v-if="ponteMotivo"
+                data-testid="talos-ponte-reason"
+                class="text-xs leading-5 text-[var(--talos-warning)]"
+            >
+                {{ t(ponteMotivo) }}
+            </p>
         </section>
 
         <!--

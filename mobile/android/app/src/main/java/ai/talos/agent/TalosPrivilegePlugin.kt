@@ -345,27 +345,75 @@ class TalosPrivilegePlugin : Plugin() {
         )
     }
 
-    /** L'accoppiamento: indirizzo della finestrella e codice a sei cifre. */
+    /**
+     * L'accoppiamento. ⭐ L'indirizzo **lo trova TALOS**: alla persona resta da
+     * leggere il codice a sei cifre che la finestrella le sta già mostrando.
+     *
+     * `address` resta accettato come scorciatoia per quando l'annuncio non
+     * arriva — su una rete che blocca il multicast succede, e allora è meglio
+     * un campo da compilare che un vicolo cieco.
+     */
     @PluginMethod
     fun bridgePair(call: PluginCall) {
-        val esito = TalosPonteAdb.accoppia(
-            context,
-            call.getString("address") ?: "",
-            call.getString("code") ?: "",
-        )
-        call.resolve(
-            JSObject().put("ok", esito.ok).put("reason", esito.motivo ?: "")
-                .put("output", esito.uscita).put("error", esito.errore),
-        )
+        provaOgniIndirizzo(
+            call,
+            TalosPonteAdb.ANNUNCIO_ACCOPPIAMENTO,
+            "pairing-not-announced",
+        ) { indirizzo -> TalosPonteAdb.accoppia(context, indirizzo, call.getString("code") ?: "") }
     }
 
-    /** Il collegamento, che è l'altra porta — quella della schermata dietro. */
+    /** Il collegamento, che è l'ALTRA porta. Anche questa se la trova da sé. */
     @PluginMethod
     fun bridgeConnect(call: PluginCall) {
-        val esito = TalosPonteAdb.collega(context, call.getString("address") ?: "")
+        provaOgniIndirizzo(
+            call,
+            TalosPonteAdb.ANNUNCIO_COLLEGAMENTO,
+            "connect-not-announced",
+        ) { indirizzo -> TalosPonteAdb.collega(context, indirizzo) }
+    }
+
+    /**
+     * ⭐ Prova ogni candidato annunciato, e dice QUALE ha funzionato.
+     *
+     * ⛔ Non si prende «il primo»: misurato il 2026-08-08 che l'annuncio in
+     * testa era un residuo di una sessione precedente ancora in cache, e
+     * collegarcisi dava `Connection refused` mentre il telefono era lì, acceso e
+     * raggiungibile. Un ponte che fallisce a caso è peggio di un ponte assente,
+     * perché alla persona sembra colpa sua.
+     *
+     * `address` esplicito scavalca tutto: su una rete che blocca il multicast
+     * l'annuncio non arriva, e un campo da compilare è meglio di un vicolo cieco.
+     */
+    private fun provaOgniIndirizzo(
+        call: PluginCall,
+        annuncio: String,
+        seNessuno: String,
+        azione: (String) -> TalosPonteAdb.Esito,
+    ) {
+        val scelto = call.getString("address")?.takeIf { it.isNotBlank() }
+        val candidati = if (scelto != null) listOf(scelto) else TalosPonteAdb.scopri(context, annuncio)
+        if (candidati.isEmpty()) {
+            call.resolve(JSObject().put("ok", false).put("reason", seNessuno).put("tried", 0))
+            return
+        }
+        var ultimo: TalosPonteAdb.Esito? = null
+        for (indirizzo in candidati) {
+            val esito = azione(indirizzo)
+            ultimo = esito
+            if (esito.ok) {
+                call.resolve(
+                    JSObject().put("ok", true).put("address", indirizzo)
+                        .put("tried", candidati.size)
+                        .put("output", esito.uscita).put("error", esito.errore),
+                )
+                return
+            }
+        }
         call.resolve(
-            JSObject().put("ok", esito.ok).put("reason", esito.motivo ?: "")
-                .put("output", esito.uscita).put("error", esito.errore),
+            JSObject().put("ok", false)
+                .put("reason", ultimo?.motivo ?: seNessuno)
+                .put("tried", candidati.size)
+                .put("output", ultimo?.uscita ?: "").put("error", ultimo?.errore ?: ""),
         )
     }
 
