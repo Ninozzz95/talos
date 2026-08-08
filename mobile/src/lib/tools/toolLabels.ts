@@ -51,6 +51,8 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     device_status: 'Checking the phone',
     device_torch: 'Using the torch',
     device_media: 'Controlling playback',
+    device_airplane: 'Switching airplane mode',
+    device_power_saving: 'Switching battery saver',
     device_vibrate: 'Buzzing the phone',
     device_volume: 'Changing the volume',
     device_alarm: 'Setting an alarm',
@@ -113,6 +115,8 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     device_status: 'toolActivity.deviceStatus',
     device_torch: 'toolActivity.deviceTorch',
     device_media: 'toolActivity.deviceMedia',
+    device_airplane: 'toolActivity.deviceAirplane',
+    device_power_saving: 'toolActivity.devicePowerSaving',
     device_vibrate: 'toolActivity.deviceVibrate',
     device_volume: 'toolActivity.deviceVolume',
     device_alarm: 'toolActivity.deviceAlarm',
@@ -331,6 +335,8 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     // e due strumenti che mostrano lo stesso segno raccontano la stessa cosa
     // mentre ne stanno facendo due. Il segno del suono che SUONA e' l'audio.
     device_media: 'audio',
+    device_airplane: 'phone',
+    device_power_saving: 'phone',
     device_volume: 'volume',
     device_alarm: 'clock',
     device_open_app: 'phone',

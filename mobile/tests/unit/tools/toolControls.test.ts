@@ -275,6 +275,9 @@ describe('Agent Tools control registry', () => {
             // zero, perche' `dispatchMediaKeyEvent` e' la porta dei telecomandi
             // Bluetooth e non chiede permessi.
             'device_media',
+            // 2026-08-09, l'Ondata 1: aereo e risparmio energetico. Due righe
+            // in cui Gemini pretende di essere l'assistente predefinito.
+            'device_airplane', 'device_power_saving',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -329,7 +332,7 @@ describe('Agent Tools control registry', () => {
          * aggiunto qualcosa».
          */
         expect(digestOf(controlPlane))
-            .toBe('ce08ba4cc7b869337847889a60e2b8a921739953434f09fa4d4ec1a7c2607293')
+            .toBe('d410479e94ecfbbedc424d872d73773a73b8263ce928c03b6a9c3f8fdc1d31cf')
         /*
          * ⭐ Ri-fissato 2026-08-08 per i TRE tool delle NOTIFICHE:
          * `device_notifications_list`, `device_notification_reply`,
@@ -434,11 +437,19 @@ describe('Agent Tools control registry', () => {
          * **Dimostrato, non assunto**: il blocco «senza i nuovi» qui sopra
          * riproduce tutte e tre le impronte storiche byte per byte.
          */
+        /*
+         * ⭐ Ri-fissati 2026-08-09 anche per l'Ondata 1: `device_airplane` e
+         * `device_power_saving`. Due righe del censimento dove Gemini pretende
+         * di essere l'assistente predefinito del telefono, e noi no.
+         *
+         * **Dimostrato, non assunto**: il blocco «senza i nuovi» qui sopra
+         * riproduce tutte e tre le impronte storiche byte per byte.
+         */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('a2460bed364b513e463a1b63b576b736bd9e4c0f3832c9057e9b359f633db9e2')
+            .toBe('a82f87487d0da2f2647df3772a2a574b53802b6498136d16a766979ce13c1baf')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('f12213de31ab1124b04e142884f8c672c1d61d8a3e8ebf19194b2a24ed5c0ed0')
+            .toBe('acac29abb192dc3a60a9be4342237cdd2e92b58180db9fb429e2b50b70be6a42')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('04ef50ccac3218e2404ef6000ea204ef287de2e3736ab8a9e33db89f71204882')
+            .toBe('2f8c1fb9435e9c58b70856b5a723ca59fa23153c56ac9560c6546446865170c1')
     })
 })

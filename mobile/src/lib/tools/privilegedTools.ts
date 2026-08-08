@@ -29,6 +29,8 @@ export interface TalosPrivilegedToolSources {
     wifi(on: boolean): Promise<Esito>
     bluetooth(on: boolean): Promise<Esito>
     doNotDisturb(mode: string): Promise<Esito>
+    airplane(on: boolean): Promise<Esito>
+    powerSaving(on: boolean): Promise<Esito>
     systemSetting(name: string, value?: string): Promise<Esito & { value?: string }>
     appUsage(days: number): Promise<Esito>
     listApps(): Promise<Esito>
@@ -99,6 +101,36 @@ export function createTalosPrivilegedTools(
             async run(input) {
                 const r = await sources.bluetooth(input.on)
                 return esitoDi(sources, r, input.on ? 'Bluetooth on.' : 'Bluetooth off.')
+            },
+        }) as TalosToolDefinition<never>,
+
+        defineTalosTool({
+            name: 'device_airplane',
+            action: 'write',
+            title: 'Turn airplane mode on or off',
+            description: [
+                'Turn airplane mode on or off.',
+                'IMPORTANT: turning it ON cuts the phone off the network, which also cuts',
+                'the privileged bridge TALOS uses. The switch itself works, but after that',
+                'anything needing the bridge will report it is not connected — say this',
+                'before doing it, and do not promise to turn it back off yourself.',
+            ].join(' '),
+            input: z.object({ on: z.boolean() }),
+            async run(input) {
+                const r = await sources.airplane(input.on)
+                return esitoDi(sources, r, input.on ? 'Airplane mode on.' : 'Airplane mode off.')
+            },
+        }) as TalosToolDefinition<never>,
+
+        defineTalosTool({
+            name: 'device_power_saving',
+            action: 'write',
+            title: 'Turn battery saver on or off',
+            description: 'Turn the phone battery saver on or off. Send on:false to turn it off.',
+            input: z.object({ on: z.boolean() }),
+            async run(input) {
+                const r = await sources.powerSaving(input.on)
+                return esitoDi(sources, r, input.on ? 'Battery saver on.' : 'Battery saver off.')
             },
         }) as TalosToolDefinition<never>,
 

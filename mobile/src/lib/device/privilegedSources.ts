@@ -75,6 +75,44 @@ export function createTalosPrivilegedSources(): TalosPrivilegedToolSources | nul
                 : { done: false, via: 'none', reason: r.reason }
         },
 
+        /**
+         * ⭐ Aereo e risparmio energetico: due righe del censimento (#34) dove
+         * Gemini pretende di essere **l'assistente predefinito del telefono**.
+         * Noi le facciamo dal ponte, da app qualunque.
+         *
+         * MISURATO sul Pad il 2026-08-09: `airplane_mode_on` 0 → 1 → 0, e per il
+         * risparmio energetico non solo la riga ma il sistema che la recepisce —
+         * `mSettingBatterySaverEnabled=true` in `dumpsys power`.
+         *
+         * ⛔ E la MODALITÀ AEREO SPEGNE IL PONTE. Il ponte parla col telefono
+         * sulla rete locale: accendere l'aereo taglia il ramo su cui si è
+         * seduti. Il comando parte e riesce — l'abbiamo misurato — ma la
+         * connessione dopo cade, e la prossima cosa che TALOS chiede troverà il
+         * ponte spento. Non è un difetto da correggere qui: è un fatto che la
+         * descrizione dello strumento deve dire al modello.
+         */
+        async airplane(on) {
+            const r = await talosRunAsShell(['cmd', 'connectivity', 'airplane-mode', on ? 'enable' : 'disable'])
+            if (r.ok) return { done: true, via: 'shell' }
+            const aperto = await apriPannello('android.settings.AIRPLANE_MODE_SETTINGS')
+            return aperto
+                ? { done: true, via: 'panel', reason: r.reason }
+                : { done: false, via: 'none', reason: r.reason }
+        },
+
+        async powerSaving(on) {
+            // ⛔ `settings put global low_power` e non `cmd power set-mode`: il
+            // secondo esiste ma su questa ROM non e' quello che l'interruttore
+            // delle impostazioni guarda. Misurato: con `low_power` a 1,
+            // `dumpsys power` riporta `mSettingBatterySaverEnabled=true`.
+            const r = await talosRunAsShell(['settings', 'put', 'global', 'low_power', on ? '1' : '0'])
+            if (r.ok) return { done: true, via: 'shell' }
+            const aperto = await apriPannello('android.settings.BATTERY_SAVER_SETTINGS')
+            return aperto
+                ? { done: true, via: 'panel', reason: r.reason }
+                : { done: false, via: 'none', reason: r.reason }
+        },
+
         async doNotDisturb(mode) {
             const r = await talosRunAsShell(['cmd', 'notification', 'set_dnd', mode])
             if (r.ok) return { done: true, via: 'shell' }
