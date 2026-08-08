@@ -35,9 +35,35 @@
  * più lungo: nove caratteri, cioè niente.
  */
 
-/** I due marcatori, e nient'altro: si riconosce ciò che il nostro ponte emette. */
+/** I marcatori del ragionamento: quello che va nel cassetto. */
 const APERTURA = '<think>'
 const CHIUSURA = '</think>'
+
+/**
+ * ⛔ E la chiamata a un tool scritta come TESTO, che invece si butta.
+ *
+ * ## Perché serve
+ *
+ * VISTO sul Pad il 2026-08-08 con Qwen3-1.7B: dopo che il tool era già stato
+ * eseguito, nella bolla comparivano cinque righe di
+ * `<tool_call> {"name": "device_torch", "arguments": {"on": true}} </tool_call>`.
+ * È la stessa causa delle esecuzioni ripetute — la grammatica pigra non si
+ * carica, quindi il modello riscrive la chiamata come testo libero — ma il
+ * rimedio qui è diverso: quel testo non è ragionamento e non è una risposta.
+ * È sintassi interna, e a schermo non ci va mai.
+ *
+ * ## Perché si BUTTA e non si instrada
+ *
+ * Il ragionamento ha un posto dove andare, il cassetto. Una chiamata già
+ * eseguita non ha niente da aggiungere a nessuno dei due: il suo effetto è
+ * altrove e il suo esito arriva per la sua strada. Mostrarla vorrebbe dire far
+ * leggere alla persona il verso interno di una cosa già successa.
+ *
+ * Se il blocco resta aperto — generazione troncata a metà chiamata — si butta
+ * anche la coda: mezza JSON a schermo è peggio di niente.
+ */
+const TOOL_APERTURA = '<tool_call>'
+const TOOL_CHIUSURA = '</tool_call>'
 
 export interface TalosThinkSlice {
     /** Ciò che va nella bolla della risposta. */
@@ -74,7 +100,13 @@ function codaAmbigua(testo: string, marcatore: string): number {
 }
 
 export function talosCreateThinkSplitter(): TalosThinkSplitter {
-    let dentro = false
+    /**
+     * Tre stati e non un booleano, da quando i marcatori sono due paia:
+     * `testo` cerca l'una o l'altra apertura, `ragionamento` e `chiamata`
+     * cercano la propria chiusura. Un booleano non saprebbe DA COSA sta
+     * uscendo, e uscirebbe dalla cosa sbagliata.
+     */
+    let stato: 'testo' | 'ragionamento' | 'chiamata' = 'testo'
     let sospeso = ''
 
     function consuma(chiudendo: boolean): TalosThinkSlice {
@@ -82,24 +114,50 @@ export function talosCreateThinkSplitter(): TalosThinkSplitter {
         let reasoning = ''
 
         for (;;) {
-            const marcatore = dentro ? CHIUSURA : APERTURA
-            const at = sospeso.indexOf(marcatore)
+            if (stato === 'testo') {
+                const dovePensiero = sospeso.indexOf(APERTURA)
+                const doveChiamata = sospeso.indexOf(TOOL_APERTURA)
+                // La PRIMA delle due, non una preferita: l'ordine lo decide il
+                // testo, non noi.
+                const primo = dovePensiero < 0 ? doveChiamata
+                    : doveChiamata < 0 ? dovePensiero
+                        : Math.min(dovePensiero, doveChiamata)
+                if (primo >= 0) {
+                    text += sospeso.slice(0, primo)
+                    const pensiero = primo === dovePensiero
+                    sospeso = sospeso.slice(primo + (pensiero ? APERTURA : TOOL_APERTURA).length)
+                    stato = pensiero ? 'ragionamento' : 'chiamata'
+                    continue
+                }
+                /*
+                 * Nessuna apertura intera: si emette tutto tranne la coda che
+                 * potrebbe esserne l'inizio. Si trattiene la PIU' LUNGA delle
+                 * due code possibili, altrimenti `«…ecco <tool_c»` uscirebbe a
+                 * schermo perche' non e' un prefisso di `<think>`.
+                 */
+                const trattenuti = chiudendo ? 0 : Math.max(
+                    codaAmbigua(sospeso, APERTURA),
+                    codaAmbigua(sospeso, TOOL_APERTURA),
+                )
+                text += sospeso.slice(0, sospeso.length - trattenuti)
+                sospeso = sospeso.slice(sospeso.length - trattenuti)
+                return { text, reasoning }
+            }
+
+            const chiusura = stato === 'ragionamento' ? CHIUSURA : TOOL_CHIUSURA
+            const at = sospeso.indexOf(chiusura)
             if (at >= 0) {
-                const prima = sospeso.slice(0, at)
-                if (dentro) reasoning += prima
-                else text += prima
-                sospeso = sospeso.slice(at + marcatore.length)
-                dentro = !dentro
+                // ⛔ Il contenuto della chiamata non va da nessuna parte.
+                if (stato === 'ragionamento') reasoning += sospeso.slice(0, at)
+                sospeso = sospeso.slice(at + chiusura.length)
+                stato = 'testo'
                 continue
             }
 
-            // Nessun marcatore intero: si emette tutto tranne la coda che
-            // potrebbe esserne l'inizio — a meno che lo stream sia finito, e
-            // allora quella coda è testo e basta.
-            const trattenuti = chiudendo ? 0 : codaAmbigua(sospeso, marcatore)
-            const emettibile = sospeso.slice(0, sospeso.length - trattenuti)
-            if (dentro) reasoning += emettibile
-            else text += emettibile
+            const trattenuti = chiudendo ? 0 : codaAmbigua(sospeso, chiusura)
+            if (stato === 'ragionamento') {
+                reasoning += sospeso.slice(0, sospeso.length - trattenuti)
+            }
             sospeso = sospeso.slice(sospeso.length - trattenuti)
             return { text, reasoning }
         }
