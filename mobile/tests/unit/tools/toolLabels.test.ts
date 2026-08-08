@@ -3,7 +3,7 @@ import {
     TALOS_TOOL_ICONS,
     TALOS_TOOL_LABELS,
     TALOS_TOOL_LABEL_KEYS,
-    TALOS_TOOL_CONSENT_KEYS,
+    talosToolConsentKeys,
     talosToolConsentCopy,
     talosToolIconName,
     talosToolActivityDetail,
@@ -70,10 +70,46 @@ describe('tool activity labels', () => {
         expect(missing, `no icon for: ${missing.join(', ')}`).toEqual([])
     })
 
-    it('TOOL-CONSENT-I18N-01 every offered tool owns localized consent keys', () => {
-        const missing = everyToolName().filter((name) => !(name in TALOS_TOOL_CONSENT_KEYS))
+    it('TOOL-CONSENT-I18N-01 le chiavi si DERIVANO dal nome, senza eccezioni', () => {
+        /*
+         * ⛔ Questa non e' piu' la guardia importante, e va detto perche'.
+         *
+         * Prima esisteva una tabella di 58 righe e questo test cercava le righe
+         * mancanti. La tabella non c'e' piu': 57 voci su 58 seguivano la stessa
+         * regola, e la 58esima (`device_do_not_disturb` → `deviceDnd`) era una
+         * svista. Adesso la chiave esiste sempre, quindi «manca la riga» non e'
+         * piu' un difetto possibile.
+         *
+         * ⇒ La guardia vera e' quella sotto, sul DIZIONARIO. Questa resta a
+         * fissare la convenzione: se qualcuno cambiasse la derivazione, ogni
+         * chiave del progetto cambierebbe in silenzio.
+         */
+        expect(talosToolConsentKeys('library_list')).toEqual({
+            title: 'toolConsent.libraryList.title',
+            description: 'toolConsent.libraryList.description',
+        })
+        expect(talosToolConsentKeys('device_do_not_disturb').title)
+            .toBe('toolConsent.deviceDoNotDisturb.title')
+        // Un nome di una parola sola resta identico a se stesso.
+        expect(talosToolConsentKeys('think').title).toBe('toolConsent.think.title')
+    })
 
-        expect(missing, `no consent copy for: ${missing.join(', ')}`).toEqual([])
+    it('⛔ e una chiave SENZA frase non arriva mai a schermo', () => {
+        /*
+         * Il rischio si e' spostato con la tabella. Prima un tool senza riga
+         * cadeva nel ripiego; adesso la chiave c'e' sempre, e senza questo
+         * controllo la scheda mostrerebbe `toolConsent.fooBar.title` — che e'
+         * PEGGIO del nome interno, perche' quello almeno era una parola.
+         *
+         * Il traduttore di prova restituisce la chiave quando non la trova: e'
+         * esattamente la condizione che il codice deve riconoscere.
+         */
+        const copia = talosToolConsentCopy(
+            { name: 'attrezzo_inventato', title: 'attrezzo_inventato', description: 'x' },
+            talosTestT('it'),
+        )
+        expect(copia.title).not.toContain('toolConsent.')
+        expect(copia.title).not.toBe('attrezzo_inventato')
     })
 
     it('EVERY tool has a localized activity key too', () => {
@@ -96,8 +132,8 @@ describe('tool activity labels', () => {
             const t = talosTestT(locale)
             for (const nome of everyToolName()) {
                 const chiavi = [
-                    TALOS_TOOL_CONSENT_KEYS[nome]?.title,
-                    TALOS_TOOL_CONSENT_KEYS[nome]?.description,
+                    talosToolConsentKeys(nome).title,
+                    talosToolConsentKeys(nome).description,
                     TALOS_TOOL_LABEL_KEYS[nome],
                 ]
                 for (const chiave of chiavi) {

@@ -140,212 +140,49 @@ export interface TalosToolConsentCopy {
     description: string
 }
 
-export const TALOS_TOOL_CONSENT_KEYS: Record<string, TalosToolConsentCopy> = {
-    library_list: {
-        title: 'toolConsent.libraryList.title',
-        description: 'toolConsent.libraryList.description',
-    },
-    library_search: {
-        title: 'toolConsent.librarySearch.title',
-        description: 'toolConsent.librarySearch.description',
-    },
-    library_read: {
-        title: 'toolConsent.libraryRead.title',
-        description: 'toolConsent.libraryRead.description',
-    },
-    library_file_origin: {
-        title: 'toolConsent.libraryFileOrigin.title',
-        description: 'toolConsent.libraryFileOrigin.description',
-    },
-    notes_list: {
-        title: 'toolConsent.notesList.title',
-        description: 'toolConsent.notesList.description',
-    },
-    notes_create: {
-        title: 'toolConsent.notesCreate.title',
-        description: 'toolConsent.notesCreate.description',
-    },
-    notes_update: {
-        title: 'toolConsent.notesUpdate.title',
-        description: 'toolConsent.notesUpdate.description',
-    },
-    notes_delete: {
-        title: 'toolConsent.notesDelete.title',
-        description: 'toolConsent.notesDelete.description',
-    },
-    tasks_create: {
-        title: 'toolConsent.tasksCreate.title',
-        description: 'toolConsent.tasksCreate.description',
-    },
-    tasks_complete: {
-        title: 'toolConsent.tasksComplete.title',
-        description: 'toolConsent.tasksComplete.description',
-    },
-    tasks_update: {
-        title: 'toolConsent.tasksUpdate.title',
-        description: 'toolConsent.tasksUpdate.description',
-    },
-    tasks_delete: {
-        title: 'toolConsent.tasksDelete.title',
-        description: 'toolConsent.tasksDelete.description',
-    },
-    tasks_list: {
-        title: 'toolConsent.tasksList.title',
-        description: 'toolConsent.tasksList.description',
-    },
-    memory_write: {
-        title: 'toolConsent.memoryWrite.title',
-        description: 'toolConsent.memoryWrite.description',
-    },
-    memory_update: {
-        title: 'toolConsent.memoryUpdate.title',
-        description: 'toolConsent.memoryUpdate.description',
-    },
-    memory_delete: {
-        title: 'toolConsent.memoryDelete.title',
-        description: 'toolConsent.memoryDelete.description',
-    },
-    library_rename: {
-        title: 'toolConsent.libraryRename.title',
-        description: 'toolConsent.libraryRename.description',
-    },
-    library_delete: {
-        title: 'toolConsent.libraryDelete.title',
-        description: 'toolConsent.libraryDelete.description',
-    },
-    memory_search: {
-        title: 'toolConsent.memorySearch.title',
-        description: 'toolConsent.memorySearch.description',
-    },
-    time_now: {
-        title: 'toolConsent.timeNow.title',
-        description: 'toolConsent.timeNow.description',
-    },
-    web_search: {
-        title: 'toolConsent.webSearch.title',
-        description: 'toolConsent.webSearch.description',
-    },
-    web_read: {
-        title: 'toolConsent.webRead.title',
-        description: 'toolConsent.webRead.description',
-    },
-    document_create: {
-        title: 'toolConsent.documentCreate.title',
-        description: 'toolConsent.documentCreate.description',
-    },
-    generate_image: {
-        title: 'toolConsent.generateImage.title',
-        description: 'toolConsent.generateImage.description',
-    },
-    library_export: {
-        title: 'toolConsent.libraryExport.title',
-        description: 'toolConsent.libraryExport.description',
-    },
-    library_context_policy_update: {
-        title: 'toolConsent.libraryContextPolicyUpdate.title',
-        description: 'toolConsent.libraryContextPolicyUpdate.description',
-    },
-    research_list: {
-        title: 'toolConsent.researchList.title',
-        description: 'toolConsent.researchList.description',
-    },
-    research_start: {
-        title: 'toolConsent.researchStart.title',
-        description: 'toolConsent.researchStart.description',
-    },
-    research_read: {
-        title: 'toolConsent.researchRead.title',
-        description: 'toolConsent.researchRead.description',
-    },
-    research_rename: {
-        title: 'toolConsent.researchRename.title',
-        description: 'toolConsent.researchRename.description',
-    },
-    research_pause: {
-        title: 'toolConsent.researchPause.title',
-        description: 'toolConsent.researchPause.description',
-    },
-    research_resume: {
-        title: 'toolConsent.researchResume.title',
-        description: 'toolConsent.researchResume.description',
-    },
-    research_cancel: {
-        title: 'toolConsent.researchCancel.title',
-        description: 'toolConsent.researchCancel.description',
-    },
-    research_delete: {
-        title: 'toolConsent.researchDelete.title',
-        description: 'toolConsent.researchDelete.description',
-    },
-    device_status: {
-        title: 'toolConsent.deviceStatus.title',
-        description: 'toolConsent.deviceStatus.description',
-    },
-    device_torch: {
-        title: 'toolConsent.deviceTorch.title',
-        description: 'toolConsent.deviceTorch.description',
-    },
-    device_vibrate: {
-        title: 'toolConsent.deviceVibrate.title',
-        description: 'toolConsent.deviceVibrate.description',
-    },
-    device_volume: {
-        title: 'toolConsent.deviceVolume.title',
-        description: 'toolConsent.deviceVolume.description',
-    },
-    device_alarm: {
-        title: 'toolConsent.deviceAlarm.title',
-        description: 'toolConsent.deviceAlarm.description',
-    },
-    device_open_app: {
-        title: 'toolConsent.deviceOpenApp.title',
-        description: 'toolConsent.deviceOpenApp.description',
-    },
-    device_open_settings: {
-        title: 'toolConsent.deviceOpenSettings.title',
-        description: 'toolConsent.deviceOpenSettings.description',
-    },
-    device_compose: {
-        title: 'toolConsent.deviceCompose.title',
-        description: 'toolConsent.deviceCompose.description',
-    },
-    device_speak: {
-        title: 'toolConsent.deviceSpeak.title',
-        description: 'toolConsent.deviceSpeak.description',
-    },
-    device_wallpaper: {
-        title: 'toolConsent.deviceWallpaper.title',
-        description: 'toolConsent.deviceWallpaper.description',
-    },
-    device_keep_awake: {
-        title: 'toolConsent.deviceKeepAwake.title',
-        description: 'toolConsent.deviceKeepAwake.description',
-    },
-    device_wifi: { title: 'toolConsent.deviceWifi.title', description: 'toolConsent.deviceWifi.description' },
-    device_bluetooth: { title: 'toolConsent.deviceBluetooth.title', description: 'toolConsent.deviceBluetooth.description' },
-    device_do_not_disturb: { title: 'toolConsent.deviceDnd.title', description: 'toolConsent.deviceDnd.description' },
-    device_system_setting: { title: 'toolConsent.deviceSystemSetting.title', description: 'toolConsent.deviceSystemSetting.description' },
-    device_app_usage: { title: 'toolConsent.deviceAppUsage.title', description: 'toolConsent.deviceAppUsage.description' },
-    device_list_apps: { title: 'toolConsent.deviceListApps.title', description: 'toolConsent.deviceListApps.description' },
-    device_notifications_list: { title: 'toolConsent.deviceNotificationsList.title', description: 'toolConsent.deviceNotificationsList.description' },
-    device_notification_reply: { title: 'toolConsent.deviceNotificationReply.title', description: 'toolConsent.deviceNotificationReply.description' },
-    device_notification_dismiss: { title: 'toolConsent.deviceNotificationDismiss.title', description: 'toolConsent.deviceNotificationDismiss.description' },
-    local_models_search: {
-        title: 'toolConsent.localModelsSearch.title',
-        description: 'toolConsent.localModelsSearch.description',
-    },
-    local_model_inspect: {
-        title: 'toolConsent.localModelInspect.title',
-        description: 'toolConsent.localModelInspect.description',
-    },
-    local_model_download: {
-        title: 'toolConsent.localModelDownload.title',
-        description: 'toolConsent.localModelDownload.description',
-    },
-    local_models_status: {
-        title: 'toolConsent.localModelsStatus.title',
-        description: 'toolConsent.localModelsStatus.description',
-    },
+/**
+ * ⛔⛔ LE CHIAVI SI DERIVANO, NON SI SCRIVONO A MANO.
+ *
+ * ## Cosa c'era qui, e perché non c'è più
+ *
+ * Una tabella di 58 righe che diceva `library_list` →
+ * `toolConsent.libraryList.title`. Misurate tutte e 58 il 2026-08-08: **57
+ * seguivano la stessa regola** e una sola deviava (`device_do_not_disturb`
+ * puntava a `deviceDnd`), per una svista di chi l'aveva scritta. Allineata
+ * quella, la tabella non diceva più niente che il nome del tool non dicesse
+ * già — ed è la definizione di un fatto scritto a mano.
+ *
+ * Toglierla vale due cose:
+ *
+ * 1. **Un tool nuovo non può più dimenticare la sua riga.** Era il difetto che
+ *    la guardia `TOOL-CONSENT-I18N-01` inseguiva; adesso non esiste il posto
+ *    dove dimenticarsela.
+ * 2. **Esce dal primo blocco.** Erano 212 righe caricate all'avvio per una
+ *    schermata che compare solo quando qualcuno chiede un permesso.
+ *
+ * ## ⛔ E il rischio si sposta, quindi si sposta anche la guardia
+ *
+ * Prima, un tool senza riga finiva nel ripiego e vedeva una frase generica.
+ * Adesso la chiave esiste **sempre** — e se il dizionario non la conosce, a
+ * schermo comparirebbe `toolConsent.fooBar.title`, che è **peggio** del nome
+ * interno: quello almeno era una parola.
+ *
+ * Per questo `talosToolConsentCopy` non si fida della chiave: controlla che la
+ * traduzione sia diversa dalla chiave. È lo stesso criterio che usava il test,
+ * portato dentro il codice — dove protegge anche a runtime, e non solo quando
+ * qualcuno ricorda di lanciare i test.
+ */
+export function talosToolConsentKeys(name: string): TalosToolConsentCopy {
+    const camel = name
+        .split('_')
+        .map((parte, indice) => (indice === 0
+            ? parte
+            : parte.charAt(0).toUpperCase() + parte.slice(1)))
+        .join('')
+    return {
+        title: `toolConsent.${camel}.title`,
+        description: `toolConsent.${camel}.description`,
+    }
 }
 
 /**
@@ -357,8 +194,16 @@ export function talosToolConsentCopy(
     tool: { name?: string; title: string; description: string },
     translate: TalosTranslate,
 ): TalosToolConsentCopy {
-    const keys = tool.name ? TALOS_TOOL_CONSENT_KEYS[tool.name] : undefined
-    if (!keys) {
+    const keys = tool.name ? talosToolConsentKeys(tool.name) : undefined
+    /*
+     * ⛔ Una chiave che torna se stessa NON è una traduzione: è una frase che
+     * manca nel dizionario. Il traduttore, quando non trova, restituisce la
+     * chiave — e mostrarla vorrebbe dire scrivere `toolConsent.fooBar.title`
+     * sulla schermata dove una persona decide se fidarsi.
+     */
+    const titolo = keys ? translate(keys.title) : ''
+    const tradotto = keys !== undefined && titolo !== keys.title && titolo.trim() !== ''
+    if (!tradotto) {
         /*
          * ⛔ UN NOME INTERNO NON COMPARE MAI IN UNA RICHIESTA DI PERMESSO.
          *
@@ -391,9 +236,14 @@ export function talosToolConsentCopy(
         }
         return { title: tool.title, description: tool.description }
     }
+    const descrizione = translate(keys.description)
     return {
-        title: translate(keys.title),
-        description: translate(keys.description),
+        title: titolo,
+        // Anche la descrizione può mancare da sola: allora si tiene quella che
+        // il tool porta con sé, che è in inglese ma è una frase vera.
+        description: descrizione !== keys.description && descrizione.trim() !== ''
+            ? descrizione
+            : tool.description,
     }
 }
 

@@ -1159,7 +1159,7 @@ export const TALOS_IT_MESSAGES = {
             title: 'Accendi o spegni il Bluetooth',
             description: 'Come il Wi-Fi. Spegnerlo scollega auricolari e orologio.',
         },
-        deviceDnd: {
+        deviceDoNotDisturb: {
             title: 'Metti o togli il Non disturbare',
             description: '⛔ Il silenzio totale nasconde anche sveglie e chiamate. TALOS preferisce «solo le cose importanti», che e’ quasi sempre quello che serve.',
         },
