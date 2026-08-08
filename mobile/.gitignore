@@ -14,3 +14,6 @@ node_modules/
 .env.local
 .env.*.local
 tests/e2e/.auth/
+
+# Gli scatti del telecomando: prove, non sorgenti.
+*.png
