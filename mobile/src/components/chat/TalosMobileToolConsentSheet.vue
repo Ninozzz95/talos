@@ -63,6 +63,28 @@ const rendered = computed(() => {
     if (value.length <= MAX_RENDERED_ARGUMENTS) return value
     return `${value.slice(0, MAX_RENDERED_ARGUMENTS)}\n…`
 })
+
+/**
+ * ⛔ UN RIQUADRO CON DENTRO `{}` NON È INFORMAZIONE: È SINTASSI.
+ *
+ * Visto sul Pad il 2026-08-09 mentre si provava «leggi le notifiche»: lo
+ * strumento non prende argomenti, e la scheda mostrava comunque il suo riquadro
+ * grigio con dentro due parentesi graffe. A chi deve decidere se dare un
+ * permesso, quelle due graffe non dicono niente — e peggio, sembrano un guasto.
+ *
+ * È la stessa famiglia del difetto #23, il nome interno di un tool mostrato al
+ * posto di una frase: sintassi nostra finita davanti a una persona.
+ *
+ * ⇒ Senza argomenti il riquadro non c'è. La scheda resta titolo, spiegazione e
+ * scelte, che è tutto ciò che serve a dire sì o no.
+ */
+const haArgomenti = computed(() => {
+    const dato = props.input
+    if (dato === null || dato === undefined) return false
+    if (Array.isArray(dato)) return dato.length > 0
+    if (typeof dato === 'object') return Object.keys(dato as object).length > 0
+    return String(dato).trim() !== ''
+})
 </script>
 
 <template>
@@ -144,6 +166,7 @@ const rendered = computed(() => {
             </div>
 
             <pre
+                v-if="haArgomenti"
                 data-testid="talos-tool-consent-input"
                 class="mt-3 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-2 text-2xs leading-4 text-[var(--talos-muted)]"
             >{{ rendered }}</pre>

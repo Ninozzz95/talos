@@ -48,7 +48,7 @@ class TalosNotificationListener : NotificationListenerService() {
         vivo = false
         // Scollegati: le azioni catturate non valgono piu' niente, e tenerle
         // sarebbe custodire riferimenti a conversazioni che non guardiamo piu'.
-        synchronized(azioniCatturate) { azioniCatturate.clear() }
+        maniglie.svuota()
         super.onListenerDisconnected()
     }
 
@@ -79,22 +79,19 @@ class TalosNotificationListener : NotificationListenerService() {
         private var istanza: TalosNotificationListener? = null
 
         /**
-         * Le azioni di risposta catturate al momento della lettura.
+         * Le maniglie date al modello, con l'azione catturata alla lettura.
          *
          * ⛔ Volatile e limitato: NON e' un archivio di cio' che passa sul
          * telefono. Si svuota quando il sistema ci scollega e quando supera il
          * tetto — tenere di piu' vorrebbe dire custodire i `PendingIntent` di
          * conversazioni che nessuno riaprira'.
+         *
+         * ⛔⛔ La risoluzione maniglia → chiave vera vive TUTTA in
+         * `TalosManiglieNotifiche`, e non qui, per il motivo scritto in quel
+         * file: scritta due volte, una delle due sbagliava e diceva di aver
+         * fatto.
          */
-        private val azioniCatturate = LinkedHashMap<String, Presa>()
-        private const val TETTO_AZIONI = 60
-        private var contatoreManiglie = 0
-
-        /** Cio' che serve per rispondere, tenuto insieme. */
-        private data class Presa(
-            val chiaveVera: String,
-            val azione: Notification.Action?,
-        )
+        private val maniglie = TalosManiglieNotifiche<Notification.Action>()
     }
 
     override fun onCreate() {
@@ -152,17 +149,9 @@ class TalosNotificationListener : NotificationListenerService() {
          * svuota quando il sistema ci scollega. Non e' un archivio di cio' che
          * passa sul telefono — quello non lo teniamo, per scelta.
          */
-        val maniglie = HashMap<String, String>()
-        synchronized(azioniCatturate) {
-            if (azioniCatturate.size > TETTO_AZIONI) azioniCatturate.clear()
-            for (sbn in scelte) {
-                val maniglia = "n" + (++contatoreManiglie)
-                maniglie[sbn.key] = maniglia
-                azioniCatturate[maniglia] = Presa(sbn.key, azioneDiRisposta(sbn))
-            }
+        return scelte.map { sbn ->
+            descrivi(sbn, maniglie.registra(sbn.key, azioneDiRisposta(sbn)))
         }
-
-        return scelte.map { sbn -> descrivi(sbn, maniglie[sbn.key] ?: sbn.key) }
     }
 
     /**
@@ -313,26 +302,25 @@ class TalosNotificationListener : NotificationListenerService() {
     }
 
     /** Risponde a una notifica. Torna `null` se è andata, o il motivo se no. */
-    fun rispondi(chiave: String, testo: String): String? {
+    fun rispondi(maniglia: String, testo: String): String? {
         val attive = runCatching { activeNotifications }.getOrNull()
             ?: return "listener-not-connected"
         /*
          * ⭐ La maniglia data alla lettura, che porta con se' l'azione gia'
          * catturata: e' quella che non invecchia.
          */
-        val presa = synchronized(azioniCatturate) { azioniCatturate[chiave] }
-        val chiaveVera = presa?.chiaveVera ?: chiave
+        val voce = maniglie.voce(maniglia)
+        val chiaveVera = maniglie.chiaveVera(maniglia)
 
-        val azione = presa?.azione
+        val azione = voce?.azione
             // Ricaduta per chi risponde senza aver elencato: si cerca ancora,
             // ma e' il percorso fragile ed e' solo una cortesia.
             ?: stessaConversazione(attive, chiaveVera)?.let { azioneDiRisposta(it) }
-            ?: return if (presa == null && stessaConversazione(attive, chiaveVera) == null) {
+            ?: return if (voce == null && stessaConversazione(attive, chiaveVera) == null) {
                 "notification-gone"
             } else {
                 "no-reply-field"
             }
-        val sbn = stessaConversazione(attive, chiaveVera)
         val campi = azione.remoteInputs ?: return "no-reply-field"
 
         return runCatching {
@@ -359,18 +347,32 @@ class TalosNotificationListener : NotificationListenerService() {
         }
     }
 
-    /** Toglie una notifica dalla tendina. Solo quelle che il sistema permette. */
-    fun scarta(chiave: String): String? {
+    /**
+     * Toglie una notifica dalla tendina. Solo quelle che il sistema permette.
+     *
+     * ⛔⛔ IL PARAMETRO SI CHIAMA `maniglia`, E NON È PEDANTERIA.
+     *
+     * Riprodotto sul Pad il 2026-08-09 alle 00:03: qui c'era
+     * `cancelNotification(chiave)` con dentro la maniglia `n7`, mentre la chiave
+     * vera era già stata risolta due righe sopra e poi non usata. Il sistema, a
+     * cui arriva una chiave che non conosce, **non fa niente e non fallisce** —
+     * `cancelNotification` torna `void`. TALOS ha detto «Fatto ✅ Rimossa la
+     * notifica» mentre `cmd notification list` la mostrava ancora lì.
+     *
+     * Col parametro chiamato `maniglia`, scrivere `cancelNotification(maniglia)`
+     * si legge sbagliato prima ancora di essere eseguito. È l'unica difesa che
+     * funziona contro una svista, perché una svista non la ferma un commento.
+     */
+    fun scarta(maniglia: String): String? {
         val attive = runCatching { activeNotifications }.getOrNull()
             ?: return "listener-not-connected"
-        // La stessa maniglia dell'elenco: il modello non maneggia chiavi vere.
-        val vera = synchronized(azioniCatturate) { azioniCatturate[chiave]?.chiaveVera } ?: chiave
+        val vera = maniglie.chiaveVera(maniglia)
         val sbn = attive.firstOrNull { it.key == vera } ?: return "notification-gone"
         // ⛔ Una notifica non scartabile è quella di un servizio in primo piano:
         // toglierla vorrebbe dire nascondere che qualcosa sta girando.
         if (!sbn.isClearable) return "not-clearable"
         return runCatching {
-            cancelNotification(chiave)
+            cancelNotification(vera)
             null
         }.getOrElse { "dismiss-failed" }
     }

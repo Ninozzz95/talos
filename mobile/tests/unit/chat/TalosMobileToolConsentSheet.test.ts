@@ -19,6 +19,61 @@ function mountCard(allowPersistent = true) {
     })
 }
 
+function mountSenzaArgomenti(input: unknown) {
+    return mount(TalosMobileToolConsentSheet, {
+        props: {
+            title: 'Leggi le notifiche a schermo',
+            description: 'Legge titolo e testo delle notifiche in corso.',
+            input,
+            actions: ['read'] as const,
+            sessionTitle: 'Nuova chat',
+            pendingCount: 1,
+            allowPersistent: true,
+        },
+        global: { stubs: { Teleport: true } },
+    })
+}
+
+/**
+ * ⛔ Visto sul Pad il 2026-08-09 provando «elenca le notifiche»: lo strumento non
+ * prende argomenti, e la scheda mostrava lo stesso il riquadro grigio con dentro
+ * `{}`. Due parentesi graffe non aiutano a decidere se dare un permesso — e
+ * sembrano un guasto.
+ *
+ * Il test non chiede «il riquadro esiste». Chiede che la persona NON veda mai la
+ * nostra sintassi: cerca le graffe nel testo a schermo.
+ */
+describe('⛔ la scheda non mostra mai sintassi al posto di informazione', () => {
+    it('senza argomenti il riquadro non c’e’, e `{}` non compare a schermo', () => {
+        const wrapper = mountSenzaArgomenti({})
+        expect(wrapper.find('[data-testid="talos-tool-consent-input"]').exists()).toBe(false)
+        expect(wrapper.text()).not.toContain('{}')
+        // ⛔ E cio' che serve a decidere resta tutto.
+        expect(wrapper.text()).toContain('Leggi le notifiche a schermo')
+        expect(wrapper.text()).toContain('Legge titolo e testo delle notifiche in corso.')
+        wrapper.unmount()
+    })
+
+    it('e nemmeno quando gli argomenti non arrivano affatto', () => {
+        for (const vuoto of [undefined, null, {}, []]) {
+            const wrapper = mountSenzaArgomenti(vuoto)
+            expect(
+                wrapper.find('[data-testid="talos-tool-consent-input"]').exists(),
+                `riquadro comparso per ${JSON.stringify(vuoto) ?? 'undefined'}`,
+            ).toBe(false)
+            wrapper.unmount()
+        }
+    })
+
+    it('ma con argomenti VERI il riquadro c’e’, perche’ li si deve poter leggere', () => {
+        const wrapper = mountSenzaArgomenti({ key: 'n7', text: 'ci sono' })
+        const riquadro = wrapper.get('[data-testid="talos-tool-consent-input"]')
+        expect(riquadro.text()).toContain('n7')
+        expect(riquadro.text()).toContain('ci sono')
+        wrapper.unmount()
+    })
+})
+
 describe('TalosMobileToolConsentSheet', () => {
     it('TOOL-AUTH-18 is a non-modal card without backdrop or focus trap', () => {
         const wrapper = mountCard()
