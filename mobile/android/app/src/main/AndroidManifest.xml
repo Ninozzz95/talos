@@ -391,9 +391,36 @@
     <!--
          La vibrazione: un permesso NORMALE, concesso all'installazione, e
          l'unica cosa della lista dell'owner («permessi, vibrazioni, WiFi»)
-         che non passa da Shizuku. Su ColorOS Shizuku non riesce nemmeno ad
-         autorizzarci, quindi e' la prima che TALOS puo' fare davvero.
+         che non passa da Shizuku — e quindi l'unica che funziona anche quando
+         Shizuku non è avviato. ⛔ La frase che stava qui, «su ColorOS Shizuku
+         non riesce nemmeno ad autorizzarci», era sbagliata: mancava la riga
+         `API_V23` qui sopra. Vedi il commento lì.
     -->
+    <!--
+         ⛔⛔ IL PERMESSO DI SHIZUKU, che mancava — e il difetto era NOSTRO.
+
+         ## Come si è visto, il 2026-08-08
+
+         Shizuku avviato da adb e vivo (server come uid 2000, provato). L'app
+         chiede l'autorizzazione, Shizuku risponde «Il permesso di adb è
+         limitato» con un solo OK, e la nostra schermata concludeva «il
+         produttore del telefono lo impedisce».
+
+         Era falso. `dumpsys package ai.talos.dev` elenca i permessi a runtime:
+         POST_NOTIFICATIONS, CAMERA, RECORD_AUDIO — e di `API_V23` **nessuna
+         traccia**. Non era negato: non esisteva. `Shizuku.requestPermission`
+         su API 23+ passa dal normale flusso dei permessi a runtime, e un
+         permesso non dichiarato nel manifest non si può chiedere.
+
+         ## ⛔ E la lezione che costa più della riga
+
+         Il commento qui sotto diceva «Su ColorOS Shizuku non riesce nemmeno ad
+         autorizzarci». L'avevo scritto io, da un'osservazione non strumentata, e
+         da lì era diventato un fatto in memoria e una decisione di progetto —
+         il livello privilegiato dato per perduto. Una riga mancante travestita
+         da limite del produttore.
+    -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Il volume dei flussi audio. Normale: nessun dialogo. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
