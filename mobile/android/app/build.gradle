@@ -130,6 +130,14 @@ android {
             version '3.31.6'
         }
     }
+    sourceSets {
+        main {
+            // ⛔ I binari del ponte NON stanno nella repo: ce li mette
+            // `preparaPonteAdb` scaricandoli e verificandoli. Vedi il compito
+            // sotto per il perche'.
+            jniLibs.srcDirs += ["${buildDir}/ponte/jniLibs"]
+        }
+    }
     packagingOptions {
         jniLibs {
             // Le librerie native vanno ESTRATTE all'installazione.
@@ -206,3 +214,183 @@ try {
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
+
+// ---------------------------------------------------------------------------
+// ⛔⛔ IL PONTE ADB: i binari NON stanno nella repo, si scaricano e si VERIFICANO
+// ---------------------------------------------------------------------------
+//
+// ## Perché non sono committati
+//
+// Sono 56 file, 10,4 MB, e nessuno di essi l'abbiamo scritto noi. Metterli
+// nella repo pubblica di TALOS significherebbe lasciarceli PER SEMPRE: la
+// storia di git non si cancella, si riscrive. Undici megabyte di binari altrui
+// dentro il progetto di una persona, per una scorciatoia che per contratto è
+// temporanea (compito #47), sono un prezzo che non vale la pena pagare.
+//
+// ## ⭐ E scaricandoli si guadagna la cosa che serviva davvero
+//
+// La verifica delle impronte smette di essere un rito fatto una volta da me e
+// diventa parte di OGNI compilazione. Se domani Termux ripubblica un pacchetto
+// diverso, il build si ferma qui — non se ne accorge nessuno sei mesi dopo.
+//
+// La fonte di verità è `src/main/jniLibs/PROVENIENZA.md`, che invece nella repo
+// c'è: è un documento leggibile da una persona, ed è lì che si passa per
+// cambiare qualcosa.
+import org.apache.commons.compress.archivers.ar.ArArchiveInputStream
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
+import java.security.MessageDigest
+
+static String improntaDi(byte[] dati) {
+    return MessageDigest.getInstance('SHA-256').digest(dati).encodeHex().toString()
+}
+
+tasks.register('preparaPonteAdb') {
+    description = 'Scarica e verifica i binari del ponte ADB dichiarati in PROVENIENZA.md'
+    def scheda = file('src/main/jniLibs/PROVENIENZA.md')
+    def fuori = file("${buildDir}/ponte/jniLibs/arm64-v8a")
+    // La cache sta FUORI da build/: un `clean` non deve costare un altro
+    // scaricamento di dieci megabyte.
+    def cache = new File(gradle.gradleUserHomeDir, 'talos-ponte-adb')
+
+    inputs.file scheda
+    outputs.dir fuori
+
+    doLast {
+        if (!scheda.exists()) {
+            throw new GradleException("Manca ${scheda}: senza la scheda di provenienza il ponte non si costruisce.")
+        }
+        def testo = scheda.getText('UTF-8')
+
+        // Le tre tabelle, riconosciute dal numero di colonne.
+        def attesi = [:]      // nome nell'APK -> [pacchetto, impronta]
+        def pacchetti = [:]   // pacchetto -> [url, impronta del .deb]
+        def rinominati = [:]  // nome nell'APK -> nome vero dentro il pacchetto
+        testo.eachLine { riga ->
+            def r = riga.trim()
+            def m = (r =~ /^\|\s*`(\S+\.so)`\s*\|\s*(\S+)[^|]*\|[^|]*\|\s*`([0-9a-f]{64})`\s*\|$/)
+            if (m.matches()) { attesi[m[0][1]] = [m[0][2], m[0][3]]; return }
+            def d = (r =~ /^\|\s*(\S+)\s*\|\s*\[[^\]]+\]\((\S+)\)\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
+            if (d.matches()) { pacchetti[d[0][1]] = [d[0][2], d[0][3]]; return }
+            def n = (r =~ /^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|$/)
+            if (n.matches() && n[0][2].endsWith('.so')) { rinominati[n[0][2]] = n[0][1] }
+        }
+        if (attesi.isEmpty() || pacchetti.isEmpty()) {
+            throw new GradleException(
+                    "PROVENIENZA.md non ha prodotto nessuna riga: la tabella è cambiata e questo "
+                            + "compito non la riconosce più. Non è una scheda vuota.")
+        }
+
+        // Cosa serve da ciascun pacchetto: nome vero dentro -> nome nell'APK.
+        def daPrendere = [:].withDefault { [:] }
+        attesi.each { apk, dati ->
+            daPrendere[dati[0]][rinominati.getOrDefault(apk, apk)] = apk
+        }
+
+        cache.mkdirs()
+        fuori.mkdirs()
+        def scritti = [] as Set
+
+        daPrendere.each { pacchetto, voluti ->
+            def riga = pacchetti[pacchetto]
+            if (riga == null) {
+                throw new GradleException("PROVENIENZA.md cita il pacchetto '${pacchetto}' fra i file ma non fra i .deb.")
+            }
+            def url = riga[0]
+            def improntaDeb = riga[1]
+            def deb = new File(cache, url.tokenize('/').last())
+
+            if (!deb.exists() || improntaDi(deb.bytes) != improntaDeb) {
+                logger.lifecycle("ponte adb: scarico ${deb.name}")
+                deb.withOutputStream { uscita -> new URL(url).withInputStream { uscita << it } }
+            }
+            def improntaVera = improntaDi(deb.bytes)
+            if (improntaVera != improntaDeb) {
+                deb.delete()
+                throw new GradleException(
+                        "IMPRONTA DIVERSA per ${deb.name}.\n  atteso  ${improntaDeb}\n  trovato ${improntaVera}\n"
+                                + "Il pacchetto pubblicato non è più quello dichiarato in PROVENIENZA.md. "
+                                + "NON si aggiorna il numero senza sapere perché è cambiato.")
+            }
+
+            // Un .deb è un archivio `ar`; dentro, `data.tar.xz`.
+            byte[] corpo = null
+            deb.withInputStream { flusso ->
+                def ar = new ArArchiveInputStream(flusso)
+                def voce
+                while ((voce = ar.nextEntry) != null) {
+                    if (voce.name.startsWith('data.tar')) {
+                        corpo = voce.name.endsWith('.xz') ? new XZCompressorInputStream(ar).bytes : ar.bytes
+                        break
+                    }
+                }
+            }
+            if (corpo == null) throw new GradleException("${deb.name}: data.tar non trovato.")
+
+            // I .so sono spesso collegamenti: si tiene tutto e si scioglie dopo.
+            def contenuti = [:]
+            def collegamenti = [:]
+            new TarArchiveInputStream(new ByteArrayInputStream(corpo)).withCloseable { tar ->
+                def voce
+                while ((voce = tar.nextEntry) != null) {
+                    def percorso = voce.name
+                    /*
+                     * ⛔ Solo `bin/` e `lib/`, e non è pignoleria.
+                     *
+                     * Misurato: dentro `android-tools` ci sono TRE voci che si
+                     * chiamano `adb` — il programma da 2.864.304 byte in `bin/`,
+                     * e due file di completamento della shell da 13.786 e 202
+                     * byte sotto `share/`. Indicizzando per solo nome vinceva
+                     * l'ultima, e nell'APK sarebbe finito un file di 202 byte
+                     * al posto di adb. Il controllo dell'impronta l'ha visto —
+                     * ed è esattamente il caso per cui esiste.
+                     */
+                    if (!percorso.contains('/bin/') && !percorso.contains('/lib/')) continue
+                    def base = percorso.tokenize('/').last()
+                    /*
+                     * ⛔ `voce.isFile()` e non `voce.file`.
+                     *
+                     * Misurato il 2026-08-08: Groovy, per `voce.file`, preferisce
+                     * `getFile()` — che su una voce LETTA da un archivio vale
+                     * sempre `null`. Nessuna voce finiva nella mappa, e l'errore
+                     * che ne usciva («'libprotobuf.so' non trovato dentro il
+                     * pacchetto») accusava il pacchetto invece di questa riga.
+                     */
+                    if (voce.isSymbolicLink() || voce.isLink()) {
+                        collegamenti[base] = voce.linkName.tokenize('/').last()
+                    } else if (voce.isFile()) {
+                        contenuti[base] = tar.bytes
+                    }
+                }
+            }
+
+            voluti.each { vero, apk ->
+                def nome = vero
+                def giri = 0
+                while (contenuti[nome] == null && collegamenti[nome] != null && giri++ < 8) {
+                    nome = collegamenti[nome]
+                }
+                def dati = contenuti[nome]
+                if (dati == null) throw new GradleException("${deb.name}: '${vero}' non trovato dentro il pacchetto.")
+
+                def atteso = attesi[apk][1]
+                def trovata = improntaDi(dati)
+                if (trovata != atteso) {
+                    throw new GradleException(
+                            "IMPRONTA DIVERSA per ${apk} (da ${deb.name}).\n  atteso  ${atteso}\n  trovato ${trovata}")
+                }
+                new File(fuori, apk).bytes = dati
+                scritti << apk
+            }
+        }
+
+        if (scritti != attesi.keySet()) {
+            throw new GradleException("Mancano dal ponte: ${attesi.keySet() - scritti}")
+        }
+        logger.lifecycle("ponte adb: ${scritti.size()} binari verificati contro PROVENIENZA.md")
+    }
+}
+
+// ⛔ PRIMA della compilazione, sempre. Un ponte a metà non è un ponte, e un APK
+// senza questi file si installa benissimo e poi non sa accoppiarsi.
+tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'preparaPonteAdb' }

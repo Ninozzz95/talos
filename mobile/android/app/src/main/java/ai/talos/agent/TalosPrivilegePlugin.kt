@@ -218,7 +218,9 @@ class TalosPrivilegePlugin : Plugin() {
             return
         }
         if (!Shizuku.pingBinder()) {
-            call.resolve(esito.put("ok", false).put("reason", "shizuku-not-running"))
+            // Shizuku non c'è. Non è più la fine della strada: il ponte in casa
+            // non dipende da lui, ed è l'unico che funziona su OxygenOS 16.
+            call.resolve(conIlPonte(esito, comando, "shizuku-not-running"))
             return
         }
         /*
@@ -252,12 +254,14 @@ class TalosPrivilegePlugin : Plugin() {
         try {
             val processo = avviaComeShell(comando.toTypedArray())
             if (processo == null) {
-                // Il caso più comune: il server di Shizuku ci ha respinti. Si
-                // dice quale delle due cose è successa, perché la cura è
-                // diversa — autorizzare l'app, oppure riavviare Shizuku.
-                call.resolve(esito.put("ok", false)
-                    .put("reason", if (autorizzatoSecondoAndroid) "exec-unavailable" else "shizuku-refused")
-                    .put("androidPermission", autorizzatoSecondoAndroid)
+                // Il caso più comune sul Pad dell'owner: il server di Shizuku ci
+                // ha respinti. Prima si diceva soltanto quale delle due cose era
+                // successa; adesso si PROVA l'altra strada, perché ce n'è una.
+                call.resolve(conIlPonte(
+                    esito,
+                    comando,
+                    if (autorizzatoSecondoAndroid) "exec-unavailable" else "shizuku-refused",
+                ).put("androidPermission", autorizzatoSecondoAndroid)
                     .put("detail", ultimoRifiuto ?: ""))
                 return
             }
@@ -280,9 +284,96 @@ class TalosPrivilegePlugin : Plugin() {
             if (negato) esito.put("reason", "denied-by-system")
             call.resolve(esito)
         } catch (fallito: Exception) {
-            call.resolve(esito.put("ok", false).put("reason", "exec-failed")
+            call.resolve(conIlPonte(esito, comando, "exec-failed")
                 .put("error", fallito.message ?: fallito.javaClass.simpleName))
         }
+    }
+
+    /**
+     * ⭐⭐ LA SECONDA STRADA, quando Shizuku non c'è o ci ha respinti.
+     *
+     * ## Perché il ripiego sta QUI e non in cima
+     *
+     * Perché Shizuku, dove funziona, è più veloce e non chiede niente
+     * all'utente: parla direttamente col suo server, senza avviare un processo
+     * né aprire una porta. Metterlo per primo significa che chi ha un telefono
+     * dove Shizuku va **non paga nulla** per l'esistenza del ponte.
+     *
+     * ## ⛔ E perché NON si ripiega quando la ROM ha detto di no
+     *
+     * Le due strade arrivano alla stessa identità: uid 2000, la shell. Se il
+     * monitoraggio permessi ha rifiutato a Shizuku, rifiuterà identicamente al
+     * ponte — riprovare sarebbe solo lento, e produrrebbe un secondo «no» che
+     * qualcuno potrebbe leggere come una causa diversa. Il ripiego scatta solo
+     * quando Shizuku **non ha potuto provare**: assente, spento, o rifiutato dal
+     * suo server.
+     *
+     * ## I due motivi si riferiscono ENTRAMBI
+     *
+     * Se falliscono tutte e due, la risposta porta sia il motivo del ponte sia
+     * quello di Shizuku. Chi indaga con un motivo solo in mano ricomincia da
+     * capo per scoprire l'altro — l'ho fatto io il 2026-08-08 con
+     * `shizuku-refused` che spariva dietro una frase generica.
+     */
+    private fun conIlPonte(esito: JSObject, comando: List<String>, motivoShizuku: String): JSObject {
+        if (!TalosPonteAdb.disponibile(context)) {
+            return esito.put("ok", false).put("reason", motivoShizuku).put("via", "none")
+        }
+        val ponte = TalosPonteAdb.shell(context, comando, PROGRAMMI_AMMESSI)
+        if (ponte.ok) {
+            return esito.put("ok", true).put("via", "bridge")
+                .put("output", ponte.uscita).put("error", ponte.errore).put("exitCode", ponte.codice)
+        }
+        return esito.put("ok", false)
+            .put("reason", ponte.motivo ?: motivoShizuku)
+            .put("shizukuReason", motivoShizuku)
+            .put("via", "none")
+            .put("output", ponte.uscita)
+            .put("error", ponte.errore)
+    }
+
+    /** Se il ponte è impacchettato, e se in questo istante è collegato. */
+    @PluginMethod
+    fun bridgeStatus(call: PluginCall) {
+        val presente = TalosPonteAdb.disponibile(context)
+        call.resolve(
+            JSObject().put("packaged", presente)
+                // ⛔ Si CHIEDE al ponte, non si ricorda: il Debug wireless muore
+                // al riavvio, e un valore ricordato racconterebbe un telefono
+                // che non c'è più.
+                .put("connected", presente && TalosPonteAdb.collegato(context)),
+        )
+    }
+
+    /** L'accoppiamento: indirizzo della finestrella e codice a sei cifre. */
+    @PluginMethod
+    fun bridgePair(call: PluginCall) {
+        val esito = TalosPonteAdb.accoppia(
+            context,
+            call.getString("address") ?: "",
+            call.getString("code") ?: "",
+        )
+        call.resolve(
+            JSObject().put("ok", esito.ok).put("reason", esito.motivo ?: "")
+                .put("output", esito.uscita).put("error", esito.errore),
+        )
+    }
+
+    /** Il collegamento, che è l'altra porta — quella della schermata dietro. */
+    @PluginMethod
+    fun bridgeConnect(call: PluginCall) {
+        val esito = TalosPonteAdb.collega(context, call.getString("address") ?: "")
+        call.resolve(
+            JSObject().put("ok", esito.ok).put("reason", esito.motivo ?: "")
+                .put("output", esito.uscita).put("error", esito.errore),
+        )
+    }
+
+    /** Chiude il server e la porta locale che teneva aperta. */
+    @PluginMethod
+    fun bridgeStop(call: PluginCall) {
+        val esito = TalosPonteAdb.spegni(context)
+        call.resolve(JSObject().put("ok", esito.ok))
     }
 
     /**
