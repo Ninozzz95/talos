@@ -134,27 +134,49 @@ export const TALOS_DEVICE_CAPABILITIES: readonly TalosCapability[] = Object.free
         permission: 'android.permission.SYSTEM_ALERT_WINDOW',
         settingsAction: 'android.settings.action.MANAGE_OVERLAY_PERMISSION',
     },
-    /**
-     * ⛔ L'accessibilità: la chiave di casa.
-     *
-     * Regime `read` e non `guess`, ed è il punto: dà l'**albero** della
-     * schermata, non un'immagine da interpretare. Chi la usa per indovinare sta
-     * buttando via la sola cosa che la rende diversa.
-     */
-    {
-        id: 'screen_read',
-        tier: 'special',
-        regime: 'read',
-        permission: null,
-        settingsAction: 'android.settings.ACCESSIBILITY_SETTINGS',
-    },
 
-    // ── Shizuku: vivo finché lui è vivo.
+    // ── Shizuku o il ponte: vivi finché loro sono vivi.
     { id: 'wifi_toggle', tier: 'shell', regime: 'ask', permission: null, settingsAction: 'android.settings.WIFI_SETTINGS' },
     { id: 'bluetooth_toggle', tier: 'shell', regime: 'ask', permission: null, settingsAction: 'android.settings.BLUETOOTH_SETTINGS' },
     { id: 'mobile_data_toggle', tier: 'shell', regime: 'ask', permission: null, settingsAction: 'android.settings.DATA_ROAMING_SETTINGS' },
     { id: 'app_install', tier: 'shell', regime: 'ask', permission: null, settingsAction: null },
     { id: 'screen_touch', tier: 'shell', regime: 'read', permission: null, settingsAction: null },
+    /**
+     * ⛔⛔ LEGGERE LO SCHERMO NON È PIÙ UNA CAPACITÀ «SPECIALE».
+     *
+     * Fino al 2026-08-08 stava fra le `special`, con
+     * `android.settings.ACCESSIBILITY_SETTINGS` come schermata: si dava per
+     * scontato che l'albero della schermata lo desse un `AccessibilityService`.
+     * Misurato sul Pad quella sera alle 23:33, **non è così**.
+     *
+     * Con la sola identità del ponte (`uid=2000(shell)`, compito #46):
+     *
+     * - `uiautomator dump` → l'albero. 18 testi dalle Impostazioni Wi-Fi (i nomi
+     *   delle reti, «Connessa»), 166 dalla schermata di TALOS, con riquadri,
+     *   `clickable` e `resource-id`. Costa **2.140 ms**: si legge quando serve,
+     *   mai in continuo.
+     * - `uiautomator events` → il flusso, che è la parte che sembrava
+     *   irraggiungibile: 46 righe in 6 secondi, `TYPE_WINDOW_STATE_CHANGED`,
+     *   `TYPE_VIEW_FOCUSED`, `TYPE_WINDOW_CONTENT_CHANGED`, col pacchetto e col
+     *   testo. È lo **stesso** `onAccessibilityEvent`.
+     *
+     * ⇒ Non è un'imitazione: `uiautomator` gira su `UiAutomation`, che **è** un
+     * client di accessibilità agganciato col permesso della shell. Stesso
+     * albero, stessi eventi, altra porta.
+     *
+     * ⛔ E il dubbio che restava è stato chiuso misurandolo, non ragionandoci:
+     * agganciando davvero un servizio di accessibilità (`settings put secure
+     * enabled_accessibility_services`, che dalla shell **riesce** — verificato
+     * con `Bound services:` in `dumpsys accessibility`) l'albero della stessa
+     * schermata è risultato **identico**: 336 nodi contro 336, 166 testi contro
+     * 166. Il servizio non aggiunge niente che il ponte non veda già.
+     *
+     * ⇒ Per questo `tier: 'shell'` e `settingsAction: null`. Non c'è una
+     * schermata dove concederlo, perché non c'è niente da concedere: o il ponte
+     * è collegato, o questa capacità non c'è. Il passo mancante è la pagina dei
+     * privilegi, non una casella in Accessibilità.
+     */
+    { id: 'screen_read', tier: 'shell', regime: 'read', permission: null, settingsAction: null },
 ])
 
 export function talosCapability(id: string): TalosCapability | null {
