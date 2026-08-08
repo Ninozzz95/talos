@@ -1443,6 +1443,8 @@ export const TALOS_IT_MESSAGES = {
         ollamaEndpointRequired: 'Ollama richiede un endpoint raggiungibile da questo dispositivo.',
     },
     library: {
+        /* ⛔ Una riga che non si apre è un file che la persona crede di avere. */
+        fileMissing: 'Il file non c’è più su questo dispositivo',
         title: 'Libreria',
         contextVault: 'Archivio contesto',
         acrossEveryChat: '{count} in tutte le chat',

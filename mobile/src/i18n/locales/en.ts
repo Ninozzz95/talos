@@ -1426,6 +1426,8 @@ export const TALOS_EN_MESSAGES = {
         ollamaEndpointRequired: 'Ollama requires an endpoint reachable from this device.',
     },
     library: {
+        /* A row that will not open is a file the person believes they have. */
+        fileMissing: 'This file is no longer on this device',
         title: 'Library',
         contextVault: 'Context Vault',
         acrossEveryChat: '{count} across every chat',

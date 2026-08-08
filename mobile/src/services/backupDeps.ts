@@ -38,6 +38,17 @@ export async function talosBackupDeps(): Promise<TalosBackupWiringDeps> {
             const letto = await servizio.readFilePreview(fileId).catch(() => null)
             return letto?.bytes ?? null
         },
+        /**
+         * Rimette i byte dove la riga dice che stanno.
+         *
+         * Stesso magazzino da cui li ha letti l'esportazione: se la scrittura
+         * andasse altrove, la riga d'indice punterebbe a un posto vuoto — che
+         * è il difetto che questa funzione esiste per togliere.
+         */
+        async writeVaultBytes(privateUri: string, base64: string) {
+            const fileStore = await import('@/services/attachmentFileStore')
+            await fileStore.createAttachmentFileStore().writePrivateBytes(privateUri, base64)
+        },
         async readSettings() {
             const { useSettingsStore } = await import('@/stores/settings')
             const settings = useSettingsStore()

@@ -33,6 +33,28 @@ const PROVIDER_IDS = ['openai', 'anthropic', 'gemini', 'deepseek', 'openrouter',
 export interface TalosBackupWiringDeps {
     repository: TalosChatRepository
     readVaultBytes(fileId: string): Promise<Uint8Array | null>
+    /**
+     * ⛔ Rimette i BYTE di un file della Libreria dove la riga dice che stanno.
+     *
+     * ## Il difetto, con il conto sotto gli occhi
+     *
+     * MISURATO sul Pad il 2026-08-08: la Libreria elencava **quattro** immagini
+     * e sul disco ce n'erano **tre**. La quarta era l'unica anteriore alla prova
+     * export → `pm clear` → import del giorno prima.
+     *
+     * Il motivo sta nel contratto: `CreateVaultFileInput` porta `private_uri`,
+     * cioè un PERCORSO, e nessun campo per il contenuto. Il ripristino
+     * scriveva quindi la riga d'indice e non scriveva mai i byte — e dopo un
+     * `pm clear` quel percorso non punta più a niente.
+     *
+     * ## Perché una riga senza file è peggio di un file mancante
+     *
+     * Un file che non c'è si vede: non compare, e la persona sa di averlo
+     * perso. Una riga che c'è e non si apre è un file che la persona **crede
+     * di avere** — e la scopre il giorno in cui le serve. È la differenza fra
+     * un backup e la promessa di un backup.
+     */
+    writeVaultBytes(privateUri: string, base64: string): Promise<void>
     readSettings(): Promise<Record<string, unknown>>
     deviceModel(): Promise<string | null>
     appBuild: string
@@ -118,7 +140,22 @@ export function talosBackupSinksFrom(deps: TalosBackupWiringDeps): TalosBackupSi
                          * c'è è peggio della sua assenza: compare nell'elenco,
                          * si tocca, e non si apre. Meglio che manchi e si veda.
                          */
-                        if (file.bytesBase64 === null) continue
+                        const contenuto = file.bytesBase64
+                        const percorso = file.private_uri
+                        if (typeof contenuto !== 'string' || contenuto.length === 0) continue
+                        if (typeof percorso !== 'string' || percorso.length === 0) continue
+
+                        /*
+                         * ⛔ PRIMA i byte, POI la riga — e l'ordine è la metà
+                         * che conta.
+                         *
+                         * Se la scrittura del contenuto fallisce (spazio finito,
+                         * permesso negato), la riga non deve nascere: meglio un
+                         * file che manca e si vede, che una voce nell'elenco che
+                         * non si apre. Invertendo i due passi si otterrebbe
+                         * esattamente il difetto che stiamo togliendo.
+                         */
+                        await deps.writeVaultBytes(percorso, contenuto)
                         await repository.createVaultFile(riga as never)
                     }
                     return
