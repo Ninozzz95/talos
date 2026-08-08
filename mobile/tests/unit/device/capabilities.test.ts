@@ -35,16 +35,54 @@ describe('⛔ nessuna capacità indovina', () => {
     })
 
     /**
-     * L'accessibilità è il caso in cui è più facile sbagliare regime: dà
-     * l'albero, e chi la usa per interpretare uno screenshot butta via la sola
-     * cosa che la rende diversa da una fotografia.
+     * Leggere lo schermo è il caso in cui è più facile sbagliare regime: si dà
+     * l'albero, e chi lo usa per interpretare uno screenshot butta via la sola
+     * cosa che lo rende diverso da una fotografia.
      */
-    it('l’accessibilità LEGGE, non indovina', () => {
+    it('leggere lo schermo LEGGE, non indovina', () => {
         expect(talosCapability('screen_read')?.regime).toBe('read')
     })
 
     it('i tocchi partono dall’albero, non dall’occhio', () => {
         expect(talosCapability('screen_touch')?.regime).toBe('read')
+    })
+})
+
+/**
+ * ⛔⛔ IL PRESIDIO CHE VALE PIÙ DEGLI ALTRI: nessuno rimette l'accessibilità.
+ *
+ * Il 2026-08-08 è stato MISURATO che il ponte (uid 2000) dà l'albero
+ * (`uiautomator dump`) **e** il flusso eventi (`uiautomator events`), e che
+ * agganciare davvero un `AccessibilityService` lascia l'albero **identico** —
+ * 336 nodi contro 336, 166 testi contro 166. In più Android 17, con Advanced
+ * Protection Mode, revoca quelle API a chi non è uno strumento di
+ * accessibilità, e Google elenca gli **assistenti** fra gli esclusi.
+ *
+ * ⇒ Rimettere `screen_read` fra le `special` con
+ * `android.settings.ACCESSIBILITY_SETTINGS` è la modifica che sembra ovvia a
+ * chi legge l'elenco senza sapere questo. Questi due test la fermano, e il
+ * messaggio dice il perché — perché un test che fallisce senza spiegare si
+ * aggira in trenta secondi.
+ */
+describe('⛔ l’accessibilità è archiviata, e non torna per distrazione', () => {
+    it('leggere lo schermo passa dal PONTE, non da una schermata di sistema', () => {
+        const schermo = talosCapability('screen_read')
+        expect(
+            schermo?.tier,
+            'screen_read è tornato «special»: ma il ponte dà già albero ED eventi, ' +
+                'e su Android 17 l’accessibilità viene revocata agli assistenti',
+        ).toBe('shell')
+        expect(schermo?.settingsAction).toBeNull()
+    })
+
+    it('e NESSUNA capacità manda la persona nelle impostazioni di accessibilità', () => {
+        const accessibilita = TALOS_DEVICE_CAPABILITIES
+            .filter((c) => c.settingsAction === 'android.settings.ACCESSIBILITY_SETTINGS')
+            .map((c) => c.id)
+        expect(
+            accessibilita,
+            `capacità che chiedono l’accessibilità: ${accessibilita.join(', ')}`,
+        ).toEqual([])
     })
 })
 
