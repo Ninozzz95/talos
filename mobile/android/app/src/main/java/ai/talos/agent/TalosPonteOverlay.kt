@@ -201,9 +201,29 @@ object TalosPonteOverlay {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             tipo,
-            // ⛔ NESSUN flag di fuoco: vedi il commento in cima. Con
-            // FLAG_NOT_FOCUSABLE il campo smette di ricevere le cifre.
-            0,
+            /*
+             * ⛔⛔ DUE COSE DIVERSE, e confonderle costa il giro intero.
+             *
+             * - NESSUN flag di FUOCO (`FLAG_NOT_FOCUSABLE`): senza fuoco il
+             *   campo non riceverebbe una cifra. Vedi il commento in cima.
+             * - `FLAG_NOT_TOUCH_MODAL`: **obbligatorio**, e me lo ero
+             *   dimenticato. Una finestra è «touch modal» per impostazione
+             *   predefinita: si prende TUTTI i tocchi dello schermo, anche
+             *   quelli fuori dai propri bordi.
+             *
+             * Misurato sul Pad il 2026-08-08 alle 23:05: con la finestra a
+             * schermo, quattro scorrimenti sulla lista delle Opzioni
+             * sviluppatore non la muovevano di un pixel, e un tocco su
+             * «Memoria» non apriva niente — `topResumedActivity` restava
+             * `DevelopmentSettingsDashboardActivity`. Sembrava che Impostazioni
+             * si fosse bloccata; in realtà i tocchi li stavamo mangiando noi.
+             *
+             * ⇒ Ed è esattamente ciò che serve qui: la persona deve poter
+             * navigare fino a «Debug wireless → Accoppia con codice» MENTRE il
+             * nostro campo la aspetta. Una finestra che si prende tutto le
+             * impedirebbe di raggiungere il codice che le stiamo chiedendo.
+             */
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             android.graphics.PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
