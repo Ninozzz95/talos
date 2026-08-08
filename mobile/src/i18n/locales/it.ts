@@ -1442,6 +1442,11 @@ export const TALOS_IT_MESSAGES = {
         changedDuringProbe: 'Il modello è cambiato durante la verifica di TALOS. Riprova sul catalogo corrente.',
         ollamaEndpointRequired: 'Ollama richiede un endpoint raggiungibile da questo dispositivo.',
     },
+    capabilityLost: {
+        /* ⛔ Non un errore: un fatto sul telefono, con la mossa dentro. */
+        title: 'TALOS può fare meno di prima',
+        privilegedBridge: 'Il ponte per agire sul telefono non è più attivo: succede a ogni riavvio. Aprilo da Impostazioni → Controllo del telefono.',
+    },
     library: {
         /* ⛔ Una riga che non si apre è un file che la persona crede di avere. */
         fileMissing: 'Il file non c’è più su questo dispositivo',

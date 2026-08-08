@@ -1425,6 +1425,11 @@ export const TALOS_EN_MESSAGES = {
         changedDuringProbe: 'The model changed while TALOS was testing it. Retry on the current catalog.',
         ollamaEndpointRequired: 'Ollama requires an endpoint reachable from this device.',
     },
+    capabilityLost: {
+        /* Not an error: a fact about the phone, with the next move in it. */
+        title: 'TALOS can do less than before',
+        privilegedBridge: 'The bridge that lets TALOS act on the phone is no longer running: this happens after every restart. Start it from Settings → Phone control.',
+    },
     library: {
         /* A row that will not open is a file the person believes they have. */
         fileMissing: 'This file is no longer on this device',
