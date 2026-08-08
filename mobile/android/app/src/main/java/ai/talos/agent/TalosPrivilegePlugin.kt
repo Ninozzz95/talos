@@ -221,15 +221,44 @@ class TalosPrivilegePlugin : Plugin() {
             call.resolve(esito.put("ok", false).put("reason", "shizuku-not-running"))
             return
         }
-        if (Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            call.resolve(esito.put("ok", false).put("reason", "shizuku-not-authorised"))
-            return
-        }
+        /*
+         * ⛔ SI PROVA LO STESSO, e si riferisce cosa risponde il server.
+         *
+         * ## Cosa è stato misurato il 2026-08-08, su OxygenOS 16
+         *
+         * Shizuku vivo e avviato da adb. L'app chiede l'autorizzazione e non
+         * arriva mai, perché Shizuku la concede con un `pm grant` e questa ROM
+         * ha tolto alla shell il potere di concedere:
+         *
+         *   SecurityException: grantRuntimePermission: Neither user 2000 nor
+         *   current process has android.permission.GRANT_RUNTIME_PERMISSIONS
+         *
+         * Quindi `checkSelfPermission` qui non dirà MAI «concesso» — e
+         * fermarsi su quel controllo significa non provare mai, su un
+         * dispositivo dove la shell esegue benissimo (Wi-Fi acceso e spento
+         * dalla shell: provato).
+         *
+         * ## Perché non è un aggiramento
+         *
+         * Non stiamo scavalcando nessun controllo: chi decide se accettarci è
+         * il server di Shizuku, e continua a decidere lui. Noi smettiamo solo
+         * di indovinare la sua risposta al posto suo. Se rifiuta, il rifiuto
+         * arriva da lui, con le sue parole, e finisce in `reason` — che è
+         * un'informazione, mentre «shizuku-not-authorised» era una previsione.
+         */
+        val autorizzatoSecondoAndroid =
+            Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
 
         try {
             val processo = avviaComeShell(comando.toTypedArray())
             if (processo == null) {
-                call.resolve(esito.put("ok", false).put("reason", "exec-unavailable"))
+                // Il caso più comune: il server di Shizuku ci ha respinti. Si
+                // dice quale delle due cose è successa, perché la cura è
+                // diversa — autorizzare l'app, oppure riavviare Shizuku.
+                call.resolve(esito.put("ok", false)
+                    .put("reason", if (autorizzatoSecondoAndroid) "exec-unavailable" else "shizuku-refused")
+                    .put("androidPermission", autorizzatoSecondoAndroid)
+                    .put("detail", ultimoRifiuto ?: ""))
                 return
             }
             val uscita = BufferedReader(InputStreamReader(processo.inputStream)).use { it.readText() }
@@ -279,6 +308,17 @@ class TalosPrivilegePlugin : Plugin() {
      * (`exec-unavailable`) e non un errore generico: quel giorno il registro
      * dirà cosa è successo, invece di far sembrare rotto il telefono.
      */
+    /**
+     * L'ultimo motivo per cui l'avvio non è riuscito, con le parole di chi ha
+     * rifiutato.
+     *
+     * ⛔ Prima qui c'era `runCatching { … }.getOrNull()` e basta: l'eccezione
+     * spariva, e chiunque indagasse trovava soltanto un `null` — cioè «non ha
+     * funzionato», che è la stessa cosa che si vedeva a schermo. Un errore
+     * ingoiato costa più della riga che serviva a tenerlo.
+     */
+    private var ultimoRifiuto: String? = null
+
     private fun avviaComeShell(comando: Array<String>): Process? = runCatching {
         val metodo = Shizuku::class.java.getDeclaredMethod(
             "newProcess",
@@ -288,7 +328,11 @@ class TalosPrivilegePlugin : Plugin() {
         )
         metodo.isAccessible = true
         metodo.invoke(null, comando, null, null) as? Process
-    }.getOrNull()
+    }.onFailure {
+        // La riflessione impacchetta tutto in InvocationTargetException: quella
+        // che dice qualcosa è la causa, non l'involucro.
+        ultimoRifiuto = (it.cause ?: it).toString()
+    }.onSuccess { ultimoRifiuto = null }.getOrNull()
 
     private companion object {
         /**

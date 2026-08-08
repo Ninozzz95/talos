@@ -45,7 +45,23 @@ function esitoDi(sources: TalosPrivilegedToolSources, r: Esito, fatto: string) {
          * riferirebbe come concluso, e la persona si fiderebbe di un
          * interruttore che nessuno ha toccato.
          */
-        return { ok: true, content: `${fatto} — but it is NOT done yet: the phone panel is open and the user must tap the switch. Say exactly that.` }
+        /*
+         * ⛔ E col MOTIVO per cui non è stato fatto da noi.
+         *
+         * Misurato sul Pad il 2026-08-08: chiesto «spegni il wifi», TALOS ha
+         * aperto il pannello e l'ha detto onestamente — ma alla domanda
+         * «perché?» ha risposto di non avere nessun risultato grezzo da
+         * mostrare. Il motivo esisteva (Shizuku non ci ha autorizzati) e si era
+         * perso qui: il ramo del pannello buttava via `reason`.
+         *
+         * Non è un dettaglio da diagnostica. «Ti ho aperto il pannello» lascia
+         * la persona a stringersi nelle spalle; «ti ho aperto il pannello
+         * perché Shizuku non mi ha ancora autorizzato — te la apro?» le dice la
+         * mossa successiva. Un ripiego senza la sua causa è un vicolo cieco con
+         * l'aria di un servizio.
+         */
+        const perche = r.reason ? ` The privileged path was not available: ${sources.reasonOf(r.reason)}` : ''
+        return { ok: true, content: `${fatto} — but it is NOT done yet: the phone panel is open and the user must tap the switch. Say exactly that.${perche}` }
     }
     return {
         ok: false,

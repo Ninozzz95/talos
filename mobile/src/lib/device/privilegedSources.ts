@@ -60,7 +60,7 @@ export function createTalosPrivilegedSources(): TalosPrivilegedToolSources | nul
              */
             const aperto = await apriPannello('android.settings.panel.action.INTERNET_CONNECTIVITY')
             return aperto
-                ? { done: true, via: 'panel' }
+                ? { done: true, via: 'panel', reason: r.reason }
                 : { done: false, via: 'none', reason: r.reason }
         },
 
@@ -71,7 +71,7 @@ export function createTalosPrivilegedSources(): TalosPrivilegedToolSources | nul
             // schermata, che è meno bello e va detto com'è.
             const aperto = await apriPannello('android.settings.BLUETOOTH_SETTINGS')
             return aperto
-                ? { done: true, via: 'panel' }
+                ? { done: true, via: 'panel', reason: r.reason }
                 : { done: false, via: 'none', reason: r.reason }
         },
 
@@ -80,7 +80,7 @@ export function createTalosPrivilegedSources(): TalosPrivilegedToolSources | nul
             if (r.ok) return { done: true, via: 'shell' }
             const aperto = await apriPannello('android.settings.ZEN_MODE_SETTINGS')
             return aperto
-                ? { done: true, via: 'panel' }
+                ? { done: true, via: 'panel', reason: r.reason }
                 : { done: false, via: 'none', reason: r.reason }
         },
 
@@ -111,7 +111,7 @@ export function createTalosPrivilegedSources(): TalosPrivilegedToolSources | nul
             if (r.ok) return { done: true, via: 'shell' }
             const aperto = await apriPannello('android.settings.DISPLAY_SETTINGS')
             return aperto
-                ? { done: true, via: 'panel' }
+                ? { done: true, via: 'panel', reason: r.reason }
                 : { done: false, via: 'none', reason: r.reason }
         },
 

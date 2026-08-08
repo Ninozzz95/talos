@@ -71,10 +71,27 @@ const MOTIVO: Record<string, string> = {
     'program-not-allowed': 'That program is not on the allowed list. This is a bug in TALOS, not something the user can fix.',
     'exec-unavailable': 'The privileged bridge cannot run commands on this build of Shizuku. Tell the user; do not retry.',
     'not-on-this-platform': 'There is no phone to act on here.',
+    'shizuku-refused': 'Shizuku is running but refused TALOS. On ColorOS and OxygenOS 16 this is expected and permanent: Shizuku authorises apps with pm grant, and this ROM took GRANT_RUNTIME_PERMISSIONS away from the shell — measured 2026-08-08. Tell the user that this phone will not allow it, and offer the system panel instead. Do not retry, and do not suggest restarting Shizuku: it is already running.',
 }
 
+/**
+ * ⛔ E quando il motivo NON è in elenco, si dice comunque QUAL È.
+ *
+ * Misurato il 2026-08-08: il ponte rispondeva `shizuku-refused` — un motivo
+ * nuovo, aggiunto dal lato nativo e mai arrivato qui — e la frase generica lo
+ * ingoiava. TALOS riferiva «il percorso privilegiato non è disponibile», che è
+ * l'unica cosa che la persona già vedeva da sé.
+ *
+ * Un elenco di motivi è per forza incompleto: ne nascono di nuovi ogni volta che
+ * il lato nativo impara a distinguere un caso. Il ripiego non deve nascondere
+ * quelli che non conosce — deve passarli, così chi legge (la persona, o io
+ * mentre indago) ha almeno il nome della cosa da cercare.
+ */
 export function talosPrivilegedReason(reason: string | undefined): string {
-    return MOTIVO[reason ?? ''] ?? 'The privileged bridge did not manage it. Tell the user rather than retrying.'
+    const noto = MOTIVO[reason ?? '']
+    if (noto) return noto
+    const quale = reason ? ` The bridge said: "${reason}".` : ''
+    return `The privileged bridge did not manage it.${quale} Tell the user rather than retrying.`
 }
 
 /**
