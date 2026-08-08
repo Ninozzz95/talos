@@ -25,6 +25,11 @@ public class MainActivity extends BridgeActivity {
         // c'e', se e' vivo e se ci ha autorizzati, cosi' la schermata puo'
         // mostrare il primo passo mancante invece di un elenco di cose da fare.
         registerPlugin(ai.talos.agent.TalosPrivilegePlugin.class);
+        // Il primo tool che tocca il telefono senza chiedere niente a nessuno.
+        registerPlugin(ai.talos.agent.TalosDevicePlugin.class);
+        // ⭐ TALOS che parla. Nessun permesso, e la capacita' col rapporto
+        // valore/costo piu' alto di tutto l'inventario.
+        registerPlugin(ai.talos.agent.TalosSpeechPlugin.class);
         registerPlugin(TalosDevicePermissionsPlugin.class);
         // Owner 2026-07-28: durable, user-chosen Save-As for encrypted Library
         // files. The plugin accepts only TALOS's private export staging path.
