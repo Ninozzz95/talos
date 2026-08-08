@@ -70,6 +70,10 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     device_status: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     // Accendere un LED si spegne premendo di nuovo: reversibile per costruzione.
     // Mettere in pausa si disfa premendo di nuovo, e non tocca nessun dato.
+    // ⛔ L'aereo taglia la rete, e con essa il ponte: siamo noi a non poterlo
+    // piu' disfare. R2 e irreversibile non e' pessimismo, e' il fatto.
+    device_airplane: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    device_power_saving: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     device_media: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     device_torch: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     // Una vibrazione non si disfa — ed e' un fatto sul mondo, non sui dati.

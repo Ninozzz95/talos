@@ -127,6 +127,8 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
      */
     { id: 'device_wifi', group: 'device', actions: ['write'] },
     { id: 'device_bluetooth', group: 'device', actions: ['write'] },
+    { id: 'device_airplane', group: 'device', actions: ['write'] },
+    { id: 'device_power_saving', group: 'device', actions: ['write'] },
     { id: 'device_do_not_disturb', group: 'device', actions: ['write'] },
     // Senza valore LEGGE, con un valore SCRIVE: servono entrambe.
     { id: 'device_system_setting', group: 'device', actions: ['write', 'read'] },

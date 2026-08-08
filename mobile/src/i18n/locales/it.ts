@@ -967,6 +967,8 @@ export const TALOS_IT_MESSAGES = {
         localModelsStatus: 'Controllo un download in corso',
         deviceStatus: 'Controllo del telefono',
         deviceMedia: 'Riproduzione',
+        deviceAirplane: 'Modalità aereo',
+        devicePowerSaving: 'Risparmio energetico',
         deviceTorch: 'Torcia',
         deviceVibrate: 'Vibrazione',
         deviceVolume: 'Volume',
@@ -1121,6 +1123,14 @@ export const TALOS_IT_MESSAGES = {
         deviceStatus: {
             title: 'Controlla come sta il telefono',
             description: 'Legge batteria, spazio, memoria, suoneria e tipo di rete. Non legge niente che identifichi te o il dispositivo.',
+        },
+        deviceAirplane: {
+            title: 'Accendi o spegni la modalità aereo',
+            description: '⛔ Accendendola il telefono esce dalla rete, e TALOS perde il collegamento privilegiato: dopo non potrà rispegnerla da solo.',
+        },
+        devicePowerSaving: {
+            title: 'Accendi o spegni il risparmio energetico',
+            description: 'Lo stesso interruttore delle impostazioni. Riduce le attività in secondo piano.',
         },
         deviceMedia: {
             title: 'Metti in pausa o riprendi cio’ che stai ascoltando',
@@ -2245,6 +2255,8 @@ export const TALOS_IT_MESSAGES = {
             local_model_download: { title: 'Scarica un modello', description: 'Scarica un modello su questo dispositivo. Chiede sempre, qualunque sia la taglia.' },
             local_models_status: { title: 'Controlla un download', description: 'Riporta cosa si sta scaricando e a che punto è. Solo questo dispositivo.' },
             device_status: { title: 'Guarda com’è il telefono', description: 'Legge batteria, spazio, memoria, suoneria e tipo di rete. Niente che identifichi te o questo telefono.' },
+            device_airplane: { title: 'Accendi o spegni la modalità aereo', description: '⛔ Accendendola il telefono esce dalla rete e TALOS perde il collegamento privilegiato: dopo non potrà rispegnerla da solo.' },
+            device_power_saving: { title: 'Accendi o spegni il risparmio energetico', description: 'Lo stesso interruttore delle impostazioni. Riduce le attività in secondo piano.' },
             device_media: { title: 'Metti in pausa o riprendi', description: 'Agisce sull’app che sta suonando adesso — musica, podcast, video. Non apre niente e non legge cosa stai ascoltando.' },
             device_torch: { title: 'Accendi o spegni la torcia', description: 'Accende e spegne la torcia. Non chiede nessun permesso.' },
             device_vibrate: { title: 'Fai vibrare il telefono', description: 'Un colpo breve, come segnale fisico. Non per annunciare le risposte: a quello servono le notifiche.' },

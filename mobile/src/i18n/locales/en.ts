@@ -949,6 +949,8 @@ export const TALOS_EN_MESSAGES = {
         localModelsStatus: 'Checking on a model download',
         deviceStatus: 'Checking the phone',
         deviceMedia: 'Playback',
+        deviceAirplane: 'Airplane mode',
+        devicePowerSaving: 'Battery saver',
         deviceTorch: 'Torch',
         deviceVibrate: 'Vibration',
         deviceVolume: 'Volume',
@@ -1103,6 +1105,14 @@ export const TALOS_EN_MESSAGES = {
         deviceStatus: {
             title: 'Check how the phone is',
             description: 'Reads battery, storage, memory, ringer mode and network type. It reads nothing that identifies you or the device.',
+        },
+        deviceAirplane: {
+            title: 'Turn airplane mode on or off',
+            description: '⛔ Turning it on takes the phone off the network, and TALOS loses its privileged link: it will not be able to turn it back off by itself.',
+        },
+        devicePowerSaving: {
+            title: 'Turn battery saver on or off',
+            description: 'The same switch as in settings. It reduces background activity.',
         },
         deviceMedia: {
             title: 'Pause or resume what you are listening to',
@@ -2230,6 +2240,8 @@ export const TALOS_EN_MESSAGES = {
             local_model_download: { title: 'Download a model', description: 'Download a model onto this device. Asks you every time, however large.' },
             local_models_status: { title: 'Check on a download', description: 'Report what is downloading and how far it has got. This device only.' },
             device_status: { title: 'Check the phone', description: 'Reads battery, storage, memory, ringer mode and network type. Nothing that identifies you or this phone.' },
+            device_airplane: { title: 'Turn airplane mode on or off', description: '⛔ Turning it on takes the phone off the network and TALOS loses its privileged link: it will not be able to turn it back off by itself.' },
+            device_power_saving: { title: 'Turn battery saver on or off', description: 'The same switch as in settings. It reduces background activity.' },
             device_media: { title: 'Pause or resume playback', description: 'Acts on whichever app is playing right now — music, podcast, video. It opens nothing and does not read what you are listening to.' },
             device_torch: { title: 'Turn the torch on or off', description: 'Switches the phone torch. Needs no permission from you.' },
             device_vibrate: { title: 'Vibrate the phone', description: 'A short buzz as a physical signal. Not for announcing replies — notifications do that.' },

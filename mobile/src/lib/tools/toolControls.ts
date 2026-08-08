@@ -66,6 +66,8 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     device_status: true,
     device_torch: true,
     device_media: true,
+    device_airplane: true,
+    device_power_saving: true,
     device_vibrate: true,
     device_volume: true,
     device_alarm: true,
