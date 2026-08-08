@@ -958,8 +958,88 @@ Java_ai_talos_TalosLlamaNative_nativeParseReply(JNIEnv * env, jclass, jlong hand
         // `is_partial` falso: questa è la risposta finita. Lo streaming continua
         // a mostrare il testo grezzo mentre arriva, ed è corretto — è alla fine
         // che si decide che cosa era ragionamento.
-        const common_chat_msg parsed = common_chat_parse(text, false, parsing);
-        out["content"] = parsed.content;
+        common_chat_msg parsed = common_chat_parse(text, false, parsing);
+
+        /*
+         * ââ LA CHIAMATA CHE IL PARSER LASCIAVA CADERE, e con lei la verita'.
+         *
+         * ## Il difetto, riprodotto sul Pad il 2026-08-08
+         *
+         * Modello locale, tool offerti, grammatica pigra con un solo innesco:
+         * `<tool_call>`, tipo parola. Chiesto Â«accendi la torciaÂ», il modello
+         * rispondeva Â«Fatto, torcia accesaÂ» e la torcia restava spenta â
+         * nessuna scheda di consenso, nessun evento in `dumpsys media.camera`.
+         *
+         * ## La causa, che sta a monte di noi
+         *
+         * llama.cpp, issue #20260: il parser `peg-native` riceve TUTTO l'output,
+         * e la radice della sua grammatica si aspetta di cominciare da
+         * `<tool_call>`. Qualsiasi testo prima â e un modello che ragiona ne
+         * produce SEMPRE â fa fallire la lettura. Il fallimento non Ã¨ rumoroso:
+         * torna un messaggio senza chiamate, la prosa sopravvive, e quella prosa
+         * dice Â«fattoÂ».
+         *
+         * â Un difetto che trasforma un tool mancato in una BUGIA Ã¨ peggio di
+         * un tool che non parte: chi legge Â«fattoÂ» smette di controllare.
+         *
+         * ## La cura, e perche' questa
+         *
+         * Se il parser non ha trovato chiamate ma nel testo c'Ã¨ l'innesco, si
+         * rilegge DAL marcatore: al parser si consegna esattamente cio' che la
+         * sua radice sa leggere. Il ragionamento e la prosa restano quelli della
+         * prima lettura, perche' quelli il parser li aveva presi bene.
+         *
+         * Non tocchiamo llama.cpp e non indoviniamo un formato: usiamo l'innesco
+         * che il TEMPLATE ha dichiarato, quindi la correzione vale per ogni
+         * modello, anche per quelli che useremo domani.
+         */
+        std::string testo_visibile = parsed.content;
+        if (parsed.tool_calls.empty()) {
+            for (const common_grammar_trigger & innesco : session->chat.grammar_triggers) {
+                if (innesco.value.empty()) continue;
+                const size_t dove = text.find(innesco.value);
+                // `dove == 0` vuol dire che il parser aveva gia' il testo giusto
+                // e non ha trovato niente lo stesso: non e' questo il caso.
+                if (dove == std::string::npos || dove == 0) continue;
+
+                const common_chat_msg riletto =
+                        common_chat_parse(text.substr(dove), false, parsing);
+                if (riletto.tool_calls.empty()) continue;
+
+                TALOS_LOGI("chiamata recuperata: il parser era inciampato su %zu byte di prefisso "
+                           "(innesco \"%.40s\", %zu chiamate)",
+                           dove, innesco.value.c_str(), riletto.tool_calls.size());
+                parsed.tool_calls = riletto.tool_calls;
+
+                // La prosa si ferma dove comincia la chiamata: il blocco della
+                // chiamata non e' testo per la persona.
+                const size_t nel_contenuto = testo_visibile.find(innesco.value);
+                if (nel_contenuto != std::string::npos) {
+                    testo_visibile.erase(nel_contenuto);
+                }
+                break;
+            }
+        }
+
+        /*
+         * â E se nemmeno cosi' si recupera, lo si DICE.
+         *
+         * Il caso peggiore non e' la chiamata persa: e' la chiamata persa in
+         * silenzio. Finche' questo ramo taceva, l'unica traccia del difetto era
+         * una risposta sbagliata in chat, che nessun registro spiegava.
+         */
+        if (parsed.tool_calls.empty()) {
+            for (const common_grammar_trigger & innesco : session->chat.grammar_triggers) {
+                if (!innesco.value.empty() && text.find(innesco.value) != std::string::npos) {
+                    TALOS_LOGE("â il testo contiene l'innesco \"%.40s\" ma il parser non ha trovato "
+                               "NESSUNA chiamata: la risposta che segue potrebbe affermare il falso",
+                               innesco.value.c_str());
+                    break;
+                }
+            }
+        }
+
+        out["content"] = testo_visibile;
         out["reasoning"] = parsed.reasoning_content;
         /**
          * Le chiamate ai tool, che uscivano di qui gia' prima e venivano

@@ -824,6 +824,7 @@ export const TALOS_EN_MESSAGES = {
         generatedFilesSavedAfterAuthorization: 'Saved {count} file(s) to the Library: {names}.',
         generatedFilesNotSavedAfterAuthorization: 'No generated files were saved ({count} skipped).',
         toolAuthorizationPending: '{count} tool authorization request is waiting. You can keep chatting.',
+        toolAuthorizationSettled: 'That authorization request has been handled.',
         libraryAnswerGuardAbstention: 'I could not produce a reliable answer that stayed on the current conversation topic. Please rephrase the question or name the source to use.',
         composerPreferencesSaveFailed: 'TALOS could not save composer preferences. {detail}',
         selectModelBeforeSending: 'Select a model before sending.',
@@ -947,6 +948,8 @@ export const TALOS_EN_MESSAGES = {
         researchDelete: 'Deleting a research',
     },
     toolConsent: {
+        /* The fallback when a label is missing: never the internal name. */
+        unknownTool: 'A TALOS tool',
         libraryList: {
             title: 'Browse the Library',
             description: 'View the names, types, dates, and origin of Library files available to this chat.',

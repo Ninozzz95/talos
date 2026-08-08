@@ -124,6 +124,18 @@ function makeController(messages: FakeMessage[] = []) {
     })
     return {
         catalogs: reactive({}),
+        /*
+         * ⛔ Le attese di autorizzazione fanno parte del CONTRATTO del
+         * controller, non di un caso di prova.
+         *
+         * Questa finzione non le aveva, e la schermata — che dal 2026-08-08 le
+         * legge per far diventare la riga dell'attesa una porta — moriva con
+         * «Cannot read properties of undefined». Non era un difetto della
+         * schermata: era una finzione piu' povera del vero.
+         */
+        pendingToolAuthorizations: ref([]),
+        toolAuthorizationRecoveries: ref([]),
+        showToolAuthorization: vi.fn(),
         profiles: ref([]),
         selectedModelId: ref(null),
         effort: ref('high'),
