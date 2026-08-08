@@ -322,6 +322,29 @@
         <receiver
             android:name="ai.talos.TalosTransferControl"
             android:exported="false" />
+
+        <!--
+            ⭐ SHIZUKU — il pezzo che RICEVE il binder all'avvio.
+
+            Senza questo provider il binder non arriva mai e il client resta a
+            guardare: è l'errore più comune di chi integra Shizuku, perché tutto
+            compila, niente protesta, e niente funziona.
+
+            È esportato perché Shizuku deve poterlo raggiungere, non perché
+            debba farlo chiunque: `android:permission` lo chiude alle app
+            normali, ed è la riga che rende accettabile l'esportazione.
+
+            ⛔ MISURATO sul Pad (ColorOS): da qui NON arrivano i permessi
+            permanenti — la shell esegue ma non concede. Arriva la capacità di
+            FARE, finché Shizuku è vivo.
+        -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 </application>
 
     <!-- Permissions -->
