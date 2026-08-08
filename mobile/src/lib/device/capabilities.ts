@@ -80,6 +80,20 @@ export const TALOS_DEVICE_CAPABILITIES: readonly TalosCapability[] = Object.free
     // non è la fotocamera, e non ne vuole il permesso.
     { id: 'torch', tier: 'free', regime: 'ask', permission: null, settingsAction: null },
     { id: 'speak', tier: 'free', regime: 'ask', permission: null, settingsAction: null },
+    /**
+     * ⭐⭐ Il controllo media costa ZERO — ed era l'unica riga del censimento
+     * (#34, 2026-08-09) dove Gemini vinceva **senza un cancello**.
+     *
+     * Per Wi-Fi, torcia o Non disturbare, Gemini pretende che l'app Google sia
+     * l'assistente predefinito del telefono. Per i media no. Era l'unica casella
+     * persa a parità di condizioni — e si chiude senza chiedere niente a
+     * nessuno, perché `AudioManager.dispatchMediaKeyEvent` è la stessa porta da
+     * cui entrano i telecomandi Bluetooth.
+     *
+     * Regime `ask` e non `guess`: si manda il tasto che il sistema aspetta, non
+     * si cerca un pulsante «pausa» sullo schermo di un'app.
+     */
+    { id: 'media_control', tier: 'free', regime: 'ask', permission: null, settingsAction: null },
     { id: 'volume', tier: 'free', regime: 'ask', permission: 'android.permission.MODIFY_AUDIO_SETTINGS', settingsAction: null },
     { id: 'alarm', tier: 'free', regime: 'ask', permission: 'com.android.alarm.permission.SET_ALARM', settingsAction: null },
     { id: 'open_app', tier: 'free', regime: 'ask', permission: null, settingsAction: null },

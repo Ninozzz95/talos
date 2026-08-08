@@ -97,6 +97,7 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
      */
     { id: 'device_status', group: 'device', actions: ['read'] },
     { id: 'device_torch', group: 'device', actions: ['write'] },
+    { id: 'device_media', group: 'device', actions: ['write'] },
     { id: 'device_vibrate', group: 'device', actions: ['write'] },
     { id: 'device_volume', group: 'device', actions: ['write'] },
     { id: 'device_alarm', group: 'device', actions: ['write'] },

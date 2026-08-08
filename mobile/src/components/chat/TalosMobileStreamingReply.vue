@@ -17,6 +17,7 @@ import {
     NotebookPen,
     Smartphone,
     Sparkles,
+    Play,
     Telescope,
     Volume2,
     Wrench,
@@ -71,6 +72,10 @@ const TOOL_ICONS: Record<TalosToolIconName, unknown> = {
     phone: Smartphone,
     torch: Flashlight,
     volume: Volume2,
+    // ⛔ Play e non un altoparlante: il volume ha gia' il suo segno, e due
+    // strumenti diversi con lo stesso disegno raccontano la stessa cosa
+    // mentre ne stanno facendo due.
+    audio: Play,
     voice: AudioLines,
     document: FileText,
     image: ImageIcon,

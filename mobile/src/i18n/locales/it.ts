@@ -966,6 +966,7 @@ export const TALOS_IT_MESSAGES = {
         localModelDownload: 'Scarico un modello su questo telefono',
         localModelsStatus: 'Controllo un download in corso',
         deviceStatus: 'Controllo del telefono',
+        deviceMedia: 'Riproduzione',
         deviceTorch: 'Torcia',
         deviceVibrate: 'Vibrazione',
         deviceVolume: 'Volume',
@@ -1120,6 +1121,10 @@ export const TALOS_IT_MESSAGES = {
         deviceStatus: {
             title: 'Controlla come sta il telefono',
             description: 'Legge batteria, spazio, memoria, suoneria e tipo di rete. Non legge niente che identifichi te o il dispositivo.',
+        },
+        deviceMedia: {
+            title: 'Metti in pausa o riprendi cio’ che stai ascoltando',
+            description: 'Agisce sull’app che sta suonando adesso — musica, podcast, video. Non apre niente e non legge cosa stai ascoltando.',
         },
         deviceTorch: {
             title: 'Accendi o spegni la torcia',
@@ -2240,6 +2245,7 @@ export const TALOS_IT_MESSAGES = {
             local_model_download: { title: 'Scarica un modello', description: 'Scarica un modello su questo dispositivo. Chiede sempre, qualunque sia la taglia.' },
             local_models_status: { title: 'Controlla un download', description: 'Riporta cosa si sta scaricando e a che punto è. Solo questo dispositivo.' },
             device_status: { title: 'Guarda com’è il telefono', description: 'Legge batteria, spazio, memoria, suoneria e tipo di rete. Niente che identifichi te o questo telefono.' },
+            device_media: { title: 'Metti in pausa o riprendi', description: 'Agisce sull’app che sta suonando adesso — musica, podcast, video. Non apre niente e non legge cosa stai ascoltando.' },
             device_torch: { title: 'Accendi o spegni la torcia', description: 'Accende e spegne la torcia. Non chiede nessun permesso.' },
             device_vibrate: { title: 'Fai vibrare il telefono', description: 'Un colpo breve, come segnale fisico. Non per annunciare le risposte: a quello servono le notifiche.' },
             device_volume: { title: 'Leggi o imposta il volume', description: 'Legge un volume o lo imposta, in percentuale. Il silenzioso vero vuole un permesso che dai tu.' },

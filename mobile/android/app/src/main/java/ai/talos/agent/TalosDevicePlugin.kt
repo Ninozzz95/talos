@@ -10,11 +10,15 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.os.StatFs
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.AlarmClock
+import android.view.KeyEvent
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -585,5 +589,109 @@ class TalosDevicePlugin : Plugin() {
         result.put("done", true)
         result.put("on", voluto)
         call.resolve(result)
+    }
+
+    // ─────────────────────────────────────────────── media
+
+    /**
+     * ⭐⭐ IL CONTROLLO MEDIA NON COSTA NIENTE ALLA PERSONA — e non serve il ponte.
+     *
+     * `AudioManager.dispatchMediaKeyEvent` è la stessa porta da cui entrano i
+     * telecomandi Bluetooth e le cuffie col tasto: non chiede permessi, non
+     * chiede di essere l'assistente predefinito. ⇒ Su questa riga Gemini pretende
+     * che l'app Google sia l'assistente del telefono; noi non pretendiamo niente.
+     *
+     * ## ⛔⛔ E QUI SI APPLICA LA LEZIONE DEL 2026-08-09
+     *
+     * `dispatchMediaKeyEvent` torna **void**. Se non c'è nessuna sessione media
+     * attiva, il tasto va nel vuoto — e non fallisce. È **esattamente** la forma
+     * del difetto di stanotte, dove `cancelNotification` con una chiave
+     * sconosciuta non faceva niente e riferiva successo.
+     *
+     * ⇒ Due presidi, e nessuno dei due è facoltativo:
+     *
+     * 1. **Prima**: per mettere in pausa, fermare o cambiare traccia serve che
+     *    stia suonando qualcosa. Se non suona niente si risponde
+     *    `nothing-playing`, che è una risposta vera e utile — non un «fatto».
+     * 2. **Dopo**: si riguarda `isMusicActive` e si riferisce lo stato REALE.
+     *    Se la pausa non ha morso, chi legge lo viene a sapere da noi.
+     *
+     * `isMusicActive` non chiede permessi: chiede al servizio audio se qualcosa
+     * sta uscendo dagli altoparlanti, ed è la sola verifica che si può fare
+     * senza pretendere dalla persona l'accesso alle notifiche.
+     *
+     * ⛔ Il cambio traccia NON è verificabile così: `avanti` lascia la musica
+     * attiva esattamente come prima. Si riferisce `playing` e la descrizione
+     * dello strumento dice al modello di non promettere quale brano è partito.
+     */
+    @PluginMethod
+    fun media(call: PluginCall) {
+        val azione = call.getString("action").orEmpty()
+        val codice = when (azione) {
+            "play_pause" -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+            "play" -> KeyEvent.KEYCODE_MEDIA_PLAY
+            "pause" -> KeyEvent.KEYCODE_MEDIA_PAUSE
+            "next" -> KeyEvent.KEYCODE_MEDIA_NEXT
+            "previous" -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+            "stop" -> KeyEvent.KEYCODE_MEDIA_STOP
+            else -> null
+        }
+        if (codice == null) {
+            call.resolve(JSObject().put("done", false).put("reason", "unknown-action"))
+            return
+        }
+        val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        if (audio == null) {
+            call.resolve(JSObject().put("done", false).put("reason", "no-audio-service"))
+            return
+        }
+
+        val suonavaPrima = audio.isMusicActive
+        // ⛔ Presidio 1: fermare o saltare cio' che non suona e' un tasto nel vuoto.
+        if (!suonavaPrima && azione != "play" && azione != "play_pause") {
+            call.resolve(
+                JSObject().put("done", false).put("reason", "nothing-playing").put("playing", false),
+            )
+            return
+        }
+
+        val quando = SystemClock.uptimeMillis()
+        val inviato = runCatching {
+            audio.dispatchMediaKeyEvent(KeyEvent(quando, quando, KeyEvent.ACTION_DOWN, codice, 0))
+            audio.dispatchMediaKeyEvent(KeyEvent(quando, quando, KeyEvent.ACTION_UP, codice, 0))
+            true
+        }.getOrDefault(false)
+        if (!inviato) {
+            call.resolve(JSObject().put("done", false).put("reason", "dispatch-failed"))
+            return
+        }
+
+        /*
+         * ⛔ Presidio 2: si guarda l'ESITO, non la chiamata. E si aspetta, perche'
+         * l'app che suona riceve il tasto e reagisce in un altro processo: leggere
+         * `isMusicActive` nell'istante dopo l'invio misurerebbe il PRIMA.
+         *
+         * Mezzo secondo e' abbastanza perche' il servizio audio si aggiorni, e
+         * poco abbastanza da non far sembrare la chat bloccata. Si aspetta su un
+         * Handler e non con uno sleep: il thread principale non si blocca mai.
+         */
+        Handler(Looper.getMainLooper()).postDelayed({
+            val suonaDopo = runCatching { audio.isMusicActive }.getOrDefault(false)
+            val riuscito = when (azione) {
+                "pause", "stop" -> !suonaDopo
+                "play" -> suonaDopo
+                "play_pause" -> suonaDopo != suonavaPrima
+                // Cambio traccia: l'unica cosa vera che si puo' dire e' che sta
+                // ancora suonando. Vedi la nota in cima.
+                else -> suonaDopo
+            }
+            call.resolve(
+                JSObject()
+                    .put("done", riuscito)
+                    .put("playing", suonaDopo)
+                    .put("action", azione)
+                    .apply { if (!riuscito) put("reason", "no-media-app-took-it") },
+            )
+        }, 500)
     }
 }

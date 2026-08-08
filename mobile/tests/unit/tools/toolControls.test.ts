@@ -269,6 +269,12 @@ describe('Agent Tools control registry', () => {
             // vorrebbe dire che ho mosso un contratto vecchio insieme ai nuovi.
             'device_notifications_list', 'device_notification_reply',
             'device_notification_dismiss',
+            // ⭐ 2026-08-09, il CONTROLLO MEDIA. Dal censimento dei concorrenti
+            // (#34) era l'UNICA riga dove Gemini vinceva senza pretendere di
+            // essere l'assistente predefinito del telefono — e si chiude a costo
+            // zero, perche' `dispatchMediaKeyEvent` e' la porta dei telecomandi
+            // Bluetooth e non chiede permessi.
+            'device_media',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -308,8 +314,22 @@ describe('Agent Tools control registry', () => {
          * «ho aggiunto qualcosa». Se cadesse senza che io abbia aggiunto nulla,
          * vorrebbe dire che un contratto e' cambiato da solo.
          */
+        /*
+         * ⭐ Ri-fissato 2026-08-09 per il CONTROLLO MEDIA, `device_media`.
+         *
+         * Dal censimento dei concorrenti (#34) era l'UNICA riga in cui Gemini
+         * vinceva **senza un cancello**: per il Wi-Fi o la torcia pretende di
+         * essere l'assistente predefinito del telefono, per i media no. Era
+         * l'unica casella persa a parita' di condizioni.
+         *
+         * **Dimostrato, non assunto**, come tutte le volte precedenti: il blocco
+         * qui sopra lo esclude e riproduce `369a6d…` byte per byte — nessuno dei
+         * contratti preesistenti si e' mosso. Questo secondo numero e' lo stato
+         * corrente, e cambiarlo e' il gesto deliberato con cui si dichiara «ho
+         * aggiunto qualcosa».
+         */
         expect(digestOf(controlPlane))
-            .toBe('d23a3f3f7afb70ddbb870dab05ed5a8313a7b5a99b3db8208fb5f25fbd7fc4c2')
+            .toBe('ce08ba4cc7b869337847889a60e2b8a921739953434f09fa4d4ec1a7c2607293')
         /*
          * ⭐ Ri-fissato 2026-08-08 per i TRE tool delle NOTIFICHE:
          * `device_notifications_list`, `device_notification_reply`,
@@ -404,11 +424,21 @@ describe('Agent Tools control registry', () => {
         // Ri-fissati 2026-08-08 per i NOVE del telefono. I tre dialetti si
         // muovono INSIEME, come dev'essere: e' lo stesso contratto tradotto tre
         // volte. Se se ne muovesse uno solo, sarebbe un traduttore rotto.
+        /*
+         * ⭐ Ri-fissati 2026-08-09 anche per il CONTROLLO MEDIA, `device_media`.
+         *
+         * I tre dialetti si muovono INSIEME, come dev'essere: e' lo stesso
+         * contratto tradotto tre volte, e se se ne muovesse uno solo sarebbe un
+         * traduttore rotto, non un tool nuovo.
+         *
+         * **Dimostrato, non assunto**: il blocco «senza i nuovi» qui sopra
+         * riproduce tutte e tre le impronte storiche byte per byte.
+         */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('cfd564daaa69e391b08e2592037c174e69b232d59e50ca4eae8803cbb832be84')
+            .toBe('a2460bed364b513e463a1b63b576b736bd9e4c0f3832c9057e9b359f633db9e2')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('7ab4d54ad4879d0509067456d062059b77900b421684550d6d621d5ca33754e7')
+            .toBe('f12213de31ab1124b04e142884f8c672c1d61d8a3e8ebf19194b2a24ed5c0ed0')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('0d273e89a18577b6bc3e7a9088d718485f7e328a2df52ea562c49bafd08277db')
+            .toBe('04ef50ccac3218e2404ef6000ea204ef287de2e3736ab8a9e33db89f71204882')
     })
 })
