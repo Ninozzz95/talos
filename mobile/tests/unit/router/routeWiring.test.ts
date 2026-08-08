@@ -61,6 +61,8 @@ describe('router wiring', () => {
             'runs', 'context', 'settings',
             'settings-models', 'settings-models-providers',
             'settings-models-catalog', 'settings-models-local', 'settings-models-local-repo',
+            // Il controllo del telefono: sotto le Impostazioni, non fra le stazioni.
+            'settings-privilege',
         ])
 
         /**

@@ -38,6 +38,9 @@ class TalosPrivilegePlugin : Plugin() {
     /** Il codice con cui riconosciamo la NOSTRA richiesta fra le risposte. */
     private val richiesta = 4127
 
+    /** Il pacchetto di Shizuku: serve a distinguere «assente» da «spenta». */
+    private val SHIZUKU = "moe.shizuku.privileged.api"
+
     private val ascoltatore = Shizuku.OnRequestPermissionResultListener { code, _ ->
         if (code != richiesta) return@OnRequestPermissionResultListener
         // Non si risponde alla chiamata da qui: la chiamata si e' gia' chiusa
@@ -84,6 +87,41 @@ class TalosPrivilegePlugin : Plugin() {
          */
         result.put("canGrantPermissions", f.uid == 0)
         call.resolve(result)
+    }
+
+    /**
+     * Porta dove si fa il passo successivo: l'app Shizuku, o le opzioni
+     * sviluppatore.
+     *
+     * ⛔ Nativo e non un `AppLauncher` generico, per una ragione precisa: se
+     * Shizuku **non è installato** va aperta la sua pagina, non l'app che non
+     * c'è. Mandare al sito chi ce l'ha già installata gli fa perdere il filo;
+     * aprire un'app assente non fa niente e sembra un difetto nostro. Sono due
+     * casi, e chi li distingue è il `PackageManager`, che sta qui.
+     */
+    @PluginMethod
+    fun open(call: PluginCall) {
+        val dove = call.getString("target") ?: ""
+        val intent = when (dove) {
+            "shizuku" -> context.packageManager.getLaunchIntentForPackage(SHIZUKU)
+                ?: android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://shizuku.rikka.app/"),
+                )
+            "developer" -> android.content.Intent(
+                android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS,
+            )
+            else -> {
+                call.reject("TALOS_PRIVILEGE_UNKNOWN_TARGET")
+                return
+            }
+        }
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        val esito = JSObject()
+        runCatching { context.startActivity(intent) }
+            .onSuccess { esito.put("opened", true) }
+            .onFailure { esito.put("opened", false) }
+        call.resolve(esito)
     }
 
     /**

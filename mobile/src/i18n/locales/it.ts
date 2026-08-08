@@ -860,6 +860,53 @@ export const TALOS_IT_MESSAGES = {
         codeCopied: 'Codice copiato.',
         codeCopyFailed: 'Impossibile copiare il codice.',
     },
+    privilege: {
+        pageTitle: 'Controllo del telefono',
+        /**
+         * ⛔ Nessuna promessa qui. Chi apre questa pagina vuole sapere se TALOS
+         * può toccare il telefono, e la risposta onesta comincia dicendo COME.
+         */
+        intro: 'TALOS può agire sul telefono passando da Shizuku, che gli presta l’identità che usa il computer quando lo colleghi via cavo. Niente root, e niente permessi speciali dentro TALOS.',
+        statusHeading: 'Stato',
+        // Le quattro porte, e ognuna ha un solo passo successivo.
+        missingTitle: 'Shizuku non è installato',
+        missingBody: 'Shizuku è l’app che presta a TALOS l’identità per agire. È gratuita e open source, e senza di lei TALOS resta dentro i suoi confini.',
+        missingAction: 'Come si installa',
+        stoppedTitle: 'Shizuku è installato ma non è in esecuzione',
+        stoppedBody: 'Il suo servizio si spegne a ogni riavvio del telefono, ed è così per come funziona: va riavviato collegandosi a un computer, oppure dal debug senza fili.',
+        stoppedAction: 'Apri Shizuku',
+        askTitle: 'Manca la tua autorizzazione',
+        askBody: 'Shizuku è pronto. Manca il tuo sì: senza, TALOS non può fare niente sul telefono.',
+        askAction: 'Autorizza TALOS',
+        deniedTitle: 'Hai detto di no',
+        deniedBody: 'Va benissimo, e TALOS non te lo richiederà. Se cambi idea, l’autorizzazione si dà dall’app Shizuku, nell’elenco delle app.',
+        deniedAction: 'Apri Shizuku',
+        /**
+         * ⛔ Lo stato che le guide di Shizuku non hanno, e che questa pagina
+         * esiste per avere. MISURATO sul Pad: su ColorOS l’autorizzazione non
+         * arriva mai, e senza dirlo qui la persona ripremerebbe all’infinito.
+         */
+        blockedTitle: 'Il produttore del telefono lo impedisce',
+        blockedBody: 'L’autorizzazione è stata chiesta e non è arrivata. Su OnePlus, OPPO, Xiaomi e Meizu il produttore limita questi permessi. Si riapre da: Impostazioni → Opzioni sviluppatore → «Disabilita monitoraggio permessi». Dopo averlo spento, riavvia Shizuku.',
+        blockedAction: 'Apri le opzioni sviluppatore',
+        readyTitle: 'TALOS può agire sul telefono',
+        /** ⛔ Con la shell si FA, non si CONCEDE. Dirlo evita una promessa falsa. */
+        readyShellBody: 'Finché Shizuku resta in esecuzione. Al prossimo riavvio del telefono va riavviato anche lui — e i permessi che TALOS ottiene non sopravvivono al riavvio.',
+        readyRootBody: 'Con i privilegi di root: i permessi che TALOS ottiene restano anche dopo un riavvio.',
+        reachHeading: 'Fin dove arriva',
+        reachAct: 'Può agire adesso',
+        reachActNo: 'Non può ancora agire',
+        reachReboot: 'I permessi sopravvivono al riavvio',
+        reachRebootNo: 'I permessi NON sopravvivono al riavvio',
+        detailsHeading: 'Dettagli',
+        detailVersion: 'Versione del servizio',
+        detailIdentity: 'Identità',
+        identityRoot: 'root',
+        identityShell: 'shell (come il cavo)',
+        identityUnknown: 'sconosciuta',
+        outdated: 'La versione di Shizuku è troppo vecchia per TALOS: aggiornala.',
+        refresh: 'Ricontrolla',
+    },
     toolActivity: {
         libraryList: 'Esplorazione della Libreria',
         librarySearch: 'Ricerca nella Libreria',
