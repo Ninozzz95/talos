@@ -33,6 +33,8 @@ interface PonteDispositivo {
     openSettingsScreen(options: { action: string, forThisApp: boolean }): Promise<{ done: boolean, reason?: string }>
     compose(options: { kind: string, value: string, text?: string }): Promise<{ done: boolean, reason?: string }>
     status(): Promise<Record<string, unknown>>
+    wallpaper(options: { imageBase64: string, where: string }): Promise<{ done: boolean, reason?: string, appliedTo: string }>
+    keepAwake(options: { on: boolean }): Promise<{ done: boolean, reason?: string, on: boolean }>
 }
 
 interface PonteVoce {
@@ -58,7 +60,18 @@ function nonQui<T extends object>(extra: T) {
  * offerto e sempre fallimentare costa token a ogni turno e insegna al modello
  * ad ignorare una capacità che altrove funziona.
  */
-export function createTalosDeviceSources(): TalosDeviceToolSources | null {
+/**
+ * ⛔ `Omit` di `findImage`/`availableImages`, e non e' pigrizia di tipi: questo
+ * file conosce il TELEFONO, non la Libreria. La risoluzione di un'immagine dal
+ * nome vive nel controller, dove vive gia' per la modifica delle immagini, e da
+ * li' viene aggiunta. Dichiararla qui vorrebbe dire o duplicarla o farsi passare
+ * mezzo controller — e la duplicazione e' esattamente cio' che questa firma
+ * impedisce.
+ */
+export type TalosDeviceHardwareSources =
+    Omit<TalosDeviceToolSources, 'findImage' | 'availableImages'>
+
+export function createTalosDeviceSources(): TalosDeviceHardwareSources | null {
     if (!Capacitor.isNativePlatform()) return null
 
     return {
@@ -124,6 +137,22 @@ export function createTalosDeviceSources(): TalosDeviceToolSources | null {
             }
             catch {
                 return { available: false, reason: FUORI_DA_ANDROID }
+            }
+        },
+        async wallpaper(imageBase64, where) {
+            try {
+                return await TalosDeviceBridge.wallpaper({ imageBase64, where })
+            }
+            catch {
+                return nonQui({ appliedTo: where })
+            }
+        },
+        async keepAwake(on) {
+            try {
+                return await TalosDeviceBridge.keepAwake({ on })
+            }
+            catch {
+                return nonQui({ on })
             }
         },
         async speak(text) {

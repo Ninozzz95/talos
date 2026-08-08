@@ -79,7 +79,7 @@ export interface TalosToolsetDeps {
      */
     readVaultFileBytes?(fileId: string): Promise<{ bytes: Uint8Array; mediaType: string } | null>
     /** Asks the human. Absent means: nothing can be confirmed, so writes fail closed. */
-    requestConsent?(request: TalosToolConsentRequest): Promise<boolean | 'busy'>
+    requestConsent?(request: TalosToolConsentRequest): Promise<boolean | 'busy' | 'unanswered'>
     /** Session id → title, so a search result can say which chat it came from. */
     sessionTitles?(): Promise<Map<string, string>>
     /**
@@ -185,7 +185,7 @@ export interface TalosToolset {
         permissions: Partial<TalosToolPermissions> | undefined,
         enabledTools: Readonly<TalosAgentToolEnabled>,
     ): TalosToolDefinition<never>[]
-    requestConsent(request: TalosToolConsentRequest): Promise<boolean | 'busy'>
+    requestConsent(request: TalosToolConsentRequest): Promise<boolean | 'busy' | 'unanswered'>
     /**
      * ⛔ B2 — quello che serve sapere di un tool per METTERLO IN UN PIANO.
      *

@@ -230,6 +230,8 @@ describe('Agent Tools control registry', () => {
             'device_status', 'device_torch', 'device_vibrate', 'device_volume',
             'device_alarm', 'device_open_app', 'device_open_settings',
             'device_compose', 'device_speak',
+            // 2026-08-08, seconda tornata: le due che completavano le dieci.
+            'device_wallpaper', 'device_keep_awake',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -270,7 +272,7 @@ describe('Agent Tools control registry', () => {
          * vorrebbe dire che un contratto e' cambiato da solo.
          */
         expect(digestOf(controlPlane))
-            .toBe('d5ecbba93fd458ca5110ce551fcfeba47ccde578bce917b9245f59b2f8f5270b')
+            .toBe('b73673e9ab0cfa8b6aecdd2c3a7b8f858161d163ab68e678aee9d57b638e9426')
         /**
          * Re-pinned 2026-08-01 for the three DIALECT digests only — the control
          * plane above did not move, which is the proof that nothing structural
@@ -340,10 +342,10 @@ describe('Agent Tools control registry', () => {
         // muovono INSIEME, come dev'essere: e' lo stesso contratto tradotto tre
         // volte. Se se ne muovesse uno solo, sarebbe un traduttore rotto.
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('3ba06a9ba52d0aea691c73ff81d17d492f480232c6385f9174e91b50cecb663b')
+            .toBe('b2c6280a705de8a87966bf05f82b357c36ac03ea6ee5d9632afec2ae7303c412')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('71a05bc0de18d9dbcaf5083a393898bee17c471d5159384ec4dffa0eb454f460')
+            .toBe('1d2bcf0f89e754327564923ddfdf7e0c903bd17da881098a75c08e3277bbee20')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('d44bebc864738ae3050ac93ac2be4f6ea27716dd3f53b5f9fc5a41d6150e2f30')
+            .toBe('cadde4e497692fe85092589322a322fe47551795cc192933249cc9e347542122')
     })
 })

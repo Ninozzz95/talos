@@ -2550,6 +2550,51 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // The tool suite. Sources come from what the controller already
             // owns; the loop runs the calls through the permission gate and
             // writes an audit row for every outcome.
+            /**
+             * ⭐ Trovare un'immagine della Libreria dal nome che il modello ha
+             * visto passare.
+             *
+             * ⛔ Vive QUI, fuori dall'oggetto delle dipendenze, perche' ora la
+             * usano in DUE: modificare un'immagine e metterla come sfondo. Due
+             * copie della stessa risoluzione vorrebbero dire che un giorno
+             * «Foto.PNG» si trova da una parte e non dall'altra, e a sbagliare
+             * sarebbe la copia che nessuno guarda.
+             */
+            const trovaImmagineDellaLibreria = async (reference: string) => {
+                        const wanted = reference.trim().toLowerCase()
+                        const senzaCoda = (nome: string) => nome.replace(/\.[^.]+$/, '')
+                        const immagini = attachments.vaultFiles
+                            .filter((entry) => entry.media_type.startsWith('image/'))
+                        const nome = (entry: { display_name: string }) =>
+                            entry.display_name.trim().toLowerCase()
+
+                        /*
+                         * Dal piu' preciso al piu' generoso, e ci si
+                         * ferma al primo che decide.
+                         *
+                         * L'ultimo passo accetta una corrispondenza
+                         * parziale SOLO se e' unica: con due immagini
+                         * che contengono la stessa parola, scegliere la
+                         * prima vorrebbe dire modificare in silenzio la
+                         * foto sbagliata. Meglio non trovarla e dire
+                         * quali sono — quello lo si corregge, una
+                         * modifica al file sbagliato no.
+                         */
+                        const parziali = immagini.filter((entry) =>
+                            nome(entry).includes(wanted) || wanted.includes(nome(entry)))
+                        const file = immagini.find((entry) => entry.id === reference)
+                            ?? immagini.find((entry) => nome(entry) === wanted)
+                            ?? immagini.find((entry) => senzaCoda(nome(entry)) === senzaCoda(wanted))
+                            ?? (parziali.length === 1 ? parziali[0] : null)
+                        if (!file) return null
+                        const raw = await vaultService.readFilePreview(file.id).catch(() => null)
+                        if (!raw) return null
+                        return {
+                            base64: talosBytesToBase64(raw.bytes),
+                            mediaType: file.media_type,
+                            name: file.display_name,
+                        }
+            }
             const { createTalosToolset } = await import('@/lib/tools/toolset')
             const toolset = await createTalosToolset({
                     repository: deps.chatRepository,
@@ -2867,7 +2912,24 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * modello a ignorare una capacita' che sul telefono
                      * funziona davvero.
                      */
-                    device: () => createTalosDeviceSources(),
+                    device: () => {
+                        const fonti = createTalosDeviceSources()
+                        if (!fonti) return null
+                        return {
+                            ...fonti,
+                            /*
+                             * ⛔ Lo sfondo prende l'immagine dalla LIBRERIA con
+                             * lo stesso risolutore della modifica immagini, e
+                             * non un percorso scelto dal modello: un percorso
+                             * sarebbe un tool che apre qualunque file del
+                             * dispositivo travestito da «cambia sfondo».
+                             */
+                            findImage: (reference: string) => trovaImmagineDellaLibreria(reference),
+                            availableImages: () => attachments.vaultFiles
+                                .filter((entry) => entry.media_type.startsWith('image/'))
+                                .map((entry) => entry.display_name),
+                        }
+                    },
                     images: () => {
                         const drawer = sendRuntime.imageProvider
                         if (!drawer) return null
@@ -2910,41 +2972,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                     .filter((entry) => entry.media_type.startsWith('image/'))
                                     .map((entry) => entry.display_name)
                             },
-                            async findImage(reference) {
-                                const wanted = reference.trim().toLowerCase()
-                                const senzaCoda = (nome: string) => nome.replace(/\.[^.]+$/, '')
-                                const immagini = attachments.vaultFiles
-                                    .filter((entry) => entry.media_type.startsWith('image/'))
-                                const nome = (entry: { display_name: string }) =>
-                                    entry.display_name.trim().toLowerCase()
-
-                                /*
-                                 * Dal piu' preciso al piu' generoso, e ci si
-                                 * ferma al primo che decide.
-                                 *
-                                 * L'ultimo passo accetta una corrispondenza
-                                 * parziale SOLO se e' unica: con due immagini
-                                 * che contengono la stessa parola, scegliere la
-                                 * prima vorrebbe dire modificare in silenzio la
-                                 * foto sbagliata. Meglio non trovarla e dire
-                                 * quali sono — quello lo si corregge, una
-                                 * modifica al file sbagliato no.
-                                 */
-                                const parziali = immagini.filter((entry) =>
-                                    nome(entry).includes(wanted) || wanted.includes(nome(entry)))
-                                const file = immagini.find((entry) => entry.id === reference)
-                                    ?? immagini.find((entry) => nome(entry) === wanted)
-                                    ?? immagini.find((entry) => senzaCoda(nome(entry)) === senzaCoda(wanted))
-                                    ?? (parziali.length === 1 ? parziali[0] : null)
-                                if (!file) return null
-                                const raw = await vaultService.readFilePreview(file.id).catch(() => null)
-                                if (!raw) return null
-                                return {
-                                    base64: talosBytesToBase64(raw.bytes),
-                                    mediaType: file.media_type,
-                                    name: file.display_name,
-                                }
-                            },
+                            findImage: (reference: string) => trovaImmagineDellaLibreria(reference),
                             async generate(prompt, shape, signal, source, mask) {
                                 const {
                                     planTalosImageRequest, parseTalosGeneratedImages,
@@ -3207,7 +3235,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     },
                     // Durable preflight owns authorization. The legacy executor
                     // callback remains fail-closed if a caller bypasses it.
-                    requestConsent: async () => false,
+                    requestConsent: async () => 'unanswered' as const,
                 })
             // Evaluated now, from the live settings, so a permission changed a
             // minute ago governs this message.
@@ -3591,7 +3619,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     const result = await preflightTalosToolExecution(tool, call.arguments, {
                         permissions: effectivePermissions(),
                         isToolEnabled: isEffectivelyEnabled,
-                        requestConsent: async () => false,
+                        requestConsent: async () => 'unanswered' as const,
                         audit: (row) => toolset.audit(row, sendIdentity.sessionId),
                         /*
                          * La catena della conversazione, che è ciò che rende
@@ -3671,7 +3699,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     const result = await executeTalosTool(tool, call.arguments, {
                         permissions: effectivePermissions(),
                         isToolEnabled: isEffectivelyEnabled,
-                        requestConsent: async () => false,
+                        requestConsent: async () => 'unanswered' as const,
                         audit: (row) => toolset.audit(row, sendIdentity.sessionId),
                         /*
                          * La catena della conversazione, che è ciò che rende

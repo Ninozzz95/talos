@@ -44,6 +44,15 @@ export interface TalosDeviceToolSources {
     openSettings(action: string, forThisApp: boolean): Promise<Esito>
     compose(kind: string, value: string, text?: string): Promise<Esito>
     status(): Promise<Record<string, unknown>>
+    wallpaper(imageBase64: string, where: string): Promise<Esito & { appliedTo: string }>
+    keepAwake(on: boolean): Promise<Esito & { on: boolean }>
+    /**
+     * ⛔ La risoluzione del nome e' del CONTROLLER, non di qui: e' la stessa che
+     * usa la modifica delle immagini, e due copie vorrebbero dire che un giorno
+     * «Foto.PNG» si trova da una parte e non dall'altra.
+     */
+    findImage(reference: string): Promise<{ base64: string, mediaType: string, name: string } | null>
+    availableImages(): string[]
     speak(text: string): Promise<{ spoken: boolean, reason?: string }>
 }
 
@@ -65,6 +74,10 @@ const MOTIVO: Record<string, string> = {
     'unknown-kind': 'Unsupported kind. Use call, sms, share, search or url.',
     silenced: 'The phone is silenced, so nothing was said aloud. The answer is still on screen.',
     unavailable: 'Speech is not available on this device. Tell the user; do not retry.',
+    'no-image': 'No image was given. Name one from the Library.',
+    'not-an-image': 'That file is not a readable image. Pick another.',
+    'wallpaper-not-allowed': 'This phone does not let apps change the wallpaper. Offer to open the wallpaper settings with device_open_settings.',
+    'no-window': 'TALOS is not on screen, so the screen cannot be held awake. Do not retry.',
 }
 
 function esitoDi(r: Esito, fatto: string) {
@@ -258,5 +271,68 @@ export function createTalosDeviceTools(
                 }
             },
         }) as TalosToolDefinition<never>,
+        defineTalosTool({
+            name: 'device_wallpaper',
+            action: 'write',
+            /*
+             * ⛔ Anche `read`, e conta: per applicare uno sfondo bisogna
+             * LEGGERE un file della Libreria. Chi ha tolto al modello il
+             * permesso di leggere le proprie cose dev'essere fermato qui, non
+             * scoprire che una via traversa lo aggirava.
+             */
+            requiredActions: ['read'],
+            title: 'Set the wallpaper',
+            description: [
+                'Set an image from the Library as the phone wallpaper.',
+                'Name the image as the user knows it. where: home, lock or both.',
+                'Draw an image first if the user asked for something new.',
+            ].join(' '),
+            input: z.object({
+                image: z.string().min(1).max(300),
+                where: z.enum(['home', 'lock', 'both']).optional(),
+            }),
+            async run(input) {
+                const trovata = await sources.findImage(input.image)
+                if (!trovata) {
+                    /*
+                     * ⛔ L'errore dice COSA c'e'. Misurato il 2026-08-04 sulla
+                     * generazione immagini: un «non trovata» muto ha fatto
+                     * riprovare cinque volte di fila e poi arrendersi. Un
+                     * errore che non offre l'alternativa costringe a
+                     * indovinare, e indovinare costa round veri.
+                     */
+                    const ci = sources.availableImages()
+                    return {
+                        ok: false,
+                        code: 'TALOS_DEVICE_IMAGE_NOT_FOUND',
+                        content: ci.length
+                            ? `No Library image matches "${input.image}". These exist: ${ci.join(', ')}.`
+                            : 'There are no images in the Library yet. Create one first.',
+                    }
+                }
+                const dove = input.where ?? 'home'
+                const r = await sources.wallpaper(trovata.base64, dove)
+                return esitoDi(r, `Wallpaper set from ${trovata.name} (${r.appliedTo}).`)
+            },
+        }) as TalosToolDefinition<never>,
+
+        defineTalosTool({
+            name: 'device_keep_awake',
+            action: 'write',
+            title: 'Keep the screen awake',
+            description: [
+                'Stop the screen turning off while the user follows something on it —',
+                'a recipe, directions, a procedure. Send on:false to let it sleep again.',
+                'It only holds while TALOS is on screen, and ends by itself when it is not.',
+            ].join(' '),
+            input: z.object({ on: z.boolean() }),
+            async run(input) {
+                const r = await sources.keepAwake(input.on)
+                return esitoDi(r, input.on
+                    ? 'The screen will stay on while TALOS is open.'
+                    : 'The screen can turn off again.')
+            },
+        }) as TalosToolDefinition<never>,
+
     ]
 }

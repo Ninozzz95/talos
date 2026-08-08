@@ -108,7 +108,21 @@ export interface TalosToolExecutionDeps {
      * could not ask — a machine refusal, which must not be recorded as the
      * user having said no.
      */
-    requestConsent(request: TalosToolConsentRequest): Promise<boolean | 'busy'>
+    /**
+     * ⛔ `'unanswered'` esiste perché un `false` che significa «qui non c'è
+     * nessuno a cui chiedere» NON è un rifiuto.
+     *
+     * Nel percorso della chat questa porta è scritta `async () => false`: la
+     * domanda la fa la scheda di autorizzazione, non questa funzione. Finché il
+     * `false` era uno solo, una richiesta già decisa che non veniva riconosciuta
+     * finiva qui e il modello sentiva «Declined by the user» — cioè si
+     * attribuiva alla persona una decisione che non aveva preso.
+     *
+     * RIPRODOTTO sul Pad il 2026-08-08: si tocca **Consenti** e il modello
+     * risponde «ho annullato». Ora chi non ha una superficie per chiedere lo
+     * dichiara, e la differenza arriva fino al modello.
+     */
+    requestConsent(request: TalosToolConsentRequest): Promise<boolean | 'busy' | 'unanswered'>
     audit(row: TalosToolAuditRow): Promise<void>
     context: TalosToolContext
     /**
@@ -363,7 +377,7 @@ export async function executeTalosTool(
         ? preflight.input
         : preflight.request.input
     if (preflight.status === 'authorization_required') {
-        let answer: boolean | 'busy' = false
+        let answer: boolean | 'busy' | 'unanswered' = false
         try {
             answer = await deps.requestConsent(preflight.request)
         } catch {
@@ -379,6 +393,26 @@ export async function executeTalosTool(
                 input,
             })
             return { ok: false, content: `Not run: another confirmation is already open. Ask again after it is answered.`, code: 'TALOS_TOOL_CONSENT_BUSY' }
+        }
+        if (answer === 'unanswered') {
+            /*
+             * ⛔ Si ferma lo stesso — chiuso in caso di dubbio, sempre — ma non
+             * si mette in bocca alla persona un «no» che non ha detto. E il
+             * modello riceve un'istruzione utile invece di una bugia: la cosa
+             * da fare non è arrendersi, è farla richiedere.
+             */
+            await record(deps, {
+                tool: tool.name,
+                action: tool.action,
+                requiredActions,
+                status: 'denied',
+                input,
+            })
+            return {
+                ok: false,
+                content: `Not run: "${tool.title}" is still waiting for the user's authorization, and no answer reached this call. The user has NOT refused. Tell them the request is pending, or offer to ask again.`,
+                code: 'TALOS_TOOL_AWAITING_AUTHORIZATION',
+            }
         }
         if (!answer) {
             await record(deps, {

@@ -929,6 +929,8 @@ export const TALOS_EN_MESSAGES = {
         deviceOpenSettings: 'Opening settings',
         deviceCompose: 'Preparing a message',
         deviceSpeak: 'Speaking out loud',
+        deviceWallpaper: 'Changing the wallpaper',
+        deviceKeepAwake: 'Holding the screen awake',
         researchList: 'Looking at your researches',
         researchStart: 'Starting a deep research',
         researchRead: 'Reading a research report',
@@ -1094,6 +1096,14 @@ export const TALOS_EN_MESSAGES = {
         deviceSpeak: {
             title: 'Read out loud',
             description: '⛔ Anyone in the room hears it. With the phone silenced it says nothing, and tells you so.',
+        },
+        deviceWallpaper: {
+            title: 'Set this image as the wallpaper',
+            description: '⛔ Anyone who looks at the phone sees it, even locked. The old wallpaper cannot be put back: TALOS does not know what it was.',
+        },
+        deviceKeepAwake: {
+            title: 'Keep the screen on',
+            description: 'The screen stays on while TALOS is in front, and sleeps again as soon as it is not. It uses battery.',
         },
         researchList: {
             title: 'Browse your researches',
@@ -2140,6 +2150,8 @@ export const TALOS_EN_MESSAGES = {
             device_open_settings: { title: 'Open a settings screen', description: 'Takes you straight to the exact Android screen instead of saying it cannot help.' },
             device_compose: { title: 'Prepare a call, a message or a share', description: 'Fills it in and hands it to you. TALOS never calls or sends by itself: you press the button.' },
             device_speak: { title: 'Say something out loud', description: 'Reads a short answer through the speaker. Anyone in the room hears it, so it counts as leaving this phone. A silenced phone stays silent.' },
+            device_wallpaper: { title: 'Set an image as the wallpaper', description: 'Takes an image from your Library and sets it as the phone wallpaper — home screen, lock screen or both.' },
+            device_keep_awake: { title: 'Keep the screen awake', description: 'Stops the screen turning off while you follow something: a recipe, directions. It lasts while TALOS is open.' },
         },
     },
     lock: {
