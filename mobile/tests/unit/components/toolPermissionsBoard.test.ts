@@ -81,15 +81,32 @@ describe('la scheda dei permessi degli strumenti', () => {
     it('dice quali strumenti stanno dentro ogni potere, e li prende dal catalogo', () => {
         const { wrapper } = scheda()
         for (const azione of TALOS_TOOL_ACTIONS) {
-            const riga = wrapper.get(`[data-testid="talos-tool-permission-${azione}-tools"]`).text()
+            const dettaglio = wrapper.get(`[data-testid="talos-tool-permission-${azione}-tools"]`)
             const attesi = TALOS_AGENT_TOOL_CONTROLS.filter((c) => c.actions.includes(azione))
             expect(attesi.length).toBeGreaterThan(0)
-            // Il conto, non i nomi: i nomi passano dalle traduzioni e cambiano,
-            // il NUMERO di strumenti coperti no.
-            const elencati = riga.split('·').filter((p) => p.trim().length > 0)
-            expect(elencati.length).toBeGreaterThanOrEqual(1)
-            // Nessuno strumento del catalogo può mancare dal suo potere.
-            expect(elencati.length).toBe(new Set(attesi.map((c) => c.id)).size)
+
+            /*
+             * ⛔ Le CIFRE della riga chiusa, non i nomi.
+             *
+             * Dal 2026-08-08 l'elenco sta dentro un collapse — owner: «voglio
+             * che le categorie vengano raggruppate in un collapse» — e la riga
+             * che si legge senza aprire dice «copre N strumenti in M
+             * categorie». È quella riga a portare adesso la garanzia di prima:
+             * nessuno strumento del catalogo può mancare dal suo potere. Se un
+             * tool nuovo non arrivasse fin qui, N smetterebbe di tornare.
+             *
+             * I nomi restano fuori dalla verifica per la stessa ragione di
+             * prima: passano dalle traduzioni e cambiano. I due numeri no.
+             */
+            const cifre = (dettaglio.get('summary').text().match(/\d+/g) ?? []).map(Number)
+            expect(cifre).toEqual([
+                new Set(attesi.map((c) => c.id)).size,
+                new Set(attesi.map((c) => c.group)).size,
+            ])
+
+            // E le categorie ci sono davvero, non solo contate: una categoria
+            // per riga, con i suoi strumenti sotto.
+            expect(dettaglio.findAll('li').length).toBe(new Set(attesi.map((c) => c.group)).size)
         }
     })
 

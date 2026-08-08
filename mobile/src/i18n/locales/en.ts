@@ -931,6 +931,12 @@ export const TALOS_EN_MESSAGES = {
         deviceSpeak: 'Speaking out loud',
         deviceWallpaper: 'Changing the wallpaper',
         deviceKeepAwake: 'Holding the screen awake',
+        deviceWifi: 'Wi-Fi',
+        deviceBluetooth: 'Bluetooth',
+        deviceDnd: 'Do Not Disturb',
+        deviceSystemSetting: 'Phone setting',
+        deviceAppUsage: 'Phone usage',
+        deviceListApps: 'Your apps',
         researchList: 'Looking at your researches',
         researchStart: 'Starting a deep research',
         researchRead: 'Reading a research report',
@@ -1100,6 +1106,30 @@ export const TALOS_EN_MESSAGES = {
         deviceWallpaper: {
             title: 'Set this image as the wallpaper',
             description: '⛔ Anyone who looks at the phone sees it, even locked. The old wallpaper cannot be put back: TALOS does not know what it was.',
+        },
+        deviceWifi: {
+            title: 'Turn Wi-Fi on or off',
+            description: 'If TALOS cannot do it itself it opens the phone panel over this screen, and you tap the switch — it says so, because then it is not done yet.',
+        },
+        deviceBluetooth: {
+            title: 'Turn Bluetooth on or off',
+            description: 'Like Wi-Fi. Turning it off disconnects earbuds and watch.',
+        },
+        deviceDnd: {
+            title: 'Set or clear Do Not Disturb',
+            description: '⛔ Total silence hides alarms and calls too. TALOS prefers “only what matters”, which is nearly always what you want.',
+        },
+        deviceSystemSetting: {
+            title: 'Read or change a phone setting',
+            description: 'Brightness, screen timeout, auto-rotate. Nothing else: those are the three TALOS can explain.',
+        },
+        deviceAppUsage: {
+            title: 'Look at how you used the phone',
+            description: '⛔ Which apps and for how long is a portrait of your day. It stays on the phone, and the model only gets what the question needs.',
+        },
+        deviceListApps: {
+            title: 'Look at which apps you have',
+            description: '⛔ The list of installed apps says a lot about a person. It exists so TALOS opens the right one instead of guessing the name.',
         },
         deviceKeepAwake: {
             title: 'Keep the screen on',
@@ -1854,6 +1884,7 @@ export const TALOS_EN_MESSAGES = {
     },
     toolPermissions: {
         allAtOnce: 'Decide everything at once',
+        coversCount: 'Covers {tools} tools across {groups} categories',
         covers: 'Covers:',
         changeLater: 'You can change this any time, in Settings › Agent tools.',
         state: {
@@ -2089,6 +2120,7 @@ export const TALOS_EN_MESSAGES = {
         alwaysAllowed: 'Always allowed',
         askAgain: 'Ask again',
         revokeFailed: 'Could not revoke the saved authorization for {tool}.',
+        groupCount: '{enabled} of {total} on',
         groups: {
             library: 'Library',
             personal: 'Personal',
@@ -2152,6 +2184,12 @@ export const TALOS_EN_MESSAGES = {
             device_speak: { title: 'Say something out loud', description: 'Reads a short answer through the speaker. Anyone in the room hears it, so it counts as leaving this phone. A silenced phone stays silent.' },
             device_wallpaper: { title: 'Set an image as the wallpaper', description: 'Takes an image from your Library and sets it as the phone wallpaper — home screen, lock screen or both.' },
             device_keep_awake: { title: 'Keep the screen awake', description: 'Stops the screen turning off while you follow something: a recipe, directions. It lasts while TALOS is open.' },
+            device_wifi: { title: 'Turn Wi-Fi on or off', description: 'Turns Wi-Fi on and off. If it cannot do it itself, it opens the phone panel over TALOS and you tap the switch.' },
+            device_bluetooth: { title: 'Turn Bluetooth on or off', description: 'Turns Bluetooth on and off. Turning it off disconnects earbuds and watch.' },
+            device_do_not_disturb: { title: 'Set or clear Do Not Disturb', description: 'Silences the phone, or lets it ring again. Prefers “only what matters” over total silence, which hides alarms too.' },
+            device_system_setting: { title: 'Read or change a setting', description: 'Brightness, screen timeout and auto-rotate: the three TALOS can explain.' },
+            device_app_usage: { title: 'Look at how you used the phone', description: 'Which apps you have been on and for how long, over the last few days.' },
+            device_list_apps: { title: 'Look at which apps you have', description: 'Lists installed apps with the name you see and the technical one, so TALOS opens the right one without guessing.' },
         },
     },
     lock: {

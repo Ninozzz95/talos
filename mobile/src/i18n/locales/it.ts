@@ -949,6 +949,12 @@ export const TALOS_IT_MESSAGES = {
         deviceSpeak: 'Lettura ad alta voce',
         deviceWallpaper: 'Cambio dello sfondo',
         deviceKeepAwake: 'Schermo tenuto acceso',
+        deviceWifi: 'Wi-Fi',
+        deviceBluetooth: 'Bluetooth',
+        deviceDnd: 'Non disturbare',
+        deviceSystemSetting: 'Impostazione del telefono',
+        deviceAppUsage: 'Uso del telefono',
+        deviceListApps: 'Le tue app',
         researchList: 'Consultazione delle ricerche',
         researchStart: 'Avvio di una ricerca',
         researchRead: 'Lettura di un rapporto',
@@ -1118,6 +1124,30 @@ export const TALOS_IT_MESSAGES = {
         deviceWallpaper: {
             title: 'Metti l’immagine come sfondo',
             description: '⛔ Lo sfondo lo vede chiunque guardi il telefono, anche da bloccato. Lo sfondo di prima non si può rimettere: TALOS non sa qual era.',
+        },
+        deviceWifi: {
+            title: 'Accendi o spegni il Wi-Fi',
+            description: 'Se TALOS non puo’ farlo da solo apre il pannello del telefono qui sopra, e l’interruttore lo tocchi tu — in quel caso non e’ ancora fatto, e te lo dice.',
+        },
+        deviceBluetooth: {
+            title: 'Accendi o spegni il Bluetooth',
+            description: 'Come il Wi-Fi. Spegnerlo scollega auricolari e orologio.',
+        },
+        deviceDnd: {
+            title: 'Metti o togli il Non disturbare',
+            description: '⛔ Il silenzio totale nasconde anche sveglie e chiamate. TALOS preferisce «solo le cose importanti», che e’ quasi sempre quello che serve.',
+        },
+        deviceSystemSetting: {
+            title: 'Leggi o cambia un’impostazione del telefono',
+            description: 'Luminosita’, spegnimento dello schermo, rotazione automatica. Nient’altro: sono le tre che TALOS sa spiegare.',
+        },
+        deviceAppUsage: {
+            title: 'Guarda come hai usato il telefono',
+            description: '⛔ Quali app e per quanto tempo: e’ il ritratto di una giornata. Resta sul telefono, e al modello arriva solo cio’ che serve alla domanda.',
+        },
+        deviceListApps: {
+            title: 'Guarda quali app hai',
+            description: '⛔ L’elenco delle app installate dice molto di una persona. Serve perche’ TALOS apra quella giusta invece di indovinare il nome.',
         },
         deviceKeepAwake: {
             title: 'Tieni acceso lo schermo',
@@ -1869,6 +1899,7 @@ export const TALOS_IT_MESSAGES = {
     },
     toolPermissions: {
         allAtOnce: 'Decidi tutto in un colpo',
+        coversCount: 'Copre {tools} strumenti in {groups} categorie',
         covers: 'Riguarda:',
         changeLater: 'Si cambia quando vuoi, da Impostazioni › Strumenti agente.',
         state: {
@@ -2104,6 +2135,7 @@ export const TALOS_IT_MESSAGES = {
         alwaysAllowed: 'Sempre consentito',
         askAgain: 'Chiedi di nuovo',
         revokeFailed: 'Non è stato possibile revocare l’autorizzazione salvata per {tool}.',
+        groupCount: '{enabled} di {total} accesi',
         groups: {
             library: 'Libreria',
             personal: 'Personali',
@@ -2167,6 +2199,12 @@ export const TALOS_IT_MESSAGES = {
             device_speak: { title: 'Dì qualcosa ad alta voce', description: 'Legge una risposta breve dall’altoparlante. La sente chiunque sia nella stanza, quindi conta come uscire da questo telefono. Se il telefono è silenzioso, resta silenzioso.' },
             device_wallpaper: { title: 'Metti un’immagine come sfondo', description: 'Prende un’immagine della Libreria e la mette come sfondo del telefono, sulla schermata iniziale, su quella di blocco o su entrambe.' },
             device_keep_awake: { title: 'Tieni acceso lo schermo', description: 'Impedisce allo schermo di spegnersi mentre segui qualcosa: una ricetta, delle indicazioni. Vale finché TALOS è aperto.' },
+            device_wifi: { title: 'Accendi o spegni il Wi-Fi', description: 'Accende e spegne il Wi-Fi. Se non ci riesce da solo apre il pannello del telefono sopra TALOS, e l’interruttore lo tocchi tu.' },
+            device_bluetooth: { title: 'Accendi o spegni il Bluetooth', description: 'Accende e spegne il Bluetooth. Spegnendolo si scollegano auricolari e orologio.' },
+            device_do_not_disturb: { title: 'Metti o togli il Non disturbare', description: 'Zittisce il telefono, o lo lascia suonare di nuovo. Preferisce «solo le cose importanti» al silenzio totale, che nasconde anche le sveglie.' },
+            device_system_setting: { title: 'Leggi o cambia un’impostazione', description: 'Luminosita’, spegnimento dello schermo e rotazione automatica: le tre che TALOS sa spiegare.' },
+            device_app_usage: { title: 'Guarda come hai usato il telefono', description: 'Quali app hai usato e per quanto, negli ultimi giorni. Utile quando chiedi delle tue abitudini.' },
+            device_list_apps: { title: 'Guarda quali app hai', description: 'Elenca le app installate col nome che vedi tu e quello tecnico, cosi’ TALOS apre quella giusta senza indovinare.' },
         },
     },
     lock: {

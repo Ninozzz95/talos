@@ -29,6 +29,10 @@ const settings = vi.hoisted(() => ({
         // The three trust levels moved here from AI defaults on 2026-08-02:
         // the panel now frames the tool list with how far the model may go.
         tools: { read: 'allow', write: 'ask', outbound: 'ask' },
+        // ⛔ Scelti TUTTI e tre: qui i permessi non sono l'oggetto della prova,
+        // e senza questa riga i tre valori sopra verrebbero riportati al
+        // default di oggi — la regola provata in `permessiEffettiviAschermo`.
+        tools_chosen: ['read', 'write', 'outbound'],
         agent_tools: {
             library_list: true,
             library_search: true,
@@ -62,6 +66,7 @@ const settings = vi.hoisted(() => ({
     },
     setAgentToolEnabled: vi.fn(async () => {}),
     revokeToolAuthorization: vi.fn(async () => {}),
+    effectiveToolPermissions: () => settings.state.tools,
 }))
 
 vi.mock('@/stores/settings', () => ({ useSettingsStore: () => settings }))
