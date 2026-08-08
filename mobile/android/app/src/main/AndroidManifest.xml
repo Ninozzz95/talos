@@ -345,6 +345,37 @@
             android:enabled="true"
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <!--
+            ⭐ IL SERVIZIO CHE ASCOLTA LE NOTIFICHE.
+
+            È meta' di cio' che fa Gemini, e non passa da nessun ponte
+            privilegiato: si accende dalla pagina di sistema, come una qualunque
+            impostazione. Su questo telefono, dove la ROM non lascia che Shizuku
+            ci autorizzi, è la capacità grande che resta raggiungibile.
+
+            ⛔ `BIND_NOTIFICATION_LISTENER_SERVICE` la richiede il SISTEMA a noi,
+            non noi a lui: è la firma che dice «solo Android può collegarsi a
+            questo servizio». Senza, qualunque app potrebbe legarsi al nostro
+            ascoltatore e leggere ciò che legge lui.
+
+            ⛔ E ciò che TALOS non potrà mai leggere, dichiarato una volta qui e
+            ripetuto nella descrizione dello strumento: da Android 15 le
+            notifiche sensibili — i codici a due fattori — sono oscurate a chi
+            non ha `RECEIVE_SENSITIVE_NOTIFICATIONS`, un permesso di piattaforma
+            che a noi non sarà dato. Non è un limite da aggirare: è una
+            promessa da fare.
+        -->
+        <service
+            android:name="ai.talos.agent.TalosNotificationListener"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
 </application>
 
     <!-- Permissions -->

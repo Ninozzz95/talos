@@ -1,6 +1,7 @@
 import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
 import { createTalosDeviceTools } from '@/lib/tools/deviceTools'
 import { createTalosPrivilegedTools } from '@/lib/tools/privilegedTools'
+import { createTalosNotificationTools } from '@/lib/tools/notificationTools'
 import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
 import { createTalosTasksWriteTools } from '@/lib/tools/tasksWriteTools'
@@ -118,6 +119,15 @@ export interface TalosToolsetDeps {
      * gruppo sparisce intero invece di offrire sei tool che falliranno sempre.
      */
     privileged?(): import('@/lib/tools/privilegedTools').TalosPrivilegedToolSources | null
+    /**
+     * ⛔ Le notifiche hanno la LORO sorgente, separata dal privilegiato.
+     *
+     * Non passano da nessun ponte: si accendono dalla pagina di sistema. Se
+     * dipendessero da `privileged`, sparirebbero su un telefono dove il ponte
+     * non c'è — cioè esattamente su questo, dove sono la capacità più grande
+     * che resta.
+     */
+    notifications?(): import('@/lib/tools/notificationTools').TalosNotificationSources | null
     /**
      * La Libreria, in scrittura: rinominare e togliere.
      *
@@ -602,6 +612,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...(memoryWrite ? createTalosMemoryWriteTools(memoryWrite) : []),
                 ...(deps.device?.() ? createTalosDeviceTools(deps.device()!) : []),
                 ...(deps.privileged?.() ? createTalosPrivilegedTools(deps.privileged()!) : []),
+                ...(deps.notifications?.() ? createTalosNotificationTools(deps.notifications()!) : []),
                 ...(libraryWrite ? createTalosLibraryWriteTools(libraryWrite) : []),
                 ...(notesWrite ? createTalosNotesWriteTools(notesWrite) : []),
                 ...(tasksWrite ? createTalosTasksWriteTools(tasksWrite) : []),

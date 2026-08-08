@@ -16,6 +16,7 @@ import { createTalosLibraryContextPolicyTools } from '@/lib/tools/libraryContext
 import { createTalosLocalModelTools } from '@/lib/models/modelTools'
 import { createTalosDeviceTools } from '@/lib/tools/deviceTools'
 import { createTalosPrivilegedTools } from '@/lib/tools/privilegedTools'
+import { createTalosNotificationTools } from '@/lib/tools/notificationTools'
 import {
     talosToolRequiredActions,
     talosToolsForAnthropic,
@@ -126,6 +127,19 @@ function everyExecutableTool() {
             wifi: vi.fn(), bluetooth: vi.fn(), doNotDisturb: vi.fn(),
             systemSetting: vi.fn(), appUsage: vi.fn(), listApps: vi.fn(),
             ready: vi.fn(), reasonOf: vi.fn(),
+        } as never),
+        /*
+         * ⭐ Le notifiche — metà di ciò che fa Gemini.
+         *
+         * ⛔ Fabbrica SEPARATA da quella privilegiata, e non è pulizia: le
+         * notifiche non passano da nessun ponte, si accendono dalla pagina di
+         * sistema. Se stessero lì dentro, sparirebbero proprio sul telefono
+         * dove il ponte non si accenderà mai — cioè dove sono la capacità più
+         * grande che resta.
+         */
+        ...createTalosNotificationTools({
+            status: vi.fn(), list: vi.fn(), reply: vi.fn(),
+            dismiss: vi.fn(), reasonOf: vi.fn(),
         } as never),
     ]
 }
@@ -248,6 +262,13 @@ describe('Agent Tools control registry', () => {
             // 2026-08-08, T2: le sei che passano dalla shell privilegiata.
             'device_wifi', 'device_bluetooth', 'device_do_not_disturb',
             'device_system_setting', 'device_app_usage', 'device_list_apps',
+            // ⭐ 2026-08-08, le NOTIFICHE: leggerle, rispondere, toglierle.
+            // Metà di ciò che fa Gemini, e l'unica capacità grande che resta
+            // raggiungibile su un telefono dove il ponte privilegiato non si
+            // accenderà mai. Se togliendole il digest storico non tornasse,
+            // vorrebbe dire che ho mosso un contratto vecchio insieme ai nuovi.
+            'device_notifications_list', 'device_notification_reply',
+            'device_notification_dismiss',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -288,7 +309,22 @@ describe('Agent Tools control registry', () => {
          * vorrebbe dire che un contratto e' cambiato da solo.
          */
         expect(digestOf(controlPlane))
-            .toBe('512bbf966c1b495715297eb37cb5909d4207de2c66e7f209dfad9d08911953e3')
+            .toBe('d23a3f3f7afb70ddbb870dab05ed5a8313a7b5a99b3db8208fb5f25fbd7fc4c2')
+        /*
+         * ⭐ Ri-fissato 2026-08-08 per i TRE tool delle NOTIFICHE:
+         * `device_notifications_list`, `device_notification_reply`,
+         * `device_notification_dismiss`.
+         *
+         * Sono metà di ciò che fa Gemini, e l'unica capacità grande che resta
+         * raggiungibile su un telefono dove il ponte privilegiato non si
+         * accenderà mai — perché non passano da nessun ponte: si accendono
+         * dalla pagina di sistema.
+         *
+         * **Dimostrato, non assunto**, come tutte le volte precedenti: il
+         * blocco delle esclusioni qui sopra li toglie e riproduce `369a6d…`
+         * byte per byte. Nessuno dei contratti preesistenti si è mosso, che è
+         * l'unica domanda a cui questa impronta serve a rispondere.
+         */
         /**
          * Re-pinned 2026-08-01 for the three DIALECT digests only — the control
          * plane above did not move, which is the proof that nothing structural
@@ -353,15 +389,26 @@ describe('Agent Tools control registry', () => {
         expect(digestOf(talosToolsForGemini(withoutNotesWrite as never)))
             .toBe('61745afe6d79da05fa2d982bc4cc3bd9256305f66d4caaa15f3d386772565e62')
 
+        /*
+         * ⭐ Ri-fissati 2026-08-08 anche per i TRE tool delle NOTIFICHE.
+         *
+         * I tre dialetti si muovono INSIEME, come dev'essere: è lo stesso
+         * contratto tradotto tre volte, e se se ne muovesse uno solo sarebbe un
+         * traduttore rotto, non un tool nuovo.
+         *
+         * **Dimostrato, non assunto**: il blocco «senza i nuovi» qui sopra
+         * riproduce tutte e tre le impronte storiche byte per byte. Nessun
+         * contratto preesistente si è mosso.
+         */
         // E con i nuovi dentro: il contratto pubblico di oggi.
         // Ri-fissati 2026-08-08 per i NOVE del telefono. I tre dialetti si
         // muovono INSIEME, come dev'essere: e' lo stesso contratto tradotto tre
         // volte. Se se ne muovesse uno solo, sarebbe un traduttore rotto.
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('10feee4f78bd9b64d9946802273b47fea78190f77dd574ee3975bec72927edb9')
+            .toBe('cfd564daaa69e391b08e2592037c174e69b232d59e50ca4eae8803cbb832be84')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('9dfae32eb780dc4a017c5649f3e7a8428b94ddf3483b63502feca3bdcdcb9af3')
+            .toBe('7ab4d54ad4879d0509067456d062059b77900b421684550d6d621d5ca33754e7')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('d602ab9ee22ebe5ee1b8d198e7b1ea9d30a0e028da9239e46ac08863a2176335')
+            .toBe('0d273e89a18577b6bc3e7a9088d718485f7e328a2df52ea562c49bafd08277db')
     })
 })

@@ -321,6 +321,7 @@ import { talosOnLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
 import { chooseTalosImageProvider } from '@/lib/images/imageProviderSelection'
 import { createTalosDeviceSources } from '@/lib/device/devicePlugin'
 import { createTalosPrivilegedSources } from '@/lib/device/privilegedSources'
+import { createTalosNotificationSources } from '@/lib/device/notificationSources'
 import type { TalosImageModelCandidate, TalosImageProvider } from '@/lib/images/imageGateway'
 
 export type ProviderCatalogStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
@@ -2920,6 +2921,17 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * cosa per chi legge.
                      */
                     privileged: () => createTalosPrivilegedSources(),
+                    /**
+                     * ⭐ Le notifiche — metà di ciò che fa Gemini.
+                     *
+                     * ⛔ Sorgente SEPARATA dal privilegiato, e non è pulizia:
+                     * le notifiche non passano da nessun ponte, si accendono
+                     * dalla pagina di sistema. Se dipendessero da `privileged`
+                     * sparirebbero proprio dove servono di più — su un telefono
+                     * come questo, dove la ROM non lascia che Shizuku ci
+                     * autorizzi e il ponte non si accenderà mai.
+                     */
+                    notifications: () => createTalosNotificationSources(),
                     device: () => {
                         const fonti = createTalosDeviceSources()
                         if (!fonti) return null
