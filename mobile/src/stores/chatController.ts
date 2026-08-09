@@ -3720,7 +3720,62 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     const result = await executeTalosTool(tool, call.arguments, {
                         permissions: effectivePermissions(),
                         isToolEnabled: isEffectivelyEnabled,
-                        requestConsent: async () => 'unanswered' as const,
+                        /*
+                         * ⛔⛔ IL PIANO VALE ANCHE QUI, non solo alla barriera.
+                         *
+                         * ## Il difetto, riprodotto in DODICI secondi il 2026-08-09
+                         *
+                         * Claude Sonnet 5, «apri la calcolatrice». Compare UNA
+                         * scheda, si tocca **Consenti**, e TALOS risponde: «la
+                         * richiesta per vedere l'elenco delle app è ancora in
+                         * attesa della tua autorizzazione — dovresti vedere un
+                         * prompt sul telefono». Il prompt era appena stato
+                         * risposto, e non ne comparirà mai un altro.
+                         *
+                         * ## La causa
+                         *
+                         * «Consenti» è `allow_turn`, e `allow_turn` apre un
+                         * PIANO legato al turno. Il modello sbaglia il nome del
+                         * pacchetto, riprova nel giro dopo chiedendo l'elenco:
+                         * la barriera lascia passare — il piano la copre — ma
+                         * l'esecutore rifà il cancello per conto suo, e lì il
+                         * piano non arrivava. Non trovando nessuna risposta per
+                         * QUELLA chiamata (l'identificativo è nuovo, il
+                         * checkpoint è quello vecchio) chiedeva di nuovo, e in
+                         * chat quella porta risponde `unanswered`.
+                         *
+                         * ⇒ Barriera e cancello davano due risposte diverse alla
+                         * stessa domanda. Il «sì» della persona finiva in mezzo.
+                         *
+                         * ## ⛔ Perché NON allarga niente
+                         *
+                         * È la STESSA funzione che decide alla barriera, con la
+                         * stessa catena: se il piano non copre, qui si risponde
+                         * `unanswered` come prima e ci si ferma. E i due
+                         * pavimenti restano — `talosPlanReplacesConsent` riporta
+                         * la scheda sulla trifecta chiusa e su R4, perché un
+                         * permesso dato prima non può coprire un pericolo nato
+                         * dopo.
+                         */
+                        requestConsent: async (richiesta) => {
+                            const dati = richiesta as unknown as {
+                                inputDigest?: string
+                                reason?: string
+                                risk?: string
+                            }
+                            return talosPlanReplacesConsent(
+                                talosPlanFor(sendIdentity.sessionId),
+                                {
+                                    tool: call.name,
+                                    digest: dati.inputDigest ?? '',
+                                    reason: dati.reason,
+                                    risk: dati.risk,
+                                },
+                                toolset.chainFor(sendIdentity.sessionId),
+                            )
+                                ? true
+                                : 'unanswered' as const
+                        },
                         audit: (row) => toolset.audit(row, sendIdentity.sessionId),
                         /*
                          * La catena della conversazione, che è ciò che rende

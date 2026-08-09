@@ -274,13 +274,53 @@ function exactRequest(
     inputDigest: string,
     actions: readonly TalosToolAction[],
 ): request is TalosToolAuthorizationRequestV1 {
-    return !!request
-        && request.schema_version === 1
-        && request.tool === tool
-        && request.call_id === callId
-        && request.input_digest === inputDigest
-        && SHA256.test(request.input_digest)
-        && coversActions(request.actions, actions)
+    return talosPercheRichiestaScartata(request, tool, callId, inputDigest, actions) === null
+}
+
+/**
+ * ⭐⭐ PERCHÉ una richiesta già decisa non è valsa — con una parola sola.
+ *
+ * ## Cosa è costato non averla
+ *
+ * MISURATO sul Pad il 2026-08-09, Claude Sonnet 5, «apri la calcolatrice». La
+ * scheda compare, si tocca **Consenti**, e il modello riceve lo stesso
+ * «lo strumento è ancora in attesa della tua autorizzazione» — che poi ripete
+ * alla persona: *«dovresti vedere un prompt sul telefono»*. Ma il prompt era
+ * appena stato risposto, e non ne comparirà nessun altro.
+ *
+ * Riprodotto in **dodici secondi**, deterministico. E impossibile da
+ * diagnosticare dall'esterno, perché il confronto ha **quattro** condizioni —
+ * strumento, identificativo della chiamata, impronta degli argomenti, azioni
+ * coperte — e il codice ne restituiva una sola risposta: «no».
+ *
+ * ⇒ È la stessa lezione di [[ripiego-col-motivo]]: un rifiuto senza la sua
+ * causa manda a cercare nel posto sbagliato. Qui mandava a cercare una scheda
+ * che non esisteva.
+ *
+ * ## ⛔ Perché una PAROLA e non un messaggio
+ *
+ * Perché questo esito finisce in tre posti che non parlano la stessa lingua: il
+ * registro tecnico, la riga di verifica, e il testo che il MODELLO legge.
+ * Una parola breve e stabile si incolla in tutti e tre senza tradurla, e non
+ * porta con sé né l'impronta né gli argomenti — che sono dati della persona e
+ * non hanno niente da fare in un messaggio verso il modello.
+ *
+ * `null` vuol dire che la richiesta vale.
+ */
+export function talosPercheRichiestaScartata(
+    request: TalosToolAuthorizationRequestV1 | undefined,
+    tool: string,
+    callId: string,
+    inputDigest: string,
+    actions: readonly TalosToolAction[],
+): 'assente' | 'contratto' | 'strumento' | 'chiamata' | 'argomenti' | 'azioni' | null {
+    if (!request) return 'assente'
+    if (request.schema_version !== 1) return 'contratto'
+    if (request.tool !== tool) return 'strumento'
+    if (request.call_id !== callId) return 'chiamata'
+    if (request.input_digest !== inputDigest || !SHA256.test(request.input_digest)) return 'argomenti'
+    if (!coversActions(request.actions, actions)) return 'azioni'
+    return null
 }
 
 export function resolveTalosToolAuthorization(input: {
