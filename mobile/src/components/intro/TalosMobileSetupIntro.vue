@@ -98,6 +98,43 @@ const decidingAutonomy = ref(false)
  */
 const toolPermissions = ref<TalosToolPermissions>({ ...TALOS_DEFAULT_TOOL_PERMISSIONS })
 
+/**
+ * ⛔⛔⭐ QUALI AZIONI LA PERSONA HA DAVVERO TOCCATO — e perche' senza questo
+ * insieme l'introduzione disarmava la difesa che le sta sotto.
+ *
+ * ## Il difetto, trovato leggendo il 2026-08-09
+ *
+ * Questo passo scriveva TUTTI E TRE i valori premendo «avanti», anche a
+ * interruttori mai sfiorati. E `setToolPermissions` registra come SCELTA ogni
+ * azione che riceve — giustamente: toccare un permesso e' sceglierlo.
+ *
+ * ⇒ Chiunque attraversasse l'introduzione, anche solo premendo avanti, usciva
+ * con tutte e tre le azioni marcate «scelte». Da quel momento
+ * `talosEffectiveToolPermissions` — la regola che dice «un valore che nessuno ha
+ * scelto e' il default di OGGI, non quello del giorno dell'installazione» — non
+ * poteva piu' raggiungerlo. Il meccanismo costruito apposta per non congelare i
+ * default veniva disarmato dalla prima schermata che la persona vede.
+ *
+ * ⛔ Ed e' il difetto peggiore possibile qui, perche' congela il default del
+ * giorno dell'installazione: chi ha l'app da piu' tempo resta sui valori piu'
+ * larghi, e non lo sa. Owner, 2026-08-08, misurando la SUA installazione:
+ * `tools: { read: allow, write: allow, outbound: allow }`.
+ *
+ * ## ⛔ E perche' NON si guarda se il valore e' CAMBIATO
+ *
+ * Ci ho provato, e il test l'ha bocciato in trenta secondi: chi tocca
+ * «Chiedimelo sempre» quando gia' dice «chiedimelo» non produce nessuna
+ * differenza — eppure ha deciso, e la prudenza e' una risposta legittima quanto
+ * il permesso. Guardare il valore avrebbe tolto la scelta proprio a chi sceglie
+ * la cautela.
+ *
+ * ⇒ Il discrimine e' il GESTO sulla scheda, non il valore che ne esce. La
+ * scheda presenta i tre permessi come UNA decisione — «la pagina decide tutti i
+ * permessi in un colpo» — quindi toccarla decide per tutti e tre, e non toccarla
+ * non decide niente.
+ */
+const haDecisoAutonomia = ref(false)
+
 
 const index = ref(0)
 const stage = ref<'language' | 'story' | 'setup'>(
@@ -189,8 +226,16 @@ async function next(): Promise<void> {
         if (decidingAutonomy.value) return
         decidingAutonomy.value = true
         try {
-            // Gli STESSI tre valori che le Impostazioni leggono, non una copia.
-            await settings.setToolPermissions({ ...toolPermissions.value })
+            /*
+             * ⛔ Si scrive SOLO se la scheda e' stata toccata. Vedi
+             * `haDecisoAutonomia`: scrivere passando oltre marcherebbe come
+             * «scelto» un valore che nessuno ha guardato, e congelerebbe per
+             * sempre il default del giorno dell'installazione.
+             */
+            if (haDecisoAutonomia.value) {
+                // Gli STESSI tre valori che le Impostazioni leggono, non una copia.
+                await settings.setToolPermissions({ ...toolPermissions.value })
+            }
         } finally {
             decidingAutonomy.value = false
         }
@@ -531,6 +576,7 @@ function onKeydown(event: KeyboardEvent): void {
                         <TalosToolPermissionsBoard
                             v-model="toolPermissions"
                             :busy="decidingAutonomy"
+                            @update:model-value="haDecisoAutonomia = true"
                         />
                     </div>
 

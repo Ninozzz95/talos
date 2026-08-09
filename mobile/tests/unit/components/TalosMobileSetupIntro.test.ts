@@ -390,6 +390,42 @@ describe('first-run setup', () => {
         wrapper.unmount()
     })
 
+    /**
+     * ⛔⛔⭐ IL VERSO CONTRARIO — e senza di lui il difetto era invisibile.
+     *
+     * I due test qui sopra provano che TOCCARE la scheda registra una scelta.
+     * Nessuno provava il contrario: passare oltre SENZA toccarla.
+     *
+     * E li' stava il difetto. La pagina scriveva tutti e tre i permessi premendo
+     * «avanti», e `setToolPermissions` registra come SCELTA ogni azione che
+     * riceve — giustamente. ⇒ Chiunque attraversasse l'introduzione senza
+     * guardare gli interruttori usciva con tutte e tre le azioni «scelte», e da
+     * quel momento `talosEffectiveToolPermissions` non poteva piu' aggiornargli
+     * il default: restava congelato quello del giorno dell'installazione.
+     *
+     * ⛔ E' il difetto peggiore possibile qui, perche' colpisce chi ha l'app da
+     * PIU' tempo: l'owner, misurando la sua il 2026-08-08, aveva ancora
+     * `allow/allow/allow` mentre il codice diceva `ask` da una settimana.
+     *
+     * Owner 2026-08-09, regola d'oro: ogni funzione si prova anche al contrario.
+     * Questo test e' quel contrario.
+     */
+    it('⛔ passare oltre SENZA toccare la scheda non e una scelta', async () => {
+        const wrapper = await mountSetup()
+        await wrapper.get('[data-testid="talos-setup-name"]').setValue('Nino')
+        for (let step = 0; step < 3; step += 1) {
+            await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+            await flushPromises()
+        }
+        // La scheda e' a schermo. Non la si tocca: si preme solo «avanti».
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+
+        expect(state.toolPermissions).toEqual([])
+        expect(state.toolsChosen).toEqual([])
+        wrapper.unmount()
+    })
+
     it('offre il background senza chiederlo da solo, e lascia passare', async () => {
         /**
          * Owner: «senza questa non possiamo andare avanti» — ma un onboarding
