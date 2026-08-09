@@ -57,6 +57,8 @@ function plugin() {
         overlayStatus(): Promise<{ allowed: boolean, open: boolean }>
         overlayRequest(): Promise<{ opened: boolean }>
         overlayPair(options: Record<string, string>): Promise<{ shown: boolean, reason?: string }>
+        pairNotification(options: Record<string, string>): Promise<{ shown: boolean }>
+        pairNotificationClose(): Promise<{ closed: boolean }>
         bridgePair(options: { code: string, address?: string }): Promise<RispostaPonte>
         bridgeConnect(options: { address?: string }): Promise<RispostaPonte>
     }>('TalosPrivilege')
@@ -199,11 +201,39 @@ async function agisci(): Promise<void> {
  * niente, e non ci sarebbe più nessuno a disegnarlo.
  */
 async function apriFlottante(): Promise<void> {
+    ponteMotivo.value = null
+    /*
+     * ⭐⭐ PRIMA LA NOTIFICA, e la finestra flottante solo se la notifica non
+     * si posa.
+     *
+     * Owner, 2026-08-09: «appena entro in dev settings la finestra flottante
+     * viene coperta». Da Android 15 le opzioni sviluppatore dichiarano il
+     * contenuto protetto dalla condivisione schermo, e su OxygenOS quella
+     * protezione si porta via anche le finestre disegnate sopra.
+     *
+     * La tendina la disegna SystemUI e si apre sopra qualunque schermata,
+     * comprese quelle protette — ed è la strada che usa Shizuku
+     * (`AdbPairingService`). ⛔ Con un limite noto e dichiarato: su alcune ROM
+     * il campo della notifica non si apre mentre Impostazioni è in primo piano
+     * (Shizuku #868, proprio su OnePlus). Per questo la finestra flottante
+     * resta: non come scelta, come rete.
+     */
+    try {
+        const notifica = await plugin().pairNotification({
+            title: t('ponte.floatTitle'),
+            instruction: t('ponte.floatInstruction'),
+            action: t('ponte.pairAction'),
+        })
+        if (notifica.shown) {
+            await plugin().open({ target: 'developer' })
+            return
+        }
+    } catch { /* si prova la finestra flottante */ }
+
     if (ponte.value.floatNeedsPermission) {
         try { await plugin().overlayRequest() } catch { /* la pagina lo dice a parole */ }
         return
     }
-    ponteMotivo.value = null
     try {
         const esito = await plugin().overlayPair({
             title: t('ponte.floatTitle'),

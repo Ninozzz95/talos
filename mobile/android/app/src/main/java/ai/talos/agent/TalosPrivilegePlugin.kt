@@ -541,6 +541,68 @@ class TalosPrivilegePlugin : Plugin() {
         }
     }
 
+    /**
+     * ⭐⭐ ACCOPPIAMENTO DALLA TENDINA: il codice si scrive in una NOTIFICA.
+     *
+     * ## Perché sostituisce la finestra flottante
+     *
+     * Owner, 2026-08-09: «appena entro in dev settings la finestra flottante
+     * viene coperta». Da Android 15 la pagina delle opzioni sviluppatore
+     * dichiara il proprio contenuto protetto dalla condivisione schermo, e su
+     * OxygenOS quella protezione si porta via anche le finestre di sistema
+     * disegnate sopra.
+     *
+     * La tendina no: la disegna SystemUI e si apre **sopra qualunque
+     * schermata**, comprese quelle protette. È la stessa strada di Shizuku
+     * (`AdbPairingService`), cercata prima di scrivere una riga.
+     *
+     * ## Come si chiude il giro
+     *
+     * La notifica resta finché non arriva un codice. Quando arriva, qui si fa
+     * lo stesso lavoro dell'altra strada — scopri, accoppia, e **subito**
+     * collega, perché sono due porte diverse e chiedere un secondo tocco alla
+     * persona sarebbe farle fare un passo che sappiamo già.
+     */
+    @PluginMethod
+    fun pairNotification(call: PluginCall) {
+        val mostrata = TalosAccoppiamentoNotifica.mostra(
+            context,
+            call.getString("title") ?: "Pairing code",
+            call.getString("instruction") ?: "",
+            call.getString("action") ?: "Pair",
+        ) { codice ->
+            /*
+             * ⛔ Su un thread a parte: qui si scopre un servizio di rete e si
+             * lancia un processo, e questo arriva dal ricevitore di una
+             * notifica — cioè sul thread principale. Bloccarlo significherebbe
+             * un ANR mentre la persona guarda.
+             */
+            Thread {
+                val indirizzi = TalosPonteAdb.scopri(context, TalosPonteAdb.ANNUNCIO_ACCOPPIAMENTO)
+                var riuscito = false
+                for (indirizzo in indirizzi) {
+                    if (!TalosPonteAdb.accoppia(context, indirizzo, codice).ok) continue
+                    val collegato = TalosPonteAdb.scopri(
+                        context,
+                        TalosPonteAdb.ANNUNCIO_COLLEGAMENTO,
+                    ).firstOrNull { TalosPonteAdb.collega(context, it).ok }
+                    riuscito = collegato != null
+                    break
+                }
+                if (riuscito) TalosAccoppiamentoNotifica.chiudi(context)
+                notifyListeners("talosPonteChanged", JSObject().put("connected", riuscito))
+            }.start()
+        }
+        call.resolve(JSObject().put("shown", mostrata))
+    }
+
+    /** Toglie la notifica dell'accoppiamento. */
+    @PluginMethod
+    fun pairNotificationClose(call: PluginCall) {
+        TalosAccoppiamentoNotifica.chiudi(context)
+        call.resolve(JSObject().put("closed", true))
+    }
+
     /** Toglie la finestra flottante. */
     @PluginMethod
     fun overlayClose(call: PluginCall) {
