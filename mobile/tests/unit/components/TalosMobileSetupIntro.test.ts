@@ -159,7 +159,19 @@ describe('what TALOS says it is, before asking for anything', () => {
         expect(text).toMatch(/from inside the conversation/i) // changed from chat
         expect(text).toMatch(/two models at once/i)
         expect(text).toMatch(/zethos/i)
-        expect(text).toMatch(/shizuku/i) // acting on the phone itself
+        /*
+         * ⛔ Cio' che va nominato e' la CAPACITA', non la dipendenza.
+         *
+         * Qui c'era `/shizuku/i`. Shizuku e' stato tolto il 2026-08-09 — zero
+         * voci nell'APK — e il test lo pretendeva ancora: teneva in vita il nome
+         * di un'app di terzi dentro la promessa di TALOS, e sarebbe andato rosso
+         * proprio quando il testo diceva finalmente il vero.
+         *
+         * Un test che nomina il MEZZO si rompe a ogni cambio di mezzo; uno che
+         * nomina la capacita' sopravvive, ed e' anche quello che interessa a chi
+         * legge la schermata: agire sul telefono.
+         */
+        expect(text).toMatch(/on the phone itself/i) // acting on the phone itself
         expect(text).toMatch(/encrypted sync/i) // cloud, optional, off by default
         expect(text).toMatch(/encrypted Library/i) // the phone's own files
         wrapper.unmount()
@@ -177,16 +189,18 @@ describe('what TALOS says it is, before asking for anything', () => {
         // The modal this replaces mixed them, and the owner called it fake.
         const wrapper = await mountStory()
         // The invariant that matters: nothing unbuilt is described in the
-        // present tense. Shizuku and cloud sync exist only in the future list,
-        // so the four things TALOS says it DOES must not mention them.
+        // present tense. Acting on the phone and cloud sync exist only in the
+        // future list, so the four things TALOS says it DOES must not mention
+        // them. (Named by capability, not by dependency: the dependency was
+        // Shizuku, it is gone, and a test pinned to a mechanism dies with it.)
         const built = wrapper.findAll('li').map((node) => node.text())
             .filter((text) => /encrypted on this phone|download a model|remembers what you tell|second model|Library/i.test(text))
         expect(built.length).toBeGreaterThanOrEqual(4)
-        expect(built.join(' ')).not.toMatch(/shizuku|sync/i)
+        expect(built.join(' ')).not.toMatch(/on the phone itself|sync/i)
         // And the future list says all three, in the future tense.
         const coming = wrapper.findAll('li').map((node) => node.text()).join(' ')
         expect(coming).toMatch(/zethos/i)
-        expect(coming).toMatch(/shizuku/i)
+        expect(coming).toMatch(/on the phone itself/i)
         expect(coming).toMatch(/encrypted sync/i)
         wrapper.unmount()
     })
