@@ -91,10 +91,31 @@ internal object TalosEd25519 {
      * Non c'è nessuno a cronometrare. Se un giorno questa aritmetica servisse
      * altrove, questa riga va riletta prima di riusarla.
      */
-    fun per(n: BigInteger, punto: Punto): Punto {
+    fun per(n: BigInteger, punto: Punto): Punto = perGrezzo(n.mod(L), punto)
+
+    /**
+     * ⛔⛔ Come `per`, ma **senza ridurre lo scalare**. Non è una comodità: è
+     * l'unica forma giusta quando il punto non sta nel sottogruppo primo.
+     *
+     * ## Perché, con la trappola per intero
+     *
+     * `per` riduce mod `L` perché su un punto di ordine `L` due scalari
+     * congruenti danno lo stesso risultato. Vero — **ma solo lì**.
+     *
+     * I punti `M` e `N` di SPAKE2 nascono da un hash, quindi hanno anche una
+     * componente di ordine piccolo. Su quella, aggiungere `L` **cambia** il
+     * risultato: è esattamente il meccanismo con cui BoringSSL rende lo scalare
+     * della password un multiplo di otto, così che il cofattore si cancelli.
+     *
+     * ⇒ Chiamare `per` al posto di questa funzione **annullerebbe quella
+     * correzione**, e l'accoppiamento fallirebbe senza un solo errore: due
+     * chiavi diverse, e nient'altro da guardare.
+     */
+    fun perGrezzo(n: BigInteger, punto: Punto): Punto {
         var risultato = NEUTRO
         var somma = punto
-        var resto = n.mod(L)
+        var resto = n
+        require(resto.signum() >= 0) { "lo scalare non e' negativo" }
         while (resto.signum() > 0) {
             if (resto.testBit(0)) risultato = somma(risultato, somma)
             somma = somma(somma, somma)
@@ -102,6 +123,9 @@ internal object TalosEd25519 {
         }
         return risultato
     }
+
+    /** L'opposto di un punto: stessa `y`, `x` specchiata. */
+    fun opposto(punto: Punto): Punto = Punto(P.subtract(punto.x).mod(P), punto.y)
 
     /**
      * I 32 byte di un punto: `y` little-endian, e in cima il bit del segno di `x`.
