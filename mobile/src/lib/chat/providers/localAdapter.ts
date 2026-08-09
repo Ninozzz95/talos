@@ -40,7 +40,7 @@ import {
     talosLocalEscalatedContextTokens,
 } from '@/lib/models/localContextPolicy'
 import { talosToolsForLocalEngine } from '@/lib/tools/registry'
-import { talosNormaliseLocalToolCalls } from '@/lib/chat/localToolCalls'
+import { talosNormaliseLocalToolCalls, talosRecuperaChiamateNude } from '@/lib/chat/localToolCalls'
 import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/thinkStream'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 
@@ -826,7 +826,35 @@ async function run(
      */
     if (congelato) void congelaSePossibile(congelato, plan.promptTokens, status.shape)
 
-    const normalised = talosNormaliseLocalToolCalls(generation.toolCalls)
+    /*
+     * ⭐ La seconda lettura: la chiamata che il modello ha scritto a parole.
+     *
+     * MISURATO tre volte sul Pad il 2026-08-09 con Qwen3-1.7B: a «accendi la
+     * torcia» la risposta in chat era esattamente
+     * `{"name": "device_torch", "arguments": {"on": true}}` — l'oggetto nudo,
+     * senza il tag `<tool_call>` che il template dichiara. Il recupero nativo
+     * cerca quel tag, quindi non partiva, e la chiamata moriva come prosa.
+     *
+     * Qui e non nel motore nativo per una ragione pratica: i nomi degli
+     * strumenti offerti in questo giro li ha questo file, ed è quel confronto —
+     * non la forma del JSON — a rendere la promozione sicura. In più si prova
+     * senza dispositivo, e un difetto che è costato una serata di misure merita
+     * un test che lo tenga fermo.
+     *
+     * ⛔ Solo se il parser non ha trovato NIENTE: quando il formato è stato
+     * letto bene, un oggetto JSON nella prosa è prosa.
+     */
+    const nomiOfferti = new Set((offered ?? []).map((tool) => tool.name))
+    let chiamateGrezze = generation.toolCalls
+    let testoGrezzo = generation.text
+    if (!chiamateGrezze?.length && nomiOfferti.size > 0) {
+        const recuperate = talosRecuperaChiamateNude(generation.text, nomiOfferti)
+        if (recuperate.calls.length > 0) {
+            chiamateGrezze = recuperate.calls.map((call) => ({ ...call, id: '' }))
+            testoGrezzo = recuperate.text
+        }
+    }
+    const normalised = talosNormaliseLocalToolCalls(chiamateGrezze)
     /*
      * Anche il testo FINALE passa dal separatore, non solo lo stream.
      *
@@ -835,7 +863,7 @@ async function run(
      * era già corretto; era questo il punto scoperto, e proprio quello che
      * finisce nel database — cioè quello che si rilegge riaprendo la chat.
      */
-    const finale = talosSplitFinalThink(generation.text, generation.reasoning)
+    const finale = talosSplitFinalThink(testoGrezzo, generation.reasoning)
     return {
         text: finale.text,
         model: input.model.id,
