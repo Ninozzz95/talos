@@ -478,6 +478,22 @@ export const TALOS_EN_MESSAGES = {
                 title: 'Network access',
                 purpose: 'Reaching the AI provider you configured. Nothing is sent anywhere else, and nothing leaves the device until you send a message.',
             },
+            notificationAccess: {
+                title: 'Reading your notifications',
+                purpose: 'Telling you what arrived and replying for you. TALOS sees the notifications of every app on this phone, including their text — this is the widest window it has into your device, and it stays closed until you open it by hand in system settings.',
+            },
+            bridge: {
+                title: 'Running commands on this phone',
+                purpose: 'Doing things Android does not offer apps: listing what is installed, changing system settings, reaching parts of the phone no app can. It runs with the same powers as a computer plugged in over USB. Nothing works until you pair it once with a six-digit code you read on your own screen, and every command still passes your permission gate.',
+            },
+            deviceControl: {
+                title: 'Controlling the phone',
+                purpose: 'Torch, volume, alarms, wallpaper, opening an app or a settings screen. None of these needs a permission — Android lets any app do them — so the only thing standing between a request and the action is the permission gate you control in Tools.',
+            },
+            localModel: {
+                title: 'Models that run here',
+                purpose: 'A model downloaded onto this phone answers without the network. What you write to it never leaves the device — not to us, not to anyone — and it keeps working with the phone in flight mode.',
+            },
         },
     },
     chat: {

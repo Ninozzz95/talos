@@ -42,11 +42,25 @@ export type TalosPermissionKind =
      * peggio di una che non c'è.
      */
     | 'exemption'
+    /**
+     * ⭐ Un ACCESSO SPECIALE: Android lo tiene fuori dai permessi normali, in
+     * «Impostazioni → App → Accesso speciale», perché è più potente di quelli.
+     * Non si chiede con un dialogo: si concede a mano, una volta, sapendo cosa
+     * si sta dando.
+     *
+     * Esiste perché due delle cose più potenti che TALOS sa fare — leggere le
+     * notifiche di tutte le app, ed eseguire comandi sul telefono — non
+     * comparivano in questa pagina **affatto**. Una schermata privacy che elenca
+     * il microfono e tace sulla shell non è incompleta: è fuorviante.
+     */
+    | 'special'
     /** Not a permission at all — a capability, or a picker that needs none. */
     | 'none'
 
 export interface TalosPermissionRow {
-    id: 'microphone' | 'notifications' | 'appLock' | 'files' | 'background' | 'network'
+    id:
+        | 'microphone' | 'notifications' | 'appLock' | 'files' | 'background' | 'network'
+        | 'notificationAccess' | 'bridge' | 'deviceControl' | 'localModel'
     title: string
     kind: TalosPermissionKind
     /**
@@ -112,6 +126,47 @@ export const TALOS_PERMISSION_ROWS: readonly TalosPermissionRow[] = [
         title: 'Network access',
         kind: 'install',
         purpose: 'Reaching the AI provider you configured. Nothing is sent anywhere else, and nothing leaves the device until you send a message.',
+    },
+    /*
+     * ⛔⭐⭐ LE QUATTRO RIGHE CHE MANCAVANO, e le prime due sono le più potenti
+     * che TALOS abbia.
+     *
+     * Questa pagina era ferma a sei voci scritte quando TALOS sapeva dettare e
+     * scaricare modelli. Da allora ha imparato a leggere le notifiche di ogni
+     * app, ad accendere la torcia, a cambiare il volume, e a **eseguire comandi
+     * sul telefono con i privilegi della shell**.
+     *
+     * Nessuna di queste era qui. Una schermata privacy che elenca il microfono
+     * e tace sulla shell non è incompleta: è **fuorviante**, perché chi la legge
+     * conclude di aver visto tutto.
+     *
+     * ⇒ Le descrizioni dicono il CONFINE, non solo la funzione — è quello che
+     * una persona attenta alla privacy sta davvero chiedendo — e dicono anche
+     * cosa TALOS **non** può fare, perché è l'unica parte verificabile.
+     */
+    {
+        id: 'notificationAccess',
+        title: 'Reading your notifications',
+        kind: 'special',
+        purpose: 'Telling you what arrived and replying for you. TALOS sees the notifications of every app on this phone, including their text — this is the widest window it has into your device, and it stays closed until you open it by hand in system settings.',
+    },
+    {
+        id: 'bridge',
+        title: 'Running commands on this phone',
+        kind: 'special',
+        purpose: 'Doing things Android does not offer apps: listing what is installed, changing system settings, reaching parts of the phone no app can. It runs with the same powers as a computer plugged in over USB. Nothing works until you pair it once with a six-digit code you read on your own screen, and every command still passes your permission gate.',
+    },
+    {
+        id: 'deviceControl',
+        title: 'Controlling the phone',
+        kind: 'none',
+        purpose: 'Torch, volume, alarms, wallpaper, opening an app or a settings screen. None of these needs a permission — Android lets any app do them — so the only thing standing between a request and the action is the permission gate you control in Tools.',
+    },
+    {
+        id: 'localModel',
+        title: 'Models that run here',
+        kind: 'none',
+        purpose: 'A model downloaded onto this phone answers without the network. What you write to it never leaves the device — not to us, not to anyone — and it keeps working with the phone in flight mode.',
     },
 ]
 
@@ -254,11 +309,25 @@ export function talosBackgroundExtraSteps(identity: TalosMakerIdentity): readonl
  * a greyed row invites a tap that can never work and reads as something broken.
  */
 export function visibleTalosPermissionRows(
-    device: { notifications: boolean; biometricHardware: boolean },
+    device: {
+        notifications: boolean
+        biometricHardware: boolean
+        /**
+         * ⛔ Il ponte si mostra SOLO dove può funzionare.
+         *
+         * `exportKeyingMaterial` è API pubblica da Android 12: sotto, la parte
+         * dell'accoppiamento non esiste. Una riga che promette una cosa
+         * impossibile su questo telefono è peggio di una riga assente — manda
+         * qualcuno a cercare un interruttore che non troverà, e a credere di
+         * aver sbagliato lui.
+         */
+        bridgeSupported?: boolean
+    },
 ): TalosPermissionRow[] {
     return TALOS_PERMISSION_ROWS.filter((row) => {
         if (row.id === 'notifications') return device.notifications
         if (row.id === 'appLock') return device.biometricHardware
+        if (row.id === 'bridge') return device.bridgeSupported !== false
         return true
     })
 }
