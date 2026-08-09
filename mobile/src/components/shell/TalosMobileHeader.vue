@@ -71,6 +71,7 @@ const emit = defineEmits<{
             size="icon-lg"
             class="min-h-touch min-w-touch"
             variant="ghost"
+            data-testid="talos-shell-menu"
             :aria-label="$t('navigation.openMenu')"
             @click="emit('openMenu')"
         >

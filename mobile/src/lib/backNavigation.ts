@@ -111,3 +111,56 @@ export function talosStationExit(entry: TalosStationEntry | null): { route: stri
     // main menu is where leaving it goes.
     return { route: entry?.from ?? 'chat', sidebar: entry?.viaSidebar ?? true }
 }
+
+/**
+ * ⛔⭐ USCIRE DALL'APP VUOLE DUE COLPI, NON UNO.
+ *
+ * ## Il difetto, misurato sul Pad il 2026-08-09
+ *
+ * Dalla chat, con l'app appena aperta:
+ *
+ *     partenza    pathname = "/"   history.length = 1
+ *     un indietro → la WebView sparisce: TALOS e' USCITO
+ *
+ * Un solo tocco del tasto piu' usato di Android, e la conversazione che stavi
+ * scrivendo non c'e' piu'. Nessun avviso, nessuna seconda possibilita'.
+ *
+ * ⛔ E c'e' un dettaglio che lo rende peggiore: `history.length = 1` significa
+ * che la chat non lascia traccia. Non esiste una pila da risalire — l'indietro
+ * dalla radice non ha nessun altro posto dove andare se non fuori.
+ *
+ * ## La cura, scelta dall'owner
+ *
+ * Il modello Android classico: il primo colpo avvisa, il secondo entro una
+ * breve finestra esce. Owner 2026-08-09: «toast in basso, 2 secondi».
+ *
+ * Si riconosce senza impararlo, non aggiunge un passo a chi vuole uscire
+ * davvero (due tocchi rapidi sono un gesto solo), e sopra ogni cosa non chiede
+ * una risposta a chi voleva solo chiudere un pannello.
+ *
+ * ## Perche' e' una funzione pura
+ *
+ * Perche' la parte che sbaglia e' il CONFRONTO FRA DUE ISTANTI, e un confronto
+ * di tempi dentro un componente si puo' solo guardare. Qui si prova: due colpi
+ * vicini escono, due lontani no, e il secondo verso e' quello che il difetto
+ * occupava.
+ */
+export const TALOS_FINESTRA_USCITA_MS = 2_000
+
+export function talosUscitaConConferma(input: {
+    /** Adesso, in millisecondi. Passato da fuori: il tempo non si inventa qui. */
+    readonly ora: number
+    /** Quando e' stato chiesto l'ultimo indietro dalla radice, o null. */
+    readonly ultimaRichiesta: number | null
+    readonly finestraMs?: number
+}): 'avvisa' | 'esci' {
+    const finestra = input.finestraMs ?? TALOS_FINESTRA_USCITA_MS
+    if (input.ultimaRichiesta === null) return 'avvisa'
+    /*
+     * ⛔ `<=` e non `<`: al millisecondo esatto della scadenza il secondo colpo
+     * vale ancora. Un confine che rifiuta il caso limite trasforma una finestra
+     * di due secondi in «due secondi meno un istante», e chi la manca non
+     * capisce perche'.
+     */
+    return input.ora - input.ultimaRichiesta <= finestra ? 'esci' : 'avvisa'
+}

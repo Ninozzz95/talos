@@ -31,6 +31,8 @@ import { useTalosMobileIntroState } from '@/composables/useTalosMobileIntroState
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
 import {
     resolveTalosBackAction,
+    TALOS_FINESTRA_USCITA_MS,
+    talosUscitaConConferma,
     talosStationEntryAfter,
     talosStationExit,
     type TalosStationEntry,
@@ -927,6 +929,9 @@ onMounted(async () => {
  * percorrere **lo stesso codice**, o il preview del gesto predittivo mostra una
  * destinazione e il tasto ne raggiunge un'altra.
  */
+/** Quando e' stato chiesto l'ultimo indietro dalla radice. Vedi il caso `exit`. */
+let ultimaUscita: number | null = null
+
 function talosIndietro(canGoBack: boolean): 'handled' | 'history' | 'exit' {
     const action = resolveTalosBackAction({
         composerOverlayOpen: talosOverlayBackActive(),
@@ -951,7 +956,25 @@ function talosIndietro(canGoBack: boolean): 'handled' | 'history' | 'exit' {
         }
         case 'leave-station': leaveStation(); return 'handled'
         case 'history': return 'history'
-        case 'exit': return 'exit'
+        case 'exit': {
+            /*
+             * ⛔ DUE COLPI PER USCIRE. Il perche', col numero che l'ha
+             * provocato, sta su `talosUscitaConConferma`: dalla chat un solo
+             * indietro chiudeva TALOS senza avvisare, e `history.length` era 1
+             * — nessuna pila da risalire, solo la porta.
+             */
+            const ora = Date.now()
+            if (talosUscitaConConferma({ ora, ultimaRichiesta: ultimaUscita }) === 'esci') {
+                ultimaUscita = null
+                return 'exit'
+            }
+            ultimaUscita = ora
+            toastsStore.push({
+                message: t('navigation.pressBackAgainToExit'),
+                durationMs: TALOS_FINESTRA_USCITA_MS,
+            })
+            return 'handled'
+        }
     }
 }
 
