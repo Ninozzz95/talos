@@ -87,7 +87,9 @@ function createFixture(options: FixtureOptions = {}): string {
     const chatOptionsMenuIsDynamic = options.eagerChatOptionsMenu !== true
     const routeKeys = [
         'src/screens/ResearchScreen.vue',
-        'src/screens/RunsScreen.vue',
+        // `RunsScreen.vue` (il Cockpit) è stato tolto il 2026-08-09: qui e nel
+        // guardiano restava elencato, e il build falliva chiedendo un file che
+        // non esiste più.
         'src/screens/ContextScreen.vue',
         'src/screens/SettingsScreen.vue',
         'src/screens/SettingsModelsScreen.vue',

@@ -13,6 +13,7 @@ import {
     talosCodiceValido,
     talosPonteGuida,
     talosPonteMotivo,
+    talosPonteRiaggancioAutomatico,
 } from '@/lib/privilege/pontePasso'
 
 /**
@@ -72,6 +73,14 @@ const ricollegamentoFallito = ref(false)
 const ponteInCorso = ref(false)
 const codice = ref('')
 const ponteMotivo = ref<string | null>(null)
+/**
+ * Se il tentativo automatico è già stato speso per la caduta in corso.
+ *
+ * ⛔ Si RIARMA quando il ponte torna su, non quando la pagina si rimonta: una
+ * pagina riaperta dieci volte non ha diritto a dieci `adb connect`, ma una
+ * caduta nuova sì. Vedi `talosPonteRiaggancioAutomatico`.
+ */
+const riaggancioSpeso = ref(false)
 
 const ponte = computed(() => talosPonteGuida({
     packaged: pontePresente.value,
@@ -81,7 +90,26 @@ const ponte = computed(() => talosPonteGuida({
 
 const codiceValido = computed(() => talosCodiceValido(codice.value))
 
-async function leggiPonte(): Promise<void> {
+/**
+ * Lo stato VERO del ponte, chiesto al ponte. Nessuna deduzione.
+ *
+ * ⛔⛔ E il RIARMO del tentativo automatico sta QUI, sull'osservazione, non
+ * sull'esito che `bridgeConnect` promette.
+ *
+ * MISURATO sul Pad il 2026-08-09, ed è un difetto trovato solo perché la prova
+ * si fa nei due versi. Prima versione: il riaggancio riusciva e basta. Il
+ * diritto al tentativo però si riarmava soltanto quando una LETTURA vedeva il
+ * ponte su — e la lettura dopo un riaggancio riuscito arriva **sei secondi**
+ * dopo, perché la sentinella passa subito al ritmo lento. Staccato il ponte
+ * dentro quella finestra: TALOS non ci riprovava **mai più**.
+ *
+ * ⇒ Su una rete che balla — Wi-Fi che va e viene, Debug wireless che si
+ * riaccende — quello non è un caso di laboratorio: è il caso normale.
+ *
+ * E il riarmo NON può stare sull'`ok` del tentativo: un `ok` che non regge
+ * farebbe ritentare ogni due secondi per sempre. Si riarma su ciò che si vede.
+ */
+async function osservaPonte(): Promise<void> {
     try {
         const stato = await plugin().bridgeStatus()
         pontePresente.value = stato.packaged === true
@@ -90,6 +118,37 @@ async function leggiPonte(): Promise<void> {
         // Build web: il ponte non esiste, e la sezione lo dice invece di fingere.
         pontePresente.value = false
         ponteCollegato.value = false
+    }
+    if (ponteCollegato.value) {
+        riaggancioSpeso.value = false
+        // Un fallimento di prima non deve tenere in vista il campo del codice a
+        // ponte collegato: lo stato vivo batte la memoria.
+        ricollegamentoFallito.value = false
+    }
+}
+
+async function leggiPonte(): Promise<void> {
+    await osservaPonte()
+    /*
+     * ⭐ IL RIAGGANCIO DA SOLO — la frase a schermo diventa vera.
+     *
+     * La pagina prometteva «TALOS si ricollega da solo»; MISURATO il
+     * 2026-08-09, non lo faceva: undici letture in ventitré secondi e nessun
+     * tentativo. Il perché di ogni condizione sta su
+     * `talosPonteRiaggancioAutomatico`.
+     */
+    const passo = talosPonteRiaggancioAutomatico({
+        packaged: pontePresente.value,
+        connected: ponteCollegato.value,
+        giaTentato: riaggancioSpeso.value,
+        inCorso: ponteInCorso.value,
+    })
+    riaggancioSpeso.value = passo.speso
+    if (passo.tenta) {
+        await ricollega()
+        // ⛔ Il tentativo non dichiara vittoria da solo: si RIGUARDA. È questa
+        // riga che riarma il diritto per la caduta successiva.
+        await osservaPonte()
     }
     // ⛔ La sentinella si riarma DA QUI e non dalla montata: al `mounted` questi
     // due valori sono ancora `false` perché la lettura è asincrona, e una

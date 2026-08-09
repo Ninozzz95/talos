@@ -9,8 +9,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * ⭐⭐⭐ LA SENTINELLA: si accorge DA SÉ quando la persona apre «Accoppia con
- * codice», invece di cercare quando è troppo tardi.
+ * ⭐⭐⭐ LA SENTINELLA: si accorge DA SÉ quando un annuncio `adb` compare sulla
+ * rete, invece di cercarlo quando è troppo tardi.
  *
  * ## Il difetto, con le parole dell'owner
  *
@@ -22,9 +22,8 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * ## Perché [TalosPonteAdb.scopri] costa sei secondi, e non per pigrizia
  *
- * Perché fa un **censimento**: parte quando il codice è già stato scritto,
- * chiede alla rete «chi c'è?», e si trova in mano annunci vivi e morti
- * mescolati. Misurato sul Pad:
+ * Perché fa un **censimento**: parte quando serve, chiede alla rete «chi c'è?»,
+ * e si trova in mano annunci vivi e morti mescolati. Misurato sul Pad:
  *
  * ```
  *   adb-2ea6573c-1yc9eU (2)  → 192.168.1.95:43053   morto
@@ -40,20 +39,21 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * Un annuncio che **arriva** mentre siamo già in ascolto è vivo **per
  * costruzione**: la cache l'avrebbe consegnato subito all'avvio dell'ascolto,
- * non trenta secondi dopo, mentre la persona tocca «Accoppia dispositivo con
- * codice». Il tempo smette di essere una finestra da aspettare e diventa
- * l'informazione stessa.
+ * non trenta secondi dopo. Il tempo smette di essere una finestra da aspettare e
+ * diventa l'informazione stessa.
  *
- * ⇒ Tre cose insieme, con un meccanismo solo:
+ * È la stessa strada di Shizuku (`AdbMdns` + `NsdManager`), cercata prima di
+ * scrivere una riga.
  *
- * 1. l'attesa di sei secondi **sparisce** — l'indirizzo è già in mano quando il
- *    codice arriva;
- * 2. la notifica può dire «trovato, scrivi le sei cifre» **nell'istante** in cui
- *    la finestrella si apre, che è la cosa che l'owner ha chiesto;
- * 3. l'ambiguità vivo/morto si risolve da sé, invece di essere aggirata.
+ * ## ⛔ Perché è una CLASSE e non più un oggetto solo
  *
- * È la stessa strada di Shizuku (`AdbMdns` + `NsdManager` su
- * `_adb-tls-pairing._tcp`), cercata prima di scrivere una riga.
+ * Perché gli annunci sono **due**, e il secondo costava quanto il primo.
+ *
+ * MISURATO sul Pad il 2026-08-09, tre volte di fila: riagganciare il ponte
+ * costava **9.131 ms** col censimento e **3.124 ms** passando l'indirizzo già
+ * noto — cioè `_adb-tls-connect._tcp` pagava gli stessi sei secondi che
+ * `_adb-tls-pairing._tcp` aveva già smesso di pagare. Lo stesso meccanismo,
+ * scritto una volta, serve tutti e due: **6.007 ms tolti a ogni riaggancio**.
  *
  * ## ⛔ La coda delle risoluzioni resta, e serve ancora
  *
@@ -63,9 +63,29 @@ import java.util.concurrent.atomic.AtomicReference
  * coda c'è per la stessa ragione, ma **senza tetto**: la sentinella non ha una
  * finestra da consumare, quindi non c'è niente che possa «girare a vuoto».
  */
-object TalosSentinellaAccoppiamento {
+class TalosSentinellaMdns(
+    private val annuncio: String,
+    /**
+     * Se un indirizzo visto prima resta buono quando la sentinella si riaccende.
+     *
+     * ⛔ MISURATO sul Pad il 2026-08-09, ed è il difetto che ha reso la seconda
+     * caduta tre volte più cara della prima: **3.011 ms** contro **8.600 ms**.
+     * La sentinella del collegamento si spegne quando il ponte è su e si
+     * riaccende quando cade — e `accendi` azzerava l'indirizzo *un istante
+     * prima* che servisse, mandando il riaggancio al censimento da sei secondi.
+     *
+     * ⇒ `false` per l'ACCOPPIAMENTO: `adbd` cambia porta a ogni apertura della
+     * finestrella, e lì un indirizzo vecchio è peggio di nessun indirizzo,
+     * perché quella strada non ha un censimento di riserva.
+     *
+     * ⇒ `true` per il COLLEGAMENTO: la porta regge finché il Debug wireless è
+     * acceso, e se non regge il censimento c'è come ripiego. Veloce quando si
+     * può, giusto sempre.
+     */
+    private val ricordaFraAccensioni: Boolean = false,
+) {
 
-    /** Cosa fare quando la finestrella di sistema si apre davvero. */
+    /** Cosa fare quando l'annuncio compare davvero. */
     fun interface Quando {
         fun trovato(indirizzo: String)
     }
@@ -74,25 +94,52 @@ object TalosSentinellaAccoppiamento {
     private val ultimoIndirizzo = AtomicReference<String?>(null)
 
     /**
-     * L'indirizzo visto per ultimo, o `null` se la finestrella non si è ancora
-     * aperta.
+     * L'indirizzo visto per ultimo, o `null` se l'annuncio non è ancora
+     * comparso.
      *
      * ⛔ Si tiene l'**ultimo** e non il primo: `adbd` si ri-registra a ogni
-     * apertura della finestrella, e chi arriva dopo ha sostituito chi c'era
-     * prima. Tenere il primo vorrebbe dire preferire sistematicamente quello
-     * scaduto — che è il difetto misurato sopra, al contrario.
+     * apertura, e chi arriva dopo ha sostituito chi c'era prima. Tenere il primo
+     * vorrebbe dire preferire sistematicamente quello scaduto — che è il difetto
+     * misurato sopra, al contrario.
      */
     fun indirizzoPronto(): String? = ultimoIndirizzo.get()
+
+    /** Se sta già sorvegliando. Serve a non riaccenderla a ogni battito. */
+    fun accesa(): Boolean = cercatoreVivo.get() != null
+
+    /**
+     * ⭐ Ricorda un indirizzo imparato ALTROVE, senza mDNS.
+     *
+     * ⛔ Perché esiste, e perché è meglio della sentinella stessa: quando il
+     * ponte è collegato, `adb devices` stampa già `192.168.1.95:45853 device` —
+     * l'indirizzo è lì, dentro un comando che il battito esegue comunque ogni
+     * 2-6 secondi. Impararlo da lì costa **zero**: zero pacchetti multicast,
+     * zero attesa, e il valore è fresco per definizione perché descrive una
+     * connessione viva in questo istante.
+     *
+     * MISURATO sul Pad il 2026-08-09, ed è il difetto che questa via chiude: la
+     * sentinella accesa nel momento della caduta veniva **interrogata
+     * nell'istante stesso** in cui cominciava ad ascoltare, non aveva ancora
+     * sentito niente, e il riaggancio ricadeva nel censimento da sei secondi —
+     * 8.696 ms invece di 3.011.
+     *
+     * ⇒ L'ascolto mDNS resta per il caso in cui non ci si sia MAI collegati in
+     * questo processo. Per tutti gli altri, l'indirizzo si sa già.
+     */
+    fun ricorda(indirizzo: String) {
+        ultimoIndirizzo.set(indirizzo)
+    }
 
     /**
      * Comincia a sorvegliare. Idempotente: chiamarla due volte non apre due
      * ascolti, perché due ascolti sullo stesso tipo raddoppiano il traffico
      * multicast senza aggiungere una sola informazione.
      */
-    fun accendi(context: Context, quando: Quando): Boolean {
+    @JvmOverloads
+    fun accendi(context: Context, quando: Quando = Quando { }): Boolean {
         if (cercatoreVivo.get() != null) return true
         val nsd = context.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return false
-        ultimoIndirizzo.set(null)
+        if (!ricordaFraAccensioni) ultimoIndirizzo.set(null)
 
         val coda = ConcurrentLinkedQueue<NsdServiceInfo>()
         val occupato = AtomicBoolean(false)
@@ -136,11 +183,9 @@ object TalosSentinellaAccoppiamento {
             override fun onDiscoveryStarted(t: String?) = Unit
             override fun onDiscoveryStopped(t: String?) = Unit
             /**
-             * ⛔ Si NOTA e non si dimentica. La finestrella che si chiude toglie
-             * l'annuncio, ma il codice che la persona ha in mano resta valido
-             * per il tempo che il sistema gli dà: azzerare qui l'indirizzo
-             * significherebbe buttare via una strada ancora buona un istante
-             * prima di usarla.
+             * ⛔ Si NOTA e non si dimentica. L'annuncio che sparisce non rende
+             * inutile l'indirizzo che avevamo: azzerarlo qui significherebbe
+             * buttare via una strada ancora buona un istante prima di usarla.
              */
             override fun onServiceLost(info: NsdServiceInfo?) = Unit
             override fun onServiceFound(info: NsdServiceInfo?) {
@@ -151,11 +196,7 @@ object TalosSentinellaAccoppiamento {
         }
 
         return runCatching {
-            nsd.discoverServices(
-                TalosPonteAdb.ANNUNCIO_ACCOPPIAMENTO,
-                NsdManager.PROTOCOL_DNS_SD,
-                cercatore,
-            )
+            nsd.discoverServices(annuncio, NsdManager.PROTOCOL_DNS_SD, cercatore)
             cercatoreVivo.set(cercatore)
             true
         }.getOrDefault(false)
@@ -171,4 +212,29 @@ object TalosSentinellaAccoppiamento {
         val nsd = context.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return
         runCatching { nsd.stopServiceDiscovery(cercatore) }
     }
+}
+
+/**
+ * Le due sentinelle, una per annuncio.
+ *
+ * ⛔ Vivono quanto il processo perché l'indirizzo deve essere **già in mano** nel
+ * momento in cui serve: una sentinella creata quando serve è, di nuovo, una
+ * fotografia.
+ */
+object TalosSentinelle {
+    /** `_adb-tls-pairing._tcp`: si accende con la notifica del codice. */
+    val accoppiamento = TalosSentinellaMdns(TalosPonteAdb.ANNUNCIO_ACCOPPIAMENTO)
+
+    /**
+     * `_adb-tls-connect._tcp`: si accende quando il ponte è GIÙ e si spegne
+     * quando è su.
+     *
+     * ⛔ Non sempre accesa: mentre il ponte regge non c'è niente da cercare, e
+     * lasciare acceso un ascolto multicast per un evento che non arriva è
+     * esattamente il costo invisibile di cui sopra.
+     */
+    val collegamento = TalosSentinellaMdns(
+        TalosPonteAdb.ANNUNCIO_COLLEGAMENTO,
+        ricordaFraAccensioni = true,
+    )
 }

@@ -1,5 +1,6 @@
 package ai.talos.agent
 
+import ai.talos.agent.ponte.TalosSentinelle
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
@@ -297,7 +298,39 @@ object TalosPonteAdb {
      */
     fun collegato(context: Context): Boolean {
         val esito = esegui(context, listOf("devices"), attesaMs = 10_000)
-        return esito.uscita.lines().drop(1).any { it.trim().endsWith("device") }
+        val riga = esito.uscita.lines().drop(1)
+            .map { it.trim() }
+            .firstOrNull { it.isNotEmpty() && it.endsWith("device") }
+            ?: return false
+        /*
+         * ⭐ L'INDIRIZZO DEL PROSSIMO RIAGGANCIO SI IMPARA QUI, GRATIS.
+         *
+         * `adb devices` stampa `192.168.1.95:45853 device`: la prima colonna è
+         * esattamente ciò che servirà a `adb connect` quando il ponte cadrà. E
+         * questo comando gira comunque a ogni battito, quindi impararlo non
+         * costa niente — né pacchetti multicast, né attesa.
+         *
+         * Il perché in una riga: la sentinella mDNS accesa NEL momento della
+         * caduta non ha ancora sentito nulla, e il riaggancio ricadeva nel
+         * censimento da sei secondi. Vedi `TalosSentinellaMdns.ricorda`.
+         */
+        indirizzoDi(riga)?.let { TalosSentinelle.collegamento.ricorda(it) }
+        return true
+    }
+
+    /**
+     * La prima colonna di `adb devices`, se è davvero un `indirizzo:porta`.
+     *
+     * ⛔ Si controlla che sia una coppia con una porta numerica: un seriale USB
+     * finirebbe in `adb connect` come indirizzo, e fallirebbe ogni volta senza
+     * dire perché.
+     */
+    internal fun indirizzoDi(riga: String): String? {
+        val primo = riga.split(Regex("\\s+")).firstOrNull()?.trim().orEmpty()
+        if (primo.count { it == ':' } != 1) return null
+        val porta = primo.substringAfterLast(':').toIntOrNull() ?: return null
+        if (porta !in 1..65_535) return null
+        return primo.takeIf { it.substringBeforeLast(':').isNotBlank() }
     }
 
     /**
@@ -383,8 +416,23 @@ object TalosPonteAdb {
      * già fallita, e una volta sola: se il riaggancio non riesce, il ripiego
      * parte come prima e dice la verità.
      */
-    private fun riaggancia(context: Context): Boolean =
-        scopri(context, ANNUNCIO_COLLEGAMENTO).any { collega(context, it).ok }
+    private fun riaggancia(context: Context): Boolean {
+        /*
+         * ⭐ Prima quello che la sentinella ha già visto arrivare.
+         *
+         * MISURATO sul Pad il 2026-08-09: col censimento 9.131 ms, con
+         * l'indirizzo noto 3.124 ms. Qui la differenza si sente il doppio,
+         * perché questo riaggancio sta **dentro** un comando che una persona ha
+         * chiesto in chat: sono sei secondi in cui non succede niente a schermo.
+         */
+        val subito = TalosSentinelle.collegamento.indirizzoPronto()
+        if (subito != null && collega(context, subito).ok) return true
+        // ⛔ Il censimento resta come ripiego: un indirizzo visto mezz'ora fa
+        // può essere scaduto, e senza questo il comando fallirebbe per una
+        // cache invece che per un ponte assente.
+        return scopri(context, ANNUNCIO_COLLEGAMENTO).filter { it != subito }
+            .any { collega(context, it).ok }
+    }
 
     /** Chiude il server, e con esso la porta locale che teneva aperta. */
     fun spegni(context: Context): Esito = esegui(context, listOf("kill-server"), attesaMs = 10_000)

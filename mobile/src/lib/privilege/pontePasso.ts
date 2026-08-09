@@ -107,6 +107,72 @@ export function talosPonteGuida(stato: TalosPonteStato): TalosPonteGuida {
     }
 }
 
+/** Quello che serve per decidere se riagganciarsi da soli, e nient'altro. */
+export interface TalosPonteRiaggancio {
+    /** Se i binari sono nell'APK. Senza, non c'è niente da tentare. */
+    packaged: boolean
+    /** Se in QUESTO istante c'è un dispositivo collegato. */
+    connected: boolean
+    /** Se un tentativo automatico è già stato speso per QUESTA caduta. */
+    giaTentato: boolean
+    /** Se un'operazione sul ponte è già in volo (anche premuta a mano). */
+    inCorso: boolean
+}
+
+export interface TalosPonteRiaggancioEsito {
+    /** Se tentare `bridgeConnect` adesso, senza che nessuno prema niente. */
+    tenta: boolean
+    /** Il nuovo valore di `giaTentato`, da riportare nello stato di chi chiama. */
+    speso: boolean
+}
+
+/**
+ * ⭐ Se TALOS deve riagganciarsi DA SOLO, adesso — e quando ne riacquista il
+ * diritto.
+ *
+ * ## ⛔ Perché esiste: la pagina prometteva una cosa che non faceva
+ *
+ * MISURATO sul Pad il 2026-08-09. La schermata dice, testuale: «Se ti sei già
+ * accoppiato una volta, TALOS si ricollega da solo: non serve un altro codice».
+ * Staccato il ponte con `bridgeStop`, uscito e rientrato nella pagina:
+ * **undici** letture di stato in ventitré secondi e **zero** tentativi di
+ * ricollegarsi. Restava staccato finché non premevo io.
+ *
+ * E il tocco che mancava costava **1.169 ms** dal dito alla scritta «TALOS è
+ * collegato al tuo telefono» — cioè la cosa era a un secondo di distanza, e la
+ * si faceva aspettare per sempre.
+ *
+ * ⇒ Un passo che il programma sa fare, e che sa anche QUANDO fare, non si
+ * chiede a chi guarda: si fa. Il pulsante resta per quando il tentativo
+ * automatico fallisce.
+ *
+ * ## ⛔ Un tentativo per caduta, non un tentativo al secondo
+ *
+ * La sentinella rilegge lo stato ogni due secondi quando il ponte è giù. Senza
+ * `giaTentato` questo diventerebbe un `adb connect` ogni due secondi per
+ * sempre: batteria, rete, e un registro pieno di fallimenti identici.
+ *
+ * ## ⛔ E il RIARMO sta QUI dentro, non in chi chiama
+ *
+ * Perché è la metà che si dimentica. La sentinella era già stata scritta una
+ * volta guardando **solo** l'arrivo del ponte e non la sua caduta, e il difetto
+ * si è visto solo sul dispositivo. Un diritto che si spende e non si riarma
+ * fa esattamente lo stesso danno al contrario: dopo la prima caduta TALOS non
+ * ci riproverebbe **mai più** per tutta la vita della pagina.
+ *
+ * ⇒ Il ponte collegato azzera il debito: la caduta successiva ha il suo
+ * tentativo. Così la regola intera è una funzione sola, e si prova nei due
+ * versi senza montare una schermata.
+ */
+export function talosPonteRiaggancioAutomatico(stato: TalosPonteRiaggancio): TalosPonteRiaggancioEsito {
+    // ⭐ IL RIARMO. Collegato ⇒ nessun debito verso la prossima caduta.
+    if (stato.connected) return { tenta: false, speso: false }
+    if (!stato.packaged) return { tenta: false, speso: stato.giaTentato }
+    if (stato.giaTentato) return { tenta: false, speso: true }
+    if (stato.inCorso) return { tenta: false, speso: false }
+    return { tenta: true, speso: true }
+}
+
 /**
  * Il codice è di sei cifre, e basta questo a saperlo.
  *
