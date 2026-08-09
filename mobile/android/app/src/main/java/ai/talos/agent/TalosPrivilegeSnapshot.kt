@@ -1,7 +1,6 @@
 package ai.talos.agent
 
 import android.content.pm.PackageManager
-import rikka.shizuku.Shizuku
 
 /**
  * Cosa TALOS può fare sul telefono **adesso**, chiesto invece che sperato.
@@ -44,7 +43,6 @@ import rikka.shizuku.Shizuku
 object TalosPrivilegeSnapshot {
 
     /** Il pacchetto dell'app Shizuku, per distinguere «assente» da «spenta». */
-    private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
 
     /**
      * Perché non si può usare Shizuku, quando non si può.
@@ -100,46 +98,40 @@ object TalosPrivilegeSnapshot {
      * un utente che apre una schermata di stato e si vede comparire una
      * richiesta di permesso non ha capito cosa ha appena autorizzato.
      */
+    /**
+     * ⛔⛔ SHIZUKU NON C'È PIÙ — 2026-08-09, per decisione dell'owner.
+     *
+     * ## Cosa faceva questa funzione
+     *
+     * Interrogava il server di Shizuku: installato? vivo? che versione? ci ha
+     * autorizzati? Cinque domande a un'app di terzi, per sapere se TALOS poteva
+     * eseguire un comando.
+     *
+     * ## Perché non ha più senso chiederglielo
+     *
+     * Le due strade arrivavano alla **stessa identità**: uid 2000, la shell.
+     * Non c'era niente che Shizuku sapesse fare e il ponte no. E su OxygenOS 16,
+     * misurato il 2026-08-08, Shizuku non riusciva nemmeno ad autorizzarci: lo
+     * fa con un `pm grant`, e questa ROM alla shell quel potere l'ha tolto.
+     *
+     * ⇒ Su questo telefono la strada «preferita» era quella che non funziona.
+     *
+     * ## Perché la classe resta, invece di sparire
+     *
+     * Perché un'installazione vecchia può avere ancora questi stati scritti sul
+     * disco, e i suoi valori attraversano il ponte fino all'interfaccia.
+     * Toglierli di colpo farebbe leggere a quelle installazioni uno stato
+     * sconosciuto — e uno stato sconosciuto, in una schermata di permessi,
+     * diventa un «non lo so» presentato come un «no».
+     *
+     * La fotografia adesso dice sempre **ASSENTE**: è la verità, e la verità
+     * porta l'interfaccia alla pagina dell'accoppiamento, che è il posto giusto.
+     */
     @JvmStatic
-    fun leggi(packageManager: PackageManager): Fotografia {
-        val installata = runCatching {
-            packageManager.getPackageInfo(SHIZUKU_PACKAGE, 0)
-        }.isSuccess
-
-        // `pingBinder` è l'unica domanda che distingue «installata» da «viva»:
-        // il binder arriva solo quando il servizio gira davvero.
-        val vivo = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
-        if (!vivo) {
-            return Fotografia(
-                stato = if (installata) Stato.SPENTO else Stato.ASSENTE,
-                versione = -1,
-                uid = -1,
-                troppoVecchio = false,
-            )
-        }
-
-        val versione = runCatching { Shizuku.getVersion() }.getOrDefault(-1)
-        val uid = runCatching { Shizuku.getUid() }.getOrDefault(-1)
-        // Le versioni pre-11 non hanno il modello di permesso che usiamo: una
-        // richiesta li' non fallisce, viene semplicemente ignorata.
-        val vecchio = runCatching { Shizuku.isPreV11() }.getOrDefault(false)
-
-        val concesso = runCatching {
-            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-        }.getOrDefault(false)
-        val haGiaDettoNo = runCatching {
-            Shizuku.shouldShowRequestPermissionRationale()
-        }.getOrDefault(false)
-
-        return Fotografia(
-            stato = when {
-                concesso -> Stato.PRONTO
-                haGiaDettoNo -> Stato.NEGATO
-                else -> Stato.DA_AUTORIZZARE
-            },
-            versione = versione,
-            uid = uid,
-            troppoVecchio = vecchio,
-        )
-    }
+    fun leggi(packageManager: PackageManager): Fotografia = Fotografia(
+        stato = Stato.ASSENTE,
+        versione = -1,
+        uid = -1,
+        troppoVecchio = false,
+    )
 }
