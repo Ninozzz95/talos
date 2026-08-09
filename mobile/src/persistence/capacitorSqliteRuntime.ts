@@ -153,6 +153,24 @@ export function createCapacitorSqliteRuntime(
                 path: MIGRATION_FILE, data: payload, directory: Directory.Data, encoding: Encoding.UTF8,
             })
         },
+        /**
+         * ⛔ NIENTE RITENTATIVI QUI DENTRO, ed è una conclusione, non una svista.
+         *
+         * Per un giorno intero questa lettura è sembrata il difetto: partiva a
+         * 172 ms e tornava a 10.048 ms, tagliata di netto dal recinto da dieci
+         * secondi del ponte. Ci ho scritto sopra un giro di richiami che
+         * bussava finché il Filesystem non rispondeva, e funzionava.
+         *
+         * Non era sua la colpa. Capacitor esegue i metodi di **tutti** i plugin
+         * su un thread solo, e il ponte ADB lo teneva occupato per dieci
+         * secondi a ogni avvio: questa lettura stava semplicemente in coda
+         * dietro di lui (la storia intera sta su `TalosFilaPonte`).
+         *
+         * Tolto il tappo vero, misurato sul telefono dell'owner: **12 ms**, con
+         * la chiamata secca. Il giro di richiami è stato rimosso — un rimedio al
+         * sintomo che sopravvive alla sua causa non è una difesa, è un posto
+         * dove il prossimo blocco si nasconde invece di farsi vedere.
+         */
         readMigration: async () => {
             try {
                 const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem')

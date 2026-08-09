@@ -55,6 +55,12 @@ class TalosSpeechPlugin : Plugin() {
     @Volatile private var stoParlando = false
 
     override fun load() {
+        // ⛔ `load()` gira sul thread CONDIVISO dei plugin: quello che ferma
+        // tutti gli altri se lo si blocca. Qui va bene — misurato 2 ms, perche'
+        // il costruttore di TextToSpeech si aggancia al servizio e torna
+        // subito, e l'esito arriva nella richiamata. Se un giorno qualcuno
+        // aggiunge qui una cosa che ASPETTA, il prezzo lo paga tutta l'app:
+        // la spiegazione lunga sta su TalosPrivilegePlugin.sulPonte.
         motore = TextToSpeech(context) { stato ->
             if (stato != TextToSpeech.SUCCESS) {
                 motore = null
