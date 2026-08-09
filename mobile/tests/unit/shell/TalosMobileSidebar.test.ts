@@ -84,7 +84,19 @@ describe('TalosMobileSidebar (F1-T3)', () => {
     it('F2-RED-20 keeps Model Lab under Settings instead of duplicating it in primary navigation', async () => {
         const wrapper = mountSidebar()
         await flushPromises()
-        for (const label of ['Research', 'Cockpit', 'Library']) {
+        /*
+         * ⛔ «Cockpit» era qui, ed e' stato TOLTO il 2026-08-09 su decisione
+         * dell'owner: la voce si apriva solo per dire «non disponibile in questa
+         * build», cioe' un comando morto vestito da funzione, in due tocchi
+         * dalla chat.
+         *
+         * ⭐ Quel posto non resta vuoto per caso: ci entrera' **Codice**, la
+         * fase agentica B. Finche' non c'e', la navigazione primaria ha SEI
+         * voci — Memoria, Attivita', Note, Diagnostica, Ricerca approfondita,
+         * Libreria — e questo test difende il fatto che non se ne intrufoli una
+         * settima prima del tempo.
+         */
+        for (const label of ['Research', 'Library']) {
             expect(document.querySelector(`[data-testid="talos-mobile-sidebar"] [aria-label="Open ${label}"]`), label).toBeTruthy()
         }
         expect(document.querySelector('[data-testid="talos-mobile-sidebar"] [aria-label="Open Model Lab"]')).toBeNull()

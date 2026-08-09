@@ -24,7 +24,6 @@ const SCREEN_CONTRACT: Record<string, { file: string; component: string; markers
     notes: { file: 'NotesScreen.vue', component: 'NotesScreen', markers: ['data-testid="talos-notes-screen"'] },
     doctor: { file: 'DoctorScreen.vue', component: 'DoctorScreen', markers: ['data-testid="talos-doctor-screen"'] },
     research: { file: 'ResearchScreen.vue', component: 'ResearchScreen', markers: ["t('stations.deepResearchTitle')"] },
-    runs: { file: 'RunsScreen.vue', component: 'RunsScreen', markers: ["t('stations.runtimeCockpitTitle')"] },
     context: { file: 'ContextScreen.vue', component: 'ContextScreen', markers: ['data-testid="talos-library-search"'] },
     settings: { file: 'SettingsScreen.vue', component: 'SettingsScreen', markers: ["t('stations.settingsCenterTitle')"] },
     'settings-models': { file: 'SettingsModelsScreen.vue', component: 'SettingsModelsScreen', markers: ['data-testid="settings-models-screen"'] },
@@ -58,7 +57,7 @@ describe('router wiring', () => {
             'notes', 'note-new', 'note-item',
             'doctor',
             'research', 'research-new', 'research-report', 'research-claim', 'research-source',
-            'runs', 'context', 'settings',
+            'context', 'settings',
             'settings-models', 'settings-models-providers',
             'settings-models-catalog', 'settings-models-local', 'settings-models-local-repo',
             // Il controllo del telefono: sotto le Impostazioni, non fra le stazioni.
