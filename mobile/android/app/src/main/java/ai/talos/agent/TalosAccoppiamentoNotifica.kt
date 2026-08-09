@@ -67,6 +67,24 @@ object TalosAccoppiamentoNotifica {
     private var ricevitore: BroadcastReceiver? = null
 
     /**
+     * Le parole con cui questa notifica sa parlare, tutte prese in una volta.
+     *
+     * ⛔ Si conservano perché gli altri due momenti — «sto lavorando» e «non è
+     * andata» — arrivano da un thread di sfondo, quando il JavaScript non è più
+     * nel giro e non può passarle. Chiederle di nuovo vorrebbe dire o inventarle
+     * in Kotlin (e allora questa sarebbe l'unica superficie di TALOS che non
+     * parla la lingua scelta), o non dire niente — che è il difetto qui sotto.
+     */
+    private class Parole(
+        val titolo: String,
+        val etichettaCampo: String,
+        val alLavoro: String,
+        val fallita: String,
+    )
+
+    private var parole: Parole? = null
+
+    /**
      * Mette la notifica col campo, e resta in ascolto della risposta.
      *
      * Le parole arrivano da JavaScript: è lì che vivono i dizionari, e una
@@ -78,7 +96,65 @@ object TalosAccoppiamentoNotifica {
         titolo: String,
         testo: String,
         etichettaCampo: String,
+        alLavoro: String,
+        fallita: String,
         quandoArriva: Ascoltatore,
+    ): Boolean {
+        parole = Parole(titolo, etichettaCampo, alLavoro, fallita)
+        return posa(context, titolo, testo, etichettaCampo, false, quandoArriva)
+    }
+
+    /**
+     * ⭐ «Ci sto lavorando» — e non è cortesia, è l'unica cosa vera da dire.
+     *
+     * ⛔ Il difetto che ha pagato questa funzione, owner 2026-08-09 con la foto:
+     * «la notifica si blocca in spinning». Scritto il codice, la notifica restava
+     * **identica**, e sotto partiva un lavoro che può durare **fino a 36
+     * secondi** — scoperta dell'annuncio fino a 6 s, poi l'accoppiamento con un
+     * tetto di 30 s. Trentasei secondi in cui la persona guarda esattamente la
+     * stessa schermata di prima e non ha modo di sapere se ha premuto davvero.
+     *
+     * Il campo sparisce mentre si lavora, di proposito: un campo che accetta un
+     * secondo codice mentre il primo è ancora in volo produce due accoppiamenti
+     * accavallati sulla stessa porta.
+     */
+    fun lavora(context: Context, testo: String? = null) {
+        val p = parole ?: return
+        posa(context, p.titolo, testo ?: p.alLavoro, null, true, null)
+    }
+
+    /**
+     * ⛔ «Non è andata» — la metà del contratto che mancava del tutto.
+     *
+     * Prima, se l'accoppiamento falliva, **non succedeva niente**: nessun testo
+     * nuovo, nessun motivo, la notifica ferma lì. Solo la riuscita la chiudeva.
+     * ⇒ Un fallimento silenzioso è indistinguibile da un lavoro ancora in corso,
+     * e quello che si vede è esattamente ciò che l'owner ha fotografato.
+     *
+     * Il campo torna: il codice scade e la porta cambia, quindi la cosa utile
+     * dopo un no è **poterne scrivere un altro** senza rifare tutto il giro.
+     */
+    fun riprova(context: Context, motivo: String? = null) {
+        val p = parole ?: return
+        val testo = if (motivo.isNullOrBlank()) p.fallita else "${p.fallita} ($motivo)"
+        posa(context, p.titolo, testo, p.etichettaCampo, false, null)
+    }
+
+    /**
+     * L'unico posto che disegna la notifica, nei tre momenti che ha.
+     *
+     * `etichettaCampo == null` vuol dire senza campo; `inCorso` mette la barra
+     * indeterminata. `quandoArriva == null` significa «sto solo ridisegnando»:
+     * l'ascoltatore e il ricevitore restano quelli di prima, e riregistrarli
+     * lascerebbe in giro un ricevitore mai tolto a ogni cambio di stato.
+     */
+    private fun posa(
+        context: Context,
+        titolo: String,
+        testo: String,
+        etichettaCampo: String?,
+        inCorso: Boolean,
+        quandoArriva: Ascoltatore?,
     ): Boolean = runCatching {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return false
         /*
@@ -98,16 +174,10 @@ object TalosAccoppiamentoNotifica {
          */
         if (!manager.areNotificationsEnabled()) return false
         creaCanale(manager, titolo)
-        ascoltatore = quandoArriva
-        registraRicevitore(context)
-
-        val remoto = RemoteInput.Builder(CHIAVE_CODICE)
-            .setLabel(etichettaCampo)
-            // ⛔ Sei cifre: la tastiera numerica risparmia alla persona il
-            // passaggio piu' sbagliato di tutta la procedura, che e' cercare i
-            // numeri mentre un codice scade.
-            .setAllowFreeFormInput(true)
-            .build()
+        if (quandoArriva != null) {
+            ascoltatore = quandoArriva
+            registraRicevitore(context)
+        }
 
         val intento = Intent(AZIONE_RISPOSTA).setPackage(context.packageName)
         /*
@@ -123,16 +193,7 @@ object TalosAccoppiamentoNotifica {
         }
         val inSospeso = PendingIntent.getBroadcast(context, ID_NOTIFICA, intento, bandiere)
 
-        val azione = Notification.Action.Builder(null, etichettaCampo, inSospeso)
-            .addRemoteInput(
-                android.app.RemoteInput.Builder(CHIAVE_CODICE)
-                    .setLabel(etichettaCampo)
-                    .setAllowFreeFormInput(true)
-                    .build(),
-            )
-            .build()
-
-        val notifica = Notification.Builder(context, CANALE)
+        val costruttore = Notification.Builder(context, CANALE)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(titolo)
             .setContentText(testo)
@@ -141,13 +202,29 @@ object TalosAccoppiamentoNotifica {
             // scorrimento resta in Impostazioni senza piu' dove scrivere.
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
-            .addAction(azione)
-            .build()
 
-        manager.notify(ID_NOTIFICA, notifica)
-        // `remoto` serve solo a tenere in vita il riferimento androidx per chi
-        // legge: la notifica usa la versione di piattaforma.
-        remoto.label
+        if (etichettaCampo != null) {
+            costruttore.addAction(
+                Notification.Action.Builder(null, etichettaCampo, inSospeso)
+                    .addRemoteInput(
+                        android.app.RemoteInput.Builder(CHIAVE_CODICE)
+                            .setLabel(etichettaCampo)
+                            // ⛔ Sei cifre: la tastiera numerica risparmia alla
+                            // persona il passaggio piu' sbagliato di tutta la
+                            // procedura, che e' cercare i numeri mentre un
+                            // codice scade.
+                            .setAllowFreeFormInput(true)
+                            .build(),
+                    )
+                    .build(),
+            )
+        }
+        // La barra indeterminata: non sappiamo quanto manca — la scoperta
+        // dell'annuncio dipende dalla rete — e una percentuale inventata sarebbe
+        // una bugia piu' precisa, non un'informazione migliore.
+        if (inCorso) costruttore.setProgress(0, 0, true)
+
+        manager.notify(ID_NOTIFICA, costruttore.build())
         true
     }.getOrDefault(false)
 
@@ -159,6 +236,7 @@ object TalosAccoppiamentoNotifica {
         ricevitore?.let { runCatching { context.applicationContext.unregisterReceiver(it) } }
         ricevitore = null
         ascoltatore = null
+        parole = null
     }
 
     private fun creaCanale(manager: NotificationManager, titolo: String) {
