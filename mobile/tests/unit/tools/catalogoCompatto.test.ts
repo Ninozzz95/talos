@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
     TALOS_DETTAGLI_STRUMENTO,
+    talosDimenticaSvelati,
     talosIndiceCompatto,
     talosStrumentoDettagli,
+    talosSvelatiIn,
 } from '@/lib/tools/catalogoCompatto'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
 
@@ -101,5 +103,52 @@ describe('lo strumento che svela gli schemi', () => {
         // diventasse `write` chiederebbe un consenso per una domanda senza
         // contenuto, e ogni domanda senza contenuto insegna a dire sì.
         expect(dettagli.action).toBe('read')
+    })
+})
+
+/**
+ * ⛔⛔ MISURATO sul Pad il 2026-08-09, ed è il difetto peggiore che il catalogo
+ * abbia prodotto.
+ *
+ * Prima versione: l'insieme degli svelati nasceva e moriva dentro un singolo
+ * invio. «Accendi la torcia» → due passi corretti, scheda, torcia accesa
+ * DAVVERO (registro fotocamera 06:30:44). Subito dopo «spegni la torcia» →
+ * nessuna scheda, nessun evento, e la risposta «La torcia è stata spegna».
+ *
+ * Il modello vedeva nella conversazione uno strumento che aveva appena usato e
+ * che non gli era più offerto: invece di richiederne la forma, ha RACCONTATO
+ * l'azione. La tassa dei due passi a ogni messaggio è un invito a saltare il
+ * passo, e chi salta il passo afferma il falso.
+ */
+describe('cio che e stato svelato resta svelato', () => {
+    it('⛔ lo stesso strumento è ancora chiamabile al messaggio DOPO', async () => {
+        const sessione = 'sessione-torcia'
+        talosDimenticaSvelati(sessione)
+
+        // Primo messaggio: il modello chiede la forma.
+        const primo = talosSvelatiIn(sessione)
+        const dettagli = talosStrumentoDettagli(TUTTI, schemaDi, (n) => {
+            for (const nome of n) primo.add(nome)
+        })
+        await dettagli.run({ names: ['device_torch'] }, {} as never)
+
+        // Secondo messaggio: insieme NUOVO chiesto per la stessa conversazione.
+        const secondo = talosSvelatiIn(sessione)
+        expect(secondo.has('device_torch')).toBe(true)
+    })
+
+    it('⛔ ma NON passa a un altra conversazione', () => {
+        // I permessi e gli interruttori cambiano per chat: offrire altrove
+        // cio' che li' potrebbe non esserci e' il difetto opposto.
+        talosDimenticaSvelati('chat-a')
+        talosDimenticaSvelati('chat-b')
+        talosSvelatiIn('chat-a').add('device_torch')
+        expect(talosSvelatiIn('chat-b').has('device_torch')).toBe(false)
+    })
+
+    it('dimenticare una conversazione la svuota', () => {
+        talosSvelatiIn('chat-c').add('device_torch')
+        talosDimenticaSvelati('chat-c')
+        expect(talosSvelatiIn('chat-c').size).toBe(0)
     })
 })

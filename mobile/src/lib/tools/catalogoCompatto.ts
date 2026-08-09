@@ -47,6 +47,52 @@ import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
  * architettura.
  */
 
+/**
+ * ⛔⛔ CIO' CHE E' STATO SVELATO RESTA SVELATO, per tutta la conversazione.
+ *
+ * ## Il difetto, misurato sul Pad il 2026-08-09
+ *
+ * Prima versione: l'insieme degli strumenti svelati nasceva e moriva **dentro
+ * un singolo invio**. Conseguenza: a ogni messaggio il modello ripartiva da
+ * zero e doveva rifare i due passi anche per uno strumento che aveva appena
+ * usato.
+ *
+ * Con Qwen3-1.7B: «accendi la torcia» → due passi corretti, scheda di
+ * consenso, torcia accesa DAVVERO (registro della fotocamera, 06:30:44).
+ * Subito dopo, «spegni la torcia» → **nessuna scheda**, **nessun evento**, e
+ * la risposta «La torcia è stata spegna». Il modello vedeva nella
+ * conversazione uno strumento che aveva appena chiamato e che ora non gli era
+ * piu' offerto: invece di richiederne la forma, ha raccontato l'azione.
+ *
+ * ⇒ La tassa dei due passi ad ogni messaggio non e' solo lenta: e' un invito a
+ * saltare il passo. E un modello che salta il passo **afferma il falso**, che
+ * e' il difetto peggiore del catalogo.
+ *
+ * ## Perche' per conversazione e non per sempre
+ *
+ * Perche' e' la stessa vita della catena e del piano: quello che il modello ha
+ * imparato in questo discorso serve in questo discorso. Un deposito globale
+ * porterebbe schemi di strumenti che in un'altra chat potrebbero non essere
+ * nemmeno offerti — i permessi cambiano, gli interruttori cambiano — e
+ * offrire cio' che non c'e' piu' e' esattamente il difetto opposto.
+ */
+const SVELATI = new Map<string, Set<string>>()
+
+/** Gli strumenti gia' svelati in questa conversazione. Vivo, non copiato. */
+export function talosSvelatiIn(sessione: string | null): Set<string> {
+    const chiave = sessione ?? '(nessuna)'
+    const esistente = SVELATI.get(chiave)
+    if (esistente) return esistente
+    const nuovo = new Set<string>()
+    SVELATI.set(chiave, nuovo)
+    return nuovo
+}
+
+/** Per i test, e per quando una conversazione viene cancellata. */
+export function talosDimenticaSvelati(sessione: string | null): void {
+    SVELATI.delete(sessione ?? '(nessuna)')
+}
+
 /** Il nome che il modello usa per chiedere la forma di uno strumento. */
 export const TALOS_DETTAGLI_STRUMENTO = 'tool_details'
 
@@ -76,7 +122,7 @@ export function talosIndiceCompatto(
  */
 export function talosStrumentoDettagli(
     tools: ReadonlyArray<TalosToolDefinition<never>>,
-    schemaDi: (tool: TalosToolDefinition<never>) => unknown,
+    schemaDi: (tool: TalosToolDefinition<never>) => unknown | Promise<unknown>,
     svela: (nomi: readonly string[]) => void,
 ): TalosToolDefinition<{ names: string[] }> {
     const perNome = new Map(tools.map((tool) => [tool.name, tool]))
@@ -114,7 +160,7 @@ export function talosStrumentoDettagli(
                 : ''
             return {
                 ok: true,
-                content: JSON.stringify(trovati.map(schemaDi)) + avviso,
+                content: JSON.stringify(await Promise.all(trovati.map(schemaDi))) + avviso,
             }
         },
     })

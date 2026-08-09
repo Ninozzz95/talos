@@ -3294,6 +3294,86 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * still emit one unprompted and dropping it silently would lose
              * content the user watched being written.
              */
+            /*
+             * ⭐⭐ IL CATALOGO COMPATTO — acceso SOLO sul motore locale.
+             *
+             * MISURATO il 2026-08-09: i 61 schemi interi sono 38.386 byte
+             * (~10.375 token), l'indice 5.087 (~1.375). L'87% in meno, e
+             * nessuno strumento sparisce: restano tutti nominati nell'indice, e
+             * chi ne vuole la forma la chiede con `tool_details`.
+             *
+             * ⛔ Solo il locale, per adesso. Un modello con la chiave ha una
+             * finestra larga e la fedeltà per reggere 61 schemi: cambiargli il
+             * protocollo sotto i piedi introdurrebbe un rischio dove non c'è un
+             * problema. Se la sonda regge, la scelta si riapre.
+             */
+            const catalogoAttivo = profile?.provider === 'local' && offeredTools.length > 0
+            /*
+             * ⛔ CARICATO A RICHIESTA, e non e' pigrizia: importarlo in cima
+             * tira `registry` dentro il primo pezzo del pacchetto e il cancello
+             * del bundle e' andato a 676.002 byte contro i 600.000 ammessi.
+             * Il catalogo serve quando si INVIA, non quando si apre l'app.
+             */
+            const catalogo = catalogoAttivo
+                ? await import('@/lib/tools/catalogoCompatto')
+                : null
+            /*
+             * ⛔ Vive quanto la CONVERSAZIONE, non quanto l'invio: uno
+             * strumento gia' svelato resta chiamabile al messaggio dopo. La
+             * ragione, con la misura, sta in `catalogoCompatto.ts`.
+             */
+            const svelati = catalogo
+                ? catalogo.talosSvelatiIn(sendIdentity.sessionId)
+                : new Set<string>()
+            const dettagliStrumento = catalogo
+                ? catalogo.talosStrumentoDettagli(
+                    offeredTools as never,
+                    async (tool) => {
+                        const { talosToolsForLocalEngine } = await import('@/lib/tools/registry')
+                        return talosToolsForLocalEngine([tool] as never)[0]
+                    },
+                    (nomi) => { for (const nome of nomi) svelati.add(nome) },
+                )
+                : null
+            /**
+             * Cosa VEDE il modello: l'indice più gli strumenti già svelati.
+             *
+             * ⛔ Si ricalcola a ogni giro, non una volta: `svelati` cresce
+             * mentre il turno va avanti, ed è esattamente quella crescita che
+             * rende chiamabile ciò che il modello ha appena chiesto.
+             */
+            const strumentiEsposti = (): typeof offeredTools => (
+                dettagliStrumento
+                    ? [
+                        dettagliStrumento as never,
+                        ...offeredTools.filter((tool: { name: string }) => svelati.has(tool.name)),
+                    ]
+                    : offeredTools
+            )
+            /**
+             * Cosa si può ESEGUIRE: tutto, più `tool_details`.
+             *
+             * ⛔ Diverso da ciò che si espone, e la differenza è il punto: il
+             * modello non deve vedere 61 schemi, ma quando ne chiama uno
+             * l'esecutore deve trovarlo. Cercare nella lista esposta darebbe
+             * «non esiste nessun tool chiamato…» su uno strumento che c'è.
+             */
+            const strumentiEseguibili = dettagliStrumento
+                ? [...offeredTools, dettagliStrumento as never]
+                : offeredTools
+            const indiceNelPrompt = catalogo
+                ? `
+
+# Tools available
+
+These tools exist. You do NOT have their input `
+                    + `schemas yet: call ${catalogo.TALOS_DETTAGLI_STRUMENTO} with the names you `
+                    + `need, then call them.
+
+`
+                    + catalogo.talosIndiceCompatto(offeredTools as never)
+                : ''
+
             const documentToolOffered = offeredTools.some(
                 (tool: { name: string }) => tool.name === 'document_create',
             )
@@ -3362,9 +3442,18 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     timeoutMs,
                     effort: sendRuntime.effort,
                     thinking: sendRuntime.thinking,
-                    system: sendIdentity.surface === 'browse'
+                    /*
+                     * ⭐ L'INDICE va nel prompt di sistema, non altrove.
+                     *
+                     * È lì che vive il prefisso congelato: il catalogo è uguale
+                     * a ogni messaggio, quindi paga il prefill una volta sola
+                     * come il resto del prompt. Metterlo in un turno lo farebbe
+                     * ricalcolare a ogni giro, e il risparmio si mangerebbe da
+                     * sé.
+                     */
+                    system: (sendIdentity.surface === 'browse'
                         ? tonePrompt + TALOS_BROWSE_APPENDIX
-                        : tonePrompt,
+                        : tonePrompt) + indiceNelPrompt,
                 }),
                 deps.transport,
             )
@@ -3473,9 +3562,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 deps.settings.effectiveToolPermissions(),
             )
             const isEffectivelyEnabled = (name: string): boolean => (
-                sendRuntime.agentTools[name as keyof TalosAgentToolEnabled] === true
-                && deps.settings.state.agent_tools[name as keyof TalosAgentToolEnabled] === true
-                && toolset.isEnabled(name, sendRuntime.agentTools)
+                /*
+                 * ⛔ `tool_details` non è una capacità: è l'impianto del
+                 * catalogo, e non compare fra gli interruttori perché non c'è
+                 * niente da spegnere. Consegna la FORMA di strumenti che sono
+                 * già passati da `toolset.offer` — cioè dai permessi e dagli
+                 * interruttori — quindi non può svelare niente che la persona
+                 * abbia spento. C'è una riga di test che lo tiene fermo.
+                 */
+                name === 'tool_details'
+                || (
+                    sendRuntime.agentTools[name as keyof TalosAgentToolEnabled] === true
+                    && deps.settings.state.agent_tools[name as keyof TalosAgentToolEnabled] === true
+                    && toolset.isEnabled(name, sendRuntime.agentTools)
+                )
             )
             const authorizationFor = (callId: string): TalosToolAuthorizationRequestV1 | undefined =>
                 authorizationCheckpoint?.requests.find((request) => request.call_id === callId)
@@ -3560,7 +3660,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * solo senza schemi da compilare — vedi la ragione in
                      * `agentLoop.ts`, dove la decisione viene presa.
                      */
-                    const strumenti = opzioni?.senzaStrumenti ? [] : offeredTools
+                    const strumenti = opzioni?.senzaStrumenti ? [] : strumentiEsposti()
                     if (!libraryAnswerGuardArmed) {
                         return completeProviderRound(turns, stream, strumenti)
                     }
@@ -3640,7 +3740,33 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     }
                 },
                 preflight: async (call) => {
-                    const tool = offeredTools.find(
+                    /*
+                     * ⛔⛔ `tool_details` NON passa dal cancello dei permessi, e
+                     * non e' una scorciatoia: e' che li' dentro non ci sta.
+                     *
+                     * MISURATO il 2026-08-09: alla prima versione ogni «accendi
+                     * la torcia» col catalogo finiva in
+                     * `CHAT_EXECUTION_FAILED` — «il permesso che avevi dato
+                     * valeva per l'invio di prima». Sotto c'era
+                     * `TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID`: il
+                     * checkpoint rifiuta le richieste per strumenti che non
+                     * sono nel catalogo governato dalle impostazioni, e
+                     * `tool_details` non c'e' — perche' non e' una capacita'.
+                     *
+                     * Metterlo nel catalogo vorrebbe dire dargli un
+                     * interruttore, cioe' offrire di spegnere il modo in cui il
+                     * modello scopre gli altri strumenti. Non e' una scelta che
+                     * abbia senso proporre.
+                     *
+                     * ⛔ E non allarga niente: consegna la FORMA di strumenti
+                     * gia' passati da `toolset.offer`, cioe' dai permessi e
+                     * dagli interruttori. Non puo' svelare cio' che la persona
+                     * ha spento, non tocca dati, non esce dal telefono.
+                     */
+                    if (dettagliStrumento && call.name === dettagliStrumento.name) {
+                        return { status: 'ready' as const }
+                    }
+                    const tool = strumentiEseguibili.find(
                         (entry: { name: string }) => entry.name === call.name,
                     )
                     if (!tool) return { status: 'ready' as const }
@@ -3717,7 +3843,21 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 },
                 execute: async (call) => {
                     const timing = round.open?.tool(call.name)
-                    const tool = offeredTools.find((entry: { name: string }) => entry.name === call.name)
+                    // Stessa ragione della barriera qui sopra: il catalogo che
+                    // parla di se' non passa dall'esecutore, che e' fatto per
+                    // le capacita'.
+                    if (dettagliStrumento && call.name === dettagliStrumento.name) {
+                        const grezzi: unknown = JSON.parse(call.arguments || '{}')
+                        const letti = dettagliStrumento.input.safeParse(grezzi)
+                        if (!letti.success) {
+                            timing?.finish(false, 0, 'TALOS_TOOL_INPUT_INVALID')
+                            return { ok: false, content: 'Give `names` as a list of tool names.' }
+                        }
+                        const esito = await dettagliStrumento.run(letti.data, {} as never)
+                        timing?.finish(esito.ok, 0, null)
+                        return { ok: esito.ok, content: esito.content }
+                    }
+                    const tool = strumentiEseguibili.find((entry: { name: string }) => entry.name === call.name)
                     if (!tool) {
                         // A model can hallucinate a tool name. Saying so is more
                         // useful than failing the turn.
