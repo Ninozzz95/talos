@@ -272,7 +272,11 @@ class TalosDevicePlugin : Plugin() {
         if (call.getBoolean("forThisApp", false) == true) {
             intent.data = Uri.fromParts("package", context.packageName, null)
         }
-        call.resolve(avvia(intent))
+        // ⛔ `chiedendoPrima = false`: queste sono schermate di SISTEMA, e
+        // chiedere chi risponde a un intent di sistema ottiene «non te lo dico»
+        // dal filtro di visibilita' dei pacchetti — non «non esiste». Il perche'
+        // per esteso sta su `avvia`, insieme alla misura che l'ha smascherato.
+        call.resolve(avvia(intent, chiedendoPrima = false))
     }
 
     /** Prepara una ricerca, una chiamata, un SMS. La persona conferma. */
@@ -415,17 +419,54 @@ class TalosDevicePlugin : Plugin() {
      * intent**, ed è ciò che rende il gesto ripetibile: «componi QUESTO
      * numero» deve valere anche la decima volta di fila.
      */
-    private fun avvia(intent: Intent): JSObject {
+    /**
+     * @param chiedendoPrima se domandare al sistema chi risponde all'intent.
+     *   ⛔ Va messo a `false` per le schermate di **sistema**: il perché è
+     *   scritto per esteso qui sotto, ed è un difetto che abbiamo pagato.
+     */
+    private fun avvia(intent: Intent, chiedendoPrima: Boolean = true): JSObject {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val result = JSObject()
         /*
-         * ⛔ Si CHIEDE prima se qualcuno risponde a questo intent, invece di
-         * scoprirlo da un'eccezione. `ActivityNotFoundException` arriva solo
-         * quando non c'è proprio nessuno; ci sono casi in mezzo — un'app
-         * disabilitata, un profilo di lavoro — in cui `startActivity` non
-         * lancia e non succede niente, e allora si direbbe «fatto» a vuoto.
+         * ⛔⛔ «Il telefono non offre una schermata compatibile» — DETTO DI UNA
+         * SCHERMATA CHE C'ERA.
+         *
+         * ## Il difetto, visto dall'owner il 2026-08-09
+         *
+         * Alla domanda «apri le impostazioni per l'accesso alle notifiche»,
+         * TALOS rispondeva: «Il telefono non offre una schermata compatibile.
+         * Non posso quindi leggerle direttamente.» Misurato sul Pad un minuto
+         * dopo:
+         *
+         *     cmd package resolve-activity -a android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
+         *     name=com.android.settings.Settings$NotificationAccessSettingsActivity
+         *     enabled=true exported=true
+         *
+         * La schermata c'era, accesa ed esportata.
+         *
+         * ## Perché `resolveActivity` diceva di no
+         *
+         * Dal filtro di **visibilità dei pacchetti** di Android 11: un'app vede
+         * solo ciò che ha dichiarato in `<queries>`. Le nostre dichiarano il
+         * telefono, l'SMS, la condivisione — non le decine di schermate di
+         * sistema.
+         *
+         * ⇒ `resolveActivity` non rispondeva «non esiste». Rispondeva **«non te
+         * lo dico»**, e noi lo traducevamo in «non esiste», e il modello lo
+         * traduceva in «il tuo telefono non ce l'ha». Tre traduzioni, e alla
+         * fine una persona convinta di avere un telefono limitato.
+         *
+         * ## Perché la guardia resta, ma non qui
+         *
+         * Era stata messa per una ragione vera: `startActivity` verso un'app
+         * disabilitata a volte non lancia e non fa niente, e allora si
+         * direbbe «fatto» a vuoto. Vale per le app di terzi.
+         *
+         * Per le schermate di sistema no: il filtro **impedisce di
+         * interrogarle, non di avviarle**. Lì l'unico giudice onesto è provare
+         * e guardare l'eccezione.
          */
-        if (intent.resolveActivity(context.packageManager) == null) {
+        if (chiedendoPrima && intent.resolveActivity(context.packageManager) == null) {
             result.put("done", false)
             result.put("reason", "not-available-here")
             return result
