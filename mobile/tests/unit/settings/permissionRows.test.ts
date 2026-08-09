@@ -110,7 +110,62 @@ describe('which rows a given device sees', () => {
         const rows = visibleTalosPermissionRows({ notifications: true, biometricHardware: true })
         expect(rows.map((row) => row.id)).toEqual([
             'microphone', 'notifications', 'appLock', 'files', 'background', 'network',
+            'notificationAccess', 'bridge', 'deviceControl', 'localModel',
         ])
+    })
+
+    /**
+     * ⛔⭐⭐ LE DUE COSE PIÙ POTENTI CHE TALOS SA FARE NON POSSONO MANCARE DA QUI.
+     *
+     * Fino al 2026-08-09 questa pagina elencava sei voci scritte quando TALOS
+     * sapeva dettare e scaricare modelli. Nel frattempo aveva imparato a leggere
+     * le notifiche di **ogni app** e a **eseguire comandi sul telefono coi
+     * privilegi della shell** — e nessuna delle due compariva.
+     *
+     * ⇒ Una schermata privacy che elenca il microfono e tace sulla shell non è
+     * incompleta: è **fuorviante**, perché chi la legge conclude di aver visto
+     * tutto. Questa prova esiste perché non possa succedere di nuovo in
+     * silenzio: chi toglie una di quelle due righe deve passare di qui.
+     */
+    it('⛔ le due capacità piu POTENTI ci sono, e sono marcate come accesso speciale', () => {
+        const rows = visibleTalosPermissionRows({ notifications: true, biometricHardware: true })
+        const speciali = rows.filter((row) => row.kind === 'special').map((row) => row.id)
+
+        expect(speciali).toContain('notificationAccess')
+        expect(speciali).toContain('bridge')
+    })
+
+    /**
+     * ⛔ Il ponte si mostra solo dove può funzionare: `exportKeyingMaterial` è
+     * API pubblica da Android 12. Una riga che promette l'impossibile manda
+     * qualcuno a cercare un interruttore che non troverà, e a credere di aver
+     * sbagliato lui.
+     */
+    it('⛔ il PONTE sparisce dove non puo funzionare, e il resto resta', () => {
+        const rows = visibleTalosPermissionRows({
+            notifications: true,
+            biometricHardware: true,
+            bridgeSupported: false,
+        })
+
+        expect(rows.map((row) => row.id)).not.toContain('bridge')
+        // E non si porta via le altre: e' una riga sola a sparire.
+        expect(rows.map((row) => row.id)).toContain('notificationAccess')
+        expect(rows.map((row) => row.id)).toContain('deviceControl')
+    })
+
+    /**
+     * ⛔ Ogni riga deve dire il CONFINE, non solo la funzione: è quello che una
+     * persona attenta alla privacy sta davvero chiedendo. Una descrizione corta
+     * è quasi sempre una che dice cosa fa e tace su dove si ferma.
+     */
+    it('⛔ ogni riga dice anche dove TALOS si ferma', () => {
+        for (const row of TALOS_PERMISSION_ROWS) {
+            expect(row.purpose.length, `${row.id} troppo corta per dire un confine`)
+                .toBeGreaterThan(80)
+            expect(row.purpose, `${row.id} usa una formula generica`)
+                .not.toMatch(/required for full functionality|necessario per il funzionamento/i)
+        }
     })
 })
 

@@ -481,6 +481,22 @@ export const TALOS_IT_MESSAGES = {
                 title: 'Accesso alla rete',
                 purpose: 'Raggiunge il provider AI che hai configurato. Nulla viene inviato altrove e niente lascia il dispositivo finché non invii un messaggio.',
             },
+            notificationAccess: {
+                title: 'Lettura delle tue notifiche',
+                purpose: 'Dirti cos’è arrivato e rispondere al posto tuo. TALOS vede le notifiche di ogni app su questo telefono, testo compreso: è la finestra più larga che abbia sul tuo dispositivo, e resta chiusa finché non la apri tu a mano nelle impostazioni di sistema.',
+            },
+            bridge: {
+                title: 'Esecuzione di comandi su questo telefono',
+                purpose: 'Fare cose che Android alle app non concede: elencare ciò che è installato, cambiare impostazioni di sistema, raggiungere parti del telefono precluse a un’app. Gira con gli stessi poteri di un computer collegato via USB. Non funziona niente finché non lo accoppi una volta con un codice di sei cifre che leggi sul tuo schermo, e ogni comando passa comunque dal tuo cancello dei permessi.',
+            },
+            deviceControl: {
+                title: 'Controllo del telefono',
+                purpose: 'Torcia, volume, sveglie, sfondo, aprire un’app o una schermata di impostazioni. Nessuna di queste richiede un permesso — Android le concede a qualunque app — quindi l’unica cosa fra una richiesta e l’azione è il cancello dei permessi che governi tu in Strumenti.',
+            },
+            localModel: {
+                title: 'Modelli che girano qui',
+                purpose: 'Un modello scaricato su questo telefono risponde senza rete. Quello che gli scrivi non lascia mai il dispositivo — non a noi, non a nessuno — e continua a funzionare col telefono in modalità aereo.',
+            },
         },
     },
     chat: {
