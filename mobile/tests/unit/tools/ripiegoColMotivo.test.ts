@@ -70,7 +70,9 @@ describe('il ripiego sul pannello porta con sé il motivo', () => {
         expect(risposta.ok).toBe(true)
         expect(risposta.content).toContain('NOT done yet')
         // ⛔ E adesso c'è anche la causa, con la mossa successiva dentro.
-        expect(risposta.content).toContain('has not authorised TALOS')
+        // ⛔ Le parole sono cambiate con l'uscita di Shizuku, la PROPRIETÀ no:
+        // il motivo dice cosa fare — accoppiare — e non è una diagnosi muta.
+        expect(risposta.content).toContain('never been paired')
     })
 
     it('RIPIEGO-02 le due cause NON si confondono: hanno cure diverse', async () => {
@@ -82,7 +84,7 @@ describe('il ripiego sul pannello porta con sé il motivo', () => {
         })
 
         expect(spento.content).not.toBe(nonAutorizzato.content)
-        expect(spento.content).toContain('not running')
+        expect(spento.content).toContain('not connected')
     })
 
     it('RIPIEGO-03 quando l\'ha fatto DAVVERO non si giustifica', async () => {
@@ -118,10 +120,13 @@ describe('il ripiego sul pannello porta con sé il motivo', () => {
         const risposta = await esegui({
             done: true, via: 'panel', reason: 'shizuku-refused',
         })
-        expect(risposta.content).toContain('GRANT_RUNTIME_PERMISSIONS')
+        expect(risposta.content).toContain('could not run this')
         // ⛔ E soprattutto: non mandare la persona a riavviare Shizuku, che è
         // già in esecuzione. Un consiglio sbagliato è peggio di nessun consiglio.
-        expect(risposta.content).toContain('do not suggest restarting Shizuku')
+        // ⛔ La proprietà che conta e resta: il motivo VIETA di riprovare.
+        // Prima lo diceva nominando Shizuku; adesso non c'è più nessuno da
+        // riavviare, ma un modello che riprova all'infinito costerebbe uguale.
+        expect(risposta.content.toLowerCase()).toContain('do not retry')
     })
 
     it('RIPIEGO-04 morde: senza il motivo le due risposte sarebbero IDENTICHE', async () => {
@@ -132,6 +137,6 @@ describe('il ripiego sul pannello porta con sé il motivo', () => {
          */
         const senzaMotivo = 'Wi-Fi turned off — but it is NOT done yet: the phone panel is open and the user must tap the switch. Say exactly that.'
         expect(senzaMotivo).not.toContain('authorised')
-        expect(senzaMotivo).not.toContain('not running')
+        expect(senzaMotivo).not.toContain('not connected')
     })
 })
