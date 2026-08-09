@@ -890,11 +890,21 @@ describe('welcome setup checklist (F2-T6)', () => {
     })
 
     /**
-     * ⛔ Ma a chat PIENA l'introduzione non è a schermo, quindi il girello non
-     * c'è: lì quella riga è l'unico segnale, e toglierla rimetterebbe il tasto
-     * invia spento senza che nessuno dica perché.
+     * ⛔⭐ A CHAT PIENA IL GIRELLO C'È LO STESSO — ed è il difetto che questo
+     * test presidia, non una preferenza.
+     *
+     * Fino al 2026-08-09 questo test asseriva l'OPPOSTO: `exists()` doveva
+     * essere `false`. Non perché fosse giusto, ma perché il girello viveva
+     * dentro l'introduzione, e l'introduzione si vede solo a chat vuota. Chi
+     * apriva una conversazione già piena non aveva nessun segnale al centro
+     * mentre l'archivio si apriva: metà delle persone, nessun girello.
+     *
+     * Una limitazione dell'implementazione era stata scritta come se fosse un
+     * requisito, e il test la teneva ferma. Owner: «deve essere un popup overlay
+     * non innestato nello sfondo chat» — e un overlay non ha motivo di sparire
+     * quando ci sono dei messaggi sotto.
      */
-    it('⛔ a chat piena la riga sotto il compositore RESTA: è l unico segnale', () => {
+    it('⛔ a chat PIENA il girello c e lo stesso, e la riga sotto tace', () => {
         const controller = makeController([{
             id: 'm1', role: 'user', content: 'ciao', created_at: '2026-08-09T10:00:00.000Z',
         }])
@@ -903,9 +913,37 @@ describe('welcome setup checklist (F2-T6)', () => {
         mockState.controller = controller
         const wrapper = mount(ChatScreen)
 
-        expect(wrapper.find('[data-testid="talos-chat-loading"]').exists()).toBe(false)
+        const girello = wrapper.find('[data-testid="talos-chat-loading"]')
+        expect(girello.exists()).toBe(true)
+        expect(girello.text()).toContain('Loading chats')
         expect(wrapper.findComponent({ name: 'TalosMobileComposer' }).props('sendDisabledReason'))
-            .toBe('Preparazione dell’archivio locale delle chat')
+            .toBe('')
+    })
+
+    /**
+     * ⛔ È un OVERLAY, non un paragrafo che scorre coi messaggi.
+     *
+     * Senza questa prova, il girello potrebbe tornare a essere un `<p>` dentro
+     * la lista — che è com'era — e il test qui sopra passerebbe identico: il
+     * testid esiste in entrambi i casi. Quello che distingue le due cose è che
+     * l'overlay è **fuori** dal contenitore che scorre e copre lo schermo.
+     */
+    it('⛔ il girello e un overlay a tutto schermo, fratello della radice', () => {
+        const controller = makeController([{
+            id: 'm1', role: 'user', content: 'ciao', created_at: '2026-08-09T10:00:00.000Z',
+        }])
+        controller.chat.state.persistenceStatus = 'loading'
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+
+        const girello = wrapper.find('[data-testid="talos-chat-loading"]')
+        const classi = girello.attributes('class') ?? ''
+        expect(classi).toContain('fixed')
+        expect(classi).toContain('inset-0')
+        // Figlio DIRETTO della sezione: se qualcuno lo rimettesse dentro la
+        // lista dei messaggi o dentro l'introduzione, il genitore non sarebbe
+        // piu' la radice.
+        expect(girello.element.parentElement?.getAttribute('data-testid')).toBe('mobile-screen')
     })
 
     it('e riappare appena l archivio e pronto e manca davvero qualcosa', () => {

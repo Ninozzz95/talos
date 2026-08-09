@@ -80,16 +80,22 @@ const archivioInCaricamento = computed(() =>
 /**
  * ⛔ Lo stesso fatto detto DUE volte, in due posti, con due parole diverse.
  *
- * Il girello al centro e la riga sotto il compositore dicevano entrambi che
- * l'archivio si sta aprendo. Quando il girello c'è, quella riga tace; quando
- * l'introduzione non è a schermo — cioè a chat già piena — la riga resta l'unico
- * segnale e va lasciata, altrimenti il tasto invia torna a essere spento senza
- * che nessuno dica perché.
+ * Il girello al centro e la riga sotto il compositore dicono entrambi che
+ * l'archivio si sta aprendo: quando c'è il girello, quella riga tace.
+ *
+ * ## Perché la condizione si è SEMPLIFICATA
+ *
+ * Prima c'era anche `&& chat.messages.length === 0`, e non era un capriccio: il
+ * girello viveva dentro l'introduzione, che si vede solo a chat vuota. A chat
+ * piena non compariva, e la riga restava l'unico segnale — toglierla avrebbe
+ * lasciato il tasto invia spento senza spiegazione.
+ *
+ * Ora il girello è un overlay a tutto schermo e c'è **sempre** mentre
+ * l'archivio si apre. ⇒ La riga è un doppione in entrambi i casi, e la
+ * condizione che distingueva i due casi non ha più niente da distinguere.
  */
 const motivoInvioSpento = computed(() =>
-    archivioInCaricamento.value && chat.messages.length === 0
-        ? ''
-        : sendDisabledReason.value)
+    archivioInCaricamento.value ? '' : sendDisabledReason.value)
 
 const attesePendenti = computed<readonly string[]>(() => [
     ...controller.pendingToolAuthorizations.value.map((pending) => pending.checkpoint_id),
@@ -1025,19 +1031,6 @@ onBeforeUnmount(() => {
                         Il girello dice «sta succedendo»; una frase ferma sembra
                         un guasto. E sta al centro, dove l'occhio e' gia'.
                     -->
-                    <p
-                        v-if="archivioInCaricamento"
-                        data-testid="talos-chat-loading"
-                        role="status"
-                        aria-live="polite"
-                        class="mt-6 inline-flex items-center gap-2 text-sm text-[var(--talos-muted)]"
-                    >
-                        <LoaderCircle
-                            class="size-4 shrink-0 text-[var(--talos-accent)] motion-safe:animate-spin"
-                            aria-hidden="true"
-                        />
-                        {{ t('chat.loadingChats') }}
-                    </p>
 
                     <!--
                         The switch, on the welcome itself, in both directions —
@@ -1256,6 +1249,46 @@ onBeforeUnmount(() => {
                 @open-browser-url="openBrowserUrl"
                 @update-library-turn-override="libraryTurnOverride = $event"
             />
+        </div>
+
+        <!--
+            ⭐ IL GIRELLO E' UN OVERLAY, non un paragrafo dentro l'introduzione.
+
+            Owner 2026-08-09: «deve essere un popup overlay non innestato nello
+            sfondo chat, fatto in modo pulito e verificato visivamente».
+
+            ⛔ E annidarlo li' non era solo brutto: l'introduzione si vede solo a
+            chat VUOTA, quindi chi apriva una conversazione gia' piena non aveva
+            NESSUN segnale al centro mentre l'archivio si apriva. Il girello
+            c'era per meta' delle persone.
+
+            Sta qui, fratello della radice della schermata e non figlio di
+            nessun contenitore che scorre: cosi' resta al centro dello schermo
+            invece di seguire la lista dei messaggi.
+
+            z-[80]: sopra il compositore (z-40) e il suo foglio (z-[75]), sotto i
+            pannelli a tutto schermo (z-[85] e z-[95]) — che mentre l'archivio si
+            apre non possono essere aperti, ma se un giorno lo fossero avrebbero
+            ragione loro.
+
+            Il velo prende i tocchi di proposito: finche' l'archivio non e'
+            aperto non c'e' niente da toccare sotto, e un tasto che risponde
+            senza poter fare niente e' peggio di un tasto che non risponde.
+        -->
+        <div
+            v-if="archivioInCaricamento"
+            data-testid="talos-chat-loading"
+            role="status"
+            aria-live="polite"
+            class="fixed inset-0 z-[80] flex items-center justify-center bg-[var(--talos-background)]/75 supports-backdrop-filter:backdrop-blur-sm"
+        >
+            <div class="flex flex-col items-center gap-3 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-card)] px-7 py-6 shadow-xl">
+                <LoaderCircle
+                    class="size-7 text-[var(--talos-accent)] motion-safe:animate-spin"
+                    aria-hidden="true"
+                />
+                <p class="text-sm text-[var(--talos-muted)]">{{ t('chat.loadingChats') }}</p>
+            </div>
         </div>
 
     </section>
