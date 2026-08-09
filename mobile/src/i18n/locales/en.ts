@@ -112,7 +112,7 @@ export const TALOS_EN_MESSAGES = {
         traitFilesBody: 'Give TALOS a document from this phone and it is copied into a private, encrypted Library — searchable inside the text, and never uploaded to anyone.',
         comingLabel: 'Next',
         comingZethos: 'Zethos, the runtime being built to put ten-billion-parameter models on a phone.',
-        comingShizuku: 'Acting on the phone itself through Shizuku — with every action typed, previewed and reversible, never a blind shell.',
+        comingShizuku: 'Acting on the phone itself through the in-house bridge — with every action typed, previewed and reversible, never a blind shell.',
         comingSync: 'Optional encrypted sync, if you ever want a second device. Off by default, and local-first stays the point.',
         pricing: 'Free to use: you pay only the providers you choose, and only what you use.',
         begin: 'Set up TALOS',
@@ -879,7 +879,7 @@ export const TALOS_EN_MESSAGES = {
     },
     privilege: {
         pageTitle: 'Phone control',
-        intro: 'TALOS can act on the phone through Shizuku, which lends it the identity your computer uses over a cable. No root, and no special permissions inside TALOS.',
+        intro: 'TALOS acts on the phone with the same identity your computer uses over a cable. The bridge is inside TALOS: no third-party app, no root, and no special permissions.',
         statusHeading: 'Status',
         missingTitle: 'Shizuku is not installed',
         missingBody: 'Shizuku is the app that lends TALOS the identity to act. It is free and open source, and without it TALOS stays inside its own boundaries.',
