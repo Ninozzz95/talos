@@ -910,6 +910,7 @@ export const TALOS_EN_MESSAGES = {
         reasonOverlayNotAllowed: 'The permission to draw over other apps is missing. Without it the field cannot appear on top of Settings.',
         openDeveloper: 'Open developer options',
         codeLabel: 'Six-digit code',
+        reasonNotificationNotShown: 'TALOS cannot show the notification with the code field. Turn TALOS notifications on and try again.',
         reasonPairingNotAnnounced: 'TALOS cannot hear the pairing announcement. Check that the dialog with the code is still open — it does not last long — and that the phone is on Wi-Fi.',
         reasonConnectNotAnnounced: 'Pairing worked, but TALOS cannot find the connection port. Try again in a few seconds: the phone announces it shortly after.',
         reasonBadCode: 'The code is six digits.',

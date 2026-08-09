@@ -13,7 +13,6 @@ function stato(parziale: Partial<TalosPonteStato> = {}): TalosPonteStato {
         packaged: true,
         connected: false,
         reconnectFailed: false,
-        overlayAllowed: true,
         ...parziale,
     }
 }
@@ -62,10 +61,23 @@ describe('il ponte mostra UN passo alla volta', () => {
         expect(g.floatNeedsPermission).toBe(false)
     })
 
-    it('senza il permesso, il pulsante porta a CHIEDERLO invece di fallire', () => {
-        const g = talosPonteGuida(stato({ reconnectFailed: true, overlayAllowed: false }))
-        expect(g.floatKey).toBe('ponte.allowOverlay')
-        expect(g.floatNeedsPermission).toBe(true)
+    it('⛔ NON esiste piu un passo «concedi la finestra flottante»', () => {
+        /*
+         * Owner 2026-08-09: «appena entro in dev settings la finestra
+         * flottante viene coperta» — e poi, vista la notifica funzionare: «se
+         * la notifica funziona, la finestra flottante se ne deve andare
+         * definitivamente».
+         *
+         * PROVATO sul Pad con le opzioni sviluppatore in primo piano: notifica
+         * viva, pulsante «Accoppia», campo di scrittura aperto, tastiera su.
+         * SYSTEM_ALERT_WINDOW e' uscito dal manifest.
+         *
+         * ⇒ Un passo che chiede un permesso che non usiamo piu' sarebbe la
+         * peggiore delle cose: insegna a concedere senza leggere.
+         */
+        const g = talosPonteGuida(stato({ reconnectFailed: true }))
+        expect(g.floatNeedsPermission).toBe(false)
+        expect(g.floatKey).toBe('ponte.floatAction')
     })
 
     it('negli altri passi la finestra flottante non si propone', () => {
@@ -139,10 +151,7 @@ describe('i motivi sono scritti in ENTRAMBE le lingue', () => {
         usate.add('ponte.fallbackNote')
         usate.add('ponte.floatTitle')
         usate.add('ponte.floatInstruction')
-        for (const s of [
-            stato({ reconnectFailed: true }),
-            stato({ reconnectFailed: true, overlayAllowed: false }),
-        ]) {
+        for (const s of [stato({ reconnectFailed: true })]) {
             const f = talosPonteGuida(s).floatKey
             if (f) usate.add(f)
         }

@@ -928,6 +928,7 @@ export const TALOS_IT_MESSAGES = {
         reasonOverlayNotAllowed: 'Manca il permesso di disegnare sopra le altre app. Senza, il campo non può comparire sopra Impostazioni.',
         openDeveloper: 'Apri le opzioni sviluppatore',
         codeLabel: 'Codice a sei cifre',
+        reasonNotificationNotShown: 'TALOS non può mostrare la notifica col campo. Attiva le notifiche di TALOS e riprova.',
         reasonPairingNotAnnounced: 'TALOS non sente l\'annuncio dell\'accoppiamento. Controlla che la finestrella col codice sia ancora aperta — dura poco — e che il telefono sia sul Wi-Fi.',
         reasonConnectNotAnnounced: 'L\'accoppiamento è riuscito ma TALOS non trova la porta del collegamento. Riprova fra qualche secondo: il telefono la annuncia poco dopo.',
         reasonBadCode: 'Il codice è di sei cifre.',

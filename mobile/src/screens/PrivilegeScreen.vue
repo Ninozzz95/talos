@@ -4,6 +4,11 @@ import { Capacitor } from '@capacitor/core'
 import { useTalosI18n } from '@/i18n'
 import { Check, ChevronRight, RefreshCw, ShieldAlert, Smartphone, X } from '@lucide/vue'
 import {
+    openTalosAppSettings,
+    readTalosDeviceState,
+    requestTalosNotifications,
+} from '@/services/devicePermissions'
+import {
     talosShizukuGuidance,
     talosShizukuReach,
     type TalosShizukuSnapshot,
@@ -54,9 +59,6 @@ function plugin() {
         request(): Promise<{ outcome: string }>
         open(options: { target: string }): Promise<{ opened: boolean }>
         bridgeStatus(): Promise<{ packaged: boolean, connected: boolean }>
-        overlayStatus(): Promise<{ allowed: boolean, open: boolean }>
-        overlayRequest(): Promise<{ opened: boolean }>
-        overlayPair(options: Record<string, string>): Promise<{ shown: boolean, reason?: string }>
         pairNotification(options: Record<string, string>): Promise<{ shown: boolean }>
         pairNotificationClose(): Promise<{ closed: boolean }>
         bridgePair(options: { code: string, address?: string }): Promise<RispostaPonte>
@@ -75,13 +77,11 @@ const ricollegamentoFallito = ref(false)
 const ponteInCorso = ref(false)
 const codice = ref('')
 const ponteMotivo = ref<string | null>(null)
-const overlayConsentito = ref(false)
 
 const ponte = computed(() => talosPonteGuida({
     packaged: pontePresente.value,
     connected: ponteCollegato.value,
     reconnectFailed: ricollegamentoFallito.value,
-    overlayAllowed: overlayConsentito.value,
 }))
 
 const codiceValido = computed(() => talosCodiceValido(codice.value))
@@ -91,7 +91,6 @@ async function leggiPonte(): Promise<void> {
         const stato = await plugin().bridgeStatus()
         pontePresente.value = stato.packaged === true
         ponteCollegato.value = stato.connected === true
-        overlayConsentito.value = (await plugin().overlayStatus()).allowed === true
     } catch {
         // Build web: il ponte non esiste, e la sezione lo dice invece di fingere.
         pontePresente.value = false
@@ -203,47 +202,52 @@ async function agisci(): Promise<void> {
 async function apriFlottante(): Promise<void> {
     ponteMotivo.value = null
     /*
-     * ⭐⭐ PRIMA LA NOTIFICA, e la finestra flottante solo se la notifica non
-     * si posa.
+     * ⭐⭐ IL CODICE SI SCRIVE NELLA TENDINA. La finestra flottante non c'è più.
      *
      * Owner, 2026-08-09: «appena entro in dev settings la finestra flottante
      * viene coperta». Da Android 15 le opzioni sviluppatore dichiarano il
      * contenuto protetto dalla condivisione schermo, e su OxygenOS quella
      * protezione si porta via anche le finestre disegnate sopra.
      *
-     * La tendina la disegna SystemUI e si apre sopra qualunque schermata,
-     * comprese quelle protette — ed è la strada che usa Shizuku
-     * (`AdbPairingService`). ⛔ Con un limite noto e dichiarato: su alcune ROM
-     * il campo della notifica non si apre mentre Impostazioni è in primo piano
-     * (Shizuku #868, proprio su OnePlus). Per questo la finestra flottante
-     * resta: non come scelta, come rete.
+     * La tendina la disegna SystemUI e passa sopra qualunque schermata,
+     * comprese quelle protette. PROVATO sul Pad con le opzioni sviluppatore in
+     * primo piano: notifica viva, pulsante «Accoppia», campo di scrittura
+     * aperto, tastiera su.
+     *
+     * ⛔ E se ne tiene UNA sola. Due strade per lo stesso passo vogliono dire
+     * due modi di fallire, e quella coperta falliva **in silenzio**: la persona
+     * restava dentro Impostazioni a cercare un campo che non c'era.
      */
+    try {
+        /*
+         * ⛔ Il permesso si chiede PRIMA, non si scopre dopo.
+         *
+         * MISURATO sul Pad: `POST_NOTIFICATIONS granted=false`, la notifica non
+         * si posava, e senza questo passo la persona sarebbe finita dentro
+         * Impostazioni davanti al nulla. `pm grant` e `appops set` sono
+         * bloccati da questa ROM: l'unica strada è il dialogo di sistema, cioè
+         * che sia TALOS a chiederlo — com'è giusto.
+         */
+        const stato = await readTalosDeviceState()
+        if (stato.notifications !== 'granted') {
+            const dopo = await requestTalosNotifications()
+            // Negato per sempre: il dialogo non ricomparirà, e l'unica cosa
+            // utile è portarla dove l'interruttore c'è davvero.
+            if (dopo === 'denied') {
+                await openTalosAppSettings('notifications')
+                return
+            }
+        }
+    } catch { /* si prova lo stesso: `shown` dirà la verità */ }
+
     try {
         const notifica = await plugin().pairNotification({
             title: t('ponte.floatTitle'),
             instruction: t('ponte.floatInstruction'),
             action: t('ponte.pairAction'),
         })
-        if (notifica.shown) {
-            await plugin().open({ target: 'developer' })
-            return
-        }
-    } catch { /* si prova la finestra flottante */ }
-
-    if (ponte.value.floatNeedsPermission) {
-        try { await plugin().overlayRequest() } catch { /* la pagina lo dice a parole */ }
-        return
-    }
-    try {
-        const esito = await plugin().overlayPair({
-            title: t('ponte.floatTitle'),
-            instruction: t('ponte.floatInstruction'),
-            action: t('ponte.pairAction'),
-            notHeard: t('ponte.reasonPairingNotAnnounced'),
-            failed: t('ponte.reasonGeneric'),
-        })
-        if (!esito.shown) {
-            ponteMotivo.value = talosPonteMotivo(esito.reason)
+        if (!notifica.shown) {
+            ponteMotivo.value = talosPonteMotivo('notification-not-shown')
             return
         }
         await plugin().open({ target: 'developer' })
