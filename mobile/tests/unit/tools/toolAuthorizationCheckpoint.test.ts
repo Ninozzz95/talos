@@ -625,4 +625,98 @@ describe('⛔⭐ l\'id del profilo modello, che ha rotto i tool su tutto OpenRou
         parseTalosToolAuthorizationCheckpoint(checkpoint, motivo)
         expect(motivo.reason).toBeNull()
     })
+
+    /**
+     * ⛔⭐⭐ La richiesta ORFANA, vista tre volte in una notte: la chat diceva
+     * «una richiesta è in attesa» e non c'era NIENTE da toccare.
+     *
+     * `hydrateOne` mette il record in quarantena e lo toglie da `open` — cosa
+     * giusta: un checkpoint non adottato non deve sembrare vivo. Ma `open` era
+     * l'unica finestra dell'app: `pending()` vuoto, `recoveries()` vuoto, e la
+     * riga in chat che annuncia l'attesa restava lì a puntare il nulla.
+     *
+     * Il permesso finiva in un limbo: non concedibile e non negabile. La persona
+     * non poteva far altro che chiedersi cosa TALOS volesse fare al suo telefono.
+     */
+    it('⛔ una richiesta SCARTATA resta raggiungibile: scheda, motivo, e si chiude', async () => {
+        const checkpoint = await makeCheckpoint()
+        const gate = coordinator()
+        await repository.appendToolActivity({
+            id: checkpoint.id,
+            session_id: checkpoint.session_id,
+            message_id: null,
+            operation: 'tool.authorization',
+            status: 'pending',
+            payload: {
+                contract: 'talos.tool.authorization-checkpoint/1',
+                // Il digest non torna: il record è integro come forma, ma il suo
+                // contenuto non è più quello autorizzato.
+                checkpoint: {
+                    ...checkpoint,
+                    requests: [{ ...checkpoint.requests[0], input: { title: 'Altro' } }],
+                },
+            },
+            evidence: {},
+            created_at: NOW,
+        })
+
+        await gate.hydrate()
+
+        // ⛔ NON eseguibile: resta fuori da pending(), dove una decisione lo
+        // cercherebbe per farlo partire.
+        expect(gate.pending()).toEqual([])
+
+        // ⭐ Ma VISIBILE, col motivo, e con lo strumento che era stato chiesto.
+        const schede = gate.recoveries()
+        expect(schede).toHaveLength(1)
+        expect(schede[0].checkpoint_id).toBe('checkpoint-1')
+        expect(schede[0].error).toBe('TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID')
+        expect(schede[0].session_title).toBe('Q2 plan')
+        expect(schede[0].tools.map((tool) => tool.tool)).toEqual(['document_create'])
+
+        // Non c'è niente da riprendere: il digest non tornerà a tornare.
+        await expect(gate.retryRecovery('checkpoint-1')).resolves.toBe(false)
+
+        // E «Ho capito» la chiude davvero — in memoria e sul disco. Senza questo
+        // la scheda tornerebbe a ogni sguardo.
+        await gate.cancel('checkpoint-1')
+        expect(gate.recoveries()).toEqual([])
+        const attivita = await repository.listSessionToolActivities('session-1')
+        expect(attivita.find((riga) => riga.id === 'checkpoint-1')?.status).toBe('cancelled')
+    })
+
+    /**
+     * Il caso peggiore: il payload non si parsifica affatto. Non sappiamo quali
+     * strumenti erano stati chiesti né come si chiamava la conversazione.
+     *
+     * ⛔ La scheda deve uscire LO STESSO. L'identità viene dal record, che c'è
+     * sempre; i campi che non conosciamo restano vuoti invece di essere
+     * inventati — è la stessa bugia che stiamo togliendo dalla chat.
+     */
+    it('⛔ scartata anche senza checkpoint leggibile: la scheda esce comunque', async () => {
+        const gate = coordinator()
+        await repository.appendToolActivity({
+            id: 'activity-illeggibile',
+            session_id: 'session-1',
+            message_id: null,
+            operation: 'tool.authorization',
+            status: 'pending',
+            payload: { contract: 'talos.tool.authorization-checkpoint/1', checkpoint: 'spazzatura' },
+            evidence: {},
+            created_at: NOW,
+        })
+
+        await gate.hydrate()
+
+        const schede = gate.recoveries()
+        expect(schede).toHaveLength(1)
+        expect(schede[0].checkpoint_id).toBe('activity-illeggibile')
+        expect(schede[0].session_id).toBe('session-1')
+        expect(schede[0].tools).toEqual([])
+        expect(schede[0].session_title).toBe('')
+        expect(schede[0].error).toBe('TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID')
+
+        await gate.cancel('activity-illeggibile')
+        expect(gate.recoveries()).toEqual([])
+    })
 })

@@ -427,6 +427,31 @@ const activeToolAuthorizationRecovery = computed(() =>
 const toolAuthorizationReviewCount = computed(() =>
     chatController.pendingToolAuthorizations.value.length
     + chatController.toolAuthorizationRecoveries.value.length)
+
+/**
+ * ⛔⭐⭐ QUALE delle superfici è davvero a schermo — non «quale sarebbe la sua
+ * volta» in una catena di `v-else-if`.
+ *
+ * Il pulsante «Controlla azioni» è l'unica via verso un permesso in sospeso, e
+ * stava in coda a quella catena: bastava un foglio del piano rimasto aperto
+ * perché sparisse. Riscrivere la sua condizione a mano avrebbe ripetuto lo
+ * stesso errore al contrario — nascondendolo proprio quando il piano copre la
+ * scheda di consenso, cioè nel caso da salvare.
+ *
+ * ⇒ La catena e il pulsante leggono le STESSE tre bandiere. Se una superficie
+ * mostra la richiesta, il pulsante tace; altrimenti c'è. Non esiste un terzo
+ * caso, e non c'è modo di scriverne uno per sbaglio.
+ */
+const recoveryCardShown = computed(() =>
+    activeToolAuthorizationRecovery.value !== null
+    && chatController.toolAuthorizationPromptVisible.value)
+const planSheetShown = computed(() =>
+    !recoveryCardShown.value && chatController.planRequest.value !== null)
+const consentSheetShown = computed(() =>
+    !recoveryCardShown.value
+    && !planSheetShown.value
+    && activeToolAuthorization.value !== null
+    && chatController.toolAuthorizationPromptVisible.value)
 const toolAuthorizationRecoveryBusy = ref<string | null>(null)
 
 async function retryToolAuthorizationRecovery(checkpointId: string): Promise<void> {
@@ -1053,17 +1078,18 @@ onBeforeUnmount(async () => {
             </TalosMobileConfirmDialog>
 
             <TalosMobileToolAuthorizationRecoveryCard
-                v-if="activeToolAuthorizationRecovery && chatController.toolAuthorizationPromptVisible.value"
+                v-if="recoveryCardShown && activeToolAuthorizationRecovery"
                 :session-title="activeToolAuthorizationRecovery.session_title"
                 :tools="activeToolAuthorizationRecovery.tools"
                 :recovery-count="chatController.toolAuthorizationRecoveries.value.length"
+                :error="activeToolAuthorizationRecovery.error ?? null"
                 :busy="toolAuthorizationRecoveryBusy === activeToolAuthorizationRecovery.checkpoint_id"
                 @retry="void retryToolAuthorizationRecovery(activeToolAuthorizationRecovery.checkpoint_id)"
                 @cancel="void cancelToolAuthorizationRecovery(activeToolAuthorizationRecovery.checkpoint_id)"
                 @later="chatController.dismissToolAuthorization()"
             />
             <TalosMobilePlanSheet
-                v-else-if="chatController.planRequest.value"
+                v-else-if="planSheetShown && chatController.planRequest.value"
                 :plan="chatController.planRequest.value"
                 :session-title="chatController.chat.activeSession.value?.title ?? ''"
                 @approve="(stepIds) => chatController.answerPlan(stepIds)"
@@ -1071,7 +1097,7 @@ onBeforeUnmount(async () => {
                 @later="chatController.answerPlan(null)"
             />
             <TalosMobileToolConsentSheet
-                v-else-if="activeToolAuthorization && chatController.toolAuthorizationPromptVisible.value"
+                v-else-if="consentSheetShown && activeToolAuthorization"
                 :title="activeToolAuthorization.title"
                 :description="activeToolAuthorization.description"
                 :input="activeToolAuthorization.input"
@@ -1084,11 +1110,32 @@ onBeforeUnmount(async () => {
                 @deny="void chatController.decideToolAuthorization(activeToolAuthorization.request_id, 'deny')"
                 @later="chatController.dismissToolAuthorization()"
             />
+            <!--
+                ⛔⭐⭐ Questo pulsante è l'UNICA via verso un permesso in
+                sospeso, e stava in fondo a una catena di `v-else-if` insieme
+                a superfici che non c'entrano.
+
+                Bastava che il foglio del piano restasse aperto — e `planRequest`
+                si azzera SOLO da `answerPlan`, cioè solo dai tre pulsanti di
+                quel foglio: un invio interrotto lo lascia lì — perché il ramo
+                del piano vincesse per sempre e sia la scheda di consenso sia
+                questo pulsante diventassero irraggiungibili. La chat continuava
+                a dire «una richiesta è in attesa» (e diceva il vero: l'id era
+                vivo) e non c'era niente da toccare.
+
+                ⇒ La condizione ora è esplicita e NON dipende dagli altri rami:
+                c'è qualcosa da rivedere, e nessuna delle due schede lo sta già
+                mostrando. Un permesso è il pavimento della sicurezza: la strada
+                per rispondergli non può essere il ramo di scarto di qualcos'altro.
+            -->
             <button
-                v-else-if="toolAuthorizationReviewCount > 0"
+                v-if="toolAuthorizationReviewCount > 0 && !recoveryCardShown && !consentSheetShown"
                 type="button"
                 data-testid="talos-tool-authorization-reopen"
-                class="talos-pressable pointer-events-auto fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-3 z-[94] min-h-touch rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] px-4 text-xs font-medium text-[var(--talos-text)] shadow-lg"
+                class="talos-pressable pointer-events-auto fixed right-3 min-h-touch rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] px-4 text-xs font-medium text-[var(--talos-text)] shadow-lg"
+                :class="planSheetShown
+                    ? 'top-[max(1rem,env(safe-area-inset-top))] z-[97]'
+                    : 'bottom-[max(1rem,env(safe-area-inset-bottom))] z-[94]'"
                 @click="chatController.showToolAuthorization()"
             >
                 {{ $t('chat.reviewToolActions', {

@@ -1,16 +1,29 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { AlertTriangle, RotateCcw, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import type {
     TalosToolAuthorizationRecoveryToolView,
 } from '@/lib/tools/toolAuthorizationCheckpoint'
 
-defineProps<{
+/**
+ * ⛔⭐ Due schede in una, e la differenza NON è cosmetica.
+ *
+ * - Senza `error`: il turno si era interrotto a metà. Si può riprendere, e il
+ *   pericolo è di RIFARE un'azione già fatta — da qui l'avviso sul duplicato.
+ * - Con `error`: la richiesta è caduta. Non c'è niente da riprendere e niente
+ *   che possa essere già successo: nessuno strumento è mai partito. Offrire
+ *   «Riprova» qui sarebbe un pulsante che non può funzionare.
+ */
+const props = defineProps<{
     sessionTitle: string
     tools: readonly TalosToolAuthorizationRecoveryToolView[]
     recoveryCount: number
     busy: boolean
+    error?: string | null
 }>()
+
+const caduta = computed(() => typeof props.error === 'string' && props.error.length > 0)
 
 const emit = defineEmits<{
     retry: []
@@ -41,9 +54,13 @@ const emit = defineEmits<{
                     <h2
                         id="talos-tool-recovery-title"
                         class="mt-0.5 text-md font-semibold text-[var(--talos-text)]"
-                    >{{ $t('chat.authorizationRecoveryTitle') }}</h2>
+                    >{{ caduta
+                        ? $t('chat.authorizationDroppedTitle')
+                        : $t('chat.authorizationRecoveryTitle') }}</h2>
                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-                        {{ $t('chat.authorizationRecoveryDescription') }}
+                        {{ caduta
+                            ? $t('chat.authorizationDroppedDescription')
+                            : $t('chat.authorizationRecoveryDescription') }}
                     </p>
                 </div>
                 <Button
@@ -79,6 +96,22 @@ const emit = defineEmits<{
             </div>
 
             <p
+                v-if="caduta && tools.length === 0"
+                data-testid="talos-tool-recovery-unknown-tools"
+                class="mt-3 text-xs leading-5 text-[var(--talos-muted)]"
+            >
+                {{ $t('chat.authorizationDroppedUnknownTools') }}
+            </p>
+
+            <p
+                v-if="caduta"
+                data-testid="talos-tool-recovery-reason"
+                class="mt-3 rounded-xl bg-[var(--talos-panel-soft)] px-3 py-2 font-mono text-2xs leading-5 text-[var(--talos-muted)]"
+            >
+                {{ $t('chat.authorizationDroppedReason', { code: error }) }}
+            </p>
+            <p
+                v-else
                 data-testid="talos-tool-recovery-warning"
                 class="mt-3 rounded-xl bg-[var(--talos-warning,var(--talos-accent))]/10 px-3 py-2 text-xs leading-5 text-[var(--talos-text)]"
             >
@@ -89,15 +122,21 @@ const emit = defineEmits<{
                 {{ $t('chat.authorizationRecoveryCount', { count: recoveryCount }) }}
             </p>
 
-            <div class="mt-4 grid grid-cols-2 gap-2">
+            <div class="mt-4 gap-2" :class="caduta ? 'grid grid-cols-1' : 'grid grid-cols-2'">
                 <Button
                     type="button"
                     data-testid="talos-tool-recovery-cancel"
-                    class="talos-pressable min-h-touch rounded-full border border-[var(--talos-border)] bg-transparent text-sm text-[var(--talos-text)]"
+                    class="talos-pressable min-h-touch rounded-full text-sm"
+                    :class="caduta
+                        ? 'bg-[var(--talos-accent)] font-medium text-[var(--talos-accent-contrast,var(--primary-foreground))]'
+                        : 'border border-[var(--talos-border)] bg-transparent text-[var(--talos-text)]'"
                     :disabled="busy"
                     @click="emit('cancel')"
-                >{{ $t('chat.authorizationRecoveryCancel') }}</Button>
+                >{{ caduta
+                    ? $t('chat.authorizationDroppedClose')
+                    : $t('chat.authorizationRecoveryCancel') }}</Button>
                 <Button
+                    v-if="!caduta"
                     type="button"
                     data-testid="talos-tool-recovery-retry"
                     class="talos-pressable min-h-touch rounded-full bg-[var(--talos-accent)] text-sm font-medium text-[var(--talos-accent-contrast,var(--primary-foreground))]"

@@ -67,6 +67,15 @@ export interface TalosToolAuthorizationRecoveryView {
     readonly tools: readonly TalosToolAuthorizationRecoveryToolView[]
     readonly created_at: string
     readonly updated_at: string
+    /**
+     * ⛔⭐ Perché questa richiesta è stata SCARTATA, quando lo è stata.
+     *
+     * Assente per una ripresa normale (il turno era a metà, si può riprendere).
+     * Valorizzato quando il checkpoint non è stato adottato: allora non c'è
+     * niente da riprendere, e la persona ha diritto di sapere che una
+     * richiesta di permesso è caduta — e con quale codice.
+     */
+    readonly error?: string
 }
 
 function objectOf(value: unknown): Record<string, unknown> | null {
@@ -402,7 +411,62 @@ export function createTalosToolAuthorizationCoordinator(deps: {
         activity: TalosLocalToolActivity
         checkpoint: TalosToolAuthorizationCheckpointV1
     }>()
+    /**
+     * ⛔⭐⭐ I checkpoint SCARTATI — visti tre volte in una notte come «una
+     * richiesta in attesa» a cui non si poteva rispondere.
+     *
+     * ## Il difetto
+     *
+     * `hydrateOne` mette in quarantena un record che non si parsifica o i cui
+     * digest non tornano, e — giustamente — lo toglie da `open`: un checkpoint
+     * che il consumatore non ha adottato non deve sembrare vivo. Ma `open` era
+     * l'UNICO posto da cui l'app guardava: fuori di lì, `pending()` è vuoto e
+     * `recoveries()` pure. Il record spariva dall'intera app **mentre la chat
+     * continuava a dire «una richiesta è in attesa»**: nessuna scheda, nessun
+     * pulsante «Controlla azioni», nessun modo di rispondere né di annullare.
+     *
+     * ⇒ Un permesso che nessuno può concedere E nessuno può negare. La persona
+     * resta col dubbio di cosa TALOS stia aspettando di fare al suo telefono.
+     *
+     * ## Perché una mappa a parte e non `open`
+     *
+     * Perché la separazione era GIUSTA. Uno scartato non si riprende — il
+     * digest non tornerà a tornare — e rimetterlo in `open` lo farebbe rientrare
+     * in `pending()`, dove una decisione lo cercherebbe per eseguirlo. Qui vive
+     * solo per essere **mostrato e chiuso**: `recoveries()` lo espone col suo
+     * codice, `cancel()` lo toglie di mezzo.
+     */
+    const scartati = new Map<string, {
+        activity: TalosLocalToolActivity
+        view: TalosToolAuthorizationRecoveryView
+    }>()
     let mutationTail: Promise<void> = Promise.resolve()
+
+    function scartato(
+        activity: TalosLocalToolActivity,
+        checkpoint: TalosToolAuthorizationCheckpointV1 | null,
+        error: string,
+    ): void {
+        // ⛔ Senza checkpoint l'identità viene dal record: è meno ricca, ma è
+        // vera. Inventare un titolo di sessione qui sarebbe la stessa bugia che
+        // stiamo togliendo dalla chat.
+        scartati.set(checkpoint?.id ?? activity.id, {
+            activity,
+            view: {
+                checkpoint_id: checkpoint?.id ?? activity.id,
+                session_id: checkpoint?.session_id ?? activity.session_id,
+                session_title: checkpoint?.send_identity.sessionTitle ?? '',
+                model_profile_id: checkpoint?.send_identity.modelProfileId ?? null,
+                tools: (checkpoint?.requests ?? []).map((request) => ({
+                    tool: request.tool as TalosAgentToolId,
+                    actions: [...request.actions],
+                })),
+                created_at: checkpoint?.created_at ?? activity.created_at,
+                updated_at: checkpoint?.updated_at ?? activity.updated_at,
+                error,
+            },
+        })
+    }
 
     async function markInvalid(activity: TalosLocalToolActivity, error: string): Promise<void> {
         await deps.repository.updateToolActivity(activity.id, {
@@ -433,10 +497,16 @@ export function createTalosToolAuthorizationCoordinator(deps: {
      */
     async function hydrateOne(activity: TalosLocalToolActivity): Promise<void> {
         let adopted: string | null = null
+        // ⛔ Tenuto FUORI dal try: nel `catch` serve per dire QUALE richiesta è
+        // caduta, e ri-parsificarlo lì significherebbe poter lanciare dentro il
+        // gestore dell'errore — cioè perdere anche la quarantena.
+        let letto: TalosToolAuthorizationCheckpointV1 | null = null
         try {
             const checkpoint = checkpointFromActivity(activity)
+            letto = checkpoint
             if (!checkpoint || !(await hasValidDigests(checkpoint))) {
                 await markInvalid(activity, 'TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID')
+                scartato(activity, checkpoint, 'TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID')
                 return
             }
             open.set(checkpoint.id, { activity, checkpoint })
@@ -454,6 +524,7 @@ export function createTalosToolAuthorizationCoordinator(deps: {
             const reason = error instanceof Error && /^[A-Z0-9_]{4,64}$/.test(error.message)
                 ? error.message
                 : 'TALOS_TOOL_AUTHORIZATION_HYDRATE_FAILED'
+            scartato(activity, letto, reason)
             try {
                 await markInvalid(activity, reason)
             } catch {
@@ -506,6 +577,7 @@ export function createTalosToolAuthorizationCoordinator(deps: {
     const api: TalosToolAuthorizationCoordinator = {
         async hydrate() {
             open.clear()
+            scartati.clear()
             const sessions = await deps.repository.listSessions()
             const activities = (await Promise.all(sessions.map(
                 (session) => deps.repository.listSessionToolActivities(session.id),
@@ -583,11 +655,8 @@ export function createTalosToolAuthorizationCoordinator(deps: {
                 })))
         },
         recoveries() {
-            return [...open.values()]
+            const riprendibili: TalosToolAuthorizationRecoveryView[] = [...open.values()]
                 .filter(({ checkpoint }) => checkpoint.phase === 'running_tools')
-                .sort((left, right) =>
-                    left.checkpoint.created_at.localeCompare(right.checkpoint.created_at)
-                    || left.checkpoint.id.localeCompare(right.checkpoint.id))
                 .map(({ checkpoint }) => ({
                     checkpoint_id: checkpoint.id,
                     session_id: checkpoint.session_id,
@@ -601,6 +670,12 @@ export function createTalosToolAuthorizationCoordinator(deps: {
                     created_at: checkpoint.created_at,
                     updated_at: checkpoint.updated_at,
                 }))
+            // Gli scartati stanno nella STESSA lista: sono l'unica strada che
+            // la persona ha per accorgersene e per chiuderli.
+            return [...riprendibili, ...[...scartati.values()].map(({ view }) => view)]
+                .sort((left, right) =>
+                    left.created_at.localeCompare(right.created_at)
+                    || left.checkpoint_id.localeCompare(right.checkpoint_id))
         },
         async decide(requestId, decision) {
             let result = false
@@ -708,6 +783,23 @@ export function createTalosToolAuthorizationCoordinator(deps: {
             open.delete(checkpointId)
         },
         async cancel(checkpointId) {
+            // ⛔ Uno scartato si annulla come gli altri: è già in quarantena nel
+            // database, ma finché resta in memoria la scheda torna a ogni
+            // sguardo. «Annulla» deve levarla di mezzo davvero.
+            const caduto = scartati.get(checkpointId)
+            if (caduto) {
+                scartati.delete(checkpointId)
+                await deps.repository.updateToolActivity(caduto.activity.id, {
+                    status: 'cancelled',
+                    evidence: {
+                        ...caduto.activity.evidence,
+                        contract: CONTRACT,
+                        error: caduto.view.error,
+                        cancelled_at: now(),
+                    },
+                })
+                return
+            }
             const owner = open.get(checkpointId)
             if (!owner) return
             await deps.repository.updateToolActivity(owner.activity.id, {
