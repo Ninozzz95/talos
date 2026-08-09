@@ -48,12 +48,35 @@ const emit = defineEmits<{
 
 <template>
     <div data-testid="talos-mobile-immersive-chrome" class="pointer-events-none absolute inset-x-0 top-0 z-20">
-        <!-- light fade for scroll continuity under the floating pills -->
-        <div
-            aria-hidden="true"
-            class="absolute inset-x-0 top-0 h-[calc(4rem+env(safe-area-inset-top))] bg-gradient-to-b from-[var(--talos-background)] via-[var(--talos-background)]/70 to-transparent"
-        />
-        <div class="relative flex items-start justify-between px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
+        <!--
+            ⛔⛔ IL VELO ARRIVA DOVE ARRIVANO I COMANDI, e non un pixel prima.
+
+            MISURATO sul Pad il 2026-08-10, in viewport telefono:
+
+                velo (sfumatura)      0 → 64 px
+                «Apri menu»          40 → 88 px    ← 24 px di pulsante su fondo NUDO
+
+            Il velo era alto `4rem` scritto a mano, i tondi arrivano più in
+            basso: la parte finale del pulsante stava direttamente sopra il
+            testo della conversazione, e la bolla del messaggio passava sotto
+            senza niente in mezzo. Nella cattura si legge «Cosa puoi controllare
+            sel mio telef…», col resto tagliato dal tondo di destra.
+
+            ⇒ `inset-0` invece di un'altezza: il velo eredita l'altezza VERA
+            della riga dei comandi, quindi non può più restare indietro se un
+            giorno i tondi crescono o si aggiunge una seconda riga. È la regola
+            del «niente scritto a mano»: se è una misura, si misura.
+
+            ⛔ La `pb` non è decorazione: è la coda della sfumatura, lo spazio in
+            cui il fondo diventa trasparente. Senza, il velo finirebbe di netto
+            e si vedrebbe il bordo.
+        -->
+        <div class="relative pb-6">
+            <div
+                aria-hidden="true"
+                class="absolute inset-0 bg-gradient-to-b from-[var(--talos-background)] from-40% via-[var(--talos-background)]/70 to-transparent"
+            />
+            <div class="relative flex items-start justify-between px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <Button
                 v-if="!hideMenu"
                 type="button"
@@ -87,8 +110,9 @@ const emit = defineEmits<{
                     @export="emit('export')"
                     @media="emit('media')"
                 />
+                </div>
+                <span v-else aria-hidden="true" />
             </div>
-            <span v-else aria-hidden="true" />
         </div>
     </div>
 </template>
