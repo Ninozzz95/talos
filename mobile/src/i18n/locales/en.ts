@@ -928,6 +928,8 @@ export const TALOS_EN_MESSAGES = {
         allowOverlay: 'Allow the floating window',
         floatTitle: 'Pairing code',
         floatInstruction: 'Type the six digits you can see behind this. Do not leave Settings: the dialog expires the moment you close it.',
+        floatWorking: 'Pairing. Looking for the phone on the network and opening the connection: this can take a few seconds.',
+        floatFailed: 'That did not work. The system dialog shows a new code every time: open it again and type that one.',
         fallbackNote: 'Or, if you would rather not grant that permission: type the code below — but the system dialog closes when you leave Settings, and then pairing cannot work.',
         reasonOverlayNotAllowed: 'The permission to draw over other apps is missing. Without it the field cannot appear on top of Settings.',
         openDeveloper: 'Open developer options',

@@ -946,6 +946,8 @@ export const TALOS_IT_MESSAGES = {
         allowOverlay: 'Consenti la finestra flottante',
         floatTitle: 'Codice di accoppiamento',
         floatInstruction: 'Scrivi qui le sei cifre che vedi dietro. Non uscire da Impostazioni: la finestrella scade appena la chiudi.',
+        floatWorking: 'Sto accoppiando. Cerco il telefono sulla rete e apro il collegamento: può volerci qualche secondo.',
+        floatFailed: 'Non è riuscito. La finestrella di sistema mostra un codice nuovo ogni volta: riaprila e scrivi quello.',
         fallbackNote: 'Oppure, se preferisci non dare quel permesso: il codice va scritto qui sotto — ma la finestrella di sistema si chiude quando esci da Impostazioni, e allora l’accoppiamento non riesce.',
         reasonOverlayNotAllowed: 'Manca il permesso di disegnare sopra le altre app. Senza, il campo non può comparire sopra Impostazioni.',
         openDeveloper: 'Apri le opzioni sviluppatore',

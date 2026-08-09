@@ -91,6 +91,11 @@ async function leggiPonte(): Promise<void> {
         pontePresente.value = false
         ponteCollegato.value = false
     }
+    // ⛔ La sentinella si riarma DA QUI e non dalla montata: al `mounted` questi
+    // due valori sono ancora `false` perché la lettura è asincrona, e una
+    // sentinella decisa lì non partirebbe mai. Qui invece lo stato è quello
+    // vero, appena letto.
+    sorveglia()
 }
 
 async function ricollega(): Promise<void> {
@@ -215,6 +220,13 @@ async function apriFlottante(): Promise<void> {
             title: t('ponte.floatTitle'),
             instruction: t('ponte.floatInstruction'),
             action: t('ponte.pairAction'),
+            // ⛔ Le parole degli ALTRI DUE momenti si consegnano adesso, tutte
+            // insieme. «Sto lavorando» e «non è andata» nascono su un thread di
+            // sfondo, quando questa pagina non è più a schermo e il JavaScript
+            // non è più nel giro: chiederle allora vorrebbe dire scriverle in
+            // Kotlin, cioè in una lingua sola.
+            working: t('ponte.floatWorking'),
+            failed: t('ponte.floatFailed'),
         })
         if (!notifica.shown) {
             ponteMotivo.value = talosPonteMotivo('notification-not-shown')
@@ -238,11 +250,19 @@ onMounted(() => {
      * «accoppia» dopo essersi accoppiato.
      */
     const p = plugin() as unknown as {
-        addListener?: (evento: string, cb: (dati: { connected?: boolean }) => void) => void
+        addListener?: (evento: string, cb: (dati: { connected?: boolean, reason?: string }) => void) => void
     }
     p.addListener?.('talosPonteChanged', (dati) => {
         ponteCollegato.value = dati.connected === true
-        if (dati.connected === true) ponteMotivo.value = null
+        /*
+         * ⛔ Anche il NO arriva qui, e va detto. Prima si trattava solo il sì:
+         * un accoppiamento fallito lasciava la pagina esattamente com'era, e
+         * chi rientrava da Impostazioni trovava «accoppia» senza sapere se
+         * aveva sbagliato il codice o se non era partito niente.
+         */
+        ponteMotivo.value = dati.connected === true
+            ? null
+            : talosPonteMotivo(dati.reason ?? undefined)
     })
 
     /*
@@ -261,11 +281,73 @@ onMounted(() => {
 })
 
 function quandoTorna(): void {
-    if (document.visibilityState === 'visible') void leggiPonte()
+    if (document.visibilityState !== 'visible') { smettiDiSorvegliare(); return }
+    // ⛔ Si rilegge ANCHE la fotografia, non solo il ponte: al rientro può essere
+    // cambiata l'identità o il permesso, e una pagina che ne aggiorna metà
+    // racconta uno stato che non è mai esistito.
+    void rileggi()
+    void leggiPonte()
+}
+
+/* ------------------------------------------------------------------------ *
+ * IL RICONTROLLO AUTOMATICO
+ * ------------------------------------------------------------------------ */
+
+let sentinella: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * ⭐ Guarda da sé, invece di aspettare che qualcuno prema «aggiorna».
+ *
+ * Owner 2026-08-09: «deve ricontrollare automaticamente, ed essere super
+ * veloce». Adesso si può: il controllo costa **115 ms** misurati sul Pad
+ * (`bridgeStatus` × 3: 124, 114, 110 ms) — prima ne costava fino a dieci
+ * secondi, perché stava in coda dietro al ponte sul thread condiviso.
+ *
+ * ## ⛔ Perché SOLO quando c'è qualcosa da aspettare
+ *
+ * La sentinella gira **solo** se il ponte è impacchettato e **non** collegato,
+ * cioè nell'unico stato in cui esiste una transizione da cogliere: la persona è
+ * appena andata ad accendere il Debug wireless e sta tornando. A collegamento
+ * fatto si ferma da sé — continuare vorrebbe dire lanciare un processo ogni due
+ * secondi per riscoprire una cosa che non cambia più.
+ *
+ * E si ferma quando la pagina non è a schermo: un controllo che nessuno guarda
+ * è batteria spesa per niente.
+ *
+ * ## Il numero, e perché due secondi
+ *
+ * 115 ms ogni 2.000 ms sono il **6%** del tempo. È la soglia sotto cui il costo
+ * sparisce e sopra cui l'attesa si sente: mezzo secondo sarebbe un quarto del
+ * tempo passato a interrogare, cinque secondi sarebbero cinque secondi di
+ * schermata vecchia proprio mentre la persona guarda se ha funzionato.
+ */
+function sorveglia(): void {
+    smettiDiSorvegliare()
+    if (document.visibilityState !== 'visible') return
+    if (!pontePresente.value || ponteCollegato.value) return
+    /*
+     * ⛔ Un colpo solo che si riarma, non un `setInterval`.
+     *
+     * `leggiPonte()` richiama `sorveglia()` quando ha finito: con un intervallo
+     * fisso il prossimo colpo partirebbe a orologio anche se il precedente non
+     * è ancora tornato, e su una rete lenta si accavallerebbero due `adb
+     * devices`. Così invece i due secondi contano dalla FINE del controllo
+     * precedente, e non ce n'è mai più di uno in volo.
+     */
+    sentinella = setTimeout(() => { void leggiPonte() }, 2_000)
+}
+
+function smettiDiSorvegliare(): void {
+    if (sentinella === null) return
+    clearTimeout(sentinella)
+    sentinella = null
 }
 
 onUnmounted(() => {
     document.removeEventListener('visibilitychange', quandoTorna)
+    // ⛔ Senza questa riga la sentinella sopravvive alla pagina: un intervallo
+    // che interroga un ponte per una schermata che non esiste più.
+    smettiDiSorvegliare()
 })
 </script>
 

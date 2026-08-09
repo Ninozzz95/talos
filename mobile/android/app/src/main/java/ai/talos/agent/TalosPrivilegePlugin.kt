@@ -473,6 +473,8 @@ class TalosPrivilegePlugin : Plugin() {
             call.getString("title") ?: "Pairing code",
             call.getString("instruction") ?: "",
             call.getString("action") ?: "Pair",
+            call.getString("working") ?: "Pairing…",
+            call.getString("failed") ?: "Pairing failed. Open wireless debugging again and enter the new code.",
         ) { codice ->
             /*
              * ⛔ Su un thread a parte: qui si scopre un servizio di rete e si
@@ -487,20 +489,41 @@ class TalosPrivilegePlugin : Plugin() {
              * due `adb` sulla stessa porta, cioè il difetto che la
              * serializzazione esiste per impedire.
              */
+            // ⭐ Prima di tutto: dirle che è partito. Il lavoro qui sotto può
+            // durare fino a 36 secondi, e fino a ieri li passava in silenzio
+            // assoluto — la foto dell'owner è quella.
+            TalosAccoppiamentoNotifica.lavora(context)
             TalosFilaPonte.esegui {
                 val indirizzi = TalosPonteAdb.scopri(context, TalosPonteAdb.ANNUNCIO_ACCOPPIAMENTO)
                 var riuscito = false
+                // ⛔ Il motivo si TIENE. Un fallimento senza motivo manda la
+                // persona a ripetere lo stesso gesto: non ha modo di sapere se
+                // ha sbagliato il codice, se l'annuncio non è arrivato, o se il
+                // telefono ha chiuso la porta mentre lei scriveva.
+                var motivo: String? = if (indirizzi.isEmpty()) "pairing-not-announced" else null
                 for (indirizzo in indirizzi) {
-                    if (!TalosPonteAdb.accoppia(context, indirizzo, codice).ok) continue
+                    val paio = TalosPonteAdb.accoppia(context, indirizzo, codice)
+                    if (!paio.ok) { motivo = paio.motivo ?: "pair-refused"; continue }
                     val collegato = TalosPonteAdb.scopri(
                         context,
                         TalosPonteAdb.ANNUNCIO_COLLEGAMENTO,
                     ).firstOrNull { TalosPonteAdb.collega(context, it).ok }
                     riuscito = collegato != null
+                    if (!riuscito) motivo = "connect-refused"
                     break
                 }
-                if (riuscito) TalosAccoppiamentoNotifica.chiudi(context)
-                notifyListeners("talosPonteChanged", JSObject().put("connected", riuscito))
+                if (riuscito) {
+                    TalosAccoppiamentoNotifica.chiudi(context)
+                } else {
+                    // Il campo torna, col motivo accanto: la porta è cambiata e
+                    // il codice è un altro, quindi la cosa utile è poterlo
+                    // riscrivere qui invece di rifare tutto il giro.
+                    TalosAccoppiamentoNotifica.riprova(context, motivo)
+                }
+                notifyListeners(
+                    "talosPonteChanged",
+                    JSObject().put("connected", riuscito).put("reason", motivo),
+                )
             }
         }
         call.resolve(JSObject().put("shown", mostrata))
