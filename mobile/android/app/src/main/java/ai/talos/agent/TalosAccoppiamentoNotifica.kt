@@ -80,6 +80,7 @@ object TalosAccoppiamentoNotifica {
         val etichettaCampo: String,
         val alLavoro: String,
         val fallita: String,
+        val pronta: String,
     )
 
     private var parole: Parole? = null
@@ -98,10 +99,33 @@ object TalosAccoppiamentoNotifica {
         etichettaCampo: String,
         alLavoro: String,
         fallita: String,
+        pronta: String,
         quandoArriva: Ascoltatore,
     ): Boolean {
-        parole = Parole(titolo, etichettaCampo, alLavoro, fallita)
+        parole = Parole(titolo, etichettaCampo, alLavoro, fallita, pronta)
         return posa(context, titolo, testo, etichettaCampo, false, quandoArriva)
+    }
+
+    /**
+     * ⭐⭐⭐ «L'HO VISTA» — la notifica si accorge da sé che la finestrella di
+     * sistema si è aperta, e lo dice nell'istante in cui succede.
+     *
+     * Owner 2026-08-09: «come fa Shizuku, la notifica deve scovare
+     * automaticamente quando l'utente clicca su accoppia con codice nel Debug
+     * wireless».
+     *
+     * ⛔ Non è cosmetica. Prima la persona vedeva sempre lo stesso testo —
+     * «scrivi le sei cifre» — sia mentre cercava la voce nel menu, sia dopo
+     * averla aperta. Due situazioni diverse, un solo messaggio: nessun modo di
+     * sapere se TALOS stesse guardando o no, e nessun modo di accorgersi di aver
+     * aperto la finestrella sbagliata.
+     *
+     * Adesso il testo cambia **quando** cambia il mondo, ed è anche la prova che
+     * la sentinella funziona: se non compare, non stiamo vedendo l'annuncio.
+     */
+    fun pronta(context: Context) {
+        val p = parole ?: return
+        posa(context, p.titolo, p.pronta, p.etichettaCampo, false, null)
     }
 
     /**

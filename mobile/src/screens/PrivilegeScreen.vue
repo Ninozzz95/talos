@@ -227,6 +227,7 @@ async function apriFlottante(): Promise<void> {
             // Kotlin, cioè in una lingua sola.
             working: t('ponte.floatWorking'),
             failed: t('ponte.floatFailed'),
+            ready: t('ponte.floatReady'),
         })
         if (!notifica.shown) {
             ponteMotivo.value = talosPonteMotivo('notification-not-shown')
