@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { TALOS_EN_MESSAGES } from '@/i18n/locales/en'
 import { TALOS_IT_MESSAGES } from '@/i18n/locales/it'
 import {
+    TALOS_TENTATIVI_DOPO_CADUTA,
+    TALOS_TENTATIVI_DOPO_SCOSSA,
     talosCodiceValido,
     talosPonteGuida,
     talosPonteMotivo,
@@ -103,26 +105,25 @@ describe('⭐ TALOS si riaggancia DA SOLO — e la frase a schermo diventa vera'
         return {
             packaged: true,
             connected: false,
-            giaTentato: false,
+            tentativiRimasti: TALOS_TENTATIVI_DOPO_CADUTA,
             inCorso: false,
             ...parziale,
         }
     }
 
-    it('ponte giù e mai tentato: ci prova, senza che nessuno prema niente', () => {
+    it('ponte giù col credito pieno: ci prova, senza che nessuno prema niente', () => {
         /*
          * ⛔ MISURATO sul Pad il 2026-08-09: staccato il ponte, uscito e
          * rientrato nella pagina, **undici** letture di stato in ventitré
          * secondi e ZERO tentativi. E il tocco che mancava valeva 1.169 ms.
          */
-        expect(talosPonteRiaggancioAutomatico(riaggancio())).toEqual({ tenta: true, speso: true })
+        expect(talosPonteRiaggancioAutomatico(riaggancio())).toEqual({ tenta: true, rimasti: 0 })
     })
 
-    it('⛔ un tentativo per caduta: alla lettura dopo NON ci riprova', () => {
-        // La sentinella rilegge ogni due secondi: senza questa riga sarebbe un
-        // `adb connect` ogni due secondi per sempre.
-        expect(talosPonteRiaggancioAutomatico(riaggancio({ giaTentato: true })))
-            .toEqual({ tenta: false, speso: true })
+    it('⛔ finito il credito NON ci riprova: la sentinella batte ogni 2 s', () => {
+        // Senza il tetto sarebbe un `adb connect` ogni due secondi per sempre.
+        expect(talosPonteRiaggancioAutomatico(riaggancio({ tentativiRimasti: 0 })))
+            .toEqual({ tenta: false, rimasti: 0 })
     })
 
     it('collegato: niente da tentare', () => {
@@ -133,10 +134,19 @@ describe('⭐ TALOS si riaggancia DA SOLO — e la frase a schermo diventa vera'
         expect(talosPonteRiaggancioAutomatico(riaggancio({ packaged: false })).tenta).toBe(false)
     })
 
+    it('⛔ senza binari il credito NON si consuma: non è un tentativo, è un\'assenza', () => {
+        // Se lo consumasse, installare i binari a metà sessione lascerebbe TALOS
+        // senza tentativi proprio quando comincia ad averne uno da fare.
+        expect(talosPonteRiaggancioAutomatico(riaggancio({ packaged: false, tentativiRimasti: 3 })).rimasti)
+            .toBe(3)
+    })
+
     it('con un\'operazione già in volo non se ne apre una seconda', () => {
         // Il caso vero: la persona ha premuto «Ricollega» e la sentinella
         // scatta nello stesso istante.
-        expect(talosPonteRiaggancioAutomatico(riaggancio({ inCorso: true })).tenta).toBe(false)
+        const esito = talosPonteRiaggancioAutomatico(riaggancio({ inCorso: true, tentativiRimasti: 2 }))
+        expect(esito.tenta).toBe(false)
+        expect(esito.rimasti, 'e il credito resta intatto: non ha tentato niente').toBe(2)
     })
 
     it('⛔ IL VERSO CONTRARIO — il ponte torna su, e la caduta DOPO ha il suo tentativo', () => {
@@ -148,25 +158,47 @@ describe('⭐ TALOS si riaggancia DA SOLO — e la frase a schermo diventa vera'
          * Qui si percorre la vita intera: cade, tenta, resta giù, non ritenta,
          * torna su, ricade — e ritenta.
          */
-        let speso = false
+        let credito = TALOS_TENTATIVI_DOPO_CADUTA
         const giro = (stato: Partial<TalosPonteRiaggancio>) => {
-            const esito = talosPonteRiaggancioAutomatico(riaggancio({ ...stato, giaTentato: speso }))
-            speso = esito.speso
+            const esito = talosPonteRiaggancioAutomatico(riaggancio({ ...stato, tentativiRimasti: credito }))
+            credito = esito.rimasti
             return esito.tenta
         }
 
         expect(giro({ connected: false }), 'prima caduta: ci prova').toBe(true)
         expect(giro({ connected: false }), 'ancora giù: non insiste').toBe(false)
         expect(giro({ connected: true }), 'collegato: niente da fare').toBe(false)
-        expect(speso, 'il diritto si è RIARMATO').toBe(false)
+        expect(credito, 'il credito si è RICARICATO').toBe(TALOS_TENTATIVI_DOPO_CADUTA)
         expect(giro({ connected: false }), 'caduta nuova: ci riprova').toBe(true)
     })
 
     it('⛔ e senza il riarmo il giro sopra fallirebbe — la prova che il test morde', () => {
-        // Un `giaTentato` che non si azzera mai: l'ultima riga del giro
+        // Un credito che non si ricarica mai: l'ultima riga del giro
         // diventerebbe `false`, cioè TALOS non ci riproverebbe MAI più.
-        const senzaRiarmo = talosPonteRiaggancioAutomatico(riaggancio({ connected: false, giaTentato: true }))
-        expect(senzaRiarmo.tenta).toBe(false)
+        expect(talosPonteRiaggancioAutomatico(riaggancio({ tentativiRimasti: 0 })).tenta).toBe(false)
+    })
+
+    it('⛔⛔ LA SCOSSA vale più di una caduta: il Debug wireless riacceso cambia PORTA', () => {
+        /*
+         * MISURATO sul Pad il 2026-08-10, ed è il difetto che ha creato questo
+         * numero: riacceso il Debug wireless, TALOS NON tornava su in 40 s.
+         *
+         * `adbd` riparte su una porta nuova. Il primo tentativo la sbaglia per
+         * forza — l'annuncio nuovo non esiste ancora — e con un credito da un
+         * colpo solo quel fallimento chiudeva la porta per sempre.
+         */
+        expect(TALOS_TENTATIVI_DOPO_SCOSSA).toBeGreaterThan(TALOS_TENTATIVI_DOPO_CADUTA)
+
+        let credito = TALOS_TENTATIVI_DOPO_SCOSSA
+        const tentativi: boolean[] = []
+        for (let i = 0; i < 5; i++) {
+            const esito = talosPonteRiaggancioAutomatico(riaggancio({ tentativiRimasti: credito }))
+            credito = esito.rimasti
+            tentativi.push(esito.tenta)
+        }
+        expect(tentativi.filter(Boolean).length, 'tre tentativi, poi si ferma')
+            .toBe(TALOS_TENTATIVI_DOPO_SCOSSA)
+        expect(tentativi.at(-1), 'e non insiste all\'infinito').toBe(false)
     })
 })
 

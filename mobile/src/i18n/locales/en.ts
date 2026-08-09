@@ -718,6 +718,12 @@ export const TALOS_EN_MESSAGES = {
         stopSpeaking: 'Stop speaking',
         speakMessage: 'Speak message',
         speak: 'Speak',
+        // A tap that makes no sound has to say why, or it reads as a dead
+        // button. The reason comes from the engine, it is not guessed.
+        speakSilenced: 'The phone is silenced, so reading aloud stays silent.',
+        speakUnavailable: 'This phone has no speech engine.',
+        speakEmpty: 'There is no text to read in this message.',
+        speakFailed: 'Reading aloud did not start. Try again.',
         retryAssistant: 'Retry assistant response',
         retryResponse: 'Retry response',
         saveToLibrary: 'Save to Library',

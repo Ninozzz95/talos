@@ -721,6 +721,12 @@ export const TALOS_IT_MESSAGES = {
         stopSpeaking: 'Interrompi lettura',
         speakMessage: 'Leggi il messaggio',
         speak: 'Leggi',
+        // ⛔ Un tocco che non produce voce deve DIRE perché: senza, è identico a
+        // un pulsante rotto. Il motivo arriva dal motore, non è indovinato.
+        speakSilenced: 'Il telefono è in silenzioso: la lettura resta muta.',
+        speakUnavailable: 'Questo telefono non ha un motore di sintesi vocale.',
+        speakEmpty: 'Non c’è testo da leggere in questo messaggio.',
+        speakFailed: 'La lettura non è partita. Riprova.',
         retryAssistant: 'Riprova la risposta dell’assistente',
         retryResponse: 'Riprova risposta',
         saveToLibrary: 'Salva nella Libreria',

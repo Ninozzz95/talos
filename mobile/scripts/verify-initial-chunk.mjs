@@ -98,6 +98,19 @@ const DYNAMIC_BOUNDARIES = [
         suffix: 'src/components/chat/TalosMobileEnhancerDrawer.vue',
         code: 'TALOS_ENHANCER_DRAWER_NOT_LAZY',
     },
+    /*
+     * ⭐ Il motore vocale entra in scena al primo TOCCO, non al primo disegno.
+     *
+     * Owner 2026-08-10: «ogni messaggio di risposta deve avere icona sound per
+     * tts». L'icona c'è sempre — quindi non serve chiedere niente al motore per
+     * disegnarla, quindi il motore non serve in pagina.
+     *
+     * MISURATO: spostandolo qui il grafo d'avvio è passato da 600.982 byte
+     * (rosso) a 599.943 (verde). È il primo verde del compito #51, ottenuto
+     * togliendo peso e non alzando il tetto — e senza questo confine
+     * tornerebbe dentro alla prima riga distratta.
+     */
+    { suffix: 'src/services/speech.ts', code: 'TALOS_SPEECH_NOT_LAZY' },
     { suffix: 'src/screens/ResearchScreen.vue', code: 'TALOS_ROUTE_NOT_LAZY' },
     /*
      * ⛔ Qui c'era `src/screens/RunsScreen.vue`, il Cockpit, tolto il

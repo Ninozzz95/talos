@@ -107,14 +107,46 @@ export function talosPonteGuida(stato: TalosPonteStato): TalosPonteGuida {
     }
 }
 
+/**
+ * I tentativi che una CADUTA vista dal battito si merita.
+ *
+ * Uno. L'indirizzo è noto e il ponte è caduto da solo: se `adb connect` non
+ * regge al primo colpo, insistere costa tre secondi a vuoto e non cambia niente.
+ * ⛔ E per chi non si è MAI accoppiato conta il doppio: ogni tentativo lì è un
+ * censimento da sei secondi, e tre di fila terrebbero nascosto il passo
+ * dell'accoppiamento per venti secondi.
+ */
+export const TALOS_TENTATIVI_DOPO_CADUTA = 1
+
+/**
+ * I tentativi che una SCOSSA dall'esterno si merita.
+ *
+ * ⛔ MISURATO sul Pad il 2026-08-10, ed è il difetto che ha imposto questo
+ * numero: riacceso il Debug wireless, TALOS **non tornava su in 40 secondi**.
+ *
+ * Perché `adbd` riparte su una **porta nuova**: l'indirizzo che sapevamo è
+ * scaduto nell'istante stesso in cui l'interruttore è tornato su, e il primo
+ * tentativo parte prima che il nuovo annuncio esista. Con un tentativo solo,
+ * quel fallimento chiudeva la porta per sempre.
+ *
+ * ⇒ Tre, spesi al ritmo del battito (2 s l'uno mentre il ponte è giù): una
+ * finestra di qualche secondo in cui `adbd` finisce di annunciarsi e la
+ * sentinella mDNS raccoglie la porta nuova.
+ *
+ * ⭐ E la regola generale: **una scossa è un'occasione nuova, non la stessa
+ * caduta.** Il tetto ai tentativi serve a non martellare su una linea ferma,
+ * non a ignorare il mondo che cambia.
+ */
+export const TALOS_TENTATIVI_DOPO_SCOSSA = 3
+
 /** Quello che serve per decidere se riagganciarsi da soli, e nient'altro. */
 export interface TalosPonteRiaggancio {
     /** Se i binari sono nell'APK. Senza, non c'è niente da tentare. */
     packaged: boolean
     /** Se in QUESTO istante c'è un dispositivo collegato. */
     connected: boolean
-    /** Se un tentativo automatico è già stato speso per QUESTA caduta. */
-    giaTentato: boolean
+    /** Quanti tentativi restano per l'occasione in corso. */
+    tentativiRimasti: number
     /** Se un'operazione sul ponte è già in volo (anche premuta a mano). */
     inCorso: boolean
 }
@@ -122,8 +154,8 @@ export interface TalosPonteRiaggancio {
 export interface TalosPonteRiaggancioEsito {
     /** Se tentare `bridgeConnect` adesso, senza che nessuno prema niente. */
     tenta: boolean
-    /** Il nuovo valore di `giaTentato`, da riportare nello stato di chi chiama. */
-    speso: boolean
+    /** Quanti tentativi restano dopo questa decisione. */
+    rimasti: number
 }
 
 /**
@@ -146,31 +178,34 @@ export interface TalosPonteRiaggancioEsito {
  * chiede a chi guarda: si fa. Il pulsante resta per quando il tentativo
  * automatico fallisce.
  *
- * ## ⛔ Un tentativo per caduta, non un tentativo al secondo
+ * ## ⛔ Un tetto ai tentativi, non un tentativo al secondo
  *
  * La sentinella rilegge lo stato ogni due secondi quando il ponte è giù. Senza
- * `giaTentato` questo diventerebbe un `adb connect` ogni due secondi per
- * sempre: batteria, rete, e un registro pieno di fallimenti identici.
+ * un tetto questo diventerebbe un `adb connect` ogni due secondi per sempre:
+ * batteria, rete, e un registro pieno di fallimenti identici.
+ *
+ * ⇒ Il tetto dipende dall'OCCASIONE: [[TALOS_TENTATIVI_DOPO_CADUTA]] per una
+ * caduta vista dal battito, [[TALOS_TENTATIVI_DOPO_SCOSSA]] per un evento
+ * arrivato da fuori. I due numeri hanno il loro perché scritto accanto.
  *
  * ## ⛔ E il RIARMO sta QUI dentro, non in chi chiama
  *
  * Perché è la metà che si dimentica. La sentinella era già stata scritta una
  * volta guardando **solo** l'arrivo del ponte e non la sua caduta, e il difetto
- * si è visto solo sul dispositivo. Un diritto che si spende e non si riarma
+ * si è visto solo sul dispositivo. Un tetto che si consuma e non si ricarica
  * fa esattamente lo stesso danno al contrario: dopo la prima caduta TALOS non
  * ci riproverebbe **mai più** per tutta la vita della pagina.
  *
- * ⇒ Il ponte collegato azzera il debito: la caduta successiva ha il suo
- * tentativo. Così la regola intera è una funzione sola, e si prova nei due
- * versi senza montare una schermata.
+ * ⇒ Il ponte collegato ricarica il credito. Così la regola intera è una
+ * funzione sola, e si prova nei due versi senza montare una schermata.
  */
 export function talosPonteRiaggancioAutomatico(stato: TalosPonteRiaggancio): TalosPonteRiaggancioEsito {
-    // ⭐ IL RIARMO. Collegato ⇒ nessun debito verso la prossima caduta.
-    if (stato.connected) return { tenta: false, speso: false }
-    if (!stato.packaged) return { tenta: false, speso: stato.giaTentato }
-    if (stato.giaTentato) return { tenta: false, speso: true }
-    if (stato.inCorso) return { tenta: false, speso: false }
-    return { tenta: true, speso: true }
+    // ⭐ IL RIARMO. Collegato ⇒ la prossima caduta parte col credito pieno.
+    if (stato.connected) return { tenta: false, rimasti: TALOS_TENTATIVI_DOPO_CADUTA }
+    if (!stato.packaged) return { tenta: false, rimasti: stato.tentativiRimasti }
+    if (stato.inCorso) return { tenta: false, rimasti: stato.tentativiRimasti }
+    if (stato.tentativiRimasti <= 0) return { tenta: false, rimasti: 0 }
+    return { tenta: true, rimasti: stato.tentativiRimasti - 1 }
 }
 
 /**
