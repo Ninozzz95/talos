@@ -27,7 +27,6 @@ export interface TalosPonteStato {
     /** Se un tentativo silenzioso di ricollegarsi è già stato fatto e fallito. */
     reconnectFailed: boolean
     /** Se il sistema ci lascia disegnare sopra le altre app. */
-    overlayAllowed: boolean
 }
 
 export type TalosPontePasso = 'unavailable' | 'reconnect' | 'pair' | 'ready'
@@ -99,8 +98,12 @@ export function talosPonteGuida(stato: TalosPonteStato): TalosPonteGuida {
         actionKey: 'ponte.pairAction',
         wantsCode: true,
         ready: false,
-        floatKey: stato.overlayAllowed ? 'ponte.floatAction' : 'ponte.allowOverlay',
-        floatNeedsPermission: !stato.overlayAllowed,
+        // ⛔ Un passo solo: la finestra flottante non esiste piu'. Owner
+        // 2026-08-09, dopo che la notifica e' stata vista funzionare sopra le
+        // opzioni sviluppatore: «se la notifica funziona, la finestra
+        // flottante se ne deve andare definitivamente».
+        floatKey: 'ponte.floatAction',
+        floatNeedsPermission: false,
     }
 }
 
@@ -130,7 +133,7 @@ export function talosPonteMotivo(reason: string | undefined): string {
         case 'connect-refused': return 'ponte.reasonConnectRefused'
         case 'bridge-not-packaged': return 'ponte.unavailableBody'
         case 'bridge-timeout': return 'ponte.reasonTimeout'
-        case 'overlay-not-allowed': return 'ponte.reasonOverlayNotAllowed'
+        case 'notification-not-shown': return 'ponte.reasonNotificationNotShown'
         default: return 'ponte.reasonGeneric'
     }
 }

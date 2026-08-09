@@ -494,27 +494,29 @@
     -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <!--
-        ⭐⭐ DISEGNARE SOPRA LE ALTRE APP — e la ragione precisa per cui serve.
+        ⛔⛔ SYSTEM_ALERT_WINDOW E' STATO TOLTO — 2026-08-09.
 
-        Non è «il pulsante flottante» in generale: è l'unico modo per chiudere
-        l'accoppiamento del ponte ADB. Misurato sul Pad il 2026-08-08 alle
-        22:24: la finestrella «Accoppia con codice» di Impostazioni muore quando
-        esci da Impostazioni, e con lei il servizio `_adb-tls-pairing._tcp`. Chi
-        passa a TALOS per scrivere le sei cifre trova un annuncio che non c'è
-        più.
+        Serviva alla finestrella che teneva il campo del codice sopra
+        Impostazioni. Owner: «appena entro in dev settings la finestra
+        flottante viene coperta». Da Android 15 le opzioni sviluppatore
+        dichiarano il contenuto protetto dalla condivisione schermo, e su
+        OxygenOS quella protezione si porta via anche le finestre disegnate
+        sopra: la flottante non veniva nascosta per un difetto nostro, veniva
+        nascosta per progetto.
 
-        Una finestra flottante NON manda Impostazioni in secondo piano: la
-        finestrella resta viva e la persona scrive senza uscire.
+        Al suo posto c'e' una NOTIFICA con campo di risposta — la stessa strada
+        di Shizuku (`AdbPairingService`). PROVATO sul Pad con le opzioni
+        sviluppatore in primo piano: notifica viva, pulsante, campo di
+        scrittura aperto, tastiera su.
 
-        ⛔ Non è concesso all'installazione: vuole un viaggio in una pagina di
-        sistema, che TALOS apre con `package:` sul proprio nome — senza quello si
-        apre l'elenco di tutte le app e bisogna cercarsi dentro.
-
-        Lo stesso permesso serve poi al pulsante flottante che chiama TALOS da
-        fuori (compito #29): uno, due funzioni.
+        ⇒ Un permesso che non serve piu' non si tiene «per sicurezza»:
+        `SYSTEM_ALERT_WINDOW` e' fra i piu' pesanti che un'app possa chiedere, e
+        chiederlo senza usarlo e' esattamente cio' che insegna a concedere
+        senza leggere. Se il compito #29 (il pulsante flottante che chiama
+        TALOS da fuori) lo vorra' davvero, se lo richiedera' allora, con la sua
+        ragione sotto gli occhi.
     -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.VIBRATE" />
+        <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Il volume dei flussi audio. Normale: nessun dialogo. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Lo sfondo: TALOS disegna un'immagine e la mette sul telefono. Normale,
