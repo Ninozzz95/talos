@@ -304,28 +304,39 @@ let sentinella: ReturnType<typeof setTimeout> | null = null
  * (`bridgeStatus` × 3: 124, 114, 110 ms) — prima ne costava fino a dieci
  * secondi, perché stava in coda dietro al ponte sul thread condiviso.
  *
- * ## ⛔ Perché SOLO quando c'è qualcosa da aspettare
+ * ## ⛔ ANCHE quando è collegato — e questa riga è costata una prova
  *
- * La sentinella gira **solo** se il ponte è impacchettato e **non** collegato,
- * cioè nell'unico stato in cui esiste una transizione da cogliere: la persona è
- * appena andata ad accendere il Debug wireless e sta tornando. A collegamento
- * fatto si ferma da sé — continuare vorrebbe dire lanciare un processo ogni due
- * secondi per riscoprire una cosa che non cambia più.
+ * La prima versione girava **solo** se il ponte era impacchettato e **non**
+ * collegato: guardavo la transizione «spento → acceso» e davo per scontato che
+ * a collegamento fatto non ci fosse più niente da vedere.
  *
- * E si ferma quando la pagina non è a schermo: un controllo che nessuno guarda
- * è batteria spesa per niente.
+ * MISURATO sul Pad il 2026-08-09: spento il Debug wireless con il ponte
+ * collegato e la pagina aperta, dopo cinque secondi diceva ancora «TALOS è
+ * collegato al tuo telefono». L'ha scoperto solo perché ho toccato
+ * «Ricontrolla».
  *
- * ## Il numero, e perché due secondi
+ * ⇒ La transizione che una persona incontra davvero è **l'altra**: il ponte che
+ * cade sotto i piedi — al riavvio, quando il Debug wireless si spegne, quando
+ * cambia rete. Sorvegliare solo l'arrivo e non la caduta vuol dire raccontare
+ * una capacità che non c'è più, che è il difetto del compito #33.
  *
- * 115 ms ogni 2.000 ms sono il **6%** del tempo. È la soglia sotto cui il costo
- * sparisce e sopra cui l'attesa si sente: mezzo secondo sarebbe un quarto del
- * tempo passato a interrogare, cinque secondi sarebbero cinque secondi di
- * schermata vecchia proprio mentre la persona guarda se ha funzionato.
+ * ## I due ritmi, e perché sono due
+ *
+ * Il controllo costa **115 ms** misurati (`bridgeStatus` × 3: 124, 114, 110).
+ *
+ * - **non collegato → 2 s** (6% del tempo): la persona sta facendo qualcosa
+ *   adesso e aspetta di vedere l'esito, quindi la freschezza vale il costo;
+ * - **collegato → 6 s** (2%): la caduta è rara e non urgente — nessuno la sta
+ *   provocando apposta — e pagare il ritmo veloce per sorvegliare una cosa
+ *   stabile sarebbe spendere batteria per un evento che non arriva.
+ *
+ * E si ferma sempre quando la pagina non è a schermo: un controllo che nessuno
+ * guarda è batteria spesa per niente.
  */
 function sorveglia(): void {
     smettiDiSorvegliare()
     if (document.visibilityState !== 'visible') return
-    if (!pontePresente.value || ponteCollegato.value) return
+    if (!pontePresente.value) return
     /*
      * ⛔ Un colpo solo che si riarma, non un `setInterval`.
      *
@@ -335,7 +346,7 @@ function sorveglia(): void {
      * devices`. Così invece i due secondi contano dalla FINE del controllo
      * precedente, e non ce n'è mai più di uno in volo.
      */
-    sentinella = setTimeout(() => { void leggiPonte() }, 2_000)
+    sentinella = setTimeout(() => { void leggiPonte() }, ponteCollegato.value ? 6_000 : 2_000)
 }
 
 function smettiDiSorvegliare(): void {
