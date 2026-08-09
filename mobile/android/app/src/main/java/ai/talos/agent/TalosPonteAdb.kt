@@ -234,15 +234,53 @@ object TalosPonteAdb {
         if (comando.isEmpty()) return Esito(false, motivo = "no-command")
         if (comando[0] !in ammessi) return Esito(false, motivo = "program-not-allowed")
 
-        val esito = esegui(context, listOf("shell") + comando, attesaMs = 30_000)
-        if (!esito.ok && esito.errore.contains("no devices", ignoreCase = true)) {
-            return esito.copy(motivo = "bridge-not-connected")
+        var esito = esegui(context, listOf("shell") + comando, attesaMs = 30_000)
+        if (staccato(esito) && riaggancia(context)) {
+            esito = esegui(context, listOf("shell") + comando, attesaMs = 30_000)
         }
+        if (staccato(esito)) return esito.copy(motivo = "bridge-not-connected")
         // Stessa trappola del percorso Shizuku: `cmd` e `settings` escono con 0
         // e stampano la SecurityException su stderr.
         val negato = esito.errore.contains("SecurityException")
         return if (negato) esito.copy(ok = false, motivo = "denied-by-system") else esito
     }
+
+    /** Il riconoscimento vive in `TalosPonteStato`, dove si prova senza telefono. */
+    private fun staccato(esito: Esito): Boolean =
+        TalosPonteStato.staccato(esito.ok, esito.errore)
+
+    /**
+     * ⭐⭐ SI RIPROVA A COLLEGARSI, UNA VOLTA, PRIMA DI RIPIEGARE.
+     *
+     * ## Il difetto, misurato sul Pad il 2026-08-09
+     *
+     * «Accendi il risparmio energetico» dalla chat: TALOS apriva il pannello di
+     * sistema e diceva che il ponte non era collegato. Ma il Debug wireless era
+     * **acceso** (`192.168.1.95:33331`), TALOS era **fra i dispositivi
+     * accoppiati** (`u0_a386@OP6190L1`), e il binario era al suo posto. Tutto
+     * quello che serviva c'era: mancava soltanto un `adb connect`.
+     *
+     * La connessione non sopravvive al riavvio dell'app né a quello del
+     * telefono, e nessuno la rifaceva: `shell()` trovava «no devices» e
+     * ripiegava. Da quel momento OGNI comando privilegiato degradava al
+     * pannello — per sempre — finché qualcuno non fosse andato in
+     * Impostazioni → Ponte a premere «Ricollega», che è una schermata dove non
+     * si va per caso.
+     *
+     * ⇒ È l'ultimo centimetro di [[il ponte in casa]]: una capacità che c'è,
+     * che la persona ha già autorizzato, e che si perde per un passo che il
+     * programma sapeva fare da sé.
+     *
+     * ## ⛔ Perché UNA volta, e solo dopo un fallimento
+     *
+     * Perché la scoperta dell'annuncio costa fino a **6 secondi** (`scopri`), e
+     * pagarli prima di ogni comando li farebbe pagare anche ai telefoni dove il
+     * ponte è collegato benissimo. Qui si pagano solo quando la strada buona è
+     * già fallita, e una volta sola: se il riaggancio non riesce, il ripiego
+     * parte come prima e dice la verità.
+     */
+    private fun riaggancia(context: Context): Boolean =
+        scopri(context, ANNUNCIO_COLLEGAMENTO).any { collega(context, it).ok }
 
     /** Chiude il server, e con esso la porta locale che teneva aperta. */
     fun spegni(context: Context): Esito = esegui(context, listOf("kill-server"), attesaMs = 10_000)
@@ -299,20 +337,85 @@ object TalosPonteAdb {
      * caso, in un modo che alla persona sembra colpa sua. Si raccolgono tutti i
      * candidati e si prova finché uno apre.
      */
+    /**
+     * ⛔⛔ SI RISOLVE UNO PER VOLTA, perché `NsdManager` non sa fare altro.
+     *
+     * ## Il difetto, misurato sul Pad il 2026-08-09
+     *
+     * Interrogando la rete dal PC, il telefono annunciava **tre** record per lo
+     * stesso servizio:
+     *
+     * ```
+     * adb-2ea6573c-1yc9eU (2)  → 192.168.1.95:43053   morto
+     * adb-2ea6573c-1yc9eU      → 192.168.1.95:38737   morto
+     * adb-2ea6573c-1yc9eU (3)  → 192.168.1.95:33331   VIVO
+     * ```
+     *
+     * Il registro dell'`adb` impacchettato mostrava che TALOS ne aveva provato
+     * **uno solo**, e per giunta uno morto: `failed to connect to
+     * '192.168.1.95:38737': Connection refused`. La porta viva, 33331, non
+     * compariva **nemmeno una volta** in tutto il registro.
+     *
+     * ## La causa
+     *
+     * `resolveService` accetta **una risoluzione alla volta**. I tre annunci
+     * arrivano nello stesso istante, la prima parte e le altre due tornano
+     * `FAILURE_ALREADY_ACTIVE` — su un `onResolveFailed` che qui era `= Unit`,
+     * cioè le buttava via in silenzio. Il commento sopra prometteva «si
+     * raccolgono tutti i candidati»: ne raccoglieva uno.
+     *
+     * ⇒ Un ponte accoppiato, autorizzato e con la porta aperta si comportava
+     * come un ponte assente — e la persona vedeva solo il pannello di sistema.
+     *
+     * ## La cura
+     *
+     * Una **coda**: chi arriva mentre un'altra risoluzione è in corso aspetta il
+     * suo turno invece di essere scartato. Un tetto sui tentativi perché una
+     * rimessa in coda che fallisse sempre girerebbe a vuoto per tutta la
+     * finestra.
+     */
     fun scopri(context: Context, tipo: String, attesaMs: Long = 6_000): List<String> {
         val nsd = context.getSystemService(Context.NSD_SERVICE) as? NsdManager ?: return emptyList()
         val trovati = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
         val calma = CountDownLatch(1)
 
-        val risolutore = object : NsdManager.ResolveListener {
-            override fun onResolveFailed(info: NsdServiceInfo?, codice: Int) = Unit
+        val coda = java.util.concurrent.ConcurrentLinkedQueue<NsdServiceInfo>()
+        val occupato = java.util.concurrent.atomic.AtomicBoolean(false)
+        // ⛔ Il tetto: senza, una risoluzione che fallisce sempre e si rimette in
+        // coda girerebbe a vuoto per tutta la finestra di sei secondi.
+        val tentativi = java.util.concurrent.atomic.AtomicInteger(0)
+        var risolutore: NsdManager.ResolveListener? = null
+
+        fun prossimo() {
+            if (!occupato.compareAndSet(false, true)) return
+            val info = coda.poll()
+            val ascoltatore = risolutore
+            if (info == null || ascoltatore == null || tentativi.incrementAndGet() > TETTO_RISOLUZIONI) {
+                occupato.set(false)
+                return
+            }
+            runCatching { @Suppress("DEPRECATION") nsd.resolveService(info, ascoltatore) }
+                .onFailure { occupato.set(false); prossimo() }
+        }
+
+        risolutore = object : NsdManager.ResolveListener {
+            override fun onResolveFailed(info: NsdServiceInfo?, codice: Int) {
+                // Occupato: non è un no, è un «più tardi». Torna in coda.
+                if (codice == NsdManager.FAILURE_ALREADY_ACTIVE && info != null) coda.add(info)
+                occupato.set(false)
+                prossimo()
+            }
+
             override fun onServiceResolved(info: NsdServiceInfo?) {
-                val porta = info?.port ?: return
-                val ospite = info.host?.hostAddress ?: return
+                val porta = info?.port
+                val ospite = info?.host?.hostAddress
                 // ⛔ Solo IPv4: `adb connect` con un IPv6 senza parentesi non sa
                 // dove finisce l'indirizzo e dove comincia la porta.
-                if (ospite.contains(':')) return
-                trovati.add("$ospite:$porta")
+                if (porta != null && ospite != null && !ospite.contains(':')) {
+                    trovati.add("$ospite:$porta")
+                }
+                occupato.set(false)
+                prossimo()
             }
         }
 
@@ -323,7 +426,9 @@ object TalosPonteAdb {
             override fun onDiscoveryStopped(t: String?) = Unit
             override fun onServiceLost(info: NsdServiceInfo?) = Unit
             override fun onServiceFound(info: NsdServiceInfo?) {
-                if (info != null) runCatching { @Suppress("DEPRECATION") nsd.resolveService(info, risolutore) }
+                if (info == null) return
+                coda.add(info)
+                prossimo()
             }
         }
 
@@ -338,6 +443,15 @@ object TalosPonteAdb {
             trovati.toList().reversed()
         }.getOrElse { emptyList() }
     }
+
+    /**
+     * Quante risoluzioni al massimo in una finestra di scoperta.
+     *
+     * Sul Pad gli annunci vivi e morti erano **tre**; dodici lascia spazio a
+     * qualche rimessa in coda senza permettere a un fallimento ripetuto di
+     * girare a vuoto per sei secondi.
+     */
+    private const val TETTO_RISOLUZIONI = 12
 
     /** Il servizio che il telefono annuncia mentre la finestrella è aperta. */
     const val ANNUNCIO_ACCOPPIAMENTO = "_adb-tls-pairing._tcp"
