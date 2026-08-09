@@ -80,7 +80,25 @@ android {
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
-            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+             //
+             // ⛔⛔ E le DUE aggiunte nostre, con la misura che le ha volute.
+             //
+             // MISURATO il 2026-08-09 aprendo l'APK: dentro c'erano 2,45 MB di
+             // SOURCEMAP di pdf.js (`pdf.worker.mjs.map` da sola pesa 1,21 MB)
+             // e 0,79 MB di un PDF di ESEMPIO che pdf.js si porta dietro per la
+             // sua pagina dimostrativa — `compressed.tracemonkey-pldi-09.pdf`,
+             // un articolo accademico del 2009 che con TALOS non c'entra nulla.
+             //
+             // Tre megabyte e mezzo su trentaquattro — il 10% — spediti a ogni
+             // persona che installa l'app, per servire il debug di una libreria
+             // di terzi che noi non stiamo debuggando. Una mappa serve a chi
+             // legge una traccia nel browser; nessuno legge tracce dentro un
+             // APK firmato sul telefono di qualcun altro.
+             //
+             // `*.map` e' volutamente largo: qualunque libreria vendorizzata ne
+             // porti una domani, resta fuori senza che nessuno se ne accorga —
+             // che e' il modo in cui questi tre megabyte erano entrati.
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.map:!compressed.tracemonkey-pldi-09.pdf'
         }
     }
     // ⛔ PRIMA di `buildTypes`: Gradle risolve i nomi nell'ordine in cui
