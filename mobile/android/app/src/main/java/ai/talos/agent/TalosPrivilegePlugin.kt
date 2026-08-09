@@ -313,7 +313,12 @@ class TalosPrivilegePlugin : Plugin() {
          * wireless, la nostra connessione no. È il prossimo passo, non una
          * ragione per tenersi una dipendenza che qui non funziona.
          */
-        conIlPonte(esito, comando, "solo-ponte")
+        /*
+         * ⛔ `probe` = una DOMANDA, non un atto. Chi chiede se il ponte c'e' non
+         * deve pagare i sei secondi di scoperta mDNS per riagganciarlo: la
+         * misura di quel costo sta su `TalosPonteAdb.shell`.
+         */
+        conIlPonte(esito, comando, "solo-ponte", riaggancia = call.getBoolean("probe", false) != true)
     }
 
     /**
@@ -342,11 +347,16 @@ class TalosPrivilegePlugin : Plugin() {
      * capo per scoprire l'altro — l'ho fatto io il 2026-08-08 con
      * `shizuku-refused` che spariva dietro una frase generica.
      */
-    private fun conIlPonte(esito: JSObject, comando: List<String>, motivoDiPartenza: String): JSObject {
+    private fun conIlPonte(
+        esito: JSObject,
+        comando: List<String>,
+        motivoDiPartenza: String,
+        riaggancia: Boolean = true,
+    ): JSObject {
         if (!TalosPonteAdb.disponibile(context)) {
             return esito.put("ok", false).put("reason", motivoDiPartenza).put("via", "none")
         }
-        val ponte = TalosPonteAdb.shell(context, comando, PROGRAMMI_AMMESSI)
+        val ponte = TalosPonteAdb.shell(context, comando, PROGRAMMI_AMMESSI, riagganciaSeStaccato = riaggancia)
         if (ponte.ok) {
             return esito.put("ok", true).put("via", "bridge")
                 .put("output", ponte.uscita).put("error", ponte.errore).put("exitCode", ponte.codice)

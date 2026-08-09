@@ -36,7 +36,7 @@ import { Capacitor } from '@capacitor/core'
  */
 
 interface PontePrivilegiato {
-    exec(options: { command: string[] }): Promise<{
+    exec(options: { command: string[], probe?: boolean }): Promise<{
         ok: boolean
         reason?: string
         program?: string
@@ -108,7 +108,24 @@ export function talosPrivilegedReason(reason: string | undefined): string {
  * sceglie il modello, e un testo di risposta con dentro uno spazio o un punto e
  * virgola diventerebbe un secondo comando.
  */
-export async function talosRunAsShell(command: readonly string[]): Promise<{
+export async function talosRunAsShell(
+    command: readonly string[],
+    /**
+     * ⛔⭐ UNA DOMANDA NON DEVE AVERE EFFETTI.
+     *
+     * Con `probe: true` il ponte risponde con quello che sa e basta: se la
+     * connessione e' caduta NON prova a riagganciarla.
+     *
+     * Misurato sul Pad il 2026-08-09 col campionatore di pile, a ogni avvio:
+     * il riaggancio costa una scoperta mDNS da SEI secondi, e il guardiano
+     * delle capacita' la pagava a ogni apertura dell'app solo per sapere se il
+     * ponte c'era. Dieci secondi di lavoro per una domanda.
+     *
+     * Chi AGISCE lo lascia falso: li' il riaggancio e' giusto, perche' senza
+     * non potrebbe fare la cosa che gli e' stata chiesta.
+     */
+    opzioni: { readonly probe?: boolean } = {},
+): Promise<{
     ok: boolean
     output: string
     reason?: string
@@ -117,7 +134,10 @@ export async function talosRunAsShell(command: readonly string[]): Promise<{
         return { ok: false, output: '', reason: 'not-on-this-platform' }
     }
     try {
-        const esito = await TalosPrivilegeBridge.exec({ command: [...command] })
+        const esito = await TalosPrivilegeBridge.exec({
+            command: [...command],
+            probe: opzioni.probe === true,
+        })
         return { ok: esito.ok, output: esito.output ?? '', reason: esito.reason }
     }
     catch {
@@ -130,6 +150,12 @@ export async function talosPrivilegedReady(): Promise<boolean> {
     // Si chiede al ponte una cosa innocua e si guarda se risponde. ⛔ Non si
     // tiene un flag: Shizuku muore al riavvio e un flag ricorderebbe un mondo
     // che non c'è più.
-    const esito = await talosRunAsShell(['settings', 'get', 'system', 'screen_brightness'])
+    // ⛔ `probe`: e' una DOMANDA. Senza, il guardiano pagava sei secondi di
+    // scoperta mDNS a ogni avvio per riagganciare un ponte che voleva solo
+    // guardare. Vedi `talosRunAsShell`.
+    const esito = await talosRunAsShell(
+        ['settings', 'get', 'system', 'screen_brightness'],
+        { probe: true },
+    )
     return esito.ok
 }
