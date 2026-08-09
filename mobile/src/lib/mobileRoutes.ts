@@ -6,7 +6,7 @@ export type TalosMobileRouteName =
     | 'memory-item' | 'memory-new' | 'task-item' | 'task-new' | 'note-item' | 'note-new'
     | 'settings-privilege'
     | 'research' | 'research-new' | 'research-report' | 'research-claim' | 'research-source'
-    | 'runs' | 'context' | 'settings'
+    | 'context' | 'settings'
     | 'settings-models' | 'settings-models-providers'
     | 'settings-models-catalog' | 'settings-models-local' | 'settings-models-local-repo'
 
@@ -40,7 +40,6 @@ const loadResearchNewScreen = () => import('@/screens/ResearchNewScreen.vue').th
 const loadResearchReportScreen = () => import('@/screens/ResearchReportScreen.vue').then((module) => module.default)
 const loadResearchClaimScreen = () => import('@/screens/ResearchClaimScreen.vue').then((module) => module.default)
 const loadResearchSourceScreen = () => import('@/screens/ResearchSourceScreen.vue').then((module) => module.default)
-const loadRunsScreen = () => import('@/screens/RunsScreen.vue').then((module) => module.default)
 const loadContextScreen = () => import('@/screens/ContextScreen.vue').then((module) => module.default)
 const loadSettingsScreen = () => import('@/screens/SettingsScreen.vue').then((module) => module.default)
 const loadSettingsModelsScreen = () => import('@/screens/SettingsModelsScreen.vue').then((module) => module.default)
@@ -117,7 +116,6 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'research-report', path: '/research/:id', desktop_station_id: 'research', component: loadResearchReportScreen, parent: 'research' },
     { name: 'research-claim', path: '/research/:id/claim/:index', desktop_station_id: 'research', component: loadResearchClaimScreen, parent: 'research-report' },
     { name: 'research-source', path: '/research/:id/source/:index', desktop_station_id: 'research', component: loadResearchSourceScreen, parent: 'research-report' },
-    { name: 'runs', path: '/runs', desktop_station_id: 'tasks', component: loadRunsScreen },
     { name: 'context', path: '/context', desktop_station_id: 'context_vault', component: loadContextScreen },
     { name: 'settings', path: '/settings', desktop_station_id: 'settings', component: loadSettingsScreen },
     { name: 'settings-models', path: '/settings/models', desktop_station_id: 'settings', component: loadSettingsModelsScreen, parent: 'settings' },

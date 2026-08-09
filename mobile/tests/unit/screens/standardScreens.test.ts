@@ -4,7 +4,6 @@ import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { reactive, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import ResearchNewScreen from '@/screens/ResearchNewScreen.vue'
-import RunsScreen from '@/screens/RunsScreen.vue'
 
 const mockState = vi.hoisted(() => ({ controller: null as unknown }))
 vi.mock('@/stores/chatController', () => ({ useChatController: () => mockState.controller }))
@@ -93,12 +92,17 @@ describe('standard tab screens (verbatim desktop parity, step-1 empty states)', 
         expect(w.get<HTMLButtonElement>('[data-testid="talos-research-start"]').element.disabled).toBe(false)
     })
 
-    it('runs: Runtime cockpit header + Runtime eyebrow + real empty copy', () => {
-        const w = mount(RunsScreen)
-        expect(w.get('[data-testid="mobile-screen-title"]').text()).toBe('Runtime cockpit')
-        expect(w.get('[data-testid="mobile-screen-eyebrow"]').text()).toContain('Runtime')
-        expect(w.text()).toContain('Not in this build')
-    })
+    /*
+     * ⛔ Qui c'era la prova del «Runtime cockpit», e diceva una cosa vera di una
+     * schermata che non doveva esistere: titolo, occhiello, e il testo «Not in
+     * this build». Una stazione raggiungibile in due tocchi dalla chat che si
+     * apriva solo per dichiararsi assente.
+     *
+     * Tolta insieme alla schermata il 2026-08-09, su decisione dell'owner. Quel
+     * posto nella navigazione e' prenotato per **Codice** (fase agentica B), e
+     * quando arrivera' avra' la sua prova qui — con del contenuto vero da
+     * verificare, non con un rifiuto.
+     */
 
     it('context: Library header + Context Vault section chrome + local-first empty state', () => {
         const w = mount(ContextScreen)

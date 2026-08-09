@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import {
-    Activity, BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, MessageSquareText,
+    BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, MessageSquareText,
     Pencil, Trash2, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -62,7 +62,6 @@ const TOOL_DEFINITIONS: Array<{ key: string; route: TalosMobileRouteName; icon: 
     { key: 'navigation.notes', route: 'notes', icon: StickyNote },
     { key: 'navigation.doctor', route: 'doctor', icon: Stethoscope },
     { key: 'navigation.research', route: 'research', icon: BookOpen },
-    { key: 'navigation.cockpit', route: 'runs', icon: Activity },
     { key: 'navigation.library', route: 'context', icon: FileArchive },
 ]
 const tools = computed(() => TOOL_DEFINITIONS.map(tool => ({ ...tool, label: t(tool.key) })))

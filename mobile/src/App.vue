@@ -726,7 +726,6 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     // page and a source page indistinguishable from the list behind them.
     'research-claim': 'research.claimTitle',
     'research-source': 'research.sourceTitle',
-    runs: 'stations.runtimeCockpitTitle',
     context: 'navigation.library',
     settings: 'stations.settingsCenterTitle',
     'settings-models': 'models.labTitle',

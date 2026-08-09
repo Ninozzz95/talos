@@ -78,7 +78,6 @@ export const TALOS_EN_MESSAGES = {
         closeMenu: 'Close menu',
         goBack: 'Go back',
         primary: 'Primary navigation',
-        cockpit: 'Cockpit',
         modelLab: 'Model Lab',
     },
     language: {
@@ -2674,7 +2673,6 @@ export const TALOS_EN_MESSAGES = {
     },
     stations: {
         deepResearchTitle: 'Deep Research V3',
-        runtimeCockpitTitle: 'Runtime cockpit',
         settingsCenterTitle: 'Settings Center',
         tasksEmpty: 'No tasks yet.',
         newTask: 'New task',
@@ -2686,7 +2684,6 @@ export const TALOS_EN_MESSAGES = {
         deepResearchEyebrow: 'Deep research',
         deepResearchUnavailable: 'Not in this build — Deep Research needs the local research worker, which is not installed yet. There is nothing to queue or select here.',
         runtimeEyebrow: 'Runtime',
-        runtimeUnavailable: 'Not in this build — the mobile run cockpit needs the local execution worker, which is not installed yet. Nothing has been queried.',
     },
     browser: {
         title: 'Browser',

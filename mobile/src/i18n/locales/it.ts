@@ -81,7 +81,6 @@ export const TALOS_IT_MESSAGES = {
         closeMenu: 'Chiudi menu',
         goBack: 'Torna indietro',
         primary: 'Navigazione principale',
-        cockpit: 'Cockpit',
         modelLab: 'Laboratorio modelli',
     },
     language: {
@@ -2689,7 +2688,6 @@ export const TALOS_IT_MESSAGES = {
     },
     stations: {
         deepResearchTitle: 'Ricerca approfondita V3',
-        runtimeCockpitTitle: 'Cockpit runtime',
         settingsCenterTitle: 'Centro impostazioni',
         tasksEmpty: 'Nessuna attività.',
         newTask: 'Nuova attività',
@@ -2701,7 +2699,6 @@ export const TALOS_IT_MESSAGES = {
         deepResearchEyebrow: 'Ricerca approfondita',
         deepResearchUnavailable: 'Non disponibile in questa build: Ricerca approfondita richiede il worker di ricerca locale, che non è ancora installato. Qui non c’è nulla da mettere in coda o selezionare.',
         runtimeEyebrow: 'Runtime',
-        runtimeUnavailable: 'Non disponibile in questa build: il cockpit delle esecuzioni mobile richiede il worker di esecuzione locale, che non è ancora installato. Non è stata effettuata alcuna interrogazione.',
     },
     browser: {
         title: 'Browser',
