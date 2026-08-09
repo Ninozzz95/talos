@@ -4,7 +4,7 @@ import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import { talosChatDiscardedByModeSwitch } from '@/lib/chat/modeSwitch'
 import { talosTemporaryWelcome } from '@/lib/chat/temporaryWelcome'
 import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ArrowDown, AlertTriangle, CheckCircle2, Circle, Globe2, X } from '@lucide/vue'
+import { ArrowDown, AlertTriangle, CheckCircle2, Circle, Globe2, LoaderCircle, X } from '@lucide/vue'
 import { useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
@@ -67,6 +67,30 @@ const controller = useChatController()
  * Le due sorgenti stanno INSIEME perche' la persona non distingue — e non deve
  * distinguere — fra una richiesta nuova e una ripresa dopo un'interruzione.
  */
+/**
+ * L'archivio locale delle chat si sta ancora aprendo.
+ *
+ * `error` è escluso di proposito: quello NON è un'attesa, è un guasto, e ha già
+ * la sua riga che dice cosa è andato storto. Un girello lì prometterebbe che
+ * passa da sola una cosa che non passa.
+ */
+const archivioInCaricamento = computed(() =>
+    chat.state.persistenceStatus === 'idle' || chat.state.persistenceStatus === 'loading')
+
+/**
+ * ⛔ Lo stesso fatto detto DUE volte, in due posti, con due parole diverse.
+ *
+ * Il girello al centro e la riga sotto il compositore dicevano entrambi che
+ * l'archivio si sta aprendo. Quando il girello c'è, quella riga tace; quando
+ * l'introduzione non è a schermo — cioè a chat già piena — la riga resta l'unico
+ * segnale e va lasciata, altrimenti il tasto invia torna a essere spento senza
+ * che nessuno dica perché.
+ */
+const motivoInvioSpento = computed(() =>
+    archivioInCaricamento.value && chat.messages.length === 0
+        ? ''
+        : sendDisabledReason.value)
+
 const attesePendenti = computed<readonly string[]>(() => [
     ...controller.pendingToolAuthorizations.value.map((pending) => pending.checkpoint_id),
     ...controller.toolAuthorizationRecoveries.value.map((recovery) => recovery.checkpoint_id),
@@ -988,6 +1012,34 @@ onBeforeUnmount(() => {
                     </template>
 
                     <!--
+                        ⛔ L'archivio che si apre e' un'ATTESA, non un motivo per
+                        cui non puoi scrivere.
+
+                        Stava sotto il compositore, nella riga che spiega perche'
+                        il tasto invia e' spento — insieme a «aggiungi una chiave»
+                        e «scegli un modello», che sono cose DA FARE. Questa non
+                        lo e': non c'e' niente da fare, si aspetta e passa da
+                        sola. Owner 2026-08-09: «non mi piace la scritta
+                        preparazione etc, metti uno spinner al centro».
+
+                        Il girello dice «sta succedendo»; una frase ferma sembra
+                        un guasto. E sta al centro, dove l'occhio e' gia'.
+                    -->
+                    <p
+                        v-if="archivioInCaricamento"
+                        data-testid="talos-chat-loading"
+                        role="status"
+                        aria-live="polite"
+                        class="mt-6 inline-flex items-center gap-2 text-sm text-[var(--talos-muted)]"
+                    >
+                        <LoaderCircle
+                            class="size-4 shrink-0 text-[var(--talos-accent)] motion-safe:animate-spin"
+                            aria-hidden="true"
+                        />
+                        {{ t('chat.loadingChats') }}
+                    </p>
+
+                    <!--
                         The switch, on the welcome itself, in both directions —
                         the same control the chat menu carries, where the eye
                         already is.
@@ -1148,7 +1200,7 @@ onBeforeUnmount(() => {
                 :sending="composerBusy === 'this-chat'"
                 :refreshing-models="refreshingModels"
                 :discovery-problems="discoveryProblems"
-                :send-disabled-reason="sendDisabledReason"
+                :send-disabled-reason="motivoInvioSpento"
                 :enhancing-prompt="enhancingPrompt"
                 :enhancer-depth="enhancer.depth"
                 :enhancer-model="enhancer.model"

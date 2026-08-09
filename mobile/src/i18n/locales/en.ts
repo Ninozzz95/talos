@@ -813,6 +813,7 @@ export const TALOS_EN_MESSAGES = {
         startFreshAfterTooBig: 'Start a new chat, or ask the same thing in a shorter message. Nothing you already have is lost.',
         resendAfterAuthorizationLapsed: 'The tool permission applied to the previous send. Send the message again — it will ask once.',
         preparingLocalStorage: 'Preparing local chat storage',
+        loadingChats: 'Loading chats',
         addProviderKeyOrEndpoint: 'Add a provider API key or local endpoint in Settings',
         addSpecificProviderKey: 'Add your {provider} API key in Settings',
         refreshProviderCatalog: 'Refresh the selected provider model catalog',

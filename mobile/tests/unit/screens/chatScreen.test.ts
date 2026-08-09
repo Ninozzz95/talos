@@ -860,6 +860,54 @@ describe('welcome setup checklist (F2-T6)', () => {
         expect(wrapper.find('[data-testid="talos-setup-checklist"]').exists()).toBe(false)
     })
 
+    /**
+     * Owner 2026-08-09: «non mi piace la scritta preparazione etc, metti uno
+     * spinner al centro con una scritta caricamento chat».
+     *
+     * ⛔ Il pezzo che vale il test non è il girello: è che lo stesso fatto non
+     * venga detto DUE volte. «Preparazione dell'archivio» viveva nella riga che
+     * spiega perché il tasto invia è spento, insieme a «aggiungi una chiave» e
+     * «scegli un modello» — cose DA FARE. Un'attesa non è una di quelle, e
+     * lasciarla lì mentre il girello gira dice la stessa cosa in due posti con
+     * due parole diverse.
+     */
+    it('⛔ l archivio che si apre e un GIRELLO al centro, e non anche una riga sotto', () => {
+        const controller = makeController()
+        controller.chat.state.persistenceStatus = 'loading'
+        controller.sendDisabledReason.value = 'Preparazione dell’archivio locale delle chat'
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+
+        const girello = wrapper.find('[data-testid="talos-chat-loading"]')
+        expect(girello.exists()).toBe(true)
+        // Il banco gira in inglese: la chiave è la stessa, la lingua no.
+        expect(girello.text()).toContain('Loading chats')
+        expect(girello.attributes('role')).toBe('status')
+
+        // ⛔ E il doppione sotto il compositore tace.
+        expect(wrapper.findComponent({ name: 'TalosMobileComposer' }).props('sendDisabledReason'))
+            .toBe('')
+    })
+
+    /**
+     * ⛔ Ma a chat PIENA l'introduzione non è a schermo, quindi il girello non
+     * c'è: lì quella riga è l'unico segnale, e toglierla rimetterebbe il tasto
+     * invia spento senza che nessuno dica perché.
+     */
+    it('⛔ a chat piena la riga sotto il compositore RESTA: è l unico segnale', () => {
+        const controller = makeController([{
+            id: 'm1', role: 'user', content: 'ciao', created_at: '2026-08-09T10:00:00.000Z',
+        }])
+        controller.chat.state.persistenceStatus = 'loading'
+        controller.sendDisabledReason.value = 'Preparazione dell’archivio locale delle chat'
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+
+        expect(wrapper.find('[data-testid="talos-chat-loading"]').exists()).toBe(false)
+        expect(wrapper.findComponent({ name: 'TalosMobileComposer' }).props('sendDisabledReason'))
+            .toBe('Preparazione dell’archivio locale delle chat')
+    })
+
     it('e riappare appena l archivio e pronto e manca davvero qualcosa', () => {
         const controller = makeController()
         controller.chat.state.persistenceStatus = 'ready'
