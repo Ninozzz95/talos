@@ -5,9 +5,50 @@
     <!-- F5.1 #29 root cause (Android 11+ package visibility): without this
          declaration SpeechRecognizer cannot bind the RecognitionService and
          dictation dies silently. https://developer.android.com/about/versions/11/behavior-changes-11 -->
+    <!--
+        ⛔⛔ SENZA QUESTO, TALOS ELENCA LE APP E POI DICE CHE NON ESISTONO.
+
+        MISURATO sul Pad il 2026-08-09. Dalla chat: «apri Spotify». Risposta:
+        «Spotify non risulta installato su questo telefono». Ma
+        `pm list packages` lo trovava eccome — `com.spotify.music` — e TALOS
+        stesso lo aveva ELENCATO fra le 51 app installate mezz'ora prima.
+
+        La causa e' la visibilita' dei pacchetti di Android 11: senza una
+        `<queries>` che li dichiari, `getLaunchIntentForPackage` torna **null**
+        per qualsiasi app di terzi, ed e' indistinguibile da «non installata».
+
+        ⇒ Le due strade vedevano due mondi diversi: l'ELENCO passa dal ponte
+        (`cmd package list`, identita' della shell, vede tutto), l'APERTURA passa
+        dal `PackageManager` dell'app, che era cieco. Un assistente che nomina
+        una cosa e poi nega che esista e' peggio di uno che non la nomina.
+
+        ⛔ E si dichiara il MINIMO che serve, non `QUERY_ALL_PACKAGES`: quello e'
+        un permesso che Google fa giustificare per iscritto, e qui non serve —
+        ci bastano le app che hanno un'icona da toccare, piu' le tre azioni che
+        il tool «prepara» (telefonata, SMS, condivisione) e che passano da
+        `resolveActivity`.
+    -->
     <queries>
         <intent>
             <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <!-- Le app avviabili: e' esattamente l'insieme che «apri un'app» apre. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- Le tre cose che TALOS prepara e la persona conferma. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
         </intent>
     </queries>
 
