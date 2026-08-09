@@ -173,6 +173,19 @@ android {
     }
 }
 
+/**
+ * ⛔ Le proprietà passate a Gradle NON arrivano da sole alla JVM dei test.
+ *
+ * Serve per `TalosPonteVeroTest`, l'unica prova che parla con un `adbd` in carne
+ * e ossa: senza bersaglio si salta da sola, e con `-Dtalos.adbd=IP:PORTA` si
+ * collega davvero. Senza questa riga la proprietà si perde per strada e la prova
+ * risulta «saltata» anche quando gliel'hai data — cioè mente su un esito.
+ */
+tasks.withType(Test).configureEach {
+    def bersaglio = System.getProperty('talos.adbd')
+    if (bersaglio != null) systemProperty 'talos.adbd', bersaglio
+}
+
 repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
