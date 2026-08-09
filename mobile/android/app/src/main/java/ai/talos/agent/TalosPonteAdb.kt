@@ -157,21 +157,99 @@ object TalosPonteAdb {
         }
         costruttore.redirectErrorStream(false)
 
+        /**
+         * ⛔⛔⭐ IL GIRELLO SENZA FINE — misurato sul Pad il 2026-08-09.
+         *
+         * ## Il difetto, e perché il timeout non serviva a niente
+         *
+         * La forma di prima era:
+         *
+         *     val uscita = processo.inputStream.readText()   // ← nessun timeout
+         *     val errore = processo.errorStream.readText()   // ← nessun timeout
+         *     val finito = processo.waitFor(attesaMs, …)     // ← il timeout, DOPO
+         *
+         * `readText()` finisce quando la pipe arriva a **fine file**, e una pipe
+         * arriva a fine file quando **l'ultimo** che ne tiene l'estremità di
+         * scrittura la chiude. Quindi i 30 secondi non venivano nemmeno
+         * guardati: si aspettava per sempre una riga prima.
+         *
+         * ## Chi tiene aperta la pipe: il DEMONE
+         *
+         * `adb` non è un programma solo. Al primo comando **forka un server**
+         * che resta vivo — ed eredita `stdout` e `stderr` del padre. Misurato:
+         *
+         *     ps -A | grep adb   →   27489 u0_a386 adb
+         *
+         * Un demone dell'app, vivo da **prima** della prova, di un tentativo di
+         * accoppiamento precedente. Il comando `pair` finiva, il demone no, la
+         * pipe non arrivava mai a fine file, e la promessa lato interfaccia non
+         * si risolveva: **il girello girava all'infinito**.
+         *
+         * ## E un secondo blocco, classico, che c'era comunque
+         *
+         * Leggere `stdout` fino in fondo PRIMA di toccare `stderr`: se il figlio
+         * riempie i 64 KiB della pipe di `stderr`, si ferma a scrivere, quindi
+         * non chiude mai `stdout`, quindi il primo `readText()` non torna. Due
+         * processi che si aspettano a vicenda.
+         *
+         * ## La cura: nessuna pipe da leggere
+         *
+         * Si scrive su **file**. Un demone che eredita quei descrittori non fa
+         * male a nessuno, e noi non aspettiamo niente: `waitFor(attesaMs)`
+         * diventa l'unico orologio, com'era sempre stato inteso. I file si
+         * leggono dopo, e anche su timeout — quello che il comando ha fatto in
+         * tempo a dire è la cosa più utile che abbiamo per capire perché.
+         *
+         * ⛔ E `stdin` si chiude subito: `adb pair` senza codice valido **chiede
+         * il codice da tastiera**. Con l'estremità di scrittura in mano nostra e
+         * mai chiusa, quella domanda non riceveva né risposta né fine file, e
+         * restava lì. Chiusa, il comando fallisce in un istante — che è l'esito
+         * giusto: un errore si mostra, un'attesa infinita no.
+         */
+        val cartella = casa(context)
+        val fuori = File.createTempFile("ponte-out", ".txt", cartella)
+        val dentro = File.createTempFile("ponte-err", ".txt", cartella)
+        costruttore.redirectOutput(fuori)
+        costruttore.redirectError(dentro)
+
         return runCatching {
             val processo = costruttore.start()
-            val uscita = processo.inputStream.bufferedReader().use { it.readText() }
-            val errore = processo.errorStream.bufferedReader().use { it.readText() }
+            // Nessuno scriverà mai su questo ingresso: dirlo subito trasforma
+            // una domanda interattiva in un errore immediato.
+            runCatching { processo.outputStream.close() }
+
             val finito = processo.waitFor(attesaMs, TimeUnit.MILLISECONDS)
-            if (!finito) {
-                processo.destroyForcibly()
-                return Esito(false, uscita.trim(), errore.trim(), motivo = "bridge-timeout")
+            if (!finito) processo.destroyForcibly()
+
+            val uscita = leggi(fuori)
+            val errore = leggi(dentro)
+            // ⛔ Niente `return` qui dentro: salterebbe la pulizia dei due file
+            // di appoggio, che sta nell'`also` in fondo alla catena.
+            if (finito) {
+                val codice = processo.exitValue()
+                Esito(codice == 0, uscita, errore, codice)
+            } else {
+                Esito(false, uscita, errore, motivo = "bridge-timeout")
             }
-            val codice = processo.exitValue()
-            Esito(codice == 0, uscita.trim(), errore.trim(), codice)
         }.getOrElse {
             Esito(false, errore = it.message ?: it.javaClass.simpleName, motivo = "bridge-exec-failed")
+        }.also {
+            runCatching { fuori.delete() }
+            runCatching { dentro.delete() }
         }
     }
+
+    /**
+     * Il contenuto di un file di appoggio, limitato.
+     *
+     * ⛔ Il tetto non è pigrizia: `adb` in errore sa scrivere molto, questo testo
+     * finisce in un esito che attraversa il ponte fino all'interfaccia, e un
+     * messaggio da megabyte non aiuta nessuno a capire cosa è andato storto.
+     */
+    private fun leggi(file: File): String = runCatching {
+        val testo = file.readText()
+        if (testo.length > MAX_USCITA) testo.take(MAX_USCITA) else testo
+    }.getOrDefault("").trim()
 
     /**
      * L'accoppiamento: il codice a sei cifre che il telefono mostra una volta
@@ -472,4 +550,7 @@ object TalosPonteAdb {
      */
     private val INDIRIZZO = Regex("""^[0-9a-fA-F.:\[\]]{3,45}:\d{1,5}$""")
     private val SEI_CIFRE = Regex("""^\d{6}$""")
+
+    /** Quanto testo di un comando ha senso portarsi dietro. */
+    private const val MAX_USCITA = 64_000
 }
