@@ -820,6 +820,7 @@ export const TALOS_IT_MESSAGES = {
         authorizationTooBig: 'Questa conversazione è diventata troppo grande per portarsi dietro il permesso.',
         startFreshAfterTooBig: 'Apri una chat nuova, oppure chiedi la stessa cosa in un messaggio più corto. Quello che hai già non si perde.',
         preparingLocalStorage: 'Preparazione dell’archivio locale delle chat',
+        loadingChats: 'Caricamento chat',
         addProviderKeyOrEndpoint: 'Aggiungi una chiave API del provider o un endpoint locale nelle Impostazioni',
         addSpecificProviderKey: 'Aggiungi la chiave API {provider} nelle Impostazioni',
         refreshProviderCatalog: 'Aggiorna il catalogo modelli del provider selezionato',
