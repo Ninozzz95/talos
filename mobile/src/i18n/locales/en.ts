@@ -825,6 +825,7 @@ export const TALOS_EN_MESSAGES = {
         generatedFilesNotSavedAfterAuthorization: 'No generated files were saved ({count} skipped).',
         toolAuthorizationPending: '{count} tool authorization request is waiting. You can keep chatting.',
         toolAuthorizationSettled: 'That authorization request has been handled.',
+        emptyAnswerAfterTools: 'The tools ran ({count}), but the model wrote no answer. Try asking again, or with a different model.',
         libraryAnswerGuardAbstention: 'I could not produce a reliable answer that stayed on the current conversation topic. Please rephrase the question or name the source to use.',
         composerPreferencesSaveFailed: 'TALOS could not save composer preferences. {detail}',
         selectModelBeforeSending: 'Select a model before sending.',

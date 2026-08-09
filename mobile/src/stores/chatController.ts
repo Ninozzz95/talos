@@ -14,6 +14,7 @@ import type {
 import { buildChatCompletion } from '@/lib/chat/chatCompletion'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import { talosComposerBusy } from '@/lib/chat/composerBusy'
+import { talosRispostaVuotaDopoStrumenti, talosStrumentiPartiti } from '@/lib/chat/rispostaVuota'
 import {
     talosToolActivityDetail,
     talosToolConsentCopy,
@@ -4001,7 +4002,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     attachments: completion.messageAttachments,
                 }
             }
-            const raw = completion.text
+            // Il perché sta tutto in `rispostaVuota.ts`, accanto alla misura
+            // che l'ha reso necessario.
+            const raw = talosRispostaVuotaDopoStrumenti(completion.text, completion.executed.length)
+                ? deps.translate('chat.emptyAnswerAfterTools', {
+                    count: talosStrumentiPartiti(completion.executed),
+                })
+                : completion.text
             // F3-T4: a final-line tone suggestion is stripped from the durable
             // reply and surfaced as a toast — the user decides, never auto-applied.
             const { text, suggestion } = extractToneSuggestion(raw)
