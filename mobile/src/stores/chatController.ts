@@ -314,6 +314,7 @@ const unavailableFilePicker: TalosNativeFilePicker = {
 }
 
 import { talosChainFor } from '@/lib/tools/chainStore'
+import { talosChiudiSuStop } from '@/lib/chat/stopSuAttesa'
 import { talosPlanReplacesConsent, type TalosPlan } from '@/lib/tools/plan'
 import { talosPlanFor } from '@/lib/tools/planStore'
 import { TALOS_TOOL_SECURITY_FALLBACK as PIANO_SICUREZZA_PRUDENTE } from '@/lib/tools/security'
@@ -4016,16 +4017,30 @@ These tools exist. You do NOT have their input `
                         catena,
                         portata === 'conversation' ? 'conversation' : 'turn',
                     )
+                    // ⛔ Lo STOP chiude anche il piano: il perché, e il difetto
+                    // che ha prodotto, stanno in `stopSuAttesa.ts`.
+                    const staccaStop = talosChiudiSuStop(
+                        stream?.signal,
+                        () => planRequest.value?.id === piano.id,
+                        () => answerPlan(null),
+                    )
                     const decisione = await new Promise<{ admitted: readonly string[], cancelled: boolean }>(
                         (resolve) => {
                             // Se una seconda domanda arrivasse mentre la prima
                             // e' aperta, si rifiuta: e' l'esito prudente, ed e'
                             // la stessa regola del consenso immagini.
                             if (planResolve) { resolve({ admitted: [], cancelled: true }); return }
+                            // Fermato PRIMA che il foglio si apra: non si apre
+                            // affatto, invece di chiedere di un lavoro annullato.
+                            if (stream?.signal?.aborted) {
+                                resolve({ admitted: [], cancelled: true })
+                                return
+                            }
                             planResolve = resolve
                             planRequest.value = piano
                         },
                     )
+                    staccaStop()
                     /*
                      * ⛔ B8 — la notifica, e i due pesi.
                      *

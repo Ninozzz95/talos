@@ -309,6 +309,57 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         wrapper.unmount()
     })
 
+    /**
+     * ⛔⭐⭐ La richiesta ORFANA, vista tre volte in una notte: la chat diceva
+     * «una richiesta di autorizzazione è in attesa» e non c'era NIENTE da
+     * toccare — nessuna scheda e nessun pulsante «Controlla azioni».
+     *
+     * Il pulsante era l'ultimo anello di una catena di `v-else-if` che
+     * comincia con la scheda di ripresa e passa per il foglio del PIANO. Un
+     * piano rimasto aperto — e `planRequest` si azzera solo dai tre pulsanti di
+     * quel foglio, quindi un invio interrotto lo lascia lì — vinceva il ramo, e
+     * da quel momento nessuna richiesta di permesso aveva più dove mostrarsi.
+     *
+     * ⇒ Un permesso è il pavimento della sicurezza. La strada per rispondergli
+     * non può essere il ramo di scarto di qualcos'altro.
+     */
+    it('⛔ col PIANO aperto la via verso un permesso in sospeso resta aperta', async () => {
+        const controller = mockState.controller as ReturnType<typeof makeController>
+        controller.pendingToolAuthorizations.value = [{
+            request_id: 'request-pending',
+            checkpoint_id: 'checkpoint-pending',
+        }]
+        controller.toolAuthorizationPromptVisible.value = true
+        controller.planRequest.value = {
+            id: 'piano-1',
+            steps: [],
+            risk: 'low',
+            state: 'proposed',
+            scope: 'turn',
+        }
+        const router = makeRouter()
+        router.push('/')
+        await router.isReady()
+
+        const wrapper = mount(App, { global: { plugins: [router] } })
+        await flushPromises()
+
+        // Il piano ha la precedenza a schermo: è la domanda di adesso.
+        await vi.waitFor(() => {
+            expect(document.body.querySelector('[data-testid="talos-plan-sheet"]')).not.toBeNull()
+        })
+        expect(document.body.querySelector('[data-testid="talos-tool-consent"]')).toBeNull()
+
+        // ⭐ Ma la richiesta di permesso resta RAGGIUNGIBILE. Il pulsante non è
+        // teletrasportato in `body` come le schede: sta nell'albero della shell.
+        const riapri = wrapper.find('[data-testid="talos-tool-authorization-reopen"]')
+        expect(riapri.exists()).toBe(true)
+        await riapri.trigger('click')
+        await flushPromises()
+        expect(controller.showToolAuthorization).toHaveBeenCalled()
+        wrapper.unmount()
+    })
+
     it('TOOL-AUTH-25 renders explicit uncertain-work recovery above normal consent', async () => {
         const controller = mockState.controller as ReturnType<typeof makeController>
         controller.toolAuthorizationRecoveries.value = [{
