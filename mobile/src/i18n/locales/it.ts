@@ -115,7 +115,7 @@ export const TALOS_IT_MESSAGES = {
         traitFilesBody: 'Dai a TALOS un documento del telefono: viene copiato in una Libreria privata e cifrata, ricercabile nel testo e mai caricato sui nostri server.',
         comingLabel: 'In arrivo',
         comingZethos: 'Zethos, il runtime in sviluppo per portare modelli da dieci miliardi di parametri su un telefono.',
-        comingShizuku: 'Azioni sul telefono tramite Shizuku, sempre tipizzate, mostrate in anteprima e reversibili, mai una shell cieca.',
+        comingShizuku: 'Azioni sul telefono col ponte in casa, sempre tipizzate, mostrate in anteprima e reversibili, mai una shell cieca.',
         comingSync: 'Sincronizzazione cifrata facoltativa, se vorrai un secondo dispositivo. Disattivata in origine, senza rinunciare al local-first.',
         pricing: 'Uso gratuito: paghi soltanto i provider che scegli e soltanto quanto consumi.',
         begin: 'Configura TALOS',
@@ -890,7 +890,7 @@ export const TALOS_IT_MESSAGES = {
          * ⛔ Nessuna promessa qui. Chi apre questa pagina vuole sapere se TALOS
          * può toccare il telefono, e la risposta onesta comincia dicendo COME.
          */
-        intro: 'TALOS può agire sul telefono passando da Shizuku, che gli presta l’identità che usa il computer quando lo colleghi via cavo. Niente root, e niente permessi speciali dentro TALOS.',
+        intro: 'TALOS agisce sul telefono con la stessa identità che usa il computer quando lo colleghi via cavo. Il ponte è dentro TALOS: nessuna app di terzi, niente root, e nessun permesso speciale.',
         statusHeading: 'Stato',
         // Le quattro porte, e ognuna ha un solo passo successivo.
         missingTitle: 'Shizuku non è installato',
