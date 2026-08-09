@@ -5,6 +5,8 @@
  * Provider-backed neural TTS (OpenAI/ElevenLabs) is a future extension gated on
  * keys + network; this is the honest on-device path.
  */
+import { Capacitor, registerPlugin } from '@capacitor/core'
+
 export interface TalosSpeechVoice {
     voiceURI: string
     name: string
@@ -17,7 +19,15 @@ export interface TalosSpeechUtterance {
     rate: number
     pitch: number
     onend?: () => void
-    onerror?: () => void
+    /**
+     * ⛔ Il motivo arriva DENTRO l'errore, e non è un ornamento.
+     *
+     * Il motore nativo si rifiuta di parlare col telefono in silenzioso e lo
+     * dice: `{spoken:false, reason:"silenced"}`. Senza portare quel motivo fin
+     * qui, il pulsante tornerebbe da solo allo stato di partenza e la persona
+     * vedrebbe **niente** — cioè la stessa esperienza di un pulsante rotto.
+     */
+    onerror?: (reason?: string) => void
 }
 
 /** The subset of the platform synthesizer we use; injectable for tests. */
@@ -32,7 +42,7 @@ export interface TalosSpeakOptions {
     rate?: number
     pitch?: number
     onend?: () => void
-    onerror?: () => void
+    onerror?: (reason?: string) => void
 }
 
 export interface TalosSpeechService {
@@ -44,6 +54,45 @@ export interface TalosSpeechService {
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
 
+/**
+ * Il testo COME SI LEGGE, non come si scrive.
+ *
+ * ⛔ MISURATO sul Pad il 2026-08-10, spiando cosa arriva al motore:
+ *
+ * ```
+ *   TalosSpeech.speak {"text":"Invio a mamma: **“ok”**.\n\nRisposto a mamma: **“ok”**."}
+ * ```
+ *
+ * Gli asterischi finiscono nella voce. `TextToSpeech` non conosce il Markdown:
+ * legge quello che gli dai, e «asterisco asterisco ok asterisco asterisco» è
+ * esattamente ciò che una persona sente.
+ *
+ * ⇒ Si toglie la punteggiatura di STRUTTURA e si tiene il testo. Non è un
+ * parser: è la lista corta di segni che il modello usa davvero — grassetto,
+ * corsivo, codice, titoli, elenchi, collegamenti — e ognuno lascia dietro il
+ * suo contenuto.
+ */
+export function talosTestoDaLeggere(markdown: string): string {
+    return markdown
+        // I blocchi di codice si annunciano invece di essere sillabati.
+        .replace(/```[\s\S]*?```/g, ' ')
+        // `codice in linea` → codice in linea
+        .replace(/`([^`]+)`/g, '$1')
+        // [testo](indirizzo) → testo: l'indirizzo letto ad alta voce è rumore.
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        // **grassetto**, *corsivo*, __sottolineato__, _corsivo_
+        .replace(/(\*\*|__)(.*?)\1/g, '$2')
+        .replace(/(\*|_)(.*?)\1/g, '$2')
+        // I titoli perdono i cancelletti, non il titolo.
+        .replace(/^#{1,6}\s+/gm, '')
+        // I trattini di elenco a inizio riga.
+        .replace(/^\s*[-*+]\s+/gm, '')
+        // Le citazioni.
+        .replace(/^\s*>\s?/gm, '')
+        .replace(/[ \t]+/g, ' ')
+        .trim()
+}
+
 export function createTalosSpeechService(synth: TalosSpeechSynth | null): TalosSpeechService {
     return {
         supported() {
@@ -53,9 +102,14 @@ export function createTalosSpeechService(synth: TalosSpeechSynth | null): TalosS
             return synth ? synth.getVoices() : []
         },
         async speak(text, options = {}) {
-            if (!synth) return
-            const trimmed = text.trim()
-            if (!trimmed) return
+            if (!synth) {
+                // ⛔ Nessun motore non è «niente da fare»: chi ha premuto deve
+                // sapere perché non ha sentito nulla.
+                options.onerror?.('unavailable')
+                return
+            }
+            const trimmed = talosTestoDaLeggere(text)
+            if (!trimmed) { options.onerror?.('empty'); return }
             // Always cancel first so two replies never talk over each other.
             synth.cancel()
             synth.speak({
@@ -104,9 +158,107 @@ export function talosPlatformSpeechSynth(): TalosSpeechSynth | null {
     }
 }
 
+/* -------------------------------------------------------------------------- *
+ * ⭐⭐ IL MOTORE NATIVO — e perché su Android è l'UNICO che esiste
+ * -------------------------------------------------------------------------- */
+
+/**
+ * L'adattatore sul plugin `TalosSpeech`, cioè su `android.speech.tts`.
+ *
+ * ## ⛔ IL DIFETTO CHE HA CREATO QUESTA FUNZIONE
+ *
+ * Owner 2026-08-10: «ogni messaggio di risposta deve avere icona sound per
+ * tts». Il pulsante c'era già — icona `Volume2`, che diventa `Square` mentre
+ * parla, con tanto di etichette tradotte e test — ma **non è mai comparso su
+ * nessun messaggio, su nessun telefono**.
+ *
+ * MISURATO nella WebView del Pad:
+ *
+ * ```
+ *   'speechSynthesis' in window        false
+ *   typeof SpeechSynthesisUtterance    undefined
+ *   Capacitor.Plugins.TalosSpeech.speak  function     ← il motore vero
+ * ```
+ *
+ * La WebView di Android **non ha la Web Speech API**. `supported()` era quindi
+ * sempre falso, e il `v-if` sul pulsante lo cancellava. Nel frattempo il motore
+ * nativo funzionava: provato lo stesso giorno, `{spoken:true}` e `speaking` da
+ * falso a vero.
+ *
+ * ⇒ Due motori, e l'interfaccia era appesa a quello che sul dispositivo non
+ * esiste. È la stessa forma del compito #33 — codice giusto, sintomo invisibile
+ * — e si vede solo provando sul telefono.
+ *
+ * ## Le due cose che il nativo fa e il web no
+ *
+ * - **si rifiuta di parlare col telefono in silenzioso**, e dice perché: quel
+ *   motivo arriva fino al pulsante invece di sparire;
+ * - **dice quando ha finito** (`talosSpeechDone`), che è ciò che riporta l'icona
+ *   da «ferma» a «ascolta». Senza, resterebbe «ferma» per sempre.
+ */
+export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
+    if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable('TalosSpeech')) return null
+    const plugin = registerPlugin<{
+        speak(options: { text: string }): Promise<{ spoken: boolean, reason?: string }>
+        stop(): Promise<unknown>
+        addListener(evento: string, cb: () => void): Promise<unknown>
+    }>('TalosSpeech')
+
+    /*
+     * ⛔ UNA sola frase alla volta, e il richiamo è quello dell'ULTIMA.
+     *
+     * L'evento `talosSpeechDone` non porta l'identità della frase, e non serve
+     * che lo faccia: il servizio annulla sempre prima di parlare, quindi in aria
+     * non ce n'è mai più di una. Tenere una mappa di richiami darebbe l'idea
+     * sbagliata che ne possano convivere due.
+     */
+    let finita: (() => void) | null = null
+    void plugin.addListener('talosSpeechDone', () => {
+        const chiudi = finita
+        finita = null
+        chiudi?.()
+    })
+
+    return {
+        /*
+         * ⛔ Il nativo non espone ancora l'elenco delle voci: si dice zero
+         * invece di inventarne una. Il pannello «Voce» mostrerà l'elenco vuoto,
+         * che è la verità — e prima di questa riga non mostrava nemmeno quello,
+         * perché la sezione intera era spenta.
+         */
+        getVoices: () => [],
+        speak(utterance) {
+            finita = utterance.onend ?? null
+            void plugin.speak({ text: utterance.text })
+                .then((esito) => {
+                    if (esito?.spoken) return
+                    finita = null
+                    utterance.onerror?.(esito?.reason)
+                })
+                .catch(() => { finita = null; utterance.onerror?.(undefined) })
+        },
+        cancel() {
+            finita = null
+            void plugin.stop().catch(() => undefined)
+        },
+    }
+}
+
 let singleton: TalosSpeechService | null = null
 
+/**
+ * Il motore vero se c'è, la Web Speech API se non c'è.
+ *
+ * ⛔ L'ordine non è negoziabile: su Android il primo esiste e il secondo no.
+ */
 export function useTalosSpeechService(): TalosSpeechService {
-    if (!singleton) singleton = createTalosSpeechService(talosPlatformSpeechSynth())
+    if (!singleton) {
+        singleton = createTalosSpeechService(talosNativeSpeechSynth() ?? talosPlatformSpeechSynth())
+    }
     return singleton
+}
+
+/** ⛔ Solo per i test: il singleton nasconderebbe il motore iniettato. */
+export function __resetTalosSpeechServiceForTests(): void {
+    singleton = null
 }

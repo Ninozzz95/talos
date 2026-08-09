@@ -1,6 +1,7 @@
 package ai.talos.agent
 
 import ai.talos.agent.ponte.TalosFilaPonte
+import ai.talos.agent.ponte.TalosScossaPonte
 import ai.talos.agent.ponte.TalosSentinelle
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -40,6 +41,32 @@ class TalosPrivilegePlugin : Plugin() {
 
     /** Il codice con cui riconosciamo la NOSTRA richiesta fra le risposte. */
     private val richiesta = 4127
+
+    /**
+     * ⭐ Le due cause di una caduta, ascoltate invece che cercate.
+     *
+     * MISURATO: guarire costava 128 ms, accorgersene 7,7-9,1 s. Il perché di
+     * ogni scelta sta su [TalosScossaPonte]; qui c'è solo il collegamento — la
+     * scossa diventa un evento per la pagina, che rilegge davvero.
+     *
+     * ⛔ NON porta lo stato dentro l'evento. Dire «connected: false» da qui
+     * sarebbe indovinare: solo `adb devices` lo sa. L'evento dice «riguarda».
+     */
+    private val scossa = TalosScossaPonte { causa ->
+        notifyListeners("talosPonteScosso", JSObject().put("causa", causa))
+    }
+
+    override fun load() {
+        super.load()
+        // Costa un ContentObserver e un NetworkCallback: nessun polling, nessun
+        // risveglio. Vive quanto il processo, come le sentinelle.
+        scossa.accendi(context)
+    }
+
+    override fun handleOnDestroy() {
+        scossa.spegni(context)
+        super.handleOnDestroy()
+    }
 
     /**
      * ⛔⛔⛔ IL PONTE NON GIRA MAI SUL THREAD DEI PLUGIN. Mai.

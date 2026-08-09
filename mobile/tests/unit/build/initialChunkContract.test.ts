@@ -56,6 +56,9 @@ function createFixture(options: FixtureOptions = {}): string {
     const agentLoopKey = 'src/lib/tools/agentLoop.ts'
     const toolConsentKey = 'src/components/chat/TalosMobileToolConsentSheet.vue'
     const chatMediaKey = 'src/components/chat/TalosMobileChatMediaPanel.vue'
+    // ⭐ Il motore vocale entra al primo TOCCO, non al primo disegno: è la
+    // riga che ha portato il grafo d'avvio da 600.982 byte a 599.943.
+    const speechKey = 'src/services/speech.ts'
     const documentGeneratorKey = 'src/lib/documents/documentGenerator.ts'
     const launcherIconDialogKey = 'src/components/talos/settings/TalosLauncherIconDialog.vue'
     const chatScreenKey = 'src/screens/ChatScreen.vue'
@@ -145,6 +148,7 @@ function createFixture(options: FixtureOptions = {}): string {
                 agentLoopKey,
                 toolConsentKey,
                 chatMediaKey,
+                speechKey,
                 ...(documentsAreDynamic ? [documentGeneratorKey] : []),
                 ...(launcherIconDialogIsDynamic ? [launcherIconDialogKey] : []),
                 chatScreenKey,
@@ -213,6 +217,10 @@ function createFixture(options: FixtureOptions = {}): string {
         },
         [chatMediaKey]: {
             file: 'assets/chat-media.js',
+            isDynamicEntry: true,
+        },
+        [speechKey]: {
+            file: 'assets/speech.js',
             isDynamicEntry: true,
         },
         [documentGeneratorKey]: {

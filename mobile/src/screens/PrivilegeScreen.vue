@@ -10,6 +10,8 @@ import {
 } from '@/services/devicePermissions'
 import type { TalosShizukuSnapshot } from '@/lib/privilege/shizukuGuidance'
 import {
+    TALOS_TENTATIVI_DOPO_CADUTA,
+    TALOS_TENTATIVI_DOPO_SCOSSA,
     talosCodiceValido,
     talosPonteGuida,
     talosPonteMotivo,
@@ -74,13 +76,14 @@ const ponteInCorso = ref(false)
 const codice = ref('')
 const ponteMotivo = ref<string | null>(null)
 /**
- * Se il tentativo automatico è già stato speso per la caduta in corso.
+ * Quanti tentativi automatici restano per l'occasione in corso.
  *
- * ⛔ Si RIARMA quando il ponte torna su, non quando la pagina si rimonta: una
+ * ⛔ Si RICARICA quando il ponte torna su, non quando la pagina si rimonta: una
  * pagina riaperta dieci volte non ha diritto a dieci `adb connect`, ma una
- * caduta nuova sì. Vedi `talosPonteRiaggancioAutomatico`.
+ * caduta nuova sì. E una SCOSSA dall'esterno lo ricarica di più, perché è un
+ * mondo cambiato e non la stessa caduta. Vedi `talosPonteRiaggancioAutomatico`.
  */
-const riaggancioSpeso = ref(false)
+const tentativiRimasti = ref(TALOS_TENTATIVI_DOPO_CADUTA)
 
 const ponte = computed(() => talosPonteGuida({
     packaged: pontePresente.value,
@@ -120,7 +123,7 @@ async function osservaPonte(): Promise<void> {
         ponteCollegato.value = false
     }
     if (ponteCollegato.value) {
-        riaggancioSpeso.value = false
+        tentativiRimasti.value = TALOS_TENTATIVI_DOPO_CADUTA
         // Un fallimento di prima non deve tenere in vista il campo del codice a
         // ponte collegato: lo stato vivo batte la memoria.
         ricollegamentoFallito.value = false
@@ -140,10 +143,10 @@ async function leggiPonte(): Promise<void> {
     const passo = talosPonteRiaggancioAutomatico({
         packaged: pontePresente.value,
         connected: ponteCollegato.value,
-        giaTentato: riaggancioSpeso.value,
+        tentativiRimasti: tentativiRimasti.value,
         inCorso: ponteInCorso.value,
     })
-    riaggancioSpeso.value = passo.speso
+    tentativiRimasti.value = passo.rimasti
     if (passo.tenta) {
         await ricollega()
         // ⛔ Il tentativo non dichiara vittoria da solo: si RIGUARDA. È questa
@@ -323,6 +326,37 @@ onMounted(() => {
         ponteMotivo.value = dati.connected === true
             ? null
             : talosPonteMotivo(dati.reason ?? undefined)
+    })
+
+    /*
+     * ⭐⭐ LA SCOSSA: è successo qualcosa che può aver fatto cadere il ponte.
+     *
+     * MISURATO sul Pad il 2026-08-09, in due viewport: guarire costava 128 ms,
+     * ACCORGERSI 7,7-9,1 s. Tutto il tempo se ne andava nell'attesa del battito
+     * lento — sei secondi per notare una caduta che si riparava in un decimo.
+     *
+     * ⛔ Il nativo NON dice se il ponte è su o giù: dice che il Debug wireless
+     * è stato toccato, o che la rete è cambiata. La verità la sa solo
+     * `adb devices`, quindi qui si RILEGGE davvero — e `leggiPonte` è la stessa
+     * strada di sempre: osserva, decide, riaggancia, riosserva.
+     *
+     * ⇒ Un evento che portasse `connected` dentro di sé sarebbe il pannello che
+     * mente del compito #33, con un travestimento nuovo.
+     */
+    p.addListener?.('talosPonteScosso', () => {
+        /*
+         * ⛔ MISURATO sul Pad il 2026-08-10: riacceso il Debug wireless, TALOS
+         * NON tornava su in 40 secondi. `adbd` riparte su una **porta nuova**,
+         * il primo tentativo la sbaglia, e col credito da un colpo solo quel
+         * fallimento chiudeva la porta per sempre.
+         *
+         * ⇒ Una scossa è un'OCCASIONE NUOVA, non la stessa caduta: ricarica il
+         * credito, e i tentativi si spendono al ritmo del battito mentre
+         * `adbd` finisce di annunciarsi.
+         */
+        tentativiRimasti.value = TALOS_TENTATIVI_DOPO_SCOSSA
+        ricollegamentoFallito.value = false
+        void leggiPonte()
     })
 
     /*

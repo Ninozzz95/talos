@@ -37,8 +37,19 @@ function toggleSpeak(): void {
         <Button v-if="message.role === 'user'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.resendMessage')" :title="$t('chat.resendMessage')" :disabled="busy" @click="emit('resend', message)">
             <RefreshCcw class="size-3.5" aria-hidden="true" />
         </Button>
+        <!--
+            ⛔ Owner 2026-08-10: «ogni messaggio di risposta deve avere icona
+            sound per tts». Qui c'era `&& speech.supported`, e su Android quella
+            condizione è SEMPRE falsa: la WebView non ha `speechSynthesis`
+            (misurato: `'speechSynthesis' in window` → false). L'icona non è mai
+            comparsa su nessun messaggio, pur essendo scritta e tradotta.
+
+            ⇒ L'icona c'è sempre. Se un motore non c'è, si dice toccando —
+            invece di far sparire il comando e lasciare la persona senza sapere
+            che quella cosa esisteva.
+        -->
         <Button
-            v-if="message.role === 'assistant' && speech.supported"
+            v-if="message.role === 'assistant'"
             type="button"
             variant="ghost"
             size="icon"
