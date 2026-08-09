@@ -3553,9 +3553,16 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 return result
             }
             const agentDeps: TalosAgentLoopDeps = {
-                complete: async (turns) => {
+                complete: async (turns, opzioni) => {
+                    /*
+                     * ⛔ Il giro senza strumenti: si passa un elenco VUOTO, non
+                     * si salta il provider. Il modello deve rispondere davvero,
+                     * solo senza schemi da compilare — vedi la ragione in
+                     * `agentLoop.ts`, dove la decisione viene presa.
+                     */
+                    const strumenti = opzioni?.senzaStrumenti ? [] : offeredTools
                     if (!libraryAnswerGuardArmed) {
-                        return completeProviderRound(turns, stream, offeredTools)
+                        return completeProviderRound(turns, stream, strumenti)
                     }
                     // This guard owns only the first provider draft. A tool
                     // call disarms it before any side effect can run.
@@ -3566,7 +3573,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         firstDraft = await completeProviderRound(
                             turns,
                             firstBuffer.handlers,
-                            offeredTools,
+                            strumenti,
                         )
                     } catch (error) {
                         // Once bytes exist, expose that exact interrupted draft;
