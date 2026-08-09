@@ -1,5 +1,6 @@
 package ai.talos.agent
 
+import ai.talos.agent.ponte.TalosFilaPonte
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -38,6 +39,88 @@ class TalosPrivilegePlugin : Plugin() {
 
     /** Il codice con cui riconosciamo la NOSTRA richiesta fra le risposte. */
     private val richiesta = 4127
+
+    /**
+     * ⛔⛔⛔ IL PONTE NON GIRA MAI SUL THREAD DEI PLUGIN. Mai.
+     *
+     * ## Il difetto che ha pagato questa riga
+     *
+     * Owner 2026-08-09: «Caricamento chat» durava **dieci secondi** a ogni
+     * avvio. Dodici misure hanno escluso ogni sospetto ovvio — i dati (vuoto =
+     * pieno), la chiave (44 ms), l'apertura cifrata (8 ms), le risorse (104 ms),
+     * il keystore (1 ms), SQLCipher (3 ms), i venti `registerPlugin` (187 ms in
+     * tutto). Tre cure sono state scritte e poi rimosse perché la misura le
+     * bocciava.
+     *
+     * La firma vera era questa: sette chiamate spedite fra 302 ms e 8.708 ms
+     * arrivavano al nativo **tutte nello stesso millisecondo**, 10.032 ms dopo
+     * la prima. Non lentezza: una **coda**.
+     *
+     * Campionando la pila del thread colpevole (`TalosSpiaIlThread`) è venuto
+     * fuori il nome, con le righe:
+     *
+     * ```
+     *   TalosPrivilegePlugin.exec:234
+     *    └─ conIlPonte:267
+     *        ├─ shell:315 → esegui("shell …")     ~3,2 s
+     *        ├─ shell:316 → riaggancia:361
+     *        │    └─ scopri:517  (mDNS)           ~6,0 s
+     *        └─ collega:278 → esegui("connect …") ~0,8 s
+     * ```
+     *
+     * ## Perché un blocco qui ferma cose che non c'entrano niente
+     *
+     * Capacitor ha **un thread solo** per i metodi di **tutti** i plugin:
+     *
+     * ```
+     *   Bridge.java:138   HandlerThread("CapacitorPlugins")
+     *   Bridge.java:854   taskHandler.post(currentThreadTask)
+     * ```
+     *
+     * Chi lo occupa ferma il database, la chat, la voce, tutto. E nessuno
+     * aspettava il ponte: il guardiano delle capacità parte **senza essere
+     * atteso** (`App.vue:768`). La chat non aspettava lui — aspettava il thread
+     * che lui teneva. Danno collaterale puro.
+     *
+     * ⛔ `bridge.execute()` NON è la via d'uscita: posta sullo stesso thread
+     * (`Bridge.java:906`). L'unica strada è un esecutore nostro; risolvere una
+     * `PluginCall` da un altro thread è confermato sicuro dai manutentori di
+     * Capacitor.
+     *
+     * ## Perché UN thread e non un pool
+     *
+     * Perché le operazioni del ponte sono **seriali per natura**: `riaggancia`
+     * non deve correre insieme a una `shell`, e due riagganci insieme
+     * litigherebbero sulla stessa porta. Un thread solo conserva esattamente la
+     * serializzazione che c'era prima — toglie solo il disturbo agli altri.
+     *
+     * ## ⛔ La regola, per chi aggiunge un metodo domani
+     *
+     * Ogni `@PluginMethod` che tocca `TalosPonteAdb` passa da qui. Se ne aggiungi
+     * uno che non lo fa, hai rimesso il difetto: non si vede in questo file, si
+     * vede come un girello di dieci secondi da un'altra parte dell'app.
+     */
+    private fun sulPonte(call: PluginCall, opera: () -> JSObject) {
+        TalosFilaPonte.esegui {
+            try {
+                call.resolve(opera())
+            }
+            catch (guasto: Throwable) {
+                // ⛔ Senza questo, un'eccezione qui sarebbe una promessa che non
+                // si risolve MAI: il lato JavaScript resterebbe appeso per
+                // sempre, che e' il difetto peggiore di quello che curiamo.
+                //
+                // ⛔ E si cattura `Throwable`, non `Exception`: `reject` vuole
+                // una `Exception`, ma prendere solo quelle lascerebbe passare
+                // un `Error` — e allora la promessa resterebbe appesa proprio
+                // nel caso peggiore, che e' l'unico in cui conta davvero.
+                call.reject(
+                    guasto.message ?: "bridge-failed",
+                    guasto as? Exception ?: RuntimeException(guasto),
+                )
+            }
+        }
+    }
 
     /** La fotografia: cosa si può fare adesso, e se non si può, perché. */
     @PluginMethod
@@ -179,7 +262,7 @@ class TalosPrivilegePlugin : Plugin() {
      * strumento.
      */
     @PluginMethod
-    fun exec(call: PluginCall) {
+    fun exec(call: PluginCall) = sulPonte(call) {
         val esito = JSObject()
         val comando = mutableListOf<String>()
         val grezzo = call.getArray("command")
@@ -190,15 +273,13 @@ class TalosPrivilegePlugin : Plugin() {
         }
 
         if (comando.isEmpty()) {
-            call.resolve(esito.put("ok", false).put("reason", "no-command"))
-            return
+            return@sulPonte esito.put("ok", false).put("reason", "no-command")
         }
         if (comando[0] !in PROGRAMMI_AMMESSI) {
             // Col nome vero dentro: chi legge il registro deve capire cosa è
             // stato rifiutato senza venire a rileggere questo file.
-            call.resolve(esito.put("ok", false)
-                .put("reason", "program-not-allowed").put("program", comando[0]))
-            return
+            return@sulPonte esito.put("ok", false)
+                .put("reason", "program-not-allowed").put("program", comando[0])
         }
         /*
          * ⭐⭐⭐ UNA STRADA SOLA, ED È LA NOSTRA — owner 2026-08-09.
@@ -231,7 +312,7 @@ class TalosPrivilegePlugin : Plugin() {
          * wireless, la nostra connessione no. È il prossimo passo, non una
          * ragione per tenersi una dipendenza che qui non funziona.
          */
-        call.resolve(conIlPonte(esito, comando, "solo-ponte"))
+        conIlPonte(esito, comando, "solo-ponte")
     }
 
     /**
@@ -282,15 +363,13 @@ class TalosPrivilegePlugin : Plugin() {
 
     /** Se il ponte è impacchettato, e se in questo istante è collegato. */
     @PluginMethod
-    fun bridgeStatus(call: PluginCall) {
+    fun bridgeStatus(call: PluginCall) = sulPonte(call) {
         val presente = TalosPonteAdb.disponibile(context)
-        call.resolve(
-            JSObject().put("packaged", presente)
-                // ⛔ Si CHIEDE al ponte, non si ricorda: il Debug wireless muore
-                // al riavvio, e un valore ricordato racconterebbe un telefono
-                // che non c'è più.
-                .put("connected", presente && TalosPonteAdb.collegato(context)),
-        )
+        JSObject().put("packaged", presente)
+            // ⛔ Si CHIEDE al ponte, non si ricorda: il Debug wireless muore
+            // al riavvio, e un valore ricordato racconterebbe un telefono
+            // che non c'è più.
+            .put("connected", presente && TalosPonteAdb.collegato(context))
     }
 
     /**
@@ -337,39 +416,32 @@ class TalosPrivilegePlugin : Plugin() {
         annuncio: String,
         seNessuno: String,
         azione: (String) -> TalosPonteAdb.Esito,
-    ) {
+    ) = sulPonte(call) {
         val scelto = call.getString("address")?.takeIf { it.isNotBlank() }
         val candidati = if (scelto != null) listOf(scelto) else TalosPonteAdb.scopri(context, annuncio)
         if (candidati.isEmpty()) {
-            call.resolve(JSObject().put("ok", false).put("reason", seNessuno).put("tried", 0))
-            return
+            return@sulPonte JSObject().put("ok", false).put("reason", seNessuno).put("tried", 0)
         }
         var ultimo: TalosPonteAdb.Esito? = null
         for (indirizzo in candidati) {
             val esito = azione(indirizzo)
             ultimo = esito
             if (esito.ok) {
-                call.resolve(
-                    JSObject().put("ok", true).put("address", indirizzo)
-                        .put("tried", candidati.size)
-                        .put("output", esito.uscita).put("error", esito.errore),
-                )
-                return
+                return@sulPonte JSObject().put("ok", true).put("address", indirizzo)
+                    .put("tried", candidati.size)
+                    .put("output", esito.uscita).put("error", esito.errore)
             }
         }
-        call.resolve(
-            JSObject().put("ok", false)
-                .put("reason", ultimo?.motivo ?: seNessuno)
-                .put("tried", candidati.size)
-                .put("output", ultimo?.uscita ?: "").put("error", ultimo?.errore ?: ""),
-        )
+        JSObject().put("ok", false)
+            .put("reason", ultimo?.motivo ?: seNessuno)
+            .put("tried", candidati.size)
+            .put("output", ultimo?.uscita ?: "").put("error", ultimo?.errore ?: "")
     }
 
     /** Chiude il server e la porta locale che teneva aperta. */
     @PluginMethod
-    fun bridgeStop(call: PluginCall) {
-        val esito = TalosPonteAdb.spegni(context)
-        call.resolve(JSObject().put("ok", esito.ok))
+    fun bridgeStop(call: PluginCall) = sulPonte(call) {
+        JSObject().put("ok", TalosPonteAdb.spegni(context).ok)
     }
 
     /**
@@ -407,8 +479,15 @@ class TalosPrivilegePlugin : Plugin() {
              * lancia un processo, e questo arriva dal ricevitore di una
              * notifica — cioè sul thread principale. Bloccarlo significherebbe
              * un ANR mentre la persona guarda.
+             *
+             * ⛔⛔ E precisamente su QUELLO del ponte, non su uno qualunque.
+             * Prima era un `Thread {}` sciolto, e andava bene finché il ponte
+             * girava su un thread solo per caso. Ora che [sulPonte] ne ha uno
+             * suo, un thread sciolto correrebbe **in parallelo** a un `exec`:
+             * due `adb` sulla stessa porta, cioè il difetto che la
+             * serializzazione esiste per impedire.
              */
-            Thread {
+            TalosFilaPonte.esegui {
                 val indirizzi = TalosPonteAdb.scopri(context, TalosPonteAdb.ANNUNCIO_ACCOPPIAMENTO)
                 var riuscito = false
                 for (indirizzo in indirizzi) {
@@ -422,7 +501,7 @@ class TalosPrivilegePlugin : Plugin() {
                 }
                 if (riuscito) TalosAccoppiamentoNotifica.chiudi(context)
                 notifyListeners("talosPonteChanged", JSObject().put("connected", riuscito))
-            }.start()
+            }
         }
         call.resolve(JSObject().put("shown", mostrata))
     }
