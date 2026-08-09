@@ -1,0 +1,121 @@
+import { z } from 'zod'
+import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
+
+/**
+ * ⭐⭐ IL CATALOGO COMPATTO: tutti i tool nominati, gli schemi a richiesta.
+ *
+ * ## Il numero che ha deciso questa forma
+ *
+ * MISURATO il 2026-08-09, con ogni sorgente presente:
+ *
+ * | | byte | ~token |
+ * |---|---|---|
+ * | i 61 schemi interi | 38.386 | 10.375 |
+ * | l'indice qui sotto |  5.087 |  1.375 |
+ *
+ * **L'87% in meno**, e nessuno dei 61 strumenti sparisce: restano tutti
+ * nominati, e chi ne vuole la forma esatta la chiede.
+ *
+ * ## Perché non è un'ottimizzazione, ma il vincolo
+ *
+ * Gemma 2 2B IT ha una finestra di **8.192 token**: i soli schemi la sfondano
+ * del 26%, prima del prompt di sistema e prima che la persona scriva. Con
+ * l'indice ci si sta con quattro quinti liberi.
+ *
+ * E c'è la seconda metà, misurata prima di questa: la generazione è legata alla
+ * banda, e il contesto la strangola —
+ *
+ *     512 token → 19-37 tok/s · 2.048 → 18,7 · 8.414 → **1,9**
+ *
+ * ⇒ Due giri piccoli battono un giro enorme di circa dieci volte. L'obiezione
+ * ovvia («un giro in più costa») è, sui numeri di questo telefono, rovesciata.
+ *
+ * ## ⛔ E la parità resta intatta
+ *
+ * Owner: «i locali devono avere le stesse possibilità dei key». Parità vuol
+ * dire che il modello **può chiamare** ogni strumento, non che deve averne lo
+ * schema sotto gli occhi a ogni turno. L'indice li nomina tutti; nessuna
+ * capacità sparisce.
+ *
+ * ## ⛔ Il rischio, dichiarato prima di costruirci sopra
+ *
+ * Chiede al modello una disciplina in due passi — chiedi la forma, poi chiama.
+ * Su quel tipo di disciplina il 1.7B si è già dimostrato inaffidabile: il
+ * 2026-08-09 ha richiesto **cinque volte** la stessa identica chiamata. Se non
+ * regge, questa strada muore qui e si sceglie una finestra più grande sapendo
+ * perché — che è il motivo per cui questo file nasce come sonda e non come
+ * architettura.
+ */
+
+/** Il nome che il modello usa per chiedere la forma di uno strumento. */
+export const TALOS_DETTAGLI_STRUMENTO = 'tool_details'
+
+/**
+ * Una riga per strumento: nome e **prima frase** della descrizione.
+ *
+ * ⛔ La prima frase e non un riassunto nostro: la descrizione è già scritta per
+ * il modello, e riscriverla qui creerebbe due verità sullo stesso strumento —
+ * quella dell'indice e quella dello schema — che un giorno divergono.
+ */
+export function talosIndiceCompatto(
+    tools: ReadonlyArray<TalosToolDefinition<never>>,
+): string {
+    return tools.map((tool) => {
+        const primaFrase = tool.description.split(/(?<=\.)\s/)[0] ?? tool.description
+        return `${tool.name}: ${primaFrase.slice(0, 120)}`
+    }).join('\n')
+}
+
+/**
+ * Lo strumento che svela la forma degli altri.
+ *
+ * ⛔ Legge e basta: non tocca niente, non esce dal telefono, non costa. Per
+ * questo la sua azione è `read` e non richiede consenso — chiedere «posso
+ * dirti com'è fatto un modulo?» sarebbe una domanda senza contenuto, e ogni
+ * domanda senza contenuto insegna a rispondere di sì senza leggere.
+ */
+export function talosStrumentoDettagli(
+    tools: ReadonlyArray<TalosToolDefinition<never>>,
+    schemaDi: (tool: TalosToolDefinition<never>) => unknown,
+    svela: (nomi: readonly string[]) => void,
+): TalosToolDefinition<{ names: string[] }> {
+    const perNome = new Map(tools.map((tool) => [tool.name, tool]))
+    return defineTalosTool<{ names: string[] }>({
+        name: TALOS_DETTAGLI_STRUMENTO,
+        title: 'Look up a tool',
+        description: 'Get the exact input schema of one or more tools from the catalogue '
+            + 'above, so you can call them. Ask for every tool you intend to use in this '
+            + 'message, in one go. After this returns, those tools become callable.',
+        action: 'read',
+        input: z.object({
+            names: z.array(z.string().max(64)).min(1).max(8)
+                .describe('Tool names exactly as they appear in the catalogue.'),
+        }),
+        async run(input) {
+            const trovati = input.names
+                .map((nome) => perNome.get(nome))
+                .filter((tool): tool is TalosToolDefinition<never> => tool !== undefined)
+            /*
+             * ⛔ Un nome sbagliato non e' un errore da far fallire: e' il caso
+             * piu' probabile con un modello piccolo. Si dice QUALI non esistono
+             * e si consegna comunque quelli buoni, cosi' il giro non si perde.
+             */
+            const mancanti = input.names.filter((nome) => !perNome.has(nome))
+            if (trovati.length === 0) {
+                return {
+                    ok: false,
+                    content: `No tool is called ${mancanti.join(', ')}. `
+                        + 'Use a name exactly as written in the catalogue.',
+                }
+            }
+            svela(trovati.map((tool) => tool.name))
+            const avviso = mancanti.length
+                ? `\n\nThese do not exist: ${mancanti.join(', ')}.`
+                : ''
+            return {
+                ok: true,
+                content: JSON.stringify(trovati.map(schemaDi)) + avviso,
+            }
+        },
+    })
+}
