@@ -77,7 +77,9 @@ test('header and sidebar actions expose accessible names and 44x44 touch targets
 
     await page.locator(MENU).click()
     await expect(page.locator(SIDEBAR)).toBeVisible()
-    for (const label of ['Open Research', 'Open Cockpit', 'Open Library', 'Open Settings']) {
+    // «Open Cockpit» è uscito il 2026-08-09 su decisione dell'owner: al suo
+    // posto entrerà Codice (fase agentica B).
+    for (const label of ['Open Research', 'Open Library', 'Open Settings']) {
         const entry = page.locator(`${SIDEBAR} [aria-label="${label}"]`)
         await expect(entry).toBeVisible()
         const box = await entry.boundingBox()
@@ -219,8 +221,11 @@ test('shell stays functional with lifecycle registration disabled and default ba
     await disableSubsystems(page, ['lifecycle'])
     await page.goto('/')
     await expect(page.locator(HEADER)).toBeVisible()
-    await openStation(page, 'Cockpit')
-    await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'runs')
+    // La stazione qui serve solo a provare che il guscio regge senza il ciclo
+    // di vita nativo: dopo la rimozione del Cockpit si usa la Diagnostica, che
+    // è una stazione come le altre.
+    await openStation(page, 'Doctor')
+    await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'doctor')
     expect(errors, errors.join('\n')).toEqual([])
 })
 

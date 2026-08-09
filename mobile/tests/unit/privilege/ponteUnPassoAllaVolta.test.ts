@@ -5,6 +5,8 @@ import {
     talosCodiceValido,
     talosPonteGuida,
     talosPonteMotivo,
+    talosPonteRiaggancioAutomatico,
+    type TalosPonteRiaggancio,
     type TalosPonteStato,
 } from '@/lib/privilege/pontePasso'
 
@@ -93,6 +95,78 @@ describe('il ponte mostra UN passo alla volta', () => {
         // adesso è collegato — è la stessa regola per cui non teniamo flag.
         const g = talosPonteGuida(stato({ connected: true, reconnectFailed: true }))
         expect(g.passo).toBe('ready')
+    })
+})
+
+describe('⭐ TALOS si riaggancia DA SOLO — e la frase a schermo diventa vera', () => {
+    function riaggancio(parziale: Partial<TalosPonteRiaggancio> = {}): TalosPonteRiaggancio {
+        return {
+            packaged: true,
+            connected: false,
+            giaTentato: false,
+            inCorso: false,
+            ...parziale,
+        }
+    }
+
+    it('ponte giù e mai tentato: ci prova, senza che nessuno prema niente', () => {
+        /*
+         * ⛔ MISURATO sul Pad il 2026-08-09: staccato il ponte, uscito e
+         * rientrato nella pagina, **undici** letture di stato in ventitré
+         * secondi e ZERO tentativi. E il tocco che mancava valeva 1.169 ms.
+         */
+        expect(talosPonteRiaggancioAutomatico(riaggancio())).toEqual({ tenta: true, speso: true })
+    })
+
+    it('⛔ un tentativo per caduta: alla lettura dopo NON ci riprova', () => {
+        // La sentinella rilegge ogni due secondi: senza questa riga sarebbe un
+        // `adb connect` ogni due secondi per sempre.
+        expect(talosPonteRiaggancioAutomatico(riaggancio({ giaTentato: true })))
+            .toEqual({ tenta: false, speso: true })
+    })
+
+    it('collegato: niente da tentare', () => {
+        expect(talosPonteRiaggancioAutomatico(riaggancio({ connected: true })).tenta).toBe(false)
+    })
+
+    it('senza binari non si tenta: non c\'è niente da eseguire', () => {
+        expect(talosPonteRiaggancioAutomatico(riaggancio({ packaged: false })).tenta).toBe(false)
+    })
+
+    it('con un\'operazione già in volo non se ne apre una seconda', () => {
+        // Il caso vero: la persona ha premuto «Ricollega» e la sentinella
+        // scatta nello stesso istante.
+        expect(talosPonteRiaggancioAutomatico(riaggancio({ inCorso: true })).tenta).toBe(false)
+    })
+
+    it('⛔ IL VERSO CONTRARIO — il ponte torna su, e la caduta DOPO ha il suo tentativo', () => {
+        /*
+         * È la metà che si dimentica, e in questo progetto si è già dimenticata
+         * una volta: la sentinella guardava l'arrivo del ponte e non la caduta,
+         * e il difetto si è visto solo sul dispositivo.
+         *
+         * Qui si percorre la vita intera: cade, tenta, resta giù, non ritenta,
+         * torna su, ricade — e ritenta.
+         */
+        let speso = false
+        const giro = (stato: Partial<TalosPonteRiaggancio>) => {
+            const esito = talosPonteRiaggancioAutomatico(riaggancio({ ...stato, giaTentato: speso }))
+            speso = esito.speso
+            return esito.tenta
+        }
+
+        expect(giro({ connected: false }), 'prima caduta: ci prova').toBe(true)
+        expect(giro({ connected: false }), 'ancora giù: non insiste').toBe(false)
+        expect(giro({ connected: true }), 'collegato: niente da fare').toBe(false)
+        expect(speso, 'il diritto si è RIARMATO').toBe(false)
+        expect(giro({ connected: false }), 'caduta nuova: ci riprova').toBe(true)
+    })
+
+    it('⛔ e senza il riarmo il giro sopra fallirebbe — la prova che il test morde', () => {
+        // Un `giaTentato` che non si azzera mai: l'ultima riga del giro
+        // diventerebbe `false`, cioè TALOS non ci riproverebbe MAI più.
+        const senzaRiarmo = talosPonteRiaggancioAutomatico(riaggancio({ connected: false, giaTentato: true }))
+        expect(senzaRiarmo.tenta).toBe(false)
     })
 })
 

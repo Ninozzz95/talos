@@ -99,7 +99,16 @@ const DYNAMIC_BOUNDARIES = [
         code: 'TALOS_ENHANCER_DRAWER_NOT_LAZY',
     },
     { suffix: 'src/screens/ResearchScreen.vue', code: 'TALOS_ROUTE_NOT_LAZY' },
-    { suffix: 'src/screens/RunsScreen.vue', code: 'TALOS_ROUTE_NOT_LAZY' },
+    /*
+     * ⛔ Qui c'era `src/screens/RunsScreen.vue`, il Cockpit, tolto il
+     * 2026-08-09 su decisione dell'owner («leviamo cockpit»).
+     *
+     * Il file era sparito ma la riga no, e questo guardiano PRETENDE una voce
+     * nel manifesto per ogni percorso elencato: `expected 1 manifest entry,
+     * received 0` — cioè `npm run build` restava rosso, e il messaggio parlava
+     * di pigrizia mentre il problema era un'assenza. Un elenco di file che
+     * devono esistere è anche un elenco da potare quando un file se ne va.
+     */
     { suffix: 'src/screens/ContextScreen.vue', code: 'TALOS_ROUTE_NOT_LAZY' },
     { suffix: 'src/screens/SettingsScreen.vue', code: 'TALOS_ROUTE_NOT_LAZY' },
     // Model Lab is four addressable mobile routes. Keeping only the old
