@@ -188,7 +188,7 @@ public class TalosLlamaEngineDeviceTest {
             StringBuilder longPrompt = new StringBuilder(6_000);
             for (int index = 0; index < 900; index += 1) longPrompt.append("parola ");
 
-            String answer = engine.generateBlocking(longPrompt.toString(), 8, false);
+            String answer = engine.generateBlocking(longPrompt.toString(), 8, TalosLlamaEngine.Mode.BENCHMARK);
 
             assertNotNull("la generazione non è tornata: il prompt oltre la batch è di nuovo fatale",
                     answer);
@@ -293,7 +293,7 @@ public class TalosLlamaEngineDeviceTest {
             assertNotNull("il GGUF non espone un chat template", prompt);
             assertFalse("il GGUF espone un chat template vuoto", prompt.isEmpty());
 
-            String reply = engine.generateBlocking(prompt, 32, true);
+            String reply = engine.generateBlocking(prompt, 32, TalosLlamaEngine.Mode.CHAT);
             assertNotNull("la generazione templata non è tornata", reply);
             assertFalse("la generazione templata è vuota", reply.trim().isEmpty());
             assertTrue("nessun token prodotto", engine.tokensProduced() > 0);
