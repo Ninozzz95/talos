@@ -48,7 +48,26 @@ export interface TalosAgentCompletion {
 
 export interface TalosAgentLoopDeps {
     /** One provider round trip. */
-    complete(turns: ChatTurn[]): Promise<TalosAgentCompletion>
+    /**
+     * ⭐ `senzaStrumenti` NON è un'ottimizzazione: è l'unica uscita da un ciclo.
+     *
+     * MISURATO sul Pad il 2026-08-09, Qwen3-1.7B, «elenca le notifiche»: il
+     * tool parte, il risultato torna, e il modello richiede **la stessa
+     * identica chiamata** cinque volte di fila. La rete anti-ripetizione la
+     * ferma ogni volta e gli risponde «già fatto, usa il risultato che hai
+     * sopra» — e lui la richiede di nuovo, finché i giri finiscono. Il
+     * messaggio che arriva alla persona è **vuoto**.
+     *
+     * Chiedere di nuovo con le stesse carte in mano non ha nessuna ragione di
+     * andare diversamente. Togliere gli strumenti per UN giro cambia il
+     * problema: senza schemi da compilare, l'unica cosa che il modello può
+     * produrre è prosa — cioè la risposta.
+     *
+     * ⛔ Un modello con la chiave non ci finisce quasi mai, ma la garanzia non
+     * può dipendere da quale modello si è scelto: è la stessa regola della rete
+     * anti-ripetizione qui sopra.
+     */
+    complete(turns: ChatTurn[], opzioni?: { senzaStrumenti?: boolean }): Promise<TalosAgentCompletion>
     /**
      * Resolves every call in a round before any call is allowed to execute.
      * Omit only for legacy callers whose executor owns the complete gate.
@@ -460,6 +479,45 @@ async function persistBeforeModel(
     }
 }
 
+/**
+ * ⛔⛔ L'ANCORAGGIO — e perché è nato da una regressione MIA.
+ *
+ * Togliere gli strumenti per un giro toglie il ciclo, e sul Pad il 2026-08-09
+ * ha funzionato: la bolla vuota è sparita. Ma quello che è comparso al suo
+ * posto era **inventato**. Qwen3-1.7B, «elenca le notifiche», ha risposto:
+ *
+ *     Notifica di connessione a rete
+ *     Notifica di caricamento di dati
+ *     Notifica di errori di sistema
+ *     ...
+ *
+ * Dieci righe plausibili e **nessuna vera**: le notifiche vere erano WhatsApp,
+ * Shizuku, la batteria e il meteo, e stavano nel risultato dello strumento
+ * poche righe sopra. Senza schemi da compilare il modello ha scritto prosa —
+ * ma ha scritto la prosa che si aspettava, non quella che aveva letto.
+ *
+ * ⇒ Avevo scambiato **vuoto** con **falso**, che è peggio: una bolla vuota
+ * dice «non lo so», un elenco inventato dice «ecco». Chi legge il secondo
+ * smette di controllare.
+ *
+ * Questo turno lo rimette con i piedi per terra: rispondi **da quello che c'è
+ * qui sopra**, e se non c'è, dillo. ⛔ Non è una garanzia — un modello piccolo
+ * può ignorarlo — ma è la differenza fra un modello a cui non abbiamo chiesto
+ * di ancorarsi e uno a cui l'abbiamo chiesto. La garanzia vera non può stare
+ * in un'istruzione, e infatti non ci sta: sta nel fatto che una risposta senza
+ * fondamento resta un difetto aperto, non una cosa che abbiamo coperto.
+ *
+ * ⛔ Non entra in `state.turns`: è una spinta per QUESTA chiamata, non un pezzo
+ * della conversazione. Persistendolo finirebbe nel checkpoint e nella cronologia,
+ * dove non ha niente da fare.
+ */
+const ANCORAGGIO: ChatTurn = {
+    role: 'user',
+    content: 'Answer now, in prose, using ONLY the tool results above. Do not invent '
+        + 'items, names, or values: if the results do not contain what the user asked '
+        + 'for, say exactly that instead of filling the gap.',
+}
+
 async function continueTalosAgentLoop(
     state: MutableAgentLoopState,
     deps: TalosAgentLoopDeps,
@@ -498,7 +556,10 @@ async function continueTalosAgentLoop(
             ]
             state.completion = null
             await persistBeforeModel(state, deps)
-            const finalCompletion = await deps.complete(state.turns)
+            // Stessa ragione del giro a vuoto: qui la risposta e' l'unica cosa
+            // che resta da fare, e offrire gli schemi invita a rifare il giro
+            // che il limite ha appena chiuso.
+            const finalCompletion = await deps.complete(state.turns, { senzaStrumenti: true })
             say(finalCompletion.text)
             return outcomeOf(state, finalCompletion)
         }
@@ -648,7 +709,25 @@ async function continueTalosAgentLoop(
         ]
         state.completion = null
         await persistBeforeModel(state, deps)
-        state.completion = await deps.complete(state.turns)
+        /*
+         * ⭐⭐ IL GIRO A VUOTO: se non è arrivata NESSUNA chiamata nuova, il
+         * modello sta girando su sé stesso e il prossimo turno si chiede senza
+         * strumenti.
+         *
+         * `runnable` non vuoto e `nuove` vuoto vuol dire esattamente questo: ha
+         * chiesto solo cose già fatte in questo messaggio. Ognuna ha ricevuto
+         * «già fatto, usa il risultato che hai sopra» — e richiederle di nuovo
+         * con le stesse carte in mano non ha ragione di andare diversamente.
+         *
+         * ⛔ Solo quando il giro è stato INTERAMENTE ripetizioni. Un giro con
+         * anche una sola chiamata nuova è un modello che sta lavorando, e
+         * togliergli gli strumenti gli spezzerebbe la catena a metà.
+         */
+        const giroAVuoto = runnable.length > 0 && nuove.length === 0
+        state.completion = await deps.complete(
+            giroAVuoto ? [...state.turns, ANCORAGGIO] : state.turns,
+            giroAVuoto ? { senzaStrumenti: true } : undefined,
+        )
     }
 }
 
