@@ -1,6 +1,7 @@
 package ai.talos.agent
 
 import ai.talos.agent.ponte.TalosFilaPonte
+import ai.talos.agent.ponte.TalosSentinellaAccoppiamento
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -475,6 +476,7 @@ class TalosPrivilegePlugin : Plugin() {
             call.getString("action") ?: "Pair",
             call.getString("working") ?: "Pairing…",
             call.getString("failed") ?: "Pairing failed. Open wireless debugging again and enter the new code.",
+            call.getString("ready") ?: "Found it. Type the six digits now.",
         ) { codice ->
             /*
              * ⛔ Su un thread a parte: qui si scopre un servizio di rete e si
@@ -494,7 +496,34 @@ class TalosPrivilegePlugin : Plugin() {
             // assoluto — la foto dell'owner è quella.
             TalosAccoppiamentoNotifica.lavora(context)
             TalosFilaPonte.esegui {
-                val indirizzi = TalosPonteAdb.scopri(context, TalosPonteAdb.ANNUNCIO_ACCOPPIAMENTO)
+                /*
+                 * ⭐⭐⭐ L'INDIRIZZO E' GIA' IN MANO, e questo e' il taglio grosso.
+                 *
+                 * Owner 2026-08-09: «accoppiamento TROPPO LENTO». La lentezza
+                 * NON era l'accoppiamento: era la scoperta che lo precedeva.
+                 *
+                 * `scopri()` costa fino a **6 secondi** e li paga sempre, perche'
+                 * fa un censimento: da una fotografia sola non distingue un
+                 * annuncio vivo da uno scaduto, e l'unica difesa era aspettare
+                 * la finestra intera. Il commento su `scopri` lo dichiara.
+                 *
+                 * La sentinella e' in ascolto da quando la notifica e' comparsa:
+                 * quando la persona apre «Accoppia dispositivo con codice»,
+                 * l'annuncio arriva a NOI, e un annuncio che arriva mentre
+                 * guardiamo e' vivo per costruzione. Quando il codice viene
+                 * scritto, l'indirizzo e' li' da secondi.
+                 *
+                 * ⛔ Il ripiego resta, e non e' pigrizia: su una rete che blocca
+                 * il multicast l'annuncio non arriva MAI. Senza `scopri` di
+                 * scorta, quella persona non avrebbe piu' nessuna strada — e la
+                 * strada lenta e' comunque meglio di nessuna strada.
+                 */
+                val subito = TalosSentinellaAccoppiamento.indirizzoPronto()
+                val indirizzi = if (subito != null) {
+                    listOf(subito)
+                } else {
+                    TalosPonteAdb.scopri(context, TalosPonteAdb.ANNUNCIO_ACCOPPIAMENTO)
+                }
                 var riuscito = false
                 // ⛔ Il motivo si TIENE. Un fallimento senza motivo manda la
                 // persona a ripetere lo stesso gesto: non ha modo di sapere se
@@ -513,6 +542,7 @@ class TalosPrivilegePlugin : Plugin() {
                     break
                 }
                 if (riuscito) {
+                    TalosSentinellaAccoppiamento.spegni(context)
                     TalosAccoppiamentoNotifica.chiudi(context)
                 } else {
                     // Il campo torna, col motivo accanto: la porta è cambiata e
@@ -526,12 +556,35 @@ class TalosPrivilegePlugin : Plugin() {
                 )
             }
         }
+        /*
+         * ⭐ La sentinella parte INSIEME alla notifica, non quando serve.
+         *
+         * Deve essere gia' in ascolto nel momento in cui la persona apre
+         * «Accoppia dispositivo con codice», perche' e' l'ARRIVO dell'annuncio a
+         * dire che quello e' vivo. Accenderla dopo vorrebbe dire tornare a fare
+         * una fotografia, cioe' tornare ai sei secondi.
+         *
+         * ⛔ E solo se la notifica c'e' davvero: `mostrata` e' falsa quando i
+         * permessi di notifica mancano, e una sentinella accesa per una notifica
+         * che nessuno vedra' e' solo traffico multicast a fondo perduto.
+         */
+        if (mostrata) {
+            TalosSentinellaAccoppiamento.accendi(context) {
+                // Non serve l'indirizzo qui: la sentinella lo tiene. Serve dire
+                // alla persona che il momento e' ADESSO.
+                TalosAccoppiamentoNotifica.pronta(context)
+                notifyListeners("talosPonteAnnuncio", JSObject().put("ready", true))
+            }
+        }
         call.resolve(JSObject().put("shown", mostrata))
     }
 
     /** Toglie la notifica dell'accoppiamento. */
     @PluginMethod
     fun pairNotificationClose(call: PluginCall) {
+        // ⛔ Sempre e comunque: una scoperta mDNS lasciata accesa manda pacchetti
+        // finche' il processo vive, e non si presenta mai come difetto.
+        TalosSentinellaAccoppiamento.spegni(context)
         TalosAccoppiamentoNotifica.chiudi(context)
         call.resolve(JSObject().put("closed", true))
     }
