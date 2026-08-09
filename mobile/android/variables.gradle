@@ -19,7 +19,6 @@ ext {
      * Fissata, non `+`: una libreria che cambia da sola sotto un ponte
      * privilegiato e' un aggiornamento che nessuno ha letto.
      */
-    shizukuVersion = '13.1.5'
     minSdkVersion = 26
     compileSdkVersion = 36
     targetSdkVersion = 36

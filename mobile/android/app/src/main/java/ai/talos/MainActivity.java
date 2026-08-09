@@ -21,7 +21,7 @@ public class MainActivity extends BridgeActivity {
         // carries the address of the thing that finished.
         registerPlugin(TalosDonePlugin.class);
         registerPlugin(TalosNotificationCentrePlugin.class);
-        // Il ponte privilegiato. Per ora GUARDA soltanto: dice se Shizuku
+        // Il ponte privilegiato in casa. Per ora GUARDA soltanto: dice se
         // c'e', se e' vivo e se ci ha autorizzati, cosi' la schermata puo'
         // mostrare il primo passo mancante invece di un elenco di cose da fare.
         registerPlugin(ai.talos.agent.TalosPrivilegePlugin.class);

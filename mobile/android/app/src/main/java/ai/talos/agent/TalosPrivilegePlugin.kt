@@ -5,7 +5,6 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
-import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
@@ -40,36 +39,6 @@ class TalosPrivilegePlugin : Plugin() {
     /** Il codice con cui riconosciamo la NOSTRA richiesta fra le risposte. */
     private val richiesta = 4127
 
-    /** Il pacchetto di Shizuku: serve a distinguere «assente» da «spenta». */
-    private val SHIZUKU = "moe.shizuku.privileged.api"
-
-    private val ascoltatore = Shizuku.OnRequestPermissionResultListener { code, _ ->
-        if (code != richiesta) return@OnRequestPermissionResultListener
-        // Non si risponde alla chiamata da qui: la chiamata si e' gia' chiusa
-        // dicendo «ho chiesto». Qui si annuncia il CAMBIO, e chi guarda la
-        // schermata lo vede senza doverla riaprire.
-        notifyListeners("talosPrivilegeChanged", JSObject())
-    }
-
-    override fun load() {
-        runCatching { Shizuku.addRequestPermissionResultListener(ascoltatore) }
-        // Il binder puo' arrivare DOPO l'avvio dell'app — Shizuku lo consegna
-        // quando e' pronto. Senza questi due, una schermata aperta troppo
-        // presto direbbe «spento» per sempre.
-        runCatching {
-            Shizuku.addBinderReceivedListenerSticky {
-                notifyListeners("talosPrivilegeChanged", JSObject())
-            }
-            Shizuku.addBinderDeadListener {
-                notifyListeners("talosPrivilegeChanged", JSObject())
-            }
-        }
-    }
-
-    override fun handleOnDestroy() {
-        runCatching { Shizuku.removeRequestPermissionResultListener(ascoltatore) }
-    }
-
     /** La fotografia: cosa si può fare adesso, e se non si può, perché. */
     @PluginMethod
     fun snapshot(call: PluginCall) {
@@ -92,25 +61,24 @@ class TalosPrivilegePlugin : Plugin() {
     }
 
     /**
-     * Porta dove si fa il passo successivo: l'app Shizuku, o le opzioni
-     * sviluppatore.
+     * Porta dove si fa il passo successivo: le opzioni sviluppatore.
      *
-     * ⛔ Nativo e non un `AppLauncher` generico, per una ragione precisa: se
-     * Shizuku **non è installato** va aperta la sua pagina, non l'app che non
-     * c'è. Mandare al sito chi ce l'ha già installata gli fa perdere il filo;
-     * aprire un'app assente non fa niente e sembra un difetto nostro. Sono due
-     * casi, e chi li distingue è il `PackageManager`, che sta qui.
+     * ⛔⛔ Il bersaglio `shizuku` NON è stato tolto, ed è una scelta.
+     *
+     * Un'installazione vecchia ha ancora quel nome scritto nella sua interfaccia
+     * e lo chiederà. Rispondere `TALOS_PRIVILEGE_UNKNOWN_TARGET` a un pulsante
+     * che qualcuno sta guardando sarebbe un comando morto — il difetto che
+     * inseguiamo da settimane.
+     *
+     * Quindi si risponde, e si risponde con la cosa **utile adesso**: le opzioni
+     * sviluppatore, che è dove si accende il Debug wireless e quindi dove
+     * comincia l'unico ponte rimasto.
      */
     @PluginMethod
     fun open(call: PluginCall) {
         val dove = call.getString("target") ?: ""
         val intent = when (dove) {
-            "shizuku" -> context.packageManager.getLaunchIntentForPackage(SHIZUKU)
-                ?: android.content.Intent(
-                    android.content.Intent.ACTION_VIEW,
-                    android.net.Uri.parse("https://shizuku.rikka.app/"),
-                )
-            "developer" -> android.content.Intent(
+            "shizuku", "developer" -> android.content.Intent(
                 android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS,
             )
             else -> {
@@ -154,11 +122,14 @@ class TalosPrivilegePlugin : Plugin() {
             TalosPrivilegeSnapshot.Stato.NEGATO -> result.put("outcome", "denied")
             TalosPrivilegeSnapshot.Stato.ASSENTE -> result.put("outcome", "missing")
             TalosPrivilegeSnapshot.Stato.SPENTO -> result.put("outcome", "stopped")
-            TalosPrivilegeSnapshot.Stato.DA_AUTORIZZARE -> {
-                runCatching { Shizuku.requestPermission(richiesta) }
-                    .onFailure { result.put("outcome", "failed") }
-                    .onSuccess { result.put("outcome", "asked") }
-            }
+            /*
+             * ⛔ Senza Shizuku non c'e' piu' un permesso da CHIEDERE a
+             * qualcuno: il ponte in casa non concede, si accoppia. Lo stato
+             * resta nell'enumerazione perche' un'installazione vecchia puo'
+             * ancora leggerlo dal disco, e sparire in silenzio sarebbe peggio
+             * che dire «va accoppiato».
+             */
+            TalosPrivilegeSnapshot.Stato.DA_AUTORIZZARE -> result.put("outcome", "pair")
         }
         call.resolve(result)
     }
@@ -229,76 +200,38 @@ class TalosPrivilegePlugin : Plugin() {
                 .put("reason", "program-not-allowed").put("program", comando[0]))
             return
         }
-        if (!Shizuku.pingBinder()) {
-            // Shizuku non c'è. Non è più la fine della strada: il ponte in casa
-            // non dipende da lui, ed è l'unico che funziona su OxygenOS 16.
-            call.resolve(conIlPonte(esito, comando, "shizuku-not-running"))
-            return
-        }
         /*
-         * ⛔ SI PROVA LO STESSO, e si riferisce cosa risponde il server.
+         * ⭐⭐⭐ UNA STRADA SOLA, ED È LA NOSTRA — owner 2026-08-09.
          *
-         * ## Cosa è stato misurato il 2026-08-08, su OxygenOS 16
+         * ## Cosa c'era prima
          *
-         * Shizuku vivo e avviato da adb. L'app chiede l'autorizzazione e non
-         * arriva mai, perché Shizuku la concede con un `pm grant` e questa ROM
-         * ha tolto alla shell il potere di concedere:
+         * Si tentava Shizuku, e il ponte in casa era il ripiego. Aveva senso
+         * finché il ponte era nuovo e non provato.
+         *
+         * ## Perché adesso non ne ha più
+         *
+         * Le due strade arrivano **alla stessa identità**: uid 2000, la shell.
+         * Non c'è niente che Shizuku sappia fare e il ponte no. E su OxygenOS 16
+         * — misurato il 2026-08-08 — Shizuku non riesce nemmeno ad autorizzarci,
+         * perché lo fa con un `pm grant` che questa ROM alla shell ha tolto:
          *
          *   SecurityException: grantRuntimePermission: Neither user 2000 nor
          *   current process has android.permission.GRANT_RUNTIME_PERMISSIONS
          *
-         * Quindi `checkSelfPermission` qui non dirà MAI «concesso» — e
-         * fermarsi su quel controllo significa non provare mai, su un
-         * dispositivo dove la shell esegue benissimo (Wi-Fi acceso e spento
-         * dalla shell: provato).
+         * ⇒ Su questo telefono la strada «preferita» era quella che non
+         * funziona, e il ripiego era l'unica che funzionasse.
          *
-         * ## Perché non è un aggiramento
+         * ## E il costo che pagava la persona
          *
-         * Non stiamo scavalcando nessun controllo: chi decide se accettarci è
-         * il server di Shizuku, e continua a decidere lui. Noi smettiamo solo
-         * di indovinare la sua risposta al posto suo. Se rifiuta, il rifiuto
-         * arriva da lui, con le sue parole, e finisce in `reason` — che è
-         * un'informazione, mentre «shizuku-not-authorised» era una previsione.
+         * Un'app di terzi da cercare, installare, avviare, e riavviare a ogni
+         * riavvio del telefono. Il ponte chiede **sei cifre, una volta**.
+         *
+         * ⛔ Resta una cosa che Shizuku faceva meglio, e va detta invece di
+         * nasconderla: il suo server sopravvive allo spegnimento del Debug
+         * wireless, la nostra connessione no. È il prossimo passo, non una
+         * ragione per tenersi una dipendenza che qui non funziona.
          */
-        val autorizzatoSecondoAndroid =
-            Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
-
-        try {
-            val processo = avviaComeShell(comando.toTypedArray())
-            if (processo == null) {
-                // Il caso più comune sul Pad dell'owner: il server di Shizuku ci
-                // ha respinti. Prima si diceva soltanto quale delle due cose era
-                // successa; adesso si PROVA l'altra strada, perché ce n'è una.
-                call.resolve(conIlPonte(
-                    esito,
-                    comando,
-                    if (autorizzatoSecondoAndroid) "exec-unavailable" else "shizuku-refused",
-                ).put("androidPermission", autorizzatoSecondoAndroid)
-                    .put("detail", ultimoRifiuto ?: ""))
-                return
-            }
-            val uscita = BufferedReader(InputStreamReader(processo.inputStream)).use { it.readText() }
-            val errori = BufferedReader(InputStreamReader(processo.errorStream)).use { it.readText() }
-            val codice = processo.waitFor()
-            /*
-             * ⛔ Il codice di uscita NON basta a dire «riuscito». `cmd` e
-             * `settings` restituiscono 0 anche quando stampano una
-             * SecurityException su stderr — ed è esattamente così che il
-             * monitoraggio permessi si manifesta. Quindi si guarda anche
-             * l'errore, e lo si riporta INTERO invece di riassumerlo: chi
-             * legge deve poter capire perché, non soltanto che.
-             */
-            val negato = errori.contains("SecurityException")
-            esito.put("ok", codice == 0 && !negato)
-            esito.put("exitCode", codice)
-            esito.put("output", uscita.trim())
-            esito.put("error", errori.trim())
-            if (negato) esito.put("reason", "denied-by-system")
-            call.resolve(esito)
-        } catch (fallito: Exception) {
-            call.resolve(conIlPonte(esito, comando, "exec-failed")
-                .put("error", fallito.message ?: fallito.javaClass.simpleName))
-        }
+        call.resolve(conIlPonte(esito, comando, "solo-ponte"))
     }
 
     /**
@@ -327,9 +260,9 @@ class TalosPrivilegePlugin : Plugin() {
      * capo per scoprire l'altro — l'ho fatto io il 2026-08-08 con
      * `shizuku-refused` che spariva dietro una frase generica.
      */
-    private fun conIlPonte(esito: JSObject, comando: List<String>, motivoShizuku: String): JSObject {
+    private fun conIlPonte(esito: JSObject, comando: List<String>, motivoDiPartenza: String): JSObject {
         if (!TalosPonteAdb.disponibile(context)) {
-            return esito.put("ok", false).put("reason", motivoShizuku).put("via", "none")
+            return esito.put("ok", false).put("reason", motivoDiPartenza).put("via", "none")
         }
         val ponte = TalosPonteAdb.shell(context, comando, PROGRAMMI_AMMESSI)
         if (ponte.ok) {
@@ -337,8 +270,11 @@ class TalosPrivilegePlugin : Plugin() {
                 .put("output", ponte.uscita).put("error", ponte.errore).put("exitCode", ponte.codice)
         }
         return esito.put("ok", false)
-            .put("reason", ponte.motivo ?: motivoShizuku)
-            .put("shizukuReason", motivoShizuku)
+            .put("reason", ponte.motivo ?: motivoDiPartenza)
+            // ⛔ Si chiamava `shizukuReason` — un nome che dopo l'uscita di
+            // Shizuku non descriveva piu' niente. Un campo che porta il nome di
+            // una cosa che non esiste piu' e' un indizio falso per chi indaga.
+            .put("motivoDiPartenza", motivoDiPartenza)
             .put("via", "none")
             .put("output", ponte.uscita)
             .put("error", ponte.errore)
@@ -531,21 +467,6 @@ class TalosPrivilegePlugin : Plugin() {
      * ingoiato costa più della riga che serviva a tenerlo.
      */
     private var ultimoRifiuto: String? = null
-
-    private fun avviaComeShell(comando: Array<String>): Process? = runCatching {
-        val metodo = Shizuku::class.java.getDeclaredMethod(
-            "newProcess",
-            Array<String>::class.java,
-            Array<String>::class.java,
-            String::class.java,
-        )
-        metodo.isAccessible = true
-        metodo.invoke(null, comando, null, null) as? Process
-    }.onFailure {
-        // La riflessione impacchetta tutto in InvocationTargetException: quella
-        // che dice qualcosa è la causa, non l'involucro.
-        ultimoRifiuto = (it.cause ?: it).toString()
-    }.onSuccess { ultimoRifiuto = null }.getOrNull()
 
     private companion object {
         /**

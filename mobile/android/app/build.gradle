@@ -203,26 +203,18 @@ dependencies {
     // P0 web-read SSRF boundary: maintained TLS/HTTP client with injectable
     // DNS so the exact validated A/AAAA set is used for the connection.
     implementation "com.squareup.okhttp3:okhttp:5.4.0"
-    /**
-     * ⭐ SHIZUKU — il ponte verso le API di sistema, senza root.
+    /*
+     * ⛔⛔ SHIZUKU E' USCITO — 2026-08-09.
      *
-     * Shizuku avvia un processo Java con `app_process` sotto l'identita' della
-     * shell (uid 2000, la stessa di adb) ed espone le API di sistema via
-     * Binder. Un'app autorizzata dalla persona ci passa attraverso: niente
-     * root, niente permessi speciali nell'APK.
+     * Qui c'erano `dev.rikka.shizuku:api` e `:provider`. Le due strade
+     * arrivavano alla STESSA identita' — uid 2000, la shell — e su OxygenOS 16,
+     * misurato, Shizuku non riusciva nemmeno ad autorizzarci: lo fa con un
+     * `pm grant` che questa ROM alla shell ha tolto. La strada «preferita» era
+     * quella che non funziona.
      *
-     * ⛔ MISURATO sul Pad dell'owner (ColorOS): la shell **esegue** ma **non
-     * concede** — `pm grant` e `appops set` vengono rifiutati. Quindi da qui
-     * NON arrivano i permessi permanenti: arriva la capacita' di FARE cose
-     * finche' Shizuku e' vivo. I permessi che devono sopravvivere al riavvio
-     * vogliono Dhizuku, che pero' pretende un dispositivo senza account.
-     *
-     * `api` e' il client, `provider` e' il pezzo che riceve il binder
-     * all'avvio. Servono entrambi: senza il provider il binder non arriva mai e
-     * il client resta a guardare.
+     * Il ponte in casa fa lo stesso senza un'app di terzi da installare, e il
+     * suo accoppiamento e' provato contro il servizio vero di Android.
      */
-    implementation "dev.rikka.shizuku:api:$shizukuVersion"
-    implementation "dev.rikka.shizuku:provider:$shizukuVersion"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     // Test-only: the download policy is proved against the SAME case table

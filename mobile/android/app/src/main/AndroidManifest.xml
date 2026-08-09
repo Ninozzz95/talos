@@ -365,27 +365,19 @@
             android:exported="false" />
 
         <!--
-            ⭐ SHIZUKU — il pezzo che RICEVE il binder all'avvio.
+            ⛔⛔ IL PROVIDER DI SHIZUKU E' STATO TOLTO — 2026-08-09.
 
-            Senza questo provider il binder non arriva mai e il client resta a
-            guardare: è l'errore più comune di chi integra Shizuku, perché tutto
-            compila, niente protesta, e niente funziona.
+            Owner: «se possiamo levare Shizuku e fare un solo passaggio con un
+            nostro plugin in casa, facciamolo e facciamolo bene».
 
-            È esportato perché Shizuku deve poterlo raggiungere, non perché
-            debba farlo chiunque: `android:permission` lo chiude alle app
-            normali, ed è la riga che rende accettabile l'esportazione.
+            Le due strade arrivavano alla STESSA identita': uid 2000, la shell.
+            E su OxygenOS 16, misurato, Shizuku non riusciva nemmeno ad
+            autorizzarci — lo fa con un `pm grant` che questa ROM alla shell ha
+            tolto. La strada «preferita» era quella che non funziona.
 
-            ⛔ MISURATO sul Pad (ColorOS): da qui NON arrivano i permessi
-            permanenti — la shell esegue ma non concede. Arriva la capacità di
-            FARE, finché Shizuku è vivo.
+            Il ponte in casa chiede sei cifre, una volta, e non vuole nessuna
+            app di terzi. L'accoppiamento e' provato contro il servizio vero.
         -->
-        <provider
-            android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="${applicationId}.shizuku"
-            android:multiprocess="false"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <!--
             ⭐ IL SERVIZIO CHE ASCOLTA LE NOTIFICHE.
@@ -468,32 +460,7 @@
          non riesce nemmeno ad autorizzarci», era sbagliata: mancava la riga
          `API_V23` qui sopra. Vedi il commento lì.
     -->
-    <!--
-         ⛔⛔ IL PERMESSO DI SHIZUKU, che mancava — e il difetto era NOSTRO.
-
-         ## Come si è visto, il 2026-08-08
-
-         Shizuku avviato da adb e vivo (server come uid 2000, provato). L'app
-         chiede l'autorizzazione, Shizuku risponde «Il permesso di adb è
-         limitato» con un solo OK, e la nostra schermata concludeva «il
-         produttore del telefono lo impedisce».
-
-         Era falso. `dumpsys package ai.talos.dev` elenca i permessi a runtime:
-         POST_NOTIFICATIONS, CAMERA, RECORD_AUDIO — e di `API_V23` **nessuna
-         traccia**. Non era negato: non esisteva. `Shizuku.requestPermission`
-         su API 23+ passa dal normale flusso dei permessi a runtime, e un
-         permesso non dichiarato nel manifest non si può chiedere.
-
-         ## ⛔ E la lezione che costa più della riga
-
-         Il commento qui sotto diceva «Su ColorOS Shizuku non riesce nemmeno ad
-         autorizzarci». L'avevo scritto io, da un'osservazione non strumentata, e
-         da lì era diventato un fatto in memoria e una decisione di progetto —
-         il livello privilegiato dato per perduto. Una riga mancante travestita
-         da limite del produttore.
-    -->
-    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
-    <!--
+        <!--
         ⛔⛔ SYSTEM_ALERT_WINDOW E' STATO TOLTO — 2026-08-09.
 
         Serviva alla finestrella che teneva il campo del codice sopra
