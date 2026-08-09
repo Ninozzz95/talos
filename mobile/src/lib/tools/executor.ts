@@ -3,6 +3,7 @@ import {
     TALOS_EMPTY_TOOL_AUTHORIZATIONS,
     digestTalosToolAuthorizationInput,
     resolveTalosToolAuthorization,
+    talosPercheRichiestaScartata,
     type TalosToolAuthorizationGrantsV1,
     type TalosToolAuthorizationRequestV1,
 } from '@/lib/tools/toolAuthorizations'
@@ -408,9 +409,44 @@ export async function executeTalosTool(
                 status: 'denied',
                 input,
             })
+            /*
+             * ⛔ E si dice PERCHÉ la decisione già presa non è valsa.
+             *
+             * MISURATO il 2026-08-09: la persona tocca «Consenti», e il modello
+             * riceve questa stessa frase e la ripete — «dovresti vedere un
+             * prompt sul telefono» — mentre il prompt era appena stato risposto
+             * e non ne comparirà nessun altro. Senza il motivo, chi legge (la
+             * persona, il modello, o io mentre indago) va a cercare una scheda
+             * che non esiste.
+             *
+             * Il motivo è una parola sola e non porta né argomenti né impronte:
+             * questo testo lo legge il MODELLO, e i dati della persona non
+             * hanno niente da fare qui.
+             */
+            const motivo = talosPercheRichiestaScartata(
+                deps.authorizationRequest,
+                tool.name,
+                deps.callId ?? `legacy:${tool.name}`,
+                preflight.request.inputDigest,
+                preflight.request.actions,
+            )
+            /*
+             * ⛔ «assente» si dice, non si tace.
+             *
+             * L'avevo escluso pensando che «non c'era nessuna risposta» fosse
+             * ovvio. Sul Pad, il 2026-08-09, era proprio quello il caso — e
+             * tacerlo ha reso il messaggio identico a prima, cioe' inutile a
+             * chi indaga. Un motivo che si nasconde nel caso piu' frequente non
+             * e' un motivo.
+             */
+            const perche = motivo === null
+                ? ' Nothing was wrong with the recorded answer, so the gate re-asked for another reason.'
+                : motivo === 'assente'
+                    ? ' No answer was recorded for THIS call at all.'
+                    : ` The user's earlier answer did not apply to this call (mismatch: ${motivo}).`
             return {
                 ok: false,
-                content: `Not run: "${tool.title}" is still waiting for the user's authorization, and no answer reached this call. The user has NOT refused. Tell them the request is pending, or offer to ask again.`,
+                content: `Not run: "${tool.title}" is still waiting for the user's authorization, and no answer reached this call.${perche} The user has NOT refused. Tell them the request is pending, or offer to ask again.`,
                 code: 'TALOS_TOOL_AWAITING_AUTHORIZATION',
             }
         }
