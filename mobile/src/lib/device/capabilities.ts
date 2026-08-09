@@ -218,7 +218,12 @@ export interface TalosCapabilityGap {
 
 export function talosCapabilityGap(
     id: string,
-    stato: { shizukuReady: boolean; granted: ReadonlySet<string> },
+    /**
+     * ⛔ Si chiamava `shizukuReady`. Dopo l'uscita di Shizuku il nome
+     * descriveva una cosa che non esiste — e un nome cosi' e' un indizio falso
+     * per chiunque legga il codice cercando di capire da cosa dipende.
+     */
+    stato: { shellReady: boolean; granted: ReadonlySet<string> },
 ): TalosCapabilityGap | null {
     const c = talosCapability(id)
     if (!c) return null
@@ -227,16 +232,16 @@ export function talosCapabilityGap(
     if (c.tier === 'free') return null
 
     if (c.tier === 'shell') {
-        if (stato.shizukuReady) return null
+        if (stato.shellReady) return null
         return {
             capability: id,
             tier: 'shell',
-            // ⛔ Non si manda alle impostazioni di sistema per una capacità
-            // Shizuku: la schermata giusta è la NOSTRA, quella che spiega i
-            // quattro gradini. Mandare al Wi-Fi di sistema chi non ha Shizuku
-            // è dargli il posto giusto per la ragione sbagliata.
+            // ⛔ Non si manda alle impostazioni di sistema per una capacità che
+            // vuole la shell: la schermata giusta è la NOSTRA, quella che
+            // spiega l'accoppiamento. Mandare al Wi-Fi di sistema chi non ha
+            // il ponte è dargli il posto giusto per la ragione sbagliata.
             settingsAction: null,
-            reasonKey: 'deviceGap.needsShizuku',
+            reasonKey: 'deviceGap.needsBridge',
             manualOnly: false,
         }
     }

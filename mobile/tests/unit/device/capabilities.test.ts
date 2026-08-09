@@ -128,7 +128,7 @@ describe('l’inventario è coerente con sé stesso', () => {
  * dei due dice perché, e nessuno porta all'interruttore.
  */
 describe('quando non si può, si dice COSA MANCA e DOVE', () => {
-    const niente = { shizukuReady: false, granted: new Set<string>() }
+    const niente = { shellReady: false, granted: new Set<string>() }
 
     it('una capacità gratuita non ha mai un buco', () => {
         for (const id of ['vibrate', 'torch', 'speak', 'device_status']) {
@@ -144,7 +144,7 @@ describe('quando non si può, si dice COSA MANCA e DOVE', () => {
 
     it('e concessa, il buco sparisce', () => {
         const gap = talosCapabilityGap('do_not_disturb', {
-            shizukuReady: false,
+            shellReady: false,
             granted: new Set(['android.permission.ACCESS_NOTIFICATION_POLICY']),
         })
         expect(gap).toBeNull()
@@ -159,12 +159,12 @@ describe('quando non si può, si dice COSA MANCA e DOVE', () => {
         const gap = talosCapabilityGap('wifi_toggle', niente)
         expect(gap?.tier).toBe('shell')
         expect(gap?.settingsAction).toBeNull()
-        expect(gap?.reasonKey).toBe('deviceGap.needsShizuku')
+        expect(gap?.reasonKey).toBe('deviceGap.needsBridge')
     })
 
     it('e con Shizuku pronto non c’è più nessun buco', () => {
         expect(talosCapabilityGap('wifi_toggle', {
-            shizukuReady: true, granted: new Set(),
+            shellReady: true, granted: new Set(),
         })).toBeNull()
     })
 

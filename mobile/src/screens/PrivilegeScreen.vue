@@ -2,17 +2,13 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { useTalosI18n } from '@/i18n'
-import { Check, ChevronRight, RefreshCw, ShieldAlert, Smartphone, X } from '@lucide/vue'
+import { Check, ChevronRight, RefreshCw, Smartphone } from '@lucide/vue'
 import {
     openTalosAppSettings,
     readTalosDeviceState,
     requestTalosNotifications,
 } from '@/services/devicePermissions'
-import {
-    talosShizukuGuidance,
-    talosShizukuReach,
-    type TalosShizukuSnapshot,
-} from '@/lib/privilege/shizukuGuidance'
+import type { TalosShizukuSnapshot } from '@/lib/privilege/shizukuGuidance'
 import {
     talosCodiceValido,
     talosPonteGuida,
@@ -49,7 +45,6 @@ const { t } = useTalosI18n()
 const snapshot = ref<TalosShizukuSnapshot | null>(null)
 const caricando = ref(true)
 /** Se in QUESTA sessione abbiamo già chiesto. È un fatto sulla sessione. */
-const haChiesto = ref(false)
 
 interface RispostaPonte { ok: boolean, reason?: string, address?: string, tried?: number }
 
@@ -154,37 +149,12 @@ async function rileggi(): Promise<void> {
     }
 }
 
-const guida = computed(() => (snapshot.value
-    ? talosShizukuGuidance(snapshot.value, haChiesto.value)
-    : null))
-const portata = computed(() => (snapshot.value ? talosShizukuReach(snapshot.value) : null))
-
 const identita = computed(() => {
     const uid = snapshot.value?.uid ?? -1
     if (uid === 0) return t('privilege.identityRoot')
     if (uid === 2000) return t('privilege.identityShell')
     return t('privilege.identityUnknown')
 })
-
-async function agisci(): Promise<void> {
-    const azione = guida.value?.action
-    if (!azione || azione === 'none') return
-    if (azione === 'request') {
-        // ⛔ Si segna PRIMA di chiedere: se il produttore blocca, la richiesta
-        // non torna mai con un esito, e senza questo la pagina resterebbe per
-        // sempre a dire «premi il pulsante».
-        haChiesto.value = true
-        try { await plugin().request() } catch { /* la pagina lo mostra da se' */ }
-        await rileggi()
-        return
-    }
-    // ⛔ L'apertura la fa il lato NATIVO, non un launcher generico: se Shizuku
-    // non è installato va aperta la sua pagina, non l'app che non c'è — e a
-    // distinguere i due casi è il PackageManager, che sta di là.
-    try {
-        await plugin().open({ target: azione === 'openShizuku' ? 'shizuku' : 'developer' })
-    } catch { /* la pagina dice già il percorso a parole */ }
-}
 
 /**
  * ⭐⭐ La strada che chiude davvero il giro: il campo GALLEGGIA sopra
@@ -314,53 +284,18 @@ onUnmounted(() => {
         </p>
 
         <!--
-            IL PASSO. Uno solo, grande. Il bordo cambia quando è un blocco del
-            produttore invece di una cosa da fare: un passo si fa, un blocco si
-            capisce, e chi non distingue i due riprova all'infinito.
+            ⛔⛔ QUI C'ERA IL PASSO DI SHIZUKU — tolto il 2026-08-09.
+
+            Era un riquadro che diceva «installa Shizuku», «avvialo»,
+            «autorizzaci». Con Shizuku fuori dal progetto quel riquadro
+            mostrerebbe per sempre il primo gradino di una scala che non porta
+            piu' da nessuna parte: un'istruzione da seguire che non serve a
+            niente e' peggio di nessuna istruzione, perche' chi la segue si
+            convince che il problema sia suo.
+
+            Il ponte, che era la seconda strada, adesso e' l'unica ed e' qui
+            sotto: sei cifre lette sul proprio schermo, una volta.
         -->
-        <section
-            v-else-if="guida"
-            data-testid="talos-privilege-step"
-            class="flex flex-col gap-3 rounded-[var(--talos-radius-card)] border p-4"
-            :class="guida.ready
-                ? 'border-[var(--talos-accent)]/40 bg-[var(--talos-accent)]/5'
-                : guida.manufacturerBlocked
-                    ? 'border-[var(--talos-warning)]/50 bg-[var(--talos-warning)]/10'
-                    : 'border-[var(--talos-border)]'"
-        >
-            <h2 class="flex items-start gap-2 text-sm font-semibold text-[var(--talos-text)]">
-                <ShieldAlert
-                    v-if="guida.manufacturerBlocked"
-                    class="mt-0.5 size-4 shrink-0 text-[var(--talos-warning)]"
-                    aria-hidden="true"
-                />
-                <Check
-                    v-else-if="guida.ready"
-                    class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]"
-                    aria-hidden="true"
-                />
-                <span data-testid="talos-privilege-title">{{ t(guida.titleKey) }}</span>
-            </h2>
-
-            <p class="text-xs leading-5 text-[var(--talos-muted)]" data-testid="talos-privilege-body">
-                {{ t(guida.bodyKey) }}
-            </p>
-
-            <p v-if="snapshot?.outdated" class="text-xs leading-5 text-[var(--talos-warning)]">
-                {{ t('privilege.outdated') }}
-            </p>
-
-            <button
-                v-if="guida.actionKey"
-                type="button"
-                data-testid="talos-privilege-action"
-                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-4 text-sm font-semibold text-[var(--talos-accent-contrast)]"
-                @click="void agisci()"
-            >
-                {{ t(guida.actionKey) }}
-                <ChevronRight class="size-4" aria-hidden="true" />
-            </button>
-        </section>
 
         <!--
             ⭐⭐ IL PONTE IN CASA — la seconda strada, e su questa ROM l'unica.
@@ -471,21 +406,6 @@ onUnmounted(() => {
             FA, ma niente sopravvive al riavvio. Dirlo qui evita di promettere la
             seconda cosa avendo ottenuto la prima.
         -->
-        <section v-if="portata" class="flex flex-col gap-2" data-testid="talos-privilege-reach">
-            <h3 class="font-mono text-2xs uppercase tracking-wider text-[var(--talos-muted)]">
-                {{ t('privilege.reachHeading') }}
-            </h3>
-            <p class="flex items-center gap-2 text-xs text-[var(--talos-text)]">
-                <Check v-if="portata.canAct" class="size-3.5 text-[var(--talos-accent)]" aria-hidden="true" />
-                <X v-else class="size-3.5 text-[var(--talos-muted)]" aria-hidden="true" />
-                {{ portata.canAct ? t('privilege.reachAct') : t('privilege.reachActNo') }}
-            </p>
-            <p class="flex items-center gap-2 text-xs text-[var(--talos-text)]">
-                <Check v-if="portata.survivesReboot" class="size-3.5 text-[var(--talos-accent)]" aria-hidden="true" />
-                <X v-else class="size-3.5 text-[var(--talos-muted)]" aria-hidden="true" />
-                {{ portata.survivesReboot ? t('privilege.reachReboot') : t('privilege.reachRebootNo') }}
-            </p>
-        </section>
 
         <section v-if="snapshot && snapshot.version >= 0" class="flex flex-col gap-2">
             <h3 class="font-mono text-2xs uppercase tracking-wider text-[var(--talos-muted)]">
