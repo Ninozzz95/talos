@@ -59,6 +59,7 @@ export const TALOS_IT_MESSAGES = {
         // Il pulsante dice DOVE va. Uno che si chiama «torna alla chat»
         // e va da un'altra parte e' peggio di uno che non c'e'.
         backToChat: 'Torna alla chat',
+        pressBackAgainToExit: 'Premi di nuovo per uscire da TALOS',
         backToNamed: 'Torna a {name}',
         chat: 'Chat',
         chats: 'Chat',
@@ -2406,6 +2407,8 @@ export const TALOS_IT_MESSAGES = {
         sections: { status: 'Stato', data: 'Dati', advanced: 'Avanzate' },
         checksPassedOne: '1 controllo superato',
         checksPassedMany: '{count} controlli superati',
+        showChecks: 'Vedi i controlli',
+        hideChecks: 'Nascondi i controlli',
         problemsFoundOne: '1 problema rilevato',
         problemsFoundMany: '{count} problemi rilevati',
         timingsOff: 'I tempi vengono registrati soltanto quando “Mostra dettagli tecnici” è attivo in Avanzate. Quando è disattivato non viene misurato nulla e non viene sostenuto alcun costo.',

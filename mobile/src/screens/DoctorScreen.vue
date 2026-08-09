@@ -23,6 +23,7 @@ import { biometricUnlockAvailable } from '@/services/appLock'
 import { writeTalosClipboardText } from '@/services/clipboard'
 import {
     splitTalosDoctorRows,
+    talosDoctorFoldLabel,
     talosLockDoctorRow,
     talosStorageDoctorRow,
 } from '@/lib/diagnostics/doctorSections'
@@ -99,6 +100,13 @@ const verdict = computed(() => {
     }
 })
 const split = computed(() => splitTalosDoctorRows(rows.value))
+
+/** L'etichetta della piega. La regola, col perché, sta su `talosDoctorFoldLabel`. */
+const etichettaPiega = computed(() => talosDoctorFoldLabel({
+    problems: split.value.problems.length,
+    passing: split.value.passing.length,
+    open: showPassing.value,
+}))
 const traces = computed(() => controller.traces())
 const buildId = computed(() => rows.value.find((row) => row.id === 'build')?.value ?? t('doctor.unknown'))
 
@@ -436,7 +444,7 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                             @click="showPassing = !showPassing"
                         >
                             <CircleCheck class="size-4 shrink-0 text-[var(--talos-success,#3f9d6b)]" aria-hidden="true" />
-                            {{ t(split.passing.length === 1 ? 'doctor.checksPassedOne' : 'doctor.checksPassedMany', { count: split.passing.length }) }}
+                            {{ t(etichettaPiega.key, { count: etichettaPiega.count ?? 0 }) }}
                             <ChevronDown class="ml-auto size-4 transition-transform" :class="showPassing ? '' : '-rotate-90'" aria-hidden="true" />
                         </button>
                     </h3>

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
     resolveTalosBackAction,
+    TALOS_FINESTRA_USCITA_MS,
+    talosUscitaConConferma,
     talosStationEntryAfter,
     talosStationExit,
     type TalosBackState,
@@ -130,5 +132,43 @@ describe('leaving a station the way you came into it', () => {
         // A cold start straight into a station: the 2026-07-24 rule stands,
         // because a station IS opened from the main menu.
         expect(talosStationExit(null)).toEqual({ route: 'chat', sidebar: true })
+    })
+})
+
+describe('uscire dall app vuole DUE colpi', () => {
+    /*
+     * ⛔ Il difetto, misurato sul Pad il 2026-08-09: dalla chat appena aperta
+     * (`history.length = 1`) un SOLO indietro faceva sparire TALOS. Nessun
+     * avviso, e la conversazione che stavi scrivendo se ne andava con lui.
+     *
+     * Owner: toast in basso, finestra di 2 secondi.
+     */
+    it('il PRIMO colpo avvisa e basta', () => {
+        expect(talosUscitaConConferma({ ora: 10_000, ultimaRichiesta: null })).toBe('avvisa')
+    })
+
+    it('il SECONDO colpo dentro la finestra esce', () => {
+        expect(talosUscitaConConferma({ ora: 11_000, ultimaRichiesta: 10_000 })).toBe('esci')
+    })
+
+    /*
+     * ⛔ IL VERSO CONTRARIO, e qui e' doppio.
+     *
+     * Il primo: passata la finestra si ricomincia da capo — altrimenti un
+     * indietro dato ora e uno dato fra mezz'ora chiuderebbero l'app insieme,
+     * cioe' l'avviso non varrebbe niente.
+     *
+     * Il secondo: il confine ESATTO. `<=` e non `<`, perche' al millisecondo
+     * della scadenza il colpo vale ancora: una finestra che rifiuta il caso
+     * limite e' «due secondi meno un istante», e chi la manca non capisce.
+     */
+    it('passata la finestra si ricomincia da capo', () => {
+        expect(talosUscitaConConferma({ ora: 10_000 + TALOS_FINESTRA_USCITA_MS + 1, ultimaRichiesta: 10_000 }))
+            .toBe('avvisa')
+    })
+
+    it('al millisecondo esatto della scadenza il colpo vale ancora', () => {
+        expect(talosUscitaConConferma({ ora: 10_000 + TALOS_FINESTRA_USCITA_MS, ultimaRichiesta: 10_000 }))
+            .toBe('esci')
     })
 })

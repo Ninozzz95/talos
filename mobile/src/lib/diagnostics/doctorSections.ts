@@ -113,3 +113,42 @@ export function splitTalosDoctorRows(rows: readonly TalosDoctorRow[]): {
         passing: rows.filter((row) => row.ok),
     }
 }
+
+/**
+ * ⛔⭐ COSA DICE IL PULSANTE DELLA PIEGA — e perché non è sempre lo stesso.
+ *
+ * Owner 2026-08-09, guardando la Diagnostica sul Pad in orizzontale: «18
+ * controlli superati» compariva DUE volte, a due centimetri di distanza. La
+ * scheda del verdetto sopra, il pulsante della piega sotto le linguette, stessa
+ * identica frase.
+ *
+ * ## Perché non erano un doppione SEMPRE
+ *
+ * Il verdetto dice «N controlli superati» quando non c'è nessun problema, e
+ * «N problemi trovati» quando ce n'è. La piega dice quanti ne sono passati.
+ *
+ * A schermo verde i due numeri coincidono e la frase si ripete; con dei
+ * problemi dicono cose diverse e complementari — «3 problemi trovati» e «15
+ * controlli superati» — e togliere la seconda perderebbe un'informazione che
+ * nessun altro porta.
+ *
+ * ⇒ Il conto sta nella piega **solo quando il verdetto non lo porta già**.
+ * Altrimenti quel pulsante è una PORTA, e una porta dice dove si va: non ripete
+ * quello che c'è scritto sul muro accanto.
+ *
+ * Sta qui e non nel template perché una regola dentro un'interpolazione non si
+ * può provare: si può solo guardare.
+ */
+export function talosDoctorFoldLabel(input: {
+    readonly problems: number
+    readonly passing: number
+    readonly open: boolean
+}): { readonly key: string, readonly count?: number } {
+    if (input.problems > 0) {
+        return {
+            key: input.passing === 1 ? 'doctor.checksPassedOne' : 'doctor.checksPassedMany',
+            count: input.passing,
+        }
+    }
+    return { key: input.open ? 'doctor.hideChecks' : 'doctor.showChecks' }
+}

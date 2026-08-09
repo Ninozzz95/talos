@@ -5,7 +5,7 @@ import {
     talosLockDoctorRow,
     talosStorageDoctorRow,
     talosDoctorVerdict,
-    splitTalosDoctorRows,
+    splitTalosDoctorRows, talosDoctorFoldLabel,
 } from '@/lib/diagnostics/doctorSections'
 
 /**
@@ -140,5 +140,32 @@ describe('the encrypted-storage check', () => {
         expect(row.value).toBe('SQLCipher native — error · migration held; your data is kept, retry to restore')
         expect(row.value).not.toContain('chat_messages')
         expect(row.ok).toBe(false)
+    })
+})
+
+describe('l etichetta della piega dice il conto SOLO quando il verdetto non lo porta gia', () => {
+    /*
+     * ⛔ I DUE VERSI, e il primo e' quello che il difetto occupava.
+     *
+     * Owner 2026-08-09: «18 controlli superati» compariva due volte a due
+     * centimetri di distanza, verdetto sopra e piega sotto. Nessuno provava il
+     * caso tutto-verde, che e' proprio quello in cui i due numeri coincidono.
+     *
+     * E la regola d'oro dello stesso giorno: ogni funzione si prova anche al
+     * contrario. Qui il contrario e' «con dei problemi», dove il conto NON e'
+     * un doppione ma un'informazione che nessun altro porta.
+     */
+    it('tutto verde: e una PORTA, non un secondo conteggio', () => {
+        expect(talosDoctorFoldLabel({ problems: 0, passing: 18, open: false }))
+            .toEqual({ key: 'doctor.showChecks' })
+        expect(talosDoctorFoldLabel({ problems: 0, passing: 18, open: true }))
+            .toEqual({ key: 'doctor.hideChecks' })
+    })
+
+    it('con problemi: il conto SERVE, perche il verdetto dice altro', () => {
+        expect(talosDoctorFoldLabel({ problems: 3, passing: 15, open: false }))
+            .toEqual({ key: 'doctor.checksPassedMany', count: 15 })
+        expect(talosDoctorFoldLabel({ problems: 1, passing: 1, open: true }))
+            .toEqual({ key: 'doctor.checksPassedOne', count: 1 })
     })
 })

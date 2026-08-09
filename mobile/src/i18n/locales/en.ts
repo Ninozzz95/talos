@@ -56,6 +56,7 @@ export const TALOS_EN_MESSAGES = {
         // Il pulsante dice DOVE va. Uno che si chiama «torna alla chat»
         // e va da un'altra parte e' peggio di uno che non c'e'.
         backToChat: 'Back to chat',
+        pressBackAgainToExit: 'Press back again to leave TALOS',
         backToNamed: 'Back to {name}',
         chat: 'Chat',
         chats: 'Chats',
@@ -2391,6 +2392,8 @@ export const TALOS_EN_MESSAGES = {
         sections: { status: 'Status', data: 'Data', advanced: 'Advanced' },
         checksPassedOne: '1 check passed',
         checksPassedMany: '{count} checks passed',
+        showChecks: 'See the checks',
+        hideChecks: 'Hide the checks',
         problemsFoundOne: '1 problem found',
         problemsFoundMany: '{count} problems found',
         timingsOff: 'Timings are recorded only while Show technical detail is on, under Advanced. Nothing is measured — and nothing is paid for — while it is off.',
