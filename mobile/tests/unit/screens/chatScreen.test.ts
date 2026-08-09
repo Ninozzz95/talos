@@ -841,6 +841,33 @@ describe('welcome setup checklist (F2-T6)', () => {
         expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'settings-models' })
     })
 
+    /**
+     * ⛔⛔ Owner 2026-08-09, con la fotografia: chiudendo del tutto l'app e
+     * riaprendola compariva «Completa la configurazione — Aggiungi una chiave
+     * provider · Scegli il modello» su un'app configurata da settimane. Due
+     * centimetri sotto, nella stessa schermata, c'era gia' «Preparazione
+     * dell'archivio locale delle chat».
+     *
+     * RIPRODOTTO sul Pad: compare a t+4s dall'avvio a freddo e sparisce da
+     * sola. Non e' un dato sbagliato, e' un dato che non c'e' ANCORA — e «non
+     * lo so» veniva trattato come «non ce l'hai».
+     */
+    it('⛔ TACE finche l archivio non e pronto: «non lo so» non e «non ce l hai»', () => {
+        const controller = makeController()
+        controller.chat.state.persistenceStatus = 'loading'
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+        expect(wrapper.find('[data-testid="talos-setup-checklist"]').exists()).toBe(false)
+    })
+
+    it('e riappare appena l archivio e pronto e manca davvero qualcosa', () => {
+        const controller = makeController()
+        controller.chat.state.persistenceStatus = 'ready'
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+        expect(wrapper.find('[data-testid="talos-setup-checklist"]').exists()).toBe(true)
+    })
+
     it('hides when setup is genuinely complete', () => {
         const controller = makeController()
         controller.profiles.value = [{

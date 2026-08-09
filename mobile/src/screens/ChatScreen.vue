@@ -405,8 +405,33 @@ const browserService = createTalosInAppBrowserService({ onEvent: queueBrowserEve
 // done when a composer model is actually selected.
 const setupHasKey = computed(() => profiles.value.some((profile) => profile.has_secret))
 const setupHasModel = computed(() => selectedModelId.value !== null)
+/**
+ * ⛔⛔ NON SI DICE «TI MANCA» FINCHE' NON SI SA.
+ *
+ * Owner, 2026-08-09, con la fotografia: chiudendo del tutto l'app e
+ * riaprendola compariva «Completa la configurazione — Aggiungi una chiave
+ * provider · Scegli il modello» su un'app configurata da settimane. Due
+ * centimetri piu' sotto, nella stessa schermata, c'era gia' scritto
+ * «Preparazione dell'archivio locale delle chat».
+ *
+ * RIPRODOTTO: compare a **t+4s** dall'avvio a freddo e sparisce da sola subito
+ * dopo. Non e' un dato sbagliato: e' un dato che non c'e' ANCORA — `profiles`
+ * e' vuoto e `selectedModelId` e' null perche' il deposito non ha finito di
+ * aprirsi, non perche' manchi qualcosa.
+ *
+ * ⇒ Il difetto e' che «non lo so» veniva trattato come «non ce l'hai». E' la
+ * stessa forma delle bugie che stiamo togliendo dalla chat, spostata
+ * sull'accoglienza: la prima cosa che TALOS dice a chi lo riapre e' una cosa
+ * falsa sul suo stesso telefono.
+ *
+ * La cura e' la terza risposta: finche' il deposito non e' `ready`, la lista
+ * non parla. Il segnale esiste gia' e questa schermata lo usa gia' poco piu'
+ * sotto per l'errore — mancava solo qui.
+ */
 const setupChecklistVisible = computed(() =>
-    !settings.state.onboarding.setup_dismissed && !(setupHasKey.value && setupHasModel.value),
+    chat.state.persistenceStatus === 'ready'
+    && !settings.state.onboarding.setup_dismissed
+    && !(setupHasKey.value && setupHasModel.value),
 )
 
 function dismissSetupChecklist(): void {
