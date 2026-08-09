@@ -308,12 +308,38 @@ object TalosPonteAdb {
      * server di Shizuku a fare da secondo giudice. Se non filtrassimo noi, non
      * filtrerebbe nessuno.
      */
-    fun shell(context: Context, comando: List<String>, ammessi: Set<String>): Esito {
+    fun shell(
+        context: Context,
+        comando: List<String>,
+        ammessi: Set<String>,
+        /**
+         * ⛔⭐ SE FALSO, NON SI RIAGGANCIA — e serve a una cosa precisa.
+         *
+         * Owner 2026-08-09, misurato col campionatore di pile a ogni avvio:
+         *
+         *     802 ms   exec("shell ...")          il guardiano interroga
+         *     4029 ms  scopri (mDNS)              riaggancio: SEI secondi
+         *     10093 ms bridgeStatus               e appena finisce, riparte
+         *
+         * A OGNI apertura dell'app il ponte faceva un giro di riaggancio da
+         * dieci secondi. Non blocca piu' la chat — quello e' curato — ma sono
+         * dieci secondi di lavoro per una DOMANDA: il guardiano delle capacita'
+         * vuole solo sapere se il ponte c'e', non aprirlo.
+         *
+         * ⇒ Chi CHIEDE passa `riagganciaSeStaccato = false` e ha la risposta
+         * subito; chi AGISCE lo lascia vero, e allora il riaggancio e' giusto
+         * perche' senza non potrebbe fare la cosa che gli e' stata chiesta.
+         *
+         * La distinzione e' la stessa di `leggi()` contro `chiedi()` sui
+         * permessi: una domanda non deve avere effetti.
+         */
+        riagganciaSeStaccato: Boolean = true,
+    ): Esito {
         if (comando.isEmpty()) return Esito(false, motivo = "no-command")
         if (comando[0] !in ammessi) return Esito(false, motivo = "program-not-allowed")
 
         var esito = esegui(context, listOf("shell") + comando, attesaMs = 30_000)
-        if (staccato(esito) && riaggancia(context)) {
+        if (riagganciaSeStaccato && staccato(esito) && riaggancia(context)) {
             esito = esegui(context, listOf("shell") + comando, attesaMs = 30_000)
         }
         if (staccato(esito)) return esito.copy(motivo = "bridge-not-connected")
