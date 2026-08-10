@@ -348,15 +348,34 @@ class TalosSpeechPlugin : Plugin() {
             runCatching { tts.setPitch(v.coerceIn(0.1f, 2.0f)) }
         }
 
+        /*
+         * ⭐ ACCODARE o ZITTIRE, e la differenza la decide chi chiama.
+         *
+         * Owner 2026-08-10: «il TTS deve partire di pari passo con il rendering
+         * della risposta». Leggere mentre la risposta si scrive vuol dire
+         * mandare una frase alla volta, e ognuna deve METTERSI IN CODA dietro
+         * la precedente: con QUEUE_FLUSH ogni frase nuova ammazza quella che
+         * sta suonando, e si sentirebbe solo l'ultima sillaba di ciascuna.
+         *
+         * ⛔ Il predefinito resta FLUSH: una risposta nuova zittisce la
+         * precedente, che e' il comportamento giusto quando si preme «leggi»
+         * su un altro messaggio.
+         */
+        val modo = if (call.getString("queue") == "add") {
+            TextToSpeech.QUEUE_ADD
+        } else {
+            TextToSpeech.QUEUE_FLUSH
+        }
+
         val id = "talos-${System.nanoTime()}"
         // QUEUE_FLUSH: una frase nuova ZITTISCE la precedente. Accodarle
         // significherebbe che chi manda due messaggi si sente leggere il primo
         // mentre guarda il secondo.
         val esito = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            tts.speak(testo, TextToSpeech.QUEUE_FLUSH, null, id)
+            tts.speak(testo, modo, null, id)
         } else {
             @Suppress("DEPRECATION")
-            tts.speak(testo, TextToSpeech.QUEUE_FLUSH, null)
+            tts.speak(testo, modo, null)
         }
         result.put("spoken", esito == TextToSpeech.SUCCESS)
         if (esito != TextToSpeech.SUCCESS) result.put("reason", "refused")

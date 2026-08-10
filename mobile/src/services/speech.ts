@@ -23,6 +23,8 @@ export interface TalosSpeechUtterance {
     voiceURI?: string
     rate: number
     pitch: number
+    /** `add` mette in coda dietro cio' che sta suonando; assente = zittisce. */
+    queue?: 'flush' | 'add'
     onend?: () => void
     /**
      * ⛔ Il motivo arriva DENTRO l'errore, e non è un ornamento.
@@ -46,6 +48,8 @@ export interface TalosSpeakOptions {
     voiceURI?: string
     rate?: number
     pitch?: number
+    /** `add` per leggere una frase alla volta mentre la risposta si scrive. */
+    queue?: 'flush' | 'add'
     onend?: () => void
     onerror?: (reason?: string) => void
 }
@@ -134,13 +138,21 @@ export function createTalosSpeechService(synth: TalosSpeechSynth | null): TalosS
             }
             const trimmed = talosTestoDaLeggere(text)
             if (!trimmed) { options.onerror?.('empty'); return }
-            // Always cancel first so two replies never talk over each other.
-            synth.cancel()
+            /*
+             * ⛔ Si zittisce PRIMA — tranne quando si accoda.
+             *
+             * «Sempre annullare» era giusto finche' si leggeva una risposta
+             * intera alla volta. Leggendo mentre la risposta si scrive, ogni
+             * frase nuova ammazzerebbe la precedente a meta': si sentirebbe una
+             * sillaba per frase.
+             */
+            if (options.queue !== 'add') synth.cancel()
             synth.speak({
                 text: trimmed,
                 voiceURI: options.voiceURI,
                 rate: clamp(options.rate ?? 1, 0.5, 2),
                 pitch: clamp(options.pitch ?? 1, 0, 2),
+                queue: options.queue,
                 onend: options.onend,
                 onerror: options.onerror,
             })
@@ -223,7 +235,7 @@ export function talosPlatformSpeechSynth(): TalosSpeechSynth | null {
 export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
     if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable('TalosSpeech')) return null
     const plugin = registerPlugin<{
-        speak(options: { text: string, rate?: number, pitch?: number }): Promise<{ spoken: boolean, reason?: string }>
+        speak(options: { text: string, rate?: number, pitch?: number, queue?: 'flush' | 'add' }): Promise<{ spoken: boolean, reason?: string }>
         stop(): Promise<unknown>
         voices(): Promise<{ available: boolean, voices?: TalosVoceDispositivo[], current?: string | null }>
         setVoice(options: { name: string }): Promise<{ done: boolean, reason?: string }>
@@ -310,6 +322,9 @@ export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
                 text: utterance.text,
                 rate: utterance.rate,
                 pitch: utterance.pitch,
+                // ⛔ Accodare, quando si legge mentre la risposta arriva: con
+                // «flush» ogni frase nuova ammazza quella che sta suonando.
+                queue: utterance.queue,
             })
                 .then((esito) => {
                     if (esito?.spoken) return

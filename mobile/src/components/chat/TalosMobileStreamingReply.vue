@@ -95,8 +95,7 @@ const runningTools = computed(() => controller.toolActivity.value.map((activity)
 })))
 // Defect #5: reasoning streams on its own channel, so it can appear before the
 // first letter of the answer — which is exactly when it is most useful.
-const streamingReasoning = computed(() => state.streamingReasoning ?? '')
-/**
+const streamingReasoning = computed(() => state.streamingReasoning ?? '')/**
  * Stesso motivo del blocco ragionamento: al `v-if` serve sapere se c'è
  * qualcosa, non ottenere una copia ripulita della traccia intera a ogni
  * aggiornamento.
