@@ -173,12 +173,60 @@ export function createTalosPrivilegedSources(): TalosPrivilegedToolSources | nul
             }
         },
 
+        /**
+         * Le app che una persona può APRIRE — cioè quelle con un'icona.
+         *
+         * ## ⛔ Il difetto, e stava in due caratteri
+         *
+         * Qui c'era `cmd package list packages **-3**`, e `-3` vuol dire «solo
+         * le app di terze parti»: quelle installate dalla persona. Tutto il
+         * preinstallato — calcolatrice, orologio, fotocamera, telefono,
+         * impostazioni — restava invisibile.
+         *
+         * MISURATO sul Pad il 2026-08-10, dallo stesso ponte:
+         *
+         * ```
+         *   con -3 (quello che TALOS vedeva)     49
+         *   tutti i pacchetti                   439
+         *   app con un'icona da toccare          68
+         * ```
+         *
+         * ⇒ TALOS era cieco su 19 app avviabili su 68, e le cieche erano
+         * proprio quelle che una persona nomina. Provato in chat: «Apri la
+         * calcolatrice» → «Non trovo un'app Calcolatrice installata sul
+         * telefono», mentre `com.oneplus.calculator` è installata e ha la sua
+         * attività di avvio.
+         *
+         * ## ⭐ E la domanda giusta allinea ELENCO e APERTURA
+         *
+         * L'apertura passa da `getLaunchIntentForPackage`, cioè può aprire
+         * esattamente le app con un'attività MAIN/LAUNCHER — le stesse che il
+         * manifest dichiara in `<queries>`. Chiedere QUELLE, e non «le app di
+         * terze parti», fa combaciare ciò che TALOS nomina con ciò che TALOS sa
+         * aprire: prima l'elenco e l'apertura vedevano due mondi diversi, e un
+         * assistente che nomina una cosa e poi nega che esista è peggio di uno
+         * che non la nomina.
+         */
         async listApps() {
-            const r = await talosRunAsShell(['cmd', 'package', 'list', 'packages', '-3'])
+            const r = await talosRunAsShell([
+                'cmd', 'package', 'query-activities', '--brief',
+                '-a', 'android.intent.action.MAIN',
+                '-c', 'android.intent.category.LAUNCHER',
+            ])
             if (!r.ok) return { done: false, via: 'none', reason: r.reason }
-            const pacchetti = r.output.split('\n')
-                .map((riga) => riga.replace(/^package:/, '').trim())
-                .filter(Boolean)
+            /*
+             * L'uscita alterna intestazioni e righe `pacchetto/attività`: si
+             * tiene il pacchetto, una volta sola, in ordine. Un'app con due
+             * icone comparirebbe due volte, e sarebbe rumore.
+             *
+             * ⛔ Scritto stretto apposta: il grafo d'avvio ha meno di cento
+             * byte di margine (compito #51), e questo modulo ci viaggia dentro
+             * perché `chatController` lo importa staticamente. Finché quella
+             * dipendenza non diventa pigra, ogni riga qui si paga all'avvio.
+             */
+            const pacchetti = [...new Set(
+                (r.output.match(/^\s*[\w.]+\//gm) ?? []).map((s) => s.trim().slice(0, -1)),
+            )].sort()
             return { done: true, via: 'shell', output: pacchetti.join('\n') }
         },
     }

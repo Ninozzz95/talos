@@ -322,7 +322,6 @@ import { talosOriginForWrite } from '@/lib/tools/security'
 import { talosOnLocalCatalogueChange } from '@/lib/models/localCatalogueSignal'
 import { chooseTalosImageProvider } from '@/lib/images/imageProviderSelection'
 import { createTalosDeviceSources } from '@/lib/device/devicePlugin'
-import { createTalosPrivilegedSources } from '@/lib/device/privilegedSources'
 import { createTalosNotificationSources } from '@/lib/device/notificationSources'
 import type { TalosImageModelCandidate, TalosImageProvider } from '@/lib/images/imageGateway'
 
@@ -2916,13 +2915,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * modello a ignorare una capacita' che sul telefono
                      * funziona davvero.
                      */
-                    /**
-                     * T2 — la strada privilegiata, e il pannello quando non
-                     * c'è. ⛔ Ogni risposta dice PER QUALE delle due è passata:
-                     * «l'ho fatto io» e «te l'ho aperto» non sono la stessa
-                     * cosa per chi legge.
+                    /*
+                     * ⛔ `privileged` NON si passa più da qui, ed è una misura,
+                     * non un gusto.
+                     *
+                     * La sorgente T2 tira dentro il ponte, la shell e il plugin
+                     * del dispositivo. Passandola da questo file — che è pezzo
+                     * d'AVVIO — quei moduli finivano nel primo grafo: il tetto
+                     * di 600.000 byte l'ha misurato, **600.048**.
+                     *
+                     * Ora la costruisce `toolset.ts`, che è già caricato a
+                     * richiesta. La cucitura resta: chi passa `deps.privileged`
+                     * (i test, o un domani un'altra piattaforma) vince sul
+                     * valore predefinito.
                      */
-                    privileged: () => createTalosPrivilegedSources(),
                     /**
                      * ⭐ Le notifiche — metà di ciò che fa Gemini.
                      *
