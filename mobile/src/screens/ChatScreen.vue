@@ -1174,11 +1174,22 @@ onBeforeUnmount(() => {
 
             <!-- F5-#29: dictation problems speak where the thumb is — right
                  above the composer, never buried at the top of the thread. -->
+            <!-- ⛔ IL SILENZIO NON SI VESTE DA GUASTO — owner 2026-08-10, dal
+                 Pad: microfono in una chat nuova, e in rosso «Il riconoscimento
+                 vocale non e' riuscito». In logcat il motore diceva
+                 NO_SPEECH_DETECTED: aveva funzionato, non aveva sentito nulla.
+                 Chi non ha parlato non ha rotto niente — la riga resta e spiega,
+                 ma con i colori di un avviso e senza `role="alert"`, che
+                 interrompe chi legge con lo schermo. -->
             <div
                 v-if="dictation.error.value"
-                role="alert"
+                :role="dictation.errorCode.value === 'noSpeech' ? 'status' : 'alert'"
                 data-testid="talos-dictation-error"
-                class="mx-3 mb-2 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]"
+                :data-esito="dictation.errorCode.value ?? ''"
+                class="mx-3 mb-2 rounded-md border p-3 text-sm"
+                :class="dictation.errorCode.value === 'noSpeech'
+                    ? 'border-[var(--talos-border)] bg-[var(--talos-surface-2)] text-[var(--talos-muted)]'
+                    : 'border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]'"
             >
                 {{ dictation.error.value }}
             </div>

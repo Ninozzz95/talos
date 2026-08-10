@@ -51,6 +51,34 @@ function loadPlugin(): SpeechRecognitionPlugin {
     return SpeechRecognition
 }
 
+/**
+ * ⛔⛔ IL SILENZIO NON E' UN GUASTO — owner 2026-08-10, dal Pad: preme il
+ * microfono in una chat nuova e legge in rosso «Il riconoscimento vocale non e'
+ * riuscito. Riprova.».
+ *
+ * MISURATO in logcat, non dedotto:
+ *
+ *     W RecognitionClient: #onError space agsa_transcription_NO_SPEECH_DETECTED
+ *
+ * Il motore aveva ascoltato 4,6 s e funzionato benissimo: non aveva sentito
+ * parlare, e l'ha detto. Android lo consegna come `ERROR_NO_MATCH` /
+ * `ERROR_SPEECH_TIMEOUT`, il fork lo gira come `NO_MATCH` / `SPEECH_TIMEOUT`, e
+ * noi lo mettevamo nel mucchio dei guasti — l'esito piu' NORMALE che esista
+ * (premere, ripensarci, parlare piano) diventava un allarme che dice di
+ * riprovare senza dire cosa cambiare.
+ *
+ * ⛔ La distinzione non e' cosmetica: `recognitionFailed` manda a cercare un
+ * guasto che non c'e'. `noSpeech` dice la cosa vera — avvicinati e riparla.
+ */
+const SILENZIO = /NO_MATCH|SPEECH_TIMEOUT|NO_SPEECH|no-speech/i
+const PERMESSO = /permission|not.?allowed|denied/i
+
+export function talosEsitoDettatura(dettaglio: string): TalosDictationErrorCode {
+    if (PERMESSO.test(dettaglio)) return 'permissionDenied'
+    if (SILENZIO.test(dettaglio)) return 'noSpeech'
+    return 'recognitionFailed'
+}
+
 function nativeEngine(): TalosDictationEngine {
     let active = false
     return {
@@ -106,9 +134,7 @@ function nativeEngine(): TalosDictationEngine {
                 active = false
                 talosLogDeviceIssue('TALOS_SPEECH_ERROR', `${data.code ?? ''} ${data.message ?? ''}`)
                 const detail = `${data.code ?? ''} ${data.message ?? ''}`
-                events.onError(/permission|not.?allowed|denied/i.test(detail)
-                    ? 'permissionDenied'
-                    : 'recognitionFailed')
+                events.onError(talosEsitoDettatura(detail))
             })
             try {
                 await talosWithTimeout(
@@ -195,9 +221,9 @@ function webEngine(): TalosDictationEngine {
             const instance = recognition
             recognition.onerror = (event) => {
                 if (stopping || instance !== recognition) return
-                events.onError(event.error === 'not-allowed'
-                    ? 'permissionDenied'
-                    : 'recognitionFailed')
+                // Il web dice `no-speech` dove il nativo dice `NO_MATCH`: stessa
+                // cosa, stesso esito — la regola sta in un posto solo.
+                events.onError(talosEsitoDettatura(String(event.error ?? '')))
             }
             recognition.onend = () => {
                 // A superseded instance must not clobber the live session.

@@ -102,6 +102,29 @@ export function talosTestoDaLeggere(markdown: string): string {
         // Un blocco aperto e mai chiuso: una risposta interrotta a metà del
         // ragionamento non deve farsi leggere per intero.
         .replace(/<think(?:ing)?>[\s\S]*$/i, ' ')
+        /*
+         * ⛔⛔ GLI EMOJI NON SI LEGGONO — owner 2026-08-10, sentito sul Pad:
+         * «il tts dice ciao mano che saluta».
+         *
+         * Ogni emoji ha un NOME nel database Unicode, e `TextToSpeech` legge
+         * quello: «Ciao 👋» diventa «Ciao mano che saluta». Un modello che
+         * chiude ogni risposta con un'emoji — cioè quasi tutti — trasforma ogni
+         * lettura in una filastrocca di didascalie.
+         *
+         * ⛔ Si usa `Extended_Pictographic` e NON `Emoji`: la seconda comprende
+         * le CIFRE (0-9 hanno la proprietà Emoji per via dei tasti numerici), e
+         * cancellerebbe i numeri dalle risposte. Un filtro che toglie «2026»
+         * dalla lettura sarebbe peggio dell'emoji che voleva togliere.
+         *
+         * Si tolgono anche i pezzi che compongono un'emoji e non stanno da
+         * soli: selettore di variante, giuntore a larghezza zero, tonalità
+         * della pelle, indicatori regionali (le bandiere) e il quadratino dei
+         * tasti — se no restano segni orfani che il motore prova a dire.
+         */
+        .replace(
+            /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}️‍⃣]/gu,
+            ' ',
+        )
         // I blocchi di codice si annunciano invece di essere sillabati.
         .replace(/```[\s\S]*?```/g, ' ')
         // `codice in linea` → codice in linea
