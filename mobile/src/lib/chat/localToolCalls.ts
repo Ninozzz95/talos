@@ -7,6 +7,11 @@
  * provenienza — e per non averlo, la normalizzazione va fatta una volta, qui.
  */
 
+import {
+    talosArgomentiDiUnModelloPiccolo,
+    talosSenzaRaffica,
+} from '@/lib/chat/argomentiDiUnModelloPiccolo'
+
 export interface TalosLocalToolCall {
     readonly name: string
     readonly arguments: string
@@ -119,7 +124,14 @@ export function talosRecuperaChiamateNude(
     }
 
     if (!calls.length) return { calls: [], text: testo }
-    return { calls, text: resto.trim() }
+    /*
+     * ⛔ LA RAFFICA SI RIDUCE QUI, prima che diventi lavoro.
+     *
+     * Owner 2026-08-11, `Llama-3.2-3B` su un semplice «Ciao»: quattro
+     * `tool_details` di fila, 14 secondi. Un modello che chiede quattro volte
+     * lo stesso strumento non sta facendo quattro cose: sta ricominciando.
+     */
+    return { calls: talosSenzaRaffica(calls), text: resto.trim() }
 }
 
 /**
@@ -183,15 +195,23 @@ function comeChiamata(
         return { name: nome, arguments: '{}' }
     }
     if (typeof argomenti === 'string') {
-        // Già una stringa JSON: si accetta solo se è davvero analizzabile,
-        // altrimenti a valle arriverebbe una chiamata che nessuno può eseguire.
-        try {
-            const dentro: unknown = JSON.parse(argomenti)
-            if (!dentro || typeof dentro !== 'object' || Array.isArray(dentro)) return null
-            return { name: nome, arguments: argomenti }
-        }
-        catch { return null }
+        /*
+         * ⛔ Non basta «è analizzabile»: un modello piccolo scrive spesso
+         * quasi-JSON — apici singoli, `True`, e un elenco chiuso dentro una
+         * stringa. Il caso misurato sul Pad l'11 agosto con Llama-3.2-3B:
+         * `"names": "['library_list', 'time_now']"`. Il lettore che raddrizza
+         * quelle tre storpiature, e solo quelle, sta in
+         * `argomentiDiUnModelloPiccolo.ts`.
+         */
+        const raddrizzati = talosArgomentiDiUnModelloPiccolo(argomenti)
+        return raddrizzati === null ? null : { name: nome, arguments: raddrizzati }
     }
     if (typeof argomenti !== 'object' || Array.isArray(argomenti)) return null
-    return { name: nome, arguments: JSON.stringify(argomenti) }
+    // Anche l'oggetto passa dal raddrizzatore: le stringhe-elenco stanno lì
+    // dentro tanto quanto in una stringa di argomenti.
+    return {
+        name: nome,
+        arguments: talosArgomentiDiUnModelloPiccolo(JSON.stringify(argomenti))
+            ?? JSON.stringify(argomenti),
+    }
 }
