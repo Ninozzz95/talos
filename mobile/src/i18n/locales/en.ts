@@ -738,6 +738,7 @@ export const TALOS_EN_MESSAGES = {
         scrollEarlier: 'Scroll up for earlier messages',
         messageCopied: 'Message copied.',
         messageCopyFailed: 'Message copy failed.',
+        actionsDone: 'Done:',
         memoryUsedOne: '1 memory used',
         memoryUsedMany: '{count} memories used',
         attachedFiles: 'Attached files',
