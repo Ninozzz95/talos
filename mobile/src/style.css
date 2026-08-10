@@ -282,9 +282,22 @@
     -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
 }
 
+/*
+ * ⛔ Il marchio della schermata nuova CRESCE col viewport — owner 2026-08-11:
+ * «è un logo troppo piccolo su tablet».
+ *
+ * Due cause, e questa è la seconda: la prima era la safe zone di Android
+ * rimasta dentro l'SVG (50px per lato, tolti nel generatore); questa è una
+ * misura fissa di 4,5rem, che su un telefono da 411 px di larghezza riempie e
+ * su un tablet da 914 sembra un francobollo accanto a un titolo enorme.
+ *
+ * `clamp` invece di una media query perché il salto non serve: sotto i ~655 px
+ * di viewport vince il minimo (il telefono resta identico a prima, 4,5rem), poi
+ * cresce, e a 8rem si ferma per non mangiarsi la domanda di benvenuto.
+ */
 .talos-short-logo-hero {
-    width: 4.5rem;
-    height: 4.5rem;
+    width: clamp(4.5rem, 11vw, 8rem);
+    height: clamp(4.5rem, 11vw, 8rem);
 }
 
 .talos-welcome-title {
