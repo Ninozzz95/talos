@@ -970,6 +970,9 @@ export const TALOS_IT_MESSAGES = {
         reasonGeneric: 'Il ponte non ce l\'ha fatta. Riprova, e se insiste riaccendi il Debug wireless.',
     },
     toolActivity: {
+        // Cosa legge una PERSONA quando un tool non riesce. Il motivo vero è
+        // scritto per il modello — vedi avvisoDiTool.ts — e non arriva qui.
+        failedNotice: 'Non è riuscito: {tool}. Il motivo è nella chat.',
         libraryList: 'Esplorazione della Libreria',
         librarySearch: 'Ricerca nella Libreria',
         libraryRead: 'Lettura di un documento',

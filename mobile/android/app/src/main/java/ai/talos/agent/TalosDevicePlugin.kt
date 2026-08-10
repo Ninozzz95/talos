@@ -333,18 +333,61 @@ class TalosDevicePlugin : Plugin() {
             call.resolve(result)
             return
         }
-        val intent = Intent(azione)
         // Alcune schermate vogliono sapere DI CHI parlano — i permessi
         // speciali, per esempio — e senza il pacchetto aprono l'elenco di
         // tutte le app invece della nostra riga.
-        if (call.getBoolean("forThisApp", false) == true) {
-            intent.data = Uri.fromParts("package", context.packageName, null)
-        }
+        val perQuestaApp = call.getBoolean("forThisApp", false) == true
+        val dato = Uri.fromParts("package", context.packageName, null)
         // ⛔ `chiedendoPrima = false`: queste sono schermate di SISTEMA, e
         // chiedere chi risponde a un intent di sistema ottiene «non te lo dico»
         // dal filtro di visibilita' dei pacchetti — non «non esiste». Il perche'
         // per esteso sta su `avvia`, insieme alla misura che l'ha smascherato.
-        call.resolve(avvia(intent, chiedendoPrima = false))
+        val primo = avvia(
+            Intent(azione).also { if (perQuestaApp) it.data = dato },
+            chiedendoPrima = false,
+        )
+        if (primo.optBoolean("done", false)) {
+            primo.put("scope", if (perQuestaApp) "app" else "general")
+            call.resolve(primo)
+            return
+        }
+        /*
+         * ⛔⛔ IL RIPIEGO NELL'ALTRO VERSO — ed è il difetto del 2026-08-10.
+         *
+         * Owner, dal telefono: «Il telefono non offre questa schermata, quindi
+         * non posso abilitare l'accesso alle notifiche da qui». La schermata
+         * c'era. A romperla era il DATO `package:`, che il modello chiede in
+         * buona fede — glielo dice la descrizione dello strumento, «mettilo
+         * quando la schermata riguarda TALOS», e l'accesso alle notifiche
+         * riguarda TALOS.
+         *
+         * MISURATO su questo telefono, sette schermate, nei due versi:
+         *
+         * | schermata                              | con `package:` | senza |
+         * |----------------------------------------|----------------|-------|
+         * | ACTION_NOTIFICATION_LISTENER_SETTINGS  | **no**         | sì    |
+         * | NOTIFICATION_POLICY_ACCESS_SETTINGS    | **no**         | sì    |
+         * | WIFI_SETTINGS                          | **no**         | sì    |
+         * | action.MANAGE_WRITE_SETTINGS           | sì             | sì    |
+         * | USAGE_ACCESS_SETTINGS                  | sì             | sì    |
+         * | action.MANAGE_OVERLAY_PERMISSION       | sì             | sì    |
+         * | APPLICATION_DETAILS_SETTINGS           | sì             | **no**|
+         *
+         * ⇒ Dal NOME non si capisce, e l'ultima riga dimostra che serve anche
+         * il verso opposto: quella pagina, senza il dato, non si apre. Quindi
+         * non si indovina e non si scrive una tabella che invecchia con la
+         * prossima ROM: si PROVA, e se la prima forma non si apre si prova
+         * l'altra. Un elenco generale aperto vale infinitamente più di un «non
+         * si può», purche' si dica QUALE si e' aperto — ed e' `scope`.
+         */
+        val secondo = avvia(
+            Intent(azione).also { if (!perQuestaApp) it.data = dato },
+            chiedendoPrima = false,
+        )
+        if (secondo.optBoolean("done", false)) {
+            secondo.put("scope", if (perQuestaApp) "general" else "app")
+        }
+        call.resolve(secondo)
     }
 
     /** Prepara una ricerca, una chiamata, un SMS. La persona conferma. */

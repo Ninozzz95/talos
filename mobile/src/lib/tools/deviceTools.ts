@@ -1,5 +1,9 @@
 import { z } from 'zod'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
+import {
+    TALOS_SCHERMATE_DI_SISTEMA,
+    talosSchermataDiSistema,
+} from '@/lib/device/capabilities'
 
 /**
  * I tool che toccano il TELEFONO, non i dati.
@@ -41,7 +45,7 @@ export interface TalosDeviceToolSources {
     volume(stream: string, percent?: number): Promise<Esito & { percent: number }>
     alarm(input: { hour?: number, minute?: number, seconds?: number, label?: string }): Promise<Esito>
     openApp(packageName: string): Promise<Esito>
-    openSettings(action: string, forThisApp: boolean): Promise<Esito>
+    openSettings(action: string, forThisApp: boolean): Promise<Esito & { scope?: string }>
     compose(kind: string, value: string, text?: string): Promise<Esito>
     status(): Promise<Record<string, unknown>>
     wallpaper(imageBase64: string, where: string): Promise<Esito & { appliedTo: string }>
@@ -70,7 +74,18 @@ const MOTIVO: Record<string, string> = {
     'no-torch': 'This device has no torch. Tell the user; do not retry.',
     'no-camera-service': 'The torch is not reachable on this device. Do not retry.',
     'not-installed': 'That app is not installed on this phone. Tell the user, or suggest another app.',
-    'not-available-here': 'This phone does not offer that screen. Tell the user; do not retry.',
+    /*
+     * ⛔ NON «questo telefono non offre quella schermata»: era una BUGIA.
+     *
+     * Owner 2026-08-10, dal telefono: TALOS ha detto «Il telefono non offre
+     * questa schermata, quindi non posso abilitare l'accesso alle notifiche da
+     * qui». MISURATO subito dopo, sullo stesso telefono: la schermata si apre
+     * (`com.android.settings/.Settings$NotificationAccessSettingsActivity`).
+     * Android risponde `ActivityNotFoundException` anche quando è il NOME
+     * dell'azione a essere sbagliato — e questa riga trasformava un nostro
+     * errore di battitura in un difetto del telefono di chi legge.
+     */
+    'not-available-here': 'No screen answered that action name. The screen probably exists — the action string was wrong. Try the exact action from this tool\'s description, or say you could not open it.',
     'needs-dnd-access': 'Changing that volume needs Do Not Disturb access, which only the user can grant. Offer to open it with device_open_settings.',
     'unknown-kind': 'Unsupported kind. Use call, sms, share, search or url.',
     'not-a-number': 'That is not a phone number — there is not a single digit in it. If you meant a contact by name, say you cannot look up contacts yet.',
@@ -300,15 +315,42 @@ export function createTalosDeviceTools(
                 'USE THIS WHENEVER YOU CANNOT DO SOMETHING YOURSELF: taking the user to the',
                 'exact screen is far more useful than saying you cannot. Set forThisApp when',
                 'the screen is about TALOS itself, such as one of its permissions.',
+                `The screens TALOS needs most: ${TALOS_SCHERMATE_DI_SISTEMA.join(', ')}.`,
             ].join(' '),
             input: z.object({
                 action: z.string().min(1).max(120),
                 forThisApp: z.boolean().optional(),
             }),
             async run(input) {
+                /*
+                 * ⛔ L'azione si CORREGGE prima di provarla.
+                 *
+                 * MISURATO il 2026-08-10: `android.settings.ACTION_NOTIFICATION_
+                 * LISTENER_SETTINGS` apre la schermata, la stessa senza `ACTION_`
+                 * risponde «unable to resolve Intent» — e quel rifiuto arrivava
+                 * alla persona come «questo telefono non offre quella schermata».
+                 * Il telefono la offriva; sbagliava chi la nominava a memoria.
+                 * L'elenco vero sta nel catalogo delle capacità, dove è già
+                 * scritto per ognuna.
+                 */
+                const azione = talosSchermataDiSistema(input.action) ?? input.action
+                const chiesta = input.forThisApp ?? false
+                const esito = await sources.openSettings(azione, chiesta)
+                /*
+                 * ⛔ Se si e' aperto l'ELENCO invece della riga di TALOS, va
+                 * DETTO. MISURATO il 2026-08-10: l'accesso alle notifiche non
+                 * accetta il dato `package:`, quindi la richiesta «la riga di
+                 * TALOS» ripiega sull'elenco di tutte le app. Un modello che
+                 * non lo sapesse direbbe «guarda l'interruttore di TALOS» a chi
+                 * ha davanti trenta righe — e la persona penserebbe di aver
+                 * sbagliato lei.
+                 */
+                const ripiegato = esito.done && chiesta && esito.scope === 'general'
                 return esitoDi(
-                    await sources.openSettings(input.action, input.forThisApp ?? false),
-                    'Opened that settings screen.',
+                    esito,
+                    ripiegato
+                        ? 'Opened the general settings list, not TALOS\'s own row — this phone does not offer a per-app page here. Tell the user to find TALOS in the list.'
+                        : 'Opened that settings screen.',
                 )
             },
         }) as TalosToolDefinition<never>,
