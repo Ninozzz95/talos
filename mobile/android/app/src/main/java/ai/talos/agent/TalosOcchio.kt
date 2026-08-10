@@ -127,8 +127,34 @@ class TalosOcchio : AccessibilityService() {
     fun esegui(indice: Int, azione: String, testo: String?): String? {
         val elenco = sguardo
         if (elenco.isEmpty()) return "nessunoSguardo"
-        if (SystemClock.uptimeMillis() - sguardoAl > VITA_SGUARDO_MS) return "sguardoVecchio"
-        val e = elenco.getOrNull(indice) ?: return "indiceFuoriElenco"
+        val atteso = elenco.getOrNull(indice) ?: return "indiceFuoriElenco"
+        /*
+         * ⛔⛔ SCADUTO NON VUOL DIRE PERDUTO: si RIGUARDA e si confronta.
+         *
+         * MISURATO sul Pad il 2026-08-10, prima corsa vera del pilota: ogni
+         * passo costa una chiamata al modello — SECONDI — e mezzo secondo di
+         * vita dello sguardo era finito da un pezzo quando l'azione arrivava.
+         * Esito: `sguardoVecchio` a ogni singolo passo, il tetto del tempo che
+         * scatta dopo due passi, e un pilota che non arriva mai da nessuna
+         * parte. Il tetto ha funzionato; la funzione no.
+         *
+         * ⛔ E la cura NON è allungare la vita dello sguardo: sarebbe toccare
+         * su una schermata che non c'è più, cioè il difetto che quei 500 ms
+         * esistono per impedire. Si riguarda, e si tocca solo se all'indice
+         * c'è ANCORA la stessa cosa — stesso tipo e stessa etichetta. Se lo
+         * schermo è cambiato si risponde `schermoCambiato`, e chi guida
+         * riguarda: costa 16 ms e non compra niente per sbaglio.
+         */
+        val e = if (SystemClock.uptimeMillis() - sguardoAl > VITA_SGUARDO_MS) {
+            val adesso = interattivi().getOrNull(indice) ?: return "schermoCambiato"
+            if (adesso.tipo != atteso.tipo || adesso.etichetta != atteso.etichetta) {
+                return "schermoCambiato"
+            }
+            adesso
+        }
+        else {
+            atteso
+        }
         val fatto = when (azione) {
             "tocca" -> e.nodo.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             "scrivi" -> {

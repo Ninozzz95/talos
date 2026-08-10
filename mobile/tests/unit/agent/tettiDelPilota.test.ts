@@ -137,14 +137,28 @@ describe('⭐ si racconta PRIMA di toccare', () => {
         expect(ordine).toEqual(['detto', 'toccato'])
     })
 
-    it('usa il PERCHÉ del modello quando c\'è, e ripiega quando è vuoto', async () => {
-        const conPerche = porte()
-        await talosGuidaLoSchermo(conPerche, { ...TALOS_LIMITI_PREDEFINITI, passi: 1, millisecondi: 1e7 })
-        expect(vi.mocked(conPerche.racconta).mock.calls[0]![0]).toBe('tocco Invio')
+    it('⛔ NON legge il «perché» del modello: la frase la costruisce la voce', async () => {
+        /*
+         * Owner 2026-08-10: «le frasi del TTS devono essere il meno meccaniche
+         * e robotiche possibile». `azione.perche` lo scrive il modello — in
+         * inglese quando gli gira, lungo quanto vuole, con dentro gli indici.
+         * La riga che si sente è quella di `voceDelPilota`: verbo umano,
+         * etichetta a schermo, e l'apertura solo al primo passo.
+         */
+        const p = porte()
+        await talosGuidaLoSchermo(p, { ...TALOS_LIMITI_PREDEFINITI, passi: 1, millisecondi: 1e7 })
+        expect(vi.mocked(p.racconta).mock.calls[0]![0]).toBe('Ok, tocco Invio')
+    })
 
-        const senza = porte({ chiedi: vi.fn(async () => '{"azione":"tocca","indice":1}') })
-        await talosGuidaLoSchermo(senza, { ...TALOS_LIMITI_PREDEFINITI, passi: 1, millisecondi: 1e7 })
-        expect(vi.mocked(senza.racconta).mock.calls[0]![0]).toContain('tocca')
+    it('⛔ e TACE quando non c\'è niente di nuovo: il silenzio è una riga', async () => {
+        // Tre scorrimenti di fila non si annunciano tre volte. Nessuno dei
+        // cinque assistenti censiti lo prevede: il loro ciclo parla sempre.
+        const p = porte({
+            chiedi: vi.fn(async () => '{"azione":"scorri","indice":0}'),
+        })
+        await talosGuidaLoSchermo(p, { ...TALOS_LIMITI_PREDEFINITI, passi: 4, millisecondi: 1e7 })
+        expect(vi.mocked(p.agisci)).toHaveBeenCalledTimes(4)
+        expect(vi.mocked(p.racconta)).toHaveBeenCalledTimes(1)
     })
 })
 

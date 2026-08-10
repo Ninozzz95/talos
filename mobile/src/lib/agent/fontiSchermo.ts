@@ -1,6 +1,7 @@
 import { buildChatCompletion } from '@/lib/chat/chatCompletion'
 import { talosCorsaDelloSchermo } from '@/lib/agent/corsaDelloSchermo'
 import { TalosSchermoBridge } from '@/lib/device/ponteSchermo'
+import { TalosDeviceBridge } from '@/lib/device/devicePlugin'
 import type { TalosCorsaDelPilota } from '@/lib/agent/pilotaDelloSchermo'
 import type { CompletionContext } from '@/lib/chat/chatCompletion'
 import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
@@ -68,6 +69,15 @@ export async function talosAvviaCorsa(input: TalosAvvioCorsa): Promise<TalosCors
             input.trasporto,
         ),
         apriApp: input.apriApp,
+        /*
+         * ⛔ L'elenco lo prende QUI e non lo riceve dal controller: passarglielo
+         * costava 346 byte nel grafo d'avvio (600.346 su 600.000), cioe' il
+         * pilota tornava a farsi pagare da chi non lo usa. Questo file e' gia'
+         * pigro: chiedere il PackageManager da qui non costa niente a nessuno.
+         */
+        elencoApp: async () => await TalosDeviceBridge.listApps()
+            .then((r) => r.output ?? '')
+            .catch(() => ''),
         parla: input.parla,
     })
 }

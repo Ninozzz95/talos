@@ -23,6 +23,20 @@ import type { TalosAzione } from '@/lib/agent/passoDelloSchermo'
 export interface TalosManoSorgenti {
     /** Aprire un'app: la stessa strada di `device_open_app`, non una seconda. */
     apriApp(nomePacchetto: string): Promise<{ done: boolean, reason?: string }>
+    /**
+     * L'elenco vero delle app, «Nome<TAB>pacchetto» per riga.
+     *
+     * ⛔ MISURATO sul Pad il 2026-08-10, prima corsa vera del pilota: il modello
+     * ha chiesto `apri_app` con **«Chrome»**, la porta voleva
+     * `com.android.chrome`, e la risposta è stata «non installato» — su un
+     * telefono dove Chrome c'è. La grammatica prometteva «il nome dell'app» e
+     * sotto pretendeva un identificativo: la colpa non è del modello.
+     *
+     * ⇒ Il nome si RISOLVE con l'elenco che il PackageManager ci dà già con le
+     * etichette, invece di far indovinare un id — la stessa lezione di
+     * `device_list_apps`: `org.thunderdog.challegram` non dice «Telegram».
+     */
+    elencoApp(): Promise<string>
     /** L'attesa, iniettata: nei test non deve passare tempo vero. */
     aspetta(millisecondi: number): Promise<void>
 }
@@ -55,7 +69,11 @@ export function creaManoDelloSchermo(sorgenti: TalosManoSorgenti) {
             }
             case 'apri_app': {
                 if (!azione.testo) return { fatto: false, motivo: 'nomeAppMancante' }
-                const esito = await sorgenti.apriApp(azione.testo)
+                const pacchetto = azione.testo.includes('.')
+                    ? azione.testo
+                    : talosPacchettoPerNome(await sorgenti.elencoApp(), azione.testo)
+                if (!pacchetto) return { fatto: false, motivo: `appNonTrovata: ${azione.testo}` }
+                const esito = await sorgenti.apriApp(pacchetto)
                 return { fatto: esito.done, ...(esito.reason ? { motivo: esito.reason } : {}) }
             }
             case 'attendi': {
@@ -68,4 +86,25 @@ export function creaManoDelloSchermo(sorgenti: TalosManoSorgenti) {
                 return { fatto: false, motivo: 'fineNonVaEseguita' }
         }
     }
+}
+
+/**
+ * Il pacchetto di un'app dal suo nome umano, o `null`.
+ *
+ * ⛔ L'ordine dei tentativi conta: prima l'uguaglianza esatta, poi l'inizio,
+ * poi il contenuto. Senza, «Chrome» su un telefono che ha anche «Chrome Beta»
+ * potrebbe aprire quella sbagliata — e aprire l'app sbagliata mentre si guida
+ * uno schermo vuol dire toccare dentro un'app che nessuno ha chiesto.
+ */
+export function talosPacchettoPerNome(elenco: string, richiesta: string): string | null {
+    const cercata = richiesta.trim().toLowerCase()
+    if (!cercata) return null
+    const righe = elenco.split(/\r?\n/)
+        .map((riga) => riga.split(/\t/))
+        .filter((pezzi): pezzi is [string, string] => pezzi.length >= 2 && !!pezzi[1]?.trim())
+        .map(([nome, pacchetto]) => ({ nome: nome.trim().toLowerCase(), pacchetto: pacchetto.trim() }))
+    return righe.find((r) => r.nome === cercata)?.pacchetto
+        ?? righe.find((r) => r.nome.startsWith(cercata))?.pacchetto
+        ?? righe.find((r) => r.nome.includes(cercata))?.pacchetto
+        ?? null
 }
