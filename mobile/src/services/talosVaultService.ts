@@ -12,6 +12,40 @@ import { talosLogDeviceIssue } from '@/lib/talosDeviceLog'
 import type { TalosAttachmentFileStore } from '@/services/attachmentFileStore'
 import type { TalosPickedFile } from '@/services/nativeFilePicker'
 
+/**
+ * ⭐⭐ SE QUESTA RIGA PROMETTE UN FILE SU DISCO.
+ *
+ * ## ⛔ La domanda giusta, dopo che quella sbagliata è costata 22 falsi
+ *
+ * La prima difesa chiedeva «questa riga ha un file su disco?» e marcava
+ * `failed` tutte quelle che rispondevano no. Sul Pad ne ha marcate **22 sane**:
+ * `existsPrivate` diceva il vero, era la DOMANDA a essere sbagliata.
+ *
+ * ⇒ La domanda giusta è: **questa riga promette un file, e la promessa regge?**
+ * E la risposta non va inventata — sta già nel contratto dello schema, letta
+ * nelle due sole strade che creano una riga (MISURATE il 2026-08-10):
+ *
+ * ```
+ *   pending   + private_uri ''    la riga nasce PRIMA dei byte, per contratto
+ *   available + percorso pieno    IL FILE C'È — l'unica che promette qualcosa
+ *   failed    + private_uri ''    la copia è fallita, ed è dichiarato
+ *   revoked                       tolto apposta
+ * ```
+ *
+ * ⛔ E una premessa del compito è caduta strada facendo: si credeva che i
+ * documenti GENERATI vivessero «come testo estratto, senza file per
+ * costruzione». Falso, misurato sul Pad: «Salva nella Libreria» su una risposta
+ * scrive `files/talos-vault/files/<id>.md` — 61 byte, visti con `run-as`. Anche
+ * il ripiego dell'analisi fallita tiene i byte: perde il testo cercabile, non
+ * il file.
+ */
+export function talosRigaPrometteUnFile(riga: {
+    readonly status: string
+    readonly private_uri: string
+}): boolean {
+    return riga.status === 'available' && riga.private_uri.trim() !== ''
+}
+
 /** What only the caller knows about a file's origin (famiglia B). */
 export interface TalosProvenanceInput {
     model?: string | null
@@ -507,11 +541,72 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                 }
             }
 
+            /*
+             * ⛔⛔ LE RIGHE CHE PROMETTONO UN FILE E NON CE L'HANNO.
+             *
+             * È la difesa che il 2026-08-08 aveva marcato VENTIDUE righe sane e
+             * che era stata ritirata. Torna adesso perché la domanda è cambiata:
+             * non più «questa riga ha un file su disco?» — a cui `pending` e
+             * `failed` rispondono «no» essendo perfettamente sane — ma «questa
+             * riga PROMETTE un file, e la promessa regge?».
+             *
+             * La regola non è stata inventata: è già nel contratto dello schema,
+             * e si legge nelle strade che scrivono (MISURATE il 2026-08-10,
+             * leggendole tutte — sono due sole a creare una riga):
+             *
+             *   riga appena creata      pending   private_uri ''   nessun file, per contratto
+             *   copia riuscita          available percorso pieno   IL FILE C'È
+             *   copia fallita           failed    private_uri ''   nessun file, e lo dice
+             *   analisi fallita         available byte tenuti      il file c'è, manca il testo
+             *   ripristino (85203e76)   byte scritti PRIMA della riga
+             *
+             * ⇒ Solo `available` con un percorso non vuoto promette qualcosa.
+             * Tutto il resto non va nemmeno cercato: cercarlo era l'errore.
+             */
+            const promesse = (await options.repository.listVaultFileSummaries())
+                .filter(talosRigaPrometteUnFile)
+            for (const file of promesse) {
+                let cè = true
+                try {
+                    cè = await options.fileStore.existsPrivate(file.private_uri)
+                } catch {
+                    /*
+                     * ⛔ Se non si riesce nemmeno a CHIEDERE, non si accusa.
+                     * Un errore del deposito non è la prova che il file manchi,
+                     * e marcare su un dubbio è come sono nati i ventidue falsi.
+                     */
+                    continue
+                }
+                if (cè) continue
+                try {
+                    await options.repository.updateVaultFile(file.id, {
+                        status: 'failed',
+                        private_uri: '',
+                        failure_code: 'TALOS_VAULT_FILE_MISSING',
+                    })
+                } catch {
+                    // Una riga che non si riesce a marcare non ferma le altre.
+                }
+            }
         },
     }
 
     /*
-     * ⛔⛔ QUI C'ERA UNA DIFESA CHE FACEVA PIÙ DANNO DEL DIFETTO. RITIRATA.
+     * ⛔⛔ QUI C'ERA UNA DIFESA CHE FACEVA PIÙ DANNO DEL DIFETTO.
+     *
+     * ✅ 2026-08-10 — È TORNATA, dentro `reconcilePending`, con la DOMANDA
+     * cambiata: non «questa riga ha un file?» ma «questa riga PROMETTE un file,
+     * e la promessa regge?». Vedi `talosRigaPrometteUnFile` in cima al file:
+     * la regola era già nel contratto dello schema e non andava inventata.
+     *
+     * ⛔ E una premessa scritta qui sotto è FALSA, misurata il 2026-08-10:
+     * i documenti generati NON vivono «senza file per costruzione». «Salva
+     * nella Libreria» su una risposta scrive
+     * `files/talos-vault/files/<id>.md` — 61 byte, visti con `run-as` sul Pad.
+     * Resta scritta perché è ciò che credevo quando ho fatto il danno, ed è la
+     * parte che spiega perché l'ho fatto.
+     *
+     * Il racconto originale, che vale ancora come lezione:
      *
      * ## Cosa doveva fare
      *
