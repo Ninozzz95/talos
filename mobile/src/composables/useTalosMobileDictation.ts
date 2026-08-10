@@ -30,6 +30,12 @@ export interface TalosMobileDictation {
     visible: ComputedRef<boolean>
     status: Ref<TalosMobileDictationStatus>
     error: Ref<string | null>
+    /**
+     * ⛔ Il CODICE accanto alla frase: la schermata deve poter distinguere «non
+     * hai parlato» da «si è rotto qualcosa» per non colorare di rosso un esito
+     * normale — owner 2026-08-10, misurato sul Pad.
+     */
+    errorCode: Ref<TalosDictationErrorCode | null>
     /** F5.2 waveform: 0..1, spikes on incoming speech, decays to a listening floor. */
     level: Ref<number>
     toggle(): Promise<void>
@@ -43,6 +49,12 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
     const supported = ref(false)
     const status = ref<TalosMobileDictationStatus>('idle')
     const error = ref<string | null>(null)
+    /**
+     * ⛔ QUALE esito, non solo che testo — owner 2026-08-10, dal Pad.
+     * Il silenzio e' un esito normale e non va vestito da guasto: la schermata
+     * ha bisogno del CODICE per scegliere il colore, non della frase.
+     */
+    const errorCode = ref<TalosDictationErrorCode | null>(null)
     const defaultErrorMessages: Record<TalosDictationErrorCode, string> = {
         permissionDenied: 'Microphone permission is required.',
         unavailable: 'Dictation unavailable.',
@@ -136,15 +148,18 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             sessionEpoch += 1
             status.value = 'error'
             error.value = messageFor('stoppedResponding')
+            errorCode.value = 'stoppedResponding'
         }, LISTENING_INACTIVITY_MS)
     }
 
     async function start(): Promise<void> {
         error.value = null
+        errorCode.value = null
         const granted = await engine.requestPermission()
         if (!granted) {
             status.value = 'error'
             error.value = messageFor('permissionDenied')
+            errorCode.value = 'permissionDenied'
             return
         }
         const capturedBase = options.base().trim()
@@ -159,6 +174,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             sessionEpoch += 1
             status.value = 'error'
             error.value = messageFor('startTimeout')
+            errorCode.value = 'startTimeout'
         }, START_WATCHDOG_MS)
         await engine.start({
             onStart: () => {
@@ -191,6 +207,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
                 }
                 status.value = 'error'
                 error.value = messageFor('noSpeech')
+                errorCode.value = 'noSpeech'
             },
             onError: (code) => {
                 if (epoch !== sessionEpoch) return
@@ -198,6 +215,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
                 stopLevel()
                 status.value = 'error'
                 error.value = messageFor(code)
+                errorCode.value = code
             },
         }, { language: options.language?.() })
     }
@@ -228,9 +246,10 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
         sessionEpoch += 1
         status.value = 'idle'
         error.value = null
+        errorCode.value = null
         stopLevel()
         stopEngineBestEffort()
     }
 
-    return { supported, visible, status, error, level, toggle, cancel }
+    return { supported, visible, status, error, errorCode, level, toggle, cancel }
 }

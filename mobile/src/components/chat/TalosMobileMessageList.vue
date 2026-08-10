@@ -387,35 +387,49 @@ function messageStateLabel(state: string): string {
                          vezzo: due disegni uguali per una cosa che si preme e
                          una che si guarda insegnano a premere quella sbagliata.
                     -->
-                    <span
-                        v-if="message.role === 'assistant' && parla.lette.value.has(message.id)"
-                        data-testid="talos-message-spoken"
-                        class="mb-1 inline-flex items-center text-[var(--talos-muted)]"
-                        :title="$t('chat.spokenAloud')"
-                        :aria-label="$t('chat.spokenAloud')"
-                    >
-                        <Mic class="size-4" aria-hidden="true" />
-                    </span>
-                    <button
-                        v-if="attesaViva(message)"
-                        type="button"
-                        data-testid="talos-authorization-pending-open"
-                        class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-xl border border-[var(--talos-accent)]/50 bg-[var(--talos-active)] px-3 text-left text-sm"
-                        @click="emit('reviewAuthorization')"
-                    >
-                        <ShieldQuestion class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                        <span class="min-w-0 flex-1">{{ message.content }}</span>
-                        <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
-                    </button>
-                    <p
-                        v-else-if="checkpointDi(message)"
-                        data-testid="talos-authorization-pending-done"
-                        class="text-xs leading-5 text-[var(--talos-muted)]"
-                    >{{ $t('chat.toolAuthorizationSettled') }}</p>
-                    <TalosMobileMessageContent
-                        v-else
-                        :content="message.content"
-                    />
+                    <!-- ⛔ ACCANTO, NON SOPRA — owner 2026-08-10, terza passata,
+                         con lo SCHERMO in mano: «icona deve essere ACCANTO al
+                         testo non sopra». La versione prima metteva il segnalino
+                         come fratello del contenuto dentro una colonna, e un
+                         contenuto di blocco lo spinge su una riga tutta sua.
+                         Il DOM diceva «c'e'» ed era vero; lo screenshot diceva
+                         DOVE, ed era sbagliato. Serve la RIGA: icona nella
+                         colonnina a sinistra, testo che le sta a fianco.
+                         `items-start` la tiene sulla PRIMA riga anche quando la
+                         risposta e' lunga. -->
+                    <div class="flex min-w-0 max-w-full items-start gap-1.5">
+                        <span
+                            v-if="message.role === 'assistant' && parla.lette.value.has(message.id)"
+                            data-testid="talos-message-spoken"
+                            class="mt-1 inline-flex shrink-0 items-center text-[var(--talos-muted)]"
+                            :title="$t('chat.spokenAloud')"
+                            :aria-label="$t('chat.spokenAloud')"
+                        >
+                            <Mic class="size-4" aria-hidden="true" />
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <button
+                                v-if="attesaViva(message)"
+                                type="button"
+                                data-testid="talos-authorization-pending-open"
+                                class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-xl border border-[var(--talos-accent)]/50 bg-[var(--talos-active)] px-3 text-left text-sm"
+                                @click="emit('reviewAuthorization')"
+                            >
+                                <ShieldQuestion class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                                <span class="min-w-0 flex-1">{{ message.content }}</span>
+                                <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                            </button>
+                            <p
+                                v-else-if="checkpointDi(message)"
+                                data-testid="talos-authorization-pending-done"
+                                class="text-xs leading-5 text-[var(--talos-muted)]"
+                            >{{ $t('chat.toolAuthorizationSettled') }}</p>
+                            <TalosMobileMessageContent
+                                v-else
+                                :content="message.content"
+                            />
+                        </div>
+                    </div>
                     <!-- Owner 2026-07-26: the "Sources" pill, under the answer
                          and never above it — you read the claim, then check what
                          it rests on. -->
