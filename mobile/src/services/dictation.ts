@@ -81,6 +81,7 @@ function nativeEngine(): TalosDictationEngine {
             }
         },
         async start(events, options = {}) {
+            talosDettaturaAnnota('avvio')
             const plugin = loadPlugin()
             active = true
             await plugin.removeAllListeners()
@@ -91,6 +92,7 @@ function nativeEngine(): TalosDictationEngine {
             })
             await plugin.addListener('listeningState', (data: { state?: string; status?: string }) => {
                 const state = data.state ?? data.status
+                talosDettaturaAnnota(`stato:${state ?? '?'}${active ? '' : ' (sessione gia chiusa)'}`)
                 if (state === 'started' || state === 'listening') events.onStart?.()
                 if ((state === 'stopped' || state === 'idle') && active) {
                     active = false
@@ -99,6 +101,7 @@ function nativeEngine(): TalosDictationEngine {
             })
             // F5.2: runtime recognizer errors finally reach JS as an event.
             await plugin.addListener('error', (data: { code?: string | number; message?: string }) => {
+                talosDettaturaAnnota(`errore:${data.code ?? '?'}${active ? '' : ' (sessione gia chiusa)'}`)
                 if (!active) return
                 active = false
                 talosLogDeviceIssue('TALOS_SPEECH_ERROR', `${data.code ?? ''} ${data.message ?? ''}`)
@@ -128,6 +131,7 @@ function nativeEngine(): TalosDictationEngine {
             }
         },
         async stop() {
+            talosDettaturaAnnota('stop chiesto dalla persona')
             const plugin = loadPlugin()
             active = false
             // SF5-1 discipline kept: never trust a native stop to settle.
@@ -226,6 +230,43 @@ const unsupportedEngine: TalosDictationEngine = {
  * build), a full plugin-method inventory (proves the wrapper is really the
  * capgo one), and the RAW native results verbatim, not just pass/fail.
  */
+/**
+ * ⛔⛔ IL DIARIO DELLA DETTATURA — perché un difetto che non si riproduce
+ * non si indovina: si strumenta.
+ *
+ * Owner 2026-08-10: «quando la dettatura vocale è finita, il pulsante da stop
+ * non ritorna a icona microfono». MISURATO sul Pad, tre uscite su tre, con
+ * tocchi reali:
+ *
+ * ```
+ *   il motore decide che hai smesso   Detta → Interrompi (505 ms) → Detta (5.556 ms)  ✅
+ *   tocchi tu lo stop                 Detta → Interrompi → Detta (506 ms)             ✅
+ *   ritorno dallo sfondo              torna «Invia messaggio», ed è giusto: c'è testo ✅
+ * ```
+ *
+ * ⇒ Non si riproduce da qui. E un difetto visto da chi lo usa e non da chi lo
+ * cerca non è un difetto immaginario: è un difetto di cui non conosciamo la
+ * strada. Questo diario tiene le ultime transizioni con l'ora, così la
+ * prossima volta la Diagnostica dice **qual è stato l'ultimo evento
+ * ricevuto** invece di lasciarci a ipotizzare.
+ *
+ * Sedici righe: abbastanza per una sessione intera, poche abbastanza da non
+ * diventare un archivio che nessuno legge.
+ */
+const DIARIO_MAX = 16
+const diario: string[] = []
+
+export function talosDettaturaAnnota(evento: string): void {
+    const ora = new Date().toISOString().slice(11, 23)
+    diario.push(`${ora} ${evento}`)
+    if (diario.length > DIARIO_MAX) diario.shift()
+}
+
+/** Le ultime transizioni, dalla più vecchia. Vuoto se non si è mai dettato. */
+export function talosDettaturaDiario(): readonly string[] {
+    return [...diario]
+}
+
 export interface TalosDictationDiagnostics {
     buildId: string
     native: boolean
@@ -237,6 +278,8 @@ export interface TalosDictationDiagnostics {
     available: boolean | null
     trace: string
     error: string | null
+    /** Le ultime transizioni della dettatura, per spiegare un blocco. */
+    diario: readonly string[]
 }
 
 function talosBuildId(): string {
@@ -256,6 +299,7 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
             buildId, native, registered: webOk, pluginLoaded: webOk, methods: webOk ? ['webSpeech'] : [],
             permissionsRaw: null, availableRaw: null, available: webOk, trace,
             error: webOk ? null : trace,
+            diario: talosDettaturaDiario(),
         }
     }
 
@@ -296,6 +340,7 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
             buildId, native, registered, pluginLoaded: false, methods: [],
             permissionsRaw: null, availableRaw: null, available: null,
             trace, error: failure,
+            diario: talosDettaturaDiario(),
         }
     }
 
@@ -321,6 +366,7 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
             buildId, native, registered, pluginLoaded: false, methods: [],
             permissionsRaw: null, availableRaw: null, available: null,
             trace, error: failures.join(' · ') || trace,
+            diario: talosDettaturaDiario(),
         }
     }
     const pluginObj = plugin as unknown as Record<string, unknown>
@@ -345,6 +391,7 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
         native,
         registered,
         pluginLoaded: true,
+        diario: talosDettaturaDiario(),
         methods,
         permissionsRaw,
         availableRaw,

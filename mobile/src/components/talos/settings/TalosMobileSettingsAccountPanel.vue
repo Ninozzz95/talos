@@ -87,7 +87,7 @@ onMounted(async () => {
     dictationDiag.value = await talosDictationDiagnostics().catch((error) => ({
         buildId: 'unknown', native: false, registered: false, pluginLoaded: false,
         methods: [], permissionsRaw: null, availableRaw: null, available: null,
-        trace: String(error), error: String(error),
+        trace: String(error), error: String(error), diario: [],
     }))
 })
 
