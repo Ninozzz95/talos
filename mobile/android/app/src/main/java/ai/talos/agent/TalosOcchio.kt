@@ -64,15 +64,17 @@ class TalosOcchio : AccessibilityService() {
     }
 
     /**
-     * ⭐ IL DITO. I nostri tocchi non arrivano qui (li inietta il framework);
-     * un dito vero sì. È il freno «mi hai toccato, mi fermo» senza permessi
-     * nuovi — e va provato con una mano vera, non è ancora verificato.
+     * ⛔⛔ QUESTA STRADA È CHIUSA, e resta scritta perché non la riprovi nessuno.
+     *
+     * MISURATO col dito dell'owner il 2026-08-10: `TYPE_TOUCH_INTERACTION_START`
+     * **non arriva**. Android lo consegna solo a un servizio che chiede
+     * l'esplorazione al tocco — che cambierebbe il modo in cui la persona usa il
+     * telefono (un tocco legge, due attivano). Per accorgersi di una mano non si
+     * stravolge il telefono di quella mano.
+     *
+     * ⇒ Il dito si sente al livello GREZZO: vedi `TalosDitoVero`.
      */
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType == AccessibilityEvent.TYPE_TOUCH_INTERACTION_START) {
-            ultimoDito = SystemClock.uptimeMillis()
-        }
-    }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
     /**
      * Lo sguardo: gli elementi con cui si può interagire, numerati.
@@ -167,12 +169,6 @@ class TalosOcchio : AccessibilityService() {
         @Volatile private var vivo: TalosOcchio? = null
         @Volatile private var sguardo: List<Elemento> = emptyList()
         @Volatile private var sguardoAl: Long = 0
-        @Volatile private var ultimoDito: Long = 0
-
         fun aperto(): TalosOcchio? = vivo
-
-        /** Da quanti millisecondi non tocca nessuno. `null` se non ha mai toccato. */
-        fun dallUltimoDito(): Long? =
-            if (ultimoDito == 0L) null else SystemClock.uptimeMillis() - ultimoDito
     }
 }

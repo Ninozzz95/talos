@@ -52,8 +52,14 @@ class TalosSchermoPlugin : Plugin() {
                 .put("elementi", righe)
                 .put("millisecondi", SystemClock.uptimeMillis() - t0)
                 // ⛔ Il freno viaggia con lo sguardo: chi decide deve sapere se
-                // nel frattempo una mano vera ha toccato lo schermo.
-                .also { o -> TalosOcchio.dallUltimoDito()?.let { o.put("dallUltimoDito", it) } },
+                // nel frattempo una mano VERA ha toccato lo schermo. Misurato nei
+                // due versi il 2026-08-10 — un dito produce 1.369 righe dal
+                // pannello, due nostri tocchi iniettati ne producono zero.
+                .also { o ->
+                    val q = TalosDitoVero.dallUltimoDito()
+                    if (q != null) o.put("dallUltimoDito", q)
+                    o.put("manoSullaSchermo", TalosDitoVero.haToccato())
+                },
         )
     }
 
