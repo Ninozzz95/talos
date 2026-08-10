@@ -82,8 +82,49 @@ const MOTIVO: Record<string, string> = {
     'no-window': 'TALOS is not on screen, so the screen cannot be held awake. Do not retry.',
 }
 
+/**
+ * ⛔⛔ L'ESITO RIUSCITO SI DICE PER INTERO, e non è cortesia: è la differenza
+ * fra un turno che si legge e uno che sembra fallito.
+ *
+ * MISURATO sul Pad il 2026-08-10 con Qwen3-1.7B.Q4_K_M, torcia accesa, chat
+ * nuova, «Spegni la torcia»:
+ *
+ * ```
+ *   dumpsys   07:21:18 : Torch … turned off for client PID 31874   ✅ SPENTA
+ *   in chat   «The tool results do not contain what the user asked for.»
+ * ```
+ *
+ * E all'accensione, dove il racconto riusciva, il modello ha citato un esito
+ * che **non esiste**: `{"status": "on"}`. Il nostro era «Torch on.» — due
+ * parole, senza soggetto e senza verbo. Un modello piccolo davanti a un esito
+ * telegrafico non lo riconosce come la risposta alla domanda, e o lo inventa o
+ * dichiara che non c'è.
+ *
+ * ⇒ Un esito riuscito dice **che è stato fatto** e **com'è adesso**, in una
+ * frase intera. Costa una decina di token per turno e vale per tutti i
+ * provider: è ancoraggio, non decorazione.
+ *
+ * ⛔ Il prefisso «Done.» è aggiunto QUI e non in ogni tool: scriverlo in
+ * quindici posti significa che il sedicesimo lo dimenticherà.
+ *
+ * ## ⛔ E NON HA CURATO IL SINTOMO. Va detto, se no questo commento mente.
+ *
+ * Rimisurato col testo nuovo, stessa build, chat nuove, Qwen3-1.7B:
+ *
+ * ```
+ *   dumpsys   07:25:49 turned on · 07:26:12 turned off   ✅ agisce nei due versi
+ *   in chat   «The tool_results do not contain what the user asked for.»  ⛔ x2
+ * ```
+ *
+ * Quel modello produce quella frase comunque. ⇒ L'ipotesi «l'esito era troppo
+ * telegrafico» è **respinta dalla misura**: questa resta una buona regola di
+ * contratto — un esito che dice com'è adesso serve a ogni provider — ma la cura
+ * del racconto è altrove, ed è un problema di prodotto, non di prompt:
+ * **quando uno strumento che AGISCE riesce, la persona deve vederlo anche se il
+ * modello lo racconta male.** Compito #65.
+ */
 function esitoDi(r: Esito, fatto: string) {
-    if (r.done) return { ok: true, content: fatto }
+    if (r.done) return { ok: true, content: fatto.startsWith('Done') ? fatto : `Done. ${fatto}` }
     return {
         ok: false,
         content: MOTIVO[r.reason ?? ''] ?? 'It did not happen. Tell the user rather than retrying.',
@@ -118,7 +159,12 @@ export function createTalosDeviceTools(
             description: 'Turn the phone torch on or off. Send on:false to turn it off.',
             input: z.object({ on: z.boolean() }),
             async run(input) {
-                return esitoDi(await sources.torch(input.on), input.on ? 'Torch on.' : 'Torch off.')
+                // ⛔ Frase intera, soggetto e stato: «Torch off.» non veniva
+                // riconosciuto come la risposta alla domanda — vedi `esitoDi`.
+                return esitoDi(
+                    await sources.torch(input.on),
+                    `The phone torch is now ${input.on ? 'ON' : 'OFF'}.`,
+                )
             },
         }) as TalosToolDefinition<never>,
 
