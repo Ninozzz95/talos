@@ -7,6 +7,7 @@ import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosSpeechService, type TalosSpeechVoice } from '@/services/speech'
 import { parseTalosDictationLanguageMode } from '@/lib/dictationPolicy'
+import { talosVociOrdinate, type TalosVoceDispositivo } from '@/lib/voice/sceltaVoce'
 
 /**
  * Owner 2026-07-24 — Voice (text-to-speech) settings: pick the device voice
@@ -19,11 +20,24 @@ const service = useTalosSpeechService()
 const supported = service.supported()
 const voices = ref<TalosSpeechVoice[]>([])
 
+/*
+ * ⛔ Si rilegge finché non arrivano: il motore nativo risponde su un altro
+ * thread e la prima lettura può essere vuota. Un solo tentativo dopo 300 ms era
+ * una scommessa — e quando perdeva, il pannello mostrava «nessuna voce» su un
+ * telefono che ne ha 473.
+ */
 onMounted(() => {
-    voices.value = service.voices()
-    // Some engines populate voices asynchronously — re-read shortly after.
-    if (voices.value.length === 0) window.setTimeout(() => { voices.value = service.voices() }, 300)
+    let tentativi = 0
+    const leggi = () => {
+        voices.value = service.voices()
+        if (voices.value.length > 0 || ++tentativi >= 10) return
+        window.setTimeout(leggi, 300)
+    }
+    leggi()
 })
+
+/** Mostra anche le lingue che non sono quella dell'interfaccia. */
+const tutteLeLingue = ref(false)
 
 const selectedVoice = computed({
     get: () => settings.state.voice.voice_uri ?? '',
@@ -42,10 +56,45 @@ const dictationLanguageItems = computed(() => [
     { value: 'en', label: t('voice.dictationEnglish') },
     { value: 'it', label: t('voice.dictationItalian') },
 ])
-const voiceItems = computed(() => voices.value.map((voice) => ({
-    value: voice.voiceURI,
-    label: `${voice.name} (${voice.lang})`,
-})))
+/**
+ * ⛔⛔ LE VOCI DELLA TUA LINGUA, IN ORDINE — non 473 lingue mescolate.
+ *
+ * MISURATO sul Pad il 2026-08-10, appena il selettore ha smesso di essere
+ * vuoto: offriva **474 righe**, e le prime erano `sfb (es-US)`,
+ * `ur-PK-language`, `htm · rete (ja-JP)`. Un elenco così non è una scelta: è
+ * un archivio. Chi cerca «una voce meno robotica» si arrende alla terza riga.
+ *
+ * ⇒ Prima quelle della lingua in cui TALOS sta parlando, ordinate dalla
+ * migliore (`talosVociOrdinate`: mai la generica in testa, la neurale prima di
+ * quella sul telefono). Le altre lingue restano raggiungibili con un
+ * interruttore, perché chi è bilingue esiste — ma non le paga chi non lo è.
+ */
+const linguaInterfaccia = computed(() => document.documentElement.lang || navigator.language || 'it')
+const voiceItems = computed(() => {
+    const dispositivo: TalosVoceDispositivo[] = voices.value.map((v) => ({
+        name: v.voiceURI,
+        locale: v.lang,
+        // Il servizio non porta questi campi: l'ordinamento userà i criteri che
+        // restano — nominata contro generica, e la rete — che sono quelli che
+        // distinguono davvero (sul Pad la qualità è 400 per tutte).
+        quality: 400,
+        latency: 200,
+        network: / · rete$/.test(v.name),
+        notInstalled: false,
+    }))
+    const miaLingua = talosVociOrdinate(dispositivo, {
+        lingua: linguaInterfaccia.value,
+        rete: navigator.onLine !== false,
+    })
+    const restanti = tutteLeLingue.value
+        ? dispositivo.filter((v) => !miaLingua.some((m) => m.name === v.name))
+        : []
+    const etichetta = (v: TalosVoceDispositivo) => {
+        const originale = voices.value.find((o) => o.voiceURI === v.name)
+        return `${originale?.name ?? v.name} (${v.locale})`
+    }
+    return [...miaLingua, ...restanti].map((v) => ({ value: v.name, label: etichetta(v) }))
+})
 function setRate(event: Event): void {
     void settings.setVoicePreferences({ rate: Number((event.target as HTMLInputElement).value) })
 }
@@ -97,6 +146,24 @@ function preview(): void {
                     :aria-label="t('voice.readAloudVoice')"
                     :none-label="t('voice.deviceDefault')"
                 />
+            </label>
+
+            <!-- ⛔ Le altre lingue esistono ma non le paga chi non le usa:
+                 senza questo interruttore il selettore offriva 474 righe di
+                 473 lingue mescolate, misurato sul Pad. -->
+            <!-- ⛔ Il testid sta sulla LABEL, non sull'input: un <input> non ha
+                 testo, quindi un comando cercato per etichetta risultava
+                 «assente» su uno schermo dove si legge benissimo. Misurato. -->
+            <label
+                data-testid="talos-voice-all-languages"
+                class="mt-2 flex min-h-touch items-center gap-2 text-xs text-[var(--talos-muted)]"
+            >
+                <input
+                    v-model="tutteLeLingue"
+                    type="checkbox"
+                    class="size-4 accent-[var(--talos-accent)]"
+                >
+                <span>{{ t('voice.allLanguages') }}</span>
             </label>
 
             <label class="mt-3 block">

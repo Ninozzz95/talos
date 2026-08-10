@@ -7,6 +7,7 @@ export type TalosMobileSettingsTabId =
     | 'email'
     | 'reminders'
     | 'appearance'
+    | 'voice'
     | 'language'
     | 'privacy'
     | 'backup'
@@ -42,6 +43,23 @@ export const TALOS_MOBILE_SETTINGS_TABS: readonly TalosMobileSettingsTab[] = Obj
     { id: 'email', label: 'Email', description: 'Email triage, drafts and policy-gated sending.', availability: 'gated', gateReason: 'No authorized mobile email connector is configured.' },
     { id: 'reminders', label: 'Reminders', description: 'Local reminders and delivery channels.', availability: 'gated', gateReason: 'The mobile reminder delivery worker is not installed yet.' },
     { id: 'appearance', label: 'Appearance', description: '', availability: 'available' },
+    /**
+     * ⛔ LA VOCE ESCE DA «ASPETTO» — owner 2026-08-10, parole sue: «l'impostazione
+     * della voce si trova su aspetto. Deve avere un'impostazione fuori».
+     *
+     * E ha ragione per un motivo che vale oltre questo caso: «Aspetto» è come
+     * TALOS **appare**, la voce è come TALOS **si comporta**. Erano insieme
+     * perché la voce era nata come un dettaglio; adesso è una capacità intera —
+     * legge, ascolta, e un domani risponde quando la chiami (#29) — e una
+     * capacità che vive dentro la pagina di un'altra non la trova nessuno.
+     *
+     * MISURATO lo stesso giorno, ed è la prova che stava nel posto sbagliato:
+     * il selettore mostrava **0 voci** (leggeva il Web Speech API) mentre il
+     * motore che parla ne aveva **473** ed era fermo sulla generica. Un
+     * pannello nascosto in fondo a un'altra pagina è un pannello che nessuno
+     * apre, e un difetto lì dentro può vivere per mesi.
+     */
+    { id: 'voice', label: 'Voice', description: 'Which voice reads aloud, how fast, and the dictation language.', availability: 'available' },
     { id: 'language', label: 'Language', description: 'The language used by TALOS menus, settings and controls.', availability: 'available' },
     { id: 'privacy', label: 'Privacy and permissions', description: 'What TALOS can ask the device for, and what leaves it.', availability: 'available' },
     { id: 'backup', label: 'Backup and restore', description: 'Take everything with you, and bring it back.', availability: 'available' },
@@ -85,7 +103,7 @@ export interface TalosMobileSettingsGroup {
 export const TALOS_MOBILE_SETTINGS_GROUPS: readonly TalosMobileSettingsGroup[] = Object.freeze([
     { label: 'Intelligence', tabIds: ['models', 'ai_defaults', 'agent_tools'] },
     { label: 'Connections', tabIds: ['search', 'browser'] },
-    { label: 'Interface', tabIds: ['appearance', 'language'] },
+    { label: 'Interface', tabIds: ['appearance', 'voice', 'language'] },
     // Its own group: a privacy claim is TALOS's central promise, and burying it
     // under Interface would say the opposite.
     { label: 'Privacy', tabIds: ['privacy', 'backup'] },
