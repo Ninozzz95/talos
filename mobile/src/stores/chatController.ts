@@ -3368,17 +3368,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const strumentiEseguibili = dettagliStrumento
                 ? [...offeredTools, dettagliStrumento as never]
                 : offeredTools
+            /*
+             * ⛔ Il testo sta in `catalogoCompatto`, non qui: è la parte che ha
+             * dovuto imparare a farsi obbedire da un modello piccolo, e va
+             * scritta accanto alla misura che l'ha corretta — non in mezzo a
+             * duemila righe di controller, dove nessuno la rileggerebbe.
+             */
             const indiceNelPrompt = catalogo
-                ? `
-
-# Tools available
-
-These tools exist. You do NOT have their input `
-                    + `schemas yet: call ${catalogo.TALOS_DETTAGLI_STRUMENTO} with the names you `
-                    + `need, then call them.
-
-`
-                    + catalogo.talosIndiceCompatto(offeredTools as never)
+                ? catalogo.talosIstruzioneCatalogo(offeredTools as never)
                 : ''
 
             const documentToolOffered = offeredTools.some(
