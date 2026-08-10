@@ -771,6 +771,7 @@ watch(() => props.prompt, () => {
                  its own filled background, so removing the border alone left
                  the container exactly where it was. -->
             <Button
+                data-testid="talos-composer-action"
                 type="button"
                 size="icon"
                 variant="ghost"
