@@ -362,10 +362,64 @@ function forGeminiDialect(node: unknown): unknown {
             out.anyOf = forGeminiDialect(value)
             continue
         }
+        /*
+         * ⛔⛔ SI TIENE CIO' CHE E' PERMESSO, non si tolgono i vietati.
+         *
+         * MISURATO sul telefono dell'owner il 2026-08-10, HTTP 400 di
+         * gemini-2.5-flash:
+         *
+         *   Invalid JSON payload received. Unknown name "additionalProperties"
+         *   at 'tools[0].function_declarations[9].parameters': Cannot find field.
+         *
+         * ⇒ Qui c'era una lista di ECCEZIONI — `const`, `oneOf` — e ha retto
+         * finche' nessuno schema ha prodotto una chiave nuova. Poi Zod ha
+         * emesso `additionalProperties` su un tool, e Gemini ha rifiutato
+         * l'INTERA chiamata: non un tool, tutta la conversazione.
+         *
+         * La ricerca dice che l'elenco dei rifiutati e' lungo e cresce —
+         * `$schema`, `$defs`, `$ref`, `$id`, `default`, `title`, `examples`,
+         * `propertyNames`, `additionalProperties`… Inseguirlo a colpi di
+         * eccezioni significa aspettare il prossimo 400 in produzione.
+         *
+         * ⇒ Gemini accetta un SOTTOINSIEME di OpenAPI 3.0, e quel sottoinsieme
+         * e' corto e documentato. Si tiene quello. Una chiave nuova che non c'e'
+         * dentro viene lasciata fuori PRIMA di partire, e il difetto non nasce.
+         */
+        if (key === 'properties') {
+            /*
+             * ⛔ DENTRO `properties` le chiavi sono NOMI DI CAMPO, non parole
+             * chiave di schema: `testo`, `quanti`, `tipo`. Applicarci la lista
+             * degli ammessi li cancella tutti e lo schema esce VUOTO — cioe' il
+             * modello smette di sapere cosa passare.
+             *
+             * Preso da un test un minuto dopo aver scritto il filtro: la cura
+             * stava per diventare un difetto peggiore del difetto.
+             */
+            const campi: Record<string, unknown> = {}
+            for (const [nome, sotto] of Object.entries(value as Record<string, unknown>)) {
+                campi[nome] = forGeminiDialect(sotto)
+            }
+            out.properties = campi
+            continue
+        }
+        if (!GEMINI_AMMESSE.has(key)) continue
         out[key] = forGeminiDialect(value)
     }
     return out
 }
+
+/**
+ * Il sottoinsieme di OpenAPI 3.0 che `generateContent` accetta nei
+ * `function_declarations`, dalla documentazione di Google.
+ *
+ * ⛔ `format` NON c'e': e' documentato come supportato ma solo per certi
+ * valori, e uno sbagliato e' un altro 400. E' un suggerimento, non un
+ * significato: toglierlo non cambia cosa il modello puo' chiamare.
+ */
+const GEMINI_AMMESSE: ReadonlySet<string> = new Set([
+    'type', 'description', 'nullable', 'enum', 'items', 'properties',
+    'required', 'minItems', 'maxItems', 'propertyOrdering', 'anyOf',
+])
 
 export function talosToolsForGemini(tools: ReadonlyArray<TalosToolDefinition<never>>): unknown[] {
     if (tools.length === 0) return []

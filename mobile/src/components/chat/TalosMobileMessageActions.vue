@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue'
-import { Copy, Library, RefreshCcw, RotateCcw } from '@lucide/vue'
+import { Copy, Library, RefreshCcw, RotateCcw, Square, Volume2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
+import { useTalosSpeech } from '@/composables/useTalosSpeech'
 
 const TalosMobileMessageOverflowMenu = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileMessageOverflowMenu.vue'),
@@ -20,6 +21,11 @@ const emit = defineEmits<{
     saveToLibrary: [message: TalosMobileMessageView]
 }>()
 
+const speech = useTalosSpeech()
+function toggleSpeak(): void {
+    void speech.toggle(props.message.id, props.message.content)
+}
+
 // Owner 2026-07-24: speak the assistant reply aloud (device TTS). One at a
 // time; the button toggles to Stop while this message is speaking.
 </script>
@@ -33,18 +39,32 @@ const emit = defineEmits<{
             <RefreshCcw class="size-3.5" aria-hidden="true" />
         </Button>
         <!--
-            ⛔ LA LETTURA NON STA PIU' QUI: e' passata all'INIZIO della risposta
-            (`talos-message-speak` in TalosMobileMessageList).
+            ⛔ IL COMANDO DELLA LETTURA STA QUI, accanto a «copia», SEMPRE.
 
-            Owner 2026-08-10: «invece del chip badge lettura ad alta voce,
-            semplicemente un'icona all'inizio della risposta». La ragione d'uso
-            regge da sola: si decide di ascoltare PRIMA di leggere. Un comando in
-            fondo si trova quando la risposta e' gia' stata letta con gli occhi,
-            cioe' quando non serve piu'.
+            Owner 2026-08-10: «l'icona sound deve stare accanto alle altre come
+            quella copia eccetera a prescindere». L'avevo spostato all'inizio
+            della risposta e tolto da qui: sbagliato due volte — un comando che
+            si sposta si perde, e sopra il testo ci va un SEGNALINO
+            (`talos-message-spoken`), che si guarda e non si preme.
 
-            ⛔ E qui non ne resta una copia: due comandi per la stessa cosa sono
-            due stati da tenere allineati, e prima o poi ne resta uno acceso.
+            ⛔ E niente `speech.supported` nel `v-if`: su Android quella
+            condizione e' SEMPRE falsa (la WebView non ha `speechSynthesis`,
+            misurato), e l'icona non compariva su nessun messaggio.
         -->
+        <Button
+            v-if="message.role === 'assistant'"
+            type="button"
+            variant="ghost"
+            size="icon"
+            class="min-h-touch min-w-touch"
+            :aria-label="speech.speakingId.value === message.id ? $t('chat.stopSpeaking') : $t('chat.speakMessage')"
+            :title="speech.speakingId.value === message.id ? $t('common.stop') : $t('chat.speak')"
+            :aria-pressed="speech.speakingId.value === message.id"
+            @click="toggleSpeak"
+        >
+            <Square v-if="speech.speakingId.value === message.id" class="size-3.5" fill="currentColor" aria-hidden="true" />
+            <Volume2 v-else class="size-3.5" aria-hidden="true" />
+        </Button>
         <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.retryAssistant')" :title="$t('chat.retryResponse')" :disabled="busy || !canRetry" @click="emit('retry', message)">
             <RotateCcw class="size-3.5" aria-hidden="true" />
         </Button>

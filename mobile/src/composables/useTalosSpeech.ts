@@ -25,6 +25,24 @@ import { useTalosI18n } from '@/i18n'
  */
 const speakingId = ref<string | null>(null)
 
+/**
+ * ⭐ QUALI RISPOSTE SONO STATE LETTE AD ALTA VOCE, su richiesta.
+ *
+ * Owner 2026-08-10: «l'icona prima del testo è solo un segnalino per far capire
+ * che la chat ha parlato ad alta voce su richiesta dell'utente… non deve
+ * apparire se non si chiede alla chat di parlare».
+ *
+ * ⛔ È un SEGNALINO, non un comando: il comando resta sotto, accanto a «copia»,
+ * ed è sempre presente. Due cose diverse che si somigliavano — per questo il
+ * segnalino usa un'icona diversa, come ha chiesto l'owner.
+ *
+ * ⛔ Vive quanto la SESSIONE, non quanto la chat: riaprendo l'app il segnalino
+ * sparisce. È una scelta, non una dimenticanza — «questa risposta l'ho appena
+ * sentita» è un fatto del momento, e persisterlo vorrebbe dire scrivere nel
+ * database una riga per ogni ascolto.
+ */
+const lette = ref<ReadonlySet<string>>(new Set())
+
 export function useTalosSpeech() {
     const settings = useSettingsStore()
     const toasts = useTalosMobileToasts()
@@ -42,6 +60,9 @@ export function useTalosSpeech() {
             return
         }
         speakingId.value = id
+        // ⛔ Si segna PRIMA di parlare, non a fine lettura: il segnalino deve
+        // comparire quando la persona chiede, non quando il motore finisce.
+        lette.value = new Set([...lette.value, id])
         const { useTalosSpeechService } = await import('@/services/speech')
         await useTalosSpeechService().speak(text, {
             voiceURI: settings.state.voice.voice_uri ?? undefined,
@@ -57,6 +78,8 @@ export function useTalosSpeech() {
 
     return {
         speakingId: readonly(speakingId),
+        /** Le risposte che sono state chieste ad alta voce in questa sessione. */
+        lette: readonly(lette),
         toggle,
         stop,
     }
