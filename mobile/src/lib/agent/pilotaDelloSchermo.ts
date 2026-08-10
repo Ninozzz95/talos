@@ -1,3 +1,4 @@
+import { talosFraseDaDire } from '@/lib/agent/voceDelPilota'
 import {
     talosLeggiAzione,
     talosOsservazione,
@@ -112,6 +113,9 @@ export async function talosGuidaLoSchermo(
     const storia: string[] = []
     let passi = 0
     let fallimenti = 0
+    // Cosa si è detto l'ultima volta: serve al SILENZIO — tre scorrimenti di
+    // fila non si annunciano tre volte.
+    let ultima: { azione: TalosAzione['azione'], etichetta?: string } | undefined
     const chiudi = (fine: TalosFineCorsa): TalosCorsaDelPilota => ({
         fine,
         storia,
@@ -151,8 +155,23 @@ export async function talosGuidaLoSchermo(
          * Owner 2026-08-10: «Sempre a voce quando guida». Il punto non è la
          * cortesia: raccontare dopo informa, raccontare prima dà a chi ascolta
          * il tempo di dire «no, aspetta» mentre il dito non è ancora arrivato.
+         *
+         * ⛔ E NON si legge `azione.perche`: quello lo scrive il modello, in
+         * inglese quando gli gira, lungo quanto vuole e con dentro gli indici.
+         * La frase la costruisce `voceDelPilota` — rotazione invece di
+         * sorteggio, brevità progressiva, e il silenzio quando non c'è niente
+         * di nuovo da dire. `null` vuol dire «taci», ed è una riga legittima.
          */
-        porte.racconta(azione.perche?.trim() || talosRigaDiStoria(passi, azione))
+        const bersaglio = sguardo.elementi.find((e) => e.indice === azione.indice)
+        const frase = talosFraseDaDire({
+            numero: passi,
+            azione,
+            ...(bersaglio?.etichetta ? { etichetta: bersaglio.etichetta } : {}),
+            ...(ultima ? { precedente: ultima.azione } : {}),
+            ...(ultima?.etichetta ? { etichettaPrecedente: ultima.etichetta } : {}),
+        })
+        if (frase) porte.racconta(frase)
+        ultima = { azione: azione.azione, etichetta: bersaglio?.etichetta }
 
         if (azione.azione === 'fine') {
             storia.push(talosRigaDiStoria(passi, azione))

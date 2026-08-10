@@ -53,8 +53,43 @@ object TalosDitoVero {
      */
     const val PERCORSO = "/data/local/tmp/talos-dito.txt"
 
-    /** Il comando che il ponte deve avviare, staccato. */
-    val COMANDO = listOf("sh", "-c", "getevent -l > $PERCORSO 2>&1 &")
+    /**
+     * Il comando che il ponte deve avviare, staccato.
+     *
+     * ## ⛔⛔ SI GUARDA SOLO IL PANNELLO, e ci è costata una corsa vera
+     *
+     * La prima versione era `getevent -l > file`, senza dire QUALE device. Alla
+     * prima corsa del pilota sul Pad (2026-08-10) il file è passato da 559 a
+     * **45.327 byte** senza che nessuno toccasse il vetro, e il freno ha fermato
+     * l'agente dopo UN passo dicendo «mi hai toccato». Dentro il file:
+     *
+     * ```
+     *   add device 10: /dev/input/event9
+     *     name:     "Monkey touch"
+     *   remove device 10: /dev/input/event9
+     * ```
+     *
+     * ⇒ Non era un dito: `getevent` **ristampa il censimento di tutti i device**
+     * ogni volta che uno compare o sparisce, e «Monkey touch» è il device
+     * virtuale che crea `input tap` — cioè i tocchi **NOSTRI**. Il freno
+     * scambiava noi per la persona: il difetto peggiore possibile su un freno,
+     * perché non si vede (l'agente «si comporta bene») e rende la funzione
+     * inutile.
+     *
+     * La misura originale — dito 1.258 byte, tocco iniettato 0 — restava vera:
+     * guardava **solo `/dev/input/event4`**, il pannello. Era il comando a non
+     * dirlo.
+     *
+     * ⛔ E il pannello si SCOPRE, non si scrive: `ABS_MT_POSITION_X` è la
+     * capacità che solo un touchscreen dichiara. Su un altro telefono il numero
+     * del device è un altro, e un `event4` scritto a mano avrebbe funzionato
+     * qui e mentito altrove.
+     */
+    val COMANDO = listOf(
+        "sh", "-c",
+        "D=$(getevent -pl 2>/dev/null | awk '/^add device/{d=\$4} /ABS_MT_POSITION_X/{print d; exit}'); " +
+            "[ -n \"\$D\" ] && getevent -l \"\$D\" > $PERCORSO 2>&1 &",
+    )
 
     @Volatile private var vistaA = -1L
 

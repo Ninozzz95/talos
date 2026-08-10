@@ -24,6 +24,8 @@ export interface TalosMontaggioCorsa {
     completa: ChatCompletion
     /** Aprire un'app: la stessa strada di `device_open_app`. */
     apriApp(nomePacchetto: string): Promise<{ done: boolean, reason?: string }>
+    /** L'elenco «Nome<TAB>pacchetto», per non far indovinare un id al modello. */
+    elencoApp(): Promise<string>
     /** ⭐ La voce. Owner: sempre, quando guida. */
     parla(frase: string): void
 }
@@ -39,6 +41,7 @@ export async function talosCorsaDelloSchermo(
     await talosArmaIlFreno()
     const esegui = creaManoDelloSchermo({
         apriApp: montaggio.apriApp,
+        elencoApp: montaggio.elencoApp,
         aspetta: (ms) => new Promise((ok) => { setTimeout(ok, ms) }),
     })
     return await talosGuidaLoSchermo({
