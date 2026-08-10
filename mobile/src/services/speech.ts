@@ -204,7 +204,7 @@ export function talosPlatformSpeechSynth(): TalosSpeechSynth | null {
 export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
     if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable('TalosSpeech')) return null
     const plugin = registerPlugin<{
-        speak(options: { text: string }): Promise<{ spoken: boolean, reason?: string }>
+        speak(options: { text: string, rate?: number, pitch?: number }): Promise<{ spoken: boolean, reason?: string }>
         stop(): Promise<unknown>
         voices(): Promise<{ available: boolean, voices?: TalosVoceDispositivo[], current?: string | null }>
         setVoice(options: { name: string }): Promise<{ done: boolean, reason?: string }>
@@ -281,7 +281,17 @@ export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
                 scelta: utterance.voiceURI ?? null,
             })
             if (scelta.voce) void plugin.setVoice({ name: scelta.voce.name })
-            void plugin.speak({ text: utterance.text })
+            /*
+             * ⛔ VELOCITÀ E TONALITÀ viaggiano con la frase. Prima si mandava
+             * solo il testo, e i due cursori del pannello non toccavano niente:
+             * il difetto non era «non si aggiorna in tempo reale», era «non è
+             * mai cambiata».
+             */
+            void plugin.speak({
+                text: utterance.text,
+                rate: utterance.rate,
+                pitch: utterance.pitch,
+            })
                 .then((esito) => {
                     if (esito?.spoken) return
                     finita = null
