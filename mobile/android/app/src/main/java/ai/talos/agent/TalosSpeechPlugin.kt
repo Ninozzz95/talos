@@ -323,6 +323,31 @@ class TalosSpeechPlugin : Plugin() {
             }
         }
 
+        /*
+         * ⛔⛔ VELOCITÀ E TONALITÀ, che prima non arrivavano MAI.
+         *
+         * Owner 2026-08-10: «quando cambio un parametro della voce, la voce si
+         * deve aggiornare». MISURATO leggendo il codice: `speak` riceveva solo
+         * `{ text }`, e in questo file non comparivano né `setSpeechRate` né
+         * `setPitch`. ⇒ I due cursori del pannello erano **inerti su Android**:
+         * non è che la voce non si aggiornava, è che non era mai cambiata.
+         *
+         * ⛔ Si applicano a OGNI frase, come la voce: il motore torna ai valori
+         * predefiniti quando il servizio si riavvia, e una preferenza applicata
+         * una volta sola è una preferenza che un giorno sparisce da sola.
+         *
+         * I limiti sono quelli di Android — `setSpeechRate` e `setPitch`
+         * accettano da 0 in su, e sotto 0,1 la voce diventa incomprensibile.
+         * Si stringe qui invece di fidarsi del chiamante: un cursore rotto non
+         * deve poter produrre una voce inutilizzabile.
+         */
+        call.getFloat("rate")?.let { v ->
+            runCatching { tts.setSpeechRate(v.coerceIn(0.1f, 3.0f)) }
+        }
+        call.getFloat("pitch")?.let { v ->
+            runCatching { tts.setPitch(v.coerceIn(0.1f, 2.0f)) }
+        }
+
         val id = "talos-${System.nanoTime()}"
         // QUEUE_FLUSH: una frase nuova ZITTISCE la precedente. Accodarle
         // significherebbe che chi manda due messaggi si sente leggere il primo

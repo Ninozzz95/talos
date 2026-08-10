@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { Volume2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -95,11 +95,35 @@ const voiceItems = computed(() => {
     }
     return [...miaLingua, ...restanti].map((v) => ({ value: v.name, label: etichetta(v) }))
 })
+/**
+ * ⭐⭐ SI SENTE SUBITO — owner 2026-08-10: «quando cambio un parametro della
+ * voce, la voce si deve aggiornare automaticamente, in tempo reale».
+ *
+ * ⛔ E prima non poteva succedere per una ragione più grave della mancanza di
+ * questa funzione: velocità e tonalità **non arrivavano al motore**. `speak`
+ * riceveva solo `{ text }`, e nel plugin non comparivano né `setSpeechRate` né
+ * `setPitch` — i due cursori erano inerti su Android. Prima si è aperta la
+ * strada, poi si è messo l'ascolto.
+ *
+ * ⛔ Con un RITARDO, e non è pigrizia: un cursore trascinato emette una
+ * cinquantina di eventi, e rifar partire la voce a ognuno significa cinquanta
+ * frasi tagliate a metà. Si aspetta che la mano si fermi.
+ */
+const ATTESA_ANTEPRIMA_MS = 420
+let attesa: number | null = null
+function anteprimaFraPoco(): void {
+    if (attesa !== null) window.clearTimeout(attesa)
+    attesa = window.setTimeout(() => { attesa = null; preview() }, ATTESA_ANTEPRIMA_MS)
+}
+onBeforeUnmount(() => { if (attesa !== null) window.clearTimeout(attesa) })
+
 function setRate(event: Event): void {
     void settings.setVoicePreferences({ rate: Number((event.target as HTMLInputElement).value) })
+    anteprimaFraPoco()
 }
 function setPitch(event: Event): void {
     void settings.setVoicePreferences({ pitch: Number((event.target as HTMLInputElement).value) })
+    anteprimaFraPoco()
 }
 function preview(): void {
     void service.speak(t('voice.previewPhrase'), {
@@ -108,6 +132,13 @@ function preview(): void {
         pitch: settings.state.voice.pitch,
     })
 }
+
+/*
+ * Anche cambiando VOCE si sente subito: è la scelta che più di tutte si fa a
+ * orecchio, e chiedere «scegli, poi tocca Anteprima» è un passo che nessuno fa
+ * — si sceglie a caso e si tiene la prima.
+ */
+watch(selectedVoice, () => { anteprimaFraPoco() })
 </script>
 
 <template>
