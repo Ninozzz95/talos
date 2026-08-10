@@ -113,6 +113,88 @@ export function talosIndiceCompatto(
 }
 
 /**
+ * ⛔⛔ L'ISTRUZIONE CHE FA FARE IL PRIMO PASSO, e prima non lo faceva fare.
+ *
+ * MISURATO sul Pad il 2026-08-10 con Qwen3-1.7B.Q4_K_M appena installato:
+ *
+ * ```
+ *   «Accendi la torcia»      → «There is no tool available to turn on the torch»
+ *   «Che strumenti hai?»     → elenca device_notifications_list, device_torch, …
+ *   logcat                   → tool: 2, grammatica: pigra
+ * ```
+ *
+ * Le tre righe insieme dicono una cosa sola: **l'indice arriva e il modello lo
+ * legge**, ma davanti a una richiesta non chiama `tool_details` — dichiara di
+ * non avere lo strumento che ha appena saputo elencare. Con la chiave la stessa
+ * frase accende la torcia; è la violazione di «locali e api allineati al 100%».
+ *
+ * ## Perché il testo di prima non bastava
+ *
+ * Diceva: «These tools exist. You do NOT have their input schemas yet: call
+ * tool_details with the names you need, then call them». È **descrittivo**: dice
+ * come stanno le cose e lascia al modello di dedurne la mossa. Un modello grande
+ * la deduce; uno da 1,7 miliardi di parametri prende la strada più corta, che è
+ * rispondere.
+ *
+ * ⇒ Tre cambi, tutti nella stessa direzione:
+ *
+ *  1. **imperativo**, non descrittivo: «FIRST call … THEN call …»;
+ *  2. il **rifiuto è vietato per nome**: «never answer that a tool is not
+ *     available when its name is in this list» — è esattamente la frase
+ *     sbagliata che il modello produceva, e vietarla alla lettera costa 20
+ *     token;
+ *  3. ⛔ **NESSUN esempio in forma di JSON.** Ce l'avevo messo — «call
+ *     tool_details with {"names": ["device_torch"]}» — ed è stato un difetto
+ *     mio, misurato subito dopo sullo stesso telefono:
+ *
+ *     ```
+ *       «Accendi la torcia» → «…the tool device_torch is available. Calling the
+ *        tool to turn the torch on:» + un BLOCCO DI CODICE che ripete
+ *        «tool_details with {"names": ["device_torch"]}, read the schema it
+ *        returns, then call device_torch»
+ *     ```
+ *
+ *     Cioè: ha smesso di rifiutare — il divieto funziona — e ha cominciato a
+ *     **scrivere la chiamata a parole** invece di emetterla. Un modello piccolo
+ *     imita ciò che gli sta davanti, e un esempio in forma di chiamata è una
+ *     chiamata da copiare. Stessa forma del difetto in
+ *     `chiamata-scritta-a-parole`.
+ *
+ *     ⇒ L'istruzione dice COSA fare, mai COME SI SCRIVE. La forma la conosce
+ *     già il template del GGUF, ed è il solo posto dove deve stare.
+ */
+export function talosIstruzioneCatalogo(
+    tools: ReadonlyArray<TalosToolDefinition<never>>,
+): string {
+    if (!tools.length) return ''
+    return [
+        '',
+        '',
+        '# Tools available',
+        '',
+        'The tools listed below EXIST on this device and work. You do not have',
+        'their input schemas yet, so you cannot call them directly.',
+        '',
+        `To use any of them: FIRST call ${TALOS_DETTAGLI_STRUMENTO}, naming every`,
+        'tool you intend to use in this message. THEN call those tools.',
+        '',
+        `So for ${tools[0]!.name}: call ${TALOS_DETTAGLI_STRUMENTO} for it, read the`,
+        `schema that comes back, then call ${tools[0]!.name} itself.`,
+        '',
+        '⛔ Never reply that a tool "is not available", or that you "cannot do',
+        'this", when the name is in the list below. That is always wrong: call',
+        `${TALOS_DETTAGLI_STRUMENTO} for it instead.`,
+        '',
+        '⛔ Never write a tool call as text, in prose or in a code block. Make',
+        'the call. Text that describes a call does nothing at all.',
+        '',
+        talosIndiceCompatto(tools),
+        '',
+        '',
+    ].join('\n')
+}
+
+/**
  * Lo strumento che svela la forma degli altri.
  *
  * ⛔ Legge e basta: non tocca niente, non esce dal telefono, non costa. Per
