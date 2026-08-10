@@ -34,6 +34,8 @@ export interface PonteSchermo {
         millisecondi: number
         motivo?: string
     }>
+    /** Indietro e Home: azioni di SISTEMA, senza indice. */
+    sistema(options: { azione: string }): Promise<{ fatto: boolean, motivo?: string }>
     armaIlFreno(): Promise<{ armato: boolean, comando: string[], percorso: string }>
 }
 

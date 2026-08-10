@@ -156,6 +156,11 @@ class TalosOcchio : AccessibilityService() {
         return if (fatto) null else "rifiutata"
     }
 
+    /** Dopo un'azione di sistema lo schermo cambia: gli indici non valgono piu'. */
+    fun dimenticaSguardo() {
+        sguardo = emptyList()
+    }
+
     companion object {
         private const val TAG = "TalosOcchio"
 

@@ -122,4 +122,14 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     // ⛔ R3: manda un messaggio a una persona vera, e non si annulla.
     device_notification_reply: { risk: 'R3', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: true, canTransmit: true },
     device_notification_dismiss: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    /*
+     * ⛔⛔ R4, e non è prudenza: è l'unica riga onesta.
+     *
+     * Guidare lo schermo tocca app di ALTRI. Legge dati privati (qualunque cosa
+     * ci sia su quello schermo), legge contenuto NON fidato (una pagina web
+     * dice al modello cosa fare), e può trasmettere (una ricerca, un messaggio,
+     * un acquisto). È la trifecta al completo su una riga sola — esattamente la
+     * combinazione per cui esiste il livello più alto.
+     */
+    device_screen_drive: { risk: 'R4', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: true, canTransmit: true },
 })

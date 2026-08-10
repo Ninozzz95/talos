@@ -3,6 +3,7 @@ import { createTalosDeviceTools } from '@/lib/tools/deviceTools'
 import { createTalosPrivilegedTools } from '@/lib/tools/privilegedTools'
 import { createTalosPrivilegedSources } from '@/lib/device/privilegedSources'
 import { createTalosNotificationTools } from '@/lib/tools/notificationTools'
+import { createTalosSchermoTools } from '@/lib/tools/schermoTools'
 import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
 import { createTalosTasksWriteTools } from '@/lib/tools/tasksWriteTools'
@@ -129,6 +130,15 @@ export interface TalosToolsetDeps {
      * che resta.
      */
     notifications?(): import('@/lib/tools/notificationTools').TalosNotificationSources | null
+    /**
+     * ⭐⭐ Il pilota dello schermo: TALOS usa un'app al posto della persona.
+     *
+     * Assente dove non c'è uno schermo da guidare — e allora il tool non
+     * compare affatto, invece di esistere e fallire sempre. È la stessa regola
+     * del gruppo del telefono: offrire una capacità che non c'è insegna al
+     * modello che TALOS promette cose che non fa.
+     */
+    schermo?(): import('@/lib/tools/schermoTools').TalosSchermoToolSources | null
     /**
      * La Libreria, in scrittura: rinominare e togliere.
      *
@@ -643,6 +653,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                  */
                 ...(privilegiate ? createTalosPrivilegedTools(privilegiate) : []),
                 ...(deps.notifications?.() ? createTalosNotificationTools(deps.notifications()!) : []),
+                ...(deps.schermo?.() ? createTalosSchermoTools(deps.schermo()!) : []),
                 ...(libraryWrite ? createTalosLibraryWriteTools(libraryWrite) : []),
                 ...(notesWrite ? createTalosNotesWriteTools(notesWrite) : []),
                 ...(tasksWrite ? createTalosTasksWriteTools(tasksWrite) : []),

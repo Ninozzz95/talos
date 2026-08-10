@@ -1,5 +1,6 @@
 package ai.talos.agent
 
+import android.accessibilityservice.AccessibilityService
 import android.os.SystemClock
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
@@ -81,6 +82,35 @@ class TalosSchermoPlugin : Plugin() {
                 .put("manoSulloSchermo", TalosDitoVero.haToccato())
                 .put("byteDiTocchi", TalosDitoVero.cresciutoDi()),
         )
+    }
+
+    /**
+     * Indietro e Home: i due gesti che NON hanno un elemento a schermo.
+     *
+     * ⛔ Stanno qui e non dentro `agisci` perché non prendono un indice: sono
+     * azioni di sistema, non di un nodo. Infilarle in `agisci` vorrebbe dire
+     * accettare un indice finto — e un indice finto è la scusa con cui un
+     * giorno passa un indice sbagliato.
+     */
+    @PluginMethod
+    fun sistema(call: PluginCall) {
+        val occhio = TalosOcchio.aperto()
+        if (occhio == null) {
+            call.reject("TALOS_OCCHIO_CHIUSO", "TALOS_OCCHIO_CHIUSO")
+            return
+        }
+        val quale = when (call.getString("azione")) {
+            "indietro" -> AccessibilityService.GLOBAL_ACTION_BACK
+            "home" -> AccessibilityService.GLOBAL_ACTION_HOME
+            else -> {
+                call.resolve(JSObject().put("fatto", false).put("motivo", "azioneSconosciuta"))
+                return
+            }
+        }
+        // ⛔ Lo sguardo si invalida come dopo ogni azione: Indietro cambia
+        // schermata, e gli indici di prima non descrivono piu' niente.
+        occhio.dimenticaSguardo()
+        call.resolve(JSObject().put("fatto", occhio.performGlobalAction(quale)))
     }
 
     @PluginMethod
