@@ -93,6 +93,32 @@ describe('⛔ l\'istruzione del catalogo deve far fare il PRIMO PASSO', () => {
      * rumore ATTORNO a una chiamata vera, non al posto suo. Resta in prosa, con
      * i nomi veri e senza JSON da copiare, più il divieto esplicito.
      */
+    /**
+     * ⛔ E DOPO che il tool è tornato, il racconto deve essere una frase.
+     *
+     * MISURATO sul Pad, chat nuova, torcia accesa da Claude, poi il locale:
+     *
+     * ```
+     *   dumpsys   07:17:44 : Torch … turned off for client PID 20955   ✅ agisce
+     *   in chat   «Checking the available tools, the device_torch tool is
+     *              available. Calling the tool to turn off the torch:»
+     *              + blocco di codice «tool_call: device_torch, toggle, off»
+     * ```
+     *
+     * Cioè: fa la cosa giusta e la racconta malissimo — in inglese a una
+     * domanda in italiano, pensando ad alta voce, e chiudendo con una finta
+     * chiamata in un blocco di codice. Con la chiave la stessa azione dice
+     * «Fatto, torcia spenta! 🔦». La parità non è solo «il tool parte»: è anche
+     * cosa legge la persona.
+     */
+    it('dice cosa fare DOPO il tool: una frase, nella lingua di chi ha scritto', () => {
+        const t = talosIstruzioneCatalogo(TOOLS)
+        expect(t).toMatch(/ONE short sentence/)
+        expect(t).toMatch(/language they wrote in/)
+        expect(t, 'e vieta il pensiero ad alta voce che si vedeva a schermo')
+            .toMatch(/do not explain which tools you considered/)
+    })
+
     it('porta l\'esempio in PROSA, col primo tool vero e senza JSON', () => {
         const t = talosIstruzioneCatalogo(TOOLS)
         expect(t).toContain('So for device_torch:')
