@@ -2,6 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+
 import TalosMobileToolSheet from '@/components/shell/TalosMobileToolSheet.vue'
 
 /*
@@ -17,10 +18,21 @@ import TalosMobileToolSheet from '@/components/shell/TalosMobileToolSheet.vue'
  * E sono asincroni per una ragione misurata: renderle sincrone per far tacere
  * una prova costa **60 KB** nel grafo d'avvio, che ha meno di 3 KB di margine.
  */
+/*
+ * ⛔ `__esModule: true` NON è cerimonia — è la riga che mancava.
+ *
+ * `defineAsyncComponent` riceve il MODULO risolto e, se non sa che è un
+ * modulo ES, non scarta l'involucro: va a chiedergli `__isTeleport`, e la
+ * guardia di Vitest alza «No "__isTeleport" export is defined». Erano SEI
+ * delle ventuno rejection del compito #57, da questo file solo — con zero
+ * test falliti, quindi invisibili se non si legge il testo dell'errore.
+ */
 vi.mock('@/components/shell/TalosMobileNotificationBell.vue', () => ({
+    __esModule: true,
     default: { name: 'TalosMobileNotificationBell', render: () => null },
 }))
 vi.mock('@/components/shell/TalosMobileDownloadCenterTrigger.vue', () => ({
+    __esModule: true,
     default: { name: 'TalosMobileDownloadCenterTrigger', render: () => null },
 }))
 

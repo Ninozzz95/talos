@@ -34,6 +34,25 @@ vi.mock('@/stores/settings', () => ({
     useSettingsStore: () => ({ state: { chat_layout: { message_style: 'sections', bubble_scale: 'compact' } } }),
 }))
 
+/*
+ * ⛔ La risposta in volo è un componente ASINCRONO, e questi casi non la
+ * riguardano: montandola per davvero il suo grafo continua a caricarsi mentre
+ * il caso è già finito, e Vitest lo segnala come rifiuto non gestito —
+ * «Cannot load '/src/lib/tools/toolLabels.ts' … after the environment was torn
+ * down». Compito #57: tre rejection da qui, con tutti i test verdi.
+ *
+ * ⛔ Da SOLO questo file era pulito: l'import faceva in tempo a posare. In
+ * suite intera no — ed è per questo che un difetto così si vede solo dal
+ * conto totale, mai dal file singolo.
+ *
+ * ⛔ `__esModule: true` è obbligatorio: senza, `defineAsyncComponent` non sa
+ * di dover scartare l'involucro e chiede `__isTeleport` al modulo finto.
+ */
+vi.mock('@/components/chat/TalosMobileStreamingReply.vue', () => ({
+    __esModule: true,
+    default: { name: 'TalosMobileStreamingReply', render: () => null },
+}))
+
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
 
 const CHECKPOINT = 'checkpoint-torcia-01'

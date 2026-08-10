@@ -2378,6 +2378,9 @@ export const TALOS_EN_MESSAGES = {
         blockedByPermission: 'The key is saved, but below you chose “Never allow” for sending data off the device: search will not run while that stands.',
     },
     doctor: {
+        // A scan failure becomes a ROW, not a blank screen: the station whose
+        // job is to say what is wrong cannot be the one that stays silent.
+        scanFailedLabel: 'The scan did not finish',
         agent: {
             privateSeen: 'Your data already read in this chat',
             untrustedSeen: 'Outside content that entered this chat',

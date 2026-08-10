@@ -92,6 +92,7 @@ vi.mock('@/services/databaseProtection', () => ({
 // The provider key panel is reused wholesale rather than reimplemented; it
 // drags the whole model catalogue in, which this test does not need.
 vi.mock('@/components/talos/models/TalosMobileProviderRuntimePanel.vue', () => ({
+    __esModule: true,
     // `__esModule` matters: without it defineAsyncComponent treats the module
     // itself as the component and Vue reads properties off the mock.
     __esModule: true,
