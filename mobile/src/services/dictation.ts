@@ -80,7 +80,15 @@ function loadPlugin(): SpeechRecognitionPlugin {
  * ⛔ La distinzione non e' cosmetica: `recognitionFailed` manda a cercare un
  * guasto che non c'e'. `noSpeech` dice la cosa vera — avvicinati e riparla.
  */
-const SILENZIO = /NO_MATCH|SPEECH_TIMEOUT|NO_SPEECH|no-speech/i
+/**
+ * ⛔ `NO_PROGRESS` sta qui dentro, e non e' indulgenza — owner 2026-08-10,
+ * premendo il microfono mentre TALOS parlava. Il motore risponde
+ * `agsa_transcription_ONLINE_NO_PROGRESS`: «il riconoscitore in rete non e'
+ * andato da nessuna parte». Per chi ha premuto e non ha ancora detto niente e'
+ * la stessa cosa del silenzio — e chiamarlo guasto manda a cercare una rottura
+ * che non c'e', esattamente come faceva `NO_MATCH` stamattina.
+ */
+const SILENZIO = /NO_MATCH|SPEECH_TIMEOUT|NO_SPEECH|no-speech|NO_PROGRESS/i
 const PERMESSO = /permission|not.?allowed|denied/i
 
 export function talosEsitoDettatura(dettaglio: string): TalosDictationErrorCode {

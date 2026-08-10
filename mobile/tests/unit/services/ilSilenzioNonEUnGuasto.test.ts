@@ -23,6 +23,14 @@ describe('⛔ il silenzio non è un guasto', () => {
         expect(talosEsitoDettatura('NO_MATCH No speech detected')).toBe('noSpeech')
     })
 
+    it('⛔ ONLINE_NO_PROGRESS: il caso del microfono premuto MENTRE TALOS parla', () => {
+        // Owner 2026-08-10, misurato: premendo il microfono durante la lettura
+        // il motore risponde `agsa_transcription_ONLINE_NO_PROGRESS`. Per chi ha
+        // premuto e non ha ancora detto niente e' silenzio, non un guasto.
+        expect(talosEsitoDettatura('ONLINE_NO_PROGRESS ')).toBe('noSpeech')
+        expect(talosEsitoDettatura('agsa_transcription_ONLINE_NO_PROGRESS')).toBe('noSpeech')
+    })
+
     it('e le altre tre forme dello stesso fatto', () => {
         expect(talosEsitoDettatura('SPEECH_TIMEOUT ')).toBe('noSpeech')
         expect(talosEsitoDettatura('no-speech')).toBe('noSpeech')
