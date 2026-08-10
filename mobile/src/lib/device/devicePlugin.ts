@@ -38,7 +38,13 @@ interface PonteDispositivo {
      * vuole nessuna shell e funziona su un telefono dove il ponte non c'è.
      */
     listApps(): Promise<{ done: boolean, reason?: string, output?: string, count?: number }>
-    openSettingsScreen(options: { action: string, forThisApp: boolean }): Promise<{ done: boolean, reason?: string }>
+    /**
+     * ⛔ `scope` dice QUALE pagina si e' aperta: `app` la riga di TALOS,
+     * `general` l'elenco di tutte. Il nativo ripiega da una all'altra quando la
+     * prima non si apre — misurato il 2026-08-10 — e chi non lo sapesse
+     * direbbe alla persona di cercare una riga che non sta guardando.
+     */
+    openSettingsScreen(options: { action: string, forThisApp: boolean }): Promise<{ done: boolean, reason?: string, scope?: string }>
     compose(options: { kind: string, value: string, text?: string }): Promise<{ done: boolean, reason?: string }>
     status(): Promise<Record<string, unknown>>
     wallpaper(options: { imageBase64: string, where: string }): Promise<{ done: boolean, reason?: string, appliedTo: string }>

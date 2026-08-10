@@ -125,3 +125,59 @@ describe('i tool del telefono nel toolset', () => {
         for (const nome of NOMI_DISPOSITIVO) expect(offerti).not.toContain(nome)
     })
 })
+
+/**
+ * ⛔⛔ «Il telefono non offre questa schermata» — e la schermata c'era.
+ *
+ * ## Il difetto, dallo screenshot dell'owner del 2026-08-10
+ *
+ * TALOS rifiuta di aprire l'accesso alle notifiche. La causa NON era il nome
+ * dell'azione: era `forThisApp`. Il modello lo mette in buona fede — la
+ * descrizione dello strumento gli dice «mettilo quando la schermata riguarda
+ * TALOS» — il nativo aggiunge `data = package:ai.talos`, e quella pagina un
+ * dato non lo accetta. MISURATO sul telefono, sette schermate nei due versi:
+ *
+ * ```
+ *   ACTION_NOTIFICATION_LISTENER_SETTINGS                 → si apre
+ *   ACTION_NOTIFICATION_LISTENER_SETTINGS dat=package:    → unable to resolve
+ *   APPLICATION_DETAILS_SETTINGS                          → unable to resolve
+ *   APPLICATION_DETAILS_SETTINGS         dat=package:     → si apre
+ * ```
+ *
+ * Il nativo adesso ripiega da una forma all'altra e dichiara `scope`. Qui si
+ * prova la METÀ che sta in TypeScript: che il ripiego venga RACCONTATO. Un
+ * modello che riceve solo «fatto» manda a cercare l'interruttore di TALOS a chi
+ * ha davanti l'elenco di trenta app, e la persona pensa di aver sbagliato lei.
+ */
+describe('⛔ la schermata aperta si dice QUALE è', () => {
+    const apriConScope = async (scope: string | undefined, forThisApp: boolean) => {
+        const tools = createTalosDeviceTools({
+            ...fonti(),
+            openSettings: vi.fn(async () => ({ done: true, ...(scope ? { scope } : {}) })),
+        } as never)
+        const tool = tools.find((t) => t.name === 'device_open_settings')!
+        return await (tool as never as {
+            run(input: unknown): Promise<{ ok: boolean, content: string }>
+        }).run({ action: 'android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS', forThisApp })
+    }
+
+    it('il caso dell\'owner: si voleva la riga di TALOS, si è aperto l\'elenco', async () => {
+        const esito = await apriConScope('general', true)
+        expect(esito.ok).toBe(true)
+        expect(esito.content).toContain('general settings list')
+        expect(esito.content).toContain('find TALOS in the list')
+    })
+
+    it('⛔ e il verso contrario: se la riga di TALOS si è aperta DAVVERO, non si dice', async () => {
+        // Se questa riga cadesse, TALOS manderebbe a cercare in un elenco chi ha
+        // gia' davanti il proprio interruttore — il difetto opposto, stessa
+        // radice: raccontare una schermata diversa da quella che si vede.
+        const esito = await apriConScope('app', true)
+        expect(esito.content).not.toContain('general settings list')
+    })
+
+    it('e chi non ha chiesto la propria riga non sente parlare di ripieghi', async () => {
+        const esito = await apriConScope('general', false)
+        expect(esito.content).not.toContain('general settings list')
+    })
+})

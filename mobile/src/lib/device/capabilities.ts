@@ -198,6 +198,65 @@ export function talosCapability(id: string): TalosCapability | null {
 }
 
 /**
+ * ⛔⛔ LE SCHERMATE CHE SAPPIAMO APRIRE — e perché il modello non deve indovinarle.
+ *
+ * ## La misura, col telefono in mano il 2026-08-10
+ *
+ * ```
+ *   am start -a android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS   → si apre
+ *   am start -a android.settings.NOTIFICATION_LISTENER_SETTINGS          → unable to resolve Intent
+ * ```
+ *
+ * Quattro caratteri di differenza — `ACTION_` — e la seconda riga arrivava a
+ * TALOS come `ActivityNotFoundException`, cioè come `not-available-here`, cioè
+ * come **«questo telefono non offre quella schermata»**. Falso: la schermata
+ * c'è, l'abbiamo aperta. A sbagliare era la stringa, e la stringa la scriveva un
+ * modello **a memoria**.
+ *
+ * ⇒ Un fatto sulle Impostazioni di Android non si fa ricordare a un modello: si
+ * prende da qui, dove è già scritto per ogni capacità. È la stessa regola del
+ * «niente scritto a mano» applicata al contrario — non lo scriviamo noi due
+ * volte, e non lo indovina nessuno.
+ */
+export const TALOS_SCHERMATE_DI_SISTEMA: readonly string[] = Object.freeze(
+    Array.from(
+        new Set(
+            TALOS_DEVICE_CAPABILITIES
+                .map((c) => c.settingsAction)
+                .filter((azione): azione is string => azione !== null),
+        ),
+    ),
+)
+
+/**
+ * Quello che un modello scrive → l'azione VERA, o `null` se non la conosciamo.
+ *
+ * Accetta tre forme, in quest'ordine, perché sono le tre che un modello produce
+ * davvero: l'azione esatta, l'`id` di una capacità (`notifications_read`), e il
+ * nome della costante senza prefisso o con quello sbagliato — che è esattamente
+ * l'inciampo misurato qui sopra.
+ *
+ * ⛔ `null` NON vuol dire «non esiste»: vuol dire «non è nel nostro elenco». Le
+ * schermate di Android sono centinaia e questo catalogo copre le nostre; chi
+ * chiama passa avanti la richiesta così com'è invece di rifiutarla — vedi
+ * `device_open_settings`.
+ */
+export function talosSchermataDiSistema(richiesta: string): string | null {
+    const pulita = richiesta.trim()
+    if (pulita.length === 0) return null
+    if (TALOS_SCHERMATE_DI_SISTEMA.includes(pulita)) return pulita
+    const perId = talosCapability(pulita)?.settingsAction
+    if (perId) return perId
+    // La coda: `NOTIFICATION_LISTENER_SETTINGS`, `ACTION_NOTIFICATION_…`,
+    // `settings.WIFI_SETTINGS` — tutte finiscono uguali a una che conosciamo.
+    const coda = pulita.toUpperCase().replace(/^ANDROID\.SETTINGS\.(ACTION\.)?/, '')
+    return TALOS_SCHERMATE_DI_SISTEMA.find((azione) => {
+        const sua = azione.toUpperCase().replace(/^ANDROID\.SETTINGS\.(ACTION\.)?/, '')
+        return sua === coda || sua === `ACTION_${coda}` || `ACTION_${sua}` === coda
+    }) ?? null
+}
+
+/**
  * ⭐ IL METODO CHE VALE IL FILE: cosa rispondere quando NON si può.
  *
  * Mai «non posso». Sempre: che cosa manca, e dove si apre. Se non esiste

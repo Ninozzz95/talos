@@ -694,15 +694,28 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
              */
             void (async () => {
                 try {
-                    const { talosNotify } = await import('@/stores/notificationCentre')
+                    const [{ talosNotify }, { talosT }, { talosAvvisoDiTool }] = await Promise.all([
+                        import('@/stores/notificationCentre'),
+                        import('@/i18n'),
+                        import('@/lib/tools/avvisoDiTool'),
+                    ])
                     talosNotify({
                         // Per TOOL e non per esecuzione: dieci letture della
                         // Libreria restano una riga che dice «dieci volte».
                         key: `tool:${row.tool}`,
                         channel: 'jobs',
                         weight: row.status === 'failed' ? 'notable' : 'log',
-                        title: row.tool,
-                        ...(row.status === 'failed' && row.error ? { body: row.error } : {}),
+                        /*
+                         * ⛔ NON `row.tool` e NON `row.error`.
+                         *
+                         * Owner 2026-08-10, screenshot dal telefono: il toast
+                         * diceva «Say so and offer to open the system page. Do
+                         * not retry.» — una riga scritta per il MODELLO, in
+                         * inglese, sullo schermo di chi possiede il telefono.
+                         * Il motivo per esteso, e la regola, stanno in
+                         * `avvisoDiTool.ts`.
+                         */
+                        ...talosAvvisoDiTool(row, talosT),
                         at: Date.now(),
                     })
                 } catch {

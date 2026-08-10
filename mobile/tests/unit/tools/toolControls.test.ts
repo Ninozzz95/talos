@@ -486,11 +486,34 @@ describe('Agent Tools control registry', () => {
          * 'tools[0].function_declarations[9].parameters'» — e Gemini rifiutava
          * l'INTERA conversazione, non un tool.
          */
+        /*
+         * ⛔ 2026-08-10, TERZO cambio: `device_open_settings` porta ADESSO
+         * l'elenco delle schermate che sappiamo aprire, e i tre dialetti si
+         * muovono INSIEME — che è il verso giusto, perché a cambiare è la
+         * descrizione, uguale per tutti, non un traduttore.
+         *
+         * La causa, misurata sul telefono dell'owner:
+         *
+         * ```
+         *   am start -a android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS → si apre
+         *   am start -a android.settings.NOTIFICATION_LISTENER_SETTINGS        → unable to resolve
+         * ```
+         *
+         * Il modello scriveva quella costante A MEMORIA, sbagliava di quattro
+         * caratteri, e TALOS raccontava il rifiuto come «il telefono non offre
+         * questa schermata» — una bugia sul telefono di chi legge. Adesso
+         * l'elenco vero è nella descrizione e nel catalogo delle capacità.
+         *
+         * ⛔ E l'impronta del PIANO DI CONTROLLO qui sopra NON si è mossa: nomi,
+         * titoli e azioni sono identici. È esattamente la domanda a cui questa
+         * guardia divisa serve a rispondere — è cambiato cosa il modello legge,
+         * non cosa lo strumento è.
+         */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('0728c67977d34ea14afc5ed9aea8cf72ceeae58df298854986586e96f105bbfd')
+            .toBe('4e5a04ddc7ffc76f3dc109df18a418f489c5aa1d8d6dc6381734a33c61a03ef2')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('877ac1db9ff68593382a579737b6980a5a0935d866458e4bce30c4a0d89b7cdd')
+            .toBe('1984d706c0066875dc46053a1af5bc54a778e8a01fc955941aeec751616da940')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('115f1d718cc3a312d7ffed1390fa48ece1d74c3cd208b41019488f8c1e08111d')
+            .toBe('19ef7c1e92f187facd1c841947b96491865a58d6228be30b1cc2ad0111ad93bd')
     })
 })
