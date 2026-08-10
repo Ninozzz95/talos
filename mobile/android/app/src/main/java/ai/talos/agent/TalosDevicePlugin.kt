@@ -245,6 +245,74 @@ class TalosDevicePlugin : Plugin() {
     }
 
     /**
+     * ⭐⭐ LE APP AVVIABILI COL NOME CHE LA PERSONA LEGGE.
+     *
+     * ## ⛔ Il difetto, trovato incrociando i provider
+     *
+     * L'elenco passava dal ponte (`cmd package query-activities`) e restituiva
+     * **solo nomi di pacchetto**. Il modello doveva sapere a memoria che
+     * Telegram X si chiama `org.thunderdog.challegram`.
+     *
+     * MISURATO sul Pad il 2026-08-10, stesso telefono, stessa domanda
+     * «Apri Telegram», tre provider:
+     *
+     * ```
+     *   anthropic/claude-sonnet-5   «Non ho trovato Telegram»          ⛔ SBAGLIATO
+     *   openai/gpt-5.6              «Non trovo Telegram»               ⛔ SBAGLIATO
+     *   google/gemini-3.6-flash     apre org.thunderdog.challegram     ✅
+     * ```
+     *
+     * Telegram X **era installato**. Due modelli su tre hanno risposto che non
+     * c'era, e non per pigrizia: dei 65 pacchetti avviabili molti non dicono
+     * cosa sono — `cn.wps.moffice_eng`, `com.wispr.flowapp`,
+     * `com.binary.hyperdroid`, `andes.oplus.documentsreader`. Dare al modello
+     * un id opaco e pretendere che ne conosca la mappa è chiedergli di
+     * indovinare, e chi indovina sbaglia una volta su tre.
+     *
+     * ## ⭐ E non serve nessun privilegio
+     *
+     * `<queries>` per MAIN/LAUNCHER è già dichiarato nel manifest, quindi
+     * `queryIntentActivities` vede esattamente le app che «apri un'app» sa
+     * aprire, e `loadLabel` dà il nome vero. Niente shell, niente ponte: questo
+     * elenco funziona anche su un telefono dove il ponte non si accenderà mai.
+     *
+     * Formato: una riga per app, `Etichetta<TAB>pacchetto`, ordinate per
+     * etichetta. Il tool filtra sulla riga intera, quindi cercare «telegram»
+     * trova un pacchetto che quella parola non la contiene.
+     */
+    @PluginMethod
+    fun listApps(call: PluginCall) {
+        val pm = context.packageManager
+        val intento = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val result = JSObject()
+        try {
+            val righe = pm.queryIntentActivities(intento, 0)
+                .asSequence()
+                .mapNotNull { info ->
+                    val pacchetto = info.activityInfo?.packageName ?: return@mapNotNull null
+                    val etichetta = info.loadLabel(pm).toString().trim()
+                    // ⛔ Un'app con due icone comparirebbe due volte: si tiene
+                    // il pacchetto una volta sola, e sarebbe rumore altrimenti.
+                    pacchetto to (if (etichetta.isEmpty()) pacchetto else etichetta)
+                }
+                .distinctBy { it.first }
+                .sortedBy { it.second.lowercase() }
+                .map { "${it.second}\t${it.first}" }
+                .toList()
+            result.put("done", true)
+            result.put("output", righe.joinToString("\n"))
+            result.put("count", righe.size)
+        }
+        catch (e: Exception) {
+            // ⛔ Si DICE che non si è potuto leggere, invece di restituire un
+            // elenco vuoto che il modello riferirebbe come «nessuna app».
+            result.put("done", false)
+            result.put("reason", e.javaClass.simpleName)
+        }
+        call.resolve(result)
+    }
+
+    /**
      * ⭐ IL RIPIEGO UNIVERSALE: portare la persona dove la cosa si fa a mano.
      *
      * È il metodo che rende ogni «non posso» ancora utile. Quando una capacità

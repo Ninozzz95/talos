@@ -30,6 +30,14 @@ interface PonteDispositivo {
     volume(options: { stream: string, percent?: number }): Promise<{ done: boolean, reason?: string, percent: number }>
     alarm(options: { hour?: number, minute?: number, seconds?: number, label?: string }): Promise<{ done: boolean, reason?: string }>
     openApp(options: { package: string }): Promise<{ done: boolean, reason?: string }>
+    /**
+     * Le app avviabili, `Etichetta<TAB>pacchetto` per riga.
+     *
+     * ⛔ Sta QUI e non nel privilegiato per una ragione misurata: passa dal
+     * `PackageManager` dell'app con le `<queries>` già dichiarate, quindi non
+     * vuole nessuna shell e funziona su un telefono dove il ponte non c'è.
+     */
+    listApps(): Promise<{ done: boolean, reason?: string, output?: string, count?: number }>
     openSettingsScreen(options: { action: string, forThisApp: boolean }): Promise<{ done: boolean, reason?: string }>
     compose(options: { kind: string, value: string, text?: string }): Promise<{ done: boolean, reason?: string }>
     status(): Promise<Record<string, unknown>>
