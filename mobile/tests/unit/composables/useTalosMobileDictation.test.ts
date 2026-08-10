@@ -108,6 +108,7 @@ describe('useTalosMobileDictation (F2-T5)', () => {
             onTranscript: vi.fn(),
             engine,
             language: () => 'it-IT',
+            autoLanguage: () => false,
         })
         await flush()
 
@@ -115,7 +116,10 @@ describe('useTalosMobileDictation (F2-T5)', () => {
 
         expect(engine.start).toHaveBeenCalledWith(
             expect.any(Object),
-            { language: 'it-IT' },
+            // ⛔ La lingua NON viaggia piu' da sola: accanto va sempre se il
+            // rilevamento e' acceso, o il nativo non saprebbe distinguere
+            // «parlo italiano» da «decidilo tu ascoltando».
+            { language: 'it-IT', autoLanguage: false, allowedLanguages: [] },
         )
     })
 

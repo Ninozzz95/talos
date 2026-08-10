@@ -16,10 +16,20 @@ export interface TalosDictationEvents {
     onPartial: (text: string) => void
     onEnd: () => void
     onError: (code: TalosDictationErrorCode) => void
+    /** ⭐ La lingua che il motore ha davvero sentito (API 34). */
+    onLanguage?: (tag: string) => void
 }
 
 export interface TalosDictationStartOptions {
     language?: string
+    /**
+     * ⭐ Acceso, il motore decide la lingua ASCOLTANDO, e la cambia anche a
+     * meta' frase. Default acceso: chiedere in anticipo la lingua di ogni
+     * frase e' il difetto che l'owner ha pagato il 2026-08-10.
+     */
+    autoLanguage?: boolean
+    /** Fra quali lingue puo' muoversi: mai piu' di tre, o inizia a sbagliare. */
+    allowedLanguages?: readonly string[]
 }
 
 export interface TalosDictationEngine {
@@ -445,8 +455,43 @@ export async function requestTalosDictationPermission(): Promise<boolean> {
     }
 }
 
+/**
+ * ⛔⛔ IL MOTORE DI CASA ARRIVA AL PRIMO USO, non all'avvio.
+ *
+ * MISURATO: tenendolo qui il grafo iniziale saliva a 602.547 byte su un tetto
+ * di 600.000 (compito #51). Nessuno paga un riconoscitore vocale per aprire una
+ * chat: il modulo si carica quando qualcuno tocca il microfono.
+ *
+ * ⛔ Qui si importa un modulo NOSTRO, non il proxy di un plugin: la trappola
+ * gia' pagata era `await` su un proxy Capacitor (e' thenable e il ponte gira un
+ * metodo `then` che non risponde mai). Un import dinamico di un chunk Vite non
+ * ha niente a che vedere con quello — l'app ne fa gia' decine.
+ */
+function casaEngine(): TalosDictationEngine {
+    let vero: TalosDictationEngine | null = null
+    const carica = async (): Promise<TalosDictationEngine> => {
+        if (!vero) vero = (await import('@/services/dictationCasa')).creaMotoreDiCasa()
+        return vero
+    }
+    return {
+        supported: async () => (await carica()).supported(),
+        requestPermission: async () => (await carica()).requestPermission(),
+        start: async (eventi, opzioni) => (await carica()).start(eventi, opzioni),
+        stop: async () => { if (vero) await vero.stop() },
+    }
+}
+
+/**
+ * ⛔ La scelta si rifà a ogni chiamata, e NON si tiene in cache: la prima
+ * versione la memorizzava «per non attraversare il ponte», che era un'ipotesi
+ * sbagliata — `isPluginAvailable` legge la mappa dei plugin registrati in
+ * pagina, non chiama il nativo. Una cache lì avrebbe solo congelato una scelta
+ * fatta prima che i plugin finissero di registrarsi.
+ */
 export function talosDictationEngine(): TalosDictationEngine {
-    if (Capacitor.isNativePlatform()) return nativeEngine()
+    if (Capacitor.isNativePlatform()) {
+        return Capacitor.isPluginAvailable('TalosDictation') ? casaEngine() : nativeEngine()
+    }
     if (webSpeechConstructor()) return webEngine()
     return unsupportedEngine
 }

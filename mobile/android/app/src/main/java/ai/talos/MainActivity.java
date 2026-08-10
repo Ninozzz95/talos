@@ -42,6 +42,9 @@ public class MainActivity extends BridgeActivity {
         // ⭐ TALOS che parla. Nessun permesso, e la capacita' col rapporto
         // valore/costo piu' alto di tutto l'inventario.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosSpeechPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
+        // Il riconoscitore DI CASA: il plugin di terzi passa una lingua sola e
+        // nessuna chiave di rilevamento — misurato nel suo sorgente.
+        { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosDictationPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(TalosDevicePermissionsPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // Owner 2026-07-28: durable, user-chosen Save-As for encrypted Library
         // files. The plugin accepts only TALOS's private export staging path.

@@ -56,10 +56,15 @@ describe('TalosMobileVoiceSettings', () => {
         service.supported.mockReturnValueOnce(false)
         const wrapper = mount(TalosMobileVoiceSettings)
         expect(wrapper.find('[data-testid="talos-voice-settings"]').exists()).toBe(true)
-        expect(wrapper.get('[data-testid="talos-dictation-language"]').text()).toContain('Follow device')
+        // ⛔ Si guardano le VOCI del menu', non il testo reso: il selettore
+        // finto disegna solo l'etichetta scelta, e cercare li' dentro
+        // proverebbe che c'e' un'etichetta — non QUALI scelte esistono.
+        const voci = wrapper.findAllComponents(TalosThemedSelect)[0]?.props('items') as
+            { value: string }[]
+        expect(voci[0]?.value).toBe('auto')
         expect(wrapper.find('[data-testid="talos-voice-preview"]').exists()).toBe(false)
 
-        wrapper.findAllComponents(TalosThemedSelect)[0]?.vm.$emit('update:modelValue', 'it')
-        expect(settings.setVoicePreferences).toHaveBeenCalledWith({ dictation_language: 'it' })
+        wrapper.findAllComponents(TalosThemedSelect)[0]?.vm.$emit('update:modelValue', 'it-IT')
+        expect(settings.setVoicePreferences).toHaveBeenCalledWith({ dictation_language: 'it-IT' })
     })
 })
