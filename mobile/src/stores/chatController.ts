@@ -13,6 +13,7 @@ import type {
 } from '@/components/chat/mobileChatTypes'
 import { buildChatCompletion } from '@/lib/chat/chatCompletion'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
+import { TALOS_METADATA_AZIONI, talosAzioniEseguite } from '@/lib/tools/tracciaAzione'
 import { talosComposerBusy } from '@/lib/chat/composerBusy'
 import { talosRispostaVuotaDopoStrumenti, talosStrumentiPartiti } from '@/lib/chat/rispostaVuota'
 import {
@@ -3314,6 +3315,25 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * protocollo sotto i piedi introdurrebbe un rischio dove non c'è un
              * problema. Se la sonda regge, la scelta si riapre.
              */
+            /*
+             * ⭐⭐ COSA HA FATTO TALOS, raccolto dal turno e scritto da TALOS.
+             *
+             * MISURATO sul Pad il 2026-08-10 con Qwen3-1.7B: la torcia si
+             * spegne davvero (`dumpsys`: «turned off for client PID 1246») e la
+             * chat scrive «The tool_results do not contain what the user asked
+             * for». Con la chiave lo stesso turno dice «Fatto, torcia spenta».
+             * ⇒ Finché l'unico narratore e' il modello, quello che la persona
+             * legge dipende da quanto e' bravo il modello.
+             *
+             * Si raccoglie QUI perche' e' il punto in cui passa OGNI esecuzione
+             * di OGNI tool del turno, riuscita o no — lo stesso posto da cui
+             * parte la notifica.
+             */
+            const azioniDelTurno: import('@/lib/tools/executor').TalosToolAuditRow[] = []
+            const registraAzione = (row: import('@/lib/tools/executor').TalosToolAuditRow) => {
+                azioniDelTurno.push(row)
+                return toolset.audit(row, sendIdentity.sessionId)
+            }
             const catalogoAttivo = profile?.provider === 'local' && offeredTools.length > 0
             /*
              * ⛔ CARICATO A RICHIESTA, e non e' pigrizia: importarlo in cima
@@ -3778,7 +3798,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         permissions: effectivePermissions(),
                         isToolEnabled: isEffectivelyEnabled,
                         requestConsent: async () => 'unanswered' as const,
-                        audit: (row) => toolset.audit(row, sendIdentity.sessionId),
+                        audit: registraAzione,
                         /*
                          * La catena della conversazione, che è ciò che rende
                          * viva la regola della trifecta: senza queste due righe
@@ -3927,7 +3947,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                 ? true
                                 : 'unanswered' as const
                         },
-                        audit: (row) => toolset.audit(row, sendIdentity.sessionId),
+                        audit: registraAzione,
                         /*
                          * La catena della conversazione, che è ciò che rende
                          * viva la regola della trifecta: senza queste due righe
@@ -4364,6 +4384,19 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     : {}),
                 ...(libraryAnswerGuardTrace
                     ? { library_answer_guard: libraryAnswerGuardTrace }
+                    : {}),
+                /*
+                 * ⛔ COSA E' STATO FATTO, accanto a cio' che il modello dice.
+                 *
+                 * DENTRO `metadata`, come `used_library` e `used_memories`: la
+                 * vista legge `message.metadata`. Messo accanto invece che
+                 * dentro non compariva — e la prova sul dispositivo l'ha detto
+                 * subito: torcia accesa nel sistema, nessuna traccia a schermo.
+                 *
+                 * Non corregge il modello: lo affianca. La frase resta la sua.
+                 */
+                ...(talosAzioniEseguite(azioniDelTurno).length
+                    ? { [TALOS_METADATA_AZIONI]: talosAzioniEseguite(azioniDelTurno) }
                     : {}),
             }
             /**

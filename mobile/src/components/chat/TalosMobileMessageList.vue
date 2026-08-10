@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { BookMarked, ChevronRight, FileText, ShieldQuestion } from '@lucide/vue'
+import { BookMarked, CheckCheck, ChevronRight, FileText, ShieldQuestion } from '@lucide/vue'
 import { talosShortModelLabel } from '@/lib/models/modelLabel'
+import { TALOS_METADATA_AZIONI, talosHaAzioniDaMostrare } from '@/lib/tools/tracciaAzione'
+import { TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
 /*
@@ -75,6 +77,21 @@ function attesaViva(message: TalosMobileMessageView): boolean {
 }
 
 const { t } = useTalosI18n()
+
+/**
+ * ⛔ I nomi INTERNI non si mostrano mai: `device_torch` non dice niente a
+ * nessuno. Si passa dal catalogo delle etichette, lo stesso che usa la riga
+ * dell'attivita' — due nomi per la stessa cosa e' un difetto gia' aperto (#41).
+ */
+function azioniFatte(metadata: unknown): string[] {
+    const righe = (metadata as Record<string, unknown> | null)?.[TALOS_METADATA_AZIONI]
+    if (!Array.isArray(righe)) return []
+    return righe.map((riga) => {
+        const nome = (riga as { tool?: string })?.tool ?? ''
+        const chiave = TALOS_TOOL_LABEL_KEYS[nome]
+        return chiave ? t(chiave) : nome
+    })
+}
 const PlainMessage = defineComponent({
     props: { content: { type: String, required: true } },
     setup(plainProps) {
@@ -381,6 +398,20 @@ function messageStateLabel(state: string): string {
                         v-if="Array.isArray(message.metadata.sources) && message.metadata.sources.length"
                         :sources="message.metadata.sources as never"
                     />
+                    <!-- ⛔⛔ COSA E' STATO FATTO, scritto da TALOS.
+                         MISURATO 2026-08-10: col motore locale la torcia si
+                         spegne davvero e la chat scrive «the tool_results do
+                         not contain what the user asked for». La frase resta
+                         quella del modello; questa riga dice cosa e' successo. -->
+                    <div
+                        v-if="talosHaAzioniDaMostrare(message.metadata)"
+                        data-testid="talos-actions-done"
+                        class="mt-1.5 inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
+                    >
+                        <CheckCheck class="size-3.5 shrink-0" aria-hidden="true" />
+                        <span>{{ $t('chat.actionsDone') }}</span>
+                        <span class="opacity-80">{{ azioniFatte(message.metadata).join(' · ') }}</span>
+                    </div>
                     <!-- F4 Memory: one calm-thread disclosure; every injected
                          turn still retains its own auditable metadata. -->
                     <div
