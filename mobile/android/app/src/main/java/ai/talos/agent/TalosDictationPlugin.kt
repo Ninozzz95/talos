@@ -202,23 +202,46 @@ class TalosDictationPlugin : Plugin() {
         }
 
         attivita.runOnUiThread {
-            try {
-                motore?.destroy()
-            } catch (ignorato: Exception) {
-                // Un motore già morto non è un problema da riferire.
+            /*
+             * ⛔⛔ SI RIUSA IL RICONOSCITORE, non si distrugge e ricrea.
+             *
+             * MISURATO sul Pad il 2026-08-10, col difetto che l'owner ha
+             * trovato premendo il microfono subito dopo una risposta letta ad
+             * alta voce: due giri su sei fallivano in meno di mezzo secondo.
+             *
+             * ⛔ E la traccia diceva dove NON era: il microfono si apriva
+             * davvero (`RecognitionService#onMicrophoneOpened`, col segnale
+             * acustico), e l'evento d'errore del plugin non arrivava MAI
+             * (`eventi: []` con un ascoltatore nostro attaccato apposta). ⇒ Non
+             * era il motore e non era l'evento: era `startListening` che
+             * lanciava, e il rifiuto della chiamata diventava «riconoscimento
+             * fallito» passando dal classificatore.
+             *
+             * La causa e' qui: `destroy()` su un riconoscitore che sta ancora
+             * chiudendo la sessione precedente lo lascia in uno stato in cui il
+             * successivo `startListening` non parte — e lo fa a intermittenza,
+             * perche' dipende da quanto ci mette il servizio di Google a
+             * finire. Un'istanza sola, `cancel()` prima di ripartire, e il
+             * problema non esiste: e' anche il modo in cui Android vuole che si
+             * usi questa classe.
+             */
+            val riconoscitore = motore ?: SpeechRecognizer.createSpeechRecognizer(context).also {
+                motore = it
             }
-            val nuovo = SpeechRecognizer.createSpeechRecognizer(context)
-            motore = nuovo
-            nuovo.setRecognitionListener(ascoltatore(mia))
+            runCatching { riconoscitore.cancel() }
+            riconoscitore.setRecognitionListener(ascoltatore(mia))
             inAscolto = true
             try {
-                nuovo.startListening(
+                riconoscitore.startListening(
                     intentoDiAscolto(lingua, automatica, consentite, parziali, offline, silenzio),
                 )
                 call.resolve(JSObject().put("started", true))
             } catch (errore: Exception) {
                 inAscolto = false
-                call.reject("startFailed: ${errore.message}")
+                // ⛔ Il motivo VERO viaggia col rifiuto: senza, chi sta sopra
+                // vede solo «riconoscimento fallito» e cerca il guasto nel
+                // motore — che e' esattamente dove NON era.
+                call.reject("startFailed: ${errore.javaClass.simpleName}: ${errore.message}")
             }
         }
     }
@@ -330,13 +353,9 @@ class TalosDictationPlugin : Plugin() {
             return
         }
         attivita.runOnUiThread {
-            try {
-                motore?.cancel()
-                motore?.destroy()
-            } catch (ignorato: Exception) {
-                // idem
-            }
-            motore = null
+            // ⛔ Si annulla, NON si distrugge: l'istanza si riusa, e distruggerla
+            // qui riporterebbe il difetto intermittente al giro dopo.
+            runCatching { motore?.cancel() }
             call.resolve()
         }
     }
