@@ -1026,6 +1026,7 @@ export const TALOS_IT_MESSAGES = {
         deviceNotificationsList: 'Le tue notifiche',
         deviceNotificationReply: 'Risposta a una notifica',
         deviceNotificationDismiss: 'Notifica tolta',
+        deviceScreenDrive: 'Sta usando un’app per te',
         researchList: 'Consultazione delle ricerche',
         researchStart: 'Avvio di una ricerca',
         researchRead: 'Lettura di un rapporto',
@@ -1241,6 +1242,10 @@ export const TALOS_IT_MESSAGES = {
         deviceNotificationDismiss: {
             title: 'Togli una notifica',
             description: 'La toglie dalla tendina. Quelle di qualcosa che sta girando non si possono togliere: nasconderle nasconderebbe che sta girando.',
+        },
+        deviceScreenDrive: {
+            title: 'Usa un’app al posto tuo',
+            description: '⛔ TALOS prende in mano lo schermo: tocca, scrive e scorre dentro le altre app finche’ non arriva all’obiettivo, dicendo a voce cosa sta per fare PRIMA di ogni mossa. Si ferma da solo dopo 20 passi, 2 minuti o due errori di fila — e nell’istante in cui tocchi lo schermo il telefono torna tuo.',
         },
         deviceListApps: {
             title: 'Guarda quali app hai',
@@ -2316,6 +2321,7 @@ export const TALOS_IT_MESSAGES = {
             device_notifications_list: { title: 'Leggi le notifiche a schermo', description: '⛔ Android tiene nascosti i codici di accesso e quelli a due fattori: TALOS non li vede e non li vedra’ mai.' },
             device_notification_reply: { title: 'Rispondi a una notifica', description: 'Manda un messaggio VERO dal campo di risposta rapida. Chiede sempre, e non si annulla.' },
             device_notification_dismiss: { title: 'Togli una notifica', description: 'La toglie dalla tendina. Quelle di qualcosa che sta girando non si tolgono.' },
+            device_screen_drive: { title: 'Usa un’app al posto tuo', description: '⛔ TALOS tocca, scrive e scorre dentro le altre app per arrivare a un obiettivo, e dice a voce cosa sta per fare PRIMA di ogni mossa. Si ferma da solo dopo 20 passi, 2 minuti, due errori di fila — e nell’istante in cui tocchi lo schermo.' },
         },
     },
     lock: {

@@ -1008,6 +1008,7 @@ export const TALOS_EN_MESSAGES = {
         deviceNotificationsList: 'Your notifications',
         deviceNotificationReply: 'Replying to a notification',
         deviceNotificationDismiss: 'Dismissing a notification',
+        deviceScreenDrive: 'Using an app for you',
         researchList: 'Looking at your researches',
         researchStart: 'Starting a deep research',
         researchRead: 'Reading a research report',
@@ -1223,6 +1224,10 @@ export const TALOS_EN_MESSAGES = {
         deviceNotificationDismiss: {
             title: 'Dismiss a notification',
             description: 'Removes it from the shade. Notifications for something still running cannot be removed: hiding them would hide that it is running.',
+        },
+        deviceScreenDrive: {
+            title: 'Use an app for you',
+            description: '⛔ TALOS takes the screen: it taps, types and scrolls inside other apps until it reaches the goal, saying out loud what it is about to do BEFORE each move. It stops on its own after 20 steps, 2 minutes or two failures in a row — and the instant you touch the screen the phone is yours again.',
         },
         deviceListApps: {
             title: 'Look at which apps you have',
@@ -2301,6 +2306,7 @@ export const TALOS_EN_MESSAGES = {
             device_notifications_list: { title: 'Read the notifications on screen', description: '⛔ Android hides passcodes and two-factor codes: TALOS cannot see them and never will.' },
             device_notification_reply: { title: 'Reply to a notification', description: 'Sends a REAL message through the quick-reply field. Always asks, and cannot be undone.' },
             device_notification_dismiss: { title: 'Dismiss a notification', description: 'Removes it from the shade. Notifications for something still running cannot be removed.' },
+            device_screen_drive: { title: 'Use an app for you', description: '⛔ TALOS taps, types and scrolls inside other apps to reach a goal, and says out loud what it is about to do BEFORE each move. It stops on its own after 20 steps, 2 minutes, two failures in a row — and the instant you touch the screen.' },
         },
     },
     lock: {

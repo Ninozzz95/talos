@@ -17,6 +17,7 @@ import { createTalosLocalModelTools } from '@/lib/models/modelTools'
 import { createTalosDeviceTools } from '@/lib/tools/deviceTools'
 import { createTalosPrivilegedTools } from '@/lib/tools/privilegedTools'
 import { createTalosNotificationTools } from '@/lib/tools/notificationTools'
+import { createTalosSchermoTools } from '@/lib/tools/schermoTools'
 import {
     talosToolRequiredActions,
     talosToolsForAnthropic,
@@ -141,6 +142,7 @@ function everyExecutableTool() {
             status: vi.fn(), list: vi.fn(), reply: vi.fn(),
             dismiss: vi.fn(), reasonOf: vi.fn(),
         } as never),
+        ...createTalosSchermoTools({ guida: vi.fn(), occhioAperto: vi.fn() } as never),
     ]
 }
 
@@ -162,9 +164,26 @@ describe('Agent Tools control registry', () => {
     })
 
     it('AGENT-TOOLS-02 preserves current flows, sanitizes values, and fails unknown tools closed', () => {
-        expect(TALOS_DEFAULT_AGENT_TOOL_ENABLED.library_context_policy_update).toBe(false)
+        /*
+         * ⛔ Gli strumenti nascono ACCESI, tranne un elenco DICHIARATO.
+         *
+         * La forma conta: non «quasi tutti sono accesi», ma «questi due sono
+         * spenti e nessun altro». Uno strumento nuovo che nascesse spento senza
+         * finire in questo elenco rompe qui — e con lui rompe la domanda che
+         * gli va fatta, perche' spento di suo vuol dire che la persona non lo
+         * trovera' mai se non lo cerca.
+         *
+         * `device_screen_drive` (2026-08-10): e' l'unico che prende in mano il
+         * telefono e agisce dentro app di ALTRI — R4, trifecta completa.
+         * Acceso senza che nessuno l'abbia deciso sarebbe una capacita' arrivata
+         * di nascosto con un aggiornamento.
+         */
+        const SPENTI_DI_PROPOSITO = ['library_context_policy_update', 'device_screen_drive']
+        for (const id of SPENTI_DI_PROPOSITO) {
+            expect(TALOS_DEFAULT_AGENT_TOOL_ENABLED[id as never]).toBe(false)
+        }
         expect(Object.entries(TALOS_DEFAULT_AGENT_TOOL_ENABLED)
-            .filter(([id]) => id !== 'library_context_policy_update')
+            .filter(([id]) => !SPENTI_DI_PROPOSITO.includes(id))
             .every(([, value]) => value)).toBe(true)
 
         const parsed = parseTalosAgentToolEnabled({
@@ -278,6 +297,13 @@ describe('Agent Tools control registry', () => {
             // 2026-08-09, l'Ondata 1: aereo e risparmio energetico. Due righe
             // in cui Gemini pretende di essere l'assistente predefinito.
             'device_airplane', 'device_power_saving',
+            /*
+             * ⭐⭐ 2026-08-10, il PILOTA DELLO SCHERMO: `device_screen_drive`.
+             * Se togliendolo l'impronta storica non tornasse, vorrebbe dire che
+             * ho mosso un contratto vecchio insieme al nuovo — ed e' esattamente
+             * la domanda a cui questa guardia serve a rispondere.
+             */
+            'device_screen_drive',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -332,7 +358,7 @@ describe('Agent Tools control registry', () => {
          * aggiunto qualcosa».
          */
         expect(digestOf(controlPlane))
-            .toBe('d410479e94ecfbbedc424d872d73773a73b8263ce928c03b6a9c3f8fdc1d31cf')
+            .toBe('ee2f9a5a095af8eea05dbbf9fe3824372f9b54c146822689ef33634a06792bfe')
         /*
          * ⭐ Ri-fissato 2026-08-08 per i TRE tool delle NOTIFICHE:
          * `device_notifications_list`, `device_notification_reply`,
@@ -509,11 +535,22 @@ describe('Agent Tools control registry', () => {
          * guardia divisa serve a rispondere — è cambiato cosa il modello legge,
          * non cosa lo strumento è.
          */
+        /*
+         * ⭐⭐ 2026-08-10, QUARTO cambio: entra `device_screen_drive`, il pilota
+         * dello schermo. Tutte e quattro le impronte dello STATO CORRENTE si
+         * muovono insieme — piano di controllo compreso, perche' stavolta e' un
+         * tool NUOVO e non una descrizione riscritta.
+         *
+         * ⛔ E l'impronta STORICA qui sopra (`369a6d…`) NON si e' mossa: il
+         * blocco che lo esclude la riproduce byte per byte. Cioe' nessuno dei
+         * contratti preesistenti e' cambiato insieme al nuovo — che e' l'unica
+         * domanda a cui questa guardia divisa serve a rispondere.
+         */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('4e5a04ddc7ffc76f3dc109df18a418f489c5aa1d8d6dc6381734a33c61a03ef2')
+            .toBe('330084ec6659a5cb685839f153334019c156d2ebd967175a26ead82786a8fb6b')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('1984d706c0066875dc46053a1af5bc54a778e8a01fc955941aeec751616da940')
+            .toBe('2c83524b2b8ed1260d0ab714ee2bfb67e2704a831e6ae2aa46e60e6b573025b7')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('19ef7c1e92f187facd1c841947b96491865a58d6228be30b1cc2ad0111ad93bd')
+            .toBe('d6ae4f25031b067f2bb6b48e8f0a1f28b79807814f96fa9c9ab54b2a40e69084')
     })
 })

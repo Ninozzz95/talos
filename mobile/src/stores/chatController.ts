@@ -2941,6 +2941,44 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * autorizzi e il ponte non si accenderà mai.
                      */
                     notifications: () => createTalosNotificationSources(),
+                    /**
+                     * ⭐⭐ IL PILOTA DELLO SCHERMO — l'ultimo centimetro.
+                     *
+                     * ⛔ Senza questa riga il tool NON ESISTE. È il difetto del
+                     * 2026-08-08 per cui è nato `toolsetDispositivo.test.ts`:
+                     * nove strumenti scritti, nel catalogo, con l'interruttore
+                     * e le frasi in due lingue, e il modello non li vedeva
+                     * perché nessuno passava la sorgente.
+                     *
+                     * Il modello del pilota è QUELLO DELLA CHAT, risolto a ogni
+                     * corsa e non congelato all'avvio: chi cambia modello nel
+                     * compositore cambia anche chi guida, che è la sola cosa
+                     * che una persona si aspetti.
+                     */
+                    schermo: () => {
+                        const fonti = createTalosDeviceSources()
+                        if (!fonti) return null
+                        // ⛔ Due righe, e il resto dietro un import PIGRO.
+                        // MISURATO: la stessa logica scritta qui portava il grafo
+                        // d'avvio a 600.880 byte su 600.000 — cioe' il pilota si
+                        // faceva pagare all'apertura da chi non lo usera' mai.
+                        const pilota = () => import('@/lib/agent/fontiSchermo')
+                        return {
+                            occhioAperto: () => pilota().then((m) => m.talosOcchioAperto()),
+                            guida: (obiettivo: string) => pilota().then((m) => m.talosAvviaCorsa({
+                                obiettivo,
+                                profilo: selectedProfile.value,
+                                modello: selectedProviderModel.value,
+                                effort: effort.value,
+                                thinking: thinking.value,
+                                chiave: (provider) => deps.getKey(provider as never),
+                                punto: (provider) => deps.getEndpoint(provider as never),
+                                trasporto: deps.transport,
+                                apriApp: (nome) => fonti.openApp(nome),
+                                parla: (frase) => { void fonti.speak(frase) },
+                            })),
+                        }
+                    },
                     device: () => {
                         const fonti = createTalosDeviceSources()
                         if (!fonti) return null

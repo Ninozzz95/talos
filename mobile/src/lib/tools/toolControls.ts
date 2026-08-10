@@ -86,6 +86,15 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     device_notifications_list: true,
     device_notification_reply: true,
     device_notification_dismiss: true,
+    /*
+     * ⛔ SPENTO di suo, unico nel catalogo del telefono.
+     *
+     * Ogni altro strumento fa UNA cosa che la persona ha chiesto. Questo prende
+     * in mano il telefono e ne fa venti dentro app di altri: acceso senza che
+     * nessuno l'abbia deciso sarebbe una capacità arrivata di nascosto con un
+     * aggiornamento. Si accende dalle impostazioni, una volta, guardandolo.
+     */
+    device_screen_drive: false,
 })
 
 export type TalosAgentToolId = keyof typeof TALOS_DEFAULT_AGENT_TOOL_ENABLED
