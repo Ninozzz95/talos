@@ -79,6 +79,25 @@ const clamp = (value: number, min: number, max: number): number => Math.min(max,
  */
 export function talosTestoDaLeggere(markdown: string): string {
     return markdown
+        /*
+         * ⛔⛔ IL RAGIONAMENTO NON SI LEGGE — owner 2026-08-10: «il tts legge
+         * anche il blocco di ragionamento, deve solo leggere la risposta».
+         *
+         * Non è un dettaglio estetico: il ragionamento è lungo quanto la
+         * risposta o di più, è scritto per la macchina, e spesso è in inglese
+         * mentre la risposta è in italiano. Chi preme «leggi» si sente leggere
+         * il processo invece del risultato, e la funzione diventa inservibile.
+         *
+         * ⛔ Si tolgono le ETICHETTE ESPLICITE, non «tutto ciò che sembra un
+         * ragionamento»: `message.reasoning` è già un campo separato, quindi
+         * questa riga serve per i modelli che lo scrivono IN LINEA nel testo —
+         * i locali lo fanno. Un filtro più largo mangerebbe la risposta.
+         */
+        .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, ' ')
+        .replace(/<\|?(?:begin_of_thought|thought)\|?>[\s\S]*?<\|?(?:end_of_thought|\/thought)\|?>/gi, ' ')
+        // Un blocco aperto e mai chiuso: una risposta interrotta a metà del
+        // ragionamento non deve farsi leggere per intero.
+        .replace(/<think(?:ing)?>[\s\S]*$/i, ' ')
         // I blocchi di codice si annunciano invece di essere sillabati.
         .replace(/```[\s\S]*?```/g, ' ')
         // `codice in linea` → codice in linea
