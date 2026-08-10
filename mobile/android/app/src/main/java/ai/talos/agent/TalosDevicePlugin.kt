@@ -18,6 +18,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.AlarmClock
+import android.provider.Settings
 import android.view.KeyEvent
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -448,6 +449,27 @@ class TalosDevicePlugin : Plugin() {
     @PluginMethod
     fun status(call: PluginCall) {
         val result = JSObject()
+
+        /*
+         * ⭐ CHE TELEFONO SEI. Owner 2026-08-10, dallo screenshot: TALOS
+         * rispondeva «non ho accesso al nome commerciale o al modello di marca
+         * del tuo telefono (per motivi di privacy…)». Non era vero, ed era una
+         * privacy che nessuno aveva chiesto: erano dati che il telefono dà a
+         * chiunque, e senza i quali TALOS non può nemmeno dire se un modello
+         * locale ci gira.
+         *
+         * ⛔ `Build.MODEL` da solo NON basta: qui vale `OPD2415`, che non è il
+         * nome che la persona conosce. Il nome vero sta in
+         * `Settings.Global.DEVICE_NAME` — API PUBBLICA, misurata su questo
+         * telefono: «OnePlus Pad 3». Il codice resta accanto, perché è quello
+         * che serve per cercare le specifiche.
+         */
+        result.put("manufacturer", Build.MANUFACTURER)
+        result.put("model", Build.MODEL)
+        result.put("androidVersion", Build.VERSION.RELEASE)
+        runCatching {
+            Settings.Global.getString(context.contentResolver, Settings.Global.DEVICE_NAME)
+        }.getOrNull()?.takeIf { it.isNotBlank() }?.let { result.put("deviceName", it) }
 
         val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
         bm?.let {

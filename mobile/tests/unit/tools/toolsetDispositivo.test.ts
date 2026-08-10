@@ -181,3 +181,40 @@ describe('⛔ la schermata aperta si dice QUALE è', () => {
         expect(esito.content).not.toContain('general settings list')
     })
 })
+
+/**
+ * ⛔⛔ «Non ho accesso al modello del tuo telefono, per motivi di privacy.»
+ *
+ * Owner 2026-08-10, screenshot: TALOS lo ha detto — e non se l'era inventato.
+ * Gliel'avevamo scritto noi nella descrizione di `device_status`: «It reads
+ * nothing that identifies the device or the person». Una frase pensata per
+ * rassicurare che è diventata una BUGIA sulle capacità, e ha fatto rifiutare
+ * una risposta che il telefono dà a chiunque.
+ *
+ * ⛔ Questo caso morde sulla descrizione perché è lì che vive il difetto: il
+ * nativo può leggere marca e modello da sempre: era il testo a dire di no.
+ */
+describe('⛔ device_status dice CHE TELEFONO è, e non finge una privacy', () => {
+    const descrizione = () => {
+        const tools = createTalosDeviceTools(fonti() as never)
+        return tools.find((t) => t.name === 'device_status')!.description
+    }
+
+    it('promette marca, modello e nome del dispositivo', () => {
+        const d = descrizione().toLowerCase()
+        expect(d).toContain('make')
+        expect(d).toContain('model')
+        expect(d).toContain('android version')
+    })
+
+    it('⛔ e NON dice più che non identifica il dispositivo', () => {
+        // La riga esatta che ha prodotto il rifiuto nello screenshot.
+        expect(descrizione()).not.toContain('nothing that identifies the device')
+    })
+
+    it('ma la promessa sulla PERSONA resta, perché quella è vera', () => {
+        // Marca e modello sono del telefono; conti, numeri e posizione no —
+        // e su quelli il tool non tocca niente.
+        expect(descrizione().toLowerCase()).toContain('nothing about the person')
+    })
+})

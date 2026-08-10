@@ -290,6 +290,7 @@ export async function preflightTalosToolExecution(
     const security = securityOf(tool.name)
     const trifecta = talosTrifectaVerdict(chain, security)
     const effectiveRisk = talosEffectiveRisk(chain, security)
+    const vietaIlSempre = talosForbidsPersistentGrant(effectiveRisk, requiredActions)
 
     const resolution = resolveTalosToolAuthorization({
         tool: tool.name,
@@ -348,8 +349,11 @@ export async function preflightTalosToolExecution(
                 // Su R4 «consenti sempre» non esiste, e vale anche quando a R4
                 // ci si arriva PER VIA DELLA CATENA — che è il caso che nessuno
                 // aveva previsto scrivendo il tool.
-                allowPersistent: resolution.allow_persistent
-                    && !talosForbidsPersistentGrant(effectiveRisk),
+                // ⛔ Le AZIONI viaggiano con il rischio: chi solo legge non
+                // perde il «sempre» nemmeno a R4 — owner 2026-08-10, «per le
+                // ricerche web nessuno escluso in lettura». Il perché per
+                // esteso, col compromesso, sta su `talosForbidsPersistentGrant`.
+                allowPersistent: resolution.allow_persistent && !vietaIlSempre,
                 ...(trifecta.closed ? { reason: 'trifecta' as const } : {}),
                 risk: effectiveRisk,
             },

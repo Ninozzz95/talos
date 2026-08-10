@@ -296,3 +296,34 @@ describe('la copertura è REALE, non simbolica', () => {
         expect(senza).toEqual([])
     })
 })
+
+/**
+ * ⛔⛔ IL «SEMPRE» NON SI TOGLIE A CHI SOLO LEGGE — decisione dell'owner.
+ *
+ * 2026-08-10, screenshot della scheda di `web_read`: «manca consenti sempre».
+ * Non era un difetto di rendering: `web_read` è R2, ma dopo una ricerca la
+ * CATENA lo porta a R4 e la regola toglieva il «sempre». Owner: «voglio che
+ * consenti sempre appaia SEMPRE per le ricerche web, nessuno escluso in
+ * lettura».
+ *
+ * ⛔ E il confine resta dov'era per tutto il resto: una lettura autorizzata per
+ * sempre è una porta a un'iniezione, ma qualunque cosa quella pagina convinca
+ * il modello a FARE passa da un tool che scrive — e quello il «sempre» non ce
+ * l'ha. Questi due casi provano proprio quel confine.
+ */
+describe('⛔ il «sempre» e la lettura', () => {
+    it('a R4, chi SOLO LEGGE tiene il «consenti sempre»', () => {
+        expect(talosForbidsPersistentGrant('R4', ['read'])).toBe(false)
+        expect(talosForbidsPersistentGrant('R4', ['read', 'outbound'])).toBe(false)
+    })
+
+    it('⛔ ma chi SCRIVE lo perde: è lì che la difesa morde', () => {
+        expect(talosForbidsPersistentGrant('R4', ['write'])).toBe(true)
+        expect(talosForbidsPersistentGrant('R4', ['write', 'outbound'])).toBe(true)
+    })
+
+    it('e sotto R4 non si toglie niente a nessuno', () => {
+        expect(talosForbidsPersistentGrant('R2', ['write'])).toBe(false)
+        expect(talosForbidsPersistentGrant('R3', ['write'])).toBe(false)
+    })
+})

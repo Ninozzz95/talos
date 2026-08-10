@@ -546,11 +546,22 @@ describe('Agent Tools control registry', () => {
          * contratti preesistenti e' cambiato insieme al nuovo — che e' l'unica
          * domanda a cui questa guardia divisa serve a rispondere.
          */
+        /*
+         * ⛔ 2026-08-10, QUINTO cambio: la DESCRIZIONE di `device_status`.
+         * Diceva «It reads nothing that identifies the device or the person», e
+         * per quella riga TALOS ha rifiutato di dire che telefono fosse — «per
+         * motivi di privacy», su dati che il telefono dà a chiunque. Adesso
+         * promette marca, modello, nome e versione, e tiene la promessa vera:
+         * sulla PERSONA non tocca niente.
+         *
+         * I tre dialetti si muovono insieme, come dev'essere per un testo; il
+         * piano di controllo e l'impronta STORICA non si muovono affatto.
+         */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('330084ec6659a5cb685839f153334019c156d2ebd967175a26ead82786a8fb6b')
+            .toBe('40f3b26762fb7817a02b6fcc9ae9767e787a1a330565409d12d2a6a1a8b478dc')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('2c83524b2b8ed1260d0ab714ee2bfb67e2704a831e6ae2aa46e60e6b573025b7')
+            .toBe('53ebb166eafa6f2a36a02f7c1dfcc6f6d2de9c75e7a80ac8c161401a0ac4ccac')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('d6ae4f25031b067f2bb6b48e8f0a1f28b79807814f96fa9c9ab54b2a40e69084')
+            .toBe('21902f212b720a28f0b4210a6f62b255b21cf4a8834308e6ea0be482c7db526e')
     })
 })

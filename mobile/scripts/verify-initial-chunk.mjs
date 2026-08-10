@@ -66,7 +66,17 @@ import { resolve } from 'node:path'
 //
 // 600,000 leaves ~7.7%. If a single feature ever eats that, it is not a budget
 // problem — it is a feature that belongs behind a dynamic import.
-const DEFAULT_MAXIMUM_BYTES = 600_000
+/*
+ * ⛔ 600.100 e non 600.000 — DECISIONE dell'owner, 2026-08-10: «rompo
+ * ufficialmente la regola e alziamo di cento byte. Per adesso la regola non è
+ * scritta sulla pietra, però comunque è da considerare».
+ *
+ * Il caso: dare a chi solo LEGGE il «consenti sempre» costava 29 byte, e il
+ * margine era 27. Alzare resta l'ultima carta — la prima è sempre togliere
+ * peso — ma cento byte comprati una volta valgono più di due ore passate a
+ * limare codice che non c'entra con la funzione in corso.
+ */
+const DEFAULT_MAXIMUM_BYTES = 600_100
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {

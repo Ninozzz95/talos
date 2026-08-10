@@ -157,9 +157,10 @@ export function createTalosDeviceTools(
             title: 'Check the phone',
             description: [
                 'Read how the phone is right now: battery, storage, memory, ringer mode and',
-                'network type. Use it when the user asks about their device, or before',
-                'suggesting something that needs space, battery or a connection.',
-                'It reads nothing that identifies the device or the person.',
+                'network type, plus which phone this is: make, model code, its name and',
+                'the Android version. Use it when the user asks about their device, or',
+                'before suggesting something that needs space, battery or a connection.',
+                'It reads nothing about the PERSON — no accounts, no numbers, no location.',
             ].join(' '),
             input: z.object({}),
             async run() {
