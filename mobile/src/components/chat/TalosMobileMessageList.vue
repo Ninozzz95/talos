@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { BookMarked, CheckCheck, ChevronRight, FileText, ShieldQuestion } from '@lucide/vue'
+import { useTalosSpeech } from '@/composables/useTalosSpeech'
+import { BookMarked, CheckCheck, ChevronRight, FileText, ShieldQuestion, Square, Volume2 } from '@lucide/vue'
 import { talosShortModelLabel } from '@/lib/models/modelLabel'
 import { TALOS_METADATA_AZIONI, talosHaAzioniDaMostrare } from '@/lib/tools/tracciaAzione'
 import { TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
@@ -77,6 +78,7 @@ function attesaViva(message: TalosMobileMessageView): boolean {
 }
 
 const { t } = useTalosI18n()
+const parla = useTalosSpeech()
 
 /**
  * ⛔ I nomi INTERNI non si mostrano mai: `device_torch` non dice niente a
@@ -371,6 +373,28 @@ function messageStateLabel(state: string): string {
                         non l'annuncio di una porta altrove. Se non lo e' piu',
                         la riga parla al passato e nessuno la insegue.
                     -->
+                    <!-- ⛔ LA LETTURA STA ALL'INIZIO DELLA RISPOSTA, come icona
+                         sola — owner 2026-08-10: «invece del chip badge lettura
+                         ad alta voce, semplicemente un'icona all'inizio della
+                         risposta».
+
+                         Sta QUI e non piu' in fondo fra le azioni per una
+                         ragione d'uso: si decide di ascoltare PRIMA di leggere,
+                         non dopo. Un comando in fondo si trova quando la
+                         risposta e' gia' stata letta con gli occhi, cioe' quando
+                         non serve piu'. -->
+                    <button
+                        v-if="message.role === 'assistant' && !checkpointDi(message)"
+                        type="button"
+                        data-testid="talos-message-speak"
+                        class="talos-pressable mb-1 inline-flex size-7 items-center justify-center rounded-full text-[var(--talos-muted)] hover:bg-[var(--talos-active)] hover:text-[var(--talos-text)]"
+                        :aria-label="parla.speakingId.value === message.id ? $t('chat.stopSpeaking') : $t('chat.speakMessage')"
+                        :aria-pressed="parla.speakingId.value === message.id"
+                        @click="parla.toggle(message.id, message.content)"
+                    >
+                        <Square v-if="parla.speakingId.value === message.id" class="size-3.5" fill="currentColor" aria-hidden="true" />
+                        <Volume2 v-else class="size-4" aria-hidden="true" />
+                    </button>
                     <button
                         v-if="attesaViva(message)"
                         type="button"

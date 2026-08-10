@@ -82,10 +82,26 @@ const voiceItems = computed(() => {
         network: / · rete$/.test(v.name),
         notInstalled: false,
     }))
+    /*
+     * ⛔ SOLO LE PRIME TRE — owner 2026-08-10, dopo averle ascoltate tutte:
+     * «vorrei solo le prime tre disponibili, le altre non mi piacciono, sono
+     * troppo robotiche».
+     *
+     * È una scelta fatta a ORECCHIO, e per questo vale: Android dichiara
+     * `quality: 400` per tutte e nove le italiane, quindi nessun numero avrebbe
+     * potuto separarle. Le prime tre sono quelle che l'ordinamento porta in
+     * testa — le neurali di rete — e sono anche le uniche che una persona ha
+     * detto di sopportare.
+     *
+     * ⛔ Il limite NON si applica a «tutte le lingue»: chi accende quello ha
+     * chiesto esplicitamente l'archivio, e nascondergliene i due terzi sarebbe
+     * rispondere a una domanda diversa da quella che ha fatto.
+     */
+    const QUANTE_VOCI = 3
     const miaLingua = talosVociOrdinate(dispositivo, {
         lingua: linguaInterfaccia.value,
         rete: navigator.onLine !== false,
-    })
+    }).slice(0, QUANTE_VOCI)
     const restanti = tutteLeLingue.value
         ? dispositivo.filter((v) => !miaLingua.some((m) => m.name === v.name))
         : []

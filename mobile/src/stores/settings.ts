@@ -598,9 +598,22 @@ export interface TalosMobileVoicePreferences {
     dictation_language: TalosDictationLanguageMode
 }
 
+/**
+ * ⛔ 1.2 e 1.0 sono una SCELTA DELL'OWNER, ascoltando: «di default voglio
+ * velocita' a 1.2 e tonalita' a 1» (2026-08-10).
+ *
+ * Non e' un ritocco estetico. A 1.0 la voce di sistema legge come un annuncio
+ * di stazione; a 1.2 sta al passo di chi ascolta una risposta che ha appena
+ * chiesto. La tonalita' resta neutra perche' e' li' che le voci di Google
+ * suonano meno artificiali — alzarla le rende squillanti, abbassarla cupe.
+ *
+ * ⛔ E vale solo per chi NON ha ancora scelto: `parseVoicePreferences` tiene il
+ * valore salvato. Cambiare il predefinito non deve muovere la voce di chi
+ * l'aveva gia' regolata a orecchio.
+ */
 const DEFAULT_VOICE_PREFERENCES: TalosMobileVoicePreferences = {
     voice_uri: null,
-    rate: 1,
+    rate: 1.2,
     pitch: 1,
     dictation_language: 'system',
 }
