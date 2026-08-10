@@ -402,15 +402,24 @@ describe('Agent Tools control registry', () => {
         expect(digestOf(talosToolsForOpenAi(beforeDescriptionUpdate as never)))
             .toBe('b0681b4eb5360b75fef3ed62c5db431e0976098c1cf89aec9e3745003de25819')
         expect(digestOf(talosToolsForGemini(beforeDescriptionUpdate as never)))
-            .toBe('be971a4fccdb1a4ce451a12783f87a84b5e721b9fa7a4f4361508bb1508336c0')
+            .toBe('7721578c61b818493cf37f104af81204a76c1616b7ba14878d9c677ca0045b00')
 
         // Gli stessi tre dialetti SENZA i tool nuovi: identici a ieri.
         expect(digestOf(talosToolsForAnthropic(withoutNotesWrite as never)))
             .toBe('8903bcf9aad1954b61d2bed23eacc170c0259b78fa0a293cef0927129373d3f5')
         expect(digestOf(talosToolsForOpenAi(withoutNotesWrite as never)))
             .toBe('9291e14e238147c8459bef3a66a0f9dae841130b40fb67f927bcf67e9969b058')
+        /*
+         * ⛔ 2026-08-10: SOLO l'impronta Gemini si muove qui, e non e' una
+         * deriva del contratto — e' il TRADUTTORE verso Gemini che e' cambiato.
+         * Le impronte Anthropic e OpenAI sopra sono rimaste identiche byte per
+         * byte, ed e' quella la prova che nessun tool preesistente si e' mosso.
+         *
+         * Causa, misurata sul telefono dell'owner: HTTP 400 «Unknown name
+         * "additionalProperties"», e Gemini rifiutava l'INTERA conversazione.
+         */
         expect(digestOf(talosToolsForGemini(withoutNotesWrite as never)))
-            .toBe('61745afe6d79da05fa2d982bc4cc3bd9256305f66d4caaa15f3d386772565e62')
+            .toBe('234e68152ed95f3ca85254a5c2f208414df79ec242c26e0a0dedd7138efaf8ef')
 
         /*
          * ⭐ Ri-fissati 2026-08-08 anche per i TRE tool delle NOTIFICHE.
@@ -465,12 +474,23 @@ describe('Agent Tools control registry', () => {
          * non si allenta la guardia.
          *
          * I tre dialetti si muovono INSIEME, come dev'essere.
+         *
+         * ⛔ 2026-08-10, SECONDO cambio: SOLO il dialetto Gemini si muove, e
+         * questa volta la asimmetria e' giusta. Non e' cambiato il contratto —
+         * nomi, descrizioni e schemi sono gli stessi per tutti — e' cambiato il
+         * TRADUTTORE verso Gemini, che ora tiene solo il sottoinsieme di
+         * OpenAPI che quel provider accetta.
+         *
+         * La causa, misurata sul telefono dell'owner: HTTP 400
+         * «Unknown name "additionalProperties" at
+         * 'tools[0].function_declarations[9].parameters'» — e Gemini rifiutava
+         * l'INTERA conversazione, non un tool.
          */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
             .toBe('0728c67977d34ea14afc5ed9aea8cf72ceeae58df298854986586e96f105bbfd')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
             .toBe('877ac1db9ff68593382a579737b6980a5a0935d866458e4bce30c4a0d89b7cdd')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('45660069a0e93a380f4efb5a704ebe661aac7990e56502bc1456aa0e160dbf54')
+            .toBe('115f1d718cc3a312d7ffed1390fa48ece1d74c3cd208b41019488f8c1e08111d')
     })
 })

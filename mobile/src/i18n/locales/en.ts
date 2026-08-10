@@ -717,6 +717,7 @@ export const TALOS_EN_MESSAGES = {
         messageActions: 'Message actions',
         resendMessage: 'Resend message',
         stopSpeaking: 'Stop speaking',
+        spokenAloud: 'Read aloud',
         speakMessage: 'Speak message',
         speak: 'Speak',
         // A tap that makes no sound has to say why, or it reads as a dead

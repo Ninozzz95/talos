@@ -720,6 +720,7 @@ export const TALOS_IT_MESSAGES = {
         messageActions: 'Azioni messaggio',
         resendMessage: 'Invia di nuovo il messaggio',
         stopSpeaking: 'Interrompi lettura',
+        spokenAloud: 'Letta ad alta voce',
         speakMessage: 'Leggi il messaggio',
         speak: 'Leggi',
         // ⛔ Un tocco che non produce voce deve DIRE perché: senza, è identico a

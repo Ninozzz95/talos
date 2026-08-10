@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { useTalosSpeech } from '@/composables/useTalosSpeech'
-import { BookMarked, CheckCheck, ChevronRight, FileText, ShieldQuestion, Square, Volume2 } from '@lucide/vue'
+import { BookMarked, CheckCheck, ChevronRight, FileText, Mic, ShieldQuestion } from '@lucide/vue'
 import { talosShortModelLabel } from '@/lib/models/modelLabel'
 import { TALOS_METADATA_AZIONI, talosHaAzioniDaMostrare } from '@/lib/tools/tracciaAzione'
 import { TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
@@ -373,28 +373,29 @@ function messageStateLabel(state: string): string {
                         non l'annuncio di una porta altrove. Se non lo e' piu',
                         la riga parla al passato e nessuno la insegue.
                     -->
-                    <!-- ⛔ LA LETTURA STA ALL'INIZIO DELLA RISPOSTA, come icona
-                         sola — owner 2026-08-10: «invece del chip badge lettura
-                         ad alta voce, semplicemente un'icona all'inizio della
-                         risposta».
+                    <!-- ⛔ SEGNALINO, NON COMANDO — owner 2026-08-10, seconda
+                         passata: «l'icona prima del testo è solo un segnalino
+                         per far capire che la chat ha parlato ad alta voce su
+                         richiesta… non deve apparire se non si chiede».
 
-                         Sta QUI e non piu' in fondo fra le azioni per una
-                         ragione d'uso: si decide di ascoltare PRIMA di leggere,
-                         non dopo. Un comando in fondo si trova quando la
-                         risposta e' gia' stata letta con gli occhi, cioe' quando
-                         non serve piu'. -->
-                    <button
-                        v-if="message.role === 'assistant' && !checkpointDi(message)"
-                        type="button"
-                        data-testid="talos-message-speak"
-                        class="talos-pressable mb-1 inline-flex size-7 items-center justify-center rounded-full text-[var(--talos-muted)] hover:bg-[var(--talos-active)] hover:text-[var(--talos-text)]"
-                        :aria-label="parla.speakingId.value === message.id ? $t('chat.stopSpeaking') : $t('chat.speakMessage')"
-                        :aria-pressed="parla.speakingId.value === message.id"
-                        @click="parla.toggle(message.id, message.content)"
+                         La prima versione l'aveva fatto diventare un pulsante,
+                         e il comando era sparito da sotto: due errori in uno.
+                         Il comando sta accanto a «copia», sempre; questo dice
+                         soltanto «questa risposta l'hai fatta leggere».
+
+                         ⛔ Icona DIVERSA da quella del comando, e non e' un
+                         vezzo: due disegni uguali per una cosa che si preme e
+                         una che si guarda insegnano a premere quella sbagliata.
+                    -->
+                    <span
+                        v-if="message.role === 'assistant' && parla.lette.value.has(message.id)"
+                        data-testid="talos-message-spoken"
+                        class="mb-1 inline-flex items-center text-[var(--talos-muted)]"
+                        :title="$t('chat.spokenAloud')"
+                        :aria-label="$t('chat.spokenAloud')"
                     >
-                        <Square v-if="parla.speakingId.value === message.id" class="size-3.5" fill="currentColor" aria-hidden="true" />
-                        <Volume2 v-else class="size-4" aria-hidden="true" />
-                    </button>
+                        <Mic class="size-4" aria-hidden="true" />
+                    </span>
                     <button
                         v-if="attesaViva(message)"
                         type="button"
