@@ -1,99 +1,90 @@
 package ai.talos.agent
 
-import android.os.SystemClock
-import android.util.Log
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import java.io.File
 
 /**
  * ⭐⭐ IL FRENO: «mi hai toccato, mi fermo».
  *
- * ## Perché al livello grezzo e non con l'accessibilità
+ * ## La misura che l'ha deciso, col dito dell'owner
  *
- * MISURATO col dito dell'owner il 2026-08-10, nei DUE versi:
+ * 2026-08-10, nei DUE versi:
  *
- * | chi tocca                | righe da `touchpanel` (`/dev/input/event4`) |
- * |--------------------------|---------------------------------------------|
+ * | chi tocca                | righe dal `touchpanel` (`/dev/input/event4`) |
+ * |--------------------------|----------------------------------------------|
  * | **un dito vero**         | **1.369** (1.018 EV_ABS, 327 EV_SYN, 24 EV_KEY) |
- * | due `input tap` NOSTRI   | **1** (sola intestazione)                    |
+ * | due `input tap` NOSTRI   | **1** (sola intestazione)                     |
  *
- * ⇒ I tocchi che iniettiamo noi passano dal framework e **non toccano mai il
- * pannello**: al livello grezzo un dito umano e un tocco nostro sono opposti.
- * È il discriminatore perfetto, e non costa niente a chi possiede il telefono.
+ * ⇒ I tocchi che iniettiamo passano dal framework e **non toccano mai il
+ * pannello**. Al livello grezzo un dito umano e un tocco nostro sono opposti:
+ * il discriminatore è perfetto, non costa permessi, e non cambia niente a chi
+ * possiede il telefono.
  *
- * ⛔ La strada dell'accessibilità è CHIUSA e sta scritta in `TalosOcchio`:
+ * ⛔ La strada dell'accessibilità è CHIUSA, e sta scritta in `TalosOcchio`:
  * `TYPE_TOUCH_INTERACTION_START` non arriva senza l'esplorazione al tocco, che
- * cambierebbe il modo in cui la persona usa il telefono.
+ * trasformerebbe un tocco in «leggi» e due in «attiva».
  *
- * ⛔⛔ E la trappola della misura, che è costata quasi la strada giusta: il
- * primo conteggio dava `0` perché cercava `ABS_MT`/`BTN_TOUCH`, mentre
- * `getevent -lt` mette i codici in un'altra colonna. **Contare la stringa
- * sbagliata assomiglia in tutto all'assenza di dati.** Per questo qui si conta
- * il NOME DEL DISPOSITIVO, che è stabile, e non i nomi dei codici.
+ * ## ⛔ Perché si guarda la DIMENSIONE del file e non le righe
+ *
+ * Due ragioni, e la prima è una lezione pagata:
+ *
+ * **1. Contare la stringa sbagliata assomiglia all'assenza di dati.** Il primo
+ * conteggio dava `0` perché cercava `ABS_MT`/`BTN_TOUCH`, mentre `getevent -lt`
+ * mette i codici in un'altra colonna: stavo per dichiarare «il dito non si
+ * sente» e buttare la strada giusta. Un file che **cresce** non ha colonne da
+ * sbagliare.
+ *
+ * **2. La pipe non arriva mai a fine file.** `TalosPonteAdb.esegui` scrive su
+ * file proprio per questo: il demone `adb` eredita i descrittori e resta vivo,
+ * quindi chi legge un flusso aspetta per sempre. Qui si riusa quel disegno —
+ * il comando scrive su file, e noi guardiamo il file.
+ *
+ * ## E l'effetto collaterale è desiderabile
+ *
+ * Il file cresce per QUALUNQUE ingresso fisico: schermo, volume, accensione.
+ * Non è impreciso, è più giusto — se la persona sta premendo qualcosa, il
+ * telefono è tornato suo, qualunque cosa stia premendo.
  */
 object TalosDitoVero {
 
-    /** Il pannello dice il suo nome in `getevent -p`: non si indovina un numero. */
-    private const val NOME_PANNELLO = "touchpanel"
+    /**
+     * Dove il ponte scrive gli eventi grezzi. In `/data/local/tmp` perché è la
+     * sola cartella che la shell (uid 2000) e l'app sanno leggere entrambe —
+     * misurato: i file ci nascono `-rw-rw-rw-`.
+     */
+    const val PERCORSO = "/data/local/tmp/talos-dito.txt"
 
-    @Volatile private var processo: Process? = null
-    @Volatile private var ultimo: Long = 0
+    /** Il comando che il ponte deve avviare, staccato. */
+    val COMANDO = listOf("sh", "-c", "getevent -l > $PERCORSO 2>&1 &")
+
+    @Volatile private var vistaA = -1L
 
     /**
-     * Comincia ad ascoltare il pannello. Serve la shell del ponte: un'app
-     * normale non legge `/dev/input`.
-     *
-     * ⛔ Si passa il comando gia' pronto invece di costruirlo qui: chi possiede
-     * il ponte e' `TalosPonteAdb`, e due posti che sanno come si esegue una
-     * shell sono due posti che possono divergere.
+     * Si comincia a guardare da ADESSO: quello che c'era prima non è un tocco
+     * di questa sessione.
      */
-    fun ascolta(esegui: (String) -> Process?) {
-        smetti()
-        val p = esegui("getevent -l") ?: run {
-            Log.i(TAG, "nessuna shell: il freno non e' armato")
-            return
-        }
-        processo = p
-        Thread({
-            runCatching {
-                BufferedReader(InputStreamReader(p.inputStream)).useLines { righe ->
-                    var pannello: String? = null
-                    for (riga in righe) {
-                        // `add device N: /dev/input/eventX` seguito da `name: "..."`
-                        if (riga.contains("name:") && riga.contains(NOME_PANNELLO)) {
-                            pannello = ultimoDispositivo
-                            continue
-                        }
-                        if (riga.startsWith("add device")) {
-                            ultimoDispositivo = riga.substringAfter(": ").trim()
-                            continue
-                        }
-                        if (pannello != null && riga.startsWith(pannello)) {
-                            ultimo = SystemClock.uptimeMillis()
-                        }
-                    }
-                }
-            }
-        }, "talos-dito").start()
+    fun azzera() {
+        vistaA = quanto()
     }
+
+    /** Vero se qualcosa è cresciuto da quando si guarda. Non consuma. */
+    fun haToccato(): Boolean {
+        val ora = quanto()
+        // ⛔ `-1` vuol dire «non stiamo guardando»: NON si risponde `false`,
+        // che vorrebbe dire «nessuno ha toccato» ed è una bugia. Chi chiede
+        // deve distinguere «non ho toccato» da «non lo so», e lo fa con
+        // `armato()`.
+        return vistaA >= 0 && ora > vistaA
+    }
+
+    /** Il freno è armato davvero? Un freno che non sa di esistere non frena. */
+    fun armato(): Boolean = vistaA >= 0 && File(PERCORSO).exists()
+
+    /** Quanti byte di eventi sono arrivati da quando si guarda. */
+    fun cresciutoDi(): Long = if (vistaA < 0) 0 else (quanto() - vistaA).coerceAtLeast(0)
 
     fun smetti() {
-        runCatching { processo?.destroy() }
-        processo = null
+        vistaA = -1
     }
 
-    /** Da quanti millisecondi una mano vera non tocca. `null` se non ha mai toccato. */
-    fun dallUltimoDito(): Long? =
-        if (ultimo == 0L) null else SystemClock.uptimeMillis() - ultimo
-
-    /**
-     * ⛔ La domanda che il ciclo fa PRIMA di ogni azione. Mezzo secondo e' la
-     * finestra in cui un dito e un nostro tocco si sovrapporrebbero: dentro
-     * quella, si cede il telefono e basta.
-     */
-    fun haToccato(entroMs: Long = 500): Boolean =
-        (dallUltimoDito() ?: Long.MAX_VALUE) <= entroMs
-
-    @Volatile private var ultimoDispositivo: String? = null
-    private const val TAG = "TalosDito"
+    private fun quanto(): Long = runCatching { File(PERCORSO).length() }.getOrDefault(0L)
 }
