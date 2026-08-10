@@ -282,8 +282,34 @@ export function talosEffectiveRisk(
  * Vale anche quando il rischio è salito **per via della catena**: è lì che
  * serve di più, perché è il caso che nessuno aveva previsto scrivendo il tool.
  */
-export function talosForbidsPersistentGrant(risk: TalosToolRisk): boolean {
-    return risk === 'R4'
+export function talosForbidsPersistentGrant(
+    risk: TalosToolRisk,
+    /** Le azioni che il tool chiede DAVVERO. Assenti = decide solo il rischio. */
+    azioni?: readonly TalosToolAction[],
+): boolean {
+    /*
+     * ⛔⛔ CHI SOLO LEGGE NON PERDE MAI IL «SEMPRE» — decisione dell'owner del
+     * 2026-08-10: «voglio che consenti sempre appaia SEMPRE per le ricerche
+     * web, nessuno escluso in lettura».
+     *
+     * Il caso che l'ha fatta nascere, dallo screenshot: `web_read` è R2, ma
+     * dopo una ricerca la CATENA lo porta a R4 (contenuto non fidato + rete +
+     * dati privati: la trifecta), e la scheda toglieva «consenti sempre» — su
+     * una funzione che si usa dieci volte al giorno e che sul telefono non
+     * cambia niente.
+     *
+     * ⛔ Il compromesso, detto per intero perché non si nasconde: una lettura
+     * autorizzata per sempre è una porta aperta a un'iniezione — una pagina
+     * scritta apposta può dire al modello cosa fare. Resta però una LETTURA:
+     * qualunque cosa quella pagina convinca il modello a FARE passa da un tool
+     * che SCRIVE, e quello il «sempre» non ce l'ha. È lì che la difesa morde,
+     * ed è perché questa riga guarda `write` e non il rischio.
+     *
+     * ⛔ Ed è UNA riga anche per un motivo misurato: il grafo d'avvio ha 27
+     * byte di margine, e la stessa logica a tre `if` lo sfondava di 2
+     * (600.002 su 600.000).
+     */
+    return risk === 'R4' && (!azioni || azioni.includes('write'))
 }
 
 /**
