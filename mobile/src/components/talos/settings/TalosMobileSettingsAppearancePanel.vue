@@ -6,7 +6,6 @@ import { TabsContent } from 'reka-ui'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
-import TalosMobileVoiceSettings from '@/components/talos/settings/TalosMobileVoiceSettings.vue'
 import {
     TALOS_THEME_PRESETS,
     type TalosThemeId,
@@ -457,7 +456,6 @@ const stickyListClass = 'sticky top-0 z-10 -mx-4 bg-[var(--talos-window-bg,var(-
             data-appearance-section="voice"
             class="talos-motion-tab-panel pt-2 outline-none"
         >
-            <TalosMobileVoiceSettings />
         </TabsContent>
     </TalosThemedTabs>
 </template>

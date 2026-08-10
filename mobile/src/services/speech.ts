@@ -6,6 +6,11 @@
  * keys + network; this is the honest on-device path.
  */
 import { Capacitor, registerPlugin } from '@capacitor/core'
+import {
+    talosSiglaVoce,
+    talosVoceDaUsare,
+    type TalosVoceDispositivo,
+} from '@/lib/voice/sceltaVoce'
 
 export interface TalosSpeechVoice {
     voiceURI: string
@@ -201,8 +206,36 @@ export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
     const plugin = registerPlugin<{
         speak(options: { text: string }): Promise<{ spoken: boolean, reason?: string }>
         stop(): Promise<unknown>
+        voices(): Promise<{ available: boolean, voices?: TalosVoceDispositivo[], current?: string | null }>
+        setVoice(options: { name: string }): Promise<{ done: boolean, reason?: string }>
         addListener(evento: string, cb: () => void): Promise<unknown>
     }>('TalosSpeech')
+
+    /*
+     * ⛔⛔ L'ELENCO VERO, e prima qui c'era `() => []`.
+     *
+     * MISURATO sul Pad il 2026-08-10, i due elenchi nello stesso istante:
+     *
+     * ```
+     *   Web Speech API (quello che la schermata mostrava)     0 voci
+     *   plugin nativo  (quello che parla davvero)           473 voci
+     *   voce in uso                                    it-IT-language
+     * ```
+     *
+     * Il selettore era vuoto e il motore restava sulla generica: owner, «la
+     * voce è troppo robotica». Non c'era una scelta sbagliata — non c'era
+     * nessuna scelta.
+     *
+     * ⛔ `getVoices()` è SINCRONO per contratto (lo è nel Web Speech API), e il
+     * nativo risponde su un thread. Si tiene una copia e si riempie appena si
+     * può: la prima chiamata può tornare vuota, e il pannello rilegge — come
+     * faceva già per i motori lenti del browser.
+     */
+    let elenco: TalosVoceDispositivo[] = []
+    const aggiorna = () => plugin.voices()
+        .then((r) => { if (r?.available && Array.isArray(r.voices)) elenco = r.voices })
+        .catch(() => { /* il pannello mostrerà l'elenco vuoto, che è la verità */ })
+    void aggiorna()
 
     /*
      * ⛔ UNA sola frase alla volta, e il richiamo è quello dell'ULTIMA.
@@ -221,14 +254,33 @@ export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
 
     return {
         /*
-         * ⛔ Il nativo non espone ancora l'elenco delle voci: si dice zero
-         * invece di inventarne una. Il pannello «Voce» mostrerà l'elenco vuoto,
-         * che è la verità — e prima di questa riga non mostrava nemmeno quello,
-         * perché la sezione intera era spenta.
+         * Le voci del motore che parla davvero, tradotte nella forma che il
+         * pannello conosce. `voiceURI` è il nome nativo: è quello che
+         * `setVoice` vuole indietro, quindi non si inventa un id nostro che poi
+         * andrebbe rimappato.
          */
-        getVoices: () => [],
+        getVoices: () => elenco.map((v) => ({
+            voiceURI: v.name,
+            name: talosSiglaVoce(v) + (v.network ? ' · rete' : ''),
+            lang: v.locale,
+        })),
         speak(utterance) {
             finita = utterance.onend ?? null
+            /*
+             * ⛔ La voce si applica PRIMA di ogni frase, non una volta all'avvio.
+             * Il motore torna alla generica quando il servizio si riavvia — e si
+             * riavvia da solo, per un aggiornamento o un cambio di lingua. Una
+             * preferenza applicata una volta sola è una preferenza che un giorno
+             * sparisce senza che nessuno se ne accorga.
+             */
+            const scelta = talosVoceDaUsare(elenco, {
+                // La lingua dell'interfaccia: è quella in cui TALOS sta
+                // parlando, e può divergere da quella del telefono.
+                lingua: document.documentElement.lang || navigator.language || 'it',
+                rete: navigator.onLine !== false,
+                scelta: utterance.voiceURI ?? null,
+            })
+            if (scelta.voce) void plugin.setVoice({ name: scelta.voce.name })
             void plugin.speak({ text: utterance.text })
                 .then((esito) => {
                     if (esito?.spoken) return

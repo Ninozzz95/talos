@@ -1,9 +1,11 @@
 package ai.talos.agent
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioManager
 import android.os.Build
 import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
 import android.speech.tts.UtteranceProgressListener
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -30,11 +32,23 @@ import java.util.Locale
  * dello Stop che abbiamo già pagato una volta sul motore locale — lì il segnale
  * arrivava al JS e non al nativo, e il modello continuava a macinare.
  *
- * **2. Rispetta il silenzioso.** Un telefono in vibrazione o in silenzioso è
- * una persona che ha detto «non fare rumore». Parlare lo stesso è ignorare una
- * richiesta esplicita, ed è il modo più rapido di far spegnere la voce per
- * sempre. Si controlla il profilo PRIMA, e si risponde `spoken: false` con il
- * motivo — non si finge di aver parlato.
+ * **2. ⛔ RIVISTA dall'owner il 2026-08-10: conta il VOLUME, non la suoneria.**
+ *
+ * Diceva: «un telefono in silenzioso è una persona che ha detto non fare
+ * rumore», e rifiutava di parlare se `ringerMode != NORMAL`. Owner, parole sue:
+ * «bisogna fare in modo che il volume del TTS si senta anche quando il telefono
+ * è silenzioso. Basta che il volume non zero».
+ *
+ * Ed è la lettura giusta di Android, non un'eccezione: la suoneria in
+ * silenzioso zittisce **squilli e notifiche** — cose che arrivano da fuori e
+ * non le hai chieste. Una lettura ad alta voce l'hai chiesta tu, adesso, ed è
+ * dell'altra famiglia: media e accessibilità. Il segnale onesto è **il volume
+ * del flusso su cui esce la voce**: se è a zero non si sentirebbe comunque, e
+ * allora si dice; se non è a zero, si parla.
+ *
+ * ⇒ La voce esce con `USAGE_ASSISTANCE_ACCESSIBILITY`, che è esattamente
+ * «qualcuno legge a voce alta per me» e Android non lo tratta come una
+ * notifica.
  *
  * **3. Dice quando ha finito.** L'interfaccia deve poter mostrare che sta
  * parlando e smettere di mostrarlo al momento giusto. Senza, resta un'icona
@@ -111,10 +125,113 @@ class TalosSpeechPlugin : Plugin() {
     @PluginMethod
     fun status(call: PluginCall) {
         val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val flusso = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            AudioManager.STREAM_ACCESSIBILITY
+        } else {
+            AudioManager.STREAM_MUSIC
+        }
         val result = JSObject()
         result.put("available", motore != null)
         result.put("speaking", stoParlando)
-        result.put("silenced", audio?.ringerMode != AudioManager.RINGER_MODE_NORMAL)
+        /*
+         * ⛔ `silenced` ADESSO VUOL DIRE «non uscirebbe suono», non «la
+         * suoneria è giù» — owner 2026-08-10. Il nome è rimasto perché è quello
+         * che l'interfaccia deve sapere; è cambiata la domanda che risponde.
+         * Il profilo silenzioso non zittisce la voce: solo il volume a zero.
+         */
+        val volume = audio?.getStreamVolume(flusso) ?: 0
+        val volumeMedia = audio?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
+        result.put("silenced", volume == 0 && volumeMedia == 0)
+        result.put("volume", volume)
+        result.put("volumeMax", audio?.getStreamMaxVolume(flusso) ?: 0)
+        result.put("ringerSilent", audio?.ringerMode != AudioManager.RINGER_MODE_NORMAL)
+        call.resolve(result)
+    }
+
+    /**
+     * ⭐⭐ LE VOCI VERE DEL DISPOSITIVO, con la loro qualità dichiarata.
+     *
+     * Owner 2026-08-10: «la voce è troppo robotica… voglio il meglio del
+     * meglio». Il primo passo non è installare niente: è **smettere di
+     * accettare la voce predefinita**. Android espone `tts.voices` con
+     * `quality`, `latency`, se serve la rete, e le `features` — fra cui
+     * `notInstalled`, che distingue una voce che si può scaricare da una che
+     * non c'è.
+     *
+     * ⛔ Su questo telefono il motore è uno solo (`com.google.android.tts`) e
+     * nessuna preferenza è salvata: TALOS stava usando **quella che capitava**.
+     * Con questo elenco si può scegliere la migliore, e farlo vedere.
+     *
+     * Ogni voce porta:
+     *  · `name`      l'id da passare a `setVoice`
+     *  · `locale`    il tag BCP-47
+     *  · `quality`   100/300/400/500 secondo Android (più alto è meglio)
+     *  · `network`   se ha bisogno della rete (più bella, ma non offline)
+     *  · `notInstalled` se va scaricata prima
+     *  · `latency`   quanto ci mette a partire
+     */
+    @PluginMethod
+    fun voices(call: PluginCall) {
+        val tts = motore
+        val result = JSObject()
+        if (tts == null) {
+            result.put("available", false)
+            result.put("reason", "unavailable")
+            call.resolve(result)
+            return
+        }
+        val elenco = org.json.JSONArray()
+        runCatching {
+            val tutte: Set<Voice> = tts.voices ?: emptySet()
+            for (v in tutte) {
+                val riga = JSObject()
+                riga.put("name", v.name)
+                riga.put("locale", v.locale.toLanguageTag())
+                riga.put("quality", v.quality)
+                riga.put("latency", v.latency)
+                riga.put("network", v.isNetworkConnectionRequired)
+                riga.put(
+                    "notInstalled",
+                    v.features?.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) == true,
+                )
+                elenco.put(riga)
+            }
+        }
+        result.put("available", true)
+        result.put("voices", elenco)
+        result.put("current", runCatching { tts.voice?.name }.getOrNull())
+        result.put("engine", runCatching { tts.defaultEngine }.getOrNull())
+        call.resolve(result)
+    }
+
+    /**
+     * Sceglie una voce per nome, e dice se ci è riuscito.
+     *
+     * ⛔ Non si fida del nome: se il motore la rifiuta si risponde `false`,
+     * perché una preferenza salvata che il motore ignora è peggio di nessuna
+     * preferenza — la persona crede di aver scelto e sente altro.
+     */
+    @PluginMethod
+    fun setVoice(call: PluginCall) {
+        val nome = call.getString("name").orEmpty()
+        val tts = motore
+        val result = JSObject()
+        if (tts == null || nome.isEmpty()) {
+            result.put("done", false)
+            result.put("reason", if (tts == null) "unavailable" else "no-name")
+            call.resolve(result)
+            return
+        }
+        val voce = runCatching { tts.voices?.firstOrNull { it.name == nome } }.getOrNull()
+        if (voce == null) {
+            result.put("done", false)
+            result.put("reason", "not-found")
+            call.resolve(result)
+            return
+        }
+        val esito = runCatching { tts.setVoice(voce) }.getOrDefault(TextToSpeech.ERROR)
+        result.put("done", esito == TextToSpeech.SUCCESS)
+        if (esito != TextToSpeech.SUCCESS) result.put("reason", "refused")
         call.resolve(result)
     }
 
@@ -143,14 +260,33 @@ class TalosSpeechPlugin : Plugin() {
             return
         }
 
-        val forzato = call.getBoolean("force", false) == true
+        /*
+         * ⛔ IL CANCELLO È IL VOLUME, NON LA SUONERIA — owner 2026-08-10.
+         *
+         * Prima c'era `ringerMode != NORMAL` → rifiuto. Ma il silenzioso
+         * zittisce ciò che arriva da fuori (squilli, notifiche), non ciò che la
+         * persona ha appena chiesto. La domanda onesta è una sola: **uscirebbe
+         * un suono?** E la risposta sta nel volume del flusso su cui parliamo.
+         *
+         * `force` resta e ora vuol dire «parla comunque»: serve a chi ha appena
+         * premuto «leggi ad alta voce» su un telefono col volume a zero, per
+         * far dire all'interfaccia «alza il volume» invece di tacere e basta.
+         */
         val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-        if (!forzato && audio?.ringerMode != AudioManager.RINGER_MODE_NORMAL) {
-            // ⛔ Non si finge di aver parlato: chi chiama deve poter mostrare
-            // «il telefono e' in silenzioso» invece di un'icona che si accende
-            // e si spegne senza che esca un suono.
+        val forzato = call.getBoolean("force", false) == true
+        val flusso = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            AudioManager.STREAM_ACCESSIBILITY
+        } else {
+            AudioManager.STREAM_MUSIC
+        }
+        val volume = audio?.getStreamVolume(flusso) ?: 0
+        val volumeMedia = audio?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
+        if (!forzato && volume == 0 && volumeMedia == 0) {
+            // ⛔ Non si finge di aver parlato: chi chiama deve poter dire «alza
+            // il volume» invece di mostrare un'icona che si accende e si spegne
+            // senza che esca un suono.
             result.put("spoken", false)
-            result.put("reason", "silenced")
+            result.put("reason", "volume-zero")
             call.resolve(result)
             return
         }
@@ -160,6 +296,31 @@ class TalosSpeechPlugin : Plugin() {
         // divergere.
         call.getString("language")?.let { tag ->
             runCatching { tts.language = Locale.forLanguageTag(tag) }
+        }
+
+        /*
+         * ⭐ LA VOCE ESCE COME «QUALCUNO LEGGE PER ME», non come una notifica.
+         *
+         * `USAGE_ASSISTANCE_ACCESSIBILITY` è la famiglia dei lettori di
+         * schermo: Android la instrada su `STREAM_ACCESSIBILITY`, che ha il
+         * suo cursore del volume e **non** viene zittita dal profilo
+         * silenzioso. È la traduzione esatta della richiesta dell'owner —
+         * «basta che il volume non sia zero» — invece di un'eccezione scritta
+         * a mano.
+         *
+         * ⛔ Si applica a ogni frase e non una volta sola: `setAudioAttributes`
+         * vale per le chiamate successive, e un motore che si riavvia (cambio
+         * di voce, aggiornamento del servizio) tornerebbe al predefinito.
+         */
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            runCatching {
+                tts.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build(),
+                )
+            }
         }
 
         val id = "talos-${System.nanoTime()}"

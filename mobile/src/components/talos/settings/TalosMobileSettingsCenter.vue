@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch, type Component } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Languages, Mail, Palette, Search, Settings, Shield, ShieldCheck, Smartphone, DatabaseBackup, User, Wrench } from '@lucide/vue'
+import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Languages, Mail, Palette, Search, Settings, Shield, ShieldCheck, Smartphone, DatabaseBackup, User, Volume2, Wrench } from '@lucide/vue'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosMediaQuery } from '@/composables/useTalosMediaQuery'
 import { useTalosAccountStore } from '@/stores/account'
@@ -9,6 +9,7 @@ import TalosAccountAvatar from '@/components/talos/TalosAccountAvatar.vue'
 import TalosMobileSettingsAiDefaultsPanel from './TalosMobileSettingsAiDefaultsPanel.vue'
 import TalosMobileSettingsAppearancePanel from './TalosMobileSettingsAppearancePanel.vue'
 import TalosMobileSettingsLanguagePanel from './TalosMobileSettingsLanguagePanel.vue'
+import TalosMobileVoiceSettings from './TalosMobileVoiceSettings.vue'
 import TalosMobileSettingsPrivacyPanel from './TalosMobileSettingsPrivacyPanel.vue'
 import TalosMobileSettingsBackupPanel from './TalosMobileSettingsBackupPanel.vue'
 import TalosMobileSettingsBrowserPanel from './TalosMobileSettingsBrowserPanel.vue'
@@ -177,6 +178,7 @@ const ICONS: Record<TalosMobileSettingsTabId, Component> = {
     email: Mail,
     reminders: Bell,
     appearance: Palette,
+    voice: Volume2,
     language: Languages,
     privacy: ShieldCheck,
     backup: DatabaseBackup,
@@ -210,6 +212,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
     ai_defaults: TalosMobileSettingsAiDefaultsPanel,
     search: TalosMobileSettingsSearchPanel,
     appearance: TalosMobileSettingsAppearancePanel,
+    voice: TalosMobileVoiceSettings,
     language: TalosMobileSettingsLanguagePanel,
     privacy: TalosMobileSettingsPrivacyPanel,
     backup: TalosMobileSettingsBackupPanel,

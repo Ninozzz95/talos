@@ -33,7 +33,7 @@ describe('TALOS mobile settings registry', () => {
         const desktopIds = TALOS_MOBILE_SETTINGS_TABS
             .map((tab) => tab.id)
             .filter((id) => !(id in MOBILE_ONLY))
-        expect(desktopIds).toHaveLength(12)
+        expect(desktopIds).toHaveLength(13)
         for (const id of Object.keys(MOBILE_ONLY)) {
             expect(TALOS_MOBILE_SETTINGS_TABS.some((tab) => tab.id === id)).toBe(true)
         }
@@ -51,7 +51,18 @@ describe('TALOS mobile settings registry', () => {
      * esiste per far emergere i debiti. Sta qui, e finche' il desktop non ce
      * l'ha questa riga E' il ticket.
      */
-    it('exposes the exact twelve desktop settings categories in order (F4-#25: no Shortcuts on a phone)', () => {
+    /**
+     * ⛔ 2026-08-10: entra `voice`, e come `backup` sta QUI e non fra i
+     * mobile-only. Una stazione della voce il desktop la puo' avere e la deve
+     * avere — questa riga E' il ticket, finche' non ce l'ha.
+     *
+     * Perche' e' nata: owner, «l'impostazione della voce si trova su aspetto.
+     * Deve avere un'impostazione fuori». E la misura che gli da' ragione: in
+     * fondo ad Aspetto il selettore mostrava **0 voci** mentre il motore ne
+     * aveva **473** ed era fermo sulla generica. Un pannello nascosto dentro
+     * un altro e' un pannello che nessuno apre.
+     */
+    it('exposes the exact thirteen desktop settings categories in order (F4-#25: no Shortcuts on a phone)', () => {
         expect(TALOS_MOBILE_SETTINGS_TABS
             .map((tab) => tab.id)
             .filter((id) => !(id in MOBILE_ONLY))).toEqual([
@@ -63,6 +74,7 @@ describe('TALOS mobile settings registry', () => {
             'email',
             'reminders',
             'appearance',
+            'voice',
             'backup',
             'account',
             'agent_tools',
@@ -79,6 +91,7 @@ describe('TALOS mobile settings registry', () => {
             'Email',
             'Reminders',
             'Appearance',
+            'Voice',
             'Backup and restore',
             'Account',
             'Agent Tools',
@@ -100,6 +113,8 @@ describe('TALOS mobile settings registry', () => {
             // and it exists because the APK signing key was lost: reinstalling
             // means uninstalling, and uninstalling without an export means
             // losing the chats, the Library, the memories and the keys.
-            .toEqual(['models', 'ai_defaults', 'search', 'browser', 'appearance', 'language', 'privacy', 'backup', 'account', 'agent_tools'])
+            // 2026-08-10: Voice joined them, ed e' un pannello locale vero —
+            // legge le voci del motore del telefono e ne applica una.
+            .toEqual(['models', 'ai_defaults', 'search', 'browser', 'appearance', 'voice', 'language', 'privacy', 'backup', 'account', 'agent_tools'])
     })
 })
