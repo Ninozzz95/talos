@@ -197,6 +197,14 @@ export function createTalosPrivilegedSources(): TalosPrivilegedToolSources | nul
          * telefono», mentre `com.oneplus.calculator` è installata e ha la sua
          * attività di avvio.
          *
+         * ## ⛔ E NON BASTAVA: i pacchetti non dicono cosa sono
+         *
+         * Corretto il filtro, restava il secondo difetto — trovato lo stesso
+         * giorno incrociando i provider (vedi il `try` nel corpo). Il ponte dà
+         * solo nomi di pacchetto, e `org.thunderdog.challegram` è Telegram X.
+         * ⇒ Adesso l'elenco lo fa il NATIVO, che sa l'etichetta; questo resta
+         * il ripiego.
+         *
          * ## ⭐ E la domanda giusta allinea ELENCO e APERTURA
          *
          * L'apertura passa da `getLaunchIntentForPackage`, cioè può aprire
@@ -208,6 +216,41 @@ export function createTalosPrivilegedSources(): TalosPrivilegedToolSources | nul
          * che non la nomina.
          */
         async listApps() {
+            /*
+             * ⭐⭐ PRIMA IL NATIVO, perché sa il NOME che la persona legge.
+             *
+             * MISURATO il 2026-08-10 incrociando tre provider sulla stessa
+             * domanda «Apri Telegram», con Telegram X installato:
+             *
+             * ```
+             *   anthropic/claude-sonnet-5   «Non ho trovato Telegram»       ⛔
+             *   openai/gpt-5.6              «Non trovo Telegram»            ⛔
+             *   google/gemini-3.6-flash     apre org.thunderdog.challegram  ✅
+             * ```
+             *
+             * Il ponte restituisce **solo pacchetti**, e `org.thunderdog.challegram`
+             * non contiene la parola «telegram»: chi non sa la mappa a memoria
+             * risponde che l'app non c'è. Due modelli su tre.
+             *
+             * Il `PackageManager` dell'app, con le `<queries>` già nel
+             * manifest, dà `Etichetta<TAB>pacchetto` — e in più non vuole
+             * nessun privilegio, quindi l'elenco funziona anche dove il ponte
+             * non si accenderà mai.
+             *
+             * ⛔ Il ponte resta come ripiego e NON viene tolto: se un domani il
+             * nativo non c'è (piattaforma diversa, plugin non caricato), un
+             * elenco di soli pacchetti è comunque meglio del silenzio.
+             */
+            try {
+                const nativo = await TalosDeviceBridge.listApps()
+                if (nativo?.done && typeof nativo.output === 'string' && nativo.output) {
+                    return { done: true, via: 'native' as const, output: nativo.output }
+                }
+            }
+            catch {
+                // il nativo non c'è: si prova il ponte, sotto
+            }
+
             const r = await talosRunAsShell([
                 'cmd', 'package', 'query-activities', '--brief',
                 '-a', 'android.intent.action.MAIN',

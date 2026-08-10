@@ -445,11 +445,32 @@ describe('Agent Tools control registry', () => {
          * **Dimostrato, non assunto**: il blocco «senza i nuovi» qui sopra
          * riproduce tutte e tre le impronte storiche byte per byte.
          */
+        /*
+         * ⛔ Ri-fissati 2026-08-10 per la DESCRIZIONE di `device_list_apps`, e
+         * la ragione è una misura, non un ritocco di stile.
+         *
+         * La descrizione prometteva già «the name the user sees», e la
+         * sorgente restituiva **solo pacchetti**. Provato sul Pad con la stessa
+         * domanda «Apri Telegram», Telegram X installato:
+         *
+         * ```
+         *   anthropic/claude-sonnet-5   «Non ho trovato Telegram»          ⛔
+         *   openai/gpt-5.6              «Non trovo Telegram»               ⛔
+         *   google/gemini-3.6-flash     apre org.thunderdog.challegram     ✅
+         * ```
+         *
+         * Adesso la riga dice il FORMATO («Nome<TAB>pacchetto»), dice di
+         * passare il PACCHETTO, e avverte con l'esempio che i due non si
+         * somigliano. È un cambio di contratto voluto: si muove l'impronta,
+         * non si allenta la guardia.
+         *
+         * I tre dialetti si muovono INSIEME, come dev'essere.
+         */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('a82f87487d0da2f2647df3772a2a574b53802b6498136d16a766979ce13c1baf')
+            .toBe('0728c67977d34ea14afc5ed9aea8cf72ceeae58df298854986586e96f105bbfd')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('acac29abb192dc3a60a9be4342237cdd2e92b58180db9fb429e2b50b70be6a42')
+            .toBe('877ac1db9ff68593382a579737b6980a5a0935d866458e4bce30c4a0d89b7cdd')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('2f8c1fb9435e9c58b70856b5a723ca59fa23153c56ac9560c6546446865170c1')
+            .toBe('45660069a0e93a380f4efb5a704ebe661aac7990e56502bc1456aa0e160dbf54')
     })
 })

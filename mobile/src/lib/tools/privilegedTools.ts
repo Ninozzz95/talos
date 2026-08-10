@@ -23,7 +23,19 @@ import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
  * la strada senza privilegi è quella normale almeno una volta al giorno.
  */
 
-interface Esito { done: boolean, via: 'shell' | 'panel' | 'none', output?: string, reason?: string }
+/**
+ * ⛔ `via` dice PER QUALE STRADA, e le strade sono quattro, non due.
+ *
+ * `shell` l'ho fatto io dal ponte · `panel` ti ho aperto la porta e tocchi tu ·
+ * `none` non è successo niente · `native` l'ho fatto io **senza** ponte, con
+ * un'API pubblica dell'app.
+ *
+ * `native` è nato il 2026-08-10 con l'elenco delle app: passa dal
+ * `PackageManager` con le `<queries>` del manifest, quindi non vuole nessun
+ * privilegio. Chiamarlo `shell` avrebbe detto una cosa falsa proprio nel campo
+ * che esiste per non dire cose false.
+ */
+interface Esito { done: boolean, via: 'shell' | 'native' | 'panel' | 'none', output?: string, reason?: string }
 
 export interface TalosPrivilegedToolSources {
     wifi(on: boolean): Promise<Esito>
@@ -39,7 +51,9 @@ export interface TalosPrivilegedToolSources {
 }
 
 function esitoDi(sources: TalosPrivilegedToolSources, r: Esito, fatto: string) {
-    if (r.done && r.via === 'shell') return { ok: true, content: fatto }
+    // `shell` e `native` dicono la STESSA cosa a chi legge — «l'ho fatto io» —
+    // e si distinguono solo su come. È `panel` che è un'altra cosa.
+    if (r.done && (r.via === 'shell' || r.via === 'native')) return { ok: true, content: fatto }
     if (r.done && r.via === 'panel') {
         /*
          * ⛔ `ok: true` ma il testo non dice «fatto»: la porta è aperta e la
@@ -198,10 +212,23 @@ export function createTalosPrivilegedTools(
             name: 'device_list_apps',
             action: 'read',
             title: 'Which apps are on this phone',
+            /*
+             * ⛔ Questa descrizione PROMETTEVA già «the name the user sees», e
+             * la sorgente restituiva solo pacchetti: una promessa al modello
+             * che i dati non mantenevano. Misurato il 2026-08-10 —
+             * `org.thunderdog.challegram` è Telegram X, e due provider su tre
+             * hanno risposto che Telegram non era installato. Ora è vera, e la
+             * riga dice il FORMATO perché il modello sappia cosa passare a
+             * `device_open_app`.
+             */
             description: [
-                'List the apps installed on this phone, with the name the user sees and the',
-                'package name. ⛔ Use this BEFORE device_open_app instead of guessing a',
-                'package name: guessing is how you open the wrong app, or nothing at all.',
+                'List the apps installed on this phone. One app per line, as',
+                '"Visible name<TAB>package.name" — pass the PACKAGE to device_open_app.',
+                '⛔ Use this BEFORE device_open_app instead of guessing a package name:',
+                'many packages do not resemble the app (Telegram X is org.thunderdog.challegram),',
+                'and guessing is how you open the wrong app, or tell the user an installed app',
+                'does not exist. `search` matches the visible name too, so search what the',
+                'user actually said.',
             ].join(' '),
             input: z.object({ search: z.string().max(60).optional() }),
             async run(input) {
