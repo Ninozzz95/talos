@@ -85,7 +85,14 @@ export function useTalosRispostaAVoce(input: {
         if (parla.speakingId.value === ID_TURNO) {
             void parla.seguiIlTesto(ID_TURNO, ultimoTesto, true)
             const ultima = [...input.messaggi()].reverse().find((m) => m.role === 'assistant')
-            if (ultima) parla.segnaLetta(ultima.id)
+            if (ultima) {
+                parla.segnaLetta(ultima.id)
+                // ⛔ E la lettura passa SOTTO il messaggio vero: cosi' la sua
+                // riga di comandi mostra «ferma» finche' la voce parla, e un
+                // tocco la interrompe. Senza, il pulsante resta altoparlante
+                // mentre TALOS sta parlando — owner 2026-08-10.
+                parla.rinominaLettura(ID_TURNO, ultima.id)
+            }
         }
         attesa.value = false
         ultimoTesto = ''

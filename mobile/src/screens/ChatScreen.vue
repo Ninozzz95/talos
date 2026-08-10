@@ -205,6 +205,25 @@ void import('@/composables/useTalosRispostaAVoce').then(({ useTalosRispostaAVoce
     })
 })
 
+/**
+ * ⛔ Le parole mentre le dici. Sono gia' nella bozza — ma durante la dettatura
+ * la bozza e' NASCOSTA dalla barra, quindi si parlava al buio. Qui si mostra
+ * solo il pezzo NUOVO: rileggere anche quello che c'era prima confonderebbe
+ * «quello che sto dicendo» con «quello che c'era gia' scritto».
+ */
+const trascrizioneViva = computed(() => {
+    const ora = prompt.value
+    const prima = dictationDraftBefore.value
+    return ora.startsWith(prima) ? ora.slice(prima.length).trim() : ora.trim()
+})
+
+/** ⭐ Chiude la dettatura e manda, in un gesto solo. */
+async function onSendDictation(): Promise<void> {
+    dictation.cancel()
+    await nextTick()
+    await onSend()
+}
+
 async function toggleDictation(): Promise<void> {
     if (dictation.status.value === 'idle') dictationDraftBefore.value = prompt.value
     await dictation.toggle()
@@ -1284,8 +1303,10 @@ onBeforeUnmount(() => {
                 @update:prompt="draft.updatePrompt($event)"
                 @send="onSend"
                 @stop="chat.stopStreaming()"
+                :dictation-transcript="trascrizioneViva"
                 @toggle-dictation="void toggleDictation()"
                 @discard-dictation="discardDictation()"
+                @send-dictation="void onSendDictation()"
                 @attach="selectAttachments"
                 @take-photo="attachments.takePhoto"
                 @pick-photos="attachments.pickPhotos"

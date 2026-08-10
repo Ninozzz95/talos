@@ -280,6 +280,25 @@ class TalosDictationPlugin : Plugin() {
                 RecognizerIntent.EXTRA_ENABLE_FORMATTING,
                 RecognizerIntent.FORMATTING_OPTIMIZE_QUALITY,
             )
+            // ⛔⛔ SESSIONE A SEGMENTI — la differenza fra dettare una frase e
+            // dettare un pensiero. Senza, il riconoscitore chiude al primo
+            // respiro: chi si ferma a pensare si ritrova la dettatura finita a
+            // meta'. Con questa, i risultati arrivano a SEGMENTI
+            // (`onSegmentResults`) e la sessione dura finche' non la si chiude.
+            i.putExtra(
+                RecognizerIntent.EXTRA_SEGMENTED_SESSION,
+                RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+            )
+            if (silenzio <= 0) {
+                // Il respiro di chi pensa: due secondi chiudono un SEGMENTO, non
+                // la sessione. Il numero non e' un gusto — sotto il secondo si
+                // spezzano le frasi a meta', sopra i tre la trascrizione arriva
+                // a blocchi e sembra ferma.
+                i.putExtra(
+                    RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                    2_000,
+                )
+            }
         }
         return i
     }
@@ -390,6 +409,31 @@ class TalosDictationPlugin : Plugin() {
         }
 
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
+
+        /**
+         * ⭐ Un SEGMENTO e' finito: la persona ha preso fiato, non ha smesso.
+         *
+         * ⛔ Il testo qui e' definitivo per QUEL pezzo, e le parziali che
+         * arrivano dopo ripartono da zero — chi sta sopra deve accumulare, o
+         * ogni respiro cancellerebbe quello che si e' detto prima.
+         */
+        override fun onSegmentResults(segmentResults: Bundle) {
+            if (!viva()) return
+            val testo = segmentResults
+                .getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                ?.firstOrNull()
+                .orEmpty()
+            if (testo.isNotEmpty()) {
+                notifyListeners("talosDictationSegment", JSObject().put("text", testo))
+            }
+        }
+
+        override fun onEndOfSegmentedSession() {
+            if (!viva()) return
+            epoca += 1
+            inAscolto = false
+            stato("stopped")
+        }
 
         /**
          * ⭐ API 34: il motore dice che lingua ha sentito. Non serve a cambiare
