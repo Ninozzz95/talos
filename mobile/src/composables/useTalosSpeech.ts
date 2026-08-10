@@ -51,10 +51,72 @@ const lette = ref<ReadonlySet<string>>(new Set())
  */
 const quantoDetto = new Map<string, number>()
 
+/**
+ * ⛔⛔ LA VOCE CAMBIAVA TONO A META' LETTURA.
+ *
+ * Owner 2026-08-10: «si sente una voce e poi dopo un po' cambia tono». MISURATO
+ * in logcat, non dedotto:
+ *
+ *     Synthesis request for locale ita-ITA and name it-it-x-itb-network
+ *     TTS dispatch: it-it-x-itb-server, local fallback: it-it-x-itb-seanet-embedded
+ *
+ * Due cause, una sopra l'altra:
+ *
+ * **1. Nessuno fissava la voce.** Senza una scelta esplicita passavamo
+ * `undefined`, e ogni frase e' una `speak()` a se': il motore risolveva la
+ * «predefinita» da capo ogni volta, e poteva risolverla DIVERSA. In una lettura
+ * di ieri il dispaccio era della famiglia `kda`, in una di oggi `itb`.
+ *
+ * **2. La voce di rete ha un ripiego LOCALE, col timbro di un'altra voce.** Lo
+ * dice il log stesso: `it-it-x-itb-server` con `local fallback:
+ * it-it-x-itb-seanet-embedded`. Basta un'esitazione della rete a meta' lettura e
+ * il timbro cambia da solo — e fissare il NOME non lo impedisce, perche' il
+ * salto lo fa il motore dentro di se'.
+ *
+ * ⇒ La voce si risolve UNA volta per lettura e si passa a ogni frase; e senza
+ * una scelta esplicita si preferisce una voce che NON dipende dalla rete. Costa
+ * pochissimo (le `seanet` incorporate sono neurali) e in cambio il timbro non
+ * cambia mai — nemmeno in ascensore.
+ */
+const voceDellaLettura = new Map<string, string>()
+
 export function useTalosSpeech() {
     const settings = useSettingsStore()
     const toasts = useTalosMobileToasts()
-    const { t } = useTalosI18n()
+    const { t, locale } = useTalosI18n()
+
+    /**
+     * La voce da usare per TUTTE le frasi di questa lettura.
+     *
+     * ⛔ Si risolve una volta sola e si ricorda: risolverla a ogni frase e' il
+     * difetto, non la cura.
+     */
+    async function voceFissa(id: string): Promise<string | undefined> {
+        const scelta = settings.state.voice.voice_uri
+        if (scelta) return scelta
+        const gia = voceDellaLettura.get(id)
+        if (gia) return gia
+        try {
+            const [{ useTalosSpeechService }, { talosVoceDaUsare }] = await Promise.all([
+                import('@/services/speech'),
+                import('@/lib/voice/sceltaVoce'),
+            ])
+            const voci = await useTalosSpeechService().voices()
+            const { voce } = talosVoceDaUsare(voci as never, {
+                lingua: locale.value,
+                // ⛔ `rete: false` — non e' avarizia di dati: e' l'unica scelta
+                // che garantisce lo STESSO timbro dall'inizio alla fine.
+                rete: false,
+                scelta: null,
+            })
+            if (voce) voceDellaLettura.set(id, voce.name)
+            return voce?.name
+        } catch {
+            // Se non si riesce a scegliere, si lascia decidere al motore: e' il
+            // comportamento di prima, non un guasto nuovo.
+            return undefined
+        }
+    }
 
     async function stop(): Promise<void> {
         speakingId.value = null
@@ -81,6 +143,28 @@ export function useTalosSpeech() {
      * il messaggio nasce. Senza, la voce si sentirebbe e l'icona non
      * comparirebbe su niente.
      */
+    /**
+     * ⛔⛔ La lettura CAMBIA NOME quando il messaggio vero nasce.
+     *
+     * Owner 2026-08-10: «se il TTS è ancora attivo l'icona sound in basso
+     * dovrebbe essere stop, perché il TTS è in corso e posso fermarlo in
+     * qualunque momento». Aveva ragione, ed era un difetto MIO: la lettura di un
+     * turno nato dalla voce si apre su un id del TURNO — durante lo streaming il
+     * messaggio non esiste ancora — e cosi' nessuna riga di comandi si
+     * riconosceva «in lettura». Il pulsante restava altoparlante mentre la voce
+     * parlava, e non c'era modo di fermarla se non dalle impostazioni.
+     */
+    function rinominaLettura(da: string, a: string): void {
+        if (speakingId.value !== da) return
+        const quanto = quantoDetto.get(da)
+        if (quanto !== undefined) quantoDetto.set(a, quanto)
+        quantoDetto.delete(da)
+        const voce = voceDellaLettura.get(da)
+        if (voce) voceDellaLettura.set(a, voce)
+        voceDellaLettura.delete(da)
+        speakingId.value = a
+    }
+
     function segnaLetta(id: string): void {
         lette.value = new Set([...lette.value, id])
     }
@@ -90,6 +174,8 @@ export function useTalosSpeech() {
         speakingId.value = id
         lette.value = new Set([...lette.value, id])
         quantoDetto.delete(id)
+        // Lettura nuova = voce da risolvere di nuovo: l'id del turno si riusa.
+        voceDellaLettura.delete(id)
         return true
     }
 
@@ -102,9 +188,10 @@ export function useTalosSpeech() {
         // ⛔ Si segna PRIMA di parlare, non a fine lettura: il segnalino deve
         // comparire quando la persona chiede, non quando il motore finisce.
         lette.value = new Set([...lette.value, id])
+        const voce = await voceFissa(id)
         const { useTalosSpeechService } = await import('@/services/speech')
         await useTalosSpeechService().speak(text, {
-            voiceURI: settings.state.voice.voice_uri ?? undefined,
+            voiceURI: voce,
             rate: settings.state.voice.rate,
             pitch: settings.state.voice.pitch,
             onend: () => { if (speakingId.value === id) speakingId.value = null },
@@ -134,17 +221,23 @@ export function useTalosSpeech() {
         const { pronte, resto } = talosFrasiDaLeggere(testo, detto, finito)
         if (!pronte.length) return
         quantoDetto.set(id, testo.length - resto.length)
+        const voce = await voceFissa(id)
         const { useTalosSpeechService } = await import('@/services/speech')
         const servizio = useTalosSpeechService()
         for (const frase of pronte) {
             await servizio.speak(frase, {
-                voiceURI: settings.state.voice.voice_uri ?? undefined,
+                voiceURI: voce,
                 rate: settings.state.voice.rate,
                 pitch: settings.state.voice.pitch,
                 // ⛔ In coda: se no ogni frase ammazza la precedente a meta'.
                 queue: 'add',
+                // ⛔ L'ultima frase di un testo FINITO chiude la lettura senza
+                // controllare l'id: fra l'accodamento e la fine la lettura puo'
+                // aver cambiato nome (il messaggio vero e' nato), e un
+                // confronto col nome vecchio lascerebbe il pulsante su «ferma»
+                // per sempre — su una stanza silenziosa.
                 onend: finito && frase === pronte[pronte.length - 1]
-                    ? () => { if (speakingId.value === id) speakingId.value = null }
+                    ? () => { speakingId.value = null }
                     : undefined,
             })
         }
@@ -154,6 +247,7 @@ export function useTalosSpeech() {
         speakingId: readonly(speakingId),
         seguiIlTesto,
         apriLetturaDiVoce,
+        rinominaLettura,
         segnaLetta,
         /** Le risposte che sono state chieste ad alta voce in questa sessione. */
         lette: readonly(lette),

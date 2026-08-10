@@ -14,10 +14,7 @@ import { Loader2, ArrowUp,
     SlidersHorizontal,
     Plus,
     Sparkles,
-    Square,
-    Check,
-    X, } from '@lucide/vue'
-import TalosMicWaveform from '@/components/brand/TalosMicWaveform.vue'
+    Square, } from '@lucide/vue'
 import TalosMobileAttachmentTray from '@/components/chat/TalosMobileAttachmentTray.vue'
 /**
  * Il cassetto del modello e dello sforzo si apre a richiesta, quindi si carica
@@ -118,6 +115,8 @@ const props = withDefaults(defineProps<{
     dictationListening?: boolean
     dictationStarting?: boolean
     dictationLevel?: number
+    /** ⭐ Le parole mentre le dici: la trascrizione viva, non la bozza. */
+    dictationTranscript?: string
     // F3-T4bis (owner #13): Claude-style minimal bar + organized tool drawer.
     drawerMode?: boolean
     // Owner 2026-07-24 (ChatGPT-style): compact bar that expands on focus.
@@ -158,6 +157,7 @@ const props = withDefaults(defineProps<{
     dictationListening: false,
     dictationStarting: false,
     dictationLevel: 0,
+    dictationTranscript: '',
     drawerMode: false,
     immersiveComposer: false,
     plusDropdown: false,
@@ -168,12 +168,18 @@ const props = withDefaults(defineProps<{
     libraryFiles: () => [],
 })
 
+const TalosMobileDictationBar = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileDictationBar.vue'),
+)
+
 const emit = defineEmits<{
     'update:prompt': [prompt: string]
     send: []
     stop: []
     toggleDictation: []
     discardDictation: []
+    /** ⭐ Chiude la dettatura E manda: il gesto di chi ha le mani occupate. */
+    sendDictation: []
     selectModelProfile: [profileId: string]
     selectModelRoutingProfile: [profileId: string]
     selectEffort: [level: TalosMobileEffortLevel]
@@ -689,40 +695,16 @@ watch(() => props.prompt, () => {
             mezzo l'onda che reagisce alla voce, che e' l'unica cosa che dice
             «ti sto sentendo».
         -->
-        <div
+        <TalosMobileDictationBar
             v-if="dictationListening || dictationStarting"
-            data-testid="talos-dictation-live"
-            class="talos-dictation-live flex items-center gap-3 rounded-2xl border border-[var(--talos-accent,var(--primary))]/30 bg-[color-mix(in_srgb,var(--talos-accent,#c08b3c)_10%,transparent)] px-2 py-2"
-        >
-            <!-- ✕ BUTTA VIA: rimette il campo com'era prima di parlare. Se si
-                 limitasse a fermare sarebbe un doppione del ✓, cioe' un comando
-                 che mente. -->
-            <button
-                type="button"
-                data-testid="talos-dictation-discard"
-                :aria-label="$t('chat.discardDictation')"
-                class="talos-pressable flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--talos-panel,var(--card))] text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                @click="emit('discardDictation')"
-            >
-                <X class="size-4" aria-hidden="true" />
-            </button>
-            <TalosMicWaveform :level="dictationStarting ? 0.12 : dictationLevel" :bars="24" class="min-w-0 flex-1" />
-            <!-- Il nome dello stato resta, ma per chi non vede: l'onda lo dice
-                 gia' a chi guarda, e la barra non deve diventare una frase. -->
-            <span class="sr-only" role="status">
-                {{ dictationStarting ? $t('chat.starting') : $t('chat.listening') }}
-            </span>
-            <!-- ✓ TIENE: chiude la dettatura e lascia il testo nel campo. -->
-            <button
-                type="button"
-                data-testid="talos-dictation-keep"
-                :aria-label="$t('chat.stopDictation')"
-                class="talos-pressable flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                @click="emit('toggleDictation')"
-            >
-                <Check class="size-4" aria-hidden="true" />
-            </button>
-        </div>
+            :avvio="dictationStarting"
+            :livello="dictationLevel"
+            :trascrizione="dictationTranscript"
+            :bozza="props.prompt"
+            @annulla="emit('discardDictation')"
+            @ferma="emit('toggleDictation')"
+            @invia="emit('sendDictation')"
+        />
 
         <div v-if="!(dictationListening || dictationStarting)" class="relative min-w-0">
             <!-- Owner 2026-07-24 immersive compact pill: [+] input [mic] [send] on ONE

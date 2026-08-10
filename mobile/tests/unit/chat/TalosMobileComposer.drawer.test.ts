@@ -29,7 +29,7 @@ function mountComposer(overrides: Record<string, unknown> = {}) {
 }
 
 describe('composer drawer mode (F3-T4bis)', () => {
-    it('renders the minimal bar: add-to-chat, model chip, mic — no inline tool row', () => {
+    it('renders the minimal bar: add-to-chat, model chip, mic — no inline tool row', async () => {
         const wrapper = mountComposer({ drawerMode: true })
         expect(wrapper.find('[aria-label="Add to chat"]').exists()).toBe(true)
         const chip = wrapper.get('[data-testid="talos-composer-model-chip"]')
@@ -41,7 +41,7 @@ describe('composer drawer mode (F3-T4bis)', () => {
         }
     })
 
-    it('keeps the classic bar untouched when the toggle is off', () => {
+    it('keeps the classic bar untouched when the toggle is off', async () => {
         const wrapper = mountComposer({ drawerMode: false })
         expect(wrapper.find('[aria-label="Add to chat"]').exists()).toBe(false)
         expect(wrapper.find('[aria-label="Attach a file"]').exists()).toBe(true)
@@ -203,12 +203,12 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
         expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
     })
 
-    it('immersive: stays expanded when there is content (never collapses over a draft)', () => {
+    it('immersive: stays expanded when there is content (never collapses over a draft)', async () => {
         const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: 'hello' })
         expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
     })
 
-    it('immersive OFF keeps the bar always visible', () => {
+    it('immersive OFF keeps the bar always visible', async () => {
         const wrapper = mountComposer({ drawerMode: true, immersiveComposer: false, prompt: '' })
         expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
     })
@@ -232,7 +232,7 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
 
     // Owner device feedback: the compact immersive pill must be [+] input [mic]
     // [send] on one line — + and mic must NOT disappear in the compact state.
-    it('immersive compact shows the inline + and mic (single-line pill), not the model chip', () => {
+    it('immersive compact shows the inline + and mic (single-line pill), not the model chip', async () => {
         const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
         expect(wrapper.find('[aria-label="Add to chat"]').exists()).toBe(true)
         expect(wrapper.find('[aria-label="Dictate"]').exists()).toBe(true)
@@ -243,7 +243,7 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
     // Owner device bug: tapping "+" blurred the field and dismissed the keyboard.
     // The tap must cancel the pointerdown (Android WebView blurs on pointerdown,
     // before any mousedown handler could run).
-    it('immersive compact: tapping "+" cancels the pointerdown so the field keeps focus', () => {
+    it('immersive compact: tapping "+" cancels the pointerdown so the field keeps focus', async () => {
         const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
         const ev = new Event('pointerdown', { bubbles: true, cancelable: true })
         wrapper.get('[aria-label="Add to chat"]').element.dispatchEvent(ev)
@@ -251,7 +251,7 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
     })
 
     // SF-critic fix: aria must describe the surface the "+" actually opens.
-    it('the "+" advertises a menu with plus-dropdown on and a dialog (the drawer) off', () => {
+    it('the "+" advertises a menu with plus-dropdown on and a dialog (the drawer) off', async () => {
         const on = mountComposer({ drawerMode: true, plusDropdown: true })
         expect(on.get('[aria-label="Add to chat"]').attributes('aria-haspopup')).toBe('menu')
         const off = mountComposer({ drawerMode: true, plusDropdown: false })
@@ -274,10 +274,22 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
     // the name ("right button + live pill"), rubber-stamping the duplication it
     // was meant to catch. Exactly one control may be named "Stop dictation";
     // the pill's own control is "Cancel dictation".
-    it('exposes exactly one Stop-dictation control while listening', () => {
+    it('exposes exactly one Stop-dictation control while listening', async () => {
+        /*
+         * ⛔ IL PUNTO DI QUESTO CASO ERA «UNO SOLO», non «esiste».
+         *
+         * Il difetto che difendeva: due comandi di stop contemporanei, uno
+         * nella barra e uno nel compositore. Dal 2026-08-10 la barra e' un
+         * componente caricato al bisogno, quindi il compositore non puo' piu'
+         * averne uno suo — e la difesa diventa esattamente questa: mentre si
+         * detta, il compositore non disegna NESSUN comando di dettatura, cosi'
+         * il solo che esiste e' quello della barra (provato in
+         * `barraDettatura.test.ts`).
+         */
         const wrapper = mountComposer({ drawerMode: true, dictationSupported: true, dictationListening: true })
-        expect(wrapper.findAll('[aria-label="Stop dictation"]')).toHaveLength(1)
-        expect(wrapper.findAll('[aria-label="Cancel dictation"]').length).toBeLessThanOrEqual(1)
+        await flushPromises()
+        expect(wrapper.findAll('[aria-label="Stop dictation"]')).toHaveLength(0)
+        expect(wrapper.findAll('textarea')).toHaveLength(0)
     })
 
     // Owner device 2026-07-25: the mic was "extremely hard" to start. Root cause:
@@ -285,7 +297,7 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
     // textarea, the pill EXPANDED, and the button moved away before the click
     // resolved. The press must not steal focus, and activating the mic must
     // actively blur so the keyboard gets out of the way for speech.
-    it('the right button does not steal focus (no layout shift mid-tap)', () => {
+    it('the right button does not steal focus (no layout shift mid-tap)', async () => {
         const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, dictationSupported: true, prompt: '' })
         const ev = new Event('pointerdown', { bubbles: true, cancelable: true })
         wrapper.get('[aria-label="Dictate"]').element.dispatchEvent(ev)

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
 
@@ -26,7 +26,7 @@ function mountComposer(overrides: Record<string, unknown> = {}) {
 }
 
 describe('TalosMobileComposer dictation (F2-T5)', () => {
-    it('hides the mic entirely when dictation is unsupported', () => {
+    it('hides the mic entirely when dictation is unsupported', async () => {
         const wrapper = mountComposer()
         expect(wrapper.find('[aria-label="Dictate"]').exists()).toBe(false)
         expect(wrapper.find('[aria-label="Stop dictation"]').exists()).toBe(false)
@@ -40,7 +40,7 @@ describe('TalosMobileComposer dictation (F2-T5)', () => {
         expect(wrapper.emitted('toggleDictation')).toHaveLength(1)
     })
 
-    it('mentre si detta il CAMPO SPARISCE: resta solo la barra', () => {
+    it('mentre si detta il CAMPO SPARISCE: resta solo la barra', async () => {
         /**
          * Owner 2026-08-04, con screenshot: «vorrei che il campo testo venisse
          * nascosto mentre registri, in modo che si veda solo la barra di
@@ -53,44 +53,21 @@ describe('TalosMobileComposer dictation (F2-T5)', () => {
         expect(fermo.find('textarea').exists()).toBe(true)
 
         const wrapper = mountComposer({ dictationSupported: true, dictationListening: true })
-        expect(wrapper.get('[data-testid="talos-dictation-live"]').exists()).toBe(true)
         expect(wrapper.find('textarea').exists()).toBe(false)
-    })
-
-    it('due comandi OPPOSTI agli estremi: uno butta, uno tiene', () => {
-        /**
-         * La forma viene dal riferimento passato dall'owner (Claude mobile).
-         * Il ✕ non e' un secondo Stop: emette `discardDictation`, che rimette il
-         * campo com'era prima di parlare. Due comandi che fanno la stessa cosa
-         * sarebbero un comando che mente.
-         */
-        const wrapper = mountComposer({ dictationSupported: true, dictationListening: true })
-        const pill = wrapper.get('[data-testid="talos-dictation-live"]')
-        expect(pill.find('[data-testid="talos-mic-waveform"]').exists()).toBe(true)
-
         /*
-         * L'icona, non solo il bottone.
+         * ⛔ QUI NON SI GUARDA DENTRO LA BARRA, e non è una rinuncia.
          *
-         * La prima versione di questo test guardava che i due bottoni ci
-         * fossero, e passava: `X` e `Check` NON erano importati, Vue li rendeva
-         * come elementi sconosciuti e i due cerchi erano vuoti sullo schermo.
-         * L'ha preso uno screenshot dal dispositivo, non il typecheck.
+         * Dal 2026-08-10 la barra è un componente caricato al bisogno — sta
+         * fuori dal grafo d'avvio perché chi scrive a tastiera non deve pagarla
+         * (misurato: 601.684 byte su un tetto di 600.000). Da qui dentro non è
+         * ancora risolta al momento del montaggio, e un'asserzione su di lei
+         * proverebbe soltanto che una promessa non si è risolta.
+         *
+         * I suoi tre comandi, la trascrizione viva e lo stato per chi non vede
+         * si provano dove vivono: `tests/unit/chat/barraDettatura.test.ts`.
+         * Qui resta la responsabilità del COMPOSITORE: mentre si detta, il
+         * campo sparisce.
          */
-        for (const id of ['talos-dictation-discard', 'talos-dictation-keep']) {
-            expect(pill.get(`[data-testid="${id}"]`).find('svg').exists(), id).toBe(true)
-        }
-
-        pill.get('[data-testid="talos-dictation-discard"]').trigger('click')
-        pill.get('[data-testid="talos-dictation-keep"]').trigger('click')
-        expect(wrapper.emitted('discardDictation')).toHaveLength(1)
-        expect(wrapper.emitted('toggleDictation')).toHaveLength(1)
     })
 
-    it('«In ascolto» resta per chi non vede, senza diventare una frase sullo schermo', () => {
-        // L'onda lo dice gia' a chi guarda; il testo serve a chi non guarda.
-        const wrapper = mountComposer({ dictationSupported: true, dictationListening: true })
-        const stato = wrapper.get('[data-testid="talos-dictation-live"] [role="status"]')
-        expect(stato.text()).toContain('Listening')
-        expect(stato.classes()).toContain('sr-only')
-    })
 })

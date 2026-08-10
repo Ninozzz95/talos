@@ -87,12 +87,29 @@ export function creaMotoreDiCasa(): TalosDictationEngine {
         async start(events, options = {}) {
             talosDettaturaAnnota('avvio:casa')
             attiva = true
+            /**
+             * ⛔⛔ IL RESPIRO NON CANCELLA QUELLO CHE HAI DETTO.
+             *
+             * Con la sessione a segmenti il motore chiude un SEGMENTO a ogni
+             * pausa e riparte da zero: le parziali che arrivano dopo NON
+             * contengono piu' il pezzo di prima. Senza accumulare, ogni respiro
+             * riscriverebbe la bozza dall'inizio — la dettatura lunga
+             * diventerebbe l'ultima frase detta.
+             */
+            let finito = ''
+            const insieme = (parziale: string): string =>
+                (finito && parziale ? `${finito} ${parziale}` : finito || parziale)
             await TalosDictationBridge.removeAllListeners()
             await TalosDictationBridge.addListener('talosDictationPartial', ((d: { text?: string }) => {
-                if (attiva && d.text) events.onPartial(d.text)
+                if (attiva && d.text) events.onPartial(insieme(d.text))
+            }) as never)
+            await TalosDictationBridge.addListener('talosDictationSegment', ((d: { text?: string }) => {
+                if (!attiva || !d.text) return
+                finito = insieme(d.text)
+                events.onPartial(finito)
             }) as never)
             await TalosDictationBridge.addListener('talosDictationResult', ((d: { text?: string }) => {
-                if (attiva && d.text) events.onPartial(d.text)
+                if (attiva && d.text) events.onPartial(insieme(d.text))
             }) as never)
             await TalosDictationBridge.addListener('talosDictationState', ((d: { state?: string }) => {
                 talosDettaturaAnnota(`stato:${d.state ?? '?'}${attiva ? '' : ' (sessione gia chiusa)'}`)

@@ -386,6 +386,22 @@ function messageStateLabel(state: string): string {
                          ⛔ Icona DIVERSA da quella del comando, e non e' un
                          vezzo: due disegni uguali per una cosa che si preme e
                          una che si guarda insegnano a premere quella sbagliata.
+
+                         ⛔ ALLINEAMENTO PER LINEA DI BASE, misurato sul Pad.
+
+                         Col `mt-1` fisso, e poi anche con `h-[1lh]` e
+                         `items-start`, i due rettangoli erano: icona `top 359`,
+                         prima riga del testo `top 371` — DODICI pixel di
+                         scarto, e non era il margine del paragrafo (`mt: 0`).
+                         Un allineamento per BORDO deve indovinare da dove
+                         comincia il blocco accanto, e ci sono sempre dodici
+                         pixel che non gli hai detto.
+
+                         `items-baseline` non indovina: mette la base
+                         dell'icona sulla base della prima riga, che e' la
+                         stessa linea su cui poggiano le lettere. Il mezzo
+                         `em` di scarto e' il compenso ottico — una `x` poggia
+                         sulla base, un cerchio la attraversa.
                     -->
                     <!-- ⛔ ACCANTO, NON SOPRA — owner 2026-08-10, terza passata,
                          con lo SCHERMO in mano: «icona deve essere ACCANTO al
@@ -397,11 +413,11 @@ function messageStateLabel(state: string): string {
                          colonnina a sinistra, testo che le sta a fianco.
                          `items-start` la tiene sulla PRIMA riga anche quando la
                          risposta e' lunga. -->
-                    <div class="flex min-w-0 max-w-full items-start gap-1.5">
+                    <div class="flex min-w-0 max-w-full items-baseline gap-1.5">
                         <span
                             v-if="message.role === 'assistant' && parla.lette.value.has(message.id)"
                             data-testid="talos-message-spoken"
-                            class="mt-1 inline-flex shrink-0 items-center text-[var(--talos-muted)]"
+                            class="inline-flex shrink-0 translate-y-[0.15em] items-center text-[var(--talos-muted)]"
                             :title="$t('chat.spokenAloud')"
                             :aria-label="$t('chat.spokenAloud')"
                         >
