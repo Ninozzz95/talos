@@ -23,6 +23,24 @@ import com.getcapacitor.annotation.CapacitorPlugin
 @CapacitorPlugin(name = "TalosSchermo")
 class TalosSchermoPlugin : Plugin() {
 
+    /**
+     * Arma il freno: da adesso qualunque ingresso fisico ferma l'agente.
+     *
+     * ⛔ Il comando lo avvia chi possiede il ponte — qui si azzera soltanto il
+     * riferimento. Due posti che sanno come si esegue una shell sono due posti
+     * che possono divergere.
+     */
+    @PluginMethod
+    fun armaIlFreno(call: PluginCall) {
+        TalosDitoVero.azzera()
+        call.resolve(
+            JSObject()
+                .put("armato", TalosDitoVero.armato())
+                .put("comando", JSArray.from(TalosDitoVero.COMANDO.toTypedArray()))
+                .put("percorso", TalosDitoVero.PERCORSO),
+        )
+    }
+
     @PluginMethod
     fun disponibile(call: PluginCall) {
         call.resolve(JSObject().put("aperto", TalosOcchio.aperto() != null))
@@ -55,11 +73,13 @@ class TalosSchermoPlugin : Plugin() {
                 // nel frattempo una mano VERA ha toccato lo schermo. Misurato nei
                 // due versi il 2026-08-10 — un dito produce 1.369 righe dal
                 // pannello, due nostri tocchi iniettati ne producono zero.
-                .also { o ->
-                    val q = TalosDitoVero.dallUltimoDito()
-                    if (q != null) o.put("dallUltimoDito", q)
-                    o.put("manoSullaSchermo", TalosDitoVero.haToccato())
-                },
+                // ⛔ Il freno viaggia con lo sguardo, e dice anche se e' ARMATO:
+                // «nessuno ha toccato» e «non lo so» sono due cose diverse, e
+                // confonderle su un agente che tocca un telefono altrui e' il
+                // difetto peggiore che ci sia.
+                .put("frenoArmato", TalosDitoVero.armato())
+                .put("manoSulloSchermo", TalosDitoVero.haToccato())
+                .put("byteDiTocchi", TalosDitoVero.cresciutoDi()),
         )
     }
 
