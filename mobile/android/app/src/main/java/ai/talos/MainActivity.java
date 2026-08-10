@@ -42,6 +42,10 @@ public class MainActivity extends BridgeActivity {
         // ⭐ TALOS che parla. Nessun permesso, e la capacita' col rapporto
         // valore/costo piu' alto di tutto l'inventario.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosSpeechPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
+        // ⭐ L'OCCHIO e la MANO: l'albero in-process (2-26 ms contro i 2.216 di
+        // `uiautomator dump`) e le azioni SUL NODO, che portano gratis la
+        // scrittura dell'italiano accentato.
+        { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosSchermoPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // Il riconoscitore DI CASA: il plugin di terzi passa una lingua sola e
         // nessuna chiave di rilevamento — misurato nel suo sorgente.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosDictationPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }

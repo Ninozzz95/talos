@@ -407,6 +407,25 @@
             ACTION_SET_TEXT (`input text 'perche'' muore con NullPointerException),
             e se il dito vero produce TYPE_TOUCH_INTERACTION_START.
         -->
+        <!--
+            ⭐ L'OCCHIO: l'albero in-process (2-26 ms contro i 2.216 di
+            `uiautomator dump`, misurati) e le azioni SUL NODO — che portano
+            gratis la scrittura dell'italiano accentato, impossibile con
+            `input text`.
+        -->
+        <service
+            android:name="ai.talos.agent.TalosOcchio"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/talos_occhio" />
+        </service>
+
         <service
             android:name="ai.talos.agent.TalosOcchioSonda"
             android:exported="false"
