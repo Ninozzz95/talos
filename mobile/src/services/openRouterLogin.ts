@@ -23,6 +23,7 @@
  * sulla sua strada.
  */
 import { registerPlugin } from '@capacitor/core'
+import { talosLogDeviceIssue } from '@/lib/talosDeviceLog'
 import { openTalosLinkOnce } from '@/services/inAppBrowserService'
 import {
     talosCreatePkcePair,
@@ -35,7 +36,82 @@ import {
 export interface TalosOAuthLoopbackPlugin {
     open(): Promise<{ port: number }>
     awaitCallback(): Promise<{ target: string }>
+    /** Il codice arrivato mentre di qua non c'era piu' nessuno ad aspettarlo. */
+    pendingCallback(): Promise<{ target: string }>
     close(): Promise<void>
+}
+
+/**
+ * ⛔⛔ IL VERIFICATORE DEVE SOPRAVVIVERE ALL'APP RICREATA.
+ *
+ * MISURATO sul Pad il 2026-08-10, tre volte di fila: si tocca «Accedi con
+ * OpenRouter», si autorizza, la pagina locale scrive «Fatto, torna a TALOS» —
+ * e tornando non succede NIENTE. Nessuna chiave, nessun errore, nessuna riga in
+ * logcat: lo scambio non partiva proprio.
+ *
+ * La causa e' che tutto il flusso viveva dentro una sola chiamata JavaScript:
+ * il verificatore era una variabile locale, e l'attesa del codice una promessa
+ * tenuta viva. Android ricrea l'attivita' mentre il browser di sistema sta
+ * davanti, la WebView riparte da zero, e quella variabile e quella promessa
+ * spariscono insieme. Il codice arrivava a una casa vuota.
+ *
+ * ⇒ Il verificatore si scrive PRIMA di aprire il browser, e al ritorno si
+ * ritira il codice dal nativo.
+ */
+const CHIAVE_ATTESA = 'talos.openrouter.pkce'
+
+async function ricordaVerificatore(verifier: string): Promise<void> {
+    const { Preferences } = await import('@capacitor/preferences')
+    await Preferences.set({ key: CHIAVE_ATTESA, value: verifier })
+}
+
+async function verificatoreRicordato(): Promise<string | null> {
+    const { Preferences } = await import('@capacitor/preferences')
+    return (await Preferences.get({ key: CHIAVE_ATTESA })).value
+}
+
+async function dimenticaVerificatore(): Promise<void> {
+    const { Preferences } = await import('@capacitor/preferences')
+    await Preferences.remove({ key: CHIAVE_ATTESA })
+}
+
+/**
+ * ⭐ Riprende un accesso interrotto dalla ricreazione dell'app.
+ *
+ * Si chiama quando il pannello dei provider torna a schermo: se c'e' un codice
+ * conservato dal nativo e un verificatore ricordato, l'accesso si chiude adesso
+ * — senza far ricominciare da capo, e senza bruciare un secondo codice.
+ *
+ * ⛔ Torna `null` quando non c'e' niente da riprendere: e' il caso NORMALE, e
+ * non deve diventare un errore rosso su una schermata che nessuno ha chiesto.
+ */
+export async function talosRiprendiAccessoOpenRouter(
+    deps: TalosOpenRouterLoginDeps = defaultDeps(),
+): Promise<TalosOpenRouterLoginResult | null> {
+    let target = ''
+    try {
+        target = (await deps.loopback.pendingCallback()).target
+    } catch {
+        return null
+    }
+    if (!target) return null
+    const verifier = await verificatoreRicordato()
+    if (!verifier) return null
+    await dimenticaVerificatore()
+    let code: string | null = null
+    try {
+        code = talosReadOpenRouterCode(target)
+    } catch {
+        return { ok: false, reason: 'cancelled' }
+    }
+    if (code === null) return { ok: false, reason: 'cancelled' }
+    await dimenticaVerificatore().catch(() => {})
+    try {
+        return { ok: true, key: await deps.exchange({ code, verifier }) }
+    } catch (errore) {
+        talosLogDeviceIssue('TALOS_OPENROUTER_EXCHANGE', String(errore))
+        return { ok: false, reason: 'exchange' }
+    }
 }
 
 export interface TalosOpenRouterLoginDeps {
@@ -86,6 +162,10 @@ export async function talosLoginWithOpenRouter(
     // domani. Le si dà un ascoltatore subito; il rifiuto vero si legge sotto.
     risposta.catch(() => {})
 
+    // ⛔ PRIMA di aprire il browser: da qui in poi l'app puo' essere ricreata
+    // in qualunque momento, e questa e' l'unica cosa che non si puo' ricostruire.
+    await ricordaVerificatore(verifier).catch(() => {})
+
     const aperto = await deps.openBrowser(talosOpenRouterAuthUrl({
         callbackUrl: talosOpenRouterCallbackUrl(port),
         challenge,
@@ -107,7 +187,11 @@ export async function talosLoginWithOpenRouter(
 
     try {
         return { ok: true, key: await deps.exchange({ code, verifier }) }
-    } catch {
+    } catch (errore) {
+        // ⛔ Il motivo va ALMENO in logcat: senza, l'unica diagnosi possibile e'
+        // riprovare e sperare — che e' esattamente cio' che abbiamo dovuto fare
+        // il 2026-08-10, bruciando un codice a ogni tentativo.
+        talosLogDeviceIssue('TALOS_OPENROUTER_EXCHANGE', String(errore))
         return { ok: false, reason: 'exchange' }
     }
 }

@@ -154,7 +154,18 @@ export async function talosExchangeOpenRouterCode(
             code_challenge_method: 'S256',
         }),
     })
-    if (!response.ok) throw new Error(`TALOS_OAUTH_EXCHANGE_FAILED:${response.status}`)
+    if (!response.ok) {
+        // ⛔ IL MOTIVO VIAGGIA COL GUASTO — 2026-08-10, misurato sul Pad.
+        // Lo scambio e' fallito e l'interfaccia diceva solo «OpenRouter non ha
+        // rilasciato la chiave»: non distingue una rete caduta da un codice
+        // scaduto da un 403. Con un codice finto la stessa chiamata risponde
+        // `400 {"error":{"message":"Invalid code"}}` — cioe' il corpo dice
+        // tutto, e noi lo stavamo buttando.
+        const corpo = await response.text().catch(() => '')
+        throw new Error(
+            `TALOS_OAUTH_EXCHANGE_FAILED:${response.status}:${corpo.slice(0, 200)}`,
+        )
+    }
     const payload: unknown = await response.json()
     const key = (payload as { key?: unknown } | null)?.key
     if (typeof key !== 'string' || key.trim() === '') throw new Error('TALOS_OAUTH_NO_KEY')

@@ -66,6 +66,26 @@ public class TalosOAuthLoopbackPlugin extends Plugin {
     private Thread listener;
 
     /**
+     * ⛔⛔ IL CODICE SI CONSERVA, non si consegna e basta — 2026-08-10, misurato
+     * sul Pad.
+     *
+     * `awaitCallback` risponde a una chiamata TENUTA VIVA nella WebView. Se
+     * Android ricrea l'attività mentre il browser di sistema è davanti — e lo
+     * fa, perché la nostra pagina è in secondo piano e la memoria serve al
+     * browser — quella chiamata muore col suo contesto JavaScript. Il thread
+     * qui sotto riceve il codice e lo consegna a NESSUNO: la pagina locale
+     * scrive «Fatto, torna a TALOS», l'utente torna, e non succede niente.
+     * Nessun errore, nessuna traccia. È esattamente ciò che è successo tre
+     * volte di fila.
+     *
+     * ⛔ `static` non è pigrizia: il campo deve sopravvivere alla ricreazione
+     * dell'ATTIVITÀ, che è il caso reale. Se muore il processo muore anche la
+     * porta in ascolto, quindi il browser non avrebbe mai potuto rispondere —
+     * quel caso non esiste e non va difeso.
+     */
+    private static volatile String pendingTarget;
+
+    /**
      * Apre la porta e dice quale è. Non aspetta: il browser deve poter partire
      * subito, e la risposta arriverà su {@code awaitCallback}.
      */
@@ -103,8 +123,11 @@ public class TalosOAuthLoopbackPlugin extends Plugin {
             try (Socket connection = current.accept()) {
                 String target = readRequestTarget(connection);
                 writeClosingPage(connection);
+                // Si mette DA PARTE prima di consegnarlo: se di là non c'è più
+                // nessuno, resta qui e lo si ritira con `pendingCallback`.
+                pendingTarget = target == null ? "" : target;
                 JSObject payload = new JSObject();
-                payload.put("target", target == null ? "" : target);
+                payload.put("target", pendingTarget);
                 call.resolve(payload);
             } catch (Exception error) {
                 // Una porta chiusa mentre si aspettava è un annullamento, non un
@@ -118,6 +141,21 @@ public class TalosOAuthLoopbackPlugin extends Plugin {
             }
         }, "talos-oauth-loopback");
         listener.start();
+    }
+
+    /**
+     * Il codice arrivato mentre di là non c'era più nessuno.
+     *
+     * Si ritira UNA volta sola: un codice di autorizzazione vale un uso, e
+     * lasciarlo in giro dopo averlo speso è un modo di riprovare a vuoto.
+     */
+    @PluginMethod
+    public void pendingCallback(PluginCall call) {
+        String target = pendingTarget;
+        pendingTarget = null;
+        JSObject payload = new JSObject();
+        payload.put("target", target == null ? "" : target);
+        call.resolve(payload);
     }
 
     /** Chiude la porta: annulla un accesso in corso e libera il numero. */
