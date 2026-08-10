@@ -1,6 +1,7 @@
 import { createTalosMemoryWriteTools } from '@/lib/tools/memoryWriteTools'
 import { createTalosDeviceTools } from '@/lib/tools/deviceTools'
 import { createTalosPrivilegedTools } from '@/lib/tools/privilegedTools'
+import { createTalosPrivilegedSources } from '@/lib/device/privilegedSources'
 import { createTalosNotificationTools } from '@/lib/tools/notificationTools'
 import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
@@ -602,6 +603,18 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             const tasksWrite = deps.tasksWrite?.() ?? null
             const documents = deps.documents?.() ?? null
             const images = deps.images?.() ?? null
+            /*
+             * Il valore iniettato vince; altrimenti si costruisce qui — vedi il
+             * perché sotto, accanto ai tool privilegiati.
+             *
+             * ⛔ Decide la PRESENZA della funzione, non il valore che rende:
+             * con `deps.privileged?.() ?? …` un test che passa `() => null` per
+             * dire «qui non c'è telefono» si vedrebbe restituire la sorgente
+             * vera dal ripiego, e proverebbe il contrario di ciò che chiede.
+             */
+            const privilegiate = deps.privileged
+                ? deps.privileged()
+                : createTalosPrivilegedSources()
             return [
                 ...all,
                 ...libraryExports,
@@ -611,7 +624,24 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...(research ? createTalosResearchTools(research) : []),
                 ...(memoryWrite ? createTalosMemoryWriteTools(memoryWrite) : []),
                 ...(deps.device?.() ? createTalosDeviceTools(deps.device()!) : []),
-                ...(deps.privileged?.() ? createTalosPrivilegedTools(deps.privileged()!) : []),
+                /*
+                 * ⛔ La sorgente PRIVILEGIATA si costruisce QUI, non nel
+                 * controller della chat.
+                 *
+                 * MISURATO il 2026-08-10: `chatController` importava
+                 * `createTalosPrivilegedSources` staticamente, e quel modulo è
+                 * nel pezzo d'AVVIO — che ha meno di cento byte di margine
+                 * (compito #51). Aggiungere una riga al ponte del telefono
+                 * faceva diventare rossa la build, che è un accoppiamento
+                 * assurdo: il codice che apre un'app non deve pesare sul primo
+                 * disegno della chat.
+                 *
+                 * ⇒ `toolset.ts` è già un pezzo caricato a richiesta, e
+                 * costruire la sorgente qui la porta con sé. La cucitura resta:
+                 * chi passa `deps.privileged` (i test, o un domani un'altra
+                 * piattaforma) vince sul valore predefinito.
+                 */
+                ...(privilegiate ? createTalosPrivilegedTools(privilegiate) : []),
                 ...(deps.notifications?.() ? createTalosNotificationTools(deps.notifications()!) : []),
                 ...(libraryWrite ? createTalosLibraryWriteTools(libraryWrite) : []),
                 ...(notesWrite ? createTalosNotesWriteTools(notesWrite) : []),
