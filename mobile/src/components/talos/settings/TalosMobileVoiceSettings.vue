@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosSpeechService, type TalosSpeechVoice } from '@/services/speech'
-import { parseTalosDictationLanguageMode } from '@/lib/dictationPolicy'
+import { TALOS_LINGUA_AUTOMATICA, parseTalosDictationLanguageMode } from '@/lib/dictationPolicy'
 import { talosVociOrdinate, type TalosVoceDispositivo } from '@/lib/voice/sceltaVoce'
 
 /**
@@ -51,10 +51,60 @@ const dictationLanguage = computed({
         })
     },
 })
+/**
+ * ⛔⛔ L'ELENCO NON LO SCRIVIAMO PIÙ NOI.
+ *
+ * Owner 2026-08-10: parlava italiano con la dettatura su inglese, e non è mai
+ * stato sentito. Prima qui c'erano TRE righe fisse — «segui il dispositivo»,
+ * «inglese», «italiano» — su un telefono che sa ascoltarne decine.
+ *
+ * Adesso la prima voce è **Automatica** ed è il default: sotto, il nativo
+ * accende il rilevamento e il cambio lingua a metà frase. Le altre le dichiara
+ * il dispositivo (`ACTION_GET_LANGUAGE_DETAILS`), col loro nome scritto nella
+ * lingua stessa — `Intl.DisplayNames`, non una tabella nostra da tenere
+ * aggiornata a mano.
+ */
+const lingueDelDispositivo = ref<string[]>([])
+void import('@/services/dictationCasa')
+    .then(({ talosLingueDichiarate }) => talosLingueDichiarate())
+    .then((esito) => { lingueDelDispositivo.value = esito.languages })
+    .catch(() => { lingueDelDispositivo.value = [] })
+
+const nomeDellaLingua = (tag: string): string => {
+    try {
+        const nomi = new Intl.DisplayNames([tag], { type: 'language' })
+        const nome = nomi.of(tag) ?? tag
+        return nome.charAt(0).toLocaleUpperCase(tag) + nome.slice(1)
+    } catch {
+        // Un tag che l'ambiente non sa nominare resta se stesso: meglio
+        // `sw-KE` di una riga vuota che non si può scegliere.
+        return tag
+    }
+}
+
+/**
+ * ⛔ MISURATO sul Pad il 2026-08-10: `ACTION_GET_LANGUAGE_DETAILS` torna un
+ * elenco VUOTO — la broadcast ordinata non riceve risposta e scatta la rete da
+ * 1,5 s. Senza un ripiego il menù avrebbe una voce sola, «Automatica», e chi
+ * volesse inchiodare una lingua non potrebbe. Le lingue di sistema sono un
+ * fatto vero e disponibile: si usano quelle.
+ */
+const lingueOfferte = computed(() => (
+    lingueDelDispositivo.value.length
+        ? lingueDelDispositivo.value
+        : [...new Set(typeof navigator === 'undefined' ? [] : (navigator.languages ?? []))]
+))
+
 const dictationLanguageItems = computed(() => [
-    { value: 'system', label: t('voice.dictationSystem') },
-    { value: 'en', label: t('voice.dictationEnglish') },
-    { value: 'it', label: t('voice.dictationItalian') },
+    { value: TALOS_LINGUA_AUTOMATICA, label: t('voice.dictationAuto') },
+    ...lingueOfferte.value.map((tag) => ({ value: tag, label: nomeDellaLingua(tag) })),
+    // ⛔ Una scelta salvata che il dispositivo non dichiara più (pacchetto
+    // disinstallato) resterebbe invisibile nel menù, e il selettore mostrerebbe
+    // il vuoto al posto di ciò che è davvero impostato.
+    ...(dictationLanguage.value !== TALOS_LINGUA_AUTOMATICA
+        && !lingueOfferte.value.includes(dictationLanguage.value)
+        ? [{ value: dictationLanguage.value, label: nomeDellaLingua(dictationLanguage.value) }]
+        : []),
 ])
 /**
  * ⛔⛔ LE VOCI DELLA TUA LINGUA, IN ORDINE — non 473 lingue mescolate.

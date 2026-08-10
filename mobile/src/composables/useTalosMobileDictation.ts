@@ -20,6 +20,10 @@ export interface UseTalosMobileDictationOptions {
     native?: boolean
     /** Resolved at start so a persisted language change applies next session. */
     language?: () => string | undefined
+    /** ⭐ Il motore decide la lingua ascoltando, e la cambia a meta' frase. */
+    autoLanguage?: () => boolean
+    /** Fra quali lingue puo' muoversi: mai piu' di tre. */
+    allowedLanguages?: () => readonly string[]
     /** Live locale boundary; raw plugin prose never becomes application UI. */
     errorMessage?: (code: TalosDictationErrorCode) => string
 }
@@ -217,7 +221,11 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
                 error.value = messageFor(code)
                 errorCode.value = code
             },
-        }, { language: options.language?.() })
+        }, {
+            language: options.language?.(),
+            autoLanguage: options.autoLanguage?.() ?? true,
+            allowedLanguages: options.allowedLanguages?.() ?? [],
+        })
     }
 
     // F4-#18 inversion: hiding the mic on a failed probe made real-device

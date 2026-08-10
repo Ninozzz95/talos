@@ -31,8 +31,12 @@ const thenableProxy = vi.hoisted(() => new Proxy({}, {
 vi.mock('@capacitor/core', () => ({
     Capacitor: {
         isNativePlatform: () => platform.native,
-        isPluginAvailable: () => true,
+        // ⛔ Questi casi coprono la RETE (il plugin di terzi): il riconoscitore
+        // di casa si dichiara assente di proposito, o non si proverebbe mai
+        // piu' la strada su cui si scende quando il nostro non c'e'.
+        isPluginAvailable: (nome: string) => nome !== 'TalosDictation',
     },
+    registerPlugin: () => ({}),
 }))
 vi.mock('@capgo/capacitor-speech-recognition', () => ({ SpeechRecognition: thenableProxy }))
 

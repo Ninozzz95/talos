@@ -62,6 +62,37 @@ export function useTalosSpeech() {
         useTalosSpeechService().stop()
     }
 
+    /**
+     * ⭐⭐ Apre la lettura di una risposta che sta ANCORA arrivando.
+     *
+     * Owner 2026-08-10: se il turno l'hai dettato, la risposta parte a voce da
+     * sola. Qui non si parla: si dichiara «questa la sto leggendo», e poi
+     * `seguiIlTesto` manda al motore una frase alla volta man mano che si
+     * scrive — che è la differenza fra sentire subito e aspettare la fine.
+     *
+     * ⛔ Non ruba la voce a una lettura in corso: se qualcosa si sta già
+     * leggendo, chi ha chiesto quella viene prima.
+     */
+    /**
+     * Il segnalino sul messaggio VERO.
+     *
+     * ⛔ Serve perche' durante lo streaming l'id definitivo non esiste ancora:
+     * la lettura si apre su un id del turno, e il segnalino si posa qui quando
+     * il messaggio nasce. Senza, la voce si sentirebbe e l'icona non
+     * comparirebbe su niente.
+     */
+    function segnaLetta(id: string): void {
+        lette.value = new Set([...lette.value, id])
+    }
+
+    function apriLetturaDiVoce(id: string): boolean {
+        if (speakingId.value !== null) return false
+        speakingId.value = id
+        lette.value = new Set([...lette.value, id])
+        quantoDetto.delete(id)
+        return true
+    }
+
     async function toggle(id: string, text: string): Promise<void> {
         if (speakingId.value === id) {
             await stop()
@@ -122,6 +153,8 @@ export function useTalosSpeech() {
     return {
         speakingId: readonly(speakingId),
         seguiIlTesto,
+        apriLetturaDiVoce,
+        segnaLetta,
         /** Le risposte che sono state chieste ad alta voce in questa sessione. */
         lette: readonly(lette),
         toggle,

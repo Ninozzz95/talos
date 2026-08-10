@@ -13,7 +13,10 @@ import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
 import { createTalosMobileComposerDraftController } from '@/composables/useTalosMobileComposerDraft'
 import { useTalosMobileDictation } from '@/composables/useTalosMobileDictation'
-import { resolveTalosDictationLanguageTag } from '@/lib/dictationPolicy'
+import {
+    resolveTalosDictationLanguageTag,
+    talosRilevamentoAcceso,
+} from '@/lib/dictationPolicy'
 import { TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH } from '@/lib/chat/promptEnhancerDepth'
 import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import { talosLightImpact } from '@/services/haptics'
@@ -150,12 +153,56 @@ const prompt = draft.prompt
  */
 const dictationDraftBefore = ref('')
 
+/**
+ * ⭐⭐ SE HAI PARLATO, TI RISPONDE A VOCE — owner 2026-08-10.
+ *
+ * ⛔ Non è un rilevamento: è una PROVENIENZA. Quel testo l'ha scritto il motore
+ * di dettatura, non la tastiera, e questo lo sappiamo per costruzione — nessuna
+ * soglia, nessun falso positivo. Le regole storte (correggo a mano, cancello
+ * tutto, annullo) stanno in `provenienzaVoce`, con i loro casi.
+ */
+const voce = ref<import('@/composables/useTalosRispostaAVoce').TalosRispostaAVoce | null>(null)
+
 // F2-T5: live dictation — partials compose onto the draft captured at start.
 const dictation = useTalosMobileDictation({
     base: () => prompt.value,
-    onTranscript: (text) => draft.updatePrompt(text),
+    onTranscript: (text) => {
+        voce.value?.dettatura(dictationDraftBefore.value, text)
+        draft.updatePrompt(text)
+    },
     language: () => resolveTalosDictationLanguageTag(settings.state.voice.dictation_language),
+    // ⛔ Il rilevamento si accende solo in automatico: chi ha scelto una lingua
+    // a mano l'ha scelta, e non gliela cambiamo sotto i piedi.
+    autoLanguage: () => talosRilevamentoAcceso(settings.state.voice.dictation_language),
+    allowedLanguages: () => voce.value?.lingue ?? [],
     errorMessage: (code) => t(`chat.dictationErrors.${code}`),
+})
+
+/**
+ * Fra quali lingue può muoversi il motore quando ascolta in automatico.
+ *
+ * ⛔ Si MISURA da ciò che il dispositivo dichiara e da ciò che la persona usa:
+ * l'elenco scritto a mano di prima aveva due voci, ed è esattamente ciò che ha
+ * fatto sbagliare l'owner.
+ */
+
+
+/**
+ * ⛔ Ogni cambiamento della bozza passa di qui: è il punto in cui la
+ * provenienza muore se del dettato non resta niente.
+ */
+watch(prompt, (testo) => voce.value?.aggiornaBozza(testo))
+
+/**
+ * ⭐⭐ Il pezzo che risponde a voce arriva DOPO l'avvio — misurato: dentro la
+ * schermata costava 3.817 byte sul tetto del grafo iniziale (compito #51).
+ */
+void import('@/composables/useTalosRispostaAVoce').then(({ useTalosRispostaAVoce }) => {
+    voce.value = useTalosRispostaAVoce({
+        streaming: () => chat.state.streamingText,
+        messaggi: () => chat.messages,
+        interfaccia: () => locale.value,
+    })
 })
 
 async function toggleDictation(): Promise<void> {
@@ -573,6 +620,9 @@ async function onSend(): Promise<void> {
     // and must not be cleared by this older send.
     const turnPolicy = libraryTurnOverride.value
     void talosLightImpact()
+    // ⭐ La provenienza si legge PRIMA di svuotare il campo: dopo, la bozza è
+    // vuota e la risposta sarebbe sempre «no».
+    voce.value?.catturaInvio()
     // SF5-3: a live mic must not survive the send — late partials would
     // resurrect the sent text into the composer.
     dictation.cancel()

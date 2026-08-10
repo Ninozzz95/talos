@@ -161,13 +161,15 @@ describe('parseTalosMobileSettings', () => {
     })
 
     it('DICT-SETTINGS-01 parses dictation language fail-closed', () => {
-        expect(parseTalosMobileSettings(null).voice.dictation_language).toBe('system')
+        // ⛔ Il default e' AUTOMATICO: una lingua inchiodata all'installazione
+        // e' esattamente cio' che ha fatto perdere una dettatura all'owner.
+        expect(parseTalosMobileSettings(null).voice.dictation_language).toBe('auto')
         expect(parseTalosMobileSettings(JSON.stringify({
             voice: { dictation_language: 'it' },
-        })).voice.dictation_language).toBe('it')
+        })).voice.dictation_language).toBe('auto')
         expect(parseTalosMobileSettings(JSON.stringify({
-            voice: { dictation_language: 'de' },
-        })).voice.dictation_language).toBe('system')
+            voice: { dictation_language: 'de-DE' },
+        })).voice.dictation_language).toBe('de-DE')
     })
 })
 describe('useSettingsStore', () => {
@@ -521,14 +523,14 @@ describe('useSettingsStore', () => {
 
     it('persists and rehydrates an explicit dictation language', async () => {
         const store = useSettingsStore()
-        await store.setVoicePreferences({ dictation_language: 'it' })
+        await store.setVoicePreferences({ dictation_language: 'it-IT' })
         __resetSettingsStoreForTests()
         const fresh = useSettingsStore()
 
         await fresh.hydrate()
 
-        expect(fresh.state.voice.dictation_language).toBe('it')
-        expect(JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!).voice.dictation_language).toBe('it')
+        expect(fresh.state.voice.dictation_language).toBe('it-IT')
+        expect(JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!).voice.dictation_language).toBe('it-IT')
     })
 
     it('sanitizes and persists Motion V6 preferences through the canonical parser', async () => {
