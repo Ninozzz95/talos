@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import { BadgeCheck, ChevronDown, KeyRound, LogIn, RefreshCw, RotateCcw, Server, Trash2 } from '@lucide/vue'
@@ -99,6 +99,45 @@ async function loginWithOAuth(provider: TalosMobileProviderId): Promise<void> {
         // «chiave salvata» e messaggi d'errore restano una cosa sola.
         await controller.saveKey(provider, result.key)
     })
+}
+
+/**
+ * ⭐ Riprende un accesso OpenRouter rimasto a metà.
+ *
+ * ⛔ MISURATO sul Pad il 2026-08-10: Android ricrea l'attività mentre il
+ * browser di sistema è davanti, la WebView riparte, e la promessa che
+ * aspettava il codice muore col suo contesto. Il codice arrivava e non lo
+ * ritirava nessuno: nessuna chiave, nessun errore, nessuna traccia. Adesso il
+ * nativo lo conserva e questa riga lo va a prendere quando la schermata torna.
+ *
+ * ⛔ Silenzioso quando non c'è niente da riprendere — che è il caso normale.
+ */
+async function riprendiOpenRouter(): Promise<void> {
+    const { talosRiprendiAccessoOpenRouter } = await import('@/services/openRouterLogin')
+    const ripreso = await talosRiprendiAccessoOpenRouter().catch(() => null)
+    if (!ripreso) return
+    if (!ripreso.ok) {
+        error.value = t(OAUTH_FAILURE_KEYS[ripreso.reason])
+        return
+    }
+    await run('openrouter', async () => { await controller.saveKey('openrouter', ripreso.key) })
+}
+
+/**
+ * ⛔⛔ AL RISVEGLIO, non al montaggio — 2026-08-10, seconda correzione.
+ *
+ * La prima versione chiamava la ripresa in `onMounted`, e non serviva a niente:
+ * tornando dal browser il pannello era GIA' montato, quindi non scattava. Il
+ * codice era conservato nel nativo e nessuno lo chiedeva — stesso silenzio di
+ * prima, causa diversa. Il momento giusto e' quando la pagina torna visibile.
+ */
+onMounted(() => {
+    void riprendiOpenRouter()
+    document.addEventListener('visibilitychange', quandoTorna)
+})
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', quandoTorna))
+function quandoTorna(): void {
+    if (document.visibilityState === 'visible') void riprendiOpenRouter()
 }
 
 async function saveKey(provider: TalosMobileProviderId): Promise<void> {
