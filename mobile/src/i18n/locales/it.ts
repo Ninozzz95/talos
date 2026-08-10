@@ -2393,6 +2393,9 @@ export const TALOS_IT_MESSAGES = {
         blockedByPermission: 'La chiave è salvata, ma qui sotto hai scelto «Non consentire mai» per l’invio di dati fuori dal dispositivo: finché resta così la ricerca non parte.',
     },
     doctor: {
+        // ⛔ Un guasto della scansione diventa una RIGA, non una schermata
+        // bianca: la stazione che dice cosa non va non può essere l'unica muta.
+        scanFailedLabel: 'La diagnosi non è riuscita fino in fondo',
         agent: {
             privateSeen: 'Dati tuoi già letti in questa chat',
             untrustedSeen: 'Contenuto esterno entrato in questa chat',

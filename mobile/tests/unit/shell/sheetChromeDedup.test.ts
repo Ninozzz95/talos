@@ -24,9 +24,11 @@ import TalosMobileSettingsCenter from '@/components/talos/settings/TalosMobileSe
  * una prova costa **60 KB** nel grafo d'avvio, che ha meno di 3 KB di margine.
  */
 vi.mock('@/components/shell/TalosMobileNotificationBell.vue', () => ({
+    __esModule: true,
     default: { name: 'TalosMobileNotificationBell', render: () => null },
 }))
 vi.mock('@/components/shell/TalosMobileDownloadCenterTrigger.vue', () => ({
+    __esModule: true,
     default: { name: 'TalosMobileDownloadCenterTrigger', render: () => null },
 }))
 

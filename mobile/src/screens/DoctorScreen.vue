@@ -371,7 +371,39 @@ async function scan(): Promise<void> {
 async function runScan(): Promise<void> {
     try {
         await scan()
-    } finally {
+    }
+    /*
+     * ⛔⛔ IL `catch` MANCAVA, e il commento qui sopra prometteva già che ci
+     * fosse: «una sonda che lancia deve costare la sua riga, non tutta la
+     * stazione». `try/finally` senza `catch` NON ferma il lancio — spegne la
+     * rotellina e rilancia.
+     *
+     * Conseguenza misurata: `scan()` cade a metà, `rows` non viene mai
+     * assegnato, e la Diagnostica resta **vuota e muta**. La stazione il cui
+     * mestiere è dirti cosa non va diventa l'unica che non lo dice.
+     *
+     * Trovato il 2026-08-10 dalle rejection della suite (compito #57): sei da
+     * questo file, tutte `Cannot read properties of undefined (reading
+     * 'value')` dentro `scan`, tutte cadute nel vuoto perché nessuno aspettava
+     * la promessa di `onMounted`.
+     *
+     * ⇒ Il guasto diventa una RIGA, con il suo motivo dentro. Le righe già
+     * raccolte restano: mezza diagnosi con un guasto dichiarato è più utile di
+     * una schermata bianca.
+     */
+    catch (guasto: unknown) {
+        const motivo = guasto instanceof Error && guasto.message ? guasto.message : String(guasto)
+        rows.value = [
+            ...rows.value,
+            {
+                id: 'doctor-scan-failed',
+                label: t('doctor.scanFailedLabel'),
+                value: motivo.slice(0, 160),
+                ok: false,
+            },
+        ]
+    }
+    finally {
         scanning.value = false
     }
 }

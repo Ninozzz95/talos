@@ -56,6 +56,17 @@ vi.mock('@/services/modelTransfer', () => ({
     talosCancelModelTransfer: vi.fn(async () => ({ ok: true })),
     talosPauseModelTransfer: vi.fn(async () => ({ ok: true })),
     talosResumeModelTransfer: vi.fn(async () => ({ ok: true })),
+    /*
+     * ⛔ MANCAVA, e il commento qui sopra dice già perché conta: «un mock a
+     * metà romperebbe per il motivo sbagliato».
+     *
+     * Lo store la chiama a ogni giro in cui qualcosa è arrivato
+     * (`modelTransfers.ts:235`). Assente dal finto, il registro di Vitest alza
+     * «No "talosAcknowledgeArrivals" export is defined» — dentro un `await`
+     * che nessuno guarda, quindi diventa una rejection non gestita e la suite
+     * esce 1 con tutti i test verdi. Compito #57.
+     */
+    talosAcknowledgeArrivals: vi.fn(async () => undefined),
 }))
 
 const annunci: string[] = []

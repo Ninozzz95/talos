@@ -19,7 +19,14 @@ const harness = vi.hoisted(() => ({
         setShell: vi.fn().mockResolvedValue(undefined),
     },
     controller: {
-        chat: { state: { persistenceStatus: 'ready', persistenceError: null } },
+        /*
+         * ⛔ `activeSession` MANCAVA, e non era un dettaglio del finto: la
+         * scansione legge `controller.chat.activeSession.value?.id`, quindi
+         * qui lanciava «Cannot read properties of undefined» a OGNI caso —
+         * sei rejection non gestite, con sei test verdi. Il finto
+         * incompleto nascondeva il difetto vero al posto di trovarlo.
+         */
+        chat: { state: { persistenceStatus: 'ready', persistenceError: null }, activeSession: { value: null } },
         traces: () => [],
         clearTraces: vi.fn(),
     },
@@ -141,5 +148,42 @@ describe('DoctorScreen', () => {
         expect(harness.settings.setShell).toHaveBeenCalledWith({ debug_diagnostics: true })
         expect(harness.controller.clearTraces).not.toHaveBeenCalled()
         wrapper.unmount()
+    })
+})
+
+/* -------------------------------------------------------------------------- *
+ * ⛔⛔ UNA SONDA CHE LANCIA COSTA LA SUA RIGA, NON TUTTA LA STAZIONE
+ * -------------------------------------------------------------------------- */
+
+describe('⛔ la Diagnostica non resta MUTA quando la scansione cade', () => {
+    /*
+     * Il commento su `runScan` prometteva già questo comportamento — ma il
+     * codice era `try { … } finally { … }` SENZA `catch`, e un `finally` non
+     * ferma il lancio: spegne la rotellina e rilancia.
+     *
+     * Conseguenza: `rows` non veniva mai assegnato e la stazione restava
+     * BIANCA. Trovato il 2026-08-10 dalle rejection della suite (compito #57):
+     * sei da questo file solo, tutte cadute nel vuoto perché nessuno aspettava
+     * la promessa di `onMounted`.
+     */
+    it('un guasto durante la scansione diventa una riga con il suo motivo', async () => {
+        // La sonda esplode dove esplodeva davvero: leggendo la sessione attiva.
+        const sano = harness.controller.chat.activeSession
+        Object.defineProperty(harness.controller.chat, 'activeSession', {
+            configurable: true,
+            get() { throw new Error('sonda esplosa') },
+        })
+        let testo = ''
+        try {
+            testo = (await openDoctor()).text()
+        } finally {
+            Object.defineProperty(harness.controller.chat, 'activeSession', {
+                configurable: true, writable: true, value: sano,
+            })
+        }
+        expect(testo, 'la stazione deve dire che la diagnosi non è finita')
+            .toMatch(/non è riuscita fino in fondo|did not finish/i)
+        expect(testo, 'e deve portare il MOTIVO, non solo il fatto')
+            .toContain('sonda esplosa')
     })
 })
