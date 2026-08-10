@@ -449,3 +449,83 @@ describe('il ciclo dei tool, che qui non ha un ruolo tool', () => {
         expect(risultato.call_id).toBe('call_a')
     })
 })
+
+/**
+ * ⛔⛔ IL 402 DI OPENROUTER SI IMPARA, non si mostra alla persona.
+ *
+ * Owner 2026-08-10, screenshot dal Pad, `openrouter / google/gemini-3.6-flash`:
+ * «You requested up to 65536 tokens, but can only afford 65050».
+ *
+ * Quei 65.536 non li chiedevamo noi: il corpo NON ha mai avuto `max_tokens` —
+ * è OpenRouter che, senza il campo, riserva il massimo di output del modello
+ * contro il credito (la comunità lo chiama «budget reservation trap», fino a
+ * 320× fra riservato e speso).
+ *
+ * ⇒ Si prova senza tetto, e se il rifiuto arriva porta con sé il numero: si
+ * riprova UNA volta con quello. Questi casi attraversano `fetch` vero perché
+ * il ripiego vive nel percorso in STREAMING, che è quello della chat.
+ */
+describe('⛔ il rifiuto per crediti insegna il tetto', () => {
+    const RIFIUTO = 'This request requires more credits, or fewer max_tokens. '
+        + 'You requested up to 65536 tokens, but can only afford 65050.'
+
+    const sseRisposta = () => new Response(
+        new ReadableStream({
+            start(c) {
+                c.enqueue(new TextEncoder().encode(
+                    'data: {"choices":[{"delta":{"content":"ciao"}}]}\n\ndata: [DONE]\n\n',
+                ))
+                c.close()
+            },
+        }),
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+    )
+
+    const modello = {
+        id: 'google/gemini-3.6-flash', provider: 'openrouter' as const, displayName: 'Gemini',
+        chatCompatibility: 'supported' as const, inputModalities: ['text'],
+        outputModalities: ['text'], supportedParameters: [],
+    }
+
+    it('riprova UNA volta, e il secondo corpo porta il tetto dichiarato', async () => {
+        const corpi: unknown[] = []
+        const finto = vi.fn(async (_url: string, init: RequestInit) => {
+            corpi.push(JSON.parse(String(init.body)))
+            if (corpi.length === 1) return new Response(RIFIUTO, { status: 402 })
+            return sseRisposta()
+        })
+        vi.stubGlobal('fetch', finto)
+        try {
+            const esito = await openRouterAdapter.streamComplete!(
+                { model: modello as never, turns: [{ role: 'user', content: 'ciao' }], effort: 'off', thinking: false },
+                { apiKey: 'k' },
+                { onChunk: () => {}, onReasoning: () => {} } as never,
+            )
+            expect(esito.text).toBe('ciao')
+        }
+        finally { vi.unstubAllGlobals() }
+
+        expect(finto).toHaveBeenCalledTimes(2)
+        // ⛔ Il PRIMO tentativo non ha tetto: nessuna risposta accorciata per
+        // prudenza quando il credito basta.
+        expect((corpi[0] as Record<string, unknown>).max_tokens).toBeUndefined()
+        // Il secondo sì, col numero che il provider ha dichiarato (meno il 2%).
+        expect((corpi[1] as Record<string, unknown>).max_tokens).toBe(63_749)
+    })
+
+    it('⛔ e un errore che NON parla di crediti non fa ritentare', async () => {
+        const finto = vi.fn(async () => new Response('upstream exploded', { status: 500 }))
+        vi.stubGlobal('fetch', finto)
+        try {
+            await expect(openRouterAdapter.streamComplete!(
+                { model: modello as never, turns: [{ role: 'user', content: 'ciao' }], effort: 'off', thinking: false },
+                { apiKey: 'k' },
+                { onChunk: () => {}, onReasoning: () => {} } as never,
+            )).rejects.toThrow()
+        }
+        finally { vi.unstubAllGlobals() }
+        // Una sola chiamata: insistere su un guasto vero nasconde alla persona
+        // una cosa che deve sapere.
+        expect(finto).toHaveBeenCalledTimes(1)
+    })
+})

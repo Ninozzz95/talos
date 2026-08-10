@@ -10,6 +10,7 @@ import type {
 } from '@/lib/chat/providerContracts'
 import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
+import { talosTettoDaiCrediti } from '@/lib/chat/tettoDaiCrediti'
 import { talosPromptCacheKey } from '@/lib/chat/promptCache'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import { talosToolsForOpenAiResponses } from '@/lib/tools/registry'
@@ -289,6 +290,15 @@ function compatibleCompletionData(
     config: OpenAiCompatibleConfig,
     input: TalosMobileCompletionInput,
     stream: boolean,
+    /**
+     * ⛔ Il tetto di risposta, e solo quando il PROVIDER l'ha dichiarato.
+     *
+     * Non si manda mai di nostra iniziativa: un numero scelto da noi
+     * accorcerebbe risposte legittime per proteggere da un problema che
+     * riguarda il preventivo. Qui arriva soltanto dal rifiuto — vedi
+     * `tettoDaiCrediti.ts`.
+     */
+    tetto?: number,
 ): Record<string, unknown> {
     const messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }> = []
     if (input.system?.trim()) messages.push({ role: 'system', content: input.system })
@@ -311,6 +321,7 @@ function compatibleCompletionData(
         messages.push(message as never)
     }
     const data: Record<string, unknown> = { model: input.model.id, messages, stream }
+    if (tetto !== undefined) data.max_tokens = tetto
     const compatibleTools = talosModelSupportsToolCalling(input.model) ? input.tools : undefined
     if (compatibleTools?.length) {
         data.tools = talosToolsForOpenAi(compatibleTools)
@@ -522,10 +533,38 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
             }
 
             const toolCalls = createOpenAiToolCallAccumulator()
-            const stream = await talosStreamText({
+            /*
+             * ⛔⛔ IL RIFIUTO PER CREDITI SI IMPARA, non si mostra.
+             *
+             * Owner 2026-08-10, screenshot: «You requested up to 65536 tokens,
+             * but can only afford 65050». Quei 65.536 non li chiedevamo noi —
+             * il corpo qui sopra NON ha mai avuto `max_tokens`: e' OpenRouter
+             * che, senza il campo, riserva il massimo di output del modello
+             * contro il credito.
+             *
+             * ⇒ Si prova senza tetto (nessuna risposta accorciata per
+             * prudenza); se il rifiuto arriva, porta con se' il numero, e si
+             * riprova UNA volta con quello. Il primo tentativo non costa token:
+             * il 402 e' un controllo di budget e cade prima della generazione.
+             */
+            const conRipiegoSulCredito = async <T>(giro: (tetto?: number) => Promise<T>): Promise<T> => {
+                try {
+                    return await giro(undefined)
+                }
+                catch (errore) {
+                    const detto = errore instanceof Error ? errore.message : String(errore)
+                    const tetto = talosTettoDaiCrediti(detto)
+                    // ⛔ Un solo ritentativo: se anche col tetto dichiarato non
+                    // passa, il credito non basta davvero e insistere sarebbe
+                    // nascondere alla persona una cosa che deve sapere.
+                    if (tetto === null) throw errore
+                    return await giro(tetto)
+                }
+            }
+            const stream = await conRipiegoSulCredito(async (tetto) => await talosStreamText({
                 url: `${baseUrl}/chat/completions`,
                 headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-                body: compatibleCompletionData(config, input, true),
+                body: compatibleCompletionData(config, input, true, tetto),
                 signal: handlers.signal,
                 accumulator: createTalosSseAccumulator(),
                 extract: (payload) => {
@@ -548,7 +587,7 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 },
                 onChunk: handlers.onChunk,
                 onReasoning: handlers.onReasoning,
-            })
+            }))
             const calls = toolCalls.calls()
             if (!stream.text && calls.length === 0) throw malformedProviderResponse(config.provider, 'complete', { received: { text: stream.text, calls: calls.length }, note: 'stream ended with no text and no tool calls' })
             return {
