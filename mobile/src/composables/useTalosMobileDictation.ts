@@ -24,6 +24,12 @@ export interface UseTalosMobileDictationOptions {
     autoLanguage?: () => boolean
     /** Fra quali lingue puo' muoversi: mai piu' di tre. */
     allowedLanguages?: () => readonly string[]
+    /**
+     * ⛔ Ferma la voce prima di ascoltare. Chi parla tace quando l'altro
+     * comincia: senza, la lettura in corso ruba l'audio al riconoscitore e la
+     * dettatura fallisce in 500 ms senza nemmeno partire (misurato).
+     */
+    zittisci?: () => void | Promise<void>
     /** Live locale boundary; raw plugin prose never becomes application UI. */
     errorMessage?: (code: TalosDictationErrorCode) => string
 }
@@ -159,6 +165,25 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
     async function start(): Promise<void> {
         error.value = null
         errorCode.value = null
+        // ⛔⛔ CHI PARLA TACE, quando l'altro comincia — owner 2026-08-10, sul Pad:
+        // «subito dopo che mi risponde, se lo premo di nuovo mi spunta l'errore».
+        //
+        // MISURATO, la finestra e' esattamente quella in cui TALOS sta ancora
+        // leggendo: premendo il microfono a 200 ms e a 1.500 ms dall'inizio
+        // della lettura arriva `recognitionFailed` in 500 ms — SEMPRE lo stesso
+        // tempo, e in logcat il riconoscitore non compare affatto: non parte
+        // proprio. Lasciando finire la voce, invece, parte e dice
+        // `NO_SPEECH_DETECTED`, che e' il comportamento giusto.
+        //
+        // ⇒ La voce e il microfono si contendono l'audio, e non e' un caso
+        // limite: era una cosa che MANCAVA. Nessuna riga, in tutta l'app,
+        // fermava la lettura prima di ascoltare — mentre ogni assistente
+        // vocale fa il contrario, e chi detta si aspetta che TALOS stia zitto.
+        //
+        // ⛔ Si ferma PRIMA di chiedere il permesso: la scheda del permesso puo'
+        // restare aperta secondi, e nel frattempo la voce continuerebbe a
+        // parlare sopra a una domanda che aspetta una risposta.
+        await options.zittisci?.()
         const granted = await engine.requestPermission()
         if (!granted) {
             status.value = 'error'

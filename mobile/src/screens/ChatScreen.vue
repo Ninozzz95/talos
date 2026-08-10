@@ -13,6 +13,7 @@ import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
 import { createTalosMobileComposerDraftController } from '@/composables/useTalosMobileComposerDraft'
 import { useTalosMobileDictation } from '@/composables/useTalosMobileDictation'
+import { useTalosSpeech } from '@/composables/useTalosSpeech'
 import {
     resolveTalosDictationLanguageTag,
     talosRilevamentoAcceso,
@@ -162,6 +163,12 @@ const dictationDraftBefore = ref('')
  * tutto, annullo) stanno in `provenienzaVoce`, con i loro casi.
  */
 const voce = ref<import('@/composables/useTalosRispostaAVoce').TalosRispostaAVoce | null>(null)
+/**
+ * ⛔ La lettura si ferma SUBITO, senza aspettare un import dinamico: fra il
+ * tocco sul microfono e l'inizio dell'ascolto passano poche centinaia di
+ * millisecondi, e in quella finestra la voce ruberebbe l'audio.
+ */
+const parlaSubito = () => useTalosSpeech()
 
 // F2-T5: live dictation — partials compose onto the draft captured at start.
 const dictation = useTalosMobileDictation({
@@ -175,6 +182,8 @@ const dictation = useTalosMobileDictation({
     // a mano l'ha scelta, e non gliela cambiamo sotto i piedi.
     autoLanguage: () => talosRilevamentoAcceso(settings.state.voice.dictation_language),
     allowedLanguages: () => voce.value?.lingue ?? [],
+    // ⛔ Chi parla tace: la lettura in corso si ferma prima di ascoltare.
+    zittisci: () => parlaSubito().stop(),
     errorMessage: (code) => t(`chat.dictationErrors.${code}`),
 })
 
