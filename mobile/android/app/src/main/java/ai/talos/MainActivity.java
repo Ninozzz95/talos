@@ -86,6 +86,28 @@ public class MainActivity extends BridgeActivity {
         // secondi, poi riprende. Chiunque bussi in quella finestra aspetta, e
         // per tre volte ho scambiato l'inquilino di turno per il colpevole.
         // Questi numeri dicono se il silenzio nasce qui dentro, e di chi e'.
+        /*
+         * ⛔⛔ LA BOLLA SI REGISTRA PER NOME, e la riflessione qui è la scelta
+         * giusta, non una scorciatoia.
+         *
+         * Owner 2026-08-11: «la bolla la voglio solo nella versione di sviluppo,
+         * non in produzione». Quel pallino vive nel source set `debug`, quindi
+         * questa classe — che sta in `main` — non può NOMINARLO: non compilerebbe
+         * la release. Nominarlo come stringa e cercarlo è l'unico modo di tenere
+         * il codice fuori dall'APK di produzione invece che spento dentro.
+         *
+         * ⇒ In release `Class.forName` non trova niente, il ponte non ha il
+         * plugin, e la schermata nasconde la scheda perché le è stato risposto
+         * «non ci sono». L'ASSENZA è la prova: un interruttore si può sbagliare,
+         * un file che non entra nell'APK no.
+         */
+        try {
+            //noinspection unchecked
+            registerPlugin((Class<? extends com.getcapacitor.Plugin>)
+                Class.forName("ai.talos.bolla.TalosBollaPlugin"));
+        } catch (ClassNotFoundException assente) {
+            // È la produzione: la bolla non esiste, e va bene così.
+        }
         long tSuper = android.os.SystemClock.uptimeMillis();
         super.onCreate(savedInstanceState);
         Log.i("TalosAvvio", "super.onCreate: " + (android.os.SystemClock.uptimeMillis() - tSuper) + " ms");

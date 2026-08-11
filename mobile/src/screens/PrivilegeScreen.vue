@@ -5,6 +5,12 @@ import {
     talosNominaAssistenteColPonte,
     type TalosStatoRuoloAssistente,
 } from '@/lib/device/ruoloAssistente'
+import {
+    talosAccendiLaBolla,
+    talosLeggiLaBolla,
+    talosSpegniLaBolla,
+    type TalosStatoBolla,
+} from '@/lib/device/bolla'
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Capacitor } from '@capacitor/core'
@@ -114,11 +120,33 @@ const faseRuolo = ref<TalosFaseRuolo>('fermo')
 /** Chi torna in primo piano fa da sveglia: si rilegge, sempre. */
 let smettiDiAscoltare: (() => void) | null = null
 
+/**
+ * ⭐ LA BOLLA — solo nella build di sviluppo, e la scheda lo scopre CHIEDENDO.
+ *
+ * ⛔ Nessun `if (sviluppo)` qui: il pacchetto web è lo stesso per le due
+ * varianti. È il plugin nativo a non esistere in produzione, e `available`
+ * riporta quella risposta. L'assenza è la prova.
+ */
+const bolla = ref<TalosStatoBolla>({ available: false, granted: false, on: false })
+
+async function leggiLaBolla(): Promise<void> {
+    bolla.value = await talosLeggiLaBolla()
+}
+
+async function alternaLaBolla(): Promise<void> {
+    bolla.value = bolla.value.on ? await talosSpegniLaBolla() : await talosAccendiLaBolla()
+}
+
 async function ascoltaIlRitorno(): Promise<void> {
     try {
         const { App } = await import('@capacitor/app')
         const iscrizione = await App.addListener('appStateChange', ({ isActive }) => {
-            if (isActive) void leggiRuolo()
+            if (!isActive) return
+            void leggiRuolo()
+            // ⛔ Anche la bolla: il permesso di finestra flottante si concede in
+            // una pagina di sistema che non torna nessun esito, quindi l'unico
+            // momento in cui possiamo sapere com'è andata è il rientro.
+            void leggiLaBolla()
         })
         smettiDiAscoltare = () => { void iscrizione.remove() }
     } catch {
@@ -415,6 +443,7 @@ async function apriFlottante(): Promise<void> {
 
 onMounted(() => {
     void leggiRuolo()
+    void leggiLaBolla()
     void ascoltaIlRitorno()
     void rileggi()
     void leggiPonte()
@@ -655,6 +684,43 @@ onUnmounted(() => {
             >
                 {{ t('privilege.assistantManual') }}
             </p>
+        </section>
+
+        <!--
+            ⭐ LA BOLLA — c'è solo dove il plugin nativo esiste, cioè nella build
+            di sviluppo. In produzione `available` è falso e questa sezione non
+            viene disegnata affatto: non è nascosta, non esiste.
+        -->
+        <section
+            v-if="bolla.available"
+            data-testid="talos-bolla"
+            :data-acceso="bolla.on ? 'si' : 'no'"
+            class="flex flex-col gap-3 rounded-[var(--talos-radius-card)] border p-4"
+            :class="bolla.on
+                ? 'border-[var(--talos-accent)]/40 bg-[var(--talos-accent)]/5'
+                : 'border-[var(--talos-border)]'"
+        >
+            <h2 class="flex items-center gap-2 text-base font-semibold text-[var(--talos-foreground)]">
+                <Check v-if="bolla.on" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                <Smartphone v-else class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                {{ t('privilege.bubbleTitle') }}
+            </h2>
+            <p class="text-sm leading-6 text-[var(--talos-muted)]">
+                {{ bolla.on ? t('privilege.bubbleOn') : t('privilege.bubbleBody') }}
+            </p>
+            <button
+                type="button"
+                data-testid="talos-bolla-interruttore"
+                :data-acceso="bolla.on"
+                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] px-4 text-sm font-semibold"
+                :class="bolla.on
+                    ? 'border border-[var(--talos-border)] text-[var(--talos-foreground)]'
+                    : 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast)]'"
+                @click="void alternaLaBolla()"
+            >
+                {{ bolla.on ? t('privilege.bubbleOff') : t('privilege.bubbleAsk') }}
+                <ChevronRight v-if="!bolla.on" class="size-4" aria-hidden="true" />
+            </button>
         </section>
 
         <p v-if="caricando" role="status" class="py-6 text-sm text-[var(--talos-muted)]">
