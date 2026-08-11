@@ -66,7 +66,25 @@ export function talosRacconto(corsa: TalosCorsaDelPilota): string {
     const cosaFare = corsa.fine.motivo === 'mano-sullo-schermo'
         ? 'The user touched the screen, so TALOS stopped. Do NOT offer to continue unless they ask.'
         : 'Tell the user where it got to, and ask whether to continue. Do not silently retry.'
-    return `Stopped: ${corsa.fine.motivo}${tempo}. ${cosaFare}${passi}`
+    /*
+     * ⛔⛔ IL MOTIVO INTERNO NON SI RIPETE ALLA PERSONA.
+     *
+     * Owner 2026-08-11: in chat è comparso «schermoCambiato». Non l'avevamo
+     * scritto noi in italiano: l'ha copiato il modello da questo racconto, che
+     * è fatto per LUI ed è pieno di parole che nessuno dice ad alta voce.
+     *
+     * ⇒ Gli si passa la frase già pronta, nella lingua della persona, e gli si
+     * dice di usare quella. Vietare senza dare un'alternativa è il modo più
+     * sicuro di farsi disobbedire: se non ha una frase, ne inventa una — o
+     * ricopia la nostra.
+     *
+     * ⛔ E la frase resta comunque detta a voce da `corsaDelloSchermo`, che non
+     * dipende dal modello: due strade per la stessa cosa, perché quella che
+     * passa da un modello non è mai garantita.
+     */
+    const daDire = `Say this to the user, in their own words: "${talosFraseDiFine(corsa.fine)}" `
+        + 'Never show them the internal reason above — it is a code for you, not a sentence.'
+    return `Stopped: ${corsa.fine.motivo}${tempo}. ${cosaFare} ${daDire}${passi}`
 }
 
 export function createTalosSchermoTools(

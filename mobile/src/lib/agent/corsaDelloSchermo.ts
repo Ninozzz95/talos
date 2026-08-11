@@ -1,7 +1,11 @@
 import { TalosSchermoBridge, talosArmaIlFreno } from '@/lib/device/ponteSchermo'
 import { creaManoDelloSchermo } from '@/lib/device/manoDelloSchermo'
 import { creaChiediDelPilota } from '@/lib/agent/chiediAlPilota'
-import { talosGuidaLoSchermo, type TalosCorsaDelPilota } from '@/lib/agent/pilotaDelloSchermo'
+import {
+    talosFraseDiFine,
+    talosGuidaLoSchermo,
+    type TalosCorsaDelPilota,
+} from '@/lib/agent/pilotaDelloSchermo'
 import type { ChatCompletion } from '@/stores/chat'
 
 /**
@@ -44,7 +48,7 @@ export async function talosCorsaDelloSchermo(
         elencoApp: montaggio.elencoApp,
         aspetta: (ms) => new Promise((ok) => { setTimeout(ok, ms) }),
     })
-    return await talosGuidaLoSchermo({
+    const corsa = await talosGuidaLoSchermo({
         guarda: () => TalosSchermoBridge.guarda().catch(() => null),
         agisci: esegui,
         chiedi: creaChiediDelPilota({
@@ -54,4 +58,24 @@ export async function talosCorsaDelloSchermo(
         racconta: montaggio.parla,
         adesso: () => Date.now(),
     })
+    /*
+     * ⛔⛔ LA FRASE PER LA PERSONA ESISTEVA E NON LA DICEVA NESSUNO.
+     *
+     * `talosFraseDiFine` era scritta, provata dai test, esportata due volte — e
+     * cercandone i chiamanti non ne aveva **uno**. Quando il pilota si fermava,
+     * l'unica voce che restava era il modello, che ripete a modo suo il
+     * racconto tecnico in inglese: è così che l'owner si è ritrovato
+     * «schermoCambiato» scritto in chat il 2026-08-11.
+     *
+     * ⛔ Si dice SOLO quando la corsa NON è finita bene. A fine riuscita la
+     * risposta del modello racconta già cosa ha ottenuto, e aggiungerci «Fatto.»
+     * a voce vorrebbe dire dirlo due volte — che è il difetto opposto e si
+     * sente uguale.
+     *
+     * ⛔ E si dice qui, non dentro il ciclo: il ciclo non conosce la voce, la
+     * riceve. Metterla lì legherebbe i tetti — che si provano senza telefono —
+     * a un motore vocale.
+     */
+    if (corsa.fine.motivo !== 'fine') montaggio.parla(talosFraseDiFine(corsa.fine))
+    return corsa
 }
