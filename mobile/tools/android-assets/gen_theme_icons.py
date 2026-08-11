@@ -285,13 +285,22 @@ def web_mark_svg() -> str:
     stessa opacità, stessi spessori — solo senza il bordo che serviva a un
     ritaglio che qui non avviene.
     """
-    origine_x = mark["translateX"]
-    origine_y = mark["translateY"]
-    lato = float(viewport[2]) - 2 * float(origine_x)
+    """
+    ⛔ E L'ORIGINE È ZERO, non il translate — owner 2026-08-11: «su telefono non
+    è centrato bene rispetto alla scritta».
+
+    Errore mio di aritmetica, e la misura lo dice in una riga: il disegno vive
+    in coordinate **0…500** (l'esagono va da x=111,5 a x=388,5, centro 250). Il
+    `translate(50, 50)` del launcher SPOSTA quel disegno dentro la tela da 600 —
+    non dichiara dove il disegno si trova. Prendendolo come origine guardavo la
+    finestra 50…550, cioè il marchio scostato di 50 unità a sinistra: appena
+    percettibile accanto a un titolo centrato, e infatti si vedeva.
+    """
+    lato = float(viewport[2]) - 2 * float(mark["translateX"])
     return "\n".join([
         intestazione,
         f'<svg xmlns="http://www.w3.org/2000/svg"'
-        f' viewBox="{origine_x} {origine_y} {lato:g} {lato:g}">',
+        f' viewBox="0 0 {lato:g} {lato:g}">',
         '  <g stroke="currentColor" fill="none"'
         ' stroke-linecap="round" stroke-linejoin="round">',
         corpo,
