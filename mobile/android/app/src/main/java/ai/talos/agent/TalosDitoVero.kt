@@ -91,35 +91,69 @@ object TalosDitoVero {
             "[ -n \"\$D\" ] && getevent -l \"\$D\" > $PERCORSO 2>&1 &",
     )
 
-    @Volatile private var vistaA = -1L
+    /** L'istante in cui si è armato, o `-1` se non si sta guardando. */
+    @Volatile private var armatoA = -1L
 
     /**
      * Si comincia a guardare da ADESSO: quello che c'era prima non è un tocco
      * di questa sessione.
+     *
+     * ## ⛔⛔ IL FRENO ZOMBIE: diceva «armato» e non sentiva più niente
+     *
+     * MISURATO sul Pad l'11 agosto, provando il ripiego. Nessun `getevent` vivo
+     * (`ps -A -o NAME | grep -c getevent` → **0**), eppure `armato()` rispondeva
+     * **true** e il pilota partiva col freno grezzo: il file c'era ancora,
+     * lasciato da una corsa di ore prima. Un freno così è peggio di uno spento —
+     * dichiara di sentire, non cresce mai di un byte, e quindi risponde «nessuno
+     * ha toccato» per sempre. E siccome il file vive in `/data/local/tmp`,
+     * sopravvive alla chiusura dell'app: da solo non guarisce.
+     *
+     * ⛔ IL PRIMO RIMEDIO NON FUNZIONAVA, e va detto perché non lo riprovi
+     * nessuno: cancellare il file da qui. `File.delete()` fallisce in silenzio —
+     * il file è `-rw-rw-rw- shell shell`, ma cancellarlo vuole il permesso di
+     * scrittura sulla **cartella**, e la cartella è di `shell`. L'ho scoperto
+     * perché dopo la correzione la misura diceva ancora `tipo: "grezzo"`.
+     *
+     * ⇒ Non si cancella: si guarda l'**ora**. Il comando apre il file con `>`,
+     * che lo tronca e ne aggiorna la data. Se la data è più vecchia del momento
+     * in cui abbiamo armato, quel file è di qualcun altro e questo freno non è
+     * in servizio — e il posto non resta vuoto, subentra quello degli eventi.
      */
     fun azzera() {
-        vistaA = quanto()
+        armatoA = System.currentTimeMillis()
     }
 
-    /** Vero se qualcosa è cresciuto da quando si guarda. Non consuma. */
-    fun haToccato(): Boolean {
-        val ora = quanto()
-        // ⛔ `-1` vuol dire «non stiamo guardando»: NON si risponde `false`,
-        // che vorrebbe dire «nessuno ha toccato» ed è una bugia. Chi chiede
-        // deve distinguere «non ho toccato» da «non lo so», e lo fa con
-        // `armato()`.
-        return vistaA >= 0 && ora > vistaA
-    }
+    /**
+     * Vero se è arrivato anche un solo byte da quando si guarda.
+     *
+     * ⛔ Il confronto è con **zero**, non con la dimensione di prima: il comando
+     * tronca il file all'avvio, quindi dopo un armamento valido tutto ciò che
+     * c'è dentro è arrivato dopo. Confrontare con la dimensione precedente era
+     * la seconda faccia del freno zombie — con un file vecchio da 167.762 byte
+     * ci sarebbero voluti 167.762 byte di dita prima di accorgersi di una mano.
+     */
+    fun haToccato(): Boolean = armato() && quanto() > 0
 
-    /** Il freno è armato davvero? Un freno che non sa di esistere non frena. */
-    fun armato(): Boolean = vistaA >= 0 && File(PERCORSO).exists()
+    /**
+     * Il freno è armato davvero? Un freno che non sa di esistere non frena.
+     *
+     * ⛔ La tolleranza di un secondo non è pigrizia: la data di un file ha la
+     * grana del secondo su alcuni filesystem, e senza di essa un freno armato e
+     * partito nello stesso istante si dichiarerebbe spento.
+     */
+    fun armato(): Boolean =
+        armatoA >= 0 && quando() + TOLLERANZA_DATA_MS >= armatoA
 
     /** Quanti byte di eventi sono arrivati da quando si guarda. */
-    fun cresciutoDi(): Long = if (vistaA < 0) 0 else (quanto() - vistaA).coerceAtLeast(0)
+    fun cresciutoDi(): Long = if (armato()) quanto() else 0
 
     fun smetti() {
-        vistaA = -1
+        armatoA = -1
     }
 
+    private const val TOLLERANZA_DATA_MS = 1_000L
+
     private fun quanto(): Long = runCatching { File(PERCORSO).length() }.getOrDefault(0L)
+
+    private fun quando(): Long = runCatching { File(PERCORSO).lastModified() }.getOrDefault(0L)
 }

@@ -64,17 +64,62 @@ class TalosOcchio : AccessibilityService() {
     }
 
     /**
-     * ⛔⛔ QUESTA STRADA È CHIUSA, e resta scritta perché non la riprovi nessuno.
+     * ⭐⭐ IL FRENO CHE NON CHIEDE LA SHELL: la mano si sente dagli EVENTI.
      *
-     * MISURATO col dito dell'owner il 2026-08-10: `TYPE_TOUCH_INTERACTION_START`
-     * **non arriva**. Android lo consegna solo a un servizio che chiede
-     * l'esplorazione al tocco — che cambierebbe il modo in cui la persona usa il
-     * telefono (un tocco legge, due attivano). Per accorgersi di una mano non si
-     * stravolge il telefono di quella mano.
+     * Il freno grezzo (`TalosDitoVero`) legge `/dev/input`, e `/dev/input` vuole
+     * l'identità della shell. Su un telefono senza il ponte acceso quel freno non
+     * si arma, e il pilota **si rifiutava di partire**: la funzione esisteva solo
+     * per chi aveva già fatto un giro nelle impostazioni di sviluppo. Qui c'è il
+     * freno che funziona ovunque, perché si appoggia al servizio che il pilota
+     * richiede comunque per esistere.
      *
-     * ⇒ Il dito si sente al livello GREZZO: vedi `TalosDitoVero`.
+     * ⇒ **Se TALOS può vedere lo schermo, TALOS può sentire la tua mano.**
+     *
+     * ## Le misure che l'hanno deciso (Pad, 11 agosto)
+     *
+     * | cosa succede                     | cosa arriva qui              |
+     * |----------------------------------|------------------------------|
+     * | nessuno tocca, 8 secondi         | **0 eventi** — silenzio vero |
+     * | un dito su un elemento           | `TYPE_VIEW_CLICKED`          |
+     * | un dito che scorre               | 6 × `TYPE_VIEW_SCROLLED`     |
+     * | un dito **sul vuoto**            | **0 eventi** ⛔ vedi sotto   |
+     * | un tocco di TALOS                | `TYPE_VIEW_CLICKED` a +5-27 ms |
+     *
+     * ⛔⛔ PRIMA misura fallita, e va detta: il filtro del servizio dichiarava
+     * `typeWindowStateChanged|typeWindowContentChanged|typeTouchInteractionStart`
+     * — `typeViewClicked` **non c'era**. Il 2026-08-10 ne avevo concluso «gli
+     * eventi non arrivano»: non arrivavano perché non li avevamo chiesti. Il
+     * servizio non era sordo, era **tappato**.
+     *
+     * ## ⛔ Il nostro tocco e quello della persona sono IDENTICI per tipo
+     *
+     * `performAction(ACTION_CLICK)` produce lo stesso `TYPE_VIEW_CLICKED` di un
+     * dito: misurato. Quindi non si distingue dal **cosa**, si distingue dal
+     * **quando** — e il quando lo sappiamo perché l'azione la facciamo noi.
+     * Dopo ogni nostra azione si è sordi per [SORDITA_MS]; fuori da quella
+     * finestra, un evento di interazione è una mano.
+     *
+     * I 400 ms sono ~15 volte il ritardo peggiore misurato (27 ms su quattro
+     * tocchi: 9, 27, 5, 13) e restano un'inezia rispetto ai **secondi** che
+     * passano fra un passo e l'altro, che è il tempo in cui una mano arriva
+     * davvero. Il rischio residuo è simmetrico e va nominato: un tocco della
+     * persona nei 400 ms dopo il nostro non ferma la corsa. Ne bastano due, e
+     * chi vuole riprendersi il telefono non tocca una volta sola.
+     *
+     * ## ⛔ IL LIMITE, misurato e non nascosto
+     *
+     * Un dito appoggiato dove non c'è niente di interattivo non produce nessun
+     * evento — provato anche tenendolo premuto un secondo. Questo freno sente
+     * ogni tocco che **fa qualcosa**; il freno grezzo sente ogni tocco e basta.
+     * Per questo i due convivono e `frenoTipo` dice quale è in servizio: un
+     * freno che promette più di quel che sente è peggio di nessun freno.
      */
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        val tipo = event?.eventType ?: return
+        if (tipo and INTERAZIONI == 0) return
+        if (SystemClock.uptimeMillis() - nostraAzioneAl <= SORDITA_MS) return
+        manoVista = true
+    }
 
     /**
      * Lo sguardo: gli elementi con cui si può interagire, numerati.
@@ -155,6 +200,9 @@ class TalosOcchio : AccessibilityService() {
         else {
             atteso
         }
+        // ⛔ Si marca PRIMA di toccare: fra la marcatura e l'evento passano
+        // 5-27 ms, e marcare dopo lascerebbe fuori proprio l'evento nostro.
+        segnaNostraAzione()
         val fatto = when (azione) {
             "tocca" -> e.nodo.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             "scrivi" -> {
@@ -197,9 +245,57 @@ class TalosOcchio : AccessibilityService() {
          */
         private const val VITA_SGUARDO_MS = 500L
 
+        /**
+         * ⛔ Quanto si resta sordi dopo una NOSTRA azione.
+         *
+         * MISURATO su quattro tocchi (Pad, 11 agosto): l'evento del nostro
+         * tocco arriva dopo 9, 27, 5, 13 ms. Quattrocento è quindici volte il
+         * peggiore — largo abbastanza da non sentirsi da soli anche quando il
+         * telefono è occupato, e stretto abbastanza da essere invisibile fra
+         * due passi che costano secondi.
+         */
+        private const val SORDITA_MS = 400L
+
+        /**
+         * Solo gli eventi che vuol dire «qualcuno ha INTERAGITO».
+         *
+         * ⛔ Fuori restano `TYPE_WINDOW_CONTENT_CHANGED` e
+         * `TYPE_WINDOW_STATE_CHANGED`: sono conseguenze, non tocchi, e arrivano
+         * a raffica anche quando TALOS apre un'app da solo. Un freno che li
+         * ascoltasse si fermerebbe da sé al primo passo.
+         */
+        private val INTERAZIONI = AccessibilityEvent.TYPE_VIEW_CLICKED or
+            AccessibilityEvent.TYPE_VIEW_LONG_CLICKED or
+            AccessibilityEvent.TYPE_VIEW_SCROLLED or
+            AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
+
         @Volatile private var vivo: TalosOcchio? = null
         @Volatile private var sguardo: List<Elemento> = emptyList()
         @Volatile private var sguardoAl: Long = 0
+        @Volatile private var nostraAzioneAl: Long = 0
+        @Volatile private var manoVista: Boolean = false
+
         fun aperto(): TalosOcchio? = vivo
+
+        /**
+         * Da adesso in poi, un'interazione è una mano.
+         *
+         * ⛔ Si azzera all'ARMAMENTO e non a ogni sguardo: un tocco arrivato
+         * mentre il modello pensava deve sopravvivere fino al controllo, se no
+         * il freno sente solo le mani abbastanza fortunate da toccare nel
+         * millisecondo giusto.
+         */
+        fun armaIlFrenoDegliEventi() {
+            manoVista = false
+            nostraAzioneAl = SystemClock.uptimeMillis()
+        }
+
+        /** Marca l'istante di una nostra azione: da qui parte la sordità. */
+        fun segnaNostraAzione() {
+            nostraAzioneAl = SystemClock.uptimeMillis()
+        }
+
+        /** Una mano ha interagito da quando il freno è stato armato? */
+        fun manoVistaDagliEventi(): Boolean = manoVista
     }
 }

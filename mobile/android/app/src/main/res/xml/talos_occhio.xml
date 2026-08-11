@@ -1,12 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  ⭐ L'OCCHIO. `canRetrieveWindowContent` serve a leggere l'albero;
-  `typeTouchInteractionStart` è il freno «mi hai toccato, mi fermo».
+  ⭐ L'OCCHIO. `canRetrieveWindowContent` serve a leggere l'albero.
+
+  ⛔⛔ QUESTA RIGA È IL FRENO. Il 2026-08-10 avevo concluso «gli eventi di
+  interazione non arrivano»: non arrivavano perché `typeViewClicked` NON era
+  dichiarato qui. Il servizio non era sordo, era tappato — e la conclusione
+  sbagliata è costata la funzione, perché il pilota si rifiutava di partire su
+  qualunque telefono senza il ponte adb acceso.
+
+  I quattro `typeView*` sono ciò che permette a TALOS di accorgersi che la
+  persona ha ripreso in mano il telefono, SENZA identità di shell. Toglierne uno
+  toglie un modo di fermare l'agente: vedi `TalosOcchio.onAccessibilityEvent`.
+
   ⛔ NIENTE `flagRequestTouchExplorationMode`: cambierebbe il modo in cui la
   persona usa il telefono, e noi vogliamo guardare, non prendere il posto.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeTouchInteractionStart"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeTouchInteractionStart|typeViewClicked|typeViewLongClicked|typeViewScrolled|typeViewTextSelectionChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:canRetrieveWindowContent="true"
     android:notificationTimeout="100"
