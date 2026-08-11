@@ -43,7 +43,7 @@
  * cronologia e strumenti sono quelli veri, non una copia.
  */
 import { computed, onMounted, ref } from 'vue'
-import { ArrowUp, Copy, Eye, EyeOff, Maximize2, Mic, Square, Volume2, VolumeX, X } from '@lucide/vue'
+import { ArrowUp, Camera, Copy, Eye, EyeOff, FileText, Image, Library, Maximize2, Mic, Plus, Square, Volume2, VolumeX, X } from '@lucide/vue'
 import TalosMobileMessageContent from '@/components/chat/TalosMobileMessageContent.vue'
 import { useTalosI18n } from '@/i18n'
 import { useChatController } from '@/stores/chatController'
@@ -194,6 +194,34 @@ const lettura = useTalosSpeech()
 const ID_LETTURA = 'talos-barra'
 const staLeggendo = computed(() => lettura.speakingId.value === ID_LETTURA)
 
+/**
+ * ⭐ GLI ALLEGATI — le stesse quattro porte di Gemini, più una che lei non ha.
+ *
+ * Censito l'11 agosto: il suo `Aggiungi allegato` apre Foto · Fotocamera · File
+ * · Drive. Le prime tre le abbiamo identiche; al posto di Drive c'è **la
+ * Libreria**, che è meglio per un motivo concreto: i file che TALOS ha già
+ * letto, indicizzato e di cui conosce il testo. Allegare da lì non ricarica
+ * niente e il modello parte già sapendo cosa c'è dentro.
+ *
+ * ⛔ È lo STESSO controller della chat (`controller.attachments`), non una copia:
+ * consensi, limiti e Libreria sono quelli veri. Una seconda pila di allegati
+ * accanto alla prima sarebbe la solita superficie che diverge.
+ */
+const allegati = controller.attachments
+const menuAllegati = ref(false)
+
+async function conIlMenuChiuso(azione: () => Promise<void>): Promise<void> {
+    menuAllegati.value = false
+    try {
+        await azione()
+    } catch {
+        errore.value = t('barra.attachFailed')
+    }
+}
+
+/** Gli ultimi file della Libreria: un elenco corto, non un archivio da sfogliare. */
+const libreriaRecente = computed(() => allegati.vaultFiles.slice(0, 4))
+
 async function chiudi(): Promise<void> {
     dettatura.cancel()
     try {
@@ -258,8 +286,26 @@ async function invia(): Promise<void> {
         testo,
         controller.selectedModelId.value,
         metadati,
-        undefined,
-        () => { bozza.value = '' },
+        // ⛔ Gli allegati si leggono ADESSO, non alla fine: `bindings` è
+        // calcolato sulla bozza, e la bozza si svuota appena il messaggio è
+        // registrato — un attimo prima che la generazione finisca.
+        allegati.bindings.value,
+        () => {
+            bozza.value = ''
+            /*
+             * ⛔ E GLI ALLEGATI, che me li ero dimenticati — trovato sul Pad.
+             *
+             * Mandato «cosa dice il file allegato» con `nota-talos.txt`, la
+             * risposta era giusta («Talos è un gigante di bronzo…») ma il
+             * gettone RESTAVA nella barra: il messaggio dopo se lo sarebbe
+             * portato dietro senza che nessuno l'avesse chiesto.
+             *
+             * `clearSent()` è lo stesso metodo che il controller della chat
+             * chiama nello stesso punto — il nome esisteva già, mancava la
+             * chiamata.
+             */
+            allegati.clearSent()
+        },
     )
     if (!inviato) errore.value = chat.state.lastError ?? t('barra.sendFailed')
 }
@@ -273,6 +319,9 @@ function tastoInvio(evento: KeyboardEvent): void {
 onMounted(async () => {
     await controller.init()
     if (!chat.activeSession.value) await controller.newSession()
+    // ⛔ Senza, `vaultFiles` resta vuoto e la Libreria sembra non avere niente:
+    // un elenco vuoto che in realtà non è ancora stato letto è una bugia.
+    void allegati.initialize()
     // Chi ha chiamato con la voce vuole parlare, non trovarsi una tastiera in
     // faccia; chi ha chiamato col gesto sta già guardando il campo.
     if (props.modo.daVoce) void dettatura.toggle()
@@ -360,6 +409,44 @@ onMounted(async () => {
 
         <p v-if="errore" class="errore" role="alert">{{ errore }}</p>
 
+        <!-- Il menu degli allegati: compare SOPRA la pillola e se ne va, come i
+             chip dei suggerimenti di Gemini — fuori dal pannello, non dentro,
+             così la pillola non si gonfia mai. -->
+        <div v-if="menuAllegati" class="menu" data-testid="talos-barra-menu-allegati">
+            <button type="button" class="voce" @click="conIlMenuChiuso(() => allegati.pickPhotos())">
+                <Image class="icona-piccola" aria-hidden="true" />{{ t('barra.attachPhotos') }}
+            </button>
+            <button type="button" class="voce" @click="conIlMenuChiuso(() => allegati.takePhoto())">
+                <Camera class="icona-piccola" aria-hidden="true" />{{ t('barra.attachCamera') }}
+            </button>
+            <button type="button" class="voce" @click="conIlMenuChiuso(() => allegati.selectFiles())">
+                <FileText class="icona-piccola" aria-hidden="true" />{{ t('barra.attachFile') }}
+            </button>
+            <div v-if="libreriaRecente.length" class="menu-titolo">
+                <Library class="icona-piccola" aria-hidden="true" />{{ t('barra.attachLibrary') }}
+            </div>
+            <button
+                v-for="file in libreriaRecente"
+                :key="file.id"
+                type="button"
+                class="voce voce--libreria"
+                @click="conIlMenuChiuso(async () => { await allegati.attachExisting(file) })"
+            >{{ file.display_name }}</button>
+        </div>
+
+        <!-- Gli allegati scelti: una riga di gettoni sopra la pillola. -->
+        <div v-if="allegati.items.length" class="allegati" data-testid="talos-barra-allegati">
+            <span v-for="pezzo in allegati.items" :key="pezzo.id" class="gettone">
+                {{ pezzo.displayName }}
+                <button
+                    type="button"
+                    class="gettone-via"
+                    :aria-label="t('barra.attachRemove', { name: pezzo.displayName })"
+                    @click="allegati.remove(pezzo.id)"
+                ><X class="icona-piccola" aria-hidden="true" /></button>
+            </span>
+        </div>
+
         <!-- LA PILLOLA: la forma a riposo, e non cambia mai taglia. -->
         <form class="pillola" data-testid="talos-barra" @submit.prevent="invia">
             <span class="orlo" :data-stato="filo" data-testid="talos-barra-filo" aria-hidden="true" />
@@ -378,6 +465,17 @@ onMounted(async () => {
                 <Eye v-if="guardo && contestoDisponibile" class="icona-piccola" aria-hidden="true" />
                 <EyeOff v-else class="icona-piccola" aria-hidden="true" />
                 <span class="numero">{{ contestoDisponibile && guardo ? props.modo.contesto.nodi : '—' }}</span>
+            </button>
+
+            <button
+                type="button"
+                class="piu"
+                :aria-expanded="menuAllegati"
+                :aria-label="t('barra.attach')"
+                data-testid="talos-barra-allega"
+                @click="menuAllegati = !menuAllegati"
+            >
+                <Plus class="icona-piccola" aria-hidden="true" />
             </button>
 
             <span v-if="ascolta" class="livello" aria-hidden="true"><i /><i /><i /></span>
@@ -971,4 +1069,114 @@ onMounted(async () => {
     .carta { max-width: 620px; }
     .maniglia { height: 26px; }
 }
+
+/* ── ALLEGATI: il «+», il menu e i gettoni ──────────────────────────────────
+ *
+ * ⛔ Il menu vive FUORI dalla pillola, come i chip dei suggerimenti di Gemini.
+ * Dentro l'avrebbe gonfiata, e la pillola che non cambia mai taglia è la forma
+ * che tutto questo compito è servito a trovare.
+ */
+.piu {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    flex: none;
+    border-radius: 50%;
+    color: var(--muted-foreground);
+    transition: background-color 160ms ease, color 160ms ease, transform 90ms ease;
+}
+.piu:hover,
+.piu[aria-expanded='true'] {
+    background: color-mix(in oklab, var(--primary) 16%, transparent);
+    color: var(--primary);
+}
+.piu:active { transform: scale(0.9); }
+
+.menu {
+    width: 100%;
+    max-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+    border-radius: 18px;
+    background: var(--card);
+    border: 1px solid color-mix(in oklab, var(--primary) 16%, var(--border));
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 28%), 0 18px 44px -14px rgb(0 0 0 / 78%);
+    animation: barra-sale 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.voce {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    color: var(--foreground);
+    font-size: var(--text-sm);
+    text-align: left;
+    transition: background-color 150ms ease;
+}
+.voce:hover,
+.voce:focus-visible { background: color-mix(in oklab, var(--foreground) 8%, transparent); }
+
+/* I file della Libreria rientrano sotto il loro titolo: sono un elenco, non
+   quattro comandi in più. */
+.voce--libreria {
+    padding-left: 34px;
+    color: var(--muted-foreground);
+    font-size: var(--text-xs);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+}
+
+.menu-titolo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px 4px;
+    color: var(--primary);
+    font-family: var(--talos-font-mono);
+    font-size: var(--text-2xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.allegati {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+    max-width: 460px;
+}
+
+.gettone {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 5px 6px 5px 11px;
+    border-radius: 999px;
+    background: var(--card);
+    border: 1px solid color-mix(in oklab, var(--primary) 26%, var(--border));
+    box-shadow: 0 6px 18px -8px rgb(0 0 0 / 70%);
+    color: var(--foreground);
+    font-size: var(--text-2xs);
+    overflow: hidden;
+}
+
+.gettone-via {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    flex: none;
+    border-radius: 50%;
+    color: var(--muted-foreground);
+    transition: background-color 150ms ease, color 150ms ease;
+}
+.gettone-via:hover { background: color-mix(in oklab, var(--foreground) 10%, transparent); color: var(--foreground); }
 </style>
