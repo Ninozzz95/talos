@@ -250,7 +250,7 @@ onMounted(async () => {
             :aria-label="t('barra.title')"
             data-testid="talos-barra-carta"
         >
-            <div class="filo" :data-stato="filo" aria-hidden="true" />
+            <span class="orlo" :data-stato="filo" aria-hidden="true" />
             <button
                 type="button"
                 class="maniglia"
@@ -296,7 +296,7 @@ onMounted(async () => {
 
         <!-- LA PILLOLA: la forma a riposo, e non cambia mai taglia. -->
         <form class="pillola" data-testid="talos-barra" @submit.prevent="invia">
-            <div class="filo" :data-stato="filo" data-testid="talos-barra-filo" aria-hidden="true" />
+            <span class="orlo" :data-stato="filo" data-testid="talos-barra-filo" aria-hidden="true" />
 
             <button
                 type="button"
@@ -381,20 +381,55 @@ onMounted(async () => {
     gap: 10px;
     /* ⛔ Nessuno sfondo, nemmeno al 5%: l'app sotto si legge. */
     background: transparent;
-    padding: 0 12px max(env(safe-area-inset-bottom), 10px);
+    /*
+     * ⛔ QUANTO STACCA DA SOTTO, e il numero viene da Gemini, non dal gusto.
+     *
+     * Misurato sul Pad (schermo alto 3392 px), col fondo della pillola:
+     *
+     *     Gemini   y=3300  →  92 px dal bordo
+     *     TALOS    y=3350  →  42 px dal bordo   ⛔ appiccicata
+     *
+     * L'owner l'ha vista subito: «non metterla tutta alla fine, ma neanche
+     * troppo in alto». 92 px reali su questo schermo sono 35 px logici, e la
+     * safe area ne dà già 16: da qui il `+19`.
+     *
+     * ⛔ Lo stacco si SOMMA all'area sicura, non la sostituisce: sono due cose
+     * diverse — una è estetica, l'altra è il bordo fisico dello schermo. Un
+     * `max()` fra le due ignorava del tutto lo stacco sui telefoni con l'area
+     * sicura alta.
+     *
+     * ⛔ E l'area sicura ha un MINIMO, imparato nel secondo viewport: forzando
+     * 1080×2400 il sistema la dichiara a 0, la somma diventava 19 px logici (47
+     * reali) e la pillola tornava appiccicata in basso. Il `max(..., 12px)`
+     * garantisce lo stacco anche dove il telefono non dichiara niente.
+     */
+    padding: 0 12px calc(max(env(safe-area-inset-bottom, 0px), 12px) + 19px);
 }
 
 /* Il vetro, uguale per la pillola e per la carta: una materia sola. */
 .pillola,
 .carta {
     position: relative;
-    background: color-mix(in oklab, var(--card) 86%, transparent);
+    background: color-mix(in oklab, var(--card) 94%, transparent);
     backdrop-filter: blur(24px) saturate(160%);
     -webkit-backdrop-filter: blur(24px) saturate(160%);
     border: 1px solid color-mix(in oklab, var(--primary) 16%, var(--border));
+    /*
+     * ⛔ TRE ombre, e ognuna risolve un fondo diverso — misurato sopra Wikipedia,
+     * che è BIANCA: l'alone bronzo da solo si perdeva del tutto.
+     *
+     *   1. il riflesso interno   dà spessore al vetro
+     *   2. l'anello scuro 1 px   stacca su fondo CHIARO, dove nessun bagliore serve
+     *   3. l'ombra lunga         solleva il pannello su qualunque fondo
+     *
+     * L'alone bronzo (`.orlo::after`) fa il resto sul fondo SCURO, dove invece è
+     * l'anello a sparire. Servono tutti e due perché l'app sotto non la
+     * scegliamo noi.
+     */
     box-shadow:
-        0 1px 0 0 color-mix(in oklab, var(--foreground) 7%, transparent) inset,
-        0 20px 50px -16px rgb(0 0 0 / 72%);
+        0 1px 0 0 color-mix(in oklab, var(--foreground) 8%, transparent) inset,
+        0 0 0 1px rgb(0 0 0 / 28%),
+        0 22px 54px -14px rgb(0 0 0 / 78%);
     color: var(--foreground);
     font-family: var(--talos-font-ui);
 }
@@ -621,52 +656,140 @@ onMounted(async () => {
     font-size: var(--text-xs);
 }
 
-/* ── IL FILO — la firma, e Gemini non ha niente del genere ───────────────── */
-.filo {
-    position: absolute;
-    top: 0;
-    left: 22px;
-    right: 22px;
-    height: 2px;
-    border-radius: 2px;
-    overflow: hidden;
-    background: color-mix(in oklab, var(--primary) 24%, transparent);
-    pointer-events: none;
+/* ── L'ORLO — la firma, e adesso gira tutto attorno ─────────────────────
+ *
+ * Owner 2026-08-11: «fai in modo che il widget abbia un gradiente animato come
+ * Gemini, in modo che lo distacchi bene dallo sfondo».
+ *
+ * Aveva ragione, e la prova era a schermo: sopra Wikipedia la carta si leggeva
+ * male perché il vetro non staccava dal fondo chiaro. Un bordo che gira lo
+ * stacca senza mettere un velo sull'app sotto — che resta la regola numero uno.
+ *
+ * ## Cosa fa Gemini nel 2026, e cosa prendiamo
+ *
+ * Il suo aggiornamento porta «un gradiente animato che PULSA e scorre mentre il
+ * sistema elabora». Prendiamo l'idea, non la tavolozza: da noi il gradiente è
+ * bronzo, cioè il colore del tema che la persona ha scelto.
+ *
+ * ⭐ E la firma non cambia, si estende: prima era un filo da 2 px sul bordo
+ * alto, adesso è tutto il perimetro, e porta gli stessi TRE stati — fermo,
+ * ascolto, pensiero. Gemini un segnale di stato non ce l'ha affatto.
+ *
+ * ## La tecnica, e perché questa
+ *
+ * `@property` registra l'angolo come vero tipo `<angle>`: senza, una custom
+ * property è una stringa e il browser non sa interpolarla — l'animazione
+ * scatterebbe da 0 a 360 invece di girare. È la strada del 2026, e non serve
+ * una riga di JavaScript.
+ *
+ * La maschera a due strati (`content-box` XOR tutto) ritaglia il centro e
+ * lascia solo la cornice: un bordo vero, non un rettangolo colorato sotto.
+ */
+@property --talos-giro-barra {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
 }
 
-.filo::after {
+.orlo {
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1.5px;
+    pointer-events: none;
+    background: conic-gradient(
+        from var(--talos-giro-barra),
+        transparent 0%,
+        color-mix(in oklab, var(--primary) 70%, transparent) 10%,
+        var(--primary) 17%,
+        color-mix(in oklab, var(--primary) 40%, white) 20%,
+        var(--primary) 23%,
+        color-mix(in oklab, var(--primary) 70%, transparent) 30%,
+        transparent 44%,
+        transparent 100%
+    );
+    /* Il ritaglio: resta la cornice, il centro torna trasparente. */
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    opacity: 0.55;
+    animation: barra-giro 14s linear infinite;
+    transition: opacity 320ms ease;
+}
+
+/*
+ * L'ALONE: lo stesso gradiente, sfocato, dietro. È lui che stacca il pannello
+ * dal fondo — e lo fa senza toccare l'app sotto, che è il vincolo dell'owner.
+ */
+.orlo::after {
+    content: '';
+    position: absolute;
+    inset: -10px;
+    border-radius: inherit;
+    background: inherit;
+    filter: blur(16px);
+    opacity: 0.6;
+    z-index: -1;
+    transition: opacity 320ms ease;
+}
+
+@keyframes barra-giro {
+    to { --talos-giro-barra: 360deg; }
+}
+
+/* Ascolto: gira più svelto e si accende — piano, come chi aspetta. */
+.orlo[data-stato='ascolto'] {
+    opacity: 0.9;
+    animation-duration: 5s;
+}
+
+/* Pensiero: corre. È l'unica cosa che si legge con la coda dell'occhio. */
+.orlo[data-stato='pensa'] {
+    opacity: 1;
+    animation-duration: 2.2s;
+}
+
+.orlo[data-stato='pensa']::after { opacity: 0.85; }
+
+/*
+ * ⭐ IL VELO CHE RESPIRA, e questo viene dritto da Gemini.
+ *
+ * Il suo aggiornamento 2026 mette «un gradiente animato che pulsa e scorre
+ * mentre il sistema elabora». È il pezzo che rende viva l'attesa senza dire una
+ * parola — e vive DENTRO il pannello, quindi non tocca l'app sottostante.
+ *
+ * ⛔ Compare solo mentre si lavora. Un fondo che si muove sempre è rumore: qui
+ * si accende quando c'è qualcosa da aspettare e sparisce quando finisce.
+ */
+.pillola::before,
+.carta::before {
     content: '';
     position: absolute;
     inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
     opacity: 0;
     background: linear-gradient(
-        90deg,
-        transparent,
-        var(--primary) 46%,
-        color-mix(in oklab, var(--primary) 45%, white) 50%,
-        var(--primary) 54%,
-        transparent
+        115deg,
+        transparent 20%,
+        color-mix(in oklab, var(--primary) 22%, transparent) 45%,
+        color-mix(in oklab, var(--primary) 8%, transparent) 60%,
+        transparent 80%
     );
-    transform: translate3d(-100%, 0, 0);
+    background-size: 260% 100%;
+    transition: opacity 380ms ease;
 }
 
-/* Ascolto: il filo RESPIRA, piano, come chi aspetta che tu finisca. */
-.filo[data-stato='ascolto']::after {
+.pillola:has(.orlo[data-stato='pensa'])::before,
+.carta:has(.orlo[data-stato='pensa'])::before {
     opacity: 1;
-    transform: none;
-    background: color-mix(in oklab, var(--primary) 85%, transparent);
-    animation: barra-respiro 1900ms ease-in-out infinite;
+    animation: barra-velo 2600ms ease-in-out infinite;
 }
-@keyframes barra-respiro { 0%, 100% { opacity: 0.26; } 50% { opacity: 1; } }
 
-/* Pensiero: il filo CORRE. Un passaggio solo, non un rimbalzo. */
-.filo[data-stato='pensa']::after {
-    opacity: 1;
-    animation: barra-corsa 1250ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
-}
-@keyframes barra-corsa {
-    from { transform: translate3d(-100%, 0, 0); }
-    to { transform: translate3d(100%, 0, 0); }
+@keyframes barra-velo {
+    0% { background-position: 140% 0; }
+    100% { background-position: -40% 0; }
 }
 
 :where(.pillola, .carta) :focus-visible {
@@ -675,19 +798,26 @@ onMounted(async () => {
 }
 
 /*
- * ⛔ Chi ha chiesto meno movimento non perde NESSUNA informazione: il filo resta
- * acceso mentre si lavora invece di correre. Lo stato si legge lo stesso — è
- * l'unico modo onesto di spegnere un'animazione che dice qualcosa.
+ * ⛔ Chi ha chiesto meno movimento non perde NESSUNA informazione.
+ *
+ * L'orlo smette di girare ma resta acceso, e la sua LUMINOSITÀ continua a dire
+ * i tre stati: tenue a riposo, acceso mentre ascolta, pieno mentre lavora. È
+ * l'unico modo onesto di spegnere un'animazione che porta un'informazione —
+ * toglierla e basta lascerebbe la persona senza il segnale, non senza il moto.
  */
 @media (prefers-reduced-motion: reduce) {
     .pillola, .carta { animation: none; }
-    .filo[data-stato='ascolto']::after,
-    .filo[data-stato='pensa']::after {
+    .orlo {
         animation: none;
-        opacity: 1;
-        transform: none;
-        background: var(--primary);
+        background: linear-gradient(
+            110deg,
+            color-mix(in oklab, var(--primary) 30%, transparent),
+            var(--primary),
+            color-mix(in oklab, var(--primary) 30%, transparent)
+        );
     }
+    .orlo::after { filter: blur(9px); }
+    .pillola::before, .carta::before { animation: none; }
     .azione--ascolta::after { animation: none; opacity: 0.6; }
     .livello i, .scheletro span { animation: none; }
 }

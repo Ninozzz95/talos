@@ -111,7 +111,7 @@
         <!--
             ⭐⭐ LA BARRA: TALOS sopra l'app che stai usando.
 
-            ⛔ `singleInstance` e `excludeFromRecents`: la barra vive in un task
+            ⛔ `taskAffinity=""` e `excludeFromRecents`: la barra vive in un task
             SUO e non compare fra le app recenti. Se stesse nello stesso task
             della schermata intera, chiudere la barra ti riporterebbe dentro
             TALOS invece che dove eri — che è il contrario del punto.
@@ -120,10 +120,32 @@
             la barra in su, non coprirla. Una casella di testo che finisce
             sotto la tastiera è una casella che non esiste.
         -->
+        <!--
+            ⛔⛔ singleTask E NON singleInstance — e la differenza è di UNA
+            cifra, misurata sullo stesso telefono.
+
+            Con `singleInstance` la barra si vedeva, ma sotto c'era un
+            rettangolo grigio: Chrome spariva. Ho confrontato le due
+            activity in `dumpsys activity activities`, la nostra e quella di
+            Gemini, mentre erano aperte sopra la stessa pagina:
+
+                    Gemini FloatyActivity   occludesParent=false  launchMode=2
+                    TALOS  TalosBarra       occludesParent=false  launchMode=3
+
+            Tutto il resto uguale, la finestra pure (`fmt=TRANSPARENT`,
+            stessi `fl=`, stessi `pfl=`). `singleInstance` dà un task
+            ISOLATO: il sistema sa che non copriamo il padre, ma dietro un
+            task isolato non compone nessun altro task. `singleTask` tiene
+            il task nostro — che è ciò che serve, insieme a
+            `taskAffinity=""` — senza chiederne uno impenetrabile.
+
+            ⛔ E `onNewIntent` continua ad arrivare: serve per il contesto
+            che il sistema consegna DOPO l'apertura (vedi TalosAssistente).
+            -->
         <activity
             android:name=".TalosBarraActivity"
             android:theme="@style/TalosBarra"
-            android:launchMode="singleInstance"
+            android:launchMode="singleTask"
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:windowSoftInputMode="adjustResize"
@@ -322,8 +344,8 @@
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths"></meta-data>
+            android:name="android.support.FILE_PROVIDER_PATHS"
+            android:resource="@xml/file_paths"></meta-data>
         </provider>
 
         <!-- AndroidX's official persistence bridge for AppCompat per-app
@@ -334,8 +356,8 @@
             android:enabled="false"
             android:exported="false">
             <meta-data
-                android:name="autoStoreLocales"
-                android:value="true" />
+            android:name="autoStoreLocales"
+            android:value="true" />
         </service>
 
         <service
@@ -453,8 +475,8 @@
             android:label="@string/app_name"
             android:permission="android.permission.BIND_VOICE_INTERACTION">
             <meta-data
-                android:name="android.voice_interaction"
-                android:resource="@xml/talos_assistente" />
+            android:name="android.voice_interaction"
+            android:resource="@xml/talos_assistente" />
             <intent-filter>
                 <action android:name="android.service.voice.VoiceInteractionService" />
             </intent-filter>
@@ -482,8 +504,8 @@
                 <action android:name="android.speech.RecognitionService" />
             </intent-filter>
             <meta-data
-                android:name="android.speech"
-                android:resource="@xml/talos_assistente" />
+            android:name="android.speech"
+            android:resource="@xml/talos_assistente" />
         </service>
 
         <service
@@ -495,8 +517,8 @@
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
             <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/talos_occhio" />
+            android:name="android.accessibilityservice"
+            android:resource="@xml/talos_occhio" />
         </service>
 
         <service
@@ -508,8 +530,8 @@
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
             <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/talos_occhio_sonda" />
+            android:name="android.accessibilityservice"
+            android:resource="@xml/talos_occhio_sonda" />
         </service>
 
         <service

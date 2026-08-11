@@ -4,7 +4,7 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.Gravity;
+
 import android.view.WindowManager;
 
 import com.getcapacitor.Bridge;
@@ -54,6 +54,37 @@ public class TalosBarraActivity extends MainActivity {
     /** Lo dice all'app web: sei la barra, non la schermata intera. */
     public static final String EXTRA_BARRA = "ai.talos.BARRA";
 
+    /**
+     * ⛔⛔ IL TEMA SI RIPRENDE A FORZA, perché Capacitor lo SOVRASCRIVE.
+     *
+     * `BridgeActivity.onCreate` chiama `setTheme(AppTheme_NoActionBar)` prima di
+     * tutto: il tema che il manifest dichiara per questa activity
+     * (`@style/TalosBarra`, trasparente) veniva cancellato, e la finestra
+     * finiva vestita da `Theme.AppCompat.DayNight.NoActionBar`.
+     *
+     * ## Come l'ho scoperto: il COLORE è l'impronta digitale
+     *
+     * Tre ipotesi mie erano già cadute — la gravità della finestra, il
+     * `launchMode`, il fondo della WebView — e ogni volta lo schermo restava un
+     * rettangolo grigio. Allora invece di guardare i flag ho campionato il
+     * PIXEL, dal raw di `screencap`:
+     *
+     *     (200,900) (1200,1700) (2200,2600) = #303030
+     *
+     * `#303030` non è un colore di TALOS: il nostro fondo è `#1e1f22`, la carta
+     * `#1d1e22`, l'orlo `#2c2f36`. È `background_material_dark`, cioè il
+     * `windowBackground` di AppCompat in modalità notte. ⇒ Non stavamo
+     * disegnando male il nostro tema: **non era il nostro tema**.
+     *
+     * ⛔ E la lezione vale oltre questo file: un flag si può leggere e sembrare
+     * giusto (`fmt=TRANSPARENT`, `occludesParent=false`: erano entrambi corretti
+     * mentre il difetto c'era). Un colore misurato dice CHI ha disegnato.
+     */
+    @Override
+    public void setTheme(int resid) {
+        super.setTheme(R.style.TalosBarra);
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -64,37 +95,40 @@ public class TalosBarraActivity extends MainActivity {
          * finestra di dialogo, cioè una cosa che ti INTERROMPE invece di
          * starti accanto.
          */
+        /*
+         * ⛔⛔ LA FINESTRA NON SI TOCCA — e ci sono volute due prove sbagliate e
+         * un confronto per capirlo.
+         *
+         * Le prime due versioni le imponevano una forma: prima
+         * `WRAP_CONTENT` in altezza (e non si vedeva NIENTE: una WebView dentro
+         * una finestra che le chiede di misurarsi da sola non ha un'altezza da
+         * cui partire, e il contenuto web disposto in percentuale non aveva
+         * dove stare), poi `MATCH_PARENT` con `gravity = BOTTOM`.
+         *
+         * ⭐ La prova che chiude la questione è un CONFRONTO, non un
+         * ragionamento. `dumpsys window` sullo stesso telefono, con Gemini
+         * aperta sopra Chrome e poi con noi:
+         *
+         *   Gemini  mAttrs={(0,0)(fillxfill) sim={adjust=resize} … fmt=TRANSPARENT
+         *   TALOS   mAttrs={(0,0)(fillxfill) gr=BOTTOM CENTER_VERTICAL sim={adjust=resize} … fmt=TRANSPARENT
+         *
+         * Tutto il resto identico: stessi `fl=`, stessi `pfl=`, stesso
+         * `ty=BASE_APPLICATION`, ognuna nel suo task. L'UNICA differenza era la
+         * gravità che avevo messo io — e per giunta incoerente, perché il
+         * sistema la componeva in `BOTTOM CENTER_VERTICAL`, cioè «in basso» e
+         * «centrata in verticale» insieme.
+         *
+         * ⛔ E non serviva a niente: la barra si ancora in basso da SOLA, col
+         * CSS (`position: fixed; inset: 0` più `justify-content: flex-end`).
+         * Stavo chiedendo due volte la stessa cosa a due strati diversi, e uno
+         * dei due non l'aveva capita.
+         *
+         * Resta solo ciò che il tema non può fare: togliere l'oscuramento
+         * dietro — l'app sotto deve restare LEGGIBILE, è tutto il punto della
+         * funzione — e mettere un fondo trasparente al posto di quello del tema.
+         */
         final android.view.Window finestra = getWindow();
         if (finestra != null) {
-            final WindowManager.LayoutParams p = finestra.getAttributes();
-            p.gravity = Gravity.BOTTOM;
-            p.width = WindowManager.LayoutParams.MATCH_PARENT;
-            /*
-             * ⛔⛔ MATCH_PARENT, e il primo tentativo diceva WRAP_CONTENT.
-             *
-             * Sembrava più onesto — «la finestra è alta quanto la barra» — e
-             * invece è la ragione per cui l'11 agosto sullo schermo non c'era
-             * NIENTE: una WebView dentro una finestra che le chiede di
-             * misurarsi da sola non ha un'altezza da cui partire, e il
-             * contenuto web (che si dispone in percentuale dell'altezza
-             * disponibile) non ha nessun posto dove stare.
-             *
-             * La finestra prende tutto lo schermo ed è TRASPARENTE; è il
-             * contenuto web ad ancorarsi in basso. In cambio si guadagnano tre
-             * cose che WRAP_CONTENT non poteva dare: la risposta che si espande
-             * senza far ridisegnare la finestra al sistema, il tocco fuori che
-             * chiude (perché quel tocco cade dentro la nostra finestra e
-             * arriva alla pagina), e la tastiera che spinge in su con
-             * `adjustResize` invece di coprire il campo.
-             */
-            p.height = WindowManager.LayoutParams.MATCH_PARENT;
-            finestra.setAttributes(p);
-            /*
-             * ⛔ Niente oscuramento dietro: l'app sotto deve restare LEGGIBILE.
-             * È tutto il punto della funzione — chiedere senza perdere di
-             * vista quello che stavi facendo. Un velo scuro la spegnerebbe, e
-             * la barra tornerebbe a essere una schermata come le altre.
-             */
             finestra.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             finestra.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         }
