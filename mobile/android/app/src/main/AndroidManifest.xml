@@ -108,6 +108,27 @@
                  launcher, avoiding duplicate home-screen icons. -->
         </activity>
 
+        <!--
+            ⭐⭐ LA BARRA: TALOS sopra l'app che stai usando.
+
+            ⛔ `singleInstance` e `excludeFromRecents`: la barra vive in un task
+            SUO e non compare fra le app recenti. Se stesse nello stesso task
+            della schermata intera, chiudere la barra ti riporterebbe dentro
+            TALOS invece che dove eri — che è il contrario del punto.
+
+            ⛔ `windowSoftInputMode="adjustResize"`: la tastiera deve spingere
+            la barra in su, non coprirla. Una casella di testo che finisce
+            sotto la tastiera è una casella che non esiste.
+        -->
+        <activity
+            android:name=".TalosBarraActivity"
+            android:theme="@style/TalosBarra"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:windowSoftInputMode="adjustResize"
+            android:exported="false" />
+
         <!-- GENERATED alias list (tools/android-assets/gen_theme_icons.py). Exactly one
              alias is android:enabled="true" at any time; the default-theme alias ships
              enabled so the app is always launchable even if the feature is never used.
@@ -413,6 +434,58 @@
             gratis la scrittura dell'italiano accentato, impossibile con
             `input text`.
         -->
+        <!--
+            ⭐⭐ TALOS COME ASSISTENTE DEL TELEFONO.
+
+            Promosso dalla sonda `debug` l'11 agosto 2026, dopo che la misura ha
+            risposto sì: col ruolo assistente il sistema consegna la STRUTTURA
+            dello schermo E lo screenshot — 49 nodi su Impostazioni, 212
+            sull'elenco app — senza accessibilità e senza MediaProjection.
+
+            ⛔ Da qui in poi è una PROMESSA: TALOS compare fra gli assistenti che
+            il telefono offre, e chi lo sceglie si aspetta che risponda. Il ruolo
+            non si prende: lo dà la persona, e l'app lo chiede con
+            `RoleManager.createRequestRoleIntent`.
+        -->
+        <service
+            android:name="ai.talos.agent.TalosAssistente"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <meta-data
+                android:name="android.voice_interaction"
+                android:resource="@xml/talos_assistente" />
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name="ai.talos.agent.TalosAssistenteSessioneService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionSessionService" />
+            </intent-filter>
+        </service>
+
+        <!--
+            ⛔ Non riconosce niente: senza un RecognitionService dichiarato il
+            sistema, su diverse versioni, rifiuta di assegnare il ruolo.
+            L'ascolto vero passa dal plugin di dettatura che esiste già.
+        -->
+        <service
+            android:name="ai.talos.agent.TalosAssistenteRiconoscimento"
+            android:exported="true"
+            android:permission="android.permission.BIND_RECOGNITION_SERVICE">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.speech"
+                android:resource="@xml/talos_assistente" />
+        </service>
+
         <service
             android:name="ai.talos.agent.TalosOcchio"
             android:exported="false"

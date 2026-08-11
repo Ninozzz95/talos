@@ -90,8 +90,26 @@ import { resolve } from 'node:path'
  * il suo mestiere — accorgersi di una LIBRERIA entrata per sbaglio nell'avvio,
  * non di una condizione in un template. La prima carta resta togliere peso, e
  * qui è stata giocata fino in fondo prima di chiedere.
+ *
+ * ⛔ E poi 601.200 — LA BARRA (compito #90), 2026-08-11. Qui la prima carta è
+ * stata giocata per davvero, e il numero lo dice:
+ *
+ *     tutta la barra dentro `main.ts`   601.765   ⛔ +1.643
+ *     spostata in `lib/barra/avvia`     600.625   ⛔ +503
+ *     senza la barra (misurato)         600.122
+ *
+ * Cioè 1.140 byte sono usciti dall'avvio, e i 503 rimasti NON si possono
+ * togliere: sono la riga che decide CHI ci sta mostrando prima di disegnare
+ * qualcosa. Se quella decisione la prendesse un modulo caricato dopo, la
+ * schermata intera sarebbe già a schermo — e la barra esiste esattamente per
+ * non farla comparire.
+ *
+ * ⛔ Il tetto NON copre un difetto: copre una funzione nuova che si è pagata da
+ * sola tranne l'ultimo mezzo kilobyte. Se un domani il numero risale senza che
+ * nessuno abbia aggiunto niente all'avvio, quel mezzo kilobyte è il primo posto
+ * dove NON guardare.
  */
-const DEFAULT_MAXIMUM_BYTES = 600_600
+const DEFAULT_MAXIMUM_BYTES = 601_200
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {

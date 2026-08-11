@@ -115,6 +115,13 @@ async function bootstrapTalosMobileApp(): Promise<void> {
     // so the "offline readiness" rationale buys nothing on device.
     // Mount first; warm the station chunks once the main thread is free.
     const i18n = await createTalosI18n()
+    /*
+     * ⛔ Chiamato da fuori, TALOS non apre la schermata intera: apre LA BARRA,
+     * sopra l'app che stavi usando. Chi decide, e quanto costa deciderlo, sta
+     * tutto in `lib/barra/avvia` — qui non ci sono byte da spendere, perche'
+     * questa riga la paga anche chi apre l'app dall'icona (compito #90).
+     */
+    if (await (await import('@/lib/barra/avvia')).talosAvviaLaBarra(i18n)) return
     createApp(App).use(i18n).use(router).mount('#app')
 
     const warm = (): void => {
