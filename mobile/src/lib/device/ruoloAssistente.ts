@@ -36,9 +36,31 @@ export interface TalosStatoRuoloAssistente {
     readonly reason?: string
 }
 
+/**
+ * Cosa risponde la finestra di sistema quando si richiude.
+ *
+ * ⛔ Tre risposte, non una, perché la schermata deve distinguere tre casi che
+ * portano a comportamenti opposti:
+ * - `opened` — l'abbiamo lanciata;
+ * - `shown` — è rimasta abbastanza da poter essere LETTA (il nativo lo misura:
+ *   una finestra che si autochiude muore in decine di ms);
+ * - `granted` — il ruolo c'è, riletto dal sistema.
+ *
+ * `shown && !granted` è **un rifiuto**, e si rispetta. `!shown` è un problema
+ * nostro, e si aggira col ponte. Confonderli significa o prendersi con la forza
+ * ciò che è appena stato negato, o lasciare la persona davanti a un pulsante
+ * morto: sono i due errori peggiori che questa schermata possa fare.
+ */
+export interface TalosEsitoRichiestaRuolo {
+    readonly opened: boolean
+    readonly shown: boolean
+    readonly granted: boolean
+    readonly reason?: string
+}
+
 interface PonteRuolo {
     assistantRole(): Promise<TalosStatoRuoloAssistente>
-    requestAssistantRole(): Promise<{ opened: boolean }>
+    requestAssistantRole(): Promise<TalosEsitoRichiestaRuolo>
 }
 
 const Ponte = registerPlugin<PonteRuolo>('TalosPrivilege')
@@ -59,18 +81,34 @@ export async function talosLeggiRuoloAssistente(): Promise<TalosStatoRuoloAssist
 }
 
 /**
- * Apre la finestra di sistema che chiede il ruolo.
+ * Apre la finestra di sistema che chiede il ruolo, e ASPETTA che si richiuda.
  *
- * ⛔ Torna `false` invece di lanciare: chi chiama sta rispondendo a un tocco, e
- * un'eccezione lì diventa una schermata bianca. Il caso «non si è aperto» è un
- * esito da mostrare, non un incidente da propagare.
+ * ## ⛔ Perché adesso si aspetta invece di contare i secondi
+ *
+ * Fino all'11 agosto questa chiamata tornava appena la finestra partiva, e chi
+ * la usava tirava a indovinare con un timer da 2,5 s: se la persona ci metteva
+ * di più a leggere, l'app la dava per fallita mentre la finestra era ancora
+ * sotto le sue dita. Ora il nativo usa `startActivityForResult` — che era anche
+ * la CURA del difetto per cui la finestra non compariva affatto — e la promessa
+ * si chiude quando si chiude la finestra. Niente più tetto arbitrario.
+ *
+ * ⛔ Torna un esito invece di lanciare: chi chiama sta rispondendo a un tocco, e
+ * un'eccezione lì diventa una schermata bianca. «Non si è aperto» è un caso da
+ * mostrare, non un incidente da propagare.
  */
-export async function talosChiediRuoloAssistente(): Promise<boolean> {
+export async function talosChiediRuoloAssistente(): Promise<TalosEsitoRichiestaRuolo> {
     try {
         const esito = await Ponte.requestAssistantRole()
-        return esito.opened === true
+        return {
+            opened: esito.opened === true,
+            shown: esito.shown === true,
+            granted: esito.granted === true,
+            reason: esito.reason,
+        }
     } catch {
-        return false
+        // ⛔ `shown: false` anche qui: senza ponte non è comparso niente, e chi
+        // legge deve poter tentare l'altra strada invece di credere a un no.
+        return { opened: false, shown: false, granted: false, reason: 'no-bridge' }
     }
 }
 
