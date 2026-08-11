@@ -83,6 +83,36 @@ class TalosBollaPlugin : Plugin() {
         call.resolve(esito)
     }
 
+    /**
+     * ⛔⛔ LA SONDA CHE DECIDE L'ARCHITETTURA DI «HEY TALOS».
+     *
+     * Domanda: quando il servizio sentirà la parola magica mentre la persona è
+     * in un'altra app, Android lo lascerà aprire la barra? Da Android 15 avviare
+     * un'activity dal sottofondo è vietato, e fra le esenzioni c'è
+     * `SYSTEM_ALERT_WINDOW` — ma **solo se l'app ha una finestra flottante
+     * VISIBILE in quel momento**.
+     *
+     * Se è vero, «hey TALOS» dovrà mostrare un velo «ti ascolto» PRIMA di
+     * aprire la barra (che è anche la cosa giusta da mostrare). Se è falso,
+     * quel velo non serve e l'architettura è più semplice.
+     *
+     * ⛔ Non si deduce dalla documentazione: si misura sul telefono. La sonda
+     * aspetta `attesaMs` — il tempo di andare in un'altra app — e poi prova ad
+     * aprire la barra dal servizio, col velo o senza a seconda di `conVelo`.
+     * L'esito si legge in `mCurrentFocus`, non qui.
+     */
+    @PluginMethod
+    fun probeApriDaSfondo(call: PluginCall) {
+        val attesa = call.getInt("attesaMs") ?: 6_000
+        val conVelo = call.getBoolean("conVelo") ?: false
+        TalosBolla.sonda(context, attesa.toLong(), conVelo)
+        val esito = JSObject()
+        esito.put("partita", true)
+        esito.put("attesaMs", attesa)
+        esito.put("conVelo", conVelo)
+        call.resolve(esito)
+    }
+
     private companion object {
         /*
          * ⛔ Lo stato sta QUI e non nel servizio perché la domanda è «l'ho

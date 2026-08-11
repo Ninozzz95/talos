@@ -171,7 +171,74 @@ public class TalosBarraActivity extends MainActivity {
          * basta un anello opaco per cancellare l'app sottostante.
          */
         rendiTrasparenteLaWebView("onCreate");
+        trattieniIlPrimoFrame();
     }
+
+    /**
+     * ⭐⭐ NON SI DISEGNA NIENTE finché la barra non è pronta a essere vista.
+     *
+     * ## Il difetto, misurato sui fotogrammi
+     *
+     * Owner 2026-08-11, con un video del suo schermo: «un lampeggio nero poco
+     * prima che la barra entra… solo all'inizio, deve sparire». Dal 132° al 148°
+     * fotogramma (61,5 al secondo) lo schermo è un rettangolo pieno `#1e1f22` —
+     * **455 ms** in cui l'app sotto è cancellata.
+     *
+     * `#1e1f22` non è un colore di sistema: è `--talos-background`, il fondo
+     * della nostra app. ⇒ Alla PRIMA apertura la WebView dipinge la pagina col
+     * suo fondo normale, e solo dopo il JS la rende trasparente. Dalla seconda
+     * volta non si vede più perché l'activity è `singleTask` e resta viva: ecco
+     * perché il lampo era «solo all'inizio», e perché sul Pad — dove provavo
+     * sempre a caldo — non l'ho mai riprodotto.
+     *
+     * ## ⛔ Perché fermare il DISEGNO e non schiarire il frame
+     *
+     * Dipingere quel mezzo secondo di un colore meno vistoso lascerebbe il lampo
+     * dov'è, solo più educato — e il difetto tornerebbe intero il giorno che
+     * qualcuno cambia tema. Qui invece non c'è nessun fotogramma da nascondere:
+     * finché il primo frame non è quello giusto, la finestra **non disegna**, e
+     * l'app sotto resta visibile come se non fosse successo niente.
+     *
+     * ⛔ E c'è un TETTO, perché una schermata che non si disegna mai è peggio di
+     * un lampo: se il lato web non suona il campanello entro `TETTO_MS` si
+     * disegna comunque. Un blocco senza uscita è il modo in cui una cura diventa
+     * un difetto peggiore di quello che curava.
+     */
+    private void trattieniIlPrimoFrame() {
+        final android.view.View contenuto = findViewById(android.R.id.content);
+        if (contenuto == null) return;
+        contenuto.getViewTreeObserver().addOnPreDrawListener(
+            new android.view.ViewTreeObserver.OnPreDrawListener() {
+                @Override
+                public boolean onPreDraw() {
+                    if (!pronta) return false;
+                    contenuto.getViewTreeObserver().removeOnPreDrawListener(this);
+                    return true;
+                }
+            });
+        contenuto.postDelayed(() -> {
+            if (pronta) return;
+            Log.w(SEGNO, "il campanello non è arrivato entro " + TETTO_MS + " ms: disegno lo stesso");
+            laBarraEPronta();
+        }, TETTO_MS);
+    }
+
+    /** Il campanello: lo suona `lib/barra/avvia.ts` via `TalosBarraPlugin`. */
+    void laBarraEPronta() {
+        if (pronta) return;
+        pronta = true;
+        final android.view.View contenuto = findViewById(android.R.id.content);
+        if (contenuto != null) contenuto.invalidate();
+    }
+
+    /**
+     * ⛔ `volatile`: il campanello arriva dal ponte, il disegno lo legge dal
+     * thread dell'interfaccia. Senza, uno dei due potrebbe non vedere l'altro.
+     */
+    private volatile boolean pronta = false;
+
+    /** Oltre questo, si disegna comunque. Vedi `trattieniIlPrimoFrame`. */
+    private static final long TETTO_MS = 1500L;
 
     /*
      * ⛔⛔ E SI RIFÀ A OGNI RIPRESA, perché una volta sola NON basta.

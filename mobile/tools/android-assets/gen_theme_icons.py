@@ -183,11 +183,19 @@ def adaptive_icon(pid: str) -> str:
 def color_resource() -> str:
     colors = [
         '<?xml version="1.0" encoding="utf-8"?>',
-        "<!-- GENERATED (theme icon backgrounds) by gen_theme_icons.py — do not edit by hand. -->",
+        "<!-- GENERATED (theme icon backgrounds + accents) by gen_theme_icons.py — do not edit by hand. -->",
         "<resources>",
     ]
     for pid, bg, _accent in PRESETS:
         colors.append(f'    <color name="ic_talos_bg_{pid}">{bg}</color>')
+    # ⛔ Gli ACCENTI servono al nativo, non alle icone: la bolla (il pallino
+    # flottante) deve seguire il tema come tutto il resto, e il suo colore non
+    # può essere scritto a mano in Kotlin — sarebbe una seconda verità che il
+    # giorno che il tema cambia resta indietro senza dirlo. Qui la sorgente è
+    # una: la stessa tabella `PRESETS` che genera le icone.
+    colors.append("")
+    for pid, _bg, accent in PRESETS:
+        colors.append(f'    <color name="ic_talos_accent_{pid}">{accent}</color>')
     colors.append("</resources>\n")
     return "\n".join(colors)
 
