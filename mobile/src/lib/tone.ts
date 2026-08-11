@@ -74,9 +74,31 @@ const TONE_IDS = TALOS_TONE_PRESETS.map((preset) => preset.id).join('|')
  * regola regge anche nei casi che non abbiamo previsto, che è ciò che un
  * divieto secco non fa mai.
  *
- * ⛔ Sta in `BASE_PROMPT` e nel prompt locale: la ricerca (11 agosto) non
- * garantisce che un provider obbedisca sul canale del ragionamento, quindi va
- * misurato a due colonne — chiave e locale — prima di dirlo chiuso.
+ * ## ⛔⛔ E NON BASTA: due tentativi, due misure, stesso esito
+ *
+ * Sul Pad, DeepSeek V4 Flash, chat NUOVA ogni volta, stessa domanda italiana
+ * che obbliga a ragionare («Ho 3 scatole: A pesa il doppio di B…»):
+ *
+ * | cosa ho messo nel prompt              | cosa ha scritto nel ragionamento |
+ * |---------------------------------------|----------------------------------|
+ * | la riga qui sotto, in inglese         | «Let me solve this. A = 2B…»     |
+ * | la stessa riga scritta IN ITALIANO    | «Let's solve this. A = 2B…»      |
+ *
+ * ⛔ Prima di dare la colpa al modello ho verificato **tutte e due le volte**
+ * che la riga fosse davvero dentro il bundle caricato dalla WebView, non solo
+ * nel sorgente. C'era. Le misure valgono.
+ *
+ * ⇒ La ricerca (11 agosto) spiega perché: il ragionamento va nella lingua del
+ * **contesto**, e il nostro contesto è inglese quasi per intero — questo
+ * prompt più le descrizioni di 46 tool. Una riga italiana in mezzo a duemila
+ * caratteri inglesi non sposta l'ancora. Sulla chat ufficiale di DeepSeek lo
+ * stesso modello pensa nella lingua giusta perché lì è tutto in quella lingua.
+ *
+ * ⇒ La riga RESTA — costa nulla, e le altre colonne (locale, altri provider)
+ * non sono ancora misurate. Ma la cura vera è tradurre la superficie del
+ * prompt, che è un lavoro suo: vedi il compito «il prompt parla la lingua
+ * della persona». Decisione dell'owner 2026-08-11: per ora si accetta, e si
+ * dice — non si finge che funzioni.
  *
  * ⛔ E la costante NON si esporta. Esportata non si minifica, e il grafo
  * d'avvio ha sforato per 95 byte esatti (600.195 contro 600.100) per quello:
@@ -84,7 +106,7 @@ const TONE_IDS = TALOS_TONE_PRESETS.map((preset) => preset.id).join('|')
  * controlla la riga per contenuto.
  */
 const RIGA_LINGUA_RAGIONAMENTO =
-    'Your reasoning is SHOWN to the user: write it in their language too.'
+    'Reasoning is SHOWN to the user: write it in their language.'
 
 const BASE_PROMPT = 'You are TALOS. Answer the user\'s message. '
     + `${RIGA_LINGUA_RAGIONAMENTO} `
