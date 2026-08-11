@@ -30,13 +30,23 @@ class TalosSchermoPlugin : Plugin() {
      * ⛔ Il comando lo avvia chi possiede il ponte — qui si azzera soltanto il
      * riferimento. Due posti che sanno come si esegue una shell sono due posti
      * che possono divergere.
+     *
+     * ⭐ I FRENI SONO DUE, e si armano tutti e due qui.
+     *
+     * Quello **grezzo** legge `/dev/input` e sente ogni tocco, compreso il dito
+     * appoggiato dove non c'è niente — ma vuole l'identità della shell, cioè il
+     * ponte acceso. Quello **degli eventi** vive nell'occhio, non chiede niente
+     * a nessuno, e sente ogni tocco che fa qualcosa. Il secondo esiste perché il
+     * primo non c'è su un telefono appena installato, e senza freno il pilota
+     * si rifiutava di partire: la funzione era di fatto spenta per chiunque.
      */
     @PluginMethod
     fun armaIlFreno(call: PluginCall) {
         TalosDitoVero.azzera()
+        TalosOcchio.armaIlFrenoDegliEventi()
         call.resolve(
             JSObject()
-                .put("armato", TalosDitoVero.armato())
+                .put("armato", TalosDitoVero.armato() || TalosOcchio.aperto() != null)
                 .put("comando", JSArray.from(TalosDitoVero.COMANDO.toTypedArray()))
                 .put("percorso", TalosDitoVero.PERCORSO),
         )
@@ -78,8 +88,15 @@ class TalosSchermoPlugin : Plugin() {
                 // «nessuno ha toccato» e «non lo so» sono due cose diverse, e
                 // confonderle su un agente che tocca un telefono altrui e' il
                 // difetto peggiore che ci sia.
-                .put("frenoArmato", TalosDitoVero.armato())
-                .put("manoSulloSchermo", TalosDitoVero.haToccato())
+                // ⛔ Due freni, un solo verdetto: basta che UNO dei due abbia
+                // sentito. E `frenoTipo` dice quale è in servizio, perché i due
+                // non sentono le stesse cose — vedi `TalosOcchio`.
+                .put("frenoArmato", TalosDitoVero.armato() || occhio != null)
+                .put("frenoTipo", if (TalosDitoVero.armato()) "grezzo" else "eventi")
+                .put(
+                    "manoSulloSchermo",
+                    TalosDitoVero.haToccato() || TalosOcchio.manoVistaDagliEventi(),
+                )
                 .put("byteDiTocchi", TalosDitoVero.cresciutoDi()),
         )
     }
@@ -110,6 +127,10 @@ class TalosSchermoPlugin : Plugin() {
         // ⛔ Lo sguardo si invalida come dopo ogni azione: Indietro cambia
         // schermata, e gli indici di prima non descrivono piu' niente.
         occhio.dimenticaSguardo()
+        // ⛔ E si marca l'azione NOSTRA, se no Indietro e Home fanno scattare il
+        // freno degli eventi: sono azioni a tutti gli effetti, e producono gli
+        // stessi eventi di una mano.
+        TalosOcchio.segnaNostraAzione()
         call.resolve(JSObject().put("fatto", occhio.performGlobalAction(quale)))
     }
 

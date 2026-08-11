@@ -26,6 +26,8 @@ export interface PonteSchermo {
         elementi: TalosElementoSchermo[]
         millisecondi: number
         frenoArmato: boolean
+        /** Quale dei due freni è in servizio: sentono cose diverse. */
+        frenoTipo?: TalosTipoFreno
         manoSulloSchermo: boolean
         byteDiTocchi: number
     }>
@@ -49,29 +51,59 @@ export type TalosMotivoFreno =
     | 'comando-non-partito'
 
 /**
+ * ⭐⭐ I DUE FRENI, e perché non sono lo stesso freno.
+ *
+ * | freno     | sente                              | chiede             |
+ * |-----------|------------------------------------|--------------------|
+ * | `grezzo`  | **ogni** tocco, anche sul vuoto     | identità di shell  |
+ * | `eventi`  | ogni tocco che **fa** qualcosa      | niente             |
+ *
+ * MISURATO sul Pad l'11 agosto: un dito appoggiato dove non c'è niente di
+ * interattivo produce **zero** eventi di accessibilità, anche tenendolo premuto
+ * un secondo; sul pannello grezzo produce byte. ⇒ I due non sono equivalenti, e
+ * chiamarli con lo stesso nome sarebbe promettere più di quel che si sente.
+ */
+export type TalosTipoFreno = 'grezzo' | 'eventi'
+
+/**
  * Arma il freno: da adesso qualunque ingresso fisico ferma l'agente.
  *
  * ⛔ Il comando arriva DAL NATIVO (`comando`), non è scritto qui. Due posti che
  * sanno come si ascolta il dito sono due posti che possono divergere, e il
  * giorno che divergono il freno resta indietro di una build.
+ *
+ * ## ⛔⛔ IL RIPIEGO NON È UN DETTAGLIO: È LA FUNZIONE
+ *
+ * Prima di oggi, se `getevent` non partiva questa funzione tornava
+ * `armato: false`, e il pilota **si rifiutava di partire**. Su un telefono
+ * appena installato — cioè su tutti tranne questo, dove il comando lo avevo
+ * avviato IO da un adb esterno — la guida dello schermo non esisteva. Il freno
+ * non stava proteggendo nessuno: stava spegnendo la funzione.
+ *
+ * Ora si prova il freno grezzo, e se non parte si resta su quello degli eventi,
+ * che vive nel servizio che il pilota richiede comunque per vedere lo schermo.
+ * ⇒ Se TALOS può vedere lo schermo, TALOS può sentire la tua mano.
  */
 export async function talosArmaIlFreno(): Promise<{
     armato: boolean
     motivo: TalosMotivoFreno
+    tipo?: TalosTipoFreno
 }> {
     if (!Capacitor.isNativePlatform()) {
         return { armato: false, motivo: 'non-su-questa-piattaforma' }
     }
     let comando: readonly string[]
     try {
+        // ⭐ Questa chiamata arma GIÀ il freno degli eventi lato nativo: da qui
+        // in poi il ripiego c'è, qualunque cosa faccia la shell.
         comando = (await TalosSchermoBridge.armaIlFreno()).comando
     }
     catch {
         return { armato: false, motivo: 'ponte-chiuso' }
     }
     // `getevent` vuole l'identità della shell: un'app non legge `/dev/input`.
-    const esito = await talosRunAsShell(comando)
-    if (!esito.ok) return { armato: false, motivo: 'comando-non-partito' }
+    // Se non c'è, non è una sconfitta — è l'altro freno che resta in servizio.
+    await talosRunAsShell(comando)
     /*
      * ⛔ Si RILEGGE dal nativo invece di fidarsi del comando riuscito.
      *
@@ -81,7 +113,12 @@ export async function talosArmaIlFreno(): Promise<{
      * la sola difesa che ci si aspetta ci sia.
      */
     try {
-        return { armato: (await TalosSchermoBridge.guarda()).frenoArmato, motivo: 'pronto' }
+        const stato = await TalosSchermoBridge.guarda()
+        return {
+            armato: stato.frenoArmato,
+            motivo: 'pronto',
+            ...(stato.frenoTipo ? { tipo: stato.frenoTipo } : {}),
+        }
     }
     catch {
         return { armato: false, motivo: 'ponte-chiuso' }

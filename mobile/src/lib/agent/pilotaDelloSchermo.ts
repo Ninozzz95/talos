@@ -35,6 +35,19 @@ import {
  * telefono e trovarselo pilotato — quindi si rifiuta di cominciare, e si dice
  * perché.
  *
+ * ⛔⛔ E questa regola, giusta, aveva SPENTO la funzione. Il freno era uno solo
+ * e leggeva `/dev/input`, che vuole l'identità della shell: su un telefono senza
+ * il ponte adb acceso rispondeva sempre `false`, e il pilota non partiva mai. La
+ * prima corsa vera del 2026-08-10 era riuscita solo perché quel comando l'avevo
+ * avviato **io** da un adb esterno — cioè la funzione «funzionava» su un
+ * dispositivo su cui nessun'altra persona si troverà mai.
+ *
+ * Ora i freni sono due (vedi `TalosOcchio` e `ponteSchermo`), e il secondo vive
+ * nel servizio di accessibilità che il pilota richiede comunque per **vedere**
+ * lo schermo. ⇒ Se TALOS può vedere lo schermo, TALOS può sentire la tua mano,
+ * e questo rifiuto torna a essere quello che deve essere: un invariante che non
+ * scatta mai, non l'interruttore generale della funzione.
+ *
  * ## Perché tutto passa da porte iniettate
  *
  * Il ciclo non conosce né il ponte, né il modello, né la voce: li riceve. Così
