@@ -2827,6 +2827,13 @@ export const TALOS_EN_MESSAGES = {
         openFailed: 'TALOS did not open.',
         copied: 'Copied',
         copyFailed: 'The text did not copy.',
+        attach: 'Attach',
+        attachPhotos: 'Photos',
+        attachCamera: 'Camera',
+        attachFile: 'File',
+        attachLibrary: 'From the Library',
+        attachRemove: 'Remove {name}',
+        attachFailed: 'The attachment did not go through.',
     },
 } as const
 

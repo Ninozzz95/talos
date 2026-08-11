@@ -2835,5 +2835,12 @@ export const TALOS_IT_MESSAGES = {
         openFailed: 'TALOS non si è aperto.',
         copied: 'Copiato',
         copyFailed: 'Il testo non si è copiato.',
+        attach: 'Allega',
+        attachPhotos: 'Foto',
+        attachCamera: 'Fotocamera',
+        attachFile: 'File',
+        attachLibrary: 'Dalla Libreria',
+        attachRemove: 'Togli {name}',
+        attachFailed: 'L\'allegato non è passato.',
     },
 } as const satisfies TalosTranslatedMessages<TalosEnglishMessages>
