@@ -898,6 +898,9 @@ export const TALOS_IT_MESSAGES = {
         assistantHeld: 'TALOS è il tuo assistente. Chiamalo da qualunque app e la barra compare.',
         assistantAsk: 'Rendi TALOS il tuo assistente',
         assistantManual: 'Questo telefono non ha la finestra: Impostazioni → App → App predefinite → Assistente digitale.',
+        assistantBridgeWhy: 'Questa ROM non ha offerto la scelta — il suo elenco di assistenti è vuoto. TALOS può farlo col proprio ponte.',
+        assistantBridgeAsk: 'Fallo col ponte',
+        assistantBridgeFailed: 'Nemmeno il ponte ci è riuscito. Accendi il Debug wireless qui sotto, poi riprova.',
         pageTitle: 'Controllo del telefono',
         /**
          * ⛔ Nessuna promessa qui. Chi apre questa pagina vuole sapere se TALOS

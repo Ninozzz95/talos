@@ -73,3 +73,63 @@ export async function talosChiediRuoloAssistente(): Promise<boolean> {
         return false
     }
 }
+
+/**
+ * ⭐⭐ LA SECONDA STRADA: TALOS si nomina assistente COL PROPRIO PONTE.
+ *
+ * ## ⛔ Perché serve — misurato sul telefono dell'owner l'11 agosto
+ *
+ * OnePlus 13 (PJZ110), **ColorOS V16.1.0 cinese**, Android 16. Il pulsante
+ * «Rendi TALOS l'assistente» non faceva niente. Il log dice perché:
+ *
+ *     RequestRoleActivity → checkFinished=true → removeAppToken
+ *
+ * cioè la finestra di sistema parte e **si chiude da sola**. E la schermata
+ * «App assistente digitale» elenca **solo «Nessuno»**: né TALOS, né Claude, né
+ * Google — pur avendo tutti un `VoiceInteractionService` valido (`pm
+ * query-services` li elenca eccome). ⇒ Non siamo noi a non qualificarci: è la
+ * ROM cinese che non offre nessun assistente da scegliere.
+ *
+ * ⭐ Ma il ruolo È assegnabile, provato:
+ *
+ *     cmd role add-role-holder android.app.role.ASSISTANT ai.talos.dev
+ *     → get-role-holders: ai.talos.dev
+ *
+ * E lo stesso ponte scrive le due impostazioni che il sistema legge davvero.
+ *
+ * ## ⛔ Perché è la SECONDA e non la prima
+ *
+ * La finestra di sistema è la strada onesta: chiede, e la persona decide. Il
+ * ponte fa lo stesso mestiere senza chiedere, e va offerto solo quando la prima
+ * non ha funzionato — con un pulsante che dica cosa sta per succedere. È la
+ * stessa regola del resto del progetto: «l'ho fatto io» e «te l'ho aperto» non
+ * sono la stessa cosa per chi legge.
+ */
+export async function talosNominaAssistenteColPonte(pacchetto: string): Promise<boolean> {
+    const { TalosPrivilegeBridge } = await import('@/lib/device/privilegedShell')
+    const servizio = `${pacchetto}/ai.talos.agent.TalosAssistente`
+    try {
+        const ruolo = await TalosPrivilegeBridge.exec({
+            command: ['cmd', 'role', 'add-role-holder', 'android.app.role.ASSISTANT', pacchetto],
+        })
+        if (!ruolo.ok) return false
+        /*
+         * ⛔ Le due impostazioni vanno scritte ANCHE dopo il ruolo: sul Pad il
+         * ruolo da solo non bastava a far partire il gesto, e sono i due valori
+         * che il sistema legge per sapere CHI chiamare.
+         */
+        await TalosPrivilegeBridge.exec({
+            command: ['settings', 'put', 'secure', 'voice_interaction_service', servizio],
+        })
+        await TalosPrivilegeBridge.exec({
+            command: ['settings', 'put', 'secure', 'assistant', servizio],
+        })
+        // ⛔ Non si dichiara vittoria sull'esito dei comandi: si RILEGGE dal
+        // sistema. Un `cmd` che torna 0 e non ha fatto niente è esattamente il
+        // difetto che ci è costato «Fatto ✅» su una notifica mai rimossa.
+        const dopo = await talosLeggiRuoloAssistente()
+        return dopo.held
+    } catch {
+        return false
+    }
+}
