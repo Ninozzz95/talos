@@ -6,9 +6,13 @@ import {
     type TalosHuggingFaceModel,
     type TalosHuggingFaceSort,
 } from '@/lib/models/huggingFace'
-import { talosGroupGgufFiles, type TalosGgufSet } from '@/lib/models/ggufSet'
+import {
+    talosGroupGgufFiles,
+    talosModelloDiUnSet,
+    type TalosGgufSet,
+} from '@/lib/models/ggufSet'
 import { TALOS_GGUF_FIRST_READ_BYTES, talosReadGgufHeader } from '@/lib/models/gguf'
-import { talosModelFit, type TalosModelFit } from '@/lib/models/fit'
+import { talosModelFit, type TalosModelFit, type TalosModelShape } from '@/lib/models/fit'
 import { TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS } from '@/lib/models/localContextPolicy'
 import { talosMeasureDevice, type TalosMeasuredDevice } from '@/services/deviceCapacity'
 import { clearProviderKey, getProviderKey, setProviderKey } from '@/services/secureKeyStore'
@@ -537,6 +541,9 @@ export async function talosSetLocalModelSort(sort: TalosHuggingFaceSort): Promis
 
 export async function talosOpenModelRepo(id: string, revision = 'main'): Promise<void> {
     const generation = ++repoGeneration
+    // ⛔ L'eredita' e' di QUESTO repository: tenerla fra un'apertura e l'altra
+    // vorrebbe dire, un giorno, dare la forma di un modello a un altro.
+    letture.clear()
     state.repo = { id, revision, sets: [], loading: true, failure: null }
     try {
         const paths = await requireClient().listGgufFiles(id, revision)
@@ -644,8 +651,102 @@ export async function talosExamineSet(key: string): Promise<void> {
             quantisation: parsed.header.quantisation ?? set.quantisation,
             trainedContext: parsed.header.shape.trainedContext,
         }
+        letture.set(set.paths[0]!, {
+            forma: parsed.header.shape,
+            inizioDeiPesi: parsed.header.dataOffset,
+        })
     } catch (failure) {
         set.examination = { state: 'unreadable', reason: describe(failure) }
+    }
+}
+
+/** Ciò che una lettura riuscita lascia in eredità alle altre qualità. */
+const letture = new Map<string, { forma: TalosModelShape, inizioDeiPesi: number }>()
+
+/**
+ * ⭐⭐ ESAMINA UN REPOSITORY: una lettura per MODELLO, non per versione.
+ *
+ * ## Il difetto, con i numeri (misurato l'11 agosto)
+ *
+ * `local_model_inspect` leggeva l'intestazione di **ogni** versione, una dopo
+ * l'altra, in fila. E le versioni sono tante: 18, 26, 29 nei tre repository
+ * misurati. Il costo vero, cronometrato da rete fissa:
+ *
+ * | pezzo                              | costo                |
+ * |------------------------------------|----------------------|
+ * | una prima lettura da 1 MiB         | **1.630 ms**         |
+ * | l'intestazione VERA di quel modello| **7,48 MiB**         |
+ * | ⇒ richieste per versione           | **2** (1 MiB + 7,5)  |
+ * | ⇒ 18 versioni in fila              | **~153 MB**, minuti  |
+ *
+ * È questo che l'owner ha visto come «DeepSeek ci mette un casino di tempo»:
+ * non era il modello che risponde piano, era questo tool che scaricava
+ * centocinquanta megabyte uno alla volta prima di poter dire qualcosa.
+ *
+ * ## Perché una sola lettura basta, e non è una scorciatoia
+ *
+ * Le versioni di un modello differiscono per la **qualità**, non per la forma:
+ * misurato su IQ3_M, Q4_0 e Q8_0 dello stesso modello, blocchi, embedding,
+ * teste, contesto addestrato e perfino il numero di tensori sono identici — e
+ * **l'inizio dei pesi coincide byte per byte** (7.837.984 in tutti e tre).
+ *
+ * ⇒ `pesi = dimensione del file − inizio dei pesi` è **esatto**, non stimato:
+ * l'unica cosa che cambia fra due qualità è quanto pesano i pesi, e quella la
+ * dice la dimensione del file, che sappiamo già dall'elenco.
+ *
+ * ⛔ Il raggruppamento è per MODELLO e non per repository: vedi
+ * `talosModelloDiUnSet`. E i capofila si leggono in **parallelo** fra loro,
+ * perché sono modelli diversi e non c'è niente da riusare.
+ */
+export async function talosExamineRepo(): Promise<void> {
+    const repo = state.repo
+    if (!repo) return
+    const gruppi = new Map<string, TalosLocalModelSet[]>()
+    for (const set of repo.sets) {
+        if (set.incomplete) continue
+        const chiave = talosModelloDiUnSet(set)
+        const gia = gruppi.get(chiave)
+        if (gia) gia.push(set)
+        else gruppi.set(chiave, [set])
+    }
+    await Promise.all([...gruppi.values()].map(async (membri) => {
+        const capofila = membri[0]!
+        await talosExamineSet(capofila.paths[0]!)
+        const eredita = letture.get(capofila.paths[0]!)
+        if (!eredita) return
+        for (const altro of membri.slice(1)) talosEredita(altro, eredita)
+    }))
+}
+
+/**
+ * Applica a una versione la forma letta da un'altra dello stesso modello.
+ *
+ * ⛔ Non si copia il verdetto: si ricalcola con la dimensione di QUESTA
+ * versione. Copiarlo direbbe che un Q8 da 3,4 GB sta in memoria come un IQ3 da
+ * 1,6 — cioè esattamente la bugia che questo tool esiste per non dire.
+ */
+function talosEredita(
+    set: TalosLocalModelSet,
+    eredita: { forma: TalosModelShape, inizioDeiPesi: number },
+): void {
+    const device = state.device
+    if (!device) return
+    const pesi = set.totalBytes - eredita.inizioDeiPesi
+    // Un file più piccolo dell'intestazione non è una versione: è un residuo.
+    if (pesi <= 0) return
+    const forma: TalosModelShape = { ...eredita.forma, weightBytes: pesi }
+    set.examination = {
+        state: 'read',
+        fit: talosModelFit({
+            model: forma,
+            device,
+            context: state.context,
+            fileBytes: set.totalBytes,
+        }),
+        // ⛔ Qui il nome del file è l'UNICA fonte: l'intestazione letta è di
+        // un'altra qualità, e riportare la sua direbbe che sono tutte uguali.
+        quantisation: set.quantisation,
+        trainedContext: forma.trainedContext,
     }
 }
 

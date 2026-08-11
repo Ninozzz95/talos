@@ -5,7 +5,7 @@ import {
     talosLocalModels,
     talosSearchLocalModels,
     talosOpenModelRepo,
-    talosExamineSet,
+    talosExamineRepo,
     talosDownloadSet,
     talosRefreshDeviceCapacity,
     talosRefreshTransfer,
@@ -137,11 +137,18 @@ export function createTalosLocalModelTools(): TalosToolDefinition<never>[] {
                     }
                 }
 
-                // Read every header, so the answer is about the models rather
-                // than about their file names.
-                for (const set of state.repo.sets) {
-                    if (!set.incomplete) await talosExamineSet(set.paths[0]!)
-                }
+                /*
+                 * Read the headers, so the answer is about the models rather
+                 * than about their file names.
+                 *
+                 * ⛔ UNA lettura per MODELLO, non per versione: questo ciclo
+                 * ne faceva una per ognuna delle 18-29 versioni di un
+                 * repository tipico, in fila, e ognuna costa due richieste
+                 * perché l'intestazione vera supera i 7 MiB. Misurato: ~153 MB
+                 * scaricati uno alla volta prima di poter dire una parola.
+                 * Vedi `talosExamineRepo`.
+                 */
+                await talosExamineRepo()
 
                 const device = state.device
                 return {

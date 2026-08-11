@@ -18,6 +18,7 @@ const store = vi.hoisted(() => ({
     search: vi.fn(async () => undefined),
     open: vi.fn(async () => undefined),
     examine: vi.fn(async () => undefined),
+    examineRepo: vi.fn(async () => undefined),
     download: vi.fn(async () => ({ ok: true as const })),
     refreshDevice: vi.fn(async () => undefined),
     refreshTransfer: vi.fn(async () => undefined),
@@ -30,6 +31,7 @@ vi.mock('@/stores/localModels', () => ({
     talosSearchLocalModels: store.search,
     talosOpenModelRepo: store.open,
     talosExamineSet: store.examine,
+    talosExamineRepo: store.examineRepo,
     talosDownloadSet: store.download,
     talosRefreshDeviceCapacity: store.refreshDevice,
     talosRefreshTransfer: store.refreshTransfer,
@@ -119,6 +121,7 @@ beforeEach(() => {
     store.search.mockClear()
     store.open.mockClear()
     store.examine.mockClear()
+    store.examineRepo.mockClear()
     store.download.mockClear().mockResolvedValue({ ok: true })
     store.refreshLeftovers.mockClear()
     store.refreshToken.mockClear()
@@ -286,6 +289,37 @@ describe('inspecting', () => {
         expect(JSON.parse(result.content).models[0]).toMatchObject({
             unusable: 'missing-parts', missing: 2, total: 3,
         })
+        expect(store.examine).not.toHaveBeenCalled()
+    })
+
+    /**
+     * ⛔⛔ IL TOOL CHIEDE UNA LETTURA PER MODELLO, non una per versione.
+     *
+     * Owner 2026-08-11: «DeepSeek ci sta un casino di tempo… era quando è stato
+     * attivato il tool ricerca modelli da hf». Qui c'era un ciclo che leggeva
+     * l'intestazione di ogni singola versione, in fila, e le versioni sono
+     * 18-29 nei repository veri. Costo misurato: 1.630 ms a lettura, e
+     * l'intestazione vera supera i 7 MiB ⇒ due richieste ciascuna, ~153 MB
+     * scaricati uno alla volta prima di poter rispondere.
+     *
+     * ⛔ Questo caso sta QUI e non solo sullo store perché la lezione l'ho già
+     * pagata una volta: una prova sulla funzione non dice niente su chi la
+     * chiama. Rimettendo il ciclo, `examine` torna a essere chiamato e
+     * `examineRepo` no — e questa riga diventa rossa.
+     */
+    it('⛔ non legge una intestazione per versione: ne chiede una per MODELLO', async () => {
+        store.state = baseState({
+            repo: {
+                id: 'a/b',
+                revision: 'main',
+                loading: false,
+                sets: [set({ label: 'IQ3_M' }), set({ label: 'Q4_0' }), set({ label: 'Q8_0' })],
+            },
+        }) as never
+
+        await call('local_model_inspect', { repo: 'a/b' })
+
+        expect(store.examineRepo).toHaveBeenCalledTimes(1)
         expect(store.examine).not.toHaveBeenCalled()
     })
 
