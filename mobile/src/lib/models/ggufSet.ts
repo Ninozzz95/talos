@@ -87,6 +87,44 @@ function variantSuffixOf(path: string, quantisation: string): string | null {
     return suffix === '' ? null : suffix
 }
 
+/**
+ * ⭐⭐ QUALE MODELLO È — non quale versione.
+ *
+ * Un repository GGUF tiene lo **stesso** modello a qualità diverse: 18 file per
+ * `bartowski/Llama-3.2-3B-Instruct-GGUF`, 26 per `unsloth/Qwen3-4B-GGUF`, 29
+ * per `unsloth/gemma-3-4b-it-GGUF`. Leggere l'intestazione di ognuno vuol dire
+ * pagare diciassette volte la stessa risposta.
+ *
+ * MISURATO l'11 agosto su tre qualità dello stesso modello (IQ3_M, Q4_0, Q8_0):
+ *
+ * | campo                 | IQ3_M   | Q4_0    | Q8_0    |
+ * |-----------------------|---------|---------|---------|
+ * | blocchi               | 28      | 28      | 28      |
+ * | embedding             | 3072    | 3072    | 3072    |
+ * | contesto addestrato   | 131072  | 131072  | 131072  |
+ * | teste / teste KV      | 24 / 8  | 24 / 8  | 24 / 8  |
+ * | numero di tensori     | 255     | 255     | 255     |
+ * | **inizio dei pesi**   | 7.837.984 | 7.837.984 | 7.837.984 |
+ *
+ * Cambia **solo** `general.file_type`, che sta già nel nome del file. E siccome
+ * l'inizio dei pesi è identico **byte per byte**, il peso dei pesi di ogni altra
+ * versione si ricava dalla sua dimensione senza approssimare niente.
+ *
+ * ⛔ La chiave è il nome PRIMA della qualità, non il repository: certi
+ * pubblicatori mettono più modelli nello stesso posto, e trattarli come uno
+ * darebbe la forma del 4B a un 8B. Senza una qualità riconosciuta si torna al
+ * percorso intero — un gruppo per conto suo, cioè il vecchio comportamento.
+ */
+export function talosModelloDiUnSet(set: TalosGgufSet): string {
+    const percorso = set.paths[0] ?? ''
+    const nome = setKeyOf(percorso)
+    if (!set.quantisation) return nome
+    const minuscolo = nome.toLocaleLowerCase('en-US')
+    const segno = `-${set.quantisation.toLocaleLowerCase('en-US')}`
+    const dove = minuscolo.lastIndexOf(segno)
+    return dove < 0 ? nome : nome.slice(0, dove)
+}
+
 function humanVariantSuffix(suffix: string): string {
     const acronyms: Readonly<Record<string, string>> = {
         cuda: 'CUDA',
