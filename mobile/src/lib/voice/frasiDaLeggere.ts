@@ -25,6 +25,8 @@
  * l'ultima frase è quasi sempre monca.
  */
 
+import { isTalosAgentToolId } from '@/lib/tools/toolControls'
+
 /** Quanto testo si accetta di tenere in coda senza mai dirlo. */
 const CODA_MASSIMA = 4_000
 
@@ -112,5 +114,39 @@ export function talosFrasiDaLeggere(
         pronte.push(resto.trim())
         resto = ''
     }
-    return { pronte, resto }
+    /*
+     * ⛔⛔ UN NOME INTERNO NON SI PRONUNCIA.
+     *
+     * MISURATO sul Pad l'11 agosto, sonda sul ponte nativo
+     * (`Capacitor.nativePromise` → `["TalosSpeech","speak",{text}]`), durante
+     * una corsa del pilota. Catturato in ordine:
+     *
+     *     "device_screen_drive"                 ⛔
+     *     "Ok, vado alla schermata iniziale"    ✅
+     *
+     * La lettura segue il testo in STREAMING, e in quell'istante lo stream del
+     * provider portava il nome del tool nel canale di testo — succede mentre la
+     * chiamata parte. A voce «device underscore screen underscore drive» non lo
+     * capisce nessuno: è la stessa famiglia di `nessunNomeInterno`, stavolta
+     * all'orecchio invece che all'occhio.
+     *
+     * ⛔ Il criterio è STRETTO di proposito: si tace solo ciò che combacia con
+     * un id del catalogo. Un filtro generico su tutto ciò che ha un trattino
+     * basso mangerebbe nomi di file, righe di codice e parole vere che la
+     * persona ha chiesto di sentire.
+     */
+    return { pronte: pronte.filter((frase) => !soloUnNomeDiTool(frase)), resto }
+}
+
+/**
+ * La frase è SOLO l'identificativo di uno strumento?
+ *
+ * ⛔ «Solo»: se il nome sta dentro una frase vera — «ho usato device_torch per
+ * accenderla» — la frase si dice comunque. Togliere una parola in mezzo
+ * lascerebbe un buco che si sente, e quel che conta è non leggere ad alta voce
+ * una riga che è soltanto un identificativo.
+ */
+function soloUnNomeDiTool(frase: string): boolean {
+    const nudo = frase.trim().replace(/^["'«(]+|["'»).,;:!?]+$/g, '')
+    return nudo.length > 0 && isTalosAgentToolId(nudo)
 }

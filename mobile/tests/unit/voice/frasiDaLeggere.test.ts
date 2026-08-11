@@ -65,3 +65,43 @@ describe('⛔ si legge per frasi, mentre la risposta arriva', () => {
         expect(talosFrasiDaLeggere('Ciao.', 5, false)).toEqual({ pronte: [], resto: '' })
     })
 })
+
+/**
+ * ⛔⛔ TALOS HA PRONUNCIATO «device_screen_drive».
+ *
+ * MISURATO sul Pad l'11 agosto con una sonda sul ponte nativo
+ * (`Capacitor.nativePromise` → `["TalosSpeech","speak",{text}]`), durante una
+ * corsa del pilota. Catturato, in ordine:
+ *
+ *     "device_screen_drive"                 ⛔ il nome INTERNO, ad alta voce
+ *     "Ok, vado alla schermata iniziale"    ✅ la voce del pilota
+ *
+ * La lettura segue il testo in streaming, e in quell'istante lo stream del
+ * provider portava il nome del tool nel canale di testo. È la famiglia di
+ * `nessunNomeInterno`, stavolta all'orecchio.
+ */
+describe('⛔ un nome interno non si pronuncia', () => {
+    it('il caso catturato: la riga col solo id non arriva al motore', () => {
+        const { pronte } = talosFrasiDaLeggere('device_screen_drive\n', 0, true)
+        expect(pronte).toEqual([])
+    })
+
+    it('e vale per qualunque id del catalogo, anche fra virgolette', () => {
+        expect(talosFrasiDaLeggere('"device_torch"\n', 0, true).pronte).toEqual([])
+        expect(talosFrasiDaLeggere('library_list.\n', 0, true).pronte).toEqual([])
+    })
+
+    it('⛔ ma una FRASE che contiene il nome si dice comunque', () => {
+        // Togliere una parola in mezzo lascerebbe un buco che si sente. Quel
+        // che conta è non leggere una riga che è SOLO un identificativo.
+        const { pronte } = talosFrasiDaLeggere('Ho usato device_torch per accenderla.\n', 0, true)
+        expect(pronte).toEqual(['Ho usato device_torch per accenderla.'])
+    })
+
+    it('⛔ e una parola normale col trattino basso NON viene zittita', () => {
+        // Il criterio è stretto di proposito: solo ciò che combacia con un id
+        // del catalogo. Un filtro generico mangerebbe nomi di file e codice.
+        const { pronte } = talosFrasiDaLeggere('vecchio_nome_file\n', 0, true)
+        expect(pronte).toEqual(['vecchio_nome_file'])
+    })
+})
