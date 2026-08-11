@@ -43,12 +43,14 @@
  * cronologia e strumenti sono quelli veri, non una copia.
  */
 import { computed, onMounted, ref } from 'vue'
-import { ArrowUp, Copy, Eye, EyeOff, Maximize2, Mic, Square, X } from '@lucide/vue'
+import { ArrowUp, Copy, Eye, EyeOff, Maximize2, Mic, Square, Volume2, VolumeX, X } from '@lucide/vue'
 import TalosMobileMessageContent from '@/components/chat/TalosMobileMessageContent.vue'
 import { useTalosI18n } from '@/i18n'
 import { useChatController } from '@/stores/chatController'
 import { useTalosMobileDictation } from '@/composables/useTalosMobileDictation'
 import { useTalosRispostaAVoce } from '@/composables/useTalosRispostaAVoce'
+import { useTalosSpeech } from '@/composables/useTalosSpeech'
+import { talosOffsetDelTrascinamento, talosTrascinamentoApre } from '@/lib/barra/trascinamento'
 import { TALOS_METADATA_DETTATO } from '@/lib/tools/tracciaAzione'
 import type { TalosModoBarra } from '@/lib/barra/modoBarra'
 
@@ -150,6 +152,48 @@ const etichettaSpia = computed(() => {
         : t('barra.context', { n: props.modo.contesto.nodi })
 })
 
+/**
+ * ⭐ IL GESTO DELLA MANIGLIA — quanto la carta è salita sotto il dito.
+ *
+ * La regola (soglia e smorzamento) vive in `lib/barra/trascinamento`, non qui:
+ * dentro un gestore di eventi sarebbe provabile solo con un dito vero, e le
+ * prove che contano sono quelle che si possono fare nei due versi.
+ */
+const alzata = ref(0)
+const inMano = ref(false)
+let partenzaY = 0
+
+function prendiLaManiglia(evento: PointerEvent): void {
+    inMano.value = true
+    partenzaY = evento.clientY
+    // ⛔ La cattura serve: senza, il dito che esce dalla maniglia mentre sale
+    // smette di essere ascoltato e il gesto muore a metà — che è precisamente
+    // il momento in cui la persona sta facendo la cosa giusta.
+    ;(evento.currentTarget as HTMLElement).setPointerCapture(evento.pointerId)
+}
+
+function muoviLaManiglia(evento: PointerEvent): void {
+    if (!inMano.value) return
+    alzata.value = talosOffsetDelTrascinamento(partenzaY - evento.clientY)
+}
+
+function lasciaLaManiglia(evento: PointerEvent): void {
+    if (!inMano.value) return
+    inMano.value = false
+    const apre = talosTrascinamentoApre(partenzaY - evento.clientY)
+    alzata.value = 0
+    if (apre) void apriInTalos()
+}
+
+/**
+ * ⭐ Leggere la risposta ad alta voce — Gemini ce l'ha (`Ascolta`), e noi il
+ * motore l'abbiamo già in casa: è lo stesso di ogni risposta in chat, quindi la
+ * voce, la lingua e il «fermati» sono quelli veri, non una seconda copia.
+ */
+const lettura = useTalosSpeech()
+const ID_LETTURA = 'talos-barra'
+const staLeggendo = computed(() => lettura.speakingId.value === ID_LETTURA)
+
 async function chiudi(): Promise<void> {
     dettatura.cancel()
     try {
@@ -247,15 +291,26 @@ onMounted(async () => {
         <article
             v-if="cartaVisibile"
             class="carta"
+            :class="{ 'carta--in-mano': inMano }"
+            :style="{ transform: `translate3d(0, ${-alzata}px, 0)` }"
             :aria-label="t('barra.title')"
             data-testid="talos-barra-carta"
         >
             <span class="orlo" :data-stato="filo" aria-hidden="true" />
+            <!-- ⭐ La maniglia: trascinala in su e la conversazione entra in
+                 TALOS intero. Su Gemini il nodo si chiama «Punto di
+                 trascinamento» ed è `clickable=false` — da noi il TOCCO fa la
+                 stessa cosa, perché un comando che si può solo trascinare non
+                 esiste per chi naviga da tastiera. -->
             <button
                 type="button"
                 class="maniglia"
                 :aria-label="t('barra.open')"
                 data-testid="talos-barra-maniglia"
+                @pointerdown="prendiLaManiglia"
+                @pointermove="muoviLaManiglia"
+                @pointerup="lasciaLaManiglia"
+                @pointercancel="lasciaLaManiglia"
                 @click="apriInTalos"
             ><span /></button>
 
@@ -274,6 +329,17 @@ onMounted(async () => {
             <footer class="piede">
                 <button type="button" class="tondo" :aria-label="t('common.copy')" @click="copia">
                     <Copy class="icona" aria-hidden="true" />
+                </button>
+                <button
+                    type="button"
+                    class="tondo"
+                    :aria-pressed="staLeggendo"
+                    :aria-label="staLeggendo ? t('chat.stopSpeaking') : t('chat.speak')"
+                    data-testid="talos-barra-leggi"
+                    @click="lettura.toggle(ID_LETTURA, risposta)"
+                >
+                    <VolumeX v-if="staLeggendo" class="icona" aria-hidden="true" />
+                    <Volume2 v-else class="icona" aria-hidden="true" />
                 </button>
                 <span v-if="copiato" class="copiato">{{ t('barra.copied') }}</span>
                 <span class="spazio" />
@@ -406,13 +472,28 @@ onMounted(async () => {
     padding: 0 12px calc(max(env(safe-area-inset-bottom, 0px), 12px) + 19px);
 }
 
-/* Il vetro, uguale per la pillola e per la carta: una materia sola. */
+/*
+ * ⛔⛔ NIENTE `backdrop-filter`: QUI NON PUÒ FUNZIONARE, e l'ha detto lo schermo.
+ *
+ * Sul Pad, con la carta aperta sopra Wikipedia, il testo della pagina si
+ * leggeva NITIDO attraverso il pannello — non sfocato. Non era un valore
+ * sbagliato: `backdrop-filter` sfoca ciò che sta dietro **nel documento**, e
+ * dietro non c'è niente. Chrome è un'altra FINESTRA di Android, composta dal
+ * sistema sotto la nostra WebView trasparente; il CSS non la vede e non può
+ * toccarla.
+ *
+ * ⇒ La leggibilità deve venire dall'OPACITÀ, non dalla sfocatura. E questa è
+ * anche la ragione per cui Gemini, censita l'11 agosto, usa una carta quasi
+ * nera OPACA senza nessun vetro: ha lo stesso vincolo, e ci è arrivata prima.
+ *
+ * Il pannello resta «appoggiato sopra» grazie all'orlo, all'alone e alle tre
+ * ombre — che funzionano, perché sono disegnate DA NOI e non chiedono al
+ * compositore di sfocare qualcosa che non gli appartiene.
+ */
 .pillola,
 .carta {
     position: relative;
-    background: color-mix(in oklab, var(--card) 94%, transparent);
-    backdrop-filter: blur(24px) saturate(160%);
-    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    background: var(--card);
     border: 1px solid color-mix(in oklab, var(--primary) 16%, var(--border));
     /*
      * ⛔ TRE ombre, e ognuna risolve un fondo diverso — misurato sopra Wikipedia,
@@ -436,6 +517,9 @@ onMounted(async () => {
 
 /* ── LA PILLOLA ──────────────────────────────────────────────────────────── */
 .pillola {
+    /* Un filo di trasparenza: quel poco che dice «sono appoggiata sopra»,
+       senza mettere del testo da leggere sopra un fondo che non controlliamo. */
+    background: color-mix(in oklab, var(--card) 93%, transparent);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -555,6 +639,17 @@ onMounted(async () => {
     to { opacity: 1; transform: none; }
 }
 
+/*
+ * Il ritorno a posto quando il gesto non arriva alla soglia.
+ *
+ * ⛔ E si SPEGNE mentre il dito è sulla maniglia (`--in-mano`): una transizione
+ * attiva durante il trascinamento fa inseguire la carta al dito con un ritardo,
+ * e un pannello che arriva in ritardo sul proprio dito è la cosa che fa dire
+ * «non risponde».
+ */
+.carta { transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+.carta--in-mano { transition: none; }
+
 /* La maniglia: il gesto per portare la conversazione dentro TALOS intero.
    Per ora è un TOCCO — il trascinamento è il passo dopo, e finché non c'è
    sarebbe disonesto disegnare qualcosa che sembra trascinabile e non lo è. */
@@ -563,6 +658,9 @@ onMounted(async () => {
     place-items: center;
     height: 22px;
     flex: none;
+    /* ⛔ Senza, il browser interpreta il trascinamento verticale come uno
+       scorrimento e i `pointermove` non arrivano mai: il gesto non esisterebbe. */
+    touch-action: none;
 }
 .maniglia span {
     width: 34px;
@@ -820,5 +918,57 @@ onMounted(async () => {
     .pillola::before, .carta::before { animation: none; }
     .azione--ascolta::after { animation: none; opacity: 0.6; }
     .livello i, .scheletro span { animation: none; }
+}
+
+/*
+ * ⭐ IL TABLET NON È UN TELEFONO GRANDE — owner 2026-08-11, guardando il Pad:
+ * «alzala un po' e falla un po' più spessa in altezza».
+ *
+ * Ha ragione, e il motivo è fisico: su uno schermo da 914 px logici la stessa
+ * pillola che sul telefono riempie il pollice diventa un filo lontano, e il
+ * pollice che la raggiunge arriva da più lontano. Gemini questa distinzione non
+ * la fa — usa la stessa taglia dappertutto, che è comodo per chi la scrive e
+ * non per chi la tocca.
+ *
+ * I numeri: bersaglio da 38 a 46 px (la soglia comoda su tablet), pillola più
+ * alta di conseguenza, e lo stacco da terra da 35 a 50 px logici — 131 px reali
+ * sul Pad, contro i 92 di Gemini.
+ */
+@media (min-width: 700px) {
+    .scena { padding-bottom: calc(max(env(safe-area-inset-bottom, 0px), 12px) + 34px); }
+
+    .pillola {
+        /*
+         * ⛔ 460 e non 520, e il numero l'ha corretto la MISURA.
+         *
+         * Alzando l'altezza avevo allargato anche la pillola, e la sonda ha
+         * detto dove finiva: 1365 px su 2400, cioè il 57% dello schermo, contro
+         * il 41% di Gemini. A quella larghezza non si legge più come una
+         * pillola, si legge come una barra — e l'owner aveva chiesto solo che
+         * fosse più spessa.
+         *
+         * 460 logici = 1207 px reali = 50%. Più larga di Gemini, perché su un
+         * tablet da 12 pollici la sua sembra sperduta, ma con lo stesso rapporto
+         * fra i lati: 7:1 contro 7,4:1. È la proporzione a fare la pillola, non
+         * la larghezza da sola.
+         */
+        max-width: 460px;
+        gap: 8px;
+        padding: 9px 9px 9px 11px;
+    }
+
+    .campo {
+        padding: 11px 6px;
+        font-size: var(--text-base);
+    }
+
+    .azione { width: 46px; height: 46px; }
+    .azione .icona { width: 19px; height: 19px; }
+
+    .spia { padding: 7px 12px 7px 9px; }
+    .numero { font-size: var(--text-xs); }
+
+    .carta { max-width: 620px; }
+    .maniglia { height: 26px; }
 }
 </style>
