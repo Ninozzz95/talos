@@ -1,4 +1,10 @@
 <script setup lang="ts">
+import {
+    talosChiediRuoloAssistente,
+    talosLeggiRuoloAssistente,
+    type TalosStatoRuoloAssistente,
+} from '@/lib/device/ruoloAssistente'
+
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { useTalosI18n } from '@/i18n'
@@ -46,6 +52,33 @@ import {
 const { t } = useTalosI18n()
 
 const snapshot = ref<TalosShizukuSnapshot | null>(null)
+/**
+ * ⭐⭐ IL RUOLO DI ASSISTENTE — la scheda che mancava.
+ *
+ * Owner 2026-08-11, provando la barra: «la funzione assistenza è collegata
+ * all'app?». Non lo era: si metteva solo dalle Impostazioni di sistema, e l'app
+ * non sapeva nemmeno di averlo.
+ *
+ * ⛔ E si azzera a ogni reinstallazione dell'APK (misurato): senza questa
+ * scheda la barra smetteva di aprirsi e sembrava un difetto nostro.
+ */
+const ruolo = ref<TalosStatoRuoloAssistente>({ held: false, canRequest: false })
+
+async function leggiRuolo(): Promise<void> {
+    ruolo.value = await talosLeggiRuoloAssistente()
+}
+
+async function chiediRuolo(): Promise<void> {
+    await talosChiediRuoloAssistente()
+    /*
+     * ⛔ NON si segna «fatto» qui: la finestra è di SISTEMA e la decisione la
+     * prende la persona, magari fra dieci secondi, magari mai. Si rilegge al
+     * ritorno — è la stessa regola per cui una scheda di consenso non si chiude
+     * da sola quando il modello dice di aver fatto.
+     */
+    void leggiRuolo()
+}
+
 const caricando = ref(true)
 /** Se in QUESTA sessione abbiamo già chiesto. È un fatto sulla sessione. */
 
@@ -302,6 +335,7 @@ async function apriFlottante(): Promise<void> {
 }
 
 onMounted(() => {
+    void leggiRuolo()
     void rileggi()
     void leggiPonte()
 
@@ -465,6 +499,63 @@ onUnmounted(() => {
             <Smartphone class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
             {{ t('privilege.intro') }}
         </p>
+
+        <!--
+            ⭐⭐ IL RUOLO DI ASSISTENTE — sta PER PRIMO, e non è un vezzo di
+            impaginazione: senza, la barra non si apre affatto, e tutto quello
+            che c'è sotto (il ponte, i permessi) serve a funzioni che la persona
+            non vedrà mai partire.
+
+            Owner 2026-08-11: «la funzione assistenza è collegata all'app?».
+            Non lo era. Adesso sì, con un tocco: `RoleManager` mostra la finestra
+            di sistema, e la decisione resta al sistema e alla persona — noi non
+            possiamo assegnarci niente, ed è giusto così.
+        -->
+        <section
+            data-testid="talos-ruolo-assistente"
+            :data-ruolo="ruolo.held ? 'si' : 'no'"
+            class="flex flex-col gap-3 rounded-[var(--talos-radius-card)] border p-4"
+            :class="ruolo.held
+                ? 'border-[var(--talos-accent)]/40 bg-[var(--talos-accent)]/5'
+                : 'border-[var(--talos-border)]'"
+        >
+            <h2 class="flex items-start gap-2 text-sm font-semibold text-[var(--talos-text)]">
+                <Check
+                    v-if="ruolo.held"
+                    class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]"
+                    aria-hidden="true"
+                />
+                <Smartphone v-else class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                <span>{{ t('privilege.assistantTitle') }}</span>
+            </h2>
+
+            <p class="text-xs leading-5 text-[var(--talos-muted)]">
+                {{ ruolo.held ? t('privilege.assistantHeld') : t('privilege.assistantBody') }}
+            </p>
+
+            <!--
+                ⛔ Il pulsante compare SOLO se il sistema ha una finestra da
+                mostrare. Dove non ce l'ha (`canRequest` falso) si dice dove
+                andare a mano, invece di offrire un comando che non fa niente.
+            -->
+            <button
+                v-if="!ruolo.held && ruolo.canRequest"
+                type="button"
+                data-testid="talos-ruolo-chiedi"
+                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-4 text-sm font-semibold text-[var(--talos-accent-contrast)]"
+                @click="void chiediRuolo()"
+            >
+                {{ t('privilege.assistantAsk') }}
+                <ChevronRight class="size-4" aria-hidden="true" />
+            </button>
+            <p
+                v-else-if="!ruolo.held"
+                class="text-xs leading-5 text-[var(--talos-muted)]"
+                data-testid="talos-ruolo-a-mano"
+            >
+                {{ t('privilege.assistantManual') }}
+            </p>
+        </section>
 
         <p v-if="caricando" role="status" class="py-6 text-sm text-[var(--talos-muted)]">
             {{ t('privilege.refresh') }}…

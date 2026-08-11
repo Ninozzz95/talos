@@ -172,6 +172,77 @@ class TalosPrivilegePlugin : Plugin() {
     }
 
     /**
+     * ⭐⭐ IL RUOLO DI ASSISTENTE: TALOS lo sa, e lo può CHIEDERE.
+     *
+     * Owner 2026-08-11, provando l'app sul suo telefono: «la funzione assistenza
+     * è collegata all'app? tutte le impostazioni sono predisposte per settarla
+     * dall'app?». La risposta era NO: si metteva solo dalle Impostazioni di
+     * sistema (o da `adb`), e l'app non sapeva nemmeno di averlo.
+     *
+     * ⛔ E c'è di peggio, misurato: **il ruolo si azzera a ogni reinstallazione
+     * dell'APK**. Nel giro di sviluppo la barra smetteva di funzionare da sola e
+     * sembrava un difetto nostro. Senza questa lettura non c'era modo di dirlo.
+     *
+     * Due risposte separate perché sono due domande diverse:
+     * - `held` — TALOS è l'assistente ADESSO;
+     * - `canRequest` — il sistema ha una finestra da mostrare per chiederlo.
+     *   ⛔ Su alcune ROM `isRoleAvailable` è falso pur esistendo il ruolo: in
+     *   quel caso l'unica strada resta la pagina di sistema, e chi disegna la
+     *   schermata deve poterlo sapere invece di offrire un pulsante morto.
+     */
+    @PluginMethod
+    fun assistantRole(call: PluginCall) {
+        val result = JSObject()
+        val gestore = context.getSystemService(android.app.role.RoleManager::class.java)
+        if (gestore == null) {
+            result.put("held", false)
+            result.put("canRequest", false)
+            result.put("reason", "no-role-manager")
+            call.resolve(result)
+            return
+        }
+        val disponibile = gestore.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)
+        result.put("held", gestore.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT))
+        result.put("canRequest", disponibile)
+        if (!disponibile) result.put("reason", "role-unavailable")
+        call.resolve(result)
+    }
+
+    /**
+     * Chiede il ruolo con la finestra di SISTEMA — un tocco, non un viaggio.
+     *
+     * ⛔ `createRequestRoleIntent` è l'unica via onesta: la decisione resta al
+     * sistema e alla persona, noi non possiamo assegnarci niente. Se la ROM non
+     * offre la finestra si ripiega sulla pagina delle impostazioni assistente,
+     * che esiste sempre — meglio due tocchi che un pulsante che non fa niente.
+     */
+    @PluginMethod
+    fun requestAssistantRole(call: PluginCall) {
+        val gestore = context.getSystemService(android.app.role.RoleManager::class.java)
+        val attivita = activity
+        if (gestore == null || attivita == null) {
+            call.reject("TALOS_ROLE_UNAVAILABLE")
+            return
+        }
+        val intent = if (gestore.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)) {
+            gestore.createRequestRoleIntent(android.app.role.RoleManager.ROLE_ASSISTANT)
+        } else {
+            android.content.Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS)
+        }
+        try {
+            attivita.startActivity(intent)
+            val result = JSObject()
+            result.put("opened", true)
+            call.resolve(result)
+        } catch (errore: android.content.ActivityNotFoundException) {
+            // ⛔ Il motivo si consegna a chi lo mostrerà: una schermata che dice
+            // «non è riuscito» senza dire perché è la cosa che ci ha già
+            // fregato con Shizuku.
+            call.reject("TALOS_ROLE_NO_SCREEN", errore)
+        }
+    }
+
+    /**
      * Porta dove si fa il passo successivo: le opzioni sviluppatore.
      *
      * ⛔⛔ Il bersaglio `shizuku` NON è stato tolto, ed è una scelta.

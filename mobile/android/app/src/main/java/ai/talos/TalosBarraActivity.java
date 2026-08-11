@@ -42,9 +42,14 @@ import com.getcapacitor.Bridge;
  *      aggiunge una la barra resta indietro di una funzione senza dirlo.
  *
  * Ereditando, il codice è quello: stessi plugin, stesso ponte, stessa app web.
- * Cambia solo il VESTITO — il tema trasparente e la finestra ancorata in basso
- * — e cambia perché è una classe diversa, quindi il sistema può darle un tema
- * suo e un'istanza sua senza toccare la schermata intera.
+ * Cambia solo il VESTITO — il tema trasparente — e cambia perché è una classe
+ * diversa, quindi il sistema può darle un tema suo e un'istanza sua senza
+ * toccare la schermata intera.
+ *
+ * ⛔ La finestra invece NON si tocca: l'ancoraggio in basso lo fa il CSS. Le
+ * prime due versioni la forzavano (prima `WRAP_CONTENT`, poi `gravity=BOTTOM`) e
+ * la seconda è caduta confrontando `dumpsys window` con Gemini — vedi il blocco
+ * in `onCreate`.
  *
  * ⛔ E il diritto di stare sopra le altre app NON è `SYSTEM_ALERT_WINDOW`: lo
  * dà il ruolo di assistente, che la persona ha già scelto di darci. Un permesso
@@ -117,11 +122,6 @@ public class TalosBarraActivity extends MainActivity {
         }
 
         super.onCreate(savedInstanceState);
-        /*
-         * ⛔ La finestra NON si tocca (vedi il blocco più sotto): l'ancoraggio in
-         * basso lo fa il CSS, e la gravità imposta a mano era la causa di un
-         * difetto — smascherata confrontando `dumpsys window` con Gemini.
-         */
         /*
          * ⛔⛔ LA FINESTRA NON SI TOCCA — e ci sono volute due prove sbagliate e
          * un confronto per capirlo.

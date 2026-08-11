@@ -886,6 +886,11 @@ export const TALOS_EN_MESSAGES = {
         codeCopyFailed: 'Code copy failed.',
     },
     privilege: {
+        assistantTitle: 'TALOS as your assistant',
+        assistantBody: 'The bar only opens once TALOS is your assistant. One tap, and Android asks you.',
+        assistantHeld: 'TALOS is your assistant. Call it from any app and the bar comes up.',
+        assistantAsk: 'Make TALOS the assistant',
+        assistantManual: 'This phone has no dialog for it: Settings → Apps → Default apps → Digital assistant.',
         pageTitle: 'Phone control',
         intro: 'TALOS acts on the phone with the same identity your computer uses over a cable. The bridge is inside TALOS: no third-party app, no root, and no special permissions.',
         statusHeading: 'Status',
