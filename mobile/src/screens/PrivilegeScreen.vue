@@ -2,6 +2,7 @@
 import {
     talosChiediRuoloAssistente,
     talosLeggiRuoloAssistente,
+    talosNominaAssistenteColPonte,
     type TalosStatoRuoloAssistente,
 } from '@/lib/device/ruoloAssistente'
 
@@ -68,6 +69,28 @@ async function leggiRuolo(): Promise<void> {
     ruolo.value = await talosLeggiRuoloAssistente()
 }
 
+/**
+ * ⛔ La finestra di sistema NON basta su tutte le ROM — misurato.
+ *
+ * ColorOS cinese V16.1.0: `RequestRoleActivity` parte e si chiude da sola, e la
+ * schermata «App assistente digitale» elenca solo «Nessuno» — né TALOS, né
+ * Claude, né Google, pur avendo tutti un `VoiceInteractionService` valido. Non
+ * è che non ci qualifichiamo: è la ROM che non offre nessun assistente.
+ *
+ * Quando la prima strada non ha prodotto niente, si mostra la seconda: il ponte.
+ */
+const ruoloConPonte = ref(false)
+const ruoloDalPonteFallito = ref(false)
+
+async function nominaColPonte(): Promise<void> {
+    ruoloDalPonteFallito.value = false
+    const fatto = await talosNominaAssistenteColPonte('ai.talos.dev')
+    // ⛔ Si RILEGGE, non si crede all'esito: è la regola dopo «Fatto ✅» su una
+    // notifica che era ancora lì.
+    await leggiRuolo()
+    if (!ruolo.value.held) ruoloDalPonteFallito.value = !fatto || true
+}
+
 async function chiediRuolo(): Promise<void> {
     await talosChiediRuoloAssistente()
     /*
@@ -76,7 +99,10 @@ async function chiediRuolo(): Promise<void> {
      * ritorno — è la stessa regola per cui una scheda di consenso non si chiude
      * da sola quando il modello dice di aver fatto.
      */
-    void leggiRuolo()
+    await leggiRuolo()
+    // La finestra può essersi chiusa da sola (ColorOS): allora la seconda
+    // strada diventa visibile, invece di lasciare un pulsante che non fa niente.
+    if (!ruolo.value.held) ruoloConPonte.value = true
 }
 
 const caricando = ref(true)
@@ -555,6 +581,34 @@ onUnmounted(() => {
             >
                 {{ t('privilege.assistantManual') }}
             </p>
+
+            <!--
+                ⭐⭐ LA SECONDA STRADA, e compare solo dopo che la prima ha fallito.
+                Su ColorOS cinese la finestra di sistema si chiude da sola e le
+                Impostazioni non elencano NESSUN assistente: lì questo pulsante
+                è l'unico modo, e il ponte ce l'abbiamo in casa.
+            -->
+            <template v-if="!ruolo.held && ruoloConPonte">
+                <p class="text-xs leading-5 text-[var(--talos-muted)]">
+                    {{ t('privilege.assistantBridgeWhy') }}
+                </p>
+                <button
+                    type="button"
+                    data-testid="talos-ruolo-ponte"
+                    class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] border border-[var(--talos-accent)]/40 px-4 text-sm font-semibold text-[var(--talos-accent)]"
+                    @click="void nominaColPonte()"
+                >
+                    {{ t('privilege.assistantBridgeAsk') }}
+                    <ChevronRight class="size-4" aria-hidden="true" />
+                </button>
+                <p
+                    v-if="ruoloDalPonteFallito"
+                    class="text-xs leading-5 text-[var(--talos-muted)]"
+                    data-testid="talos-ruolo-ponte-fallito"
+                >
+                    {{ t('privilege.assistantBridgeFailed') }}
+                </p>
+            </template>
         </section>
 
         <p v-if="caricando" role="status" class="py-6 text-sm text-[var(--talos-muted)]">
