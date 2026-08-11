@@ -65,7 +65,41 @@
     <uses-permission android:name="android.permission.EXECUTE_APP_FUNCTION"
         tools:ignore="ProtectedPermissions" />
 
+    <!--
+        ⭐⭐ LA BOLLA — e perché SOLO qui, deciso dall'owner l'11 agosto 2026.
+
+        «Voglio solo che sia nella versione di sviluppo, non nella versione di
+        produzione. È solo una cosa che serve a me.»
+
+        La bolla è il pallino di TALOS sopra le altre app: un tocco e la barra si
+        apre, su qualunque ROM. Serve all'owner perché sul suo ColorOS cinese il
+        gesto dell'assistente non esiste — ma un pallino sempre in vista è una
+        scelta di gusto, e in produzione la porta è la scheda in tendina.
+
+        ⛔ Sta nel source set `debug` e NON dietro un interruttore a runtime: un
+        interruttore si può sbagliare, un file che nella release non viene
+        nemmeno compilato no. In produzione questa app non CHIEDE
+        `SYSTEM_ALERT_WINDOW`, che è fra i permessi più pesanti che esistano — e
+        il 2026-08-09 l'avevamo tolto proprio per non chiederlo senza usarlo.
+
+        ⛔ `FOREGROUND_SERVICE_SPECIAL_USE`: da Android 14 un servizio di primo
+        piano deve DICHIARARE a cosa serve. Qui non c'è un tipo che descriva
+        «tengo a schermo un pulsante», e inventarne uno vicino (`dataSync`)
+        sarebbe una dichiarazione falsa al sistema operativo.
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <application>
+
+        <service
+            android:name="ai.talos.bolla.TalosBolla"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Pulsante flottante di sviluppo per aprire la barra dell'assistente" />
+        </service>
 
         <!--
             ⛔ LA SONDA DELL'ASSISTENTE NON STA PIU' QUI, ed è una buona notizia.
