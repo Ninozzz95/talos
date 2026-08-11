@@ -84,5 +84,46 @@ export async function talosAvviaLaBarra(i18n: Plugin): Promise<boolean> {
 
     const { default: TalosBarraRoot } = await import('@/components/barra/TalosBarraRoot.vue')
     createApp(TalosBarraRoot, { modo }).use(i18n).use(router).mount('#app')
+    void suonaIlCampanello()
     return true
+}
+
+/**
+ * ⭐⭐ IL CAMPANELLO: «adesso puoi disegnarmi».
+ *
+ * ## ⛔ Il difetto che uccide, misurato sui fotogrammi
+ *
+ * Owner 2026-08-11, con un video del suo schermo: «un lampeggio nero poco prima
+ * che la barra entra… solo all'inizio, deve sparire». Dal 132° al 148°
+ * fotogramma — **455 ms** — lo schermo era un rettangolo pieno `#1e1f22`, che
+ * non è un colore di sistema: è `--talos-background`, il fondo della NOSTRA
+ * app. Alla prima apertura la WebView dipinge la pagina col suo fondo normale,
+ * e le righe qui sopra la rendono trasparente solo dopo.
+ *
+ * ⇒ L'activity tiene fermo il disegno finché non suoniamo. Quando suoniamo, il
+ * PRIMO frame è già quello giusto: non c'è nessun fotogramma da nascondere.
+ *
+ * ⛔ Si suona DOPO il mount e dentro un `requestAnimationFrame`: prima del
+ * primo giro di disegno il DOM esiste ma non è ancora stato steso, e un
+ * campanello anticipato riaprirebbe la porta proprio sul frame sbagliato.
+ *
+ * ⛔ E fallisce in SILENZIO: se il plugin non c'è — sul web, o in una build
+ * futura senza — l'activity si sblocca da sola col suo tetto. Un errore qui
+ * lascerebbe una barra montata e invisibile, che è il difetto peggiore dei due.
+ */
+async function suonaIlCampanello(): Promise<void> {
+    await new Promise<void>((risolvi) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolveSubito(risolvi)))
+    })
+    try {
+        const { registerPlugin } = await import('@capacitor/core')
+        await registerPlugin<{ pronta(): Promise<void> }>('TalosBarra').pronta()
+    } catch {
+        // Nessun ponte: l'activity si disegna da sola allo scadere del tetto.
+    }
+}
+
+/** Esiste solo per non annidare una funzione dentro due `requestAnimationFrame`. */
+function resolveSubito(risolvi: () => void): void {
+    risolvi()
 }

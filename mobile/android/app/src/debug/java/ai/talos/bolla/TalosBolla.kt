@@ -57,6 +57,13 @@ class TalosBolla : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         avviaInPrimoPiano()
+        if (intent?.getBooleanExtra(EXTRA_SONDA, false) == true) {
+            eseguiLaSonda(
+                intent.getLongExtra(EXTRA_ATTESA, 6_000L),
+                intent.getBooleanExtra(EXTRA_VELO, false),
+            )
+            return START_NOT_STICKY
+        }
         if (pallino == null) runCatching { attacca() }
             .onFailure { Log.w(TAG, "$SEGNO la bolla non si è attaccata", it) }
         /*
@@ -111,9 +118,12 @@ class TalosBolla : Service() {
             setPadding(bordo, bordo, bordo, bordo)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(FONDO)
-                setStroke((2 * densita).toInt(), BRONZO)
+                setColor(coloreDelTema("ic_talos_bg", FONDO_DI_SCORTA))
+                setStroke((2 * densita).toInt(), coloreDelTema("ic_talos_accent", ACCENTO_DI_SCORTA))
             }
+            imageTintList = android.content.res.ColorStateList.valueOf(
+                coloreDelTema("ic_talos_accent", ACCENTO_DI_SCORTA),
+            )
             elevation = 8 * densita
             contentDescription = "TALOS"
         }
@@ -226,17 +236,118 @@ class TalosBolla : Service() {
             .onFailure { Log.w(TAG, "$SEGNO la bolla non ha aperto la barra", it) }
     }
 
+    /**
+     * ⭐⭐ IL COLORE VIENE DAL MOTORE DEI TEMI, non da questo file.
+     *
+     * Owner 2026-08-11: «mi raccomando aggancia tutto al motore dei temi». La
+     * prima versione della bolla aveva `#c08b3c` scritto dentro: il bronzo del
+     * tema *calm*. Sarebbe stato giusto per un tema su quattordici, e sbagliato
+     * per gli altri tredici — cioè una seconda verità sul colore di TALOS, che
+     * il giorno che il tema cambia resta indietro senza dirlo a nessuno.
+     *
+     * ## Come lo sa, senza inventarsi niente
+     *
+     * Il tema attivo il nativo lo conosce già: è l'alias del lanciatore acceso,
+     * e `TalosAppIconPlugin.activePreset()` lo legge. I colori dei quattordici
+     * temi li genera `tools/android-assets/gen_theme_icons.py` dalla stessa
+     * tabella che disegna le icone — una sorgente sola, per il web e per qui.
+     *
+     * ⛔ E se il tema non si sapesse, si ripiega su *calm* (quello di partenza)
+     * invece di lasciare un pallino invisibile: un ripiego dichiarato è meglio
+     * di un colore mancante, e questa riga dice quale.
+     */
+    private fun coloreDelTema(prefisso: String, scorta: Int): Int {
+        val tema = runCatching { ai.talos.TalosAppIconPlugin.activePreset(this) }.getOrNull() ?: "calm"
+        val id = resources.getIdentifier("${prefisso}_$tema", "color", packageName)
+        if (id == 0) return scorta
+        return runCatching { resources.getColor(id, theme) }.getOrDefault(scorta)
+    }
+
+    /**
+     * ⛔ La sonda dell'apertura dal SOTTOFONDO. Vedi `probeApriDaSfondo`.
+     *
+     * Il velo è una finestra flottante VISIBILE, larga quanto lo schermo e alta
+     * poco: quello che «hey TALOS» mostrerebbe davvero per dire «ti ascolto».
+     * Se l'apertura riesce solo con lui, quel velo diventa parte del disegno.
+     */
+    private fun eseguiLaSonda(attesa: Long, conVelo: Boolean) {
+        android.os.Handler(mainLooper).postDelayed({
+            var velo: View? = null
+            Log.i(
+                TAG,
+                "$SEGNO sonda: canDrawOverlays=${android.provider.Settings.canDrawOverlays(this)}" +
+                    " pallinoAttaccato=${pallino != null}",
+            )
+            if (conVelo) {
+                velo = runCatching { attaccaIlVelo() }
+                    .onFailure { Log.w(TAG, "$SEGNO sonda: il velo è stato RIFIUTATO", it) }
+                    .getOrNull()
+                Log.i(TAG, "$SEGNO sonda: velo attaccato=${velo != null}")
+            }
+            Log.i(TAG, "$SEGNO sonda: provo ad aprire la barra, conVelo=$conVelo")
+            apriLaBarra()
+            android.os.Handler(mainLooper).postDelayed({
+                velo?.let { v -> runCatching { getSystemService(WindowManager::class.java)?.removeView(v) } }
+            }, 4_000)
+        }, attesa)
+    }
+
+    private fun attaccaIlVelo(): View {
+        val wm = getSystemService(WindowManager::class.java)!!
+        val densita = resources.displayMetrics.density
+        val vista = ImageView(this).apply {
+            setImageResource(ai.talos.R.drawable.ic_tendina_talos)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setColor(coloreDelTema("ic_talos_bg", FONDO_DI_SCORTA))
+                cornerRadius = 24 * densita
+            }
+            setPadding((16 * densita).toInt(), (16 * densita).toInt(), (16 * densita).toInt(), (16 * densita).toInt())
+        }
+        val p = WindowManager.LayoutParams(
+            (220 * densita).toInt(),
+            (72 * densita).toInt(),
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            android.graphics.PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = (120 * densita).toInt()
+        }
+        wm.addView(vista, p)
+        return vista
+    }
+
     companion object {
         const val TAG = "TalosBolla"
         const val SEGNO = "🫧"
+        private const val EXTRA_SONDA = "sonda"
+        private const val EXTRA_ATTESA = "attesa"
+        private const val EXTRA_VELO = "velo"
+
+        fun sonda(contesto: Context, attesa: Long, conVelo: Boolean) {
+            contesto.startForegroundService(
+                Intent(contesto, TalosBolla::class.java)
+                    .putExtra(EXTRA_SONDA, true)
+                    .putExtra(EXTRA_ATTESA, attesa)
+                    .putExtra(EXTRA_VELO, conVelo),
+            )
+        }
+
         private const val CANALE = "talos-bolla"
         private const val ID_AVVISO = 4711
         private const val LATO_DP = 52f
         private const val PADDING_DP = 13f
         /** Sotto questo spostamento il dito ha TOCCATO, non trascinato. */
         private const val SOGLIA_DP = 6f
-        private val BRONZO = Color.parseColor("#c08b3c")
-        private val FONDO = Color.parseColor("#e6141414")
+        /*
+         * ⛔ RIPIEGHI, non colori di TALOS: si usano solo se il tema attivo non
+         * si riesce a leggere. Sono quelli di *calm*, il tema di partenza —
+         * vedi `coloreDelTema`.
+         */
+        private val ACCENTO_DI_SCORTA = Color.parseColor("#c08b3c")
+        private val FONDO_DI_SCORTA = Color.parseColor("#1e1f22")
 
         fun accendi(contesto: Context) {
             contesto.startForegroundService(Intent(contesto, TalosBolla::class.java))

@@ -75,7 +75,23 @@ public class TalosAppIconPlugin extends Plugin {
     }
 
     private String activePreset() {
-        SharedPreferences prefs = getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        return activePreset(getContext());
+    }
+
+    /**
+     * ⭐ Il tema attivo, leggibile da CHIUNQUE nel nativo.
+     *
+     * Owner 2026-08-11: «mi raccomando aggancia tutto al motore dei temi». Il
+     * pallino flottante deve seguire il tema come il resto, e per farlo deve
+     * poter sapere quale sia — senza copiarsi la chiave delle preferenze, che
+     * sarebbe una seconda verità da tenere allineata a mano.
+     *
+     * ⛔ `public` e statico: chi chiama sta in un altro package (`ai.talos.bolla`)
+     * e non è un plugin, quindi non ha `getContext()`. Il valore di partenza
+     * resta uno solo, qui.
+     */
+    public static String activePreset(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         return prefs.getString(KEY_ACTIVE, DEFAULT_PRESET);
     }
 

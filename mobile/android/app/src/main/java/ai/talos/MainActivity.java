@@ -86,6 +86,10 @@ public class MainActivity extends BridgeActivity {
         // secondi, poi riprende. Chiunque bussi in quella finestra aspetta, e
         // per tre volte ho scambiato l'inquilino di turno per il colpevole.
         // Questi numeri dicono se il silenzio nasce qui dentro, e di chi e'.
+        // ⛔ Il campanello della barra: senza, l'activity trattiene il primo
+        // frame fino al tetto e la barra compare mezzo secondo dopo. Vedi
+        // TalosBarraActivity.trattieniIlPrimoFrame.
+        { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(TalosBarraPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         /*
          * ⛔⛔ LA BOLLA SI REGISTRA PER NOME, e la riflessione qui è la scelta
          * giusta, non una scorciatoia.

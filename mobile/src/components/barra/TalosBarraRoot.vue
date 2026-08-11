@@ -359,6 +359,10 @@ onMounted(async () => {
          velo — l'app sotto si vede intera, che è tutto il punto. -->
     <div class="scena" data-testid="talos-barra-scena" @click.self="chiudi">
 
+        <!-- ⭐ L'ONDA: la luce sui bordi, che entra dal basso e svanisce.
+             Misurata su Gemini l'11 agosto, non dedotta — vedi `.onda`. -->
+        <div class="onda" data-testid="talos-barra-onda" aria-hidden="true" />
+
         <!-- LA CARTA: un oggetto separato, che va e viene. La pillola non si
              gonfia mai — è la forma misurata su Gemini l'11 agosto. -->
         <article
@@ -680,12 +684,109 @@ onMounted(async () => {
     max-width: 440px;
     padding: 6px 6px 6px 8px;
     border-radius: 999px;
-    animation: barra-entra 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    /*
+     * ⭐⭐ L'ENTRATA — «attesa, poi rilascio», col vocabolario di Gemini.
+     *
+     * Owner 2026-08-11: «voglio un'animazione come fa Gemini con le onde, non
+     * una semplice transizione: qualcosa fatto a regola d'arte».
+     *
+     * Le linee guida di Google Design per il movimento di Gemini dicono tre
+     * cose, e qui ci sono tutte e tre:
+     *
+     *   1. «ogni animazione ha un inizio e una fine definiti, che creano un
+     *      senso di flusso direzionale» ⇒ la pillola SALE, non compare;
+     *   2. «la velocità dà un senso di ATTESA, poi RILASCIO» ⇒ la curva parte
+     *      lenta, accelera e supera di poco l'arrivo prima di posarsi
+     *      (`cubic-bezier(0.34, 1.42, 0.42, 1)`), invece della decelerazione
+     *      piatta di prima;
+     *   3. «un moto increspato in un gradiente radiale può fare le onde della
+     *      voce» ⇒ `.onda`, qui sotto.
+     *
+     * ⛔ La larghezza parte a 0.92 e non l'altezza: una pillola schiacciata in
+     * verticale si legge come un errore di disegno, una che si APRE in
+     * orizzontale si legge come qualcosa che arriva. È la stessa differenza fra
+     * un oggetto che appare e un oggetto che entra.
+     *
+     * ⛔ E dura POCO — 320 ms, 18 px. Misurato su Gemini: al terzo fotogramma
+     * (animazioni rallentate sei volte) la sua pillola è già formata e ferma.
+     * Il movimento sta nella LUCE, non nell'oggetto. Una pillola che viaggia a
+     * lungo mentre la luce corre sarebbe rumore su rumore.
+     */
+    animation: barra-entra 320ms cubic-bezier(0.34, 1.42, 0.42, 1) both;
 }
 
 @keyframes barra-entra {
-    from { opacity: 0; transform: translate3d(0, 20px, 0) scale(0.98); }
+    from { opacity: 0; transform: translate3d(0, 18px, 0) scaleX(0.94); }
+    55% { opacity: 1; }
     to { opacity: 1; transform: none; }
+}
+
+/*
+ * ⭐⭐ L'ONDA: la luce che corre sui BORDI dello schermo, e poi svanisce.
+ *
+ * ## ⛔ La prima versione era inventata. Questa è misurata.
+ *
+ * Avevo scritto un anello radiale che sbocciava dalla pillola, dedotto dalle
+ * linee guida di Google Design. L'owner: «attiva Gemini sul Pad, provalo e
+ * analizza gli screenshot». Fatto — Gemini nominata assistente, gesto
+ * dell'assistente sopra Wikipedia, raffica di fotogrammi a bordo telefono con
+ * le animazioni rallentate sei volte. Quello che fa davvero:
+ *
+ *   j3   la pillola è GIÀ formata in basso; un alone caldo sul solo angolo in
+ *        alto a destra
+ *   j4   la luce si è allargata lungo tutto il bordo SINISTRO e l'angolo in
+ *        basso — blu, verde, rosa
+ *   j22  la luce NON C'È PIÙ: restano la pillola e le schede
+ *
+ * ⇒ Tre fatti che il disegno deve rispettare, e nessuno dei tre l'avevo
+ * indovinato:
+ *
+ *   1. la luce sta sui **bordi**, non al centro e non sotto la pillola;
+ *   2. è **passeggera**: entra e sparisce, non resta come cornice;
+ *   3. la pagina sotto resta **sempre leggibile** — Gemini non mette mai un
+ *      velo, nemmeno all'1%. Il movimento è nella LUCE, non nella pillola.
+ *
+ * ## ⭐ E dove la superiamo
+ *
+ * Gemini accende i quattro angoli quasi insieme, senza dire da dove arriva la
+ * cosa che è arrivata. Qui la luce **sale dal basso** — da dove la barra
+ * atterra — e si spegne salendo: è lo «slancio direzionale» che le loro stesse
+ * linee guida descrivono e che la loro implementazione non mostra. E i colori
+ * sono i NOSTRI: `--primary` segue il tema, quindi l'onda cambia col vestito
+ * invece di essere il blu di qualcun altro.
+ *
+ * ⛔ Solo `opacity` e `transform`: le due proprietà che il compositore anima
+ * senza ridisegnare. Un'onda che facesse ricalcolare il layout a ogni frame
+ * farebbe scattare proprio l'istante che deve rendere bello.
+ *
+ * ⛔ `pointer-events: none`: è luce, non un comando. Senza, coprirebbe la
+ * pillola e il primo tocco finirebbe nel vuoto.
+ */
+.onda {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    /*
+     * Quattro fuochi sui bordi, non un alone unico: due in basso (da dove
+     * arriva la barra, più forti e più larghi) e due in alto (l'eco, appena
+     * accennata). `closest-side` tiene ogni fuoco ancorato al suo bordo invece
+     * di farlo diventare una macchia centrale.
+     */
+    background:
+        radial-gradient(60% 34% at 8% 100%, color-mix(in oklab, var(--primary) 42%, transparent), transparent 72%),
+        radial-gradient(58% 30% at 94% 96%, color-mix(in oklab, var(--primary) 34%, transparent), transparent 70%),
+        radial-gradient(46% 26% at 100% 6%, color-mix(in oklab, var(--primary) 26%, transparent), transparent 68%),
+        radial-gradient(40% 22% at 0% 14%, color-mix(in oklab, var(--primary) 18%, transparent), transparent 66%);
+    animation: barra-onda 820ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes barra-onda {
+    /* Attesa: la luce è già accesa in basso ma ancora schiacciata sul bordo. */
+    from { opacity: 0; transform: translate3d(0, 12%, 0) scale(1.06); }
+    /* Rilascio: il colpo di luce, sul frame in cui la pillola atterra. */
+    26% { opacity: 1; }
+    /* E si spegne salendo, lasciando lo schermo com'era. */
+    to { opacity: 0; transform: translate3d(0, -4%, 0) scale(1); }
 }
 
 .campo {
@@ -1079,6 +1180,10 @@ onMounted(async () => {
         );
     }
     .orlo::after { filter: blur(9px); }
+    /* ⛔ L'onda è puro movimento: chi ha chiesto meno moto non la vede
+       affatto. Lasciarla ferma e accesa sarebbe una cornice colorata che non
+       se ne va più — peggio dell'animazione che voleva evitare. */
+    .onda { animation: none; opacity: 0; }
     .pillola::before, .carta::before { animation: none; }
     .azione--ascolta::after { animation: none; opacity: 0.6; }
     .livello i, .scheletro span { animation: none; }
