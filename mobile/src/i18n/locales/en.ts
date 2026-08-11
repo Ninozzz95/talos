@@ -2837,6 +2837,8 @@ export const TALOS_EN_MESSAGES = {
         attachCamera: 'Camera',
         attachFile: 'File',
         attachLibrary: 'From the Library',
+        attachLibraryEmpty: 'The Library is empty — nothing to attach yet.',
+        attachLibraryLoading: 'Reading the Library…',
         attachRemove: 'Remove {name}',
         attachFailed: 'The attachment did not go through.',
     },

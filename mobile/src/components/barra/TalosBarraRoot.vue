@@ -436,7 +436,12 @@ onMounted(async () => {
             <button type="button" class="voce" @click="conIlMenuChiuso(() => allegati.selectFiles())">
                 <FileText class="icona-piccola" aria-hidden="true" />{{ t('barra.attachFile') }}
             </button>
-            <div v-if="libreriaRecente.length" class="menu-titolo">
+            <!-- ⛔ IL TITOLO C'È SEMPRE, e la sezione non sparisce quando è vuota.
+                 Provato l'11 agosto: sul telefono di prova il vault era vuoto e
+                 la Libreria non compariva affatto — un menu che a volte ha una
+                 sezione e a volte no, senza dire perché, è un comando muto. Ora
+                 dice cosa manca: «vuota», oppure «sto guardando». -->
+            <div class="menu-titolo">
                 <Library class="icona-piccola" aria-hidden="true" />{{ t('barra.attachLibrary') }}
             </div>
             <button
@@ -446,6 +451,11 @@ onMounted(async () => {
                 class="voce voce--libreria"
                 @click="conIlMenuChiuso(async () => { await allegati.attachExisting(file) })"
             >{{ file.display_name }}</button>
+            <p
+                v-if="!libreriaRecente.length"
+                class="menu-vuoto"
+                data-testid="talos-barra-libreria-vuota"
+            >{{ allegati.vaultLoading.value ? t('barra.attachLibraryLoading') : t('barra.attachLibraryEmpty') }}</p>
         </div>
 
         <!-- Gli allegati scelti: una riga di gettoni sopra la pillola. -->
@@ -1145,6 +1155,13 @@ onMounted(async () => {
     text-overflow: ellipsis;
     white-space: nowrap;
     display: block;
+}
+
+.menu-vuoto {
+    padding: 6px 12px 8px 34px;
+    color: var(--muted-foreground);
+    font-size: var(--text-2xs);
+    line-height: 1.4;
 }
 
 .menu-titolo {
