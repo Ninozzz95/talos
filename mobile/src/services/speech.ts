@@ -300,6 +300,12 @@ export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
      * sbagliata che ne possano convivere due.
      */
     let finita: (() => void) | null = null
+    /**
+     * ⛔ La CODA delle letture: garantisce che «applica la voce» e «parla»
+     * restino nell'ordine giusto anche quando le frasi arrivano una dietro
+     * l'altra. Vedi il commento dentro `speak`.
+     */
+    let catena: Promise<unknown> = Promise.resolve()
     void plugin.addListener('talosSpeechDone', () => {
         const chiudi = finita
         finita = null
@@ -334,22 +340,37 @@ export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
                 rete: navigator.onLine !== false,
                 scelta: utterance.voiceURI ?? null,
             })
-            if (scelta.voce) void plugin.setVoice({ name: scelta.voce.name })
             /*
-             * ⛔ VELOCITÀ E TONALITÀ viaggiano con la frase. Prima si mandava
-             * solo il testo, e i due cursori del pannello non toccavano niente:
-             * il difetto non era «non si aggiorna in tempo reale», era «non è
-             * mai cambiata».
+             * ⛔⛔ SI ASPETTA CHE LA VOCE SIA APPLICATA — e prima non si
+             * aspettava. Owner 2026-08-11: «quando TALOS parla, per i primi
+             * secondi si sente la voce predefinita e poi cambia con la voce che
+             * ho scelto».
+             *
+             * La riga era `void plugin.setVoice(...)` seguita subito da
+             * `plugin.speak(...)`: due chiamate al ponte lanciate nello stesso
+             * istante, e il ponte le consegna nell'ordine in cui arrivano al suo
+             * thread — non nell'ordine in cui servono. Il motore cominciava a
+             * parlare con la voce che aveva, e cambiava quando `setVoice`
+             * finalmente atterrava. Non era «la voce ci mette un po'»: era che
+             * non l'avevamo ancora messa.
+             *
+             * ⛔ E si SERIALIZZA con una catena, invece di aspettare qui: leggendo
+             * mentre la risposta si scrive le frasi arrivano una dietro l'altra, e
+             * due `speak` che aspettano ciascuna la propria `setVoice` potrebbero
+             * scavalcarsi — cioè leggere la seconda frase prima della prima. La
+             * catena garantisce l'ordine senza far aspettare chi chiama.
              */
-            void plugin.speak({
-                text: utterance.text,
-                rate: utterance.rate,
-                pitch: utterance.pitch,
-                // ⛔ Accodare, quando si legge mentre la risposta arriva: con
-                // «flush» ogni frase nuova ammazza quella che sta suonando.
-                queue: utterance.queue,
-            })
-                .then((esito) => {
+            catena = catena
+                .then(async () => {
+                    if (scelta.voce) await plugin.setVoice({ name: scelta.voce.name })
+                    const esito = await plugin.speak({
+                        text: utterance.text,
+                        rate: utterance.rate,
+                        pitch: utterance.pitch,
+                        // ⛔ Accodare, quando si legge mentre la risposta arriva:
+                        // con «flush» ogni frase nuova ammazza quella che suona.
+                        queue: utterance.queue,
+                    })
                     if (esito?.spoken) return
                     finita = null
                     utterance.onerror?.(esito?.reason)

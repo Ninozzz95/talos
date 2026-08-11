@@ -122,6 +122,39 @@ const dettatura = useTalosMobileDictation({
     },
     autoLanguage: () => true,
     allowedLanguages: () => voce.lingue,
+    /**
+     * ⛔⛔ CHI PARLA TACE — e questa riga MANCAVA, ed è il difetto che rendeva
+     * l'assistente inutilizzabile.
+     *
+     * Owner 2026-08-11: «l'assistente parte con la modalità ascolto ma se parlo
+     * non ascolta e non recepisce le parole; per farlo funzionare devo
+     * ripremere il pulsante microfono».
+     *
+     * ## Come si è chiusa, e perché la mia prima ipotesi era sbagliata
+     *
+     * Avevo misurato una traccia piatta — `orlo=fermo` per dodici secondi — e
+     * dato la colpa a `zittisci` che restava appeso. Ho guardato chi lo passa:
+     * **solo `ChatScreen.vue`**. La barra non lo passava affatto, quindi non
+     * poteva appendersi. Non era una riga che si bloccava: era una riga che
+     * NON C'ERA.
+     *
+     * E il commento in testa a `start()` dice già cosa succede senza, misurato
+     * sul Pad il 10 agosto: se TALOS sta leggendo e parte il microfono, il
+     * riconoscitore **non parte proprio** e arriva `recognitionFailed` in 500
+     * ms. La barra apriva l'ascolto mentre la voce leggeva ancora la risposta
+     * di prima ⇒ errore immediato, orlo `fermo`, e la ripresa automatica non
+     * scattava perché riparte solo sul SILENZIO, non su un errore vero.
+     *
+     * ⇒ Ecco perché «ripremere il microfono» funzionava: nel frattempo la voce
+     * aveva finito. E perché dalla tendina andava: lì non c'era nessuna lettura
+     * in corso.
+     *
+     * ⛔ La cura era già scritta e collaudata in `ChatScreen`. Il difetto vero è
+     * che la barra è una SECONDA superficie sulla stessa funzione, e le due
+     * possono divergere in silenzio — è il rischio che avevamo dichiarato
+     * scegliendo di ereditare, e questa volta ci ha morso.
+     */
+    zittisci: () => lettura.stop(),
 })
 
 const ascolta = computed(() => dettatura.status.value === 'listening' || dettatura.status.value === 'starting')
@@ -179,6 +212,35 @@ watch(
 function laVoceLaComandaLaPersona(): void {
     ascoltoVoluto.value = false
 }
+
+/**
+ * ⭐⭐ FINITO DI PARLARE = INVIATO. Owner 2026-08-11: «quando finisco di parlare,
+ * cioè quando TALOS rileva tutte le parole, devono essere inviate subito».
+ *
+ * ## ⛔ Come si distingue «ho finito» da «ho premuto stop»
+ *
+ * Il motore vocale chiude la sessione in due casi che dall'esterno si assomigliano:
+ * quando ha consegnato il risultato finale (hai finito di parlare) e quando lo
+ * fermiamo noi perché la persona ha toccato il microfono. Mandare in tutti e due
+ * i casi vorrebbe dire spedire una domanda a chi aveva appena deciso di NON
+ * mandarla — cioè togliere alla persona il ripensamento.
+ *
+ * Li distingue `ascoltoVoluto`: resta vero se la sessione è finita da sola, va
+ * a falso appena la persona tocca il microfono, scrive, o manda a mano. Quindi
+ * la regola è: si manda solo se l'ascolto era ancora nostro.
+ *
+ * ⛔ E si aspetta che il testo ci sia: `onEnd` arriva anche dopo un silenzio, e
+ * lì non c'è niente da mandare — quel caso lo prende la ripresa qui sopra.
+ */
+watch(
+    () => dettatura.status.value,
+    (adesso, prima) => {
+        if (prima !== 'listening' || adesso !== 'idle') return
+        if (!ascoltoVoluto.value) return
+        if (!bozza.value.trim()) return
+        void invia()
+    },
+)
 
 /**
  * ⭐⭐ OGNI CHIAMATA NUOVA RIACCENDE L'ASCOLTO — e senza questo la seconda
@@ -877,10 +939,41 @@ onMounted(async () => {
     to { opacity: 0; transform: translate3d(0, -4%, 0) scale(1); }
 }
 
+/*
+ * ⛔ IL CAMPO CRESCE CON LE RIGHE — owner 2026-08-11: «quando dico molte parole
+ * e vanno a capo vengono tagliate: l'altezza si deve aggiustare in base alle
+ * righe».
+ *
+ * Una `textarea` con `rows="1"` resta alta una riga qualunque cosa contenga: il
+ * testo scorre dentro e quello che hai appena dettato sparisce di sopra. Con la
+ * voce è insopportabile, perché non stai guardando la tastiera mentre parli:
+ * guardi il campo per capire se ti ha sentito.
+ *
+ * `field-sizing: content` è la riga che lo fa fare al motore invece che a noi —
+ * niente misure dello `scrollHeight` a ogni tasto, niente riflussi. Il tetto
+ * resta (`max-height`), e oltre quello si scorre: una pillola che diventa alta
+ * mezzo schermo coprirebbe l'app sotto, che è tutto ciò che non deve fare.
+ */
 .campo {
     flex: 1;
     min-width: 0;
-    max-height: 6rem;
+    field-sizing: content;
+    min-height: 1lh;
+    /*
+     * ⛔ QUATTRO RIGHE, e il tetto è scritto in RIGHE — owner 2026-08-11:
+     * «dagli un massimo di 4 righe prima dello scroll».
+     *
+     * `4lh` invece di un valore in rem: `lh` è l'altezza di riga REALE, quindi
+     * il tetto resta quattro righe anche quando cambia la scala del testo
+     * (`--talos-ui-scale`) o il tema porta un carattere diverso. Un numero in
+     * pixel sarebbe giusto oggi e sbagliato al primo che ingrandisce i caratteri
+     * — cioè proprio la persona che ha più bisogno di leggerle, quelle righe.
+     *
+     * Il `+ 16px` sono il riempimento sopra e sotto: senza, la quarta riga
+     * finirebbe tagliata a metà dal tetto stesso.
+     */
+    max-height: calc(4lh + 16px);
+    overflow-y: auto;
     padding: 8px 4px;
     border: 0;
     background: transparent;
