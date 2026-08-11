@@ -2800,6 +2800,34 @@ export const TALOS_EN_MESSAGES = {
         openItem: 'Open {item}',
         openSettings: 'Open Settings',
     },
+    /**
+     * The bar: TALOS on top of the app you are using (task #90).
+     *
+     * The context line is the differentiator, so it carries the NUMBER: what
+     * TALOS was handed of your screen, in plain sight, with a switch to take it
+     * away. Competitors take the same context and never mention it.
+     */
+    barra: {
+        title: 'TALOS',
+        context: 'I can see your screen · {n} elements',
+        contextWithImage: 'I can see your screen · {n} elements + image',
+        contextOff: 'Not looking at your screen',
+        contextNone: 'I cannot see your screen',
+        close: 'Close',
+        expand: 'Show the whole answer',
+        collapse: 'Shorten the answer',
+        write: 'Write to TALOS',
+        listening: 'Listening',
+        speak: 'Speak',
+        stopListening: 'Stop listening',
+        send: 'Send',
+        stop: 'Stop',
+        open: 'Open in TALOS',
+        sendFailed: 'The message did not go through.',
+        openFailed: 'TALOS did not open.',
+        copied: 'Copied',
+        copyFailed: 'The text did not copy.',
+    },
 } as const
 
 export type TalosEnglishMessages = typeof TALOS_EN_MESSAGES

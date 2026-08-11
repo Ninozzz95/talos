@@ -68,48 +68,19 @@
     <application>
 
         <!--
-            E0/E1 — il servizio assistente, SOLO in debug.
+            ⛔ LA SONDA DELL'ASSISTENTE NON STA PIU' QUI, ed è una buona notizia.
 
-            E0: il sistema consegna una AssistStructure su ColorOS?
-            E1: tenendo il ruolo, `EXECUTE_APP_FUNCTIONS` si sblocca? (permesso
-                `internal|role`, NON VERIFICATO da nessuna delle due fonti: e'
-                «il premio piu' grosso» del catalogo della fase 7)
+            Il 2026-08-11 ha risposto alla sua domanda — col ruolo assistente il
+            sistema consegna struttura E screenshot (49 nodi su Impostazioni, 212
+            sull'elenco app) — ed è stata promossa a funzione in `main`
+            (`TalosAssistente`). Tenerla anche qui vorrebbe dire DUE candidati
+            assistente nella build di sviluppo: due nomi per la stessa cosa, che
+            è un difetto che abbiamo già in coda con un altro nome.
 
-            Il ruolo si assegna da fuori con:
-              cmd role add-role-holder android.app.role.ASSISTANT ai.talos.dev
+            Resta E1, non ancora provata: tenendo il ruolo, `EXECUTE_APP_FUNCTIONS`
+            si sblocca? È un permesso `internal|role`, e i due `uses-permission`
+            qui sopra esistono per poterlo chiedere.
         -->
-        <service
-            android:name="ai.talos.agent.TalosAssistProbeService"
-            android:exported="true"
-            android:permission="android.permission.BIND_VOICE_INTERACTION">
-            <meta-data
-                android:name="android.voice_interaction"
-                android:resource="@xml/talos_assist_probe" />
-            <intent-filter>
-                <action android:name="android.service.voice.VoiceInteractionService" />
-            </intent-filter>
-        </service>
-
-        <service
-            android:name="ai.talos.agent.TalosAssistProbeSessionService"
-            android:exported="true"
-            android:permission="android.permission.BIND_VOICE_INTERACTION">
-            <intent-filter>
-                <action android:name="android.service.voice.VoiceInteractionSessionService" />
-            </intent-filter>
-        </service>
-
-        <service
-            android:name="ai.talos.agent.TalosAssistProbeRecognition"
-            android:exported="true"
-            android:permission="android.permission.BIND_RECOGNITION_SERVICE">
-            <intent-filter>
-                <action android:name="android.speech.RecognitionService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.speech"
-                android:resource="@xml/talos_assist_probe" />
-        </service>
         <provider
             android:name="ai.talos.agent.TalosAgentProbeProvider"
             android:authorities="${applicationId}.agentprobe"
