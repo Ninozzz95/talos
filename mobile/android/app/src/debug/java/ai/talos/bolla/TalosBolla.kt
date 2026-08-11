@@ -222,12 +222,13 @@ class TalosBolla : Service() {
     }
 
     /**
-     * ⛔ `voce=0` come la scheda in tendina: chi tocca col dito vuole scrivere.
-     * Chi arriva dal gesto dell'assistente — o un giorno dalla parola magica —
-     * ha già usato la voce, e lì la barra parte in ascolto.
+     * ⛔ `voce=1` come tutte le altre porte. Owner 2026-08-11: «assicurati che
+     * l'assistente si apra SEMPRE in modalità ascolto». Chi tocca il pallino
+     * vuole parlargli; chi vuole scrivere ha il campo lì, e la tastiera non
+     * sale più da sola.
      */
     private fun apriLaBarra() {
-        val indirizzo = android.net.Uri.parse("talos://barra?voce=0&nodi=0&immagine=0")
+        val indirizzo = android.net.Uri.parse("talos://barra?voce=1&nodi=0&immagine=0")
         val apri = Intent(Intent.ACTION_VIEW, indirizzo, this, ai.talos.TalosBarraActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra(ai.talos.TalosBarraActivity.EXTRA_BARRA, true)

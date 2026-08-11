@@ -79,14 +79,17 @@ class TalosTendina : TileService() {
     }
 
     /**
-     * ⛔ `voce=0`: chi tocca una scheda con il dito si aspetta di SCRIVERE.
+     * ⛔ `voce=1` — e prima qui c'era `voce=0`, con la sua brava ragione.
      *
-     * La stessa barra, chiamata dal gesto dell'assistente, parte in ascolto —
-     * perché lì la persona ha usato la voce per arrivarci. Confondere le due
-     * cose vuol dire aprire il microfono a chi voleva la tastiera.
+     * Avevo scritto: «chi tocca una scheda col dito si aspetta di scrivere».
+     * L'owner l'ha corretto l'11 agosto: «assicurati che l'assistente si apra
+     * SEMPRE in modalità ascolto». Ha ragione, ed è la stessa ragione per cui
+     * la barra è un assistente e non una casella di testo: chi lo apre lo apre
+     * per PARLARGLI, e chi vuole scrivere ha il campo lì sotto — che ora non
+     * fa nemmeno salire la tastiera da solo.
      */
     private fun intentDellaBarra(): Intent {
-        val indirizzo = android.net.Uri.parse("talos://barra?voce=0&nodi=0&immagine=0")
+        val indirizzo = android.net.Uri.parse("talos://barra?voce=1&nodi=0&immagine=0")
         return Intent(Intent.ACTION_VIEW, indirizzo, this, TalosBarraActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             putExtra(TalosBarraActivity.EXTRA_BARRA, true)
