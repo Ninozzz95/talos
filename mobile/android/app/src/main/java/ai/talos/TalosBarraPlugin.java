@@ -51,4 +51,51 @@ public class TalosBarraPlugin extends Plugin {
         }
         call.resolve();
     }
+
+    /**
+     * ⭐⭐ APRE TALOS INTERO SULLA CONVERSAZIONE CHE STAVI FACENDO.
+     *
+     * ## ⛔ Il difetto, e la frase falsa che lo nascondeva
+     *
+     * Owner 2026-08-11: «quando faccio "apri in TALOS" si deve aprire la chat
+     * aggiornata col testo che ho inviato, o comunque tutta la conversazione».
+     *
+     * Il codice apriva l'app col suo intent di lancio, e un commento diceva: «la
+     * chat è già la stessa, per costruzione: non c'è niente da trasferire». Era
+     * FALSO, ed è il tipo di frase che tiene in piedi un difetto per settimane.
+     * La barra vive in un'altra Activity, quindi in un'altra **WebView**: è un
+     * altro contesto JavaScript, con un'altra istanza del negozio della chat. In
+     * comune c'è solo il database. Aprendo l'app senza dirle niente, quella
+     * riapriva la conversazione che aveva lei — non la tua.
+     *
+     * ⇒ Qui si passa l'id della sessione nell'indirizzo, e l'app intera la apre
+     * leggendola da disco. Il dato viaggia dove viaggiano già i modi della barra:
+     * nell'URI, che è l'unico canale che sopravvive a due processi web diversi.
+     *
+     * ⛔ `CLEAR_TOP | SINGLE_TOP`: se TALOS è già aperto da qualche parte deve
+     * TORNARE in cima e ricevere l'indirizzo in `onNewIntent`, non impilare una
+     * seconda copia di sé stesso sopra la prima.
+     */
+    @PluginMethod
+    public void apriLaChat(PluginCall call) {
+        final String sessione = call.getString("sessione");
+        final android.content.Intent apri = new android.content.Intent(
+            android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse("talos://chat" + (sessione == null ? "" : "?sessione=" + android.net.Uri.encode(sessione))),
+            getContext(),
+            MainActivity.class);
+        apri.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+            | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+            | android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        com.getcapacitor.JSObject esito = new com.getcapacitor.JSObject();
+        try {
+            getContext().startActivity(apri);
+            esito.put("aperta", true);
+        } catch (Exception errore) {
+            // ⛔ Non si lancia: chi chiama sta rispondendo a un tocco, e
+            // un'eccezione lì diventa una barra che non dice niente.
+            esito.put("aperta", false);
+        }
+        call.resolve(esito);
+    }
 }

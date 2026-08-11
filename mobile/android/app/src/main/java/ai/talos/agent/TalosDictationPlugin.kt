@@ -269,6 +269,21 @@ class TalosDictationPlugin : Plugin() {
                 RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
                 silenzio,
             )
+            /*
+             * ⛔⛔ E QUANTO ASPETTARE PRIMA CHE UNO COMINCI, che è un'altra cosa.
+             *
+             * I due `SILENCE` qui sopra dicono «quanto silenzio DOPO che ha
+             * parlato». Nessuno dei due dice al motore di non chiudere prima che
+             * la persona abbia aperto bocca — e il default è corto. Owner
+             * 2026-08-11: «la modalità ascolto rimane ma non ascolta niente, al
+             * primo avvio». Il motore chiudeva dopo un secondo, noi riaprivamo, e
+             * `startListening` chiamata di continuo **fallisce in silenzio**:
+             * `onBeginningOfSpeech` non arriva più (comportamento noto e
+             * documentato della classe).
+             *
+             * ⇒ Si dice al motore di aspettare, invece di riaprirlo a raffica.
+             */
+            i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, silenzio * 5)
         }
 
         // ⛔ La lingua si mette SOLO se qualcuno l'ha chiesta davvero. Senza

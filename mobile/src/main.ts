@@ -124,6 +124,28 @@ async function bootstrapTalosMobileApp(): Promise<void> {
     if (await (await import('@/lib/barra/avvia')).talosAvviaLaBarra(i18n)) return
     createApp(App).use(i18n).use(router).mount('#app')
 
+    /*
+     * ⛔ LA CONSEGNA DALLA BARRA: «apri in TALOS» deve aprire QUELLA
+     * conversazione, non quella che l'app aveva. Owner 2026-08-11. Il perché sta
+     * in `lib/barra/consegna` — in breve: barra e app sono due WebView diverse,
+     * e l'unico canale che le attraversa è l'indirizzo.
+     *
+     * ⛔ Dopo il `mount`, e con `void`: la chat si apre da sé quando è pronta, e
+     * far aspettare l'avvio dell'app per una consegna che riguarda un'apertura
+     * su cento sarebbe pagare tutti per pochi.
+     */
+    void (async () => {
+        const [{ talosAscoltaLaConsegna }, { useChatController }] = await Promise.all([
+            import('@/lib/barra/consegna'),
+            import('@/stores/chatController'),
+        ])
+        const controller = useChatController()
+        await talosAscoltaLaConsegna(async (sessione) => {
+            await controller.init()
+            await controller.selectSession(sessione)
+        })
+    })()
+
     const warm = (): void => {
         void preloadTalosMobileRoutes()
             // Observable signal: the shell is interactive BEFORE this resolves, but

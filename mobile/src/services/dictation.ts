@@ -30,6 +30,16 @@ export interface TalosDictationStartOptions {
     autoLanguage?: boolean
     /** Fra quali lingue puo' muoversi: mai piu' di tre, o inizia a sbagliare. */
     allowedLanguages?: readonly string[]
+    /**
+     * ⛔⛔ QUANTO SILENZIO prima che il motore consideri finito il turno, in ms.
+     *
+     * Esisteva nel nativo (`silenceMillis`) e NESSUNO lo passava: il motore
+     * usava il suo default corto, chiudeva dopo un secondo, e chi voleva un
+     * ascolto continuo era costretto a riaprirlo di continuo — che è il modo
+     * documentato per farlo fallire in silenzio. Owner 2026-08-11: «la modalità
+     * ascolto rimane ma non ascolta niente».
+     */
+    silenceMillis?: number
 }
 
 export interface TalosDictationEngine {
@@ -160,6 +170,7 @@ function nativeEngine(): TalosDictationEngine {
                         partialResults: true,
                         popup: false,
                         ...(options.language ? { language: options.language } : {}),
+                        ...(options.silenceMillis ? { silenceMillis: options.silenceMillis } : {}),
                     }),
                     10000,
                     'TALOS_SPEECH_START',
