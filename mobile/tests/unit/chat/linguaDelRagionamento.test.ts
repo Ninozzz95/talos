@@ -7,7 +7,7 @@ import { buildTalosSystemPrompt } from '@/lib/tone'
  * byte proprio per questo (600.195 contro 600.100). Un test non deve costare
  * peso all'app di chi non lo esegue mai.
  */
-const RIGA = 'Your reasoning is SHOWN to the user: write it in their language too.'
+const RIGA = 'Reasoning is SHOWN to the user: write it in their language.'
 
 /**
  * ⛔⛔ «ANSWER in the user's language» NON copriva il ragionamento.
