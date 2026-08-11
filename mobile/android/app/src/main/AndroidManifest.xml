@@ -142,6 +142,36 @@
             ⛔ E `onNewIntent` continua ad arrivare: serve per il contesto
             che il sistema consegna DOPO l'apertura (vedi TalosAssistente).
             -->
+        <!--
+            ⭐⭐ IL TASTO A MANI LIBERE — e perché `VOICE_COMMAND`, misurato.
+
+            Owner 2026-08-11: «attivazione con la voce, hey TALOS». La parola
+            magica vera («hey TALOS» sempre in ascolto) è murata su questa ROM —
+            `AlwaysOnHotwordDetector` è @SystemApi da Android 12, e girare
+            l'appop del microfono vuole `MANAGE_APP_OPS_MODES`, che uid 2000 (il
+            ponte in casa) NON ha (compito #92, provato: SecurityException).
+
+            Ma il 90% di quello a cui una parola magica serve — mani occupate,
+            guida, cucina — lo dà il TASTO. Misurato sul Pad:
+
+                pm query-activities -a android.intent.action.VOICE_COMMAND
+                    → rispondeva SOLO Google (HandsFreeActivity)
+
+            Il gesto (`keyevent 219`) passa dal SERVIZIO e apriva TALOS; il tasto
+            delle cuffie tenuto premuto (KEYCODE_HEADSETHOOK) cerca un'ACTIVITY
+            che risponda a `VOICE_COMMAND`, non trovava TALOS, e ripiegava sulla
+            schermata «Gestisci assistente» — pur essendo TALOS l'assistente in
+            carica. Sono due strade diverse e ne dichiaravamo una sola.
+
+            ⛔ `exported="true"` è OBBLIGATORIO qui: un intent-filter su una
+            activity non esportata non viene mai consultato dal sistema, e il
+            filtro sarebbe codice morto che sembra vivo. La barra resta protetta
+            da `singleTask` + `taskAffinity=""`: si apre, non espone dati, e chi
+            la chiude torna dov'era.
+
+            Zero permessi nuovi, zero microfono sempre aperto: il tasto apre la
+            barra, e da lì la persona parla come già fa oggi.
+        -->
         <activity
             android:name=".TalosBarraActivity"
             android:theme="@style/TalosBarra"
@@ -149,7 +179,12 @@
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:windowSoftInputMode="adjustResize"
-            android:exported="false" />
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VOICE_COMMAND" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <!-- GENERATED alias list (tools/android-assets/gen_theme_icons.py). Exactly one
              alias is android:enabled="true" at any time; the default-theme alias ships

@@ -1,5 +1,6 @@
 package ai.talos;
 
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -87,13 +88,39 @@ public class TalosBarraActivity extends MainActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        /*
+         * ⛔⛔ QUESTA È LA BARRA ANCHE QUANDO NESSUNO L'HA DETTO NELL'INDIRIZZO.
+         *
+         * La sessione dell'assistente apre la barra con `talos://barra?nodi=…`,
+         * e l'app web accende il modo barra leggendo quell'indirizzo
+         * (`App.getLaunchUrl`). Ma il TASTO DELLE CUFFIE (`VOICE_COMMAND`) apre
+         * questa stessa Activity SENZA indirizzo: senza questa riga, l'app web
+         * non troverebbe `talos://barra`, monterebbe la SCHERMATA INTERA dentro
+         * la finestra trasparente, e il tasto darebbe una app rotta.
+         *
+         * La verità non sta nell'indirizzo, sta nella CLASSE: se sei
+         * `TalosBarraActivity`, sei la barra. Quindi se l'indirizzo non è già il
+         * nostro, gliene mettiamo uno di partenza — `voce=1` perché chi arriva
+         * dalle cuffie vuole parlare, `nodi=0` perché a mani libere non c'è
+         * nessuno schermo da guardare, ed è giusto che la spia lo dica.
+         *
+         * ⛔ Prima di `super.onCreate`: è lì che il ponte cattura l'intent di
+         * lancio, e un dato messo dopo arriverebbe troppo tardi.
+         */
+        final Intent lancio = getIntent();
+        final android.net.Uri indirizzo = lancio == null ? null : lancio.getData();
+        final boolean giaBarra = indirizzo != null && "talos".equals(indirizzo.getScheme());
+        if (!giaBarra) {
+            final Intent conIndirizzo = lancio != null ? lancio : new Intent();
+            conIndirizzo.setData(android.net.Uri.parse("talos://barra?voce=1&nodi=0&immagine=0"));
+            setIntent(conIndirizzo);
+        }
+
         super.onCreate(savedInstanceState);
         /*
-         * ⛔ La finestra si àncora in BASSO, dove sta il pollice e dove la
-         * mettono tutti — Gemini compresa, misurata. In alto coprirebbe la
-         * barra di stato e quello che stai leggendo; al centro sarebbe una
-         * finestra di dialogo, cioè una cosa che ti INTERROMPE invece di
-         * starti accanto.
+         * ⛔ La finestra NON si tocca (vedi il blocco più sotto): l'ancoraggio in
+         * basso lo fa il CSS, e la gravità imposta a mano era la causa di un
+         * difetto — smascherata confrontando `dumpsys window` con Gemini.
          */
         /*
          * ⛔⛔ LA FINESTRA NON SI TOCCA — e ci sono volute due prove sbagliate e
