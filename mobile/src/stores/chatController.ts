@@ -979,7 +979,15 @@ export interface ChatController {
     }
     resendMessage(messageId: string): Promise<void>
     retryAssistantMessage(messageId: string): Promise<void>
-    send(text: string, turnPolicy?: TalosLibraryTurnOverride | null): Promise<boolean>
+    /**
+     * @param diVoce vero se il turno nasce dalla DETTATURA: marca il messaggio
+     *     col microfono e fa leggere la risposta. Vedi `messaggioDettato.ts`.
+     */
+    send(
+        text: string,
+        turnPolicy?: TalosLibraryTurnOverride | null,
+        diVoce?: boolean,
+    ): Promise<boolean>
     enhancePrompt(text: string): Promise<TalosMobilePromptEnhancementResult | null>
     clearPromptEnhancement(): void
 }
@@ -6016,13 +6024,30 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     async function send(
         text: string,
         turnPolicy: TalosLibraryTurnOverride | null = null,
+        /**
+         * ⭐ Questo turno è nato dalla VOCE della persona?
+         *
+         * Non è un'euristica: lo decide `talosProvenienzaVoce`, che tiene il
+         * pezzo dettato e lo cerca nella bozza. Serviva già per leggere la
+         * risposta a chi aveva parlato; da oggi marca anche il messaggio, così
+         * il microfono a schermo significa una cosa sola. Vedi
+         * `lib/voice/messaggioDettato.ts`.
+         */
+        diVoce = false,
     ): Promise<boolean> {
         clearPromptEnhancement()
         preferVisionProfileForAttachments()
         const accepted = await chat.send(
             text,
             selectedModelId.value,
-            {},
+            // ⛔ Quando NON è dettato non si scrive `dictated: false`: si
+            // scrive niente. Un sacchetto pieno di falsi è rumore che finisce
+            // nel database, nei backup e in ogni esportazione.
+            // ⛔ La chiave a lettere e non la costante: importarla costava byte a un
+            // grafo che sta a venticinque dal tetto. È documentata in
+            // `tracciaAzione.ts` (`TALOS_METADATA_DETTATO`), la legge il
+            // template di `TalosMobileMessageList`, e un test la tiene ferma.
+            diVoce ? { dictated: true } : {},
             attachments.bindings.value,
             // Owner 2026-07-24: clear the composer's attachments the instant the
             // user turn is COMMITTED — not after the whole generation, which left

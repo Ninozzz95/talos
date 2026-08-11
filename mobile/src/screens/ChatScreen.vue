@@ -650,7 +650,10 @@ async function onSend(): Promise<void> {
     void talosLightImpact()
     // ⭐ La provenienza si legge PRIMA di svuotare il campo: dopo, la bozza è
     // vuota e la risposta sarebbe sempre «no».
-    voce.value?.catturaInvio()
+    // ⭐ Il booleano non si butta più: dice se QUESTO messaggio nasce di voce,
+    // e da oggi serve a due cose — leggere la risposta, e marcare il messaggio
+    // col microfono. Vedi `lib/voice/messaggioDettato.ts`.
+    const diVoce = voce.value?.catturaInvio() ?? false
     // SF5-3: a live mic must not survive the send — late partials would
     // resurrect the sent text into the composer.
     dictation.cancel()
@@ -661,9 +664,7 @@ async function onSend(): Promise<void> {
     // rejoin the live edge so the message-add watch auto-scrolls (it was gated
     // when the user had scrolled up).
     rejoinLiveEdge()
-    const accepted = turnPolicy
-        ? await controller.send(text, turnPolicy)
-        : await controller.send(text)
+    const accepted = await controller.send(text, turnPolicy, diVoce)
     if (!accepted) {
         draft.updatePrompt(text)
         await draft.flush()

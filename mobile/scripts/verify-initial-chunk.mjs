@@ -75,8 +75,23 @@ import { resolve } from 'node:path'
  * margine era 27. Alzare resta l'ultima carta — la prima è sempre togliere
  * peso — ma cento byte comprati una volta valgono più di due ore passate a
  * limare codice che non c'entra con la funzione in corso.
+ *
+ * ⛔ E poi 600.600 — owner, 2026-08-11: «alza il tetto di 500, i 100 di prima
+ * erano pochi e te l'avrei dovuto dire».
+ *
+ * Il caso: spostare il microfono dalla risposta LETTA al messaggio DETTATO
+ * costava 15 byte oltre il tetto, dopo averne già recuperati 71 — tolto il
+ * modulo nuovo, tolta la funzione esportata, tolto l'import della costante
+ * (600.186 → 600.115). I quindici rimasti ERANO la funzione: il ternario che
+ * scrive il metadato e la condizione nel template.
+ *
+ * ⛔ La lezione non è «alzare quando serve»: è che un margine da 100 byte non è
+ * un margine, è un allarme che suona a ogni riga. Con 500 il tetto torna a fare
+ * il suo mestiere — accorgersi di una LIBRERIA entrata per sbaglio nell'avvio,
+ * non di una condizione in un template. La prima carta resta togliere peso, e
+ * qui è stata giocata fino in fondo prima di chiedere.
  */
-const DEFAULT_MAXIMUM_BYTES = 600_100
+const DEFAULT_MAXIMUM_BYTES = 600_600
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {
