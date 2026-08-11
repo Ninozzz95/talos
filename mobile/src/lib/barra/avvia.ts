@@ -63,6 +63,18 @@ export async function talosAvviaLaBarra(i18n: Plugin): Promise<boolean> {
      * schermata» con 403 nodi nel log.
      */
     const modo = reactive({
+        /*
+         * ⭐⭐ IL NUMERO DELLA CHIAMATA, e non è un dettaglio contabile.
+         *
+         * L'activity della barra è `singleTask`: dalla seconda apertura in poi
+         * non si monta niente, arriva solo un indirizzo nuovo. Chi ascolta il
+         * MODO non può accorgersi di una chiamata nuova guardando i valori —
+         * misurato sul Pad l'11 agosto: riaperta dalla tendina dopo il gesto,
+         * `daVoce` andava da `true` a `true`, il watch non scattava, e la barra
+         * restava muta. Un contatore invece cambia SEMPRE, ed è la sola cosa
+         * che distingue «è cambiato un dato» da «mi hanno chiamato di nuovo».
+         */
+        chiamata: 1,
         daVoce: letto.daVoce,
         contesto: { nodi: letto.contesto.nodi, immagine: letto.contesto.immagine },
     })
@@ -76,6 +88,18 @@ export async function talosAvviaLaBarra(i18n: Plugin): Promise<boolean> {
             if (!aggiornato) return
             modo.contesto.nodi = aggiornato.contesto.nodi
             modo.contesto.immagine = aggiornato.contesto.immagine
+            /*
+             * ⛔⛔ E ANCHE `daVoce`, che prima restava quello della PRIMA
+             * apertura. Misurato sul Pad l'11 agosto: chiamata la barra col
+             * gesto (che ascolta) e poi riaperta dalla tendina, l'orlo diceva
+             * `fermo` — e viceversa. Causa: l'activity è `singleTask`, quindi
+             * dalla seconda volta in poi non si monta niente di nuovo, arriva
+             * solo questo evento. Aggiornare il contesto e non il modo voleva
+             * dire che la barra ricordava per sempre COME era stata aperta la
+             * prima volta.
+             */
+            modo.daVoce = aggiornato.daVoce
+            modo.chiamata += 1
         })
     } catch {
         // Sul web non c'è nessun intent che possa arrivare dopo: la barra vive

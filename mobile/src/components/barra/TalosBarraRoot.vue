@@ -50,7 +50,7 @@
  * è la stessa: `useChatController()` è un oggetto condiviso, quindi memoria,
  * cronologia e strumenti sono quelli veri, non una copia.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ArrowUp, Camera, Copy, Eye, EyeOff, FileText, Image, Library, Maximize2, Mic, Plus, Square, Volume2, VolumeX, X } from '@lucide/vue'
 import TalosMobileMessageContent from '@/components/chat/TalosMobileMessageContent.vue'
 import { useTalosI18n } from '@/i18n'
@@ -62,7 +62,12 @@ import { talosOffsetDelTrascinamento, talosTrascinamentoApre } from '@/lib/barra
 import { TALOS_METADATA_DETTATO } from '@/lib/tools/tracciaAzione'
 import type { TalosModoBarra } from '@/lib/barra/modoBarra'
 
-const props = defineProps<{ modo: TalosModoBarra }>()
+/*
+ * ⛔ `chiamata` non sta in `TalosModoBarra` perché non si legge dall'indirizzo:
+ * lo conta chi riceve gli indirizzi (`lib/barra/avvia.ts`). Metterlo nel tipo
+ * che il parser produce vorrebbe dire chiedergli un dato che non ha.
+ */
+const props = defineProps<{ modo: TalosModoBarra & { chiamata?: number } }>()
 
 const { t, locale } = useTalosI18n()
 const controller = useChatController()
@@ -121,6 +126,85 @@ const dettatura = useTalosMobileDictation({
 
 const ascolta = computed(() => dettatura.status.value === 'listening' || dettatura.status.value === 'starting')
 const lavora = computed(() => chat.state.sending)
+
+/**
+ * ⭐⭐ L'ASCOLTO NON MUORE DA SOLO — owner 2026-08-11: «assicurati che
+ * l'assistente si apra SEMPRE in modalità ascolto».
+ *
+ * ## ⛔ Il difetto, misurato sul Pad
+ *
+ * Chiamata la barra col gesto dell'assistente e lasciata lì sei secondi, due
+ * testimoni indipendenti dicevano la stessa cosa:
+ *
+ *     appops:  RECORD_AUDIO: allow; duration=+2s029ms   ← preso e RILASCIATO
+ *     DOM:     microfono="Parla"  orlo="fermo"          ← non sta ascoltando
+ *
+ * ⇒ L'ascolto partiva davvero, e moriva dopo **due secondi**: il motore vocale
+ * chiude da solo quando non sente niente, e la barra restava muta con l'aria di
+ * non aver mai ascoltato. Chi chiama un assistente e poi pensa un attimo prima
+ * di parlare trovava il microfono già spento.
+ *
+ * ## La cura, e i suoi limiti
+ *
+ * Il silenzio NON è un errore: si riparte. Ma con tre freni, perché un
+ * microfono che si riaccende all'infinito è la cosa peggiore che un'app possa
+ * fare a chi si fida:
+ *
+ *   1. un TETTO di riprese — dopo `RIPRESE_MASSIME` silenzi TALOS smette, e la
+ *      pillola resta lì pronta a essere scritta;
+ *   2. la persona VINCE sempre — se tocca il microfono per fermarlo, se scrive,
+ *      o se manda la domanda, non si riparte più (`ascoltoVoluto` va a falso);
+ *   3. si riparte SOLO sul silenzio (`noSpeech`). Un errore vero — permesso
+ *      negato, motore rotto — non si insiste: si mostra.
+ */
+const RIPRESE_MASSIME = 4
+const ascoltoVoluto = ref(props.modo.daVoce)
+let riprese = 0
+
+watch(
+    () => [dettatura.status.value, dettatura.errorCode.value] as const,
+    ([stato, codice]) => {
+        if (!ascoltoVoluto.value) return
+        if (stato !== 'error' || codice !== 'noSpeech') return
+        if (riprese >= RIPRESE_MASSIME) {
+            ascoltoVoluto.value = false
+            return
+        }
+        riprese += 1
+        void dettatura.toggle()
+    },
+)
+
+/** La persona ha deciso: da qui in poi l'ascolto non si riaccende da solo. */
+function laVoceLaComandaLaPersona(): void {
+    ascoltoVoluto.value = false
+}
+
+/**
+ * ⭐⭐ OGNI CHIAMATA NUOVA RIACCENDE L'ASCOLTO — e senza questo la seconda
+ * apertura era muta.
+ *
+ * L'activity della barra è `singleTask`: dalla seconda volta in poi NON si
+ * monta niente: arriva solo un indirizzo nuovo, che `avvia.ts` riversa nel modo
+ * reattivo. Quindi `onMounted` — dove l'ascolto parte — non viene più eseguito.
+ *
+ * MISURATO sul Pad: chiamata col gesto (ascolta), chiusa, riaperta dalla
+ * tendina → `orlo=fermo`. La barra ricordava per sempre com'era stata aperta la
+ * PRIMA volta, e nessuna delle tre porte funzionava alla seconda chiamata.
+ *
+ * ⛔ E il contatore delle riprese si azzera qui: sono i silenzi di QUESTA
+ * chiamata, non di tutte quelle da quando l'app è viva. Senza, alla quinta
+ * apertura TALOS non ascolterebbe più.
+ */
+watch(
+    () => props.modo.chiamata,
+    () => {
+        if (!props.modo.daVoce) return
+        riprese = 0
+        ascoltoVoluto.value = true
+        if (!ascolta.value) void dettatura.toggle()
+    },
+)
 
 /**
  * La risposta a questa domanda: quella che arriva, o quella appena arrivata.
@@ -289,6 +373,9 @@ function alternaContesto(): void {
 async function invia(): Promise<void> {
     const testo = bozza.value.trim()
     if (!testo || lavora.value) return
+    // ⛔ La domanda è partita: da qui l'ascolto non si riaccende da solo.
+    // Senza questa riga il microfono tornerebbe su mentre TALOS risponde.
+    laVoceLaComandaLaPersona()
     dettatura.cancel()
     const dettato = voce.catturaInvio()
     domanda.value = testo
@@ -541,6 +628,7 @@ onMounted(async () => {
             <textarea
                 v-model="bozza"
                 class="campo"
+                @beforeinput="laVoceLaComandaLaPersona"
                 rows="1"
                 :placeholder="ascolta ? t('barra.listening') : t('barra.write')"
                 :aria-label="t('barra.write')"
@@ -577,7 +665,7 @@ onMounted(async () => {
                 :aria-pressed="ascolta"
                 :aria-label="ascolta ? t('barra.stopListening') : t('barra.speak')"
                 data-testid="talos-barra-microfono"
-                @click="dettatura.toggle()"
+                @click="laVoceLaComandaLaPersona(); dettatura.toggle()"
             >
                 <Mic class="icona" aria-hidden="true" />
             </button>
