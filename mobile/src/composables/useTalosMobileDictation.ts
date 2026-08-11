@@ -30,6 +30,14 @@ export interface UseTalosMobileDictationOptions {
      * dettatura fallisce in 500 ms senza nemmeno partire (misurato).
      */
     zittisci?: () => void | Promise<void>
+    /**
+     * ⛔ Quanto silenzio prima che il motore chiuda il turno, in ms. Chi vuole
+     * un ascolto CONTINUO deve dirlo al motore, non riaprirlo di continuo:
+     * `startListening` richiamata a raffica fallisce in silenzio, ed è il
+     * difetto che l'owner ha visto l'11 agosto («l'ascolto resta ma non capisce
+     * niente»).
+     */
+    silenceMillis?: () => number | undefined
     /** Live locale boundary; raw plugin prose never becomes application UI. */
     errorMessage?: (code: TalosDictationErrorCode) => string
 }
@@ -250,6 +258,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             language: options.language?.(),
             autoLanguage: options.autoLanguage?.() ?? true,
             allowedLanguages: options.allowedLanguages?.() ?? [],
+            silenceMillis: options.silenceMillis?.(),
         })
     }
 

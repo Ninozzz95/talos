@@ -155,9 +155,50 @@ const dettatura = useTalosMobileDictation({
      * scegliendo di ereditare, e questa volta ci ha morso.
      */
     zittisci: () => lettura.stop(),
+    /**
+     * ⛔⛔ 1600 ms, e sono la differenza fra «ascolta» e «fa finta».
+     *
+     * Il motore chiude il turno col SUO tempo di default — corto — e nessuno
+     * gli aveva mai detto altrimenti (`silenceMillis` esisteva nel nativo e non
+     * lo passava nessuno). Per tenere l'ascolto acceso lo riaprivamo, e
+     * `startListening` richiamata a raffica **fallisce in silenzio**:
+     * `onBeginningOfSpeech` non arriva più. Da fuori è esattamente quello che
+     * ha visto l'owner: «la modalità ascolto rimane ma non ascolta niente».
+     *
+     * ⇒ Si dice al motore di aspettare. 1600 ms lasciano respirare una pausa in
+     * mezzo a una frase, e sono abbastanza corti perché smettere di parlare
+     * chiuda il turno — che è anche il segnale con cui la domanda parte da sola.
+     */
+    silenceMillis: () => 1600,
 })
 
-const ascolta = computed(() => dettatura.status.value === 'listening' || dettatura.status.value === 'starting')
+const ATTESA_MS = 30_000
+/** Quanto si aspetta prima di riaprire il motore. Vedi la ripresa qui sotto. */
+const RESPIRO_MS = 500
+const ascoltoVoluto = ref(props.modo.daVoce)
+let scadenzaAscolto = props.modo.daVoce ? Date.now() + ATTESA_MS : 0
+
+/**
+ * ⛔⛔ ASCOLTA = È LA NOSTRA INTENZIONE, non «il motore è agganciato adesso».
+ *
+ * Owner 2026-08-11, col video: «appena apro l'assistente la modalità ascolto si
+ * spegne dopo un secondo circa».
+ *
+ * Era vero, e la causa era qui: il motore vocale chiude il turno appena non
+ * sente niente, noi lo riapriamo subito (100 ms, misurati), ma in mezzo lo stato
+ * passava per `error` e la pillola diceva «fermo». Per chi guarda, TALOS si era
+ * spento e riacceso — e in mezzo non sapeva se parlare.
+ *
+ * ⇒ I riavvii del motore sono affar NOSTRO. Finché la sessione di ascolto è
+ * aperta (`ascoltoVoluto`), la barra dice che ascolta: è la verità dal punto di
+ * vista di chi parla. Quando smettiamo davvero — tempo scaduto, o la persona ha
+ * deciso — `ascoltoVoluto` va a falso e la pillola si spegne una volta sola.
+ */
+const ascolta = computed(() =>
+    ascoltoVoluto.value
+    || dettatura.status.value === 'listening'
+    || dettatura.status.value === 'starting',
+)
 const lavora = computed(() => chat.state.sending)
 
 /**
@@ -190,23 +231,65 @@ const lavora = computed(() => chat.state.sending)
  *   3. si riparte SOLO sul silenzio (`noSpeech`). Un errore vero — permesso
  *      negato, motore rotto — non si insiste: si mostra.
  */
-const RIPRESE_MASSIME = 4
-const ascoltoVoluto = ref(props.modo.daVoce)
-let riprese = 0
+/**
+ * ⛔ QUANTO ASPETTA, e perché un TEMPO e non un numero di tentativi.
+ *
+ * La prima versione contava quattro riprese. Owner 2026-08-11, col video: «appena
+ * apro l'assistente la modalità ascolto si spegne dopo un secondo circa». Il
+ * motore vocale chiude il turno appena non sente niente — a volte dopo quattro
+ * secondi, a volte dopo uno — quindi contare i tentativi vuol dire aspettare un
+ * tempo che cambia da apertura ad apertura. Trenta secondi sono trenta secondi.
+ */
 
 watch(
     () => [dettatura.status.value, dettatura.errorCode.value] as const,
     ([stato, codice]) => {
         if (!ascoltoVoluto.value) return
         if (stato !== 'error' || codice !== 'noSpeech') return
-        if (riprese >= RIPRESE_MASSIME) {
+        if (Date.now() >= scadenzaAscolto) {
             ascoltoVoluto.value = false
             return
         }
-        riprese += 1
-        void dettatura.toggle()
+        /*
+         * ⛔ Si RESPIRA prima di riaprire. `cancel()` e la chiusura della
+         * sessione precedente non sono istantanei, e riaprire dentro quella
+         * finestra è il modo documentato per mettere il riconoscitore in uno
+         * stato in cui non sente più niente.
+         */
+        setTimeout(() => {
+            if (!ascoltoVoluto.value) return
+            if (dettatura.status.value === 'listening' || dettatura.status.value === 'starting') return
+            void dettatura.toggle()
+        }, RESPIRO_MS)
     },
 )
+
+/**
+ * ⛔⛔ IL PULSANTE FERMA DAVVERO — owner 2026-08-11: «il pulsante microfono
+ * mentre ascolta non ferma l'ascolto, lo ferma e subito dopo lo fa ripartire».
+ *
+ * Aveva ragione, ed era colpa del disegno nuovo. La pillola dice «ascolto»
+ * finché ascoltare è la nostra INTENZIONE, anche nei 500 ms in cui il motore è
+ * chiuso fra due turni. Il vecchio gestore faceva `toggle()`, che in quel
+ * momento non trova niente da fermare e quindi **accende**. Da fuori: premo per
+ * fermare e riparte.
+ *
+ * ⇒ Il pulsante guarda l'intenzione, non il motore: se stiamo ascoltando —
+ * comunque — si smette, e si smette anche di volerlo.
+ */
+function alternaAscolto(): void {
+    const acceso = ascoltoVoluto.value
+        || dettatura.status.value === 'listening'
+        || dettatura.status.value === 'starting'
+    if (acceso) {
+        ascoltoVoluto.value = false
+        dettatura.cancel()
+        return
+    }
+    scadenzaAscolto = Date.now() + ATTESA_MS
+    ascoltoVoluto.value = true
+    void dettatura.toggle()
+}
 
 /** La persona ha deciso: da qui in poi l'ascolto non si riaccende da solo. */
 function laVoceLaComandaLaPersona(): void {
@@ -235,7 +318,11 @@ function laVoceLaComandaLaPersona(): void {
 watch(
     () => dettatura.status.value,
     (adesso, prima) => {
-        if (prima !== 'listening' || adesso !== 'idle') return
+        // ⛔ Anche da `starting`: se il risultato finale arriva prima che il
+        // motore segnali il primo suono, lo stato non passa mai per `listening`
+        // — e la domanda resterebbe nel campo senza partire.
+        if (adesso !== 'idle') return
+        if (prima !== 'listening' && prima !== 'starting') return
         if (!ascoltoVoluto.value) return
         if (!bozza.value.trim()) return
         void invia()
@@ -254,17 +341,19 @@ watch(
  * tendina → `orlo=fermo`. La barra ricordava per sempre com'era stata aperta la
  * PRIMA volta, e nessuna delle tre porte funzionava alla seconda chiamata.
  *
- * ⛔ E il contatore delle riprese si azzera qui: sono i silenzi di QUESTA
- * chiamata, non di tutte quelle da quando l'app è viva. Senza, alla quinta
- * apertura TALOS non ascolterebbe più.
+ * ⛔ E l'attesa riparte da qui: sono i trenta secondi di QUESTA chiamata, non
+ * quelli da quando l'app è viva. Senza, alla seconda apertura TALOS troverebbe
+ * il tempo già scaduto e non ascolterebbe più.
  */
 watch(
     () => props.modo.chiamata,
     () => {
         if (!props.modo.daVoce) return
-        riprese = 0
+        scadenzaAscolto = Date.now() + ATTESA_MS
         ascoltoVoluto.value = true
-        if (!ascolta.value) void dettatura.toggle()
+        if (dettatura.status.value !== 'listening' && dettatura.status.value !== 'starting') {
+            void dettatura.toggle()
+        }
     },
 )
 
@@ -393,24 +482,37 @@ async function chiudi(): Promise<void> {
 }
 
 /**
- * ⭐ Porta la conversazione dentro TALOS intero.
+ * ⭐ Porta la conversazione dentro TALOS intero — QUELLA conversazione.
  *
  * Censito su Gemini: ha DUE strade per la stessa cosa — un tondo «Apri l'app
  * Gemini» e la maniglia trascinabile — e la conversazione arriva di là completa,
- * con la domanda in bolla e un titolo generato. Qui la chat è già la stessa, per
- * costruzione: non c'è niente da trasferire, basta aprire.
+ * con la domanda in bolla.
+ *
+ * ## ⛔ E qui c'era un difetto tenuto in piedi da una frase falsa
+ *
+ * Il commento diceva: «la chat è già la stessa, per costruzione: non c'è niente
+ * da trasferire, basta aprire». Owner 2026-08-11: «si deve aprire la chat
+ * aggiornata col testo che ho inviato, o comunque tutta la conversazione».
+ *
+ * La frase era falsa. La barra vive in un'altra Activity, quindi in un'altra
+ * **WebView**: un altro contesto JavaScript, con un'altra istanza del negozio
+ * della chat. In comune c'è solo il database. Aprire l'app senza dirle niente
+ * la lasciava sulla conversazione che aveva lei.
+ *
+ * ⇒ Si passa l'id della sessione, e l'app intera la apre leggendola da disco.
+ *
+ * ⛔ E si esce SOLO se l'apertura è riuscita: chiudere la barra dopo un'apertura
+ * fallita lascerebbe la persona senza né l'una né l'altra.
  */
 async function apriInTalos(): Promise<void> {
     try {
-        const [{ App }, { TalosDeviceBridge }] = await Promise.all([
+        const [{ App }, { registerPlugin }] = await Promise.all([
             import('@capacitor/app'),
-            import('@/lib/device/devicePlugin'),
+            import('@capacitor/core'),
         ])
-        const info = await App.getInfo()
-        // ⛔ Il pacchetto si CHIEDE: fra `ai.talos` e `ai.talos.dev` scritto a
-        // mano sbaglierei metà delle installazioni, e in quella metà il pulsante
-        // non farebbe niente senza dirlo.
-        await TalosDeviceBridge.openApp({ package: info.id })
+        const ponte = registerPlugin<{ apriLaChat(o: { sessione: string | null }): Promise<{ aperta: boolean }> }>('TalosBarra')
+        const esito = await ponte.apriLaChat({ sessione: chat.activeSession.value?.id ?? null })
+        if (!esito?.aperta) { errore.value = t('barra.openFailed'); return }
         await App.exitApp()
     } catch {
         errore.value = t('barra.openFailed')
@@ -727,7 +829,7 @@ onMounted(async () => {
                 :aria-pressed="ascolta"
                 :aria-label="ascolta ? t('barra.stopListening') : t('barra.speak')"
                 data-testid="talos-barra-microfono"
-                @click="laVoceLaComandaLaPersona(); dettatura.toggle()"
+                @click="alternaAscolto()"
             >
                 <Mic class="icona" aria-hidden="true" />
             </button>
