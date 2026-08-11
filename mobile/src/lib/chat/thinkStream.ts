@@ -65,6 +65,36 @@ const CHIUSURA = '</think>'
 const TOOL_APERTURA = '<tool_call>'
 const TOOL_CHIUSURA = '</tool_call>'
 
+/**
+ * ⛔⛔ I blocchi che si BUTTANO, e il secondo l'ha trovato l'owner.
+ *
+ * `<tool_call>` c'era da sempre. `<tools>` no — ed è il blocco con cui un
+ * modello piccolo si RILEGGE il catalogo invece di usarlo: sul Pad, l'11
+ * agosto, Qwen3-1.7B ha risposto a una domanda di aritmetica con l'elenco dei
+ * nostri strumenti, descrizioni comprese.
+ *
+ * Vale la stessa ragione della chiamata: non ha niente da aggiungere a nessuno
+ * dei due cassetti. Chi vuole sapere quali strumenti esistono ha un pannello.
+ */
+const DA_BUTTARE = [
+    { apre: TOOL_APERTURA, chiude: TOOL_CHIUSURA },
+    { apre: '<tools>', chiude: '</tools>' },
+] as const
+
+/** La prima delle aperture da buttare che compare, con la sua chiusura. */
+function primaDi(
+    testo: string,
+    aperture: readonly string[],
+): { dove: number, apre: string, chiude: string } {
+    let dove = -1
+    let quale = 0
+    for (let i = 0; i < aperture.length; i += 1) {
+        const at = testo.indexOf(aperture[i]!)
+        if (at >= 0 && (dove < 0 || at < dove)) { dove = at; quale = i }
+    }
+    return { dove, apre: DA_BUTTARE[quale]!.apre, chiude: DA_BUTTARE[quale]!.chiude }
+}
+
 export interface TalosThinkSlice {
     /** Ciò che va nella bolla della risposta. */
     text: string
@@ -108,6 +138,8 @@ export function talosCreateThinkSplitter(): TalosThinkSplitter {
      */
     let stato: 'testo' | 'ragionamento' | 'chiamata' = 'testo'
     let sospeso = ''
+    /** Quale chiusura sta aspettando lo stato «chiamata»: le aperture sono due. */
+    let chiusuraAttesa: string = TOOL_CHIUSURA
 
     function consuma(chiudendo: boolean): TalosThinkSlice {
         let text = ''
@@ -115,36 +147,53 @@ export function talosCreateThinkSplitter(): TalosThinkSplitter {
 
         for (;;) {
             if (stato === 'testo') {
+                /*
+                 * ⛔⛔ TRE aperture, non due — e la terza l'ha trovata l'owner.
+                 *
+                 * RIPRODOTTO sul Pad l'11 agosto con Qwen3-1.7B: a una domanda
+                 * di aritmetica, in chat è comparso il CATALOGO degli strumenti
+                 * dentro `<tools><tool_details>…`. Il separatore conosceva
+                 * `<tool_call>` — e infatti quello non lampeggiava mai — ma non
+                 * `<tools>`, che è il blocco con cui il modello si rilegge la
+                 * lista invece di usarla.
+                 *
+                 * ⇒ Stesso trattamento: si butta. Un catalogo a schermo non
+                 * aggiunge niente a nessuno dei due cassetti, esattamente come
+                 * una chiamata già eseguita.
+                 */
                 const dovePensiero = sospeso.indexOf(APERTURA)
-                const doveChiamata = sospeso.indexOf(TOOL_APERTURA)
+                const doveChiamata = primaDi(sospeso, DA_BUTTARE.map((b) => b.apre))
                 // La PRIMA delle due, non una preferita: l'ordine lo decide il
                 // testo, non noi.
-                const primo = dovePensiero < 0 ? doveChiamata
-                    : doveChiamata < 0 ? dovePensiero
-                        : Math.min(dovePensiero, doveChiamata)
+                const primo = dovePensiero < 0 ? doveChiamata.dove
+                    : doveChiamata.dove < 0 ? dovePensiero
+                        : Math.min(dovePensiero, doveChiamata.dove)
                 if (primo >= 0) {
                     text += sospeso.slice(0, primo)
                     const pensiero = primo === dovePensiero
-                    sospeso = sospeso.slice(primo + (pensiero ? APERTURA : TOOL_APERTURA).length)
+                    sospeso = sospeso.slice(
+                        primo + (pensiero ? APERTURA : doveChiamata.apre).length,
+                    )
+                    if (!pensiero) chiusuraAttesa = doveChiamata.chiude
                     stato = pensiero ? 'ragionamento' : 'chiamata'
                     continue
                 }
                 /*
                  * Nessuna apertura intera: si emette tutto tranne la coda che
                  * potrebbe esserne l'inizio. Si trattiene la PIU' LUNGA delle
-                 * due code possibili, altrimenti `«…ecco <tool_c»` uscirebbe a
+                 * code possibili, altrimenti `«…ecco <tool_c»` uscirebbe a
                  * schermo perche' non e' un prefisso di `<think>`.
                  */
                 const trattenuti = chiudendo ? 0 : Math.max(
                     codaAmbigua(sospeso, APERTURA),
-                    codaAmbigua(sospeso, TOOL_APERTURA),
+                    ...DA_BUTTARE.map((b) => codaAmbigua(sospeso, b.apre)),
                 )
                 text += sospeso.slice(0, sospeso.length - trattenuti)
                 sospeso = sospeso.slice(sospeso.length - trattenuti)
                 return { text, reasoning }
             }
 
-            const chiusura = stato === 'ragionamento' ? CHIUSURA : TOOL_CHIUSURA
+            const chiusura = stato === 'ragionamento' ? CHIUSURA : chiusuraAttesa
             const at = sospeso.indexOf(chiusura)
             if (at >= 0) {
                 // ⛔ Il contenuto della chiamata non va da nessuna parte.

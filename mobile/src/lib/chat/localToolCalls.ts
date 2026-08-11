@@ -215,3 +215,70 @@ function comeChiamata(
             ?? JSON.stringify(argomenti),
     }
 }
+
+/**
+ * ⭐⭐ IL PROTOCOLLO NON ARRIVA MAI ALLO SCHERMO.
+ *
+ * RIPRODOTTO sul Pad l'11 agosto con `unsloth/Qwen3-1.7B-GGUF` Q4_K_M, chat
+ * nuova, domanda di aritmetica in italiano — nessuno strumento serviva. Al
+ * posto della risposta, in chat:
+ *
+ *     <tools> </tools> <tools> </tools>
+ *     <tools> <tool_details> <tool_name>library_list</tool_name>
+ *     <tool_description>List, browse, count or filter every local Library
+ *     file…</tool_description> <tool_input>{}</tool_input> </tool_details>
+ *     … </tool_results>
+ *
+ * ⛔ Quel testo NON è nostro: non esiste in tutto il sorgente. Ma le
+ * descrizioni dentro sì — sono le nostre, alla lettera. Il modello sta
+ * **ricopiando il catalogo** invece di usarlo: la stessa cosa che faceva il
+ * 360M col protocollo di identità, e la ragione per cui il prompt locale ha un
+ * tetto di 600 caratteri. Solo che qui il testo ripetuto sono i tool, che sono
+ * decine di volte più lunghi.
+ *
+ * ## ⛔ Perché la rete sta a VALLE e non solo a monte
+ *
+ * La causa a monte è del modello e cambia con ogni modello: un 1,7B ricopia,
+ * un 4B forse no, il prossimo farà un'altra cosa ancora. Una rete a valle
+ * invece vale per tutti e non si può dimenticare. È la stessa scelta già fatta
+ * per il nome interno dello strumento nella voce: la causa si cura dove si
+ * può, il sintomo si ferma sempre.
+ *
+ * ## ⛔ E si tolgono solo i NOSTRI tag, non «tutto ciò che sembra XML»
+ *
+ * Una risposta può contenere HTML per ragioni legittime — qualcuno che chiede
+ * come si scrive un tag, un pezzo di codice. Si toglie l'elenco chiuso qui
+ * sotto, che è il vocabolario del protocollo dei tool e nient'altro.
+ */
+const TAG_DEL_PROTOCOLLO = [
+    'tools', 'tool_details', 'tool_name', 'tool_description',
+    'tool_input', 'tool_results', 'tool_result', 'tool_call',
+] as const
+
+/**
+ * Il testo senza il protocollo degli strumenti.
+ *
+ * ⛔ Si toglie il BLOCCO quando è chiuso, e il singolo tag quando non lo è: una
+ * generazione tagliata a metà lascia un'apertura orfana, ed è esattamente il
+ * caso in cui la persona vedrebbe la roba peggiore.
+ */
+export function talosSenzaProtocolloDeiTool(testo: string): string {
+    /*
+     * ⛔ Il taglio degli spazi vale ANCHE per il testo già pulito, e non è
+     * pignoleria: il separatore dello stream toglie i blocchi e lascia l'a capo
+     * che li precedeva, quindi la risposta arriva qui come «\nC = 2 kg.». Una
+     * bolla che comincia a capo sembra rotta, e il caso l'ha trovato un test
+     * («expected '\nC = 2 kg.' to be 'C = 2 kg.'») proprio perché l'uscita
+     * anticipata saltava la ripulitura.
+     */
+    if (!testo.includes('<')) return testo.trim()
+    let fuori = testo
+    for (const tag of TAG_DEL_PROTOCOLLO) {
+        fuori = fuori
+            .replace(new RegExp(`<${tag}(?:\\s[^>]*)?>[^]*?</${tag}>`, 'gi'), '')
+            .replace(new RegExp(`</?${tag}(?:\\s[^>]*)?>`, 'gi'), '')
+    }
+    // ⛔ Le righe vuote lasciate dietro sono parte del difetto: una risposta che
+    // comincia con tre a capo sembra rotta anche quando non lo è più.
+    return fuori.replace(/\n{3,}/g, '\n\n').trim()
+}

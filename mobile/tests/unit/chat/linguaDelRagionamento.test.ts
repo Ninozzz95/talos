@@ -40,7 +40,21 @@ describe('⛔ la lingua del ragionamento, nelle due colonne', () => {
          * seguita.
          */
         const locale = buildTalosSystemPrompt('neutral', { provider: 'local', model: 'qwen3-1.7b' })
-        expect(locale).toContain('REASON, in the user\'s language')
+        /*
+         * ⛔⛔ E NIENTE PAROLE IN MAIUSCOLO, imparato rompendolo.
+         *
+         * La prima versione diceva «Answer, and REASON, in the user's
+         * language». Sul Pad, l'11 agosto, Qwen3-1.7B ha risposto «REASON: The
+         * user provided a problem involving three boxes…»: aveva preso la
+         * parola in maiuscolo per un'etichetta da stampare. Su un modello
+         * piccolo tutto ciò che sembra un marcatore diventa uscita.
+         */
+        const urlate = (locale.match(/\b[A-Z]{3,}\b/g) ?? [])
+            // ⛔ I nomi propri restano: «TALOS» e «AVM» sono chi siamo, non
+            // enfasi. Tutto il resto in maiuscolo è un marcatore travestito.
+            .filter((parola) => !['TALOS', 'AVM'].includes(parola))
+        expect(urlate).toEqual([])
+        expect(locale).toContain('Reply in the user\'s language, and think in it too')
         expect(locale).toContain('your reasoning is shown to them')
         expect(locale.length).toBeLessThan(600)
     })

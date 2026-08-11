@@ -753,3 +753,53 @@ describe("lo Stop ferma il motore, non solo l'ascolto", () => {
     })
 })
 
+
+/**
+ * ⛔⛔ IL PROTOCOLLO DEGLI STRUMENTI NON ARRIVA MAI ALLO SCHERMO.
+ *
+ * RIPRODOTTO sul Pad l'11 agosto con `unsloth/Qwen3-1.7B-GGUF` Q4_K_M: a una
+ * domanda di aritmetica in italiano, dove nessuno strumento serviva, la
+ * risposta in chat era il CATALOGO degli strumenti — le nostre descrizioni,
+ * alla lettera, dentro il formato del modello.
+ *
+ * ⛔ Questi casi stanno sull'ADATTATORE e non solo sulla regola pura: una
+ * prova sulla funzione non dice niente su chi la chiama, ed è la lezione che
+ * in questa sessione ho già pagato due volte.
+ */
+describe('⛔ F3 — il catalogo non finisce in chat', () => {
+    /** Lo stesso ingresso minimo degli altri casi: qui conta solo l'USCITA. */
+    const ingresso = () => ({
+        model: {
+            id: '/models/qwen.gguf', provider: 'local', displayName: 'Qwen',
+            chatCompatibility: 'unknown', supportedParameters: [],
+            inputModalities: ['text'], outputModalities: ['text'],
+        },
+        turns: [{ role: 'user', content: 'Quanto fa 6 + 6?' }],
+        effort: 'low',
+        thinking: false,
+    })
+
+    it('⭐ il testo del modello esce ripulito, sia risposta sia ragionamento', async () => {
+        localEngine.talosLocalEngineGenerate.mockResolvedValue({
+            text: '<tools> <tool_details> <tool_name>library_list</tool_name> '
+                + '<tool_description>List every local Library file.</tool_description> '
+                + '<tool_input>{}</tool_input> </tool_details> </tools>\nC = 2 kg.',
+            reasoning: 'Vediamo. <tool_call>{"name":"x"}</tool_call> Poi rispondo.',
+            tokens: 42,
+        })
+
+        const esito = await localAdapter.complete(
+            ingresso() as never,
+            { apiKey: null, endpoint: null },
+            (() => { throw new Error('local must not use transport') }) as never,
+        ) as { text: string, reasoning?: string }
+
+        // ⛔ È questa la riga che morde: tolto il filtro dall'adattatore, qui
+        // torna dentro tutto il catalogo.
+        expect(esito.text).toBe('C = 2 kg.')
+        expect(esito.text).not.toContain('tool_name')
+        expect(esito.reasoning ?? '').not.toContain('tool_call')
+        // E la prosa vera che stava attorno non si perde.
+        expect(esito.reasoning ?? '').toContain('Poi rispondo.')
+    })
+})

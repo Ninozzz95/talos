@@ -40,7 +40,11 @@ import {
     talosLocalEscalatedContextTokens,
 } from '@/lib/models/localContextPolicy'
 import { talosToolsForLocalEngine } from '@/lib/tools/registry'
-import { talosNormaliseLocalToolCalls, talosRecuperaChiamateNude } from '@/lib/chat/localToolCalls'
+import {
+    talosNormaliseLocalToolCalls,
+    talosRecuperaChiamateNude,
+    talosSenzaProtocolloDeiTool,
+} from '@/lib/chat/localToolCalls'
 import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/thinkStream'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 
@@ -864,14 +868,24 @@ async function run(
      * finisce nel database — cioè quello che si rilegge riaprendo la chat.
      */
     const finale = talosSplitFinalThink(testoGrezzo, generation.reasoning)
+    /*
+     * ⛔⛔ IL PROTOCOLLO NON ARRIVA MAI ALLO SCHERMO — e passa da qui perché
+     * questo è l'ultimo punto prima del DATABASE: quello che si salva è quello
+     * che si rilegge riaprendo la chat. Filtrare solo lo streaming avrebbe
+     * lasciato il difetto nella trascrizione, che è lo stesso errore già
+     * commesso col `<think>` (vedi il commento qui sopra).
+     *
+     * ⛔ E su ENTRAMBI i canali: l'owner ha visto la roba tecnica sia nella
+     * risposta sia nel ragionamento.
+     */
     return {
-        text: finale.text,
+        text: talosSenzaProtocolloDeiTool(finale.text),
         model: input.model.id,
         finishReason: 'stop',
         // Nello stesso campo che usano i provider di rete, quindi nello stesso
         // cassetto: il ragionamento di un modello locale non è una cosa diversa
         // dal ragionamento di Claude, e non merita una seconda superficie.
-        reasoning: finale.reasoning || undefined,
+        reasoning: talosSenzaProtocolloDeiTool(finale.reasoning) || undefined,
         // E lo stesso vale per le chiamate: l'esecutore a valle non deve sapere
         // da dove arrivano.
         // Normalizzate una volta sola: il formato Hermes che Qwen usa non
