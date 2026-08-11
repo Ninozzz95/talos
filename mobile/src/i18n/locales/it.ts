@@ -893,6 +893,11 @@ export const TALOS_IT_MESSAGES = {
         codeCopyFailed: 'Impossibile copiare il codice.',
     },
     privilege: {
+        assistantTitle: 'TALOS come assistente',
+        assistantBody: 'La barra si apre solo quando TALOS è il tuo assistente. Un tocco, e te lo chiede Android.',
+        assistantHeld: 'TALOS è il tuo assistente. Chiamalo da qualunque app e la barra compare.',
+        assistantAsk: 'Rendi TALOS il tuo assistente',
+        assistantManual: 'Questo telefono non ha la finestra: Impostazioni → App → App predefinite → Assistente digitale.',
         pageTitle: 'Controllo del telefono',
         /**
          * ⛔ Nessuna promessa qui. Chi apre questa pagina vuole sapere se TALOS

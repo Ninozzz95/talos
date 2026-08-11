@@ -19,12 +19,20 @@
  * va e viene. Il mio primo disegno teneva testa, chip, campo e tondi sempre a
  * schermo — un pannello. Questa è la forma giusta, misurata.
  *
- * ## ⭐ La firma: IL FILO
+ * ## ⭐ La firma: L'ORLO
  *
- * Una riga da 2 px sul bordo alto: ferma, che respira mentre ascolta, che corre
- * mentre il modello lavora. ⭐ E qui li superiamo, perché Gemini **non ha nessun
- * segnale di stato**: la carta compare e basta. Un filo che si muove è l'unica
- * cosa che si legge con la coda dell'occhio mentre guardi l'app sotto.
+ * Un gradiente che gira su TUTTO il perimetro, e porta da solo i tre stati:
+ * fermo, che respira mentre ascolta, che corre mentre il modello lavora.
+ * ⭐ E qui li superiamo, perché Gemini **non ha nessun segnale di stato**: la
+ * carta compare e basta. Un bordo che si muove è l'unica cosa che si legge con
+ * la coda dell'occhio mentre guardi l'app sotto.
+ *
+ * ⛔ Nasceva come un filo da 2 px sul solo bordo alto. L'owner, guardandolo
+ * sopra Wikipedia: «fai in modo che abbia un gradiente animato come Gemini, che
+ * lo distacchi bene dallo sfondo». Aveva ragione due volte — il segnale si
+ * vedeva poco, e su un fondo chiaro il pannello non staccava. La firma non è
+ * cambiata: si è estesa dal bordo al perimetro. Il come sta nel foglio di stile,
+ * alla voce `.orlo`.
  *
  * ## ⭐ Il sorpasso: il contesto sta DENTRO la pillola, col numero
  *
@@ -137,8 +145,14 @@ const risposta = computed(() => {
 const cartaVisibile = computed(() => domanda.value !== '')
 const attesa = computed(() => cartaVisibile.value && !risposta.value)
 
-/** Lo stato che IL FILO racconta, e l'unico posto dove viene deciso. */
-const filo = computed<'fermo' | 'ascolto' | 'pensa'>(() => {
+/**
+ * Lo stato che L'ORLO racconta, e l'unico posto dove viene deciso.
+ *
+ * ⛔ Si chiama `segnale` e non `orlo`: l'orlo è come si VEDE, questo è cosa si
+ * DICE. Il giorno che la firma cambia forma un'altra volta — è già successo —
+ * questo nome resta giusto.
+ */
+const segnale = computed<'fermo' | 'ascolto' | 'pensa'>(() => {
     if (lavora.value) return 'pensa'
     if (ascolta.value) return 'ascolto'
     return 'fermo'
@@ -345,7 +359,7 @@ onMounted(async () => {
             :aria-label="t('barra.title')"
             data-testid="talos-barra-carta"
         >
-            <span class="orlo" :data-stato="filo" aria-hidden="true" />
+            <span class="orlo" :data-stato="segnale" aria-hidden="true" />
             <!-- ⭐ La maniglia: trascinala in su e la conversazione entra in
                  TALOS intero. Su Gemini il nodo si chiama «Punto di
                  trascinamento» ed è `clickable=false` — da noi il TOCCO fa la
@@ -449,7 +463,7 @@ onMounted(async () => {
 
         <!-- LA PILLOLA: la forma a riposo, e non cambia mai taglia. -->
         <form class="pillola" data-testid="talos-barra" @submit.prevent="invia">
-            <span class="orlo" :data-stato="filo" data-testid="talos-barra-filo" aria-hidden="true" />
+            <span class="orlo" :data-stato="segnale" data-testid="talos-barra-orlo" aria-hidden="true" />
 
             <button
                 type="button"

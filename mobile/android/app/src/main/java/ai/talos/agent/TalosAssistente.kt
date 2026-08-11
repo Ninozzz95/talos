@@ -87,19 +87,20 @@ class TalosAssistenteSessioneService : VoiceInteractionSessionService() {
 /**
  * La sessione: quello che succede quando chiami TALOS da fuori.
  *
- * ## ⛔ Perché APRE L'APP invece di disegnare un pannello suo
+ * ## ⛔ Apre LA BARRA, non l'app — e il primo disegno faceva il contrario
  *
- * Un pannello nativo sopra l'app che stai guardando sarebbe più elegante, e un
- * giorno si farà. Ma vorrebbe dire una SECONDA interfaccia di chat — con la sua
- * voce, i suoi consensi, il suo elenco di strumenti — accanto a quella che
- * esiste già. Due superfici che fanno la stessa cosa divergono sempre, e la
- * seconda resta indietro proprio sui pezzi che contano (i permessi, il freno,
- * le schede di consenso).
+ * La prima versione apriva TALOS a schermo pieno. L'owner l'ha bocciata in una
+ * riga: «potrei farlo con un tap». Vero: il punto della funzione è **restare
+ * dove sei**, chiedere mentre stai facendo altro.
  *
- * `startVoiceActivity` è la strada che il sistema offre: apre TALOS sapendo che
- * arriva da un'invocazione vocale. Chi chiama si ritrova dentro TALOS, con la
- * stessa chat e le stesse regole. ⇒ Una superficie sola, che è la ragione per
- * cui questa app è coerente.
+ * ⭐ E non è un pannello nativo disegnato da zero, che sarebbe una SECONDA
+ * interfaccia di chat — con la sua voce, i suoi consensi, il suo elenco di
+ * strumenti — accanto a quella che esiste già. Due superfici che fanno la stessa
+ * cosa divergono sempre, e la seconda resta indietro proprio sui pezzi che
+ * contano (i permessi, il freno, le schede di consenso).
+ *
+ * La barra è la STESSA app web su una faccia compatta: una superficie sola, che
+ * è la ragione per cui questa app è coerente. Il come sta in `onShow`.
  */
 class TalosAssistenteSessione(private val servizio: TalosAssistenteSessioneService) :
     VoiceInteractionSession(servizio) {
@@ -145,9 +146,11 @@ class TalosAssistenteSessione(private val servizio: TalosAssistenteSessioneServi
          * ⛔ Aspettare il contesto PRIMA di aprire sarebbe la cura sbagliata:
          * ritarderebbe la comparsa della barra di un tempo che non controlliamo,
          * per un dato che è un'aggiunta e non una condizione. Si apre subito, e
-         * quando il numero arriva glielo si manda: l'activity è `singleInstance`,
+         * quando il numero arriva glielo si manda: l'activity è `singleTask`,
          * quindi il secondo `startActivity` non ne crea un'altra — entra da
          * `onNewIntent`, che Capacitor consegna al lato web come `appUrlOpen`.
+         * (Era `singleInstance` fino a `f7b4d422`: un task ISOLATO impediva al
+         * sistema di comporre l'app sottostante, e Chrome spariva.)
          */
         if (barraAperta && nodi > 0) servizio.startActivity(intentDellaBarra())
     }
@@ -159,8 +162,8 @@ class TalosAssistenteSessione(private val servizio: TalosAssistenteSessioneServi
     }
 
     /**
-     * ⛔ Si apre l'app QUI e non in `onHandleAssist`: quello arriva anche
-     * quando la sessione non va mostrata, e aprire una schermata a chi non ha
+     * ⛔ La barra si apre QUI e non in `onHandleAssist`: quello arriva anche
+     * quando la sessione non va mostrata, e comparire sopra l'app di chi non ha
      * chiesto niente è il difetto peggiore che un assistente possa avere.
      */
     override fun onShow(args: Bundle?, showFlags: Int) {
