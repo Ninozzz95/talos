@@ -305,3 +305,53 @@ describe('message long-press opens the overflow menu (R2-11)', () => {
         wrapper.unmount()
     })
 })
+
+/**
+ * ⛔⛔ IL MICROFONO CAMBIA PROPRIETARIO.
+ *
+ * Owner 2026-08-11: «quando premo il pulsante sound spunta l'icona microfono
+ * accanto al testo. Questo non deve succedere. L'icona microfono deve spuntare
+ * solo quando uso il microfono per parlare io con la voce».
+ *
+ * La riga era `message.role === 'assistant' && parla.lette.has(message.id)`:
+ * il microfono su TALOS che PARLA. Questi casi stanno sul COMPONENTE e non
+ * sulla regola pura, perche' la regola pura non dice niente su chi la chiama —
+ * lezione gia' pagata due volte in questa sessione.
+ */
+describe('⛔ il microfono: sul dettato, non sulla risposta letta', () => {
+    const riga = (over: Partial<TalosMobileMessageView>): TalosMobileMessageView => ({
+        id: 'm', role: 'user', content: 'ciao', state: 'persisted',
+        created_at: '2026-08-11T10:00:00.000Z', model_profile_id: null,
+        run_id: null, metadata: {}, attachments: [],
+        ...over,
+    } as TalosMobileMessageView)
+
+    async function schermo(righe: TalosMobileMessageView[]) {
+        const wrapper = mount(TalosMobileMessageList, {
+            props: { messages: righe, sending: false },
+            global: { stubs: { Teleport: true } },
+        })
+        await flushPromises()
+        return wrapper
+    }
+
+    it('⭐ un messaggio DETTATO porta il microfono', async () => {
+        const wrapper = await schermo([riga({ id: 'u1', metadata: { dictated: true } })])
+        expect(wrapper.find('[data-testid="talos-message-dictated"]').exists()).toBe(true)
+    })
+
+    it('⛔ uno scritto a tastiera NO', async () => {
+        const wrapper = await schermo([riga({ id: 'u2' })])
+        expect(wrapper.find('[data-testid="talos-message-dictated"]').exists()).toBe(false)
+    })
+
+    it('⛔ e una RISPOSTA non lo porta mai, nemmeno se marcata', async () => {
+        // È il difetto dell'owner, al contrario: qualunque cosa ci sia nei
+        // metadati di una risposta, il microfono lì non ci va — TALOS parla,
+        // non ascolta.
+        const wrapper = await schermo([
+            riga({ id: 'a1', role: 'assistant', metadata: { dictated: true } }),
+        ])
+        expect(wrapper.find('[data-testid="talos-message-dictated"]').exists()).toBe(false)
+    })
+})

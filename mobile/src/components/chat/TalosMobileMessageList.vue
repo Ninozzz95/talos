@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { useTalosSpeech } from '@/composables/useTalosSpeech'
 import { BookMarked, CheckCheck, ChevronRight, FileText, Mic, ShieldQuestion } from '@lucide/vue'
 import { talosShortModelLabel } from '@/lib/models/modelLabel'
 import { TALOS_METADATA_AZIONI, talosHaAzioniDaMostrare } from '@/lib/tools/tracciaAzione'
@@ -78,7 +77,6 @@ function attesaViva(message: TalosMobileMessageView): boolean {
 }
 
 const { t } = useTalosI18n()
-const parla = useTalosSpeech()
 
 /**
  * ⛔ I nomi INTERNI non si mostrano mai: `device_torch` non dice niente a
@@ -414,12 +412,29 @@ function messageStateLabel(state: string): string {
                          `items-start` la tiene sulla PRIMA riga anche quando la
                          risposta e' lunga. -->
                     <div class="flex min-w-0 max-w-full items-baseline gap-1.5">
+<!-- ⭐⭐ IL MICROFONO STA SUL MESSAGGIO DETTATO, non sulla risposta letta.
+
+                         Owner 2026-08-11: «quando premo il pulsante sound
+                         spunta l'icona microfono accanto al testo. Questo non
+                         deve succedere». Aveva ragione, e la riga di prima era:
+
+                             message.role === 'assistant'
+                             && parla.lette.value.has(message.id)
+
+                         cioè il microfono marcava «TALOS ha LETTO questo» — il
+                         momento esatto in cui TALOS parla e nessuno sta
+                         ascoltando al microfono. Il simbolo giusto sulla cosa
+                         sbagliata.
+
+                         ⛔ E mentre TALOS legge non ci va NIENTE al suo posto:
+                         il pulsante dell'audio diventa già «Interrompi», e un
+                         secondo segno per lo stesso stato è rumore. -->
                         <span
-                            v-if="message.role === 'assistant' && parla.lette.value.has(message.id)"
-                            data-testid="talos-message-spoken"
+                            v-if="message.role === 'user' && message.metadata?.dictated === true"
+                            data-testid="talos-message-dictated"
                             class="inline-flex shrink-0 translate-y-[0.15em] items-center text-[var(--talos-muted)]"
-                            :title="$t('chat.spokenAloud')"
-                            :aria-label="$t('chat.spokenAloud')"
+                            :title="$t('chat.dictated')"
+                            :aria-label="$t('chat.dictated')"
                         >
                             <Mic class="size-4" aria-hidden="true" />
                         </span>

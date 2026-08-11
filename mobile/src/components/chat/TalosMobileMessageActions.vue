@@ -44,8 +44,15 @@ function toggleSpeak(): void {
             Owner 2026-08-10: «l'icona sound deve stare accanto alle altre come
             quella copia eccetera a prescindere». L'avevo spostato all'inizio
             della risposta e tolto da qui: sbagliato due volte — un comando che
-            si sposta si perde, e sopra il testo ci va un SEGNALINO
-            (`talos-message-spoken`), che si guarda e non si preme.
+            si sposta si perde, e sopra il testo ci va un SEGNALINO, che si
+            guarda e non si preme.
+
+            ⛔ Quel segnalino NON è più su questa risposta: l'11 agosto l'owner
+            ha visto che era il MICROFONO, cioè il simbolo di chi ascolta messo
+            addosso a TALOS che parla. Adesso sta sul messaggio DETTATO dalla
+            persona (`talos-message-dictated`), e qui non c'è più niente: il
+            pulsante dell'audio diventa già «Interrompi» mentre legge, e un
+            secondo segno per lo stesso stato è rumore.
 
             ⛔ E niente `speech.supported` nel `v-if`: su Android quella
             condizione e' SEMPRE falsa (la WebView non ha `speechSynthesis`,

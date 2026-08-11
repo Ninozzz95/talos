@@ -329,7 +329,7 @@ describe('ChatScreen (functional, local-first)', () => {
         const textarea = wrapper.get('[aria-label="Message TALOS"]')
         await textarea.setValue('hello world')
         await textarea.trigger('keydown', { key: 'Enter' })
-        await vi.waitFor(() => expect(controller.send).toHaveBeenCalledWith('hello world'))
+        await vi.waitFor(() => expect(controller.send).toHaveBeenCalledWith('hello world', null, false))
     })
 
     it('wires the system picker and attachment tray actions through the shared controller', async () => {
@@ -409,7 +409,7 @@ describe('ChatScreen (functional, local-first)', () => {
         const wrapper = mount(ChatScreen)
 
         await wrapper.get('[aria-label="Send message"]').trigger('click')
-        await vi.waitFor(() => expect(controller.send).toHaveBeenCalledWith(''))
+        await vi.waitFor(() => expect(controller.send).toHaveBeenCalledWith('', null, false))
 
         controller.attachments.items.push({
             ...controller.attachments.items[0],
@@ -451,7 +451,7 @@ describe('ChatScreen (functional, local-first)', () => {
             expect(wrapper.get<HTMLInputElement>('[aria-label="Message TALOS"]').element.value)
                 .toBe('Do not lose this')
         })
-        expect(controller.send).toHaveBeenCalledWith('Do not lose this')
+        expect(controller.send).toHaveBeenCalledWith('Do not lose this', null, false)
     })
 
     it('P1-CTX-UI-04 keeps a turn override after rejection and consumes it after acceptance', async () => {
@@ -482,6 +482,7 @@ describe('ChatScreen (functional, local-first)', () => {
         await vi.waitFor(() => expect(controller.send).toHaveBeenCalledWith(
             'Use this brief',
             override,
+            false,
         ))
         await vi.waitFor(() => expect(composer.props('libraryTurnOverride')).toEqual(override))
 
