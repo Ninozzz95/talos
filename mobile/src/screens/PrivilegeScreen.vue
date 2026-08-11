@@ -67,42 +67,95 @@ const ruolo = ref<TalosStatoRuoloAssistente>({ held: false, canRequest: false })
 
 async function leggiRuolo(): Promise<void> {
     ruolo.value = await talosLeggiRuoloAssistente()
+    /*
+     * ⛔ Il ruolo che ARRIVA cancella il ricordo del tentativo fallito.
+     *
+     * Misurato sul Pad l'11 agosto: dopo un tentativo andato a vuoto la fase
+     * restava `niente` per sempre. Bastava mettere il ruolo dalle Impostazioni e
+     * ritoglierlo, e la scheda tornava a mostrare «vai a farlo a mano» — un
+     * consiglio su un tentativo che nel frattempo era stato superato.
+     */
+    if (ruolo.value.held) faseRuolo.value = 'fermo'
 }
 
 /**
- * ⛔ La finestra di sistema NON basta su tutte le ROM — misurato.
+ * ⭐⭐ UN PULSANTE SOLO, e la scheda si aggiorna DA SOLA.
  *
- * ColorOS cinese V16.1.0: `RequestRoleActivity` parte e si chiude da sola, e la
- * schermata «App assistente digitale» elenca solo «Nessuno» — né TALOS, né
- * Claude, né Google, pur avendo tutti un `VoiceInteractionService` valido. Non
- * è che non ci qualifichiamo: è la ROM che non offre nessun assistente.
+ * Owner 2026-08-11: «la UI deve essere super reattiva: quando imposto TALOS come
+ * assistente deve aggiornarsi da sola, l'utente deve toccare solo un pulsante».
  *
- * Quando la prima strada non ha prodotto niente, si mostra la seconda: il ponte.
+ * Prima erano DUE tocchi e nessun aggiornamento: si premeva «Rendi TALOS
+ * l'assistente», non succedeva niente (su ColorOS la finestra si chiude da
+ * sola), e solo allora compariva un secondo pulsante per il ponte. E se il ruolo
+ * lo mettevi dalle Impostazioni di sistema, tornando nell'app la scheda diceva
+ * ancora di no.
+ *
+ * ## Come funziona adesso, in un tocco
+ *
+ * 1. si apre la finestra di SISTEMA — è la strada onesta: chiede, e decidi tu;
+ * 2. si aspetta che la finestra si RICHIUDA, e il sistema dice com'è andata;
+ * 3. se il ruolo c'è, finito;
+ * 4. ⛔ se NON c'è **perché la finestra non è nemmeno comparsa**, si passa al
+ *    ponte da soli, senza chiedere un secondo tocco.
+ *
+ * ⛔⛔ E il passo 4 NON scatta su un «no» della persona. Prima era un timer da
+ * 2,5 s a decidere, e non sapeva distinguere «la ROM non ha mostrato niente» da
+ * «ho letto e ho detto di no»: scaduto il tempo, il ponte si prendeva il ruolo
+ * lo stesso. Un rifiuto è una decisione, e si rispetta.
+ *
+ * ⛔ E il RITORNO IN PRIMO PIANO rilegge sempre, non solo dentro questa
+ * sequenza: così anche chi lo imposta a mano dalle Impostazioni trova la scheda
+ * già verde quando rientra. È l'unica cosa che rende una schermata «viva»
+ * invece che una fotografia scattata all'apertura.
  */
-const ruoloConPonte = ref(false)
-const ruoloDalPonteFallito = ref(false)
+type TalosFaseRuolo = 'fermo' | 'chiedo' | 'ponte' | 'niente'
+const faseRuolo = ref<TalosFaseRuolo>('fermo')
 
-async function nominaColPonte(): Promise<void> {
-    ruoloDalPonteFallito.value = false
-    const fatto = await talosNominaAssistenteColPonte('ai.talos.dev')
-    // ⛔ Si RILEGGE, non si crede all'esito: è la regola dopo «Fatto ✅» su una
-    // notifica che era ancora lì.
-    await leggiRuolo()
-    if (!ruolo.value.held) ruoloDalPonteFallito.value = !fatto || true
+/** Chi torna in primo piano fa da sveglia: si rilegge, sempre. */
+let smettiDiAscoltare: (() => void) | null = null
+
+async function ascoltaIlRitorno(): Promise<void> {
+    try {
+        const { App } = await import('@capacitor/app')
+        const iscrizione = await App.addListener('appStateChange', ({ isActive }) => {
+            if (isActive) void leggiRuolo()
+        })
+        smettiDiAscoltare = () => { void iscrizione.remove() }
+    } catch {
+        // Sul web non si torna da nessuna parte: la lettura all'apertura basta.
+    }
 }
 
-async function chiediRuolo(): Promise<void> {
-    await talosChiediRuoloAssistente()
-    /*
-     * ⛔ NON si segna «fatto» qui: la finestra è di SISTEMA e la decisione la
-     * prende la persona, magari fra dieci secondi, magari mai. Si rilegge al
-     * ritorno — è la stessa regola per cui una scheda di consenso non si chiude
-     * da sola quando il modello dice di aver fatto.
-     */
+async function attivaAssistente(): Promise<void> {
+    if (faseRuolo.value !== 'fermo') return
+    faseRuolo.value = 'chiedo'
+    // La promessa si chiude quando si chiude la FINESTRA: è il sistema a dire
+    // com'è andata, non un cronometro nostro.
+    const esito = await talosChiediRuoloAssistente()
     await leggiRuolo()
-    // La finestra può essersi chiusa da sola (ColorOS): allora la seconda
-    // strada diventa visibile, invece di lasciare un pulsante che non fa niente.
-    if (!ruolo.value.held) ruoloConPonte.value = true
+    if (ruolo.value.held) { faseRuolo.value = 'fermo'; return }
+
+    /*
+     * ⛔ Se la finestra è stata VISTA e il ruolo non c'è, la persona ha detto di
+     * no. Si ferma qui: prendersi col ponte ciò che è appena stato rifiutato
+     * sarebbe la cosa peggiore che questa schermata possa fare.
+     */
+    if (esito.shown) { faseRuolo.value = 'fermo'; return }
+
+    /*
+     * ⛔ Qui NON si chiede un secondo tocco. La persona ne ha già dato uno e ha
+     * detto cosa vuole; che la sua ROM non abbia mostrato la finestra è un
+     * fatto nostro da risolvere, non una domanda da rigirarle.
+     */
+    faseRuolo.value = 'ponte'
+    const { App } = await import('@capacitor/app')
+    // ⛔ Il pacchetto si CHIEDE: `ai.talos` e `ai.talos.dev` sono due
+    // installazioni diverse, e scriverlo a mano ne romperebbe una.
+    const info = await App.getInfo()
+    await talosNominaAssistenteColPonte(info.id)
+    // Si RILEGGE dal sistema, non si crede all'esito dei comandi.
+    await leggiRuolo()
+    faseRuolo.value = ruolo.value.held ? 'fermo' : 'niente'
 }
 
 const caricando = ref(true)
@@ -362,6 +415,7 @@ async function apriFlottante(): Promise<void> {
 
 onMounted(() => {
     void leggiRuolo()
+    void ascoltaIlRitorno()
     void rileggi()
     void leggiPonte()
 
@@ -509,6 +563,9 @@ function smettiDiSorvegliare(): void {
 }
 
 onUnmounted(() => {
+    // ⛔ L'ascolto muore con la schermata: un iscritto sopravvissuto
+    // continuerebbe a rileggere per un componente che non c'è più.
+    smettiDiAscoltare?.()
     document.removeEventListener('visibilitychange', quandoTorna)
     // ⛔ Senza questa riga la sentinella sopravvive alla pagina: un intervallo
     // che interroga un ponte per una schermata che non esiste più.
@@ -564,51 +621,40 @@ onUnmounted(() => {
                 mostrare. Dove non ce l'ha (`canRequest` falso) si dice dove
                 andare a mano, invece di offrire un comando che non fa niente.
             -->
+            <!--
+                ⭐ UN PULSANTE SOLO. Prova la finestra di sistema e, se quella
+                ROM non la mostra (ColorOS cinese: si chiude da sola), passa al
+                ponte da solo — senza rigirare alla persona un problema nostro.
+            -->
             <button
-                v-if="!ruolo.held && ruolo.canRequest"
+                v-if="!ruolo.held"
                 type="button"
+                :disabled="faseRuolo === 'chiedo' || faseRuolo === 'ponte'"
                 data-testid="talos-ruolo-chiedi"
-                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-4 text-sm font-semibold text-[var(--talos-accent-contrast)]"
-                @click="void chiediRuolo()"
+                :data-fase="faseRuolo"
+                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-4 text-sm font-semibold text-[var(--talos-accent-contrast)] disabled:opacity-60"
+                @click="void attivaAssistente()"
             >
-                {{ t('privilege.assistantAsk') }}
-                <ChevronRight class="size-4" aria-hidden="true" />
+                {{ faseRuolo === 'chiedo'
+                    ? t('privilege.assistantAsking')
+                    : faseRuolo === 'ponte'
+                        ? t('privilege.assistantBridging')
+                        : t('privilege.assistantAsk') }}
+                <ChevronRight v-if="faseRuolo === 'fermo' || faseRuolo === 'niente'" class="size-4" aria-hidden="true" />
             </button>
+
+            <!--
+                ⛔ Il messaggio compare SOLO quando entrambe le strade hanno
+                fallito, e dice dove andare a mano: un pulsante che non ha
+                funzionato senza una via d'uscita è un vicolo cieco.
+            -->
             <p
-                v-else-if="!ruolo.held"
+                v-if="!ruolo.held && faseRuolo === 'niente'"
                 class="text-xs leading-5 text-[var(--talos-muted)]"
                 data-testid="talos-ruolo-a-mano"
             >
                 {{ t('privilege.assistantManual') }}
             </p>
-
-            <!--
-                ⭐⭐ LA SECONDA STRADA, e compare solo dopo che la prima ha fallito.
-                Su ColorOS cinese la finestra di sistema si chiude da sola e le
-                Impostazioni non elencano NESSUN assistente: lì questo pulsante
-                è l'unico modo, e il ponte ce l'abbiamo in casa.
-            -->
-            <template v-if="!ruolo.held && ruoloConPonte">
-                <p class="text-xs leading-5 text-[var(--talos-muted)]">
-                    {{ t('privilege.assistantBridgeWhy') }}
-                </p>
-                <button
-                    type="button"
-                    data-testid="talos-ruolo-ponte"
-                    class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] border border-[var(--talos-accent)]/40 px-4 text-sm font-semibold text-[var(--talos-accent)]"
-                    @click="void nominaColPonte()"
-                >
-                    {{ t('privilege.assistantBridgeAsk') }}
-                    <ChevronRight class="size-4" aria-hidden="true" />
-                </button>
-                <p
-                    v-if="ruoloDalPonteFallito"
-                    class="text-xs leading-5 text-[var(--talos-muted)]"
-                    data-testid="talos-ruolo-ponte-fallito"
-                >
-                    {{ t('privilege.assistantBridgeFailed') }}
-                </p>
-            </template>
         </section>
 
         <p v-if="caricando" role="status" class="py-6 text-sm text-[var(--talos-muted)]">

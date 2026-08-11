@@ -215,31 +215,104 @@ class TalosPrivilegePlugin : Plugin() {
      * sistema e alla persona, noi non possiamo assegnarci niente. Se la ROM non
      * offre la finestra si ripiega sulla pagina delle impostazioni assistente,
      * che esiste sempre — meglio due tocchi che un pulsante che non fa niente.
+     *
+     * ## ⛔⛔ PERCHÉ `startActivityForResult` E NON `startActivity`
+     *
+     * Il 2026-08-11 la finestra si apriva e si chiudeva **da sola**, sul telefono
+     * ColorOS dell'owner E sul Pad OxygenOS. Avevo concluso «è la ROM cinese che
+     * non offre nessun assistente». Era falso, e l'ha detto la macchina:
+     *
+     *     W RequestRoleActivity: Package name cannot be null or empty: null
+     *     I RequestRoleFragment: … requestingPackageName=null qualifyingCount=-1
+     *     D ActivityClient: activity finished by caller: … onCreate:97
+     *
+     * `RequestRoleActivity` legge **`getCallingPackage()`** per sapere CHI sta
+     * chiedendo il ruolo, e quella è `null` per chiunque parta con
+     * `startActivity`: il nome del chiamante esiste solo nella forma **con
+     * request code**. Senza nome non c'è nessuno a cui dare il ruolo, e
+     * l'activity si chiude in `onCreate` — muta, in meno di un fotogramma.
+     *
+     * La documentazione lo dice in due punti che combaciano: `createRequestRoleIntent`
+     * torna «an Intent suitable for passing to **startActivityForResult()**», e
+     * `getCallingPackage` è «null if the calling activity did not use the
+     * **startActivityForResult** form that includes a request code».
+     *
+     * ⭐ E il risultato non è solo la cura del difetto: è un guadagno. Prima
+     * l'app tirava a indovinare se la persona avesse detto sì (aspettava 2,5 s e
+     * rileggeva il ruolo); adesso il sistema **risponde**, e `granted` dice cosa
+     * è successo davvero.
      */
     @PluginMethod
     fun requestAssistantRole(call: PluginCall) {
         val gestore = context.getSystemService(android.app.role.RoleManager::class.java)
-        val attivita = activity
-        if (gestore == null || attivita == null) {
+        if (gestore == null || activity == null) {
             call.reject("TALOS_ROLE_UNAVAILABLE")
             return
         }
-        val intent = if (gestore.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)) {
-            gestore.createRequestRoleIntent(android.app.role.RoleManager.ROLE_ASSISTANT)
-        } else {
-            android.content.Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS)
+        if (!gestore.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)) {
+            /*
+             * ⛔ Nessuna finestra da aspettare: la pagina delle impostazioni non
+             * torna nessun esito, quindi si risponde subito e si dice che il
+             * ruolo NON è stato dato. Chi legge saprà di dover rileggere al
+             * rientro invece di credere a un sì che non c'è stato.
+             */
+            val ripiego = android.content.Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS)
+            val esito = JSObject()
+            runCatching { activity.startActivity(ripiego) }
+                .onSuccess { esito.put("opened", true) }
+                .onFailure { esito.put("opened", false) }
+            esito.put("shown", false)
+            esito.put("granted", false)
+            esito.put("reason", "role-unavailable")
+            call.resolve(esito)
+            return
         }
+        val intent = gestore.createRequestRoleIntent(android.app.role.RoleManager.ROLE_ASSISTANT)
         try {
-            attivita.startActivity(intent)
-            val result = JSObject()
-            result.put("opened", true)
-            call.resolve(result)
+            quandoHoChiestoIlRuolo = android.os.SystemClock.elapsedRealtime()
+            startActivityForResult(call, intent, "tornaDallaFinestraDelRuolo")
         } catch (errore: android.content.ActivityNotFoundException) {
             // ⛔ Il motivo si consegna a chi lo mostrerà: una schermata che dice
             // «non è riuscito» senza dire perché è la cosa che ci ha già
             // fregato con Shizuku.
             call.reject("TALOS_ROLE_NO_SCREEN", errore)
         }
+    }
+
+    /** Quando è partita la finestra del ruolo, per sapere se è stata LETTA. */
+    private var quandoHoChiestoIlRuolo = 0L
+
+    /**
+     * L'esito della finestra di sistema, quando si richiude.
+     *
+     * ⛔ `granted` NON si prende da `resultCode`: si RILEGGE dal `RoleManager`.
+     * Un `RESULT_OK` dice che la finestra è stata chiusa con un sì, ma è il
+     * sistema a essere l'autorità su chi tiene il ruolo — ed è la stessa regola
+     * che ci ha già salvato altrove: non si crede all'esito di un comando, si
+     * guarda lo stato.
+     *
+     * ## ⛔ `shown`: la differenza fra «ho detto no» e «non ho visto niente»
+     *
+     * Chi chiama deve decidere se ripiegare sul ponte, e le due cose vogliono
+     * risposte opposte: un rifiuto si rispetta, una finestra mai comparsa si
+     * aggira. `resultCode` non li distingue — sono entrambi `RESULT_CANCELED`.
+     * Li distingue il TEMPO: la finestra che si autochiudeva moriva dentro
+     * `onCreate`, in decine di millisecondi (misurato: 6 ms fra l'apertura e
+     * `removeAppToken`), mentre nessuna persona legge una scelta e decide in
+     * meno di mezzo secondo. La soglia è quella, ed è una misura, non un gusto.
+     */
+    @com.getcapacitor.annotation.ActivityCallback
+    fun tornaDallaFinestraDelRuolo(call: PluginCall?, risultato: androidx.activity.result.ActivityResult?) {
+        if (call == null) return
+        val quantoEDurata = android.os.SystemClock.elapsedRealtime() - quandoHoChiestoIlRuolo
+        val gestore = context.getSystemService(android.app.role.RoleManager::class.java)
+        val esito = JSObject()
+        esito.put("opened", true)
+        esito.put("shown", quantoEDurata >= SOGLIA_FINESTRA_LETTA_MS)
+        esito.put("elapsedMs", quantoEDurata)
+        esito.put("granted", gestore?.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT) == true)
+        esito.put("resultCode", risultato?.resultCode ?: android.app.Activity.RESULT_CANCELED)
+        call.resolve(esito)
     }
 
     /**
@@ -790,5 +863,13 @@ class TalosPrivilegePlugin : Plugin() {
          * Android, tutti con una superficie che sappiamo descrivere.
          */
         val PROGRAMMI_AMMESSI = setOf("cmd", "settings", "dumpsys", "pm", "am")
+
+        /**
+         * Sotto questa durata la finestra del ruolo NON è stata letta da
+         * nessuno: si è chiusa da sola. Misurato l'11 agosto 2026 sul Pad —
+         * fra l'apertura di `RequestRoleActivity` e il suo `removeAppToken`
+         * passavano **6 ms**, e nel mezzo `finish()` dentro `onCreate`.
+         */
+        const val SOGLIA_FINESTRA_LETTA_MS = 500L
     }
 }
