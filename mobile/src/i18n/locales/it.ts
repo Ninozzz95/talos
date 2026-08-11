@@ -2845,6 +2845,8 @@ export const TALOS_IT_MESSAGES = {
         attachCamera: 'Fotocamera',
         attachFile: 'File',
         attachLibrary: 'Dalla Libreria',
+        attachLibraryEmpty: 'La Libreria è vuota — ancora niente da allegare.',
+        attachLibraryLoading: 'Sto leggendo la Libreria…',
         attachRemove: 'Togli {name}',
         attachFailed: 'L\'allegato non è passato.',
     },
