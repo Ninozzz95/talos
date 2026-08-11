@@ -186,6 +186,32 @@
             </intent-filter>
         </activity>
 
+        <!--
+            ⭐⭐ LA SCHEDA IN TENDINA — la porta della barra che non dipende
+            dalla ROM. Owner 2026-08-11: «su ColorOS cinese non c'è un modo per
+            mappare i gesti per l'assistente» ⇒ sul suo telefono la barra non
+            aveva NESSUNA porta, pur essendo TALOS l'assistente.
+
+            Costa zero: nessun permesso, nessun servizio, nessun consumo. Va
+            aggiunta a mano una volta, dal pulsante «modifica» della tendina —
+            Android non permette a un'app di infilarcisi da sola, ed è giusto
+            così: la tendina è di chi possiede il telefono.
+
+            ⛔ `BIND_QUICK_SETTINGS_TILE` è obbligatorio e va concesso al
+            SISTEMA: senza, la scheda non compare nemmeno nell'elenco, e senza
+            un messaggio che spieghi perché.
+        -->
+        <service
+            android:name=".TalosTendina"
+            android:exported="true"
+            android:icon="@drawable/ic_tendina_talos"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!-- GENERATED alias list (tools/android-assets/gen_theme_icons.py). Exactly one
              alias is android:enabled="true" at any time; the default-theme alias ships
              enabled so the app is always launchable even if the feature is never used.

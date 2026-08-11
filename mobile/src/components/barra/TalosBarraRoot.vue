@@ -69,7 +69,6 @@ const controller = useChatController()
 const chat = controller.chat
 
 const bozza = ref('')
-const campo = ref<HTMLTextAreaElement | null>(null)
 const errore = ref<string | null>(null)
 const copiato = ref(false)
 
@@ -336,10 +335,21 @@ onMounted(async () => {
     // ⛔ Senza, `vaultFiles` resta vuoto e la Libreria sembra non avere niente:
     // un elenco vuoto che in realtà non è ancora stato letto è una bugia.
     void allegati.initialize()
-    // Chi ha chiamato con la voce vuole parlare, non trovarsi una tastiera in
-    // faccia; chi ha chiamato col gesto sta già guardando il campo.
+    /*
+     * ⛔ NESSUN FUOCO AUTOMATICO — e prima qui c'era, con una riga che diceva
+     * «chi ha chiamato col gesto sta già guardando il campo».
+     *
+     * Era un'assunzione, e la misura l'ha smentita l'11 agosto. Aperta la barra
+     * da Wikipedia, il campo prendeva il fuoco, la tastiera saliva e si mangiava
+     * **metà schermo**: la pagina che stavi leggendo — cioè il motivo per cui
+     * hai chiamato TALOS — spariva sotto i tasti. E Gemini, sullo stesso
+     * telefono e sulla stessa pagina, a riposo mostra **solo la pillola**: la
+     * tastiera arriva quando tocchi il campo, non prima.
+     *
+     * La barra esiste per NON farti uscire da dove sei. Coprire quel «dove sei»
+     * nell'istante in cui compare è il contrario del suo mestiere.
+     */
     if (props.modo.daVoce) void dettatura.toggle()
-    else campo.value?.focus()
 })
 </script>
 
@@ -475,20 +485,40 @@ onMounted(async () => {
         <form class="pillola" data-testid="talos-barra" @submit.prevent="invia">
             <span class="orlo" :data-stato="segnale" data-testid="talos-barra-orlo" aria-hidden="true" />
 
+            <!--
+                ⛔ LA SPIA NON C'È QUANDO NON C'È NIENTE DA SPIARE.
+
+                Prima compariva sempre, e senza contesto era un pulsante
+                `disabled` con l'occhio sbarrato: un comando che non fa niente —
+                proprio il sospetto che ci siamo dati come regola di cacciare.
+
+                E la sua assenza NON toglie informazione: la barra aperta dalla
+                tendina non avrà MAI un contesto (nessuno gliel'ha consegnato),
+                quindi quel «non vedo» sarebbe una condizione permanente detta a
+                ogni apertura. Quando invece TALOS vede, la spia compare col
+                numero — ed è lì che quel segno vale qualcosa.
+            -->
             <button
+                v-if="contestoDisponibile"
                 type="button"
                 class="spia"
-                :class="{ 'spia--spenta': !guardo || !contestoDisponibile }"
-                :disabled="!contestoDisponibile"
-                :aria-pressed="guardo && contestoDisponibile"
+                :class="{ 'spia--spenta': !guardo }"
+                :aria-pressed="guardo"
                 :aria-label="etichettaSpia"
                 :title="etichettaSpia"
                 data-testid="talos-barra-contesto"
                 @click="alternaContesto"
             >
-                <Eye v-if="guardo && contestoDisponibile" class="icona-piccola" aria-hidden="true" />
+                <Eye v-if="guardo" class="icona-piccola" aria-hidden="true" />
                 <EyeOff v-else class="icona-piccola" aria-hidden="true" />
-                <span class="numero">{{ contestoDisponibile && guardo ? props.modo.contesto.nodi : '—' }}</span>
+                <!--
+                    ⛔ Il NUMERO compare solo quando c'è un numero da dire.
+                    Prima al suo posto stava un trattino, e sul dispositivo il
+                    risultato era «👁− +»: tre segni appiccicati in 7 px che
+                    nessuno decifra. Qui, spenta, la spia dice «vedevo, e me lo
+                    hai fatto smettere» — che è un'informazione vera.
+                -->
+                <span v-if="guardo" class="numero">{{ props.modo.contesto.nodi }}</span>
             </button>
 
             <button
@@ -505,7 +535,6 @@ onMounted(async () => {
             <span v-if="ascolta" class="livello" aria-hidden="true"><i /><i /><i /></span>
 
             <textarea
-                ref="campo"
                 v-model="bozza"
                 class="campo"
                 rows="1"
@@ -692,7 +721,20 @@ onMounted(async () => {
 .spia:active { transform: scale(0.96); }
 .spia:disabled { opacity: 0.8; }
 
+/*
+ * ⛔ Senza numero la spia torna SIMMETRICA, e non è un vezzo.
+ *
+ * Il riempimento asimmetrico (9 px a destra, 7 a sinistra) esiste per far
+ * respirare la cifra accanto all'icona. Tolta la cifra quello sbilanciamento
+ * spinge l'occhio contro il bordo sinistro e lascia un vuoto a destra: sul Pad
+ * si leggeva «👁 +» come un simbolo solo, con **7 px** fra i due pulsanti.
+ *
+ * ⛔ `.spia--spenta` è esattamente il caso «niente numero» — le due condizioni
+ * sono complementari nel template. Se un giorno smettono di esserlo, questa
+ * regola comincia a mentire: si cambiano insieme.
+ */
 .spia--spenta {
+    padding: 5px 7px;
     border-color: color-mix(in oklab, var(--border) 85%, transparent);
     background: transparent;
     color: var(--muted-foreground);
