@@ -92,9 +92,13 @@ interface PonteDispositivo {
      */
     condividiFile(options: {
         percorso: string
+        /** Il nome VERO del file: su disco la libreria usa l'id interno. */
+        nome?: string
         tipo?: string
         pacchetto?: string
         testo?: string
+        /** Il JID del destinatario (`<numero>@s.whatsapp.net`): salta il selettore. */
+        destinatario?: string
     }): Promise<{ done: boolean, reason?: string, uri?: string, tipo?: string }>
     /**
      * ⭐⭐⭐ Manda un file che sta sul TELEFONO, scelto dalla persona.
@@ -109,6 +113,8 @@ interface PonteDispositivo {
         tipo?: string
         pacchetto?: string
         testo?: string
+        /** Il JID del destinatario (`<numero>@s.whatsapp.net`): salta il selettore. */
+        destinatario?: string
     }): Promise<{ done: boolean, reason?: string, uri?: string, tipo?: string }>
     /**
      * ⭐ La riga di rubrica con cui un'app fa una cosa — o `null`.
