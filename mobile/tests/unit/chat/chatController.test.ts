@@ -2347,6 +2347,84 @@ describe('chatController', () => {
         expect(controller.thinking.value).toBe(true)
     })
 
+    /*
+     * ⛔⛔ R-05 — «UNA CHAT NUOVA NON EREDITA IL MODELLO», e la causa vera.
+     *
+     * MISURATO sul Pad il 2026-08-13: due chat aperte allo stesso modo a sei
+     * minuti di distanza, **Claude Haiku 4.5** la prima e **ByteDance Seed 2.1
+     * Turbo** la seconda. Col credito OpenRouter esaurito la seconda sarebbe
+     * fallita per un motivo che non c'entrava niente con la funzione in prova:
+     * questo difetto **avvelena ogni misura successiva**.
+     *
+     * La sonda, riprodotta togliendo la rete, ha nominato la causa in una riga:
+     * `ricordato=anthropic:claude-haiku-4-5 scartato=non-nel-catalogo profili=0`.
+     * ⇒ Il modello scelto veniva scartato come «non esiste» quando la verità
+     * era «il suo catalogo non si è potuto leggere» — e il ripiego su un altro
+     * provider **diventava permanente**, perché al ritorno del catalogo la
+     * scelta corrente era ormai valida e nessuno la rimetteva a posto.
+     *
+     * ⛔ Il test morde sulla SECONDA metà: senza `modelloInAttesa`, la prima
+     * asserzione passa lo stesso (il ripiego è giusto, lì per lì) e solo la
+     * terza diventa rossa. Provare il ripiego non prova niente: il difetto è
+     * che non torna indietro.
+     */
+    it('⛔ R-05 il modello scelto TORNA quando il suo catalogo si riesce a leggere', async () => {
+        const { deps, store, settings, request } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        store.set('gemini', 'gemini-key')
+        settings.state.composer_defaults.model_profile_id = 'anthropic:claude-live'
+
+        // Anthropic non risponde: è «non lo so», non «quel modello non esiste».
+        let anthropicGiu = true
+        const rispostaVera = request.getMockImplementation()!
+        request.mockImplementation(async (arg: { url: string }) => {
+            if (anthropicGiu && arg.url.includes('anthropic.com/v1/models')) {
+                throw new Error('Unable to resolve host "api.anthropic.com"')
+            }
+            return await rispostaVera(arg)
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+
+        // Lì per lì il ripiego è giusto: senza catalogo non c'è altro da fare.
+        expect(controller.selectedModelId.value).toBe('gemini:gemini-live')
+
+        // ⛔ E QUI STA IL DIFETTO: torna la rete, e deve tornare la SUA scelta.
+        anthropicGiu = false
+        await controller.refreshProvider('anthropic')
+        expect(controller.selectedModelId.value).toBe('anthropic:claude-live')
+    })
+
+    /*
+     * ⛔ E il verso contrario, che è la metà che manca sempre: se la persona
+     * sceglie un altro modello MENTRE il catalogo è irraggiungibile, riprendersi
+     * quello di prima le disferebbe la scelta sotto le mani.
+     */
+    it('⛔ R-05 una scelta esplicita CHIUDE l\'attesa, e non viene disfatta', async () => {
+        const { deps, store, settings, request } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        store.set('gemini', 'gemini-key')
+        settings.state.composer_defaults.model_profile_id = 'anthropic:claude-live'
+
+        let anthropicGiu = true
+        const rispostaVera = request.getMockImplementation()!
+        request.mockImplementation(async (arg: { url: string }) => {
+            if (anthropicGiu && arg.url.includes('anthropic.com/v1/models')) {
+                throw new Error('Unable to resolve host "api.anthropic.com"')
+            }
+            return await rispostaVera(arg)
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.selectModel('gemini:gemini-live')
+
+        anthropicGiu = false
+        await controller.refreshProvider('anthropic')
+        expect(controller.selectedModelId.value).toBe('gemini:gemini-live')
+    })
+
     it('projects persisted display, visibility, and probe state into Model Lab and the composer', async () => {
         const { deps, store, settings } = makeDeps()
         store.set('anthropic', 'sk-ant')
