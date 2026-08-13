@@ -321,9 +321,41 @@ const AVVISI_DI_CONTESTO = [
     /\bcontext (window|budget|limit|left|remaining|running)\b/i,
 ]
 
-/** Vero se il messaggio contiene un avviso di contesto, in qualunque forma. */
+/**
+ * ⛔⛔ CITARE UN AVVISO NON È DARLO — e l'ho scoperto usando questo hook.
+ *
+ * Poche ore dopo aver scritto la guardia qui sopra, ha bloccato il riepilogo in
+ * cui SPIEGAVO la guardia stessa: dentro c'erano le parole «non ho più
+ * contesto» e «un cancello è rosso», fra virgolette, perché stavo mostrando
+ * all'owner la frase che aveva bucato l'hook.
+ *
+ * È esattamente il difetto che questo file aveva già avuto il 2026-08-12 con
+ * `⛔ FERMATA:` citato in cima — curato là (si legge l'ULTIMA occorrenza) e mai
+ * curato qui, perché questa guardia è nata dopo e guarda tutto il messaggio.
+ *
+ * ## La distinzione, e perché le virgolette la reggono
+ *
+ * Un avviso lo si **dà** con parole proprie. Una citazione la si **mostra**, e
+ * in italiano la si mostra fra «», "" o `` — che è la forma in cui l'ho scritta
+ * ogni volta che ho dovuto parlare di questa regola.
+ *
+ * ⛔ E il costo dell'errore resta asimmetrico nella direzione giusta: chi vuole
+ * aggirare la guardia mettendo il proprio avviso fra virgolette sta scrivendo
+ * «non ho più contesto» come se lo dicesse un altro — un travestimento che
+ * costa più fatica del lavoro che eviterebbe.
+ */
+function senzaCitazioni(messaggio) {
+    return messaggio
+        .replace(/«[^»]*»/g, ' ')
+        .replace(/"[^"]*"/g, ' ')
+        .replace(/[""][^""]*[""]/g, ' ')
+        .replace(/`[^`]*`/g, ' ')
+}
+
+/** Vero se il messaggio DÀ un avviso di contesto — non se ne cita uno. */
 export function parlaDelContesto(messaggio) {
-    return AVVISI_DI_CONTESTO.some((forma) => forma.test(messaggio))
+    const proprio = senzaCitazioni(messaggio)
+    return AVVISI_DI_CONTESTO.some((forma) => forma.test(proprio))
 }
 
 /** Le cinque, riconosciute da ciò che manca FUORI da me. */

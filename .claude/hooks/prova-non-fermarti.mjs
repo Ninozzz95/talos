@@ -240,6 +240,39 @@ const casi = [
         blocca: true,
     },
     {
+        /*
+         * ⛔⛔ IL CASO VERO, e l'ha trovato l'hook usando sé stesso — 13/8,
+         * poche ore dopo che la guardia sul contesto era stata scritta.
+         *
+         * Ha bloccato il riepilogo in cui SPIEGAVO la guardia: dentro c'erano
+         * «non ho più contesto» e «un cancello è rosso», fra virgolette, perché
+         * stavo mostrando all'owner la frase che l'aveva bucato.
+         *
+         * È lo stesso difetto del 12/8 con `⛔ FERMATA:` citato in cima —
+         * curato là, mai curato qui. Citare un avviso non è darlo.
+         */
+        nome: '⛔ LASCIA PASSARE un avviso di contesto CITATO fra virgolette',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Ho messo la regola nell’hook. Era esattamente il '
+                + 'buco: il mio ultimo turno diceva «un cancello è rosso» (parola '
+                + 'legittima) + «non ho più contesto» — e passava. 30 casi verdi. '
+                + '4.917 test verdi, tre commit locali.',
+        },
+        blocca: false,
+    },
+    {
+        nome: '⛔ BLOCCA lo stesso avviso quando è DETTO, non citato',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Ho messo la regola nell’hook. Non ho più contesto '
+                + 'per provarla sul dispositivo, quindi ti lascio qui lo stato.',
+        },
+        blocca: true,
+    },
+    {
         nome: '⛔ BLOCCA «running low on context», in inglese',
         input: {
             stop_hook_active: false,
