@@ -379,6 +379,89 @@ class TalosDevicePlugin : Plugin() {
         call.resolve(avvia(intent))
     }
 
+    /**
+     * ⭐⭐⭐ LA RIGA DI RUBRICA CON CUI UN'APP FA UNA COSA — se esiste.
+     *
+     * ## Perche' esiste, e perche' torna `null` senza vergogna
+     *
+     * Owner, 2026-08-13: «predisponi l'API nativa di WhatsApp se c'e' la riga,
+     * se no usiamo il ponte». Questa e' la domanda che decide fra le due.
+     *
+     * MISURATO sul Pad, tre passaggi:
+     * 1. `https://wa.me/<numero>` apre la CHAT, non una chiamata;
+     * 2. WhatsApp dichiara `.accountsync.CallContactLandingActivity` per
+     *    `ACTION_VIEW` + `vnd.android.cursor.item/vnd.com.whatsapp.voip.call`
+     *    ⇒ **l'API esiste**;
+     * 3. ⛔ ma nella rubrica di sistema non c'e' nessun account `com.whatsapp`
+     *    — solo `com.google` e `tachyon` — quindi **la riga non c'e'**.
+     *
+     * ⇒ L'API sa fare la cosa; su QUESTO telefono le manca il dato. E' la
+     * differenza fra «non si puo'» e «non si puo' qui», e solo il dispositivo
+     * la conosce.
+     *
+     * ⛔ Dalla ricerca (owner: «non dobbiamo inventarci nulla se e' gia'
+     * scritto nel web»): il modo e' quello qui sotto — trovare il contatto dal
+     * numero, poi la sua riga con quel mimetype. ⛔ **Non e' un'API ufficiale
+     * di WhatsApp**: le fonti la chiamano «undocumented or unsupported». Per
+     * questo si PROVA e si ripiega, invece di dipenderne.
+     *
+     * ⛔ Due passaggi e non uno: `PhoneLookup` normalizza il numero come lo fa
+     * Android (prefissi, spazi, formati locali). Confrontare stringhe di numeri
+     * a mano e' il modo classico di non trovare un contatto che c'e'.
+     */
+    @PluginMethod
+    fun rigaDiContatto(call: PluginCall) {
+        val numero = call.getString("numero").orEmpty()
+        val mime = call.getString("mime").orEmpty()
+        val esito = JSObject()
+        if (numero.isEmpty() || mime.isEmpty()) {
+            call.resolve(esito.put("uri", null as String?).put("motivo", "richiesta-incompleta"))
+            return
+        }
+        try {
+            val lookup = android.net.Uri.withAppendedPath(
+                android.provider.ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+                android.net.Uri.encode(numero),
+            )
+            var contattoId: Long? = null
+            context.contentResolver.query(
+                lookup,
+                arrayOf(android.provider.ContactsContract.PhoneLookup.CONTACT_ID),
+                null, null, null,
+            )?.use { c -> if (c.moveToFirst()) contattoId = c.getLong(0) }
+            val id = contattoId
+            if (id == null) {
+                call.resolve(esito.put("uri", null as String?).put("motivo", "contatto-non-trovato"))
+                return
+            }
+            var rigaId: Long? = null
+            context.contentResolver.query(
+                android.provider.ContactsContract.Data.CONTENT_URI,
+                arrayOf(android.provider.ContactsContract.Data._ID),
+                "${android.provider.ContactsContract.Data.CONTACT_ID}=? AND " +
+                    "${android.provider.ContactsContract.Data.MIMETYPE}=?",
+                arrayOf(id.toString(), mime),
+                null,
+            )?.use { c -> if (c.moveToFirst()) rigaId = c.getLong(0) }
+            val riga = rigaId
+            if (riga == null) {
+                // ⛔ «Il contatto c'e' ma quell'app non ha la sua riga» NON e'
+                // un errore: e' la risposta, ed e' quella che fa scegliere il
+                // ponte. Confonderla con un fallimento farebbe rinunciare.
+                call.resolve(esito.put("uri", null as String?).put("motivo", "riga-assente"))
+                return
+            }
+            call.resolve(
+                esito.put("uri", "content://com.android.contacts/data/$riga").put("motivo", "trovata"),
+            )
+        }
+        catch (errore: SecurityException) {
+            // Senza il permesso contatti la domanda non ha risposta: «non lo so»,
+            // che e' diverso da «non c'e'» e porta a un'altra cosa da dire.
+            call.resolve(esito.put("uri", null as String?).put("motivo", "senza-permesso"))
+        }
+    }
+
     /** L'app c'e'? Serve a spiegare un fallimento, non a vietare un tentativo. */
     @PluginMethod
     fun appInstallata(call: PluginCall) {

@@ -48,6 +48,26 @@ export interface PonteSchermo {
      * «non c'è nessuno»: chi le confonde dice «fatto» davanti a un launcher.
      */
     chiEDavanti(): Promise<{ pacchetto: string, sipuoSapere: boolean }>
+    /**
+     * ⭐⭐⭐ Conferma il dialogo dell'app — **una regola per tutte le app**.
+     *
+     * Owner 2026-08-13: «non possiamo andare per ciascuna app esistente
+     * possibile e immaginabile… sarebbe da pazzi». E infatti non serve:
+     * MISURATO che quei dialoghi usano gli id del **framework**, uguali
+     * ovunque e non tradotti — `android:id/message` la domanda,
+     * `android:id/button1` il positivo.
+     *
+     * ⛔ `domanda` torna indietro apposta: è ciò che rende onesto il
+     * «confermato». Si conferma sapendo cosa, e chi legge può verificarlo.
+     */
+    confermaDialogo(options: { pacchetto?: string, attesaMs?: number }): Promise<{
+        fatto: boolean
+        sparito?: boolean
+        domanda?: string
+        motivo?: string
+        pacchettoVisto?: string
+        millisecondi?: number
+    }>
 }
 
 /**

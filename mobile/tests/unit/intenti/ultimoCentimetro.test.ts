@@ -26,7 +26,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const ponte = {
     chiamate: [] as Array<Record<string, unknown>>,
+    conferme: [] as Array<Record<string, unknown>>,
     esito: {} as Record<string, unknown>,
+    esitoConferma: {} as Record<string, unknown>,
     esplode: false,
 }
 
@@ -47,6 +49,10 @@ vi.mock('@/lib/device/ponteSchermo', () => ({
             if (ponte.esplode) throw new Error('ponte assente')
             return ponte.esito
         },
+        confermaDialogo: async (o: Record<string, unknown>) => {
+            ponte.conferme.push(o)
+            return ponte.esitoConferma
+        },
         chiEDavanti: async () => ({
             pacchetto: schermo.davanti
                 ?? (apri.azioni.at(-1)?.pacchetto as string | undefined) ?? '',
@@ -59,6 +65,7 @@ const apri = {
     esiti: [] as boolean[],
     azioni: [] as Array<Record<string, unknown>>,
     candidate: [] as Array<{ pacchetto: string, nome: string, attivita: string }>,
+    riga: { uri: null as string | null, motivo: 'riga-assente' },
 }
 
 vi.mock('@/lib/device/devicePlugin', () => ({
@@ -69,6 +76,13 @@ vi.mock('@/lib/device/devicePlugin', () => ({
             return { done: apri.esiti.shift() ?? true }
         },
         chiAccetta: async () => ({ app: apri.candidate }),
+        /*
+         * ⛔ Di base la riga NON c'è, come sul Pad: nella rubrica di sistema
+         * non esiste nessun account `com.whatsapp`. Un test che la desse per
+         * presente proverebbe la strada che su questo dispositivo non si
+         * percorre mai — e lascerebbe il ponte senza copertura.
+         */
+        rigaDiContatto: async () => apri.riga,
         appInstallata: async () => ({ presente: true }),
     },
 }))
@@ -77,6 +91,7 @@ vi.mock('@/lib/intenti/rubrica', () => ({
     talosRisolviContatto: async () => ({ stato: 'nessuno' as const }),
 }))
 
+import { TALOS_CAPACITA_INTENT } from '@/lib/intenti/registro'
 import { talosIntentiTools } from '@/lib/tools/intentiTools'
 
 const strumento = talosIntentiTools()[0]
@@ -91,7 +106,9 @@ async function chiedi(input: Record<string, unknown>) {
 
 beforeEach(() => {
     ponte.chiamate = []
+    ponte.conferme = []
     ponte.esito = { fatto: true, sparito: true }
+    ponte.esitoConferma = { fatto: true, sparito: true, domanda: 'Avviare una chiamata vocale?' }
     ponte.esplode = false
     apri.esiti = []
     apri.azioni = []
@@ -99,6 +116,7 @@ beforeEach(() => {
         { pacchetto: 'com.google.android.keep', nome: 'Keep Notes', attivita: 'a' },
         { pacchetto: 'com.google.android.apps.translate', nome: 'Traduttore', attivita: 'b' },
     ]
+    apri.riga = { uri: null, motivo: 'riga-assente' }
     schermo.davanti = null
     schermo.sipuoSapere = true
 })
@@ -197,6 +215,62 @@ describe('⭐⭐⭐ l\'ultimo centimetro non tocca al buio', () => {
         expect(esito.ok).toBe(false)
         expect(esito.code).toBe('TALOS_INVIO_PONTE_CHIUSO')
         expect(esito.content).toMatch(/[Nn]othing was sent/)
+    })
+})
+
+/**
+ * ⭐⭐⭐ LA CONFERMA DELL'APP — owner 2026-08-13: «non possiamo andare per
+ * ciascuna app esistente possibile e immaginabile e prevedere in ogni caso per
+ * ogni funzionalità, sarebbe da pazzi».
+ *
+ * MISURATO sul Pad: dopo «Chiamata vocale», WhatsApp apre «Avviare una chiamata
+ * vocale?» con `android:id/message`, `android:id/button1` e `android:id/button2`
+ * — **id del framework, uguali per ogni app e non tradotti**. ⇒ Il registro dice
+ * solo SE può succedere; il COME è una regola sola.
+ */
+describe('⭐⭐⭐ la conferma dell\'app: una regola, non una tabella', () => {
+    const CHIAMA = { capacita: 'whatsapp_chiama', valori: { numero: '393331112222' } }
+
+    it('⛔ il registro NON contiene etichette di pulsanti da confermare', () => {
+        const wa = TALOS_CAPACITA_INTENT.find((c) => c.id === 'whatsapp_chiama')!
+        // Se un giorno qualcuno rimettesse `['Chiama','Call']`, questo diventa
+        // rosso — ed è esattamente la tabella che l'owner ha vietato.
+        expect(wa.invio?.confermaApp).toBe(true)
+        // ⛔ Nessun oggetto con dentro le etichette del pulsante di conferma:
+        // era esattamente la tabella per app/funzione/lingua che l'owner ha
+        // vietato. Il registro dice SE, mai COME.
+        expect((wa.invio as Record<string, unknown>).conferma).toBeUndefined()
+    })
+
+    it('dopo il primo tocco chiede la conferma generica, non un pulsante nominato', async () => {
+        const esito = await chiedi(CHIAMA)
+        expect(ponte.conferme).toHaveLength(1)
+        expect(ponte.conferme[0].pacchetto).toBe('com.whatsapp')
+        // ⛔ Nessuna descrizione: il COME non passa da qui.
+        expect(ponte.conferme[0].descrizioni).toBeUndefined()
+        expect(esito.ok).toBe(true)
+    })
+
+    /*
+     * ⭐ La domanda letta dal dialogo viaggia nell'esito: è l'unica cosa che
+     * rende onesto il «confermato». Senza, TALOS direbbe «fatto» senza sapere
+     * cosa ha accettato.
+     */
+    it('⛔ riporta la DOMANDA che ha confermato', async () => {
+        const esito = await chiedi(CHIAMA)
+        expect(esito.content).toContain('Avviare una chiamata vocale?')
+    })
+
+    it('se il dialogo non c\'è, NON dice fatto', async () => {
+        ponte.esitoConferma = { fatto: false, motivo: 'nessun-dialogo' }
+        const esito = await chiedi(CHIAMA)
+        expect(esito.content).toMatch(/NOT done/)
+    })
+
+    it('confermato ma non richiuso ⇒ non si rifà', async () => {
+        ponte.esitoConferma = { fatto: true, sparito: false, domanda: 'Avviare?' }
+        const esito = await chiedi(CHIAMA)
+        expect(esito.content).toMatch(/Do NOT do it again/)
     })
 })
 

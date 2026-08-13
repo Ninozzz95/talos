@@ -154,6 +154,33 @@ describe('⭐ il registro degli intent', () => {
         expect(escono).not.toContain('spotify_cerca')
     })
 
+    /*
+     * ⛔⛔ LA PORTA CHE HO APERTO RENDENDO `contenuto` OPZIONALE.
+     *
+     * Serviva per la chiamata WhatsApp, che un testo non ce l'ha. Ma dove un
+     * testo c'è, quella guardia è **la** difesa: WhatsApp conserva la bozza,
+     * quindi il pulsante «invia» esiste PRIMA che arrivi il nostro testo, e
+     * senza `contenuto` partirebbe la bozza vecchia — alla persona giusta, con
+     * le parole sbagliate.
+     *
+     * ⇒ Un campo opzionale senza una regola è un campo che un giorno qualcuno
+     * dimentica. La regola è questa: se la capacità ha un parametro che somiglia
+     * a un testo e sa premere «invia», deve dire quale.
+     */
+    it('⛔ una capacità che INVIA UN TESTO deve dichiarare quale', () => {
+        for (const c of TALOS_CAPACITA_INTENT) {
+            if (!c.invio) continue
+            const testuali = c.parametri.filter((p) => p === 'testo' || p === 'messaggio' || p === 'body')
+            if (testuali.length === 0) continue
+            expect(
+                c.invio.contenuto,
+                `${c.id} sa premere «invia» e ha il parametro «${testuali[0]}», ma non dichiara `
+                + 'quale testo riverificare: partirebbe la bozza vecchia',
+            ).toBeTruthy()
+            expect(c.parametri).toContain(c.invio.contenuto)
+        }
+    })
+
     it('ogni voce è coerente: id unici, parametri usati, vie non vuote', () => {
         const visti = new Set<string>()
         for (const c of TALOS_CAPACITA_INTENT) {
@@ -167,6 +194,17 @@ describe('⭐ il registro degli intent', () => {
                 // ⛔ Vale per ENTRAMBE le forme: un'azione con `{lingua}` in un
                 // extra e nessun parametro `lingua` è lo stesso difetto —
                 // MISURATO, perché è esattamente com'era `traduci` prima.
+                // ⛔ La via per RIGA DI RUBRICA non ha segnaposto: nomina
+                // direttamente il parametro col numero. Deve esistere lo
+                // stesso — un `numero: 'telefono'` su una capacità che non ha
+                // «telefono» cercherebbe un contatto con la stringa vuota, e
+                // `PhoneLookup` risponderebbe «non trovato» invece che
+                // «richiesta sbagliata».
+                if (via.tipo === 'riga-contatto') {
+                    expect(c.parametri).toContain(via.numero)
+                    expect(via.mime).toMatch(/^vnd\.android\.cursor\.item\//)
+                    continue
+                }
                 const testo = via.tipo === 'azione'
                     ? Object.values(via.extra).join(' ')
                     : via.modello

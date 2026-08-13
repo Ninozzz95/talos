@@ -112,8 +112,33 @@ export interface TalosViaAzione {
     readonly extra: Readonly<Record<string, string>>
 }
 
-/** Come si raggiunge una capacità: per URI, o per azione con extra. */
-export type TalosViaIntent = TalosViaUri | TalosViaAzione
+/**
+ * ⭐⭐⭐ Una via che passa dalla RIGA DI RUBRICA che un'app si è creata.
+ *
+ * Owner, 2026-08-13: «predisponi l'API nativa di WhatsApp se c'è la riga, se no
+ * usiamo il ponte». Questa via **è** quella scelta, scritta come dato: sta
+ * prima delle altre, e se la riga non c'è il motore passa alla successiva da
+ * solo. Nessun `if` da qualche parte nel codice.
+ *
+ * MISURATO sul Pad: WhatsApp dichiara `.accountsync.CallContactLandingActivity`
+ * per `vnd.android.cursor.item/vnd.com.whatsapp.voip.call` — **l'API esiste** —
+ * ma nella rubrica di sistema non c'è nessun account `com.whatsapp`, quindi la
+ * riga **non c'è** e qui vince il ripiego.
+ *
+ * ⛔ Non è un'API ufficiale di WhatsApp (le fonti: «undocumented or unsupported
+ * approach»). ⇒ Si prova, non ci si dipende: è esattamente perché sta in un
+ * elenco di vie invece che essere l'unica strada.
+ */
+export interface TalosViaRigaContatto {
+    readonly tipo: 'riga-contatto'
+    /** Il mimetype della riga, per esempio quello della chiamata WhatsApp. */
+    readonly mime: string
+    /** Quale parametro porta il numero con cui cercare il contatto. */
+    readonly numero: string
+}
+
+/** Come si raggiunge una capacità: per URI, per azione con extra, o per riga di rubrica. */
+export type TalosViaIntent = TalosViaUri | TalosViaAzione | TalosViaRigaContatto
 
 /** Una cosa che TALOS sa far fare a un'app, senza toccarne lo schermo. */
 export interface TalosCapacitaIntent {
@@ -173,7 +198,35 @@ export interface TalosCapacitaIntent {
          * tenuta da prima. Dedurlo («è l'ultimo parametro») funzionerebbe oggi
          * e si romperebbe alla prima capacità con un ordine diverso.
          */
-        readonly contenuto: string
+        /**
+         * ⛔ Assente quando non c'è niente da riverificare — una CHIAMATA non
+         * ha un testo. Ma dove un testo c'è, la guardia è obbligatoria: senza,
+         * partirebbe la bozza vecchia. Il test `nessunInvioSenzaGuardia`
+         * pretende che ogni capacità con un parametro di testo lo dichiari.
+         */
+        readonly contenuto?: string
+        /**
+         * ⭐⭐⭐ L'app può chiedere una SUA conferma dopo il primo tocco.
+         *
+         * MISURATO sul Pad il 2026-08-13: premuto «Chiamata vocale» in
+         * WhatsApp, `click=true`, e la chiamata **non parte** — perché WhatsApp
+         * apre **«Avviare una chiamata vocale?»** con *Annulla* e *Chiama*.
+         * L'ultimo centimetro era lungo **due** passi.
+         *
+         * ## ⛔ È un `true`, non un elenco di etichette
+         *
+         * Owner, 2026-08-13: «non possiamo andare per ciascuna app esistente
+         * possibile e immaginabile e prevedere in ogni caso per ogni
+         * funzionalità, sarebbe da pazzi». Aveva ragione: avevo appena scritto
+         * `['Chiama', 'Call']`, cioè una riga per app, per funzione, per lingua.
+         *
+         * La misura l'ha reso inutile — quel dialogo usa gli **id del
+         * framework**, uguali per ogni app e **non tradotti**:
+         * `android:id/message` la domanda, `android:id/button1` il positivo,
+         * `android:id/button2` il negativo. ⇒ Qui basta dire **se** può
+         * succedere; il **come** è una regola sola, in `confermaDialogo`.
+         */
+        readonly confermaApp?: true
     }
     /**
      * `true` quando l'azione ESCE dal dispositivo (un messaggio a una persona,
@@ -339,8 +392,44 @@ export const TALOS_CAPACITA_INTENT: readonly TalosCapacitaIntent[] = [
         pacchetto: 'com.whatsapp',
         app: 'WhatsApp',
         parametri: ['numero'],
-        vie: [{ modello: 'https://wa.me/{numero}', tipo: 'https' }],
-        esce: false,
+        /*
+         * ⛔⛔ PRIMA IL NATIVO, POI IL PONTE — decisione dell'owner, 2026-08-13.
+         *
+         * MISURATO con un contatto vero: `wa.me/<numero>` apre la CHAT e non
+         * chiama. Il nome della capacità prometteva più di quel che faceva.
+         *
+         * La prima via chiede al telefono la riga di rubrica di WhatsApp: se
+         * c'è, la chiamata parte davvero e non si tocca lo schermo. Se non c'è
+         * — ed è il caso di questo Pad, dove nella rubrica non esiste nessun
+         * account `com.whatsapp` — si passa alla seconda, che apre la chat, e
+         * l'ultimo centimetro lo fa l'occhio.
+         */
+        ordineMisurato: 'Pad 2026-08-13: wa.me apre la chat e NON chiama; la riga '
+            + 'nativa di WhatsApp chiama, ma su questo dispositivo non esiste.',
+        vie: [
+            {
+                tipo: 'riga-contatto',
+                mime: 'vnd.android.cursor.item/vnd.com.whatsapp.voip.call',
+                numero: 'numero',
+            },
+            { modello: 'https://wa.me/{numero}', tipo: 'https' },
+        ],
+        /*
+         * ⛔ I due pulsanti di chiamata hanno `resource-id=""` — MISURATO. È il
+         * primo caso in cui la strada robusta (il `viewId`) non esiste proprio,
+         * e resta solo il ripiego per descrizione, che è tradotto. Per questo
+         * ce ne sono due lingue.
+         */
+        invio: {
+            descrizioni: ['Chiamata vocale', 'Voice call'],
+            // MISURATO: dopo il primo tocco WhatsApp chiede «Avviare una
+            // chiamata vocale?». Il COME si preme non sta qui: è la regola
+            // generica sugli id del framework.
+            confermaApp: true,
+        },
+        // ⛔ `true`: se chiama davvero, squilla il telefono di una persona. Era
+        // `false` quando la capacità si limitava ad aprire una chat.
+        esce: true,
     },
     // ══════ NAVIGAZIONE E LUOGHI ══════
     {

@@ -130,6 +130,27 @@ class TalosSchermoPlugin : Plugin() {
     private fun premiPulsanteOra(call: PluginCall) {
         val occhio = TalosOcchio.aperto()
         if (occhio == null) {
+            /*
+             * ⛔⛔ QUESTO RAMO USCIVA IN SILENZIO, e il silenzio e' costato una
+             * diagnosi — 2026-08-13.
+             *
+             * Chiesta una chiamata WhatsApp: la chat si apriva, il pulsante non
+             * veniva premuto, e in `logcat` NON C'ERA NIENTE. Ho cercato la
+             * causa nel giro dei tool, nel registro e nel modello prima di
+             * capire che il metodo era uscito alla prima riga.
+             *
+             * La causa vera: `am force-stop` uccide anche il servizio di
+             * accessibilita' e Android non lo riaggancia — cioe' la ricetta di
+             * misura che avevo appena adottato per un ALTRO difetto rompeva
+             * questo. Ma non e' quello il punto: il punto e' che un ramo che
+             * esce senza dire niente rende «non e' successo» e «non ho potuto»
+             * indistinguibili in un log.
+             *
+             * ⇒ Ogni uscita di questo metodo lascia una riga. Le altre due
+             * gia' la lasciavano; questa era l'unica muta, ed e' quella che
+             * capita piu' spesso.
+             */
+            Log.i("TalosOcchio", "premiPulsante: occhio-chiuso, non premo niente")
             call.resolve(JSObject().put("fatto", false).put("motivo", "occhio-chiuso"))
             return
         }
@@ -214,7 +235,7 @@ class TalosSchermoPlugin : Plugin() {
         TalosOcchio.segnaNostraAzione()
         val fatto = bersaglio?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
         val t1 = SystemClock.uptimeMillis()
-        val sparito = if (fatto) attendiCheSparisca(occhio, viewId, testoAtteso) else false
+        val sparito = if (fatto) attendiCheSparisca(occhio, viewId, testoAtteso, descrizioni) else false
         val verificaMs = SystemClock.uptimeMillis() - t1
         Log.i(
             "TalosOcchio",
@@ -264,6 +285,7 @@ class TalosSchermoPlugin : Plugin() {
         occhio: TalosOcchio,
         viewId: String,
         testoAtteso: String,
+        descrizioni: List<String>,
     ): Boolean {
         val fine = SystemClock.uptimeMillis() + 2_500
         while (SystemClock.uptimeMillis() < fine) {
@@ -273,9 +295,23 @@ class TalosSchermoPlugin : Plugin() {
                 viewId.isNotEmpty() ->
                     radice.findAccessibilityNodeInfosByViewId(viewId)?.isNotEmpty() == true
                 testoAtteso.isNotEmpty() -> bozzaContiene(radice, testoAtteso)
-                // Senza ne' viewId ne' testo non c'e' niente da verificare, e
-                // fingere un `true` sarebbe la bugia che questo metodo esiste
-                // per impedire.
+                /*
+                 * ⛔ AGGIUNTO il 2026-08-13, e la misura che l'ha imposto:
+                 * i due pulsanti di chiamata di WhatsApp hanno
+                 * `resource-id=""` — nessun `viewId` — e una chiamata non ha un
+                 * testo. Con solo i primi due rami questo metodo tornava
+                 * `false` dopo 93 ms senza aver guardato niente, e la risposta
+                 * «non confermato» era vera per il motivo sbagliato.
+                 *
+                 * Con le descrizioni la prova torna a esistere: il pulsante che
+                 * abbiamo premuto sparisce quando ha fatto effetto.
+                 */
+                descrizioni.isNotEmpty() -> descrizioni.any { d ->
+                    radice.findAccessibilityNodeInfosByText(d)?.isNotEmpty() == true ||
+                        cercaPerDescrizione(radice, d) != null
+                }
+                // Senza niente da guardare, fingere un `true` sarebbe la bugia
+                // che questo metodo esiste per impedire.
                 else -> return false
             }
             if (!ancoraLi) return true
@@ -294,6 +330,112 @@ class TalosSchermoPlugin : Plugin() {
             for (i in 0 until n.childCount) n.getChild(i)?.let { pila.addLast(it) }
         }
         return null
+    }
+
+    /**
+     * ⭐⭐⭐ LA CONFERMA DELL'APP — una regola sola, per TUTTE le app.
+     *
+     * ## Perche' non una tabella
+     *
+     * Owner, 2026-08-13: «dobbiamo fare in modo che sia piu' dinamico e
+     * automatizzato possibile, non possiamo andare per ciascuna app esistente
+     * possibile e immaginabile e prevedere in ogni caso per ogni funzionalita',
+     * sarebbe da pazzi».
+     *
+     * Aveva ragione, e avevo appena scritto la tabella: `['Chiama', 'Call']`
+     * per WhatsApp. Una riga per app, per funzione, per lingua.
+     *
+     * ## La misura che l'ha resa inutile
+     *
+     * MISURATO sul Pad la finestra «Avviare una chiamata vocale?»:
+     *
+     * ```
+     * "Avviare una chiamata vocale?"  → android:id/message
+     * "Annulla"                       → android:id/button2
+     * "Chiama"                        → android:id/button1
+     * ```
+     *
+     * Sono gli id del FRAMEWORK: `AlertDialog` li usa da sempre, valgono per
+     * ogni app che usa un dialogo di sistema, e **non sono tradotti**. ⇒ Una
+     * regola, non un elenco.
+     *
+     * ## ⛔ E perche' non e' un tocco alla cieca
+     *
+     * Premere `button1` senza guardare sarebbe pericoloso: in un'altra finestra
+     * quel pulsante puo' dire «Elimina» o «Paga». Qui si PRETENDE che ci sia
+     * anche `android:id/message` — cioe' che sia davvero un dialogo — e si
+     * **legge la domanda** e la si riporta. Si conferma sapendo cosa.
+     *
+     * ⛔ E se l'app usa un dialogo suo, senza gli id del framework, qui non si
+     * trova niente e **non si preme niente**: la degradazione giusta e' dirlo,
+     * non indovinare quale pulsante somigli a un «sì».
+     */
+    @PluginMethod
+    fun confermaDialogo(call: PluginCall) {
+        Thread({ confermaDialogoOra(call) }, "talos-conferma").start()
+    }
+
+    private fun confermaDialogoOra(call: PluginCall) {
+        val occhio = TalosOcchio.aperto()
+        if (occhio == null) {
+            Log.i("TalosOcchio", "confermaDialogo: occhio-chiuso")
+            call.resolve(JSObject().put("fatto", false).put("motivo", "occhio-chiuso"))
+            return
+        }
+        val pacchetto = call.getString("pacchetto").orEmpty()
+        val attesa = (call.getInt("attesaMs") ?: 4_000).coerceIn(200, 20_000)
+        val inizio = SystemClock.uptimeMillis()
+        var positivo: AccessibilityNodeInfo? = null
+        var domanda = ""
+        var pacchettoVisto = ""
+        while (SystemClock.uptimeMillis() - inizio < attesa && positivo == null) {
+            val radice = occhio.rootInActiveWindow
+            if (radice != null) {
+                pacchettoVisto = radice.packageName?.toString().orEmpty()
+                if (pacchetto.isEmpty() || pacchettoVisto == pacchetto) {
+                    val testo = radice.findAccessibilityNodeInfosByViewId("android:id/message")
+                        ?.firstOrNull()?.text?.toString()
+                        ?: radice.findAccessibilityNodeInfosByViewId("android:id/alertTitle")
+                            ?.firstOrNull()?.text?.toString()
+                    // ⛔ Niente domanda, niente conferma: e' la prova che siamo
+                    // davanti a un dialogo e non a una schermata qualsiasi che
+                    // per caso ha un pulsante con quell'id.
+                    if (!testo.isNullOrBlank()) {
+                        domanda = testo
+                        positivo = radice.findAccessibilityNodeInfosByViewId("android:id/button1")
+                            ?.firstOrNull { it.isClickable && it.isEnabled }
+                    }
+                }
+            }
+            if (positivo == null) Thread.sleep(70)
+        }
+        val ms = SystemClock.uptimeMillis() - inizio
+        if (positivo == null) {
+            Log.i("TalosOcchio", "confermaDialogo: nessun dialogo dopo $ms ms (visto=$pacchettoVisto)")
+            call.resolve(
+                JSObject().put("fatto", false).put("motivo", "nessun-dialogo")
+                    .put("pacchettoVisto", pacchettoVisto).put("millisecondi", ms),
+            )
+            return
+        }
+        TalosOcchio.segnaNostraAzione()
+        val fatto = positivo.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        // La prova: il dialogo si chiude quando la conferma ha fatto effetto.
+        var sparito = false
+        val t1 = SystemClock.uptimeMillis()
+        while (fatto && SystemClock.uptimeMillis() - t1 < 2_500) {
+            Thread.sleep(80)
+            val r = occhio.rootInActiveWindow ?: continue
+            if (r.findAccessibilityNodeInfosByViewId("android:id/button1")?.isNotEmpty() != true) {
+                sparito = true
+                break
+            }
+        }
+        Log.i("TalosOcchio", "confermaDialogo: click=$fatto sparito=$sparito in $ms ms")
+        call.resolve(
+            JSObject().put("fatto", fatto).put("sparito", sparito)
+                .put("domanda", domanda).put("millisecondi", ms),
+        )
     }
 
     /**

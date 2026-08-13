@@ -91,6 +91,24 @@ async function talosPercorri(
     valori: Readonly<Record<string, string>>,
     pacchetto?: string,
 ): Promise<boolean> {
+    if (via.tipo === 'riga-contatto') {
+        /*
+         * ⛔ Due domande, non una: prima «esiste la riga?», poi «aprila». La
+         * prima può rispondere `riga-assente` o `senza-permesso`, e sono cose
+         * diverse — la seconda si cura chiedendo il permesso, la prima no.
+         * Qui basta sapere che non c'è: il motore passa alla via dopo.
+         */
+        const uri = await TalosDeviceBridge
+            .rigaDiContatto({ numero: valori[via.numero] ?? '', mime: via.mime })
+            .then((r) => r.uri, () => null)
+        if (!uri) return false
+        return await TalosDeviceBridge.apriAzione({
+            azione: 'android.intent.action.VIEW',
+            uri,
+            tipo: via.mime,
+            ...(pacchetto ? { pacchetto } : {}),
+        }).then((r) => r.done, () => false)
+    }
     if (via.tipo === 'azione') {
         return await TalosDeviceBridge.apriAzione({
             azione: via.azione,
@@ -286,12 +304,54 @@ async function talosUltimoCentimetro(
         ...(invio.viewId ? { viewId: invio.viewId } : {}),
         ...(invio.descrizioni ? { descrizioni: invio.descrizioni } : {}),
         pacchetto: capacita.pacchetto,
-        testoAtteso: valori[invio.contenuto] ?? '',
+        /*
+         * ⛔ La guardia sul testo esiste SOLO dove c'è un testo. Una chiamata
+         * non ne ha, e pretenderne uno la bloccherebbe per sempre. Ma dove il
+         * testo c'è, `contenuto` è obbligatorio — `nessunInvioSenzaGuardia` in
+         * `registro.test.ts` lo pretende — perché senza partirebbe la bozza
+         * vecchia.
+         */
+        ...(invio.contenuto ? { testoAtteso: valori[invio.contenuto] ?? '' } : {}),
         attesaMs: ATTESA_APP_MS,
     // ⛔ Il ponte che non risponde è un ESITO, non un'eccezione da ingoiare: ha
     // una sua riga nella tabella qui sotto, e la persona sente cosa è successo.
     }).catch((): TalosEsitoInvio => ({ fatto: false, motivo: 'ponte-chiuso' }))
 
+    /*
+     * ⭐⭐ IL SECONDO PASSO, quando è l'APP a chiederlo.
+     *
+     * MISURATO sul Pad: premuto «Chiamata vocale», `click=true`, e la chiamata
+     * non parte — WhatsApp apre «Avviare una chiamata vocale?» con *Annulla* e
+     * *Chiama*. L'ultimo centimetro era lungo due passi.
+     *
+     * ⛔ Si preme SOLO se la finestra c'è davvero: `premiPulsante` non trova
+     * niente e non tocca niente, come sempre. Non è «riprova a caso»: è la
+     * conferma dichiarata nel registro, quindi si sa cosa si sta confermando.
+     */
+    if (esito.fatto && invio.confermaApp) {
+        const secondo = await TalosSchermoBridge.confermaDialogo({
+            pacchetto: capacita.pacchetto,
+            attesaMs: 4_000,
+        }).catch(() => ({ fatto: false, motivo: 'ponte-chiuso', sparito: false, domanda: '' }))
+        if (!secondo.fatto) {
+            return {
+                ok: true,
+                content: `TALOS started the action in ${capacita.app}, but could not complete a confirmation (${secondo.motivo ?? 'unknown'}). It is NOT done. Tell the user to look at the screen: if a confirmation is showing, one tap finishes it.`,
+            }
+        }
+        /*
+         * ⭐ La domanda dell'app viaggia con l'esito, e non è decorazione: è
+         * l'unica cosa che rende onesto il «confermato». TALOS ha letto cosa
+         * stava confermando, e chi legge può verificarlo.
+         */
+        const domanda = secondo.domanda ? ` It confirmed: "${secondo.domanda}".` : ''
+        return {
+            ok: true,
+            content: secondo.sparito
+                ? `Done.${domanda} The confirmation closed, so it went through. Say it is done, in one short sentence.`
+                : `TALOS confirmed it in ${capacita.app}${domanda} but could not verify it closed. Tell the user exactly that and ask them to check. ⛔ Do NOT do it again: it may already have gone through.`,
+        }
+    }
     if (esito.fatto && esito.sparito) {
         return {
             ok: true,
@@ -496,6 +556,18 @@ export function talosIntentiTools(): readonly TalosToolDefinition<never>[] {
                          * venti del pilota. E si riporta cosa è successo
                          * davvero, non cosa speravamo.
                          */
+                        /*
+                         * ⭐ La riga nativa NON ha un ultimo centimetro: l'app
+                         * ha già fatto la cosa. Chiedere all'occhio di premere
+                         * qualcosa dopo vorrebbe dire cercare un pulsante su
+                         * una schermata che nel frattempo è diventata un'altra.
+                         */
+                        if (via.tipo === 'riga-contatto') {
+                            return {
+                                ok: true,
+                                content: `${capacita.app} did it directly through its own contact entry — no screen was driven. Say it is done, in one short sentence.`,
+                            }
+                        }
                         if (!capacita.esce) {
                             return { ok: true, content: `Opened ${capacita.app} via ${via.tipo}.` }
                         }
