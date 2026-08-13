@@ -3,6 +3,20 @@ import { Capacitor } from '@capacitor/core'
 import type { TalosDeviceToolSources } from '@/lib/tools/deviceTools'
 
 /**
+ * Un'app del dispositivo che accetta una certa azione.
+ *
+ * ⛔ Il **nome** viaggia insieme al pacchetto, e non è cortesia: un id non dice
+ * niente a un modello. È già costato una diagnosi sbagliata su questo progetto
+ * — `org.thunderdog.challegram` non somiglia a «Telegram», e due provider su
+ * tre conclusero che Telegram non fosse installato.
+ */
+export interface TalosAppCheSaFare {
+    readonly pacchetto: string
+    readonly nome: string
+    readonly attivita: string
+}
+
+/**
  * Il ponte fra i nove tool del telefono e i due plugin nativi.
  *
  * ## ⛔ Perché fuori da Android non finge
@@ -32,6 +46,35 @@ interface PonteDispositivo {
     openApp(options: { package: string }): Promise<{ done: boolean, reason?: string }>
     /** ⭐ Apre un URI: è la porta unica del motore degli intent. */
     apriUri(options: { uri: string }): Promise<{ done: boolean, reason?: string }>
+    /**
+     * ⭐⭐⭐ CHI, FRA LE APP CHE ESISTONO DAVVERO, SA FARE QUESTA COSA.
+     *
+     * Owner 2026-08-13: «non puoi mettere delle righe predeterminate… la chat
+     * ha già una lista delle applicazioni esistenti». ⇒ La domanda si fa al
+     * telefono, non a una tabella, e le app installate domani entrano da sole.
+     *
+     * MISURATO sul Pad: `ACTION_SEND`+`text/plain` → **20 app**;
+     * `ACTION_SEARCH` → **20 app**, fra cui Spotify e YouTube.
+     */
+    chiAccetta(options: {
+        azione: string
+        tipo?: string
+        uri?: string
+    }): Promise<{ app: TalosAppCheSaFare[] }>
+    /**
+     * ⭐⭐⭐ Lancia un'AZIONE con i parametri negli extra, non dentro un URI.
+     *
+     * MISURATO il 2026-08-13: `translate.google.com/?text=girasole` apre il
+     * Traduttore e **perde il testo**; `ACTION_SEND`+`text/plain` con
+     * `android.intent.extra.TEXT` lo porta **a schermo**.
+     */
+    apriAzione(options: {
+        azione: string
+        tipo?: string
+        uri?: string
+        pacchetto?: string
+        extra?: Readonly<Record<string, string>>
+    }): Promise<{ done: boolean, reason?: string }>
     appInstallata(options: { package: string }): Promise<{ presente: boolean }>
     /**
      * Le app avviabili, `Etichetta<TAB>pacchetto` per riga.

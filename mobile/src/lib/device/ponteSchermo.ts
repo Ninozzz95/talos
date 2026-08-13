@@ -39,6 +39,56 @@ export interface PonteSchermo {
     /** Indietro e Home: azioni di SISTEMA, senza indice. */
     sistema(options: { azione: string }): Promise<{ fatto: boolean, motivo?: string }>
     armaIlFreno(): Promise<{ armato: boolean, comando: string[], percorso: string }>
+    /** ⭐ L'ultimo centimetro: preme UN pulsante, con le tre guardie. */
+    premiPulsante(options: TalosRichiestaInvio): Promise<TalosEsitoInvio>
+    /**
+     * ⭐ Chi è in primo piano ADESSO — smaschera i falsi successi.
+     *
+     * ⛔ `sipuoSapere: false` vuol dire «non lo so» (occhio chiuso), non
+     * «non c'è nessuno»: chi le confonde dice «fatto» davanti a un launcher.
+     */
+    chiEDavanti(): Promise<{ pacchetto: string, sipuoSapere: boolean }>
+}
+
+/**
+ * ⭐⭐⭐ L'ULTIMO CENTIMETRO — cosa si chiede per premere «invia».
+ *
+ * ⛔ Ogni campo è una GUARDIA, non un'opzione. Toglierne uno non rende la
+ * chiamata più comoda: la rende capace di premere la cosa sbagliata.
+ */
+export interface TalosRichiestaInvio {
+    /** Il nome della risorsa (`com.whatsapp:id/send`): non tradotto, non si sposta. */
+    readonly viewId?: string
+    /** Il ripiego tradotto, quando il `viewId` cambia. */
+    readonly descrizioni?: readonly string[]
+    /** ⛔ Il pacchetto che DEVE essere in primo piano: senza, «Invia» può essere il nostro. */
+    readonly pacchetto?: string
+    /** ⛔ Il testo che deve stare nel campo: senza, si spedisce la bozza vecchia. */
+    readonly testoAtteso?: string
+    /** Quanto si aspetta che l'app arrivi. Un'app fredda ci mette secondi. */
+    readonly attesaMs?: number
+}
+
+/**
+ * L'esito, con la PROVA dentro.
+ *
+ * ⛔ `fatto` dice che il click è stato consegnato; **`sparito` dice che il
+ * messaggio è partito**. Chi legge deve poter dire la verità alla persona, e i
+ * due non sono la stessa cosa.
+ */
+export interface TalosEsitoInvio {
+    /** Il click è stato consegnato al nodo. NON vuol dire «inviato». */
+    readonly fatto: boolean
+    /** Come è stato trovato il pulsante: `viewId` o `descrizione:<quale>`. */
+    readonly via?: string
+    /** `app-non-in-primo-piano` · `testo-non-arrivato` · `non-trovato` · `occhio-chiuso`. */
+    readonly motivo?: string
+    /** ⭐ Il controllo d'invio è sparito ⇒ la bozza ha lasciato il campo. */
+    readonly sparito?: boolean
+    /** Chi c'era davvero in primo piano, quando non era chi ci aspettavamo. */
+    readonly pacchettoVisto?: string
+    readonly millisecondi?: number
+    readonly verificaMs?: number
 }
 
 export const TalosSchermoBridge = registerPlugin<PonteSchermo>('TalosSchermo')

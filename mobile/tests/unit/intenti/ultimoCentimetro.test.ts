@@ -1,0 +1,360 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+/**
+ * ⭐⭐⭐ L'ULTIMO CENTIMETRO — e le tre guardie che gli impediscono di mentire.
+ *
+ * ## Cosa si sta provando davvero
+ *
+ * Fino al 13 agosto TALOS apriva WhatsApp con il testo dentro e **si fermava
+ * lì**: l'owner l'ha detto in tre parole — «TALOS NON HA INVIATO IL MESSAGGIO».
+ * Adesso preme lui. E il momento in cui preme è anche il momento in cui può
+ * fare il danno peggiore di tutto il progetto: mandare la cosa sbagliata a una
+ * persona vera, o dire «inviato» quando non è vero.
+ *
+ * ⇒ Questi test non provano che «funziona». Provano che **non mente** e che
+ * **non tocca al buio**:
+ *
+ * | difetto possibile | il test che lo becca |
+ * |---|---|
+ * | preme senza controllare cosa c'è nel campo | «il testo atteso viaggia fino alla guardia» |
+ * | preme in un'app qualsiasi | «il pacchetto viaggia fino alla guardia» |
+ * | dice «inviato» perché il click è riuscito | «premuto ma non confermato NON è inviato» |
+ * | riprova un invio che forse è partito | «il dubbio non si risolve rifacendo» |
+ * | manda quando gli era stato chiesto di preparare | «invia:false non preme niente» |
+ * | promette un invio in un'app mai misurata | «senza `invio` non si preme» |
+ */
+
+const ponte = {
+    chiamate: [] as Array<Record<string, unknown>>,
+    esito: {} as Record<string, unknown>,
+    esplode: false,
+}
+
+/**
+ * `davanti: null` = «è arrivata l'app che abbiamo aperto», cioè il caso normale.
+ * Un test che vuole il FALSO SUCCESSO (Spotify che si schianta) mette qui il
+ * pacchetto sbagliato, e allora la differenza la fa il codice, non il mock.
+ */
+const schermo: { davanti: string | null, sipuoSapere: boolean } = {
+    davanti: null,
+    sipuoSapere: true,
+}
+
+vi.mock('@/lib/device/ponteSchermo', () => ({
+    TalosSchermoBridge: {
+        premiPulsante: async (opzioni: Record<string, unknown>) => {
+            ponte.chiamate.push(opzioni)
+            if (ponte.esplode) throw new Error('ponte assente')
+            return ponte.esito
+        },
+        chiEDavanti: async () => ({
+            pacchetto: schermo.davanti
+                ?? (apri.azioni.at(-1)?.pacchetto as string | undefined) ?? '',
+            sipuoSapere: schermo.sipuoSapere,
+        }),
+    },
+}))
+
+const apri = {
+    esiti: [] as boolean[],
+    azioni: [] as Array<Record<string, unknown>>,
+    candidate: [] as Array<{ pacchetto: string, nome: string, attivita: string }>,
+}
+
+vi.mock('@/lib/device/devicePlugin', () => ({
+    TalosDeviceBridge: {
+        apriUri: async () => ({ done: apri.esiti.shift() ?? true }),
+        apriAzione: async (o: Record<string, unknown>) => {
+            apri.azioni.push(o)
+            return { done: apri.esiti.shift() ?? true }
+        },
+        chiAccetta: async () => ({ app: apri.candidate }),
+        appInstallata: async () => ({ presente: true }),
+    },
+}))
+
+vi.mock('@/lib/intenti/rubrica', () => ({
+    talosRisolviContatto: async () => ({ stato: 'nessuno' as const }),
+}))
+
+import { talosIntentiTools } from '@/lib/tools/intentiTools'
+
+const strumento = talosIntentiTools()[0]
+
+async function chiedi(input: Record<string, unknown>) {
+    return await (strumento.run as (i: unknown, c: unknown) => Promise<{
+        ok: boolean
+        content: string
+        code?: string
+    }>)(input, {})
+}
+
+beforeEach(() => {
+    ponte.chiamate = []
+    ponte.esito = { fatto: true, sparito: true }
+    ponte.esplode = false
+    apri.esiti = []
+    apri.azioni = []
+    apri.candidate = [
+        { pacchetto: 'com.google.android.keep', nome: 'Keep Notes', attivita: 'a' },
+        { pacchetto: 'com.google.android.apps.translate', nome: 'Traduttore', attivita: 'b' },
+    ]
+    schermo.davanti = null
+    schermo.sipuoSapere = true
+})
+
+const CIAO = { capacita: 'whatsapp_messaggio', valori: { numero: '393331112222', testo: 'ciao' } }
+
+describe('⭐⭐⭐ l\'ultimo centimetro non tocca al buio', () => {
+    /*
+     * ⛔⛔ IL TEST CHE MORDE DI PIÙ.
+     *
+     * WhatsApp CONSERVA la bozza. Se la chat era già aperta con dentro un altro
+     * testo, il pulsante «invia» c'è **prima** che arrivi il nostro — e senza
+     * questa guardia partirebbe la bozza vecchia, verso la persona giusta, con
+     * le parole sbagliate. Un difetto che si presenta come un successo.
+     *
+     * Togliendo `testoAtteso` dalla chiamata questo test diventa rosso.
+     */
+    it('⛔ il TESTO ATTESO viaggia fino alla guardia', async () => {
+        await chiedi(CIAO)
+        expect(ponte.chiamate).toHaveLength(1)
+        expect(ponte.chiamate[0].testoAtteso).toBe('ciao')
+    })
+
+    /*
+     * ⛔ Il ripiego cerca «Invia»/«Send». Quelle parole esistono anche DENTRO
+     * TALOS: se l'intent non ha aperto niente, senza questa guardia si
+     * premerebbe un nostro pulsante credendo di aver spedito.
+     */
+    it('⛔ il PACCHETTO viaggia fino alla guardia', async () => {
+        await chiedi(CIAO)
+        expect(ponte.chiamate[0].pacchetto).toBe('com.whatsapp')
+        expect(ponte.chiamate[0].viewId).toBe('com.whatsapp:id/send')
+    })
+
+    it('«inviato» si dice SOLO se il controllo d\'invio è sparito', async () => {
+        ponte.esito = { fatto: true, sparito: true }
+        const esito = await chiedi(CIAO)
+        expect(esito.ok).toBe(true)
+        expect(esito.content).toContain('Sent')
+    })
+
+    /*
+     * ⛔⛔ `performAction` che risponde `true` vuol dire «click consegnato»,
+     * non «messaggio partito». Chiamarlo «inviato» sarebbe rifare lo stesso
+     * difetto di prima, stavolta con sicurezza.
+     */
+    it('⛔ PREMUTO ma non confermato NON è «inviato»', async () => {
+        ponte.esito = { fatto: true, sparito: false }
+        const esito = await chiedi(CIAO)
+        expect(esito.content).not.toMatch(/^Sent/)
+        expect(esito.content).toMatch(/could not confirm/i)
+    })
+
+    /*
+     * ⛔⛔ E QUI STA IL DANNO IRREVERSIBILE.
+     *
+     * Se questo ramo tornasse `ok: false`, il modello leggerebbe «non fatto» e
+     * richiamerebbe il tool: se il primo invio era andato, la persona riceve il
+     * messaggio **due volte**. Un dubbio si dice; non si risolve rifacendo una
+     * cosa che non si annulla.
+     */
+    it('⛔ il DUBBIO non si risolve rifacendo: niente ok:false, e lo dice', async () => {
+        ponte.esito = { fatto: true, sparito: false }
+        const esito = await chiedi(CIAO)
+        expect(esito.ok).toBe(true)
+        expect(esito.code).toBeUndefined()
+        expect(esito.content).toMatch(/twice/i)
+        expect(esito.content).toMatch(/Do NOT press send again/i)
+    })
+
+    /*
+     * ⛔ «Non lo so» non è «no»: quattro motivi diversi portano a quattro cose
+     * diverse da dire alla persona, e appiattirli in «non riuscito» è la
+     * famiglia di difetti più frequente di questo progetto.
+     */
+    it.each([
+        ['occhio-chiuso', 'TALOS_INVIO_OCCHIO_CHIUSO', /screen-reading permission/i],
+        ['app-non-in-primo-piano', 'TALOS_INVIO_APP_NON_IN_PRIMO_PIANO', /not the app on screen/i],
+        ['testo-non-arrivato', 'TALOS_INVIO_TESTO_NON_ARRIVATO', /never appeared/i],
+        ['non-trovato', 'TALOS_INVIO_NON_TROVATO', /could not find the send button/i],
+    ])('il motivo «%s» diventa un codice e una frase sue', async (motivo, codice, frase) => {
+        ponte.esito = { fatto: false, motivo }
+        const esito = await chiedi(CIAO)
+        expect(esito.ok).toBe(false)
+        expect(esito.code).toBe(codice)
+        expect(esito.content).toMatch(frase)
+        // ⛔ In tutti e quattro NON è partito niente, e va detto: è la sola
+        // informazione che decide cosa fa la persona dopo.
+        expect(esito.content).toMatch(/[Nn]othing was sent/)
+    })
+
+    /** ⛔ Un ponte che non risponde è un ESITO, non un'eccezione da ingoiare. */
+    it('il ponte che esplode non diventa «inviato»', async () => {
+        ponte.esplode = true
+        const esito = await chiedi(CIAO)
+        expect(esito.ok).toBe(false)
+        expect(esito.code).toBe('TALOS_INVIO_PONTE_CHIUSO')
+        expect(esito.content).toMatch(/[Nn]othing was sent/)
+    })
+})
+
+describe('⛔ quando NON si deve premere, non si preme', () => {
+    it('«invia: false» non tocca il pulsante', async () => {
+        const esito = await chiedi({ ...CIAO, invia: false })
+        expect(ponte.chiamate).toHaveLength(0)
+        expect(esito.ok).toBe(true)
+        expect(esito.content).toMatch(/Nothing has been sent|Nothing was sent/)
+    })
+
+    /*
+     * ⛔ Telegram ESCE dal dispositivo ma non ha un `invio` misurato: promettere
+     * di premere un pulsante mai visto vuol dire far credere alla persona di
+     * aver mandato. Meglio dire la verità — è aperto, manca un tocco.
+     */
+    it('una capacità senza «invio» misurato non preme niente', async () => {
+        const esito = await chiedi({
+            capacita: 'telegram_messaggio',
+            valori: { utente: 'qualcuno', testo: 'ciao' },
+        })
+        expect(ponte.chiamate).toHaveLength(0)
+        expect(esito.content).toMatch(/NOT sent/)
+    })
+
+    it('cercare o navigare non ha nessun ultimo centimetro', async () => {
+        const esito = await chiedi({
+            capacita: 'mappe_naviga',
+            valori: { destinazione: 'Catania' },
+        })
+        expect(ponte.chiamate).toHaveLength(0)
+        expect(esito.ok).toBe(true)
+        expect(esito.content).toMatch(/^Opened/)
+    })
+
+    /** Se nessuna via si apre, non c'è niente da premere: non si tocca lo schermo. */
+    it('se l\'app non si apre, il pulsante non si cerca nemmeno', async () => {
+        apri.esiti = [false, false]
+        const esito = await chiedi(CIAO)
+        expect(ponte.chiamate).toHaveLength(0)
+        expect(esito.ok).toBe(false)
+    })
+})
+
+/**
+ * ⭐⭐⭐ LE CAPACITÀ SENZA APP — owner 2026-08-13: «non puoi mettere delle righe
+ * predeterminate… la chat ha già una lista delle applicazioni esistenti,
+ * dobbiamo fare in modo che chiami in quelle».
+ *
+ * Qui si prova che l'elenco NON è nostro: arriva dal dispositivo, e quando la
+ * risposta è «non si può» porta con sé **chi invece potrebbe**.
+ */
+describe('⭐⭐⭐ le capacità che l\'app se la fanno dire dal telefono', () => {
+    const MANDA = { capacita: 'manda_testo_a_app', valori: { testo: 'appunto' } }
+
+    /*
+     * ⛔⛔ IL TEST NATO DA UN DIFETTO VISTO A SCHERMO — Pad, 2026-08-13.
+     *
+     * Con `ok: false` questo elenco veniva letto come un fallimento: Haiku 4.5
+     * l'ha scartato e ha risposto alla persona «WhatsApp, Telegram, Signal,
+     * Messenger, ChatGPT», di cui **tre non erano installate**. Aveva la verità
+     * e ci ha scritto sopra, perché gliel'avevamo data come errore.
+     */
+    it('⛔ l\'elenco del telefono è una RISPOSTA (ok:true), non un fallimento', async () => {
+        const esito = await chiedi(MANDA)
+        expect(esito.ok).toBe(true)
+        expect(esito.code).toBeUndefined()
+        expect(esito.content).toContain('Keep Notes')
+        expect(esito.content).toContain('Traduttore')
+        // ⛔ E vieta esplicitamente di aggiungerne altre a memoria.
+        expect(esito.content).toMatch(/ONLY these/)
+        expect(esito.content).toMatch(/Do NOT name any other app/)
+        // ⛔ E non ha toccato niente: chiedere non è agire.
+        expect(apri.azioni).toHaveLength(0)
+    })
+
+    it('l\'app si riconosce dal NOME che dice la persona, non dall\'id', async () => {
+        const esito = await chiedi({ ...MANDA, app: 'traduttore' })
+        expect(esito.ok).toBe(true)
+        expect(apri.azioni).toHaveLength(1)
+        expect(apri.azioni[0].pacchetto).toBe('com.google.android.apps.translate')
+        expect(apri.azioni[0].azione).toBe('android.intent.action.SEND')
+        expect(apri.azioni[0].tipo).toBe('text/plain')
+    })
+
+    /*
+     * ⛔ Il testo viaggia negli EXTRA, e NON codificato: un `%20` a schermo è il
+     * messaggio della persona rovinato. Il verso opposto (URI) è provato in
+     * `registro.test.ts`, e le due prove insieme sono la guardia vera.
+     */
+    it('⛔ il testo arriva negli extra, non codificato', async () => {
+        await chiedi({ capacita: 'manda_testo_a_app', app: 'keep', valori: { testo: 'a & b' } })
+        expect((apri.azioni[0].extra as Record<string, string>)['android.intent.extra.TEXT'])
+            .toBe('a & b')
+    })
+
+    it('un\'app che non c\'è non diventa un «non si può»: dice quali ci sono', async () => {
+        const esito = await chiedi({ ...MANDA, app: 'Telegram' })
+        expect(esito.ok).toBe(false)
+        expect(esito.code).toBe('TALOS_INTENTO_APP_NON_ADATTA')
+        expect(esito.content).toContain('Keep Notes')
+    })
+
+    it('nessuna app sul dispositivo ⇒ non si inventa niente', async () => {
+        apri.candidate = []
+        const esito = await chiedi({ ...MANDA, app: 'Keep' })
+        expect(esito.ok).toBe(false)
+        expect(esito.code).toBe('TALOS_INTENTO_NESSUNA_APP')
+    })
+
+    /*
+     * ⛔⛔ IL FALSO SUCCESSO CHE SPOTIFY CI HA INSEGNATO — 2026-08-13.
+     * Spotify DICHIARA `ACTION_SEARCH`, il sistema ACCETTA l'intent, e poi
+     * l'app muore con `Fatal signal 11 (SIGSEGV)`. Chi si fermasse a
+     * «accettato» direbbe «fatto» davanti a un launcher vuoto.
+     */
+    it('⛔ intent accettato ma davanti c\'è il LAUNCHER ⇒ non è «fatto»', async () => {
+        schermo.davanti = 'com.android.launcher'
+        const esito = await chiedi({ ...MANDA, app: 'Keep' })
+        expect(esito.ok).toBe(false)
+        expect(esito.code).toBe('TALOS_INTENTO_NON_ARRIVATA')
+        expect(esito.content).toContain('com.android.launcher')
+    })
+
+    /*
+     * ⛔⛔ IL FALSO NEGATIVO CHE IL DISPOSITIVO MI HA SMENTITO — Pad, 14:25.
+     *
+     * Chiesto «manda "appunto di prova" a Keep»: Keep si è aperta come finestra
+     * SOPRA TALOS, col testo dentro e il pulsante Salva —
+     * `mCurrentFocus=com.google.android.keep/.ShareReceiverActivity` — e
+     * l'occhio vedeva ancora `ai.talos.dev`. La guardia, troppo severa, ha
+     * fatto dire a TALOS «Keep non è riuscita a ricevere il testo»: falso,
+     * detto con sicurezza, con la prova del contrario a schermo.
+     *
+     * ⇒ Restare noi in primo piano è «non lo so», e «non lo so» non è «no».
+     */
+    it('⛔ se davanti restiamo NOI non si accusa l\'app: è «non lo so»', async () => {
+        schermo.davanti = 'ai.talos.dev'
+        const esito = await chiedi({ ...MANDA, app: 'Keep' })
+        expect(esito.ok).toBe(true)
+        expect(esito.code).toBeUndefined()
+    })
+
+    /** ⛔ «Non lo so» (occhio chiuso) non è «non è arrivata». */
+    it('senza occhio non si accusa l\'app di non essere arrivata', async () => {
+        schermo.sipuoSapere = false
+        schermo.davanti = ''
+        const esito = await chiedi({ ...MANDA, app: 'Keep' })
+        expect(esito.ok).toBe(true)
+    })
+
+    /*
+     * ⛔ `esce: null` = non si sa. Un testo mandato a Keep resta nel telefono,
+     * a Gmail no: dire «inviato» sarebbe una bugia una volta su due.
+     */
+    it('⛔ non dice mai «inviato» per una generica', async () => {
+        const esito = await chiedi({ ...MANDA, app: 'Keep' })
+        expect(esito.content).toMatch(/NOT sent/)
+        expect(esito.content).not.toMatch(/^Sent/)
+    })
+})

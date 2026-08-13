@@ -42,8 +42,8 @@
  *    registro descrive la FORMA, i valori arrivano da chi chiede.
  */
 
-/** Come si raggiunge una capacità di un'app. */
-export interface TalosViaIntent {
+/** Una via che passa da un URI: `https://…` o uno schema custom. */
+export interface TalosViaUri {
     /**
      * Il modello dell'URI, con i segnaposto `{nome}`.
      *
@@ -57,9 +57,48 @@ export interface TalosViaIntent {
      *
      * ⇒ L'ordine di preferenza è una CONSEGUENZA di questo campo, non una
      * lista scritta a mano che qualcuno può riordinare per sbaglio.
+     *
+     * ⛔ MA NON SEMPRE: MISURATO sul Pad il 2026-08-13, `maps/search/?api=1&
+     * query=farmacia` apre Maps sulla schermata iniziale **senza cercare**,
+     * mentre `geo:0,0?q=farmacia` la ricerca la fa. ⇒ «HTTPS prima» vale
+     * quando l'HTTPS porta davvero i parametri; dove non li porta, l'ordine si
+     * inverte **con la misura scritta accanto**.
      */
     readonly tipo: 'https' | 'schema'
 }
+
+/**
+ * ⭐⭐⭐ Una via che passa da un'AZIONE Android, coi valori negli EXTRA.
+ *
+ * ## La misura che l'ha resa necessaria
+ *
+ * Un URI porta i parametri solo se l'app li legge, e spesso non li legge.
+ * MISURATO sul Pad il 2026-08-13:
+ *
+ * | | con l'URI | con l'azione |
+ * |---|---|---|
+ * | traduci «girasole» | Traduttore sulla schermata iniziale, **testo perso** | `ACTION_SEND` + `text/plain` → **«girasole» a schermo** |
+ *
+ * ⛔ E c'è la differenza che un test deve mordere: nell'URI ogni valore va
+ * **codificato**, negli extra **no**. Un `%20` dentro un extra arriva a schermo
+ * come `%20`, e la persona legge il proprio messaggio pieno di percentuali.
+ */
+export interface TalosViaAzione {
+    readonly tipo: 'azione'
+    /** L'azione Android, per nome pieno: `android.intent.action.SEND`. */
+    readonly azione: string
+    /** Il tipo MIME, quando l'azione lo richiede. */
+    readonly mime?: string
+    /**
+     * Gli extra, con i segnaposto `{nome}`. Le chiavi sono le **costanti di
+     * Android** (`android.intent.extra.TEXT`, `query`): così il ponte nativo
+     * resta generico e non impara niente su nessuna app.
+     */
+    readonly extra: Readonly<Record<string, string>>
+}
+
+/** Come si raggiunge una capacità: per URI, o per azione con extra. */
+export type TalosViaIntent = TalosViaUri | TalosViaAzione
 
 /** Una cosa che TALOS sa far fare a un'app, senza toccarne lo schermo. */
 export interface TalosCapacitaIntent {
@@ -103,10 +142,23 @@ export interface TalosCapacitaIntent {
      * 3. E se falliscono entrambe, NON si tocca a caso: si dice che non si è
      *    trovato. Un tocco alla cieca in una conversazione può mandare la cosa
      *    sbagliata alla persona sbagliata.
+     *
+     * ⛔ Qui dentro ci va **solo ciò che è stato misurato sul dispositivo**. Un
+     * `viewId` plausibile ma mai visto è peggio di nessun `viewId`: promette un
+     * invio che poi non avviene, e la persona crede di aver mandato.
      */
     readonly invio?: {
         readonly viewId?: string
         readonly descrizioni?: readonly string[]
+        /**
+         * ⛔ QUALE parametro porta il testo che sta per uscire — si DICHIARA.
+         *
+         * Serve alla guardia che pretende di rivedere quel testo nel campo
+         * prima di premere: senza, si spedirebbe la bozza che l'app si era
+         * tenuta da prima. Dedurlo («è l'ultimo parametro») funzionerebbe oggi
+         * e si romperebbe alla prima capacità con un ordine diverso.
+         */
+        readonly contenuto: string
     }
     /**
      * `true` quando l'azione ESCE dal dispositivo (un messaggio a una persona,
@@ -116,6 +168,19 @@ export interface TalosCapacitaIntent {
      * innocuo e spedisce è il difetto peggiore di tutta questa famiglia.
      */
     readonly esce: boolean
+    /**
+     * ⛔ PERCHÉ l'ordine delle vie deroga alla regola «HTTPS prima».
+     *
+     * La regola esiste perché l'HTTPS regge anche senza l'app. Ma regge a fare
+     * **cosa**? Su `mappe_cerca` apriva Maps e non cercava niente: un
+     * fallimento che sembra un successo. ⇒ La deroga si può fare, e costa una
+     * riga: qui dentro va la misura che l'ha decisa.
+     *
+     * ⭐ Il test la usa come chiave: senza questo campo l'ordine invertito è
+     * **rosso**. Così un riordino per sbaglio si vede, e uno voluto lascia
+     * scritto perché — che è la sola differenza fra i due.
+     */
+    readonly ordineMisurato?: string
 }
 
 /**
@@ -136,9 +201,14 @@ export const TALOS_CAPACITA_INTENT: readonly TalosCapacitaIntent[] = [
             { modello: 'https://wa.me/{numero}?text={testo}', tipo: 'https' },
             { modello: 'whatsapp://send?phone={numero}&text={testo}', tipo: 'schema' },
         ],
+        // ⭐ MISURATO sul Pad il 2026-08-13, WhatsApp 2.26.30.97: il nodo
+        // `com.whatsapp:id/send` esiste, è `clickable=true enabled=true` e ha
+        // `content-desc="Invia"`. E a campo vuoto **non c'è** (conteggio 0):
+        // è quella scomparsa la prova che il messaggio è partito.
         invio: {
             viewId: 'com.whatsapp:id/send',
             descrizioni: ['Invia', 'Send'],
+            contenuto: 'testo',
         },
         esce: true,
     },
@@ -205,10 +275,23 @@ export const TALOS_CAPACITA_INTENT: readonly TalosCapacitaIntent[] = [
         app: 'Messaggi',
         parametri: ['numero', 'testo'],
         vie: [{ modello: 'smsto:{numero}?body={testo}', tipo: 'schema' }],
-        invio: {
-            viewId: 'com.google.android.apps.messaging:id/send_message_button_icon',
-            descrizioni: ['Invia', 'Send', 'Invia SMS', 'Send SMS'],
-        },
+        /*
+         * ⛔ NIENTE `invio` QUI, e non è una dimenticanza — è una misura.
+         *
+         * C'era `com.google.android.apps.messaging:id/send_message_button_icon`,
+         * plausibile e mai visto da nessuno. Provato sul Pad il 2026-08-13:
+         *
+         * 1. `smsto:` non arriva a Messaggi: apre il selettore «Apri con»
+         *    (Messaggi / WhatsApp), perché anche WhatsApp dichiara lo schema.
+         * 2. Puntando l'app per componente, Messaggi si apre sulla
+         *    conversazione e al posto del campo di scrittura mostra
+         *    **«Inserisci una scheda SIM per continuare»**: il Pad non ha SIM,
+         *    quindi il pulsante d'invio non esiste proprio.
+         *
+         * ⇒ Un `viewId` scritto a mano prometterebbe un invio che non può
+         * avvenire, e la persona crederebbe di aver mandato un SMS. Meglio
+         * niente: il tool dirà che ha aperto la bozza, che è la verità.
+         */
         esce: true,
     },
     {
@@ -250,9 +333,28 @@ export const TALOS_CAPACITA_INTENT: readonly TalosCapacitaIntent[] = [
         pacchetto: 'com.google.android.apps.maps',
         app: 'Google Maps',
         parametri: ['cosa'],
+        /*
+         * ⛔⛔ QUI L'ORDINE È INVERTITO, ED È UNA MISURA — 2026-08-13, sul Pad:
+         *
+         * | strada | esito |
+         * |---|---|
+         * | `maps/search/?api=1&query=farmacia` | ⛔ Maps sulla **schermata iniziale**, nessuna ricerca |
+         * | `geo:0,0?q=farmacia` | ✅ la ricerca **avviene** |
+         *
+         * La regola generale «HTTPS prima» esiste perché l'HTTPS regge anche
+         * senza l'app. Ma regge a fare **cosa**? Qui apriva l'app e non cercava
+         * niente: un fallimento che sembra un successo. ⇒ La regola vale
+         * quando l'HTTPS porta davvero i parametri, e dove non li porta si
+         * inverte, con la misura scritta accanto.
+         *
+         * ⛔ `mappe_naviga` NON si tocca: `dir/?api=1&destination=` funziona —
+         * misurato «Catania» a schermo. Non è l'app, è quella forma di URL.
+         */
+        ordineMisurato: 'Pad 2026-08-13: maps/search/?api=1&query=farmacia apre '
+            + 'Maps sulla schermata iniziale senza cercare; geo:0,0?q=farmacia cerca.',
         vie: [
-            { modello: 'https://www.google.com/maps/search/?api=1&query={cosa}', tipo: 'https' },
             { modello: 'geo:0,0?q={cosa}', tipo: 'schema' },
+            { modello: 'https://www.google.com/maps/search/?api=1&query={cosa}', tipo: 'https' },
         ],
         esce: false,
     },
@@ -322,11 +424,30 @@ export const TALOS_CAPACITA_INTENT: readonly TalosCapacitaIntent[] = [
         id: 'traduci',
         pacchetto: 'com.google.android.apps.translate',
         app: 'Google Traduttore',
-        parametri: ['testo', 'lingua'],
-        vie: [{
-            modello: 'https://translate.google.com/?sl=auto&tl={lingua}&text={testo}&op=translate',
-            tipo: 'https',
-        }],
+        // ⛔ `lingua` NON è più un parametro, ed è una promessa tolta invece che
+        // una funzione persa: MISURATO che l'URL la ignorava comunque (chiesto
+        // `tl=en`, il Traduttore mostrava *Persiano*). Dichiarare un parametro
+        // che non arriva è peggio che non averlo.
+        parametri: ['testo'],
+        vie: [
+            /*
+             * ⭐ MISURATO sul Pad il 2026-08-13, nei due versi:
+             *
+             * | strada | esito |
+             * |---|---|
+             * | `translate.google.com/?text=girasole&tl=en` | ⛔ schermata iniziale, **testo perso** |
+             * | `ACTION_SEND` + `text/plain` + `EXTRA_TEXT` | ✅ **«girasole» a schermo** |
+             *
+             * ⇒ L'URL non è mai stato la strada giusta, e la regola «HTTPS
+             * prima» qui non si applica proprio: non è una gara fra URI.
+             */
+            {
+                tipo: 'azione',
+                azione: 'android.intent.action.SEND',
+                mime: 'text/plain',
+                extra: { 'android.intent.extra.TEXT': '{testo}' },
+            },
+        ],
         esce: false,
     },
     {
@@ -386,6 +507,75 @@ export const TALOS_CAPACITA_INTENT: readonly TalosCapacitaIntent[] = [
 ] as const
 
 /**
+ * ⭐⭐⭐ UNA CAPACITÀ SENZA APP — l'app la sceglie il DISPOSITIVO.
+ *
+ * ## Perché esiste
+ *
+ * Owner, 2026-08-13: «non puoi mettere delle righe predeterminate. La chat ha
+ * già una lista delle applicazioni esistenti. Dobbiamo fare in modo che chiami
+ * in quelle e non usi delle righe generiche».
+ *
+ * Il registro qui sopra descrive **quell'app, quel link**: è preciso e invecchia.
+ * MISURATO lo stesso giorno quanto invecchia in fretta — `com.android.dialer`
+ * non esiste sul Pad, `spotify:search:` non ha più un gestore, 9 pacchetti su
+ * 21 non sono installati.
+ *
+ * Queste invece descrivono **una forma d'azione**, e chi la sappia fare lo
+ * chiede al telefono con `chiAccetta()`. MISURATO sul Pad:
+ * `ACTION_SEND`+`text/plain` = **20 app**, `ACTION_SEARCH` = **20 app** —
+ * comprese quelle installate dopo che questo file è stato scritto.
+ *
+ * ⇒ Sono poche righe e coprono più app di tutto il registro sopra. Non lo
+ * sostituiscono: un deep link sa fare cose che un'azione generica non sa (la
+ * chat GIUSTA di WhatsApp, il percorso a piedi). Le due strade servono a due
+ * domande diverse, e averle entrambe è il punto.
+ */
+export interface TalosCapacitaGenerica {
+    readonly id: string
+    /** L'azione con cui si chiede al telefono chi la sa fare, e con cui si esegue. */
+    readonly via: TalosViaAzione
+    readonly parametri: readonly string[]
+    /**
+     * ⛔ `null` = **non si sa**, e non è «no».
+     *
+     * Mandare un testo a Keep non esce dal telefono; mandarlo a Gmail sì. La
+     * capacità generica non può saperlo, e fingere `false` autorizzerebbe in
+     * silenzio un invio a una persona vera. ⇒ Si tratta come se uscisse.
+     */
+    readonly esce: boolean | null
+}
+
+export const TALOS_CAPACITA_GENERICHE: readonly TalosCapacitaGenerica[] = [
+    {
+        id: 'manda_testo_a_app',
+        via: {
+            tipo: 'azione',
+            azione: 'android.intent.action.SEND',
+            mime: 'text/plain',
+            extra: { 'android.intent.extra.TEXT': '{testo}' },
+        },
+        parametri: ['testo'],
+        esce: null,
+    },
+    {
+        id: 'cerca_dentro_app',
+        via: {
+            tipo: 'azione',
+            azione: 'android.intent.action.SEARCH',
+            // `query` è `SearchManager.QUERY`: la costante di Android, non nostra.
+            extra: { query: '{cosa}' },
+        },
+        parametri: ['cosa'],
+        esce: false,
+    },
+] as const
+
+/** La capacità generica con quell'id, o `null`. */
+export function talosCapacitaGenerica(id: string): TalosCapacitaGenerica | null {
+    return TALOS_CAPACITA_GENERICHE.find((c) => c.id === id) ?? null
+}
+
+/**
  * Costruisce l'URI di una via, codificando ogni valore.
  *
  * ⛔ `encodeURIComponent` e non `encodeURI`: il secondo lascia passare `&` e
@@ -394,11 +584,32 @@ export const TALOS_CAPACITA_INTENT: readonly TalosCapacitaIntent[] = [
  * deve poter cambiare il destinatario.
  */
 export function talosComponiUri(
-    via: TalosViaIntent,
+    via: TalosViaUri,
     valori: Readonly<Record<string, string>>,
 ): string {
     return via.modello.replace(/\{(\w+)\}/g, (_, nome: string) =>
         encodeURIComponent(valori[nome] ?? ''))
+}
+
+/**
+ * Riempie gli extra di un'azione — **senza codificare**.
+ *
+ * ⛔⛔ Il contrario esatto di `talosComponiUri`, e non è una svista: dentro un
+ * URI un `&` non codificato dirotta i parametri, dentro un extra un `%20`
+ * arriva **a schermo** come `%20`. Le due funzioni fanno la stessa cosa in due
+ * mondi con regole opposte, e usarne una al posto dell'altra rompe in silenzio
+ * — in un caso il messaggio cambia destinatario, nell'altro la persona legge il
+ * proprio testo pieno di percentuali.
+ */
+export function talosComponiExtra(
+    via: TalosViaAzione,
+    valori: Readonly<Record<string, string>>,
+): Record<string, string> {
+    const fuori: Record<string, string> = {}
+    for (const [chiave, modello] of Object.entries(via.extra)) {
+        fuori[chiave] = modello.replace(/\{(\w+)\}/g, (_, nome: string) => valori[nome] ?? '')
+    }
+    return fuori
 }
 
 /** La capacità con quell'id, o `null` — mai un'eccezione, è una ricerca. */

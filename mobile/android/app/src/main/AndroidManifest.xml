@@ -86,6 +86,45 @@
             <action android:name="android.intent.action.SEND" />
             <data android:mimeType="text/plain" />
         </intent>
+        <!--
+            ⭐⭐⭐ LE AZIONI CHE SI CHIEDONO AL TELEFONO — 2026-08-13.
+
+            Owner: «la chat ha gia' una lista delle applicazioni esistenti,
+            dobbiamo fare in modo che chiami in quelle e non usi delle righe
+            generiche». ⇒ `chiAccetta()` domanda al `PackageManager` chi sa
+            fare una cosa, invece di leggerlo da una tabella che invecchia.
+
+            ⛔ Ma la domanda passa dallo STESSO filtro di Android 11: senza una
+            voce qui la risposta arriva VUOTA, e «vuota» e' indistinguibile da
+            «nessuno lo sa fare». MISURATO sul Pad via shell (che vede tutto):
+            SEND text/plain = 20 app, SEARCH = 20 app. Se dall'app se ne
+            vedessero meno, la differenza e' questa lista.
+        -->
+        <intent>
+            <action android:name="android.intent.action.SEARCH" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.WEB_SEARCH" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.INSERT" />
+            <data android:mimeType="vnd.android.cursor.item/event" />
+        </intent>
+        <!--
+            `geo:` — MISURATO il 2026-08-13: `maps/search/?api=1&query=farmacia`
+            apre Maps sulla schermata iniziale senza cercare niente, mentre
+            `geo:0,0?q=farmacia` la ricerca la fa. Per quella capacita' l'ordine
+            «HTTPS prima» era sbagliato, e senza questa riga la via giusta e'
+            invisibile.
+        -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="market" />
+        </intent>
     </queries>
 
 
