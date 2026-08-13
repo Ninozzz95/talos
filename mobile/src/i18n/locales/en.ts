@@ -972,7 +972,7 @@ export const TALOS_EN_MESSAGES = {
     toolActivity: {
         // What a PERSON is told when a tool fails. The reason itself is written
         // for the model — see avvisoDiTool.ts — and never reaches this screen.
-        failedNotice: 'Did not work: {tool}. The chat says why.',
+        failedNotice: 'Did not work: {tool}.',
         libraryList: 'Browsing your Library',
         librarySearch: 'Searching your Library',
         libraryRead: 'Reading a document',

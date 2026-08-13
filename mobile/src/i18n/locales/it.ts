@@ -993,7 +993,15 @@ export const TALOS_IT_MESSAGES = {
     toolActivity: {
         // Cosa legge una PERSONA quando un tool non riesce. Il motivo vero è
         // scritto per il modello — vedi avvisoDiTool.ts — e non arriva qui.
-        failedNotice: 'Non è riuscito: {tool}. Il motivo è nella chat.',
+        /*
+         * ⛔ Diceva «Il motivo è nella chat», e VISTO sul Pad il 2026-08-13 non
+         * c'era: il messaggio scatta quando lo strumento fallisce, cioè PRIMA
+         * che il modello abbia potuto spiegare — e se poi non spiega, resta un
+         * rimando a niente. Promettere un fatto presente su un evento futuro è
+         * la stessa famiglia di «Aggiungi una chiave API» detto a chi le chiavi
+         * ce le ha: una frase sicura su una cosa che non sappiamo.
+         */
+        failedNotice: 'Non è riuscito: {tool}.',
         libraryList: 'Esplorazione della Libreria',
         librarySearch: 'Ricerca nella Libreria',
         libraryRead: 'Lettura di un documento',
