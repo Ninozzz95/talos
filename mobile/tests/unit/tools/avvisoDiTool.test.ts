@@ -58,9 +58,29 @@ describe('⛔ l\'avviso di un tool parla alla persona, non al modello', () => {
         expect(JSON.stringify(avviso)).not.toContain('device_notifications_list')
     })
 
-    it('il corpo dice cosa è successo e dove sta il perché, in italiano', () => {
-        expect(talosAvvisoDiTool(caduto, t).body)
-            .toBe('Non è riuscito: Le tue notifiche. Il motivo è nella chat.')
+    /*
+     * ⛔⛔ QUESTO TEST CUSTODIVA UNA PROMESSA CHE L'APP NON PUÒ MANTENERE.
+     *
+     * Diceva «il corpo dice cosa è successo **e dove sta il perché**», e
+     * pretendeva la frase «Il motivo è nella chat». VISTO sul Pad il
+     * 2026-08-13: il toast compare quando lo strumento fallisce — cioè **prima**
+     * che il modello abbia scritto una sola parola — e nello scatto la chat
+     * conteneva soltanto due righe ripiegate, «Azione in un'altra app… 1s» e
+     * «Ragionamento… 15s», senza nessuna spiegazione. Il compositore era ancora
+     * sul quadrato di stop: stava generando.
+     *
+     * ⇒ Era una frase sicura su un evento futuro. Se il modello poi spiega, la
+     * promessa è vera un secondo dopo; se non spiega, è un rimando al nulla —
+     * e in entrambi i casi è falsa **nell'istante in cui la persona la legge**.
+     * Stessa famiglia di «Aggiungi una chiave API» detto a chi le chiavi ce le
+     * ha: si afferma con sicurezza una cosa che non si sa.
+     *
+     * Adesso il corpo dice il FATTO e basta. Meno utile, e vero.
+     */
+    it('⛔ il corpo dice il fatto e NON promette un perché che non controlliamo', () => {
+        const corpo = talosAvvisoDiTool(caduto, t).body
+        expect(corpo).toBe('Non è riuscito: Le tue notifiche.')
+        expect(corpo).not.toMatch(/chat/i)
     })
 
     it('⛔ un tool RIUSCITO non ha corpo: dieci esecuzioni non fanno dieci frasi', () => {

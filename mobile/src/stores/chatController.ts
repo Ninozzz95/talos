@@ -4798,14 +4798,37 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      * il pilota che «non trovava un'app per WhatsApp» era il locale, non il
      * modello scelto dall'owner.
      */
-    function applyModelSelection(id: string | null): boolean {
+    /**
+     * ⛔⛔ `scelta` DECIDE SE SI SCRIVE NEL DEPOSITO, e non è un dettaglio.
+     *
+     * MISURATO sul Pad il 2026-08-13, con l'owner che chiedeva «perché il
+     * modello nel compositore è ByteDance?»:
+     *
+     * ```
+     * composer_model    = openrouter:bytedance-seed/seed-2-1-turbo   ⛔
+     * composer_defaults = anthropic:claude-haiku-4-5-20251001        ✅
+     * sonda: modello: ripreso=openrouter:bytedance-seed/… da=sessione
+     * ```
+     *
+     * Questa funzione scriveva `composer_model` **ogni volta che applicava**,
+     * anche quando stava applicando un RIPIEGO che nessuno aveva scelto. Un
+     * catalogo caduto per qualche secondo bastava: `ensureSelection` metteva il
+     * primo modello disponibile in `selectedModelId`, la chiamata successiva lo
+     * ritrovava valido, e lo **consacrava a preferenza**. Da lì ogni chat nuova
+     * lo ereditava — e l'ereditarietà è giusta, il valore ereditato no.
+     *
+     * ⇒ Si scrive quando **la persona sceglie**. Applicare per ripiego o per
+     * ripristino non è una scelta: nel primo caso è il codice che si arrangia,
+     * nel secondo il valore viene già dal deposito.
+     */
+    function applyModelSelection(id: string | null, scelta = false): boolean {
         const profile = id ? profiles.value.find((candidate) => candidate.id === id) ?? null : null
         if (!profile || !profile.show_in_composer || !talosMobileModelProfileIsCallable(profile)) return false
         selectedModelId.value = profile.id
         // ⛔ `void`: la scelta si applica SUBITO a schermo, e la scrittura la
         // segue. Farla aspettare renderebbe il compositore lento per un dato che
         // serve alla prossima finestra, non a questa.
-        if (deps.settings.state.shell?.composer_model !== profile.id) {
+        if (scelta && deps.settings.state.shell?.composer_model !== profile.id) {
             void deps.settings.setShell?.({ composer_model: profile.id })
         }
         effort.value = clampMobileEffort(profile.effort_levels, effort.value)
@@ -5167,7 +5190,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     }
 
     async function selectModel(id: string): Promise<void> {
-        if (!applyModelSelection(id)) return
+        // ⭐ L'UNICA porta che scrive `composer_model`: qui la scelta è di chi
+        // usa l'app, e da qui la eredita la barra e la prossima chat.
+        if (!applyModelSelection(id, true)) return
         // ⛔ Una scelta esplicita CHIUDE l'attesa: se la persona ha cambiato
         // idea mentre il catalogo era irraggiungibile, riprendersi il modello
         // di prima sarebbe disfarle la scelta sotto le mani.

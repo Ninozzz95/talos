@@ -238,6 +238,17 @@ function makeDeps() {
         setComposerDefaults: vi.fn(async (patch: Partial<typeof settingsState.composer_defaults>) => {
             Object.assign(settingsState.composer_defaults, patch)
         }),
+        /*
+         * ⛔ Mancava, e la sua assenza NASCONDEVA un difetto: `applyModelSelection`
+         * chiama `deps.settings.setShell?.(…)` in modo opzionale, quindi senza
+         * questa riga la scrittura di `composer_model` non avveniva **e nessun
+         * test poteva accorgersene**. È lo stesso motivo per cui il ripiego
+         * poté diventare preferenza sul Pad dell'owner senza che la suite
+         * dicesse niente. Fonde la patch, come fa quello vero.
+         */
+        setShell: vi.fn(async (patch: Partial<typeof settingsState.shell>) => {
+            Object.assign(settingsState.shell, patch)
+        }),
         setModelLabPreferences: vi.fn(async (value: TalosMobileModelLabPreferences) => {
             settingsState.model_lab = structuredClone(value)
         }),
@@ -2394,6 +2405,55 @@ describe('chatController', () => {
         anthropicGiu = false
         await controller.refreshProvider('anthropic')
         expect(controller.selectedModelId.value).toBe('anthropic:claude-live')
+    })
+
+    /*
+     * ⛔⛔ IL RIPIEGO NON DIVENTA LA PREFERENZA — owner, 2026-08-13:
+     * «perché il modello selezionato nel composer è bytedance seed etc?»
+     *
+     * MISURATO sul suo Pad, nel deposito:
+     *   composer_model    = openrouter:bytedance-seed/seed-2-1-turbo  ⛔
+     *   composer_defaults = anthropic:claude-haiku-4-5-20251001       ✅
+     *
+     * `applyModelSelection` scriveva `composer_model` **ogni volta che
+     * applicava**, ripiego compreso. Un catalogo caduto per pochi secondi
+     * bastava a consacrare a preferenza un modello che nessuno aveva scelto —
+     * e da lì ogni chat nuova lo ereditava. ⛔ L'ereditarietà è giusta e resta
+     * (l'owner: «la nuova chat dovrebbe ereditare l'ultimo modello usato»); è
+     * il valore ereditato che era falso.
+     */
+    it('⛔ un RIPIEGO non diventa la preferenza scritta', async () => {
+        const { deps, store, settings, request } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        store.set('gemini', 'gemini-key')
+        settings.state.composer_defaults.model_profile_id = 'anthropic:claude-live'
+
+        const rispostaVera = request.getMockImplementation()!
+        request.mockImplementation(async (arg: { url: string }) => {
+            if (arg.url.includes('anthropic.com/v1/models')) {
+                throw new Error('Unable to resolve host "api.anthropic.com"')
+            }
+            return await rispostaVera(arg)
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+
+        // Il ripiego c'è, ed è giusto che ci sia: senza catalogo non c'è altro.
+        expect(controller.selectedModelId.value).toBe('gemini:gemini-live')
+        // ⛔ Ma NON deve essere finito nel deposito come se fosse una scelta.
+        expect(settings.state.shell?.composer_model).not.toBe('gemini:gemini-live')
+    })
+
+    it('una scelta ESPLICITA invece si scrive, ed è così che si eredita', async () => {
+        const { deps, store, settings } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        store.set('gemini', 'gemini-key')
+        const controller = createChatController(deps)
+        await controller.init()
+
+        await controller.selectModel('gemini:gemini-live')
+        expect(settings.state.shell?.composer_model).toBe('gemini:gemini-live')
     })
 
     /*
