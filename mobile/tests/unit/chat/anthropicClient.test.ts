@@ -164,6 +164,41 @@ describe('extended thinking alongside tools', () => {
         expect(request.body.thinking).toBeUndefined()
     })
 
+    /*
+     * ⛔⛔ E IL VERSO OPPOSTO, che è il difetto che il restringimento evita —
+     * 2026-08-13.
+     *
+     * Da oggi la storia riconsegna anche le chiamate dei messaggi PASSATI (la
+     * cura per cui TALOS diceva «Messaggio inviato» senza aver chiamato niente,
+     * vedi `storiaConLeChiamate.ts`). Con la vecchia condizione `some()`, una
+     * sessione che ha usato un tool **una volta** avrebbe perso il ragionamento
+     * **per sempre**: ogni messaggio successivo porta un risultato in mezzo
+     * alla storia, e il pensiero sarebbe stato spento a vita.
+     *
+     * L'API pretende i blocchi firmati solo sull'assistente che precede
+     * IMMEDIATAMENTE un risultato — cioè quando l'ULTIMO turno è un risultato.
+     */
+    it('continua a pensare quando il risultato è STORIA, non la domanda di adesso', () => {
+        const request = buildAnthropicRequest('k', {
+            model: 'claude-opus-4-8',
+            turns: [
+                { role: 'user', content: 'manda un whatsapp che dice occhio aperto' },
+                {
+                    role: 'assistant',
+                    content: 'Messaggio inviato.',
+                    toolCalls: [{ id: 'tu_1', name: 'app_azione', arguments: '{}' }],
+                },
+                { role: 'tool', content: 'ok', toolCallId: 'tu_1', toolName: 'app_azione' },
+                { role: 'user', content: 'manda un whatsapp che dice occhio spento' },
+            ],
+            thinking: true,
+            effort: 'high',
+            thinkingMode: 'enabled',
+            tools,
+        })
+        expect(request.body.thinking).toEqual({ type: 'enabled', budget_tokens: 24576 })
+    })
+
     it('batches a round of results into ONE user message, as the protocol describes', () => {
         const request = buildAnthropicRequest('k', {
             model: 'claude-opus-4-8',

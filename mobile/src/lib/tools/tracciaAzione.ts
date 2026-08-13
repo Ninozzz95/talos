@@ -73,6 +73,56 @@ export function talosAzioniEseguite(
  */
 export const TALOS_METADATA_AZIONI = 'actions_done'
 
+/**
+ * ⛔⛔⛔ LE CHIAMATE DEL TURNO, per la STORIA — non per lo schermo.
+ *
+ * `actions_done` sopra serve alla persona: deduplicato, solo le riuscite, solo
+ * `write`, e senza argomenti. Perfetto per un chip, **inservibile** per
+ * ricostruire la storia che il modello rilegge — ed è lì che stava il difetto
+ * misurato il 2026-08-13, per cui TALOS diceva «Messaggio inviato ad Antonino
+ * Rizzo» senza aver chiamato niente (vedi `chat/storiaConLeChiamate.ts`).
+ *
+ * ⛔ E non basta `tool_calls`, che esisteva già: quello è l'ULTIMA risposta del
+ * modello, e dopo un giro dell'agente **riuscito** è vuota — la chiamata è
+ * avvenuta in un giro precedente. Cioè proprio i turni che agiscono sono quelli
+ * che non lasciavano traccia.
+ *
+ * Qui invece: ogni chiamata che il modello ha davvero emesso, in ordine, con i
+ * suoi argomenti. Senza id — l'id si conia alla rilettura, dall'id del
+ * messaggio, perché deve essere unico dentro UNA richiesta e non fra due.
+ */
+export const TALOS_METADATA_CHIAMATE = 'tool_calls_done'
+
+/** Una chiamata avvenuta, come si conserva sul disco. */
+export interface TalosChiamataAvvenuta {
+    readonly name: string
+    /** Gli argomenti, codificati come li ha emessi il modello. */
+    readonly arguments: string
+}
+
+/**
+ * Le chiamate di un turno, nell'ordine in cui il modello le ha emesse.
+ *
+ * ⛔ NON deduplicate e NON filtrate per esito, al contrario di
+ * `talosAzioniEseguite`: qui si conserva **ciò che il modello ha fatto**, e una
+ * chiamata negata o fallita è comunque una chiamata che ha fatto. Toglierla
+ * insegnerebbe di nuovo che a volte si risponde senza chiamare.
+ *
+ * ⛔ `JSON.stringify` senza rete di sicurezza, e non per distrazione: `input` è
+ * ciò che il modello ha emesso, cioè il risultato di un `JSON.parse` — non può
+ * avere cicli. Il `?? '{}'` copre l'unico caso vero, `undefined`. Un try/catch
+ * qui costava 90 byte al grafo d'avvio, che ha un tetto di 602.000 e non ha
+ * quei byte da dare a un caso che non può accadere.
+ */
+export function talosChiamateDelTurno(
+    righe: readonly { tool: string, input: unknown }[],
+): TalosChiamataAvvenuta[] {
+    return righe.map((riga) => ({
+        name: riga.tool,
+        arguments: JSON.stringify(riga.input) ?? '{}',
+    }))
+}
+
 /** Vero quando c'è qualcosa da mostrare — usato dalla vista per non disegnare il vuoto. */
 export function talosHaAzioniDaMostrare(metadata: unknown): boolean {
     if (!metadata || typeof metadata !== 'object') return false

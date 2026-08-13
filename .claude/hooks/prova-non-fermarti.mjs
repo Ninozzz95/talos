@@ -185,6 +185,87 @@ const casi = [
         },
         blocca: true,
     },
+    /*
+     * ⛔⛔⛔ IL CASO VERO DEL 2026-08-13, verbatim — ed è quello che l'hook ha
+     * LASCIATO PASSARE. Owner: «non voglio che mi dai più avvisi di contesto di
+     * qualunque tipo».
+     *
+     * La forma che l'ha bucato: una fermata da contesto con dentro «rosso», che
+     * è la quarta legittima. `LEGITTIME` la trovava, i due `PRETESTI` sul
+     * contesto no — riconoscevano solo «il contesto *sta finendo*».
+     *
+     * Se un giorno questo caso smettesse di bloccare, la regola dell'owner è
+     * tornata a essere solo scritta.
+     */
+    {
+        nome: '⛔⛔ BLOCCA la fermata VERA del 13/8 («cancello rosso» + «non ho più contesto»)',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: '⛔ FERMATA: un cancello è rosso e non lo posso aprire '
+                + 'onestamente. Non ho più contesto per fare la modifica al prompt della '
+                + 'barra e provarla sul dispositivo con la disciplina che questo progetto '
+                + 'richiede. Preferisco lasciarti la causa localizzata e scritta.',
+        },
+        blocca: true,
+    },
+    {
+        nome: '⛔ BLOCCA l’avviso di contesto SENZA fermata dichiarata',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Fatto: 4892 test verdi e commit 27d2e945. Ti lascio la '
+                + 'causa scritta su disco perché lo spazio di contesto è agli sgoccioli.',
+        },
+        blocca: true,
+    },
+    {
+        nome: '⛔ BLOCCA «mi resta poco contesto»',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Il difetto è isolato. Mi resta poco contesto, quindi '
+                + 'riepilogo qui lo stato.',
+        },
+        blocca: true,
+    },
+    {
+        nome: '⛔ BLOCCA il passaggio di consegne travestito da diligenza',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: '⛔ FERMATA: serve una tua decisione. Intanto preparo il '
+                + 'riepilogo per chi riprende, così non si perde niente.',
+        },
+        blocca: true,
+    },
+    {
+        nome: '⛔ BLOCCA «running low on context», in inglese',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'All green. I am running low on context, so I will stop '
+                + 'here and leave notes.',
+        },
+        blocca: true,
+    },
+    {
+        /*
+         * ⛔ L'altro significato di «contesto» resta legittimo: la parola da sola
+         * non basta, serve che si parli del contesto come di una RISORSA che si
+         * consuma. Senza questo caso la guardia sopra diventerebbe un divieto di
+         * usare una parola normale della lingua.
+         */
+        nome: 'LASCIA PASSARE «il contesto del problema», che è l’altro significato',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Ho ricostruito il contesto del difetto: la barra offre '
+                + 'gli stessi 62 strumenti della chat e ne chiama zero. Corretto e provato '
+                + 'sul Pad, 4892 test verdi.',
+        },
+        blocca: false,
+    },
     {
         nome: '⛔ legge l’ULTIMA dichiarazione, non una CITAZIONE in cima',
         input: {

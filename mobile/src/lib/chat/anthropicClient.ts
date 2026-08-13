@@ -179,7 +179,23 @@ export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicReque
      * deal better than an error where the answer should be. Capturing and
      * replaying signed blocks is the real fix and is written up as a debt.
      */
-    const carriesToolResult = input.turns.some((turn) => turn.role === 'tool')
+    /*
+     * ⛔⛔ L'ULTIMO turno, non «uno qualunque» — 2026-08-13.
+     *
+     * `some()` era giusto finché i turni di risultato esistevano SOLO dentro il
+     * giro dell'agente: là l'ultimo turno è sempre un risultato, quindi «uno
+     * qualunque» e «l'ultimo» coincidevano. Da oggi la storia riconsegna anche
+     * le chiamate dei messaggi passati (vedi `storiaConLeChiamate.ts`, la cura
+     * del difetto per cui TALOS diceva «Messaggio inviato» senza aver chiamato
+     * niente) — e con `some()` una sessione che ha usato un tool **una volta**
+     * avrebbe perso il ragionamento **per sempre**, su ogni messaggio futuro.
+     *
+     * La condizione che l'API chiede davvero è più stretta: i blocchi firmati
+     * servono sull'assistente che precede IMMEDIATAMENTE un `tool_result` —
+     * cioè quando stiamo rispondendo a dei risultati, e allora l'ultimo turno è
+     * un risultato. Su una storia vecchia il modello non li pretende.
+     */
+    const carriesToolResult = input.turns[input.turns.length - 1]?.role === 'tool'
     const useThinking = budget > 0 && !carriesToolResult
     // Only the budgeted shape needs headroom reserved: in adaptive mode there
     // is no budget to leave room for, and inflating max_tokens would quietly

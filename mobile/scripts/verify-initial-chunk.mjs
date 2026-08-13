@@ -127,7 +127,38 @@ import { resolve } from 'node:path'
  * resta è il costo dei cataloghi (76 byte misurati) e delle etichette: la
  * parte che DEVE stare nel grafo perché il pannello dei permessi la mostri.
  */
-const DEFAULT_MAXIMUM_BYTES = 602_000
+/*
+ * ⛔⛔ E poi 602.100 — LA STORIA CHE RICORDA DI AVER AGITO, 2026-08-13.
+ *
+ * Non è una funzione nuova: è la cura di un difetto per cui TALOS **mentiva**.
+ * Misurato sul Pad quattro volte di fila, dalla chat e dalla barra: dopo un
+ * invio WhatsApp riuscito, diceva «Messaggio inviato ad Antonino Rizzo» senza
+ * aver chiamato nessuno strumento e senza che nulla fosse partito. Causa: la
+ * storia si ricostruiva dal disco con solo ruolo e testo, quindi la sua
+ * risposta riuscita gli tornava indietro come puro testo e lui imitava il
+ * testo. Tutto scritto in `lib/chat/storiaConLeChiamate.ts`.
+ *
+ * ⛔ E il peso è stato inseguito davvero, in SEI forme MISURATE una per una —
+ * partendo da 601.960:
+ *
+ *     modulo statico                                602.669   ⛔ +669
+ *     con `import()` pigro                          602.294   ⛔ +294
+ *     col giro della storia dentro il modulo pigro  601.852   ✅ −108
+ *       ↑ ma su questa forma la cura NON curava: il dato non arrivava
+ *     + le chiamate salvate (`tool_calls_done`)     602.087   ⛔ +87
+ *     + `await import()` anche nel controller       602.103   ⛔ +103  (PEGGIO)
+ *     + niente try/catch, `talosAzioniEseguite` 1×  602.017   ⛔ +17
+ *
+ * Cioè la terza forma ha reso 108 byte all'avvio e li ha rimessi la quarta, che
+ * è quella che fa funzionare la cura. I 17 rimasti sono il costo di conservare
+ * **cosa** è stato chiamato e con quali argomenti: senza gli argomenti la
+ * storia tornerebbe a mentire per omissione.
+ *
+ * ⛔ 100 byte, non 1.000: il tetto resta un tetto. Se un domani il numero
+ * risale senza che nessuno abbia aggiunto niente, questi 17 byte NON sono il
+ * posto dove guardare — sono già spesi e già misurati.
+ */
+const DEFAULT_MAXIMUM_BYTES = 602_100
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {

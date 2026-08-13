@@ -258,26 +258,73 @@ const PRETESTI = [
     /\bpreferisc(o|e) (farlo|rifarlo|riprender|affrontar)/i,
     // «È delicato» non è un blocco: è una descrizione del lavoro.
     /\b(troppo )?(delicat|rischios|invasiv|corposo|grosso)[oaie]\b/i,
-    /*
-     * ⛔⛔ IL CONTESTO CHE FINISCE NON È PIÙ UNA FERMATA — owner 2026-08-12:
-     * «l'hook deve farti ripartire quando dici qualcosa riguardo al contesto che
-     * sta finendo, perché è un non issue dato che il contesto si compatta
-     * automaticamente e manualmente».
-     *
-     * Era la quarta delle cinque, e nasceva da un assetto in cui esaurire il
-     * contesto significava troncare a metà frase. Non è più vero: la
-     * compattazione avviene da sé, il lavoro riprende dall'altra parte, e
-     * l'handoff che scrivevo «invece di fermarmi» era comunque una fermata —
-     * anzi la più comoda di tutte, perché sembrava diligenza.
-     *
-     * ⇒ Restano QUATTRO fermate legittime. Se il contesto si sta esaurendo si
-     * continua a lavorare: il riassunto lo fa il sistema, non io smettendo.
-     */
-    /\bcontesto (sta|è|e') (finendo|quasi|agli sgoccioli|esaurit)/i,
-    /\bcontesto (quasi )?(finito|esaurito|pieno)\b/i,
-    /\b(scrivo|faccio) l.handoff\b/i,
-    /\bpassaggio di consegne\b/i,
 ]
+
+/**
+ * ⛔⛔⛔ GLI AVVISI DI CONTESTO, DI QUALUNQUE TIPO — e battono TUTTO.
+ *
+ * Owner, 2026-08-13: «non voglio che mi dai più avvisi di contesto di qualunque
+ * tipo. Il contesto si compatta automaticamente, è una funzione ormai moderna e
+ * che tutti i provider fanno. Quindi non è più una scusa valida e devi metterla
+ * nel hook, in modo che tu parta autonomamente».
+ *
+ * ## Il difetto di questo file, misurato
+ *
+ * La regola c'era già dal 12/8, ma riconosceva **una forma sola**: «il contesto
+ * *sta finendo*». La fermata di oggi diceva un'altra cosa:
+ *
+ *   «⛔ FERMATA: un cancello è ROSSO e non lo posso aprire onestamente. **Non ho
+ *    più contesto** per fare la modifica e provarla sul dispositivo…»
+ *
+ * Nessuno dei due `PRETESTI` sul contesto la vedeva — e in compenso `LEGITTIME`
+ * trovava «rosso», che è la quarta fermata vera. ⇒ L'hook ha **lasciato passare**
+ * una fermata da contesto perché era vestita da cancello rosso.
+ *
+ * È lo stesso schema del 12/8 («la scusa si traveste da prudenza»), applicato
+ * alla lista delle scuse invece che a quella delle fermate: elencare le frasi
+ * significa inseguirle una per una, e ne resta sempre una fuori.
+ *
+ * ## Perché sta FUORI da `PRETESTI` e viene guardato per primo
+ *
+ * `PRETESTI` si legge solo dentro il motivo di una fermata **dichiarata**. Ma
+ * l'avviso di contesto non ha bisogno della formula: «ti lascio la causa scritta
+ * perché lo spazio è agli sgoccioli» è un avviso di contesto in un resoconto
+ * qualunque. L'owner ha detto «di qualunque tipo» — quindi si guarda **tutto il
+ * messaggio**, dichiarato o no, e vince su ogni parola legittima.
+ *
+ * ⛔ Non serve la parola vicino: basta che si parli del contesto **come di una
+ * risorsa che si consuma**. Le due condizioni insieme (la parola + una parola di
+ * consumo entro la stessa frase) tengono fuori «il contesto del problema», che è
+ * l'altro significato ed è legittimo.
+ */
+const AVVISI_DI_CONTESTO = [
+    // «il contesto sta finendo», «contesto quasi esaurito», «contesto pieno»,
+    // «contesto residuo», «il contesto non basta», «contesto limitato»…
+    /\bcontesto\b[^.!?;]{0,90}\b(fin(e|ir|isc|it)|esaur|sgoccioli|pien[oa]|rimast|residu|poco|scars|limitat|budget|token|margine|spazio|sufficiente|bast(a|i)|strett)/i,
+    // «non ho più contesto», «mi resta poco contesto», «con il contesto rimasto»…
+    /\b(non ho|ho poco|resta|rimane|mi rest|mi riman|poco|senza|salvare|risparmiare|consumare)\b[^.!?;]{0,40}\bcontesto\b/i,
+    // «la finestra di contesto», «il budget di contesto», «la compattazione»…
+    /\b(finestra|budget|limite|tetto|spazio) (di|del|nel) contesto\b/i,
+    /\bprima (che|di) (finire|esaurire|chiudere|compattare)\b[^.!?;]{0,30}\bcontesto\b/i,
+    /\b(si )?compatt(a|are|azione)\b[^.!?;]{0,30}\bcontesto\b/i,
+    /\bcontesto\b[^.!?;]{0,30}\bcompatt/i,
+    // L'handoff è la forma cortese dello stesso avviso: si scrive per lasciare
+    // qualcosa a «chi riprende», cioè per smettere.
+    /\b(scrivo|faccio|lascio|preparo) (l['’ ]?handoff|il (passaggio|riepilogo) (di|per))/i,
+    /\bpassaggio di consegne\b/i,
+    /\bper chi riprende\b/i,
+    // E in inglese, perché la letteratura e i log sono in inglese.
+    // ⛔ `on` E `of`: la prova ha bocciato la prima versione, che aveva solo `of`
+    // — e «running low ON context» è proprio il modo in cui si dice.
+    /\brunning (low|out) (on|of) context\b/i,
+    /\b(remaining|limited|out of|conserve|save|preserve) context\b/i,
+    /\bcontext (window|budget|limit|left|remaining|running)\b/i,
+]
+
+/** Vero se il messaggio contiene un avviso di contesto, in qualunque forma. */
+export function parlaDelContesto(messaggio) {
+    return AVVISI_DI_CONTESTO.some((forma) => forma.test(messaggio))
+}
 
 /** Le cinque, riconosciute da ciò che manca FUORI da me. */
 const LEGITTIME = [
@@ -287,8 +334,8 @@ const LEGITTIME = [
     /\b(cost[ai]|a pagamento|soldi|credit|spesa|traffico|abbonament)\b/i,
     // 3 — distruttivo o esce fuori.
     /\b(push|pubblic|cancell|elimin|distrutt|irreversibil|manda(re)? (a|un messaggio)|invia(re)? a|persona vera|chiave)\b/i,
-    // ⛔ La quarta NON C'È PIÙ: il contesto che finisce è passato fra i pretesti,
-    // per decisione dell'owner del 2026-08-12. La compattazione è automatica.
+    // ⛔ La quarta NON C'È PIÙ: il contesto che finisce è un PRETESTO, e dal
+    // 2026-08-13 lo riconosce `AVVISI_DI_CONTESTO`, che batte anche queste.
     // 4 — un cancello rosso che non si può aprire onestamente.
     /\b(rosso|non passa|fallisc|smentis|non riproduc|non ho (il|accesso)|serve (la tua|il tuo|un tuo))\b/i,
 ]
@@ -341,6 +388,18 @@ export function decidiFermata(input) {
     if (messaggio.length === 0) return null
 
     /*
+     * ⛔⛔⛔ PRIMA DI TUTTO IL RESTO: un avviso di contesto non chiude un turno,
+     * qualunque altra cosa il messaggio dica. Sta qui in cima — e non dentro
+     * `PRETESTI` — perché non ha bisogno della formula `⛔ FERMATA:` per essere
+     * un avviso, e perché deve battere anche una parola legittima nella stessa
+     * frase: è esattamente così che è passato oggi («cancello ROSSO» + «non ho
+     * più contesto»).
+     */
+    if (parlaDelContesto(messaggio)) {
+        return { decision: 'block', reason: RAGIONE_CONTESTO }
+    }
+
+    /*
      * Una fermata dichiarata passa **solo se il motivo regge**. Vedi `PRETESTI`:
      * fino al 12/8 qui bastava la formula, e la formula era diventata gratis.
      */
@@ -384,9 +443,29 @@ const CINQUE = [
     'pubblicazione, un messaggio a una persona vera, la sua chiave); (4) un',
     'CANCELLO è ROSSO e non lo si può aprire onestamente.',
     '',
-    '⛔ «Il contesto sta finendo» NON è più una di queste (owner 2026-08-12): la',
-    'compattazione è automatica, quindi è un non-problema. Se il contesto si',
-    'sta esaurendo si CONTINUA A LAVORARE — il riassunto lo fa il sistema.',
+    '⛔ Il CONTESTO non è una di queste, in NESSUNA forma (owner 2026-08-13): la',
+    'compattazione è automatica e la fanno tutti i provider, quindi non è più',
+    'una scusa valida. Se il contesto si sta esaurendo si CONTINUA A LAVORARE —',
+    'il riassunto lo fa il sistema, tu riparti da solo dall\'altra parte.',
+].join(' ')
+
+const RAGIONE_CONTESTO = [
+    '⛔ Hai dato un AVVISO DI CONTESTO, e l\'owner li ha vietati tutti il',
+    '2026-08-13: «non voglio che mi dai più avvisi di contesto di qualunque tipo.',
+    'Il contesto si compatta automaticamente, è una funzione ormai moderna e che',
+    'tutti i provider fanno. Quindi non è più una scusa valida».',
+    '',
+    'Non c\'è niente da salvare e niente da consegnare: quando lo spazio finisce',
+    'il sistema compatta da sé e tu RIPARTI DA SOLO, con il lavoro a metà ancora',
+    'in mano. Un handoff scritto «invece di fermarsi» è comunque una fermata —',
+    'anzi la più comoda, perché sembra diligenza.',
+    '',
+    '⛔ E attenzione al travestimento che ha bucato questo hook oggi: una fermata',
+    'da contesto scritta con una parola legittima dentro («un cancello è rosso…',
+    'non ho più contesto per…»). La parola legittima NON la salva più.',
+    '',
+    'Riscrivi il messaggio senza l\'avviso e CONTINUA IL LAVORO adesso, con delle',
+    'chiamate.',
 ].join(' ')
 
 const RAGIONE_PRETESTO = [

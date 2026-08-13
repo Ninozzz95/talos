@@ -14,7 +14,12 @@ import type {
 } from '@/components/chat/mobileChatTypes'
 import { buildChatCompletion } from '@/lib/chat/chatCompletion'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
-import { TALOS_METADATA_AZIONI, talosAzioniEseguite } from '@/lib/tools/tracciaAzione'
+import {
+    TALOS_METADATA_AZIONI,
+    TALOS_METADATA_CHIAMATE,
+    talosAzioniEseguite,
+    talosChiamateDelTurno,
+} from '@/lib/tools/tracciaAzione'
 import { talosTracciaFuori } from '@/lib/device/traccia'
 import { talosComposerBusy } from '@/lib/chat/composerBusy'
 import { talosRispostaVuotaDopoStrumenti, talosStrumentiPartiti } from '@/lib/chat/rispostaVuota'
@@ -4565,6 +4570,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             round.open?.finish()
             trace?.finish('ok')
             const answerSources = webSourceArchive.current?.sources() ?? []
+            // Una volta sola: era calcolata DUE volte, nel test e nel valore.
+            const azioniFatte = talosAzioniEseguite(azioniDelTurno)
             const answerMetadata = {
                 ...(liveLibrary.receipt
                     ? { library_context_receipt: liveLibrary.receipt }
@@ -4586,8 +4593,18 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                  *
                  * Non corregge il modello: lo affianca. La frase resta la sua.
                  */
-                ...(talosAzioniEseguite(azioniDelTurno).length
-                    ? { [TALOS_METADATA_AZIONI]: talosAzioniEseguite(azioniDelTurno) }
+                ...(azioniFatte.length ? { [TALOS_METADATA_AZIONI]: azioniFatte } : {}),
+                /*
+                 * ⛔⛔⛔ E LE CHIAMATE, per la STORIA — 2026-08-13.
+                 *
+                 * La riga sopra serve allo schermo. Questa serve al modello: senza,
+                 * la sua risposta riuscita gli tornava indietro come puro testo e
+                 * al messaggio dopo diceva «Messaggio inviato ad Antonino Rizzo»
+                 * **senza chiamare niente**. Misurato quattro volte di fila sul
+                 * Pad, identico dalla chat e dalla barra.
+                 */
+                ...(azioniDelTurno.length
+                    ? { [TALOS_METADATA_CHIAMATE]: talosChiamateDelTurno(azioniDelTurno) }
                     : {}),
             }
             /**
