@@ -66,8 +66,10 @@ describe('⛔ la scheda non mostra mai sintassi al posto di informazione', () =>
     })
 
     it('ma con argomenti VERI il riquadro c’e’, perche’ li si deve poter leggere', () => {
+        // Dal 12/8 gli argomenti piatti sono RIGHE e non piu' JSON: l'invariante
+        // non cambia — quello che decide il si' o il no deve restare leggibile.
         const wrapper = mountSenzaArgomenti({ key: 'n7', text: 'ci sono' })
-        const riquadro = wrapper.get('[data-testid="talos-tool-consent-input"]')
+        const riquadro = wrapper.get('[data-testid="talos-tool-consent-arguments"]')
         expect(riquadro.text()).toContain('n7')
         expect(riquadro.text()).toContain('ci sono')
         wrapper.unmount()
@@ -84,7 +86,9 @@ describe('TalosMobileToolConsentSheet', () => {
         expect(card.classes()).not.toContain('bg-black/50')
         expect(wrapper.text()).toContain('Quarterly planning')
         expect(wrapper.text()).toContain('2')
-        expect(wrapper.get('[data-testid="talos-tool-consent-input"]').text().length)
+        // ⛔ Il tetto vale su QUALUNQUE forma: passando alle righe si era perso,
+        // e questo assert e' quello che l'ha scoperto.
+        expect(wrapper.get('[data-testid="talos-tool-consent-arguments"]').text().length)
             .toBeLessThan(4_500)
         wrapper.unmount()
     })
@@ -125,5 +129,80 @@ describe('TalosMobileToolConsentSheet', () => {
         const wrapper = mountCard(false)
         expect(wrapper.find('[data-testid="talos-tool-consent-always"]').exists()).toBe(false)
         wrapper.unmount()
+    })
+})
+
+/**
+ * ⛔⛔ I DUE DIFETTI DELLA SCHEDA VISTI DALL'OWNER IL 12 AGOSTO.
+ *
+ * (a) «c'è solo nega e consenti questa volta e non consenti sempre. Per questo
+ *     lo dobbiamo aggiungere». Il bottone c'era: era tolto APPOSTA, perché
+ *     guidare lo schermo è `R4` e `irreversible`. Il difetto era il SILENZIO —
+ *     una scelta assente senza una ragione si legge come una funzione mancante,
+ *     e infatti l'ha chiesta credendo di chiedere una comodità.
+ *
+ * (b) dal suo screenshot, la scheda mostrava `{ "obiettivo": "Apri WhatsApp…" }`
+ *     con graffe e virgolette: la nostra sintassi addosso a chi possiede il
+ *     telefono.
+ */
+describe('⛔ la scheda dice PERCHÉ, e non parla in JSON', () => {
+    function scheda(over: Record<string, unknown> = {}) {
+        return mount(TalosMobileToolConsentSheet, {
+            props: {
+                title: 'Guida lo schermo',
+                description: 'TALOS tocca lo schermo al posto tuo.',
+                input: { obiettivo: 'Apri WhatsApp, trova la chat con Shadina' },
+                actions: ['write', 'outbound'] as const,
+                sessionTitle: 'Nuova chat',
+                pendingCount: 1,
+                allowPersistent: false,
+                ...over,
+            },
+            global: { stubs: { Teleport: true } },
+        })
+    }
+
+    it('⭐ senza «sempre» la scheda ne dice la RAGIONE, non tace', () => {
+        const wrapper = scheda()
+
+        expect(wrapper.find('[data-testid="talos-tool-consent-always"]').exists()).toBe(false)
+        const riga = wrapper.get('[data-testid="talos-tool-consent-no-always"]').text()
+        // La ragione, non «non disponibile»: è l'unica cosa che distingue una
+        // decisione da una funzione mancante.
+        expect(riga.toLowerCase()).toContain('undone')
+    })
+
+    it('⛔ e col «sempre» disponibile quella riga NON compare', () => {
+        // Il verso contrario: una spiegazione stampata sempre sarebbe rumore, e
+        // passerebbe la metà «lo dice» pur essendo un difetto nuovo.
+        const wrapper = scheda({ allowPersistent: true })
+
+        expect(wrapper.find('[data-testid="talos-tool-consent-always"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-tool-consent-no-always"]').exists()).toBe(false)
+    })
+
+    it('⭐ gli argomenti PIATTI si leggono a righe, senza graffe né virgolette', () => {
+        const wrapper = scheda()
+        const testo = wrapper.get('[data-testid="talos-tool-consent-arguments"]').text()
+
+        expect(testo).toContain('Apri WhatsApp, trova la chat con Shadina')
+        expect(testo).not.toContain('{')
+        expect(testo).not.toContain('"')
+        // E il riquadro JSON non c'è più affatto per questa forma.
+        expect(wrapper.find('[data-testid="talos-tool-consent-input"]').exists()).toBe(false)
+    })
+
+    it('⛔ ma una forma ANNIDATA resta JSON: appiattirla perderebbe informazione', () => {
+        const wrapper = scheda({ input: { piano: { passi: ['apri', 'scrivi'] } } })
+
+        expect(wrapper.find('[data-testid="talos-tool-consent-arguments"]').exists()).toBe(false)
+        expect(wrapper.get('[data-testid="talos-tool-consent-input"]').text()).toContain('passi')
+    })
+
+    it('⛔ e senza argomenti non compare NESSUNO dei due riquadri', () => {
+        const wrapper = scheda({ input: {} })
+
+        expect(wrapper.find('[data-testid="talos-tool-consent-arguments"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-tool-consent-input"]').exists()).toBe(false)
     })
 })

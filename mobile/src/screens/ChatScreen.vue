@@ -118,6 +118,8 @@ const composerShape = computed(() => talosComposerFlags(
 const {
     catalogs,
     profiles,
+    segretiLetti,
+    cataloghiNonLetti,
     selectedModelId,
     effort,
     thinking,
@@ -183,7 +185,13 @@ const dictation = useTalosMobileDictation({
     autoLanguage: () => talosRilevamentoAcceso(settings.state.voice.dictation_language),
     allowedLanguages: () => voce.value?.lingue ?? [],
     // ⛔ Chi parla tace: la lettura in corso si ferma prima di ascoltare.
-    zittisci: () => parlaSubito().stop(),
+    zittisci: () => parlaSubito().stop('la chat apre il microfono'),
+    /*
+     * ⛔ LA STESSA CURA DELLA BARRA, e mancava. L'11 agosto la barra ha avuto il
+     * tempo di ascolto giusto e questa schermata no: stesso microfono, due
+     * comportamenti, a seconda di dove lo premevi. Le costanti stanno in
+     * `dictationPolicy` proprio perché non possano più scostarsi.
+     */
     errorMessage: (code) => t(`chat.dictationErrors.${code}`),
 })
 
@@ -508,6 +516,17 @@ const browserService = createTalosInAppBrowserService({ onEvent: queueBrowserEve
 // F2-T6 first-run setup checklist — REAL state only (no fake progress):
 // a key exists when any profile carries a stored secret; the model step is
 // done when a composer model is actually selected.
+/*
+ * ⛔⛔ «NON HO POTUTO GUARDARE» NON È «NON CE L'HAI» — 2026-08-13.
+ *
+ * MISURATO sul Pad: Wi-Fi spento, i tre elenchi modelli falliti con
+ * `Unable to resolve host`, e la lista concludeva «nessuna chiave» perché
+ * senza elenchi non esistono profili. Intanto sul disco c'erano QUATTRO
+ * chiavi e il modello era scelto (`offerti=61`).
+ *
+ * ⇒ Se nessun elenco è stato letto, la domanda non ha risposta — e la
+ * risposta che non c'è non deve diventare un'accusa alla persona.
+ */
 const setupHasKey = computed(() => profiles.value.some((profile) => profile.has_secret))
 const setupHasModel = computed(() => selectedModelId.value !== null)
 /**
@@ -534,7 +553,17 @@ const setupHasModel = computed(() => selectedModelId.value !== null)
  * sotto per l'errore — mancava solo qui.
  */
 const setupChecklistVisible = computed(() =>
-    chat.state.persistenceStatus === 'ready'
+    /*
+     * ⛔ Si aspetta il deposito SICURO, non solo il database delle chat.
+     *
+     * MISURATO il 2026-08-13: con quattro chiavi sul dispositivo la lista
+     * diceva «Aggiungi una chiave provider», perche' `persistenceStatus` era
+     * gia' `ready` mentre i segreti non erano ancora stati letti. Sono due
+     * depositi con due tempi diversi, e questa riga ne guardava uno solo.
+     */
+    segretiLetti.value
+    && !(cataloghiNonLetti.size > 0 && profiles.value.length === 0)
+    && chat.state.persistenceStatus === 'ready'
     && !settings.state.onboarding.setup_dismissed
     && !(setupHasKey.value && setupHasModel.value),
 )

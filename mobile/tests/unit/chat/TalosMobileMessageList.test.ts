@@ -354,4 +354,21 @@ describe('⛔ il microfono: sul dettato, non sulla risposta letta', () => {
         ])
         expect(wrapper.find('[data-testid="talos-message-dictated"]').exists()).toBe(false)
     })
+
+    /**
+     * ⛔ Owner 2026-08-12: «il colore dell'icona microfono nella bolla di
+     * domanda deve avere lo stesso colore del testo, adesso è bianco».
+     *
+     * La causa era `--talos-muted`: un token per il testo secondario **sul fondo
+     * della pagina**, usato dentro una bolla il cui fondo è l'accento. Il grado
+     * di «secondario» lo deve dare l'opacità, non un'altra tinta — se no l'icona
+     * appartiene a una tavolozza che lì non esiste, e smette di seguire il tema.
+     */
+    it('⛔ il microfono prende il colore del TESTO della bolla, non quello della pagina', async () => {
+        const wrapper = await schermo([riga({ id: 'u3', metadata: { dictated: true } })])
+        const classi = wrapper.get('[data-testid="talos-message-dictated"]').classes().join(' ')
+
+        expect(classi).toContain('--talos-accent-contrast')
+        expect(classi).not.toContain('--talos-muted')
+    })
 })

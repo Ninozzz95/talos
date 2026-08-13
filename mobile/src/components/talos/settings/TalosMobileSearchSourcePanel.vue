@@ -122,14 +122,71 @@ async function saveEndpoint(): Promise<void> {
     feedback.value = t('search.addressSaved')
 }
 
+/**
+ * ⛔⛔ SPEGNERE NON È DIMENTICARE — e questo pulsante faceva tutt'e due.
+ *
+ * ## Come si è scoperto, il 2026-08-12
+ *
+ * Provando l'avviso «manca un motore di ricerca» **anche al verso contrario**:
+ * tolto il motore, riletta la schermata degli strumenti, e poi rimesso Tavily.
+ * Prima diceva «Chiave API · **una chiave è già salvata**»; dopo il giro diceva
+ * «**Serve ancora una chiave**». Il giro non era neutro: aveva cancellato la
+ * chiave dell'owner dal deposito sicuro.
+ *
+ * La riga che lo faceva era qui dentro, sotto un pulsante che si chiama
+ * «Disattiva ricerca web»:
+ *
+ *     await clearProviderKey(`search.${selected.value}`)
+ *
+ * ## Perché è un difetto e non una scelta
+ *
+ * I due gesti hanno **costi di ritorno diversi di ordini di grandezza**.
+ * Spegnere si annulla con un tocco. Una chiave cancellata non torna: si va sul
+ * sito del servizio, se ne genera un'altra, e la si riscrive a mano su un
+ * telefono. Metterli dietro allo stesso pulsante, col nome del più innocuo dei
+ * due, è la definizione di un comando che mente sul proprio effetto — la stessa
+ * famiglia dell'interruttore acceso su una capacità che non esiste.
+ *
+ * ⇒ Restano due, e ognuno dice cosa fa. `securityCatalog` distingue già
+ * `reversible` da `irreversible` per gli strumenti del modello: la stessa
+ * distinzione vale per i comandi che diamo alla persona.
+ */
 async function clearSource(): Promise<void> {
-    if (selected.value) {
+    // ⛔ La chiave RESTA, e anche l'indirizzo dell'istanza: sono configurazione,
+    // non lo stato acceso/spento. Riscegliendo la fonte si riparte com'era.
+    await settings.setSearchPreferences({ source: null })
+    feedback.value = null
+}
+
+/**
+ * L'altro gesto, quello che non si annulla, col suo nome e il suo pulsante.
+ *
+ * ⛔ E spegne ANCHE la fonte, perché senza chiave quella fonte non può
+ * rispondere. Non è il difetto di sopra al contrario: lì l'effetto in più era
+ * *estraneo* al nome del comando; qui è la sua conseguenza diretta, e viene
+ * detta nella stessa frase. La ragione è misurata nel codice: il cancello del
+ * toolset guarda **solo** la fonte —
+ *
+ *     const source = sendRuntime.search.source
+ *     if (!source) return null
+ *
+ * — e la chiave la legge dopo, al momento della chiamata. Lasciare la fonte
+ * scelta senza chiave significherebbe offrire al modello uno strumento che
+ * fallisce quando lo usa, mentre questa schermata scrive «la ricerca web resta
+ * disattivata»: di nuovo due mondi che da fuori sembrano uno.
+ */
+async function forgetKey(): Promise<void> {
+    if (!selected.value || busy.value) return
+    busy.value = true
+    try {
         const { clearProviderKey } = await import('@/services/secureKeyStore')
         await clearProviderKey(`search.${selected.value}`).catch(() => {})
+        await settings.setSearchPreferences({ source: null })
+        await refreshKeyState()
+        feedback.value = t('search.keyForgotten')
+    } finally {
+        busy.value = false
     }
-    await settings.setSearchPreferences({ source: null, endpoint: null })
-    hasKey.value = false
-    feedback.value = null
 }
 
 /**
@@ -238,9 +295,23 @@ const readiness = computed(() => {
                 >
             </label>
 
-            <Button variant="ghost" class="mt-2" data-testid="talos-search-clear" @click="clearSource">
-                {{ t('search.turnOff') }}
-            </Button>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+                <Button variant="ghost" data-testid="talos-search-clear" @click="clearSource">
+                    {{ t('search.turnOff') }}
+                </Button>
+                <!-- ⛔ Compare solo se c'è davvero qualcosa da dimenticare, e
+                     dice cosa costa: la chiave non torna, si rigenera. -->
+                <Button
+                    v-if="hasKey"
+                    variant="ghost"
+                    data-testid="talos-search-forget-key"
+                    class="text-[var(--talos-danger)]"
+                    :disabled="busy"
+                    @click="forgetKey"
+                >
+                    {{ t('search.forgetKey') }}
+                </Button>
+            </div>
         </template>
 
         <p

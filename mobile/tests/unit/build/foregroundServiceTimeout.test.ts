@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 /**
@@ -28,8 +28,29 @@ function read(path: string): string {
     return readFileSync(resolve(process.cwd(), path), 'utf8')
 }
 
-/** Every `<service>` that asks for a foreground type, with the class behind it. */
-function timedServices(): Array<{ name: string; types: string[]; source: string }> {
+/**
+ * ⛔ SOLO QUESTI DUE hanno un budget a tempo, e la differenza non e' un dettaglio.
+ *
+ * Android 15 chiama `onTimeout` — e uccide l'app — solo per `dataSync` e
+ * `mediaProcessing`. VERIFICATO sulla pagina dei cambi di comportamento di
+ * Android 15 l'11 agosto 2026, mentre si aggiungeva un servizio `microphone`
+ * per la parola di attivazione: quel tipo **non ha il timeout di sei ore**.
+ *
+ * ⇒ Pretendere `onTimeout` da un servizio `microphone` sarebbe una regola
+ * FALSA: chiederebbe di gestire una richiamata che il sistema non manda mai, e
+ * un presidio che chiede cose finte insegna a disattivare i presidi.
+ */
+const A_TEMPO = ['dataSync', 'mediaProcessing']
+
+/**
+ * Ogni `<service>` che dichiara un tipo, con la classe dietro.
+ *
+ * ⛔ Kotlin ANCHE: il primo giro cercava solo `.java`, e il servizio della
+ * parola di attivazione — scritto in Kotlin — faceva fallire il file di prova
+ * con `ENOENT` invece che con un giudizio. Un presidio che esplode e' un
+ * presidio che qualcuno cancellera'.
+ */
+function declaredServices(): Array<{ name: string; types: string[]; source: string }> {
     const manifest = read(MANIFEST)
     return [...manifest.matchAll(/<service\b[^>]*?\/>/gs)]
         .map(([block]) => block)
@@ -37,9 +58,17 @@ function timedServices(): Array<{ name: string; types: string[]; source: string 
         .map((block) => {
             const name = /android:name="([^"]+)"/.exec(block)?.[1] ?? ''
             const types = (/android:foregroundServiceType="([^"]+)"/.exec(block)?.[1] ?? '').split('|')
-            const file = `android/app/src/main/java/${name.replace(/^\./, 'ai.talos.').replace(/\./g, '/')}.java`
-            return { name, types, source: read(file) }
+            const radice = `android/app/src/main/java/${name.replace(/^\./, 'ai.talos.').replace(/\./g, '/')}`
+            const source = existsSync(resolve(process.cwd(), `${radice}.java`))
+                ? read(`${radice}.java`)
+                : read(`${radice}.kt`)
+            return { name, types, source }
         })
+}
+
+/** Quelli a cui Android manda davvero il conto. */
+function timedServices(): Array<{ name: string; types: string[]; source: string }> {
+    return declaredServices().filter((service) => service.types.some((t) => A_TEMPO.includes(t)))
 }
 
 describe('every timed foreground service answers for its budget', () => {
@@ -72,9 +101,39 @@ describe('every timed foreground service answers for its budget', () => {
      * here rather than on someone's phone.
      */
     it('declares no foreground service type nobody has answered for', () => {
-        const declared = new Set(timedServices().flatMap((service) => service.types))
+        const declared = new Set(declaredServices().flatMap((service) => service.types))
 
-        expect([...declared]).toEqual(['dataSync'])
+        /*
+         * ⛔ `microphone` e' entrato l'11 agosto 2026 con «hey TALOS»: un
+         * servizio che tiene il microfono aperto per aspettare la parola di
+         * attivazione. NON e' a tempo (vedi `A_TEMPO`), ma resta elencato qui
+         * perche' un tipo nuovo deve fermarsi su questa riga e non sul telefono
+         * di qualcuno.
+         *
+         * ⛔ E la stessa riga NON e' concessa alla bolla, che tiene un pulsante
+         * a schermo e non registra niente: la' `microphone` sarebbe una
+         * dichiarazione falsa al sistema operativo. La differenza fra le due non
+         * e' burocratica — e' se il servizio registra o no.
+         */
+        expect([...declared].sort()).toEqual(['dataSync', 'microphone'])
+    })
+
+    /**
+     * ⛔ Un servizio che tiene il microfono deve DIRLO mentre lo tiene.
+     *
+     * Non e' una regola di Android: e' una regola nostra, e vale piu' delle
+     * altre. Un microfono sempre aperto senza una notifica che lo dica e senza
+     * un modo per spegnerlo e' esattamente cio' che un assistente non deve fare.
+     */
+    it('a microphone service says so with a notification you can turn off', () => {
+        const microfoni = declaredServices().filter((service) => service.types.includes('microphone'))
+
+        expect(microfoni.length).toBeGreaterThan(0)
+        for (const servizio of microfoni) {
+            expect(servizio.source).toContain('startForeground')
+            expect(servizio.source).toContain('setOngoing(true)')
+            expect(servizio.source).toContain('fun spegni')
+        }
     })
 
     /**

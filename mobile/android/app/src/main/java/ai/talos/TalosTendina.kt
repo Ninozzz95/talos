@@ -55,6 +55,31 @@ class TalosTendina : TileService() {
 
     override fun onClick() {
         super.onClick()
+        /*
+         * ⭐⭐ ANCHE DA QUI si prova prima la porta dell'assistente.
+         *
+         * Owner 2026-08-11, sul telefono: la barra si apriva e l'occhio non
+         * vedeva niente. La causa non era un permesso — era che `startActivity`
+         * apre la finestra SALTANDO l'assistente, e solo l'assistente riceve la
+         * struttura della schermata. La tendina aveva lo stesso difetto del
+         * pallino, per la stessa ragione.
+         *
+         * ⛔ E NON serve un `startActivityAndCollapse` per chiudere la tendina.
+         * L'avevo messo, temendo che il pannello restasse aperto sopra la barra;
+         * MISURATO sul telefono, la tendina si chiude lo stesso e la barra
+         * prende il fuoco (`mCurrentFocus=TalosBarraActivity`, verificato anche
+         * a schermo con la spia dell'occhio a 244 nodi).
+         *
+         * ⛔⛔ E una precisazione che mi sono già dovuto correggere una volta:
+         * nel log compare `checkBackgroundActivityPermission deny!` su
+         * `TalosBarraActivity`. Avevo scritto che era colpa dell'intent vuoto di
+         * quella riga — **falso**: la riga non c'è più e il rifiuto compare
+         * identico. È il controllo della ROM sull'activity che la SESSIONE
+         * dell'assistente lancia, e non impedisce niente: subito dopo arriva
+         * `contesto ... nodi=448`. Un messaggio d'errore vero che riguarda
+         * un'altra domanda — vedi `il-colore-dice-chi-ha-disegnato`.
+         */
+        if (ai.talos.agent.TalosAssistente.apriComeAssistente()) return
         val apri = intentDellaBarra()
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {

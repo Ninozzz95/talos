@@ -11,6 +11,15 @@ import {
     talosSpegniLaBolla,
     type TalosStatoBolla,
 } from '@/lib/device/bolla'
+import {
+    talosAccendiLaParola,
+    talosLeggiLaParola,
+    talosSpegniLaParola,
+    type TalosStatoParola,
+} from '@/lib/device/parola'
+import TalosConsensoAutonomia from '@/components/talos/permissions/TalosConsensoAutonomia.vue'
+import { useSettingsStore } from '@/stores/settings'
+import { TALOS_TOOL_ACTIONS } from '@/lib/tools/permissionTypes'
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { Capacitor } from '@capacitor/core'
@@ -128,13 +137,81 @@ let smettiDiAscoltare: (() => void) | null = null
  * riporta quella risposta. L'assenza è la prova.
  */
 const bolla = ref<TalosStatoBolla>({ available: false, granted: false, on: false })
+/**
+ * ⭐⭐ «HEY TALOS» — sta QUI, e non fra le impostazioni della voce.
+ *
+ * Owner 2026-08-11: «collega le impostazioni di hey TALOS al controllo
+ * telefono». Ed è il posto giusto: questa pagina raccoglie le cose che TALOS
+ * può fare **sul dispositivo** quando non lo stai guardando — il ruolo di
+ * assistente, il pallino, il ponte. Una parola che apre l'assistente da sola
+ * appartiene a quella famiglia, non ai cursori di velocità e tono.
+ */
+const parola = ref<TalosStatoParola>({ available: false, on: false, permesso: 'prompt' })
 
 async function leggiLaBolla(): Promise<void> {
     bolla.value = await talosLeggiLaBolla()
+    parola.value = await talosLeggiLaParola()
 }
 
 async function alternaLaBolla(): Promise<void> {
     bolla.value = bolla.value.on ? await talosSpegniLaBolla() : await talosAccendiLaBolla()
+}
+
+/**
+ * ⛔ Spegnere non chiede niente, accendere sì.
+ *
+ * È l'unica funzione di TALOS che tiene il microfono sempre aperto: il permesso
+ * lo chiede il ponte, perché una scheda di sistema la può mostrare solo chi ha
+ * una finestra — e un servizio non ce l'ha.
+ */
+const impostazioni = useSettingsStore()
+
+/**
+ * ⛔⛔ IL CONSENSO SI CHIEDE UNA VOLTA, E SOLO SE NON E' GIA' STATO DATO.
+ *
+ * `talosEffectiveToolPermissions` riporta al default di oggi qualunque valore
+ * che nessuno abbia SCELTO. Quindi «e' gia' stato dato» non si legge guardando
+ * i tre valori — un `allow` ereditato non e' un consenso — ma guardando se le
+ * tre azioni compaiono fra le scelte. E' la stessa distinzione che quel file
+ * difende da settimane: un default e' un'ipotesi fatta al posto della persona,
+ * una scelta e' un'opinione.
+ */
+const consensoAperto = ref(false)
+
+const autonomiaGiaConcessa = computed(() => TALOS_TOOL_ACTIONS.every(
+    (azione) => impostazioni.state.tools_chosen.includes(azione)
+        && impostazioni.state.tools[azione] === 'allow',
+))
+
+async function alternaLaParola(): Promise<void> {
+    if (parola.value.on) {
+        // ⛔ Spegnere non chiede niente: togliere una capacita' non ha bisogno
+        // di un permesso, e chiedere conferma per smettere e' un attrito messo
+        // esattamente dove non serve.
+        parola.value = await talosSpegniLaParola()
+        return
+    }
+    if (!autonomiaGiaConcessa.value) {
+        consensoAperto.value = true
+        return
+    }
+    parola.value = await talosAccendiLaParola()
+}
+
+/**
+ * ⭐⭐ IL SI': tre `allow`, registrati come SCELTA.
+ *
+ * ⛔ La registrazione (`tools_chosen`) e' meta' della cura, non un dettaglio:
+ * senza, il primo avvio successivo riporterebbe i tre valori al default —
+ * `ask` — e il consenso appena dato sparirebbe senza che nessuno lo tocchi. Un
+ * si' che evapora e' peggio di un si' mai chiesto, perche' la persona crede di
+ * averlo dato. `setToolPermissions` registra la scelta da solo, ed e' scritto
+ * nel suo commento: «toccare un permesso e' sceglierlo».
+ */
+async function concediAutonomia(): Promise<void> {
+    consensoAperto.value = false
+    await impostazioni.setToolPermissions({ read: 'allow', write: 'allow', outbound: 'allow' })
+    parola.value = await talosAccendiLaParola()
 }
 
 async function ascoltaIlRitorno(): Promise<void> {
@@ -607,6 +684,13 @@ onUnmounted(() => {
         class="flex min-h-full flex-col gap-4 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3"
         data-testid="talos-privilege-screen"
     >
+        <!-- ⛔ Il consenso all'autonomia: si chiede PRIMA, guardando lo schermo
+             di proposito, perché durante l'assistente lo schermo non si tocca. -->
+        <TalosConsensoAutonomia
+            :aperta="consensoAperto"
+            @consenti="concediAutonomia"
+            @annulla="consensoAperto = false"
+        />
         <p class="flex items-start gap-2 text-xs leading-5 text-[var(--talos-muted)]">
             <Smartphone class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
             {{ t('privilege.intro') }}
@@ -686,6 +770,45 @@ onUnmounted(() => {
             </p>
         </section>
 
+
+        <!--
+            ⭐⭐ «HEY TALOS» — la porta che su ColorOS non esiste in nessun altro modo.
+
+            ⛔ La riga sotto il titolo dice che il microfono resta acceso, e lo dice
+            PRIMA che uno tocchi l'interruttore. È l'unica funzione dell'app con
+            questa proprietà, e scoprirlo dopo sarebbe tradire chi si fida.
+        -->
+        <section
+            v-if="parola.available"
+            data-testid="talos-parola"
+            :data-acceso="parola.on ? 'si' : 'no'"
+            class="flex flex-col gap-3 rounded-[var(--talos-radius-card)] border p-4"
+            :class="parola.on
+                ? 'border-[var(--talos-accent)]/40 bg-[var(--talos-accent)]/5'
+                : 'border-[var(--talos-border)]'"
+        >
+            <h2 class="flex items-center gap-2 text-base font-semibold text-[var(--talos-foreground)]">
+                <Check v-if="parola.on" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                <Smartphone v-else class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                {{ t('privilege.wakeTitle') }}
+            </h2>
+            <p class="text-sm leading-6 text-[var(--talos-muted)]">
+                {{ parola.on ? t('privilege.wakeOn') : t('privilege.wakeBody') }}
+            </p>
+            <button
+                type="button"
+                data-testid="talos-parola-interruttore"
+                :data-acceso="parola.on"
+                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] px-4 text-sm font-semibold"
+                :class="parola.on
+                    ? 'border border-[var(--talos-border)] text-[var(--talos-foreground)]'
+                    : 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast)]'"
+                @click="void alternaLaParola()"
+            >
+                {{ parola.on ? t('privilege.wakeOff') : t('privilege.wakeAsk') }}
+                <ChevronRight v-if="!parola.on" class="size-4" aria-hidden="true" />
+            </button>
+        </section>
         <!--
             ⭐ LA BOLLA — c'è solo dove il plugin nativo esiste, cioè nella build
             di sviluppo. In produzione `available` è falso e questa sezione non

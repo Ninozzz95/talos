@@ -40,7 +40,7 @@ vi.mock('@capacitor/core', () => ({
 }))
 vi.mock('@capgo/capacitor-speech-recognition', () => ({ SpeechRecognition: thenableProxy }))
 
-import { talosDictationDiagnostics } from '@/services/dictation'
+import { talosDictationDiagnostics } from '@/services/dictationDiagnostica'
 import { talosDeviceIssues } from '@/lib/talosDeviceLog'
 
 afterEach(() => {

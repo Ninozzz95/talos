@@ -63,6 +63,10 @@ const accountTab = computed(() => localizedTab(talosMobileSettingsTab(TALOS_MOBI
 // Resolve each grouped tab once (label + availability) rather than running the
 // linear settingsTab() lookup twice per row on every render.
 const resolvedGroups = computed(() => TALOS_MOBILE_SETTINGS_GROUPS.map((group) => ({
+    // ⛔ La chiave NON tradotta serve a decidere DOVE va il controllo del
+    // telefono: confrontare l'etichetta tradotta lo farebbe sparire appena
+    // qualcuno cambia lingua.
+    chiave: group.label,
     label: t(`settingsCenter.groups.${group.label.toLowerCase()}`),
     tabs: group.tabIds.map((id) => localizedTab(talosMobileSettingsTab(id))),
 })))
@@ -279,25 +283,22 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                     2026-08-08: su ColorOS Shizuku non riesce nemmeno ad
                     autorizzarci.
                 -->
-                <div class="w-full">
-                    <div class="divide-y divide-[var(--talos-border)] overflow-hidden rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]">
-                        <RouterLink
-                            :to="{ name: 'settings-privilege' }"
-                            data-testid="settings-privilege-link"
-                            class="talos-pressable flex min-h-touch w-full items-center gap-[var(--talos-space-inline)] px-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)]"
-                        >
-                            <Smartphone class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                            <span class="min-w-0 flex-1">
-                                <span class="block truncate text-sm text-[var(--talos-text)]">{{ t('privilege.pageTitle') }}</span>
-                            </span>
-                            <ChevronRight class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
-                        </RouterLink>
-                    </div>
-                </div>
 
                 <div v-for="group in resolvedGroups" :key="group.label" class="w-full">
                     <p data-testid="settings-group-heading" class="mb-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ group.label }}</p>
                     <div class="divide-y divide-[var(--talos-border)] overflow-hidden rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]">
+                            <RouterLink
+                                v-if="group.chiave === 'Intelligence'"
+                                :to="{ name: 'settings-privilege' }"
+                                data-testid="settings-privilege-link"
+                                class="talos-pressable flex min-h-touch w-full items-center gap-[var(--talos-space-inline)] px-[var(--talos-space-card)] text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)]"
+                            >
+                                <Smartphone class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate text-sm text-[var(--talos-text)]">{{ t('privilege.pageTitle') }}</span>
+                                </span>
+                                <ChevronRight class="size-[var(--talos-icon-size)] shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                            </RouterLink>
                         <template v-for="tab in group.tabs" :key="tab.id">
                             <RouterLink
                                 v-if="tab.id === TALOS_MOBILE_SETTINGS_MODEL_LAB_TAB"
@@ -377,7 +378,15 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                     v-if="tab.id === 'browser'"
                     :development-mode="developmentMode"
                 />
-                <component :is="LOCAL_PANELS[tab.id]" v-else-if="tab.availability === 'available' && LOCAL_PANELS[tab.id]" />
+                <!-- ⛔ «Serve un motore di ricerca» deve PORTARE dove si
+                     aggiusta: un avviso che nomina una schermata e non la apre
+                     lascia la persona a cercarla, che è metà del difetto che
+                     l'avviso doveva chiudere. -->
+                <component
+                    :is="LOCAL_PANELS[tab.id]"
+                    v-else-if="tab.availability === 'available' && LOCAL_PANELS[tab.id]"
+                    @vai-al-motore="selectRow('search')"
+                />
                 <TalosMobileSettingsCapabilityPanel v-else :tab="tab" />
             </div>
         </section>

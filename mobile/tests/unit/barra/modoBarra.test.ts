@@ -13,7 +13,14 @@ import { talosModoBarraDa } from '@/lib/barra/modoBarra'
 describe('⛔ il modo barra si legge dall\'indirizzo di lancio', () => {
     it('legge il contesto MISURATO: nodi e immagine, dichiarati', () => {
         const modo = talosModoBarraDa('talos://barra?voce=1&nodi=319&immagine=1')
-        expect(modo).toEqual({ daVoce: true, contesto: { nodi: 319, immagine: true } })
+        // ⛔ `apertura` è `null` quando nessuno l'ha dichiarata, ed è un valore
+        // vero: significa «questa porta non sa dire se mi ha già chiamato».
+        // Vedi `unaAperturaUnAscolto.test.ts` per cosa ci si fa.
+        expect(modo).toEqual({
+            daVoce: true,
+            contesto: { nodi: 319, immagine: true },
+            apertura: null,
+        })
     })
 
     it('e il verso contrario: chiamata senza voce, senza immagine', () => {
@@ -22,9 +29,9 @@ describe('⛔ il modo barra si legge dall\'indirizzo di lancio', () => {
         // chiave invece del suo valore passerebbe il primo caso e sbaglierebbe
         // questo — e la barra aprirebbe il microfono a chi non ha parlato.
         expect(talosModoBarraDa('talos://barra?nodi=49'))
-            .toEqual({ daVoce: false, contesto: { nodi: 49, immagine: false } })
+            .toEqual({ daVoce: false, contesto: { nodi: 49, immagine: false }, apertura: null })
         expect(talosModoBarraDa('talos://barra?voce=0&nodi=49&immagine=0'))
-            .toEqual({ daVoce: false, contesto: { nodi: 49, immagine: false } })
+            .toEqual({ daVoce: false, contesto: { nodi: 49, immagine: false }, apertura: null })
     })
 
     it('⛔ l\'app aperta dall\'ICONA non ha nessun indirizzo, e resta l\'app', () => {

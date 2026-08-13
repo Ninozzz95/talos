@@ -120,6 +120,32 @@ public class TalosBarraActivity extends MainActivity {
             conIndirizzo.setData(android.net.Uri.parse("talos://barra?voce=1&nodi=0&immagine=0"));
             setIntent(conIndirizzo);
         }
+        timbraLApertura();
+
+        /*
+         * ⭐⭐ L'ORECCHIO SI APRE QUI, PRIMA DI TUTTO IL RESTO.
+         *
+         * Owner 2026-08-11: «dico "apri Google Chrome" e ha sentito solo "Google
+         * Chrome"». MISURATO dal momento della richiesta di apertura: la barra si
+         * VEDE a +569 ms e il riconoscitore è pronto a **+763 ms**, perché
+         * l'ascolto partiva da `onMounted` di un componente Vue — cioè dopo
+         * l'Activity, dopo la WebView, dopo il bundle, dopo il montaggio. Chi
+         * tocca e parla subito regala tre quarti di secondo al vuoto, e «apri»
+         * dura meno di così.
+         *
+         * ⛔ Sta PRIMA di `super.onCreate` di proposito: è quella chiamata a
+         * costruire il ponte e la WebView, cioè la parte lenta. Metterlo dopo
+         * significherebbe aver scritto tutto questo per niente.
+         *
+         * ⛔ E solo se l'indirizzo chiede la voce: la barra si apre anche per
+         * scrivere, e un microfono acceso senza che nessuno l'abbia chiesto è
+         * esattamente ciò che non si fa. Il resto — permesso, disponibilità,
+         * spegnimento se nessuno si aggancia — lo decide `TalosOrecchioAnticipato`.
+         */
+        final android.net.Uri deciso = getIntent() == null ? null : getIntent().getData();
+        if (deciso != null && "1".equals(deciso.getQueryParameter("voce"))) {
+            ai.talos.agent.TalosOrecchioAnticipato.accendi(this);
+        }
 
         super.onCreate(savedInstanceState);
         /*
@@ -292,4 +318,108 @@ public class TalosBarraActivity extends MainActivity {
     }
 
     private static final String SEGNO = "TalosBarra";
+
+    /**
+     * ⭐⭐ IL TIMBRO DELL'APERTURA — «questa chiamata è una sola».
+     *
+     * ## ⛔ Il difetto, misurato in logcat
+     *
+     * Owner 2026-08-11: «dico "ciao mi senti" e mi stampa solo "mi senti", è come
+     * se ci fosse un ritardo subito dopo che compare l'assistente». MISURATO:
+     *
+     *     58.795  toggle da stato=idle        parte l'ascolto
+     *     58.876  listening                    sta ascoltando
+     *     00.729  toggle da stato=listening   ⛔ qualcuno lo SPEGNE
+     *     01.286  pronto epoca=2               riparte 2,5 s dopo l'apertura
+     *
+     * Il colpevole era `chiamata nuova (2)` su **una apertura sola**: Capacitor
+     * consegna lo stesso identico intent DUE volte — una da `getLaunchUrl()`,
+     * che dice con quale indirizzo l'app è partita, e una da `appUrlOpen`. È
+     * documentato e noto (issue #971 di ionic-team/capacitor), e deduplicare
+     * tocca a chi riceve: `singleTask` evita la seconda ISTANZA, non il secondo
+     * EVENTO.
+     *
+     * Il lato web trattava quella seconda consegna come «mi hanno chiamato di
+     * nuovo» e rilanciava l'ascolto, spegnendo la sessione viva. «Ciao» cadeva
+     * nel mezzo secondo di riapertura.
+     *
+     * ## Perché un timbro e non un confronto di indirizzi
+     *
+     * Confrontare le stringhe avrebbe funzionato quasi sempre e sbagliato nel
+     * caso che conta: due chiamate VERE consecutive dalla stessa porta hanno
+     * l'indirizzo identico, e verrebbero fuse in una. L'identità di un'apertura
+     * non si indovina guardando i dati — la dichiara chi apre.
+     *
+     * ⛔ E si timbra QUI perché questa Activity è l'imbuto di tutte le porte:
+     * gesto dell'assistente, tendina, pallino, tasto delle cuffie, parola di
+     * attivazione. Un timbro messo in una sola di quelle strade lascerebbe le
+     * altre col difetto.
+     */
+    private void timbraLApertura() {
+        final Intent adesso = getIntent();
+        if (adesso == null || adesso.getData() == null) return;
+        final android.net.Uri vecchio = adesso.getData();
+        /*
+         * ⛔⛔ CHI APRE PUÒ DICHIARARE LA PROPRIA APERTURA, e allora si rispetta.
+         *
+         * MISURATO il 12 agosto: un solo gesto dell'assistente produce DUE
+         * `startActivity` a 28 ms di distanza, perché il conteggio dei nodi
+         * arriva dopo che la barra è già a schermo (vedi `TalosAssistente`). Sono
+         * due Intent diversi, quindi qui ricevevano due timbri diversi, e per il
+         * lato web erano due CHIAMATE: due ascolti aperti nello stesso
+         * millisecondo, e l'errore della sessione morente raccolto da chi non era
+         * ancora nato — «speech recognition failed» su un ascolto sano.
+         *
+         * ⛔ E non si poteva indovinare da qui: due chiamate vere consecutive
+         * dalla stessa porta hanno l'indirizzo identico. L'unica cosa che separa
+         * «ti mando il dato che mancava» da «ti chiamo di nuovo» è l'intenzione
+         * di chi manda — quindi la dichiara chi manda, e questo imbuto timbra
+         * solo per le porte che non hanno dichiarato niente (pallino, tendina,
+         * cuffie, parola di attivazione).
+         */
+        if (vecchio.getQueryParameter("apertura") != null) return;
+        // `uptimeMillis` e non l'orologio: non torna indietro, e due aperture
+        // non possono cadere sullo stesso millisecondo di macchina accesa.
+        final android.net.Uri timbrato = vecchio.buildUpon()
+            .appendQueryParameter("apertura", String.valueOf(android.os.SystemClock.uptimeMillis()))
+            .build();
+        adesso.setData(timbrato);
+        setIntent(adesso);
+    }
+
+    /**
+     * ⛔ ANCHE le aperture successive vanno timbrate.
+     *
+     * L'activity è `singleTask`: dalla seconda volta in poi non nasce niente,
+     * arriva solo un intent nuovo qui. Senza questo timbro la seconda chiamata
+     * vera sarebbe indistinguibile dalla ripetizione della prima — cioè si
+     * curerebbe il difetto di stasera creandone uno peggiore, la barra che non
+     * risponde più alla seconda chiamata.
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        setIntent(intent);
+        timbraLApertura();
+        super.onNewIntent(getIntent());
+    }
+
+
+    /**
+     * ⛔ La barra se ne va: la parola di attivazione riprende il microfono.
+     *
+     * Senza questa riga, chi apre la barra e la chiude lascia «hey TALOS» in
+     * pausa **per sempre**: il servizio resta vivo, la notifica dice che sta
+     * aspettando, e non sente più niente. Sarebbe la bugia peggiore, perché
+     * riguarda un microfono.
+     *
+     * ⛔ Anche qui vale la simmetria: chi prende deve restituire, e la
+     * restituzione va messa dove la presa finisce DAVVERO — non dove speriamo
+     * che finisca.
+     */
+    @Override
+    public void onDestroy() {
+        ai.talos.parola.TalosParola.riprendi();
+        super.onDestroy();
+    }
+
 }

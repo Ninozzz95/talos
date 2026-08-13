@@ -101,9 +101,27 @@ export async function talosArmaIlFreno(): Promise<{
     catch {
         return { armato: false, motivo: 'ponte-chiuso' }
     }
-    // `getevent` vuole l'identità della shell: un'app non legge `/dev/input`.
-    // Se non c'è, non è una sconfitta — è l'altro freno che resta in servizio.
-    await talosRunAsShell(comando)
+    /*
+     * ⛔⛔ IL FRENO GREZZO NON STA SUL CAMMINO CRITICO — owner 2026-08-13:
+     * «se utente aspetta per piu di qualche secondo si stufa e lo fara
+     * manualmente».
+     *
+     * `getevent` vuole l'identità della shell: un'app non legge `/dev/input`.
+     * Se non c'è, non è una sconfitta — è l'altro freno che resta in servizio,
+     * e quello è **già armato** dalla chiamata qui sopra.
+     *
+     * ⇒ Aspettare questa shell è tempo speso per un MIGLIORAMENTO del freno,
+     * non per la sua esistenza: su un telefono senza ponte si paga un timeout
+     * intero prima di scoprire ciò che si sapeva già, e lo si paga **a ogni
+     * armamento**, cioè davanti alla persona che guarda lo schermo fermo.
+     *
+     * Parte e non si aspetta. Se arriva, il freno grezzo prende servizio al
+     * primo `guarda()` successivo; se non arriva, non è cambiato niente.
+     *
+     * ⛔ `catch` esplicito: senza, un rifiuto della shell diventa una rejection
+     * non gestita — invisibile, e indistinguibile da «non è mai partita».
+     */
+    void talosRunAsShell(comando).catch(() => undefined)
     /*
      * ⛔ Si RILEGGE dal nativo invece di fidarsi del comando riuscito.
      *

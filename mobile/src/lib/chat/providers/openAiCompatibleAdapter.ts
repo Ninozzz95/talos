@@ -457,6 +457,32 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 talosRememberReasoningConflict(input.model.id)
                 response = await send(compatibleCompletionData(config, input, false))
             }
+            /*
+             * ⛔⛔ IL RIPIEGO SUL CREDITO ESISTEVA E COPRIVA UNA STRADA SOLA.
+             *
+             * `conRipiegoSulCredito`, scritto il 2026-08-10, vive nel ramo in
+             * STREAMING. Questo ramo — la chiamata secca — non l'ha mai avuto,
+             * e chi passa di qui riceve il 402 in faccia.
+             *
+             * MISURATO sul Pad il 2026-08-13, dal pilota dello schermo:
+             *
+             * > `pilota: chiedi-in-errore TalosMobileProviderError: This request
+             * > requires more credits, or fewer max_tokens. You requested up to
+             * > 65536 tokens, but can only afford 5020`
+             *
+             * — e la corsa moriva a `passi=0 ms=175`, cioe' prima di guardare
+             * lo schermo anche una sola volta. Da fuori sembrava che il modello
+             * non capisse il compito; in realta' non era mai stato interrogato.
+             *
+             * ⇒ Stessa cura, stessa funzione, un solo ritentativo: il rifiuto
+             * porta il numero, e il numero diventa il tetto. Il primo tentativo
+             * non costa token — il 402 e' un controllo di budget e cade prima
+             * della generazione.
+             */
+            const tettoDalRifiuto = talosTettoDaiCrediti(JSON.stringify(response.data ?? ''))
+            if (tettoDalRifiuto !== null) {
+                response = await send(compatibleCompletionData(config, input, false, tettoDalRifiuto))
+            }
             requireHttpSuccess({ provider: config.provider, operation: 'complete', status: response.status, data: response.data })
             const parsed = completionSchema.safeParse(response.data)
             if (!parsed.success) throw malformedProviderResponse(config.provider, 'complete', { received: response.data, issues: parsed.error.issues })

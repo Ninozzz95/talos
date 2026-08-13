@@ -131,5 +131,20 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
      * un acquisto). È la trifecta al completo su una riga sola — esattamente la
      * combinazione per cui esiste il livello più alto.
      */
-    device_screen_drive: { risk: 'R4', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: true, canTransmit: true },
+    /*
+     * ⛔ `sempreConsentibile`: l'unica eccezione al veto su R4, decisa dall'owner
+     * il 2026-08-12 e riconfermata dopo un mio rifiuto. Il pilota non è una
+     * chiamata, è una SESSIONE: chiedere a ogni tocco non è una difesa in più,
+     * è la funzione che non si può usare. Il perché per esteso, col compromesso
+     * e coi tre presidi che lo reggono, sta su `TalosToolSecurity`.
+     */
+    device_screen_drive: { risk: 'R4', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: true, canTransmit: true, sempreConsentibile: true },
+    /*
+     * ⛔ R3 e non R4: un intent apre UNA schermata con dati gia' scritti, non
+     * prende in mano lo schermo. Ma `canTransmit` e' vero — alcune capacita'
+     * mandano un messaggio a una persona — e `sempreConsentibile` lo rende
+     * concedibile una volta per tutte, come ha deciso l'owner per il controllo
+     * del dispositivo.
+     */
+    app_azione: { risk: 'R3', reversibility: 'compensable', readsPrivateData: true, readsUntrustedContent: false, canTransmit: true, sempreConsentibile: true },
 })

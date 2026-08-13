@@ -109,7 +109,25 @@ import { resolve } from 'node:path'
  * nessuno abbia aggiunto niente all'avvio, quel mezzo kilobyte è il primo posto
  * dove NON guardare.
  */
-const DEFAULT_MAXIMUM_BYTES = 601_200
+/*
+ * ⛔ E poi 602.000 — IL MOTORE DEGLI INTENT, 2026-08-13, per decisione
+ * esplicita dell'owner: «ALZA A 602.000 ADESSO E VAI AVANTI».
+ *
+ * Il tetto era arrivato a 601.344 con 25 capacità in un tool solo — WhatsApp,
+ * Telegram, Signal, Messenger, SMS, email, chiamate, quattro modi di usare le
+ * mappe, Uber, YouTube, Spotify, Netflix, calendario, traduzione, Drive,
+ * Amazon, Play Store, Instagram, LinkedIn, web — contro le 23 dei built-in
+ * intent di Google.
+ *
+ * ⛔ E prima di chiedere, il peso è stato inseguito davvero, in quattro forme
+ * MISURATE una per una: gancio nel controller con cache 602.009, con
+ * `import()` pigro 601.650, con `&&`/`||` 601.704, fonti dentro il ponte del
+ * telefono 601.512. La forma finale — il tool chiama il ponte da sé, dietro il
+ * chunk dinamico del toolset — è la più leggera delle quattro. Quello che
+ * resta è il costo dei cataloghi (76 byte misurati) e delle etichette: la
+ * parte che DEVE stare nel grafo perché il pannello dei permessi la mostri.
+ */
+const DEFAULT_MAXIMUM_BYTES = 602_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {

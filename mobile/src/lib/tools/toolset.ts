@@ -4,6 +4,7 @@ import { createTalosPrivilegedTools } from '@/lib/tools/privilegedTools'
 import { createTalosPrivilegedSources } from '@/lib/device/privilegedSources'
 import { createTalosNotificationTools } from '@/lib/tools/notificationTools'
 import { createTalosSchermoTools } from '@/lib/tools/schermoTools'
+import { talosIntentiTools } from '@/lib/tools/intentiTools'
 import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
 import { createTalosTasksWriteTools } from '@/lib/tools/tasksWriteTools'
@@ -581,8 +582,19 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
              * che chiede conferma SEMPRE per contratto. La seconda esiste
              * perché alcune cose sono gravi a prescindere dal numero.
              */
+            /*
+             * ⛔ IL SECONDO CANCELLO: qui il veto veniva chiamato con UN SOLO
+             * argomento, quindi `sempreConsentibile` arrivava `undefined` e
+             * l'eccezione dichiarata nel catalogo non contava niente. Una
+             * firma con parametri facoltativi rende questo errore silenzioso:
+             * il codice compila, e la regola si applica a metà.
+             */
             const critical = tool.confirmation === 'always'
-                || talosForbidsPersistentGrant(security.risk)
+                || talosForbidsPersistentGrant(
+                    security.risk,
+                    actions,
+                    security.sempreConsentibile,
+                )
             /*
              * «Avrebbe chiesto?» si legge dalla STESSA funzione che decide
              * davvero, non da una regola parallela: se un giorno la grammatica
@@ -653,6 +665,8 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                  */
                 ...(privilegiate ? createTalosPrivilegedTools(privilegiate) : []),
                 ...(deps.notifications?.() ? createTalosNotificationTools(deps.notifications()!) : []),
+                // ⭐⭐ Il motore degli intent: 25 capacità in un tool solo.
+                ...(deps.device?.() ? talosIntentiTools() : []),
                 ...(deps.schermo?.() ? createTalosSchermoTools(deps.schermo()!) : []),
                 ...(libraryWrite ? createTalosLibraryWriteTools(libraryWrite) : []),
                 ...(notesWrite ? createTalosNotesWriteTools(notesWrite) : []),

@@ -91,4 +91,44 @@ describe('ogni tool dichiara la propria sicurezza', () => {
         expect(per('notes_delete').reversibility).toBe('irreversible')
         expect(per('tasks_delete').reversibility).toBe('irreversible')
     })
+
+    /**
+     * ⛔⛔ L'ECCEZIONE AL VETO SU `R4` SI CONTA, e vale UNA sola riga.
+     *
+     * Owner 2026-08-12: «il consenti sempre si riferiva al controllo del
+     * dispositivo, da modalità ASSISTENTE». Decisione sua, presa dopo un mio
+     * rifiuto e una sua riconferma — e il perché, col compromesso, sta su
+     * `TalosToolSecurity.sempreConsentibile`.
+     *
+     * ⛔ Il rischio vero non è il tool a cui l'eccezione è stata data: è il
+     * **prossimo `R4`** che nasce e se la porta dietro perché qualcuno ha
+     * copiato la riga sopra. Questo test è l'unica cosa che sta fra quel copia-
+     * incolla e un permesso permanente su un'azione che non si annulla. Se
+     * diventa rosso non si aggiorna il numero: si decide, e si scrive perché.
+     */
+    /*
+     * ⛔⛔ L'ELENCO È CHIUSO, e cresce solo con una decisione dell'owner.
+     *
+     * `sempreConsentibile` toglie una domanda che la grammatica dei permessi
+     * farebbe: ogni voce qui dentro è una difesa in meno, e deve essere stata
+     * decisa da una persona invece che scivolata dentro con una modifica.
+     *
+     * Le due voci, e perché sono diverse:
+     *
+     * - `device_screen_drive` — R4: prende in mano lo schermo. L'eccezione è
+     *   dell'owner, 2026-08-13: «voglio che metti quel maledetto pulsante
+     *   consenti sempre e ci deve essere anche per il controllo dispositivo.
+     *   Non voglio nessuna eccezione. Sarà l'utente a consentirlo».
+     * - `app_azione` — R3: apre UNA schermata con i dati già scritti, e non
+     *   tocca niente al posto della persona. Rischio più basso, stessa
+     *   eccezione, per la stessa ragione: è una cosa che si fa venti volte al
+     *   giorno, e chiederla venti volte è un modo per farsi disattivare.
+     */
+    it('⛔ SOLO DUE possono essere consentiti per sempre, e sappiamo quali', () => {
+        const conEccezione = Object.entries(TALOS_TOOL_SECURITY)
+            .filter(([, riga]) => (riga as { sempreConsentibile?: true }).sempreConsentibile)
+            .map(([id]) => id)
+
+        expect(conEccezione.sort()).toEqual(['app_azione', 'device_screen_drive'])
+    })
 })

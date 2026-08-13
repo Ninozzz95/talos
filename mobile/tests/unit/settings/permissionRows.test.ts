@@ -26,12 +26,27 @@ import {
  * and a button that silently does nothing.
  */
 describe('what the screen may claim', () => {
-    it('never lists a permission for a feature that does not exist yet', () => {
-        // The composer will one day take photos. Until it does, a row for it is
-        // a promise TALOS has not kept — and Play restricts the media
-        // permissions to apps whose core purpose IS broad media access.
+    /*
+     * ⭐ «Un giorno» È ARRIVATO — 2026-08-13.
+     *
+     * Questo test diceva: «The composer will one day take photos. Until it
+     * does, a row for it is a promise TALOS has not kept». Quel giorno è
+     * passato senza che nessuno tornasse qui: la fotocamera è nel cassetto del
+     * compositore (`TalosMobileComposerDrawer.vue`) e nella barra
+     * (`barra.attachCamera`), e `CAMERA` è dichiarata nel manifest.
+     *
+     * ⇒ Da promessa non mantenuta è diventata il difetto opposto: un permesso
+     * che l'app chiede davvero e che la sua pagina non nominava. Owner
+     * 2026-08-13: «tutti i permessi della app necessari vanno collegati nella
+     * relativa schermata, TUTTI».
+     *
+     * ⛔ `photos` resta fuori, e per la ragione originale: Play riserva i
+     * permessi media alle app il cui scopo È l'accesso alla galleria, e il
+     * selettore di sistema non ne ha bisogno.
+     */
+    it('lista la fotocamera perché ORA la funzione esiste, e non i media', () => {
         const names = TALOS_PERMISSION_ROWS.map((row) => row.id)
-        expect(names).not.toContain('camera')
+        expect(names).toContain('camera')
         expect(names).not.toContain('photos')
     })
 
@@ -108,8 +123,21 @@ describe('which rows a given device sees', () => {
 
     it('keeps everything that applies', () => {
         const rows = visibleTalosPermissionRows({ notifications: true, biometricHardware: true })
+        /*
+         * ⭐ Dodici, non dieci — 2026-08-13: `contacts` e `camera`.
+         *
+         * `contacts` è nuovo (il motore degli intent risolve un nome in un
+         * numero); `camera` mancava da prima ed è stata trovata dal censimento
+         * chiesto dall'owner: «tutti i permessi della app necessari vanno
+         * collegati nella relativa schermata, TUTTI».
+         *
+         * ⛔ L'ordine È il contenuto: le due nuove stanno dopo le notifiche e
+         * prima del blocco app, cioè fra i permessi che Android fa concedere a
+         * runtime — non in fondo, dove le voci non sono permessi affatto.
+         */
         expect(rows.map((row) => row.id)).toEqual([
-            'microphone', 'notifications', 'appLock', 'files', 'background', 'network',
+            'microphone', 'notifications', 'contacts', 'camera',
+            'appLock', 'files', 'background', 'network',
             'notificationAccess', 'bridge', 'deviceControl', 'localModel',
         ])
     })

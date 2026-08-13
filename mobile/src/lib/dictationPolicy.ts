@@ -81,3 +81,22 @@ export function resolveTalosDictationLanguageTag(
 export function talosRilevamentoAcceso(mode: TalosDictationLanguageMode): boolean {
     return mode === TALOS_LINGUA_AUTOMATICA
 }
+
+/**
+ * ⛔⛔ I DUE TEMPI DELL'ASCOLTO NON STANNO PIU' QUI, ed e' una decisione.
+ *
+ * Ci sono stati, per un'ora, l'11 agosto. Poi e' arrivato un TERZO posto che
+ * apre il microfono — `TalosOrecchioAnticipato`, che parte in `onCreate`
+ * dell'Activity per non perdere la prima parola — e quel posto **non puo'
+ * leggere una costante TypeScript**, perche' nasce prima del JavaScript.
+ *
+ * Tenerli qui avrebbe voluto dire due copie dello stesso numero: che e'
+ * esattamente la causa dei due difetti di quella giornata — prima il numero non
+ * arrivava affatto al ponte, poi arrivava solo a una delle due schermate.
+ *
+ * ⇒ Adesso vivono dove vengono APPLICATI: `TalosDictationPlugin.kt`
+ * (`TALOS_PAUSA_FINE_FRASE_MS`, `TALOS_ATTESA_INIZIO_MS`), e valgono per
+ * chiunque apra il microfono senza chiedere altro. Le opzioni `silenceMillis` e
+ * `minimumMillis` restano nel ponte: servono a chi volesse un ascolto DIVERSO —
+ * che e' una scelta da dichiarare, non un valore da ripetere.
+ */

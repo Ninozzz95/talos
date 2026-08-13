@@ -50,16 +50,17 @@
  * è la stessa: `useChatController()` è un oggetto condiviso, quindi memoria,
  * cronologia e strumenti sono quelli veri, non una copia.
  */
-import { computed, onMounted, ref, watch } from 'vue'
-import { ArrowUp, Camera, Copy, Eye, EyeOff, FileText, Image, Library, Maximize2, Mic, Plus, Square, Volume2, VolumeX, X } from '@lucide/vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
+import { ArrowUp, Camera, Copy, Eye, EyeOff, FileText, Image, Library, Maximize2, Mic, Paperclip, Plus, Square, Volume2, VolumeX, X } from '@lucide/vue'
 import TalosMobileMessageContent from '@/components/chat/TalosMobileMessageContent.vue'
 import { useTalosI18n } from '@/i18n'
 import { useChatController } from '@/stores/chatController'
 import { useTalosMobileDictation } from '@/composables/useTalosMobileDictation'
+import { talosDettaturaAnnota as annota } from '@/services/dictation'
 import { useTalosRispostaAVoce } from '@/composables/useTalosRispostaAVoce'
 import { useTalosSpeech } from '@/composables/useTalosSpeech'
 import { talosOffsetDelTrascinamento, talosTrascinamentoApre } from '@/lib/barra/trascinamento'
-import { TALOS_METADATA_DETTATO } from '@/lib/tools/tracciaAzione'
+import { TALOS_METADATA_DETTATO, TALOS_METADATA_SCHERMO } from '@/lib/tools/tracciaAzione'
 import type { TalosModoBarra } from '@/lib/barra/modoBarra'
 
 /*
@@ -72,6 +73,34 @@ const props = defineProps<{ modo: TalosModoBarra & { chiamata?: number } }>()
 const { t, locale } = useTalosI18n()
 const controller = useChatController()
 const chat = controller.chat
+
+/**
+ * ⛔⛔ IL PERMESSO SI CHIEDEVA DOVE NESSUNO POTEVA RISPONDERE.
+ *
+ * MISURATO sul Pad il 2026-08-12: dall'assistente, «guida tu lo schermo» fa
+ * comparire nella barra la riga «1 richiesta di autorizzazione per uno strumento
+ * è in attesa. Puoi continuare a usare la chat» — e **la scheda non c'è**. Vive
+ * solo in `App.vue`, cioè nell'app intera, che in quel momento non si sta
+ * guardando.
+ *
+ * ⇒ Dalla modalità assistente il controllo del dispositivo non si poteva
+ * autorizzare **affatto**: né una volta, né sempre. È il buco a monte del
+ * rilievo dell'owner sul «Consenti sempre» — quel bottone l'ho abilitato per
+ * `device_screen_drive` un'ora fa, e da qui restava irraggiungibile lo stesso.
+ *
+ * Lo stato è lo STESSO dell'app, non una copia: `useChatController()` è un
+ * oggetto condiviso, quindi una richiesta risposta di qua è risposta e basta —
+ * non c'è una seconda coda da tenere allineata.
+ *
+ * ⛔ Il componente si carica a richiesta: pesa solo quando un permesso serve
+ * davvero, e la barra deve poter comparire sopra un'altra app senza portarsi
+ * dietro una scheda che nella maggior parte delle aperture non si vedrà mai.
+ */
+const consenso = computed(() => controller.pendingToolAuthorizations.value[0] ?? null)
+const consensoVisibile = computed(() =>
+    consenso.value !== null && controller.toolAuthorizationPromptVisible.value)
+const SchedaConsenso = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileToolConsentSheet.vue'))
 
 const bozza = ref('')
 const errore = ref<string | null>(null)
@@ -86,6 +115,27 @@ const copiato = ref(false)
  * compare solo quando una domanda è stata fatta DA QUI.
  */
 const domanda = ref('')
+
+/**
+ * ⭐⭐ COSA È PARTITO INSIEME ALLA DOMANDA — e senza, non lo sapeva nessuno.
+ *
+ * ## Il difetto, visto sul Pad il 12 agosto
+ *
+ * Owner: l'invio file dall'assistente «non è mai stato testato sul dispositivo
+ * visivamente, è un errore gravissimo». Provato: il percorso FUNZIONA — `+` →
+ * Libreria → gettone → invio, e il file arriva davvero al modello.
+ *
+ * ⛔ Ma nell'istante dell'invio il gettone sparisce (giustamente: `clearSent`,
+ * se no il messaggio dopo se lo porterebbe dietro) e nella carta **non resta
+ * nessun segno**. Da fuori, «ho mandato la foto» e «ho mandato solo il testo»
+ * sono identici — e chi ha allegato qualcosa non ha modo di sapere se il modello
+ * lo ha ricevuto. La risposta arriva e non sai da cosa nasce.
+ *
+ * ⇒ Si tiene il NOME di ciò che è partito, accanto alla domanda. Non è
+ * decorazione: è la sola prova, dal lato della persona, che l'allegato ha
+ * viaggiato.
+ */
+const allegatiPartiti = ref<string[]>([])
 
 /**
  * Il contesto è acceso.
@@ -116,6 +166,15 @@ const voce = useTalosRispostaAVoce({
 const dettatura = useTalosMobileDictation({
     base: () => bozza.value,
     onTranscript: (testo) => {
+        /*
+         * ⛔⛔ HA PARLATO: il limite dei dieci secondi non lo riguarda più.
+         *
+         * Quel limite è «quanto aspetto che tu COMINCI». Lasciarlo armato mentre
+         * qualcuno sta parlando vorrebbe dire tagliargli la frase a metà allo
+         * scadere — cioè rifare, da un'altra porta, il difetto che l'owner ha
+         * segnalato due volte («non faccio in tempo a finire di parlare»).
+         */
+        if (timerAscolto !== null) { clearTimeout(timerAscolto); timerAscolto = null }
         const prima = bozza.value
         bozza.value = testo
         voce.dettatura(prima, testo)
@@ -154,7 +213,7 @@ const dettatura = useTalosMobileDictation({
      * possono divergere in silenzio — è il rischio che avevamo dichiarato
      * scegliendo di ereditare, e questa volta ci ha morso.
      */
-    zittisci: () => lettura.stop(),
+    zittisci: () => lettura.stop('la barra apre il microfono'),
     /**
      * ⛔⛔ 1600 ms, e sono la differenza fra «ascolta» e «fa finta».
      *
@@ -169,14 +228,114 @@ const dettatura = useTalosMobileDictation({
      * mezzo a una frase, e sono abbastanza corti perché smettere di parlare
      * chiuda il turno — che è anche il segnale con cui la domanda parte da sola.
      */
-    silenceMillis: () => 1600,
 })
 
-const ATTESA_MS = 30_000
+/**
+ * ⛔⛔ I DUE TEMPI DELL'ASCOLTO, che per un giorno intero sono stati uno solo.
+ *
+ * MISURATO sul Pad l'11 agosto, in `logcat`, prima di scrivere questi due
+ * numeri:
+ *
+ *     onMicrophoneOpened          20:44:42.625
+ *     onMicrophoneCloseRequested  20:44:44.625   ← 2000 ms netti
+ *     NO_SPEECH_DETECTED          20:44:44.786
+ *     (riapertura)                20:44:45.343   ← 718 ms da SORDO in mezzo
+ *
+ * Duemila millisecondi sono il default del motore, e sono meno del tempo che
+ * una persona impiega a decidere cosa chiedere. Owner: «parte, dice che
+ * ascolta, io parlo e non succede nulla».
+ *
+ * ⛔ Sono DUE decisioni, e vanno tenute separate:
+ *
+ *   - **quanta pausa vuol dire «ho finito»** — corta, perché la domanda deve
+ *     partire da sola appena smetti di parlare (è un'altra cosa che l'owner ha
+ *     chiesto lo stesso giorno);
+ *   - **quanto il microfono resta aperto anche se non hai ancora aperto bocca**
+ *     — lunga, perché chi chiama un assistente spesso pensa mezzo secondo prima
+ *     di parlare, e trovarselo chiuso in faccia è il difetto di oggi.
+ *
+ * Legarle — com'erano, con un `× 5` che avevo scelto senza misurarlo — vuol
+ * dire che non puoi accorciare l'invio senza accorciare anche la pazienza.
+ */
+/*
+ * ⛔⛔ DIECI SECONDI, E POI LO DICE — owner 2026-08-12, verbatim: «metti in
+ * ascolto TALOS per un massimo di 10 secondi come fa Gemini, prima di dire che
+ * il messaggio non è arrivato».
+ *
+ * Erano trenta, e li avevo scelti io. Trenta secondi di pillola accesa su una
+ * stanza vuota non sono pazienza: sono un microfono aperto che nessuno ha
+ * chiesto, e alla fine si spegneva **in silenzio** — la persona non sapeva se
+ * TALOS stesse ancora ascoltando, se avesse sentito, o se si fosse rotto.
+ *
+ * ⛔ E il numero è dell'owner, non mio: la ricerca sul comportamento di Gemini
+ * non pubblica questa soglia (le discussioni pubbliche riguardano il verso
+ * opposto — chiude troppo presto mentre parli). Lui l'ha guardato; io no, ed è
+ * una cosa che avrei dovuto misurare da solo prima che me la chiedesse.
+ *
+ * ⛔ NON è la pausa di fine frase: quella vale 2.200 ms e decide quando parte la
+ * domanda. Questa decide per quanto tempo TALOS resta in attesa che tu **cominci**.
+ */
+const ATTESA_MS = 10_000
 /** Quanto si aspetta prima di riaprire il motore. Vedi la ripresa qui sotto. */
+/**
+ * ⛔ IL RESPIRO FRA DUE SESSIONI — 500 ms, e 300 sono stati PROVATI e scartati.
+ *
+ * Fra la chiusura di una sessione e la riapertura TALOS è fisicamente sordo:
+ * MISURATO sul Pad, 437-560 ms col respiro a 500. Provato a 300: il buco scende
+ * a **372 ms** e la riapertura funziona — ma è **un solo campione**, contro tre
+ * su tre a 500 ms, per un guadagno di ~130 ms.
+ *
+ * ⛔ E il modo di fallire non è simmetrico: riaprire dentro la finestra in cui
+ * la sessione precedente si sta ancora chiudendo mette il riconoscitore in uno
+ * stato in cui **non sente più niente e non lo dice** — cioè esattamente il
+ * difetto che questa barra ha già pagato una volta. Un guasto rumoroso lo si
+ * scambia volentieri per 130 ms; un guasto muto no.
+ *
+ * Da riaprire quando le riaperture torneranno frequenti: con la pausa di fine
+ * frase a 2200 ms e il minimo a 8000 le sessioni durano decine di secondi, e
+ * questo buco si paga di rado.
+ */
 const RESPIRO_MS = 500
 const ascoltoVoluto = ref(props.modo.daVoce)
 let scadenzaAscolto = props.modo.daVoce ? Date.now() + ATTESA_MS : 0
+
+/**
+ * ⛔⛔ UN LIMITE È UN TIMER, non una scadenza che qualcuno passa a controllare.
+ *
+ * ## Il difetto, visto sullo SCHERMO contro il log
+ *
+ * MISURATO sul Pad il 12 agosto, aprendo l'assistente e stando zitto:
+ *
+ *     09:13:27.728  barra: stato=listening voluto=true
+ *     …e poi NIENTE. Per diciassette secondi.
+ *
+ * Il motore era muto — nessun errore, nessun risultato — e la barra continuava a
+ * dire «Ti ascolto» col microfono acceso. Lo screenshot lo mostrava mentre il
+ * diario diceva il contrario, ed è la lezione già pagata: si guarda lo schermo.
+ *
+ * ⛔ La scadenza esisteva già (`scadenzaAscolto`) e non poteva servire: la
+ * leggeva SOLO `riapriSePossibile`, cioè solo quando il motore riferiva qualcosa.
+ * Un limite che dipende dalla collaborazione della cosa che stai limitando non è
+ * un limite — e il caso in cui serve davvero è esattamente quello in cui quella
+ * cosa ha smesso di rispondere.
+ *
+ * ⇒ Owner 2026-08-12: «massimo 10 secondi, come fa Gemini, prima di dire che il
+ * messaggio non è arrivato». Dieci secondi veri, contati da qui.
+ */
+let timerAscolto: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Si smette di ascoltare — davvero, e dicendolo se c'è qualcosa da dire.
+ *
+ * ⛔ `dettatura.cancel()` NON è un dettaglio: senza, l'intenzione muore e il
+ * microfono resta aperto. È la metà che si dimentica ogni volta.
+ */
+function fermaLAscolto(messaggio: string | null): void {
+    if (timerAscolto !== null) { clearTimeout(timerAscolto); timerAscolto = null }
+    ascoltoVoluto.value = false
+    dettatura.cancel()
+    if (messaggio !== null) errore.value = messaggio
+}
 
 /**
  * ⛔⛔ ASCOLTA = È LA NOSTRA INTENZIONE, non «il motore è agganciato adesso».
@@ -200,6 +359,121 @@ const ascolta = computed(() =>
     || dettatura.status.value === 'starting',
 )
 const lavora = computed(() => chat.state.sending)
+
+/**
+ * ⭐⭐ L'ONDA CHE REAGISCE AL VOLUME, e prende il posto del testo mentre parli.
+ *
+ * ## Da dove viene, e cosa c'era prima
+ *
+ * Owner 2026-08-12, con lo screenshot di Gemini a fianco: «quando parli con
+ * Gemini non fa vedere il testo scritto ma fa vedere solo una wave che reagisce
+ * al suono… pareggialo e miglioralo». E la sua correzione, che è il punto:
+ * quella di Gemini **reagisce in base al volume**.
+ *
+ * ⛔ Qui c'erano TRE barre con un'animazione CSS a ciclo fisso — `barra-livello
+ * 900ms infinite` — cioè un disegno che si muove uguale in una stanza vuota e
+ * mentre urli. E il `level` del composable era calcolato da **quanto cresce il
+ * testo trascritto**: reagiva al riconoscimento, con centinaia di millisecondi
+ * di ritardo, e restava fermo mentre parlavi. Adesso arriva il dB vero del
+ * microfono (`onRmsChanged` → ponte → `realLevel`).
+ *
+ * ## Il sorpasso su Gemini, e non è una copia
+ *
+ * MISURATO sulla fonte (9to5google, 19 marzo 2026, il redesign che l'owner sta
+ * guardando): Gemini «replaces the text field with a waveform», e durante la
+ * registrazione **non c'è nessuna anteprima** — le parole si vedono solo DOPO
+ * l'invio. Il recensore stesso lo chiama «a bit strange in the context of
+ * transcription».
+ *
+ * ⇒ Noi nascondiamo il testo mentre parli — quella parte è giusta, il testo che
+ * si riscrive da solo sotto gli occhi è rumore — ma quando smetti lo mostriamo
+ * **prima** di mandarlo, dentro la finestra di grazia, e si può correggere.
+ * Gemini ti fa spedire alla cieca.
+ *
+ * ## Perché una CODA e non una barra sola
+ *
+ * Una barra sola dice «adesso c'è del suono». Una coda dice **come stai
+ * parlando** — dove hai preso fiato, dove hai alzato la voce — e rende visibile
+ * l'unica cosa che la persona vuole sapere: «mi sta sentendo davvero?». Sono i
+ * 2,2 secondi che contano, a 80 ms l'uno.
+ */
+const ONDE = 28
+const onde = ref<number[]>(new Array(ONDE).fill(0))
+let campionatore: ReturnType<typeof setInterval> | null = null
+
+/*
+ * ⛔⛔ `immediate: true`, E SENZA QUESTA PAROLA L'ONDA È PIATTA NELL'ASSISTENTE.
+ *
+ * Owner 2026-08-12, tre volte: «nella chat la waveform funziona bene, ma
+ * nell'assistente è piatta». L'asimmetria era tutta qui, e l'ho cercata due
+ * build nel nativo prima di guardare questa riga.
+ *
+ * `watch` è PIGRO: chiama solo su un CAMBIAMENTO. Nella chat `ascolta` parte
+ * falso e diventa vero quando premi il microfono — un cambiamento, quindi il
+ * campionatore parte. Nella barra `ascoltoVoluto` nasce **già vero**
+ * (`ref(props.modo.daVoce)`, riga sopra), perché l'assistente si apre in
+ * ascolto: `ascolta` non cambia mai, il guardiano non scatta mai, e le ventotto
+ * barre restano a zero per sempre.
+ *
+ * ⛔ E il difetto non si vede leggendo il guardiano: è corretto. Si vede solo
+ * mettendo insieme DUE righe distanti cento — dove nasce lo stato e chi lo
+ * guarda. È la ragione per cui il volume arrivava (`db=1.48` nel diario) e lo
+ * schermo restava fermo: due fatti veri e nessuno dei due sbagliato.
+ */
+watch(ascolta, (acceso) => {
+    if (acceso) {
+        if (campionatore !== null) return
+        campionatore = setInterval(() => {
+            // ⛔ Un array NUOVO: Vue non si accorge di uno `shift` in posto.
+            onde.value = [...onde.value.slice(1), dettatura.level.value]
+        }, 80)
+        return
+    }
+    if (campionatore !== null) { clearInterval(campionatore); campionatore = null }
+    onde.value = new Array(ONDE).fill(0)
+}, { immediate: true })
+
+/**
+ * ⛔ Il campo è ALTO più di una riga ⇒ la pillola diventa una carta.
+ *
+ * È la forma che l'owner ha fotografato su Gemini: il testo prende tutta la
+ * larghezza e i comandi scendono su una riga sotto. Con i comandi in linea, a
+ * quattro righe di testo la pillola diventa un rettangolo con due bottoni
+ * incollati a metà altezza — che è esattamente com'era.
+ *
+ * ⛔ Si MISURA, non si conta: `bozza.length` sarebbe sbagliato al primo a capo
+ * scritto a mano e al primo cambio di scala del testo.
+ */
+const campoEl = ref<HTMLTextAreaElement | null>(null)
+const campoAlto = ref(false)
+
+function misuraIlCampo(): void {
+    const el = campoEl.value
+    if (!el) { campoAlto.value = false; return }
+    /*
+     * ⛔⛔ L'IMBOTTITURA VA TOLTA, o la carta compare con UNA riga sola.
+     *
+     * MISURATO sul Pad il 12 agosto, con lo screenshot: scritto «cosa vedi in
+     * questa immagine» — una riga — e la pillola era già diventata carta, col
+     * `+` in basso a sinistra e la freccia in basso a destra.
+     *
+     * `scrollHeight` è l'altezza del CONTENUTO **più il riempimento verticale**.
+     * Con `padding` sopra e sotto, una riga sola supera `lineHeight × 1,6` senza
+     * che il testo sia andato a capo: la soglia guardava la cosa giusta con il
+     * metro sbagliato.
+     *
+     * ⇒ Si sottrae ciò che non è testo, e si confronta con UNA riga e mezza:
+     * mezza riga di margine assorbe l'arrotondamento dei caratteri senza
+     * lasciar passare la seconda riga vera.
+     */
+    const stile = getComputedStyle(el)
+    const riga = Number.parseFloat(stile.lineHeight) || 20
+    const imbottitura = (Number.parseFloat(stile.paddingTop) || 0)
+        + (Number.parseFloat(stile.paddingBottom) || 0)
+    campoAlto.value = (el.scrollHeight - imbottitura) > riga * 1.5
+}
+
+watch(() => bozza.value, () => { void nextTick(misuraIlCampo) })
 
 /**
  * ⭐⭐ L'ASCOLTO NON MUORE DA SOLO — owner 2026-08-11: «assicurati che
@@ -241,28 +515,223 @@ const lavora = computed(() => chat.state.sending)
  * tempo che cambia da apertura ad apertura. Trenta secondi sono trenta secondi.
  */
 
+/**
+ * ⛔⛔ UNA SOLA PORTA PER RIAPRIRE — e il difetto era che ce n'erano due, e una
+ * non portava da nessuna parte.
+ *
+ * ## Il difetto, letto in `logcat` l'11 agosto
+ *
+ *     21:09:41.695  web: stato:stopping
+ *     21:09:42.380  web: barra: stato=idle  voluto=true    ← finito, e volevamo ancora
+ *     21:09:42.661  errore=NO_MATCH
+ *
+ * Il motore chiude una sessione in DUE modi, e da fuori si assomigliano:
+ *
+ *   - `error` + `noSpeech` — non ha sentito proprio niente;
+ *   - `idle` — ha sentito QUALCOSA (un rumore, una sillaba, una parola che poi
+ *     ha scartato) e ha chiuso il turno regolarmente.
+ *
+ * La ripresa automatica guardava solo il primo. Il secondo — che è il caso
+ * normale in una stanza dove esiste un rumore qualunque — usciva in silenzio:
+ * la pillola restava accesa, il microfono era chiuso, e la persona parlava a
+ * un'app che non stava più ascoltando. È letteralmente la frase dell'owner:
+ * «la modalità ascolto rimane, ma non ascolta un cazzo».
+ *
+ * ⛔ Distinguere i due esiti serviva a UN'ALTRA cosa — decidere se mandare la
+ * domanda — e quella distinzione resta: si manda solo se c'è del testo. Ma
+ * «riaprire» non dipende da COME è finita: dipende solo da se la persona
+ * voleva ancora parlare e da quanto tempo le abbiamo promesso.
+ */
+function riapriSePossibile(motivo: string): void {
+    if (!ascoltoVoluto.value) return
+    /*
+     * ⛔⛔ NON SI RIAPRE IL MICROFONO MENTRE TALOS HA LA PAROLA.
+     *
+     * ## Il difetto, e il diario che l'ha inchiodato
+     *
+     * Owner 2026-08-12, quattro volte di fila: «il discorso si tronca prima di
+     * finire, poco dopo essere iniziato». Avevo cercato in quattro posti
+     * sbagliati — la coda del motore, il testo già tagliato, il guardiano di
+     * fine risposta, i tempi. La traccia della voce l'ha chiuso in una corsa:
+     *
+     *     53.033  errore:NO_MATCH                     ← il microfono chiude per SILENZIO
+     *     53.034  barra: riapro fra un respiro (silenzio)
+     *     53.534  barra: chiamo toggle
+     *     53.534  voce: STOP (la barra apre il microfono) mentre leggeva=-
+     *
+     * Mentre TALOS parla il microfono è ancora aperto e non sente parole: il
+     * motore chiude il turno con `NO_MATCH`, questa funzione lo riapre — e ogni
+     * riapertura passa da `zittisci()`, che **ammutolisce TALOS**. Ogni due
+     * secondi e mezzo. La prima arriva subito dopo l'inizio della risposta, ed è
+     * esattamente ciò che si sente.
+     *
+     * ⛔ E il `mentre leggeva=-` della riga dice che il colpevole NON era il
+     * guardiano di fine risposta scritto oggi: è questa strada, che esisteva da
+     * prima e riapre per il silenzio senza chiedersi chi stia parlando.
+     *
+     * ⇒ Chi parla tace, ed è la stessa regola già scritta per il verso opposto
+     * (`zittisci` prima di ascoltare). Mancava la metà simmetrica: **non
+     * ascoltare mentre parli**. Quando TALOS ha finito, la ripresa arriva dal
+     * guardiano su `talosParla` — che per questo esiste.
+     */
+    if (talosParla.value) {
+        annota(`barra: TALOS sta parlando, NON riapro (${motivo})`)
+        return
+    }
+    if (Date.now() >= scadenzaAscolto) {
+        annota(`barra: scaduta (${motivo}), smetto e lo dico`)
+        /*
+         * ⛔⛔ E SI DICE. Prima si spegneva in silenzio: la pillola smetteva di
+         * pulsare e basta, e da fuori «ha finito di ascoltare», «non ha sentito
+         * niente» e «si è rotto» erano la stessa identica cosa.
+         *
+         * Un assistente che chiude il microfono senza dire perché costringe la
+         * persona a indovinare — ed è l'unico punto della barra in cui la
+         * risposta giusta («non ho sentito niente, riprova») era già scritta e
+         * non veniva mostrata a nessuno.
+         *
+         * ⛔ Questa è la SECONDA porta: quella che conta è il timer in
+         * `vogliAscoltare`, perché questa qui si attraversa solo se il motore
+         * riferisce qualcosa — e il caso che fa male è proprio quello in cui il
+         * motore ammutolisce. Restano tutte e due: chiudono lo stesso cancello da
+         * due lati, e non si contraddicono (`fermaLAscolto` è idempotente).
+         */
+        fermaLAscolto(t('barra.nessunaVoce'))
+        return
+    }
+    annota(`barra: riapro fra un respiro (${motivo})`)
+    /*
+     * ⛔ Si RESPIRA prima di riaprire. `cancel()` e la chiusura della sessione
+     * precedente non sono istantanei, e riaprire dentro quella finestra è il
+     * modo documentato per mettere il riconoscitore in uno stato in cui non
+     * sente più niente.
+     */
+    setTimeout(() => {
+        if (!ascoltoVoluto.value) { annota('barra: nel respiro la persona ha smesso'); return }
+        if (dettatura.status.value === 'listening' || dettatura.status.value === 'starting') {
+            annota('barra: nel respiro era gia ripartito')
+            return
+        }
+        annota('barra: chiamo toggle')
+        // ⛔ Il `catch`: `toggle()` è una promessa, e una promessa che esplode
+        // dentro un `setTimeout` non la vede NESSUNO. Se l'avvio fallisce, la
+        // pillola resta accesa su un motore morto — che è il difetto di sopra
+        // con un'altra causa.
+        void dettatura.toggle().catch((errore: unknown) => {
+            annota(`barra: toggle ESPLOSO ${String(errore).slice(0, 80)}`)
+        })
+    }, RESPIRO_MS)
+}
+
 watch(
     () => [dettatura.status.value, dettatura.errorCode.value] as const,
     ([stato, codice]) => {
-        if (!ascoltoVoluto.value) return
-        if (stato !== 'error' || codice !== 'noSpeech') return
-        if (Date.now() >= scadenzaAscolto) {
-            ascoltoVoluto.value = false
+        /*
+         * ⛔ OGNI USCITA DICE PERCHÉ. Questo guardiano ha tre porte di rifiuto e
+         * dal di fuori sono indistinguibili: la pillola resta accesa in tutti e
+         * tre i casi. L'11 agosto è costato ore capire quale delle tre scattava,
+         * perché nessuna lasciava traccia. Ora finiscono in `logcat` accanto ai
+         * tempi veri del motore (vedi `talosDettaturaAnnota`).
+         */
+        annota(`barra: stato=${stato} codice=${codice ?? '-'} voluto=${ascoltoVoluto.value}`)
+        if (stato !== 'error') return
+        /*
+         * ⛔⛔ UN GUASTO HA UN CODICE — e senza questa riga la conversazione si
+         * spegneva da sola al primo silenzio.
+         *
+         * MISURATO sul Pad il 12 agosto, a ogni riapertura dopo una pausa:
+         *
+         *     barra: stato=error codice=noSpeech voluto=true
+         *     barra: riapro fra un respiro (silenzio)
+         *     barra: chiamo toggle
+         *     barra: stato=error codice=- voluto=true      ⛔ eccolo
+         *     barra: guasto vero (-), lo dico e smetto
+         *     barra: stato=starting codice=- voluto=false  ← l'intenzione è morta
+         *
+         * `start()` azzera il codice PRIMA di mettere lo stato a `starting`, e in
+         * mezzo ci sono due attese vere (la voce che tace, il permesso del
+         * microfono): per tutta quella finestra la coppia è `('error', null)`.
+         * Non è un guasto — è lo stato di mezzo di una ripartenza. Questo
+         * guardiano lo prendeva per un guasto, mostrava un errore e smetteva di
+         * voler ascoltare, cioè uccideva la ripresa che aveva appena chiesto.
+         *
+         * ⛔ È un difetto che ho introdotto io ieri insieme alla cura giusta
+         * («un errore vero si dice»): la cura guardava lo STATO e non il codice,
+         * e uno stato senza codice non dice niente su cosa sia successo.
+         */
+        if (codice === null) {
+            annota('barra: error senza codice = sto ripartendo, non è un guasto')
             return
         }
         /*
-         * ⛔ Si RESPIRA prima di riaprire. `cancel()` e la chiusura della
-         * sessione precedente non sono istantanei, e riaprire dentro quella
-         * finestra è il modo documentato per mettere il riconoscitore in uno
-         * stato in cui non sente più niente.
+         * ⛔⛔ UN ERRORE VERO SI DICE, e prima non lo diceva nessuno.
+         *
+         * Trovato dallo scouting agentico il 12 agosto: `dettatura.error` non
+         * compariva in NESSUN punto di questo file. Col permesso del microfono
+         * negato, o col riconoscitore rotto, questo guardiano usciva in silenzio
+         * (l'errore non è `noSpeech`, quindi niente ripresa) e lasciava
+         * `ascoltoVoluto` a vero: la pillola diceva «Ti ascolto» per sempre, su
+         * un microfono che non esisteva.
+         *
+         * ⇒ Il silenzio si riprende, un guasto si MOSTRA e si smette. La
+         * distinzione fra i due era già scritta nel codice — mancava la metà
+         * che riguarda la persona.
          */
-        setTimeout(() => {
-            if (!ascoltoVoluto.value) return
-            if (dettatura.status.value === 'listening' || dettatura.status.value === 'starting') return
-            void dettatura.toggle()
-        }, RESPIRO_MS)
+        if (codice !== 'noSpeech') {
+            annota(`barra: guasto vero (${codice ?? '-'}), lo dico e smetto`)
+            annullaLaGrazia('guasto della dettatura')
+            // ⛔ Da `fermaLAscolto`, non a mano: altrimenti il timer dei dieci
+            // secondi resta armato e SOVRASCRIVE questo messaggio — la persona
+            // vedrebbe «non ho sentito niente» al posto del guasto vero.
+            fermaLAscolto(dettatura.error.value ?? t('barra.sendFailed'))
+            return
+        }
+        riapriSePossibile('silenzio')
     },
 )
+
+/**
+ * ⛔⛔ «VOGLIO ASCOLTARE» NON SI DICE CON UN VERBO CHE SIGNIFICA ANCHE «SMETTI».
+ *
+ * ## Il difetto
+ *
+ * Due punti diversi facevano partire l'ascolto all'apertura — `onMounted` e il
+ * guardiano della chiamata — e tutti e due chiamavano `toggle()`. Ma `toggle` è
+ * un interruttore: se arriva mentre l'ascolto sta già partendo, lo **spegne**.
+ * MISURATO il 12 agosto, in `logcat`:
+ *
+ *     49.627  barra: toggle da onMounted
+ *     49.628  dett: toggle da stato=starting     ← spegne l'ascolto appena nato
+ *     49.628  barra: stato=idle
+ *
+ * Il guardiano della chiamata la sua difesa ce l'aveva; `onMounted` no. Ed è la
+ * stessa forma del difetto che l'owner aveva già trovato sul pulsante l'11
+ * agosto — «lo ferma e subito dopo lo fa ripartire». Due punti curati uno per
+ * volta sono due punti che possono divergere di nuovo.
+ *
+ * ⇒ Un solo verbo per l'intenzione: `vogliAscoltare` **accende** e basta.
+ * Fermare è un'altra cosa e ha il suo posto (`alternaAscolto`, `annulla`).
+ */
+function vogliAscoltare(motivo: string): void {
+    scadenzaAscolto = Date.now() + ATTESA_MS
+    ascoltoVoluto.value = true
+    if (timerAscolto !== null) clearTimeout(timerAscolto)
+    timerAscolto = setTimeout(() => {
+        timerAscolto = null
+        annota('barra: dieci secondi senza una parola, smetto e lo dico')
+        fermaLAscolto(t('barra.nessunaVoce'))
+    }, ATTESA_MS)
+    if (dettatura.status.value === 'listening' || dettatura.status.value === 'starting') {
+        annota(`barra: gia in ascolto, non tocco niente (${motivo})`)
+        return
+    }
+    annota(`barra: accendo l'ascolto (${motivo})`)
+    // ⛔ Il `catch`: una promessa che esplode qui non la vedrebbe nessuno, e la
+    // pillola resterebbe accesa su un motore che non è mai partito.
+    void dettatura.toggle().catch((errore: unknown) => {
+        annota(`barra: avvio ESPLOSO ${String(errore).slice(0, 80)}`)
+    })
+}
 
 /**
  * ⛔⛔ IL PULSANTE FERMA DAVVERO — owner 2026-08-11: «il pulsante microfono
@@ -278,21 +747,116 @@ watch(
  * comunque — si smette, e si smette anche di volerlo.
  */
 function alternaAscolto(): void {
+    // ⛔ Toccare il microfono annulla l'attesa: chi ferma l'ascolto non vuole
+    // che parta una domanda mezzo secondo dopo.
+    annullaLaGrazia('microfono toccato')
     const acceso = ascoltoVoluto.value
         || dettatura.status.value === 'listening'
         || dettatura.status.value === 'starting'
     if (acceso) {
-        ascoltoVoluto.value = false
-        dettatura.cancel()
+        // ⛔ Anche il timer dei dieci secondi: chi ferma a mano non deve
+        // ritrovarsi un messaggio «non ho sentito niente» sette secondi dopo.
+        // ⛔ E la ripresa automatica: chi spegne il microfono a mano ha detto
+        // «basta», e ritrovarselo aperto a fine risposta sarebbe non ascoltarlo.
+        turnoNatoDiVoce = false
+        if (assestamento !== null) { clearTimeout(assestamento); assestamento = null }
+        fermaLAscolto(null)
         return
     }
     scadenzaAscolto = Date.now() + ATTESA_MS
     ascoltoVoluto.value = true
+    annota('barra: toggle dal PULSANTE microfono')
     void dettatura.toggle()
+}
+
+/**
+ * ⭐⭐ LA FINESTRA DI GRAZIA — «hai finito o stai pensando?»
+ *
+ * ## Il difetto
+ *
+ * Owner 2026-08-11: «dico "ciao come stai tutto bene" e mi stampa solo "tutto
+ * bene"». La frase veniva spezzata in due messaggi, perché spedivamo appena il
+ * riconoscitore chiudeva la sessione — e lui la chiude coi SUOI criteri, non
+ * coi nostri.
+ *
+ * ## Perché una finestra e non una soglia più lunga
+ *
+ * Alzare il silenzio chiesto al motore non basta e non basterebbe mai: quel
+ * numero governa quando il motore consegna, non quando la PERSONA ha finito. E
+ * la ricerca sul parlato spontaneo dice che i due eventi non coincidono — le
+ * pause dentro un turno si addensano intorno a 150, 500 e 1500 ms (Heldner &
+ * Edlund), quindi qualunque soglia fissa taglia a metà una di quelle montagnette.
+ *
+ * Gli agenti vocali di oggi risolvono con un **periodo di grazia** dopo la fine
+ * apparente del turno, allungato quando la frase sembra incompleta (Speechmatics,
+ * LiveKit e Deepgram lo chiamano *semantic turn detection*). Qui c'è la stessa
+ * idea nella sua forma più semplice e onesta: dopo l'ultima parola si aspetta, e
+ * si continua ad ascoltare. Se arriva altro, non era finita.
+ *
+ * ⛔ E il costo è dichiarato: fra l'ultima parola e la partenza della domanda
+ * passa `GRAZIA_MS`. È il prezzo per non spezzare una frase in due, e in una
+ * conversazione vale molto di più di mezzo secondo guadagnato.
+ *
+ * ## ⛔ DA 1.600 A 900, e il taglio ha una ragione, non un'opinione
+ *
+ * Owner 2026-08-12: «passa un po' troppo tempo dalla mia ultima parola a quando
+ * TALOS invia il messaggio».
+ *
+ * Aveva ragione, e la causa è che i due tempi erano **in fila e ridondanti**:
+ *
+ *     2.200 ms   il motore aspetta il silenzio prima di chiudere il turno
+ *   + 1.600 ms   e poi la grazia riapre e riaspetta
+ *   = 3.800 ms   fra l'ultima parola e la partenza della domanda
+ *
+ * Le due attese rispondono alla STESSA domanda — «hai finito?» — e la prima l'ha
+ * già risolta: 2.200 ms di silenzio sono più del doppio degli 800-1.200 ms che
+ * usano gli agenti vocali di oggi. La grazia non deve rifare quel lavoro.
+ *
+ * ⇒ Le serve solo coprire il buco in cui siamo FISICAMENTE sordi fra due
+ * sessioni — `RESPIRO_MS` = 500 ms, misurato — più un margine perché la prima
+ * parziale della sessione nuova arrivi in tempo ad annullare l'invio. 900 ms
+ * copre il buco con 400 di margine; il totale scende a **3,1 s**.
+ *
+ * ⛔ E la parte che manca non è un numero da limare: è l'endpointing semantico
+ * (fase V3 del compito #99), l'unico modo di scendere davvero — «apri il...»
+ * aspetta, «che ore sono» parte subito. Finché non c'è, questa è la riduzione
+ * che si può fare senza rimettere in gioco «ciao come stai tutto bene».
+ */
+const GRAZIA_MS = 900
+let graziaInCorso: ReturnType<typeof setTimeout> | null = null
+let bozzaAllInizioDellaGrazia = ''
+
+function annullaLaGrazia(motivo: string): void {
+    if (graziaInCorso === null) return
+    clearTimeout(graziaInCorso)
+    graziaInCorso = null
+    annota(`barra: grazia annullata (${motivo})`)
+}
+
+function aspettaPrimaDiMandare(): void {
+    annullaLaGrazia('ne comincia una nuova')
+    bozzaAllInizioDellaGrazia = bozza.value
+    annota('barra: grazia aperta, aspetto prima di mandare')
+    graziaInCorso = setTimeout(() => {
+        graziaInCorso = null
+        // ⛔ Se nel frattempo la persona ha ripreso a parlare, la bozza è
+        // cresciuta: non era finita, e mandarla adesso taglierebbe di nuovo.
+        if (bozza.value !== bozzaAllInizioDellaGrazia) {
+            annota('barra: ha ripreso a parlare, non mando')
+            return
+        }
+        if (!ascoltoVoluto.value) { annota('barra: ha smesso lei, non mando'); return }
+        if (!bozza.value.trim()) return
+        annota('barra: silenzio vero, mando')
+        void invia()
+    }, GRAZIA_MS)
 }
 
 /** La persona ha deciso: da qui in poi l'ascolto non si riaccende da solo. */
 function laVoceLaComandaLaPersona(): void {
+    // ⛔ E l'attesa muore con lei: se la persona scrive o manda a mano, una
+    // domanda che parte da sola un attimo dopo è la peggiore delle sorprese.
+    annullaLaGrazia('ha deciso la persona')
     ascoltoVoluto.value = false
 }
 
@@ -324,8 +888,44 @@ watch(
         if (adesso !== 'idle') return
         if (prima !== 'listening' && prima !== 'starting') return
         if (!ascoltoVoluto.value) return
-        if (!bozza.value.trim()) return
-        void invia()
+        /*
+         * ⛔⛔ FINITA SENZA UNA PAROLA = SI RIAPRE, non si tace.
+         *
+         * Qui prima c'era `return`, e quel `return` è il difetto: il motore
+         * chiude il turno anche quando ha sentito un RUMORE — una porta, un
+         * respiro, una sillaba scartata — e in quel caso non c'è niente da
+         * mandare, ma la persona non ha ancora detto niente e sta per farlo.
+         * Uscendo di qui in silenzio, la pillola restava accesa su un microfono
+         * chiuso.
+         *
+         * ⇒ Nessun testo e ascolto ancora voluto ⇒ è la stessa identica
+         * situazione del silenzio: si riapre dalla stessa porta.
+         */
+        if (!bozza.value.trim()) {
+            riapriSePossibile('finita senza parole')
+            return
+        }
+        /*
+         * ⛔⛔ NON SI SPEDISCE QUI, e questo `return` vale la funzione intera.
+         *
+         * Owner 2026-08-11: «dico "ciao come stai tutto bene" e mi stampa solo
+         * "tutto bene"». La frase non veniva TAGLIATA: veniva **spezzata in due
+         * messaggi**. Il motore chiudeva la sessione a metà — dopo una pausa, o
+         * per un `NO_MATCH` — e noi spedivamo subito quel pezzo; la seconda metà
+         * diventava un messaggio a sé, e sullo schermo restava l'ultimo.
+         *
+         * ⇒ La fine della SESSIONE non è la fine della FRASE. Sono due cose
+         * diverse e a deciderle sono due soggetti diversi: la sessione la chiude
+         * il riconoscitore con i suoi criteri, la frase la chiude la persona
+         * smettendo di parlare. Finché confondiamo le due, ogni pausa un po'
+         * lunga diventa un invio.
+         *
+         * Qui si apre la finestra di grazia (`aspettaPrimaDiMandare`) e si
+         * riapre subito l'ascolto: se arrivano altre parole si annulla l'invio e
+         * si continua ad accumulare; se passa il tempo in silenzio, si manda.
+         */
+        aspettaPrimaDiMandare()
+        riapriSePossibile('la frase potrebbe non essere finita')
     },
 )
 
@@ -349,11 +949,7 @@ watch(
     () => props.modo.chiamata,
     () => {
         if (!props.modo.daVoce) return
-        scadenzaAscolto = Date.now() + ATTESA_MS
-        ascoltoVoluto.value = true
-        if (dettatura.status.value !== 'listening' && dettatura.status.value !== 'starting') {
-            void dettatura.toggle()
-        }
+        vogliAscoltare(`chiamata nuova (${props.modo.chiamata})`)
     },
 )
 
@@ -443,6 +1039,98 @@ const ID_LETTURA = 'talos-barra'
 const staLeggendo = computed(() => lettura.speakingId.value === ID_LETTURA)
 
 /**
+ * ⭐⭐ LA CONVERSAZIONE CONTINUA — finito di parlare, TALOS riapre l'orecchio.
+ *
+ * ## La regola, e perché era violata
+ *
+ * Owner 2026-08-12: «in modalità assistente quando invio un messaggio e TALOS
+ * finisce di parlare la conversazione non riparte, devo premere il pulsante
+ * manualmente. **Questo viola la nostra regola no hands**».
+ *
+ * Ha ragione, e non è una preferenza: è la regola che definisce la modalità.
+ * Un assistente a mani libere che pretende un tocco fra una domanda e l'altra
+ * non è a mani libere per metà — lo è per un turno solo.
+ *
+ * ## I due segnali esistevano già, mancava il filo
+ *
+ * `voce.catturaInvio()` sa se la domanda è nata di voce (lo legge PRIMA che il
+ * campo si svuoti); `lettura.speakingId` torna a nullo quando la voce ha finito.
+ * Nessuno metteva insieme le due cose.
+ *
+ * ⛔ E si riapre SOLO se il turno era di voce. Chi ha scritto con la tastiera
+ * non vuole trovarsi il microfono aperto in mano perché TALOS ha letto la
+ * risposta ad alta voce: sarebbe la stessa prepotenza al contrario.
+ */
+let turnoNatoDiVoce = false
+
+/** Quanto si aspetta prima di credere che la voce abbia finito. Vedi sotto. */
+const ASSESTAMENTO_MS = 600
+let assestamento: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * ⛔⛔ «HA FINITO» È UNA CONGIUNZIONE, NON UN SEGNALE SOLO.
+ *
+ * Owner 2026-08-12, provando la build precedente: «il microfono riparte, ma
+ * riparte a metà strada — TALOS non finisce tutta la frase, ne dice un pezzo e
+ * poi il microfono riparte automaticamente».
+ *
+ * ## Perché, e perché il guardiano non era sbagliato ma MAL AGGANCIATO
+ *
+ * Guardavo `speakingId`, che dice **chi possiede la lettura**, non **se il
+ * parlato è finito**. Durante lo streaming quella proprietà cambia nome
+ * (`rinominaLettura`), si azzera su un errore di una singola frase, e si azzera
+ * quando finisce l'ultima frase **del pezzo arrivato finora** — non della
+ * risposta. Il modello continua a generare, ma il segnale è già scattato.
+ *
+ * ⛔ E il danno lo fa la ripresa stessa: `vogliAscoltare` → `dettatura.toggle()`
+ * → `start()` → `await options.zittisci?.()` → `lettura.stop()`. Cioè riaprire
+ * il microfono **TRONCA** TALOS. Non arriva dopo: lo interrompe. È esattamente
+ * la frase a metà che si sente.
+ *
+ * ## La regola vera
+ *
+ * Si riapre solo quando sono vere DUE cose insieme: il modello ha finito di
+ * generare (`chat.state.sending` falso) **e** la voce ha finito di parlare. Una
+ * sola delle due è, letteralmente, metà della verità.
+ */
+const talosParla = computed(() => lettura.speakingId.value !== null || chat.state.sending)
+
+watch(talosParla, (adesso, prima) => {
+    if (prima !== true || adesso !== false) return
+    if (!turnoNatoDiVoce) return
+    /*
+     * ⛔ Se nel frattempo l'ascolto è già ripartito da un'altra porta, non si
+     * tocca niente: `vogliAscoltare` è idempotente ma l'attesa dei dieci secondi
+     * ripartirebbe, e prolungarla di nascosto non è una cortesia.
+     */
+    if (dettatura.status.value === 'listening' || dettatura.status.value === 'starting') return
+    /*
+     * ⛔⛔ SI ASSESTA PRIMA DI CREDERCI, e questo mezzo secondo non è prudenza
+     * generica: copre un buco preciso.
+     *
+     * Nell'istante in cui il modello smette di generare, la lettura della CODA
+     * — le ultime frasi, quelle che `seguiIlTesto(..., finito = true)` accoda
+     * proprio in reazione a quel momento — può non essere ancora partita. Per
+     * un tick i due segnali sono entrambi falsi e sembra finito tutto, mentre
+     * TALOS sta per dire l'ultima riga.
+     *
+     * ⇒ Si aspetta, e POI si ricontrolla. Se nel frattempo ha ripreso a
+     * parlare, non si fa niente: non è il momento. Meglio riaprire il microfono
+     * mezzo secondo dopo che troncare una frase — l'owner ha sentito il secondo
+     * caso, e non è un dettaglio di tempi: è TALOS che si interrompe da solo.
+     */
+    if (assestamento !== null) clearTimeout(assestamento)
+    assestamento = setTimeout(() => {
+        assestamento = null
+        if (talosParla.value) { annota('barra: ha ripreso a parlare, non riapro'); return }
+        if (!turnoNatoDiVoce) return
+        if (dettatura.status.value === 'listening' || dettatura.status.value === 'starting') return
+        annota('barra: TALOS ha finito di parlare, riapro il microfono')
+        vogliAscoltare('TALOS ha finito di parlare')
+    }, ASSESTAMENTO_MS)
+})
+
+/**
  * ⭐ GLI ALLEGATI — le stesse quattro porte di Gemini, più una che lei non ha.
  *
  * Censito l'11 agosto: il suo `Aggiungi allegato` apre Foto · Fotocamera · File
@@ -506,14 +1194,22 @@ async function chiudi(): Promise<void> {
  */
 async function apriInTalos(): Promise<void> {
     try {
-        const [{ App }, { registerPlugin }] = await Promise.all([
-            import('@capacitor/app'),
-            import('@capacitor/core'),
-        ])
+        const { registerPlugin } = await import('@capacitor/core')
         const ponte = registerPlugin<{ apriLaChat(o: { sessione: string | null }): Promise<{ aperta: boolean }> }>('TalosBarra')
         const esito = await ponte.apriLaChat({ sessione: chat.activeSession.value?.id ?? null })
         if (!esito?.aperta) { errore.value = t('barra.openFailed'); return }
-        await App.exitApp()
+        /*
+         * ⛔ NIENTE `App.exitApp()` QUI — chiudeva l'app appena aperta.
+         *
+         * Owner 2026-08-12, guardando lo scatto: «nota come apri in app non ha
+         * aperto la chat ma la app da dove eravamo rimasti». La sonda ha mostrato
+         * che la chat SI apriva (`push=ok rotta=chat` in 142 ms) e che subito dopo
+         * spariva tutto: `exitApp` diventa `finishAffinity()`, che chiude ogni
+         * Activity del task — MainActivity compresa.
+         *
+         * Adesso è il lato nativo a chiudere la SOLA finestra della barra, dentro
+         * `apriLaChat`, dopo aver lanciato l'app. Il perché per esteso sta lì.
+         */
     } catch {
         errore.value = t('barra.openFailed')
     }
@@ -534,6 +1230,47 @@ function alternaContesto(): void {
     scelta.value = !guardo.value
 }
 
+/**
+ * ⭐⭐ QUELLO CHE TALOS VEDE, DAVVERO DENTRO LA DOMANDA.
+ *
+ * ## ⛔ Il difetto: la spia diceva 357 e al modello arrivava ZERO
+ *
+ * Owner 2026-08-11: «icona occhio a cosa serve? A vedere elementi su schermo
+ * giusto? Ma se chiedo "cosa vedi" mi risponde che non vede nulla e non ha
+ * accesso allo schermo».
+ *
+ * Aveva ragione su tutta la linea. `invia()` mandava testo, modello, metadati e
+ * allegati — e il contesto dello schermo **non entrava da nessuna parte**. Anzi:
+ * alla barra arrivava solo il NUMERO dei nodi, perché il servizio assistente li
+ * contava e poi buttava la struttura. Un numero vero su un contenuto che non
+ * esisteva più.
+ *
+ * ⇒ È la forma peggiore di difetto: l'interfaccia promette e il modello nega. E
+ * chi legge crede al modello, quindi smette di fidarsi anche di ciò che funziona.
+ *
+ * ## Come è fatto adesso
+ *
+ * Il testo si chiede al ponte SOLO se l'occhio è acceso, e il ponte lo consegna
+ * una volta sola azzerandolo. Va in testa alla domanda dentro una cornice che
+ * DICE cos'è: un modello che riceve del testo senza cornice non sa se viene
+ * dalla persona o dallo schermo, e finisce per rispondere allo schermo.
+ */
+async function contestoDaMandare(): Promise<string> {
+    if (!guardo.value || !contestoDisponibile.value) return ''
+    try {
+        const { registerPlugin } = await import('@capacitor/core')
+        const ponte = registerPlugin<{ contestoSchermo(): Promise<{ testo: string, nodi: number }> }>('TalosBarra')
+        const visto = await ponte.contestoSchermo()
+        const schermo = (visto?.testo ?? '').trim()
+        if (!schermo) return ''
+        return [t('barra.contextPrompt'), '"""', schermo, '"""', '', ''].join('\n')
+    } catch {
+        // ⛔ Nessun ponte, nessun contesto: la domanda parte nuda invece di non
+        // partire. Una domanda senza schermo è utile; una che non parte no.
+        return ''
+    }
+}
+
 async function invia(): Promise<void> {
     const testo = bozza.value.trim()
     if (!testo || lavora.value) return
@@ -542,10 +1279,26 @@ async function invia(): Promise<void> {
     laVoceLaComandaLaPersona()
     dettatura.cancel()
     const dettato = voce.catturaInvio()
+    // ⛔ Si ricorda QUI, dove la risposta è ancora vera: serve alla ripresa
+    // automatica quando TALOS avrà finito di parlare (vedi `talosParla`).
+    turnoNatoDiVoce = dettato
     domanda.value = testo
     errore.value = null
     const metadati: Record<string, unknown> = {}
     if (dettato) metadati[TALOS_METADATA_DETTATO] = true
+    /*
+     * ⛔⛔ IL CONTESTO VA NEI METADATI, non nel testo.
+     *
+     * Owner 2026-08-11, con lo screenshot: concatenandolo, tutto il prompt del
+     * contesto finiva stampato nella chat come messaggio suo. Ora viaggia in una
+     * chiave riservata che `chat.send` sfila prima di salvare e applica solo al
+     * turno in partenza — vedi `TALOS_METADATA_SCHERMO`.
+     *
+     * ⛔ Resta PRIMA della `send` e con l'`await`: il testo dello schermo si
+     * consegna una volta sola e si azzera. Chiesto dopo, sarebbe già sparito.
+     */
+    const cornice = await contestoDaMandare()
+    if (cornice) metadati[TALOS_METADATA_SCHERMO] = cornice
     const inviato = await chat.send(
         testo,
         controller.selectedModelId.value,
@@ -556,6 +1309,8 @@ async function invia(): Promise<void> {
         allegati.bindings.value,
         () => {
             bozza.value = ''
+            // ⛔ PRIMA di `clearSent`: dopo, i nomi non ci sono più.
+            allegatiPartiti.value = allegati.items.map((pezzo) => pezzo.displayName)
             /*
              * ⛔ E GLI ALLEGATI, che me li ero dimenticati — trovato sul Pad.
              *
@@ -600,7 +1355,7 @@ onMounted(async () => {
      * La barra esiste per NON farti uscire da dove sei. Coprire quel «dove sei»
      * nell'istante in cui compare è il contrario del suo mestiere.
      */
-    if (props.modo.daVoce) void dettatura.toggle()
+    if (props.modo.daVoce) vogliAscoltare('apertura della barra')
 })
 </script>
 
@@ -644,6 +1399,14 @@ onMounted(async () => {
 
             <div class="corpo">
                 <p class="domanda">{{ domanda }}</p>
+                <!-- ⭐ Cosa è partito con la domanda. Vedi `allegatiPartiti`:
+                     senza questa riga, «ho mandato la foto» e «ho mandato solo
+                     il testo» sono indistinguibili. -->
+                <ul v-if="allegatiPartiti.length" class="partiti" data-testid="talos-barra-partiti">
+                    <li v-for="nome in allegatiPartiti" :key="nome">
+                        <Paperclip class="icona-piccola" aria-hidden="true" />{{ nome }}
+                    </li>
+                </ul>
                 <!-- L'attesa ha una forma: tre righe che respirano dicono che
                      sta arrivando del testo, e la carta non salta quando arriva. -->
                 <div v-if="attesa" class="scheletro" data-testid="talos-barra-attesa" aria-hidden="true">
@@ -737,7 +1500,12 @@ onMounted(async () => {
         </div>
 
         <!-- LA PILLOLA: la forma a riposo, e non cambia mai taglia. -->
-        <form class="pillola" data-testid="talos-barra" @submit.prevent="invia">
+        <form
+            class="pillola"
+            :class="{ 'pillola--carta': campoAlto }"
+            data-testid="talos-barra"
+            @submit.prevent="invia"
+        >
             <span class="orlo" :data-stato="segnale" data-testid="talos-barra-orlo" aria-hidden="true" />
 
             <!--
@@ -787,17 +1555,39 @@ onMounted(async () => {
                 <Plus class="icona-piccola" aria-hidden="true" />
             </button>
 
-            <span v-if="ascolta" class="livello" aria-hidden="true"><i /><i /><i /></span>
+            <!--
+                ⭐⭐ MENTRE PARLI SI VEDE L'ONDA, non il testo che si riscrive.
+                Vedi il commento su `onde`: la forma è quella di Gemini, il
+                sorpasso è che appena smetti il testo si vede e si può correggere
+                PRIMA di mandarlo. Toccare l'onda smette di ascoltare.
+            -->
+            <button
+                v-if="ascolta"
+                type="button"
+                class="onde"
+                :aria-label="t('barra.listening')"
+                data-testid="talos-barra-onde"
+                @click="alternaAscolto"
+            >
+                <i
+                    v-for="(altezza, indice) in onde"
+                    :key="indice"
+                    :style="{ '--altezza': altezza }"
+                    aria-hidden="true"
+                />
+            </button>
 
             <textarea
+                v-show="!ascolta"
+                ref="campoEl"
                 v-model="bozza"
                 class="campo"
                 @beforeinput="laVoceLaComandaLaPersona"
                 rows="1"
-                :placeholder="ascolta ? t('barra.listening') : t('barra.write')"
+                :placeholder="t('barra.write')"
                 :aria-label="t('barra.write')"
                 data-testid="talos-barra-campo"
-                @input="voce.aggiornaBozza(bozza)"
+                @input="voce.aggiornaBozza(bozza); misuraIlCampo()"
                 @keydown="tastoInvio"
             />
 
@@ -835,6 +1625,33 @@ onMounted(async () => {
             </button>
         </form>
     </div>
+
+    <!--
+        ⛔⛔ LA SCHEDA DEL PERMESSO, che qui non c'era.
+
+        Dall'assistente il pilota chiedeva l'autorizzazione e la barra scriveva
+        «1 richiesta è in attesa» senza mostrare NIENTE su cui rispondere: la
+        scheda viveva solo nell'app intera. Il perché per esteso, con la misura,
+        sta su `consenso` nello script.
+
+        Si teletrasporta sul `body` da sé (è dentro il componente), quindi sta
+        sopra la pillola invece che dentro il suo flusso — e la barra resta
+        quella che è: una riga sola, finché non serve altro.
+    -->
+    <SchedaConsenso
+        v-if="consensoVisibile && consenso"
+        :title="consenso.title"
+        :description="consenso.description"
+        :input="consenso.input"
+        :actions="consenso.actions"
+        :session-title="consenso.session_title"
+        :pending-count="controller.pendingToolAuthorizations.value.length"
+        :allow-persistent="consenso.allow_persistent"
+        @allow-turn="void controller.decideToolAuthorization(consenso.request_id, 'allow_turn')"
+        @always-allow="void controller.decideToolAuthorization(consenso.request_id, 'always_allow')"
+        @deny="void controller.decideToolAuthorization(consenso.request_id, 'deny')"
+        @later="controller.dismissToolAuthorization()"
+    />
 </template>
 
 <style scoped>
@@ -1131,17 +1948,71 @@ onMounted(async () => {
     line-height: 1;
 }
 
-.livello { display: flex; align-items: flex-end; gap: 3px; height: 15px; flex: none; }
-.livello i {
-    width: 3px;
-    border-radius: 2px;
-    background: var(--primary);
-    animation: barra-livello 900ms ease-in-out infinite;
+/* ── L'ONDA — e ogni barra è un pezzo di volume MISURATO ────────────────
+ *
+ * ⛔ Niente `animation`: se si muovesse da sola direbbe «ti sento» anche in una
+ * stanza vuota, che è la bugia più facile da raccontare in un assistente
+ * vocale. L'altezza la scrive `--altezza`, che arriva dal microfono.
+ *
+ * La transizione è corta (90 ms, poco più di un campione a 80): serve a
+ * togliere lo scatto fra due valori, non a inventare movimento fra due silenzi.
+ */
+.onde {
+    display: flex;
+    align-items: center;
+    /*
+     * ⛔ CENTRATE, e su un tablet non è un dettaglio: la pillola arriva a 440 px
+     * e le ventotto barre ne occupano ~170. Ancorate a sinistra (`flex-start`)
+     * restavano appiccicate al `+` con mezzo campo vuoto a destra — owner
+     * 2026-08-12, sul Pad. È anche la forma di Gemini: l'onda sta in mezzo alla
+     * pillola, non di lato.
+     */
+    justify-content: center;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+    height: 26px;
+    padding: 0 4px;
+    overflow: hidden;
+    background: none;
+    border: 0;
 }
-.livello i:nth-child(1) { height: 6px; }
-.livello i:nth-child(2) { height: 14px; animation-delay: 140ms; }
-.livello i:nth-child(3) { height: 9px; animation-delay: 280ms; }
-@keyframes barra-livello { 0%, 100% { transform: scaleY(0.35); } 50% { transform: scaleY(1); } }
+.onde i {
+    width: 3px;
+    flex: none;
+    border-radius: 999px;
+    background: var(--primary);
+    /* Il minimo NON è zero: una barra alta zero sparisce, e una fila che si
+       accorcia fino a sparire sembra un guasto. Due pixel dicono «sono qui, e
+       adesso c'è silenzio» — che è vero e diverso da «mi sono spenta». */
+    height: calc(2px + var(--altezza, 0) * 22px);
+    transition: height 90ms linear;
+}
+
+/* ── LA CARTA — quando il testo non sta più su una riga ──────────────────
+ *
+ * La forma che l'owner ha fotografato su Gemini: il testo prende tutta la
+ * larghezza, i comandi scendono sotto. Con i comandi in linea, a quattro righe
+ * la pillola diventa un rettangolo con due bottoni incollati a metà altezza.
+ *
+ * ⛔ `order` e non un secondo blocco di markup: gli stessi elementi, disposti
+ * diversamente. Due copie dello stesso pulsante sono due pulsanti che possono
+ * divergere — e uno dei due sarebbe quello che nessuno prova.
+ */
+.pillola--carta {
+    flex-wrap: wrap;
+    border-radius: 22px;
+    padding: 10px 10px 8px;
+    row-gap: 6px;
+}
+.pillola--carta .campo {
+    order: -1;
+    flex: 1 0 100%;
+    padding-inline: 4px;
+}
+.pillola--carta .spia { order: 1; }
+.pillola--carta .piu { order: 2; }
+.pillola--carta .azione { order: 4; margin-inline-start: auto; }
 
 .azione {
     position: relative;
@@ -1292,6 +2163,26 @@ onMounted(async () => {
 
 .icona { width: 17px; height: 17px; }
 .icona-piccola { width: 13px; height: 13px; }
+
+.partiti {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.partiti li {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px 3px 7px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--primary) 26%, transparent);
+    background: color-mix(in oklab, var(--primary) 11%, transparent);
+    color: var(--primary);
+    font-size: var(--text-xs);
+}
 
 .errore {
     margin: 0;

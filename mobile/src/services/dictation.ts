@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { SpeechRecognition } from '@capgo/capacitor-speech-recognition'
 import { talosLogDeviceIssue, talosWithTimeout } from '@/lib/talosDeviceLog'
+import { talosTracciaFuori } from '@/lib/device/traccia'
 import type { TalosDictationErrorCode } from '@/lib/dictationPolicy'
 
 /**
@@ -18,6 +19,19 @@ export interface TalosDictationEvents {
     onError: (code: TalosDictationErrorCode) => void
     /** ⭐ La lingua che il motore ha davvero sentito (API 34). */
     onLanguage?: (tag: string) => void
+    /**
+     * ⭐⭐ IL VOLUME VERO DEL MICROFONO, in dB grezzi come li dà Android.
+     *
+     * ⛔ Grezzi di proposito: la scala di `onRmsChanged` non è dichiarata in
+     * nessuna documentazione e cambia col dispositivo e col microfono. Chi
+     * disegna la normalizza su quello che sta sentendo davvero — vedi
+     * `useTalosMobileDictation`. Un fondo scala scritto a mano qui sarebbe un
+     * fatto sul telefono inventato a tavolino.
+     *
+     * Arriva ~12 volte al secondo (il picco di una finestra da 80 ms), non 30:
+     * il ritmo delle waveform dei messaggi vocali, a un terzo del costo di ponte.
+     */
+    onLevel?: (db: number) => void
 }
 
 export interface TalosDictationStartOptions {
@@ -40,6 +54,18 @@ export interface TalosDictationStartOptions {
      * ascolto rimane ma non ascolta niente».
      */
     silenceMillis?: number
+
+    /**
+     * Quanto il microfono resta aperto ANCHE se non ha ancora sentito niente —
+     * il tempo che TALOS concede a chi sta pensando prima di parlare.
+     *
+     * ⛔ Separato da `silenceMillis` di proposito: quello dice «questa pausa
+     * significa che hai finito» ed è corto perché la domanda parta subito;
+     * questo dice «non chiudermi in faccia» ed è lungo. Legarli — come faceva
+     * un `silenzio * 5` — significa che non puoi migliorare uno senza peggiorare
+     * l'altro.
+     */
+    minimumMillis?: number
 }
 
 export interface TalosDictationEngine {
@@ -65,9 +91,16 @@ export interface TalosDictationEngine {
 // "then" that never answers → 4s hang. loadPlugin is therefore SYNCHRONOUS and
 // callers must NEVER await the plugin OBJECT — only its method results (those
 // are real bridge promises, safe to await).
-type SpeechRecognitionPlugin = typeof SpeechRecognition
+export type SpeechRecognitionPlugin = typeof SpeechRecognition
 
-function loadPlugin(): SpeechRecognitionPlugin {
+/*
+ * ⛔ PUBBLICI per un motivo dichiarato: la diagnostica del Doctor vive in
+ * `dictationDiagnostica.ts` e non qui, perché questo modulo lo carica la
+ * schermata iniziale e quello lo apre solo chi va a cercarlo. Da lì servono
+ * questi due accessori — e sono due domande legittime («qual è il plugin
+ * nativo», «questo browser ha Web Speech»), non due segreti.
+ */
+export function loadPlugin(): SpeechRecognitionPlugin {
     return SpeechRecognition
 }
 
@@ -171,6 +204,7 @@ function nativeEngine(): TalosDictationEngine {
                         popup: false,
                         ...(options.language ? { language: options.language } : {}),
                         ...(options.silenceMillis ? { silenceMillis: options.silenceMillis } : {}),
+                        ...(options.minimumMillis ? { minimumMillis: options.minimumMillis } : {}),
                     }),
                     10000,
                     'TALOS_SPEECH_START',
@@ -207,7 +241,7 @@ interface WebSpeechRecognitionInstance {
     stop(): void
 }
 
-function webSpeechConstructor(): (new () => WebSpeechRecognitionInstance) | null {
+export function webSpeechConstructor(): (new () => WebSpeechRecognitionInstance) | null {
     const scope = globalThis as Record<string, unknown>
     const ctor = scope.SpeechRecognition ?? scope.webkitSpeechRecognition
     return typeof ctor === 'function' ? ctor as new () => WebSpeechRecognitionInstance : null
@@ -315,6 +349,41 @@ export function talosDettaturaAnnota(evento: string): void {
     const ora = new Date().toISOString().slice(11, 23)
     diario.push(`${ora} ${evento}`)
     if (diario.length > DIARIO_MAX) diario.shift()
+    /*
+     * ⛔⛔ E SI SENTE ANCHE DA FUORI — perché per giorni non si è sentito.
+     *
+     * Questo diario esisteva già e registrava esattamente le transizioni che
+     * servono («avvio», «stato:ready», «errore:NO_MATCH»). Era invisibile: si
+     * legge solo dal pannello del Doctor, cioè da dentro l'app, cioè non mentre
+     * stai riproducendo il difetto su un altro schermo.
+     *
+     * ⛔ E la strada ovvia NON esiste: MISURATO l'11 agosto sul Pad, un
+     * `console.info` dalla WebView **non arriva in `logcat`** in questa app —
+     * provato scrivendo una riga di prova e trovando zero occorrenze. Quindi
+     * l'unico canale che porta fuori una decisione presa dal JS è il ponte.
+     *
+     * Costa una chiamata al ponte per transizione — poche decine per sessione,
+     * non per fotogramma — e in cambio la catena «la persona ha parlato → il
+     * motore ha risposto → noi abbiamo deciso» si legge tutta di fila accanto ai
+     * tempi del motore, che è la cosa che mancava per chiudere questo difetto.
+     */
+    /*
+     * ⛔⛔ L'ORA VIAGGIA COL FATTO, perché il ponte NON conserva l'ordine.
+     *
+     * MISURATO il 12 agosto: in `logcat` la riga «toggle da onMounted»
+     * compariva **1,4 secondi dopo** due righe che nel codice le vengono dopo.
+     * Non era un ritardo vero — Capacitor esegue tutti i plugin su un thread
+     * solo (vedi `campiona-la-pila-non-indovinare-inquilino`), quindi l'ora che
+     * si legge in `logcat` è quella di CONSEGNA, non quella del fatto.
+     *
+     * Una traccia che riordina gli eventi è peggio di nessuna traccia: fa
+     * dedurre cause a rovescio. L'istante si prende QUI, dove il fatto succede,
+     * e si porta dietro.
+     */
+    // ⛔ Il come sta in `talosTracciaFuori`: da quando anche il pilota dello
+    // schermo deve raccontare dove si ferma, questo canale ha due utenti — e
+    // due copie sarebbero due comportamenti che divergono alla prima modifica.
+    talosTracciaFuori(evento, ora)
 }
 
 /** Le ultime transizioni, dalla più vecchia. Vuoto se non si è mai dettato. */
@@ -322,140 +391,6 @@ export function talosDettaturaDiario(): readonly string[] {
     return [...diario]
 }
 
-export interface TalosDictationDiagnostics {
-    buildId: string
-    native: boolean
-    registered: boolean
-    pluginLoaded: boolean
-    methods: string[]
-    permissionsRaw: string | null
-    availableRaw: string | null
-    available: boolean | null
-    trace: string
-    error: string | null
-    /** Le ultime transizioni della dettatura, per spiegare un blocco. */
-    diario: readonly string[]
-}
-
-function talosBuildId(): string {
-    // Injected by vite.config.ts `define`; absent in dev/test.
-    return typeof __TALOS_BUILD_ID__ !== 'undefined' ? __TALOS_BUILD_ID__ : 'dev'
-}
-
-const PLUGIN_METHODS = ['available', 'start', 'stop', 'checkPermissions', 'requestPermissions', 'getPluginVersion', 'addListener', 'removeAllListeners'] as const
-
-export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnostics> {
-    const buildId = talosBuildId()
-    const native = Capacitor.isNativePlatform()
-    if (!native) {
-        const webOk = webSpeechConstructor() !== null
-        const trace = `build ${buildId} · web speech ${webOk ? 'present' : 'absent'}`
-        return {
-            buildId, native, registered: webOk, pluginLoaded: webOk, methods: webOk ? ['webSpeech'] : [],
-            permissionsRaw: null, availableRaw: null, available: webOk, trace,
-            error: webOk ? null : trace,
-            diario: talosDettaturaDiario(),
-        }
-    }
-
-    // F5.3 (owner: "debug più esplicativo") — every step probed SEPARATELY,
-    // fenced, timed, and written to the Doctor ring, so a single report pins
-    // the exact dying step without adb.
-    const steps: string[] = [`build ${buildId}`]
-    const failures: string[] = []
-    const step = async <T>(name: string, run: () => Promise<T>, ms = 3000): Promise<T | null> => {
-        const started = performance.now()
-        try {
-            const value = await talosWithTimeout(run(), ms, `TALOS_SPEECH_STEP_${name}`)
-            steps.push(`${name}:ok(${Math.round(performance.now() - started)}ms)`)
-            return value
-        } catch (error) {
-            const detail = String(error).slice(0, 120)
-            const failure = `${name}:FAIL ${detail}`
-            steps.push(failure)
-            failures.push(failure)
-            talosLogDeviceIssue(`TALOS_SPEECH_STEP_${name}`, detail)
-            return null
-        }
-    }
-
-    // Step 0 — is the plugin REGISTERED in the native runtime? Synchronous,
-    // cannot hang; false means the native class failed to load and every
-    // bridge call to it will die.
-    let registered = false
-    try {
-        registered = Capacitor.isPluginAvailable('SpeechRecognition')
-    } catch { registered = false }
-    steps.push(`registered:${registered}`)
-    if (!registered) {
-        const failure = `build ${buildId} · plugin NOT registered in the native runtime`
-        talosLogDeviceIssue('TALOS_SPEECH_STEP_registered', failure)
-        const trace = steps.join(' · ')
-        return {
-            buildId, native, registered, pluginLoaded: false, methods: [],
-            permissionsRaw: null, availableRaw: null, available: null,
-            trace, error: failure,
-            diario: talosDettaturaDiario(),
-        }
-    }
-
-    // Step 1 — resolve the wrapper SYNCHRONOUSLY. It is a thenable Capacitor
-    // proxy, so it must NEVER be awaited / wrapped in a promise (that is the
-    // R-mic hang: `resolve:FAIL TIMEOUT`). A plain property read is safe and
-    // does not touch the bridge; inventory the methods to PROVE it's the real
-    // capgo plugin.
-    let plugin: SpeechRecognitionPlugin | null = null
-    try {
-        plugin = loadPlugin()
-        steps.push('resolve:ok(sync)')
-    } catch (error) {
-        const detail = String(error).slice(0, 120)
-        const failure = `resolve:FAIL ${detail}`
-        steps.push(failure)
-        failures.push(failure)
-        talosLogDeviceIssue('TALOS_SPEECH_STEP_resolve', detail)
-    }
-    if (!plugin) {
-        const trace = steps.join(' · ')
-        return {
-            buildId, native, registered, pluginLoaded: false, methods: [],
-            permissionsRaw: null, availableRaw: null, available: null,
-            trace, error: failures.join(' · ') || trace,
-            diario: talosDettaturaDiario(),
-        }
-    }
-    const pluginObj = plugin as unknown as Record<string, unknown>
-    const methods = PLUGIN_METHODS.filter((name) => typeof pluginObj[name] === 'function')
-    steps.push(`methods:[${methods.join(',')}]`)
-
-    const version = await step('version', () => plugin.getPluginVersion?.() ?? Promise.resolve({ version: 'n/a' }))
-    if (version && typeof (version as { version?: string }).version === 'string') {
-        steps.push(`v${(version as { version: string }).version}`)
-    }
-
-    const permissions = await step('checkPermissions', () => plugin.checkPermissions())
-    const permissionsRaw = permissions ? JSON.stringify(permissions) : null
-    if (permissionsRaw) steps.push(`perm:${permissionsRaw.slice(0, 80)}`)
-
-    const availability = await step('available', () => plugin.available())
-    const availableRaw = availability ? JSON.stringify(availability) : null
-    if (availableRaw) steps.push(`avail:${availableRaw.slice(0, 60)}`)
-
-    const report: TalosDictationDiagnostics = {
-        buildId,
-        native,
-        registered,
-        pluginLoaded: true,
-        diario: talosDettaturaDiario(),
-        methods,
-        permissionsRaw,
-        availableRaw,
-        available: availability ? (availability as { available?: boolean }).available === true : null,
-        trace: steps.join(' · '),
-        error: failures.length > 0 ? failures.join(' · ') : null,
-    }
-    return report
-}
 
 /** F4-#18 — request the mic permission at a meaningful moment (intro CTA / first tap). */
 export async function requestTalosDictationPermission(): Promise<boolean> {

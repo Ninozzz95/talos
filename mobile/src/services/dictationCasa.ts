@@ -131,6 +131,11 @@ export function creaMotoreDiCasa(): TalosDictationEngine {
             await TalosDictationBridge.addListener('talosDictationLanguage', ((d: { language?: string }) => {
                 if (attiva && d.language) events.onLanguage?.(d.language)
             }) as never)
+            // ⭐ Il VOLUME. Owner 2026-08-12: la waveform deve reagire al suono,
+            // e questo e' l'unico posto dell'app dove il suono passa davvero.
+            await TalosDictationBridge.addListener('talosDictationLevel', ((d: { db?: number }) => {
+                if (attiva && typeof d.db === 'number') events.onLevel?.(d.db)
+            }) as never)
 
             try {
                 await talosWithTimeout(
@@ -141,6 +146,35 @@ export function creaMotoreDiCasa(): TalosDictationEngine {
                         ...(options.allowedLanguages?.length
                             ? { allowedLanguages: [...options.allowedLanguages] }
                             : {}),
+                        /**
+                         * ⛔⛔ LA RIGA CHE MANCAVA, e per cui l'assistente non
+                         * ascoltava nessuno.
+                         *
+                         * Owner 2026-08-11: «l'assistente parte, dice che
+                         * ascolta, io parlo e non succede nulla». Misurato sul
+                         * Pad in `logcat`, non dedotto:
+                         *
+                         *     onMicrophoneOpened          20:44:42.625
+                         *     onMicrophoneCloseRequested  20:44:44.625  ← 2000 ms
+                         *     NO_SPEECH_DETECTED          20:44:44.786
+                         *
+                         * Duemila millisecondi netti di finestra: il tempo di
+                         * default del motore. `silenceMillis` esisteva nel
+                         * plugin nativo, nel servizio e nel composable — e si
+                         * fermava QUI, perché l'oggetto costruito per il ponte
+                         * non lo copiava. Un valore che attraversa quattro
+                         * strati e muore all'ultimo passo.
+                         *
+                         * ⛔ E ha avvelenato anche la diagnosi: chiedendo prima
+                         * 1600 e poi 6000 ms ho misurato 2000 e 1750, e ne avevo
+                         * concluso che Android ignorasse le chiavi. Non le
+                         * ignorava: non le riceveva. Due misure diverse dello
+                         * stesso identico caso sembrano una prova, e non lo
+                         * sono — la differenza va provata DA DOVE PARTE, non
+                         * solo dove arriva.
+                         */
+                        ...(options.silenceMillis ? { silenceMillis: options.silenceMillis } : {}),
+                        ...(options.minimumMillis ? { minimumMillis: options.minimumMillis } : {}),
                     }),
                     10000,
                     'TALOS_DICTATION_START',

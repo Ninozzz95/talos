@@ -1,5 +1,6 @@
 import { computed, reactive, readonly, ref, type ComputedRef, type Ref } from 'vue'
 import { talosBytesToBase64 } from '@/lib/bytesToBase64'
+import { talosDettaturaAnnota } from '@/services/dictation'
 import { talosT, useTalosLocalization } from '@/i18n'
 import type { TalosTranslate } from '@/i18n/contracts'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
@@ -14,6 +15,7 @@ import type {
 import { buildChatCompletion } from '@/lib/chat/chatCompletion'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import { TALOS_METADATA_AZIONI, talosAzioniEseguite } from '@/lib/tools/tracciaAzione'
+import { talosTracciaFuori } from '@/lib/device/traccia'
 import { talosComposerBusy } from '@/lib/chat/composerBusy'
 import { talosRispostaVuotaDopoStrumenti, talosStrumentiPartiti } from '@/lib/chat/rispostaVuota'
 import {
@@ -667,6 +669,8 @@ export interface ChatControllerDeps {
             readonly tone: { readonly preset: TalosToneId }
             readonly shell?: {
                 readonly library_context_enabled?: boolean
+                /** Il modello scelto nel compositore, che DEVE arrivare alla barra. */
+                readonly composer_model?: string | null
                 /** I tool della Libreria seguono QUESTO, non l iniezione ambientale. */
                 readonly library_access?: 'allow' | 'ask' | 'deny'
                 readonly memory_write_access?: 'allow' | 'ask' | 'deny'
@@ -777,6 +781,22 @@ export interface ChatController {
     readonly endpoints: Readonly<Record<TalosMobileProviderId, string | null>>
     readonly modelLabPreferences: ComputedRef<TalosMobileModelLabPreferences>
     readonly profiles: ComputedRef<TalosMobileModelProfileView[]>
+    /**
+     * Il deposito sicuro è stato letto almeno una volta.
+     *
+     * ⛔ Finché è `false`, un profilo senza `has_secret` NON significa «manca
+     * la chiave»: significa «non lo so ancora». Chi accusa la persona di non
+     * aver configurato niente deve aspettare questo.
+     */
+    readonly segretiLetti: Ref<boolean>
+    /**
+     * I provider il cui elenco modelli non si è potuto leggere (rete assente,
+     * host irrisolvibile, provider giù).
+     *
+     * ⛔ Se sono TUTTI qui dentro, «non ci sono profili» non autorizza a dire
+     * «non hai una chiave»: non l'abbiamo potuto verificare.
+     */
+    readonly cataloghiNonLetti: ReadonlySet<TalosMobileProviderId>
     /** La domanda in attesa sull'immagine che sta per uscire, o null. */
     readonly imageConsentRequest: Readonly<Ref<{ count: number, provider: string } | null>>
     answerImageConsent(answer: 'allow' | 'once' | 'deny'): Promise<void>
@@ -1052,6 +1072,49 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     const secrets = reactive<Record<string, boolean>>(
         Object.fromEntries(PROVIDER_IDS.map((provider) => [provider, false])),
     )
+    /**
+     * ⛔⛔ «NON HO ANCORA LETTO» NON È «NON CE L'HAI» — 2026-08-13.
+     *
+     * `secrets` qui sopra nasce con **tutti `false`**, e quel `false` ha due
+     * significati incompatibili: «il deposito dice che non c'è la chiave» e
+     * «il deposito non l'ho ancora aperto». Chi legge non può distinguerli, e
+     * l'unico valore disponibile è quello che accusa.
+     *
+     * MISURATO sul Pad il 2026-08-13: la schermata mostrava «Completa la
+     * configurazione — Aggiungi una chiave provider» mentre
+     * `WSSecureStorageSharedPreferences.xml` conteneva **quattro** chiavi
+     * (`openrouter`, `openai`, `anthropic`, `search.tavily`). Nessun dato era
+     * andato perso: era la lista che parlava prima di sapere, e intanto
+     * bloccava l'invio.
+     *
+     * ⛔ La cura del 9 agosto aveva già affrontato questo, ma aspettando
+     * `chat.state.persistenceStatus` — cioè **il database delle chat**, che è
+     * pronto molto prima del deposito sicuro. Due depositi diversi, una
+     * domanda sola: la stessa forma di difetto che oggi è comparsa quattro
+     * volte in quattro strati diversi.
+     */
+    const segretiLetti = ref(false)
+    /**
+     * ⛔⛔ I PROVIDER IL CUI ELENCO NON SIAMO RIUSCITI A LEGGERE.
+     *
+     * MISURATO sul Pad il 2026-08-13, con la sonda appena messa nel `catch`
+     * che era vuoto:
+     *
+     * > `catalogo openai: fallito Unable to resolve host "api.openai.com"`
+     * > `catalogo anthropic: fallito ...` · `catalogo openrouter: fallito ...`
+     *
+     * — e `dumpsys wifi` diceva `Wi-Fi is disabled`. Il tablet era **offline**.
+     * Le chiavi c'erano tutte e quattro, il modello era scelto
+     * (`modello=google/gemini-3.6-flash`, `offerti=61`): non si era perso
+     * niente. Ma senza elenchi non ci sono profili, senza profili
+     * `has_secret` è falso ovunque, e la schermata diceva **«Aggiungi una
+     * chiave provider»** a chi le chiavi ce le ha.
+     *
+     * ⇒ Ancora la stessa forma: «non lo so» detto come «non ce l'hai». Qui
+     * viene tenuto separato, così chi accusa può prima chiedersi se abbia
+     * potuto guardare.
+     */
+    const cataloghiNonLetti = reactive(new Set<TalosMobileProviderId>())
     const catalogs = reactive(initialCatalogs())
     const endpoints = reactive(initialEndpoints())
     const selectedModelId = ref<string | null>(null)
@@ -1059,6 +1122,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     // once per controller, not per message. `toolActivity` is what the chat
     // renders while a round of tools is running.
     const toolActivity = ref<TalosToolActivity[]>([])
+    /**
+     * L'istante dell'ultimo giro di tool, per dire QUANTO è passato.
+     *
+     * ⛔ Owner 2026-08-13: «ci sta troppo». Senza questo numero non si sa se il
+     * ritardo è il modello che pensa, un tool che aspetta o la persona che deve
+     * consentire: tre cause diverse, tre cure diverse.
+     */
+    let ultimoGiroTool = 0
     const pendingToolAuthorizations = ref<TalosToolAuthorizationPrompt[]>([])
     const toolAuthorizationRecoveries = ref<TalosToolAuthorizationRecoveryView[]>([])
     const toolAuthorizationPromptVisible = ref(false)
@@ -2963,6 +3034,15 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * compositore cambia anche chi guida, che è la sola cosa
                      * che una persona si aspetti.
                      */
+                    /*
+                     * ⭐⭐ IL MOTORE DEGLI INTENT — la strada VELOCE.
+                     *
+                     * MISURATO sul Pad il 2026-08-13, stesso compito: Gemini
+                     * manda un WhatsApp in ~20 s senza aprire l'app; il nostro
+                     * pilota ci metteva 20 passi e 27,8 s per non concludere.
+                     * ⇒ Questo va offerto SEMPRE che ci sia un telefono, e va
+                     * preferito al pilota ovunque la capacita' esista.
+                     */
                     schermo: () => {
                         const fonti = createTalosDeviceSources()
                         if (!fonti) return null
@@ -3323,13 +3403,32 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     sendRuntime.agentTools,
                 )
                 : []
-            // The instrumentation that lived here is gone, and it earned its
-            // keep: printing which tools were actually offered is what ended a
-            // day of deduction in one line — `web_search` WAS offered, so the
-            // fault was downstream of the gate, not in it. If this question
-            // ever needs asking again it belongs in Diagnostica, where the user
-            // can see the answer too, rather than in a console line that only
-            // helps whoever has the cable.
+            /*
+             * ⛔⛔ LA SONDA È TORNATA, E CHI L'AVEVA TOLTA AVEVA SCRITTO DOVE
+             * RIMETTERLA.
+             *
+             * Il commento che stava qui diceva: «printing which tools were
+             * actually offered is what ended a day of deduction in one line —
+             * `web_search` WAS offered, so the fault was downstream of the
+             * gate». Ed è successo di nuovo: owner 2026-08-12, l'assistente
+             * risponde «non ho accesso a internet» mentre sul dispositivo
+             * `web_search` è acceso e i permessi sono `allow`.
+             *
+             * ⇒ La domanda «quali strumenti sono stati OFFERTI a questo
+             * messaggio?» separa in una riga due mondi che da fuori sono
+             * identici: il cancello che non li passa, e il modello che li ha
+             * avuti e ha detto di no lo stesso. Senza, si deduce — e dedurre
+             * questa cosa è già costato due giornate.
+             *
+             * ⛔ Va nel diario che la persona può leggere, non in una riga che
+             * aiuta solo chi ha il cavo: è la stessa richiesta di chi l'ha
+             * scritto la prima volta.
+             */
+            talosDettaturaAnnota(
+                `tool: offerti=${offeredTools.length}`
+                + ` [${offeredTools.map((t) => t.name).filter((n) => /web|research|http/.test(n)).join(',')}]`
+                + ` modello=${providerModel?.id ?? '-'} supporta=${modelSupportsTools}`,
+            )
 
             /**
              * Owner 2026-07-26: asking for a PDF produced the PDF *and* a
@@ -4181,6 +4280,34 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     // A tool round means pages, documents or searches: long by
                     // definition, so the keeper starts now rather than waiting.
                     keeper.engage(calls.map((call) => call.name).join(', '))
+                    /*
+                     * ⛔⛔ QUELLO CHE TALOS FA FRA UN TOOL E L'ALTRO — 2026-08-13.
+                     *
+                     * Owner, guardando una corsa che ci metteva troppo: «c'è
+                     * qualcosa che TALOS sta facendo che tu non stai
+                     * catturando».
+                     *
+                     * Aveva ragione: dal di fuori si vedeva solo l'inizio e la
+                     * fine. Quanti giri di tool, quali, in che ordine, e quanto
+                     * tempo passava fra l'uno e l'altro erano invisibili — e
+                     * senza quei numeri «ci mette troppo» resta un'impressione
+                     * invece di un difetto con una causa.
+                     *
+                     * Una riga per giro, con l'ora che viaggia col fatto.
+                     */
+                    /*
+                     * ⛔ Il QUANTO, non solo il COSA.
+                     *
+                     * Owner: «ci sta troppo». Senza il tempo fra un giro e
+                     * l'altro quella frase resta un'impressione: non si sa se
+                     * il ritardo è il modello che pensa, un tool che aspetta,
+                     * o la persona che deve consentire. Tre cause diverse, tre
+                     * cure diverse — e un numero le separa.
+                     */
+                    const oraGiro = Date.now()
+                    talosTracciaFuori(`giro tool: ${calls.map((c) => c.name).join(', ')} · +${
+                        ultimoGiroTool ? oraGiro - ultimoGiroTool : 0}ms dal giro scorso`)
+                    ultimoGiroTool = oraGiro
                     // The detail is what makes four `web_read` rows tell the
                     // user anything at all.
                     toolActivity.value = calls.map((call) => ({
@@ -4252,6 +4379,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 talosEndTurnPlan(sendIdentity.sessionId)
             }
             toolActivity.value = []
+            ultimoGiroTool = 0
             if (loop.suspension) {
                 const next = createAuthorizationCheckpoint({
                     identity: sendIdentity,
@@ -4639,10 +4767,30 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         return ''
     })
 
+    /**
+     * ⛔⛔ LA SCELTA VA SU DISCO, o non esce dalla finestra in cui è stata fatta.
+     *
+     * MISURATO sul Pad il 2026-08-13: scelto Gemini 3.6 Flash nella chat, e la
+     * sonda della BARRA diceva `modello=…/Qwen3-1.7B-Q4_K_M.gguf`. Non era un
+     * ritardo di sincronizzazione: `selectedModelId` è un `ref` in memoria del
+     * controller, la barra è un'altra WebView, e lì partiva da `null` — quindi
+     * `ensureSelection()` sceglieva il primo modello richiamabile, il locale.
+     *
+     * ⇒ Da fuori sembrava «l'assistente usa un altro modello», che è già grave;
+     * la verità è peggiore, perché ha avvelenato tutte le misure della notte —
+     * il pilota che «non trovava un'app per WhatsApp» era il locale, non il
+     * modello scelto dall'owner.
+     */
     function applyModelSelection(id: string | null): boolean {
         const profile = id ? profiles.value.find((candidate) => candidate.id === id) ?? null : null
         if (!profile || !profile.show_in_composer || !talosMobileModelProfileIsCallable(profile)) return false
         selectedModelId.value = profile.id
+        // ⛔ `void`: la scelta si applica SUBITO a schermo, e la scrittura la
+        // segue. Farla aspettare renderebbe il compositore lento per un dato che
+        // serve alla prossima finestra, non a questa.
+        if (deps.settings.state.shell?.composer_model !== profile.id) {
+            void deps.settings.setShell?.({ composer_model: profile.id })
+        }
         effort.value = clampMobileEffort(profile.effort_levels, effort.value)
         if (!profile.supports_thinking) thinking.value = false
         return true
@@ -4650,6 +4798,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
     function ensureSelection(preferredProvider?: TalosMobileProviderId): void {
         if (applyModelSelection(selectedModelId.value)) return
+        // ⛔ PRIMA la scelta della persona, poi qualunque automatismo. È la riga
+        // che fa arrivare alla barra il modello scelto nella chat: senza, la
+        // finestra nuova parte da `null` e si sceglie il modello da sola.
+        if (applyModelSelection(deps.settings.state.shell?.composer_model ?? null)) return
         const preferred = preferredProvider
             ? profiles.value.find((profile) =>
                 profile.provider === preferredProvider
@@ -4670,6 +4822,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         await Promise.all(PROVIDER_IDS.map(async (provider) => {
             secrets[provider] = await deps.hasKey(provider)
         }))
+        // ⛔ DOPO la lettura, mai prima: è il momento esatto in cui i `false`
+        // qui sopra smettono di voler dire «non lo so» e cominciano a voler
+        // dire «non c'è». Vedi `segretiLetti`.
+        segretiLetti.value = true
         ensureSelection()
     }
 
@@ -4758,8 +4914,30 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         await Promise.all(PROVIDER_IDS.map(async (provider) => {
             try {
                 await refreshProvider(provider)
-            } catch {
-                // Each provider owns its actionable error state; another provider can still initialize.
+            } catch (errore) {
+                /*
+                 * ⛔⛔ QUESTO CATCH ERA VUOTO, E IL SILENZIO DIVENTAVA UNA BUGIA.
+                 *
+                 * Il commento diceva il vero — ogni provider tiene il proprio
+                 * stato d'errore, e uno che cade non deve fermare gli altri —
+                 * ma copriva il caso in cui cadono TUTTI: allora i cataloghi
+                 * restano vuoti, `profiles` resta vuoto, e la schermata dice
+                 * «Aggiungi una chiave provider» a chi le chiavi ce le ha.
+                 *
+                 * MISURATO sul Pad il 2026-08-13: quattro chiavi presenti in
+                 * `WSSecureStorageSharedPreferences.xml`, `segretiLetti` a
+                 * `true`, e la lista di configurazione lo stesso — perche' il
+                 * catalogo dei modelli vive nel DATABASE, che un reinstall
+                 * ricrea. Le chiavi sopravvivono, gli elenchi no.
+                 *
+                 * ⇒ La riga non cura il difetto: lo rende VISIBILE, che e' il
+                 * passo che mancava per curarlo senza indovinare.
+                 */
+                talosTracciaFuori(`catalogo ${provider}: fallito ${String(errore)}`)
+                // ⛔ Un catalogo NON scaricato non è un catalogo vuoto: è un
+                // catalogo che non abbiamo potuto leggere. Chi accusa la
+                // persona deve saperlo distinguere.
+                cataloghiNonLetti.add(provider)
             }
         }))
         const defaults = deps.settings.state.composer_defaults ?? TALOS_DEFAULT_COMPOSER_DEFAULTS
@@ -6196,6 +6374,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         endpoints: readonly(endpoints) as Readonly<Record<TalosMobileProviderId, string | null>>,
         modelLabPreferences,
         profiles,
+        segretiLetti,
+        cataloghiNonLetti,
         imageConsentRequest,
         answerImageConsent,
         planRequest,

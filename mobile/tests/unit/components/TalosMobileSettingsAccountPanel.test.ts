@@ -60,7 +60,7 @@ const dictationDiagnostics = vi.hoisted(() => vi.fn(async () => ({
     trace: 'build test-build · available:ok(1ms)',
     error: null,
 })))
-vi.mock('@/services/dictation', () => ({
+vi.mock('@/services/dictationDiagnostica', () => ({
     talosDictationDiagnostics: dictationDiagnostics,
 }))
 

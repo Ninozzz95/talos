@@ -30,6 +30,9 @@ interface PonteDispositivo {
     volume(options: { stream: string, percent?: number }): Promise<{ done: boolean, reason?: string, percent: number }>
     alarm(options: { hour?: number, minute?: number, seconds?: number, label?: string }): Promise<{ done: boolean, reason?: string }>
     openApp(options: { package: string }): Promise<{ done: boolean, reason?: string }>
+    /** ⭐ Apre un URI: è la porta unica del motore degli intent. */
+    apriUri(options: { uri: string }): Promise<{ done: boolean, reason?: string }>
+    appInstallata(options: { package: string }): Promise<{ presente: boolean }>
     /**
      * Le app avviabili, `Etichetta<TAB>pacchetto` per riga.
      *

@@ -85,6 +85,67 @@ const haArgomenti = computed(() => {
     if (typeof dato === 'object') return Object.keys(dato as object).length > 0
     return String(dato).trim() !== ''
 })
+
+/**
+ * ⛔⛔ IL JSON GREZZO ADDOSSO A CHI POSSIEDE IL TELEFONO.
+ *
+ * Owner 2026-08-12, dal suo screenshot: la scheda che chiedeva di guidare lo
+ * schermo mostrava, dentro un riquadro grigio,
+ *
+ *     {
+ *       "obiettivo": "Apri WhatsApp, trova la chat con Shadina…"
+ *     }
+ *
+ * Le graffe, le virgolette e l'indentazione non aiutano a decidere: sono la
+ * nostra sintassi finita davanti a una persona. Stessa famiglia di
+ * `righe-per-il-modello-sullo-schermo` e del nome interno di un tool mostrato al
+ * posto di una frase — un difetto che questo file aveva già curato una volta,
+ * per le graffe vuote, e che era rimasto per il caso pieno.
+ *
+ * ⇒ Quando gli argomenti sono un oggetto piatto di valori semplici — che è la
+ * forma della quasi totalità dei nostri tool — si leggono come righe: la voce a
+ * sinistra, il valore a destra. Il JSON resta SOLO per le forme annidate, dove
+ * appiattire perderebbe informazione e una struttura visibile è meglio di una
+ * finta frase.
+ */
+interface TalosRigaArgomento { voce: string; valore: string }
+
+const righeArgomenti = computed<TalosRigaArgomento[] | null>(() => {
+    const dato = props.input
+    if (dato === null || typeof dato !== 'object' || Array.isArray(dato)) return null
+    const voci = Object.entries(dato as Record<string, unknown>)
+    if (voci.length === 0) return null
+    // ⛔ Un solo valore annidato e si torna al JSON per TUTTO: mescolare le due
+    // forme nella stessa scheda leggerebbe peggio di entrambe.
+    if (voci.some(([, valore]) => valore !== null && typeof valore === 'object')) return null
+    /*
+     * ⛔ IL TETTO VALE ANCHE QUI, e me l'ha ricordato un test rosso.
+     *
+     * `MAX_RENDERED_ARGUMENTS` esisteva sul percorso JSON; passando alle righe
+     * l'avevo perso, e un argomento da 5.000 caratteri sarebbe finito intero
+     * nella scheda. Il riquadro scorre, quindi non si vedeva — ma una scheda di
+     * consenso che porta dentro una stringa senza limiti è la stessa firma in
+     * bianco di quando i bottoni uscivano dallo schermo: la persona approva ciò
+     * che legge, e ciò che non finisce mai non si legge.
+     *
+     * Il budget è dell'INTERA scheda, non della singola voce: dieci argomenti da
+     * quattromila caratteri sarebbero quarantamila.
+     */
+    let rimanenti = MAX_RENDERED_ARGUMENTS
+    return voci.map(([voce, valore]) => {
+        const intero = typeof valore === 'string' ? valore : String(valore)
+        const tagliato = intero.length > rimanenti ? `${intero.slice(0, Math.max(0, rimanenti))}…` : intero
+        rimanenti = Math.max(0, rimanenti - intero.length)
+        return {
+            // `file_id` → `file id`: si toglie la sintassi, non si inventa un
+            // nome. Tradurre queste voci vorrebbe una stringa per ogni argomento
+            // di ogni tool, e una mancante stamperebbe una chiave i18n al posto
+            // suo — il difetto che questa scheda ha già pagato una volta.
+            voce: voce.replace(/[_-]+/g, ' '),
+            valore: tagliato,
+        }
+    })
+})
 </script>
 
 <template>
@@ -165,8 +226,20 @@ const haArgomenti = computed(() => {
                 </p>
             </div>
 
+            <!-- ⛔ Righe leggibili quando si può; il JSON solo dove appiattire
+                 perderebbe informazione. Vedi `righeArgomenti`. -->
+            <dl
+                v-if="haArgomenti && righeArgomenti"
+                data-testid="talos-tool-consent-arguments"
+                class="mt-3 max-h-40 overflow-auto rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-2"
+            >
+                <div v-for="riga in righeArgomenti" :key="riga.voce" class="flex flex-col gap-0.5 py-1">
+                    <dt class="text-3xs uppercase tracking-wide text-[var(--talos-muted)]">{{ riga.voce }}</dt>
+                    <dd class="break-words text-xs leading-5 text-[var(--talos-text)]">{{ riga.valore }}</dd>
+                </div>
+            </dl>
             <pre
-                v-if="haArgomenti"
+                v-else-if="haArgomenti"
                 data-testid="talos-tool-consent-input"
                 class="mt-3 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-2 text-2xs leading-4 text-[var(--talos-muted)]"
             >{{ rendered }}</pre>
@@ -211,6 +284,28 @@ const haArgomenti = computed(() => {
                     @click="emit('alwaysAllow')"
                 >{{ $t('chat.authorizationAlways') }}</Button>
             </div>
+            <!--
+                ⛔⛔ UN BOTTONE CHE MANCA SENZA DIRLO SEMBRA UNA FUNZIONE CHE
+                MANCA. Owner 2026-08-12: «c'è solo nega e consenti questa volta e
+                non consenti sempre. Per questo lo dobbiamo aggiungere».
+
+                Ma c'era già, e su quella scheda era tolto APPOSTA: guidare lo
+                schermo è `R4`, `reversibility: 'irreversible'`, trifecta
+                completa — e la regola che lo vieta è una decisione dell'owner
+                stesso del 10 agosto («chi solo legge non perde il sempre»).
+
+                ⇒ Il difetto non era il bottone assente: era il SILENZIO. Chi
+                vede due scelte conclude che ne manca una, e chiede di
+                aggiungerla — cioè chiede di togliersi una difesa, credendo di
+                chiedere una comodità. Una riga sola trasforma un'omissione
+                apparente in una decisione dichiarata, ed è la stessa cura
+                dell'interruttore acceso su una capacità che non può esistere.
+            -->
+            <p
+                v-if="!allowPersistent"
+                data-testid="talos-tool-consent-no-always"
+                class="mt-2 shrink-0 text-2xs leading-4 text-[var(--talos-muted)]"
+            >{{ $t('chat.authorizationAlwaysUnavailable') }}</p>
         </section>
     </Teleport>
 </template>

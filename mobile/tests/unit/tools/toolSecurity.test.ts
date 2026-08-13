@@ -128,6 +128,31 @@ describe('«consenti sempre»', () => {
         expect(effettivo).toBe('R4')
         expect(talosForbidsPersistentGrant(effettivo)).toBe(true)
     })
+
+    /**
+     * ⛔⛔ L'ECCEZIONE DELL'OWNER, e la guardia che le impedisce di allargarsi.
+     *
+     * Owner 2026-08-12, dopo un mio rifiuto e una sua riconferma: «il consenti
+     * sempre si riferiva al controllo del dispositivo, da modalità ASSISTENTE».
+     * Il pilota non è una chiamata, è una sessione: chiedere a ogni tocco non è
+     * una difesa in più, è la funzione che non si può usare.
+     *
+     * ⛔ Il rischio VERO di questa eccezione non è il tool a cui è stata data:
+     * è il PROSSIMO `R4` che nasce e se la porta dietro senza che nessuno lo
+     * decida. Per questo è un dato per tool, e per questo il catalogo si conta.
+     */
+    it('⭐ un tool che dichiara l’eccezione tiene il «sempre» anche a R4', () => {
+        expect(talosForbidsPersistentGrant('R4', ['write', 'outbound'], true)).toBe(false)
+        // …e senza dichiararla lo perde, che è il caso di tutti gli altri.
+        expect(talosForbidsPersistentGrant('R4', ['write', 'outbound'])).toBe(true)
+    })
+
+    it('⛔ l’eccezione NON scatta da sola: la deve dichiarare il tool', () => {
+        // Il verso contrario. Se bastasse il rischio, o le azioni, o la catena,
+        // l'eccezione si allargherebbe senza che nessuno l'abbia decisa.
+        expect(talosForbidsPersistentGrant('R4', ['write'], false)).toBe(true)
+        expect(talosForbidsPersistentGrant('R4', ['write'], undefined)).toBe(true)
+    })
 })
 
 /**

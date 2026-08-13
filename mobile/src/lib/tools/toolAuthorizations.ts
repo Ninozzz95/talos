@@ -333,6 +333,15 @@ export function resolveTalosToolAuthorization(input: {
     request?: TalosToolAuthorizationRequestV1
     /** Dedicated high-impact tools ignore saved grants and ask every time. */
     forceConfirmation?: boolean
+    /**
+     * Il tool dichiara nel catalogo di sicurezza che il «sempre» è concesso,
+     * malgrado il rischio e malgrado `forceConfirmation`.
+     *
+     * ⛔ Non è un modo per aggirare la regola: è il posto dove la regola
+     * ammette un'eccezione **scritta**, decisa da una persona e leggibile nel
+     * catalogo, invece che dedotta da un numero di rischio.
+     */
+    sempreConsentibile?: boolean
 }): TalosToolAuthorizationResolution {
     const required = normalizeActions(input.requiredActions)
     if (!required) return { status: 'denied', actions: [], source: 'policy' }
@@ -394,7 +403,20 @@ export function resolveTalosToolAuthorization(input: {
         }
     }
 
-    if (!input.forceConfirmation && asked.length > 0) {
+    /*
+     * ⛔⛔ IL QUARTO CANCELLO — e senza questo gli altri tre non servono.
+     *
+     * MISURATO sul Pad il 2026-08-13: dopo aver toccato «Consenti sempre», la
+     * richiesta successiva **richiedeva il consenso da capo**. Il bottone c'era
+     * e funzionava — la concessione veniva scritta — ma da qui non veniva MAI
+     * riletta, perché `forceConfirmation` spegneva la consultazione del grant
+     * prima ancora di guardarlo.
+     *
+     * ⇒ Un «sempre» che si può dare e non vale mai è peggio di un «sempre» che
+     * non c'è: la persona crede di aver deciso, e la decisione non esiste.
+     */
+    const rispettaIlSempre = !input.forceConfirmation || input.sempreConsentibile === true
+    if (rispettaIlSempre && asked.length > 0) {
         const grant = isTalosAgentToolId(input.tool)
             ? parseTalosToolAuthorizationGrants(input.grants).grants[input.tool]
             : undefined
@@ -406,7 +428,34 @@ export function resolveTalosToolAuthorization(input: {
         return {
             status: 'ask',
             actions: asked,
-            allow_persistent: input.forceConfirmation !== true,
+            /*
+             * ⛔⛔ IL TERZO CANCELLO — owner 2026-08-13, e non si discute:
+             *
+             * > «voglio che metti quel maledetto pulsante consenti sempre e ci
+             * > deve essere anche per il controllo dispositivo. Non voglio
+             * > nessuna eccezione. Sarà l'utente a consentirlo.»
+             *
+             * `sempreConsentibile` era dichiarato nel catalogo di sicurezza e
+             * l'esecutore lo leggeva già. Ma il bottone spariva lo stesso,
+             * perché DA QUI usciva `allow_persistent: false` — e usciva prima,
+             * per una ragione che con quel tool non c'entrava: `device_screen_drive`
+             * ha `confirmation: 'always'`, e `forceConfirmation` da solo
+             * spegneva il «sempre» senza mai chiedersi se qualcuno l'avesse
+             * autorizzato per iscritto.
+             *
+             * Tre cancelli in fila sulla stessa domanda, e ognuno ne conosceva
+             * una parte: uno leggeva l'eccezione, uno la ignorava passando un
+             * argomento solo, e questo non sapeva nemmeno che esistesse. ⇒ Una
+             * regola scritta in un posto e applicata in tre non è una regola:
+             * è tre regole che sembrano una.
+             *
+             * ⛔ `forceConfirmation` NON diventa inutile: continua a valere per
+             * ogni tool che non ha l'eccezione scritta nel catalogo. Qui cade
+             * solo dove qualcuno l'ha dichiarata, cioè dove la decisione è
+             * stata presa e messa per iscritto invece che dedotta dal rischio.
+             */
+            allow_persistent: input.forceConfirmation !== true
+                || input.sempreConsentibile === true,
         }
     }
     return { status: 'allowed', source: 'baseline', actions: [] }

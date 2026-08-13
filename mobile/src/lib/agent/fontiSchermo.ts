@@ -1,6 +1,7 @@
 import { buildChatCompletion } from '@/lib/chat/chatCompletion'
 import { talosCorsaDelloSchermo } from '@/lib/agent/corsaDelloSchermo'
 import { TalosSchermoBridge } from '@/lib/device/ponteSchermo'
+import { talosTracciaFuori } from '@/lib/device/traccia'
 import { TalosDeviceBridge } from '@/lib/device/devicePlugin'
 import type { TalosCorsaDelPilota } from '@/lib/agent/pilotaDelloSchermo'
 import type { CompletionContext } from '@/lib/chat/chatCompletion'
@@ -22,9 +23,33 @@ import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
  * che non usi non deve costarti l'avvio.
  */
 export async function talosOcchioAperto(): Promise<boolean> {
+    /*
+     * ⛔ «NON LO SO» USCIVA DA QUI COME «È SPENTO».
+     *
+     * Il `catch` c'è perché il chiamante vuole un booleano — ma un ponte che
+     * lancia e un permesso spento sono due fatti diversi, e da fuori si vedeva
+     * solo il secondo: TALOS diceva alla persona «il permesso è disattivato»,
+     * che è un'affermazione, non un'incertezza. Il ripiego resta prudente (non
+     * si guida lo schermo se non si è sicuri di vederlo), ma smette di essere
+     * muto: se questa riga compare in `logcat`, la causa NON è il permesso.
+     */
+    /*
+     * ⛔ E SI TRACCIA ANCHE IL «NO», non solo l'eccezione — 2026-08-13.
+     *
+     * La prima versione di questa sonda parlava solo quando il ponte lanciava.
+     * MISURATO stamattina: il ponte NON lanciava, rispondeva `false` — e la
+     * sonda taceva, cioè taceva proprio nel caso che stavamo inseguendo.
+     * Una sonda che parla solo nel caso raro lascia il caso frequente muto.
+     */
     return await TalosSchermoBridge.disponibile()
-        .then((r) => r.aperto)
-        .catch(() => false)
+        .then((r) => {
+            talosTracciaFuori(`occhioAperto: aperto=${String(r.aperto)}`)
+            return r.aperto
+        })
+        .catch((errore: unknown) => {
+            talosTracciaFuori(`occhioAperto: ponte-in-errore ${String(errore)}`)
+            return false
+        })
 }
 
 export interface TalosAvvioCorsa {

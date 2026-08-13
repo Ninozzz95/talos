@@ -83,6 +83,42 @@ export interface TalosToolSecurity {
      * Aprire un URL costruito è trasmettere, anche se somiglia a una lettura.
      */
     canTransmit: boolean
+    /**
+     * ⛔⛔ L'ECCEZIONE DELL'OWNER AL VETO SU `R4`, dichiarata tool per tool.
+     *
+     * Owner 2026-08-12, dopo che avevo rifiutato una prima volta e lui ha
+     * riconfermato: «il consenti sempre si riferiva al controllo del
+     * dispositivo, da modalità ASSISTENTE».
+     *
+     * ## Perché la sua richiesta è giusta e la mia obiezione era parziale
+     *
+     * Il veto su `R4` protegge da una firma in bianco. Ma il pilota **non è una
+     * chiamata**: è una sessione — decine di tocchi per aprire WhatsApp e
+     * trovare una chat. Chiedere a ogni passo non è una difesa che morde una
+     * volta di più: è una funzione che non si può usare, e una difesa
+     * inutilizzabile viene spenta del tutto. È lo stesso ragionamento con cui
+     * lui stesso, il 10 agosto, ha tolto il veto alle letture.
+     *
+     * ⛔ E il compromesso, detto per intero perché non si nasconde: un permesso
+     * permanente qui è davvero su un'azione irreversibile. Regge su due presidi
+     * che esistono già e vanno tenuti vivi:
+     *   1. si **revoca** — la riga «Chiedi di nuovo» nel pannello degli
+     *      strumenti, e resta visibile lì come «Sempre consentito»;
+     *   2. il **freno al primo tocco** ferma comunque la sessione appena la mano
+     *      dell'owner tocca lo schermo.
+     *
+     * ⛔ DEBITO DICHIARATO, e non lo scrivo come se fosse fatto: la scheda **non
+     * dice** che questo «sempre» vale su un'azione che non si annulla. Il pezzo
+     * che manca è il rischio: `TalosToolConsentRequest` ce l'ha, la riga
+     * PERSISTITA (`TalosToolAuthorizationRequestV1`) no, e la scheda legge
+     * quella. Portarcelo è una modifica di schema versionato, non una riga — va
+     * fatta apposta e non di sfuggita.
+     *
+     * ⇒ È un DATO per tool e non una regola sul rischio, perché il prossimo
+     * `R4` che nasce non deve ereditare l'eccezione per sbaglio: chi lo scrive
+     * deve scriverla, e un test la conta.
+     */
+    sempreConsentibile?: true
 }
 
 /**
@@ -286,7 +322,13 @@ export function talosForbidsPersistentGrant(
     risk: TalosToolRisk,
     /** Le azioni che il tool chiede DAVVERO. Assenti = decide solo il rischio. */
     azioni?: readonly TalosToolAction[],
+    /** L'eccezione dichiarata dal tool. Vedi `sempreConsentibile`. */
+    sempreConsentibile?: boolean,
 ): boolean {
+    // ⛔ Prima di tutto il resto: un tool che dichiara l'eccezione non la perde
+    // nemmeno quando la CATENA lo porta a R4 — è proprio dentro una sessione
+    // lunga che il pilota ci arriva, cioè esattamente il caso da servire.
+    if (sempreConsentibile) return false
     /*
      * ⛔⛔ CHI SOLO LEGGE NON PERDE MAI IL «SEMPRE» — decisione dell'owner del
      * 2026-08-10: «voglio che consenti sempre appaia SEMPRE per le ricerche

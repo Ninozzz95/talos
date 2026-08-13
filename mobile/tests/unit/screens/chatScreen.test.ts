@@ -156,6 +156,10 @@ function makeController(messages: FakeMessage[] = []) {
         toolAuthorizationRecoveries: ref([]),
         showToolAuthorization: vi.fn(),
         profiles: ref([]),
+        // Il mock parte da «letto»: i test che studiano la finestra di
+        // caricamento lo rimettono a `false` esplicitamente.
+        segretiLetti: ref(true),
+        cataloghiNonLetti: new Set(),
         selectedModelId: ref(null),
         effort: ref('high'),
         thinking: ref(false),
@@ -969,9 +973,53 @@ describe('welcome setup checklist (F2-T6)', () => {
     it('e riappare appena l archivio e pronto e manca davvero qualcosa', () => {
         const controller = makeController()
         controller.chat.state.persistenceStatus = 'ready'
+        controller.segretiLetti.value = true
         mockState.controller = controller
         const wrapper = mount(ChatScreen)
         expect(wrapper.find('[data-testid="talos-setup-checklist"]').exists()).toBe(true)
+    })
+
+    /*
+     * ⛔⛔ IL DEPOSITO SICURO HA UN TEMPO SUO — 2026-08-13.
+     *
+     * MISURATO sul Pad: con QUATTRO chiavi salvate
+     * (`openrouter`, `openai`, `anthropic`, `search.tavily`) la schermata
+     * diceva «Aggiungi una chiave provider» e bloccava l'invio. Il database
+     * delle chat era gia' `ready`, ma i segreti non erano ancora stati letti —
+     * e `secrets` nasce con tutti `false`, cioe' con il valore che ACCUSA.
+     *
+     * Questo test morde su quella finestra: archivio pronto, segreti non
+     * ancora letti ⇒ la lista TACE. Col codice di prima era `true`.
+     */
+    /*
+     * ⛔⛔ IL PAD ERA OFFLINE, E TALOS ACCUSAVA LA PERSONA — 2026-08-13.
+     *
+     * MISURATO: `Wi-Fi is disabled`, i tre elenchi modelli falliti con
+     * `Unable to resolve host "api.openai.com"`, e la schermata diceva
+     * «Aggiungi una chiave provider» mentre sul disco c'erano QUATTRO chiavi
+     * e il modello era scelto. Senza elenchi non ci sono profili, e senza
+     * profili `has_secret` e' falso ovunque: la catena e' corretta, la
+     * conclusione e' falsa.
+     *
+     * Questo test morde su quella finestra. Col codice di prima era `true`.
+     */
+    it('TACE quando nessun elenco modelli e stato letto: offline non e «non hai la chiave»', () => {
+        const controller = makeController()
+        controller.chat.state.persistenceStatus = 'ready'
+        controller.segretiLetti.value = true
+        controller.cataloghiNonLetti = new Set(['openai', 'anthropic', 'openrouter'])
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+        expect(wrapper.find('[data-testid="talos-setup-checklist"]').exists()).toBe(false)
+    })
+
+    it('TACE finche il deposito SICURO non e stato letto, anche ad archivio pronto', () => {
+        const controller = makeController()
+        controller.chat.state.persistenceStatus = 'ready'
+        controller.segretiLetti.value = false
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+        expect(wrapper.find('[data-testid="talos-setup-checklist"]').exists()).toBe(false)
     })
 
     it('hides when setup is genuinely complete', () => {

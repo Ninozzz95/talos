@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { talosSessioneDaAprire } from '@/lib/barra/consegna'
+import { talosConsegnaLaSessione, talosSessioneDaAprire } from '@/lib/barra/consegna'
 
 /**
  * ⛔ IL PASSAGGIO DI CONSEGNE — e questi casi mordono sul fallire CHIUSO.
@@ -42,5 +42,65 @@ describe('⛔ la consegna dalla barra all\'app', () => {
         expect(talosSessioneDaAprire('')).toBeNull()
         expect(talosSessioneDaAprire(null)).toBeNull()
         expect(talosSessioneDaAprire(undefined)).toBeNull()
+    })
+})
+
+/**
+ * ⛔⛔ SCEGLIERE LA CONVERSAZIONE NON È APRIRLA.
+ *
+ * Owner 2026-08-12: «quando premo "vai alla chat" dall'assistente non va alla
+ * chat, va all'applicazione». RIPRODOTTO sul Pad: app lasciata su Impostazioni →
+ * Motore di ricerca, barra aperta dalla home, «Apri in TALOS» → TALOS si apre
+ * **su Impostazioni**. La conversazione giusta era selezionata e nessuno la
+ * stava guardando.
+ *
+ * ⛔ E i dieci casi qui sopra erano tutti verdi: provano il PARSER, e il parser
+ * non aveva niente che non andasse. Metà del lavoro succedeva nel chiamante, e
+ * il chiamante non lo esercitava nessuno — la lezione di
+ * `righe-per-il-modello-sullo-schermo`, pagata una seconda volta.
+ */
+describe('⛔ la consegna APRE la chat, non solo la sceglie', () => {
+    function scena(rottaCorrente: string) {
+        const fatti: string[] = []
+        return {
+            fatti,
+            chat: {
+                init: async () => { fatti.push('init') },
+                selectSession: async (id: string) => { fatti.push(`select:${id}`) },
+            },
+            navigazione: {
+                currentRoute: { value: { name: rottaCorrente } },
+                push: async (d: { name: string }) => { fatti.push(`push:${d.name}`) },
+            },
+        }
+    }
+
+    it('⭐ da un\'ALTRA schermata: sceglie la conversazione E ci porta', async () => {
+        const { fatti, chat, navigazione } = scena('settings')
+
+        await talosConsegnaLaSessione(chat, navigazione, 'abc-123')
+
+        // L'ordine conta: si sceglie prima, così la chat che compare è già quella
+        // giusta invece di lampeggiare sulla precedente.
+        expect(fatti).toEqual(['init', 'select:abc-123', 'push:chat'])
+    })
+
+    it('⛔ se siamo GIÀ sulla chat non ci si rispinge sopra', async () => {
+        // Una seconda voce nella cronologia farebbe sì che il tasto indietro non
+        // torni indietro: il verso contrario di questa funzione.
+        const { fatti, chat, navigazione } = scena('chat')
+
+        await talosConsegnaLaSessione(chat, navigazione, 'abc-123')
+
+        expect(fatti).toEqual(['init', 'select:abc-123'])
+    })
+
+    it('⛔ una navigazione RIFIUTATA non fa saltare l\'avvio', async () => {
+        const { chat, navigazione } = scena('settings')
+        navigazione.push = async () => { throw new Error('guardia') }
+
+        // Non deve lanciare: la conversazione è già quella giusta, e un'eccezione
+        // qui morirebbe dentro un `void` all'avvio dell'app, invisibile.
+        await expect(talosConsegnaLaSessione(chat, navigazione, 'abc-123')).resolves.toBeUndefined()
     })
 })

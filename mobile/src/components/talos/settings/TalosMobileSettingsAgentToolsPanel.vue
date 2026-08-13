@@ -10,11 +10,46 @@ import {
     TALOS_AGENT_TOOL_CONTROLS,
     TALOS_AGENT_TOOL_GROUP_ORDER,
 } from '@/lib/tools/toolControlCatalog'
+import type { TalosAgentToolControl } from '@/lib/tools/toolControlCatalog'
 import type { TalosAgentToolId } from '@/lib/tools/toolControls'
 
 const { t } = useTalosI18n()
 const settings = useSettingsStore()
-type AgentToolControl = typeof TALOS_AGENT_TOOL_CONTROLS[number]
+/*
+ * ⛔ L'INTERFACCIA, non `typeof CATALOGO[number]`.
+ *
+ * Il catalogo è `as const`, quindi il tipo dedotto è l'unione delle 60 voci
+ * *letterali*: `richiede` esiste solo sui membri che ce l'hanno scritto, e
+ * leggerlo sull'unione non compila. Passando dall'interfaccia il campo è
+ * opzionale su tutti — che è il fatto vero, e vale anche per il prossimo campo
+ * facoltativo che nascerà.
+ */
+type AgentToolControl = TalosAgentToolControl
+
+/**
+ * ⛔⛔ L'INTERRUTTORE CHE MENTIVA — owner 2026-08-12.
+ *
+ * «L'assistente non ha accesso alla ricerca web, cosa che dovrebbe essere
+ * tranquillamente accessibile dalla chat. Questo è assolutamente
+ * inaccettabile.» Qui `web_search` era **acceso**; i permessi erano `allow`; e
+ * il tool non veniva offerto al modello, perché nessun motore di ricerca era
+ * mai stato scelto (`offerti=59` senza `web_search`, `61` con — vedi
+ * `toolControlCatalog`).
+ *
+ * ⇒ Da fuori, «acceso ma manca il pezzo a monte» e «acceso e bloccato dai
+ * permessi» erano indistinguibili. L'owner ha dedotto il secondo, che era la
+ * spiegazione sbagliata, e ci ha perso una serata.
+ *
+ * Adesso la riga lo dice, e porta dove si aggiusta: un pannello di permessi ha
+ * un solo lavoro — dire la verità su cosa succede — e «questo non funziona
+ * comunque» fa parte della verità tanto quanto «questo è spento».
+ */
+const emit = defineEmits<{ (e: 'vaiAlMotore'): void }>()
+const motoreScelto = computed(() => settings.state.search.source !== null)
+
+function mancaIlRequisito(tool: AgentToolControl): boolean {
+    return tool.richiede === 'motoreDiRicerca' && !motoreScelto.value
+}
 // Hand-ordered, so a group added to the catalogue and forgotten here is a set
 // of tools nobody can switch off. `models` arrived 2026-07-31 with the
 // on-device download tools.
@@ -294,6 +329,23 @@ async function revokeAuthorization(tool: AgentToolControl): Promise<void> {
                             v-if="hasSavedAuthorization(tool)"
                             class="mt-1.5 inline-flex rounded-full bg-[var(--talos-accent)]/12 px-2 py-0.5 text-3xs font-medium text-[var(--talos-accent)]"
                         >{{ t('agentTools.alwaysAllowed') }}</span>
+                        <!-- ⛔ Acceso NON basta: manca il pezzo a monte, e la
+                             riga lo dice invece di lasciarlo dedurre. -->
+                        <span
+                            v-if="mancaIlRequisito(tool)"
+                            :data-agent-tool-missing="tool.id"
+                            class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1"
+                        >
+                            <span class="text-2xs leading-4 text-[var(--talos-warning)]">
+                                {{ t('agentTools.needsSearchEngine') }}
+                            </span>
+                            <button
+                                type="button"
+                                data-agent-tool-fix="search-source"
+                                class="talos-pressable pointer-events-auto relative z-30 min-h-8 rounded-full border border-[var(--talos-border)] px-2 text-2xs font-medium text-[var(--talos-accent)]"
+                                @click="emit('vaiAlMotore')"
+                            >{{ t('agentTools.chooseSearchEngine') }}</button>
+                        </span>
                     </span>
                     <span class="relative z-20 flex shrink-0 flex-col items-end gap-1">
                         <button

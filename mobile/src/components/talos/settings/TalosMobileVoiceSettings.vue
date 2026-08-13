@@ -7,7 +7,7 @@ import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosSpeechService, type TalosSpeechVoice } from '@/services/speech'
 import { TALOS_LINGUA_AUTOMATICA, parseTalosDictationLanguageMode } from '@/lib/dictationPolicy'
-import { talosVociOrdinate, type TalosVoceDispositivo } from '@/lib/voice/sceltaVoce'
+import { talosVociOfferte, type TalosVoceDispositivo } from '@/lib/voice/sceltaVoce'
 
 /**
  * Owner 2026-07-24 — Voice (text-to-speech) settings: pick the device voice
@@ -39,8 +39,19 @@ onMounted(() => {
 /** Mostra anche le lingue che non sono quella dell'interfaccia. */
 const tutteLeLingue = ref(false)
 
+/**
+ * ⛔⛔ SENZA «Automatica», il menù deve mostrare LA VOCE CHE PARLA.
+ *
+ * Owner 2026-08-11: «togli la voce predefinita». Tolta la riga, chi non ha mai
+ * scelto si ritroverebbe un menù **vuoto** — e non perché manchi una voce, ma
+ * perché la preferenza salvata è `null`.
+ *
+ * ⇒ Si mostra la prima delle offerte, che NON è un'invenzione: è esattamente
+ * quella che `talosVoceDaUsare` sceglie quando nessuno ha scelto («la migliore
+ * disponibile»). Il menù dice il vero anche prima del primo tocco.
+ */
 const selectedVoice = computed({
-    get: () => settings.state.voice.voice_uri ?? '',
+    get: () => settings.state.voice.voice_uri ?? voiceItems.value[0]?.value ?? '',
     set: (value: string) => { void settings.setVoicePreferences({ voice_uri: value || null }) },
 })
 const dictationLanguage = computed({
@@ -133,25 +144,21 @@ const voiceItems = computed(() => {
         notInstalled: false,
     }))
     /*
-     * ⛔ SOLO LE PRIME TRE — owner 2026-08-10, dopo averle ascoltate tutte:
-     * «vorrei solo le prime tre disponibili, le altre non mi piacciono, sono
-     * troppo robotiche».
+     * ⛔ DUE VOCI, e la regola sta in `talosVociOfferte` — qui si applica, non
+     * si decide.
      *
-     * È una scelta fatta a ORECCHIO, e per questo vale: Android dichiara
-     * `quality: 400` per tutte e nove le italiane, quindi nessun numero avrebbe
-     * potuto separarle. Le prime tre sono quelle che l'ordinamento porta in
-     * testa — le neurali di rete — e sono anche le uniche che una persona ha
-     * detto di sopportare.
+     * Owner 2026-08-10: «vorrei solo le prime tre, le altre sono troppo
+     * robotiche». Owner 2026-08-11: «togli la voce predefinita e mantieni solo
+     * la prima e l'ultima voce (rete)». Delle tre in testa cade la mediana.
      *
      * ⛔ Il limite NON si applica a «tutte le lingue»: chi accende quello ha
      * chiesto esplicitamente l'archivio, e nascondergliene i due terzi sarebbe
      * rispondere a una domanda diversa da quella che ha fatto.
      */
-    const QUANTE_VOCI = 3
-    const miaLingua = talosVociOrdinate(dispositivo, {
+    const miaLingua = talosVociOfferte(dispositivo, {
         lingua: linguaInterfaccia.value,
         rete: navigator.onLine !== false,
-    }).slice(0, QUANTE_VOCI)
+    })
     const restanti = tutteLeLingue.value
         ? dispositivo.filter((v) => !miaLingua.some((m) => m.name === v.name))
         : []
@@ -241,7 +248,6 @@ watch(selectedVoice, () => { anteprimaFraPoco() })
                     v-model="selectedVoice"
                     :items="voiceItems"
                     :aria-label="t('voice.readAloudVoice')"
-                    :none-label="t('voice.deviceDefault')"
                 />
             </label>
 

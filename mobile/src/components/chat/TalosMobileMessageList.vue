@@ -429,10 +429,29 @@ function messageStateLabel(state: string): string {
                          ⛔ E mentre TALOS legge non ci va NIENTE al suo posto:
                          il pulsante dell'audio diventa già «Interrompi», e un
                          secondo segno per lo stesso stato è rumore. -->
+                        <!--
+                            ⛔ IL COLORE DEL TESTO CHE ACCOMPAGNA, non quello
+                            della pagina. Owner 2026-08-12: «il colore dell'icona
+                            microfono nella bolla di domanda deve avere lo stesso
+                            colore del testo, adesso è bianco».
+
+                            Aveva ragione e la causa era `--talos-muted`: un
+                            token nato per il testo secondario **sul fondo della
+                            pagina**. Dentro la bolla dell'utente il fondo è
+                            l'accento e il testo è `--talos-accent-contrast`, così
+                            l'icona finiva quasi bianca su ambra — un colore che
+                            non appartiene a nessuna delle due parti.
+
+                            ⇒ Stesso token del testo che accompagna, e il grado
+                            di «secondario» lo dà l'OPACITÀ invece di un'altra
+                            tinta: resta più sommessa della frase senza smettere
+                            di essere dello stesso colore, e continua a funzionare
+                            se il tema cambia l'accento.
+                        -->
                         <span
                             v-if="message.role === 'user' && message.metadata?.dictated === true"
                             data-testid="talos-message-dictated"
-                            class="inline-flex shrink-0 translate-y-[0.15em] items-center text-[var(--talos-muted)]"
+                            class="inline-flex shrink-0 translate-y-[0.15em] items-center text-[var(--talos-accent-contrast,var(--primary-foreground))] opacity-70"
                             :title="$t('chat.dictated')"
                             :aria-label="$t('chat.dictated')"
                         >

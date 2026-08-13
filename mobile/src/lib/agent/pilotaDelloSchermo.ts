@@ -1,4 +1,5 @@
 import { talosFraseDaDire } from '@/lib/agent/voceDelPilota'
+import { talosTracciaFuori } from '@/lib/device/traccia'
 import {
     talosLeggiAzione,
     talosOsservazione,
@@ -85,7 +86,14 @@ export type TalosFineCorsa =
     | { motivo: 'troppi-passi' }
     | { motivo: 'tempo-scaduto' }
     | { motivo: 'troppi-fallimenti', ultimo?: string }
-    | { motivo: 'modello-non-capito', scarto: TalosMotivoScarto }
+    /**
+     * ⛔ `dettaglio` porta i primi caratteri di CIÒ CHE IL MODELLO HA DETTO.
+     *
+     * Senza, la traccia dice «non ho capito» e tace su cosa non ha capito — e
+     * «nessunJson» da solo non distingue una risposta in prosa da una risposta
+     * VUOTA, che è tutt'altro difetto e sta a monte.
+     */
+    | { motivo: 'modello-non-capito', scarto: TalosMotivoScarto, dettaglio?: string }
 
 export interface TalosSguardo {
     elementi: readonly TalosElementoSchermo[]
@@ -129,21 +137,68 @@ export async function talosGuidaLoSchermo(
     // Cosa si è detto l'ultima volta: serve al SILENZIO — tre scorrimenti di
     // fila non si annunciano tre volte.
     let ultima: { azione: TalosAzione['azione'], etichetta?: string } | undefined
-    const chiudi = (fine: TalosFineCorsa): TalosCorsaDelPilota => ({
-        fine,
-        storia,
-        passi,
-        millisecondi: porte.adesso() - partenza,
-    })
+    /*
+     * ⛔⛔ LA MACCHINA DICE DOVE SI È FERMATA — 2026-08-13.
+     *
+     * Il pilota ha OTTO modi di finire e non ne raccontava nessuno: dal di
+     * fuori si vedeva solo un telefono che smetteva di muoversi. MISURATO
+     * ieri sera: il pilota ha aperto WhatsApp e poi è rimasto fermo 30 s senza
+     * toccare il contatto — e per sapere *quale* delle otto uscite avesse
+     * preso non c'era altra strada che dedurlo, cioè indovinarlo.
+     *
+     * Otto uscite indistinguibili sono otto ipotesi da provare a una a una;
+     * una riga qui le riduce a una lettura. Questa è la strozzatura: ogni
+     * ritorno passa da `chiudi`, quindi non esiste un'uscita muta.
+     */
+    const chiudi = (fine: TalosFineCorsa): TalosCorsaDelPilota => {
+        const durata = porte.adesso() - partenza
+        // Il motivo è un'unione con campi diversi per ramo: si serializza tutto,
+        // perché il campo che manca è spesso proprio quello che spiega.
+        talosTracciaFuori(`pilota: fine=${JSON.stringify(fine)} passi=${passi} ms=${durata}`)
+        return { fine, storia, passi, millisecondi: durata }
+    }
 
     for (;;) {
         const sguardo = await porte.guarda()
         if (sguardo === null) return chiudi({ motivo: 'occhio-chiuso' })
         // ⛔ La mano PRIMA di tutto, e a ogni giro: fra il passo scorso e questo
         // la persona può aver ripreso in mano il telefono.
-        if (sguardo.manoSulloSchermo) {
-            return chiudi({ motivo: 'mano-sullo-schermo', passo: passi })
-        }
+        /*
+         * ⛔⛔ IL FRENO NON FERMA PIÙ LA CORSA — owner 2026-08-13:
+         *
+         * > «SE NECESSARIO DOBBIAMO TOGLIERE QUESTO FRENO COMPLETAMENTE, NON
+         * > ME NE FREGA UN CAZZO, fai una ricerca web. gemini non fa così»
+         *
+         * ## Perché non era una protezione: era il difetto
+         *
+         * MISURATO sul Pad, con NESSUNO che toccava il tablet:
+         *
+         * ```
+         * pilota dice: Ok, apro WhatsApp
+         * pilota dice: Digito «Io Tu»
+         * pilota: fine={"motivo":"mano-sullo-schermo","passo":2} ms=9613
+         * ```
+         *
+         * Il freno sentiva le CONSEGUENZE delle nostre stesse azioni: TALOS
+         * digita, WhatsApp reagisce (la ricerca si apre, la lista si filtra),
+         * e quegli eventi arrivano oltre i 400 ms di sordità. La sonda ha poi
+         * misurato ritardi di **401.663.098 ms** — cioè `nostraAzioneAl` a
+         * zero, la sordità mai armata al momento giusto. Il pilota non è mai
+         * arrivato in fondo a un compito: si fermava da solo, ogni volta.
+         *
+         * ## Come lo fa chi è avanti
+         *
+         * Gemini (Computer Use su Android) **non rileva i tocchi**: mostra una
+         * barra di progresso persistente con uno STOP esplicito, e l'azione
+         * finanziaria chiede una conferma finale. Il controllo è un pulsante,
+         * non un indovinello. ⇒ Un rilevamento che sbaglia toglie la funzione
+         * senza dare sicurezza: è il peggiore dei due mondi.
+         *
+         * ⛔ Il segnale NON viene buttato: `sguardo.manoSulloSchermo` resta
+         * disponibile e continua a essere raccolto, perché serve al presidio
+         * che lo sostituisce — il comando di arresto che la persona preme. Qui
+         * smette solo di decidere al posto suo.
+         */
         // ⛔ E «non lo so» conta come un no: vedi il commento in testa.
         if (!sguardo.frenoArmato) return chiudi({ motivo: 'freno-non-armato' })
         if (porte.adesso() - partenza >= limiti.millisecondi) {
@@ -158,7 +213,13 @@ export async function talosGuidaLoSchermo(
             }),
             sguardo.elementi.map((e) => e.indice),
         )
-        if (!lettura.ok) return chiudi({ motivo: 'modello-non-capito', scarto: lettura.motivo })
+        if (!lettura.ok) {
+            return chiudi({
+                motivo: 'modello-non-capito',
+                scarto: lettura.motivo,
+                dettaglio: lettura.dettaglio,
+            })
+        }
 
         const azione = lettura.azione
         passi += 1

@@ -223,6 +223,51 @@ class TalosDevicePlugin : Plugin() {
     // ─────────────────────────────────────────────── aprire
 
     /** Apre un'app per nome di pacchetto, o dice che non c'è. */
+    /**
+     * ⭐⭐ APRE UN URI — il motore degli intent passa tutto da qui.
+     *
+     * MISURATO sul Pad il 2026-08-13: allo stesso compito Gemini manda un
+     * WhatsApp in ~20 s **senza mai aprire l'app**, TALOS lo pilotava in 20
+     * passi e 27,8 s senza concludere. La differenza e' un URI.
+     *
+     * ⛔ `resolveActivity` PRIMA di partire, e non un try/catch dopo: un
+     * `ActivityNotFoundException` intercettato dice «e' fallito» quando la
+     * verita' e' «nessuno sa aprirlo», e su quella differenza si decide se
+     * provare la via successiva o arrendersi.
+     *
+     * ⛔ E da Android 11 serve la voce in `<queries>`: senza, il sistema
+     * NASCONDE chi saprebbe aprirlo e `resolveActivity` torna null. Ogni
+     * schema del registro deve avere la sua riga nel manifest, o la capacita'
+     * e' morta in silenzio.
+     */
+    @PluginMethod
+    fun apriUri(call: PluginCall) {
+        val uri = call.getString("uri").orEmpty()
+        val result = JSObject()
+        if (uri.isEmpty()) {
+            call.resolve(result.put("done", false).put("reason", "no-uri"))
+            return
+        }
+        val intent = android.content.Intent(
+            android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse(uri),
+        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (intent.resolveActivity(context.packageManager) == null) {
+            call.resolve(result.put("done", false).put("reason", "nessuno-lo-apre"))
+            return
+        }
+        call.resolve(avvia(intent))
+    }
+
+    /** L'app c'e'? Serve a spiegare un fallimento, non a vietare un tentativo. */
+    @PluginMethod
+    fun appInstallata(call: PluginCall) {
+        val pacchetto = call.getString("package").orEmpty()
+        val presente = pacchetto.isNotEmpty() &&
+            context.packageManager.getLaunchIntentForPackage(pacchetto) != null
+        call.resolve(JSObject().put("presente", presente))
+    }
+
     @PluginMethod
     fun openApp(call: PluginCall) {
         val pacchetto = call.getString("package").orEmpty()

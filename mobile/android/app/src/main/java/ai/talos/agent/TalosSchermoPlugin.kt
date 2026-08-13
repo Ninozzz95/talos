@@ -2,6 +2,7 @@ package ai.talos.agent
 
 import android.accessibilityservice.AccessibilityService
 import android.os.SystemClock
+import android.util.Log
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -52,9 +53,123 @@ class TalosSchermoPlugin : Plugin() {
         )
     }
 
+    /*
+     * ⛔⛔ IL PID STA NELLA RISPOSTA PERCHE' E' LA DOMANDA VERA — 2026-08-13.
+     *
+     * MISURATO stamattina sul Pad: `dumpsys accessibility` diceva
+     * `Bound services:{... label=TALOS — controllo del telefono ...}` e
+     * `TalosOcchio: occhio aperto` era in `logcat` alle 09:03:18 — cioe'
+     * `onServiceConnected()` ERA passato e aveva riempito `vivo`. Nello stesso
+     * momento questa chiamata rispondeva `aperto=false`, e TALOS diceva alla
+     * persona «serve il permesso di lettura dello schermo».
+     *
+     * Una static vuota mentre il servizio e' vivo lascia due spiegazioni, e da
+     * qui non si distinguono: o `vivo` e' stato azzerato, o **stiamo guardando
+     * la static di un ALTRO PROCESSO** — cioe' il servizio di accessibilita' e
+     * la WebView non condividono la memoria che credevamo condivisa.
+     *
+     * Il pid le separa in una riga: se il pid qui e quello della riga
+     * `occhio aperto` coincidono, il problema e' il ciclo di vita; se
+     * differiscono, e' l'architettura, e nessuna cura al ciclo di vita puo'
+     * funzionare.
+     */
+    /**
+     * ⭐⭐⭐ L'ULTIMO CENTIMETRO: preme UN pulsante, e lo trova senza indovinare.
+     *
+     * ## Il problema, con i numeri di chi lo fa da anni
+     *
+     * Dalla ricerca 2026 sugli strumenti di automazione: cercare il pulsante
+     * per etichetta o posizione si rompe a ogni aggiornamento dell'app —
+     * MacroDroid, che fa solo quello, **fallisce sul 31% dei form dinamici**.
+     *
+     * ⇒ Qui si cerca per `viewId` (`com.whatsapp:id/send`): il nome della
+     * risorsa non e' tradotto e non si sposta col layout. Le descrizioni sono
+     * il ripiego, e se falliscono entrambe **non si tocca niente**: un tocco
+     * alla cieca dentro una conversazione manda la cosa sbagliata a una
+     * persona vera.
+     *
+     * ## E la parte VELOCE: si aspetta l'EVENTO, non l'orologio
+     *
+     * Un `sleep(2000)` e' sempre o troppo o troppo poco. Qui si guarda il nodo
+     * finche' compare, con passi brevi, e si esce **appena** c'e' — che su una
+     * finestra gia' pronta vuol dire al primo giro, cioe' in millisecondi.
+     */
+    @PluginMethod
+    fun premiPulsante(call: PluginCall) {
+        val occhio = TalosOcchio.aperto()
+        if (occhio == null) {
+            call.resolve(JSObject().put("fatto", false).put("motivo", "occhio-chiuso"))
+            return
+        }
+        val viewId = call.getString("viewId").orEmpty()
+        val descrizioni = call.getArray("descrizioni")?.toList<String>() ?: emptyList()
+        val inizio = SystemClock.uptimeMillis()
+        var trovato: AccessibilityNodeInfo? = null
+        var via = ""
+        // ⛔ Un tetto c'e', ed e' basso: se dopo due secondi il pulsante non
+        // esiste, non esiste — e insistere significherebbe premere qualcosa
+        // che nel frattempo e' cambiato.
+        while (SystemClock.uptimeMillis() - inizio < 2_000 && trovato == null) {
+            val radice = occhio.rootInActiveWindow
+            if (radice != null) {
+                if (viewId.isNotEmpty()) {
+                    trovato = radice.findAccessibilityNodeInfosByViewId(viewId)
+                        ?.firstOrNull { it.isClickable || it.isEnabled }
+                    if (trovato != null) via = "viewId"
+                }
+                if (trovato == null) {
+                    for (d in descrizioni) {
+                        trovato = radice.findAccessibilityNodeInfosByText(d)
+                            ?.firstOrNull { it.isClickable }
+                            ?: cercaPerDescrizione(radice, d)
+                        if (trovato != null) { via = "descrizione:$d"; break }
+                    }
+                }
+            }
+            if (trovato == null) Thread.sleep(60)
+        }
+        val ms = SystemClock.uptimeMillis() - inizio
+        if (trovato == null) {
+            Log.i("TalosOcchio", "premiPulsante: NON trovato dopo $ms ms (viewId=$viewId)")
+            call.resolve(JSObject().put("fatto", false).put("motivo", "non-trovato").put("millisecondi", ms))
+            return
+        }
+        // ⛔ Il nodo trovato puo' non essere lui il cliccabile: su molte app il
+        // testo sta dentro un contenitore che riceve il tocco. Si sale finche'
+        // qualcuno accetta il click, invece di fallire su un dettaglio di
+        // struttura che cambia da un'app all'altra.
+        var bersaglio: AccessibilityNodeInfo? = trovato
+        var salite = 0
+        while (bersaglio != null && !bersaglio.isClickable && salite < 4) {
+            bersaglio = bersaglio.parent
+            salite++
+        }
+        TalosOcchio.segnaNostraAzione()
+        val fatto = bersaglio?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
+        Log.i("TalosOcchio", "premiPulsante: $fatto via=$via in $ms ms (salite=$salite)")
+        call.resolve(
+            JSObject().put("fatto", fatto).put("via", via).put("millisecondi", ms),
+        )
+    }
+
+    /** Cerca per `contentDescription`, che `findAccessibilityNodeInfosByText` non guarda. */
+    private fun cercaPerDescrizione(radice: AccessibilityNodeInfo, testo: String): AccessibilityNodeInfo? {
+        val pila = ArrayDeque<AccessibilityNodeInfo>()
+        pila.addLast(radice)
+        while (pila.isNotEmpty()) {
+            val n = pila.removeLast()
+            val d = n.contentDescription?.toString()
+            if (d != null && d.equals(testo, ignoreCase = true) && n.isClickable) return n
+            for (i in 0 until n.childCount) n.getChild(i)?.let { pila.addLast(it) }
+        }
+        return null
+    }
+
     @PluginMethod
     fun disponibile(call: PluginCall) {
-        call.resolve(JSObject().put("aperto", TalosOcchio.aperto() != null))
+        val vivo = TalosOcchio.aperto() != null
+        Log.i("TalosOcchio", "disponibile: aperto=$vivo pid=${android.os.Process.myPid()}")
+        call.resolve(JSObject().put("aperto", vivo))
     }
 
     @PluginMethod
