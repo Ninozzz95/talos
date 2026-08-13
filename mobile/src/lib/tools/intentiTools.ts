@@ -6,6 +6,7 @@ import {
     talosCapacitaGenerica,
     talosComponiExtra,
     talosComponiUri,
+    talosConSchema,
     talosParametriMancanti,
     type TalosCapacitaGenerica,
     type TalosCapacitaIntent,
@@ -99,7 +100,7 @@ async function talosPercorri(
         }).then((r) => r.done, () => false)
     }
     return await TalosDeviceBridge
-        .apriUri({ uri: talosComponiUri(via, valori) })
+        .apriUri({ uri: talosConSchema(via, talosComponiUri(via, valori)) })
         .then((r) => r.done, () => false)
 }
 
@@ -516,11 +517,26 @@ export function talosIntentiTools(): readonly TalosToolDefinition<never>[] {
                 const installata = await TalosDeviceBridge
                     .appInstallata({ package: capacita.pacchetto })
                     .then((r) => r.presente, () => false)
+                /*
+                 * ⛔⛔ E QUI SI VIETA DI INVENTARE LA CAUSA — Pad, 2026-08-13.
+                 *
+                 * Con questo stesso esito, TALOS ha risposto alla persona: «il
+                 * browser non riesce a raggiungere il sito tramite HTTPS…
+                 * verifica che la connessione sia attiva… se c'è un firewall o
+                 * un proxy». Niente di tutto ciò era vero, e la colpa finiva
+                 * sul telefono di chi legge. Un modello a cui si dà un esito
+                 * senza causa **la causa se la inventa**, ed è una spiegazione
+                 * plausibile: la più difficile da smentire.
+                 */
                 return {
                     ok: false,
-                    content: installata
+                    content: (installata
                         ? `${capacita.app} is installed but refused every route (${provate.join(', ')}).`
-                        : `${capacita.app} is not installed on this device.`,
+                        : `${capacita.app} is not installed on this device.`)
+                        + ' ⛔ Report exactly this and nothing more. Do NOT invent a cause:'
+                        + ' not the network, not a firewall or proxy, not the security settings,'
+                        + ' not HTTPS. You do not know why, and guessing blames the user\'s phone'
+                        + ' for something it did not do.',
                     code: installata ? 'TALOS_INTENTO_RIFIUTATO' : 'TALOS_INTENTO_APP_ASSENTE',
                 }
             },

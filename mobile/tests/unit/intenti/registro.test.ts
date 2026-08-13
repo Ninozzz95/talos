@@ -4,6 +4,7 @@ import {
     talosCapacita,
     talosComponiExtra,
     talosComponiUri,
+    talosConSchema,
     talosParametriMancanti,
 } from '@/lib/intenti/registro'
 
@@ -90,6 +91,41 @@ describe('⭐ il registro degli intent', () => {
         expect(uri.split('?')[1]).not.toContain('&')
         expect(uri).toContain('phone%3D666')
         expect(uri.startsWith('https://wa.me/393331112222?text=')).toBe(true)
+    })
+
+    /*
+     * ⛔⛔ LA REGOLA CHE PROTEGGE TUTTI DISTRUGGEVA L'UNICO CASO OPPOSTO.
+     *
+     * MISURATO sul Pad il 2026-08-13: «apri il sito example.org» → `app_azione`
+     * chiamato, Chrome **mai aperto**, e TALOS che spiega alla persona che «il
+     * browser non riesce a raggiungere il sito tramite HTTPS… verifica se c'è
+     * un firewall o proxy» — tutto inventato, e la colpa data al suo telefono.
+     *
+     * La causa era qui: `web_apri` ha `modello: '{indirizzo}'`, e i segnaposto
+     * si codificano SEMPRE. `https://example.org` diventava
+     * `https%3A%2F%2Fexample.org`, che non è un URI ⇒ `resolveActivity` null.
+     *
+     * ⇒ La codifica è giusta per un VALORE dentro un URI e sbagliata per un
+     * URI intero. Si dichiara quale dei due è, non si indovina.
+     */
+    it('⛔ un indirizzo che È l\'URI non si codifica', () => {
+        const web = talosCapacita('web_apri')!
+        const uri = talosComponiUri(web.vie[0] as never, { indirizzo: 'https://example.org/a?b=1&c=2' })
+        expect(uri).toBe('https://example.org/a?b=1&c=2')
+    })
+
+    /*
+     * ⛔ Chi dice «apri example.org» non scrive `https://`, e senza schema
+     * `resolveActivity` torna `null` — la stessa risposta che dà quando l'app
+     * non c'è. Due cause con una risposta sola: qui la prima si toglie.
+     */
+    it('⛔ un indirizzo senza schema ne riceve uno — ma SOLO sulle vie https', () => {
+        const web = talosCapacita('web_apri')!.vie[0]
+        expect(talosConSchema(web as never, 'example.org')).toBe('https://example.org')
+        expect(talosConSchema(web as never, 'https://example.org')).toBe('https://example.org')
+        // ⛔ E il verso che romperebbe tutto: uno schema custom non si tocca.
+        const geo = talosCapacita('mappe_cerca')!.vie[0]
+        expect(talosConSchema(geo as never, 'geo:0,0?q=farmacia')).toBe('geo:0,0?q=farmacia')
     })
 
     it('dice COSA manca, non solo che qualcosa manca', () => {

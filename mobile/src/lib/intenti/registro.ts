@@ -65,6 +65,21 @@ export interface TalosViaUri {
      * inverte **con la misura scritta accanto**.
      */
     readonly tipo: 'https' | 'schema'
+    /**
+     * ⛔ I parametri che **sono già l'URI** e che quindi NON vanno codificati.
+     *
+     * MISURATO sul Pad il 2026-08-13: «apri il sito example.org» apriva niente,
+     * e TALOS spiegava alla persona che il suo browser non raggiungeva il sito
+     * «per un firewall o un proxy» — inventato. La causa: `web_apri` ha
+     * `modello: '{indirizzo}'`, e la codifica trasformava
+     * `https://example.org` in `https%3A%2F%2Fexample.org`, che non è un URI.
+     *
+     * ⇒ Codificare è giusto per un VALORE dentro un URI e sbagliato per un URI
+     * intero. La differenza si **dichiara**: indovinarla (per esempio «se il
+     * modello è solo un segnaposto allora è grezzo») funzionerebbe oggi e si
+     * romperebbe alla prima via con due segnaposto.
+     */
+    readonly nonCodificare?: readonly string[]
 }
 
 /**
@@ -501,7 +516,10 @@ export const TALOS_CAPACITA_INTENT: readonly TalosCapacitaIntent[] = [
         pacchetto: 'com.android.chrome',
         app: 'browser',
         parametri: ['indirizzo'],
-        vie: [{ modello: '{indirizzo}', tipo: 'https' }],
+        // ⛔ L'unica via del registro il cui parametro **è** l'URI, non un
+        // valore dentro l'URI. Vedi `nonCodificare`: senza questa riga
+        // `https://example.org` partiva come `https%3A%2F%2Fexample.org`.
+        vie: [{ modello: '{indirizzo}', tipo: 'https', nonCodificare: ['indirizzo'] }],
         esce: false,
     },
 ] as const
@@ -587,8 +605,26 @@ export function talosComponiUri(
     via: TalosViaUri,
     valori: Readonly<Record<string, string>>,
 ): string {
-    return via.modello.replace(/\{(\w+)\}/g, (_, nome: string) =>
-        encodeURIComponent(valori[nome] ?? ''))
+    return via.modello.replace(/\{(\w+)\}/g, (_, nome: string) => {
+        const valore = valori[nome] ?? ''
+        return via.nonCodificare?.includes(nome) ? valore : encodeURIComponent(valore)
+    })
+}
+
+/**
+ * Un URI `https` senza schema non è un URI: glielo si mette.
+ *
+ * ⛔ MISURATO: chi dice «apri example.org» non scrive `https://`, e senza
+ * schema `resolveActivity` torna `null` — cioè la stessa risposta che dà quando
+ * l'app non c'è. Due cause diverse con una risposta sola sono il difetto più
+ * frequente di questo progetto, e qui la prima si può semplicemente togliere.
+ *
+ * ⛔ Vale SOLO per le vie `https`: aggiungerlo a uno schema custom
+ * (`geo:`, `tel:`) romperebbe l'unica cosa che quelle vie sanno fare.
+ */
+export function talosConSchema(via: TalosViaUri, uri: string): string {
+    if (via.tipo !== 'https' || /^[a-z][a-z0-9+.-]*:/i.test(uri)) return uri
+    return `https://${uri}`
 }
 
 /**
