@@ -1118,6 +1118,23 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     const catalogs = reactive(initialCatalogs())
     const endpoints = reactive(initialEndpoints())
     const selectedModelId = ref<string | null>(null)
+    /**
+     * ⛔ Il modello che la persona aveva scelto e che NON abbiamo potuto
+     * applicare perché **il suo catalogo non si leggeva**. Non è «non esiste»:
+     * è «non lo so», e le due cose vogliono comportamenti opposti.
+     *
+     * MISURATO sul Pad il 2026-08-13, togliendo la rete:
+     * `ricordato=anthropic:claude-haiku-4-5 scartato=non-nel-catalogo
+     * profili=0 cataloghiNonLetti=[anthropic,openrouter,openai]`.
+     * Con un solo catalogo caduto su tre, il ripiego prendeva **il primo
+     * modello dell'altro provider** — e diventava permanente, perché al
+     * ritorno del catalogo `ensureSelection` trovava già una scelta valida.
+     * ⇒ Una chat partiva su ByteDance col credito OpenRouter esaurito.
+     *
+     * Non è un `ref`: nessun template lo guarda, e il grafo d'avvio ha 71 byte
+     * di margine.
+     */
+    let modelloInAttesa: string | null = null
     // Defect A2 discipline: the toolset is assembled in its OWN module and built
     // once per controller, not per message. `toolActivity` is what the chat
     // renders while a round of tools is running.
@@ -4797,6 +4814,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     }
 
     function ensureSelection(preferredProvider?: TalosMobileProviderId): void {
+        /*
+         * ⛔⛔ PRIMA DI TUTTO: il modello che la persona aveva scelto e che non
+         * si era potuto applicare perché il catalogo non si leggeva.
+         *
+         * Sta in cima e non in fondo apposta. Se stesse dopo, al ritorno del
+         * catalogo `applyModelSelection(selectedModelId)` troverebbe già valido
+         * il RIPIEGO e lo terrebbe per sempre: è così che una scelta transitoria
+         * diventava permanente, e una chat partiva su un provider senza credito.
+         */
+        if (modelloInAttesa && applyModelSelection(modelloInAttesa)) {
+            talosTracciaFuori(`modello: riavuto=${modelloInAttesa}`)
+            modelloInAttesa = null
+            return
+        }
         if (applyModelSelection(selectedModelId.value)) return
         // ⛔ PRIMA la scelta della persona, poi qualunque automatismo. È la riga
         // che fa arrivare alla barra il modello scelto nella chat: senza, la
@@ -4944,7 +4975,61 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         effort.value = defaults.effort
         thinking.value = defaults.thinking
         const restoredModel = chat.activeSession.value?.active_model_profile_id ?? defaults.model_profile_id
-        if (!applyModelSelection(restoredModel)) ensureSelection()
+        const daSessione = chat.activeSession.value?.active_model_profile_id != null
+        if (applyModelSelection(restoredModel)) {
+            /*
+             * ⛔ Parla ANCHE quando va bene, e non è verbosità: se la sonda
+             * tacesse sul successo, «nessuna riga nel log» vorrebbe dire
+             * insieme «ha funzionato» e «la sonda non è arrivata». Sono due
+             * cose diverse, e confonderle è il modo in cui si insegue per
+             * mezz'ora un difetto che non c'è. Una riga per avvio dell'app.
+             */
+            talosTracciaFuori(`modello: ripreso=${restoredModel} da=${daSessione ? 'sessione' : 'pref'}`)
+        }
+        else {
+            /*
+             * ⛔⛔ LA SONDA CHE SEPARA QUATTRO CAUSE CHE DA FUORI SONO UNA.
+             *
+             * MISURATO sul Pad il 2026-08-13: due chat nuove aperte allo stesso
+             * modo, a sei minuti di distanza, con modelli diversi nel chip —
+             * **Claude Haiku 4.5** la prima, **ByteDance Seed 2.1 Turbo** la
+             * seconda. Col credito OpenRouter esaurito la seconda sarebbe
+             * fallita per un motivo che non c'entra niente con la funzione in
+             * prova: questo difetto **avvelena ogni misura successiva**.
+             *
+             * ⛔ E la prima ipotesi è caduta con la misura: credevo che l'id
+             * fosse una riga di database ricreata dal reinstall, e invece
+             * `shared_prefs` dice `anthropic:claude-haiku-4-5-20251001` — una
+             * stringa `provider:modello`, che a un reinstall sopravvive.
+             *
+             * ⇒ Restano quattro cause, e `false` le appiattisce tutte:
+             * l'id non c'è · il profilo non è nel catalogo · è nascosto al
+             * compositore · non è richiamabile (manca la chiave, o è `failed`).
+             * Portano a quattro rimedi diversi, e senza questa riga si continua
+             * a indovinare quale.
+             */
+            const p = restoredModel
+                ? profiles.value.find((candidate) => candidate.id === restoredModel) ?? null
+                : null
+            const perche = !restoredModel
+                ? 'nessun-id'
+                : !p
+                    ? 'non-nel-catalogo'
+                    : !p.show_in_composer
+                        ? 'nascosto'
+                        : `non-chiamabile(${p.status},chiave=${p.has_secret})`
+            // ⛔ Si tiene da parte SOLO quando la causa è «non lo so»: un
+            // profilo nascosto o senza chiave è un «no» vero, e riproporlo
+            // ogni volta sarebbe insistere su una porta chiusa.
+            if (perche === 'non-nel-catalogo') modelloInAttesa = restoredModel
+            ensureSelection()
+            talosTracciaFuori(
+                `modello: ricordato=${restoredModel ?? 'nessuno'} scartato=${perche}`
+                + ` profili=${profiles.value.length}`
+                + ` nonLetti=[${[...cataloghiNonLetti].join(',')}]`
+                + ` ripiego=${selectedModelId.value ?? 'nessuno'}`,
+            )
+        }
         effort.value = clampMobileEffort(selectedProfile.value?.effort_levels, effort.value)
         if (!selectedProfile.value?.supports_thinking) thinking.value = false
         initialized = true
@@ -5083,6 +5168,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
     async function selectModel(id: string): Promise<void> {
         if (!applyModelSelection(id)) return
+        // ⛔ Una scelta esplicita CHIUDE l'attesa: se la persona ha cambiato
+        // idea mentre il catalogo era irraggiungibile, riprendersi il modello
+        // di prima sarebbe disfarle la scelta sotto le mani.
+        modelloInAttesa = null
         const operations: Promise<unknown>[] = [persistComposerDefaults()]
         if (chat.activeSession.value) operations.push(chat.setActiveModelProfile(id))
         await Promise.all(operations)
