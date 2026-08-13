@@ -146,7 +146,12 @@ function everyExecutableTool() {
         ...createTalosSchermoTools({ guida: vi.fn(), occhioAperto: vi.fn() } as never),
         // ⭐ Il motore degli intent: UN tool per 25 capacità, e questa guardia
         // è ciò che impedisce che resti scollegato dal pannello dei permessi.
-        ...talosIntentiTools(),
+        // ⛔ CON le fonti dei file: `invia_file` esiste solo quando ce le ha, e
+        // senza questa riga la guardia non lo vedrebbe — cioè il tool nuovo
+        // resterebbe fuori dal pannello dei permessi senza che nessuno se ne
+        // accorga, che è esattamente il difetto che questo test esiste per
+        // impedire.
+        ...talosIntentiTools({ fileDellaLibreria: vi.fn(async () => []) }),
     ]
 }
 
@@ -322,6 +327,19 @@ describe('Agent Tools control registry', () => {
              * il motivo per cui vale la pena tenerla aggiornata a mano.
              */
             'app_azione',
+            /*
+             * ⭐⭐⭐ 2026-08-13, MANDARE UN FILE: `invia_file`.
+             *
+             * Owner, verbatim: «si possa dire alla chat di inviare un file
+             * della libreria via social media o app di messaggistica».
+             *
+             * ⛔ Stessa domanda di sempre: se togliendolo l'impronta storica
+             * NON tornasse, vorrebbe dire che aggiungendo un tool nuovo ho
+             * mosso il contratto di uno che c'era già. Il fatto che torni
+             * `369a6da1…` byte per byte dimostra che è cresciuta la LISTA, non
+             * il contratto — che è l'unica cosa che questa guardia sa dire.
+             */
+            'invia_file',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -391,8 +409,21 @@ describe('Agent Tools control registry', () => {
          * stato corrente, e cambiarlo è il gesto deliberato con cui si dichiara
          * «ho aggiunto qualcosa».
          */
+        /*
+         * ⭐⭐⭐ 2026-08-13, OTTAVO cambio: `invia_file`, mandare un file.
+         *
+         * Owner, verbatim: «si possa dire alla chat di inviare un file della
+         * libreria via social media o app di messaggistica e poi anche
+         * successivamente inviare un file che abbiamo nella memoria, salvato
+         * nel dispositivo, e inviarlo dove voglio noi».
+         *
+         * ⛔ E l'impronta STORICA (`369a6da1…`) NON si è mossa — il blocco qui
+         * sopra esclude `invia_file` e la riproduce byte per byte. È cresciuta
+         * la lista, non il contratto: i tool di ieri parlano ai provider
+         * esattamente come parlavano ieri.
+         */
         expect(digestOf(controlPlane))
-            .toBe('cd3a30beca5e97a216b5fc0afbd8f3c1673c6fab4457622158fdcf6cf07bbc07')
+            .toBe('05c679dfdb632a71a95176d753989c05019db3970bdde5229b844d86f34580ae')
         /*
          * ⭐ Ri-fissato 2026-08-08 per i TRE tool delle NOTIFICHE:
          * `device_notifications_list`, `device_notification_reply`,
@@ -625,11 +656,15 @@ describe('Agent Tools control registry', () => {
          * escluso da quel blocco, quindi il suo essere ancora verde dimostra
          * che nessuno dei contratti preesistenti è cambiato insieme a questo.
          */
+        /*
+         * ⭐⭐⭐ 2026-08-13, `invia_file`: i tre dialetti si muovono INSIEME,
+         * come dev'essere per un tool nuovo — e l'impronta STORICA resta ferma.
+         */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('cbff4bb3ed5675e92478cb05cc22d63c4d671ef07bcb280677190510a083d64d')
+            .toBe('0beadfaebc57bf18993f146bbdc25df5c95ada5eb4c634000da5868653732843')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('23714bc789c3cdd7aac8b7c6834b3bccbcdfe77f1213b4891139b67cc8e75f10')
+            .toBe('315df242daa98e2a9b6a6efaea4f3ef34af4e85ae5d9eb835cd86e84fa215c86')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('f120ffbaeb530d81f7acda2345f4d1a04bedafa91d152fdac137b2376d93b196')
+            .toBe('fecbc9b2755ffad0206c2be6b4d3b8423311c7860bf6089e48ffbb407d0f4cfa')
     })
 })

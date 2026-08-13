@@ -76,6 +76,27 @@ interface PonteDispositivo {
         extra?: Readonly<Record<string, string>>
     }): Promise<{ done: boolean, reason?: string }>
     /**
+     * ⭐⭐⭐ MANDA UN FILE a un'altra app — owner 2026-08-13.
+     *
+     * `apriAzione` qui sopra manda solo TESTO. Un file vuole un `content://`
+     * prodotto da un `FileProvider` più il permesso di lettura: un `file://`
+     * in `EXTRA_STREAM` lancia `FileUriExposedException` da Android 7. Tutto
+     * il perché sta accanto all'implementazione, in `TalosDevicePlugin.kt`.
+     *
+     * `percorso` è RELATIVO alla cartella privata — cioè `private_uri` di un
+     * file della libreria, così com'è sul disco.
+     *
+     * ⛔ `reason` distingue i casi che portano a cose diverse da dire:
+     * `file-assente` · `percorso-fuori` · `cartella-non-dichiarata` (difetto
+     * nostro) · `nessuno-lo-fa` (nessuna app accetta quel tipo).
+     */
+    condividiFile(options: {
+        percorso: string
+        tipo?: string
+        pacchetto?: string
+        testo?: string
+    }): Promise<{ done: boolean, reason?: string, uri?: string, tipo?: string }>
+    /**
      * ⭐ La riga di rubrica con cui un'app fa una cosa — o `null`.
      *
      * ⛔ `uri: null` **non è un errore**: è la risposta che fa scegliere il

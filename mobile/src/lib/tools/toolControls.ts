@@ -110,6 +110,7 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
      * secondi MISURATI, contro i ~20 secondi che Gemini impiega con l'intent.
      */
     app_azione: true,
+    invia_file: true,
 })
 
 export type TalosAgentToolId = keyof typeof TALOS_DEFAULT_AGENT_TOOL_ENABLED

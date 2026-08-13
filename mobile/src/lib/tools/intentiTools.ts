@@ -16,6 +16,11 @@ import { talosRisolviContatto } from '@/lib/intenti/rubrica'
 import { TalosDeviceBridge } from '@/lib/device/devicePlugin'
 import { TalosSchermoBridge, type TalosEsitoInvio } from '@/lib/device/ponteSchermo'
 import {
+    talosScegliApp,
+    talosScegliFile,
+    type TalosFileMandabile,
+} from '@/lib/tools/fileDaMandare'
+import {
     defineTalosTool,
     type TalosToolDefinition,
     type TalosToolResult,
@@ -379,7 +384,173 @@ async function talosUltimoCentimetro(
     }
 }
 
-export function talosIntentiTools(): readonly TalosToolDefinition<never>[] {
+/** Da dove il tool prende i file che si possono mandare. */
+export interface TalosFontiFile {
+    fileDellaLibreria(): Promise<readonly TalosFileMandabile[]>
+}
+
+/**
+ * ⭐⭐⭐ MANDARE UN FILE — owner 2026-08-13.
+ *
+ * > «si possa dire alla chat di inviare un file della libreria via social media
+ * > o app di messaggistica»
+ *
+ * ## Le tre domande, in quest'ordine, e nessuna si indovina
+ *
+ * 1. **quale file** — dalla libreria vera, con tre esiti (trovato / ambiguo /
+ *    nessuno), perché scegliere a caso significa mandare il file sbagliato a
+ *    una persona vera;
+ * 2. **chi può riceverlo** — si chiede al TELEFONO con `chiAccetta` sul MIME di
+ *    QUEL file: con un'immagine l'elenco è diverso che con un testo, e una
+ *    tabella scritta a mano invecchia (diceva `org.telegram.messenger` mentre
+ *    sul Pad c'è Telegram X);
+ * 3. **a quale app** — l'etichetta che ha detto la persona, confrontata con
+ *    quell'elenco.
+ *
+ * ⛔ Senza `app`, l'elenco torna con `ok: true` e il divieto esplicito di
+ * nominarne altre. Un elenco vero dentro un `ok:false` ha già fatto inventare
+ * al modello app non installate: gli esiti sono TRE, non due.
+ */
+function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
+    return defineTalosTool({
+        name: 'invia_file',
+        action: 'write',
+        requiredActions: ['write', 'outbound'],
+        title: 'Send a Library file',
+        /*
+         * ⛔ CORTA di proposito. Ogni byte di schema viaggia in OGNI messaggio,
+         * e il tetto complessivo è 42.000: la prima stesura ne costava 880 e
+         * sfondava. Quello che resta è ciò che il modello non può dedurre.
+         */
+        description: [
+            'Send a Library file to another app. "file" is matched against the real Library;',
+            'if several match, ask instead of guessing. Omit "app" to list the apps that accept it.',
+        ].join(' '),
+        input: z.object({
+            file: z.string().min(1).describe('The file the user named.'),
+            app: z.string().optional().describe('Destination app; omit to list them.'),
+            testo: z.string().optional().describe('Optional message with the file.'),
+        }),
+        async run(input): Promise<TalosToolResult> {
+            const file = await fonti.fileDellaLibreria()
+            const scelta = talosScegliFile(file, input.file)
+            if (scelta.esito === 'nessuno') {
+                /*
+                 * ⛔ `ok: true` con l'elenco vero. Un `ok:false` che PORTA un
+                 * elenco è la forma che fa inventare: il modello legge il
+                 * fallimento, scarta il contenuto e si inventa i nomi.
+                 */
+                return {
+                    ok: true,
+                    content: scelta.cePero.length === 0
+                        ? 'The Library is empty: there is no file to send. Tell the user, and do not invent one.'
+                        : `No Library file matches that. These are the only files that exist: ${
+                            scelta.cePero.map((f) => f.nome).join(', ')
+                        }. Ask the user which one they meant, naming ONLY these. Do not invent a file name.`,
+                    contentOrigin: 'user-direct',
+                    senzaEffetto: true,
+                    evidence: { cercato: input.file, presenti: scelta.cePero.map((f) => f.nome) },
+                }
+            }
+            if (scelta.esito === 'ambiguo') {
+                return {
+                    ok: true,
+                    content: `More than one Library file matches "${input.file}": ${
+                        scelta.fra.map((f) => f.nome).join(', ')
+                    }. Ask the user which one, naming ONLY these. Nothing was sent. Do NOT offer to pick one at random and do NOT pick one yourself: the files may differ and it goes to a real person.`,
+                    contentOrigin: 'user-direct',
+                    senzaEffetto: true,
+                    evidence: { cercato: input.file, fra: scelta.fra.map((f) => f.nome) },
+                }
+            }
+            const daMandare = scelta.file
+            const accettano = await TalosDeviceBridge.chiAccetta({
+                azione: 'android.intent.action.SEND',
+                tipo: daMandare.tipo,
+            }).then((r) => r.app, () => [])
+            if (accettano.length === 0) {
+                return {
+                    ok: false,
+                    content: `No app on this phone can receive a ${daMandare.tipo} file. Tell the user; do not invent one.`,
+                    code: 'TALOS_FILE_NESSUNA_APP',
+                }
+            }
+            const elenco = accettano.map((a) => a.nome || a.pacchetto).join(', ')
+            if (!input.app) {
+                return {
+                    ok: true,
+                    content: `"${daMandare.nome}" is ready to send. On THIS phone these apps can receive it: ${
+                        elenco
+                    }. Ask the user which one, naming ONLY these, then call again with "app". Nothing was sent yet.`,
+                    contentOrigin: 'user-direct',
+                    senzaEffetto: true,
+                    evidence: { file: daMandare.nome, tipo: daMandare.tipo, app: accettano.map((a) => a.pacchetto) },
+                }
+            }
+            const bersaglio = talosScegliApp(accettano, input.app)
+            if (!bersaglio) {
+                return {
+                    ok: true,
+                    content: `"${input.app}" is not among the apps that can receive "${daMandare.nome}". These can: ${
+                        elenco
+                    }. Ask the user to pick one of these. Nothing was sent.`,
+                    contentOrigin: 'user-direct',
+                    senzaEffetto: true,
+                    evidence: { chiesta: input.app, possibili: accettano.map((a) => a.pacchetto) },
+                }
+            }
+            const esito = await TalosDeviceBridge.condividiFile({
+                percorso: daMandare.percorso,
+                tipo: daMandare.tipo,
+                pacchetto: bersaglio.pacchetto,
+                ...(input.testo ? { testo: input.testo } : {}),
+            })
+            if (!esito.done) {
+                /*
+                 * ⛔ Ogni motivo dice una cosa diversa, e due di questi sono
+                 * difetti NOSTRI: dirli come «non riesco» li nasconderebbe.
+                 */
+                const spiegazione: Record<string, string> = {
+                    'file-assente': `The Library lists "${daMandare.nome}" but the file is not on disk. Nothing was sent. Tell the user the file is missing.`,
+                    'percorso-fuori': 'Refused: that path is outside the Library. Nothing was sent.',
+                    'cartella-non-dichiarata': 'TALOS cannot hand this file over: its folder is not declared for sharing. This is a TALOS defect, not something the user can fix. Nothing was sent.',
+                    'nessuno-lo-fa': `${bersaglio.nome} cannot receive this file after all. Nothing was sent.`,
+                }
+                return {
+                    ok: false,
+                    content: spiegazione[esito.reason ?? '']
+                        ?? `The file could not be handed to ${bersaglio.nome} (${esito.reason ?? 'unknown'}). Nothing was sent.`,
+                    code: `TALOS_FILE_${(esito.reason ?? 'sconosciuto').toUpperCase().replace(/-/g, '_')}`,
+                }
+            }
+            /*
+             * ⛔ «Consegnato» NON è «inviato», e la differenza è tutta.
+             *
+             * L'app di destinazione si è aperta con il file allegato: l'invio
+             * vero è il tocco dopo. Dirlo qui è ciò che impedisce la bugia che
+             * è costata la giornata — «Messaggio inviato» detto su un'azione
+             * che non era ancora avvenuta.
+             */
+            return {
+                ok: true,
+                content: `"${daMandare.nome}" is now attached in ${bersaglio.nome}, ready to send. It has NOT been sent yet: say so, and do not claim it was sent.`,
+                contentOrigin: 'user-direct',
+                evidence: {
+                    file: daMandare.nome,
+                    tipo: daMandare.tipo,
+                    app: bersaglio.pacchetto,
+                    uri: esito.uri ?? null,
+                },
+            }
+        },
+    // `never` è il tipo dell'INPUT nell'elenco: lo stesso cast che usa il tool
+    // accanto, per la stessa ragione — l'elenco è eterogeneo per costruzione.
+    }) as TalosToolDefinition<never>
+}
+
+export function talosIntentiTools(
+    fonti?: TalosFontiFile,
+): readonly TalosToolDefinition<never>[] {
     return [
         defineTalosTool({
             name: 'app_azione',
@@ -613,5 +784,13 @@ export function talosIntentiTools(): readonly TalosToolDefinition<never>[] {
                 }
             },
         }) as TalosToolDefinition<never>,
+        /*
+         * ⛔ IN FONDO, e l'ordine non è estetico: la guardia AGENT-TOOLS-01
+         * confronta questo elenco con quello del pannello dei permessi POSIZIONE
+         * PER POSIZIONE. Messo in cima, il test falliva con due elenchi della
+         * stessa lunghezza e contenuto — il genere di rosso che si scambia per
+         * un difetto vero.
+         */
+        ...(fonti ? [talosToolInviaFile(fonti)] : []),
     ]
 }

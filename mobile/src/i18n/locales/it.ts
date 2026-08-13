@@ -1064,6 +1064,7 @@ export const TALOS_IT_MESSAGES = {
          */
         deviceScreenDrive: 'Uso di un’app per te',
         appAzione: 'Azione in un’altra app',
+        inviaFile: 'Invio di un file',
         researchList: 'Consultazione delle ricerche',
         researchStart: 'Avvio di una ricerca',
         researchRead: 'Lettura di un rapporto',
@@ -1283,6 +1284,10 @@ export const TALOS_IT_MESSAGES = {
         appAzione: {
             title: 'Fallo in un’altra app',
             description: 'Apre l’app giusta con tutto già dentro. L’ultima parola resta tua.',
+        },
+        inviaFile: {
+            title: 'Manda un tuo file',
+            description: 'Prende un file dalla tua Libreria e lo allega nell’app che dici tu — WhatsApp, email, quello che sa riceverlo. Ti dice sempre quali app possono, e l’invio lo dai tu.',
         },
         deviceScreenDrive: {
             title: 'Usa un’app al posto tuo',
@@ -2369,6 +2374,7 @@ export const TALOS_IT_MESSAGES = {
             device_notification_dismiss: { title: 'Togli una notifica', description: 'La toglie dalla tendina. Quelle di qualcosa che sta girando non si tolgono.' },
             device_screen_drive: { title: 'Usa un’app al posto tuo', description: '⛔ TALOS tocca, scrive e scorre dentro le altre app per arrivare a un obiettivo, e dice a voce cosa sta per fare PRIMA di ogni mossa. Si ferma da solo dopo 20 passi, 2 minuti, due errori di fila — e nell’istante in cui tocchi lo schermo.' },
             app_azione: { title: 'Fallo in un’altra app', description: '⭐ Apre l’app giusta con tutto già dentro, invece di cercare sullo schermo. Messaggi, chiamate, mappe, musica, calendario.' },
+            invia_file: { title: 'Manda un tuo file', description: '⭐ Prende un file dalla tua Libreria e lo allega nell’app che dici tu. Ti dice sempre quali app sanno riceverlo su QUESTO telefono, e l’invio lo dai tu.' },
         },
     },
     lock: {

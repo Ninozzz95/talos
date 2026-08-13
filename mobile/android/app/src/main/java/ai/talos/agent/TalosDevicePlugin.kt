@@ -380,6 +380,108 @@ class TalosDevicePlugin : Plugin() {
     }
 
     /**
+     * ⭐⭐⭐ MANDARE UN FILE A UN'ALTRA APP — owner 2026-08-13.
+     *
+     * > «si possa dire alla chat di **inviare un file della libreria via social
+     * > media o app di messaggistica**»
+     *
+     * `apriAzione` sopra manda solo TESTO. Un file e' un'altra cosa, e le
+     * differenze non sono di forma: sono le tre che rompono l'invio.
+     *
+     * ## 1. `file://` NON si puo' mandare, da Android 7
+     *
+     * Passare un `Uri.fromFile(...)` in `EXTRA_STREAM` lancia
+     * `FileUriExposedException`. Serve un `content://` prodotto da un
+     * `FileProvider`, piu' `FLAG_GRANT_READ_URI_PERMISSION` — altrimenti l'app
+     * che riceve vede l'URI e non puo' aprirlo.
+     *
+     * ⛔ E il `FileProvider` deve DICHIARARE la cartella: i file della libreria
+     * stanno in `filesDir`, che le due righe scritte da Capacitor in
+     * `file_paths.xml` non coprivano. Senza `<files-path>`, `getUriForFile`
+     * lancia `Failed to find configured root`.
+     *
+     * ## 2. `ClipData`, o l'anteprima e il permesso saltano
+     *
+     * Da Android 10 il foglio di condivisione copia la `ClipData` e NON
+     * `EXTRA_STREAM`: senza `ClipData.newRawUri`, chi riceve mostra un
+     * rettangolo vuoto — e diverse app trattano il permesso come non concesso.
+     * Si mettono entrambi, che e' cio' che la documentazione descrive.
+     *
+     * ## 3. Il MIME decide CHI puo' riceverlo
+     *
+     * Non e' una formalita': con un MIME di immagine l'elenco di
+     * `queryIntentActivities` e' diverso che con `text` semplice. Per questo il
+     * tipo arriva da chi chiama e non si indovina qui — e per questo l'elenco
+     * delle app di destinazione si chiede al telefono con `chiAccetta`, non a
+     * una tabella scritta a mano.
+     *
+     * ⛔ NOTA per chi tocchera' questo commento: in Kotlin i commenti a blocco
+     * si ANNIDANO. Scrivere qui dentro la stella di un MIME preceduta da una
+     * barra apre un commento interno, e la chiusura qui sotto chiude solo
+     * quello — il resto del file diventa commento fino alla prima chiusura che
+     * capita, che era dentro una stringa. Costato una compilazione.
+     *
+     * ⛔ Il percorso e' RELATIVO a `filesDir` e viene ripulito: un `..` che
+     * uscisse da li' significherebbe mandare a un'altra app un file che non e'
+     * della libreria. La guardia confronta i percorsi CANONICI, che e' l'unica
+     * forma che regge ai collegamenti simbolici.
+     */
+    @PluginMethod
+    fun condividiFile(call: PluginCall) {
+        val percorso = call.getString("percorso").orEmpty()
+        val tipo = call.getString("tipo").orEmpty().ifEmpty { "*/*" }
+        val esito = JSObject()
+        if (percorso.isEmpty()) {
+            call.resolve(esito.put("done", false).put("reason", "no-percorso"))
+            return
+        }
+        val radice = context.filesDir
+        val file = java.io.File(radice, percorso)
+        val dentro = try {
+            file.canonicalPath.startsWith(radice.canonicalPath + java.io.File.separator)
+        } catch (_: java.io.IOException) {
+            false
+        }
+        if (!dentro) {
+            android.util.Log.i("TalosDevice", "condividiFile: percorso fuori dalla libreria, rifiuto")
+            call.resolve(esito.put("done", false).put("reason", "percorso-fuori"))
+            return
+        }
+        if (!file.isFile) {
+            call.resolve(esito.put("done", false).put("reason", "file-assente"))
+            return
+        }
+        val uri = try {
+            androidx.core.content.FileProvider.getUriForFile(
+                context,
+                context.packageName + ".fileprovider",
+                file,
+            )
+        } catch (errore: IllegalArgumentException) {
+            // La cartella non e' dichiarata in `file_paths.xml`. E' un difetto
+            // nostro, non della persona: si dice cos'e' invece di «non riesco».
+            android.util.Log.i("TalosDevice", "condividiFile: cartella non dichiarata — ${errore.message}")
+            call.resolve(esito.put("done", false).put("reason", "cartella-non-dichiarata"))
+            return
+        }
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND)
+            .setType(tipo)
+            .putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        intent.clipData = android.content.ClipData.newRawUri(null, uri)
+        call.getString("testo")?.takeIf { it.isNotEmpty() }?.let {
+            intent.putExtra(android.content.Intent.EXTRA_TEXT, it)
+        }
+        call.getString("pacchetto")?.takeIf { it.isNotEmpty() }?.let { intent.setPackage(it) }
+        if (intent.resolveActivity(context.packageManager) == null) {
+            call.resolve(esito.put("done", false).put("reason", "nessuno-lo-fa"))
+            return
+        }
+        call.resolve(avvia(intent).put("uri", uri.toString()).put("tipo", tipo))
+    }
+
+    /**
      * ⭐⭐⭐ LA RIGA DI RUBRICA CON CUI UN'APP FA UNA COSA — se esiste.
      *
      * ## Perche' esiste, e perche' torna `null` senza vergogna

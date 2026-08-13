@@ -90,6 +90,12 @@ export interface TalosToolAuditRow {
      */
     verified?: boolean
     input: unknown
+    /**
+     * ⛔ Riuscito ma senza effetto nel mondo: ha elencato, disambiguato o
+     * chiesto. Il segno «✓ Fatto» non deve comparire — vedi `senzaEffetto` in
+     * `registry.ts`, dove c'è la misura che l'ha reso necessario.
+     */
+    senzaEffetto?: boolean
     /** Kept for the record, not shown to the model. */
     evidence?: Record<string, unknown>
     error?: string
@@ -553,6 +559,7 @@ export async function executeTalosTool(
             action: tool.action,
             requiredActions,
             status: result.ok ? 'succeeded' : 'failed',
+            ...(result.senzaEffetto ? { senzaEffetto: true } : {}),
             risk: effectiveRisk,
             ...(verdetto ? { verified: true } : {}),
             input,
