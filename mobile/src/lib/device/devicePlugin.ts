@@ -75,6 +75,17 @@ interface PonteDispositivo {
         pacchetto?: string
         extra?: Readonly<Record<string, string>>
     }): Promise<{ done: boolean, reason?: string }>
+    /**
+     * ⭐ La riga di rubrica con cui un'app fa una cosa — o `null`.
+     *
+     * ⛔ `uri: null` **non è un errore**: è la risposta che fa scegliere il
+     * ponte. `motivo` distingue `riga-assente` da `senza-permesso` da
+     * `contatto-non-trovato`, che portano a tre cose diverse da dire.
+     */
+    rigaDiContatto(options: { numero: string, mime: string }): Promise<{
+        uri: string | null
+        motivo: string
+    }>
     appInstallata(options: { package: string }): Promise<{ presente: boolean }>
     /**
      * Le app avviabili, `Etichetta<TAB>pacchetto` per riga.
