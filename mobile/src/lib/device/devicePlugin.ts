@@ -97,6 +97,20 @@ interface PonteDispositivo {
         testo?: string
     }): Promise<{ done: boolean, reason?: string, uri?: string, tipo?: string }>
     /**
+     * ⭐⭐⭐ Manda un file che sta sul TELEFONO, scelto dalla persona.
+     *
+     * L'`uri` arriva dal selettore di sistema ed è già un `content://` col suo
+     * permesso di lettura: qui si rigira a chi riceve. ⛔ `reason` vale
+     * `non-e-content` per uno schema sbagliato — un `file://` esploderebbe
+     * nell'app di destinazione, e il difetto sembrerebbe suo mentre è nostro.
+     */
+    condividiUri(options: {
+        uri: string
+        tipo?: string
+        pacchetto?: string
+        testo?: string
+    }): Promise<{ done: boolean, reason?: string, uri?: string, tipo?: string }>
+    /**
      * ⭐ La riga di rubrica con cui un'app fa una cosa — o `null`.
      *
      * ⛔ `uri: null` **non è un errore**: è la risposta che fa scegliere il

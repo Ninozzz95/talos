@@ -661,10 +661,10 @@ describe('Agent Tools control registry', () => {
          * come dev'essere per un tool nuovo — e l'impronta STORICA resta ferma.
          */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('0beadfaebc57bf18993f146bbdc25df5c95ada5eb4c634000da5868653732843')
+            .toBe('8c4e1c707bcb272178fc5ef6a3582f3ef919569f00b9fb0e2a8ef000d1a2d5fa')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('315df242daa98e2a9b6a6efaea4f3ef34af4e85ae5d9eb835cd86e84fa215c86')
+            .toBe('0a9674f643d288b42e9d1af756ae2bd5e74b4dc3806729bdb3256ad28285eef2')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('fecbc9b2755ffad0206c2be6b4d3b8423311c7860bf6089e48ffbb407d0f4cfa')
+            .toBe('db016482117b7fd0c5cfe1d02182acaa36a7203f1a8aa234774c430d70628a75')
     })
 })

@@ -431,6 +431,33 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
         }
     }
 
+    /**
+     * ⭐⭐ Il file che sta sul TELEFONO, scelto dalla persona nel selettore di
+     * sistema — owner 2026-08-13.
+     *
+     * ⛔ Import PIGRO del selettore: è lo stesso modulo che gli allegati usano,
+     * e caricarlo all'avvio lo farebbe pagare a chi apre l'app senza mandare
+     * niente. Qui siamo già dentro una chiamata di tool.
+     *
+     * ⛔ E rende `null` per DUE casi diversi che qui coincidono: la persona ha
+     * annullato, oppure il file scelto non ha un `content://` da rigirare. Il
+     * secondo non dovrebbe accadere col selettore di sistema; se accadesse,
+     * mandare un `file://` farebbe esplodere l'app di destinazione con un
+     * difetto che sembra suo ed è nostro.
+     */
+    async function fileDalTelefono() {
+        const { createNativeFilePicker } = await import('@/services/nativeFilePicker')
+        const scelti = await createNativeFilePicker().pickFiles()
+        const primo = scelti[0]
+        if (!primo || primo.source.kind !== 'native-uri') return null
+        if (!primo.source.uri.startsWith('content://')) return null
+        return {
+            nome: primo.name,
+            tipo: primo.declaredMediaType,
+            uri: primo.source.uri,
+        }
+    }
+
     const sources: TalosToolSources = {
         listLibraryEntries: libraryEntries,
         listLibraryDocs: libraryDocs,
@@ -697,7 +724,10 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                  * che è vero da dove sta lui, invece di far fallire l'intero
                  * messaggio o di sparire senza spiegazione.
                  */
-                ...(deps.device?.() ? talosIntentiTools({ fileDellaLibreria: fileDaMandare }) : []),
+                ...(deps.device?.() ? talosIntentiTools({
+                    fileDellaLibreria: fileDaMandare,
+                    fileDalTelefono,
+                }) : []),
                 ...(deps.schermo?.() ? createTalosSchermoTools(deps.schermo()!) : []),
                 ...(libraryWrite ? createTalosLibraryWriteTools(libraryWrite) : []),
                 ...(notesWrite ? createTalosNotesWriteTools(notesWrite) : []),

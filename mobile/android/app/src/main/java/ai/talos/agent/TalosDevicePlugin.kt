@@ -482,6 +482,75 @@ class TalosDevicePlugin : Plugin() {
     }
 
     /**
+     * ⭐⭐⭐ MANDARE UN FILE CHE STA SUL TELEFONO — owner 2026-08-13.
+     *
+     * > «e poi anche successivamente inviare un file che abbiamo nella memoria,
+     * > salvato nel dispositivo, e inviarlo dove voglio noi»
+     *
+     * ## Perche' un metodo a parte, e non `condividiFile`
+     *
+     * Quello risolve un percorso DENTRO la nostra cartella privata e ne fabbrica
+     * un `content://` col `FileProvider`. Qui il `content://` c'e' gia': arriva
+     * dal selettore di sistema, che ce l'ha consegnato insieme al permesso di
+     * leggerlo. Rifabbricarlo non si puo' e non serve.
+     *
+     * ## ⛔ Perche' si passa dal selettore, e non e' una scorciatoia
+     *
+     * MISURATO nella documentazione, non dedotto: per un file dentro
+     * `MediaStore.Downloads` che l'app non ha creato, Android **obbliga** a
+     * passare dallo Storage Access Framework. Non esiste una query che lo
+     * trovi. Per immagini e video una query esisterebbe, ma vuole i permessi
+     * `READ_MEDIA_*` — cioe' l'accesso all'INTERA libreria di foto della
+     * persona per mandarne una.
+     *
+     * ⇒ Il selettore e' la strada che regge per OGNI tipo di file e non chiede
+     * nessun permesso pericoloso: la persona sceglie, e quel gesto E' il
+     * permesso. E' la «procedura guidata col nostro ponte» per ciò che le API
+     * davvero non possono fare.
+     *
+     * ⛔ Il permesso di lettura si RIGIRA: lo abbiamo noi e lo passiamo a chi
+     * riceve con `FLAG_GRANT_READ_URI_PERMISSION` piu' la `ClipData`, che da
+     * Android 10 e' quella che il foglio di condivisione copia davvero.
+     */
+    @PluginMethod
+    fun condividiUri(call: PluginCall) {
+        val testoUri = call.getString("uri").orEmpty()
+        val tipo = call.getString("tipo").orEmpty().ifEmpty { "*/*" }
+        val esito = JSObject()
+        if (testoUri.isEmpty()) {
+            call.resolve(esito.put("done", false).put("reason", "no-uri"))
+            return
+        }
+        val uri = android.net.Uri.parse(testoUri)
+        /*
+         * ⛔ Solo `content://`. Un `file://` qui lancerebbe
+         * `FileUriExposedException` nell'app che riceve — e il punto e' che
+         * arriverebbe da noi, quindi il difetto sarebbe nostro e sembrerebbe
+         * suo.
+         */
+        if (uri.scheme != "content") {
+            android.util.Log.i("TalosDevice", "condividiUri: schema ${uri.scheme}, rifiuto")
+            call.resolve(esito.put("done", false).put("reason", "non-e-content"))
+            return
+        }
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND)
+            .setType(tipo)
+            .putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        intent.clipData = android.content.ClipData.newRawUri(null, uri)
+        call.getString("testo")?.takeIf { it.isNotEmpty() }?.let {
+            intent.putExtra(android.content.Intent.EXTRA_TEXT, it)
+        }
+        call.getString("pacchetto")?.takeIf { it.isNotEmpty() }?.let { intent.setPackage(it) }
+        if (intent.resolveActivity(context.packageManager) == null) {
+            call.resolve(esito.put("done", false).put("reason", "nessuno-lo-fa"))
+            return
+        }
+        call.resolve(avvia(intent).put("uri", testoUri).put("tipo", tipo))
+    }
+
+    /**
      * ⭐⭐⭐ LA RIGA DI RUBRICA CON CUI UN'APP FA UNA COSA — se esiste.
      *
      * ## Perche' esiste, e perche' torna `null` senza vergogna
