@@ -57,6 +57,13 @@ export function talosAzioniEseguite(
     for (const riga of righe) {
         if (riga.action !== 'write') continue
         if (riga.status !== 'succeeded') continue
+        /*
+         * ⛔ Riuscito NON basta: `invia_file` che chiede quale dei due file
+         * mandare è riuscito, e non ha mandato niente. Senza questa riga sotto
+         * la risposta compariva «✓ Fatto: Invio di un file» — misurato sul Pad
+         * il 2026-08-13.
+         */
+        if (riga.senzaEffetto) continue
         if (visti.has(riga.tool)) continue
         visti.add(riga.tool)
         fuori.push({ tool: riga.tool })

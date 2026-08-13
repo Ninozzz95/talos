@@ -1028,6 +1028,7 @@ export const TALOS_EN_MESSAGES = {
         deviceNotificationDismiss: 'Dismissing a notification',
         deviceScreenDrive: 'Using an app for you',
         appAzione: 'Doing it in another app',
+        inviaFile: 'Sending a file',
         researchList: 'Looking at your researches',
         researchStart: 'Starting a deep research',
         researchRead: 'Reading a research report',
@@ -1247,6 +1248,10 @@ export const TALOS_EN_MESSAGES = {
         appAzione: {
             title: 'Do it in another app',
             description: 'Opens the right app already filled in. The last word stays yours.',
+        },
+        inviaFile: {
+            title: 'Send one of your files',
+            description: 'Takes a file from your Library and attaches it in the app you name — WhatsApp, email, whatever can receive it. It always tells you which apps can, and you press send.',
         },
         deviceScreenDrive: {
             title: 'Use an app for you',
@@ -2333,6 +2338,7 @@ export const TALOS_EN_MESSAGES = {
             device_notification_dismiss: { title: 'Dismiss a notification', description: 'Removes it from the shade. Notifications for something still running cannot be removed.' },
             device_screen_drive: { title: 'Use an app for you', description: '⛔ TALOS taps, types and scrolls inside other apps to reach a goal, and says out loud what it is about to do BEFORE each move. It stops on its own after 20 steps, 2 minutes, two failures in a row — and the instant you touch the screen.' },
             app_azione: { title: 'Do it in another app', description: '⭐ Opens the right app with everything already in it, instead of hunting on screen. Messaging, calls, maps, music, calendar.' },
+            invia_file: { title: 'Send one of your files', description: '⭐ Takes a file from your Library and attaches it in the app you name. It always tells you which apps can receive it on THIS phone, and you press send.' },
         },
     },
     lock: {

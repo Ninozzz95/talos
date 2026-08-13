@@ -158,7 +158,24 @@ import { resolve } from 'node:path'
  * risale senza che nessuno abbia aggiunto niente, questi 17 byte NON sono il
  * posto dove guardare — sono già spesi e già misurati.
  */
-const DEFAULT_MAXIMUM_BYTES = 602_100
+/*
+ * ⛔ E poi 602.200 — MANDARE UN FILE (`invia_file`), 2026-08-13, chiesto
+ * dall'owner: «si possa dire alla chat di inviare un file della libreria via
+ * social media o app di messaggistica».
+ *
+ * Il TOOL non pesa: vive dietro il chunk dinamico del toolset, come tutti gli
+ * altri. I **76 byte** che si vedono qui sono le cinque registrazioni che ogni
+ * tool nuovo deve avere nel grafo d'avvio — sicurezza, permessi, interruttore,
+ * etichetta d'attività, icona — cioè la parte che DEVE stare là perché il
+ * pannello dei permessi lo mostri e la persona possa spegnerlo.
+ *
+ * ⛔ E una cosa MISURATA che vale la pena scrivere, perché l'avevo dedotta
+ * male: le TRADUZIONI non stanno in questo grafo. Ho accorciato quattro
+ * descrizioni per ~300 byte e il numero non si è mosso di uno — i cataloghi di
+ * lingua sono chunk a parte. ⇒ Non si peggiora un testo che legge una persona
+ * per far quadrare questo tetto: non lo fa quadrare.
+ */
+const DEFAULT_MAXIMUM_BYTES = 602_200
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {

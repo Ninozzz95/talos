@@ -178,4 +178,5 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     // mandare un messaggio, comprare. Non è una scrittura locale.
     { id: 'device_screen_drive', group: 'device', actions: ['write', 'outbound'] },
     { id: 'app_azione', group: 'device', actions: ['write', 'outbound'] },
+    { id: 'invia_file', group: 'device', actions: ['write', 'outbound'] },
 ] as const satisfies readonly TalosAgentToolControl[])

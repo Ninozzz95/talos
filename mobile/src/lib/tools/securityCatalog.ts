@@ -147,4 +147,14 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
      * del dispositivo.
      */
     app_azione: { risk: 'R3', reversibility: 'compensable', readsPrivateData: true, readsUntrustedContent: false, canTransmit: true, sempreConsentibile: true },
+    /*
+     * ⛔ `sempreConsentibile: false`, e la prova me l'ha ricordato.
+     *
+     * `app_azione` puo' essere consentito per sempre perche' il contenuto lo
+     * scrive la persona in quel momento. Qui no: «manda un file» consentito una
+     * volta per sempre significa che da domani QUALUNQUE file della libreria
+     * puo' uscire senza che nessuno lo chieda — un documento, una foto, una
+     * nota. Il file e' suo e non lo sta riscrivendo ogni volta.
+     */
+    invia_file: { risk: 'R3', reversibility: 'compensable', readsPrivateData: true, readsUntrustedContent: false, canTransmit: true },
 })

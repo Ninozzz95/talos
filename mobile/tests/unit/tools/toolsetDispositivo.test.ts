@@ -78,7 +78,9 @@ async function suite(device: (() => TalosDeviceToolSources | null) | undefined) 
  */
 const NOMI_DISPOSITIVO = [
     ...createTalosDeviceTools(fonti()).map((tool) => tool.name),
-    ...talosIntentiTools().map((tool) => tool.name),
+    // Con le fonti: `invia_file` fa parte dei tool del telefono a tutti gli
+    // effetti, e deve sparire insieme agli altri quando il ponte non c'è.
+    ...talosIntentiTools({ fileDellaLibreria: async () => [] }).map((tool) => tool.name),
 ]
 
 const TUTTO_CONSENTITO = { read: 'allow', write: 'allow', outbound: 'allow' } as const

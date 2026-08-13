@@ -43,6 +43,26 @@ export interface TalosToolResult {
     /** Anything the audit row should keep that the model does not need. */
     evidence?: Record<string, unknown>
     /**
+     * ⛔⛔ RIUSCITO, ma NON HA FATTO NIENTE — e la differenza si vede a schermo.
+     *
+     * MISURATO sul Pad il 2026-08-13: a «manda il file nota-talos su WhatsApp»,
+     * `invia_file` ha trovato DUE file con lo stesso nome e ha fatto la cosa
+     * giusta — ha chiesto quale. Non è partito niente. Eppure sotto la risposta
+     * compariva il segno **«✓ Fatto: Invio di un file»**.
+     *
+     * La chiamata era riuscita (`ok: true`), quindi la riga di audit diceva
+     * `succeeded`, e il chip legge quello. È la stessa bugia curata poche ore
+     * prima nel testo del modello, spostata nell'interfaccia — e vale la frase
+     * che sta già nell'esecutore: «un "fatto" su una cosa non fatta è peggio di
+     * un errore, l'utente smette di controllare».
+     *
+     * ⇒ Un tool che ELENCA, DISAMBIGUA o CHIEDE lo dichiara qui. Non è un
+     * fallimento — la risposta è utile e va data al modello con `ok: true`,
+     * altrimenti scarta il contenuto e inventa. È un successo **senza effetto
+     * nel mondo**, e solo gli effetti nel mondo meritano un «Fatto».
+     */
+    senzaEffetto?: boolean
+    /**
      * ⛔ A8 — da dove viene il testo che sta in `content`.
      *
      * Facoltativo, e quando manca si ricade sulla bandiera statica del tool. Va

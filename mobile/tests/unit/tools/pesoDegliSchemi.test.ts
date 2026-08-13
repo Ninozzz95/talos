@@ -84,7 +84,29 @@ function byte(valore: unknown): number {
  * modello che l'owner vuole usare non ci sta. Ogni byte aggiunto qui allontana
  * quel traguardo, e lo fa in silenzio.
  */
-const TETTO_BYTE = 42_000
+/*
+ * ⛔ 42.000 → 42.300, il 2026-08-13, per `invia_file` — owner: «si possa dire
+ * alla chat di inviare un file della libreria via social media o app di
+ * messaggistica».
+ *
+ * Il commento qui sopra diceva che il 10% di margine bastava «per un tool nuovo
+ * normale». `invia_file` È un tool nuovo normale — tre parametri, nessuna
+ * unione discriminata — e pesa **271 byte**. Il margine se l'erano mangiato i
+ * tool arrivati fra agosto e oggi: la superficie era già a ~41.950.
+ *
+ * ⛔ E il peso è stato inseguito prima di alzare, in tre forme misurate:
+ *     prima stesura (descrizione lunga)   42.819   ⛔ +819
+ *     descrizione all'essenziale          42.354   ⛔ +354
+ *     + titolo corto, parametri asciutti  42.221   ⛔ +221
+ * Sotto i 271 byte non si scende senza togliere al modello qualcosa che non
+ * può dedurre — per esempio che deve CHIEDERE invece di indovinare quale file.
+ *
+ * ⛔ E resta vero ciò che dice il commento sopra: con ~3,7 byte per token siamo
+ * a ~11.400 token di soli schemi contro gli 8.192 di Gemma 2 2B. Quel traguardo
+ * era già fuori portata prima di questi 271 byte, e la strada per riprenderlo
+ * non è negare un tool: è il catalogo compatto per il motore locale.
+ */
+const TETTO_BYTE = 42_300
 
 /**
  * ⛔ E nessun tool da solo può valere un ottavo di tutto.

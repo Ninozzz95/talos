@@ -407,6 +407,30 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             }))
     }
 
+    /**
+     * I file che si possono CONSEGNARE a un'altra app.
+     *
+     * ⛔ Non riusa `libraryEntries`: quello rende `{id, displayName, mediaType}`
+     * — abbastanza per elencare, niente per mandare. Manca `private_uri`, che è
+     * l'unica cosa che il ponte nativo può trasformare in un `content://`.
+     *
+     * ⛔ E rende `[]` invece di lanciare quando la libreria è spenta: il tool
+     * dirà «non c'è nessun file», che è vero da dove sta lui, invece di far
+     * fallire l'intero messaggio.
+     */
+    async function fileDaMandare() {
+        try {
+            return (await librarySummaries()).map((file) => ({
+                id: file.id,
+                nome: file.display_name,
+                tipo: file.media_type,
+                percorso: file.private_uri,
+            }))
+        } catch {
+            return []
+        }
+    }
+
     const sources: TalosToolSources = {
         listLibraryEntries: libraryEntries,
         listLibraryDocs: libraryDocs,
@@ -666,7 +690,14 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...(privilegiate ? createTalosPrivilegedTools(privilegiate) : []),
                 ...(deps.notifications?.() ? createTalosNotificationTools(deps.notifications()!) : []),
                 // ⭐⭐ Il motore degli intent: 25 capacità in un tool solo.
-                ...(deps.device?.() ? talosIntentiTools() : []),
+                /*
+                 * ⛔ Le fonti dei file viaggiano SEMPRE col ponte del telefono, e
+                 * `fileDaMandare` rende `[]` quando la libreria è spenta invece
+                 * di lanciare: così `invia_file` dice «non c'è nessun file»,
+                 * che è vero da dove sta lui, invece di far fallire l'intero
+                 * messaggio o di sparire senza spiegazione.
+                 */
+                ...(deps.device?.() ? talosIntentiTools({ fileDellaLibreria: fileDaMandare }) : []),
                 ...(deps.schermo?.() ? createTalosSchermoTools(deps.schermo()!) : []),
                 ...(libraryWrite ? createTalosLibraryWriteTools(libraryWrite) : []),
                 ...(notesWrite ? createTalosNotesWriteTools(notesWrite) : []),
