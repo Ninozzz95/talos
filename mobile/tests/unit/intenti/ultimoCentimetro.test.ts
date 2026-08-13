@@ -261,6 +261,24 @@ describe('⭐⭐⭐ la conferma dell\'app: una regola, non una tabella', () => {
         expect(esito.content).toContain('Avviare una chiamata vocale?')
     })
 
+    /*
+     * ⛔⛔ LA SICUREZZA DI QUESTA REGOLA STA TUTTA QUI.
+     *
+     * `android:id/button1` è il positivo di QUALUNQUE `AlertDialog` di sistema,
+     * compreso quello dei permessi, dove dice «Consenti». MISURATO oggi:
+     * chiedendo un percorso a piedi è comparso
+     * `com.google.android.permissioncontroller/…GrantPermissionsActivity`.
+     *
+     * L'unica difesa è confermare **solo dentro l'app in cui si stava agendo**,
+     * e funziona solo se il pacchetto viaggia fin laggiù. Se questa asserzione
+     * cade, `confermaDialogo` diventa «premi il primo sì che vedi».
+     */
+    it('⛔ il PACCHETTO viaggia sempre: senza, si confermerebbe un dialogo di permessi', async () => {
+        await chiedi(CHIAMA)
+        expect(ponte.conferme[0].pacchetto).toBeTruthy()
+        expect(ponte.conferme[0].pacchetto).toBe('com.whatsapp')
+    })
+
     it('se il dialogo non c\'è, NON dice fatto', async () => {
         ponte.esitoConferma = { fatto: false, motivo: 'nessun-dialogo' }
         const esito = await chiedi(CHIAMA)
