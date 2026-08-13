@@ -383,6 +383,29 @@ class TalosSchermoPlugin : Plugin() {
             return
         }
         val pacchetto = call.getString("pacchetto").orEmpty()
+        /*
+         * ⛔⛔ SENZA SAPERE DI CHI E' IL DIALOGO NON SI CONFERMA NIENTE.
+         *
+         * `android:id/button1` e' il pulsante positivo di QUALUNQUE
+         * `AlertDialog` del sistema — compreso quello dei permessi, dove dice
+         * «Consenti». MISURATO oggi: chiedendo un percorso a piedi, in primo
+         * piano e' comparso
+         * `com.google.android.permissioncontroller/…GrantPermissionsActivity`.
+         *
+         * La difesa e' il confronto col pacchetto atteso, ed e' efficace solo
+         * se un pacchetto atteso C'E'. Un `pacchetto` vuoto renderebbe la
+         * regola «conferma il primo dialogo che vedi», che e' esattamente il
+         * tocco alla cieca che questo metodo esiste per non fare.
+         *
+         * ⇒ Non e' un elenco di pacchetti da rifiutare — quello invecchierebbe
+         * come una tabella. E' un invariante: si conferma solo dentro l'app in
+         * cui si stava agendo.
+         */
+        if (pacchetto.isEmpty()) {
+            Log.i("TalosOcchio", "confermaDialogo: rifiutato, non so di chi sia il dialogo")
+            call.resolve(JSObject().put("fatto", false).put("motivo", "pacchetto-non-detto"))
+            return
+        }
         val attesa = (call.getInt("attesaMs") ?: 4_000).coerceIn(200, 20_000)
         val inizio = SystemClock.uptimeMillis()
         var positivo: AccessibilityNodeInfo? = null
@@ -392,7 +415,9 @@ class TalosSchermoPlugin : Plugin() {
             val radice = occhio.rootInActiveWindow
             if (radice != null) {
                 pacchettoVisto = radice.packageName?.toString().orEmpty()
-                if (pacchetto.isEmpty() || pacchettoVisto == pacchetto) {
+                // ⛔ Uguaglianza secca: e' l'unica cosa che tiene fuori il
+                // dialogo dei permessi, che vive in un altro pacchetto.
+                if (pacchettoVisto == pacchetto) {
                     val testo = radice.findAccessibilityNodeInfosByViewId("android:id/message")
                         ?.firstOrNull()?.text?.toString()
                         ?: radice.findAccessibilityNodeInfosByViewId("android:id/alertTitle")
