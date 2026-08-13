@@ -106,7 +106,24 @@ function byte(valore: unknown): number {
  * era già fuori portata prima di questi 271 byte, e la strada per riprenderlo
  * non è negare un tool: è il catalogo compatto per il motore locale.
  */
-const TETTO_BYTE = 42_300
+/*
+ * ⛔ 42.300 → 42.400, il 2026-08-13 (fase 1), per il parametro `invia` di
+ * `invia_file`.
+ *
+ * ⛔ E questo NON si poteva togliere. La regola del progetto e' esplicita:
+ * «SI DICHIARA, non si deduce dal verbo che ha usato la persona — "scrivi ad
+ * Antonino che arrivo" e "prepara un messaggio per Antonino" sono due
+ * intenzioni diverse, e indovinare quale sia vuol dire mandare per sbaglio un
+ * messaggio a una persona vera». Da oggi TALOS preme «invia» anche sui file:
+ * senza questo campo dedurrebbe dal verbo se un'azione IRREVERSIBILE va fatta.
+ *
+ * Il peso e' stato inseguito prima, in due forme misurate:
+ *     descrizione lunga («False only if the user asked…»)   42.393
+ *     descrizione essenziale («False = prepare only…»)      42.374
+ *
+ * ⇒ 74 byte per non indovinare su una cosa che non si annulla.
+ */
+const TETTO_BYTE = 42_400
 
 /**
  * ⛔ E nessun tool da solo può valere un ottavo di tutto.

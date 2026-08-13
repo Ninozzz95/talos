@@ -12,6 +12,7 @@ import {
     type TalosCapacitaIntent,
     type TalosViaIntent,
 } from '@/lib/intenti/registro'
+import { talosInvioPerPacchetto } from '@/lib/intenti/registro'
 import { talosRisolviContatto } from '@/lib/intenti/rubrica'
 import { TalosDeviceBridge } from '@/lib/device/devicePlugin'
 import { TalosSchermoBridge, type TalosEsitoInvio } from '@/lib/device/ponteSchermo'
@@ -425,20 +426,153 @@ export interface TalosFontiFile {
  * nominarne altre. Un elenco vero dentro un `ok:false` ha già fatto inventare
  * al modello app non installate: gli esiti sono TRE, non due.
  */
+/**
+ * ⭐⭐⭐ IL DESTINATARIO — owner 2026-08-13, fase 1.
+ *
+ * ## Il difetto che la fa nascere, misurato
+ *
+ * `invia_file` funzionava e non sapeva A CHI: si finiva sul selettore dei
+ * contatti di WhatsApp e la persona doveva chiudere il lavoro a mano. E non
+ * avendo un campo per il destinatario, il modello infilava il nome nel TESTO —
+ * la scheda diceva `TESTO: Antonino Rizzo`, e il file sarebbe partito con
+ * quella frase dentro.
+ *
+ * ## Tre esiti, come per ogni cosa che raggiunge una persona
+ *
+ * `talosRisolviContatto` ne ha cinque e qui contano tutti: `uno` porta il JID,
+ * `molti` è una domanda legittima (due contatti che si chiamano quasi uguale
+ * sono due persone vere), e gli altri tre spiegano perché non si può.
+ *
+ * ⛔ Senza contatto NON è un errore: si finisce sul selettore, che è la strada
+ * che già funziona. Il destinatario è un miglioramento, non un requisito.
+ */
+async function talosDestinatario(
+    nome: string | undefined,
+): Promise<{ jid?: string, chiedi?: string }> {
+    if (!nome?.trim()) return {}
+    const esito = await talosRisolviContatto(nome)
+    if (esito.stato === 'uno') {
+        /*
+         * ⛔ Il JID vuole il numero SENZA `+`, spazi o trattini: la rubrica lo
+         * rende come lo ha scritto la persona («+39 392 725 6893»), e passarlo
+         * così porterebbe a una chat che non esiste — cioè a un file consegnato
+         * a nessuno, con l'aria di essere partito.
+         */
+        /*
+         * ⛔ UN contatto può avere PIÙ NUMERI — casa, lavoro, il vecchio. Il
+         * primo dell'elenco non è «quello giusto»: è solo il primo. Sceglierlo
+         * in silenzio è lo stesso errore del file preso a caso, con la stessa
+         * conseguenza — un file consegnato alla persona sbagliata.
+         */
+        const numeri = esito.contatto.numeri.filter((n) => n.replace(/\D/g, '').length >= 6)
+        if (numeri.length === 0) {
+            return { chiedi: `"${nome}" has no usable phone number saved. Ask the user.` }
+        }
+        if (numeri.length > 1) {
+            return { chiedi: `"${nome}" has more than one number: ${numeri.join(', ')}. Ask which one. Nothing was sent.` }
+        }
+        return { jid: `${numeri[0]!.replace(/\D/g, '')}@s.whatsapp.net` }
+    }
+    if (esito.stato === 'molti') {
+        return { chiedi: `More than one contact matches "${nome}": ${
+            esito.trovati.map((c) => c.nome).join(', ')
+        }. Ask which one, naming ONLY these. Nothing was sent.` }
+    }
+    if (esito.stato === 'nessuno') {
+        return { chiedi: `No contact named "${nome}". Ask the user; do not invent a number.` }
+    }
+    /*
+     * ⛔ Permesso mancante o ponte chiuso: NON si blocca l'invio. Si va avanti
+     * senza destinatario e si finisce sul selettore — dove la persona sceglie
+     * comunque, in un tocco. Rifiutare qui vorrebbe dire togliere una funzione
+     * che funziona per colpa di un permesso che serviva solo a migliorarla.
+     */
+    return {}
+}
+
+/**
+ * ⭐⭐⭐ L'ULTIMO CENTIMETRO DEL FILE — e la differenza fra preparare e fare.
+ *
+ * Il file e' allegato nella chat giusta e resta un tocco. Quel tocco e' tutta la
+ * distanza fra «TALOS prepara» e «TALOS fa», ed e' esattamente la riga su cui il
+ * confronto con Gemini si vince o si perde.
+ *
+ * ## ⛔ Si preme SOLO con tutte e tre
+ *
+ * 1. la persona non ha chiesto una bozza (`invia !== false`);
+ * 2. il destinatario e' stato risolto — senza, siamo sul selettore dei contatti
+ *    e premere «invia» la' significherebbe mandare a chi capita;
+ * 3. l'app ha una riga MISURATA per il suo pulsante. Senza, non si tocca niente.
+ *
+ * ⛔ E la prova che e' partito NON e' il click: e' la SCOMPARSA del pulsante,
+ * che `premiPulsante` verifica da se'. Un click riuscito su un pulsante che
+ * resta li' vuol dire che non e' successo niente.
+ */
+async function talosPremiInvioFile(
+    pacchetto: string,
+    nomeApp: string,
+    nomeFile: string,
+    invia: boolean | undefined,
+    destinatarioRisolto: boolean,
+): Promise<TalosToolResult> {
+    const pronto = `"${nomeFile}" is now attached in ${nomeApp}, ready to send. It has NOT been sent yet: say so, and do not claim it was sent.`
+    if (invia === false || !destinatarioRisolto) return { ok: true, content: pronto, contentOrigin: 'user-direct' }
+    const riga = talosInvioPerPacchetto(pacchetto)
+    if (!riga?.viewId) return { ok: true, content: pronto, contentOrigin: 'user-direct' }
+    const esito = await TalosSchermoBridge.premiPulsante({
+        viewId: riga.viewId,
+        ...(riga.descrizioni ? { descrizioni: riga.descrizioni } : {}),
+        pacchetto,
+        attesaMs: ATTESA_APP_MS,
+    }).catch((): TalosEsitoInvio => ({ fatto: false, motivo: 'ponte-chiuso' }))
+    if (esito.fatto && esito.sparito) {
+        return {
+            ok: true,
+            content: `"${nomeFile}" was SENT in ${nomeApp}: the send button is gone, which is the proof.`,
+            contentOrigin: 'user-direct',
+        }
+    }
+    if (esito.fatto) {
+        /*
+         * ⛔ Premuto e il pulsante e' ancora li'. NON si ripreme: se invece era
+         * partito, il secondo tocco manderebbe il file DUE volte. Il dubbio si
+         * dice, non si risolve rifacendo — e' la stessa regola del messaggio.
+         */
+        return {
+            ok: true,
+            content: `TALOS pressed send for "${nomeFile}" in ${nomeApp}, but could not confirm it left. Ask the user to look; do NOT press again, it would send it twice.`,
+            contentOrigin: 'user-direct',
+        }
+    }
+    const perche: Record<string, string> = {
+        'occhio-chiuso': `${nomeApp} has "${nomeFile}" attached and ready, but TALOS cannot press send: the screen-reading permission is off. Nothing was sent. Offer to open its settings page with device_open_settings.`,
+        'app-non-in-primo-piano': `${nomeApp} is not in front any more, so TALOS did not press anything. The file is attached: one tap on send finishes it.`,
+    }
+    return {
+        ok: true,
+        content: perche[esito.motivo ?? ''] ?? `${pronto} (send step: ${esito.motivo ?? 'unknown'})`,
+        contentOrigin: 'user-direct',
+        senzaEffetto: true,
+    }
+}
+
 function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
     return defineTalosTool({
         name: 'invia_file',
         action: 'write',
         requiredActions: ['write', 'outbound'],
-        title: 'Send a Library file',
+        // ⛔ Non più «Library»: da oggi manda anche i file del telefono, e un
+        // titolo che nomina una sola sorgente insegna al modello che l'altra
+        // non esiste.
+        title: 'Send a file',
         /*
          * ⛔ CORTA di proposito. Ogni byte di schema viaggia in OGNI messaggio,
          * e il tetto complessivo è 42.000: la prima stesura ne costava 880 e
          * sfondava. Quello che resta è ciò che il modello non può dedurre.
          */
         description: [
-            'Send a Library file to another app. "file" is matched against the real Library;',
-            'if several match, ask instead of guessing. Omit "app" to list the apps that accept it.',
+            '"file" is matched against the real Library; if several match, ask instead of',
+            'guessing. Omit "app" to list the apps that accept it.',
         ].join(' '),
         input: z.object({
             /*
@@ -449,8 +583,10 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
              */
             file: z.string().optional().describe('As the user named it.'),
             app: z.string().optional().describe('Destination app; omit to list them.'),
-            testo: z.string().optional().describe('Optional message with the file.'),
+            testo: z.string().optional().describe('Optional message.'),
             dal_telefono: z.boolean().optional().describe('On the phone, not the Library.'),
+            contatto: z.string().optional().describe('Who to send it to.'),
+            invia: z.boolean().optional().describe('False = prepare only. Omitted = send.'),
         }),
         async run(input): Promise<TalosToolResult> {
             /*
@@ -500,11 +636,16 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
                         evidence: { file: scelto.nome, tipo: scelto.tipo, app: dove.map((a) => a.pacchetto) },
                     }
                 }
+                const aChiTel = await talosDestinatario(input.contatto)
+                if (aChiTel.chiedi) {
+                    return { ok: true, content: aChiTel.chiedi, contentOrigin: 'user-direct', senzaEffetto: true }
+                }
                 const esitoTel = await TalosDeviceBridge.condividiUri({
                     uri: scelto.uri,
                     tipo: scelto.tipo,
                     pacchetto: bersaglioTel.pacchetto,
                     ...(input.testo ? { testo: input.testo } : {}),
+                    ...(aChiTel.jid ? { destinatario: aChiTel.jid } : {}),
                 })
                 if (!esitoTel.done) {
                     return {
@@ -513,10 +654,11 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
                         code: `TALOS_FILE_${(esitoTel.reason ?? 'sconosciuto').toUpperCase().replace(/-/g, '_')}`,
                     }
                 }
+                const finaleTel = await talosPremiInvioFile(
+                    bersaglioTel.pacchetto, bersaglioTel.nome, scelto.nome, input.invia, !!aChiTel.jid,
+                )
                 return {
-                    ok: true,
-                    content: `"${scelto.nome}" is now attached in ${bersaglioTel.nome}, ready to send. It has NOT been sent yet: say so, and do not claim it was sent.`,
-                    contentOrigin: 'user-direct',
+                    ...finaleTel,
                     evidence: { file: scelto.nome, tipo: scelto.tipo, app: bersaglioTel.pacchetto },
                 }
             }
@@ -595,11 +737,20 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
                     evidence: { chiesta: input.app, possibili: accettano.map((a) => a.pacchetto) },
                 }
             }
+            const aChi = await talosDestinatario(input.contatto)
+            if (aChi.chiedi) {
+                return { ok: true, content: aChi.chiedi, contentOrigin: 'user-direct', senzaEffetto: true }
+            }
             const esito = await TalosDeviceBridge.condividiFile({
                 percorso: daMandare.percorso,
+                // ⛔ Senza, il file arriva chiamandosi come l'id interno: il
+                // primo invio riuscito e' comparso in WhatsApp come
+                // `e2aaabf5-7e73-43df-aafb-50b9ca372bb1.md`.
+                nome: daMandare.nome,
                 tipo: daMandare.tipo,
                 pacchetto: bersaglio.pacchetto,
                 ...(input.testo ? { testo: input.testo } : {}),
+                ...(aChi.jid ? { destinatario: aChi.jid } : {}),
             })
             if (!esito.done) {
                 /*
@@ -627,10 +778,11 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
              * è costata la giornata — «Messaggio inviato» detto su un'azione
              * che non era ancora avvenuta.
              */
+            const finale = await talosPremiInvioFile(
+                bersaglio.pacchetto, bersaglio.nome, daMandare.nome, input.invia, !!aChi.jid,
+            )
             return {
-                ok: true,
-                content: `"${daMandare.nome}" is now attached in ${bersaglio.nome}, ready to send. It has NOT been sent yet: say so, and do not claim it was sent.`,
-                contentOrigin: 'user-direct',
+                ...finale,
                 evidence: {
                     file: daMandare.nome,
                     tipo: daMandare.tipo,

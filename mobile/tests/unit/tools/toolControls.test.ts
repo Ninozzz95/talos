@@ -423,7 +423,7 @@ describe('Agent Tools control registry', () => {
          * esattamente come parlavano ieri.
          */
         expect(digestOf(controlPlane))
-            .toBe('05c679dfdb632a71a95176d753989c05019db3970bdde5229b844d86f34580ae')
+            .toBe('09624654d0a3a46a52e2c5b212b14c38b8258fee3321f9ff28254beba65e2a60')
         /*
          * ⭐ Ri-fissato 2026-08-08 per i TRE tool delle NOTIFICHE:
          * `device_notifications_list`, `device_notification_reply`,
@@ -661,10 +661,10 @@ describe('Agent Tools control registry', () => {
          * come dev'essere per un tool nuovo — e l'impronta STORICA resta ferma.
          */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('8c4e1c707bcb272178fc5ef6a3582f3ef919569f00b9fb0e2a8ef000d1a2d5fa')
+            .toBe('16a459c4b98887dc53db2a598a402b2ddde3342dc8d00aef66d43d6918ab4891')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('0a9674f643d288b42e9d1af756ae2bd5e74b4dc3806729bdb3256ad28285eef2')
+            .toBe('9081937474d003279b5025b1681bb1bf17706e5393647aaba50fafa95bc852f5')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('db016482117b7fd0c5cfe1d02182acaa36a7203f1a8aa234774c430d70628a75')
+            .toBe('b931eca4db9361a36b43ed3f11b01e2367a5c2c1a4caeb7cc2ba315e81c2a9ea')
     })
 })

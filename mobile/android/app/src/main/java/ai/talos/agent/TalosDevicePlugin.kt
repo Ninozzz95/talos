@@ -426,6 +426,41 @@ class TalosDevicePlugin : Plugin() {
      * della libreria. La guardia confronta i percorsi CANONICI, che e' l'unica
      * forma che regge ai collegamenti simbolici.
      */
+    /**
+     * ⭐⭐⭐ IL DESTINATARIO, che salta il selettore dei contatti.
+     *
+     * ## Il difetto che la fa nascere — misurato il 2026-08-13
+     *
+     * `invia_file` funzionava e non sapeva A CHI: si arrivava a
+     * `com.whatsapp.contact.ui.picker.ExternalShareAlias`, cioe' all'elenco dei
+     * contatti, e la persona doveva finire a mano. Peggio: non avendo un campo
+     * per il destinatario, il modello infilava il nome nel TESTO — la scheda di
+     * consenso diceva `TESTO: Antonino Rizzo`, e il file sarebbe partito con
+     * quella frase dentro.
+     *
+     * ## ⛔ Non e' un'API ufficiale, ed e' scritto qui perche' si veda
+     *
+     * L'extra `jid` non compare in nessuna documentazione di WhatsApp: e' un
+     * meccanismo noto alla comunita' degli sviluppatori, come lo era il mime
+     * `vnd.android.cursor.item/vnd.com.whatsapp.voip.call` per le chiamate.
+     * Puo' smettere di funzionare con un aggiornamento loro.
+     *
+     * ⇒ Per questo NON si rompe niente se non funziona: senza `jid` l'intent
+     * resta esattamente quello di prima e si finisce sul selettore, che e' la
+     * strada che gia' funzionava. La rete di sicurezza e' la vecchia strada,
+     * non un errore.
+     *
+     * ⛔ E si verifica dal DISPOSITIVO, non da qui: se ha funzionato, il fuoco
+     * e' su `com.whatsapp.Conversation`; se no, su `ExternalShareAlias`. Sono
+     * due nomi diversi, quindi la domanda ha una risposta secca.
+     */
+    private fun destinatarioDentro(call: PluginCall, intent: android.content.Intent) {
+        val jid = call.getString("destinatario").orEmpty()
+        if (jid.isEmpty()) return
+        intent.putExtra("jid", jid)
+        android.util.Log.i("TalosDevice", "destinatario: jid messo, salto il selettore")
+    }
+
     @PluginMethod
     fun condividiFile(call: PluginCall) {
         val percorso = call.getString("percorso").orEmpty()
@@ -451,11 +486,46 @@ class TalosDevicePlugin : Plugin() {
             call.resolve(esito.put("done", false).put("reason", "file-assente"))
             return
         }
+        /*
+         * ⛔⛔ IL FILE DEVE ARRIVARE COL SUO NOME — misurato il 2026-08-13.
+         *
+         * Il primo invio riuscito e' arrivato in WhatsApp chiamandosi
+         * `e2aaabf5-7e73-43df-aafb-50b9ca372bb1.md`: il `FileProvider` prende il
+         * nome dal file SU DISCO, e sul disco la libreria usa l'id interno
+         * (`talos-vault/files/<id>.<est>`). Chi riceve vedeva un UUID.
+         *
+         * ⇒ Si copia in cache col nome vero e si condivide quella. La cartella
+         * di cache e' gia' dichiarata in `file_paths.xml` (`cache-path`), quindi
+         * non serve nient'altro, e il sistema la svuota da se'.
+         *
+         * ⛔ Il nome viene SANIFICATO: arriva dal nome che la persona ha dato al
+         * file, e una barra o dei puntini dentro un nome vorrebbero dire
+         * scrivere fuori dalla cartella.
+         */
+        val nomeVero = call.getString("nome").orEmpty()
+            .replace(Regex("[\\/:*?\"<>|]"), "_")
+            .replace("..", "_")
+            .take(120)
+            .trim()
+        val daMandare = if (nomeVero.isEmpty() || nomeVero == file.name) file else {
+            val cartella = java.io.File(context.cacheDir, "talos-condivisi")
+            cartella.mkdirs()
+            val copia = java.io.File(cartella, nomeVero)
+            try {
+                file.inputStream().use { dentro -> copia.outputStream().use { fuori -> dentro.copyTo(fuori) } }
+                copia
+            } catch (errore: java.io.IOException) {
+                // Il nome e' una cortesia, il file e' la cosa: se la copia non
+                // riesce si manda l'originale con l'id, invece di non mandare.
+                android.util.Log.i("TalosDevice", "condividiFile: copia col nome fallita — ${errore.message}")
+                file
+            }
+        }
         val uri = try {
             androidx.core.content.FileProvider.getUriForFile(
                 context,
                 context.packageName + ".fileprovider",
-                file,
+                daMandare,
             )
         } catch (errore: IllegalArgumentException) {
             // La cartella non e' dichiarata in `file_paths.xml`. E' un difetto
@@ -474,6 +544,7 @@ class TalosDevicePlugin : Plugin() {
             intent.putExtra(android.content.Intent.EXTRA_TEXT, it)
         }
         call.getString("pacchetto")?.takeIf { it.isNotEmpty() }?.let { intent.setPackage(it) }
+        destinatarioDentro(call, intent)
         if (intent.resolveActivity(context.packageManager) == null) {
             call.resolve(esito.put("done", false).put("reason", "nessuno-lo-fa"))
             return
@@ -543,6 +614,7 @@ class TalosDevicePlugin : Plugin() {
             intent.putExtra(android.content.Intent.EXTRA_TEXT, it)
         }
         call.getString("pacchetto")?.takeIf { it.isNotEmpty() }?.let { intent.setPackage(it) }
+        destinatarioDentro(call, intent)
         if (intent.resolveActivity(context.packageManager) == null) {
             call.resolve(esito.put("done", false).put("reason", "nessuno-lo-fa"))
             return

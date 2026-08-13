@@ -258,6 +258,33 @@ export interface TalosCapacitaIntent {
  * URI ricavati dal reverse engineering: quelli cambiano senza preavviso e
  * romperebbero in silenzio.
  */
+/**
+ * ⭐⭐⭐ COME SI PREME «INVIA» in una certa app — riusando ciò che è già misurato.
+ *
+ * Owner 2026-08-13, fase 1: mandare un file deve arrivare fino in fondo come ci
+ * arriva un messaggio, o TALOS *prepara* e non *fa* — che è la differenza su cui
+ * si gioca tutto il confronto con Gemini.
+ *
+ * ⛔ Non nasce una tabella nuova, e non e' pigrizia: `com.whatsapp:id/send` era
+ * gia' nel registro per `whatsapp_messaggio`, ed e' lo STESSO nodo sulla
+ * schermata di anteprima del documento — MISURATO sul Pad il 2026-08-13,
+ * `com.whatsapp:id/send desc="Invia" clickable=true` su
+ * `DocumentPreviewActivity`. Una seconda tabella sarebbe un secondo posto dove
+ * un giorno uno dei due invecchia.
+ *
+ * ⛔ E per un'app che non ha una riga, la risposta e' `null`: il file resta
+ * allegato e si dice che l'invio non e' partito. Indovinare un pulsante in
+ * un'app che non abbiamo misurato vorrebbe dire premere qualcosa a caso dentro
+ * la conversazione di qualcun altro.
+ */
+export function talosInvioPerPacchetto(
+    pacchetto: string,
+): TalosCapacitaIntent['invio'] | null {
+    if (!pacchetto) return null
+    return TALOS_CAPACITA_INTENT
+        .find((c) => c.pacchetto === pacchetto && c.invio?.viewId)?.invio ?? null
+}
+
 export const TALOS_CAPACITA_INTENT: readonly TalosCapacitaIntent[] = [
     {
         id: 'whatsapp_messaggio',
