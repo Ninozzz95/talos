@@ -18,6 +18,7 @@ import { createTalosDeviceTools } from '@/lib/tools/deviceTools'
 import { createTalosPrivilegedTools } from '@/lib/tools/privilegedTools'
 import { createTalosNotificationTools } from '@/lib/tools/notificationTools'
 import { createTalosSchermoTools } from '@/lib/tools/schermoTools'
+import { talosIntentiTools } from '@/lib/tools/intentiTools'
 import {
     talosToolRequiredActions,
     talosToolsForAnthropic,
@@ -143,6 +144,9 @@ function everyExecutableTool() {
             dismiss: vi.fn(), reasonOf: vi.fn(),
         } as never),
         ...createTalosSchermoTools({ guida: vi.fn(), occhioAperto: vi.fn() } as never),
+        // ⭐ Il motore degli intent: UN tool per 25 capacità, e questa guardia
+        // è ciò che impedisce che resti scollegato dal pannello dei permessi.
+        ...talosIntentiTools(),
     ]
 }
 
@@ -304,6 +308,20 @@ describe('Agent Tools control registry', () => {
              * la domanda a cui questa guardia serve a rispondere.
              */
             'device_screen_drive',
+            /*
+             * ⭐⭐⭐ 2026-08-13, il MOTORE DEGLI INTENT: `app_azione`.
+             *
+             * Un tool solo per 25 capacità, nato dal confronto sul Pad: stesso
+             * compito, Gemini lo chiude in ~20 s senza aprire l'app, il nostro
+             * pilota ci metteva 20 passi e 27,8 s per non concludere.
+             *
+             * ⛔ Se togliendolo l'impronta storica NON tornasse, vorrebbe dire
+             * che collegandolo ho mosso il contratto di un tool che esisteva
+             * già — cioè che i 61 strumenti di ieri oggi parlano diverso ai
+             * provider. È l'unica domanda a cui questa guardia risponde, ed è
+             * il motivo per cui vale la pena tenerla aggiornata a mano.
+             */
+            'app_azione',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -357,8 +375,24 @@ describe('Agent Tools control registry', () => {
          * corrente, e cambiarlo e' il gesto deliberato con cui si dichiara «ho
          * aggiunto qualcosa».
          */
+        /*
+         * ⭐⭐⭐ Ri-fissato 2026-08-13 per il MOTORE DEGLI INTENT, `app_azione`.
+         *
+         * Un tool solo che copre 25 capacità — WhatsApp, Telegram, Signal,
+         * Messenger, SMS, email, chiamate, quattro modi di usare le mappe,
+         * Uber, YouTube, Spotify, Netflix, calendario, traduzione, Drive,
+         * Amazon, Play Store, Instagram, LinkedIn, web. Contro le 23 capacità
+         * dei built-in intent di Google, che per giunta funzionano solo se lo
+         * sviluppatore dell'app le implementa: i deep link pubblici no.
+         *
+         * **Dimostrato, non assunto**: il blocco qui sopra lo esclude e
+         * riproduce `369a6d…` byte per byte ⇒ nessuno dei contratti
+         * preesistenti si è mosso collegandolo. Questo secondo numero è lo
+         * stato corrente, e cambiarlo è il gesto deliberato con cui si dichiara
+         * «ho aggiunto qualcosa».
+         */
         expect(digestOf(controlPlane))
-            .toBe('ee2f9a5a095af8eea05dbbf9fe3824372f9b54c146822689ef33634a06792bfe')
+            .toBe('cd3a30beca5e97a216b5fc0afbd8f3c1673c6fab4457622158fdcf6cf07bbc07')
         /*
          * ⭐ Ri-fissato 2026-08-08 per i TRE tool delle NOTIFICHE:
          * `device_notifications_list`, `device_notification_reply`,
@@ -558,10 +592,10 @@ describe('Agent Tools control registry', () => {
          * piano di controllo e l'impronta STORICA non si muovono affatto.
          */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('40f3b26762fb7817a02b6fcc9ae9767e787a1a330565409d12d2a6a1a8b478dc')
+            .toBe('1ded6fc82ee8286432574ae2aa5a1fd2a07e01625570ea6fa69689da86f05efd')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('53ebb166eafa6f2a36a02f7c1dfcc6f6d2de9c75e7a80ac8c161401a0ac4ccac')
+            .toBe('c904e381cce3faa044c25482611e74d3019b2754a0410fe1b1946a0ca4cf4605')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('21902f212b720a28f0b4210a6f62b255b21cf4a8834308e6ea0be482c7db526e')
+            .toBe('33c34d638275bd7a659912c63c026a2957ce1f68e2f45edaf15818214e3133c0')
     })
 })

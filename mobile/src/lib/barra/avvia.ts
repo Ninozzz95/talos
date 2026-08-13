@@ -62,6 +62,26 @@ export async function talosAvviaLaBarra(i18n: Plugin): Promise<boolean> {
      * numero sbagliato: era esattamente il difetto a schermo — «non vedo la
      * schermata» con 403 nodi nel log.
      */
+    /**
+     * ⛔⛔ IL TIMBRO DELL'APERTURA DA CUI SIAMO PARTITI — e si parte da QUELLO,
+     * non da `null`.
+     *
+     * MISURATO il 12 agosto, con un solo gesto dell'assistente:
+     *
+     *     barra: accendo l'ascolto (chiamata nuova (2))
+     *
+     * Due, su una apertura sola. Il confronto col timbro c'era già e non poteva
+     * scattare: partendo da `null`, la PRIMA consegna di `appUrlOpen` non aveva
+     * niente con cui confrontarsi e contava sempre una chiamata in più. Ed è
+     * proprio quella la consegna duplicata di Capacitor (issue #971): lo stesso
+     * indirizzo con cui l'app è partita, già letto qui sopra in `letto`.
+     *
+     * ⇒ Si semina con l'apertura del lancio. Da lì in poi il confronto ha
+     * qualcosa da confrontare, ed è l'unica riga che rende vero il commento
+     * scritto sotto.
+     */
+    let ultimaApertura: string | null = letto.apertura
+
     const modo = reactive({
         /*
          * ⭐⭐ IL NUMERO DELLA CHIAMATA, e non è un dettaglio contabile.
@@ -99,6 +119,24 @@ export async function talosAvviaLaBarra(i18n: Plugin): Promise<boolean> {
              * prima volta.
              */
             modo.daVoce = aggiornato.daVoce
+            /*
+             * ⛔⛔ UNA CONSEGNA IN PIÙ NON È UNA CHIAMATA IN PIÙ.
+             *
+             * Capacitor consegna lo STESSO intent due volte a freddo: una da
+             * `getLaunchUrl()` (l'indirizzo con cui siamo partiti, già letto in
+             * `letto`) e una qui. Contarle entrambe faceva credere alla barra di
+             * essere stata chiamata due volte, e la seconda «chiamata» spegneva
+             * l'ascolto appena partito: owner 2026-08-11, «dico "ciao mi senti"
+             * e mi stampa solo "mi senti"».
+             *
+             * Il timbro `apertura` lo mette l'Activity a ogni intent (vedi
+             * `TalosBarraActivity.timbraLApertura`): stesso intent, stesso
+             * timbro. Così due consegne della stessa apertura aggiornano i dati
+             * — che possono essere migliorati, il contesto arriva in ritardo —
+             * ma NON contano come una chiamata nuova.
+             */
+            if (aggiornato.apertura !== null && aggiornato.apertura === ultimaApertura) return
+            ultimaApertura = aggiornato.apertura
             modo.chiamata += 1
         })
     } catch {

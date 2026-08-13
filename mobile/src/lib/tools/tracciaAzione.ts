@@ -108,3 +108,31 @@ export function talosHaAzioniDaMostrare(metadata: unknown): boolean {
  * cento dal tetto: un file in più per due righe non vale un tetto sforato.
  */
 export const TALOS_METADATA_DETTATO = 'dictated'
+
+/**
+ * ⛔⛔ LO SCHERMO VIAGGIA QUI, e NON dentro il messaggio della persona.
+ *
+ * ## Il difetto, visto dall'owner l'11 agosto 2026
+ *
+ * Nella chat compariva **tutto il prompt**: «Qui sotto c'è il testo che compare
+ * adesso sullo schermo della persona…» seguito da centinaia di parole di
+ * interfaccia — Gmail, Deezer, WhatsApp, i nomi di ogni icona — stampati come
+ * se li avesse scritti lui.
+ *
+ * La causa era una riga sola: il contesto veniva CONCATENATO al testo prima di
+ * `chat.send`, quindi finiva nel messaggio dell'utente — mostrato a schermo,
+ * scritto su disco, e ripetuto in ogni turno successivo della conversazione.
+ *
+ * ⇒ È la stessa lezione di `righe-per-il-modello-sullo-schermo`: ciò che è
+ * scritto PER IL MODELLO non si mostra ALLA PERSONA. Il testo dello schermo ha
+ * un solo destinatario, e ora ha un canale che lo porta solo a lui.
+ *
+ * ## Le tre proprietà che questo canale garantisce
+ *
+ * 1. **Non si vede**: il messaggio salvato resta quello che la persona ha detto.
+ * 2. **Non si conserva**: `send` toglie la chiave prima di scrivere su disco —
+ *    lo schermo di un'altra app non deve restare in un database per sempre.
+ * 3. **Non si ripete**: vale solo per il turno che lo porta. Il turno dopo
+ *    riguarda un altro momento, e uno schermo vecchio sarebbe una bugia.
+ */
+export const TALOS_METADATA_SCHERMO = 'screen_context'

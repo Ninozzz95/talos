@@ -49,7 +49,17 @@ describe('TalosMobileVoiceSettings', () => {
         const trigger = wrapper.get(
             '[data-testid="talos-tts-controls"] [data-testid="talos-themed-select-trigger"]',
         )
-        expect(trigger.text()).toContain('Device default')
+        /*
+         * ⛔ NON piu' «Device default» — owner 2026-08-11: «togli la voce
+         * predefinita e mantieni solo la prima e l'ultima voce (rete)».
+         *
+         * Tolta quella riga, il menu' deve mostrare una VOCE VERA anche prima
+         * che qualcuno scelga: la prima delle offerte, che e' esattamente
+         * quella che il motore userebbe da solo. Un menu' vuoto sarebbe stato
+         * il difetto introdotto dalla richiesta, e questa riga lo vieta.
+         */
+        expect(trigger.text()).not.toContain('Device default')
+        expect(trigger.text().trim().length).toBeGreaterThan(0)
     })
 
     it('DICT-UI-01 keeps dictation language available when speech synthesis is unsupported', () => {

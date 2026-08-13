@@ -25,6 +25,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createTalosToolset } from '@/lib/tools/toolset'
 import { TALOS_DEFAULT_AGENT_TOOL_ENABLED } from '@/lib/tools/toolControls'
 import { createTalosDeviceTools, type TalosDeviceToolSources } from '@/lib/tools/deviceTools'
+import { talosIntentiTools } from '@/lib/tools/intentiTools'
 
 
 const fonti = (): TalosDeviceToolSources => ({
@@ -62,7 +63,23 @@ async function suite(device: (() => TalosDeviceToolSources | null) | undefined) 
  * gruppo è una scelta di **presentazione** e la fabbrica è una scelta di
  * **architettura**, e un test non deve confonderle.
  */
-const NOMI_DISPOSITIVO = createTalosDeviceTools(fonti()).map((tool) => tool.name)
+/*
+ * ⭐⭐ Il gruppo del telefono, e da oggi anche il MOTORE DEGLI INTENT.
+ *
+ * `app_azione` non nasce da `createTalosDeviceTools`, ma dipende dalle STESSE
+ * fonti: senza il ponte del telefono non può aprire nessun URI, e offrirlo
+ * sarebbe promettere una cosa che non può fare — la regola che questo file
+ * intero difende.
+ *
+ * ⇒ Sta qui perché la differenza fra «con le fonti» e «senza» deve restare
+ * esattamente il gruppo del telefono. Se un giorno qualcuno lo scollegasse
+ * dalle fonti, questo test diventerebbe rosso invece di lasciarlo offerto a
+ * vuoto su un browser.
+ */
+const NOMI_DISPOSITIVO = [
+    ...createTalosDeviceTools(fonti()).map((tool) => tool.name),
+    ...talosIntentiTools().map((tool) => tool.name),
+]
 
 const TUTTO_CONSENTITO = { read: 'allow', write: 'allow', outbound: 'allow' } as const
 

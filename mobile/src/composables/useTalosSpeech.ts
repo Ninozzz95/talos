@@ -1,4 +1,5 @@
 import { readonly, ref } from 'vue'
+import { talosDettaturaAnnota } from '@/services/dictation'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosI18n } from '@/i18n'
@@ -118,7 +119,21 @@ export function useTalosSpeech() {
         }
     }
 
-    async function stop(): Promise<void> {
+    /**
+     * ⛔⛔ CHI FERMA TALOS DEVE DIRE IL PROPRIO NOME.
+     *
+     * Owner 2026-08-12, tre volte di fila: «il discorso si tronca a metà». Da
+     * fuori quel sintomo ha almeno quattro cause identiche fra loro — il testo
+     * arriva già tagliato, la coda del motore perde frasi, qualcuno chiama
+     * `stop()`, il motore sbaglia e tace — e nessuna delle quattro lasciava una
+     * riga.
+     *
+     * ⇒ `stop` non è più anonimo. Il motivo finisce nella stessa riga temporale
+     * di tutto il resto della voce, e la domanda «chi ha zittito TALOS?» smette
+     * di essere una deduzione.
+     */
+    async function stop(motivo = 'non dichiarato'): Promise<void> {
+        talosDettaturaAnnota(`voce: STOP (${motivo}) mentre leggeva=${speakingId.value ?? '-'}`)
         speakingId.value = null
         const { useTalosSpeechService } = await import('@/services/speech')
         useTalosSpeechService().stop()
@@ -181,7 +196,7 @@ export function useTalosSpeech() {
 
     async function toggle(id: string, text: string): Promise<void> {
         if (speakingId.value === id) {
-            await stop()
+            await stop('la persona ha premuto Interrompi')
             return
         }
         speakingId.value = id
@@ -224,7 +239,12 @@ export function useTalosSpeech() {
         const voce = await voceFissa(id)
         const { useTalosSpeechService } = await import('@/services/speech')
         const servizio = useTalosSpeechService()
+        talosDettaturaAnnota(
+            `voce: ${pronte.length} frasi da dire, finito=${finito}, testo=${testo.length} car, detto=${detto}, resto=${resto.length}`,
+        )
         for (const frase of pronte) {
+            const numero = pronte.indexOf(frase) + 1
+            talosDettaturaAnnota(`voce: accodo ${numero}/${pronte.length} «${frase.slice(0, 28)}»`)
             await servizio.speak(frase, {
                 voiceURI: voce,
                 rate: settings.state.voice.rate,
@@ -236,9 +256,12 @@ export function useTalosSpeech() {
                 // aver cambiato nome (il messaggio vero e' nato), e un
                 // confronto col nome vecchio lascerebbe il pulsante su «ferma»
                 // per sempre — su una stanza silenziosa.
-                onend: finito && frase === pronte[pronte.length - 1]
-                    ? () => { speakingId.value = null }
-                    : undefined,
+                onend: () => {
+                    talosDettaturaAnnota(`voce: detta ${numero}/${pronte.length}`)
+                    // ⛔ Solo l'ULTIMA frase di un testo FINITO chiude la
+                    // lettura — le altre passano solo per lasciare la riga.
+                    if (finito && frase === pronte[pronte.length - 1]) speakingId.value = null
+                },
             })
         }
     }

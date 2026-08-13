@@ -142,3 +142,41 @@ export function talosVoceDaUsare(
         ? { voce: ordinate[0]!, motivo: 'migliore' }
         : { voce: null, motivo: 'nessuna' }
 }
+
+/**
+ * ⭐⭐ LE VOCI CHE SI OFFRONO DAVVERO — due, e scelte a orecchio.
+ *
+ * ## Da dove viene questa regola
+ *
+ * Owner 2026-08-10, dopo averle ascoltate tutte: «vorrei solo le prime tre
+ * disponibili, le altre non mi piacciono, sono troppo robotiche». Poi, il
+ * 2026-08-11: «togli la voce predefinita e mantieni solo la prima e l'ultima
+ * voce (rete)».
+ *
+ * ⇒ Delle tre che l'ordinamento porta in testa restano **la prima e l'ultima**:
+ * la mediana non piaceva. Non è un criterio tecnico e non finge di esserlo —
+ * Android dichiara `quality: 400` per tutte e nove le voci italiane del Pad,
+ * quindi nessun numero avrebbe potuto separarle. Le ha separate un orecchio.
+ *
+ * MISURATO sul Pad l'11 agosto, le tre in testa sono `itb · rete`, `itc · rete`,
+ * `itd · rete` — tutte neurali, il che spiega il «(rete)» dell'owner. Restano
+ * la prima e la terza.
+ *
+ * ## ⛔ E perché la MEDIANA e non «le prime due»
+ *
+ * Perché è quello che è stato chiesto, e la differenza si sente: `itc` è la voce
+ * che l'owner ha scartato, non la terza in graduatoria. Prendere «le prime due»
+ * sarebbe stato più semplice da scrivere e avrebbe tenuto proprio quella.
+ *
+ * ⛔ Con meno di tre voci disponibili non si inventa niente: si restituisce
+ * quello che c'è. Un dispositivo con una voce sola deve poterla scegliere.
+ */
+export function talosVociOfferte(
+    voci: readonly TalosVoceDispositivo[],
+    preferenza: TalosPreferenzaVoce,
+): TalosVoceDispositivo[] {
+    const ordinate = talosVociOrdinate(voci, preferenza)
+    const candidate = ordinate.slice(0, 3)
+    if (candidate.length <= 2) return candidate
+    return [candidate[0], candidate[candidate.length - 1]]
+}

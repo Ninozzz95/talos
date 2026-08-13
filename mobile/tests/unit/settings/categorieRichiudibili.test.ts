@@ -50,6 +50,9 @@ const settings = vi.hoisted(() => ({
     state: {
         tools: { read: 'ask', write: 'ask', outbound: 'ask' },
         tools_chosen: ['read', 'write', 'outbound'],
+        // Motore scelto: qui si provano i collapse, non l'avviso
+        // «manca un motore» — che ha il suo test in `interruttoreCheMente`.
+        search: { source: 'tavily' as string | null },
         agent_tools: {} as Record<string, boolean>,
         tool_authorizations: { schema_version: 1, revision: 0, grants: {} },
     },

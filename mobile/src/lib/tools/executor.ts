@@ -290,7 +290,11 @@ export async function preflightTalosToolExecution(
     const security = securityOf(tool.name)
     const trifecta = talosTrifectaVerdict(chain, security)
     const effectiveRisk = talosEffectiveRisk(chain, security)
-    const vietaIlSempre = talosForbidsPersistentGrant(effectiveRisk, requiredActions)
+    const vietaIlSempre = talosForbidsPersistentGrant(
+        effectiveRisk,
+        requiredActions,
+        security.sempreConsentibile,
+    )
 
     const resolution = resolveTalosToolAuthorization({
         tool: tool.name,
@@ -301,6 +305,10 @@ export async function preflightTalosToolExecution(
         inputDigest,
         request: deps.authorizationRequest,
         forceConfirmation: tool.confirmation === 'always' || trifecta.closed,
+        // ⛔ L'eccezione dichiarata viaggia col resto: senza, il risolutore
+        // spegne il «sempre» per `confirmation: 'always'` e non sa di doverlo
+        // riaccendere. Vedi il commento in `toolAuthorizations.ts`.
+        sempreConsentibile: security.sempreConsentibile === true,
     })
     if (resolution.status === 'denied' && resolution.source === 'policy') {
         const message = `Refused: "${tool.title}" requires ${requiredActions.join(' + ')} permission, and your policy denies ${resolution.actions.join(' + ')}. Ask the user to change it in Settings if it is really needed.`

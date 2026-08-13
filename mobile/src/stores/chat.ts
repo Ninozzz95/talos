@@ -11,6 +11,7 @@ import type {
 import { parseTalosMobileBrowserEvidenceEnvelope } from '@/lib/browser/browserContracts'
 import { stripLibrarySaveMarkers } from '@/lib/chat/librarySave'
 import { talosMessageReasoning } from '@/lib/chat/messageReasoning'
+import { TALOS_METADATA_SCHERMO } from '@/lib/tools/tracciaAzione'
 import { talosCreateReasoningGate } from '@/lib/chat/reasoningGate'
 import type { TalosMobileInputPart } from '@/lib/chat/attachmentContracts'
 import {
@@ -1385,7 +1386,23 @@ export function createChatStore<Runtime = undefined>(
             return false
         }
 
-        let preparedMetadata = { ...metadata }
+        /*
+         * ⛔⛔ IL CONTESTO DELLO SCHERMO SI SFILA QUI, prima di tutto.
+         *
+         * Owner 2026-08-11, con lo screenshot: nella chat compariva l'intero
+         * prompt del contesto — «Qui sotto c'è il testo che compare adesso sullo
+         * schermo…» più tutti i nomi delle icone — come se l'avesse scritto lui.
+         *
+         * Da qui in poi il contesto NON è più nei metadati: non passa da
+         * `prepareSend`, non finisce in `appendDurable`, non tocca il disco.
+         * Rientra in gioco una volta sola, sull'ultimo turno della richiesta.
+         */
+        const schermoDiQuestoTurno = typeof metadata[TALOS_METADATA_SCHERMO] === 'string'
+            ? String(metadata[TALOS_METADATA_SCHERMO]).trim()
+            : ''
+        const metadatiPuliti = { ...metadata }
+        delete metadatiPuliti[TALOS_METADATA_SCHERMO]
+        let preparedMetadata = { ...metadatiPuliti }
         try {
             const identity = createTalosChatSendIdentity({
                 sendId: newTalosMobileId(),
@@ -1402,7 +1419,7 @@ export function createChatStore<Runtime = undefined>(
                 const prepared = await options.prepareSend({
                     identity,
                     text: trimmed,
-                    metadata: Object.freeze({ ...metadata }),
+                    metadata: Object.freeze({ ...metadatiPuliti }),
                     attachments: Object.freeze([...attachments]),
                     signal: abort.signal,
                     runtime,
@@ -1477,6 +1494,22 @@ export function createChatStore<Runtime = undefined>(
                     }
                     return turn
                 }))
+            /*
+             * ⭐⭐ E QUI lo schermo rientra: sull'ULTIMO turno dell'utente, solo
+             * per questa richiesta.
+             *
+             * ⛔ Non prima: i turni si ricostruiscono dalla storia su disco, e
+             * sul disco il contesto non c'è — per scelta. Se lo scrivessimo là,
+             * il modello se lo ritroverebbe in ogni risposta futura, riferito a
+             * uno schermo che nel frattempo è cambiato.
+             */
+            if (schermoDiQuestoTurno) {
+                for (let i = turns.length - 1; i >= 0; i -= 1) {
+                    if (turns[i].role !== 'user') continue
+                    turns[i] = { ...turns[i], content: `${schermoDiQuestoTurno}\n\n${turns[i].content}` }
+                    break
+                }
+            }
         } catch (error) {
             state.lastError = errorMessage(error, translate)
             try {

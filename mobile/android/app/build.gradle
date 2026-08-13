@@ -154,6 +154,16 @@ android {
             // `preparaPonteAdb` scaricandoli e verificandoli. Vedi il compito
             // sotto per il perche'.
             jniLibs.srcDirs += ["${buildDir}/ponte/jniLibs"]
+            /*
+             * ⛔ Nemmeno il motore della parola di attivazione sta nella repo:
+             * ce lo mette `preparaMotoreVoce`, scaricando e verificando ogni
+             * impronta dichiarata in `PROVENIENZA-VOCE.md`. Tre cartelle perche'
+             * sono tre nature diverse — una libreria nativa, dei pesi letti a
+             * runtime, e l'interfaccia Kotlin che va COMPILATA con noi.
+             */
+            jniLibs.srcDirs += ["${buildDir}/voce/jniLibs"]
+            assets.srcDirs += ["${buildDir}/voce/assets"]
+            java.srcDirs += ["${buildDir}/voce/java"]
         }
     }
     packagingOptions {
@@ -261,6 +271,7 @@ try {
 // cambiare qualcosa.
 import org.apache.commons.compress.archivers.ar.ArArchiveInputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import java.security.MessageDigest
 
@@ -416,4 +427,137 @@ tasks.register('preparaPonteAdb') {
 
 // ⛔ PRIMA della compilazione, sempre. Un ponte a metà non è un ponte, e un APK
 // senza questi file si installa benissimo e poi non sa accoppiarsi.
-tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'preparaPonteAdb' }
+/**
+ * ⭐⭐ IL MOTORE DELLA PAROLA DI ATTIVAZIONE — scaricato e verificato, non commesso.
+ *
+ * Stessa disciplina del ponte `adb`, e per la stessa ragione: la verifica delle
+ * impronte smette di essere un rito fatto una volta e diventa parte di OGNI
+ * compilazione. La scheda leggibile e' `src/main/jniLibs/PROVENIENZA-VOCE.md`.
+ *
+ * ⛔ Tre destinazioni, perche' sono tre nature diverse:
+ *   - `voce/jniLibs`  la libreria nativa (una sola: variante a collegamento
+ *                     statico, MISURATA piu' piccola di quella con onnxruntime
+ *                     separato — 23,6 MB contro 26,5)
+ *   - `voce/assets`   i pesi del modello, letti a runtime dall'AssetManager
+ *   - `voce/java`     l'interfaccia Kotlin, che va compilata insieme a noi
+ */
+tasks.register('preparaMotoreVoce') {
+    description = 'Scarica e verifica il motore della parola di attivazione dichiarato in PROVENIENZA-VOCE.md'
+    def scheda = file('src/main/jniLibs/PROVENIENZA-VOCE.md')
+    def fuori = file("${buildDir}/voce")
+    def cache = new File(gradle.gradleUserHomeDir, 'talos-motore-voce')
+
+    inputs.file scheda
+    outputs.dir fuori
+
+    doLast {
+        if (!scheda.exists()) {
+            throw new GradleException("Manca ${scheda}: senza la scheda di provenienza il motore della voce non si costruisce.")
+        }
+        def testo = scheda.getText('UTF-8')
+
+        def pacchetti = [:]
+        def dentro = [:]
+        def rinominati = [:]
+        def fonti = [:]
+        def base = null
+        testo.eachLine { riga ->
+            def r = riga.trim()
+            def b = (r =~ /^Base: `(\S+)`$/)
+            if (b.matches()) { base = b[0][1]; return }
+            def p = (r =~ /^\|\s*(motore|modello)\s*\|\s*\[[^\]]+\]\((\S+)\)\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
+            if (p.matches()) { pacchetti[p[0][1]] = [p[0][2], p[0][3]]; return }
+            def d = (r =~ /^\|\s*`([^`]+)`\s*\|\s*(motore|modello)\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
+            if (d.matches()) { dentro[d[0][1]] = d[0][3]; return }
+            def n = (r =~ /^\|\s*`(kws\/[^`]+)`\s*\|\s*`([^`]+)`\s*\|$/)
+            if (n.matches()) { rinominati[n[0][1]] = n[0][2]; return }
+            def k = (r =~ /^\|\s*`([A-Za-z]+\.kt)`\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
+            if (k.matches()) { fonti[k[0][1]] = k[0][2] }
+        }
+        if (pacchetti.size() != 2 || dentro.isEmpty() || fonti.isEmpty() || base == null) {
+            throw new GradleException(
+                    "PROVENIENZA-VOCE.md non ha prodotto le righe attese (pacchetti=${pacchetti.size()}, " +
+                            "file=${dentro.size()}, fonti=${fonti.size()}, base=${base}). La tabella e' cambiata " +
+                            "e questo compito non la riconosce piu'. Non e' una scheda vuota.")
+        }
+
+        cache.mkdirs()
+
+        def scarica = { String url, String impronta ->
+            def giu = new File(cache, url.tokenize('/').last())
+            if (!giu.exists() || improntaDi(giu.bytes) != impronta) {
+                logger.lifecycle("motore voce: scarico ${giu.name}")
+                giu.withOutputStream { uscita -> new URL(url).withInputStream { uscita << it } }
+            }
+            def vera = improntaDi(giu.bytes)
+            if (vera != impronta) {
+                giu.delete()
+                throw new GradleException(
+                        "IMPRONTA DIVERSA per ${giu.name}.\n  atteso  ${impronta}\n  trovato ${vera}\n" +
+                                "Il pacchetto pubblicato non e' piu' quello dichiarato in PROVENIENZA-VOCE.md. " +
+                                "NON si aggiorna il numero senza sapere perche' e' cambiato.")
+            }
+            return giu
+        }
+
+        def cercati = [:]
+        dentro.each { nome, impronta ->
+            def vero = rinominati.getOrDefault(nome, nome).tokenize('/').last()
+            cercati[vero] = [nome, impronta]
+        }
+
+        def presi = [] as Set
+        pacchetti.each { quale, riga ->
+            def archivio = scarica(riga[0], riga[1])
+            new BZip2CompressorInputStream(archivio.newInputStream()).withCloseable { flusso ->
+                new TarArchiveInputStream(flusso).withCloseable { tar ->
+                    def voce
+                    while ((voce = tar.nextEntry) != null) {
+                        if (voce.directory) continue
+                        def foglia = voce.name.tokenize('/').last()
+                        def atteso = cercati[foglia]
+                        if (atteso == null) continue
+                        if (quale == 'motore' && !voce.name.contains('arm64-v8a')) continue
+                        byte[] dati = tar.readAllBytes()
+                        def vera = improntaDi(dati)
+                        if (vera != atteso[1]) {
+                            throw new GradleException(
+                                    "IMPRONTA DIVERSA per ${atteso[0]} dentro ${archivio.name}.\n" +
+                                            "  atteso  ${atteso[1]}\n  trovato ${vera}")
+                        }
+                        def nome = atteso[0]
+                        def destinazione = nome.startsWith('kws/') ?
+                                new File(fuori, "assets/${nome}") :
+                                new File(fuori, "jniLibs/arm64-v8a/${nome}")
+                        destinazione.parentFile.mkdirs()
+                        destinazione.bytes = dati
+                        presi << nome
+                    }
+                }
+            }
+        }
+        def mancanti = dentro.keySet() - presi
+        if (!mancanti.isEmpty()) {
+            throw new GradleException("Non trovati dentro i pacchetti: ${mancanti.join(', ')}")
+        }
+
+        def sorgenti = new File(fuori, 'java/com/k2fsa/sherpa/onnx')
+        sorgenti.mkdirs()
+        fonti.each { nome, impronta ->
+            def giu = new File(cache, nome)
+            if (!giu.exists() || improntaDi(giu.bytes) != impronta) {
+                logger.lifecycle("motore voce: scarico ${nome}")
+                giu.withOutputStream { uscita -> new URL(base + nome).withInputStream { uscita << it } }
+            }
+            def vera = improntaDi(giu.bytes)
+            if (vera != impronta) {
+                giu.delete()
+                throw new GradleException("IMPRONTA DIVERSA per ${nome}.\n  atteso  ${impronta}\n  trovato ${vera}")
+            }
+            new File(sorgenti, nome).bytes = giu.bytes
+        }
+        logger.lifecycle("motore voce: ${presi.size()} file e ${fonti.size()} fonti verificati")
+    }
+}
+
+tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'preparaPonteAdb', 'preparaMotoreVoce' }

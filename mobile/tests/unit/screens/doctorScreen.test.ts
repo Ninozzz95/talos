@@ -37,7 +37,7 @@ vi.mock('@/stores/chatController', () => ({ useChatController: () => harness.con
 vi.mock('@capacitor/core', () => ({
     Capacitor: { isNativePlatform: () => false, getPlatform: () => 'web' },
 }))
-vi.mock('@/services/dictation', () => ({
+vi.mock('@/services/dictationDiagnostica', () => ({
     talosDictationDiagnostics: () => Promise.resolve({
         buildId: 'test-build', pluginLoaded: true, available: true, error: null, trace: '',
     }),

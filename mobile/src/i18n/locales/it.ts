@@ -782,6 +782,10 @@ export const TALOS_IT_MESSAGES = {
         allowTool: 'Consentire {title}?',
         denyTool: 'Non consentire',
         authorizationAlways: 'Consenti sempre',
+        // ⛔ Dice il PERCHÉ, non «non disponibile»: una scelta tolta senza una
+        // ragione si legge come una funzione mancante, e infatti così è stata
+        // letta. La ragione è l'unica cosa che distingue le due.
+        authorizationAlwaysUnavailable: '«Consenti sempre» non c’è per questa azione: non si può annullare, quindi resta una decisione da prendere ogni volta.',
         authorizationLater: 'Decidi più tardi',
         authorizationFromChat: 'Richiesto da {title}',
         pendingAuthorizationCount: '{count} in attesa',
@@ -898,6 +902,11 @@ export const TALOS_IT_MESSAGES = {
         assistantHeld: 'TALOS è il tuo assistente. Chiamalo da qualunque app e la barra compare.',
         assistantAsk: 'Rendi TALOS il tuo assistente',
         assistantManual: 'Né Android né il ponte ci sono riusciti. Fallo a mano: Impostazioni → App → App predefinite → Assistente digitale. Se l’elenco è vuoto, accendi il Debug wireless qui sotto e ripremi.',
+        wakeTitle: 'Chiamalo con la voce',
+        wakeBody: 'Basta dire «hey TALOS» e si apre da solo, senza toccare niente. ⛔ Il microfono resta acceso per aspettare quelle due parole: TALOS non trascrive e non salva nulla, ma il microfono è acceso — e mentre lo è, lo dice con una notifica fissa.',
+        wakeOn: 'TALOS sta aspettando «hey TALOS». Il microfono è acceso: la notifica lo dice, e da lì si spegne.',
+        wakeAsk: 'Attiva «hey TALOS»',
+        wakeOff: 'Smetti di aspettare la parola',
         bubbleTitle: 'Il pallino di TALOS',
         bubbleBody: 'Un pallino sopra le altre app: lo tocchi e la barra si apre, senza dipendere dai gesti del telefono. Solo nella build di sviluppo.',
         bubbleOn: 'Il pallino è a schermo. Trascinalo dove vuoi: si aggancia al bordo più vicino.',
@@ -1039,6 +1048,7 @@ export const TALOS_IT_MESSAGES = {
         deviceNotificationReply: 'Risposta a una notifica',
         deviceNotificationDismiss: 'Notifica tolta',
         deviceScreenDrive: 'Sta usando un’app per te',
+        appAzione: 'Lo sta facendo in un’altra app',
         researchList: 'Consultazione delle ricerche',
         researchStart: 'Avvio di una ricerca',
         researchRead: 'Lettura di un rapporto',
@@ -1254,6 +1264,10 @@ export const TALOS_IT_MESSAGES = {
         deviceNotificationDismiss: {
             title: 'Togli una notifica',
             description: 'La toglie dalla tendina. Quelle di qualcosa che sta girando non si possono togliere: nasconderle nasconderebbe che sta girando.',
+        },
+        appAzione: {
+            title: 'Fallo in un’altra app',
+            description: 'Apre l’app giusta con tutto già dentro. L’ultima parola resta tua.',
         },
         deviceScreenDrive: {
             title: 'Usa un’app al posto tuo',
@@ -2256,6 +2270,11 @@ export const TALOS_IT_MESSAGES = {
         saveFailed: 'Non è stato possibile salvare {tool}. L’impostazione precedente è ancora attiva.',
         alwaysAllowed: 'Sempre consentito',
         askAgain: 'Chiedi di nuovo',
+        // ⛔ Dice cosa succede DAVVERO, non cosa manca in astratto: acceso qui e
+        // assente per il modello erano indistinguibili, e l'owner ne ha dedotto
+        // un blocco dei permessi che non c'era.
+        needsSearchEngine: 'Acceso, ma TALOS non può ancora usarlo: manca un motore di ricerca.',
+        chooseSearchEngine: 'Scegli il motore',
         revokeFailed: 'Non è stato possibile revocare l’autorizzazione salvata per {tool}.',
         groupCount: '{enabled} di {total} accesi',
         groups: {
@@ -2334,6 +2353,7 @@ export const TALOS_IT_MESSAGES = {
             device_notification_reply: { title: 'Rispondi a una notifica', description: 'Manda un messaggio VERO dal campo di risposta rapida. Chiede sempre, e non si annulla.' },
             device_notification_dismiss: { title: 'Togli una notifica', description: 'La toglie dalla tendina. Quelle di qualcosa che sta girando non si tolgono.' },
             device_screen_drive: { title: 'Usa un’app al posto tuo', description: '⛔ TALOS tocca, scrive e scorre dentro le altre app per arrivare a un obiettivo, e dice a voce cosa sta per fare PRIMA di ogni mossa. Si ferma da solo dopo 20 passi, 2 minuti, due errori di fila — e nell’istante in cui tocchi lo schermo.' },
+            app_azione: { title: 'Fallo in un’altra app', description: '⭐ Apre l’app giusta con tutto già dentro, invece di cercare sullo schermo. Messaggi, chiamate, mappe, musica, calendario.' },
         },
     },
     lock: {
@@ -2401,6 +2421,10 @@ export const TALOS_IT_MESSAGES = {
         instanceAddress: 'Indirizzo istanza',
         endpointPlaceholder: 'https://searx.example.org',
         turnOff: 'Disattiva ricerca web',
+        // ⛔ Il nome dice il costo: spegnere si annulla, questo no. Fino al
+        // 12/8 li faceva tutti e due il pulsante qui sopra, in silenzio.
+        forgetKey: 'Dimentica la chiave',
+        keyForgotten: 'Chiave rimossa da questo dispositivo. Per riaccendere la ricerca ne serve una nuova.',
         keySaved: 'Chiave salvata su questo dispositivo.',
         keySaveFailed: 'Non è stato possibile salvare la chiave. Nessuna modifica effettuata.',
         addressSaved: 'Indirizzo salvato.',
@@ -2827,12 +2851,32 @@ export const TALOS_IT_MESSAGES = {
         openItem: 'Apri {item}',
         openSettings: 'Apri Impostazioni',
     },
+    autonomia: {
+        titolo: 'TALOS agirà da solo sul tuo dispositivo',
+        corpo: 'Da adesso puoi parlare con TALOS senza toccare lo schermo. Per farlo, TALOS eseguirà da solo le azioni che gli chiedi: leggere quello che hai salvato, scrivere note e attività, aprire app, cercare in rete. TALOS è un sistema di intelligenza artificiale, non una persona, e può sbagliare.',
+        promessaAgisce: 'Non ti chiederà più il permesso a ogni azione: te lo stai dando adesso, una volta sola.',
+        promessaVoce: 'Prima di fare qualcosa che non si può disfare — cancellare, mandare, chiamare — te lo dirà a voce e aspetterà la tua risposta.',
+        promessaRevoca: 'Ogni azione resta scritta in Attività, e puoi togliere questo consenso quando vuoi da Impostazioni › Controllo del telefono.',
+        rifiuta: 'Non adesso',
+        accetta: 'Attiva e consenti',
+    },
     barra: {
         title: 'TALOS',
         context: 'Vedo la tua schermata · {n} elementi',
         contextWithImage: 'Vedo la tua schermata · {n} elementi + immagine',
         contextOff: 'Non guardo la schermata',
         contextNone: 'Non vedo la schermata',
+        /**
+         * ⛔ QUESTA RIGA NON LA LEGGE NESSUNO: la legge il MODELLO.
+         *
+         * Sta qui perché deve parlare la lingua della persona (chi scrive in
+         * italiano vuole una risposta in italiano), ma non va mai mostrata a
+         * schermo: è la cornice che dice al modello da dove viene il testo che
+         * segue. Senza cornice, un modello che riceve lo schermo grezzo non sa
+         * se viene dalla persona, e finisce per rispondere allo schermo invece
+         * che alla domanda.
+         */
+        contextPrompt: 'Qui sotto c’è il testo che compare adesso sullo schermo della persona. Usalo solo se serve a rispondere, e non ripeterlo tutto.',
         close: 'Chiudi',
         expand: 'Mostra tutta la risposta',
         collapse: 'Accorcia la risposta',
@@ -2844,6 +2888,8 @@ export const TALOS_IT_MESSAGES = {
         stop: 'Ferma',
         open: 'Apri in TALOS',
         sendFailed: 'Il messaggio non è partito.',
+        // Dopo i 10 secondi di attesa: si dice, non ci si spegne di nascosto.
+        nessunaVoce: 'Non ho sentito niente. Tocca il microfono per riprovare.',
         openFailed: 'TALOS non si è aperto.',
         copied: 'Copiato',
         copyFailed: 'Il testo non si è copiato.',

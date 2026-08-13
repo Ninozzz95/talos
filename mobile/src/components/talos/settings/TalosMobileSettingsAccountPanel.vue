@@ -23,7 +23,7 @@ import {
     disableTalosDatabaseProtection,
     enableTalosDatabaseProtection,
 } from '@/services/databaseProtection'
-import { talosDictationDiagnostics, type TalosDictationDiagnostics } from '@/services/dictation'
+import { talosDictationDiagnostics, type TalosDictationDiagnostics } from '@/services/dictationDiagnostica'
 
 const router = useRouter()
 const { t } = useTalosI18n()

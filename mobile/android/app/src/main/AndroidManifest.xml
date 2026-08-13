@@ -46,6 +46,42 @@
             <action android:name="android.intent.action.SENDTO" />
             <data android:scheme="smsto" />
         </intent>
+        <!--
+            ⛔⛔ SENZA QUESTE RIGHE LE APP «NON ESISTONO» — Android 11+.
+
+            Da Android 11 il sistema NASCONDE le altre app: senza una
+            dichiarazione qui, `resolveActivity` torna `null` e il codice
+            conclude che l'app non e' installata. Su questo progetto e' gia'
+            costato una diagnosi sbagliata, ed e' il primo punto della ricerca
+            2026 sugli intent.
+
+            ⇒ Ogni schema del registro (`src/lib/intenti/registro.ts`) deve
+            avere qui la sua voce, o quella capacita' e' morta in silenzio.
+        -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="mailto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="whatsapp" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tg" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="spotify" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="google.navigation" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.SEND" />
             <data android:mimeType="text/plain" />
@@ -201,6 +237,27 @@
             SISTEMA: senza, la scheda non compare nemmeno nell'elenco, e senza
             un messaggio che spieghi perché.
         -->
+        <!--
+            ⭐⭐ IL SERVIZIO CHE ASPETTA «hey TALOS».
+
+            Non trascrive e non salva: cerca due parole in token BPE e, quando
+            le sente, chiede al sistema di mostrare la sessione dell'assistente
+            — la stessa porta del gesto, quindi la barra nasce con lo schermo
+            gia' dentro.
+
+            ⛔ `exported="false"`: lo accende solo l'app, dall'interruttore che
+            la persona vede. Un servizio che tiene il microfono e che chiunque
+            puo' avviare sarebbe un difetto di sicurezza, non una funzione.
+
+            ⛔ Da Android 14 un servizio di tipo `microphone` NON si puo'
+            avviare dal fondo: si accende con l'app in primo piano, che e'
+            esattamente il momento in cui la persona tocca l'interruttore.
+        -->
+        <service
+            android:name="ai.talos.parola.TalosParola"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <service
             android:name=".TalosTendina"
             android:exported="true"
@@ -569,10 +626,30 @@
             android:resource="@xml/talos_assistente" />
         </service>
 
+        <!--
+            ⛔⛔ UN SOLO OCCHIO, E CON UN NOME SUO.
+
+            Owner 2026-08-12, con lo screenshot delle Impostazioni: «ci sono due
+            voci, due TALOS, e se ne abilito una delle due non mi fa scrivere
+            nella chat». Aveva ragione: qui erano dichiarati DUE servizi di
+            accessibilita' — `TalosOcchio` e `TalosOcchioSonda` — con la STESSA
+            etichetta `@string/app_name`, quindi nell'elenco di sistema
+            comparivano identici e indistinguibili.
+
+            `TalosOcchioSonda` era una SONDA DI MISURA: lo dice la sua stessa
+            prima riga, «SONDA, NON FUNZIONE… per essere buttato o promosso
+            dopo». Le tre misure che doveva chiudere sono chiuse dal 10 agosto e
+            nessuno la chiamava piu': era codice morto rimasto VISIBILE alla
+            persona, nel punto piu' delicato che Android abbia.
+
+            ⇒ Tolta. E l'occhio vero ha un'etichetta propria: in un elenco dove
+            ogni riga da' a un'app il diritto di leggere lo schermo, «TALOS» due
+            volte non e' un difetto estetico — e' una scelta impossibile.
+        -->
         <service
             android:name="ai.talos.agent.TalosOcchio"
             android:exported="false"
-            android:label="@string/app_name"
+            android:label="@string/talos_occhio_nome"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
@@ -580,19 +657,6 @@
             <meta-data
             android:name="android.accessibilityservice"
             android:resource="@xml/talos_occhio" />
-        </service>
-
-        <service
-            android:name="ai.talos.agent.TalosOcchioSonda"
-            android:exported="false"
-            android:label="@string/app_name"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-            android:name="android.accessibilityservice"
-            android:resource="@xml/talos_occhio_sonda" />
         </service>
 
         <service
@@ -616,6 +680,26 @@
          requested because the notification IS the service on Android 13+. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!--
+        ⛔⛔ IL MICROFONO COME TIPO DI SERVIZIO, e qui e' VERO.
+
+        Owner 2026-08-11: «hey TALOS» deve esistere perche' su ColorOS la barra
+        non ha nessuna porta assegnabile a un gesto.
+
+        Il censimento del codice dei concorrenti (Dicio, Sayboard, Kõnele, FUTO)
+        dice che dichiarano TUTTI `foregroundServiceType="microphone"`, e in
+        `OomAdjuster.java` solo quel bit concede
+        `PROCESS_CAPABILITY_FOREGROUND_MICROPHONE`.
+
+        ⛔ Alla BOLLA quel tipo e' stato NEGATO di proposito — vedi il manifesto
+        di debug: la bolla tiene un pulsante a schermo e non registra niente,
+        quindi dichiararlo sarebbe una bugia al sistema operativo. Qui invece il
+        servizio apre un `AudioRecord` e lo tiene: e' la stessa riga, ed e' vera.
+        La differenza fra le due non e' burocratica — e' se il file che la
+        dichiara registra o no.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- La casella senza la quale niente di lungo arriva in fondo.
 
@@ -708,6 +792,49 @@
     -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!--
+        ⛔⛔ RIORDINARE I TASK — e riguarda SOLO i nostri, con il sì dell'owner
+        del 2026-08-12.
+
+        ## Il difetto che lo rende necessario, misurato in quattro giri
+
+        «Apri in TALOS» dalla barra consegnava l'intent — la sonda diceva
+        `push=ok rotta=chat` — e lo schermo restava sul launcher. Provate e
+        scartate quattro cure: `App.exitApp()` (chiudeva tutto il task),
+        `finish()` subito, `finish()` a +400 ms, `finish()` prima del lancio.
+        Tutte e quattro: `mCurrentFocus=com.android.launcher`.
+
+        `dumpsys activity recents` ha escluso le due spiegazioni facili: i task
+        SONO separati e vivi (`#1723 A=ai.talos.dev` e `#1724
+        I=TalosBarraActivity`). ⇒ `startActivity` **consegna** l'intent ma non
+        porta il task in cima: su questa ROM il permesso di lanciare dal fondo
+        vale finché la finestra della barra è visibile (`BAL_ALLOW_VISIBLE_WINDOW`
+        nei log), e decade proprio nell'istante in cui la barra si chiude.
+
+        ## Perché è un permesso normale e non uno pericoloso
+
+        `REORDER_TASKS` è di livello `normal`: si concede all'installazione, non
+        chiede niente alla persona, e **non dà accesso ai task di altre app** —
+        `ActivityManager.getAppTasks()` restituisce soltanto i nostri. Serve a
+        una cosa sola: dire al sistema «il task che ho appena aperto è quello che
+        la persona vuole vedere», che è letteralmente ciò che ha chiesto toccando
+        «Apri in TALOS».
+    -->
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
+    <!--
+        ⭐⭐ LA RUBRICA — il fondamento di ogni intent «manda a <persona>».
+
+        MISURATO sul Pad il 2026-08-13: allo stesso compito Gemini risponde
+        «Non ho trovato il contatto "Io Tu" NELLA TUA RUBRICA» ⇒ risolve il
+        nome in rubrica e apre l'app col destinatario gia' dentro, senza mai
+        toccare lo schermo. TALOS pilotava: 20 passi, 27,8 s, fallito.
+
+        ⛔ E' un permesso PERICOLOSO e si chiede a runtime, quando serve, non
+        all'avvio: chi apre TALOS per la prima volta non deve vedersi chiedere
+        la rubrica prima di aver capito a cosa serve.
+    -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!--
         Two permissions TALOS never asked for, removed.

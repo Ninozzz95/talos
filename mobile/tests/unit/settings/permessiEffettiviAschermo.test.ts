@@ -42,6 +42,9 @@ const settings = vi.hoisted(() => ({
         // ereditati, e nessuna scelta registrata.
         tools: { read: 'allow', write: 'allow', outbound: 'allow' },
         tools_chosen: [] as string[],
+        // Motore scelto: qui si prova cosa DICONO i tre permessi, e senza
+        // motore le righe web aggiungerebbero un avviso che qui non c'entra.
+        search: { source: 'tavily' as string | null },
         agent_tools: {},
         tool_authorizations: { schema_version: 1, revision: 0, grants: {} },
     },

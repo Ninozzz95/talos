@@ -135,15 +135,13 @@ async function bootstrapTalosMobileApp(): Promise<void> {
      * su cento sarebbe pagare tutti per pochi.
      */
     void (async () => {
-        const [{ talosAscoltaLaConsegna }, { useChatController }] = await Promise.all([
+        const [{ talosAscoltaLaConsegna, talosConsegnaLaSessione }, { useChatController }] = await Promise.all([
             import('@/lib/barra/consegna'),
             import('@/stores/chatController'),
         ])
         const controller = useChatController()
-        await talosAscoltaLaConsegna(async (sessione) => {
-            await controller.init()
-            await controller.selectSession(sessione)
-        })
+        // ⛔ Sceglierla e APRIRLA sono due cose: vedi `talosConsegnaLaSessione`.
+        await talosAscoltaLaConsegna((sessione) => talosConsegnaLaSessione(controller, router, sessione))
     })()
 
     const warm = (): void => {

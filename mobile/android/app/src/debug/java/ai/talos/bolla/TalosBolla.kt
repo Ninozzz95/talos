@@ -228,6 +228,20 @@ class TalosBolla : Service() {
      * sale più da sola.
      */
     private fun apriLaBarra() {
+        /*
+         * ⭐⭐ PRIMA SI PROVA LA PORTA DELL'ASSISTENTE, che consegna lo schermo.
+         *
+         * Owner 2026-08-11: «sul telefono TALOS non vede lo schermo, sul tablet
+         * sì». Stessa app, stessi permessi, stessi valori in `settings`: la
+         * differenza era la porta. Il gesto passa dall'assistente e il sistema
+         * consegna `AssistStructure`; `startActivity` apre la stessa finestra
+         * saltando l'assistente, e lì non arriva niente a nessuno.
+         *
+         * ⛔ E se il sistema dice di no — perché l'assistente è un altro — si
+         * apre lo stesso, come prima: meglio una barra senza occhio che nessuna
+         * barra. La spia dirà che non vede la schermata, e sarà vero.
+         */
+        if (ai.talos.agent.TalosAssistente.apriComeAssistente()) return
         val indirizzo = android.net.Uri.parse("talos://barra?voce=1&nodi=0&immagine=0")
         val apri = Intent(Intent.ACTION_VIEW, indirizzo, this, ai.talos.TalosBarraActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

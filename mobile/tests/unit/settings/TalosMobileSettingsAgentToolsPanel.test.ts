@@ -33,6 +33,10 @@ const settings = vi.hoisted(() => ({
         // e senza questa riga i tre valori sopra verrebbero riportati al
         // default di oggi — la regola provata in `permessiEffettiviAschermo`.
         tools_chosen: ['read', 'write', 'outbound'],
+        // ⛔ Motore scelto: qui non è l'oggetto della prova, e senza motore le
+        // due righe web mostrerebbero l'avviso «manca un motore di ricerca» —
+        // che ha il suo test in `interruttoreCheMente`.
+        search: { source: 'tavily' as string | null },
         agent_tools: {
             library_list: true,
             library_search: true,

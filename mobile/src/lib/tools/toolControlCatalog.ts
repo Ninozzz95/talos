@@ -22,10 +22,45 @@ export const TALOS_AGENT_TOOL_GROUP_ORDER = Object.freeze([
     'library', 'personal', 'web', 'create', 'models', 'device',
 ]) as readonly TalosAgentToolGroup[]
 
+/**
+ * ⛔⛔ Un pezzo che deve ESISTERE a monte, o l'interruttore mente.
+ *
+ * ## Il difetto, misurato il 2026-08-12
+ *
+ * L'owner: «l'assistente non ha accesso alla ricerca web, cosa che dovrebbe
+ * essere tranquillamente accessibile dalla chat». Nelle Impostazioni
+ * `web_search` era **acceso**, i permessi erano `allow`, e la sonda diceva
+ * `offerti=59` **senza `web_search`**: il tool non veniva costruito affatto,
+ * perché in `chatController` la sua dipendenza fa
+ *
+ *     const source = sendRuntime.search.source
+ *     if (!source) return null      // nessun motore ⇒ nessun tool web
+ *
+ * e nessun motore di ricerca era mai stato scelto. Messa la chiave, la stessa
+ * sonda ha detto `offerti=61 [web_search, web_read, …]`: la differenza di due è
+ * la prova che la causa era quella.
+ *
+ * ## Perché il requisito sta nel CATALOGO e non nel pannello
+ *
+ * Un interruttore acceso su una capacità che **non può esistere** è la stessa
+ * famiglia del comando morto: promette, e la promessa non è mantenibile. Chi
+ * guarda quel pannello non ha modo di sapere che manca il pezzo a monte — e
+ * infatti ha dedotto «me lo stanno bloccando», che era la spiegazione
+ * sbagliata.
+ *
+ * Scritto qui, il requisito è un dato: il pannello lo legge invece di
+ * conoscerlo, e un test può controllare che ogni tool che dipende da un
+ * motore lo dichiari. Scritto nel pannello sarebbe stata una condizione privata
+ * che nessuno può verificare — l'errore già pagato con l'ordine dei gruppi.
+ */
+export type TalosAgentToolRequisito = 'motoreDiRicerca'
+
 export interface TalosAgentToolControl {
     id: TalosAgentToolId
     group: TalosAgentToolGroup
     actions: readonly TalosToolAction[]
+    /** Ciò che deve esistere PRIMA, o il tool non viene nemmeno offerto. */
+    richiede?: TalosAgentToolRequisito
 }
 
 /** Settings-only metadata; executable-factory conformance is test-guarded. */
@@ -70,8 +105,8 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     { id: 'tasks_update', group: 'personal', actions: ['write'] },
     { id: 'tasks_delete', group: 'personal', actions: ['write'] },
     // Esce dal dispositivo E porta dentro testo di altri: due terzi della trifecta in un tool solo.
-    { id: 'web_search', group: 'web', actions: ['outbound','write'] },
-    { id: 'web_read', group: 'web', actions: ['outbound','write'] },
+    { id: 'web_search', group: 'web', actions: ['outbound','write'], richiede: 'motoreDiRicerca' },
+    { id: 'web_read', group: 'web', actions: ['outbound','write'], richiede: 'motoreDiRicerca' },
     { id: 'document_create', group: 'create', actions: ['write'] },
     // Il prompt esce verso il provider: è trasmissione, anche se sembra creazione.
     { id: 'generate_image', group: 'create', actions: ['write','outbound'] },
@@ -142,4 +177,5 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     // ⛔ `outbound` insieme a `write`: guidare uno schermo può cercare sul web,
     // mandare un messaggio, comprare. Non è una scrittura locale.
     { id: 'device_screen_drive', group: 'device', actions: ['write', 'outbound'] },
+    { id: 'app_azione', group: 'device', actions: ['write', 'outbound'] },
 ] as const satisfies readonly TalosAgentToolControl[])

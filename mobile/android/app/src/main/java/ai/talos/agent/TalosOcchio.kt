@@ -56,11 +56,50 @@ class TalosOcchio : AccessibilityService() {
 
     override fun onDestroy() {
         if (vivo === this) vivo = null
+        Log.i(TAG, "occhio chiuso: onDestroy")
         super.onDestroy()
     }
 
+    /**
+     * ⛔⛔ QUI L'OCCHIO SI ACCECAVA DA SOLO — 2026-08-13.
+     *
+     * Questa riga c'era, e azzerava `vivo`:
+     *
+     * ```kotlin
+     * override fun onInterrupt() { if (vivo === this) vivo = null }
+     * ```
+     *
+     * `onInterrupt()` NON e' la fine del servizio. Android lo chiama per dire
+     * «smetti ORA il riscontro che stai dando» — e' il fratello di «zitto», non
+     * di «sei morto». Il servizio resta agganciato, resta capace di leggere lo
+     * schermo e di toccare i nodi: cambia soltanto che deve interrompere quello
+     * che sta comunicando.
+     *
+     * ⛔ E il danno era PERMANENTE, perche' `onServiceConnected()` non viene
+     * richiamato: dopo il primo `onInterrupt` della vita del servizio, TALOS si
+     * dichiarava cieco per sempre, fino a spegnere e riaccendere il permesso a
+     * mano.
+     *
+     * ## Come si e' visto, e perche' non si era visto prima
+     *
+     * MISURATO stamattina sul Pad dell'owner, dal suo stesso tentativo delle
+     * 08:32: `dumpsys accessibility` diceva
+     * `Bound services:{...label=TALOS — controllo del telefono, capabilities=1}`
+     * — agganciato — e nello stesso momento TALOS rispondeva in chat «serve il
+     * permesso di lettura dello schermo, che al momento e' **disattivato**», e
+     * ripiegava su `device_open_app`.
+     *
+     * ⇒ Due domande diverse che sembravano una: *il sistema mi ha agganciato?*
+     * (si') e *io mi ricordo di essere agganciato?* (no). Il pilota non si
+     * fermava a meta' strada: non partiva affatto, e il tempo che ho speso a
+     * cercare il punto in cui si fermava cercava una cosa che non e' successa.
+     *
+     * Adesso `vivo` lo azzera solo `onDestroy()`, che e' la fine vera. Qui
+     * resta la traccia, perche' sapere QUANTO SPESSO il sistema ci interrompe
+     * e' un dato che non abbiamo mai avuto.
+     */
     override fun onInterrupt() {
-        if (vivo === this) vivo = null
+        Log.i(TAG, "interruzione richiesta dal sistema: l'occhio RESTA aperto")
     }
 
     /**
@@ -117,7 +156,25 @@ class TalosOcchio : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val tipo = event?.eventType ?: return
         if (tipo and INTERAZIONI == 0) return
-        if (SystemClock.uptimeMillis() - nostraAzioneAl <= SORDITA_MS) return
+        val ritardo = SystemClock.uptimeMillis() - nostraAzioneAl
+        if (ritardo <= SORDITA_MS) return
+        /*
+         * ⛔⛔ QUANTO E' TARDI L'EVENTO CHE CI FERMA — 2026-08-13.
+         *
+         * MISURATO sul Pad: il pilota ha detto «Ok, apro WhatsApp», poi
+         * «Digito "Io Tu"», e si e' fermato con `mano-sullo-schermo` a
+         * `passi=2` — mentre NESSUNO stava toccando il tablet. Non erano
+         * tocchi fantasma: erano le CONSEGUENZE della nostra stessa azione.
+         * `ACTION_SET_TEXT` fa reagire WhatsApp (la ricerca si apre, la lista
+         * si filtra) e quegli eventi arrivano DOPO i 400 ms di sordita'.
+         *
+         * ⛔ Il numero giusto non si indovina: alzare `SORDITA_MS` a caso
+         * renderebbe il freno sordo anche alla mano vera, che e' il difetto
+         * opposto e molto peggiore. Questa riga fa dire alla macchina di
+         * quanto sfora, cosi' la soglia si sceglie sulla misura — ed e' la
+         * stessa disciplina che oggi ha chiuso quattro difetti su quattro.
+         */
+        Log.i(TAG, "freno: evento a +$ritardo ms dalla nostra azione (sordita=$SORDITA_MS)")
         manoVista = true
     }
 

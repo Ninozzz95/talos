@@ -53,6 +53,29 @@ public class TalosBarraPlugin extends Plugin {
     }
 
     /**
+     * ⭐⭐ IL TESTO DELLO SCHERMO — la porta dichiarata dietro l'occhio.
+     *
+     * Owner 2026-08-11: «icona occhio a cosa serve? A vedere elementi su schermo
+     * giusto? Ma se chiedo "cosa vedi" mi risponde che non vede nulla».
+     *
+     * Il numero nella spia era vero e il contenuto non arrivava a nessuno: il
+     * servizio contava i nodi e buttava la struttura. Questa è la porta che
+     * mancava — dichiarata, perché di là c'è l'occhio che la persona può
+     * spegnere con un tocco.
+     *
+     * ⛔ Il testo si consegna UNA VOLTA SOLA e si azzera (`prendiIlTesto`): lo
+     * schermo di un'altra app resta in memoria il tempo di attraversare il
+     * ponte, non finché a qualcuno serve.
+     */
+    @PluginMethod
+    public void contestoSchermo(PluginCall call) {
+        com.getcapacitor.JSObject esito = new com.getcapacitor.JSObject();
+        esito.put("testo", ai.talos.agent.TalosAssistente.prendiIlTestoDiSchermo());
+        esito.put("nodi", ai.talos.agent.TalosAssistente.quantiNodiVisti());
+        call.resolve(esito);
+    }
+
+    /**
      * ⭐⭐ APRE TALOS INTERO SULLA CONVERSAZIONE CHE STAVI FACENDO.
      *
      * ## ⛔ Il difetto, e la frase falsa che lo nascondeva
@@ -76,6 +99,51 @@ public class TalosBarraPlugin extends Plugin {
      * TORNARE in cima e ricevere l'indirizzo in `onNewIntent`, non impilare una
      * seconda copia di sé stesso sopra la prima.
      */
+    /**
+     * ⛔⛔ CONSEGNARE L'INTENT NON È PORTARE L'APP DAVANTI.
+     *
+     * MISURATO sul Pad il 2026-08-12, quattro giri con la sonda in
+     * `consegna.ts`: `push=ok rotta=chat` ogni volta, e `mCurrentFocus` sempre
+     * `com.android.launcher`. Quattro cure provate e scartate — `App.exitApp()`,
+     * `finish()` subito, a +400 ms, e prima del lancio.
+     *
+     * `dumpsys activity recents` ha escluso le spiegazioni facili: i task sono
+     * separati e vivi (`#1723 A=ai.talos.dev`, `#1724 I=TalosBarraActivity`).
+     * ⇒ `startActivity` **consegna** l'intent ma non porta il task in cima: su
+     * questa ROM il permesso di lanciare dal fondo vive finché la finestra della
+     * barra è visibile (`BAL_ALLOW_VISIBLE_WINDOW` nei log) e decade proprio
+     * mentre la barra si chiude.
+     *
+     * ⇒ Si chiede al sistema di portare avanti il NOSTRO task, esplicitamente.
+     * `getAppTasks()` restituisce soltanto i nostri, quindi non c'è modo di
+     * toccare l'app di qualcun altro nemmeno per errore.
+     *
+     * ⛔ Non lancia mai: se la ROM lo nega, l'intent è comunque stato consegnato
+     * e la chat è comunque quella giusta — si perde il primo piano, non il
+     * lavoro. Un'eccezione qui trasformerebbe un difetto di presentazione in una
+     * barra che non risponde.
+     */
+    private void portaAvantiTalos() {
+        try {
+            final android.app.ActivityManager gestore =
+                (android.app.ActivityManager) getContext()
+                    .getSystemService(android.content.Context.ACTIVITY_SERVICE);
+            if (gestore == null) return;
+            for (android.app.ActivityManager.AppTask task : gestore.getAppTasks()) {
+                final android.app.ActivityManager.RecentTaskInfo info = task.getTaskInfo();
+                if (info == null || info.baseIntent == null || info.baseIntent.getComponent() == null) continue;
+                // ⛔ Il task della BARRA no: portarlo avanti rimetterebbe in cima
+                // proprio la finestra da cui stiamo uscendo.
+                final String classe = info.baseIntent.getComponent().getClassName();
+                if (classe.contains("TalosBarraActivity")) continue;
+                task.moveToFront();
+                return;
+            }
+        } catch (Exception ignorata) {
+            // Vedi sopra: il primo piano è un di più, la consegna è già avvenuta.
+        }
+    }
+
     @PluginMethod
     public void apriLaChat(PluginCall call) {
         final String sessione = call.getString("sessione");
@@ -89,7 +157,35 @@ public class TalosBarraPlugin extends Plugin {
             | android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP);
         com.getcapacitor.JSObject esito = new com.getcapacitor.JSObject();
         try {
+            /*
+             * ⛔⛔ PRIMA SI CHIUDE LA BARRA, POI SI LANCIA — e l'ordine è la cura.
+             *
+             * MISURATO sul Pad il 2026-08-12, in tre giri: con `startActivity`
+             * seguito da `finish()` (subito o dopo 400 ms) la sonda diceva
+             * `push=ok rotta=chat` e `mCurrentFocus` restava
+             * `com.android.launcher`. I task SONO separati — `dumpsys activity
+             * recents` mostra `#1721 A=ai.talos.dev` per l'app e `#1722
+             * I=TalosBarraActivity` per la barra — quindi non era un problema di
+             * affinity: era che la barra moriva DOPO, e chiudendosi la ROM
+             * risaliva al task che le stava sotto, cioè il launcher da cui
+             * l'assistente era stato invocato.
+             *
+             * ⇒ Si esce prima, così l'ultimo movimento è l'ingresso dell'app e
+             * non l'uscita della barra. `startActivity` parte dal Context
+             * dell'applicazione e porta già `FLAG_ACTIVITY_NEW_TASK`: non ha
+             * bisogno che l'Activity chiamante sia ancora viva.
+             */
             getContext().startActivity(apri);
+            portaAvantiTalos();
+            /*
+             * ⛔ La barra si chiude PER ULTIMA, e solo la sua finestra.
+             *
+             * `App.exitApp()` dal JS era `finishAffinity()`: chiudeva l'intero
+             * task, MainActivity compresa. Qui muore una finestra sola, e dopo
+             * che il task dell'app è già davanti.
+             */
+            final android.app.Activity finestra = getActivity();
+            if (finestra != null) finestra.finish();
             esito.put("aperta", true);
         } catch (Exception errore) {
             // ⛔ Non si lancia: chi chiama sta rispondendo a un tocco, e

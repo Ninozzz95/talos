@@ -49,12 +49,76 @@ class TalosAssistente : VoiceInteractionService() {
 
     override fun onReady() {
         super.onReady()
+        vivo = this
         Log.i(TAG, "$SEGNO pronto")
+    }
+
+    override fun onShutdown() {
+        vivo = null
+        super.onShutdown()
     }
 
     companion object {
         const val TAG = "TalosAssistente"
         const val SEGNO = "talos.assist"
+
+        /**
+         * Il servizio vivo, quando il sistema lo tiene acceso perché TALOS è
+         * l'assistente scelto. `null` se qualcun altro ha quel posto.
+         */
+        @Volatile private var vivo: TalosAssistente? = null
+
+        /**
+         * ⭐⭐ APRE TALOS **PASSANDO DALL'ASSISTENTE** — cioè per la porta che
+         * consegna lo schermo.
+         *
+         * ## ⛔ Il difetto: due porte che sembrano una
+         *
+         * Owner 2026-08-11: «sul telefono TALOS non vede lo schermo, sul tablet
+         * sì, la versione è identica, devo abilitare qualche permesso?».
+         *
+         * Non era un permesso. MISURATO su tutti e due i dispositivi:
+         * `voice_interaction_service`, il ruolo assistente e i due
+         * `assist_*_enabled` erano **identici** — e i due interruttori che
+         * sembravano i colpevoli non esistono nemmeno sul dispositivo che
+         * funziona. La differenza era **come si apriva**: sul tablet col gesto,
+         * sul telefono dal pallino.
+         *
+         * ⇒ Il gesto chiede al sistema di mostrare l'assistente, e il sistema
+         * allora consegna `AssistStructure`. Il pallino e la tendina facevano
+         * `startActivity` sulla barra: aprono la stessa finestra, ma **saltano
+         * l'assistente**, e su quella strada nessuno riceve niente. Due porte
+         * che sembrano uguali e portano dati diversi — il tipo di difetto che
+         * sembra un permesso mancante e non lo è.
+         *
+         * ## Come si chiude
+         *
+         * TALOS **è** il servizio assistente, quindi può chiedere al sistema di
+         * mostrare la propria sessione: `showSession` è la stessa strada del
+         * gesto, ed è anche quella che userà la parola di attivazione. Con
+         * `SHOW_WITH_ASSIST` e `SHOW_WITH_SCREENSHOT` si dichiara cosa serve; il
+         * sistema decide se darlo, e se dice di no la barra si apre lo stesso —
+         * solo senza occhio, e la spia lo dice.
+         *
+         * Torna `false` se il sistema non ci sta tenendo accesi come assistente:
+         * allora chi chiama apre la barra come ha sempre fatto.
+         */
+        @JvmStatic
+        fun apriComeAssistente(): Boolean {
+            val servizio = vivo ?: return false
+            return runCatching {
+                servizio.showSession(
+                    android.os.Bundle(),
+                    android.service.voice.VoiceInteractionSession.SHOW_WITH_ASSIST
+                        or android.service.voice.VoiceInteractionSession.SHOW_WITH_SCREENSHOT,
+                )
+                Log.i(TAG, "$SEGNO sessione chiesta da noi (pallino/tendina)")
+                true
+            }.getOrElse {
+                Log.w(TAG, "$SEGNO showSession rifiutata: ${it.message}")
+                false
+            }
+        }
 
         /**
          * L'ultimo contesto raccolto, per chi lo chiede subito dopo.
@@ -71,9 +135,51 @@ class TalosAssistente : VoiceInteractionService() {
         @Volatile var immagineVista: Boolean = false
             private set
 
-        internal fun annota(nodi: Int, immagine: Boolean) {
+        /**
+         * ⭐⭐ IL TESTO DELLO SCHERMO, e si consegna UNA VOLTA SOLA.
+         *
+         * Il commento qui sopra diceva — giustamente — che non si tiene l'albero
+         * in una variabile statica, e che «quando servirà davvero, passerà per un
+         * consenso e per una porta dichiarata». Quel giorno è arrivato: owner
+         * 2026-08-11, «se chiedo cosa vedi mi risponde che non vede nulla».
+         *
+         * La porta dichiarata esiste già ed è **l'occhio nella pillola**: dice
+         * quanti elementi TALOS ha visto, e un tocco lo spegne. Quello che
+         * mancava era il contenuto dietro il numero.
+         *
+         * ⛔ Perciò questo campo NON è un magazzino: `prendiIlTesto()` lo
+         * restituisce e lo AZZERA. Lo schermo di un'altra app resta in memoria il
+         * tempo di attraversare il ponte, non finché a qualcuno serve.
+         */
+        @Volatile private var testoSchermo: String = ""
+
+        /**
+         * Prende il testo e lo cancella: si consegna una volta sola.
+         *
+         * ⛔ `@JvmStatic` e pubblica: chi la chiama è il plugin, che è in Java e
+         * in un altro package. Senza, il ponte non la vedrebbe — e la porta
+         * dichiarata resterebbe una porta murata.
+         */
+        /** Quanti nodi ha visto l'ultima chiamata. Statica per il ponte. */
+        @JvmStatic
+        fun quantiNodiVisti(): Int = nodiVisti
+
+        @JvmStatic
+        fun prendiIlTestoDiSchermo(): String {
+            val ora = testoSchermo
+            testoSchermo = ""
+            return ora
+        }
+
+        /** ⛔ Da chiamare quando la barra si chiude: niente resta indietro. */
+        internal fun dimenticaIlTesto() {
+            testoSchermo = ""
+        }
+
+        internal fun annota(nodi: Int, immagine: Boolean, testo: String = "") {
             nodiVisti = nodi
             immagineVista = immagine
+            if (testo.isNotEmpty()) testoSchermo = testo
         }
     }
 }
@@ -111,6 +217,37 @@ class TalosAssistenteSessione(private val servizio: TalosAssistenteSessioneServi
     /** La barra è già a schermo: il contesto che arriva dopo va MANDATO, non messo via. */
     private var barraAperta = false
 
+    /**
+     * ⛔⛔ L'IDENTITÀ DI QUESTA APERTURA — e la dichiara chi apre, non chi riceve.
+     *
+     * ## Il difetto, misurato il 12 agosto
+     *
+     * Owner: «col gesto mi dice *speech recognition failed*, col pulsante no».
+     * In `logcat`, per UN SOLO gesto:
+     *
+     *     47.601  START … TalosBarraActivity … result code=0   ← la apriamo
+     *     47.629  START … TalosBarraActivity … result code=3   ← e la riapriamo
+     *
+     * Ventotto millisecondi dopo. È **voluto**: la seconda partenza esiste per
+     * consegnare il conteggio dei nodi, che a `onShow` non è ancora arrivato
+     * (vedi il commento in `onHandleAssist`). Ma erano due Intent DIVERSI, e
+     * `TalosBarraActivity` timbrava ognuno con l'istante in cui lo riceveva ⇒ due
+     * timbri ⇒ per il lato web **due chiamate**, quindi due ascolti aperti nello
+     * stesso millisecondo, quindi l'errore della sessione morente raccolto da chi
+     * non era ancora nato.
+     *
+     * ⛔ Il timbro dell'Activity cura la doppia CONSEGNA dello stesso intent
+     * (Capacitor, issue #971) e non poteva curare questo: qui gli intent sono
+     * genuinamente due. Nessuna euristica sui dati poteva distinguerli — sono
+     * indistinguibili da due chiamate vere consecutive, e infatti l'unica cosa
+     * che li separa è **l'intenzione di chi li manda**.
+     *
+     * ⇒ La sessione dichiara il proprio istante di apertura e lo mette su
+     * ENTRAMBI gli intent. Il secondo aggiorna i nodi e NON conta come chiamata
+     * nuova: una apertura, un ascolto.
+     */
+    private var apertura = 0L
+
     override fun onCreate() {
         super.onCreate()
         Log.i(TalosAssistente.TAG, "${TalosAssistente.SEGNO} sessione creata")
@@ -124,7 +261,15 @@ class TalosAssistenteSessione(private val servizio: TalosAssistenteSessioneServi
         // ⛔ Una struttura con zero nodi è vuota, e vuota vuol dire «non
         // funziona» anche quando l'oggetto non è nullo.
         nodi = if (finestre > 0) contaNodi(struttura!!.getWindowNodeAt(0).rootViewNode) else 0
-        TalosAssistente.annota(nodi, immagine)
+        // ⛔ E si TIENE, non si conta e basta: vedi `raccogliTesto`.
+        val testo = if (finestre > 0) {
+            val dentro = StringBuilder()
+            raccogliTesto(struttura!!.getWindowNodeAt(0).rootViewNode, dentro)
+            dentro.toString().trim()
+        } else {
+            ""
+        }
+        TalosAssistente.annota(nodi, immagine, testo)
         Log.i(
             TalosAssistente.TAG,
             "${TalosAssistente.SEGNO} contesto finestre=$finestre nodi=$nodi" +
@@ -201,6 +346,9 @@ class TalosAssistenteSessione(private val servizio: TalosAssistenteSessioneServi
          * Gli extra restano lo stesso: costano niente e il lato nativo li legge
          * senza passare per una stringa da spacchettare.
          */
+        // ⛔ PRIMA di costruire l'intent: è il timbro che dice «questa apertura
+        // è una sola», e lo porteranno tutti gli intent di questa sessione.
+        apertura = android.os.SystemClock.uptimeMillis()
         val apri = intentDellaBarra()
         barraAperta = true
         /*
@@ -227,7 +375,11 @@ class TalosAssistenteSessione(private val servizio: TalosAssistenteSessioneServi
      */
     private fun intentDellaBarra(): Intent {
         val indirizzo = android.net.Uri.parse(
-            "talos://barra?voce=1&nodi=$nodi&immagine=${if (immagine) 1 else 0}",
+            "talos://barra?voce=1&nodi=$nodi&immagine=${if (immagine) 1 else 0}" +
+                // ⛔ Lo stesso su tutti gli intent di questa apertura: vedi il
+                // commento su `apertura`. È ciò che distingue «ti mando il
+                // contesto che mancava» da «ti sto chiamando di nuovo».
+                "&apertura=$apertura",
         )
         return Intent(Intent.ACTION_VIEW, indirizzo, servizio, ai.talos.TalosBarraActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -250,7 +402,50 @@ class TalosAssistenteSessione(private val servizio: TalosAssistenteSessioneServi
         return totale
     }
 
+    /**
+     * ⭐⭐ IL TESTO DELLO SCHERMO — e prima lo CONTAVAMO soltanto.
+     *
+     * Owner 2026-08-11: «icona occhio a cosa serve? A vedere elementi su schermo
+     * giusto? Ma se chiedo "cosa vedi" mi risponde che non vede nulla».
+     *
+     * Aveva ragione, e il difetto era esattamente questo: il sistema ci
+     * consegnava la struttura intera, noi contavamo i nodi per far comparire
+     * «357» nella spia, e poi la buttavamo. La barra mostrava un numero vero su
+     * un contenuto che non esisteva più — la forma peggiore di difetto, perché
+     * l'interfaccia promette e il modello smentisce.
+     *
+     * ⛔ Si raccolgono `text` e `contentDescription`, non uno solo: metà delle
+     * app moderne mette l'etichetta in uno e metà nell'altro, e con uno solo si
+     * perde mezza schermata senza accorgersene.
+     *
+     * ⛔ E c'è un TETTO. Una schermata lunga può valere decine di migliaia di
+     * caratteri: infilarli in un prompt vuol dire pagarli a ogni domanda e
+     * spingere fuori la conversazione. Si prende l'inizio — che è ciò che la
+     * persona sta guardando — e si dichiara il taglio invece di nasconderlo.
+     */
+    private fun raccogliTesto(nodo: AssistStructure.ViewNode?, dentro: StringBuilder) {
+        if (nodo == null || dentro.length >= TETTO_TESTO) return
+        val scritto = nodo.text?.toString()?.trim()
+        val descritto = nodo.contentDescription?.toString()?.trim()
+        if (!scritto.isNullOrEmpty()) dentro.append(scritto).append(A_CAPO)
+        else if (!descritto.isNullOrEmpty()) dentro.append(descritto).append(A_CAPO)
+        for (i in 0 until nodo.childCount) raccogliTesto(nodo.getChildAt(i), dentro)
+    }
+
     companion object {
+        /**
+         * ⛔ Quanto testo si porta via da una schermata.
+         *
+         * 8.000 caratteri sono circa due schermate piene di un articolo: quello
+         * che la persona sta guardando, non l'archivio dell'app. Oltre, si paga
+         * a ogni domanda e si spinge fuori la conversazione dal contesto del
+         * modello — cioè si peggiora la risposta per avere più materiale.
+         */
+        const val TETTO_TESTO = 8_000
+
+        /** Il carattere che separa una riga dello schermo dall'altra. */
+        const val A_CAPO: Char = 10.toChar()
+
         /** Lo dice alla barra: sei arrivato di voce, quindi ascolta. */
         const val EXTRA_DA_VOCE = "ai.talos.DA_VOCE"
 

@@ -61,6 +61,7 @@ export interface TalosPermissionRow {
     id:
         | 'microphone' | 'notifications' | 'appLock' | 'files' | 'background' | 'network'
         | 'notificationAccess' | 'bridge' | 'deviceControl' | 'localModel'
+        | 'contacts' | 'camera'
     title: string
     kind: TalosPermissionKind
     /**
@@ -87,6 +88,32 @@ export const TALOS_PERMISSION_ROWS: readonly TalosPermissionRow[] = [
         // Factually load-bearing: the foreground service runs either way, so
         // claiming long tasks need this would be false.
         purpose: 'Progress for long tasks. Without it those tasks still run — you just will not see how far along they are.',
+    },
+    /*
+     * ⭐⭐ LA RUBRICA — owner 2026-08-13: «tutti i permessi della app necessari
+     * vanno collegati nella relativa schermata nelle impostazioni di
+     * autorizzazione e permessi, TUTTI».
+     *
+     * MISURATO lo stesso giorno: il permesso era stato dichiarato nel manifest
+     * per il motore degli intent, e questa schermata non lo sapeva. Un permesso
+     * che l'app chiede e che la sua pagina dei permessi non nomina è un
+     * permesso che la persona scopre da un dialogo a sorpresa.
+     */
+    {
+        id: 'contacts',
+        title: 'Contacts',
+        kind: 'runtime',
+        purpose: 'Sending a message to someone by name. TALOS looks up the name you said and takes the number for that one message — it does not read, copy or send your address book anywhere.',
+    },
+    /*
+     * ⛔ C'era da prima e non era elencata: `CAMERA` è dichiarata nel manifest
+     * dal selettore di immagini. Trovata dallo stesso censimento.
+     */
+    {
+        id: 'camera',
+        title: 'Camera',
+        kind: 'runtime',
+        purpose: 'Taking a photo to attach to a chat. The picture goes where you send it and nowhere else; TALOS never opens the camera on its own.',
     },
     {
         id: 'appLock',

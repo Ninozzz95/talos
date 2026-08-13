@@ -80,6 +80,172 @@ const casi = [
         },
         blocca: false,
     },
+    /*
+     * ⛔⛔ IL MOTIVO SI LEGGE — owner 2026-08-12: «bisogna sistemare il fatto che
+     * stampi fermata per una cosa su cui puoi procedere da solo tranquillamente».
+     *
+     * Il primo caso qui sotto è quello VERO: la fermata con cui ho chiuso quella
+     * sera, con la causa già isolata e la sonda già sul dispositivo. Se un giorno
+     * smettesse di bloccare quella, questa parte dell'hook non serve più.
+     */
+    {
+        nome: '⛔ BLOCCA il rinvio del 2026-08-12 («non si tira via in coda a un turno lungo»)',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: '⛔ FERMATA: causa isolata a `App.exitApp()`, non ancora '
+                + 'corretta — e la correzione tocca il ciclo di vita di due Activity, cioè '
+                + 'non si tira via in coda a un turno lungo.',
+        },
+        blocca: true,
+    },
+    {
+        nome: '⛔ BLOCCA «è tardi», anche se dichiarata',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: '⛔ FERMATA: è tardi, riprendo domani a mente fresca.',
+        },
+        blocca: true,
+    },
+    {
+        nome: '⛔ BLOCCA «merita un blocco a parte»',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: '⛔ FERMATA: il refactor è corposo e merita un blocco '
+                + 'dedicato, lo faccio nel prossimo giro.',
+        },
+        blocca: true,
+    },
+    {
+        nome: '⛔ BLOCCA il pretesto TRAVESTITO da motivo legittimo',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            // Contiene «decisione», che da sola passerebbe. Il pretesto vince,
+            // perché è così che i rinvii si scrivono: mai da soli.
+            last_assistant_message: '⛔ FERMATA: è una decisione di architettura delicata, '
+                + 'meglio affrontarla nel prossimo blocco.',
+        },
+        blocca: true,
+    },
+    {
+        nome: '⛔ BLOCCA una fermata che non nomina NESSUNA delle cinque',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: '⛔ FERMATA: blocco chiuso e provato sul dispositivo.',
+        },
+        blocca: true,
+    },
+    {
+        nome: 'LASCIA PASSARE la fermata 3 — un gesto che esce fuori (la chiave)',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: '⛔ FERMATA: serve la tua chiave Tavily incollata sul Pad '
+                + '— non la scrivo io via adb, quel comando la stamperebbe in chiaro.',
+        },
+        blocca: false,
+    },
+    {
+        nome: 'LASCIA PASSARE la fermata 5 — un cancello rosso che non posso aprire',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: '⛔ FERMATA: il test non passa e non riproduco il caso '
+                + 'senza il tuo secondo dispositivo.',
+        },
+        blocca: false,
+    },
+    {
+        nome: 'LASCIA PASSARE «⛔ NON VERIFICATO» con un motivo vero',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: '⛔ NON VERIFICATO: serve la tua conferma su quale delle '
+                + 'due strade prendere, è una scelta di prodotto.',
+        },
+        blocca: false,
+    },
+    {
+        /*
+         * ⛔⛔ IL CONTESTO CHE FINISCE NON È PIÙ UNA FERMATA — owner 2026-08-12:
+         * «è un non issue dato che il contesto si compatta automaticamente e
+         * manualmente». Era la quarta delle cinque, ed era la più comoda di
+         * tutte: sembrava diligenza, e intanto il turno finiva lo stesso.
+         */
+        nome: '⛔ BLOCCA «il contesto sta finendo» — si compatta da solo',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: '⛔ FERMATA: il contesto sta finendo, scrivo l’handoff '
+                + 'invece di chiudere a metà misura.',
+        },
+        blocca: true,
+    },
+    {
+        nome: '⛔ legge l’ULTIMA dichiarazione, non una CITAZIONE in cima',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            /*
+             * ⛔ Il caso VERO del 2026-08-12, e l'ha trovato l'hook usando sé
+             * stesso: il messaggio in cui SPIEGAVO questa modifica citava
+             * «⛔ FERMATA:» in cima, e subito dopo l'elenco dei pretesti. Con la
+             * PRIMA occorrenza, l'hook leggeva la citazione come motivo e
+             * bloccava una fermata legittima.
+             *
+             * Una fermata vera è l'ultima cosa che si scrive. Una citazione può
+             * stare ovunque. Quindi si guarda l'ultima.
+             */
+            last_assistant_message: [
+                'Ho sistemato la cosa: «⛔ FERMATA:» passava sempre, qualunque motivo',
+                'seguisse. I PRETESTI sono «è tardi», «turno lungo», «prossimo blocco»,',
+                '«troppo delicato», «merita una sessione a parte». Adesso il motivo si legge.',
+                '',
+                '⛔ FERMATA: serve la tua chiave, non la scrivo io via adb.',
+            ].join(' '),
+        },
+        blocca: false,
+    },
+    /*
+     * ⛔⛔ LA TERZA FORMA — owner 2026-08-13: «ti sei fermato, hai violato la
+     * regola, fai in modo che non si ripeta più». Il messaggio che l'ha causato
+     * è il primo caso qui sotto, verbatim: nessuna offerta, nessuna promessa,
+     * nessuna fermata dichiarata. Solo un difetto raccontato e un turno chiuso.
+     */
+    {
+        nome: '⛔ BLOCCA il resoconto che si ferma («annotato, non mi ferma»)',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Tutto su disco in findings-owner-12-agosto, con la '
+                + 'citazione esatta e l ora. Annotato, non mi ferma.',
+        },
+        blocca: true,
+    },
+    {
+        nome: '⛔ BLOCCA «la prossima misura è…», che dichiara di sapere il passo dopo',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'La causa e isolata. La prossima misura e la riga di '
+                + 'ActivityTaskManager nell istante del rifiuto.',
+        },
+        blocca: true,
+    },
+    {
+        nome: 'LASCIA PASSARE un resoconto di lavoro CHIUSO, senza code aperte',
+        input: {
+            stop_hook_active: false,
+            stop_reason: 'end_turn',
+            last_assistant_message: 'Fatto: 4839 test verdi, provato sul Pad, avvio '
+                + '600.539 su 601.200.',
+        },
+        blocca: false,
+    },
     {
         nome: 'LASCIA PASSARE un resoconto senza offerte',
         input: {

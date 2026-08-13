@@ -53,6 +53,21 @@ export interface TalosModoBarra {
      */
     readonly daVoce: boolean
     readonly contesto: TalosContestoBarra
+    /**
+     * ⭐⭐ L'IDENTITÀ DELL'APERTURA — «questa chiamata è una sola».
+     *
+     * Lo scrive chi apre: `TalosAssistente` per il gesto (lo stesso su tutti gli
+     * intent di una sessione), `TalosBarraActivity` per tutte le altre porte.
+     * `null` solo per un indirizzo che non l'ha dichiarata — sul web, o da una
+     * porta futura che se ne dimenticasse.
+     *
+     * ⛔ Serve a distinguere «mi hanno chiamato di nuovo» da «mi hanno mandato
+     * un dato che mancava», e i due vogliono comportamenti opposti: il primo
+     * riaccende il microfono, il secondo deve lasciarlo in pace. MISURATO il 12
+     * agosto: un solo gesto contava DUE chiamate, e la seconda spegneva
+     * l'ascolto appena partito.
+     */
+    readonly apertura: string | null
 }
 
 const SCHEMA_BARRA = 'talos:'
@@ -96,6 +111,7 @@ export function talosModoBarraDa(indirizzo: string | null | undefined): TalosMod
             nodi: numeroNonNegativo(parametri.get('nodi')),
             immagine: parametri.get('immagine') === '1',
         },
+        apertura: parametri.get('apertura'),
     }
 }
 

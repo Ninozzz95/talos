@@ -27,6 +27,8 @@ public class MainActivity extends BridgeActivity {
         // progress; this is the one the person is actually waiting for, and it
         // carries the address of the thing that finished.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(TalosDonePlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
+        // ⭐ «hey TALOS»: l'interruttore della parola di attivazione.
+        { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.parola.TalosParolaPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(TalosNotificationCentrePlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // Il ponte privilegiato in casa. Per ora GUARDA soltanto: dice se
         // c'e', se e' vivo e se ci ha autorizzati, cosi' la schermata puo'
@@ -46,6 +48,8 @@ public class MainActivity extends BridgeActivity {
         // `uiautomator dump`) e le azioni SUL NODO, che portano gratis la
         // scrittura dell'italiano accentato.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosSchermoPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
+        // ⭐ La rubrica: senza, ogni intent «manda a <persona>» resta impossibile.
+        { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosRubricaPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // Il riconoscitore DI CASA: il plugin di terzi passa una lingua sola e
         // nessuna chiave di rilevamento — misurato nel suo sorgente.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosDictationPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
@@ -115,5 +119,27 @@ public class MainActivity extends BridgeActivity {
         long tSuper = android.os.SystemClock.uptimeMillis();
         super.onCreate(savedInstanceState);
         Log.i("TalosAvvio", "super.onCreate: " + (android.os.SystemClock.uptimeMillis() - tSuper) + " ms");
+    }
+
+    /**
+     * ⭐⭐ «HEY TALOS» TORNA VIVA QUANDO L'APP TORNA DAVANTI.
+     *
+     * ⛔ Il difetto, MISURATO il 12 agosto con `dumpsys activity services`: il
+     * servizio della parola non era fra i vivi. Non era sordo — non esisteva.
+     * E' `START_NOT_STICKY` di proposito (un microfono non deve resuscitare da
+     * solo) e nessuno lo riaccendeva MAI: bastava un riavvio o un force-stop e
+     * la funzione finiva per sempre, con l'interruttore che diceva ancora «si».
+     *
+     * ⛔ E il ricevitore di avvio non e' la cura: da Android 14 un servizio in
+     * primo piano di tipo `microphone` avviato da `BOOT_COMPLETED` lancia
+     * `ForegroundServiceStartNotAllowedException`. `RECORD_AUDIO` e'
+     * *while-in-use*, e dal fondo non si esercita.
+     *
+     * ⇒ Qui, che e' il primo istante legittimo: l'app e' davanti alla persona.
+     */
+    @Override
+    public void onResume() {
+        super.onResume();
+        ai.talos.parola.TalosParola.riprendiSeVoluta(this);
     }
 }

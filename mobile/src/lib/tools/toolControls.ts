@@ -95,6 +95,21 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
      * aggiornamento. Si accende dalle impostazioni, una volta, guardandolo.
      */
     device_screen_drive: false,
+    /*
+     * ⭐ ACCESO di suo, al contrario del pilota qui sopra — e la differenza è
+     * sostanziale, non di grado.
+     *
+     * Il pilota prende in mano il telefono e fa venti cose dentro app di altri.
+     * Questo apre UNA schermata con i dati già scritti, e ogni capacità che
+     * manda qualcosa a qualcuno passa comunque dalla scheda di conferma. È la
+     * stessa forma di «prepara una chiamata, la persona preme»: la decisione
+     * finale resta dov'era.
+     *
+     * ⇒ Spegnerlo di suo significherebbe consegnare un assistente che, davanti
+     * a «manda un messaggio a Mario», sceglie la strada lunga — 20 passi e 27,8
+     * secondi MISURATI, contro i ~20 secondi che Gemini impiega con l'intent.
+     */
+    app_azione: true,
 })
 
 export type TalosAgentToolId = keyof typeof TALOS_DEFAULT_AGENT_TOOL_ENABLED

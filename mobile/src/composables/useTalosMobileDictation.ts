@@ -1,6 +1,6 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import { Capacitor } from '@capacitor/core'
-import { talosDictationEngine, type TalosDictationEngine } from '@/services/dictation'
+import { talosDettaturaAnnota, talosDictationEngine, type TalosDictationEngine } from '@/services/dictation'
 import type { TalosDictationErrorCode } from '@/lib/dictationPolicy'
 
 /**
@@ -38,6 +38,7 @@ export interface UseTalosMobileDictationOptions {
      * niente»).
      */
     silenceMillis?: () => number | undefined
+    minimumMillis?: () => number | undefined
     /** Live locale boundary; raw plugin prose never becomes application UI. */
     errorMessage?: (code: TalosDictationErrorCode) => string
 }
@@ -104,15 +105,111 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
     }
 
     function speechLevelSpike(text: string): void {
+        // ⛔ RIPIEGO, non la strada principale: sul web non esiste un livello del
+        // microfono, e li' l'unico segnale vero e' quanto cresce il trascritto.
+        // Sul telefono arriva `onLevel` col volume, e questa non serve piu'.
+        if (volumeVero) return
         const grown = Math.max(0, text.length - lastPartialLength)
         lastPartialLength = text.length
         level.value = Math.min(1, Math.max(level.value, 0.4 + Math.min(0.5, grown * 0.06)))
+    }
+
+    /**
+     * ⭐⭐ IL VOLUME, NORMALIZZATO SU QUELLO CHE SI SENTE DAVVERO.
+     *
+     * Owner 2026-08-12: «la waveform reagisce in base al volume». Android manda
+     * `onRmsChanged` in dB, ma **non dichiara la scala**: sui documenti non c'e'
+     * un fondo scala, e fra un microfono e l'altro cambia. Inchiodare due numeri
+     * qui vorrebbe dire scrivere a mano un fatto sul dispositivo — e allora la
+     * barra resterebbe piatta su un telefono e satura su un altro.
+     *
+     * ## ⛔ Il primo tentativo era una finestra TUTTA adattiva, ed era piatta
+     *
+     * Minimo e massimo visti in questa sessione: sembra la cosa più onesta ed è
+     * fragile nel modo peggiore, perché si tara sul PRIMO campione. MISURATO sul
+     * Pad il 12 agosto, con la sonda qui sotto:
+     *
+     *     primo volume dal microfono db=7.00   ⇒ dbMin = dbMax = 7
+     *     stanza muta, db≈1.0                  ⇒ (1,0−0,5)/6,5 = 0,077
+     *     barra alta 3,7 px su 24              ⇒ una linea punteggiata
+     *
+     * Il riconoscitore apre con un valore alto — la sua taratura, non la voce —
+     * e da lì in poi tutto il parlato normale resta schiacciato in fondo.
+     *
+     * ⇒ Si parte dai bordi EMPIRICI qui sotto e la finestra può solo
+     * **allargarsi**. Così la scala è giusta al primo campione su qualunque
+     * telefono, e un dispositivo fuori scala si sistema da solo — che è quello
+     * che la versione tutta adattiva non poteva essere.
+     */
+    let volumeVero = false
+    /**
+     * ⭐ I bordi EMPIRICI, e non li ho scelti io: `Cleveroad/WaveInApp` fa questo
+     * mestiere in produzione e usa `MIN_RMS_DB_VALUE = -2.12f`,
+     * `MAX_RMS_DB_VALUE = 10.0f`. Combaciano con quello che ho misurato in
+     * logcat su questo dispositivo: stanza muta fra 0,4 e 2,2, picchi oltre 7.
+     */
+    const DB_MUTO = -2.12
+    const DB_PIENO = 10
+    /** Sotto questa escursione il rumore di fondo diventerebbe barra piena. */
+    const ESCURSIONE_MINIMA = 4
+    let dbMin = DB_MUTO
+    let dbMax = DB_PIENO
+
+    function realLevel(db: number): void {
+        if (!Number.isFinite(db)) return
+        /*
+         * ⛔ UNA riga per sessione, e serve a rispondere alla sola domanda che
+         * conta quando l'onda resta piatta: «gli eventi ARRIVANO?». Senza,
+         * «piatta» significa allo stesso modo motore muto, ponte che non
+         * consegna, e normalizzazione sbagliata — tre cure diverse.
+         */
+        if (!volumeVero) talosDettaturaAnnota(`dett: primo volume dal microfono db=${db.toFixed(2)}`)
+        volumeVero = true
+        if (decayTimer !== null) { clearInterval(decayTimer); decayTimer = null }
+        /*
+         * ⛔⛔ IL FONDO SI ALLARGA E BASTA; IL TETTO SCENDE PIANO VERSO LA TUA VOCE.
+         *
+         * Owner 2026-08-12, dopo la correzione precedente: «la waveform non è
+         * alta come prima». Vero, ed era una conseguenza diretta: passando ai
+         * bordi fissi -2,12..10 dB, una voce normale a ~5-7 dB finiva a 0,59
+         * invece che quasi a fondo scala. Il fondo scala era diventato quello di
+         * un URLO, e nessuno urla al telefono.
+         *
+         * ⛔ Ma tornare alla finestra tutta adattiva è escluso: si tarava sul
+         * PRIMO campione e l'onda restava piatta (misurato: `db=7.00` in
+         * apertura, poi tutto schiacciato a 0,077).
+         *
+         * ⇒ I due bordi si comportano in modo DIVERSO, perché rispondono a due
+         * domande diverse:
+         *   - il **fondo** è il silenzio di questa stanza: si allarga verso il
+         *     basso e non risale mai, se no il rumore verrebbe amplificato;
+         *   - il **tetto** è quanto forte parli TU: parte dal valore empirico e
+         *     scende piano verso i picchi veri, come fa il guadagno automatico
+         *     di un misuratore di livello. Chi parla piano riempie la barra
+         *     quanto chi parla forte, che è il punto di una waveform.
+         *
+         * Lo 0,6% per campione a ~12 campioni al secondo fa ~7% al secondo: in
+         * pochi secondi la scala è la tua, e un picco isolato la rialza subito.
+         */
+        if (db < dbMin) dbMin = db
+        if (db > dbMax) {
+            dbMax = db
+        } else {
+            const sceso = dbMax - (dbMax - dbMin) * 0.006
+            // ⛔ Un'escursione minima, se no il respiro diventa fondo scala.
+            dbMax = Math.max(sceso, dbMin + ESCURSIONE_MINIMA)
+        }
+        level.value = Math.min(1, Math.max(0, (db - dbMin) / (dbMax - dbMin)))
     }
 
     function stopLevel(): void {
         if (decayTimer !== null) clearInterval(decayTimer)
         decayTimer = null
         level.value = 0
+        // ⛔ La finestra del volume NON si eredita: una stanza diversa, o una
+        // voce diversa, hanno un fondo e un tetto diversi.
+        dbMin = DB_MUTO
+        dbMax = DB_PIENO
     }
 
     // Owner report (2026-07-23): the availability probe runs at app start,
@@ -162,6 +259,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
         clearWatchdog()
         watchdog = setTimeout(() => {
             if (epoch !== sessionEpoch || status.value !== 'listening') return
+            talosDettaturaAnnota('dett: CANE DA GUARDIA, nessuna parziale da troppo')
             stopEngineBestEffort()
             sessionEpoch += 1
             status.value = 'error'
@@ -233,7 +331,13 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
                 if (!transcript) return
                 options.onTranscript(capturedBase ? `${capturedBase} ${transcript}` : transcript)
             },
+            onLevel: (db) => {
+                if (epoch !== sessionEpoch) return
+                if (status.value === 'starting') status.value = 'listening'
+                realLevel(db)
+            },
             onEnd: () => {
+                talosDettaturaAnnota(`dett: onEnd sentito=${heardAnything} stato=${status.value}`)
                 if (epoch !== sessionEpoch) return
                 clearWatchdog()
                 stopLevel()
@@ -247,6 +351,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
                 errorCode.value = 'noSpeech'
             },
             onError: (code) => {
+                talosDettaturaAnnota(`dett: onError ${code}`)
                 if (epoch !== sessionEpoch) return
                 clearWatchdog()
                 stopLevel()
@@ -259,6 +364,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             autoLanguage: options.autoLanguage?.() ?? true,
             allowedLanguages: options.allowedLanguages?.() ?? [],
             silenceMillis: options.silenceMillis?.(),
+            minimumMillis: options.minimumMillis?.(),
         })
     }
 
@@ -268,6 +374,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
     const visible = computed(() => native || supported.value)
 
     async function toggle(): Promise<void> {
+        talosDettaturaAnnota(`dett: toggle da stato=${status.value}`)
         if (status.value === 'listening' || status.value === 'starting') {
             // SF5-1: the native stop() promise may never settle — the UI goes
             // idle NOW; the engine teardown is best-effort in the background.

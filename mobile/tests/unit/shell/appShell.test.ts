@@ -80,6 +80,8 @@ function makeController() {
             probe_results: {},
         }),
         profiles: ref([]),
+        segretiLetti: ref(true),
+        cataloghiNonLetti: new Set(),
         selectedModelId: ref(null),
         effort: ref('high'),
         thinking: ref(false),

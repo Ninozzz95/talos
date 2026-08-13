@@ -1,0 +1,9 @@
+▁HE Y ▁TA LO S :2.0 #0.15
+▁E I ▁TA LO S :2.0 #0.15
+▁A Y ▁TA LO S :2.0 #0.15
+▁HE ▁TA LO S :2.0 #0.15
+▁HE Y ▁TA LO S S :2.0 #0.15
+▁HE Y ▁T AL LO S :2.0 #0.15
+▁HE Y ▁TA LO S SE :2.0 #0.15
+▁TA LO S :1.0 #0.35
+▁TA LO S S :1.0 #0.35

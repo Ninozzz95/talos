@@ -86,12 +86,33 @@ describe('⛔ i tetti del pilota', () => {
         expect(corsa.fine.motivo).toBe('troppi-passi')
     })
 
-    it('⛔ LA MANO VINCE SU TUTTO: si smette senza finire il passo', async () => {
+    /*
+     * ⛔⛔ CAPOVOLTO PER DECISIONE DELL'OWNER — 2026-08-13:
+     *
+     * > «SE NECESSARIO DOBBIAMO TOGLIERE QUESTO FRENO COMPLETAMENTE, NON ME NE
+     * > FREGA UN CAZZO, fai una ricerca web. gemini non fa così»
+     *
+     * Questo test asseriva che una mano vista FERMA la corsa. Sul dispositivo
+     * quella regola non proteggeva nessuno: MISURATO con nessuno che toccava
+     * il tablet, il pilota si chiudeva con `mano-sullo-schermo` a `passi=2`,
+     * perché sentiva le CONSEGUENZE delle proprie azioni (TALOS digita,
+     * WhatsApp reagisce, l'evento arriva oltre i 400 ms di sordità). La sonda
+     * ha poi misurato ritardi di 401.663.098 ms: la sordità non era nemmeno
+     * armata. ⇒ Il pilota non arrivava MAI in fondo.
+     *
+     * Gemini non rileva i tocchi: dà una barra di progresso con uno STOP
+     * esplicito. Un rilevamento che sbaglia toglie la funzione senza dare
+     * sicurezza.
+     *
+     * ⛔ Il segnale resta RACCOLTO — serve al comando di arresto che lo
+     * sostituisce — ma smette di decidere al posto della persona.
+     */
+    it('⛔ la mano NON ferma più la corsa: decide la persona, non un indovinello', async () => {
         const p = porte({ sguardo: () => ({ ...SCHERMO, manoSulloSchermo: true }) })
         const corsa = await talosGuidaLoSchermo(p)
-        expect(corsa.fine).toEqual({ motivo: 'mano-sullo-schermo', passo: 0 })
-        expect(p.agisci).not.toHaveBeenCalled()
-        expect(p.chiedi).not.toHaveBeenCalled()
+        expect(corsa.fine.motivo).not.toBe('mano-sullo-schermo')
+        // E la corsa fa il suo lavoro invece di morire al primo giro.
+        expect(p.chiedi).toHaveBeenCalled()
     })
 
     it('⛔ FRENO NON ARMATO: non si parte affatto — «non lo so» non è «nessuno ha toccato»', async () => {
@@ -109,7 +130,21 @@ describe('⛔ i tetti del pilota', () => {
     it('una riga che non si capisce ferma la corsa invece di far toccare a caso', async () => {
         const p = porte({ chiedi: vi.fn(async () => 'Certo! Adesso tocco il pulsante.') })
         const corsa = await talosGuidaLoSchermo(p)
-        expect(corsa.fine).toEqual({ motivo: 'modello-non-capito', scarto: 'nessunJson' })
+        /*
+         * ⛔ Il `dettaglio` è ASSERITO, non tollerato.
+         *
+         * MISURATO sul Pad il 2026-08-13: la corsa si chiudeva con
+         * `{"motivo":"modello-non-capito","scarto":"nessunJson"}` e nient'altro
+         * — e da quella riga non si distingue una risposta in PROSA (il modello
+         * ha parlato invece di agire) da una risposta VUOTA (la chiamata è
+         * fallita e qualcuno se l'è mangiata). Sono due difetti diversi, con
+         * due cause in due strati diversi. La frase riportata li separa.
+         */
+        expect(corsa.fine).toEqual({
+            motivo: 'modello-non-capito',
+            scarto: 'nessunJson',
+            dettaglio: 'Certo! Adesso tocco il pulsante.',
+        })
         expect(p.agisci).not.toHaveBeenCalled()
     })
 

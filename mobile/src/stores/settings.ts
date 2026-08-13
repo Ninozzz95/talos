@@ -146,6 +146,28 @@ export interface TalosMobileShellPreferences {
      *  marker. On by default (owner wants it) but opt-out — when off, the model is
      *  not instructed to emit the marker and no capture runs. */
     library_autosave_generated: boolean
+    /**
+     * ⛔⛔ IL MODELLO SCELTO NEL COMPOSITORE, e perché deve stare su DISCO.
+     *
+     * MISURATO sul Pad il 2026-08-13: scelto **Gemini 3.6 Flash** nella chat, e
+     * la sonda della barra diceva
+     *
+     *     tool: offerti=61 modello=…/Qwen3-1.7B-Q4_K_M.gguf
+     *
+     * cioè l'assistente rispondeva col modello LOCALE mentre la persona ne aveva
+     * scelto un altro. La causa: `selectedModelId` era un `ref` **in memoria del
+     * controller**, e la barra è un'altra WebView — partiva da `null`, e
+     * `ensureSelection()` prendeva il primo modello richiamabile, che è il
+     * locale.
+     *
+     * ⇒ Non era un difetto di sincronizzazione: la scelta non usciva mai dalla
+     * finestra in cui era stata fatta. E ha avvelenato tutte le misure della
+     * notte — il pilota che «non trovava un'app per WhatsApp», il ripiego su
+     * `device_speak`: erano il locale, che l'owner non aveva scelto.
+     *
+     * `null` = nessuna scelta ancora fatta, e allora vale la scelta automatica.
+     */
+    composer_model: string | null
     /** Owner 2026-07-25: remembered Library view (grid gallery / list). */
     /**
      * Quanto accesso ha il MODELLO alla Libreria — owner 2026-08-03.
@@ -313,6 +335,8 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
      * already has `library_search` and can ask when it actually needs to.
      */
     library_autosave_generated: true,
+    // Nessuna scelta ancora fatta: decide `ensureSelection`. Vedi `composer_model`.
+    composer_model: null,
     library_access: 'ask',
     memory_write_access: 'ask',
     plan_scope: 'turn',
@@ -361,6 +385,11 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         library_autosave_generated: typeof record.library_autosave_generated === 'boolean'
             ? record.library_autosave_generated
             : DEFAULT_SHELL_PREFERENCES.library_autosave_generated,
+        // ⛔ Solo una stringa non vuota è una scelta: `''` vale come «nessuna»,
+        // se no una preferenza corrotta bloccherebbe la scelta automatica.
+        composer_model: typeof record.composer_model === 'string' && record.composer_model.trim() !== ''
+            ? record.composer_model
+            : DEFAULT_SHELL_PREFERENCES.composer_model,
         // Re-review 2026-07-25: this hardcoded 'grid' as the fallback, so the
         // documented 'list' default never shipped.
         // Chi aveva il booleano ACCESO diventa `allow`; chi lo aveva spento
