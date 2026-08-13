@@ -591,11 +591,45 @@ describe('Agent Tools control registry', () => {
          * I tre dialetti si muovono insieme, come dev'essere per un testo; il
          * piano di controllo e l'impronta STORICA non si muovono affatto.
          */
+        /*
+         * ⭐⭐⭐ 2026-08-13, SESTO cambio: `app_azione` prende `invia`.
+         *
+         * TALOS adesso preme lui il pulsante «invia» — intent per arrivare,
+         * occhio per l'ultimo centimetro — e il modello deve poter dire che
+         * NON lo si vuole: «scrivi ad Antonino che arrivo» e «prepara un
+         * messaggio per Antonino» sono due intenzioni diverse, e dedurle dal
+         * verbo vorrebbe dire mandare per sbaglio a una persona vera.
+         *
+         * I tre dialetti si muovono INSIEME, come dev'essere per un parametro
+         * nuovo su un tool solo. ⛔ E l'impronta STORICA (`369a6da1…`) NON si è
+         * mossa: `app_azione` è escluso da quel blocco, quindi il fatto che sia
+         * ancora verde dimostra che nessun contratto preesistente è cambiato
+         * insieme a questo — che è l'unica domanda a cui la guardia risponde.
+         */
+        /*
+         * ⭐⭐⭐ 2026-08-13, SETTIMO cambio: `app_azione` impara a chiedere al
+         * TELEFONO chi sa fare una cosa.
+         *
+         * Owner, verbatim: «non puoi mettere delle righe predeterminate. La
+         * chat ha già una lista delle applicazioni esistenti. Dobbiamo fare in
+         * modo che chiami in quelle e non usi delle righe generiche».
+         *
+         * Entrano due capacità che non nominano nessuna app —
+         * `manda_testo_a_app` e `cerca_dentro_app` — e un campo `app` che il
+         * modello riempie col nome che ha detto la persona. Se non sa quali
+         * app lo sanno fare, chiama senza `app` e **il dispositivo glielo
+         * dice**: misurato sul Pad, `ACTION_SEND`+`text/plain` = 20 app,
+         * `ACTION_SEARCH` = 20 app.
+         *
+         * ⛔ E l'impronta STORICA (`369a6da1…`) NON si è mossa: `app_azione` è
+         * escluso da quel blocco, quindi il suo essere ancora verde dimostra
+         * che nessuno dei contratti preesistenti è cambiato insieme a questo.
+         */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('1ded6fc82ee8286432574ae2aa5a1fd2a07e01625570ea6fa69689da86f05efd')
+            .toBe('cbff4bb3ed5675e92478cb05cc22d63c4d671ef07bcb280677190510a083d64d')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('c904e381cce3faa044c25482611e74d3019b2754a0410fe1b1946a0ca4cf4605')
+            .toBe('23714bc789c3cdd7aac8b7c6834b3bccbcdfe77f1213b4891139b67cc8e75f10')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('33c34d638275bd7a659912c63c026a2957ce1f68e2f45edaf15818214e3133c0')
+            .toBe('f120ffbaeb530d81f7acda2345f4d1a04bedafa91d152fdac137b2376d93b196')
     })
 })

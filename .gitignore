@@ -49,3 +49,25 @@ mobile/docs/desktop-mobile-delta-template.md
 mobile/docs/alignment/ORDINE-DI-LAVORO-DESKTOP.md
 .codex/
 .gstack/
+
+# ══════════════════════════════════════════════════════════════════════════
+# Documenti di SESSIONE — la stessa regola di `docs/superpowers/` qui sopra.
+#
+# TALOS diventera' pubblico CON la sua cronologia: passaggi di consegne,
+# collaudi interni e backup di sessione descrivono COME lavoriamo e SU QUALE
+# dispositivo proviamo. Sono utili a noi, oggi, sul disco; non appartengono
+# alla storia del progetto.
+#
+# ⛔ E uno di questi non e' solo inopportuno, e' PESANTE: `backup-sessione/`
+# vale **358 MB** — un transcript compresso da 343 MB fatto quasi tutto di
+# screenshot in base64, cioe' dati morti. E' entrato nell'ultimo commit
+# (`a900ae2e`) e da solo spiega perche' `.git` sia arrivato a 476 MB.
+# ⇒ Ignorarlo ferma il futuro; per riprendersi i 358 MB gia' scritti serve
+#   riscrivere quel commit, ed e' una decisione dell'owner.
+backup-sessione/
+RIPRESA-SESSIONE.md
+PROMPT-NUOVA-SESSIONE.md
+COLLAUDO-INTENTI.md
+
+# Rifiuto di Git Bash su Windows: un dump di crash della shell, non nostro.
+*.stackdump

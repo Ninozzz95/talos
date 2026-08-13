@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     TALOS_CAPACITA_INTENT,
     talosCapacita,
+    talosComponiExtra,
     talosComponiUri,
     talosParametriMancanti,
 } from '@/lib/intenti/registro'
@@ -15,17 +16,55 @@ import {
  * corsa su un tablet vero — e falliva.
  */
 describe('⭐ il registro degli intent', () => {
-    it('preferisce HTTPS agli schemi custom, dove esiste', () => {
+    it('preferisce HTTPS agli schemi custom, SALVO deroga misurata', () => {
         /*
          * ⛔ Non è estetica: `https://wa.me/…` apre il web se WhatsApp non è
          * installato, `whatsapp://` fallisce e basta. La prima via dichiarata è
          * quella che si prova per prima, quindi l'ordine È il comportamento.
+         *
+         * ⛔⛔ E LA DEROGA — 2026-08-13. La regola dice che l'HTTPS regge anche
+         * senza l'app. Ma regge a fare COSA? Su `mappe_cerca`, misurato sul
+         * Pad, `maps/search/?api=1&query=farmacia` apriva Maps e **non cercava
+         * niente**: un fallimento che sembra un successo. `geo:0,0?q=` cerca.
+         *
+         * ⇒ Invertire si può, e costa una riga: `ordineMisurato`. Senza quel
+         * campo l'inversione resta ROSSA, così un riordino per sbaglio si vede
+         * e uno voluto lascia scritto perché — che è tutta la differenza.
          */
         for (const capacita of TALOS_CAPACITA_INTENT) {
             const https = capacita.vie.findIndex((v) => v.tipo === 'https')
             const schema = capacita.vie.findIndex((v) => v.tipo === 'schema')
-            if (https >= 0 && schema >= 0) expect(https).toBeLessThan(schema)
+            if (https < 0 || schema < 0) continue
+            if (https < schema) {
+                // ⛔ Chi rispetta la regola non deve poter tenere una deroga
+                // scritta: sarebbe una spiegazione per qualcosa che non accade,
+                // cioè il modo più sicuro di far invecchiare un commento.
+                expect(capacita.ordineMisurato).toBeUndefined()
+                continue
+            }
+            expect(
+                capacita.ordineMisurato,
+                `${capacita.id} inverte l'ordine senza dire quale misura lo giustifica`,
+            ).toBeTruthy()
         }
+    })
+
+    /*
+     * ⛔⛔ URI ed EXTRA hanno regole OPPOSTE sull'escape, e confonderle rompe in
+     * silenzio: dentro un URI un `&` non codificato dirotta i parametri, dentro
+     * un extra un `%20` arriva **a schermo** come `%20` e la persona legge il
+     * proprio messaggio pieno di percentuali.
+     */
+    it('⛔ gli EXTRA non si codificano — al contrario degli URI', () => {
+        const traduci = talosCapacita('traduci')!
+        const via = traduci.vie[0]
+        expect(via.tipo).toBe('azione')
+        const extra = talosComponiExtra(via as never, { testo: 'vieni? sì & poi' })
+        expect(extra['android.intent.extra.TEXT']).toBe('vieni? sì & poi')
+        // E il verso opposto resta com'era: nell'URI si codifica eccome.
+        const wa = talosCapacita('whatsapp_messaggio')!
+        expect(talosComponiUri(wa.vie[0] as never, { numero: '39333', testo: 'a & b' }))
+            .toContain('a%20%26%20b')
     })
 
     /*
@@ -87,9 +126,15 @@ describe('⭐ il registro degli intent', () => {
             expect(c.vie.length).toBeGreaterThan(0)
             for (const via of c.vie) {
                 // ⛔ Un segnaposto che nessun parametro riempie diventa stringa
-                // vuota a runtime: l'URI parte monco e l'errore si vede solo
-                // sul telefono di qualcun altro.
-                const segnaposti = [...via.modello.matchAll(/\{(\w+)\}/g)].map((m) => m[1])
+                // vuota a runtime: l'URI parte monco, o l'extra arriva vuoto, e
+                // l'errore si vede solo sul telefono di qualcun altro.
+                // ⛔ Vale per ENTRAMBE le forme: un'azione con `{lingua}` in un
+                // extra e nessun parametro `lingua` è lo stesso difetto —
+                // MISURATO, perché è esattamente com'era `traduci` prima.
+                const testo = via.tipo === 'azione'
+                    ? Object.values(via.extra).join(' ')
+                    : via.modello
+                const segnaposti = [...testo.matchAll(/\{(\w+)\}/g)].map((m) => m[1])
                 for (const s of segnaposti) expect(c.parametri).toContain(s)
             }
         }

@@ -20,6 +20,7 @@ import android.os.VibratorManager
 import android.provider.AlarmClock
 import android.provider.Settings
 import android.view.KeyEvent
+import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -254,6 +255,125 @@ class TalosDevicePlugin : Plugin() {
         ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         if (intent.resolveActivity(context.packageManager) == null) {
             call.resolve(result.put("done", false).put("reason", "nessuno-lo-apre"))
+            return
+        }
+        call.resolve(avvia(intent))
+    }
+
+    /**
+     * ⭐⭐⭐ CHI SA FARE QUESTA COSA? — la domanda si fa al TELEFONO.
+     *
+     * ## Perché esiste, con le misure che l'hanno imposta
+     *
+     * Owner, 2026-08-13: «non puoi mettere delle righe predeterminate. La chat
+     * ha già una lista delle applicazioni esistenti. Dobbiamo fare in modo che
+     * chiami in quelle e non usi delle righe generiche».
+     *
+     * Aveva ragione, e il registro scritto a mano lo dimostrava da solo —
+     * MISURATO sul Pad lo stesso giorno:
+     *
+     * - `com.android.dialer` **non esiste** (il vero è `com.google.android.dialer`);
+     * - `spotify:search:` **non ha più un gestore**, cade sul launcher;
+     * - **9 pacchetti su 21** del registro non sono installati;
+     * - l'HTTPS di Spotify finisce in Chrome perché il dominio **non è
+     *   verificato** — un fatto del dispositivo, che nessuna tabella può sapere.
+     *
+     * ⇒ Qui si chiede al `PackageManager` chi accetta una certa AZIONE, e la
+     * risposta è vera oggi, su QUESTO telefono, comprese le app installate
+     * dopo che questo codice è stato scritto.
+     *
+     * MISURATO sul Pad: `ACTION_SEND`+`text/plain` → **20 app**;
+     * `ACTION_SEARCH` → **20 app**, fra cui Spotify e YouTube.
+     *
+     * ⛔ Torna l'ETICHETTA insieme al pacchetto. Un id non dice niente a un
+     * modello: è già costato una diagnosi sbagliata su questo progetto —
+     * `org.thunderdog.challegram` non somiglia a «Telegram», e due provider su
+     * tre dissero che Telegram non era installato.
+     *
+     * ⛔ E serve la voce in `<queries>`: da Android 11, senza dichiarazione il
+     * sistema NASCONDE le altre app e questa risposta arriva vuota — che è
+     * indistinguibile da «nessuno lo sa fare».
+     */
+    @PluginMethod
+    fun chiAccetta(call: PluginCall) {
+        val azione = call.getString("azione").orEmpty()
+        if (azione.isEmpty()) {
+            call.resolve(JSObject().put("app", JSArray()))
+            return
+        }
+        val intent = android.content.Intent(azione)
+        val tipo = call.getString("tipo")
+        if (!tipo.isNullOrEmpty()) intent.type = tipo
+        call.getString("uri")?.takeIf { it.isNotEmpty() }?.let {
+            intent.data = android.net.Uri.parse(it)
+        }
+        val pm = context.packageManager
+        val righe = JSArray()
+        val visti = HashSet<String>()
+        for (info in pm.queryIntentActivities(intent, 0)) {
+            val pacchetto = info.activityInfo?.packageName ?: continue
+            // ⛔ Noi non contiamo: TALOS che offre TALOS è rumore, e in un
+            // elenco di scelte è anche un modo per premere il proprio pulsante.
+            if (pacchetto == context.packageName) continue
+            if (!visti.add(pacchetto)) continue
+            righe.put(
+                JSObject()
+                    .put("pacchetto", pacchetto)
+                    .put("nome", info.loadLabel(pm)?.toString().orEmpty())
+                    .put("attivita", info.activityInfo?.name.orEmpty()),
+            )
+        }
+        call.resolve(JSObject().put("app", righe))
+    }
+
+    /**
+     * ⭐⭐⭐ LANCIA UN'AZIONE, non un URI — con i parametri DENTRO.
+     *
+     * ## La misura che l'ha resa necessaria
+     *
+     * Un URI porta i parametri solo se l'app li legge, e MISURATO sul Pad il
+     * 2026-08-13 spesso non li legge:
+     *
+     * | capacità | con l'URI | con l'azione |
+     * |---|---|---|
+     * | traduci | Traduttore sulla schermata iniziale, **testo perso** | `ACTION_SEND`+`text/plain` → **«girasole» a schermo** |
+     * | calendario | scheda evento aperta, **titolo perso** | (nessuna strada trovata su questo dispositivo) |
+     *
+     * ⇒ Qui i valori viaggiano negli **extra**, che è il modo in cui Android li
+     * ha sempre trasportati.
+     *
+     * ⛔ I nomi degli extra arrivano da chi chiama, e sono le costanti di
+     * Android (`android.intent.extra.TEXT`, `query`): questo metodo resta
+     * generico e non impara niente su nessuna app. Il giorno che un'app nuova
+     * vuole un extra diverso, cambia un dato — non questo file.
+     */
+    @PluginMethod
+    fun apriAzione(call: PluginCall) {
+        val azione = call.getString("azione").orEmpty()
+        val esito = JSObject()
+        if (azione.isEmpty()) {
+            call.resolve(esito.put("done", false).put("reason", "no-azione"))
+            return
+        }
+        val intent = android.content.Intent(azione)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        call.getString("tipo")?.takeIf { it.isNotEmpty() }?.let { intent.type = it }
+        call.getString("uri")?.takeIf { it.isNotEmpty() }?.let {
+            intent.data = android.net.Uri.parse(it)
+        }
+        // ⛔ Il pacchetto RESTRINGE, e non è un dettaglio: senza, «manda questo
+        // testo» apre il foglio di condivisione con venti app, e la persona
+        // deve scegliere. Con, arriva dove ha chiesto.
+        call.getString("pacchetto")?.takeIf { it.isNotEmpty() }?.let { intent.setPackage(it) }
+        call.getObject("extra")?.let { extra ->
+            val chiavi = extra.keys()
+            while (chiavi.hasNext()) {
+                val k = chiavi.next()
+                intent.putExtra(k, extra.getString(k))
+            }
+        }
+        if (intent.resolveActivity(context.packageManager) == null) {
+            call.resolve(esito.put("done", false).put("reason", "nessuno-lo-fa"))
             return
         }
         call.resolve(avvia(intent))

@@ -1047,8 +1047,15 @@ export const TALOS_IT_MESSAGES = {
         deviceNotificationsList: 'Le tue notifiche',
         deviceNotificationReply: 'Risposta a una notifica',
         deviceNotificationDismiss: 'Notifica tolta',
-        deviceScreenDrive: 'Sta usando un’app per te',
-        appAzione: 'Lo sta facendo in un’altra app',
+        /*
+         * ⛔ SINTAGMI NOMINALI, come tutti i vicini — e non è grammatica per
+         * gusto. VISTO sul Pad il 2026-08-13: la stessa etichetta compare da
+         * sola mentre lo strumento gira E dopo, dietro il prefisso «Fatto:».
+         * Con la forma verbale ne usciva **«Fatto: Lo sta facendo in un'altra
+         * app»**, che si contraddice in cinque parole.
+         */
+        deviceScreenDrive: 'Uso di un’app per te',
+        appAzione: 'Azione in un’altra app',
         researchList: 'Consultazione delle ricerche',
         researchStart: 'Avvio di una ricerca',
         researchRead: 'Lettura di un rapporto',

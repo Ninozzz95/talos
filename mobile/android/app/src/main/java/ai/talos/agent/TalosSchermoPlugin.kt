@@ -3,6 +3,7 @@ package ai.talos.agent
 import android.accessibilityservice.AccessibilityService
 import android.os.SystemClock
 import android.util.Log
+import android.view.accessibility.AccessibilityNodeInfo
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -88,14 +89,45 @@ class TalosSchermoPlugin : Plugin() {
      * alla cieca dentro una conversazione manda la cosa sbagliata a una
      * persona vera.
      *
+     * MISURATO sul Pad il 2026-08-13 su WhatsApp 2.26.30.97:
+     * `com.whatsapp:id/send` esiste, e' `clickable="true" enabled="true"` e ha
+     * `content-desc="Invia"` — cioe' il registro non stava indovinando.
+     *
+     * ## ⛔⛔ LE TRE GUARDIE, e perche' NESSUNA e' pignoleria
+     *
+     * 1. **L'app giusta** (`pacchetto`). Il ripiego per descrizione cerca
+     *    «Invia»/«Send»: se l'intent non ha aperto niente, quelle parole
+     *    esistono anche DENTRO TALOS, e si premerebbe un nostro pulsante
+     *    credendo di aver spedito. Il `viewId` e' namespaced e da solo sarebbe
+     *    salvo; il ripiego no.
+     * 2. **Il testo giusto** (`testoAtteso`). WhatsApp CONSERVA la bozza: se la
+     *    chat era gia' aperta con dentro un altro testo, il pulsante «invia»
+     *    c'e' gia' — e si spedirebbe la bozza vecchia un istante prima che
+     *    arrivi la nuova. Si pretende che un campo **modificabile** contenga
+     *    esattamente il testo che stiamo per mandare, altrimenti non si tocca.
+     * 3. **La prova dopo** (`sparito`). `performAction` che risponde `true`
+     *    vuol dire «il click e' stato consegnato», non «il messaggio e'
+     *    partito». MISURATO nei due versi: a campo pieno `id/send` c'e', a
+     *    campo vuoto il conteggio e' **0**. ⇒ La sua scomparsa e' la prova che
+     *    la bozza ha lasciato il campo, ed e' quella che si riporta.
+     *
      * ## E la parte VELOCE: si aspetta l'EVENTO, non l'orologio
      *
      * Un `sleep(2000)` e' sempre o troppo o troppo poco. Qui si guarda il nodo
      * finche' compare, con passi brevi, e si esce **appena** c'e' — che su una
      * finestra gia' pronta vuol dire al primo giro, cioe' in millisecondi.
+     *
+     * ⛔ E gira su un THREAD SUO. Capacitor esegue tutti i plugin su un thread
+     * solo (misurato: 10.400 ms di girello per questo motivo): aspettare qui
+     * un'app che si apre bloccherebbe ogni altra chiamata al ponte, voce
+     * compresa.
      */
     @PluginMethod
     fun premiPulsante(call: PluginCall) {
+        Thread({ premiPulsanteOra(call) }, "talos-ultimo-centimetro").start()
+    }
+
+    private fun premiPulsanteOra(call: PluginCall) {
         val occhio = TalosOcchio.aperto()
         if (occhio == null) {
             call.resolve(JSObject().put("fatto", false).put("motivo", "occhio-chiuso"))
@@ -103,26 +135,38 @@ class TalosSchermoPlugin : Plugin() {
         }
         val viewId = call.getString("viewId").orEmpty()
         val descrizioni = call.getArray("descrizioni")?.toList<String>() ?: emptyList()
+        val pacchetto = call.getString("pacchetto").orEmpty()
+        val testoAtteso = call.getString("testoAtteso").orEmpty()
+        // ⛔ Il tetto arriva da chi chiama: un'app fredda ci mette secondi, una
+        // gia' aperta millisecondi, e un numero scritto qui sarebbe sbagliato
+        // per una delle due. Gli estremi sono solo una rete di sicurezza.
+        val attesa = (call.getInt("attesaMs") ?: 2_000).coerceIn(200, 20_000)
+
         val inizio = SystemClock.uptimeMillis()
         var trovato: AccessibilityNodeInfo? = null
         var via = ""
-        // ⛔ Un tetto c'e', ed e' basso: se dopo due secondi il pulsante non
-        // esiste, non esiste — e insistere significherebbe premere qualcosa
-        // che nel frattempo e' cambiato.
-        while (SystemClock.uptimeMillis() - inizio < 2_000 && trovato == null) {
+        var pacchettoVisto = ""
+        var appGiusta = false
+        var testoPronto = false
+        while (SystemClock.uptimeMillis() - inizio < attesa && trovato == null) {
             val radice = occhio.rootInActiveWindow
             if (radice != null) {
-                if (viewId.isNotEmpty()) {
-                    trovato = radice.findAccessibilityNodeInfosByViewId(viewId)
-                        ?.firstOrNull { it.isClickable || it.isEnabled }
-                    if (trovato != null) via = "viewId"
-                }
-                if (trovato == null) {
-                    for (d in descrizioni) {
-                        trovato = radice.findAccessibilityNodeInfosByText(d)
-                            ?.firstOrNull { it.isClickable }
-                            ?: cercaPerDescrizione(radice, d)
-                        if (trovato != null) { via = "descrizione:$d"; break }
+                pacchettoVisto = radice.packageName?.toString().orEmpty()
+                appGiusta = pacchetto.isEmpty() || pacchettoVisto == pacchetto
+                testoPronto = testoAtteso.isEmpty() || bozzaContiene(radice, testoAtteso)
+                if (appGiusta && testoPronto) {
+                    if (viewId.isNotEmpty()) {
+                        trovato = radice.findAccessibilityNodeInfosByViewId(viewId)
+                            ?.firstOrNull { it.isClickable || it.isEnabled }
+                        if (trovato != null) via = "viewId"
+                    }
+                    if (trovato == null) {
+                        for (d in descrizioni) {
+                            trovato = radice.findAccessibilityNodeInfosByText(d)
+                                ?.firstOrNull { it.isClickable }
+                                ?: cercaPerDescrizione(radice, d)
+                            if (trovato != null) { via = "descrizione:$d"; break }
+                        }
                     }
                 }
             }
@@ -130,8 +174,31 @@ class TalosSchermoPlugin : Plugin() {
         }
         val ms = SystemClock.uptimeMillis() - inizio
         if (trovato == null) {
-            Log.i("TalosOcchio", "premiPulsante: NON trovato dopo $ms ms (viewId=$viewId)")
-            call.resolve(JSObject().put("fatto", false).put("motivo", "non-trovato").put("millisecondi", ms))
+            /*
+             * ⛔ TRE motivi e non uno: «non lo so» non e' «no», ed e' la
+             * famiglia di difetti piu' frequente di questo progetto. Chi legge
+             * deve poter distinguere «l'app non si e' aperta» da «il testo non
+             * e' arrivato» da «il pulsante non c'e'»: sono tre mosse diverse.
+             */
+            val motivo = when {
+                !appGiusta -> "app-non-in-primo-piano"
+                !testoPronto -> "testo-non-arrivato"
+                else -> "non-trovato"
+            }
+            // ⛔ Si logga la LUNGHEZZA del testo, mai il testo: e' il messaggio
+            // di una persona, e logcat lo legge chiunque abbia il cavo.
+            Log.i(
+                "TalosOcchio",
+                "premiPulsante: $motivo dopo $ms ms (viewId=$viewId pacchetto=$pacchetto " +
+                    "visto=$pacchettoVisto attesi=${testoAtteso.length} car.)",
+            )
+            call.resolve(
+                JSObject()
+                    .put("fatto", false)
+                    .put("motivo", motivo)
+                    .put("pacchettoVisto", pacchettoVisto)
+                    .put("millisecondi", ms),
+            )
             return
         }
         // ⛔ Il nodo trovato puo' non essere lui il cliccabile: su molte app il
@@ -146,10 +213,74 @@ class TalosSchermoPlugin : Plugin() {
         }
         TalosOcchio.segnaNostraAzione()
         val fatto = bersaglio?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
-        Log.i("TalosOcchio", "premiPulsante: $fatto via=$via in $ms ms (salite=$salite)")
-        call.resolve(
-            JSObject().put("fatto", fatto).put("via", via).put("millisecondi", ms),
+        val t1 = SystemClock.uptimeMillis()
+        val sparito = if (fatto) attendiCheSparisca(occhio, viewId, testoAtteso) else false
+        val verificaMs = SystemClock.uptimeMillis() - t1
+        Log.i(
+            "TalosOcchio",
+            "premiPulsante: click=$fatto via=$via in $ms ms (salite=$salite) " +
+                "sparito=$sparito in $verificaMs ms",
         )
+        call.resolve(
+            JSObject()
+                .put("fatto", fatto)
+                .put("via", via)
+                .put("sparito", sparito)
+                .put("pacchettoVisto", pacchettoVisto)
+                .put("millisecondi", ms)
+                .put("verificaMs", verificaMs),
+        )
+    }
+
+    /**
+     * La bozza contiene ESATTAMENTE quel testo, in un campo modificabile?
+     *
+     * ⛔ `equals` e non `contains`: con «contiene», un messaggio «ciao» darebbe
+     * per buona una bozza vecchia «ciao come stai», e partirebbe quella.
+     *
+     * ⛔ E **modificabile**: senza questo filtro basterebbe che lo stesso testo
+     * comparisse in un fumetto gia' inviato piu' su nella conversazione — cioe'
+     * la seconda volta che mandi «ciao» la guardia non guarderebbe piu' niente.
+     */
+    private fun bozzaContiene(radice: AccessibilityNodeInfo, testo: String): Boolean {
+        val atteso = testo.trim()
+        val candidati = radice.findAccessibilityNodeInfosByText(atteso) ?: return false
+        return candidati.any { n ->
+            val modificabile = n.isEditable ||
+                n.className?.toString()?.contains("EditText") == true
+            modificabile && n.text?.toString()?.trim() == atteso
+        }
+    }
+
+    /**
+     * Dopo il click: il controllo d'invio sparisce quando la bozza e' partita.
+     *
+     * ⛔ Non e' una cortesia, e' LA prova. MISURATO sul Pad: con testo nel campo
+     * `com.whatsapp:id/send` c'e', a campo vuoto il conteggio e' **0**.
+     * Se non sparisce, il messaggio e' ancora li' — e dirlo e' l'unica risposta
+     * onesta, perche' la persona crederebbe di averlo mandato.
+     */
+    private fun attendiCheSparisca(
+        occhio: TalosOcchio,
+        viewId: String,
+        testoAtteso: String,
+    ): Boolean {
+        val fine = SystemClock.uptimeMillis() + 2_500
+        while (SystemClock.uptimeMillis() < fine) {
+            Thread.sleep(80)
+            val radice = occhio.rootInActiveWindow ?: continue
+            val ancoraLi = when {
+                viewId.isNotEmpty() ->
+                    radice.findAccessibilityNodeInfosByViewId(viewId)?.isNotEmpty() == true
+                testoAtteso.isNotEmpty() -> bozzaContiene(radice, testoAtteso)
+                // Senza ne' viewId ne' testo non c'e' niente da verificare, e
+                // fingere un `true` sarebbe la bugia che questo metodo esiste
+                // per impedire.
+                else -> return false
+            }
+            if (!ancoraLi) return true
+        }
+        return false
     }
 
     /** Cerca per `contentDescription`, che `findAccessibilityNodeInfosByText` non guarda. */
@@ -163,6 +294,29 @@ class TalosSchermoPlugin : Plugin() {
             for (i in 0 until n.childCount) n.getChild(i)?.let { pila.addLast(it) }
         }
         return null
+    }
+
+    /**
+     * ⭐ CHI È DAVVERO IN PRIMO PIANO — la domanda che smaschera i falsi successi.
+     *
+     * MISURATO sul Pad il 2026-08-13: Spotify **dichiara** `ACTION_SEARCH`, il
+     * sistema **accetta** l'intent, e poi l'app muore con
+     * `Fatal signal 11 (SIGSEGV)` e `Force finishing activity`. Chi si fermasse
+     * a «l'intent è stato accettato» direbbe alla persona «fatto» davanti a un
+     * launcher vuoto.
+     *
+     * ⛔ Torna stringa vuota quando l'occhio è chiuso, e chi legge deve trattarla
+     * come «non lo so» — non come «non c'è nessuno». Sono due cose diverse, ed è
+     * la famiglia di difetti più frequente di questo progetto.
+     */
+    @PluginMethod
+    fun chiEDavanti(call: PluginCall) {
+        val occhio = TalosOcchio.aperto()
+        call.resolve(
+            JSObject()
+                .put("pacchetto", occhio?.rootInActiveWindow?.packageName?.toString().orEmpty())
+                .put("sipuoSapere", occhio != null),
+        )
     }
 
     @PluginMethod
