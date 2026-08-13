@@ -387,6 +387,20 @@ async function talosUltimoCentimetro(
 /** Da dove il tool prende i file che si possono mandare. */
 export interface TalosFontiFile {
     fileDellaLibreria(): Promise<readonly TalosFileMandabile[]>
+    /**
+     * ⭐⭐ La SECONDA sorgente — owner 2026-08-13: «inviare un file che abbiamo
+     * nella memoria, salvato nel dispositivo, e inviarlo dove voglio noi».
+     *
+     * ⛔ Apre il selettore di SISTEMA e aspetta che la persona scelga. Non è
+     * una scorciatoia: per un file dentro `MediaStore.Downloads` che l'app non
+     * ha creato, Android **obbliga** a passare di lì — nessuna query lo trova.
+     * E per foto e video la query esisterebbe, ma vuole `READ_MEDIA_*`, cioè
+     * l'intera libreria di immagini della persona per mandarne una.
+     *
+     * ⇒ Il gesto della persona È il permesso, e regge per ogni tipo di file.
+     * Rende `null` se ha annullato: annullare non è un errore.
+     */
+    fileDalTelefono?(): Promise<{ nome: string, tipo: string, uri: string } | null>
 }
 
 /**
@@ -427,11 +441,93 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
             'if several match, ask instead of guessing. Omit "app" to list the apps that accept it.',
         ].join(' '),
         input: z.object({
-            file: z.string().min(1).describe('The file the user named.'),
+            /*
+             * ⛔ NON obbligatorio, e la prova sul dispositivo l'ha detto: con
+             * `dal_telefono` il nome del file NON si sa — lo saprà solo dopo
+             * che la persona avrà scelto nel selettore. Preteso qui, il tool
+             * era inutilizzabile per la sua seconda sorgente.
+             */
+            file: z.string().optional().describe('As the user named it.'),
             app: z.string().optional().describe('Destination app; omit to list them.'),
             testo: z.string().optional().describe('Optional message with the file.'),
+            dal_telefono: z.boolean().optional().describe('On the phone, not the Library.'),
         }),
         async run(input): Promise<TalosToolResult> {
+            /*
+             * ⛔⛔ LA SECONDA SORGENTE, e passa PRIMA della libreria.
+             *
+             * Chi dice «dal telefono» ha già detto dove cercare: andare comunque
+             * in libreria vorrebbe dire trovarci un omonimo e mandare quello.
+             */
+            if (input.dal_telefono) {
+                if (!fonti.fileDalTelefono) {
+                    return {
+                        ok: false,
+                        content: 'This build cannot open the phone file picker. Nothing was sent.',
+                        code: 'TALOS_FILE_NIENTE_SELETTORE',
+                    }
+                }
+                const scelto = await fonti.fileDalTelefono()
+                if (!scelto) {
+                    /*
+                     * ⛔ Annullare NON è un errore, ed è la differenza che
+                     * conta: un `ok:false` qui farebbe riprovare il modello,
+                     * cioè riaprirebbe il selettore addosso a chi l'ha appena
+                     * chiuso.
+                     */
+                    return {
+                        ok: true,
+                        content: 'The user closed the file picker without choosing. Nothing was sent. Do not open it again unless they ask.',
+                        contentOrigin: 'user-direct',
+                        senzaEffetto: true,
+                    }
+                }
+                const dove = await TalosDeviceBridge.chiAccetta({
+                    azione: 'android.intent.action.SEND',
+                    tipo: scelto.tipo,
+                }).then((r) => r.app, () => [])
+                const bersaglioTel = input.app ? talosScegliApp(dove, input.app) : null
+                if (!bersaglioTel) {
+                    return {
+                        ok: true,
+                        content: dove.length === 0
+                            ? `No app on this phone can receive a ${scelto.tipo} file. Nothing was sent.`
+                            : `"${scelto.nome}" is ready. On THIS phone these apps can receive it: ${
+                                dove.map((a) => a.nome || a.pacchetto).join(', ')
+                            }. Ask the user which one, naming ONLY these. Nothing was sent yet.`,
+                        contentOrigin: 'user-direct',
+                        senzaEffetto: true,
+                        evidence: { file: scelto.nome, tipo: scelto.tipo, app: dove.map((a) => a.pacchetto) },
+                    }
+                }
+                const esitoTel = await TalosDeviceBridge.condividiUri({
+                    uri: scelto.uri,
+                    tipo: scelto.tipo,
+                    pacchetto: bersaglioTel.pacchetto,
+                    ...(input.testo ? { testo: input.testo } : {}),
+                })
+                if (!esitoTel.done) {
+                    return {
+                        ok: false,
+                        content: `The file could not be handed to ${bersaglioTel.nome} (${esitoTel.reason ?? 'unknown'}). Nothing was sent.`,
+                        code: `TALOS_FILE_${(esitoTel.reason ?? 'sconosciuto').toUpperCase().replace(/-/g, '_')}`,
+                    }
+                }
+                return {
+                    ok: true,
+                    content: `"${scelto.nome}" is now attached in ${bersaglioTel.nome}, ready to send. It has NOT been sent yet: say so, and do not claim it was sent.`,
+                    contentOrigin: 'user-direct',
+                    evidence: { file: scelto.nome, tipo: scelto.tipo, app: bersaglioTel.pacchetto },
+                }
+            }
+            if (!input.file?.trim()) {
+                return {
+                    ok: true,
+                    content: 'Which file? Say the name, or say it is on the phone and the picker opens. Nothing was sent.',
+                    contentOrigin: 'user-direct',
+                    senzaEffetto: true,
+                }
+            }
             const file = await fonti.fileDellaLibreria()
             const scelta = talosScegliFile(file, input.file)
             if (scelta.esito === 'nessuno') {
