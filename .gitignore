@@ -68,6 +68,7 @@ backup-sessione/
 RIPRESA-SESSIONE.md
 PROMPT-NUOVA-SESSIONE.md
 COLLAUDO-INTENTI.md
+TODO.md
 
 # Rifiuto di Git Bash su Windows: un dump di crash della shell, non nostro.
 *.stackdump
