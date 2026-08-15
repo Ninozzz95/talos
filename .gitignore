@@ -33,5 +33,8 @@ tests/e2e/.auth/
 !docs/immagini/*.png
 docs/immagini/DA-APPROVARE/
 
-# Il registro delle approvazioni è un documento di lavoro interno.
+# ⛔ E il registro delle approvazioni resta INTERNO: e' un documento di lavoro,
+# in italiano, che spiega perche' ogni vista e' stata accettata e nomina
+# l'owner. Serve a noi e al cancello di pubblicazione, non a chi apre il repo.
+# MISURATO: era finito nel primo push, fra le immagini.
 docs/immagini/APPROVATE.txt
