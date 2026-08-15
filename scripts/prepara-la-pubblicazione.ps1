@@ -233,10 +233,36 @@ if (-not $Esegui) {
 # ───────────────────────────────────────────────────────────────────────────
 Titolo "COSTRUZIONE"
 
+# ⛔⛔ Una copia GIA' PUBBLICATA non si butta: si aggiorna.
+#
+# Prima questo blocco diceva «esiste già, cancellala». Cancellarla significa
+# ripartire con `git init`, cioe' con una cronologia nuova — e al push
+# successivo serve un force, che su un repo pubblico riscrive la storia sotto
+# ai piedi di chi l'ha clonato.
+#
+# ⇒ Se la cartella ha una `.git` con un `origin`, e' gia' stata pubblicata: la
+# sua cronologia si conserva e i file si aggiornano. Se e' una cartella
+# qualunque, resta un errore — cancellare roba di qualcun altro non e' compito
+# di questo script.
+$riusaCronologia = $false
+$Salvataggio = $null
 if (Test-Path $Destinazione) {
-    Male "$Destinazione esiste già"
-    Nota "cancellala o scegli un'altra destinazione con -Destinazione"
-    exit 1
+    $haOrigin = $false
+    if (Test-Path (Join-Path $Destinazione '.git')) {
+        Push-Location $Destinazione
+        $haOrigin = [bool](git remote get-url origin 2>$null)
+        Pop-Location
+    }
+    if (-not $haOrigin) {
+        Male "$Destinazione esiste già e non è una copia pubblicata"
+        Nota "cancellala o scegli un'altra destinazione con -Destinazione"
+        exit 1
+    }
+    Passo "la copia è già pubblicata: ne conservo la cronologia"
+    $Salvataggio = "$Destinazione-precedente"
+    if (Test-Path $Salvataggio) { Remove-Item -LiteralPath $Salvataggio -Recurse -Force }
+    Rename-Item -LiteralPath $Destinazione -NewName (Split-Path $Salvataggio -Leaf)
+    $riusaCronologia = $true
 }
 
 # ⛔⛔ SI PUBBLICA SOLO `mobile/`, non tutta AVM. Owner 2026-08-15: «per una repo
@@ -316,19 +342,54 @@ foreach ($p in ($INTERNI + @('docs/superpowers'))) {
 }
 if ($intrusi -eq 0) { Bene "nessun documento interno nella copia" }
 
-Passo "inizializzo una cronologia NUOVA, senza passato"
+# ⛔⛔ LA SECONDA PUBBLICAZIONE — e questo script non la sapeva fare.
+#
+# MISURATO 2026-08-15, un'ora dopo il primo push: la copia si ricreava sempre
+# da zero con `git init`, quindi la sua cronologia era SEMPRE nuova. Al secondo
+# giro il push diventava un `non-fast-forward` e l'unica via d'uscita era un
+# force push — che su un repo pubblico cancella la cronologia sotto ai piedi di
+# chiunque l'abbia clonato.
+#
+# ⇒ Se la copia era già stata pubblicata, la sua `.git` si CONSERVA: si
+# aggiornano i file e si fa un commit in cima. La cronologia pubblica cresce
+# invece di essere riscritta.
+$gitPrecedente = $null
+if ($riusaCronologia) {
+    $gitPrecedente = Join-Path ([System.IO.Path]::GetTempPath()) "talos-git-$(Get-Random)"
+    Move-Item (Join-Path $Salvataggio '.git') $gitPrecedente
+}
+
+Passo $(if ($gitPrecedente) { "riprendo la cronologia gia' pubblicata" } else { "inizializzo una cronologia NUOVA, senza passato" })
 Set-Location $Destinazione
-git init -q -b main
+if ($gitPrecedente) {
+    Move-Item $gitPrecedente (Join-Path $Destinazione '.git')
+    git reset -q
+} else {
+    git init -q -b main
+}
 git add -A
-git -c user.name="antoninorizzo" -c user.email="ninozz142@gmail.com" commit -q -m "TALOS
+$messaggio = if ($gitPrecedente) {
+    "Sync from the development repository
+
+The working history and the internal documents stay in the private
+repository; this one carries the published state."
+} else {
+    "TALOS
 
 Un assistente Android che agisce sul telefono: legge lo schermo, apre le app,
 manda messaggi, e dice sempre cosa è successo davvero.
 
 Questa è la prima pubblicazione: la cronologia di sviluppo è rimasta nel
 repository privato, insieme ai documenti di lavoro."
-$commit = git rev-parse --short HEAD
-Bene "un commit solo: $commit"
+}
+# ⛔ Niente da dire? Non si fa un commit vuoto: si dice che non serve.
+if ((git status --porcelain).Count -eq 0) {
+    Bene "niente di nuovo da pubblicare"
+} else {
+    git -c user.name="antoninorizzo" -c user.email="ninozz142@gmail.com" commit -q -m $messaggio
+    $commit = git rev-parse --short HEAD
+    Bene $(if ($gitPrecedente) { "commit di aggiornamento: $commit" } else { "un commit solo: $commit" })
+}
 
 # ───────────────────────────────────────────────────────────────────────────
 #  5. LA VERIFICA — l'originale è intatto?
@@ -354,6 +415,10 @@ if (Test-Path $readmeCopia) {
         Nota "⛔ Su GitHub sarebbero riquadri rotti. Controlla mobile/.gitignore."
     } elseif ($citate) { Bene "$($citate.Count) immagini, arrivate tutte nella copia" }
     else { Bene "il README non cita immagini" }
+}
+
+if ($Salvataggio -and (Test-Path $Salvataggio)) {
+    Remove-Item -LiteralPath $Salvataggio -Recurse -Force
 }
 
 Titolo "VERIFICA — l'originale è intatto?"

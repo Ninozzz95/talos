@@ -151,7 +151,7 @@ describe('⛔ la scheda dice PERCHÉ, e non parla in JSON', () => {
             props: {
                 title: 'Guida lo schermo',
                 description: 'TALOS tocca lo schermo al posto tuo.',
-                input: { obiettivo: 'Apri WhatsApp, trova la chat con Shadina' },
+                input: { obiettivo: 'Apri WhatsApp, trova la chat con un contatto' },
                 actions: ['write', 'outbound'] as const,
                 sessionTitle: 'Nuova chat',
                 pendingCount: 1,
@@ -185,7 +185,7 @@ describe('⛔ la scheda dice PERCHÉ, e non parla in JSON', () => {
         const wrapper = scheda()
         const testo = wrapper.get('[data-testid="talos-tool-consent-arguments"]').text()
 
-        expect(testo).toContain('Apri WhatsApp, trova la chat con Shadina')
+        expect(testo).toContain('Apri WhatsApp, trova la chat con un contatto')
         expect(testo).not.toContain('{')
         expect(testo).not.toContain('"')
         // E il riquadro JSON non c'è più affatto per questa forma.
