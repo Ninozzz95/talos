@@ -16,6 +16,7 @@ import {
     requestTalosMicrophone,
     requestTalosBatteryExemption,
     requestTalosNotifications,
+    requestTalosRuntimePermission,
     type TalosDeviceState,
 } from '@/services/devicePermissions'
 
@@ -40,6 +41,9 @@ const device = ref<TalosDeviceState>({
     batteryExempt: false,
     manufacturer: '',
     brand: '',
+    // Vuota finché il sistema non risponde: una riga senza stato tace, e non
+    // dice «non richiesto» a un permesso che magari c'è.
+    runtime: {},
 })
 const { t } = useTalosI18n()
 const busy = ref<string | null>(null)
@@ -53,6 +57,20 @@ const rows = computed(() => visibleTalosPermissionRows({
 function stateOf(row: TalosPermissionRow): TalosPermissionState | null {
     if (row.id === 'microphone') return device.value.microphone
     if (row.id === 'notifications') return device.value.notifications
+    /*
+     * ⭐⭐ LE QUATTRO RIGHE CHE NON DICEVANO SE ERANO CONCESSE — 2026-08-14.
+     *
+     * Contatti, Calendario, Conteggio della posta e Fotocamera comparivano con
+     * un cerchio vuoto e nient'altro: né stato, né pulsante. È il difetto
+     * peggiore che una pagina di permessi possa avere, perché la domanda per
+     * cui una persona la apre è esattamente quella: «ce l'ha, o no?».
+     *
+     * ⛔ `?? null` e non `?? 'prompt'`: se il sistema non ha risposto, la riga
+     * torna a TACERE. Dire «non richiesto» quando non lo sappiamo è inventare
+     * un fatto, e su questa pagina un fatto inventato vale doppio.
+     */
+    const runtime = device.value.runtime[row.id]
+    if (runtime !== undefined) return runtime
     /**
      * La riga che prima non aveva stato NE pulsante.
      *
@@ -113,6 +131,15 @@ async function act(row: TalosPermissionRow): Promise<void> {
         if (row.id === 'microphone') await requestTalosMicrophone()
         if (row.id === 'notifications') await requestTalosNotifications()
         if (row.id === 'background') await requestTalosBatteryExemption()
+        /*
+         * ⭐ Le quattro si CHIEDONO col dialogo di sistema — un tocco — invece
+         * di mandare la persona a cercare un interruttore. Le Impostazioni
+         * restano per quando il dialogo non può più comparire, e quel caso lo
+         * decide `talosPermissionAction` qui sopra, non un'ipotesi.
+         */
+        if (device.value.runtime[row.id] !== undefined) {
+            await requestTalosRuntimePermission(row.id)
+        }
         await refresh()
     } finally {
         busy.value = null

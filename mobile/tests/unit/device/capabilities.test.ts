@@ -65,14 +65,38 @@ describe('⛔ nessuna capacità indovina', () => {
  * aggira in trenta secondi.
  */
 describe('⛔ l’accessibilità è archiviata, e non torna per distrazione', () => {
-    it('leggere lo schermo passa dal PONTE, non da una schermata di sistema', () => {
+    it('leggere lo schermo passa dal PONTE, non dall’accessibilità', () => {
         const schermo = talosCapability('screen_read')
         expect(
             schermo?.tier,
             'screen_read è tornato «special»: ma il ponte dà già albero ED eventi, ' +
                 'e su Android 17 l’accessibilità viene revocata agli assistenti',
         ).toBe('shell')
-        expect(schermo?.settingsAction).toBeNull()
+        /*
+         * ⛔ Qui c'era `toBeNull()`, e per due giorni ha vietato ANCHE la
+         * schermata giusta.
+         *
+         * Il presidio è «nessuno rimette l'accessibilità», non «nessuna
+         * schermata»: sono due cose diverse, e il lucchetto largo le
+         * confondeva. Il costo l'ha visto l'owner — rilievo #10, «"controlla il
+         * mio telefono" non porta alla schermata giusta»: col ponte spento
+         * TALOS offriva di aprire la pagina e apriva **«Informazioni app»**,
+         * perché qui non c'era nessuna azione da dargli.
+         *
+         * MISURATO sul Pad il 2026-08-15:
+         * `am start -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS`
+         * → `Settings$DevelopmentSettingsDashboardActivity`, cioè le Opzioni
+         * sviluppatore, dove sta il Debug wireless: l'unico posto da cui una
+         * persona riaggancia il ponte.
+         *
+         * ⇒ Adesso il presidio dice esattamente quale deve essere — che è più
+         * stretto di «nessuna», non più largo.
+         */
+        expect(
+            schermo?.settingsAction,
+            'la schermata di screen_read deve restare quella del PONTE (Opzioni ' +
+                'sviluppatore → Debug wireless), mai l’accessibilità',
+        ).toBe('android.settings.APPLICATION_DEVELOPMENT_SETTINGS')
     })
 
     it('e NESSUNA capacità manda la persona nelle impostazioni di accessibilità', () => {

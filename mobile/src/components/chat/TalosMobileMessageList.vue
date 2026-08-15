@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { BookMarked, CheckCheck, ChevronRight, FileText, Mic, ShieldQuestion } from '@lucide/vue'
+import { BookMarked, CheckCheck, ChevronRight, CircleAlert, FileText, Mic, ShieldQuestion } from '@lucide/vue'
 import { talosShortModelLabel } from '@/lib/models/modelLabel'
-import { TALOS_METADATA_AZIONI, talosHaAzioniDaMostrare } from '@/lib/tools/tracciaAzione'
+import {
+    TALOS_METADATA_AZIONI,
+    TALOS_METADATA_TRONCATA,
+    talosHaAzioniDaMostrare,
+} from '@/lib/tools/tracciaAzione'
+
 import { TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
@@ -17,6 +22,16 @@ import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActio
  */
 const TalosMobileMessageImage = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileMessageImage.vue'),
+)
+/*
+ * ⛔ PIGRA per la stessa ragione della bolla-immagine, e con un numero:
+ * statica costava **2.649 byte** al grafo d'avvio, che ha un tetto di 602.200.
+ *
+ * La prima schermata di TALOS e' una chat nuova: nessuna scheda, nessun motivo
+ * di averla gia' in memoria. Arriva col primo messaggio che ne porta una.
+ */
+const TalosMobileSchedaAzione = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileSchedaAzione.vue'),
 )
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
@@ -50,6 +65,12 @@ const props = defineProps<{
      * del momento in cui fu scritta.
      */
     pendingAuthorizationIds?: readonly string[]
+    /**
+     * ⛔ Vero solo se la persona ha acceso la diagnostica: da questo dipende
+     * se la striscia di prova mostra anche la riga tecnica (`dumpsys`, i
+     * millisecondi). Quelli sono la NOSTRA prova, non la sua lingua.
+     */
+    diagnostica?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -78,6 +99,9 @@ function attesaViva(message: TalosMobileMessageView): boolean {
 
 const { t } = useTalosI18n()
 
+
+
+
 /**
  * ⛔ I nomi INTERNI non si mostrano mai: `device_torch` non dice niente a
  * nessuno. Si passa dal catalogo delle etichette, lo stesso che usa la riga
@@ -92,6 +116,16 @@ function azioniFatte(metadata: unknown): string[] {
         return chiave ? t(chiave) : nome
     })
 }
+/**
+ * ⛔ La risposta si è fermata perché ha esaurito la lunghezza — rilievo #16b.
+ *
+ * Solo `true` conta: una chiave assente vuol dire «finita normalmente», e un
+ * avviso su ogni risposta insegnerebbe a dubitare anche di quelle intere.
+ */
+function siEFermataAlLimite(metadata: unknown): boolean {
+    return (metadata as Record<string, unknown> | null)?.[TALOS_METADATA_TRONCATA] === true
+}
+
 const PlainMessage = defineComponent({
     props: { content: { type: String, required: true } },
     setup(plainProps) {
@@ -501,6 +535,41 @@ function messageStateLabel(state: string): string {
                         <span>{{ $t('chat.actionsDone') }}</span>
                         <span class="opacity-80">{{ azioniFatte(message.metadata).join(' · ') }}</span>
                     </div>
+                    <!--
+                        ⛔⛔ SI È FERMATA A METÀ, e va detto — rilievo #16b.
+
+                        Owner, dagli screenshot del 12 agosto: la risposta
+                        appariva troncata a metà frase «senza che si capisca se
+                        sia finita, interrotta o tagliata dal rendering».
+
+                        Tre cause con lo stesso aspetto; questa è quella che non
+                        aveva voce. Il fatto lo sa solo il provider
+                        (`finishReason: 'length'`), viaggia coi metadati come le
+                        azioni, e finisce qui — sotto la risposta, dove la
+                        persona sta già guardando la frase che si interrompe.
+
+                        ⛔ Non riscrive la frase del modello: aggiunge il pezzo
+                        che il modello non poteva sapere.
+                    -->
+                    <div
+                        v-if="siEFermataAlLimite(message.metadata)"
+                        data-testid="talos-risposta-troncata"
+                        role="status"
+                        class="mt-1.5 inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
+                    >
+                        <CircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
+                        <span>{{ $t('chat.stoppedAtLimit') }}</span>
+                    </div>
+                    <!-- ⭐⭐⭐ LE SCHEDE: lo stato con cui si può ancora
+                         parlare, non l'esito. Owner 2026-08-13, dopo il testa a
+                         testa con Gemini: loro dopo «accendi la torcia»
+                         lasciano l'interruttore dentro la chat, noi dicevamo
+                         «fatto» e chiudevamo il discorso. -->
+                    <TalosMobileSchedaAzione
+                        v-if="message.metadata?.cards"
+                        :metadata="message.metadata"
+                        :diagnostica="diagnostica"
+                    />
                     <!-- F4 Memory: one calm-thread disclosure; every injected
                          turn still retains its own auditable metadata. -->
                     <div

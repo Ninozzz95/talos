@@ -96,6 +96,8 @@ export interface TalosToolAuditRow {
      * `registry.ts`, dove c'è la misura che l'ha reso necessario.
      */
     senzaEffetto?: boolean
+    /** La scheda dichiarata dal risultato: la chat la disegna. */
+    scheda?: unknown
     /** Kept for the record, not shown to the model. */
     evidence?: Record<string, unknown>
     error?: string
@@ -560,6 +562,7 @@ export async function executeTalosTool(
             requiredActions,
             status: result.ok ? 'succeeded' : 'failed',
             ...(result.senzaEffetto ? { senzaEffetto: true } : {}),
+            ...(result.scheda ? { scheda: result.scheda } : {}),
             risk: effectiveRisk,
             ...(verdetto ? { verified: true } : {}),
             input,

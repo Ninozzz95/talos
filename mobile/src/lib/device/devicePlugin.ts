@@ -43,9 +43,22 @@ interface PonteDispositivo {
     torch(options: { on: boolean }): Promise<{ done: boolean, reason?: string }>
     volume(options: { stream: string, percent?: number }): Promise<{ done: boolean, reason?: string, percent: number }>
     alarm(options: { hour?: number, minute?: number, seconds?: number, label?: string }): Promise<{ done: boolean, reason?: string }>
+    /** ⛔ Il contrario di `alarm`. Senza, «annulla la sveglia» ne creava una seconda. */
+    alarmDismiss(options: { hour?: number, minute?: number, all?: boolean }): Promise<{ done: boolean, reason?: string }>
     openApp(options: { package: string }): Promise<{ done: boolean, reason?: string }>
     /** ⭐ Apre un URI: è la porta unica del motore degli intent. */
-    apriUri(options: { uri: string }): Promise<{ done: boolean, reason?: string }>
+    /**
+     * ⭐⭐ `pacchetto` NON è un dettaglio: è «l'app, non il browser».
+     *
+     * MISURATO sul Pad il 2026-08-14: `https://open.spotify.com/search/...`
+     * senza vincolo finisce a **Chrome**, con Spotify installato. Chi dichiara
+     * un pacchetto vuole quell'app; il ponte prova prima là e ripiega sul
+     * gestore predefinito solo se quell'app non sa aprirlo.
+     */
+    apriUri(options: {
+        uri: string
+        pacchetto?: string
+    }): Promise<{ done: boolean, reason?: string }>
     /**
      * ⭐⭐⭐ CHI, FRA LE APP CHE ESISTONO DAVVERO, SA FARE QUESTA COSA.
      *
@@ -61,6 +74,24 @@ interface PonteDispositivo {
         tipo?: string
         uri?: string
     }): Promise<{ app: TalosAppCheSaFare[] }>
+    /**
+     * ⭐⭐ LE ICONE VERE, chieste solo quando si disegnano.
+     *
+     * Owner 2026-08-14: «icone pulite e coerenti nelle schede per ogni app
+     * prevista». Vengono da `getApplicationIcon`, cioè sono quelle che la
+     * persona vede sul suo launcher — un'icona disegnata da noi sarebbe una riga
+     * predeterminata col vestito grafico, e per l'app installata domani non
+     * esisterebbe.
+     *
+     * ⛔ NON si mettono nei metadati del messaggio: diciassette app a ~6 kB
+     * l'una sono cento kilobyte salvati per sempre nel database e ricopiati in
+     * ogni backup, per un dato che il telefono ha già e che cambia quando l'app
+     * si aggiorna. La scheda porta il pacchetto; l'icona si chiede al disegno.
+     *
+     * ⛔ La mappa può non avere una chiave: un'app disinstallata fra l'elenco e
+     * il disegno semplicemente non c'è, e chi disegna mostra il posto vuoto.
+     */
+    iconeApp(options: { pacchetti: string[] }): Promise<{ icone: Record<string, string> }>
     /**
      * ⭐⭐⭐ Lancia un'AZIONE con i parametri negli extra, non dentro un URI.
      *
@@ -148,6 +179,52 @@ interface PonteDispositivo {
     wallpaper(options: { imageBase64: string, where: string }): Promise<{ done: boolean, reason?: string, appliedTo: string }>
     keepAwake(options: { on: boolean }): Promise<{ done: boolean, reason?: string, on: boolean }>
     /**
+     * ⭐⭐ Quante email non lette, chieste al TELEFONO.
+     *
+     * ⛔ Dal content provider pubblico di Gmail, non dall'API di Google: quella
+     * vuole uno scope **ristretto** (verifica + assessment CASA fino al
+     * penetration test, e un token che in «Testing» scade ogni 7 giorni).
+     *
+     * ⛔ Dà i CONTEGGI, mai il testo: da questa strada il contenuto di una email
+     * non è raggiungibile, e va bene così. Mittente e oggetto restano quelli
+     * delle notifiche, che la persona ha già visto comparire.
+     *
+     * ⛔ `letto: false` porta sempre un `motivo`: «zero non lette» e «il
+     * provider non ha risposto» sono fatti diversi, e appiattirli farebbe dire
+     * «non hai posta» a chi ce l'ha.
+     */
+    postaNonLetta(): Promise<{
+        letto: boolean
+        /** `nessun-account` | `permesso-mancante` | `provider-muto` */
+        motivo?: string
+        caselle: Array<{
+            conto: string
+            nonLette: number
+            /**
+             * ⛔ Le SEZIONI della posta in arrivo, quando ci sono — e i nomi
+             * sono quelli di Gmail, nella lingua della persona.
+             *
+             * MISURATO sul Pad il 2026-08-14: su questo account `^i` non esiste
+             * e la posta in arrivo è divisa in quattro (`^sq_ig_i_personal`,
+             * `_promo`, `_social`, `_notification`). «27.953» da solo sarebbe
+             * vero e inutile: 3.804 stanno in Principali e il resto è
+             * pubblicità.
+             */
+            sezioni?: Array<{ nome: string, nonLette: number }>
+        }>
+    }>
+    /**
+     * ⛔⛔ Il permesso di Gmail è `dangerous`: SI CHIEDE, e dichiararlo non basta.
+     *
+     * MISURATO sul Pad il 2026-08-14, col permesso già nel manifest:
+     * `SecurityException … requires com.google.android.gm.permission.READ_CONTENT_PROVIDER`
+     * e `dumpsys package permission` che risponde `prot=dangerous`. Comparire
+     * fra i permessi RICHIESTI non vuol dire essere stati autorizzati.
+     */
+    chiediPermessoPosta(): Promise<{ permesso: boolean }>
+    /** Lo screenshot di sistema, via servizio di accessibilità. */
+    schermata(): Promise<{ done: boolean, reason?: string }>
+    /**
      * ⭐ Media: `playing` è la parte che conta.
      *
      * Non è un `done` travestito — è lo stato **riletto dopo** l'invio del tasto.
@@ -228,6 +305,14 @@ export function createTalosDeviceSources(): TalosDeviceHardwareSources | null {
                 return nonQui({})
             }
         },
+        async alarmDismiss(input) {
+            try {
+                return await TalosDeviceBridge.alarmDismiss(input)
+            }
+            catch {
+                return nonQui({})
+            }
+        },
         async openApp(packageName) {
             try {
                 return await TalosDeviceBridge.openApp({ package: packageName })
@@ -254,7 +339,36 @@ export function createTalosDeviceSources(): TalosDeviceHardwareSources | null {
         },
         async status() {
             try {
-                return await TalosDeviceBridge.status()
+                const stato = await TalosDeviceBridge.status()
+                /*
+                 * ⛔⛔ E SE IL PONTE È GIÙ, il resoconto deve DIRLO.
+                 *
+                 * ## Misurato sul Pad il 2026-08-15
+                 *
+                 * Col debug wireless spento (`adb_wifi_enabled = 0`), chiesto
+                 * «controlla il mio telefono». TALOS ha risposto benissimo —
+                 * batteria, memoria, spazio, suoneria — e ha perfino elencato
+                 * «due cose che non ho potuto controllare: notifiche e Gmail».
+                 * Della **strada privilegiata giù non ha detto una parola**.
+                 *
+                 * Ma senza ponte non funzionano: leggere lo schermo, pilotarlo,
+                 * Wi-Fi, Bluetooth, aereo, risparmio energia, non disturbare,
+                 * l'elenco delle app. ⇒ Metà di ciò che TALOS sa fare era
+                 * ferma, e chi ha letto «Ecco la situazione» ha creduto di aver
+                 * visto tutto. È la stessa forma del cerchio vuoto nei permessi
+                 * e della spina: **uno stato vero che il resoconto tace**.
+                 *
+                 * ⛔ Si CHIEDE ogni volta, non si ricorda: il ponte muore al
+                 * riavvio, e un flag racconterebbe un mondo che non c'è più
+                 * (vedi `talosPrivilegedReady`).
+                 *
+                 * ⛔ E non blocca mai il resoconto: se la domanda al ponte
+                 * fallisce o esplode, la chiave non c'è — «non lo so» non si
+                 * dice come «è giù».
+                 */
+                const { talosPrivilegedReady } = await import('@/lib/device/privilegedShell')
+                const ponte = await talosPrivilegedReady().catch(() => null)
+                return ponte === null ? stato : { ...stato, bridge: ponte }
             }
             catch {
                 return { available: false, reason: FUORI_DA_ANDROID }
@@ -275,6 +389,38 @@ export function createTalosDeviceSources(): TalosDeviceHardwareSources | null {
             catch {
                 return nonQui({ on })
             }
+        },
+        async screenshot() {
+            try {
+                return await TalosDeviceBridge.schermata()
+            }
+            catch {
+                return nonQui({})
+            }
+        },
+        async postaNonLetta() {
+            let esito
+            try {
+                esito = await TalosDeviceBridge.postaNonLetta()
+            }
+            catch {
+                return { letto: false, motivo: FUORI_DA_ANDROID, caselle: [] }
+            }
+            /*
+             * ⭐ SI CHIEDE, non si manda in Impostazioni — la stessa regola del
+             * calendario e della rubrica: il dialogo di sistema costa un tocco e
+             * compare sopra quello che la persona sta facendo.
+             *
+             * ⛔ UNA volta sola. Se dice di no, il motivo resta
+             * `permesso-mancante` e chi legge lo dice: un permesso richiesto due
+             * volte di fila è un permesso che viene negato.
+             */
+            if (esito.motivo !== 'permesso-mancante') return esito
+            const concesso = await TalosDeviceBridge.chiediPermessoPosta()
+                .then((r) => r.permesso)
+                .catch(() => false)
+            if (!concesso) return esito
+            return await TalosDeviceBridge.postaNonLetta().catch(() => esito)
         },
         async media(action) {
             try {

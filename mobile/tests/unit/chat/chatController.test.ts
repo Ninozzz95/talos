@@ -2744,6 +2744,48 @@ describe('chatController', () => {
         })
     })
 
+    /*
+     * ⛔⛔ QUESTI DUE CORRONO IN ITALIANO, e non è un vezzo: è l'unico modo in
+     * cui mordono.
+     *
+     * Visto sul Pad il 2026-08-13: ventiquattro chat nell'elenco, **tutte**
+     * chiamate «Nuova chat». Eppure `titleFromPrompt` era giusta e i suoi test
+     * erano verdi. A mentire era il GIRO: il controller salvava il titolo
+     * **tradotto** e la guardia della rinomina lo confrontava con la costante
+     * **inglese**. In inglese `'New chat' === 'New chat'` regge per
+     * COINCIDENZA — e ogni test di questo file gira in inglese. Ecco perché
+     * nessuno lo vedeva: la lingua del test nascondeva il difetto.
+     */
+    it('⛔ la prima domanda dà il nome alla chat — anche in italiano', async () => {
+        const { deps, store } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        const controller = createChatController({ ...deps, translate: talosTestT('it') })
+        await controller.init()
+        await controller.newSession()
+
+        await controller.send('accendi la torcia')
+
+        expect(controller.chat.activeSession.value?.title).toBe('accendi la torcia')
+    })
+
+    /*
+     * ⛔ IL VERSO CONTRARIO: una chat che ha già un nome non se lo fa cambiare
+     * dal messaggio dopo. Senza questo, una guardia rotta al contrario —
+     * rinominare sempre — passerebbe il test qui sopra.
+     */
+    it('⛔ una chat già intitolata NON viene rinominata dal messaggio dopo', async () => {
+        const { deps, store } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        const controller = createChatController({ ...deps, translate: talosTestT('it') })
+        await controller.init()
+        await controller.newSession()
+
+        await controller.send('accendi la torcia')
+        await controller.send('adesso spegnila')
+
+        expect(controller.chat.activeSession.value?.title).toBe('accendi la torcia')
+    })
+
     it('initializes exactly once across Chat and Model Lab mounts', async () => {
         const { deps, store, request, settings } = makeDeps()
         store.set('anthropic', 'sk-ant')

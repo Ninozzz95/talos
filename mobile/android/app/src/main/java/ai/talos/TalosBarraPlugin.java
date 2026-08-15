@@ -72,6 +72,19 @@ public class TalosBarraPlugin extends Plugin {
         com.getcapacitor.JSObject esito = new com.getcapacitor.JSObject();
         esito.put("testo", ai.talos.agent.TalosAssistente.prendiIlTestoDiSchermo());
         esito.put("nodi", ai.talos.agent.TalosAssistente.quantiNodiVisti());
+        /*
+         * ⭐⭐⭐ E L'INDIRIZZO DELLA PAGINA — rilievo #4.
+         *
+         * Il testo dello schermo è quello VISIBILE: su una pagina lunga è il
+         * primo schermo e basta. L'indirizzo invece apre tutto: col link il
+         * modello può leggere l'articolo intero con `web_read` invece di
+         * rispondere sul frammento che si vede.
+         *
+         * ⛔ Lo consegna Chrome nell'`AssistContent`, non lo ricostruiamo noi
+         * dai pixel della barra degli indirizzi. Vuoto quando non c'è — in
+         * incognito Chrome non lo dà, di proposito.
+         */
+        esito.put("pagina", ai.talos.agent.TalosAssistente.indirizzoDellaPagina());
         call.resolve(esito);
     }
 

@@ -6,17 +6,17 @@ import {
     type TalosStatoRuoloAssistente,
 } from '@/lib/device/ruoloAssistente'
 import {
-    talosAccendiLaBolla,
-    talosLeggiLaBolla,
-    talosSpegniLaBolla,
-    type TalosStatoBolla,
-} from '@/lib/device/bolla'
-import {
     talosAccendiLaParola,
     talosLeggiLaParola,
     talosSpegniLaParola,
     type TalosStatoParola,
 } from '@/lib/device/parola'
+import {
+    talosLeggiScorciatoie,
+    talosPannelloDeiModiAperto,
+    talosPreset,
+    type TalosStatoScorciatoie,
+} from '@/lib/device/scorciatoie'
 import TalosConsensoAutonomia from '@/components/talos/permissions/TalosConsensoAutonomia.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { TALOS_TOOL_ACTIONS } from '@/lib/tools/permissionTypes'
@@ -80,6 +80,181 @@ const snapshot = ref<TalosShizukuSnapshot | null>(null)
  */
 const ruolo = ref<TalosStatoRuoloAssistente>({ held: false, canRequest: false })
 
+/**
+ * ⭐⭐⭐ COME SI CHIAMA TALOS — lo stato vero delle tre scorciatoie.
+ *
+ * ⛔ Non è un'impostazione nostra e non si salva: le due chiavi le scrive il
+ * sistema quando la persona sceglie, e le può cambiare senza passare da qui.
+ * Si rileggono a ogni ritorno in primo piano, come i permessi.
+ */
+const scorciatoie = ref<TalosStatoScorciatoie>({
+    volume: false,
+    bottone: false,
+    servizio: '',
+    chiavi: {},
+})
+
+/** I tre preset, calcolati dai fatti: il ruolo più ciò che dice il sistema. */
+const preset = computed(() => talosPreset(ruolo.value.held, scorciatoie.value))
+
+async function leggiScorciatoie(): Promise<void> {
+    scorciatoie.value = await talosLeggiScorciatoie()
+}
+
+/**
+ * ⛔ Apre la schermata di SISTEMA e basta: l'ultimo tocco lo dà la persona.
+ *
+ * Nessuna app può assegnarsi il tasto di accensione né mettersi da sola nella
+ * scorciatoia di accessibilità — e se anche potessimo, non lo faremmo: mettere
+ * TALOS su un tasto senza chiedere è esattamente ciò che rende un assistente
+ * qualcosa da cui difendersi.
+ */
+async function apriPreset(schermata: string): Promise<void> {
+    const { TalosDeviceBridge } = await import('@/lib/device/devicePlugin')
+    await TalosDeviceBridge.openSettingsScreen({ action: schermata, forThisApp: false })
+        .catch(() => undefined)
+}
+
+/**
+ * ⭐⭐⭐ UNA CATEGORIA SOLA: «Come lo chiami».
+ *
+ * Owner 2026-08-14, guardando la prima versione: «devono essere raggruppati in
+ * una unica categoria ed in modo coerente anche le altre, così non mi sembra
+ * molto bello lato UI».
+ *
+ * Aveva ragione, ed è un difetto di sostanza prima che di grafica. Prima c'erano
+ * **quattro riquadri** per una domanda sola — il ruolo, i preset (dentro un
+ * riquadro, altri riquadri), la voce, il pallino — con tre misure di titolo
+ * diverse. La persona che si chiede «come apro TALOS?» doveva leggere quattro
+ * schede per scoprire che parlano tutte della stessa cosa.
+ *
+ * ⇒ Una categoria, righe uguali, una grammatica: **titolo, stato a destra, una
+ * riga di spiegazione, e il comando solo se c'è qualcosa da fare**. È la stessa
+ * forma del pannello degli strumenti, che in questa app è già la voce con cui le
+ * schermate parlano.
+ *
+ * ⛔ E le due righe che dipendono dal ruolo NON ripetono il pulsante del ruolo:
+ * il comando sta una volta sola, sulla riga che lo governa. Tre pulsanti
+ * identici in colonna sono rumore, e insegnano a non leggerli.
+ */
+interface TalosRigaChiamata {
+    readonly id: string
+    readonly testid: string
+    /** `pronto` accende la riga; gli altri sono cose da fare, e lo dicono. */
+    readonly pronto: boolean
+    readonly stato: string
+    readonly titolo: string
+    readonly corpo: string
+    readonly comando?: {
+        readonly testid: string
+        readonly etichetta: string
+        readonly forte: boolean
+        readonly spento: boolean
+        readonly fai: () => void
+    }
+}
+
+/**
+ * ⛔ Il pannello dei modi di chiamare TALOS: chiuso, ma non muto.
+ *
+ * Owner 2026-08-15: «stanno diventando tante, voglio che li metti dentro un
+ * collapse». `null` vuol dire «non l'ha ancora toccato», e finché è così decide
+ * la situazione: chiuso se almeno un modo funziona, **aperto** se non ne
+ * funziona nessuno — perché lì il chiuso nasconderebbe un guasto invece di un
+ * dettaglio. Appena la persona tocca, la sua scelta vince.
+ */
+const chiamateToccato = ref<boolean | null>(null)
+const chiamateAperte = computed({
+    get: () => talosPannelloDeiModiAperto(
+        chiamateToccato.value,
+        chiamate.value.some((r) => r.pronto),
+    ),
+    set: (v: boolean) => { chiamateToccato.value = v },
+})
+
+/** Quante ne funzionano, da chiuso: l'unica cosa per cui il pannello esiste. */
+const sommarioChiamate = computed(() => t('privilege.presetSummary', {
+    ready: chiamate.value.filter((r) => r.pronto).length,
+    total: chiamate.value.length,
+}))
+
+const chiamate = computed<readonly TalosRigaChiamata[]>(() => {
+    const righe: TalosRigaChiamata[] = []
+    /*
+     * ⛔ IL RUOLO STA PER PRIMO, e non è impaginazione: due delle righe sotto
+     * dipendono da lui, e leggerle prima di sapere che manca il ruolo vuol dire
+     * leggerle due volte.
+     */
+    righe.push({
+        id: 'assistente',
+        testid: 'talos-ruolo-assistente',
+        pronto: ruolo.value.held,
+        stato: ruolo.value.held ? t('privilege.presetState.pronto') : t('privilege.presetState.da-mettere'),
+        titolo: t('privilege.assistantTitle'),
+        corpo: ruolo.value.held ? t('privilege.assistantHeld') : t('privilege.assistantBody'),
+        comando: ruolo.value.held
+            ? undefined
+            : {
+                testid: 'talos-ruolo-chiedi',
+                etichetta: faseRuolo.value === 'chiedo'
+                    ? t('privilege.assistantAsking')
+                    : faseRuolo.value === 'ponte'
+                        ? t('privilege.assistantBridging')
+                        : t('privilege.assistantAsk'),
+                forte: true,
+                spento: faseRuolo.value === 'chiedo' || faseRuolo.value === 'ponte',
+                fai: () => { void attivaAssistente() },
+            },
+    })
+    for (const voce of preset.value) {
+        righe.push({
+            id: voce.id,
+            testid: `talos-preset-${voce.id}`,
+            pronto: voce.stato === 'pronto',
+            stato: t(`privilege.presetState.${voce.stato}`),
+            titolo: t(`privilege.preset.${voce.id}.title`),
+            corpo: t(`privilege.preset.${voce.id}.body`),
+            /*
+             * ⛔ Solo la scorciatoia porta un comando suo. Le due che dipendono
+             * dal ruolo non lo ripetono: il loro comando è la prima riga.
+             */
+            comando: voce.stato === 'da-mettere'
+                ? {
+                    testid: `talos-preset-vai-${voce.id}`,
+                    etichetta: t('privilege.presetGoShortcut'),
+                    forte: false,
+                    spento: false,
+                    fai: () => { void apriPreset(voce.schermata) },
+                }
+                : undefined,
+        })
+    }
+    if (parola.value.available) {
+        righe.push({
+            id: 'parola',
+            testid: 'talos-parola',
+            pronto: parola.value.on,
+            stato: parola.value.on ? t('privilege.presetState.pronto') : t('privilege.presetState.da-mettere'),
+            titolo: t('privilege.wakeTitle'),
+            corpo: parola.value.on ? t('privilege.wakeOn') : t('privilege.wakeBody'),
+            comando: {
+                testid: 'talos-parola-interruttore',
+                etichetta: parola.value.on ? t('privilege.wakeOff') : t('privilege.wakeAsk'),
+                /*
+                 * ⛔ Il pulsante PIENO è uno solo in tutta la categoria, ed è
+                 * quello del ruolo: è l'unico passo che sblocca altre righe.
+                 * Voce e pallino sono interruttori — dare a tre righe lo stesso
+                 * peso vuol dire non dirne nessuna.
+                 */
+                forte: false,
+                spento: false,
+                fai: () => { void alternaLaParola() },
+            },
+        })
+    }
+    return righe
+})
+
 async function leggiRuolo(): Promise<void> {
     ruolo.value = await talosLeggiRuoloAssistente()
     /*
@@ -130,31 +305,18 @@ const faseRuolo = ref<TalosFaseRuolo>('fermo')
 let smettiDiAscoltare: (() => void) | null = null
 
 /**
- * ⭐ LA BOLLA — solo nella build di sviluppo, e la scheda lo scopre CHIEDENDO.
- *
- * ⛔ Nessun `if (sviluppo)` qui: il pacchetto web è lo stesso per le due
- * varianti. È il plugin nativo a non esistere in produzione, e `available`
- * riporta quella risposta. L'assenza è la prova.
- */
-const bolla = ref<TalosStatoBolla>({ available: false, granted: false, on: false })
-/**
  * ⭐⭐ «HEY TALOS» — sta QUI, e non fra le impostazioni della voce.
  *
  * Owner 2026-08-11: «collega le impostazioni di hey TALOS al controllo
  * telefono». Ed è il posto giusto: questa pagina raccoglie le cose che TALOS
  * può fare **sul dispositivo** quando non lo stai guardando — il ruolo di
- * assistente, il pallino, il ponte. Una parola che apre l'assistente da sola
+ * assistente, la parola, il ponte. Una parola che apre l'assistente da sola
  * appartiene a quella famiglia, non ai cursori di velocità e tono.
  */
 const parola = ref<TalosStatoParola>({ available: false, on: false, permesso: 'prompt' })
 
-async function leggiLaBolla(): Promise<void> {
-    bolla.value = await talosLeggiLaBolla()
+async function leggiLaParola(): Promise<void> {
     parola.value = await talosLeggiLaParola()
-}
-
-async function alternaLaBolla(): Promise<void> {
-    bolla.value = bolla.value.on ? await talosSpegniLaBolla() : await talosAccendiLaBolla()
 }
 
 /**
@@ -220,10 +382,16 @@ async function ascoltaIlRitorno(): Promise<void> {
         const iscrizione = await App.addListener('appStateChange', ({ isActive }) => {
             if (!isActive) return
             void leggiRuolo()
-            // ⛔ Anche la bolla: il permesso di finestra flottante si concede in
+            /*
+             * ⛔ E le scorciatoie: la persona ci mette TALOS in una schermata
+             * di sistema che non torna nessun esito, quindi il solo momento in
+             * cui possiamo saperlo è il rientro.
+             */
+            void leggiScorciatoie()
+            // ⛔ Anche «hey TALOS»: il permesso del microfono si concede in
             // una pagina di sistema che non torna nessun esito, quindi l'unico
             // momento in cui possiamo sapere com'è andata è il rientro.
-            void leggiLaBolla()
+            void leggiLaParola()
         })
         smettiDiAscoltare = () => { void iscrizione.remove() }
     } catch {
@@ -520,7 +688,8 @@ async function apriFlottante(): Promise<void> {
 
 onMounted(() => {
     void leggiRuolo()
-    void leggiLaBolla()
+    void leggiScorciatoie()
+    void leggiLaParola()
     void ascoltaIlRitorno()
     void rileggi()
     void leggiPonte()
@@ -697,153 +866,126 @@ onUnmounted(() => {
         </p>
 
         <!--
-            ⭐⭐ IL RUOLO DI ASSISTENTE — sta PER PRIMO, e non è un vezzo di
-            impaginazione: senza, la barra non si apre affatto, e tutto quello
-            che c'è sotto (il ponte, i permessi) serve a funzioni che la persona
-            non vedrà mai partire.
+            ⭐⭐⭐ COME LO CHIAMI — una categoria sola, righe uguali.
 
-            Owner 2026-08-11: «la funzione assistenza è collegata all'app?».
-            Non lo era. Adesso sì, con un tocco: `RoleManager` mostra la finestra
-            di sistema, e la decisione resta al sistema e alla persona — noi non
-            possiamo assegnarci niente, ed è giusto così.
+            Owner 2026-08-14: «devono essere raggruppati in una unica categoria
+            ed in modo coerente anche le altre».
+
+            La grammatica è quella del pannello degli strumenti, che in questa
+            app è già la voce con cui le schermate parlano: un riquadro, un
+            titolo, e righe separate da una riga sottile — titolo a sinistra,
+            STATO a destra, una spiegazione sotto, e il comando solo dove c'è
+            qualcosa da fare.
+
+            ⛔ Niente riquadri dentro riquadri: la prima versione ne aveva tre
+            annidati, ed è la cosa che rendeva la pagina un mucchio invece di un
+            elenco.
         -->
         <section
-            data-testid="talos-ruolo-assistente"
-            :data-ruolo="ruolo.held ? 'si' : 'no'"
-            class="flex flex-col gap-3 rounded-[var(--talos-radius-card)] border p-4"
-            :class="ruolo.held
-                ? 'border-[var(--talos-accent)]/40 bg-[var(--talos-accent)]/5'
-                : 'border-[var(--talos-border)]'"
+            data-testid="talos-chiamate"
+            class="flex flex-col rounded-[var(--talos-radius-card)] border border-[var(--talos-border)]"
         >
-            <h2 class="flex items-start gap-2 text-sm font-semibold text-[var(--talos-text)]">
-                <Check
-                    v-if="ruolo.held"
-                    class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]"
-                    aria-hidden="true"
-                />
-                <Smartphone v-else class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                <span>{{ t('privilege.assistantTitle') }}</span>
-            </h2>
-
-            <p class="text-xs leading-5 text-[var(--talos-muted)]">
-                {{ ruolo.held ? t('privilege.assistantHeld') : t('privilege.assistantBody') }}
-            </p>
-
             <!--
-                ⛔ Il pulsante compare SOLO se il sistema ha una finestra da
-                mostrare. Dove non ce l'ha (`canRequest` falso) si dice dove
-                andare a mano, invece di offrire un comando che non fa niente.
-            -->
-            <!--
-                ⭐ UN PULSANTE SOLO. Prova la finestra di sistema e, se quella
-                ROM non la mostra (ColorOS cinese: si chiude da sola), passa al
-                ponte da solo — senza rigirare alla persona un problema nostro.
+                ⛔⛔ SI CHIUDE, ma NON diventa muta.
+
+                Owner 2026-08-15: «stanno diventando tante, voglio che li metti
+                dentro un collapse». Sono sei modi di chiamare TALOS, e sei
+                paragrafi aperti sono un muro anche quando ognuno è breve.
+
+                ⛔ Ma un pannello chiuso che dice solo «Come lo chiami» toglie
+                l'unica informazione per cui esiste: QUANTI funzionano. Il
+                sommario resta visibile da chiuso — è lo stesso motivo per cui
+                lo stato di ogni riga è una parola e non un pallino.
+
+                ⛔ E se non ne funziona NESSUNO si apre da solo: lì il chiuso
+                nasconderebbe un guasto, non un dettaglio.
             -->
             <button
-                v-if="!ruolo.held"
                 type="button"
-                :disabled="faseRuolo === 'chiedo' || faseRuolo === 'ponte'"
-                data-testid="talos-ruolo-chiedi"
-                :data-fase="faseRuolo"
-                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-4 text-sm font-semibold text-[var(--talos-accent-contrast)] disabled:opacity-60"
-                @click="void attivaAssistente()"
+                data-testid="talos-chiamate-testa"
+                :aria-expanded="chiamateAperte"
+                aria-controls="talos-chiamate-corpo"
+                class="flex w-full items-start gap-3 p-4 text-left"
+                @click="chiamateAperte = !chiamateAperte"
             >
-                {{ faseRuolo === 'chiedo'
-                    ? t('privilege.assistantAsking')
-                    : faseRuolo === 'ponte'
-                        ? t('privilege.assistantBridging')
-                        : t('privilege.assistantAsk') }}
-                <ChevronRight v-if="faseRuolo === 'fermo' || faseRuolo === 'niente'" class="size-4" aria-hidden="true" />
+                <Smartphone class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                <span class="flex min-w-0 flex-1 flex-col gap-1">
+                    <span class="text-sm font-semibold text-[var(--talos-text)]">
+                        {{ t('privilege.presetTitle') }}
+                    </span>
+                    <span
+                        class="text-xs leading-5 text-[var(--talos-muted)]"
+                        data-testid="talos-chiamate-sommario"
+                    >{{ chiamateAperte ? t('privilege.presetIntro') : sommarioChiamate }}</span>
+                </span>
+                <ChevronRight
+                    class="mt-0.5 size-4 shrink-0 text-[var(--talos-muted)] transition-transform"
+                    :class="chiamateAperte ? 'rotate-90' : ''"
+                    aria-hidden="true"
+                />
             </button>
 
+            <div
+                v-for="riga in (chiamateAperte ? chiamate : [])"
+                id="talos-chiamate-corpo"
+                :key="riga.id"
+                :data-testid="riga.testid"
+                :data-pronto="riga.pronto ? 'si' : 'no'"
+                class="flex flex-col gap-2 border-t border-[var(--talos-border)] p-4"
+            >
+                <div class="flex items-start justify-between gap-3">
+                    <h3 class="flex items-start gap-2 text-sm font-medium text-[var(--talos-text)]">
+                        <!-- ⛔ La spunta compare SOLO dove è vero: è il segno che
+                             fa scorrere l'occhio a ciò che manca. -->
+                        <Check
+                            v-if="riga.pronto"
+                            class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]"
+                            aria-hidden="true"
+                        />
+                        <span>{{ riga.titolo }}</span>
+                    </h3>
+                    <!--
+                        ⛔ Lo stato è una PAROLA, non un pallino colorato: «da
+                        mettere» e «manca il ruolo» portano a due mosse diverse,
+                        e un colore solo le renderebbe la stessa cosa.
+                    -->
+                    <span
+                        class="shrink-0 font-mono text-2xs uppercase tracking-wider"
+                        :class="riga.pronto ? 'text-[var(--talos-accent)]' : 'text-[var(--talos-muted)]'"
+                    >{{ riga.stato }}</span>
+                </div>
+                <p class="text-xs leading-5 text-[var(--talos-muted)]">
+                    {{ riga.corpo }}
+                </p>
+                <button
+                    v-if="riga.comando"
+                    type="button"
+                    :disabled="riga.comando.spento"
+                    :data-testid="riga.comando.testid"
+                    class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] px-4 text-xs font-semibold disabled:opacity-60"
+                    :class="riga.comando.forte
+                        ? 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast)]'
+                        : 'border border-[var(--talos-border)] text-[var(--talos-foreground)]'"
+                    @click="riga.comando.fai()"
+                >
+                    {{ riga.comando.etichetta }}
+                    <ChevronRight v-if="!riga.comando.spento" class="size-4" aria-hidden="true" />
+                </button>
+            </div>
+
             <!--
-                ⛔ Il messaggio compare SOLO quando entrambe le strade hanno
-                fallito, e dice dove andare a mano: un pulsante che non ha
-                funzionato senza una via d'uscita è un vicolo cieco.
+                ⛔ Il viaggio a mano compare SOLO quando entrambe le strade del
+                ruolo hanno fallito: un pulsante che non ha funzionato senza una
+                via d'uscita è un vicolo cieco. E sta in fondo alla categoria,
+                perché riguarda la prima riga ma si legge dopo averle provate.
             -->
             <p
                 v-if="!ruolo.held && faseRuolo === 'niente'"
-                class="text-xs leading-5 text-[var(--talos-muted)]"
+                class="border-t border-[var(--talos-border)] p-4 text-xs leading-5 text-[var(--talos-muted)]"
                 data-testid="talos-ruolo-a-mano"
             >
                 {{ t('privilege.assistantManual') }}
             </p>
-        </section>
-
-
-        <!--
-            ⭐⭐ «HEY TALOS» — la porta che su ColorOS non esiste in nessun altro modo.
-
-            ⛔ La riga sotto il titolo dice che il microfono resta acceso, e lo dice
-            PRIMA che uno tocchi l'interruttore. È l'unica funzione dell'app con
-            questa proprietà, e scoprirlo dopo sarebbe tradire chi si fida.
-        -->
-        <section
-            v-if="parola.available"
-            data-testid="talos-parola"
-            :data-acceso="parola.on ? 'si' : 'no'"
-            class="flex flex-col gap-3 rounded-[var(--talos-radius-card)] border p-4"
-            :class="parola.on
-                ? 'border-[var(--talos-accent)]/40 bg-[var(--talos-accent)]/5'
-                : 'border-[var(--talos-border)]'"
-        >
-            <h2 class="flex items-center gap-2 text-base font-semibold text-[var(--talos-foreground)]">
-                <Check v-if="parola.on" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                <Smartphone v-else class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                {{ t('privilege.wakeTitle') }}
-            </h2>
-            <p class="text-sm leading-6 text-[var(--talos-muted)]">
-                {{ parola.on ? t('privilege.wakeOn') : t('privilege.wakeBody') }}
-            </p>
-            <button
-                type="button"
-                data-testid="talos-parola-interruttore"
-                :data-acceso="parola.on"
-                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] px-4 text-sm font-semibold"
-                :class="parola.on
-                    ? 'border border-[var(--talos-border)] text-[var(--talos-foreground)]'
-                    : 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast)]'"
-                @click="void alternaLaParola()"
-            >
-                {{ parola.on ? t('privilege.wakeOff') : t('privilege.wakeAsk') }}
-                <ChevronRight v-if="!parola.on" class="size-4" aria-hidden="true" />
-            </button>
-        </section>
-        <!--
-            ⭐ LA BOLLA — c'è solo dove il plugin nativo esiste, cioè nella build
-            di sviluppo. In produzione `available` è falso e questa sezione non
-            viene disegnata affatto: non è nascosta, non esiste.
-        -->
-        <section
-            v-if="bolla.available"
-            data-testid="talos-bolla"
-            :data-acceso="bolla.on ? 'si' : 'no'"
-            class="flex flex-col gap-3 rounded-[var(--talos-radius-card)] border p-4"
-            :class="bolla.on
-                ? 'border-[var(--talos-accent)]/40 bg-[var(--talos-accent)]/5'
-                : 'border-[var(--talos-border)]'"
-        >
-            <h2 class="flex items-center gap-2 text-base font-semibold text-[var(--talos-foreground)]">
-                <Check v-if="bolla.on" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                <Smartphone v-else class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                {{ t('privilege.bubbleTitle') }}
-            </h2>
-            <p class="text-sm leading-6 text-[var(--talos-muted)]">
-                {{ bolla.on ? t('privilege.bubbleOn') : t('privilege.bubbleBody') }}
-            </p>
-            <button
-                type="button"
-                data-testid="talos-bolla-interruttore"
-                :data-acceso="bolla.on"
-                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] px-4 text-sm font-semibold"
-                :class="bolla.on
-                    ? 'border border-[var(--talos-border)] text-[var(--talos-foreground)]'
-                    : 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast)]'"
-                @click="void alternaLaBolla()"
-            >
-                {{ bolla.on ? t('privilege.bubbleOff') : t('privilege.bubbleAsk') }}
-                <ChevronRight v-if="!bolla.on" class="size-4" aria-hidden="true" />
-            </button>
         </section>
 
         <p v-if="caricando" role="status" class="py-6 text-sm text-[var(--talos-muted)]">
@@ -911,7 +1053,7 @@ onUnmounted(() => {
                 type="button"
                 data-testid="talos-ponte-float"
                 :data-needs-permission="ponte.floatNeedsPermission ? 'yes' : 'no'"
-                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-4 text-sm font-semibold text-[var(--talos-accent-contrast)]"
+                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-4 text-xs font-semibold text-[var(--talos-accent-contrast)]"
                 @click="void apriFlottante()"
             >
                 {{ t(ponte.floatKey) }}
@@ -953,7 +1095,7 @@ onUnmounted(() => {
                 type="button"
                 data-testid="talos-ponte-action"
                 :disabled="ponteInCorso || (ponte.wantsCode && !codiceValido)"
-                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-4 text-sm font-semibold text-[var(--talos-accent-contrast)] disabled:opacity-40"
+                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-4 text-xs font-semibold text-[var(--talos-accent-contrast)] disabled:opacity-40"
                 @click="void (ponte.wantsCode ? accoppia() : ricollega())"
             >
                 {{ ponteInCorso ? `${t('privilege.refresh')}…` : t(ponte.actionKey) }}

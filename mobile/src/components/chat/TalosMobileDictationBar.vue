@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Check, Square, X } from '@lucide/vue'
 import TalosMicWaveform from '@/components/brand/TalosMicWaveform.vue'
+import TalosSciaParole from '@/components/brand/TalosSciaParole.vue'
 
 /**
  * ⭐ LA BARRA DELLA DETTATURA — annulla, ferma, invia, e le parole mentre le dici.
@@ -34,12 +35,18 @@ const emit = defineEmits<{ annulla: []; ferma: []; invia: [] }>()
                  al rumore, non alle parole. Adesso il testo si vede mentre si
                  forma, ed e' anche l'unico modo di accorgersi subito se il
                  riconoscitore sta capendo un'altra cosa. -->
-            <p
-                v-if="props.trascrizione"
+            <!--
+                ⛔ 2026-08-14: qui c'era un `<p>` che andava A CAPO e si
+                scorreva in verticale, mentre l'assistente mostrava le stesse
+                parole su UNA riga che scorre. Owner: «non ha senso usare
+                componenti diversi». Adesso è lo stesso componente per tutte e
+                due le superfici — e a capo la barra cresceva verso l'alto,
+                spingendo i comandi che la persona sta guardando.
+            -->
+            <TalosSciaParole
+                :testo="props.trascrizione"
                 data-testid="talos-dictation-transcript"
-                class="max-h-16 overflow-y-auto px-1 text-sm leading-5 text-[var(--talos-muted)]"
-                aria-live="polite"
-            >{{ props.trascrizione }}</p>
+            />
             <div class="flex items-center gap-3">
             <!-- ✕ BUTTA VIA: rimette il campo com'era prima di parlare. Se si
                  limitasse a fermare sarebbe un doppione del ✓, cioe' un comando

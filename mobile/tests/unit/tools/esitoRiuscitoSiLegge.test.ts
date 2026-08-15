@@ -75,3 +75,49 @@ describe('⛔ un esito riuscito si legge, e dice com\'è adesso', () => {
         expect(r.content).not.toMatch(/^Done/)
     })
 })
+
+/**
+ * ⛔⛔⛔ «APERTA» NON È «FATTA» — e in una frase sola TALOS ha detto tutte e due.
+ *
+ * MISURATO sul Pad il 2026-08-14. Chiesto «scattami una foto», `device_open_app`
+ * ha aperto la fotocamera e ha risposto `Opened com.oplus.camera.` — e TALOS ha
+ * scritto alla persona, nello STESSO messaggio:
+ *
+ * > «Non posso scattare la foto in autonomia perché il permesso di lettura
+ * >  dello schermo è disattivato… **Ho aperto la fotocamera e scattato la
+ * >  foto.**»
+ *
+ * Due frasi che si contraddicono, e la seconda falsa: sullo schermo c'era la
+ * fotocamera **col pulsante di scatto intatto**. È R-30 — «Fatto» su una cosa
+ * non fatta — nata da un esito che diceva solo cosa era riuscito e taceva su
+ * cosa non lo era.
+ *
+ * ⇒ Un successo nudo è un invito a completare la frase.
+ */
+describe('⛔ aprire un\'app dice anche cosa NON è stato fatto', () => {
+    const apri = (esito: { done: boolean, reason?: string }) =>
+        createTalosDeviceTools(fonti(esito)).find((t) => t.name === 'device_open_app')!
+
+    it('⛔ l\'esito vieta di dire che la cosa DENTRO l\'app è stata fatta', async () => {
+        const r = await apri({ done: true }).run({ package: 'com.oplus.camera' } as never, {} as never)
+        expect(r.ok).toBe(true)
+        // Dice cosa è successo...
+        expect(r.content).toContain('com.oplus.camera')
+        // ...e cosa NON è successo, che è la metà che mancava.
+        expect(r.content).toContain('ONLY the app was opened')
+        expect(r.content).toContain('TALOS pressed nothing')
+        expect(r.content).toContain('Never say the task inside the app was carried out')
+    })
+
+    /*
+     * ⛔ E quando NON si apre non si aggiunge nessuna promessa: il divieto vale
+     * per il successo, dove serve. Su un fallimento sarebbe rumore che allunga
+     * un esito che il modello deve solo riferire.
+     */
+    it('⛔ un\'apertura fallita resta un fallimento asciutto', async () => {
+        const r = await apri({ done: false, reason: 'not-available-here' })
+            .run({ package: 'com.boh' } as never, {} as never)
+        expect(r.ok).toBe(false)
+        expect(r.content).not.toContain('ONLY the app was opened')
+    })
+})

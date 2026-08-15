@@ -79,6 +79,8 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     // Una vibrazione non si disfa — ed e' un fatto sul mondo, non sui dati.
     device_vibrate: { risk: 'R1', reversibility: 'irreversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     device_volume: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    calendar_write: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    calendar_read: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: true, canTransmit: false },
     device_alarm: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     device_open_app: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     device_open_settings: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
@@ -98,6 +100,22 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     // lo conosciamo — disfare non e' rimettere le cose com'erano.
     device_wallpaper: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     device_keep_awake: { risk: 'R1', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    /*
+     * ⛔ `readsUntrustedContent: false` e NON è una svista: da qui escono
+     * NUMERI, non testo scritto da estranei. Il testo di una email — quello sì
+     * ostile — TALOS lo vede dalle notifiche, e quella riga è già marcata.
+     */
+    device_unread_mail: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    /*
+     * ⛔ `readsPrivateData: true` e `irreversible`, e nessuna delle due è
+     * pignoleria. Legge ciò che c'è sullo schermo in quell'istante — la chat di
+     * qualcun altro, un conto, un documento — e il file finisce in galleria: uno
+     * screenshot fatto non si può disfare. ⛔ `canTransmit: false` è vero e va
+     * tenuto vero: TALOS **non riceve l'immagine**, la fa fare al sistema. Se un
+     * giorno passasse da `takeScreenshot()`, che il bitmap ce lo consegna, questa
+     * riga diventerebbe falsa nello stesso commit.
+     */
+    device_screenshot: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     // ⛔ Spegnere il Wi-Fi mentre qualcosa scarica e' reversibile come
     // interruttore e non come conseguenza: R2, e la scheda lo dice.
     device_wifi: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },

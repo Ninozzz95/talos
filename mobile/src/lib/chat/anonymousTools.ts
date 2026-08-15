@@ -1,4 +1,3 @@
-import { TALOS_AGENT_TOOL_CONTROLS } from '@/lib/tools/toolControlCatalog'
 import type { TalosAgentToolEnabled } from '@/lib/tools/toolControls'
 
 /**
@@ -27,15 +26,46 @@ import type { TalosAgentToolEnabled } from '@/lib/tools/toolControls'
  * refuses to volunteer your Library but hands it over the moment the model asks
  * is not anonymous; it just requires one more sentence. This closes the asking.
  */
-const REVEALING_GROUPS: ReadonlySet<string> = new Set(['library', 'personal'])
-const KEPT_ANYWAY: ReadonlySet<string> = new Set(['time_now'])
+/**
+ * ⛔ Le due REGOLE restano qui anche se l'elenco è scritto: sono ciò che il
+ * cancello usa per ricalcolarlo dal catalogo. Senza, la lista sarebbe un fatto
+ * senza una ragione — e fra un anno nessuno saprebbe più perché `time_now` è
+ * dentro `personal` ma non nasconde niente.
+ */
+export const TALOS_GRUPPI_CHE_RIVELANO: ReadonlySet<string> = new Set(['library', 'personal'])
+export const TALOS_TENUTI_COMUNQUE: ReadonlySet<string> = new Set(['time_now'])
 
-/** The tool ids a temporary chat must not be offered. */
-export const TALOS_TOOLS_HIDDEN_WHEN_ANONYMOUS: readonly string[] = Object.freeze(
-    TALOS_AGENT_TOOL_CONTROLS
-        .filter((tool) => REVEALING_GROUPS.has(tool.group) && !KEPT_ANYWAY.has(tool.id))
-        .map((tool) => tool.id),
-)
+/**
+ * The tool ids a temporary chat must not be offered.
+ *
+ * ⛔⛔ SCRITTO, e non derivato dal catalogo — ed è l'unico posto del progetto
+ * dove si fa, con una ragione MISURATA.
+ *
+ * Derivarlo qui costava **8,8 KB** (pre-minify) al grafo d'avvio: questo modulo
+ * è l'unico arco che tirava dentro `toolControlCatalog`, e il controller è
+ * l'unico che importa questo modulo. Cioè ogni persona che apre TALOS pagava il
+ * catalogo intero delle impostazioni per una funzione che nella chat normale
+ * **rende i suoi argomenti immutati** (`if (!anonymous) return tools`).
+ *
+ * ⛔ E una lista scritta a mano è esattamente ciò che questo progetto vieta,
+ * perché invecchia in silenzio. Quindi non è sola: `anonymousTools.test.ts` la
+ * **ricalcola dal catalogo** e pretende che coincida, voce per voce. È lo stesso
+ * patto delle impronte dei contratti — un valore fissato vale solo se un
+ * cancello lo rifà. Aggiungere un tool a `library` o `personal` fa diventare
+ * rosso quel test, e la riga si aggiorna lì.
+ */
+export const TALOS_TOOLS_HIDDEN_WHEN_ANONYMOUS: readonly string[] = Object.freeze([
+    'library_list', 'library_search', 'library_read', 'library_file_origin',
+    'notes_list', 'tasks_list', 'memory_search',
+    'research_list', 'research_start', 'research_read', 'research_rename',
+    'research_pause', 'research_resume', 'research_cancel', 'research_delete',
+    'memory_write', 'memory_update', 'memory_delete',
+    'notes_create', 'notes_update', 'notes_delete',
+    'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete',
+    'library_export', 'library_rename', 'library_delete',
+    'library_context_policy_update',
+    'calendar_read', 'calendar_write',
+])
 
 /**
  * The tool switches as a temporary chat sees them.

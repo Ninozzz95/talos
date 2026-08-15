@@ -8,7 +8,12 @@ import {
     learnTalosThinkingMode,
     talosThinkingModeFor,
 } from '@/lib/chat/anthropicThinkingMemory'
-import { talosToolsForAnthropic } from '@/lib/tools/registry'
+import { talosAttrezziAnthropicAGradi, talosToolsForAnthropic } from '@/lib/tools/registry'
+import {
+    talosConvieneAprireAGradi,
+    talosPesoDegliAttrezzi,
+    talosVaDifferito,
+} from '@/lib/tools/aperturaProgressiva'
 import { createAnthropicToolCallAccumulator, parseAnthropicToolCalls } from '@/lib/tools/wire'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
 import type { TalosMobileProviderAdapter } from '@/lib/chat/providerContracts'
@@ -18,6 +23,56 @@ import {
     requireProviderApiKey,
 } from '@/lib/chat/providerErrors'
 import { talosNumericUsage } from '@/lib/chat/providers/usage'
+
+/**
+ * ⭐⭐⭐ Quanti schemi entrano nel prefisso — la decisione, in un posto solo.
+ *
+ * Sotto le soglie della documentazione (10 attrezzi, o 10k token di
+ * definizioni) si spedisce la forma di sempre: con pochi attrezzi la ricerca
+ * costerebbe più di quel che risparmia, e la documentazione lo dice
+ * esplicitamente — *«standard tool calling è la scelta migliore quando hai meno
+ * di 10 tool»*.
+ *
+ * ⛔ La soglia si **misura sugli schemi veri**, non si assume: è la stessa
+ * regola per cui il peso degli schemi ha un test dedicato.
+ */
+/**
+ * ⛔⛔ OGGI È SPENTO, e la riga da cambiare è UNA — questa.
+ *
+ * ## Cosa manca, esattamente
+ *
+ * La ricerca lato server funziona al primo giro: torcia accesa alle 00:20:38
+ * con Claude Haiku 4.5, letta in `dumpsys`. Al giro DOPO il provider ha
+ * risposto `PROVIDER_CHAT_FAILED`.
+ *
+ * La documentazione lo dice alla voce «continuing the conversation»: la
+ * risposta va rimandata indietro **immutata, compresi i blocchi
+ * `server_tool_use` e `tool_search_tool_result`**. La nostra storia si
+ * ricostruisce con testo e `tool_use` soltanto — quei blocchi non esistono nel
+ * nostro modello di messaggio, quindi al secondo giro spediamo una
+ * conversazione malformata.
+ *
+ * ⇒ Finché non sappiamo conservarli, Anthropic riceve gli schemi interi come
+ * ha sempre fatto. **Meglio un prefisso grande che una risposta che non
+ * arriva** — ed è ciò che l'owner ha visto due volte stanotte.
+ *
+ * ⛔ Il codice e i test dell'apertura a gradi NON si cancellano: sono giusti e
+ * misurati (63 attrezzi → 4 nel prefisso, −96%). Quando la storia saprà
+ * portarsi dietro quei due blocchi, qui si rimette `talosConvieneAprireAGradi`
+ * e il resto è già al suo posto.
+ */
+const APERTURA_A_GRADI_ANTHROPIC = false
+
+function attrezziDaSpedire(tools: NonNullable<Parameters<typeof talosToolsForAnthropic>[0]>): unknown[] {
+    if (!APERTURA_A_GRADI_ANTHROPIC) return talosToolsForAnthropic(tools)
+    const peso = talosPesoDegliAttrezzi(
+        tools,
+        (tool) => (talosToolsForAnthropic([tool])[0] as { input_schema?: unknown }).input_schema,
+    )
+    return talosConvieneAprireAGradi(tools, peso)
+        ? talosAttrezziAnthropicAGradi(tools, talosVaDifferito)
+        : talosToolsForAnthropic(tools)
+}
 
 /**
  * The provider's own words out of an error body, and nothing else.
@@ -162,7 +217,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
                 thinkingMode,
                 // Il tetto che il modello dichiara, non uno scelto da noi.
                 maxTokens: input.model.maxOutputTokens ?? undefined,
-                ...(input.tools?.length ? { tools: talosToolsForAnthropic(input.tools) } : {}),
+                ...(input.tools?.length ? { tools: attrezziDaSpedire(input.tools) } : {}),
             })
             return transport.request({
                 method: 'POST',
@@ -191,7 +246,12 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
         const toolCalls = parseAnthropicToolCalls(parsed.data.content)
         // A turn that only requests tools carries no text — refusing it as
         // malformed would break the loop before it began.
-        if (!text && toolCalls.length === 0) throw malformedProviderResponse('anthropic', 'complete', { received: response.data, note: 'no text and no tool calls' })
+        //
+        // ⛔ E dopo un RISULTATO di tool il silenzio è legittimo: Claude parla
+        // insieme alla chiamata, quindi al giro finale non ha più niente da
+        // dire. Vedi il commento lungo sul ramo in streaming, che è dove il
+        // difetto è stato misurato.
+        if (!text && toolCalls.length === 0 && input.turns[input.turns.length - 1]?.role !== 'tool') throw malformedProviderResponse('anthropic', 'complete', { received: response.data, note: 'no text and no tool calls' })
         return {
             text,
             model: parsed.data.model ?? input.model.id,
@@ -222,7 +282,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             thinkingMode,
             // Il tetto che il modello dichiara, non uno scelto da noi.
             maxTokens: input.model.maxOutputTokens ?? undefined,
-            ...(input.tools?.length ? { tools: talosToolsForAnthropic(input.tools) } : {}),
+            ...(input.tools?.length ? { tools: attrezziDaSpedire(input.tools) } : {}),
         })
         const toolCalls = createAnthropicToolCallAccumulator()
         /**
@@ -295,7 +355,36 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
         }
         const { stream, toolCalls, usage: streamedUsage } = result
         const calls = toolCalls.calls()
-        if (!stream.text && calls.length === 0) throw malformedProviderResponse('anthropic', 'complete', { received: { text: stream.text, calls: calls.length }, note: 'stream ended with no text and no tool calls' })
+        /*
+         * ⛔⛔⛔ DOPO UN RISULTATO DI TOOL, IL SILENZIO È LEGITTIMO — e trattarlo
+         * come guasto ha rotto ogni conversazione con Claude.
+         *
+         * ## Misurato sul Pad il 2026-08-14
+         *
+         * «spegni la torcia» → la torcia si spegneva davvero (08:26:23 in
+         * `dumpsys`), compariva «Torcia spenta.», e **subito dopo**
+         * `PROVIDER_CHAT_FAILED`. Ogni volta, su ogni chat, con ogni modello
+         * Anthropic.
+         *
+         * La causa è una differenza fra provider che avevo già visto e non
+         * avevo collegato: **Claude parla INSIEME alla chiamata**, Gemini tace.
+         * Quindi al giro finale — quello che il ciclo fa dopo aver consegnato
+         * il risultato — Claude non ha più niente da dire e chiude senza testo
+         * e senza chiamate. Noi lo dichiaravamo malformato.
+         *
+         * ⇒ È la stessa differenza che produceva il testo doppio: una risposta
+         * vuota **non è un guasto se il modello ha già parlato**.
+         *
+         * ## ⛔ E la guardia NON si toglie
+         *
+         * Serve, e serve dove è nata: al PRIMO giro una risposta senza testo e
+         * senza chiamate è davvero un guasto — il modello non ha detto niente e
+         * non ha chiesto niente, e senza questa riga la persona vedrebbe una
+         * bolla vuota. Si restringe al caso in cui non stiamo rispondendo a un
+         * tool, che è esattamente il caso che voleva prendere.
+         */
+        const dopoUnTool = input.turns[input.turns.length - 1]?.role === 'tool'
+        if (!stream.text && calls.length === 0 && !dopoUnTool) throw malformedProviderResponse('anthropic', 'complete', { received: { text: stream.text, calls: calls.length }, note: 'stream ended with no text and no tool calls' })
         return {
             text: stream.text,
             model: input.model.id,

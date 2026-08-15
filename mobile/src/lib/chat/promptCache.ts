@@ -39,9 +39,48 @@ const BREAKPOINT = { type: 'ephemeral' as const }
  * The last tool carries the breakpoint: "all tools defined before and including
  * that tool are cached as a single prefix". This is the biggest single win here
  * — the schemas are 87% of what repeats.
+ *
+ * ⛔⛔ E l'ULTIMO NON DEV'ESSERE MAI DIFFERITO — un 400 VISTO sul Pad.
+ *
+ * 2026-08-13 23:52, primo messaggio con Claude Haiku 4.5 dopo aver acceso
+ * l'apertura a gradi: `PROVIDER_HTTP_400 — «Tool 'generate_image' cannot have
+ * both defer_loading=true and cache_control set»`. Cioè **nessuna risposta**,
+ * su ogni messaggio, per chiunque usi Anthropic.
+ *
+ * ⇒ La cura NON sta qui: `talosAttrezziAnthropicAGradi` emette i differiti
+ * PRIMA e i sempre-in-vista in fondo, così l'ultimo è per costruzione non
+ * differito e questa funzione resta la riga di prima. Cercare il non-differito
+ * qui costava 62 byte al grafo d'avvio, che ha un tetto suo.
+ *
+ * ⛔ L'invariante è custodito da `aperturaProgressiva.test.ts`, che attraversa
+ * ENTRAMBE le funzioni: guardarle separate è come il difetto è passato.
  */
 export function withTalosAnthropicToolCache(tools: readonly unknown[]): unknown[] {
     if (tools.length === 0) return []
+    /*
+     * ⛔⛔ IL TAGLIO VA SULL'ULTIMO NON DIFFERITO — e questo è costato un 400
+     * VISTO SUL DISPOSITIVO, non dedotto.
+     *
+     * Pad, 2026-08-13 23:52, primo messaggio con Claude Haiku 4.5 dopo aver
+     * acceso l'apertura a gradi:
+     *
+     *     PROVIDER_HTTP_400 — «Tool 'generate_image' cannot have both
+     *     defer_loading=true and cache_control set. Tools with defer_loading
+     *     cannot use prompt caching.»
+     *
+     * Cioè: **nessuna risposta**, su ogni messaggio, per chiunque usi Anthropic.
+     * La riga di prima marcava l'ULTIMO attrezzo della lista, e con l'apertura a
+     * gradi l'ultimo è quasi sempre differito.
+     *
+     * ⛔ E non si perde niente: la documentazione dice che i differiti sono
+     * **tolti dal prefisso prima che la chiave di cache venga calcolata**. Il
+     * taglio sull'ultimo non differito copre quindi esattamente ciò che nel
+     * prefisso c'è davvero.
+     *
+     * ⛔ Se fossero tutti differiti non si marca niente: meglio nessuna cache di
+     * nessuna risposta. (La guardia in `talosAttrezziAnthropicAGradi` fa sì che
+     * quel caso non nasca, ma qui non si dà per scontato ciò che decide altrove.)
+     */
     return tools.map((tool, index) => (
         index === tools.length - 1 && tool !== null && typeof tool === 'object'
             ? { ...tool as Record<string, unknown>, cache_control: BREAKPOINT }

@@ -123,7 +123,158 @@ function byte(valore: unknown): number {
  *
  * ⇒ 74 byte per non indovinare su una cosa che non si annulla.
  */
-const TETTO_BYTE = 42_400
+/*
+ * ⛔⛔ 42.400 → 42.500, il 2026-08-13 — e questa volta il tetto NON è più il
+ * vincolo che dice di essere. Va letto insieme al test del PREFISSO, in fondo.
+ *
+ * ## Cos'ha chiesto l'owner
+ *
+ * «Alza il tetto SOLO se strettamente necessario e come ultima possibilità.»
+ * Queste sono le possibilità provate prima, in ordine, con i numeri:
+ *
+ *   1. **un attrezzo nuovo** `device_alarm_dismiss`            42.709   ⛔ +309
+ *   2. **accorpato** su `device_alarm` come parametro `off`    42.540   ⛔ +166
+ *   3. descrizione ridotta all'osso                            42.486   ⛔ +112
+ *   4. cercato grasso altrove: `document_create` (4.878 b, il più pesante) è
+ *      **già** ottimizzato a campi di una lettera — `t`, `x`, `l`, `v`, `d`.
+ *      `device_open_settings` ha 739 b di descrizione, ma è tutta portante:
+ *      dentro c'è la riga «USE THIS WHENEVER YOU CANNOT DO SOMETHING
+ *      YOURSELF», che è ciò che le fa aprire la schermata invece di dire di no.
+ *
+ * ⇒ 197 byte recuperati su 309. I 112 che restano sono il **verso contrario**
+ * di una capacità che avevamo solo in andata, e che al verso opposto faceva
+ * danno: sveglia ancora armata, una seconda alle 07:30, Orologio aperto in
+ * faccia alla persona. Non è un ornamento che si possa togliere.
+ *
+ * ## ⛔ E perché alzarlo qui non allenta niente
+ *
+ * Questo numero misura gli schemi INTERI. Il commento in cima dice che è «il
+ * vincolo del locale», e dal 2026-08-09 **non lo è più**: il motore locale
+ * riceve l'indice compatto (5.087 b), non questi schemi. Dal 2026-08-13
+ * nessuno riceve più il totale grezzo —
+ *
+ *   Anthropic                      → prefisso di 4 attrezzi, ricerca lato server
+ *   locale · OpenAI · Gemini · OR  → indice compatto, −87%
+ *
+ * ⇒ Il vincolo vero si è spostato, e il test che lo custodisce è
+ * **«misura quanto RESTA NEL PREFISSO aprendo a gradi»**, in fondo a questo
+ * file: al massimo 5 attrezzi davanti al modello e più dell'80% in meno. Quello
+ * è più severo di questo, e non si tocca.
+ */
+/*
+ * ⛔ 42.500 → 43.100, il 2026-08-14, per `calendar_read`.
+ *
+ * ## ⛔⛔ E qui NON si è inseguito il byte, di proposito
+ *
+ * Owner, lo stesso giorno: «non dobbiamo azzoppare la nostra app per farla
+ * entrare nel grafo; **mai cambiare i contratti** per far entrare roba; se
+ * dobbiamo azzoppare l'app allora **come ultima scelta alziamo il tetto**».
+ *
+ * La descrizione di un attrezzo **è** un contratto: è la riga che il modello
+ * legge per decidere se chiamarlo. Accorciarla per far tornare un numero
+ * cambia le sue scelte — ed è esattamente come, poche ore prima, avevo unito
+ * due difese di sicurezza del prompt per risparmiare 21 byte.
+ *
+ * ## Cosa compra, in una riga
+ *
+ * Il difetto che chiude, misurato sul Pad: «che impegni ho domani?» e TALOS
+ * rispondeva «non hai compiti registrati per domani», avendo guardato le
+ * PROPRIE note. Una risposta sicura e falsa sulla giornata di una persona.
+ *
+ * E la riga sulle festività («left out unless withHolidays is true») non è
+ * ornamento: senza, il modello non sa che il filtro esiste e non può offrirlo.
+ *
+ * 551 byte per una capacità intera, dichiarata com'è invece che come sta.
+ */
+/*
+ * ⛔ 43.100 → 43.700, poche ore dopo, per `calendar_write`.
+ *
+ * ⭐ È il SORPASSO su Gemini, in due punti che Google dichiara lui non avere:
+ *  1. scrive **senza aprire nessuna app** — `ACTION_INSERT` aprirebbe il
+ *     Calendario, cioè l'errore che la sveglia ci ha appena mostrato;
+ *  2. mette **luogo e note**, che Gemini «non sa modificare».
+ *
+ * ⛔ E la riga più lunga della descrizione — «se ci sono più calendari
+ * scrivibili e nessuno è nominato, questo torna l'elenco: chiedi quale» — è
+ * quella che NON si taglia. Senza, il modello non sa che esiste una domanda da
+ * fare e sceglie lui su quale agenda finisce un appuntamento: quella di
+ * famiglia e quella di lavoro le leggono persone diverse.
+ *
+ * 597 byte perché la capacità sia dichiarata com'è, non come sta nel tetto.
+ *
+ * ## ⛔⛔ 43.700 → 43.850, il 2026-08-14, e il tetto si ALZA di proposito
+ *
+ * MISURATO sul Pad alle 13:33, in una chat pulita: «metti in agenda **domani**
+ * alle 21» — dove domani era sabato 15 — è finito su **lunedì 17**, e nel
+ * frattempo TALOS diceva «domenica 16». Tre giorni diversi per la stessa
+ * richiesta. `time_now` sul telefono rispondeva giusto («oggi è venerdì 14»):
+ * il modello semplicemente **non l'ha chiamato**.
+ *
+ * La cura sta nella descrizione del campo `from`: «For a relative date
+ * ("tomorrow") call time_now FIRST». Riprovato in chat nuova: chiesto sabato
+ * 15 alle 17, scritto `dtstart` = sabato 15 alle 17. ⇒ Quei byte **funzionano**,
+ * e una riga nel prompt di sistema no — la si legge ventimila token prima.
+ *
+ * ⛔ La regola dell'owner (14/8) è esplicita: non si azzoppa l'app per far
+ * tornare un tetto. Accorciare quella riga fino a farla entrare vorrebbe dire
+ * rimettere in gioco un appuntamento sul giorno sbagliato, che è il difetto che
+ * la persona paga.
+ *
+ * ⛔⛔ E l'ho provato: la riga era stata accorciata per stare sotto, e così
+ * facendo avrei spedito **un testo diverso da quello misurato sul telefono**.
+ * Il tetto sale di 150 byte e la riga resta quella provata, parola per parola —
+ * l'alternativa era una cura verificata in laboratorio e cambiata prima di
+ * uscire.
+ */
+/*
+ * ⭐⭐ 43.850 → 44.200, il 2026-08-14, per `device_screenshot` (268 byte).
+ *
+ * L'unica lacuna trovata dal censimento contro Gemini: «fai uno screenshot» era
+ * la sola richiesta a cui **nessun attrezzo** rispondeva.
+ *
+ * ⛔ La descrizione NON si accorcia, e le sue tre parti sono tre cose diverse:
+ * *cosa fa* (screenshot di sistema di ciò che c'è adesso), *dove finisce* (in
+ * galleria — senza, il modello dice «fatto» e la persona non sa dove guardare),
+ * e *che l'immagine a TALOS non arriva* — senza quella, il modello si offre di
+ * mostrarla e promette una cosa che non ha. È un contratto, e vale la regola
+ * dell'owner scritta qui sopra: si alza il tetto, non si accorcia la riga.
+ */
+/*
+ * ⭐⭐ 44.200 → 44.500, il 2026-08-14, per il CALENDARIO che impara a cambiare.
+ *
+ * Censimento contro Gemini: lui dichiara «aggiungere, visualizzare **o
+ * modificare** eventi», TALOS sapeva creare e leggere. La conseguenza è quella
+ * già misurata sulla sveglia: davanti a «sposta la cena alle 21» il modello,
+ * avendo solo l'attrezzo che METTE, ne crea un secondo — e la persona si ritrova
+ * due impegni che si contraddicono.
+ *
+ * ⛔ I 154 byte sono due descrizioni, e nessuna delle due è ornamento: «manda
+ * solo i campi da cambiare» impedisce di riscrivere gli altri, «non si annulla»
+ * qualifica una cancellazione. Sono contratti — vale la regola dell'owner
+ * scritta più sopra: si alza il tetto, non si accorciano le righe.
+ */
+/*
+ * ⭐⭐ 2026-08-14, `device_unread_mail` (414 byte) — E IL TETTO NON SI MUOVE.
+ *
+ * La regola dell'owner, verbatim: «appiattire senza azzoppare è cambiare
+ * contratti attuali, SEMPRE. **SE NON HAI ALTRA SCELTA E HAI SGRASSATO TUTTO**
+ * aumenta, ma con parsimonia». Le tre volte qui sopra il tetto era salito perché
+ * ogni byte era un contratto provato sul telefono. Stavolta no: c'era grasso.
+ *
+ * La riga «Call research_list first to get the research id.» stava scritta DUE
+ * volte in sei `research_*`: nella descrizione e nel `.describe()` del campo
+ * `id` — cioè nel posto più vicino al gesto, dove il modello la legge mentre
+ * riempie proprio quel campo. Tolta la copia lontana: **−298 byte**, e la
+ * sorgente dell'id resta dichiarata dove serve.
+ *
+ *   44.354 (prima) + 414 (posta) − 298 (sgrassato) = **44.470**
+ *
+ * ⛔ Restano **30 byte** di margine, e chi legge deve saperlo: il prossimo
+ * attrezzo non entra senza sgrassare ancora o senza alzare il tetto. Non lo
+ * alzo adesso «per stare comodo» — alzarlo senza necessità è esattamente ciò
+ * che la regola vieta, e un tetto alzato in anticipo non difende più niente.
+ */
+const TETTO_BYTE = 44_500
 
 /**
  * ⛔ E nessun tool da solo può valere un ottavo di tutto.
@@ -180,5 +331,42 @@ describe('il peso degli schemi dei tool, che è il vincolo del locale', () => {
         )
 
         expect(righe.length).toBeGreaterThan(10)
+    })
+
+    /*
+     * ⭐⭐⭐ QUANTO RESTA NEL PREFISSO con l'apertura a gradi.
+     *
+     * È la misura che giustifica il meccanismo. Il tetto qui sopra continua a
+     * guardare il TOTALE, e deve: gli schemi si spediscono comunque tutti, e
+     * per il motore locale — che non ha una ricerca lato server — il totale è
+     * ancora ciò che conta. Questa riga misura l'altra metà: cosa entra nel
+     * **prefisso** di un modello Anthropic, che è ciò che il modello legge a
+     * ogni turno e su cui si misura la sua capacità di scegliere.
+     */
+    it('misura quanto RESTA NEL PREFISSO aprendo a gradi', async () => {
+        const { TALOS_ATTREZZI_SEMPRE_IN_VISTA } = await import('@/lib/tools/aperturaProgressiva')
+        const schemi = await schemiLocali()
+        const inVista = schemi.filter((voce) => TALOS_ATTREZZI_SEMPRE_IN_VISTA
+            .includes(String((voce.function as Record<string, unknown>).name)))
+
+        const totale = schemi.reduce((somma, voce) => somma + byte(voce), 0)
+        const prefisso = inVista.reduce((somma, voce) => somma + byte(voce), 0)
+        const risparmio = Math.round((totale - prefisso) * 100 / totale)
+
+        // eslint-disable-next-line no-console
+        console.log(
+            `\nPREFISSO CON APERTURA A GRADI`
+            + `\n  tutti:      ${schemi.length} tool, ${totale} byte (~${Math.round(totale / 3.7)} token)`
+            + `\n  nel prefisso: ${inVista.length} tool, ${prefisso} byte (~${Math.round(prefisso / 3.7)} token)`
+            + `\n  ⇒ ${risparmio}% in meno davanti al modello a ogni turno`,
+        )
+
+        /*
+         * ⛔ La soglia della documentazione: sotto i 30-50 attrezzi la scelta
+         * regge. Con quattro in vista siamo larghi, e questo test cade il
+         * giorno in cui qualcuno allarga la lista senza pensarci.
+         */
+        expect(inVista.length).toBeLessThanOrEqual(5)
+        expect(risparmio).toBeGreaterThan(80)
     })
 })

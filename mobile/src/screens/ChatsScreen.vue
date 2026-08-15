@@ -22,6 +22,7 @@ import {
 } from '@/lib/chat/sessionCleanup'
 import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
 import { useChatController } from '@/stores/chatController'
+import { talosDaIntitolare } from '@/stores/chat'
 import { archivedChatSessions, orderChatSessions } from '@/lib/chatListGestures'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import { talosLightImpact } from '@/services/haptics'
@@ -58,8 +59,16 @@ const relativeTimeLabels = computed(() => ({
     hoursAgo: (count: number) => t('chat.hoursAgo', { count }),
     daysAgo: (count: number) => t('chat.daysAgo', { count }),
 }))
+/**
+ * ⛔ Il gettone «non ancora intitolata» si TRADUCE qui, non si salva tradotto.
+ *
+ * Prima bastava `|| t('chat.newChat')`, perché il titolo tradotto stava già nel
+ * database — ed è proprio ciò che impediva alla prima domanda di dare il nome
+ * alla chat, lasciandone ventiquattro tutte uguali. Ora il database porta un
+ * gettone stabile e la parola nasce qui.
+ */
 function sessionTitle(session: { title: string }): string {
-    return session.title || t('chat.newChat')
+    return talosDaIntitolare(session.title) ? t('chat.newChat') : session.title
 }
 function updatedAt(value: string): string {
     return talosRelativeTime(value, new Date(), relativeTimeLabels.value)

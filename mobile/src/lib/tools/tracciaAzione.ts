@@ -130,6 +130,138 @@ export function talosChiamateDelTurno(
     }))
 }
 
+/**
+ * ⭐⭐⭐ LA SCHEDA — decisione dell'owner del 2026-08-13, dopo il testa a testa.
+ *
+ * > «Scheda sempre. L'app si apre SOLO quando non c'è altro modo.»
+ *
+ * ## La misura che l'ha decisa
+ *
+ * Cinque righe contro Gemini sul Pad. Loro **non spostano mai la persona**:
+ * «accendi la torcia» → «Torcia accesa» **più l'interruttore acceso dentro la
+ * chat**, che si può ribaltare lì. Noi dicevamo «fatto» e chiudevamo il
+ * discorso.
+ *
+ * ⇒ *Noi consegnavamo un ESITO, loro consegnano uno STATO con cui si può ancora
+ * interagire.*
+ *
+ * ## Perché il TOOL dichiara la sua scheda, e non una tabella nel disegno
+ *
+ * È lo schema che la letteratura chiama **generative UI**: il risultato dello
+ * strumento porta un descrittore, e la vista lo disegna. L'alternativa —
+ * una mappa `nome del tool → componente` dentro la schermata — sarebbe un
+ * secondo posto da tenere allineato, e il primo che invecchia.
+ *
+ * ⛔ E i TIPI sono pochi e generici di proposito. Una scheda per capacità
+ * sarebbe la «riga predeterminata» che l'owner ha vietato: `interruttore` vale
+ * per la torcia, l'aereo, il risparmio energetico e per ogni cosa a due stati
+ * che verrà.
+ */
+export type TalosScheda =
+    /** Una cosa a due stati, col comando vivo: torcia, aereo, non disturbare. */
+    | {
+        readonly tipo: 'interruttore'
+        /** Il tool da richiamare, che è anche l'etichetta da tradurre. */
+        readonly tool: string
+        readonly acceso: boolean
+    }
+    /**
+     * ⭐⭐⭐ GLI IMPEGNI DI UN GIORNO — 2026-08-14, misurata contro Gemini.
+     *
+     * Alla stessa domanda lui risponde col testo **e due schede**: nome
+     * dell'evento, giorno e intervallo orario. Noi rispondevamo con del testo e
+     * basta. È la differenza che l'owner ha chiamato «SCHEDA SEMPRE».
+     *
+     * ⛔ Porta il testo GIÀ FORMATTATO, non i millisecondi: la conversione di un
+     * evento «tutto il giorno» va fatta in UTC — sbagliarla sposta il giorno —
+     * e quel sapere sta in un posto solo, `calendarioTools`. Una seconda
+     * conversione nel componente sarebbe una seconda verità sullo stesso
+     * evento, che un giorno diverge.
+     */
+    | {
+        readonly tipo: 'agenda'
+        readonly voci: ReadonlyArray<{
+            readonly titolo: string
+            /** Già leggibile: «2026-08-15 17:00–18:00» oppure «… (all day)». */
+            readonly quando: string
+            readonly luogo?: string
+            readonly calendario?: string
+        }>
+    }
+    /**
+     * ⭐⭐ LA SVEGLIA — e questa scheda serve a far vedere **l'ORA**.
+     *
+     * Owner 2026-08-14, lista delle schede: sveglia, invio file, chiamata,
+     * `app_azione`, ricerca web. La sveglia viene prima perché il suo dato è
+     * quello che sbaglia: lo stesso giorno stesso, «metti in agenda domani»
+     * è finito due giorni più in là e nessuno se n'è accorto finché non ho
+     * interrogato il provider. Un'ora scritta grande si controlla in un colpo
+     * d'occhio, e una sveglia alle 7 invece che alle 19 costa una giornata.
+     *
+     * ⛔ E NON porta un comando «annulla», che sarebbe la cosa naturale da
+     * mettere. `ACTION_DISMISS_ALARM` su questa ColorOS **non cancella niente**
+     * — provato per orario, per «la prossima» e per «tutte», con e senza
+     * `SKIP_UI`. Una levetta che non spegne è la stessa bugia del segno
+     * «Fatto» su una cosa non fatta, con un dito sopra.
+     *
+     * ⇒ Mostra lo stato e tace sui comandi che non ha. Quando la ROM ci
+     * lascerà spegnere, il comando arriva qui.
+     */
+    | {
+        readonly tipo: 'sveglia'
+        /** Già leggibile: «07:30», oppure «fra 10 min» per un timer. */
+        readonly quando: string
+        readonly etichetta?: string
+    }
+/*
+ * ⛔ Qui c'era un tipo `fonti`, aggiunto e tolto il 2026-08-14: le fonti hanno
+ * già la loro casa in `TalosMobileSourcesChip`, che le mostra meglio (favicon
+ * lette da disco, browser interno). Il buco vero era che quel chip vive solo
+ * nella lista dei messaggi ⇒ si monta quello nell'assistente, non se ne fa un
+ * secondo. La spiegazione per esteso sta in `webTools.ts`.
+ */
+    /**
+     * ⭐⭐⭐ QUALE APP — l'elenco che il modello NON deve ripetere.
+     *
+     * MISURATO sul Pad il 2026-08-13, e sta scritto in `intentiTools`: dato
+     * l'elenco vero delle app che sanno fare una cosa, il modello ha risposto
+     * «WhatsApp, Telegram, Signal, Messenger, ChatGPT» — di cui **tre non
+     * installate e una inventata**. Aveva la verità in mano e ci ha scritto
+     * sopra.
+     *
+     * Quella volta la cura fu l'etichetta (`ok: true` invece di `ok: false`) e
+     * un divieto esplicito nella riga. Funziona, ma dipende ancora dal fatto
+     * che il modello **ricopi bene** — cioè da un passaggio che non serve.
+     *
+     * ⇒ La scheda porta l'elenco **così com'è**, dal telefono allo schermo,
+     * senza passare dalle parole. È la stessa forma della domanda «quale
+     * calendario»: non un errore, una scelta.
+     *
+     * ⛔ Le voci sono TOCCABILI: `pacchetto` è ciò che serve per richiamare la
+     * capacità sull'app scelta. Un elenco che si può solo leggere lascia alla
+     * persona il compito di ridire un nome che TALOS ha già.
+     */
+    | {
+        readonly tipo: 'quale-app'
+        /** La capacità da richiamare con l'app scelta. */
+        readonly capacita: string
+        /** I valori già raccolti, da ripassare identici alla seconda chiamata. */
+        readonly valori: Readonly<Record<string, string>>
+        readonly app: ReadonlyArray<{
+            readonly nome: string
+            readonly pacchetto: string
+        }>
+    }
+
+export const TALOS_METADATA_SCHEDE = 'cards'
+
+/**
+ * ⛔ Qui restano SOLO il tipo e la chiave, e c'è un numero dietro: i controlli
+ * (`eUnaScheda`, la deduplica, la lettura dai metadati) costavano al grafo
+ * d'avvio, che ha un tetto di 602.200 byte. Vivono nel componente della scheda,
+ * che è pigro — arriva col primo messaggio che ne porta una.
+ */
+
 /** Vero quando c'è qualcosa da mostrare — usato dalla vista per non disegnare il vuoto. */
 export function talosHaAzioniDaMostrare(metadata: unknown): boolean {
     if (!metadata || typeof metadata !== 'object') return false
@@ -193,3 +325,28 @@ export const TALOS_METADATA_DETTATO = 'dictated'
  *    riguarda un altro momento, e uno schermo vecchio sarebbe una bugia.
  */
 export const TALOS_METADATA_SCHERMO = 'screen_context'
+
+/**
+ * ⛔⛔ LA RISPOSTA SI È FERMATA A METÀ — e la persona non poteva saperlo.
+ *
+ * Rilievo #16b dell'owner, dagli screenshot del 12 agosto: una risposta appariva
+ * **troncata a metà frase** («nessuna app può») «senza che si capisca se sia
+ * finita, interrotta o tagliata dal rendering».
+ *
+ * Tre cause con lo stesso aspetto:
+ *
+ * | com'è finita | chi lo sa |
+ * |---|---|
+ * | il modello ha finito di parlare | `finishReason: 'stop'` |
+ * | ha esaurito la lunghezza | `finishReason: 'length'` ← questo |
+ * | il rendering l'ha tagliata | `messageMarkdown.truncated`, che già si vede |
+ *
+ * Il secondo era l'unico senza voce: `finishReason` arrivava al controller e
+ * moriva lì, perché nessuno lo scriveva accanto alla risposta. L'unico caso
+ * trattato era quello con `length` **e testo vuoto** — cioè proprio quello in
+ * cui non c'è niente da leggere a metà.
+ *
+ * ⇒ Vale `true` SOLO per `length`. Una risposta finita non porta la chiave, e
+ * un avviso su ogni risposta insegnerebbe a dubitare anche di quelle intere.
+ */
+export const TALOS_METADATA_TRONCATA = 'stopped_at_limit'

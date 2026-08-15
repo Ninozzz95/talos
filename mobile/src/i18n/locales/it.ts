@@ -457,6 +457,29 @@ export const TALOS_IT_MESSAGES = {
             denied: 'Bloccato da Android',
         },
         rows: {
+            /*
+             * ⛔ Queste tre righe esistevano nell'elenco e NON avevano una
+             * traduzione: la schermata mostrava la chiave grezza
+             * («privacyPermissions.rows.calendar.title»). Un permesso che la sua
+             * pagina non sa nominare è un permesso non elencato — e la regola su
+             * questo progetto è che si elencano TUTTI.
+             */
+            contacts: {
+                title: 'Contatti',
+                purpose: 'Mandare un messaggio a una persona chiamandola per nome. TALOS cerca il nome che hai detto e prende il numero per quel solo messaggio: non legge, non copia e non manda da nessuna parte la tua rubrica.',
+            },
+            calendar: {
+                title: 'Calendario',
+                purpose: 'Rispondere a «che impegni ho domani» e mettere in agenda un appuntamento quando lo chiedi. Leggere e scrivere sono due permessi separati, chiesti in momenti diversi, e ogni appuntamento che TALOS scrive passa prima dalla tua conferma. Niente lascia il telefono.',
+            },
+            camera: {
+                title: 'Fotocamera',
+                purpose: 'Scattare una foto da allegare a una chat. L’immagine va dove la mandi tu e da nessun’altra parte; TALOS non apre la fotocamera per conto suo.',
+            },
+            mailCount: {
+                title: 'Conteggio della posta non letta',
+                purpose: 'Rispondere a «quante email non lette ho». TALOS legge il contatore di Gmail su questo telefono e ottiene un numero, account per account — mai il mittente, l’oggetto o il testo di una email, che da questa strada non si raggiungono. Niente lascia il telefono.',
+            },
             microphone: {
                 title: 'Microfono',
                 purpose: 'Dettatura. La voce diventa testo su questo dispositivo; l’audio non viene mai salvato né inviato altrove.',
@@ -745,7 +768,35 @@ export const TALOS_IT_MESSAGES = {
         scrollEarlier: 'Scorri verso l’alto per i messaggi precedenti',
         messageCopied: 'Messaggio copiato.',
         messageCopyFailed: 'Impossibile copiare il messaggio.',
+        stoppedAtLimit: 'Si è fermata qui: ha raggiunto la lunghezza massima. Scrivi «continua» per il resto.',
         actionsDone: 'Fatto:',
+        /*
+         * ⛔ Lo stato di una scheda si dice anche a PAROLE: il colore della
+         * levetta non può essere l'unico segno. È il pavimento di
+         * accessibilità che le linee guida sulle chat mettono per primo.
+         */
+        cardSwitchOn: 'Acceso',
+        /*
+         * ⛔ La prova NON ripete lo stato: «Torcia / Spento» e sotto «✓ Spento»
+         * era la stessa parola due volte a tre millimetri di distanza (visto
+         * sul Pad). Dice invece la cosa che solo TALOS fa — ha RILETTO
+         * l'effetto nel telefono invece di raccontarlo.
+         */
+        cardProofRead: 'Verificato sul telefono',
+        cardSwitchOff: 'Spento',
+        /*
+         * ⛔ Una DOMANDA, non un titolo: «App disponibili» descriverebbe un
+         * elenco da leggere, e questo elenco è invece la scelta che manca — le
+         * voci si toccano e la cosa parte.
+         */
+        cardWhichApp: 'Con quale app?',
+        cardAppOpened: 'Aperta',
+        /*
+         * ⛔ «Non si è aperta» e NON «Errore»: il telefono aveva detto di saperlo
+         * fare, poi l'app ha rifiutato. È un fatto sull'app, e dirlo così lascia
+         * alla persona la mossa ovvia — provarne un'altra dell'elenco.
+         */
+        cardAppRefused: 'Non si è aperta',
         memoryUsedOne: '1 memoria usata',
         memoryUsedMany: '{count} memorie usate',
         attachedFiles: 'File allegati',
@@ -902,16 +953,41 @@ export const TALOS_IT_MESSAGES = {
         assistantHeld: 'TALOS è il tuo assistente. Chiamalo da qualunque app e la barra compare.',
         assistantAsk: 'Rendi TALOS il tuo assistente',
         assistantManual: 'Né Android né il ponte ci sono riusciti. Fallo a mano: Impostazioni → App → App predefinite → Assistente digitale. Se l’elenco è vuoto, accendi il Debug wireless qui sotto e ripremi.',
-        wakeTitle: 'Chiamalo con la voce',
+        presetTitle: 'Come lo chiami',
+        presetIntro: 'Ogni modo di aprire TALOS senza toccare la sua icona. ⛔ Quelli che passano dal telefono non li può accendere TALOS: la scelta la fai tu, nella schermata di sistema, e da lì la puoi togliere.',
+        preset: {
+            accensione: {
+                title: 'Tasto di accensione tenuto premuto',
+                body: 'Chiama l’assistente predefinito del telefono: perché sia TALOS, TALOS dev’essere l’assistente. ⛔ Ma il ruolo non basta: è il telefono a decidere se girare quel gesto all’assistente, e alcuni non lo fanno (misurato su OnePlus 13 con ColorOS: la chiamata viene intercettata e non arriva a nessuno). Provalo: se si apre TALOS, da quel momento il menu di spegnimento si apre con accensione + volume su. Se non si apre, restano i due tasti del volume e «hey TALOS».',
+            },
+            gesto: {
+                title: 'Gesto dall’angolo dello schermo',
+                body: 'La strisciata dall’angolo in basso, se navighi a gesti. Chiama lo stesso assistente predefinito, quindi vale la stessa condizione, e lo stesso «dipende dal telefono».',
+            },
+            home: {
+                title: 'Tasto Home tenuto premuto',
+                body: 'Se navighi con i tre tasti invece che a gesti, questo è il gesto equivalente: tieni premuto il tasto centrale. Chiama sempre l’assistente predefinito, quindi vale la stessa condizione. ⛔ Con la navigazione a gesti il tasto Home non esiste: lì conta la riga qui sopra.',
+            },
+            volume: {
+                title: 'I due tasti del volume tenuti premuti',
+                body: 'Anche questo NON dipende dall’assistente predefinito: è la scorciatoia di accessibilità, e punta direttamente a TALOS. ⛔ La prima volta che tieni premuti i due tasti, Android ti chiede conferma: è normale, e succede una volta sola. ⛔ E questa casella è UNA sola per tutto il telefono: se ci metti un altro servizio (TalkBack, per esempio) TALOS ne esce, e questa riga torna a dire «Da mettere».',
+            },
+        },
+        presetSummary: '{ready} di {total} funzionano adesso.',
+        presetState: {
+            pronto: 'Pronto',
+            /** ⛔ Il ruolo c’è, ma decide il telefono: si prova, non si promette. */
+            dipende: 'Da provare',
+            'manca-ruolo': 'Manca il ruolo',
+            'da-mettere': 'Da mettere',
+        },
+        presetGoRole: 'Apri gli assistenti del telefono',
+        presetGoShortcut: 'Apri l’accessibilità',
+        wakeTitle: 'La parola «hey TALOS»',
         wakeBody: 'Basta dire «hey TALOS» e si apre da solo, senza toccare niente. ⛔ Il microfono resta acceso per aspettare quelle due parole: TALOS non trascrive e non salva nulla, ma il microfono è acceso — e mentre lo è, lo dice con una notifica fissa.',
         wakeOn: 'TALOS sta aspettando «hey TALOS». Il microfono è acceso: la notifica lo dice, e da lì si spegne.',
         wakeAsk: 'Attiva «hey TALOS»',
         wakeOff: 'Smetti di aspettare la parola',
-        bubbleTitle: 'Il pallino di TALOS',
-        bubbleBody: 'Un pallino sopra le altre app: lo tocchi e la barra si apre, senza dipendere dai gesti del telefono. Solo nella build di sviluppo.',
-        bubbleOn: 'Il pallino è a schermo. Trascinalo dove vuoi: si aggancia al bordo più vicino.',
-        bubbleAsk: 'Accendi il pallino',
-        bubbleOff: 'Spegni il pallino',
         assistantAsking: 'Sto chiedendo ad Android…',
         assistantBridging: 'Lo sto impostando col ponte…',
         pageTitle: 'Controllo del telefono',
@@ -972,7 +1048,6 @@ export const TALOS_IT_MESSAGES = {
         pairBody: 'Apri le opzioni sviluppatore, accendi «Debug wireless», poi tocca «Accoppia dispositivo con codice di accoppiamento». Scrivi qui le sei cifre che compaiono: gli indirizzi li trova TALOS.',
         pairAction: 'Accoppia',
         floatAction: 'Apri Impostazioni col campo davanti',
-        allowOverlay: 'Consenti la finestra flottante',
         floatTitle: 'Codice di accoppiamento',
         floatInstruction: 'Scrivi qui le sei cifre che vedi dietro. Non uscire da Impostazioni: la finestrella scade appena la chiudi.',
         floatWorking: 'Sto accoppiando. Cerco il telefono sulla rete e apro il collegamento: può volerci qualche secondo.',
@@ -1039,6 +1114,8 @@ export const TALOS_IT_MESSAGES = {
         deviceTorch: 'Torcia',
         deviceVibrate: 'Vibrazione',
         deviceVolume: 'Volume',
+        calendarRead: 'Calendario',
+        calendarWrite: 'Appuntamento',
         deviceAlarm: 'Sveglia',
         deviceOpenApp: 'Apertura di un’app',
         deviceOpenSettings: 'Apertura delle impostazioni',
@@ -1046,6 +1123,8 @@ export const TALOS_IT_MESSAGES = {
         deviceSpeak: 'Lettura ad alta voce',
         deviceWallpaper: 'Cambio dello sfondo',
         deviceKeepAwake: 'Schermo tenuto acceso',
+        deviceUnreadMail: 'Posta non letta contata',
+        deviceScreenshot: 'Schermata catturata',
         deviceWifi: 'Wi-Fi',
         deviceBluetooth: 'Bluetooth',
         deviceDnd: 'Non disturbare',
@@ -1225,9 +1304,21 @@ export const TALOS_IT_MESSAGES = {
             title: 'Leggi o cambia il volume',
             description: 'Legge o imposta il volume di musica, suoneria, sveglia o notifiche. In percentuale, perché le tacche cambiano da telefono a telefono.',
         },
+        calendarWrite: {
+            title: 'Metti un appuntamento',
+            description: 'Crea un appuntamento in agenda senza aprire nessuna app, con luogo e note. Ogni appuntamento passa dalla tua conferma.',
+        },
+        calendarRead: {
+            title: 'Leggi il calendario',
+            description: 'Guarda i tuoi appuntamenti fra due momenti, per rispondere a «che impegni ho». Legge e basta: non scrive, non modifica, non cancella niente.',
+        },
         deviceAlarm: {
             title: 'Metti una sveglia o un timer',
             description: 'La crea l’app orologio del telefono, quindi suona anche se TALOS è chiuso.',
+        },
+        deviceAlarmDismiss: {
+            title: 'Spegni una sveglia',
+            description: 'Disdice una sveglia già messa: quella a un certo orario, la prossima, o tutte.',
         },
         deviceOpenApp: {
             title: 'Apri un’app',
@@ -1297,9 +1388,17 @@ export const TALOS_IT_MESSAGES = {
             title: 'Guarda quali app hai',
             description: '⛔ L’elenco delle app installate dice molto di una persona. Serve perche’ TALOS apra quella giusta invece di indovinare il nome.',
         },
+        deviceScreenshot: {
+            title: 'Cattura la schermata',
+            description: '⛔ Riprende quello che c’è sullo schermo in quel momento — che può essere la chat di un altro o una pagina della banca. Lo scatto lo fa il sistema e finisce nella tua galleria, esattamente come coi tasti: l’immagine a TALOS non arriva.',
+        },
         deviceKeepAwake: {
             title: 'Tieni acceso lo schermo',
             description: 'Lo schermo resta acceso finché TALOS è in primo piano, e si rispegne da solo appena non lo è. Consuma batteria.',
+        },
+        deviceUnreadMail: {
+            title: 'Conta la posta non letta',
+            description: 'Legge il contatore di Gmail sul telefono: quante email non hai ancora aperto, per ogni account Google. Solo il numero — il mittente, l’oggetto e il testo da qui non si vedono, e niente esce dal dispositivo.',
         },
         researchList: {
             title: 'Consulta le tue ricerche',
@@ -2356,13 +2455,18 @@ export const TALOS_IT_MESSAGES = {
             device_torch: { title: 'Accendi o spegni la torcia', description: 'Accende e spegne la torcia. Non chiede nessun permesso.' },
             device_vibrate: { title: 'Fai vibrare il telefono', description: 'Un colpo breve, come segnale fisico. Non per annunciare le risposte: a quello servono le notifiche.' },
             device_volume: { title: 'Leggi o imposta il volume', description: 'Legge un volume o lo imposta, in percentuale. Il silenzioso vero vuole un permesso che dai tu.' },
+            calendar_write: { title: 'Metti un appuntamento', description: 'Crea un appuntamento in agenda senza aprire nessuna app, con luogo e note. Ogni appuntamento passa dalla tua conferma.' },
+            calendar_read: { title: 'Leggi il calendario', description: 'Guarda i tuoi appuntamenti per rispondere a «che impegni ho». Legge e basta: non scrive né cancella niente.' },
             device_alarm: { title: 'Metti una sveglia o un timer', description: 'La passa alla tua app orologio, così suona anche con TALOS chiuso.' },
+            device_alarm_dismiss: { title: 'Spegni una sveglia', description: 'Disdice una sveglia già messa: quella a un certo orario, la prossima, o tutte.' },
             device_open_app: { title: 'Apri un’app', description: 'Apre un’app già installata su questo telefono.' },
+            device_screenshot: { title: 'Cattura la schermata', description: '⛔ Riprende quello che c’è sullo schermo in quel momento — che può essere la chat di un altro o una pagina della banca. Lo scatto lo fa il sistema e finisce nella tua galleria, esattamente come coi tasti: l’immagine a TALOS non arriva.' },
             device_open_settings: { title: 'Apri una schermata delle impostazioni', description: 'Ti porta esattamente sulla schermata di Android, invece di dirti che non può.' },
             device_compose: { title: 'Prepara una chiamata, un messaggio o una condivisione', description: 'La compila e te la passa. TALOS non chiama e non manda da solo: il pulsante lo premi tu.' },
             device_speak: { title: 'Dì qualcosa ad alta voce', description: 'Legge una risposta breve dall’altoparlante. La sente chiunque sia nella stanza, quindi conta come uscire da questo telefono. Se il telefono è silenzioso, resta silenzioso.' },
             device_wallpaper: { title: 'Metti un’immagine come sfondo', description: 'Prende un’immagine della Libreria e la mette come sfondo del telefono, sulla schermata iniziale, su quella di blocco o su entrambe.' },
             device_keep_awake: { title: 'Tieni acceso lo schermo', description: 'Impedisce allo schermo di spegnersi mentre segui qualcosa: una ricetta, delle indicazioni. Vale finché TALOS è aperto.' },
+            device_unread_mail: { title: 'Conta la posta non letta', description: 'Quante email non lette hai in Gmail, account per account. Solo il numero: mittente, oggetto e testo da qui non si vedono, e niente esce dal telefono.' },
             device_wifi: { title: 'Accendi o spegni il Wi-Fi', description: 'Accende e spegne il Wi-Fi. Se non ci riesce da solo apre il pannello del telefono sopra TALOS, e l’interruttore lo tocchi tu.' },
             device_bluetooth: { title: 'Accendi o spegni il Bluetooth', description: 'Accende e spegne il Bluetooth. Spegnendolo si scollegano auricolari e orologio.' },
             device_do_not_disturb: { title: 'Metti o togli il Non disturbare', description: 'Zittisce il telefono, o lo lascia suonare di nuovo. Preferisce «solo le cose importanti» al silenzio totale, che nasconde anche le sveglie.' },
@@ -2898,6 +3002,7 @@ export const TALOS_IT_MESSAGES = {
          * che alla domanda.
          */
         contextPrompt: 'Qui sotto c’è il testo che compare adesso sullo schermo della persona. Usalo solo se serve a rispondere, e non ripeterlo tutto.',
+        contextPage: 'La persona sta guardando questa pagina: {page} — se la domanda riguarda il suo contenuto, aprila con web_read invece di fermarti a ciò che si vede a schermo.',
         close: 'Chiudi',
         expand: 'Mostra tutta la risposta',
         collapse: 'Accorcia la risposta',
@@ -2918,6 +3023,10 @@ export const TALOS_IT_MESSAGES = {
         attachPhotos: 'Foto',
         attachCamera: 'Fotocamera',
         attachFile: 'File',
+        /** Il titolo della sezione che dice quale modello risponderà. */
+        model: 'Modello',
+        /** ⛔ Il titolo della tendina QUI: nell'assistente non stai «aggiungendo alla chat». */
+        addTitle: 'Aggiungi al messaggio',
         attachLibrary: 'Dalla Libreria',
         attachLibraryEmpty: 'La Libreria è vuota — ancora niente da allegare.',
         attachLibraryLoading: 'Sto leggendo la Libreria…',

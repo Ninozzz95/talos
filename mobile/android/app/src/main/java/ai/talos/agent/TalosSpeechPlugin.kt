@@ -7,6 +7,8 @@ import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
 import android.speech.tts.UtteranceProgressListener
+import android.util.Log
+import java.util.Collections
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -68,6 +70,32 @@ class TalosSpeechPlugin : Plugin() {
     /** Vero fra `speak` e la fine — l'interfaccia lo usa per l'indicatore. */
     @Volatile private var stoParlando = false
 
+    /**
+     * ⛔⛔ LE FRASI ANCORA IN CANNA — e senza questo insieme «ha finito» MENTE.
+     *
+     * Owner 2026-08-14: «il microfono parte da solo quando TALOS non finisce di
+     * parlare; la conversazione deve ripartire SOLO quando TALOS finisce
+     * completamente di parlare».
+     *
+     * La causa è qui e si vede a occhio nudo una volta nominata: mentre la
+     * risposta si scrive, il lato JS manda **una frase alla volta** con
+     * `QUEUE_ADD`. `onDone` di `UtteranceProgressListener` scatta **per singola
+     * frase**, non per la risposta — e lì dentro c'era `stoParlando = false` più
+     * l'evento `talosSpeechDone`.
+     *
+     * ⇒ Alla fine della PRIMA frase TALOS dichiarava di aver finito, con altre
+     * cinque in coda. Se in quell'istante il modello aveva già smesso di
+     * generare, la barra riapriva il microfono — e riaprirlo chiama
+     * `lettura.stop()`, quindi non arrivava dopo: **troncava**. È letteralmente
+     * la frase a metà che si sente.
+     *
+     * ⛔ Un contatore non basterebbe: `onError` e `stop()` possono far sparire
+     * una frase senza il suo `onDone`, e un contatore andrebbe sotto zero o
+     * resterebbe appeso per sempre. Un insieme di identità si può anche
+     * SVUOTARE, ed è quello che fa `stop()`.
+     */
+    private val inCanna: MutableSet<String> = Collections.synchronizedSet(LinkedHashSet())
+
     override fun load() {
         // ⛔ `load()` gira sul thread CONDIVISO dei plugin: quello che ferma
         // tutti gli altri se lo si blocca. Qui va bene — misurato 2 ms, perche'
@@ -83,31 +111,99 @@ class TalosSpeechPlugin : Plugin() {
             motore?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     stoParlando = true
+                    mano.removeCallbacks(verifica)
                     notifyListeners("talosSpeechStarted", JSObject())
                 }
 
                 override fun onDone(utteranceId: String?) {
-                    stoParlando = false
-                    notifyListeners("talosSpeechDone", JSObject())
+                    finita(utteranceId, null)
                 }
 
                 @Deprecated("Il contratto vecchio; il nuovo arriva sotto.")
                 override fun onError(utteranceId: String?) {
-                    stoParlando = false
-                    notifyListeners("talosSpeechDone", JSObject())
+                    finita(utteranceId, null)
                 }
 
                 override fun onError(utteranceId: String?, errorCode: Int) {
-                    stoParlando = false
-                    val payload = JSObject()
-                    payload.put("errorCode", errorCode)
-                    notifyListeners("talosSpeechDone", payload)
+                    finita(utteranceId, errorCode)
                 }
             })
         }
     }
 
+    private val mano = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** Quando l'ultima frase ha detto «fatto». Serve a MISURARE la coda. */
+    @Volatile private var ultimoDone = 0L
+
+    /**
+     * ⭐⭐⭐ «HA FINITO» SI CHIEDE AL MOTORE, NON SI DEDUCE DA UN EVENTO.
+     *
+     * `onDone` di una frase vuol dire «questa frase è uscita», non «non ne ho
+     * altre»: il contratto di Android dice anche che una frase è considerata
+     * completa **quando il suo audio è stato consegnato al mixer**, che non è
+     * quando la persona ha smesso di sentirla.
+     *
+     * ⇒ Due condizioni, entrambe necessarie:
+     *   1. `inCanna` è vuoto — nessuna frase NOSTRA in attesa;
+     *   2. `isSpeaking()` è falso — il motore non sta parlando **e** non ha
+     *      niente in coda, che è esattamente ciò che quella funzione risponde.
+     *
+     * La seconda si CHIEDE, ripetutamente, finché non risponde di no: è la
+     * differenza fra sondare e sperare. I 600 ms di assestamento che la barra
+     * usava erano una scommessa — giusta a volte, e a volte no.
+     *
+     * ⛔ E se nel frattempo arriva una frase nuova, questa verifica si annulla
+     * da sola: `onStart` la toglie dalla coda. Durante lo streaming succede a
+     * ogni frase, ed è il caso normale, non l'eccezione.
+     */
+    private val verifica = object : Runnable {
+        override fun run() {
+            if (inCanna.isNotEmpty()) return
+            val tts = motore ?: return
+            val occupato = runCatching { tts.isSpeaking }.getOrDefault(false)
+            if (occupato && android.os.SystemClock.uptimeMillis() - ultimoDone < ATTESA_MASSIMA_MS) {
+                mano.postDelayed(this, PASSO_MS)
+                return
+            }
+            val coda = android.os.SystemClock.uptimeMillis() - ultimoDone
+            stoParlando = false
+            /*
+             * ⛔ Il numero si scrive nel registro, sempre. È la coda vera fra
+             * l'ultimo `onDone` e il motore davvero zitto: senza vederla, la
+             * prossima persona che tocca questo file rimetterà una costante a
+             * naso, che è come ci eravamo arrivati.
+             */
+            Log.i(MARCHIO, "finito di parlare: coda dopo l'ultimo onDone = $coda ms" +
+                if (occupato) " (SCADUTA: il motore diceva ancora di parlare)" else "")
+            val payload = JSObject()
+            payload.put("tailMs", coda)
+            notifyListeners("talosSpeechDone", payload)
+        }
+    }
+
+    /**
+     * Una frase è uscita di scena — per bene o per errore, qui è lo stesso: in
+     * entrambi i casi non è più in canna.
+     */
+    private fun finita(utteranceId: String?, codiceErrore: Int?) {
+        if (utteranceId != null) inCanna.remove(utteranceId)
+        // ⛔ Il conto DOPO la rimozione: è la riga che rende visibile a occhio
+        // che `onDone` parla di UNA frase e non della risposta.
+        Log.i(MARCHIO, "frase finita ($utteranceId): ne restano ${inCanna.size} in canna")
+        if (codiceErrore != null) {
+            val payload = JSObject()
+            payload.put("errorCode", codiceErrore)
+            notifyListeners("talosSpeechError", payload)
+        }
+        if (inCanna.isNotEmpty()) return
+        ultimoDone = android.os.SystemClock.uptimeMillis()
+        mano.removeCallbacks(verifica)
+        mano.postDelayed(verifica, PASSO_MS)
+    }
+
     override fun handleOnDestroy() {
+        mano.removeCallbacks(verifica)
         runCatching {
             motore?.stop()
             motore?.shutdown()
@@ -368,18 +464,91 @@ class TalosSpeechPlugin : Plugin() {
         }
 
         val id = "talos-${System.nanoTime()}"
-        // QUEUE_FLUSH: una frase nuova ZITTISCE la precedente. Accodarle
-        // significherebbe che chi manda due messaggi si sente leggere il primo
-        // mentre guarda il secondo.
+        /*
+         * ⛔⛔ CON `FLUSH` LE FRASI IN CODA MUOIONO SENZA IL LORO `onDone`.
+         *
+         * È il contratto di Android: `QUEUE_FLUSH` scarta tutto ciò che è in
+         * attesa. Quelle frasi non riceveranno mai la loro richiamata, quindi le
+         * loro identità resterebbero in `inCanna` PER SEMPRE — e TALOS non
+         * direbbe mai più di aver finito. Un microfono che non riparte più è un
+         * difetto peggiore di quello che stiamo curando.
+         */
+        if (modo == TextToSpeech.QUEUE_FLUSH) inCanna.clear()
+        inCanna.add(id)
+        mano.removeCallbacks(verifica)
         val esito = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             tts.speak(testo, modo, null, id)
         } else {
             @Suppress("DEPRECATION")
             tts.speak(testo, modo, null)
         }
+        if (esito != TextToSpeech.SUCCESS) {
+            // Rifiutata: non arriverà nessun `onDone`, quindi esce subito di
+            // scena — e se era l'ultima, `finita` fa partire la verifica.
+            finita(id, null)
+        }
         result.put("spoken", esito == TextToSpeech.SUCCESS)
         if (esito != TextToSpeech.SUCCESS) result.put("reason", "refused")
         call.resolve(result)
+    }
+
+    /**
+     * ⭐⭐⭐ LA SONDA — i segnali grezzi, tutti insieme, con l'ora.
+     *
+     * Owner 2026-08-14: «devi trovare un modo di sondarlo in maniera efficace e
+     * certa». Questa è la parte «certa»: non risponde *secondo me ho finito*,
+     * risponde **cosa dicono le fonti**, una per una, così che chi misura possa
+     * vedere QUALE cambia e QUANDO invece di fidarsi della sintesi.
+     *
+     *  · `pending`      quante frasi nostre non hanno ancora chiuso
+     *  · `engineBusy`   `TextToSpeech.isSpeaking()` — parla o ha roba in coda
+     *  · `musicActive`  `AudioManager.isMusicActive()` — esce audio davvero
+     *  · `players`      i flussi in riproduzione, con il loro `usage`
+     *
+     * ⛔ `speaking` da solo è una CONCLUSIONE, e una conclusione non si può
+     * verificare. Queste quattro righe si possono.
+     */
+    @PluginMethod
+    fun sonda(call: PluginCall) {
+        val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        val result = JSObject()
+        result.put("speaking", stoParlando)
+        result.put("pending", inCanna.size)
+        result.put("engineBusy", runCatching { motore?.isSpeaking == true }.getOrDefault(false))
+        result.put("musicActive", audio?.isMusicActive == true)
+        /*
+         * ⛔ La voce esce dal processo del MOTORE (`com.google.android.tts`),
+         * non dal nostro: cercare un riproduttore «nostro» non troverebbe
+         * niente. Si guarda l'`usage`, che è la proprietà che sopravvive
+         * all'anonimizzazione fra app.
+         */
+        val usi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            runCatching {
+                audio?.activePlaybackConfigurations
+                    ?.joinToString(",") { it.audioAttributes.usage.toString() }
+                    ?: ""
+            }.getOrDefault("")
+        } else {
+            ""
+        }
+        result.put("players", usi)
+        result.put("uptime", android.os.SystemClock.uptimeMillis())
+        call.resolve(result)
+    }
+
+    companion object {
+        private const val MARCHIO = "TalosSpeech"
+
+        /** Ogni quanto si richiede al motore se ha davvero finito. */
+        private const val PASSO_MS = 60L
+
+        /**
+         * ⛔ Oltre questo si smette di aspettare e si dichiara finito lo stesso,
+         * dicendolo nel registro. Un motore che resta «occupato» per sempre —
+         * succede se il servizio TTS si impianta — lascerebbe TALOS muto e la
+         * conversazione ferma, e fra i due mali quello è il peggiore.
+         */
+        private const val ATTESA_MASSIMA_MS = 8_000L
     }
 
     /**
@@ -393,7 +562,21 @@ class TalosSpeechPlugin : Plugin() {
     @PluginMethod
     fun stop(call: PluginCall) {
         runCatching { motore?.stop() }
+        /*
+         * ⛔ Si SVUOTA la canna: `stop()` scarta la coda e quelle frasi non
+         * riceveranno mai il loro `onDone`. Lasciarle dentro vorrebbe dire che
+         * dopo il primo «zitto» TALOS non dichiarerebbe mai più di aver finito
+         * — cioè il microfono non ripartirebbe più, mai.
+         */
+        inCanna.clear()
+        mano.removeCallbacks(verifica)
         stoParlando = false
+        // Chi ha premuto «zitto» ha finito di sentire adesso: l'evento parte
+        // subito, senza verifica, perché la verifica serve a non troncare — e
+        // qui troncare è ciò che è stato chiesto.
+        val payload = JSObject()
+        payload.put("tailMs", 0)
+        notifyListeners("talosSpeechDone", payload)
         val result = JSObject()
         result.put("stopped", true)
         call.resolve(result)

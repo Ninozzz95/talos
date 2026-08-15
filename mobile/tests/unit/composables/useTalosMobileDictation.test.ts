@@ -228,6 +228,42 @@ describe('tap-path liveness (F5-#29)', () => {
         expect(onTranscript).not.toHaveBeenCalled()
     })
 
+    /*
+     * ⛔⛔⛔ CHI SMETTE RESTITUISCE IL MICROFONO, anche da fermo.
+     *
+     * MISURATO sul Pad il 2026-08-14, in logcat, con la barra aperta e ferma:
+     *
+     *     16:42:56.900  errore:NO_MATCH            ← lo stato diventa `error`
+     *     16:42:57.267  barra: scaduta, smetto     ← e qui si chiama cancel()
+     *     16:43:40.160  nessuno ha preso il microfono: me lo riprendo
+     *
+     * Quarantatré secondi fra «smetto» e il microfono che torna alla parola di
+     * attivazione — e a restituirlo è stata la rete di sicurezza del servizio,
+     * non noi. In mezzo «hey jarvis» era sordo con la barra a schermo: il
+     * difetto che l'owner ha descritto parola per parola.
+     *
+     * Causa: `cancel()` usciva quando lo stato non era `listening`, e `error` è
+     * ESATTAMENTE lo stato in cui la barra si trova dopo un silenzio. Il motore
+     * era fermo davvero; il microfono no.
+     *
+     * ⛔ Questo test morde togliendo la chiamata dal ramo di uscita: senza,
+     * `engine.stop` non viene chiamato e il microfono resta di nessuno.
+     */
+    it('⛔ cancel() restituisce il microfono ANCHE da stato `error`', async () => {
+        const { engine, events } = engineStub()
+        const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })
+        await flush()
+        await dictation.toggle()
+        events().onStart?.()
+        // Il silenzio: è il caso più comune di tutti, non un caso limite.
+        events().onError?.({ code: 'noSpeech' })
+        expect(dictation.status.value).toBe('error')
+
+        engine.stop.mockClear()
+        dictation.cancel()
+        expect(engine.stop).toHaveBeenCalled()
+    })
+
     it('F5.2 waveform level: spikes on incoming speech, decays, zero when idle', async () => {
         vi.useFakeTimers()
         try {

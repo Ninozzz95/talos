@@ -454,6 +454,28 @@ export const TALOS_EN_MESSAGES = {
             denied: 'Blocked by Android',
         },
         rows: {
+            /*
+             * ⛔ These three rows were IN the list with no translation: the
+             * screen showed the raw key. A permission its own page cannot name
+             * is a permission that is not listed — and the rule here is that
+             * they are ALL listed.
+             */
+            contacts: {
+                title: 'Contacts',
+                purpose: 'Sending a message to someone by name. TALOS looks up the name you said and takes the number for that one message — it does not read, copy or send your address book anywhere.',
+            },
+            calendar: {
+                title: 'Calendar',
+                purpose: 'Answering "what do I have tomorrow", and putting an appointment in when you ask. Reading and writing are two separate permissions, asked at different moments, and every appointment TALOS writes is confirmed by you first. Nothing leaves the phone.',
+            },
+            camera: {
+                title: 'Camera',
+                purpose: 'Taking a photo to attach to a chat. The picture goes where you send it and nowhere else; TALOS never opens the camera on its own.',
+            },
+            mailCount: {
+                title: 'Unread mail count',
+                purpose: 'Answering "how much unread mail do I have". TALOS reads Gmail’s own counter on this phone and gets a number, per account — never the sender, the subject or the text of an email, which this route cannot reach at all. Nothing leaves the phone.',
+            },
             microphone: {
                 title: 'Microphone',
                 purpose: 'Dictation. Your voice becomes text on this device, and the audio is never stored or sent anywhere.',
@@ -738,7 +760,14 @@ export const TALOS_EN_MESSAGES = {
         scrollEarlier: 'Scroll up for earlier messages',
         messageCopied: 'Message copied.',
         messageCopyFailed: 'Message copy failed.',
+        stoppedAtLimit: 'It stopped here: it hit the maximum length. Type "continue" for the rest.',
         actionsDone: 'Done:',
+        cardSwitchOn: 'On',
+        cardProofRead: 'Verified on the phone',
+        cardSwitchOff: 'Off',
+        cardWhichApp: 'Which app?',
+        cardAppOpened: 'Opened',
+        cardAppRefused: 'It would not open',
         memoryUsedOne: '1 memory used',
         memoryUsedMany: '{count} memories used',
         attachedFiles: 'Attached files',
@@ -892,16 +921,41 @@ export const TALOS_EN_MESSAGES = {
         assistantHeld: 'TALOS is your assistant. Call it from any app and the bar comes up.',
         assistantAsk: 'Make TALOS the assistant',
         assistantManual: 'Neither Android nor the bridge could set it. Do it by hand: Settings → Apps → Default apps → Digital assistant. If the list is empty, turn on wireless debugging below and press again.',
-        wakeTitle: 'Call it with your voice',
+        presetTitle: 'How you call it',
+        presetIntro: 'Every way to open TALOS without touching its icon. ⛔ The ones the phone governs, TALOS cannot switch on: you choose, in the system screen, and you can take it back there.',
+        preset: {
+            accensione: {
+                title: 'Press and hold the power button',
+                body: 'It calls the phone’s default assistant: for that to be TALOS, TALOS has to be the assistant. ⛔ But the role is not enough: the phone decides whether to route that gesture to the assistant, and some do not (measured on a OnePlus 13 running ColorOS: the call is intercepted and reaches nobody). Try it: if TALOS opens, from then on the power menu opens with power + volume up. If it does not, the two volume keys and “hey TALOS” still work.',
+            },
+            gesto: {
+                title: 'Swipe in from the screen corner',
+                body: 'The swipe from the bottom corner, if you navigate by gestures. It calls the same default assistant, so the same condition applies, and the same "depends on the phone".',
+            },
+            home: {
+                title: 'Press and hold Home',
+                body: 'If you navigate with three buttons instead of gestures, this is the equivalent: hold the middle button. It still calls the default assistant, so the same condition applies. ⛔ With gesture navigation there is no Home button: there the row above is the one that counts.',
+            },
+            volume: {
+                title: 'Press and hold both volume keys',
+                body: 'This one does not depend on the default assistant either: it is the accessibility shortcut, and it points straight at TALOS. ⛔ The first time you hold both keys Android asks you to confirm: that is normal, and it happens once. ⛔ And this slot is ONE per phone: put another service in it (TalkBack, say) and TALOS is out, and this row goes back to "Not set yet".',
+            },
+        },
+        presetSummary: '{ready} of {total} work right now.',
+        presetState: {
+            pronto: 'Ready',
+            /** ⛔ The role is there, but the phone decides: try it, never promise it. */
+            dipende: 'Try it',
+            'manca-ruolo': 'Role missing',
+            'da-mettere': 'Not set yet',
+        },
+        presetGoRole: 'Open the phone’s assistants',
+        presetGoShortcut: 'Open accessibility',
+        wakeTitle: 'The words “hey TALOS”',
         wakeBody: 'Say “hey TALOS” and the assistant opens, hands free. ⛔ The microphone stays on to wait for those two words: TALOS neither transcribes nor stores anything, but the microphone is on — and while it is, a persistent notification says so.',
         wakeOn: 'TALOS is waiting for “hey TALOS”. The microphone is on: the notification says so, and turns it off.',
         wakeAsk: 'Turn on “hey TALOS”',
         wakeOff: 'Stop waiting for the word',
-        bubbleTitle: 'The TALOS dot',
-        bubbleBody: 'A dot on top of other apps: tap it and the bar opens, with no dependency on the phone gestures. Development build only.',
-        bubbleOn: 'The dot is on screen. Drag it anywhere: it snaps to the nearest edge.',
-        bubbleAsk: 'Turn the dot on',
-        bubbleOff: 'Turn the dot off',
         assistantAsking: 'Asking Android…',
         assistantBridging: 'Setting it with the bridge…',
         pageTitle: 'Phone control',
@@ -951,7 +1005,6 @@ export const TALOS_EN_MESSAGES = {
         pairBody: 'Open developer options, turn on "Wireless debugging", then tap "Pair device with pairing code". Type the six digits here: TALOS finds the addresses itself.',
         pairAction: 'Pair',
         floatAction: 'Open settings with the field on top',
-        allowOverlay: 'Allow the floating window',
         floatTitle: 'Pairing code',
         floatInstruction: 'Type the six digits you can see behind this. Do not leave Settings: the dialog expires the moment you close it.',
         floatWorking: 'Pairing. Looking for the phone on the network and opening the connection: this can take a few seconds.',
@@ -1010,6 +1063,8 @@ export const TALOS_EN_MESSAGES = {
         deviceTorch: 'Torch',
         deviceVibrate: 'Vibration',
         deviceVolume: 'Volume',
+        calendarRead: 'Calendar',
+        calendarWrite: 'Appointment',
         deviceAlarm: 'Alarm',
         deviceOpenApp: 'Opening an app',
         deviceOpenSettings: 'Opening settings',
@@ -1017,6 +1072,8 @@ export const TALOS_EN_MESSAGES = {
         deviceSpeak: 'Speaking out loud',
         deviceWallpaper: 'Changing the wallpaper',
         deviceKeepAwake: 'Holding the screen awake',
+        deviceUnreadMail: 'Counting your unread email',
+        deviceScreenshot: 'Taking a screenshot',
         deviceWifi: 'Wi-Fi',
         deviceBluetooth: 'Bluetooth',
         deviceDnd: 'Do Not Disturb',
@@ -1189,9 +1246,21 @@ export const TALOS_EN_MESSAGES = {
             title: 'Read or change the volume',
             description: 'Reads or sets the volume for music, ringer, alarm or notifications. As a percentage, because the number of steps differs between phones.',
         },
+        calendarWrite: {
+            title: 'Put an appointment in',
+            description: 'Creates an appointment in your calendar without opening any app, with location and notes. Every appointment is confirmed by you first.',
+        },
+        calendarRead: {
+            title: 'Read the calendar',
+            description: 'Looks at your appointments between two moments, to answer "what do I have on". It only reads: it never writes, changes or deletes anything.',
+        },
         deviceAlarm: {
             title: 'Set an alarm or a timer',
             description: 'The phone clock app owns it, so it rings even if TALOS is closed.',
+        },
+        deviceAlarmDismiss: {
+            title: 'Turn off an alarm',
+            description: 'Cancels an alarm you already set: the one at a given time, the next one, or all of them.',
         },
         deviceOpenApp: {
             title: 'Open an app',
@@ -1261,9 +1330,17 @@ export const TALOS_EN_MESSAGES = {
             title: 'Look at which apps you have',
             description: '⛔ The list of installed apps says a lot about a person. It exists so TALOS opens the right one instead of guessing the name.',
         },
+        deviceScreenshot: {
+            title: 'Take a screenshot',
+            description: '⛔ It captures whatever is on screen at that moment — which may be someone else’s chat or a bank page. The system takes it and saves it to your gallery, exactly as the hardware buttons do: TALOS never receives the image.',
+        },
         deviceKeepAwake: {
             title: 'Keep the screen on',
             description: 'The screen stays on while TALOS is in front, and sleeps again as soon as it is not. It uses battery.',
+        },
+        deviceUnreadMail: {
+            title: 'Count your unread email',
+            description: 'It reads Gmail’s own counter on this phone: how many emails you have not opened yet, per Google account. The number only — the sender, the subject and the body are not visible from here, and nothing leaves the device.',
         },
         researchList: {
             title: 'Browse your researches',
@@ -2320,13 +2397,18 @@ export const TALOS_EN_MESSAGES = {
             device_torch: { title: 'Turn the torch on or off', description: 'Switches the phone torch. Needs no permission from you.' },
             device_vibrate: { title: 'Vibrate the phone', description: 'A short buzz as a physical signal. Not for announcing replies — notifications do that.' },
             device_volume: { title: 'Read or set the volume', description: 'Reads a volume or sets it, as a percentage. Real silent mode needs a permission you grant yourself.' },
+            calendar_write: { title: 'Put an appointment in', description: 'Creates an appointment in your calendar without opening any app, with location and notes. Every appointment is confirmed by you first.' },
+            calendar_read: { title: 'Read the calendar', description: 'Looks at your appointments to answer "what do I have on". It only reads: it never writes or deletes anything.' },
             device_alarm: { title: 'Set an alarm or a timer', description: 'Hands it to your clock app, so it still rings when TALOS is closed.' },
+            device_alarm_dismiss: { title: 'Turn off an alarm', description: 'Cancels an alarm you already set: the one at a given time, the next one, or all of them.' },
             device_open_app: { title: 'Open an app', description: 'Opens an app already installed on this phone.' },
+            device_screenshot: { title: 'Take a screenshot', description: '⛔ It captures whatever is on screen at that moment — which may be someone else’s chat or a bank page. The system takes it and saves it to your gallery, exactly as the hardware buttons do: the image never reaches TALOS.' },
             device_open_settings: { title: 'Open a settings screen', description: 'Takes you straight to the exact Android screen instead of saying it cannot help.' },
             device_compose: { title: 'Prepare a call, a message or a share', description: 'Fills it in and hands it to you. TALOS never calls or sends by itself: you press the button.' },
             device_speak: { title: 'Say something out loud', description: 'Reads a short answer through the speaker. Anyone in the room hears it, so it counts as leaving this phone. A silenced phone stays silent.' },
             device_wallpaper: { title: 'Set an image as the wallpaper', description: 'Takes an image from your Library and sets it as the phone wallpaper — home screen, lock screen or both.' },
             device_keep_awake: { title: 'Keep the screen awake', description: 'Stops the screen turning off while you follow something: a recipe, directions. It lasts while TALOS is open.' },
+            device_unread_mail: { title: 'Count your unread email', description: 'How many unread emails you have in Gmail, account by account. The number only: sender, subject and body are not visible from here, and nothing leaves the phone.' },
             device_wifi: { title: 'Turn Wi-Fi on or off', description: 'Turns Wi-Fi on and off. If it cannot do it itself, it opens the phone panel over TALOS and you tap the switch.' },
             device_bluetooth: { title: 'Turn Bluetooth on or off', description: 'Turns Bluetooth on and off. Turning it off disconnects earbuds and watch.' },
             device_do_not_disturb: { title: 'Set or clear Do Not Disturb', description: 'Silences the phone, or lets it ring again. Prefers “only what matters” over total silence, which hides alarms too.' },
@@ -2867,6 +2949,7 @@ export const TALOS_EN_MESSAGES = {
          * che alla domanda.
          */
         contextPrompt: 'Below is the text currently on the person’s screen. Use it only if the question needs it, and do not repeat it back in full.',
+        contextPage: 'The person is looking at this page: {page} — if the question is about its content, open it with web_read instead of stopping at what is visible on screen.',
         close: 'Close',
         expand: 'Show the whole answer',
         collapse: 'Shorten the answer',
@@ -2887,6 +2970,10 @@ export const TALOS_EN_MESSAGES = {
         attachPhotos: 'Photos',
         attachCamera: 'Camera',
         attachFile: 'File',
+        /** The heading of the section naming which model will answer. */
+        model: 'Model',
+        /** ⛔ The drawer title HERE: in the assistant you are not «adding to the chat». */
+        addTitle: 'Add to your message',
         attachLibrary: 'From the Library',
         attachLibraryEmpty: 'The Library is empty — nothing to attach yet.',
         attachLibraryLoading: 'Reading the Library…',

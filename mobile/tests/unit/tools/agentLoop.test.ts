@@ -163,3 +163,45 @@ describe('agent loop', () => {
         expect(complete).not.toHaveBeenCalled()
     })
 })
+
+/**
+ * ⛔⛔⛔ UN PREAMBOLO CHE ANNUNCIA CIÒ CHE NON È SUCCESSO SI TOGLIE.
+ *
+ * Visto sul Pad il 2026-08-14: «Sveglia delle 07:00 annullata.» detto PRIMA di
+ * chiamare, mentre l'orologio contava quattro sveglie armate. La riga era falsa
+ * nel momento in cui è stata scritta.
+ *
+ * ⛔ Il preambolo si tiene di regola — la persona l'ha già visto scorrere, e c'è
+ * un test che lo custodisce. Ma quel test parte da un preambolo VERO. Quando
+ * l'attrezzo dichiara di non aver avuto effetto, l'annuncio è una bugia per
+ * costruzione: mostrare per sempre una frase falsa è peggio che vederne sparire
+ * una vera.
+ */
+describe('preambolo e attrezzi senza effetto', () => {
+    it('⛔⛔ il preambolo SPARISCE se il tool non ha avuto effetto', async () => {
+        const complete = vi.fn()
+            .mockResolvedValueOnce({ text: 'Sveglia annullata.', toolCalls: [call('c1')] })
+            .mockResolvedValueOnce({ text: 'Ho mandato il comando: controlla la lista.' })
+        const execute = vi.fn(async () => ({ content: 'asked', ok: true, senzaEffetto: true }))
+
+        const outcome = await runTalosAgentLoop([{ role: 'user', content: 'annulla' }], { complete, execute })
+
+        expect(outcome.text).toBe('Ho mandato il comando: controlla la lista.')
+    })
+
+    /*
+     * ⛔ IL VERSO CONTRARIO, ed è quello che protegge il test esistente: se
+     * l'attrezzo ha fatto qualcosa, il preambolo RESTA — la persona l'ha visto
+     * e racconta una cosa vera.
+     */
+    it('⛔ il preambolo RESTA se il tool ha fatto qualcosa', async () => {
+        const complete = vi.fn()
+            .mockResolvedValueOnce({ text: 'Guardo nella tua Libreria.', toolCalls: [call('c1')] })
+            .mockResolvedValueOnce({ text: 'La fattura è di 2196 euro.' })
+        const execute = vi.fn(async () => ({ content: 'found', ok: true }))
+
+        const outcome = await runTalosAgentLoop([{ role: 'user', content: 'quanto?' }], { complete, execute })
+
+        expect(outcome.text).toBe(['Guardo nella tua Libreria.', 'La fattura è di 2196 euro.'].join('\n\n'))
+    })
+})

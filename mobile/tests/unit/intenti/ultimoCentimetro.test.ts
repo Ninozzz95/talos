@@ -314,14 +314,82 @@ describe('⛔ quando NON si deve premere, non si preme', () => {
         expect(esito.content).toMatch(/NOT sent/)
     })
 
+    /*
+     * ⛔ L'asserzione era `/^Opened/`, cioè la PAROLA invece del comportamento.
+     * Dal 2026-08-14 «aperta» si dice solo dopo aver guardato lo schermo — con
+     * l'occhio che non vede Maps arrivare, la frase onesta è un'altra — e la
+     * cosa che questo test difende non è mai stata quella parola: è che per
+     * una capacità che non ESCE non si tocca nessun pulsante.
+     */
     it('cercare o navigare non ha nessun ultimo centimetro', async () => {
+        schermo.davanti = 'com.google.android.apps.maps'
         const esito = await chiedi({
             capacita: 'mappe_naviga',
             valori: { destinazione: 'Catania' },
         })
         expect(ponte.chiamate).toHaveLength(0)
         expect(esito.ok).toBe(true)
-        expect(esito.content).toMatch(/^Opened/)
+        // ⛔ E non si promette un invio che non c'è stato. Con i confini di
+        // parola: senza, «una frase sola» — `sentence` — faceva passare il test
+        // per la ragione sbagliata, che è il difetto di asserzione già pagato
+        // tre volte su questo progetto.
+        expect(esito.content).not.toMatch(/\bsent\b/i)
+    })
+
+    /*
+     * ⛔⛔ E L'ALTRO VERSO, che è il difetto misurato: intent accettato, app che
+     * si chiude da sola, TALOS che dice «fatto». MISURATO sul Pad il
+     * 2026-08-14 con Spotify — `isExiting` un secondo dopo la partenza, e in
+     * chat «Ho cercato i Pink Floyd su Spotify».
+     */
+    it('⛔ se l\'app NON arriva davanti, non si dice che è aperta', async () => {
+        schermo.davanti = 'com.android.launcher'
+        const esito = await chiedi({
+            capacita: 'mappe_naviga',
+            valori: { destinazione: 'Catania' },
+        })
+        expect(esito.ok).toBe(false)
+        expect(esito.code).toBe('TALOS_INTENTO_NON_ARRIVATA')
+    })
+
+    /*
+     * ⛔ «Non lo so» non è «no»: senza occhio non si accusa un'app di non essere
+     * arrivata. È la stessa regola già scritta per le capacità generiche.
+     */
+    /*
+     * ⛔⛔ E DIRE **PERCHÉ** NON HA POTUTO GUARDARE — 2026-08-15.
+     *
+     * MISURATO sul Pad, chiesto «farmacie vicino a me»: Maps si è aperta con le
+     * farmacie (visto sullo schermo) e TALOS ha risposto «ho inviato la
+     * richiesta a Google Maps, ma **non sono riuscito a confermare l'apertura a
+     * schermo**». Chi legge conclude che è fallito, mentre dietro c'era la
+     * risposta giusta.
+     *
+     * Non era la finestra d'attesa: MISURATO, Maps va davanti in **311 ms**
+     * contro i 4,2 s che qui si aspettano. Era che TALOS non poteva guardare —
+     * `sipuoSapere:false`, ponte spento — e quel caso usciva con la stessa
+     * frase di «ho guardato e non c'era».
+     *
+     * ⇒ Sono due cose diverse per chi ascolta: una si risolve riaccendendo il
+     * ponte, l'altra no. La riga adesso porta la causa E la mossa.
+     */
+    it('⛔ CIECO: dice che non può guardare, perché, e cosa si può fare', async () => {
+        schermo.sipuoSapere = false
+        const esito = await chiedi({
+            capacita: 'mappe_naviga',
+            valori: { destinazione: 'Catania' },
+        })
+        expect(esito.ok).toBe(true)
+        // ⛔ Non basta chiedere prudenza: la riga deve TOGLIERE al modello i
+        // verbi del successo. MISURATO: con «senza dire di averlo verificato»
+        // ha risposto «Ho cercato i Queen su Spotify», a schermo fermo.
+        expect(esito.content).toMatch(/Do NOT say you searched, played or opened/)
+        // ⛔ E deve togliere anche il verbo del FALLIMENTO: l'app può essersi
+        // aperta benissimo, ed è quello che era successo davvero.
+        expect(esito.content).toMatch(/do NOT say it did not work/)
+        // La causa, con parole che portano a una mossa.
+        expect(esito.content).toMatch(/privileged access is not connected/)
+        expect(esito.content).toContain('android.settings.APPLICATION_DEVELOPMENT_SETTINGS')
     })
 
     /** Se nessuna via si apre, non c'è niente da premere: non si tocca lo schermo. */

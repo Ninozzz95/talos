@@ -17,6 +17,8 @@ import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import {
     TALOS_METADATA_AZIONI,
     TALOS_METADATA_CHIAMATE,
+    TALOS_METADATA_SCHEDE,
+    TALOS_METADATA_TRONCATA,
     talosAzioniEseguite,
     talosChiamateDelTurno,
 } from '@/lib/tools/tracciaAzione'
@@ -88,6 +90,7 @@ import type { TalosNativeFilePicker } from '@/services/nativeFilePicker'
 import type { TalosVaultService } from '@/services/talosVaultService'
 import {
     createChatStore,
+    talosDaIntitolare,
     type ChatCompletion,
     type ChatCompletionResult,
     type ChatStore,
@@ -786,6 +789,15 @@ export interface ChatController {
     readonly endpoints: Readonly<Record<TalosMobileProviderId, string | null>>
     readonly modelLabPreferences: ComputedRef<TalosMobileModelLabPreferences>
     readonly profiles: ComputedRef<TalosMobileModelProfileView[]>
+    /** Un catalogo qualsiasi si sta ancora leggendo. */
+    readonly refreshingModels: ComputedRef<boolean>
+    /**
+     * Perché l'elenco dei modelli può essere corto: una frase già tradotta per
+     * ogni provider che NON ha risposto. Solo i guasti — un provider senza
+     * chiave non è un problema da riferire, è un provider che la persona non ha
+     * configurato.
+     */
+    readonly discoveryProblems: ComputedRef<ReadonlyArray<{ message: string, detail?: string | null }>>
     /**
      * Il deposito sicuro è stato letto almeno una volta.
      *
@@ -1123,6 +1135,31 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     const catalogs = reactive(initialCatalogs())
     const endpoints = reactive(initialEndpoints())
     const selectedModelId = ref<string | null>(null)
+
+    /**
+     * Whether any provider catalogue is still loading, and why the list may be
+     * short. Both are pure functions of `catalogs`.
+     *
+     * ⛔ They lived in `ChatScreen` until the assistant bar needed the same
+     * model picker (owner finding #9: «dalla barra il modello non si cambia»).
+     * Two surfaces computing the same thing from the same source is the shape
+     * that diverges — one gets a fix, the other keeps the old answer — so they
+     * moved to where the source already lives instead of being copied.
+     */
+    const refreshingModels = computed(() =>
+        Object.values(catalogs).some((catalog) => catalog.status === 'loading'))
+    /**
+     * Only failures — a provider with no key saved is not a problem to report,
+     * it is a provider the user has not set up. Deduplicated because two
+     * providers failing the same way should say it once.
+     */
+    const discoveryProblems = computed(() => {
+        const seen = new Set<string>()
+        return Object.values(catalogs)
+            .filter((catalog) => catalog.status === 'error' && catalog.error)
+            .map((catalog) => ({ message: catalog.error as string, detail: catalog.errorDetail }))
+            .filter((problem) => !seen.has(problem.message) && seen.add(problem.message))
+    })
     /**
      * ⛔ Il modello che la persona aveva scelto e che NON abbiamo potuto
      * applicare perché **il suo catalogo non si leggeva**. Non è «non esiste»:
@@ -3501,7 +3538,62 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 azioniDelTurno.push(row)
                 return toolset.audit(row, sendIdentity.sessionId)
             }
-            const catalogoAttivo = profile?.provider === 'local' && offeredTools.length > 0
+            /*
+             * ⭐⭐⭐ CHI APRE A GRADI, e con quale meccanismo — 2026-08-13.
+             *
+             * ## Il numero che lo impone
+             *
+             * 63 attrezzi, **42.540 byte ≈ 11.500 token** spediti a ogni
+             * messaggio. La documentazione Anthropic dà due soglie per
+             * accendere la ricerca degli attrezzi — 10 attrezzi, o 10k token di
+             * definizioni — e noi le sfondiamo entrambe. E dà la ragione che
+             * conta più del risparmio: *«la capacità di scegliere l'attrezzo
+             * giusto degrada oltre i 30-50 attrezzi disponibili»*.
+             *
+             * ⇒ Misurato sul Pad lo stesso giorno: a «annulla la sveglia delle
+             * 7 e 30» il modello ha scelto l'attrezzo che le METTE. È quel
+             * guasto, capitato a noi.
+             *
+             * ## Perché Anthropic è ESCLUSO da questo ramo
+             *
+             * Non perché non gli serva — perché ha di meglio. La sua ricerca è
+             * **lato server**: nessun giro in più, e il prefisso del prompt
+             * resta intatto, quindi **la cache regge**. Il nostro catalogo
+             * costa al modello un giro di `tool_details` e sposta il prefisso.
+             * Usarlo dove esiste quello nativo sarebbe scrivere una cosa
+             * peggiore avendo la migliore in mano. Sta in `anthropicAdapter`.
+             *
+             * ⇒ Qui restano OpenAI, Gemini, OpenRouter e il motore locale: per
+             * loro il catalogo compatto è l'unico modo, ed è già misurato —
+             * 38.386 → 5.087 byte, **−87%**.
+             *
+             * ## ⛔⛔ E perché ANTHROPIC, per ora, sta QUI DENTRO lo stesso
+             *
+             * Il ramo nativo è scritto, provato dai test e **funziona al primo
+             * giro**: torcia accesa alle 00:20:38 con Claude Haiku 4.5. Al giro
+             * DOPO il provider ha risposto `PROVIDER_CHAT_FAILED`.
+             *
+             * La causa sta nella documentazione, alla voce «continuing the
+             * conversation»: la risposta va rimandata indietro **immutata,
+             * compresi i blocchi `server_tool_use` e `tool_search_tool_result`».
+             * La nostra storia si ricostruisce con testo e `tool_use` soltanto —
+             * quei blocchi non esistono nel nostro modello di messaggio, quindi
+             * al secondo giro la conversazione che spediamo è malformata.
+             *
+             * ⇒ Finché non sappiamo conservarli, Anthropic passa dal catalogo
+             * compatto come gli altri: è provato e funziona. Il ramo nativo non
+             * si tocca e non si cancella — resta pronto, e la riga da cambiare
+             * è questa. **Meglio un giro in più che una risposta che non
+             * arriva**, che è esattamente ciò che l'owner ha visto due volte
+             * stanotte.
+             *
+             * ⛔ Il ramo nativo si spegne in `anthropicAdapter`, non qui:
+             * accendere il catalogo per Anthropic avrebbe cambiato il contratto
+             * di TUTTI i provider avendone provato sul telefono uno solo, e
+             * quattro test che descrivono l'esposizione diretta degli strumenti
+             * l'hanno detto subito.
+             */
+            const catalogoAttivo = profile?.provider !== 'anthropic' && offeredTools.length > 0
             /*
              * ⛔ CARICATO A RICHIESTA, e non e' pigrizia: importarlo in cima
              * tira `registry` dentro il primo pezzo del pacchetto e il cancello
@@ -4134,12 +4226,27 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         ? await applyConfirmedTurnLibraryContext(result.content)
                         : result.content
                     timing?.finish(result.ok, 0, result.code ?? null)
-                    return {
-                        ok: result.ok,
-                        content,
-                        images: result.images,
-                        messageAttachments: result.messageAttachments,
-                    }
+                    /*
+                     * ⛔⛔⛔ SI PASSA L'ESITO INTERO, non quattro campi scelti.
+                     *
+                     * Qui c'era un oggetto ricostruito a mano — `ok`, `content`,
+                     * `images`, `messageAttachments` — e chi ha aggiunto
+                     * `senzaEffetto` all'esito dei tool non è passato di qui.
+                     *
+                     * Visto sul Pad il 2026-08-14: il ciclo dell'agente non
+                     * poteva sapere che un attrezzo non aveva avuto effetto, e
+                     * teneva il preambolo «Sveglia delle 07:00 annullata» sopra
+                     * una risposta che diceva «non sono riuscito ad annullarla».
+                     * Due frasi opposte, a due centimetri.
+                     *
+                     * ⛔ È la stessa forma già pagata con `silenceMillis`: un
+                     * valore giusto che muore all'ULTIMO ponte, dove nessuno
+                     * guarda perché sembra solo un inoltro. Un elenco di campi
+                     * è una lista che qualcuno deve ricordarsi di aggiornare;
+                     * lo spread non ha bisogno che nessuno se ne ricordi — e
+                     * qui costa anche **meno byte** di quelli che elencava.
+                     */
+                    return { ...result, content }
                 },
                 /**
                  * ⛔ B2 — il piano, chiesto una volta sola per messaggio.
@@ -4572,6 +4679,64 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const answerSources = webSourceArchive.current?.sources() ?? []
             // Una volta sola: era calcolata DUE volte, nel test e nel valore.
             const azioniFatte = talosAzioniEseguite(azioniDelTurno)
+            /*
+             * ⛔ In linea invece che in una funzione esportata: quella costava
+             * al grafo d'avvio. L'ULTIMA vince — se in un turno la torcia si
+             * accende e si rispegne, l'interruttore da mostrare è quello finale.
+             */
+            /*
+             * ⛔⛔ LA CHIAVE NON PUÒ ESSERE `tool`: ce l'ha SOLO l'interruttore.
+             *
+             * Trovato leggendo, il 2026-08-14, aggiungendo il terzo tipo di
+             * scheda — non misurato sul telefono, ma la riga si legge da sola:
+             * `agenda`, `sveglia` e `quale-app` non hanno `tool`, quindi
+             * finivano TUTTE sulla chiave `''` e ne sopravviveva **una sola per
+             * turno**. Un turno che mette una sveglia e mostra l'agenda ne
+             * perdeva una, in silenzio.
+             *
+             * ⇒ La chiave è il TIPO più ciò che distingue due schede dello
+             * stesso tipo. E resta una deduplica vera dove serve: la torcia
+             * accesa e rispenta nello stesso turno lascia l'ultimo stato, due
+             * sveglie diverse restano due.
+             */
+            /*
+             * ⛔⛔⛔ UNA SCHEDA NON SOPRAVVIVE ALL'AZIONE CHE LA SMENTISCE.
+             *
+             * MISURATO sul Pad il 2026-08-14: chiesto «cancella Prova
+             * Spostamento», TALOS ha risposto «Ho cancellato l'evento» — vero,
+             * il provider dice `deleted=1` — e **sotto quella frase** la scheda
+             * mostrava ancora «21:00–22:00 Prova Spostamento», con la spunta
+             * «✓ Verificato sul telefono».
+             *
+             * Il turno aveva fatto due giri: `calendar_read` (che disegna
+             * l'agenda) e poi `calendar_write` che cancella. La scheda era vera
+             * quando è nata e falsa mezzo secondo dopo.
+             *
+             * ⛔ Ed è **parola per parola il difetto che avevamo misurato in
+             * GEMINI** e scritto nel componente della scheda: «annullata la
+             * sveglia, la sua scheda continuava a mostrare Sveglia 07:30 sotto
+             * la frase è stata cancellata». Averlo scritto non ci ha impedito
+             * di rifarlo: la regola stava nel commento, non nel codice.
+             *
+             * ⇒ Se in questo turno una SCRITTURA su un certo dominio è riuscita
+             * dopo la lettura che ha prodotto la scheda, la scheda si butta.
+             * Meglio nessuna scheda che una scheda che smentisce la frase
+             * accanto: la spunta di verifica invita a non controllare.
+             */
+            const smentita = (indice: number, tipo?: string): boolean => {
+                if (tipo !== 'agenda') return false
+                return azioniDelTurno.some((dopo, j) => j > indice
+                    && dopo.tool === 'calendar_write'
+                    && dopo.status === 'succeeded')
+            }
+            const schedeDelTurno = [...new Map(azioniDelTurno
+                .map((r, i) => [r, i] as const)
+                .filter(([r]) => r.scheda && typeof r.scheda === 'object')
+                .filter(([r, i]) => !smentita(i, (r.scheda as { tipo?: string }).tipo))
+                .map(([r]) => {
+                    const s = r.scheda as Record<string, string | undefined>
+                    return [s.tipo + (s.tool ?? s.capacita ?? s.quando ?? ''), r.scheda] as const
+                })).values()]
             const answerMetadata = {
                 ...(liveLibrary.receipt
                     ? { library_context_receipt: liveLibrary.receipt }
@@ -4606,6 +4771,44 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 ...(azioniDelTurno.length
                     ? { [TALOS_METADATA_CHIAMATE]: talosChiamateDelTurno(azioniDelTurno) }
                     : {}),
+                /*
+                 * ⭐⭐⭐ LE SCHEDE — owner 2026-08-13, «scheda sempre».
+                 *
+                 * Viaggiano coi metadati come `actions_done` e le fonti, perché
+                 * la vista legge `message.metadata`: è la stessa strada già
+                 * provata, e una scheda che sparisce ricaricando la chat non
+                 * sarebbe una scheda.
+                 */
+                ...(schedeDelTurno.length
+                    ? { [TALOS_METADATA_SCHEDE]: schedeDelTurno }
+                    : {}),
+                /*
+                 * ⛔⛔ SI È FERMATA A METÀ, e nessuno lo diceva — rilievo #16b.
+                 *
+                 * Owner, dagli screenshot del 12 agosto: la risposta appare
+                 * **troncata a metà frase** («nessuna app può») «senza che si
+                 * capisca se sia finita, interrotta o tagliata dal rendering».
+                 *
+                 * Tre cause diverse con lo stesso aspetto, e TALOS ne sapeva
+                 * distinguere una sola: `finishReason` arrivava fin qui e **si
+                 * fermava qui**, perché nessuno lo scriveva accanto alla
+                 * risposta. L'unico caso trattato era la risposta VUOTA con
+                 * `length` (vedi `emptyProviderResponse`) — cioè proprio quello
+                 * in cui non c'è testo da leggere a metà.
+                 *
+                 * ⇒ Adesso il fatto viaggia coi metadati, come le azioni e le
+                 * schede: la vista legge `message.metadata`, e una riga sotto
+                 * la risposta dice che è stata la lunghezza a fermarla. Non
+                 * corregge il modello e non riscrive la sua frase: aggiunge il
+                 * pezzo che il modello non può sapere.
+                 *
+                 * ⛔ SOLO `length`. Un `stop` è una risposta finita, e dire
+                 * «forse è incompleta» su ogni risposta insegnerebbe a dubitare
+                 * anche di quelle intere — che è il danno opposto e più grande.
+                 */
+                ...(completion.finishReason === 'length'
+                    ? { [TALOS_METADATA_TRONCATA]: true }
+                    : {}),
             }
             /**
              * La risposta e' arrivata: se non stai guardando, te lo diciamo.
@@ -4635,6 +4838,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     const testo = stripLibrarySaveMarkers(finalText).trim()
                     if (testo.length === 0) return
                     const { talosNotify } = await import('@/stores/notificationCentre')
+                    const titoloSessione = chat.sessions.find(
+                        (session) => session.id === sendIdentity.sessionId,
+                    )?.title ?? ''
                     talosNotify({
                         key: `chat:${sendIdentity.sessionId}`,
                         channel: 'chat',
@@ -4654,9 +4860,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         // notifica e' la cosa. Una conversazione senza titolo non
                         // deve costare la notifica — e' esattamente il genere di
                         // dettaglio che fa perdere la notizia importante.
-                        title: chat.sessions.find(
-                            (session) => session.id === sendIdentity.sessionId,
-                        )?.title || deps.translate('chat.newChat'),
+                        // ⛔ Il gettone si traduce QUI: nel database sta fermo.
+                        title: talosDaIntitolare(titoloSessione)
+                            ? deps.translate('chat.newChat')
+                            : titoloSessione,
                     // Poche parole, come chiesto: la notifica ANTICIPA, la chat
                     // contiene. Un muro di testo nella tenda non si legge e
                     // toglie spazio alle altre.
@@ -6429,10 +6636,27 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         }, await bindingsOf(previousUser.id))
     }
 
+    /**
+     * ⛔⛔ IL TITOLO DI UNA CHAT NUOVA NON SI SCRIVE QUI — e prima si scriveva.
+     *
+     * Visto sul Pad il 2026-08-13: ventiquattro chat tutte «Nuova chat». Questa
+     * riga salvava il titolo **tradotto**, e la rinomina automatica dal primo
+     * messaggio (`chat.ts`) lo confrontava con la costante **inglese**: in
+     * italiano non combaciavano mai e nessuna chat prendeva il suo nome.
+     *
+     * Ora non si passa NIENTE: il gettone «non ancora intitolata» è già il
+     * valore predefinito del negozio, e chi disegna un titolo lo traduce con
+     * `talosDaIntitolare`. Un argomento in meno è anche un byte in meno nel
+     * grafo d'avvio, che qui è contato.
+     *
+     * ⛔ La chat temporanea resta tradotta di proposito: non entra nella
+     * cronologia e non prende mai un nome dal primo messaggio, quindi «Chat
+     * temporanea» è il suo nome vero, non un segnaposto.
+     */
     async function newSession(options: { ephemeral?: boolean } = {}): Promise<void> {
         clearPromptEnhancement()
         await chat.createSession(
-            deps.translate(options.ephemeral ? 'chat.temporaryChat' : 'chat.newChat'),
+            options.ephemeral ? deps.translate('chat.temporaryChat') : undefined,
             selectedModelId.value,
             { ephemeral: options.ephemeral },
         )
@@ -6505,6 +6729,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         endpoints: readonly(endpoints) as Readonly<Record<TalosMobileProviderId, string | null>>,
         modelLabPreferences,
         profiles,
+        refreshingModels,
+        discoveryProblems,
         segretiLetti,
         cataloghiNonLetti,
         imageConsentRequest,

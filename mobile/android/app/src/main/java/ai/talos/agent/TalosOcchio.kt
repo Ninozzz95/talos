@@ -49,13 +49,57 @@ class TalosOcchio : AccessibilityService() {
         val nodo: AccessibilityNodeInfo,
     )
 
+    /**
+     * ⭐⭐ IL PULSANTE DI ACCESSIBILITÀ — la scorciatoia hardware per chiamare TALOS.
+     *
+     * Owner 2026-08-14: «bisogna mettere dei preset per mappare l'assistente a
+     * hold pulsante Power, gesture angolo, **o altri tasti di sistema**».
+     *
+     * Power e gesto d'angolo li governa il RUOLO di assistente, e nessuna app
+     * può assegnarseli da sé. Questa invece è la sola scorciatoia hardware che
+     * un'app può occupare senza permessi speciali: la persona mette TALOS nella
+     * scorciatoia di accessibilità, e da lì i **due tasti del volume tenuti
+     * premuti** (o il pulsante che galleggia) arrivano qui.
+     *
+     * ⛔ Non è `onKeyEvent`: intercettare i tasti del volume vorrebbe dire
+     * decidere noi cosa fa il volume di questo telefono. Qui il sistema ci
+     * chiama **dopo** che la persona ha scelto, e il volume resta il volume.
+     */
+    private val bottone = object : android.accessibilityservice.AccessibilityButtonController.AccessibilityButtonCallback() {
+        override fun onClicked(controller: android.accessibilityservice.AccessibilityButtonController) {
+            Log.i(TAG, "scorciatoia di accessibilità: chiamano TALOS")
+            TalosAssistente.chiama(this@TalosOcchio, "scorciatoia")
+        }
+
+        /*
+         * ⛔ Serve a DIRE, non a decidere: la schermata dei preset legge lo
+         * stato vero dal sistema, e questa riga esiste perché quando la persona
+         * toglie TALOS dalla scorciatoia il registro lo dica invece di lasciar
+         * credere che funzioni ancora.
+         */
+        override fun onAvailabilityChanged(
+            controller: android.accessibilityservice.AccessibilityButtonController,
+            disponibile: Boolean,
+        ) {
+            Log.i(TAG, "scorciatoia di accessibilità: disponibile=$disponibile")
+        }
+    }
+
     override fun onServiceConnected() {
         vivo = this
+        /*
+         * ⛔ Si registra QUI e non nel costruttore: prima dell'aggancio il
+         * controller non esiste, e chiedere il pulsante a un servizio non
+         * ancora connesso lancia. Vale la stessa regola di `vivo`.
+         */
+        runCatching { accessibilityButtonController.registerAccessibilityButtonCallback(bottone) }
+            .onFailure { Log.w(TAG, "scorciatoia non registrata: ${it.message}") }
         Log.i(TAG, "occhio aperto")
     }
 
     override fun onDestroy() {
         if (vivo === this) vivo = null
+        runCatching { accessibilityButtonController.unregisterAccessibilityButtonCallback(bottone) }
         Log.i(TAG, "occhio chiuso: onDestroy")
         super.onDestroy()
     }
@@ -333,6 +377,37 @@ class TalosOcchio : AccessibilityService() {
         @Volatile private var manoVista: Boolean = false
 
         fun aperto(): TalosOcchio? = vivo
+
+        /**
+         * ⭐⭐⭐ LO SCREENSHOT — quello di SISTEMA, non uno silenzioso.
+         *
+         * ## ⛔ Due API, e la scelta non è tecnica
+         *
+         * Android ne offre due a un servizio di accessibilità, e fanno cose
+         * diverse:
+         *
+         * | | cosa fa |
+         * |---|---|
+         * | `takeScreenshot()` (API 30) | cattura **in silenzio** e consegna il bitmap a noi: nessun suono, nessun segnale, **niente salvato** |
+         * | `GLOBAL_ACTION_TAKE_SCREENSHOT` (API 28) | fa lo screenshot **di sistema**: l'animazione, l'anteprima, e il file **in galleria** |
+         *
+         * ⇒ Si usa il secondo, per due ragioni che vanno nella stessa
+         * direzione. La prima è d'uso: «fai uno screenshot» vuol dire *voglio
+         * quell'immagine*, e con la prima API finirebbe dentro TALOS invece che
+         * dove la persona la cerca. La seconda pesa di più: **una cattura
+         * silenziosa dello schermo è esattamente ciò che un assistente non deve
+         * saper fare di nascosto**. Qui lo scatto lo si vede e lo si sente,
+         * come se l'avesse fatto la persona coi tasti.
+         *
+         * ⛔ Rende `false` se l'occhio non è agganciato: senza il servizio di
+         * accessibilità questa strada non esiste, e va detto invece di tacere.
+         */
+        fun scattaSchermata(): Boolean {
+            val servizio = vivo ?: return false
+            return runCatching {
+                servizio.performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
+            }.getOrDefault(false)
+        }
 
         /**
          * Da adesso in poi, un'interazione è una mano.

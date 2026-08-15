@@ -135,8 +135,32 @@ describe('which rows a given device sees', () => {
          * prima del blocco app, cioè fra i permessi che Android fa concedere a
          * runtime — non in fondo, dove le voci non sono permessi affatto.
          */
+        /*
+         * ⭐ Tredici dal 2026-08-14: `calendar`, in LETTURA.
+         *
+         * Nasce da un difetto misurato: «che impegni ho domani?» e TALOS
+         * rispondeva «non hai compiti registrati», avendo guardato le PROPRIE
+         * note. Non è «non lo so»: è una risposta sicura e falsa sulla giornata
+         * di una persona.
+         *
+         * ⛔ Sta fra `contacts` e `camera` perché l'ordine è il contenuto: è un
+         * permesso di runtime che riguarda **dati della persona**, e va letto
+         * accanto agli altri della stessa famiglia. `WRITE_CALENDAR` non c'è, e
+         * quando arriverà avrà la sua riga: leggere e scrivere sono due
+         * decisioni.
+         */
+        /*
+         * ⭐ Quattordici dal 2026-08-14: `mailCount`, il contatore di Gmail.
+         *
+         * ⛔ È un permesso `dangerous` che **Android non definisce**: lo
+         * definisce Gmail (MISURATO: `dumpsys package permission …` →
+         * `prot=dangerous`). Si chiede con lo stesso dialogo e si revoca dalla
+         * stessa pagina, quindi sta con gli altri di runtime — e sta dopo
+         * `calendar` perché è l'ultimo arrivato della stessa famiglia: dati
+         * della persona, letti e basta.
+         */
         expect(rows.map((row) => row.id)).toEqual([
-            'microphone', 'notifications', 'contacts', 'camera',
+            'microphone', 'notifications', 'contacts', 'calendar', 'mailCount', 'camera',
             'appLock', 'files', 'background', 'network',
             'notificationAccess', 'bridge', 'deviceControl', 'localModel',
         ])
@@ -161,6 +185,19 @@ describe('which rows a given device sees', () => {
 
         expect(speciali).toContain('notificationAccess')
         expect(speciali).toContain('bridge')
+        /*
+         * ⛔ LA FINESTRA SOPRA LE ALTRE APP NON C'E' PIU', ed e' rimasta qui
+         * mezza giornata: aggiunta il 2026-08-15 per il pallino del rientro,
+         * tolta lo stesso giorno quando l'owner ha chiesto di obliterare
+         * pallino e pulsante flottante.
+         *
+         * ⇒ Il controllo diventa il suo contrario, e per la stessa ragione per
+         * cui era nato: questa schermata elenca cio' che l'app puo' fare
+         * DAVVERO. Lasciare `overlay` dopo aver tolto le finestre direbbe a chi
+         * legge che TALOS puo' stare sopra le altre app — e non puo' piu'.
+         * Il cancello sta in `tests/unit/build/nientePallinoNienteBottone.test.ts`.
+         */
+        expect(speciali).not.toContain('overlay')
     })
 
     /**

@@ -123,9 +123,67 @@ async function talosPercorri(
             extra: talosComponiExtra(via, valori),
         }).then((r) => r.done, () => false)
     }
+    /*
+     * ⛔⛔ IL PACCHETTO ARRIVA ANCHE QUI, e prima non ci arrivava.
+     *
+     * Le due righe sopra lo passavano; questa — la strada degli URI, cioè
+     * quella che usano quasi tutte le capacità del registro — lo **buttava
+     * via**. MISURATO sul Pad il 2026-08-14, «metti su Pink Floyd su Spotify»:
+     * si apriva `open.spotify.com` dentro **Chrome**, con Spotify installato.
+     *
+     * ⇒ Un parametro dichiarato dal chiamante e ignorato da un ramo su tre è
+     * peggio di un parametro che non c'è: sembra che il vincolo esista.
+     */
     return await TalosDeviceBridge
-        .apriUri({ uri: talosConSchema(via, talosComponiUri(via, valori)) })
+        .apriUri({
+            uri: talosConSchema(via, talosComponiUri(via, valori)),
+            ...(pacchetto ? { pacchetto } : {}),
+        })
         .then((r) => r.done, () => false)
+}
+
+/**
+ * ⭐⭐⭐ IL TOCCO SU «QUALE APP» — la seconda metà della stessa azione.
+ *
+ * La scheda mostra l'elenco vero letto dal telefono; toccare una voce fa
+ * esattamente ciò che avrebbe fatto il modello scrivendo quel nome, e cioè
+ * `talosPercorri` con quel pacchetto. **La stessa funzione**, non una copia: le
+ * due strade (URI e azione) hanno regole opposte sull'escape, e un secondo
+ * chiamante che decidesse da sé sarebbe il posto dove un giorno si sbaglia
+ * verso.
+ *
+ * ⛔ Non passa dal cancello dei permessi, ed è la regola già scritta in
+ * `schedaComandi`: la scheda nasce da un'azione **già autorizzata**, e la
+ * persona sta scegliendo fra le opzioni che TALOS le ha appena messo davanti.
+ * Il tocco **è** il consenso. Non apre capacità nuove — completa questa.
+ *
+ * ⛔ Ricontrolla i parametri invece di fidarsi: i valori hanno fatto un giro
+ * dentro i metadati di un messaggio, cioè fuori da qui, e una capacità aperta
+ * con un campo vuoto porta l'app in primo piano senza il testo dentro.
+ */
+export async function talosApriConApp(
+    capacita: string,
+    valori: Readonly<Record<string, string>>,
+    pacchetto: string,
+): Promise<boolean> {
+    const generica = talosCapacitaGenerica(capacita)
+    if (!generica || !pacchetto.trim()) return false
+    if (generica.parametri.some((p) => !valori[p]?.trim())) return false
+    if (!await talosPercorri(generica.via, valori, pacchetto)) return false
+    /*
+     * ⛔⛔ «APERTA» SI DICE DOPO AVER GUARDATO — la scheda scrive quella parola
+     * sotto il nome dell'app, e non deve poterla scrivere a vuoto.
+     *
+     * MISURATO sul Pad il 2026-08-14 su un'altra strada: intent accettato, app
+     * chiusa da sola un secondo dopo, TALOS che dice «fatto». `startActivity`
+     * che non solleva vuol dire «il sistema ha accettato», non «l'app c'è».
+     *
+     * ⛔ Solo un'app DIVERSA vista davanti è una smentita. Se l'occhio non c'è
+     * la risposta è «non lo so», e la si tratta come riuscita: dire «non si è
+     * aperta» perché non abbiamo potuto guardare è la bugia opposta.
+     */
+    const davanti = await talosDavantiFinche(pacchetto, GIRI_APERTURA)
+    return davanti === null || davanti === pacchetto
 }
 
 /**
@@ -154,15 +212,62 @@ async function talosCapacitaSulDispositivo(
             code: 'TALOS_INTENTO_INCOMPLETO',
         }
     }
-    const candidate = await TalosDeviceBridge.chiAccetta({
+    const tutte = await TalosDeviceBridge.chiAccetta({
         azione: generica.via.azione,
         ...(generica.via.mime ? { tipo: generica.via.mime } : {}),
     }).then((r) => r.app, () => [])
-    const elenco = candidate.map((a) => a.nome || a.pacchetto).join(', ')
+    /*
+     * ⛔⛔⛔ SENZA UN NOME UMANO NON SI OFFRE A UN UMANO.
+     *
+     * MISURATO sul Pad il 2026-08-14, prima riga della scheda «quale app»:
+     *
+     *     com.android.cts.priv.ctsshim.InstallPriority   ›
+     *
+     * Un nome interno sullo schermo di una persona — la regola che questo
+     * progetto ripete ovunque, rotta proprio dalla scheda che serviva a NON far
+     * inventare i nomi. Ed è anche uno stub di collaudo che Android si porta
+     * dietro: non fa niente, e toccarlo non fa niente.
+     *
+     * ## ⛔ Perché NON è un elenco di pacchetti da escludere
+     *
+     * «Niente righe predeterminate: si chiede al TELEFONO» — un registro di nomi
+     * cattivi scritto a mano invecchia e mente, e domani arriva un altro stub.
+     * Il fatto qui si MISURA, e la misura è ESATTA — niente euristiche sui nomi.
+     * `loadLabel()` di Android, quando un'app non dichiara `android:label`,
+     * **ripiega sull'identificatore del componente**. Quindi «l'etichetta è
+     * uguale al nome dell'attività, o al pacchetto» vuol dire, letteralmente,
+     * *il telefono non ha un nome umano per questa cosa* — e ciò che non ha un
+     * nome umano non si mette davanti a una persona né dentro un elenco che il
+     * modello legge.
+     *
+     * ⛔ IL PRIMO TENTATIVO CONFRONTAVA SOLO COL PACCHETTO, ed è passato lo
+     * stesso: il ripiego non era `com.android.cts.ctsshim` ma
+     * `com.android.cts.ctsshim.InstallPriority`, cioè la **classe**. Il ponte
+     * ci dà già `attivita`, quindi il confronto giusto c'era e non lo usavo —
+     * ed è esatto invece che somigliante, che su un nome è la differenza fra una
+     * regola e una scommessa.
+     *
+     * ⛔ Vale per TUTTI E DUE i lettori: la riga che va al modello e la scheda
+     * che va alla persona nascono da qui, e devono dire la stessa cosa.
+     */
+    const candidate = tutte.filter((a) => {
+        const nome = a.nome?.trim() ?? ''
+        return nome !== '' && nome !== a.pacchetto && nome !== a.attivita
+    })
+    const elenco = candidate.map((a) => a.nome).join(', ')
     if (candidate.length === 0) {
+        /*
+         * ⛔ DUE MOTIVI DIVERSI, e si dicono diversi: «nessuno lo sa fare» e
+         * «lo sanno fare solo cose senza nome» sono fatti distinti, e il secondo
+         * è quasi sempre un sistema che offre uno stub. Un solo messaggio per
+         * due stati è la stessa scorciatoia che è già costata qui: gli stati
+         * sono tre, non due.
+         */
         return {
             ok: false,
-            content: 'No app on this device can do that. Tell the user; do not invent one.',
+            content: tutte.length > 0
+                ? 'The only things that accept this on the device have no app name — they are system stubs, not apps a person can pick. Tell the user nothing usable can do it; do not invent one.'
+                : 'No app on this device can do that. Tell the user; do not invent one.',
             code: 'TALOS_INTENTO_NESSUNA_APP',
         }
     }
@@ -186,7 +291,29 @@ async function talosCapacitaSulDispositivo(
          */
         return {
             ok: true,
-            content: `These ${candidate.length} apps — and ONLY these — can do that on this device: ${elenco}. This list comes from the phone itself, so it is the truth. ⛔ Do NOT name any other app, do not add apps you know from elsewhere, and do not guess: an app you name that is not in this list is not installed. Show the user this list and ask which one, then call again with "app".`,
+            content: `These ${candidate.length} apps — and ONLY these — can do that on this device: ${elenco}. This list comes from the phone itself, so it is the truth. ⛔ Do NOT name any other app, do not add apps you know from elsewhere, and do not guess: an app you name that is not in this list is not installed. The user is ALREADY seeing this list as a card they can tap, so just ask which one in one short sentence — do not repeat the names.`,
+            /*
+             * ⭐⭐⭐ E LA SCHEDA PORTA L'ELENCO INTATTO.
+             *
+             * La riga qui sopra difende la stessa cosa con le parole, e nel
+             * 2026-08-13 non era bastata: il modello aveva risposto «WhatsApp,
+             * Telegram, Signal, Messenger, ChatGPT» — tre non installate e una
+             * inventata — avendo l'elenco vero in mano.
+             *
+             * ⇒ La scheda salta il passaggio: dal telefono allo schermo, senza
+             * ricopiature. Il divieto resta, perché la riga governa anche ciò
+             * che il modello DICE; ma la persona non dipende più da quello.
+             */
+            scheda: {
+                tipo: 'quale-app' as const,
+                capacita: generica.id,
+                valori: { ...valori },
+                // ⛔ Nessun ripiego sul pacchetto: il filtro qui sopra garantisce
+                // che ogni voce abbia un nome umano, e un `||` lasciato qui
+                // rimetterebbe in silenzio la strada che ha fatto comparire
+                // `com.android.cts.priv.ctsshim.InstallPriority` sullo schermo.
+                app: candidate.map((a) => ({ nome: a.nome, pacchetto: a.pacchetto })),
+            },
         }
     }
     const cercata = app.trim().toLowerCase()
@@ -228,7 +355,9 @@ async function talosCapacitaSulDispositivo(
      * - davanti ci siamo NOI, o non si può sapere → **non lo so**, e «non lo so»
      *   non è «no»: l'intent è stato accettato e non abbiamo prove contrarie.
      */
-    const davanti = await talosDavantiFinche(scelta.pacchetto)
+    // ⛔ I giri lunghi: quattro (1,4 s) accuserebbero di «non essersi aperta»
+    // un'app che si sta aprendo — vedi `GIRI_APERTURA`.
+    const davanti = await talosDavantiFinche(scelta.pacchetto, GIRI_APERTURA)
     const nostroGuscio = davanti === '' || davanti === null || davanti.startsWith('ai.talos')
     if (davanti !== scelta.pacchetto && !nostroGuscio) {
         return {
@@ -242,11 +371,24 @@ async function talosCapacitaSulDispositivo(
      * telefono, mandarlo a Gmail no, e questa capacità non può distinguerli.
      * ⇒ Non si dice «inviato» — si dice dov'è arrivato, e si lascia decidere.
      */
+    /*
+     * ⛔⛔ E SE NON ABBIAMO POTUTO GUARDARE, non si dice «è aperta».
+     *
+     * `davanti === null` vuol dire `sipuoSapere:false` — col ponte spento TALOS
+     * è cieco. Qui finiva nello stesso ramo di «l'ho vista davanti» e la frase
+     * usciva affermativa: **«is open with the search»**, cioè un successo che
+     * nessuno ha verificato. È lo stesso confine fra «premuto» e «partito» che
+     * l'ultimo centimetro difende per gli invii, e che il ramo delle capacità
+     * note ha imparato il 2026-08-15 — qui mancava ancora.
+     */
+    const cieco = davanti === null
     return {
         ok: true,
-        content: generica.esce === false
-            ? `${scelta.nome} is open with the search.`
-            : `${scelta.nome} is open with the text already in it. It is NOT sent — TALOS cannot know whether this app sends by itself. Tell the user it is ready in ${scelta.nome} and never claim it was sent.`,
+        content: cieco
+            ? `TALOS handed the request to ${scelta.nome} and the device accepted it, but TALOS could NOT look at the screen to confirm — its privileged access is not connected, not because anything failed. Say you asked ${scelta.nome} to open it and that you cannot see the screen to confirm; never claim it is open or that anything was sent.`
+            : generica.esce === false
+                ? `${scelta.nome} is open with the search.`
+                : `${scelta.nome} is open with the text already in it. It is NOT sent — TALOS cannot know whether this app sends by itself. Tell the user it is ready in ${scelta.nome} and never claim it was sent.`,
     }
 }
 
@@ -270,12 +412,34 @@ async function talosChiEDavanti(): Promise<string | null> {
  * istantaneo dopo l'intent fotografa il momento sbagliato e accusa un'app che
  * stava semplicemente aprendosi.
  */
-async function talosDavantiFinche(atteso: string): Promise<string | null> {
+/**
+ * ⛔ Quanti giri per un'app che si sta APRENDO, contro i quattro di un'app che
+ * è già a schermo.
+ *
+ * I quattro giri (1,4 s) bastano a chi controlla un'app **già aperta** dopo un
+ * tocco. Non bastano a chi ne apre una da ferma: MISURATO, `wa.me` porta
+ * WhatsApp in primo piano col testo dentro in **~4 s** da fredda, e su questo
+ * Pad Spotify ci ha messo 9 s solo di `dexopt`.
+ *
+ * ⇒ Con quattro giri diremmo «non si è aperta» a un'app che si stava aprendo —
+ * la bugia opposta, e altrettanto sicura di sé.
+ *
+ * ⛔ Tredici: l'ULTIMO controllo cade a **4,2 s**, cioè oltre i ~4 s misurati.
+ * Il numero deve stare sopra l'avvio a freddo, se no il verdetto è sbagliato;
+ * e ogni giro in più è tempo che una persona aspetta per sentirsi dire che
+ * qualcosa NON è successo. Chi si apre esce al primo giro utile e non paga
+ * niente.
+ */
+const GIRI_APERTURA = 13
+
+async function talosDavantiFinche(atteso: string, giri = 4): Promise<string | null> {
     let visto: string | null = null
-    for (let giro = 0; giro < 4; giro++) {
+    for (let giro = 0; giro < giri; giro++) {
         visto = await talosChiEDavanti()
         if (visto === atteso) return visto
-        await new Promise((r) => setTimeout(r, 350))
+        // ⛔ Dopo l'ultimo controllo non si aspetta: quell'attesa non cambia
+        // nessuna risposta, la fa solo arrivare più tardi.
+        if (giro < giri - 1) await new Promise((r) => setTimeout(r, 350))
     }
     return visto
 }
@@ -988,7 +1152,98 @@ export function talosIntentiTools(
                             }
                         }
                         if (!capacita.esce) {
-                            return { ok: true, content: `Opened ${capacita.app} via ${via.tipo}.` }
+                            /*
+                             * ⛔⛔⛔ «APERTA» SI DICE DOPO AVER GUARDATO.
+                             *
+                             * MISURATO sul Pad il 2026-08-14, «metti su Pink
+                             * Floyd su Spotify»: l'intent è stato accettato,
+                             * TALOS ha risposto **«Ho cercato i Pink Floyd su
+                             * Spotify»** — e sullo schermo non era successo
+                             * niente. In logcat, un secondo dopo la partenza:
+                             *
+                             *     ActivityRecord{… com.spotify.music/.SpotifyMainActivity … isExiting}
+                             *     Activity top resumed state loss timeout
+                             *
+                             * L'app si era chiusa da sola (su questo Pad
+                             * Spotify non parte nemmeno dal suo lanciatore).
+                             *
+                             * ⇒ `startActivity` che non solleva vuol dire «il
+                             * sistema ha accettato la richiesta», NON «l'app ha
+                             * fatto la cosa». È lo stesso confine fra «premuto»
+                             * e «partito» che l'ultimo centimetro difende già
+                             * per gli invii: qui mancava per le aperture.
+                             *
+                             * ⛔ E gli esiti sono TRE, non due — l'occhio può
+                             * anche non esserci, e allora la risposta è «non lo
+                             * so», che è diversa da «non è arrivata».
+                             */
+                            const davanti = await talosDavantiFinche(capacita.pacchetto, GIRI_APERTURA)
+                            if (davanti === capacita.pacchetto) {
+                                return {
+                                    ok: true,
+                                    content: `${capacita.app} is open and in the foreground — TALOS checked the screen. Say it is done, in one short sentence.`,
+                                }
+                            }
+                            /*
+                             * ⛔⛔ DUE «NON LO SO» DIVERSI, e uno ha una CURA.
+                             *
+                             * MISURATO sul Pad il 2026-08-15, chiesto «farmacie
+                             * vicino a me»: Maps si è aperta con le farmacie —
+                             * l'ho vista — e TALOS ha risposto «ho inviato la
+                             * richiesta a Google Maps, ma **non sono riuscito a
+                             * confermare l'apertura a schermo**». Chi legge
+                             * conclude che è fallito, mentre dietro c'era la
+                             * risposta giusta.
+                             *
+                             * Non era la finestra: MISURATO, Maps va davanti in
+                             * **311 ms** e qui si aspetta fino a 4,2 s. Era che
+                             * TALOS **non poteva guardare**: `chiEDavanti`
+                             * risponde `sipuoSapere:false` col ponte spento
+                             * (`adb_wifi_enabled = 0`), e quel `null` finiva
+                             * nello stesso ramo di «ho guardato e non c'era».
+                             *
+                             * ⇒ Sono due cose diverse per chi ascolta: una si
+                             * risolve riaccendendo il ponte, l'altra no. Dirle
+                             * con la stessa frase toglie alla persona l'unica
+                             * mossa che aveva.
+                             */
+                            if (davanti === null) {
+                                return {
+                                    ok: true,
+                                    content: `TALOS handed the request to ${capacita.app} and the device accepted it. TALOS could NOT look at the screen to confirm, because its privileged access is not connected — not because anything failed. ⛔ Do NOT say you searched, played or opened the thing, and do NOT say it did not work. Say you asked ${capacita.app} to open it, that you cannot see the screen to confirm, and offer to open android.settings.APPLICATION_DEVELOPMENT_SETTINGS so they can reconnect it.`,
+                                }
+                            }
+                            // ⛔ E qui invece TALOS HA guardato: c'era lui davanti,
+                            // o nessuno. «Non lo so» non è «no», quindi non si
+                            // accusa l'app — ma non si vanta nemmeno un successo.
+                            if (davanti === '' || davanti.startsWith('ai.talos')) {
+                                /*
+                                 * ⛔⛔ LA RIGA DEVE TOGLIERE AL MODELLO LE PAROLE
+                                 * DEL SUCCESSO, non solo chiedergli prudenza.
+                                 *
+                                 * MISURATO sul Pad il 2026-08-14: con «say it
+                                 * was opened WITHOUT claiming you verified it»,
+                                 * il modello ha risposto «Ho cercato i Queen su
+                                 * Spotify» — una frase di successo pieno, con
+                                 * lo schermo fermo. Aveva obbedito alla lettera
+                                 * e mancato la sostanza.
+                                 *
+                                 * ⇒ Si dice cosa È SUCCESSO — la richiesta è
+                                 * stata consegnata — e si vieta il verbo che
+                                 * descrive il risultato. Una regola che lascia
+                                 * in mano al modello la parola più comoda è una
+                                 * regola che non regge.
+                                 */
+                                return {
+                                    ok: true,
+                                    content: `TALOS handed the request to ${capacita.app} and the device accepted it, but ${capacita.app} never appeared on screen while TALOS was watching. ⛔ Do NOT say you searched, played, opened or did the thing: you do not know that it happened. Say exactly that you asked ${capacita.app} to open it and could not confirm it came up.`,
+                                }
+                            }
+                            return {
+                                ok: false,
+                                content: `The device accepted the request but ${capacita.app} did not come to the foreground — "${davanti}" is there instead. ⛔ Tell the user plainly that ${capacita.app} did not open, and do NOT say you did it. Do not invent a cause: you do not know why.`,
+                                code: 'TALOS_INTENTO_NON_ARRIVATA',
+                            }
                         }
                         if (input.invia === false) {
                             return {

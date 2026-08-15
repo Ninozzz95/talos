@@ -4,6 +4,7 @@ import android.app.SearchManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.net.Uri
@@ -26,6 +27,49 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.getcapacitor.annotation.Permission
+
+/**
+ * Il lato del quadrato in cui si disegna l'icona di un'app, in pixel fisici.
+ *
+ * ⛔ Uno solo per tutte, e deciso QUI invece che da chi disegna: icone di
+ * dimensioni diverse in colonna sono la prima cosa che fa sembrare sciatta una
+ * scheda, e lasciare la scelta al CSS vorrebbe dire ingrandire un'icona piccola
+ * — cioè sfocarla. 144 px coprono i 48 dp del bersaglio di tocco anche a densità
+ * 3× senza doverli inventare.
+ */
+private const val MISURA_ICONA = 144
+
+/**
+ * ⛔ Il tag del registro per la posta: una stringa sola, perché due tag diversi
+ * sono due `grep` da ricordare — e la causa di un provider muto si cerca quando
+ * si ha fretta.
+ */
+private const val TAG_POSTA = "TalosPosta"
+
+/**
+ * ⛔⛔ IL PERMESSO DI GMAIL È `dangerous`, cioè SI CHIEDE — MISURATO, non dedotto.
+ *
+ * Dichiararlo nel manifest non basta e il telefono lo dice a chiare lettere. Il
+ * 2026-08-14, sul Pad, con la riga già nel manifest:
+ *
+ * ```
+ *   SecurityException: Permission Denial: opening provider
+ *   com.google.android.gm.provider.PublicContentProvider from ai.talos.dev
+ *   requires com.google.android.gm.permission.READ_CONTENT_PROVIDER
+ *
+ *   dumpsys package permission …READ_CONTENT_PROVIDER → prot=dangerous
+ * ```
+ *
+ * ⛔ E `dumpsys package ai.talos.dev` mostrava quel nome lo stesso: comparire
+ * fra i permessi RICHIESTI non vuol dire essere stati AUTORIZZATI — è lo stesso
+ * inganno di `adb install` che dice «Success» installando un'altra app.
+ *
+ * ⇒ Si chiede alla persona col dialogo di sistema, una volta, come per il
+ * calendario e la rubrica. Non sta in `Manifest.permission` perché non è di
+ * Android: lo definisce Gmail.
+ */
+private const val PERMESSO_POSTA = "com.google.android.gm.permission.READ_CONTENT_PROVIDER"
 
 /**
  * ⭐ Le capacità che costano ZERO a chi usa TALOS.
@@ -53,7 +97,12 @@ import com.getcapacitor.annotation.CapacitorPlugin
  * ⇒ Ogni metodo torna un booleano di esito **e il motivo**, e chi chiama lo
  * riporta invece di nasconderlo.
  */
-@CapacitorPlugin(name = "TalosDevice")
+@CapacitorPlugin(
+    name = "TalosDevice",
+    permissions = [
+        Permission(strings = [PERMESSO_POSTA], alias = "posta"),
+    ],
+)
 class TalosDevicePlugin : Plugin() {
 
     /** Oltre, non è un segnale ma un fastidio. */
@@ -212,12 +261,76 @@ class TalosDevicePlugin : Plugin() {
             Intent(AlarmClock.ACTION_SET_ALARM)
                 .putExtra(AlarmClock.EXTRA_HOUR, call.getInt("hour") ?: 7)
                 .putExtra(AlarmClock.EXTRA_MINUTES, call.getInt("minute") ?: 0)
-                // ⛔ Senza SKIP_UI si apre l'app e la persona deve confermare.
-                // Con, la sveglia c'e' e basta. Chi l'ha chiesta a voce non
-                // vuole poi toccare lo schermo.
+                /*
+                 * ⛔ Senza SKIP_UI si apre l'app e la persona deve confermare.
+                 * Con, la sveglia c'e' e basta. Chi l'ha chiesta a voce non
+                 * vuole poi toccare lo schermo.
+                 *
+                 * ⛔⛔ MA QUESTA ROM LO IGNORA — misurato sul Pad il 2026-08-14
+                 * da uno stato pulito, con l'intent sparato da `adb`:
+                 *
+                 *     PRIMA  com.android.launcher
+                 *     DOPO   com.oneplus.deskclock/…AlarmClock   (sveglia creata)
+                 *
+                 * La sveglia si crea davvero, ma la persona finisce
+                 * nell'Orologio. Non e' un difetto nostro e non si aggira con
+                 * un altro extra: l'unica alternativa sarebbe una sveglia
+                 * NOSTRA, che non suonerebbe piu' se qualcuno disinstalla TALOS
+                 * — vedi il commento in cima. Si tiene l'intent e si dichiara
+                 * il limite invece di fingere che non ci sia.
+                 */
                 .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
         }
         call.getString("label")?.let { intent.putExtra(AlarmClock.EXTRA_MESSAGE, it) }
+        call.resolve(avvia(intent))
+    }
+
+    /**
+     * ⭐⭐⭐ SPEGNERE UNA SVEGLIA — il verso che non esisteva.
+     *
+     * ## Il difetto, misurato sul Pad il 2026-08-13
+     *
+     * A «annulla la sveglia delle 7 e 30» succedevano **tre cose sbagliate in
+     * una**: la sveglia restava armata, ne compariva una **seconda** alle 07:30,
+     * e si apriva **l'app Orologio** in faccia alla persona. Causa unica: il
+     * modello aveva un solo attrezzo per le sveglie, `device_alarm`, che sa
+     * **soltanto mettere**. Gli si chiedeva di annullare e lui rifaceva.
+     *
+     * ⇒ Non era un difetto del modello: era un attrezzo **senza il suo
+     * contrario**. Nello stesso confronto Gemini annullava davvero.
+     *
+     * ## Perché `ACTION_DISMISS_ALARM` e non una cancellazione
+     *
+     * L'API delle sveglie di Android **non ha** un «elimina»: possiede solo
+     * `ACTION_DISMISS_ALARM`, che spegne l'istanza trovata. Si sceglie **come**
+     * cercarla con `EXTRA_ALARM_SEARCH_MODE`:
+     *
+     * - orario preciso, quando la persona lo dice («quella delle 7 e 30»)
+     * - la prossima, quando dice solo «annulla la sveglia»
+     * - tutte, quando dice «tutte»
+     *
+     * ⛔ `EXTRA_SKIP_UI` va messo anche qui: senza, l'orologio si apre per far
+     * scegliere quale — ed è esattamente la cosa che non deve succedere
+     * («non spostare mai la persona»). Con, se la ricerca trova una sveglia sola
+     * la spegne in silenzio.
+     */
+    @PluginMethod
+    fun alarmDismiss(call: PluginCall) {
+        val hour = call.getInt("hour")
+        val minute = call.getInt("minute")
+        val intent = Intent(AlarmClock.ACTION_DISMISS_ALARM)
+            .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+        when {
+            call.getBoolean("all") == true ->
+                intent.putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_ALL)
+            hour != null ->
+                intent
+                    .putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_TIME)
+                    .putExtra(AlarmClock.EXTRA_HOUR, hour)
+                    .putExtra(AlarmClock.EXTRA_MINUTES, minute ?: 0)
+            else ->
+                intent.putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_NEXT)
+        }
         call.resolve(avvia(intent))
     }
 
@@ -253,6 +366,39 @@ class TalosDevicePlugin : Plugin() {
             android.content.Intent.ACTION_VIEW,
             android.net.Uri.parse(uri),
         ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        /*
+         * ⛔⛔⛔ L'APP PRIMA DEL BROWSER — owner: «NON SPOSTARE MAI LA PERSONA».
+         *
+         * MISURATO sul Pad il 2026-08-14, «metti su Pink Floyd su Spotify»:
+         *
+         *     START act=VIEW dat=https://open.spotify.com/…
+         *           cmp=com.android.chrome/…IntentDispatcher      ⇐ il BROWSER
+         *
+         * Spotify era installato. L'indirizzo `https://open.spotify.com/...` è
+         * un app-link che l'app sa aprire, ma senza vincolo Android lo consegna
+         * al gestore predefinito — Chrome — e la persona si ritrova la pagina
+         * web al posto della sua musica. È esattamente il contrario del motivo
+         * per cui esiste il registro degli intenti.
+         *
+         * ⇒ Se chi chiama dichiara un pacchetto, l'URI si prova PRIMA dentro
+         * quello. Non è una preferenza estetica: `spotify:search:` e
+         * `https://open.spotify.com` portano allo stesso posto solo se ad
+         * aprirli è Spotify.
+         *
+         * ⛔ E se quell'app non lo sa aprire — non è installata, o non dichiara
+         * quel link — **si toglie il vincolo e si riprova**. La regola scritta
+         * in `intentiTools` dice «se l'app manca, apre il web invece di
+         * fallire», e restringere senza ripiegare la trasformerebbe in un
+         * fallimento nuovo. Il ripiego resta, ma diventa il piano B invece che
+         * il piano A.
+         */
+        val pacchetto = call.getString("pacchetto")?.takeIf { it.isNotEmpty() }
+        if (pacchetto != null) {
+            intent.setPackage(pacchetto)
+            if (intent.resolveActivity(context.packageManager) == null) {
+                intent.setPackage(null)
+            }
+        }
         if (intent.resolveActivity(context.packageManager) == null) {
             call.resolve(result.put("done", false).put("reason", "nessuno-lo-apre"))
             return
@@ -327,6 +473,334 @@ class TalosDevicePlugin : Plugin() {
     }
 
     /**
+     * ⭐⭐⭐ QUANTE EMAIL NON LETTE — chiesto al TELEFONO, non a Google.
+     *
+     * ## La misura che l'ha imposta
+     *
+     * Censimento contro Gemini, 2026-08-14: a «quante email non lette ho in
+     * Gmail» lui risponde col numero; TALOS apriva Gmail e basta. Era l'ultima
+     * cosa che lui faceva e noi no.
+     *
+     * ## ⛔ Perché il provider e non l'API di Google
+     *
+     * `gmail.readonly` è uno scope **ristretto**: verifica più assessment CASA,
+     * che per gli scope ristretti arriva al **Tier 3 — un penetration test** con
+     * laboratorio approvato, da rifare ogni 12 mesi. E in stato «Testing», il
+     * solo raggiungibile senza quella trafila, il **refresh token scade ogni 7
+     * giorni**: riautorizzare TALOS ogni settimana, per sempre.
+     *
+     * ⇒ Gmail espone un content provider **pubblico e documentato**
+     * (`GmailContract`) con le etichette e i loro conteggi. Un permesso normale
+     * nel manifest, nessun giro dal cloud, nessuna approvazione esterna.
+     *
+     * ## ⛔ Dà i CONTEGGI, non il testo — ed è una virtù
+     *
+     * Non esiste, da questa strada, un modo di leggere il corpo di una email:
+     * l'unico dato che esce è **quante** e **in quale etichetta**. Mittente e
+     * oggetto restano quelli delle notifiche, che la persona ha già visto
+     * comparire sul suo schermo.
+     *
+     * ## ⛔ Gli account si chiedono al sistema
+     *
+     * Nessun indirizzo scritto da noi: `AccountManager` con tipo `com.google`
+     * dice quali ci sono davvero. Un indirizzo indovinato darebbe un provider
+     * muto e una diagnosi sbagliata.
+     */
+    @PluginMethod
+    fun postaNonLetta(call: PluginCall) {
+        val esito = JSObject()
+        val caselle = JSArray()
+        /*
+         * ⛔ `GET_ACCOUNTS` non si chiede più da Android 8 per i propri tipi,
+         * ma il sistema può comunque rendere una lista vuota: quello NON è
+         * «zero email», è «non lo so», e va detto diverso.
+         */
+        val conti = runCatching {
+            android.accounts.AccountManager.get(context).getAccountsByType("com.google")
+        }.getOrNull()
+        if (conti == null || conti.isEmpty()) {
+            call.resolve(esito.put("letto", false).put("motivo", "nessun-account").put("caselle", caselle))
+            return
+        }
+        /*
+         * ⛔ Il permesso PRIMA della domanda, e con un motivo suo: senza, una
+         * negazione si travestiva da «provider muto» e il modello raccontava un
+         * guasto di Gmail al posto di una casella da spuntare.
+         */
+        if (context.checkSelfPermission(PERMESSO_POSTA) != PackageManager.PERMISSION_GRANTED) {
+            call.resolve(esito.put("letto", false).put("motivo", "permesso-mancante").put("caselle", caselle))
+            return
+        }
+        var almenoUna = false
+        for (conto in conti) {
+            val uri = android.net.Uri.parse(
+                "content://com.google.android.gm/${conto.name}/labels",
+            )
+            runCatching {
+                val cursore = context.contentResolver.query(uri, null, null, null, null)
+                if (cursore == null) {
+                    android.util.Log.w(TAG_POSTA, "provider muto: cursore nullo per $uri")
+                }
+                cursore?.use { c ->
+                    /*
+                     * ⛔ Le colonne che ci sono DAVVERO, non quelle che ci
+                     * aspettiamo: se un domani Gmail le rinomina, questa riga
+                     * dice quali sono invece di lasciarci indovinare.
+                     */
+                    val iCanonico = c.getColumnIndex("canonicalName")
+                    val iNonLette = c.getColumnIndex("numUnreadConversations")
+                    val iEtichetta = c.getColumnIndex("name")
+                    if (iCanonico < 0 || iNonLette < 0) {
+                        android.util.Log.w(
+                            TAG_POSTA,
+                            "colonne diverse dal previsto: ${c.columnNames.joinToString(",")}",
+                        )
+                        return@use
+                    }
+                    /*
+                     * ⛔⛔ LA POSTA IN ARRIVO NON È SEMPRE UNA RIGA SOLA — e il
+                     * telefono me l'ha detto dopo che avevo scritto il
+                     * contrario.
+                     *
+                     * MISURATO sul Pad il 2026-08-14. Il codice cercava `^i`
+                     * (`GmailContract…CANONICAL_NAME_INBOX`) e il commento
+                     * spiegava che le categorie sono sotto-insiemi, quindi
+                     * sommarle conterebbe due volte. Su questo account **`^i`
+                     * non esiste**: 22 etichette, e la posta in arrivo è divisa
+                     * in quattro sezioni.
+                     *
+                     * ```
+                     *   ^sq_ig_i_personal=3804  ^sq_ig_i_promo=21951
+                     *   ^sq_ig_i_social=1783    ^sq_ig_i_notification=415
+                     *   ^t=8  ^f=32  ^s=100  ^assistive_purchase=921  ^all=30833
+                     * ```
+                     *
+                     * Confronto con lo schermo di Gmail, stessa ora: Speciali 8,
+                     * Inviati 32, Spam 100, Acquisti 921 — quattro numeri
+                     * identici, quindi la colonna è quella giusta. Principale
+                     * mostra «+99», che è il tetto del display, non il conto.
+                     *
+                     * ⇒ La regola giusta: `^i` se c'è (posta classica), se no la
+                     * SOMMA delle sezioni `^sq_ig_i_*`, che sono disgiunte. Non
+                     * si sceglie a tavolino: si guarda cosa risponde questo
+                     * telefono, per questo account.
+                     */
+                    var inArrivo = -1
+                    var sommaSezioni = 0
+                    var sezioniViste = false
+                    val sezioni = JSArray()
+                    while (c.moveToNext()) {
+                        val canonico = c.getString(iCanonico) ?: continue
+                        val nonLette = c.getInt(iNonLette)
+                        if (canonico == "^i") {
+                            inArrivo = nonLette
+                            continue
+                        }
+                        if (!canonico.startsWith("^sq_ig_i_")) continue
+                        sezioniViste = true
+                        sommaSezioni += nonLette
+                        /*
+                         * ⭐ Il nome lo dà GMAIL, non noi: «Promozioni»,
+                         * «Social», «Aggiornamenti» sono le stesse parole che la
+                         * persona legge nel suo cassetto, già nella sua lingua.
+                         *
+                         * ⛔ E si prende SOLO per queste righe: `name` su
+                         * un'etichetta personale è roba della persona, e qui non
+                         * serve a niente.
+                         */
+                        val nome = if (iEtichetta >= 0) c.getString(iEtichetta) else null
+                        sezioni.put(
+                            JSObject()
+                                .put("nome", nome ?: canonico)
+                                .put("nonLette", nonLette),
+                        )
+                    }
+                    if (inArrivo < 0 && sezioniViste) inArrivo = sommaSezioni
+                    if (inArrivo < 0) {
+                        // Nessuna riga di posta in arrivo: non è «zero», è «non lo so».
+                        android.util.Log.w(TAG_POSTA, "nessuna riga di posta in arrivo fra ${c.count} etichette")
+                        return@use
+                    }
+                    almenoUna = true
+                    caselle.put(
+                        JSObject()
+                            .put("conto", conto.name)
+                            .put("nonLette", inArrivo)
+                            .put("sezioni", sezioni),
+                    )
+                }
+            }.onFailure { android.util.Log.w(TAG_POSTA, "query fallita su $uri", it) }
+        }
+        if (!almenoUna) {
+            /*
+             * ⛔ TRE stati, non due: «zero non lette» e «il provider non ha
+             * risposto» sono fatti diversi, e appiattirli farebbe dire «non hai
+             * posta» a chi ce l'ha. Il permesso può mancare, Gmail può essere
+             * troppo vecchio, l'account può non essere sincronizzato.
+             */
+            call.resolve(esito.put("letto", false).put("motivo", "provider-muto").put("caselle", caselle))
+            return
+        }
+        call.resolve(esito.put("letto", true).put("caselle", caselle))
+    }
+
+    /**
+     * Chiede alla persona il permesso di Gmail, col dialogo di sistema.
+     *
+     * ⛔ Separato dalla lettura, come per il calendario: **chiedere è un
+     * gesto**, e va fatto quando serve — non all'avvio, insieme a tutti gli
+     * altri, dove una persona dice di sì a tutto o di no a tutto.
+     */
+    @PluginMethod
+    fun chiediPermessoPosta(call: PluginCall) {
+        requestPermissionForAlias("posta", call, "esitoPermessoPosta")
+    }
+
+    @com.getcapacitor.annotation.PermissionCallback
+    private fun esitoPermessoPosta(call: PluginCall) {
+        call.resolve(
+            JSObject().put(
+                "permesso",
+                context.checkSelfPermission(PERMESSO_POSTA) == PackageManager.PERMISSION_GRANTED,
+            ),
+        )
+    }
+
+    /**
+     * ⭐⭐ LO SCREENSHOT, e il motivo per cui passa dall'occhio.
+     *
+     * L'unica strada che non chiede un consenso nuovo a ogni scatto è il
+     * servizio di accessibilità: `MediaProjection` fa comparire una scheda di
+     * sistema **ogni volta**, e per «fai uno screenshot» sarebbe una domanda al
+     * posto di una risposta. L'occhio la persona l'ha già acceso una volta, con
+     * cognizione, e questa è una delle cose che ha acceso.
+     *
+     * ⛔ E se l'occhio è chiuso si dice **quale** permesso manca: un
+     * `done: false` muto manderebbe il modello a inventare la causa — difetto
+     * già misurato su questo progetto, e non una volta sola.
+     */
+    @PluginMethod
+    fun schermata(call: PluginCall) {
+        val esito = JSObject()
+        if (TalosOcchio.aperto() == null) {
+            call.resolve(esito.put("done", false).put("reason", "occhio-chiuso"))
+            return
+        }
+        val fatto = TalosOcchio.scattaSchermata()
+        call.resolve(
+            esito.put("done", fatto)
+                .apply { if (!fatto) put("reason", "rifiutato-dal-sistema") },
+        )
+    }
+
+    /**
+     * ⭐⭐⭐ LE ICONE VERE DELLE APP — owner 2026-08-14: «icone pulite e coerenti
+     * nelle schede per ogni app prevista».
+     *
+     * ## ⛔ Perché si chiedono al telefono e non si disegnano
+     *
+     * Un'icona disegnata da noi per WhatsApp sarebbe una **riga predeterminata**
+     * col vestito grafico: invecchia al primo restyling, e per l'app installata
+     * domani non esiste proprio. `getApplicationIcon` restituisce quella che la
+     * persona vede ogni giorno sul suo launcher — compresa la forma che la sua
+     * ROM applica alle icone adattive.
+     *
+     * ## ⛔ E si chiedono SOLO quando si disegnano
+     *
+     * Non entrano nei metadati del messaggio: una scheda con diciassette app a
+     * ~6 kB l'una sarebbero **cento kilobyte** salvati per sempre nel database
+     * della chat, e ricopiati in ogni backup, per un dato che il telefono ha già
+     * e che cambia quando l'app si aggiorna. La scheda porta il **pacchetto** —
+     * che è il fatto — e chiede l'icona nel momento in cui la mostra.
+     *
+     * ## Perché tutte insieme
+     *
+     * Un giro di ponte per icona vorrebbe dire diciassette giri per una scheda.
+     * Qui si chiede un elenco e si risponde con una mappa: chi manca
+     * semplicemente non c'è, e chi disegna mostra il posto vuoto senza rompersi.
+     *
+     * ⛔ `MISURA` è in pixel fisici e non dipende dal tema: le icone escono
+     * tutte della stessa dimensione, che è metà del lavoro per farle sembrare
+     * «pulite e coerenti». L'altra metà è la cornice, e quella sta nel CSS.
+     */
+    @PluginMethod
+    fun iconeApp(call: PluginCall) {
+        val chiesti = call.getArray("pacchetti")
+        val icone = JSObject()
+        if (chiesti == null) {
+            call.resolve(JSObject().put("icone", icone))
+            return
+        }
+        val pm = context.packageManager
+        for (indice in 0 until chiesti.length()) {
+            val pacchetto = runCatching { chiesti.getString(indice) }.getOrNull()
+            if (pacchetto.isNullOrEmpty()) continue
+            /*
+             * ⛔ Ogni icona nel suo `runCatching`: un pacchetto disinstallato fra
+             * l'elenco e il disegno solleva `NameNotFoundException`, e una
+             * scheda intera senza icone per colpa di una riga sarebbe il difetto
+             * peggiore di quello che stiamo curando.
+             */
+            runCatching {
+                val disegno = pm.getApplicationIcon(pacchetto)
+                val tela = android.graphics.Bitmap.createBitmap(
+                    MISURA_ICONA,
+                    MISURA_ICONA,
+                    android.graphics.Bitmap.Config.ARGB_8888,
+                )
+                val pennello = android.graphics.Canvas(tela)
+                /*
+                 * ⭐⭐ LA MASCHERA DEL SISTEMA — è questa a rendere l'elenco
+                 * «coerente», e non la sceglie TALOS.
+                 *
+                 * MISURATO sul Pad il 2026-08-14, prima scheda con le icone:
+                 * Spotify e Google Play Services riempivano il quadrato mentre
+                 * Gmail, Contatti e Chrome stavano dentro un cerchio. La colpa
+                 * non è delle app: `getApplicationIcon` restituisce l'icona
+                 * ADATTIVA **non ritagliata**, e il ritaglio lo fa il launcher.
+                 *
+                 * ⇒ Si chiede la stessa maschera al sistema
+                 * (`AdaptiveIconDrawable.getIconMask()`) e si applica a tutte:
+                 * l'elenco viene fuori con la forma che quella persona vede sul
+                 * suo telefono, non con una forma decisa da noi.
+                 *
+                 * ⛔ Solo per le adattive: un'icona vecchia non ha un fondo da
+                 * estendere, e ritagliarla le taglierebbe un pezzo di disegno.
+                 * Restano quadrate, sono poche, e la cornice del CSS le tiene
+                 * comunque in riga.
+                 */
+                if (disegno is android.graphics.drawable.AdaptiveIconDrawable) {
+                    val maschera = android.graphics.Path(disegno.iconMask)
+                    val misura = android.graphics.Matrix()
+                    val bordi = android.graphics.RectF()
+                    maschera.computeBounds(bordi, true)
+                    misura.setRectToRect(
+                        bordi,
+                        android.graphics.RectF(0f, 0f, MISURA_ICONA.toFloat(), MISURA_ICONA.toFloat()),
+                        android.graphics.Matrix.ScaleToFit.FILL,
+                    )
+                    maschera.transform(misura)
+                    pennello.clipPath(maschera)
+                }
+                disegno.setBounds(0, 0, MISURA_ICONA, MISURA_ICONA)
+                disegno.draw(pennello)
+                val sacco = java.io.ByteArrayOutputStream()
+                tela.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, sacco)
+                tela.recycle()
+                icone.put(
+                    pacchetto,
+                    "data:image/png;base64,"
+                        + android.util.Base64.encodeToString(
+                            sacco.toByteArray(),
+                            android.util.Base64.NO_WRAP,
+                        ),
+                )
+            }
+        }
+        call.resolve(JSObject().put("icone", icone))
+    }
+
+    /**
      * ⭐⭐⭐ LANCIA UN'AZIONE, non un URI — con i parametri DENTRO.
      *
      * ## La misura che l'ha resa necessaria
@@ -372,11 +846,58 @@ class TalosDevicePlugin : Plugin() {
                 intent.putExtra(k, extra.getString(k))
             }
         }
+        /*
+         * ⛔⛔⛔ DUE DOMANDE DIVERSE ALLO STESSO TELEFONO, E DAVANO RISPOSTE
+         * DIVERSE — è il difetto visto sul Pad il 2026-08-14.
+         *
+         * La scheda «quale app» elenca chi sa fare una cosa con
+         * `queryIntentActivities`; toccare una riga arrivava qui, dove
+         * `resolveActivity` diceva **no**, e sullo schermo compariva «Non si è
+         * aperta» su un'app che il telefono aveva appena dichiarato capace.
+         * Misurato toccando Chrome su `android.intent.action.SEARCH`.
+         *
+         * Non è un capriccio: `resolveActivity` cerca solo attività che
+         * dichiarano `CATEGORY_DEFAULT`, perché è così che Android sceglie
+         * quando l'intent è implicito. `queryIntentActivities` risponde alla
+         * domanda vera — «chi ha un filtro per questa azione?» — e per
+         * `ACTION_SEARCH` quasi nessuno aggiunge quella categoria: quelle
+         * attività si aprono per **componente esplicito**, che è esattamente
+         * come le apre il motore di ricerca di sistema.
+         *
+         * ⇒ Se la strada implicita non c'è, si chiede al telefono **quale
+         * attività** di quel pacchetto sa farlo e la si apre per nome. È la
+         * stessa risposta che ha riempito l'elenco: così ciò che la scheda
+         * promette e ciò che il tocco fa tornano a essere la stessa cosa.
+         *
+         * ⛔ Solo dentro il pacchetto CHIESTO: senza quel vincolo questa riga
+         * diventerebbe «apri qualcosa che somigli», cioè aprire un'app a caso.
+         * E se non c'è nemmeno lì, si dice di no com'è giusto.
+         */
         if (intent.resolveActivity(context.packageManager) == null) {
-            call.resolve(esito.put("done", false).put("reason", "nessuno-lo-fa"))
-            return
+            val pacchetto = intent.`package`
+            val trovata = if (pacchetto.isNullOrEmpty()) {
+                null
+            } else {
+                context.packageManager
+                    .queryIntentActivities(intent, 0)
+                    .firstOrNull { it.activityInfo?.packageName == pacchetto }
+                    ?.activityInfo
+            }
+            if (trovata == null) {
+                call.resolve(esito.put("done", false).put("reason", "nessuno-lo-fa"))
+                return
+            }
+            intent.component = android.content.ComponentName(trovata.packageName, trovata.name)
         }
-        call.resolve(avvia(intent))
+        /*
+         * ⛔ `chiedendoPrima = false` quando abbiamo il componente esplicito: la
+         * guardia di `avvia` è un'altra `resolveActivity`, cioè la domanda che
+         * abbiamo appena scoperto essere quella sbagliata. Con un componente in
+         * mano l'unico giudice onesto è provare e guardare l'eccezione — che è
+         * la stessa conclusione già scritta lì dentro per le schermate di
+         * sistema.
+         */
+        call.resolve(avvia(intent, chiedendoPrima = intent.component == null))
     }
 
     /**
@@ -967,6 +1488,44 @@ class TalosDevicePlugin : Plugin() {
             result.put("batteryPercent", it.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
             result.put("charging", it.isCharging)
         }
+        /*
+         * ⛔⛔ «COLLEGATO» E «IN CARICA» SONO DUE FATTI DIVERSI — MISURATO.
+         *
+         * Owner, 2026-08-15: TALOS ha risposto «l'89%, dispositivo **non in
+         * carica**» col cavo attaccato. Il telefono, nello stesso istante:
+         *
+         *     USB powered: true      ← il cavo C'È
+         *     status: 4              ← BATTERY_STATUS_NOT_CHARGING
+         *
+         * Cioè `isCharging` diceva il vero — ColorOS a 89% col porto da 500 mA
+         * **smette** di caricare — ma la frase che ne usciva suonava come «non
+         * sei collegato», che è falso. Un fatto vero detto in modo che si legge
+         * come un altro fatto è una bugia con l'alibi.
+         *
+         * ⇒ Si consegnano TUTTI E DUE, e il terzo stato — collegato ma fermo —
+         * smette di essere invisibile. È anche l'unico che spiega perché la
+         * percentuale non sale.
+         */
+        runCatching {
+            val stato = context.registerReceiver(
+                null,
+                android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED),
+            )
+            val spina = stato?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
+            val codice = stato?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+            result.put("plugged", spina != 0)
+            result.put(
+                "power",
+                when {
+                    spina == 0 -> "unplugged"
+                    codice == BatteryManager.BATTERY_STATUS_CHARGING -> "charging"
+                    codice == BatteryManager.BATTERY_STATUS_FULL -> "plugged-full"
+                    // ⛔ Il terzo stato, quello che mancava: cavo attaccato e
+                    // batteria ferma. Il telefono lo fa apposta, e va detto.
+                    else -> "plugged-not-charging"
+                },
+            )
+        }
 
         runCatching {
             val stat = StatFs(Environment.getDataDirectory().path)
@@ -1096,6 +1655,65 @@ class TalosDevicePlugin : Plugin() {
             return result
         }
         try {
+            /*
+             * ⭐⭐⭐ IL PALLINO NASCE QUI — un istante PRIMA di cedere lo schermo.
+             *
+             * ## Il difetto, owner 2026-08-15
+             *
+             * > «apre WhatsApp, mette il messaggio nel campo, **la barra
+             * > assistente non ricompare**, e se dico "invia" non invia nulla.»
+             *
+             * ## ⛔ Perché il momento è QUESTO e non un altro
+             *
+             * Rientrare dopo aver ceduto lo schermo è un background activity
+             * launch: su Android 15+ serve `SYSTEM_ALERT_WINDOW` **e una
+             * finestra ancora visibile**. ⇒ La finestra deve esistere **prima**
+             * che TALOS sparisca, non dopo: dopo, il diritto è già decaduto.
+             *
+             * ## ⛔ E perché non nel ciclo di vita della barra, dove l'avevo messo
+             *
+             * MISURATO sul Pad, con TALOS che apriva Chrome da solo:
+             *
+             * ```
+             *   TalosBarra: davanti=false (onPause) personaAndataVia=true
+             *   TalosBarra: onDestroy
+             * ```
+             *
+             * Due sorprese in due righe. La barra non va in background: **muore**.
+             * E `onUserLeaveHint` scatta **anche quando è TALOS ad aprire l'app**
+             * — cioè il contrario di ciò che il commento in `TalosBarraActivity`
+             * dava per contratto. ⇒ Dal ciclo di vita della barra non si può
+             * distinguere «me ne sto andando io» da «mi hanno mandato via», e su
+             * quella distinzione il pallino non compariva mai.
+             *
+             * Qui invece non c'è niente da indovinare: **siamo noi che apriamo**.
+             *
+             * ⛔ E vale per OGNI app, che è la richiesta dell'owner
+             * («universale per tutte le app possibili»): questo è l'unico
+             * `startActivity` di questo plugin, ci passano tutte.
+             */
+
+        /*
+         * ⛔⛔ STACCATO IL 2026-08-15 — e si stacca invece di lasciare un crash.
+         *
+         * Il pallino FUNZIONA: misurato `attaccato=true 126x126 visibile=true`,
+         * visibile sopra Chrome nello scatto. Ma il servizio che deve tenerlo in
+         * vita non riesce a prendere il primo piano in tempo, e Android uccide
+         * l'app con `ForegroundServiceDidNotStartInTimeException` — cioè un
+         * CRASH, a venti secondi da ogni apertura di app.
+         *
+         * Provate e MISURATE, in ordine:
+         *   1. permesso `FOREGROUND_SERVICE_SPECIAL_USE` mancante → aggiunto,
+         *      crash uguale;
+         *   2. `startForeground` spostato da `onStartCommand` a `onCreate`
+         *      (il sistema diceva «Bringing down service while still waiting for
+         *      start foreground») → crash uguale.
+         *
+         * ⇒ Manca ancora una condizione, e non la conosco. Consegnare una
+         * funzione che fa saltare l'app a ogni apertura è peggio di consegnarla
+         * mancante: la riga si riaccende quando il servizio regge, e la prova
+         * che deve passare è «apri Chrome, aspetta un minuto, l'app è viva».
+         */
             context.startActivity(intent)
             result.put("done", true)
         } catch (mancante: ActivityNotFoundException) {

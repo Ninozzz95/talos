@@ -52,6 +52,48 @@ const CHAT_SESSION_NOT_FOUND = 'TALOS_CHAT_SESSION_NOT_FOUND'
 const NEW_CHAT_TITLE = 'New chat'
 
 /**
+ * ⭐⭐ IL TITOLO NON SCRITTO — e perché è una stringa VUOTA, non una parola.
+ *
+ * ## Il difetto, visto sul Pad il 2026-08-13
+ *
+ * Ventiquattro chat nell'elenco, **tutte** chiamate «Nuova chat», distinguibili
+ * solo dall'ora relativa. Eppure `titleFromPrompt` esisteva ed era giusta.
+ *
+ * La rinomina automatica era guardata da `active.title === NEW_CHAT_TITLE`,
+ * cioè contro la costante **inglese**, mentre il controller creava la sessione
+ * col titolo **tradotto** (`translate('chat.newChat')` → «Nuova chat»). In
+ * italiano `'Nuova chat' === 'New chat'` è falso: la rinomina non partiva mai.
+ * In inglese funzionava **per coincidenza**.
+ *
+ * ⇒ *Nel database va un FATTO, sullo schermo vanno le PAROLE.* Un titolo
+ * tradotto scritto in una colonna non è più traducibile: resta nella lingua di
+ * quel giorno anche se la persona cambia lingua, e qualunque confronto contro
+ * una costante è destinato a mentire in tutte le lingue tranne una.
+ *
+ * ## ⛔ Perché NON è la stringa vuota
+ *
+ * Il primo tentativo salvava `''` — «non ancora intitolata» in ogni lingua. Il
+ * database lo ha rifiutato: `normalizeChatTitle` solleva
+ * `TALOS_CHAT_TITLE_REQUIRED`, perché una chat senza nome non deve esistere.
+ * Il segnaposto quindi è **una parola sola, sempre la stessa**, mai tradotta:
+ * un gettone stabile che la guardia riconosce in ogni lingua e che chi disegna
+ * traduce al momento di mostrarlo.
+ */
+export const TALOS_TITOLO_DA_SCRIVERE = NEW_CHAT_TITLE
+
+/**
+ * Vero se il titolo è ancora quello che nessuno ha scelto.
+ *
+ * ⛔ Lo usano DUE lati e devono restare d'accordo: la guardia che rinomina alla
+ * prima domanda, e ogni schermata che disegna un titolo — che al posto del
+ * gettone mette `t('chat.newChat')`. Se i due si separassero tornerebbe esatto
+ * il difetto di oggi, solo dall'altra parte.
+ */
+export function talosDaIntitolare(title: string): boolean {
+    return title.trim() === '' || title === NEW_CHAT_TITLE
+}
+
+/**
  * Defect #5: the trace is model output like any other — it can rehearse the
  * library-save syntax, and it can be enormous. Markers are stripped and the
  * text is capped, with the truncation stated rather than hidden.
@@ -740,7 +782,7 @@ export function createChatStore<Runtime = undefined>(
      * of the routing rather than being arranged.
      */
     async function createSession(
-        title = NEW_CHAT_TITLE,
+        title = TALOS_TITOLO_DA_SCRIVERE,
         modelProfileId: string | null = null,
         options: { ephemeral?: boolean } = {},
     ): Promise<TalosLocalChatSession> {
@@ -1067,7 +1109,7 @@ export function createChatStore<Runtime = undefined>(
     async function setSurface(surface: TalosLocalChatSurface): Promise<void> {
         requirePersistence()
         let active = activeSession.value
-        if (!active) active = await createSession(NEW_CHAT_TITLE)
+        if (!active) active = await createSession(TALOS_TITOLO_DA_SCRIVERE)
         if (active.surface === surface) return
         try {
             const updated = await repository.updateSession(active.id, { surface })
@@ -1107,7 +1149,7 @@ export function createChatStore<Runtime = undefined>(
         const projectionRevision = navigationRevision
         const update: { title?: string; active_model_profile_id?: string | null } = {}
         if (active.active_model_profile_id !== modelProfileId) update.active_model_profile_id = modelProfileId
-        if (messages.length === 0 && active.title === NEW_CHAT_TITLE) update.title = titleFromPrompt(prompt)
+        if (messages.length === 0 && talosDaIntitolare(active.title)) update.title = titleFromPrompt(prompt)
         if (Object.keys(update).length > 0) {
             if ('active_model_profile_id' in update) {
                 desiredModelProfileBySession.set(targetSessionId, modelProfileId)

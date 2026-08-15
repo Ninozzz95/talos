@@ -7,6 +7,7 @@ import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialo
 import { talosCleanupCount } from '@/lib/chat/sessionCleanup'
 import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import { TALOS_DANGER_ACTION_CLASS } from '@/lib/dangerAction'
+import { talosDaIntitolare } from '@/stores/chat'
 
 /**
  * "Delete chat?" — with what it takes from the Library, and the choice.
@@ -98,6 +99,14 @@ function confirm(): void {
     emit('confirm', { deleteMedia: count.value > 0 && deleteMedia.value })
 }
 
+/**
+ * ⛔ Il gettone «non ancora intitolata» si traduce qui, non si salva tradotto:
+ * il database porta una parola ferma, lo schermo ci mette la lingua di chi legge.
+ */
+const titoloDaMostrare = computed(() => (talosDaIntitolare(props.title)
+    ? t('chat.newChat')
+    : props.title))
+
 function close(): void {
     // ALWAYS works. Closing does not abort anything — the deletion, if one is
     // really running, finishes either way — so there is no state in which
@@ -112,7 +121,7 @@ function close(): void {
 <template>
     <TalosMobileConfirmDialog
         :title="$t('chat.deleteTitle')"
-        :description="$t('chat.deleteDescription', { title: props.title || $t('chat.newChat') })"
+        :description="$t('chat.deleteDescription', { title: titoloDaMostrare })"
         @close="close"
     >
         <label

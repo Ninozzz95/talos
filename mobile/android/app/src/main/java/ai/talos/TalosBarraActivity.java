@@ -54,11 +54,103 @@ import com.getcapacitor.Bridge;
  * ⛔ E il diritto di stare sopra le altre app NON è `SYSTEM_ALERT_WINDOW`: lo
  * dà il ruolo di assistente, che la persona ha già scelto di darci. Un permesso
  * in meno da chiedere è un permesso in meno da spiegare.
+ *
+ * ⛔⛔ ATTENZIONE, sono DUE diritti diversi e la riga sopra ne copre uno solo.
+ *
+ * «Stare sopra mentre sono davanti» lo dà il ruolo — vero, e resta vero. Ma
+ * **tornare davanti dopo essermi tolto** è un'altra cosa: è un background
+ * activity launch, e su Android 15+ vuole `SYSTEM_ALERT_WINDOW` **e una
+ * finestra ancora visibile**. È il difetto che l'owner ha nominato il
+ * 2026-08-15: «apre WhatsApp e la barra non ricompare».
+ *
+ * ## ⛔ La strada del PALLINO è chiusa — owner, 2026-08-15
+ *
+ * «Rimuovi definitivamente il pulsante flottante e il pallino di TALOS
+ * d'ora in poi», «assicurati che siano obliterati per sempre».
+ *
+ * Il pallino teneva una finestra visibile apposta per soddisfare quella
+ * condizione. Non ha mai funzionato: il suo servizio non reggeva il primo
+ * piano e Android uccideva l'app con
+ * `ForegroundServiceDidNotStartInTimeException` — era già staccato prima di
+ * essere rimosso. C'è un cancello che ne impedisce il ritorno, in
+ * `tests/unit/build/niente-pallino-niente-bottone.test.ts`.
+ *
+ * ⇒ QUINDI IL RIENTRO DELLA BARRA RESTA APERTO, e va risolto per un'altra
+ * strada. Le due che restano da valutare, senza tenere una finestra a schermo:
+ * il `PendingIntent` di una notifica (che Android considera un lancio
+ * consentito) e il ritorno chiesto dalla persona — «hey TALOS», che dal
+ * 2026-08-15 apre la barra 10 volte su 10.
  */
 public class TalosBarraActivity extends MainActivity {
 
     /** Lo dice all'app web: sei la barra, non la schermata intera. */
     public static final String EXTRA_BARRA = "ai.talos.BARRA";
+
+    /**
+     * ⛔⛔ CHI HA DECISO DI ANDARSENE — e senza questa distinzione il pallino
+     * non poteva funzionare.
+     *
+     * MISURATO sul Pad il 2026-08-15: quando TALOS apre Chrome, la barra riceve
+     * `onPause` con **`isFinishing=true`** e poi `onDestroy`. Cioè non va in
+     * background: **si chiude**. Un pallino agganciato a «vado in pausa senza
+     * chiudermi» non compariva mai, perché quel caso non esiste.
+     *
+     * ⇒ La domanda giusta non è «mi sto chiudendo?» ma **«chi mi ha chiuso?»**:
+     *
+     *   - la PERSONA (HOME, recenti, indietro, X) → conversazione finita, e un
+     *     pallino che resta è l'assistente che non se ne va;
+     *   - un'APP che TALOS ha aperto per lei → la conversazione continua, e
+     *     senza una finestra visibile TALOS non potrà nemmeno tornare.
+     *
+     * `onUserLeaveHint` risponde esattamente a quella domanda: per contratto
+     * Android arriva **solo** quando è la persona ad andarsene. Qui lo si
+     * registra, e `onPause` lo legge.
+     */
+    private boolean personaAndataVia = false;
+
+    /**
+     * ⛔⛔ STO ASPETTANDO UN RISULTATO — e senza questo il file scelto si PERDE.
+     *
+     * ## Il difetto, MISURATO sul Pad il 2026-08-15
+     *
+     * Dall'assistente: `+` → File → il selettore di sistema si apre → scelgo
+     * `prova-talos.txt` → e torno a trovare **le Impostazioni**, senza nessun
+     * gettone. Il file non era allegato da nessuna parte.
+     *
+     * Il registro dice perché, in due righe:
+     *
+     * ```
+     *   ActivityRecord.destroyed
+     *   ActivityRecord.removeFromHistory
+     * ```
+     *
+     * ⇒ Aprendo il selettore, `onUserLeaveHint` scatta (misurato: arriva anche
+     * quando NON è la persona ad andarsene) e la barra fa `finish()`. Un'activity
+     * distrutta non può ricevere `onActivityResult`: **il risultato torna a
+     * nessuno**.
+     *
+     * ## La cura, e perché è universale
+     *
+     * Ogni plugin che chiede qualcosa al sistema — il selettore file, la
+     * fotocamera, la galleria — passa da `startActivityForResult`. Sovrascriverlo
+     * è il punto unico in cui TALOS sa di stare aspettando qualcosa, senza un
+     * caso speciale per ogni plugin.
+     */
+    private boolean aspettoUnRisultato = false;
+
+    @Override
+    public void startActivityForResult(Intent intent, int requestCode, Bundle options) {
+        aspettoUnRisultato = true;
+        Log.i(SEGNO, "aspetto un risultato: non mi chiudo se cedo lo schermo");
+        super.startActivityForResult(intent, requestCode, options);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        aspettoUnRisultato = false;
+        Log.i(SEGNO, "risultato arrivato: code=" + resultCode + " dati=" + (data != null));
+        super.onActivityResult(requestCode, resultCode, data);
+    }
 
     /**
      * ⛔⛔ IL TEMA SI RIPRENDE A FORZA, perché Capacitor lo SOVRASCRIVE.
@@ -148,6 +240,7 @@ public class TalosBarraActivity extends MainActivity {
         }
 
         super.onCreate(savedInstanceState);
+        registraIlTastoIndietro();
         /*
          * ⛔⛔ LA FINESTRA NON SI TOCCA — e ci sono volute due prove sbagliate e
          * un confronto per capirlo.
@@ -282,7 +375,71 @@ public class TalosBarraActivity extends MainActivity {
     @Override
     public void onResume() {
         super.onResume();
+        viva = true;
+        Log.i(SEGNO, "davanti=true (onResume)");
         rendiTrasparenteLaWebView("onResume");
+    }
+
+    /**
+     * ⭐⭐⭐ QUI NASCE IL PALLINO — owner 2026-08-15, «la barra assistente non
+     * ricompare».
+     *
+     * ## ⛔ Non era un difetto: era una regola di sistema
+     *
+     * Rientrare dopo aver ceduto lo schermo è un background activity launch, e
+     * su Android 15+ vuole `SYSTEM_ALERT_WINDOW` **e una finestra ancora
+     * visibile**. ⇒ Una barra che sparisce **non può richiamarsi**. Il pallino
+     * è quella finestra: tenendolo, TALOS conserva il diritto di tornare — e
+     * intanto dà alla persona il modo di tornarci lei.
+     *
+     * ## ⛔ Perché QUI e non «quando apro WhatsApp»
+     *
+     * Owner: «universale per tutte le app possibili». `onPause` è il punto in
+     * cui la barra cede lo schermo **a chiunque**, per qualunque strada — un
+     * intent, il pilota, un tocco. Legarlo a una app sola vorrebbe dire un caso
+     * per ognuna.
+     *
+     * ## ⛔ E la distinzione che evita il pallino di troppo era GIÀ in casa
+     *
+     * `onUserLeaveHint` arriva **solo** quando è la persona ad andarsene (HOME,
+     * recenti) e lì la barra fa `finish()`. Quando invece è TALOS ad aprire
+     * un'app arriva **solo** `onPause`. ⇒ `isFinishing()` separa i due casi
+     * senza inventare niente: se la conversazione è chiusa di proposito, un
+     * pallino che resta è l'assistente che non se ne va.
+     */
+    @Override
+    public void onPause() {
+        super.onPause();
+        viva = false;
+        Log.i(SEGNO, "davanti=false (onPause) personaAndataVia=" + personaAndataVia);
+        /*
+         * ⛔ Si guarda CHI ha chiuso, non SE si sta chiudendo: misurato, la barra
+         * si chiude anche quando è TALOS ad aprire un'app, quindi `isFinishing`
+         * qui è sempre vero e non distingue niente.
+         */
+    }
+
+    /**
+     * ⭐⭐⭐ «LA BARRA È DAVANTI ADESSO?» — e serve alla PAROLA DI ATTIVAZIONE.
+     *
+     * Owner 2026-08-14: «hey jarvis non funziona quando la barra è già aperta».
+     * Con la barra a schermo il servizio chiedeva al sistema una sessione
+     * d'assistente che era **già mostrata**: nessun intent nuovo, nessuna
+     * chiamata nuova per il lato web, e quindi nessun ascolto che riparte.
+     *
+     * ⇒ Chi sente la parola guarda qui: se la barra c'è già, le manda un intent
+     * — che `onNewIntent` timbra come apertura nuova, e il lato web tratta come
+     * «mi hanno chiamato di nuovo», che è esattamente ciò che deve succedere.
+     *
+     * ⛔ `onResume`/`onPause` e non `onCreate`/`onDestroy`: la domanda è «è
+     * davanti», non «esiste». Una barra esistente ma coperta non deve far
+     * saltare la strada dell'assistente, che è quella che porta il contesto
+     * dello schermo.
+     */
+    private static volatile boolean viva = false;
+
+    public static boolean eDavanti() {
+        return viva;
     }
 
     /*
@@ -416,9 +573,151 @@ public class TalosBarraActivity extends MainActivity {
      * restituzione va messa dove la presa finisce DAVVERO — non dove speriamo
      * che finisca.
      */
+    /**
+     * ⛔⛔⛔ SE LA PERSONA SE NE VA, LA BARRA SI CHIUDE — e prima non lo faceva.
+     *
+     * ## Il difetto, misurato sul Pad il 2026-08-14
+     *
+     * Chiamata la barra con la parola, poi lasciata lì in silenzio: rimane
+     * `topResumedActivity` **per sempre**. `dumpsys activity activities` la
+     * mostrava viva e visibile minuti dopo, riaperta col suo stesso indirizzo
+     * (`talos://barra?voce=1`), e nemmeno tre `KEYCODE_HOME` la mandavano via.
+     *
+     * ⇒ E finché vive, ogni sua sessione di ascolto chiama
+     * `TalosParola.cedi()` — misurato: una cessione ogni ~2,3 secondi. La
+     * parola di attivazione resta sorda, e il difetto che la persona sente è
+     * «hey TALOS funziona una volta sola».
+     *
+     * ## ⛔ Perché `onUserLeaveHint` e non `onPause`
+     *
+     * `onPause` scatta anche quando **noi** mettiamo davanti un'altra
+     * activity — ed è ciò che succede nell'ultimo centimetro di WhatsApp, dove
+     * TALOS apre l'app e preme il tasto. Chiudersi lì spezzerebbe la capacità
+     * che ci è costata di più.
+     *
+     * `onUserLeaveHint` per contratto Android arriva **solo** quando è la
+     * persona ad andarsene — HOME, recenti — e **non** quando un'activity viene
+     * lanciata davanti dall'app stessa. È esattamente la distinzione che serve,
+     * e non è una furbizia: è la domanda a cui quella richiamata risponde.
+     *
+     * ⛔ `riprendi()` non si chiama qui: lo fa `onDestroy`, che `finish()`
+     * garantisce. Metterlo in due posti vorrebbe dire due verità sullo stesso
+     * microfono.
+     */
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        // ⛔ Prima di `finish()`: è questo flag a dire a `onPause` che la
+        // conversazione è finita per volontà della persona, e che quindi non
+        // deve restare nessun pallino.
+        /*
+         * ⛔⛔ NON si chiude se stiamo ASPETTANDO UN RISULTATO.
+         *
+         * MISURATO: aprendo il selettore file, `onUserLeaveHint` arriva lo
+         * stesso — cioè Android non distingue «la persona se n'è andata» da
+         * «l'app ha aperto qualcosa» quanto il suo contratto promette. Chiudersi
+         * lì distruggeva l'activity, e il file scelto tornava a nessuno.
+         *
+         * ⇒ Chi aspetta un risultato resta vivo. È la stessa disciplina
+         * dell'ultimo centimetro: non si molla a metà di un'operazione.
+         */
+        if (aspettoUnRisultato) {
+            android.util.Log.i("TalosBarra", "cedo lo schermo ma aspetto un risultato: resto viva");
+            return;
+        }
+        personaAndataVia = true;
+        android.util.Log.i("TalosBarra", "la persona se n'è andata: chiudo e mollo il microfono");
+        finish();
+    }
+
+    /**
+     * ⛔⛔⛔ IL BACK CHIUDE LA BARRA — e prima veniva INGHIOTTITO.
+     *
+     * MISURATO sul Pad il 2026-08-14: chiamata la barra con la parola, premuto
+     * `KEYCODE_BACK`, e `dumpsys window` mostrava ancora
+     * `mCurrentFocus=TalosBarraActivity`. Nessuna riga di registro, da nessuna
+     * parte: il tasto arrivava e non succedeva niente.
+     *
+     * La causa è l'eredità: `BridgeActivity` passa il «indietro» alla WebView
+     * perché torni indietro nella sua cronologia. Nella schermata intera è
+     * giusto — ci sono pagine da risalire. Qui **non c'è nessuna cronologia**:
+     * la barra è UNA superficie, aperta sopra quello che la persona stava
+     * facendo. Il «indietro» lì significa una cosa sola: **toglila di mezzo**.
+     *
+     * ⇒ E finché non si toglie, tiene il microfono: ogni sua sessione di
+     * ascolto chiama `TalosParola.cedi()`, e la parola di attivazione resta
+     * sorda. Un assistente che non si può congedare è peggio di uno che non si
+     * apre — quello almeno non ti porta via niente.
+     *
+     * ## ⛔⛔ E `onBackPressed()` NON BASTA PIÙ: l'ho provato e non veniva chiamato
+     *
+     * Primo tentativo: `@Override public void onBackPressed() { finish(); }`.
+     * Compilato, installato, premuto indietro — **la barra restava aperta e il
+     * registro restava vuoto**, esattamente come prima.
+     *
+     * Con `targetSdk 36` il sistema usa il **back predittivo**: la vecchia
+     * richiamata è deprecata e non viene invocata. Chi vuole rispondere al
+     * gesto deve registrarsi su `OnBackInvokedDispatcher`. ⇒ La differenza fra
+     * «ho scritto la cura» e «la cura viene chiamata» l'ha detta il dispositivo,
+     * non il compilatore: il codice era corretto e non serviva a niente.
+     *
+     * ⛔ `finish()` e non `moveTaskToBack`: la barra deve MORIRE, perché è
+     * `onDestroy` a restituire il microfono. Mandarla dietro la lascerebbe viva
+     * a tenersi la presa, che è esattamente il difetto.
+     */
+    private void registraIlTastoIndietro() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            /*
+             * ⛔⛔ `PRIORITY_OVERLAY` e non `PRIORITY_DEFAULT`, e l'ho scoperto
+             * provando: con la priorità normale il back restava inghiottito
+             * lo stesso. Capacitor registra la SUA richiamata per la WebView, e
+             * a parità di priorità il dispatcher chiama l'ultima registrata —
+             * la sua, che arriva dopo la nostra.
+             *
+             * `PRIORITY_OVERLAY` esiste esattamente per questo: una superficie
+             * disegnata SOPRA il contenuto, che sul «indietro» deve andarsene
+             * per prima. È ciò che la barra è.
+             */
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    android.window.OnBackInvokedDispatcher.PRIORITY_OVERLAY,
+                    () -> {
+                        android.util.Log.i("TalosBarra", "indietro: chiudo la barra e mollo il microfono");
+                        finish();
+                    });
+        }
+    }
+
+    /**
+     * ⛔ La strada VECCHIA resta, per i telefoni sotto Android 13: là il back
+     * predittivo non esiste e il dispatcher nemmeno. `minSdk` è 26, quindi
+     * quei telefoni sono nel parco — togliere questo lascerebbe la barra
+     * inchiodata proprio su di loro.
+     */
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onBackPressed() {
+        android.util.Log.i("TalosBarra", "indietro (strada vecchia): chiudo la barra");
+        finish();
+    }
+
     @Override
     public void onDestroy() {
+        Log.i(SEGNO, "onDestroy personaAndataVia=" + personaAndataVia);
         ai.talos.parola.TalosParola.riprendi();
+        /*
+         * ⛔⛔ QUI NON SI TOGLIE IL PALLINO, ed è tutto il suo senso.
+         *
+         * La prima versione lo toglieva, e non poteva funzionare: il pallino
+         * esiste per **sopravvivere** alla barra: la barra muore appena cede lo
+         * schermo (misurato: `onPause isFinishing=true`, poi `onDestroy`), e un
+         * pallino che muore con lei non tiene aperta nessuna porta.
+         *
+         * Vive col PROCESSO — che resta su, perché c'è il servizio della parola
+         * — e si spegne quando la persona torna (`onResume`) o quando lo tocca.
+         *
+         * ⛔ E se la persona se n'è andata di sua volontà, in `onPause` non è
+         * stato acceso affatto: non c'è niente da togliere.
+         */
         super.onDestroy();
     }
 

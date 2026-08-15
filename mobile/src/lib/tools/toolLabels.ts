@@ -34,6 +34,8 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     library_delete: 'Deleting a Library file',
     memory_search: 'Checking what it remembers',
     time_now: 'Checking the time',
+    calendar_read: 'Checking your calendar',
+    calendar_write: 'Adding to your calendar',
     web_search: 'Searching the web',
     web_read: 'Reading a web page',
     document_create: 'Making a document',
@@ -62,6 +64,8 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     device_speak: 'Speaking out loud',
     device_wallpaper: 'Setting the wallpaper',
     device_keep_awake: 'Holding the screen awake',
+    device_unread_mail: 'Counting your unread email',
+    device_screenshot: 'Taking a screenshot',
     device_wifi: 'Switching Wi-Fi',
     device_bluetooth: 'Switching Bluetooth',
     device_do_not_disturb: 'Setting Do Not Disturb',
@@ -101,6 +105,8 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     library_delete: 'toolActivity.libraryDelete',
     memory_search: 'toolActivity.memorySearch',
     time_now: 'toolActivity.timeNow',
+    calendar_read: 'toolActivity.calendarRead',
+    calendar_write: 'toolActivity.calendarWrite',
     web_search: 'toolActivity.webSearch',
     web_read: 'toolActivity.webRead',
     document_create: 'toolActivity.documentCreate',
@@ -129,6 +135,8 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     device_speak: 'toolActivity.deviceSpeak',
     device_wallpaper: 'toolActivity.deviceWallpaper',
     device_keep_awake: 'toolActivity.deviceKeepAwake',
+    device_unread_mail: 'toolActivity.deviceUnreadMail',
+    device_screenshot: 'toolActivity.deviceScreenshot',
     device_wifi: 'toolActivity.deviceWifi',
     device_bluetooth: 'toolActivity.deviceBluetooth',
     device_do_not_disturb: 'toolActivity.deviceDnd',
@@ -286,6 +294,7 @@ export type TalosToolIconName =
     | 'voice'
     | 'document'
     | 'image'
+    | 'mail'
     | 'download'
     | 'tool'
 
@@ -310,6 +319,8 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     library_delete: 'library',
     memory_search: 'memory',
     time_now: 'clock',
+    calendar_read: 'clock',
+    calendar_write: 'clock',
     web_search: 'web',
     web_read: 'web',
     document_create: 'document',
@@ -351,6 +362,8 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     device_speak: 'voice',
     device_wallpaper: 'image',
     device_keep_awake: 'phone',
+    device_unread_mail: 'mail',
+    device_screenshot: 'image',
     device_wifi: 'web',
     device_bluetooth: 'phone',
     device_do_not_disturb: 'phone',

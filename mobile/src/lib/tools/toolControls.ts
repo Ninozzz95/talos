@@ -23,6 +23,19 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     tasks_list: true,
     memory_search: true,
     time_now: true,
+    /*
+     * ⭐ Acceso di serie come `time_now`: è una LETTURA di cose che la persona
+     * ha creato lei, e senza di essa la domanda «che impegni ho domani» non ha
+     * risposta. Il permesso di sistema resta la porta vera.
+     */
+    calendar_read: true,
+    /*
+     * ⭐ Acceso di serie, ma il permesso resta la scheda: il modello lo VEDE e
+     * lo può proporre, e chi decide se l'appuntamento nasce davvero è la
+     * conferma. Spegnerlo di serie nasconderebbe la funzione a chi non sa di
+     * doverla cercare.
+     */
+    calendar_write: true,
     web_search: true,
     web_read: true,
     document_create: true,
@@ -72,11 +85,13 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
     device_volume: true,
     device_alarm: true,
     device_open_app: true,
+    device_screenshot: true,
     device_open_settings: true,
     device_compose: true,
     device_speak: true,
     device_wallpaper: true,
     device_keep_awake: true,
+    device_unread_mail: true,
     device_wifi: true,
     device_bluetooth: true,
     device_do_not_disturb: true,

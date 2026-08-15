@@ -213,12 +213,69 @@ export async function talosGuidaLoSchermo(
             }),
             sguardo.elementi.map((e) => e.indice),
         )
+        /*
+         * ⛔⛔ UNA RISPOSTA CHE NON SI LEGGE VALE UN TENTATIVO, non la corsa.
+         *
+         * ## Il difetto, MISURATO sul Pad il 2026-08-15
+         *
+         * Chiesto «apri WhatsApp, cerca la chat con Antonino e dimmi solo il
+         * titolo». Traccia:
+         *
+         * ```
+         * pilota: fine={"motivo":"modello-non-capito",
+         *               "scarto":"indiceFuoriElenco","dettaglio":"-1"} passi=0
+         * ```
+         *
+         * **passi=0**: il pilota non ha fatto NIENTE. Il modello aveva risposto
+         * `indice: -1` — cioè «qui non c'è niente da toccare», una convenzione
+         * che il contratto non prevede — perché lo sguardo era ancora sulla
+         * schermata di partenza e WhatsApp non era aperta.
+         *
+         * ## ⛔ L'asimmetria era ingiustificata
+         *
+         * Un'azione che FALLISCE ha diritto a `fallimentiDiFila` tentativi: si
+         * tocca, non succede niente, si riprova. Una risposta che non si LEGGE
+         * chiudeva tutto al primo colpo — pur essendo il caso più facile da
+         * recuperare, perché basta ridomandare dicendo cosa non andava. Ed è
+         * anche ciò che il contratto dichiara di volere: «meglio riguardare che
+         * toccare al buio» (vedi `indiceFuoriElenco`).
+         *
+         * È il rilievo #13 dell'owner: «deve **riprovare in modo estremamente
+         * robusto** invece di arrendersi».
+         *
+         * ## ⛔ Dentro il tetto che ha scelto lui, non oltre
+         *
+         * Lo scarto entra nello STESSO contatore: due tentativi, poi stop —
+         * `fallimentiDiFila: 2` è una decisione dell'owner del 2026-08-10
+         * («retry 2 poi stop»), e un secondo contatore accanto al primo sarebbe
+         * un tetto nuovo deciso da me.
+         *
+         * ⛔ E la seconda domanda NON è la prima: lo scarto va nella storia con
+         * scritto cosa fare invece. Ridomandare la stessa cosa allo stesso
+         * modello nello stesso stato è il modo di ottenere due volte la stessa
+         * risposta — cioè aspettare due volte per niente.
+         *
+         * ⛔ `passi` non cresce: nessun dito ha toccato lo schermo. A crescere è
+         * il contatore dei fallimenti, e i tetti di tempo e di passi restano
+         * dove sono — questo ciclo non può girare a vuoto.
+         */
         if (!lettura.ok) {
-            return chiudi({
-                motivo: 'modello-non-capito',
-                scarto: lettura.motivo,
-                dettaglio: lettura.dettaglio,
-            })
+            fallimenti += 1
+            storia.push(
+                `Passo ${passi + 1}: la tua risposta non era utilizzabile `
+                + `(${lettura.motivo}: ${lettura.dettaglio}). Rispondi di nuovo `
+                + 'usando SOLO un indice presente nell\'elenco qui sopra. Se qui non '
+                + 'c\'è niente di utile, non inventare un indice: usa `apri_app` per '
+                + 'l\'app che serve, oppure `fine` spiegando cosa hai visto.',
+            )
+            if (fallimenti >= limiti.fallimentiDiFila) {
+                return chiudi({
+                    motivo: 'modello-non-capito',
+                    scarto: lettura.motivo,
+                    dettaglio: lettura.dettaglio,
+                })
+            }
+            continue
         }
 
         const azione = lettura.azione

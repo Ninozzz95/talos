@@ -390,7 +390,36 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
     }
 
     function cancel(): void {
-        if (status.value !== 'listening' && status.value !== 'starting') return
+        /*
+         * ⛔⛔⛔ SI DICE AL NATIVO CHE ABBIAMO FINITO **SEMPRE**, anche quando
+         * qui dentro risulta che non stavamo ascoltando.
+         *
+         * MISURATO sul Pad il 2026-08-14, logcat, barra aperta e ferma:
+         *
+         *     16:42:56.900  errore:NO_MATCH            ← lo stato diventa `error`
+         *     16:42:57.267  barra: scaduta, smetto     ← e qui si chiama cancel()
+         *     16:43:40.160  nessuno ha preso il microfono: me lo riprendo
+         *
+         * **Quarantatré secondi** fra «smetto» e il microfono che torna alla
+         * parola di attivazione, e a restituirlo non è stato nessuno di noi: è
+         * scattata la rete di sicurezza del servizio. In mezzo, la barra a
+         * schermo, la notifica che dice di aspettare, e «hey jarvis» sordo — il
+         * difetto che l'owner ha descritto parola per parola.
+         *
+         * La causa era questa riga, che usciva quando lo stato non era
+         * `listening`. Ma `error` è **esattamente** lo stato in cui la barra si
+         * trova dopo un silenzio, cioè il caso più comune di tutti. Il motore
+         * era fermo davvero; il microfono no.
+         *
+         * ⇒ Lo stato di QUESTO oggetto dice se c'è una sessione da chiudere,
+         * non se c'è un microfono da restituire. La seconda cosa è vera comunque
+         * — abbiamo smesso di volerlo — e va detta comunque. Fermare un motore
+         * già fermo non è un errore: lo dice anche il nativo, che lo ignora.
+         */
+        if (status.value !== 'listening' && status.value !== 'starting') {
+            stopEngineBestEffort()
+            return
+        }
         clearWatchdog()
         sessionEpoch += 1
         status.value = 'idle'

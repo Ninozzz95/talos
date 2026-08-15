@@ -223,7 +223,6 @@ export function createTalosResearchTools(
             title: 'Read a research report',
             description: [
                 'Read the report a finished deep research wrote, with its claims and how each one was verified.',
-                'Call research_list first to get the research id.',
                 'Use this when the user asks what a research found — do not answer from the title alone, which says what was asked and not what was learnt.',
             ].join(' '),
             action: 'read',
@@ -260,7 +259,6 @@ export function createTalosResearchTools(
             title: 'Rename a research',
             description: [
                 'Change the label a research carries in the list.',
-                'Call research_list first to get the research id.',
                 'This changes the name only — it does not change what was investigated or re-run anything.',
             ].join(' '),
             action: 'write',
@@ -300,7 +298,6 @@ export function createTalosResearchTools(
              */
             description: [
                 'Stop a running research, keeping everything it has collected so far. It can be resumed later with research_resume.',
-                'Call research_list first to get the research id.',
                 'Use this when the user wants it to stop for now. If they want it stopped for good, use research_cancel.',
             ].join(' '),
             action: 'write',
@@ -328,7 +325,7 @@ export function createTalosResearchTools(
             title: 'Resume a research',
             description: [
                 'Carry on a research that was paused or left unfinished, from where it stopped.',
-                'Call research_list first to get the research id: the ones worth resuming show as paused or unfinished.',
+                'The ones worth resuming show as paused or unfinished.',
                 'It does not start over — what was already collected is not searched again.',
             ].join(' '),
             action: 'write',
@@ -359,7 +356,6 @@ export function createTalosResearchTools(
             title: 'Stop a research for good',
             description: [
                 'Stop a research for good. What it already collected stays readable; nothing more is searched or paid for.',
-                'Call research_list first to get the research id.',
                 'Prefer research_pause when the user only wants it to stop for now: a cancelled research cannot be resumed.',
             ].join(' '),
             action: 'write',
@@ -387,7 +383,7 @@ export function createTalosResearchTools(
             title: 'Delete a research',
             description: [
                 'Delete a research and the report it wrote, permanently.',
-                'Call research_list first to get the research id, and say which one you are about to delete before doing it.',
+                'Say which one you are about to delete before doing it.',
                 'Prefer research_cancel for one that is merely unwanted: a stopped research is still a record, a deleted one is gone along with its sources.',
             ].join(' '),
             action: 'write',

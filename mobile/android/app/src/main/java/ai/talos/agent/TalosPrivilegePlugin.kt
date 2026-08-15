@@ -190,6 +190,132 @@ class TalosPrivilegePlugin : Plugin() {
      *   quel caso l'unica strada resta la pagina di sistema, e chi disegna la
      *   schermata deve poterlo sapere invece di offrire un pulsante morto.
      */
+    /**
+     * ⭐⭐⭐ I PRESET PER CHIAMARE TALOS — lo stato VERO, chiesto al telefono.
+     *
+     * Owner 2026-08-14: «bisogna mettere dei preset per mappare l'assistente a
+     * hold pulsante Power (menu accensione si sposta a Power più volume), gesture
+     * angolo sinistro o destro, o altri tasti di sistema».
+     *
+     * ## ⛔ Cosa un'app PUÒ davvero, e cosa no — MISURATO
+     *
+     * Power tenuto premuto e gesto d'angolo **non sono impostazioni nostre**:
+     * chiamano l'assistente predefinito, e l'unico modo onesto di finirci dentro
+     * è **prendere il ruolo**. Nessuna app si assegna un tasto di sistema, e
+     * fingere il contrario sarebbe un pulsante morto.
+     *
+     * La scorciatoia di accessibilità — i due tasti del volume tenuti premuti, e
+     * il pulsante che galleggia — è invece l'unica che un'app può occupare.
+     * MISURATO sul Pad il 2026-08-14:
+     * `settings get secure accessibility_shortcut_target_service` è **vuoto**:
+     * la casella è libera.
+     *
+     * ## ⛔ E si LEGGE, non si indovina
+     *
+     * ⛔ `AccessibilityManager.getAccessibilityShortcutTargets` sarebbe la
+     * domanda elegante, e **non esiste per noi**: compilando contro l'SDK 36 il
+     * compilatore risponde `Unresolved reference` — è `@SystemApi`, riservata
+     * alle app di sistema. Non è una scelta di stile: è una porta chiusa, e
+     * l'ho scoperto dalla macchina invece che dedurlo.
+     *
+     * ⇒ Si leggono le due chiavi che il sistema scrive davvero
+     * (`accessibility_shortcut_target_service` per i tasti del volume,
+     * `accessibility_button_targets` per il pulsante che galleggia). Leggere le
+     * impostazioni sicure è concesso a chiunque; scriverle no, e infatti non le
+     * scriviamo: **l'ultimo tocco lo dà la persona**, dalla schermata di
+     * sistema.
+     *
+     * Le chiavi della ROM (`assist_long_press_home_enabled` e le due di ColorOS)
+     * viaggiano come **testo grezzo**, `null` compreso: chi disegna dice «non lo
+     * so» invece di tradurre un'assenza in uno spento.
+     */
+    /**
+     * ⭐⭐⭐ RICHIAMA L'ASSISTENTE SULLA PAGINA APPENA APERTA — rilievo #4.
+     *
+     * Owner: «quando dici apri Chrome, Gemini apre Chrome e l'assistente si
+     * chiude. Rilanciare l'assistente con la NUOVA pagina mostrata, così la
+     * conversazione continua senza ripremere il pulsante».
+     *
+     * ## ⛔ Perché la SESSIONE e non un'activity — misurato sul Pad il 15/8
+     *
+     * Le due porte sembrano una e portano dati diversi:
+     *
+     * | come si apre | cosa arriva |
+     * | --- | --- |
+     * | `startActivity` sulla barra | niente: nessuna struttura, nessun URL |
+     * | `showSession` (questa) | `AssistStructure` **e** `AssistContent` |
+     *
+     * E `AssistContent` è il punto: Chrome ci scrive dentro l'indirizzo della
+     * scheda (`setWebUri`), quindi TALOS **riceve la pagina** invece di
+     * indovinarla dai pixel. In incognito Chrome non lo dà, di proposito.
+     *
+     * ⛔ MISURATO su questa ROM: nessun gesto di sistema passa dalla sessione —
+     * il tasto assistente e la scorciatoia lanciano la nostra **activity**, e
+     * lì di contesto non ne arriva. Se la sessione non la chiediamo noi, non
+     * arriva mai.
+     *
+     * ⛔ Torna `mostrata: false` senza fingere: se il sistema non ci tiene
+     * accesi come assistente, chi chiama lo dice invece di promettere un
+     * contesto che non avrà.
+     */
+    @PluginMethod
+    fun richiamaAssistente(call: PluginCall) {
+        val mostrata = TalosAssistente.apriComeAssistente()
+        call.resolve(
+            JSObject()
+                .put("mostrata", mostrata)
+                .put("pagina", TalosAssistente.indirizzoPagina ?: ""),
+        )
+    }
+
+    /** L'indirizzo che l'ultima sessione ha ricevuto da chi era davanti, o vuoto. */
+    @PluginMethod
+    fun paginaDellAssistente(call: PluginCall) {
+        call.resolve(JSObject().put("pagina", TalosAssistente.indirizzoPagina ?: ""))
+    }
+
+    @PluginMethod
+    fun scorciatoie(call: PluginCall) {
+        val esito = JSObject()
+        val mio = android.content.ComponentName(context, TalosOcchio::class.java).flattenToString()
+
+        /*
+         * ⛔ Il confronto NON è `==`: la stessa riga può essere
+         * `ai.talos.dev/ai.talos.agent.TalosOcchio` o la forma corta
+         * `ai.talos.dev/.agent.TalosOcchio`, e sono lo stesso servizio. Si
+         * confrontano i ComponentName, che sanno di esserlo.
+         *
+         * ⛔ E la lista è separata da DUE PUNTI, non da virgole: è la forma di
+         * `accessibility_*_targets` in AOSP.
+         */
+        fun ciSiamo(grezzo: String?): Boolean = (grezzo ?: "")
+            .split(":")
+            .any { android.content.ComponentName.unflattenFromString(it)?.flattenToString() == mio }
+
+        esito.put("volume", ciSiamo(leggiSicura("accessibility_shortcut_target_service")))
+        esito.put("bottone", ciSiamo(leggiSicura("accessibility_button_targets")))
+        esito.put("servizio", mio)
+        /*
+         * Le chiavi di sistema, grezze. `assist_long_press_home_enabled` è di
+         * Android; le altre due le definisce ColorOS e possono non esserci.
+         */
+        val chiavi = JSObject()
+        for (chiave in listOf(
+            "assist_long_press_home_enabled",
+            "assistant_screen_type",
+            "disable_google_asssist_power_wakeup",
+        )) {
+            chiavi.put(chiave, leggiSicura(chiave))
+        }
+        esito.put("chiavi", chiavi)
+        call.resolve(esito)
+    }
+
+    /** Una lettura sola per tutte le chiavi: `null` resta `null`. */
+    private fun leggiSicura(chiave: String): String? = runCatching {
+        android.provider.Settings.Secure.getString(context.contentResolver, chiave)
+    }.getOrNull()
+
     @PluginMethod
     fun assistantRole(call: PluginCall) {
         val result = JSObject()

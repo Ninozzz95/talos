@@ -8,6 +8,7 @@ import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLib
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
 import TalosMobileImageViewer from '@/components/talos/library/TalosMobileImageViewer.vue'
 import { useTalosFileOrigin } from '@/composables/useTalosFileOrigin'
+import { talosDaIntitolare } from '@/stores/chat'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import { Button } from '@/components/ui/button'
 import { useTalosSourceCardIcons } from '@/composables/useTalosSourceCardIcons'
@@ -600,7 +601,8 @@ const mediaScope = computed(() => {
     const itemKey = mine.value.length === 1 ? 'library.itemCountOne' : 'library.itemCountMany'
     const imageKey = imageCount.value === 1 ? 'library.imageCountOne' : 'library.imageCountMany'
     return t('library.mediaScope', {
-        title: props.sessionTitle.trim() || t('chat.newChat'),
+        // ⛔ Il gettone «non ancora intitolata» si traduce qui, non si salva tradotto.
+        title: talosDaIntitolare(props.sessionTitle) ? t('chat.newChat') : props.sessionTitle.trim(),
         items: t(itemKey, { count: mine.value.length }),
         images: imageCount.value > 0 ? t(imageKey, { count: imageCount.value }) : '',
     })

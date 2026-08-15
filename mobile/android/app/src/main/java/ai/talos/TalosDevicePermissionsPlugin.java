@@ -39,7 +39,38 @@ import com.getcapacitor.annotation.PermissionCallback;
 @CapacitorPlugin(
     name = "TalosDevicePermissions",
     permissions = {
-        @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS })
+        @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS }),
+        /*
+         * ⭐⭐ I QUATTRO CHE LA PAGINA MOSTRAVA SENZA STATO — 2026-08-14.
+         *
+         * Contatti, Calendario, Conteggio della posta e Fotocamera comparivano
+         * con un cerchio vuoto e nient'altro: né «CONSENTITO», né un pulsante.
+         * Cioè la pagina che promette di dire tutto taceva proprio sulla domanda
+         * per cui una persona la apre — «ce l'ha, o no?».
+         *
+         * ⛔ Sono dichiarati QUI e non solo nei plugin che li usano, e il motivo
+         * sta nel commento in cima a questa classe: Capacitor tiene un bit che
+         * Android non espone — «è già stato chiesto» — e senza quel bit un
+         * rifiuto definitivo si traveste da «mai chiesto», cioè da pulsante che
+         * non fa niente. Il bit vive nel plugin che chiede: chi legge lo stato
+         * dev'essere lo stesso che lo domanda.
+         */
+        @Permission(alias = "contacts", strings = { Manifest.permission.READ_CONTACTS }),
+        @Permission(alias = "calendar", strings = {
+            Manifest.permission.READ_CALENDAR,
+            Manifest.permission.WRITE_CALENDAR
+        }),
+        @Permission(alias = "camera", strings = { Manifest.permission.CAMERA }),
+        /*
+         * ⛔ Il contatore di Gmail NON è un permesso di Android: lo definisce
+         * Gmail ed è `dangerous` (MISURATO: `dumpsys package permission …` →
+         * `prot=dangerous`). Si chiede con lo stesso dialogo, quindi vive in
+         * questo elenco come gli altri — ma il nome va scritto per intero,
+         * perché in `Manifest.permission` non c'è.
+         */
+        @Permission(alias = "mailCount", strings = {
+            "com.google.android.gm.permission.READ_CONTENT_PROVIDER"
+        })
     }
 )
 public class TalosDevicePermissionsPlugin extends Plugin {
@@ -63,6 +94,19 @@ public class TalosDevicePermissionsPlugin extends Plugin {
             result.put("notificationsRuntime", true);
         }
         result.put("microphone", micState());
+        /*
+         * ⭐ Lo stato dei quattro, chiesto al sistema a ogni lettura.
+         *
+         * ⛔ Mai messo in cache, come tutto il resto di questa schermata:
+         * Android azzera i permessi delle app lasciate ferme qualche mese, e la
+         * persona può revocarne uno in qualunque momento. Un valore ricordato
+         * direbbe «Consentito» su un permesso tolto la settimana scorsa.
+         */
+        JSObject runtime = new JSObject();
+        for (String alias : new String[] { "contacts", "calendar", "camera", "mailCount" }) {
+            runtime.put(alias, getPermissionState(alias).toString());
+        }
+        result.put("runtime", runtime);
         /**
          * L'esenzione dal risparmio energetico, che è LA voce di questa pagina.
          *
@@ -138,6 +182,39 @@ public class TalosDevicePermissionsPlugin extends Plugin {
     @PermissionCallback
     private void notificationsResult(PluginCall call) {
         call.resolve(new JSObject().put("state", getPermissionState("notifications").toString()));
+    }
+
+    /**
+     * ⭐⭐ CHIEDE uno dei quattro — col dialogo di sistema, non con un viaggio.
+     *
+     * ⛔ La stessa regola del calendario e della rubrica: chiedere costa un
+     * tocco e la finestra compare sopra quello che la persona sta facendo;
+     * mandarla a cercare un interruttore è la strada lunga. Le Impostazioni
+     * restano per il caso in cui il dialogo non può più comparire — e quel caso
+     * lo distingue `getPermissionState`, non un'ipotesi.
+     *
+     * ⛔ Risponde con lo STATO RILETTO, mai con «fatto»: è il sistema a sapere
+     * cosa ha scelto la persona.
+     */
+    @PluginMethod
+    public void requestRuntime(PluginCall call) {
+        String alias = call.getString("alias", "");
+        if (!"contacts".equals(alias) && !"calendar".equals(alias)
+            && !"camera".equals(alias) && !"mailCount".equals(alias)) {
+            // Un alias che non conosciamo non è un incidente: è una riga che
+            // questa schermata non sa chiedere, e chi chiama deve poterlo dire.
+            call.resolve(new JSObject().put("state", "prompt").put("known", false));
+            return;
+        }
+        requestPermissionForAlias(alias, call, "runtimeResult");
+    }
+
+    @PermissionCallback
+    private void runtimeResult(PluginCall call) {
+        String alias = call.getString("alias", "");
+        call.resolve(new JSObject()
+            .put("state", getPermissionState(alias).toString())
+            .put("known", true));
     }
 
     /**

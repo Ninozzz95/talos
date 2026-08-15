@@ -718,7 +718,45 @@ ${doc.text}`),
         action: 'read',
         input: z.object({}),
         async run() {
-            return { ok: true, content: sources.now() }
+            /*
+             * ⛔⛔⛔ IL GIORNO DELLA SETTIMANA SI DICE, non si fa dedurre — e il
+             * fuso è quello del TELEFONO, non UTC.
+             *
+             * ## Il difetto, misurato sul Pad il 2026-08-14
+             *
+             * «cosa ho in programma questo weekend?» → «Oggi è **giovedì** 14
+             * agosto. Il weekend è sabato 16 e domenica 17». Era **venerdì**,
+             * e il weekend era sabato 15. Gli eventi che ha elencato erano
+             * giusti, le **date** con cui li ha etichettati no.
+             *
+             * ## Due cause, nella stessa riga
+             *
+             * 1. Si rendeva `toISOString()`, cioè **UTC**, mentre la
+             *    descrizione prometteva «local». A Roma d'estate sono due ore
+             *    di differenza: **fra mezzanotte e le 2 il giorno era ancora
+             *    quello prima**, per ogni domanda che parla di «oggi».
+             * 2. Il nome del giorno non c'era, quindi il modello lo calcolava —
+             *    e calcolare che giorno della settimana cade una data è
+             *    esattamente il genere di cosa in cui un modello sbaglia in
+             *    silenzio.
+             *
+             * ⇒ Si dice tutto: data locale, ora, **giorno della settimana** e
+             * **fuso**. Costa una riga e toglie una deduzione.
+             *
+             * ⛔ `sources.now()` resta la fonte — è iniettabile e i test la
+             * fissano. Qui si cambia solo COME si racconta.
+             */
+            const adesso = new Date(sources.now())
+            const fuso = Intl.DateTimeFormat().resolvedOptions().timeZone
+            const locale = adesso.toLocaleString('en-GB', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+            })
+            return { ok: true, content: `${locale} (${fuso}). ISO: ${sources.now()}` }
         },
     })
 
