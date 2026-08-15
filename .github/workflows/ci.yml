@@ -31,6 +31,14 @@ jobs:
       # in cui te ne accorgi è un test che fallisce per ragioni che non c'entrano.
       - run: npm ci
 
+      # ⛔ Il lanciatore tiene le sue dipendenze native ISOLATE, di proposito:
+      # `node-pty` non deve mai finire nel package.json di mobile. Ma allora
+      # vanno installate a parte — e finché nessuno lo diceva, chi clonava la
+      # repo trovava 40 test rossi al primo colpo.
+      - name: dipendenze del lanciatore
+        run: npm ci
+        working-directory: mobile/tools/git-bash-launcher
+
       - name: typecheck
         run: npm run typecheck
 

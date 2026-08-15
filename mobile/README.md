@@ -60,7 +60,6 @@ mock presented as real.
 ## Building it
 
 ```bash
-cd mobile
 npm ci
 npm run typecheck            # must be silent
 npx vitest run               # ~5.100 tests, must be green
@@ -68,6 +67,17 @@ npm run build
 npx cap sync android
 cd android && ./gradlew assembleDebug -PtalosSideBySide
 ```
+
+⛔ One extra install, and it is easy to miss: the git-bash launcher keeps its
+native dependencies isolated in its own folder, on purpose — `node-pty` must
+never end up in this project's `package.json`. If you want its tests to run:
+
+```bash
+cd tools/git-bash-launcher && npm ci
+```
+
+Without it those tests skip themselves rather than fail: a dependency that was
+never installed is not a broken project.
 
 `-PtalosSideBySide` builds `ai.talos.dev`, which installs **alongside** a release
 build instead of replacing it — useful while developing.
