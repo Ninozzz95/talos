@@ -4,6 +4,16 @@ An Android assistant that actually does things on your phone — and tells you t
 truth about what happened.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](../LICENSE)
+[![Tests](https://img.shields.io/badge/tests-5%2C144%20passing-brightgreen.svg)](#building-it)
+[![Platform](https://img.shields.io/badge/platform-Android%2014%2B-3ddc84.svg)](#status)
+[![Models](https://img.shields.io/badge/models-cloud%20or%20local-blueviolet.svg)](#what-it-does)
+
+<!--
+  ⛔ IL BADGE DELLA CI NON C'È, ED È VOLUTO.
+  La CI esiste (.github/workflows/ci.yml) ma non è mai girata: il badge sarebbe
+  verde per finta. Si aggiunge dopo il primo push, quando dice una cosa vera.
+  Un badge che mente è peggio di un badge assente.
+-->
 
 ```
 you:    manda a Shadina su WhatsApp che sto arrivando
@@ -19,6 +29,48 @@ the input field is empty, the text has moved into the conversation, and the send
 control is gone. When only one check agrees, it says so.
 
 ---
+
+## See it
+
+<table>
+<tr>
+<td width="25%"><img src="docs/immagini/1-la-barra.png" alt="The assistant bar over any app"></td>
+<td width="25%"><img src="docs/immagini/2-la-risposta.png" alt="An answer with its card"></td>
+<td width="25%"><img src="docs/immagini/3-i-permessi.png" alt="The permissions screen"></td>
+<td width="25%"><img src="docs/immagini/4-il-telefono.png" alt="Phone control"></td>
+</tr>
+<tr>
+<td><b>Ask from anywhere</b><br>The bar opens over whatever you are doing — it does not pull you into an app.</td>
+<td><b>Get an answer with its receipts</b><br>Sources, what it checked, and what it could not.</td>
+<td><b>See exactly what it can do</b><br>Every permission, why it exists, and its real state right now.</td>
+<td><b>And what your phone allows</b><br>Each capability reports whether it works — measured, not assumed.</td>
+</tr>
+</table>
+
+## How it works
+
+```
+  you speak or type
+        |
+        v
+  +-----------+   what's on screen    +---------------+
+  |   TALOS   | --------------------> | accessibility |
+  |  the bar  | <-------------------- |    service    |
+  +-----+-----+   elements + state    +---------------+
+        |
+        | picks a tool, and asks you first if it matters
+        v
+  +-----------+                       +---------------+
+  |   tools   | --------------------> |  your phone   |
+  |    40+    |                       |  other apps   |
+  +-----+-----+                       +-------+-------+
+        |                                     |
+        |         then it CHECKS  <-----------+
+        v
+  "sent" only if the field emptied, the text moved into the
+  conversation, and the send control disappeared.
+  Two out of three, or it says it could not confirm.
+```
 
 ## What it does
 
@@ -110,13 +162,75 @@ control is a live capability, not an acquired permission.
 **Today: Android.** Working and used daily on a OnePlus 13 (ColorOS) and a
 OnePlus Pad 3 (OxygenOS). Android 14+.
 
-**Next: desktop and CLI**, sharing the same tools and the same contracts — so a
-capability written once works on both surfaces instead of drifting apart. Not
-here yet; this line will say so when it is.
+**Device support**: mid-range and above. TALOS runs a wake-word model, reads the
+screen continuously while acting, and can run a language model on the phone
+itself — three things that are cheap on a flagship and expensive on an entry
+device. ⛔ It has only been measured on two phones so far, and they already
+behave differently from each other: the honest answer for anything else is «not
+yet measured».
+
+**Next: desktop, CLI and Chromebooks**, sharing the same tools and the same
+contracts — so a capability written once works everywhere instead of drifting
+apart. Not here yet; this line will say so when it is.
 
 This is a young project, published because the interesting part is the
 harness — how an assistant grounds itself in a real screen and refuses to lie
 about the result — and that part is worth more shared than kept.
+
+## Questions people ask
+
+<details>
+<summary><b>Does it really read my screen? Where does that go?</b></summary>
+
+Yes, when the accessibility service is on — that is how it can press a button in
+another app. What it reads goes to the model you chose, in the message you asked
+for, and nowhere else. There is no TALOS server: nothing is sent to us, because
+there is no us to send it to.
+
+⛔ And it is off until you turn it on, in Android's own settings. TALOS cannot
+enable it for you — Android does not allow that, and it is right not to.
+</details>
+
+<details>
+<summary><b>Do I need internet?</b></summary>
+
+Only if you pick a cloud model. With a local GGUF the phone answers by itself,
+and the wake word never leaves the device in either case: the model that hears
+«hey TALOS» runs locally, always.
+</details>
+
+<details>
+<summary><b>What does it cost?</b></summary>
+
+The app costs nothing and has nothing to sell. If you use a cloud model you pay
+that provider directly with your own key — TALOS never sees it beyond the
+device's encrypted storage.
+</details>
+
+<details>
+<summary><b>Can it send a message without asking me?</b></summary>
+
+Only if you told it to. Every capability is set to always / ask / never, and the
+default for anything that leaves the phone is **ask**. The consent sheet shows
+what is about to go out and to whom, and lets you edit it first.
+</details>
+
+<details>
+<summary><b>Why is the code commented in Italian?</b></summary>
+
+Because reasoning that is awkward to write does not get written. The comments
+here carry the measurement that decided a number and the defect a guard exists
+to prevent — they are long on purpose, and they exist because they were written
+in the language the author thinks in. Identifiers and APIs are English, and
+contributions in English are welcome.
+</details>
+
+<details>
+<summary><b>Is it stable?</b></summary>
+
+It is used daily and has ~5.100 tests, but it is young and it has been measured
+on two devices. Treat it as something to try, not as something to depend on yet.
+</details>
 
 ## Contributing
 
