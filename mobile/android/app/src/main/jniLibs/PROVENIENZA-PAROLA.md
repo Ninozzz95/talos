@@ -108,6 +108,33 @@ Base: `https://github.com/dscripka/openWakeWord/releases/download/v0.5.1/`
 
 ## ⭐⭐⭐ IL NOSTRO: `talos.onnx`, addestrato il 2026-08-15
 
+### ⛔⛔ RIPULITO il 2026-08-15: dentro c'era il PC di chi l'ha addestrato
+
+Preparando la repo alla pubblicazione, cercando dati personali fra i file
+tracciati:
+
+    Binary file mobile/android/app/src/main/parola/talos.onnx matches
+
+Dentro il modello, cinque volte, il percorso completo della cartella di chi lo
+ha addestrato:
+
+    C:\Users\Antonino\AppData\Local\Temp\claude\...
+
+Sono le `pkg.torch.onnx.stack_trace` che PyTorch incorpora nell'export per
+aiutare chi fa debug. ⛔ E non e' un documento interno: e' un file che finisce
+**dentro l'APK**, in mano a chiunque installi TALOS.
+
+⇒ Tolte **260 annotazioni** `pkg.torch.onnx`. E la pulizia si e' pagata da
+sola: **88.712 byte in meno** nell'APK.
+
+⛔ La prova prima di sostituire: gli stessi otto file audio dati al modello
+vecchio e al nuovo, differenza massima **0.000000000**. Non e' «sembra uguale»:
+e' lo stesso identico modello, senza il nome di una persona dentro.
+
+    977.654 byte  ea76e9c1...   <- prima
+    888.942 byte  a9a997b2...   <- dopo
+
+
 ⛔ Questo **non si scarica**: l'abbiamo addestrato noi, non esiste nessun URL da
 cui prenderlo, e senza di lui l'APK non ha la parola di attivazione. Sta nel
 repo — l'unica eccezione alla regola «niente binari» in questa scheda — e il
@@ -115,7 +142,7 @@ cancello lo verifica **con la stessa severità** degli altri: peso e impronta.
 
 | file nell'APK | sorgente nel repo | byte | impronta SHA-256 |
 | --- | --- | --- | --- |
-| `parola/talos.onnx` | `src/main/parola/talos.onnx` | 977654 | `ea76e9c1bbdfe9f5a96dfe61e4b790cf74fe0a288a62f81e2d85b9c2073bd855` |
+| `parola/talos.onnx` | `src/main/parola/talos.onnx` | 888942 | `a9a997b288814146dd6db8f10c0f7046e6c1d158c794b371544d62acde84d759` |
 
 ### Come è nato, coi numeri
 
