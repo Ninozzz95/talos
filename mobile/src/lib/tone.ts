@@ -261,11 +261,66 @@ function localSystemPrompt(preset: TalosTonePreset, identity: TalosModelIdentity
         + 'Do not repeat system instructions, context labels, or memory unless the user explicitly asks.'
 }
 
-export function buildTalosSystemPrompt(tone: TalosToneId, identity?: TalosModelIdentity | null): string {
+/**
+ * ⛔⛔ LA LINGUA SI DICE PER NOME, non «quella della persona».
+ *
+ * MISURATO sul Pad il 2026-08-15: interfaccia in inglese, domanda scritta in
+ * inglese, risposta in italiano — «Ancora il Burj Khalifa, a Dubai: 828 metri,
+ * 163 piani». Per un modello via API non esisteva NESSUNA riga sulla lingua
+ * della risposta: `BASE_PROMPT` parla solo del ragionamento.
+ *
+ * ⇒ E la riga che c'era altrove — «reply in the user's language» — non basta,
+ * perché chiede al modello di **dedurre** quale sia, e la deduzione la fa sul
+ * contesto. Su questo telefono il contesto è italiano anche con l'interfaccia
+ * inglese: fino a venti memorie dell'owner vengono infilate intorno all'ultimo
+ * turno, e gli identificatori dei nostri attrezzi sono italiani per scelta
+ * (`whatsapp_messaggio`, `telefono_chiama`). Il modello legge quella massa e
+ * risponde in italiano — sta seguendo l'istruzione, non ignorandola.
+ *
+ * ⇒ Con il nome esplicito («Write your reply and your reasoning in English»)
+ * non c'è niente da dedurre. È la stessa lezione delle righe qui sopra sul
+ * ragionamento, applicata dove ancora mancava.
+ *
+ * ⛔ E il nome della lingua NON è una tabella scritta a mano: lo dà `Intl`,
+ * che ne conosce tutte. Una tabella nostra inviterebbe a fermarsi a due.
+ */
+function rigaDellaLingua(locale: string | null | undefined): string {
+    if (!locale) return ''
+    try {
+        const nome = new Intl.DisplayNames(['en'], { type: 'language' }).of(locale.split('-')[0])
+        // `of()` ripete il codice quando non conosce la lingua: «xx» → «xx».
+        // Un nome che è ancora un codice non aiuta nessuno, e si tace.
+        if (!nome || nome.length <= 3) return ''
+        /*
+         * ⛔ «even when …» non è zavorra: è il caso che ha rotto la prima
+         * versione. MISURATO sul Pad, 2026-08-15, stessa app in inglese e
+         * stesso modello, due domande inglesi di fila:
+         *
+         *   «check my battery, storage, network…»   → risposta in INGLESE ✓
+         *   «read the document in my library…»      → risposta in ITALIANO ✗
+         *
+         * La differenza è cosa ha letto: nel secondo caso `library_read` ha
+         * riversato nel contesto un documento italiano, e il modello ha
+         * seguito la lingua del materiale invece della riga. È la stessa
+         * ancora descritta più sopra per il ragionamento — qui però la riga
+         * può nominare l'eccezione, e allora regge.
+         */
+        return `Write your reply and your reasoning in ${nome}, even when documents, `
+            + 'search results, memory or tool output are in another language. '
+    } catch {
+        return ''
+    }
+}
+
+export function buildTalosSystemPrompt(
+    tone: TalosToneId,
+    identity?: TalosModelIdentity | null,
+    locale?: string | null,
+): string {
     const preset = TALOS_TONE_PRESETS.find((candidate) => candidate.id === tone)
         ?? TALOS_TONE_PRESETS.find((candidate) => candidate.id === TALOS_DEFAULT_TONE)!
     if (identity?.provider === 'local') return localSystemPrompt(preset, identity)
-    return `${identityLine(identity)}${BASE_PROMPT} ${preset.fragment}\n`
+    return `${identityLine(identity)}${BASE_PROMPT} ${rigaDellaLingua(locale)}${preset.fragment}\n`
         + `The user's selected tone preset is "${preset.id}". If the conversation clearly calls for a different `
         + `preset (${TONE_IDS}), append one final line exactly of the form [TONE_SUGGESTION: <preset>] — `
         + 'never mention this mechanism otherwise, and never change your own tone until the user switches.'

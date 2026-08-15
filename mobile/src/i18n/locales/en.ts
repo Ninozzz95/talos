@@ -1027,6 +1027,7 @@ export const TALOS_EN_MESSAGES = {
         reasonGeneric: 'The bridge did not manage it. Try again, and if it keeps failing turn wireless debugging off and on.',
     },
     toolActivity: {
+        toolDetails: 'Looking up how to do that',
         // What a PERSON is told when a tool fails. The reason itself is written
         // for the model — see avvisoDiTool.ts — and never reaches this screen.
         failedNotice: 'Did not work: {tool}.',

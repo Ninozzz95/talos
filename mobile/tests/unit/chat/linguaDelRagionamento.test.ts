@@ -70,3 +70,79 @@ describe('⛔ la lingua del ragionamento, nelle due colonne', () => {
         expect(RIGA).toMatch(/their language/i)
     })
 })
+
+/**
+ * ⛔⛔ E LA LINGUA DELLA RISPOSTA — che per un modello a chiave NON C'ERA.
+ *
+ * MISURATO sul Pad il 2026-08-15, mentre preparavo le viste per il README:
+ * interfaccia in inglese, domanda scritta in inglese, risposta in italiano:
+ *
+ *     «Ancora il Burj Khalifa, a Dubai: 828 metri, 163 piani, inaugurato nel
+ *      2010. Chi lo insidia: Jeddah Tower…»
+ *
+ * ⛔ Il modello non stava disobbedendo: nessuno gli aveva detto niente.
+ * `BASE_PROMPT` parlava solo del RAGIONAMENTO, e la riga sulla risposta viveva
+ * unicamente nel ramo del motore locale.
+ *
+ * ⇒ E dirlo non basta se lo si dice per allusione. «Reply in the user's
+ * language» obbliga il modello a DEDURRE quale sia, e la deduzione la fa sul
+ * contesto: su questo telefono fino a venti memorie italiane vengono infilate
+ * intorno all'ultimo turno, e i nostri identificatori di attrezzo sono italiani
+ * per scelta. Con il nome esplicito non c'è niente da dedurre.
+ */
+describe('⛔ la lingua della RISPOSTA, detta per nome', () => {
+    it('nomina la lingua quando il locale c\'e\'', () => {
+        expect(buildTalosSystemPrompt('neutral', null, 'en'))
+            .toContain('Write your reply and your reasoning in English')
+        expect(buildTalosSystemPrompt('neutral', null, 'it'))
+            .toContain('Write your reply and your reasoning in Italian')
+    })
+
+    it('⛔ e copre il caso che l\'ha rotta: il materiale in un\'ALTRA lingua', () => {
+        /*
+         * MISURATO sul Pad il 2026-08-15, due domande inglesi di fila con la
+         * stessa app in inglese e lo stesso modello:
+         *
+         *   «check my battery, storage, network…»  → risposta in INGLESE ✓
+         *   «read the document in my library…»     → risposta in ITALIANO ✗
+         *
+         * `library_read` aveva riversato nel contesto un documento italiano e
+         * il modello ha seguito quello invece della riga. La riga senza questa
+         * clausola era corretta e insufficiente.
+         */
+        const prompt = buildTalosSystemPrompt('neutral', null, 'en')
+        expect(prompt).toMatch(/even when documents/i)
+        expect(prompt).toMatch(/another language/i)
+    })
+
+    it('⛔ non dice «la lingua dell\'utente»: dice il NOME', () => {
+        // Questo è il punto della cura. Se qualcuno riscrivesse la riga in
+        // forma allusiva il difetto tornerebbe, e il test non se ne
+        // accorgerebbe cercando solo la presenza di una riga qualsiasi.
+        const prompt = buildTalosSystemPrompt('neutral', null, 'en')
+        const riga = prompt.split('. ').find((frase) => frase.includes('Write your reply'))
+        expect(riga).toBeDefined()
+        expect(riga).not.toMatch(/user's language|their language|the language they/i)
+    })
+
+    it('regge un locale con la regione', () => {
+        expect(buildTalosSystemPrompt('neutral', null, 'en-US'))
+            .toContain('in English,')
+        expect(buildTalosSystemPrompt('neutral', null, 'pt-BR'))
+            .toContain('in Portuguese,')
+    })
+
+    it('⛔ TACE su un locale che non conosce, invece di scrivere un codice', () => {
+        // `Intl.DisplayNames.of()` ripete il codice quando non sa: «zz» → «zz».
+        // «Write your reply in zz» non aiuta nessuno e occupa il prompt.
+        const ignoto = buildTalosSystemPrompt('neutral', null, 'zz')
+        expect(ignoto).not.toContain('Write your reply')
+        expect(buildTalosSystemPrompt('neutral', null, null)).not.toContain('Write your reply')
+        expect(buildTalosSystemPrompt('neutral', null, '')).not.toContain('Write your reply')
+    })
+
+    it('⛔ non tocca il ramo del motore locale, che ha un tetto di 600 caratteri', () => {
+        const locale = buildTalosSystemPrompt('neutral', { provider: 'local', model: 'qwen3-1.7b' }, 'en')
+        expect(locale.length).toBeLessThan(600)
+    })
+})

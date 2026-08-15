@@ -2429,6 +2429,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const baseTonePrompt = buildTalosSystemPrompt(
                 sendRuntime.tone,
                 profile ? { provider: profile.provider, model: providerModel?.displayName ?? profile.model } : null,
+                // ⛔ Il locale dell'interfaccia È la lingua della persona: l'ha
+                // scelto lei. Senza questo terzo argomento il prompt non nomina
+                // nessuna lingua e il modello la deduce dal contesto — che qui
+                // è italiano anche quando l'app è in inglese. Vedi tone.ts.
+                localization.state.locale,
             )
             let payloadTurns = acceptedTurns
             let memoryWrapped = false

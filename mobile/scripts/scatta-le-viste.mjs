@@ -68,7 +68,41 @@ const SOSPETTI = [
     { nome: 'un indirizzo email', re: /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i },
     { nome: 'un numero di telefono', re: /(\+\d{2}\s?)?\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/ },
     { nome: 'un indirizzo IP privato', re: /192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+/ },
-    { nome: 'un percorso utente', re: /C:\\Users\\[A-Za-z]+/i },
+    { nome: 'un percorso utente', re: /C:[\/]Users[\/][A-Za-z]+/i },
+    /*
+     * ⛔⛔ I NOMI DELLE RETI WI-FI — e questa riga nasce da un errore vero.
+     *
+     * La prima vista scattata per il README era la barra sopra le impostazioni
+     * Wi-Fi. Il filtro l'ha lasciata passare, e dentro c'erano:
+     *
+     *     NOKIA-BEC7        la rete di casa dell'owner
+     *     A15 di Carmela    il nome di una PERSONA
+     *     TIM-45467925      la rete di un vicino
+     *     OnePlus13         il suo telefono
+     *
+     * ⇒ Le reti visibili non sono dati di chi sviluppa: sono dati dei VICINI,
+     * che non sanno nemmeno di comparire in quello screenshot. Un filtro che
+     * cerca solo email e IP non li vede, e la vista sarebbe finita su internet.
+     */
+    {
+        nome: 'un nome di rete Wi-Fi',
+        /*
+         * ⛔ `` all'inizio, e non è pignoleria: senza, «TIM» matcha dentro
+         * «ottimizzazione» e «settimanali». MISURATO — il filtro ha rifiutato
+         * due viste pulite dicendo di aver trovato «timisation» e «timediali».
+         *
+         * ⇒ Un filtro che blocca tutto è inutile quanto uno che non blocca
+         * niente: smette di essere letto, e la prima volta che serve davvero
+         * qualcuno lo disattiva.
+         */
+        re: /(TIM|WINDTRE|VODAFONE|FASTWEB|ILIAD|TISCALI|NOKIA|TP-Link|FRITZ|Linksys|NETGEAR|OnePlus|Galaxy|iPhone|Redmi|HUAWEI)[-_ ]?[A-Z0-9]{2,}/,
+    },
+    {
+        // «A15 di Carmela», «iPhone di Marco»: il nome di una persona dentro un
+        // SSID. Chi lo ha scelto non sapeva che sarebbe finito in una vetrina.
+        nome: 'una rete col nome di una persona',
+        re: / di [A-Z][a-z]{2,}/,
+    },
 ]
 
 function schermoPulito() {
