@@ -114,12 +114,75 @@ if ($conChiavi) {
 } else { Bene "nessuna chiave in chiaro" }
 
 Passo "cerco il dispositivo dell'owner e i suoi dati"
-$conDati = git grep -lE "3B1F6DE8WTX78PET|2ea6573c|ninozz142|C:\\\\Users\\\\Antonino" -- '*.ts' '*.kt' '*.java' '*.md' '*.json' '*.mjs' 2>$null
+# ⛔ Si cerca SOLO dentro `mobile/`, l'unica cartella che viene pubblicata.
+# Cercando in tutto il repo l'allarme scattava su tre `composer.json` di
+# `core/` e `control-plane/` che portano l'email dell'owner come AUTORE —
+# normale in open source, e comunque fuori dal pacchetto. Un allarme che
+# grida su file che non escono viene ignorato, e il giorno che ne trova uno
+# vero non lo legge piu' nessuno.
+$conDati = git grep -lE "3B1F6DE8WTX78PET|2ea6573c|ninozz142|C:\\\\Users\\\\Antonino" -- 'mobile/*.ts' 'mobile/*.kt' 'mobile/*.java' 'mobile/*.md' 'mobile/*.json' 'mobile/*.mjs' 2>$null
 if ($conDati) {
     Male "$($conDati.Count) file nominano il dispositivo o il percorso dell'owner:"
     $conDati | Select-Object -First 10 | ForEach-Object { Nota $_ }
     Nota "⚠ vanno ripuliti PRIMA di pubblicare: sono dati di una persona"
 } else { Bene "nessun riferimento al dispositivo o alla persona" }
+
+Passo "il README cita immagini che NON ci sono?"
+# ⛔ Il controllo OPPOSTO a quello qui sotto, e serve tanto quanto.
+#
+# Quello sotto impedisce che un'immagine non firmata venga pubblicata. Questo
+# impedisce che il README ne citi una ASSENTE — su GitHub diventa un riquadro
+# rotto, ed è la prima cosa che una persona vede del progetto. Il caso non è
+# teorico: le viste vivono in DA-APPROVARE finché l'owner non le firma, quindi
+# fra «scritto nel README» e «pronta da pubblicare» c'è sempre una finestra.
+$readme = Join-Path $Repo 'mobile/README.md'
+if (Test-Path $readme) {
+    $citate = [regex]::Matches((Get-Content $readme -Raw), 'docs/immagini/([A-Za-z0-9._-]+\.png)') |
+              ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+    $assenti = $citate | Where-Object { -not (Test-Path (Join-Path $Repo "mobile/docs/immagini/$_")) }
+    if ($assenti) {
+        Male "$($assenti.Count) immagini citate dal README non sono in docs/immagini/:"
+        $assenti | ForEach-Object {
+            $dove = if (Test-Path (Join-Path $Repo "mobile/docs/immagini/DA-APPROVARE/$_")) { " (in quarantena, in attesa del sì)" } else { " (non esiste)" }
+            Nota "$_$dove"
+        }
+        Nota "⛔ Su GitHub diventerebbero riquadri rotti."
+        $bloccoImmagini = $true
+    } elseif ($citate) { Bene "$($citate.Count) immagini citate dal README, tutte presenti" }
+}
+
+Passo "ogni screenshot e' stato APPROVATO dall'owner?"
+# ⛔⛔ Owner 2026-08-15: «devo approvare ogni screenshot esplicitamente, senza
+# il mio permesso non si pubblicano».
+#
+# Uno screenshot e' l'unica cosa in questo repo che nessun controllo automatico
+# puo' giudicare davvero: il filtro sa cercare una email o una chiave, non sa
+# vedere che sullo sfondo c'e' una cartella con dentro un nome, o che la chat
+# e' nella lingua sbagliata. ⇒ L'unico giudice e' la PERSONA, e questo cancello
+# si limita a non lasciar passare niente che non abbia firmato.
+$cartellaImg = Join-Path $Repo 'mobile/docs/immagini'
+$manifesto   = Join-Path $cartellaImg 'APPROVATE.txt'
+if (Test-Path $cartellaImg) {
+    $approvate = @()
+    if (Test-Path $manifesto) {
+        $approvate = Get-Content $manifesto | Where-Object { $_ -match '^\s*[^#\s]' } |
+                     ForEach-Object { ($_ -split '\s+')[0] }
+    }
+    $presenti = Get-ChildItem $cartellaImg -Filter *.png -File -ErrorAction SilentlyContinue
+    $nonFirmate = $presenti | Where-Object { $approvate -notcontains $_.Name }
+    if ($nonFirmate) {
+        Male "$($nonFirmate.Count) screenshot NON approvati in mobile/docs/immagini/:"
+        $nonFirmate | ForEach-Object { Nota $_.Name }
+        Nota "⛔ Non si pubblicano. Vanno mostrati all'owner e, dopo il suo si',"
+        Nota "   aggiunti a mobile/docs/immagini/APPROVATE.txt"
+        $bloccoImmagini = $true
+    } elseif ($presenti) {
+        Bene "$($presenti.Count) screenshot, tutti firmati in APPROVATE.txt"
+    } else { Bene "nessuno screenshot (niente da approvare)" }
+
+    $inAttesa = Get-ChildItem (Join-Path $cartellaImg 'DA-APPROVARE') -Filter *.png -File -ErrorAction SilentlyContinue
+    if ($inAttesa) { Nota "($($inAttesa.Count) in quarantena, in attesa del si' dell'owner)" }
+} else { Bene "nessuna cartella immagini" }
 
 # ───────────────────────────────────────────────────────────────────────────
 #  3. LE COSE CHE UNA REPO OPEN SOURCE DEVE AVERE
@@ -147,6 +210,13 @@ foreach ($pj in @('package.json', 'mobile/package.json')) {
 }
 if ($senzaLicenza) { foreach ($s in $senzaLicenza) { Male "$s non dichiara `"license`"" } }
 else { Bene "tutti i package.json dichiarano la licenza" }
+
+if ($bloccoImmagini -and $Esegui) {
+    Titolo "MI FERMO"
+    "  Ci sono screenshot che l'owner non ha approvato."
+    "  ⛔ Una vetrina pubblica non si costruisce con immagini non firmate."
+    exit 1
+}
 
 if (-not $Esegui) {
     Titolo "NON HO TOCCATO NIENTE"
@@ -217,7 +287,8 @@ $readme = Join-Path $Destinazione 'README.md'
 if (Test-Path $readme) {
     $t = Get-Content $readme -Raw
     $t = $t -replace '\]\(\.\./', ']('
-    $t = $t -replace 'cd mobile?
+    $t = $t -replace 'cd mobile
+?
 ', ''
     Set-Content $readme $t -NoNewline
     Bene "rimandi corretti"
@@ -262,6 +333,29 @@ Bene "un commit solo: $commit"
 # ───────────────────────────────────────────────────────────────────────────
 #  5. LA VERIFICA — l'originale è intatto?
 # ───────────────────────────────────────────────────────────────────────────
+Titolo "VERIFICA — le immagini sono ARRIVATE nella copia?"
+# ⛔⛔ Il controllo di prima guarda l'ORIGINALE, e non basta.
+#
+# MISURATO 2026-08-15: il cancello diceva «4 immagini citate dal README, tutte
+# presenti» — vero nell'originale — e la copia pubblicabile non ne conteneva
+# NESSUNA. `mobile/.gitignore` aveva `*.png`, quindi non erano tracciate e la
+# copia, che si costruisce dai file tracciati, le lasciava indietro.
+#
+# ⇒ Un controllo che guarda il posto sbagliato è peggio di nessun controllo:
+# dice «✓» e chiude la domanda.
+$readmeCopia = Join-Path $Destinazione 'README.md'
+if (Test-Path $readmeCopia) {
+    $citate = [regex]::Matches((Get-Content $readmeCopia -Raw), 'docs/immagini/([A-Za-z0-9._-]+\.png)') |
+              ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+    $mancanti = $citate | Where-Object { -not (Test-Path (Join-Path $Destinazione "docs/immagini/$_")) }
+    if ($mancanti) {
+        Male "$($mancanti.Count) immagini citate dal README NON sono arrivate nella copia:"
+        $mancanti | ForEach-Object { Nota $_ }
+        Nota "⛔ Su GitHub sarebbero riquadri rotti. Controlla mobile/.gitignore."
+    } elseif ($citate) { Bene "$($citate.Count) immagini, arrivate tutte nella copia" }
+    else { Bene "il README non cita immagini" }
+}
+
 Titolo "VERIFICA — l'originale è intatto?"
 
 Set-Location $Repo

@@ -83,6 +83,28 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     local_model_inspect: 'Checking whether a model fits this phone',
     local_model_download: 'Downloading a model to this phone',
     local_models_status: 'Checking on a model download',
+    /*
+     * ⛔⛔ `tool_details` NON è una capacità — ed è per questo che è arrivato
+     * a schermo senza volto.
+     *
+     * Owner 2026-08-15, guardando una risposta: «nella riga si legge
+     * tool_details». È esattamente il difetto del 26 luglio che questo file
+     * dice di aver curato — quattro righe che leggevano `web_read` — tornato
+     * da una porta che nessuna guardia sorvegliava.
+     *
+     * ⇒ Il test di copertura legge `TALOS_AGENT_TOOL_IDS`, e `tool_details`
+     * lì dentro non c'è **per scelta**: è l'impianto dell'apertura a gradi,
+     * non qualcosa che la persona concede o nega. Quindi non aveva nessun
+     * elenco che lo obbligasse a un'etichetta — pur essendo, sullo schermo,
+     * una riga come tutte le altre.
+     *
+     * ⛔ E la cura NON è nasconderlo. L'apertura a gradi costa ~1,4 s la
+     * prima volta che un attrezzo serve: senza riga, quel secondo e mezzo è
+     * schermo fermo e sembra bloccato. Una riga che dice il vero è meglio di
+     * un silenzio — è la stessa ragione per cui un attrezzo sconosciuto
+     * ripiega sul suo nome invece che sul nulla.
+     */
+    tool_details: 'Looking up how to do that',
 }
 
 export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
@@ -155,6 +177,7 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     local_model_inspect: 'toolActivity.localModelInspect',
     local_model_download: 'toolActivity.localModelDownload',
     local_models_status: 'toolActivity.localModelsStatus',
+    tool_details: 'toolActivity.toolDetails',
 }
 
 export interface TalosToolConsentCopy {
@@ -388,6 +411,7 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     local_model_inspect: 'web',
     local_model_download: 'download',
     local_models_status: 'tool',
+    tool_details: 'tool',
 }
 
 /** An unknown tool gets the generic mark rather than another tool's. */

@@ -101,6 +101,34 @@ function createMarkdownRenderer(): MarkdownIt {
     })
 
     md.validateLink = isAllowedLink
+
+    /*
+     * ⛔⛔ `<br>` DENTRO UNA CELLA — l'unico tag che si riconosce, e il perché.
+     *
+     * Owner 2026-08-15, su un confronto a quattro colonne generato da Claude:
+     * le celle mostravano il tag scritto in chiaro —
+     *
+     *     «Autonomous agentic workflows<br>· Large-repo multi-file edits»
+     *
+     * `html: false` è giusto e non si tocca: l'HTML di un modello non si
+     * esegue. Ma Markdown **non ha** un modo di andare a capo dentro una cella
+     * di tabella, e `<br>` è l'idioma che tutti usano — GitHub compreso. ⇒ Il
+     * modello sta scrivendo la cosa corretta, e siamo noi a stamparla cruda.
+     *
+     * ⇒ Si riconosce QUESTO tag e nient'altro, e diventa un `hardbreak` del
+     * renderer — non HTML iniettato. Un `<script>` o un `<img onerror>` restano
+     * testo, esattamente come prima: la superficie di rischio non cresce di un
+     * carattere.
+     */
+    md.inline.ruler.before('text', 'talos_br', (state, silent) => {
+        if (state.src.charCodeAt(state.pos) !== 0x3C /* < */) return false
+        const match = /^<br\s*\/?>/i.exec(state.src.slice(state.pos))
+        if (!match) return false
+        if (!silent) state.push('hardbreak', 'br', 0)
+        state.pos += match[0].length
+        return true
+    })
+
     md.core.ruler.after('inline', 'talos_document_contract', (state) => {
         for (const token of state.tokens) {
             if (token.type === 'heading_open' || token.type === 'heading_close') {

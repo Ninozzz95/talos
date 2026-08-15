@@ -195,11 +195,28 @@ function onListKeydown(event: KeyboardEvent): void {
         class="talos-mobile-model-picker"
         data-testid="talos-mobile-composer-model-picker"
     >
+        <!--
+            ⛔ `max-h` sì, `min-h` NO.
+
+            Il tetto serve: con 413 modelli di OpenRouter aperti la lista deve
+            smettere di crescere e cominciare a scorrere.
+
+            Il pavimento no, e costava un buco. Con `min-h-[40dvh]` su uno
+            schermo da 2400 px la lista occupava 960 px anche quando conteneva
+            tre righe da 400: 560 px di nero fra l'ultimo provider e la riga
+            «Refresh · Model Lab», cioè un quarto dello schermo. Owner
+            2026-08-15, guardando la vista: «c'è tanto spazio tra openrouter e
+            zona refresh/model lab».
+
+            ⇒ Un pannello si adatta a quello che contiene. Il vuoto non era
+            respiro: era un pavimento pensato per la lista aperta, applicato
+            anche quando è chiusa.
+        -->
         <div
             ref="listbox"
             role="listbox"
             :aria-label="$t('chat.modelForConversation')"
-            class="max-h-[70dvh] min-h-[40dvh] space-y-3 overflow-y-auto overscroll-contain pr-1"
+            class="max-h-[70dvh] space-y-3 overflow-y-auto overscroll-contain pr-1"
             @keydown="onListKeydown"
         >
             <section

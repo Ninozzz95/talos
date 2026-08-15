@@ -4,7 +4,7 @@ An Android assistant that actually does things on your phone — and tells you t
 truth about what happened.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](../LICENSE)
-[![Tests](https://img.shields.io/badge/tests-5%2C144%20passing-brightgreen.svg)](#building-it)
+[![Tests](https://img.shields.io/badge/tests-5%2C156%20passing-brightgreen.svg)](#building-it)
 [![Platform](https://img.shields.io/badge/platform-Android%2014%2B-3ddc84.svg)](#status)
 [![Models](https://img.shields.io/badge/models-cloud%20or%20local-blueviolet.svg)](#what-it-does)
 
@@ -32,18 +32,22 @@ control is gone. When only one check agrees, it says so.
 
 ## See it
 
+<img src="docs/immagini/tablet-1-table.png" alt="A model comparison built from live web sources, on a tablet">
+
+**Ask something that takes real work.** TALOS searches, compares, and tells you
+what it would pick — with every source it read, and a note about the ones it
+could not verify.
+
 <table>
 <tr>
-<td width="25%"><img src="docs/immagini/1-la-barra.png" alt="The assistant bar over any app"></td>
-<td width="25%"><img src="docs/immagini/2-la-risposta.png" alt="An answer with its card"></td>
-<td width="25%"><img src="docs/immagini/3-i-permessi.png" alt="The permissions screen"></td>
-<td width="25%"><img src="docs/immagini/4-il-telefono.png" alt="Phone control"></td>
+<td width="33%"><img src="docs/immagini/phone-1-memory-write.png" alt="Teaching TALOS something it will remember"></td>
+<td width="33%"><img src="docs/immagini/phone-2-memory-screen.png" alt="The memory screen, with scope and type on every entry"></td>
+<td width="33%"><img src="docs/immagini/tablet-4-phone.png" alt="TALOS reporting the real state of the phone"></td>
 </tr>
 <tr>
-<td><b>Ask from anywhere</b><br>The bar opens over whatever you are doing — it does not pull you into an app.</td>
-<td><b>Get an answer with its receipts</b><br>Sources, what it checked, and what it could not.</td>
-<td><b>See exactly what it can do</b><br>Every permission, why it exists, and its real state right now.</td>
-<td><b>And what your phone allows</b><br>Each capability reports whether it works — measured, not assumed.</td>
+<td><b>Teach it once</b><br>Say what you want remembered, in the middle of a normal conversation. It saves it and tells you it did.</td>
+<td><b>And see everything it kept</b><br>Every memory is on your device, scoped, typed, and deletable — and can never override a security rule.</td>
+<td><b>It reads your phone, and says what it cannot</b><br>Battery, storage, network — measured. When a capability is unavailable it says so instead of guessing.</td>
 </tr>
 </table>
 
@@ -114,7 +118,7 @@ mock presented as real.
 ```bash
 npm ci
 npm run typecheck            # must be silent
-npx vitest run               # ~5.100 tests, must be green
+npx vitest run               # 5,156 tests, must be green
 npm run build
 npx cap sync android
 cd android && ./gradlew assembleDebug -PtalosSideBySide
@@ -159,19 +163,28 @@ control is a live capability, not an acquired permission.
 
 ## Status
 
-**Today: Android.** Working and used daily on a OnePlus 13 (ColorOS) and a
-OnePlus Pad 3 (OxygenOS). Android 14+.
+**Runs on Android 14+** — phones, tablets, and Chromebooks, which run Android
+apps natively.
 
-**Device support**: mid-range and above. TALOS runs a wake-word model, reads the
-screen continuously while acting, and can run a language model on the phone
-itself — three things that are cheap on a flagship and expensive on an entry
-device. ⛔ It has only been measured on two phones so far, and they already
-behave differently from each other: the honest answer for anything else is «not
-yet measured».
+**Tested on:**
 
-**Next: desktop, CLI and Chromebooks**, sharing the same tools and the same
-contracts — so a capability written once works everywhere instead of drifting
-apart. Not here yet; this line will say so when it is.
+| device | OS | notes |
+| --- | --- | --- |
+| OnePlus 13 | Android 15 · ColorOS | daily driver |
+| OnePlus Pad 3 | Android 15 · OxygenOS | tablet layout |
+
+⛔ Two devices is a small sample, and they already behave differently from each
+other — the accessibility service, the assistant gesture and the app lock all
+work differently between the two ROMs. If TALOS misbehaves on yours, that is
+useful and worth an issue.
+
+**Mid-range and above.** TALOS runs a wake-word model, reads the screen while it
+acts, and can run a language model on the device itself — cheap on a flagship,
+expensive on an entry phone.
+
+**Next: desktop and a CLI**, sharing the same tools and the same contracts, so a
+capability written once works everywhere instead of drifting apart. Not here
+yet; this line will say so when it is.
 
 This is a young project, published because the interesting part is the
 harness — how an assistant grounds itself in a real screen and refuses to lie
@@ -228,7 +241,7 @@ contributions in English are welcome.
 <details>
 <summary><b>Is it stable?</b></summary>
 
-It is used daily and has ~5.100 tests, but it is young and it has been measured
+It is used daily and has 5,156 tests, but it is young and it has been measured
 on two devices. Treat it as something to try, not as something to depend on yet.
 </details>
 

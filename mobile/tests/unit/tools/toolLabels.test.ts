@@ -282,4 +282,45 @@ describe('tool activity labels', () => {
     it('falls back to the raw value when a url cannot be parsed', () => {
         expect(talosToolActivityDetail('web_read', '{"url":"not a url"}')).toBe('not a url')
     })
+
+    /**
+     * ⛔⛔ `tool_details` — la porta che nessuna guardia sorvegliava.
+     *
+     * Owner 2026-08-15, guardando una risposta: «nella riga si legge
+     * tool_details». È lo stesso difetto del 26 luglio in cima a questo file
+     * — il nome sul filo a schermo — tornato da un lato scoperto.
+     *
+     * ⇒ I test di copertura qui sopra leggono `TALOS_AGENT_TOOL_IDS`, e
+     * `tool_details` lì dentro non c'è PER SCELTA: è l'impianto dell'apertura
+     * a gradi, non una capacità che la persona concede o nega. Quindi non
+     * aveva nessun elenco che lo obbligasse a un volto — pur essendo, sullo
+     * schermo, una riga identica a tutte le altre.
+     *
+     * ⇒ Questi tre casi sono il suo elenco.
+     */
+    it('⛔ tool_details ha un volto umano, non il nome sul filo', () => {
+        expect(TALOS_TOOL_LABELS).toHaveProperty('tool_details')
+        expect(TALOS_TOOL_LABELS.tool_details).not.toMatch(/^[a-z0-9]+_[a-z0-9_]+$/)
+        expect(talosToolActivityLabel({ name: 'tool_details', detail: null }))
+            .toBe('Looking up how to do that')
+    })
+
+    it('e una chiave localizzata che RISOLVE in tutte e due le lingue', () => {
+        const chiave = TALOS_TOOL_LABEL_KEYS.tool_details
+        expect(chiave).toBeDefined()
+        for (const locale of ['it', 'en'] as const) {
+            const frase = talosTestT(locale)(chiave!)
+            // Il traduttore di prova restituisce la chiave quando non la
+            // trova: «diverso dalla chiave» è la prova che la frase esiste.
+            expect(frase, locale).not.toBe(chiave)
+            expect(frase.trim(), locale).not.toBe('')
+        }
+    })
+
+    it('e un segno suo, invece del ripiego', () => {
+        expect(TALOS_TOOL_ICONS).toHaveProperty('tool_details')
+        // ⛔ Qui `tool` è la scelta GIUSTA, non un ripiego: la riga parla degli
+        // attrezzi in generale, non di uno in particolare.
+        expect(talosToolIconName('tool_details')).toBe('tool')
+    })
 })

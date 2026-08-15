@@ -142,4 +142,63 @@ echo ok
         expect(result.html).toContain('aria-label="Copia codice"')
         expect(result.html).toContain('>Copia</button>')
     })
+
+    /**
+     * ⛔⛔ `<br>` DENTRO UNA CELLA, e nient'altro.
+     *
+     * Owner 2026-08-15, su un confronto a quattro colonne: le celle
+     * mostravano il tag scritto in chiaro — «Autonomous agentic
+     * workflows<br>· Large-repo multi-file edits». Markdown non ha un modo
+     * di andare a capo dentro una cella, e `<br>` e' l'idioma che tutti
+     * usano (GitHub compreso): il modello scriveva la cosa giusta ed
+     * eravamo noi a stamparla cruda.
+     */
+    it('⛔ va a capo dentro una cella, invece di stampare <br>', () => {
+        const html = renderTalosMarkdown([
+            '| a | b |',
+            '| - | - |',
+            '| uno<br>due | tre |',
+        ].join('\n')).html
+        expect(html).toContain('<br>')
+        expect(html).not.toContain('&lt;br&gt;')
+        expect(html).toContain('uno')
+        expect(html).toContain('due')
+    })
+
+    it('e regge le tre forme che i modelli scrivono', () => {
+        for (const forma of ['<br>', '<br/>', '<br />', '<BR>']) {
+            const html = renderTalosMarkdown(`riga uno${forma}riga due`).html
+            expect(html, forma).toContain('<br>')
+            expect(html, forma).not.toContain('&lt;br')
+        }
+    })
+
+    it('⛔⛔ e NESSUN altro tag passa — la superficie di rischio non cresce', () => {
+        /*
+         * La cura riconosce UN tag. Se qualcuno la generalizzasse ad «HTML
+         * consentito», questo test cadrebbe — ed e' esattamente il momento
+         * in cui deve cadere.
+         */
+        for (const pericoloso of [
+            '<script>alert(1)</script>',
+            '<img src=x onerror=alert(1)>',
+            '<iframe src="https://example.com"></iframe>',
+            '<style>body{display:none}</style>',
+            '<brx>non e un a capo</brx>',
+        ]) {
+            const html = renderTalosMarkdown(pericoloso).html
+            /*
+             * ⛔ Si controlla il TAG, non la parola. `onerror` compare
+             * nell'uscita — come testo escapato, che è precisamente ciò che
+             * deve succedere. Cercare la parola darebbe un allarme dove il
+             * comportamento è corretto, e un test che grida a vuoto viene
+             * disattivato al primo fastidio.
+             */
+            expect(html, pericoloso).not.toMatch(/<(script|iframe|style|img|object|embed)\b/i)
+            // Nessun gestore d'evento DENTRO un tag: `onerror=` come testo
+            // escapato è innocuo, dentro `<img …>` no.
+            expect(html, pericoloso).not.toMatch(/<[a-z][^>]*\son[a-z]+\s*=/i)
+            expect(html, pericoloso).toContain('&lt;')
+        }
+    })
 })

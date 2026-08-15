@@ -159,9 +159,28 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
 .talos-message-content .talos-message-table-scroll:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: -2px; }
 .talos-message-content .talos-message-table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; border: 1px solid var(--talos-border); border-radius: 6px; }
 .talos-message-content table { width: 100%; min-width: 28rem; border-collapse: collapse; font-size: 0.91em; }
+/*
+ * ⛔ `overflow-wrap: anywhere` sta sul contenitore per gli URL lunghi, e nelle
+ * celle diventa un difetto: MISURATO 2026-08-15 su un confronto a quattro
+ * colonne, le intestazioni si leggevano «Dimensi / on», «Reasoni / ng /
+ * Architec / ture». Non è testo che va a capo: sono parole tagliate a metà.
+ *
+ * ⇒ Nelle celle si torna alla regola normale — si va a capo agli spazi — e si
+ * dà a ogni colonna una larghezza minima. La tabella è già dentro un
+ * contenitore che scorre: meglio scorrere che spezzare una parola.
+ */
 .talos-message-content th,
-.talos-message-content td { border-bottom: 1px solid var(--talos-border); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
-.talos-message-content th { background: var(--talos-panel-soft); font-weight: 650; }
+.talos-message-content td {
+    border-bottom: 1px solid var(--talos-border);
+    padding: 0.5rem 0.65rem;
+    text-align: left;
+    vertical-align: top;
+    min-width: 8rem;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+/* Un'intestazione è un nome di colonna: sta su una riga, o la tabella scorre. */
+.talos-message-content th { background: var(--talos-panel-soft); font-weight: 650; white-space: nowrap; }
 .talos-message-content tr:last-child td { border-bottom: 0; }
 .talos-message-content .talos-task-marker { display: inline-flex; width: 1rem; justify-content: center; color: var(--talos-success); }
 .talos-message-content .talos-external-image-omitted { color: var(--talos-muted); font-style: italic; }
