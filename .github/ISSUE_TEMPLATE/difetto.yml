@@ -1,0 +1,80 @@
+name: Something is broken
+description: TALOS did something wrong, or did not do what it said
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time.
+
+        The five fields below are not bureaucracy: every serious defect in this
+        project needed exactly those to be reproduced. TALOS behaves differently
+        on ColorOS and on stock Android, and differently again depending on
+        whether the accessibility service is actually bound — which is not the
+        same as being switched on.
+
+        ⛔ Please do not paste a real message, a real contact or an API key. A
+        screenshot with someone's name in it stays in this issue forever.
+
+  - type: textarea
+    id: cosa
+    attributes:
+      label: What you asked TALOS, and what happened
+      description: The exact words you used, and what you saw on screen.
+      placeholder: |
+        I said: "send a message to X saying I'm on my way"
+        WhatsApp opened on the right chat, the text was in the field,
+        but nothing was sent and TALOS said it was.
+    validations:
+      required: true
+
+  - type: textarea
+    id: atteso
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: input
+    id: telefono
+    attributes:
+      label: Phone and Android version
+      placeholder: OnePlus 13, Android 15, ColorOS
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ponte
+    attributes:
+      label: Was the ADB bridge connected?
+      description: Settings → Phone control shows this.
+      options:
+        - "Yes, paired and alive"
+        - "No"
+        - "I don't know"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: occhio
+    attributes:
+      label: Was the accessibility service bound?
+      description: |
+        ⛔ Not "switched on" — **bound**. `adb shell dumpsys accessibility | grep "Bound services"`
+        must list TALOS. It can be listed as enabled and still not be bound, and
+        that difference is the cause of a whole family of defects.
+      options:
+        - "Yes, TALOS is under Bound services"
+        - "No, or Bound services is empty"
+        - "I don't know / cannot check"
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log, if you can get one
+      description: |
+        `adb logcat -d | grep -i talos` right after it happens.
+        ⛔ Read it before pasting: it can contain the name of a contact.
+      render: text
