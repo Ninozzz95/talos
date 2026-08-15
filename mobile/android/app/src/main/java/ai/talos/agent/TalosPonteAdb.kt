@@ -305,7 +305,7 @@ object TalosPonteAdb {
         /*
          * ⭐ L'INDIRIZZO DEL PROSSIMO RIAGGANCIO SI IMPARA QUI, GRATIS.
          *
-         * `adb devices` stampa `192.168.1.95:45853 device`: la prima colonna è
+         * `adb devices` stampa `192.0.2.95:45853 device`: la prima colonna è
          * esattamente ciò che servirà a `adb connect` quando il ponte cadrà. E
          * questo comando gira comunque a ogni battito, quindi impararlo non
          * costa niente — né pacchetti multicast, né attesa.
@@ -393,7 +393,7 @@ object TalosPonteAdb {
      *
      * «Accendi il risparmio energetico» dalla chat: TALOS apriva il pannello di
      * sistema e diceva che il ponte non era collegato. Ma il Debug wireless era
-     * **acceso** (`192.168.1.95:33331`), TALOS era **fra i dispositivi
+     * **acceso** (`192.0.2.95:33331`), TALOS era **fra i dispositivi
      * accoppiati** (`u0_a386@OP6190L1`), e il binario era al suo posto. Tutto
      * quello che serviva c'era: mancava soltanto un `adb connect`.
      *
@@ -476,8 +476,8 @@ object TalosPonteAdb {
      * riga di schermata. Interrogando la rete il 2026-08-08:
      *
      * ```
-     * _adb-tls-connect._tcp → adb-2ea6573c-1yc9eU        porta 38737
-     *                       → adb-2ea6573c-1yc9eU (2)    ← il «(2)» dice tutto
+     * _adb-tls-connect._tcp → adb-abc12345-1yc9eU        porta 38737
+     *                       → adb-abc12345-1yc9eU (2)    ← il «(2)» dice tutto
      * ```
      *
      * Il porto vero era **43053**: quello annunciato dal nome senza suffisso era
@@ -498,14 +498,14 @@ object TalosPonteAdb {
      * stesso servizio:
      *
      * ```
-     * adb-2ea6573c-1yc9eU (2)  → 192.168.1.95:43053   morto
-     * adb-2ea6573c-1yc9eU      → 192.168.1.95:38737   morto
-     * adb-2ea6573c-1yc9eU (3)  → 192.168.1.95:33331   VIVO
+     * adb-abc12345-1yc9eU (2)  → 192.0.2.95:43053   morto
+     * adb-abc12345-1yc9eU      → 192.0.2.95:38737   morto
+     * adb-abc12345-1yc9eU (3)  → 192.0.2.95:33331   VIVO
      * ```
      *
      * Il registro dell'`adb` impacchettato mostrava che TALOS ne aveva provato
      * **uno solo**, e per giunta uno morto: `failed to connect to
-     * '192.168.1.95:38737': Connection refused`. La porta viva, 33331, non
+     * '192.0.2.95:38737': Connection refused`. La porta viva, 33331, non
      * compariva **nemmeno una volta** in tutto il registro.
      *
      * ## La causa

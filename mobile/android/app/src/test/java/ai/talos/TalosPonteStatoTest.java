@@ -10,7 +10,7 @@ import org.junit.Test;
 /**
  * ⛔ MISURATO sul Pad il 2026-08-09. «Accendi il risparmio energetico» dalla
  * chat: TALOS apriva il pannello di sistema e diceva che il ponte non era
- * collegato. Ma il Debug wireless era ACCESO (192.168.1.95:33331), TALOS era
+ * collegato. Ma il Debug wireless era ACCESO (192.0.2.95:33331), TALOS era
  * fra i dispositivi accoppiati (u0_a386@OP6190L1) e il binario era al suo
  * posto. Mancava soltanto un `adb connect` che nessuno rifaceva.
  *
@@ -33,7 +33,7 @@ public class TalosPonteStatoTest {
 
     @Test
     public void riferimentoAUnIndirizzoMorto() {
-        assertTrue(TalosPonteStato.staccato(false, "error: device '192.168.1.95:33331' not found"));
+        assertTrue(TalosPonteStato.staccato(false, "error: device '192.0.2.95:33331' not found"));
     }
 
     @Test

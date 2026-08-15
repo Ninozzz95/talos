@@ -33,7 +33,7 @@ import java.security.SecureRandom
  *
  * ```
  * gradlew :app:testDebugUnitTest --tests ai.talos.TalosPonteVeroTest \
- *     -Dtalos.adbd=192.168.1.95:33331
+ *     -Dtalos.adbd=192.0.2.95:33331
  * ```
  *
  * L'indirizzo si legge in Impostazioni → Opzioni sviluppatore → Debug wireless.

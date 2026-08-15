@@ -237,7 +237,7 @@ function testOpenAiAdapterAllowsCredentialFreeOllamaOnlyOnLoopback(): void
     try {
         new OpenAiChatTurnAdapter(
             provider: 'ollama',
-            endpoint: 'http://192.168.1.10:11434/v1/chat/completions',
+            endpoint: 'http://192.0.2.10:11434/v1/chat/completions',
             apiKey: '',
             transport: new FixtureProviderTransport(static fn (): array => []),
         );

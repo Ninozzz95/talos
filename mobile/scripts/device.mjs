@@ -45,8 +45,35 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, openSync } from 'node:fs'
 import { LOCALIZZA, spiega } from './deviceLocator.mjs'
 
-const ADB = process.env.TALOS_ADB
-    ?? 'C:/Users/Antonino/AppData/Local/Android/Sdk/platform-tools/adb.exe'
+/*
+ * ⛔ Il percorso di `adb` NON si scrive: si trova.
+ *
+ * Qui c'era il percorso dell'SDK di chi ha scritto lo script — cioè una riga
+ * che funziona su un computer solo al mondo, e che per chiunque altro fallisce
+ * con «file non trovato» senza dire perché.
+ *
+ * ⇒ Si guarda dove l'SDK si mette davvero: la variabile che esporta lui, poi le
+ * cartelle predefinite per sistema, poi il PATH. Chi ha un'installazione fuori
+ * dall'ordinario passa `TALOS_ADB` e non tocca il codice.
+ */
+function trovaAdb() {
+    if (process.env.TALOS_ADB) return process.env.TALOS_ADB
+    const casa = process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT
+    const eseguibile = process.platform === 'win32' ? 'adb.exe' : 'adb'
+    const candidati = []
+    if (casa) candidati.push(`${casa}/platform-tools/${eseguibile}`)
+    const utente = process.env.LOCALAPPDATA ?? process.env.HOME ?? ''
+    if (utente) {
+        candidati.push(`${utente}/Android/Sdk/platform-tools/${eseguibile}`)
+        candidati.push(`${utente}/Library/Android/sdk/platform-tools/${eseguibile}`)
+    }
+    for (const c of candidati) if (existsSync(c)) return c
+    // ⛔ L'ultima spiaggia è il nome nudo: se `adb` è nel PATH funziona, se no
+    // il messaggio d'errore del sistema è già quello giusto da leggere.
+    return eseguibile
+}
+
+const ADB = trovaAdb()
 const PACCHETTO = process.env.TALOS_PACKAGE ?? 'ai.talos.dev'
 const PORTA = Number(process.env.TALOS_CDP_PORT ?? 9333)
 /** Quanto si aspetta che una cosa diventi azionabile, come fa Playwright. */

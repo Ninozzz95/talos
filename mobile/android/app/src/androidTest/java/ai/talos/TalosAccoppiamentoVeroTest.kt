@@ -39,7 +39,7 @@ import java.security.SecureRandom
  *
  * ```
  * gradlew :app:connectedDebugAndroidTest -PtalosSideBySide \
- *     -Pandroid.testInstrumentationRunnerArguments.accoppiamento=192.168.1.95:41234:123456
+ *     -Pandroid.testInstrumentationRunnerArguments.accoppiamento=192.0.2.95:41234:123456
  * ```
  */
 class TalosAccoppiamentoVeroTest {

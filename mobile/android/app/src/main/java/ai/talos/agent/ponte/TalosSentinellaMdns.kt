@@ -26,9 +26,9 @@ import java.util.concurrent.atomic.AtomicReference
  * e si trova in mano annunci vivi e morti mescolati. Misurato sul Pad:
  *
  * ```
- *   adb-2ea6573c-1yc9eU (2)  → 192.168.1.95:43053   morto
- *   adb-2ea6573c-1yc9eU      → 192.168.1.95:38737   morto
- *   adb-2ea6573c-1yc9eU (3)  → 192.168.1.95:33331   VIVO
+ *   adb-abc12345-1yc9eU (2)  → 192.0.2.95:43053   morto
+ *   adb-abc12345-1yc9eU      → 192.0.2.95:38737   morto
+ *   adb-abc12345-1yc9eU (3)  → 192.0.2.95:33331   VIVO
  * ```
  *
  * Da una fotografia sola non si distingue il vivo dal morto: l'unica difesa era
@@ -111,7 +111,7 @@ class TalosSentinellaMdns(
      * ⭐ Ricorda un indirizzo imparato ALTROVE, senza mDNS.
      *
      * ⛔ Perché esiste, e perché è meglio della sentinella stessa: quando il
-     * ponte è collegato, `adb devices` stampa già `192.168.1.95:45853 device` —
+     * ponte è collegato, `adb devices` stampa già `192.0.2.95:45853 device` —
      * l'indirizzo è lì, dentro un comando che il battito esegue comunque ogni
      * 2-6 secondi. Impararlo da lì costa **zero**: zero pacchetti multicast,
      * zero attesa, e il valore è fresco per definizione perché descrive una
