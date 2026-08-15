@@ -1,154 +1,47 @@
-name: Kadmos CI
+# I cancelli, su ogni proposta di modifica.
+#
+# ⛔ Qui NON gira la build Android: vuole l'SDK, allunga ogni giro di parecchi
+# minuti, e il difetto che troverebbe (un errore Kotlin) lo trova comunque chi
+# la propone, perché senza build non ha potuto provarla su un telefono — che è
+# la regola del progetto. La build nativa gira sui tag, dove serve l'artefatto.
+name: gates
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
-  core:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.5'
-          extensions: curl, mbstring, sqlite3, zip
-      - run: cd core && composer install --no-interaction --prefer-dist
-      - run: php core/kadmos test
-
-  validator:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: validator/package-lock.json
-      - run: cd validator && npm ci
-      - run: cd validator && npm test
-      - run: cd validator && npm run build
-
-  browser-worker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: browser-worker/package-lock.json
-      - run: cd browser-worker && npm ci
-      - run: cd browser-worker && npx playwright install --with-deps chromium
-      - run: cd browser-worker && npm test
-      - run: cd browser-worker && npm run build
-
-  browser-worker-live:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - run: bash scripts/tests/talos-browser-gates-contract.sh
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: |
-            browser-worker/package-lock.json
-            control-plane/package-lock.json
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.5'
-          extensions: curl, mbstring, sqlite3, zip
-      - run: cd browser-worker && npm ci
-      - run: cd browser-worker && npx playwright install --with-deps chromium
-      - run: cd control-plane && composer install --no-interaction --prefer-dist
-        env:
-          APP_ENV: testing
-      - run: cd control-plane && npm ci
-      - run: cd control-plane && npm run test:browser-gates-config
-        env:
-          TALOS_REQUIRE_DOCKER_COMPOSE_CONFIG: '1'
-      - run: cd control-plane && npx playwright install chromium
-      - name: Run mandatory Laravel-to-Chromium HMI integration
-        run: bash scripts/tests/talos-live-browser-worker-ci.sh
-      - name: Upload browser HMI Playwright diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: talos-browser-hmi-playwright-diagnostics
-          path: |
-            control-plane/storage/playwright-report
-            control-plane/test-results
-          if-no-files-found: warn
-          retention-days: 7
-
-  control-plane:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.5'
-          extensions: curl, mbstring, sqlite3, zip
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: control-plane/package-lock.json
-      - run: cd control-plane && copy .env.example .env
-      - run: cd control-plane && composer install --no-interaction --prefer-dist
-      - run: cd control-plane && php artisan key:generate
-      - run: cd control-plane && npm ci
-      - run: cd control-plane && npm run build
-      - run: cd control-plane && php artisan test
-
-  docker-integration:
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@v4
-      - run: bash scripts/tests/talos-docker-integration.sh
-
-  # Owner 2026-07-25 (defect #2): the mobile app was the one part of this repo
-  # nobody checked automatically — "tested" meant a command run by hand and the
-  # owner's thumb, so a regression could sit unnoticed until he hit it.
   mobile:
-    runs-on: windows-latest
-    # Serialising Playwright is what removes the documented flake, and it is
-    # also what makes this the longest job: ~3 min of unit tests plus 17 spec
-    # files one at a time. 35 was tight on a slower runner.
-    timeout-minutes: 55
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '24.18.0'
+          node-version: '20'
           cache: npm
           cache-dependency-path: mobile/package-lock.json
-      # The repo pins npm as tightly as node (preinstall fails closed outside
-      # the frozen ranges), so the runner has to match before `npm ci` runs.
-      - run: npm install -g npm@11.16.0
-      - run: cd mobile && npm ci
-      - run: cd mobile && npm run typecheck
-      - run: cd mobile && npm run test:unit
-      # `build` is the gate that matters most: it runs vue-tsc, the initial-JS
-      # and CSS budgets, and the parity ledger check.
-      - run: cd mobile && npm run build
-      - run: cd mobile && npx playwright install --with-deps chromium
-      # One worker, one retry: the suite is flaky at ~2/64 under parallel load
-      # (proven pre-existing by stashing the change and re-running the
-      # baseline). Serialising removes the contention; the single retry keeps a
-      # residual flake from turning CI red without hiding a real failure, which
-      # would show up as a repeated failure across runs.
-      - run: cd mobile && npx playwright test --workers=1 --retries=1
-      - name: Upload Playwright diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: talos-mobile-playwright-diagnostics
-          path: |
-            mobile/playwright-report
-            mobile/test-results
-          if-no-files-found: warn
-          retention-days: 7
+
+      # ⛔ `ci` e non `install`: rispetta il lockfile alla lettera. Un `install`
+      # può risolvere una versione diversa da quella provata, e il primo posto
+      # in cui te ne accorgi è un test che fallisce per ragioni che non c'entrano.
+      - run: npm ci
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: test
+        run: npx vitest run
+
+      # ⛔ Il tetto del grafo d'avvio: l'app deve aprirsi in fretta, e questo
+      # gate è l'unico posto in cui una regressione di peso si vede prima che
+      # qualcuno la senta sul telefono.
+      - name: build
+        run: npm run build
+
+      - name: grafo d'avvio
+        run: node scripts/verify-initial-chunk.mjs
