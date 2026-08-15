@@ -164,9 +164,41 @@ object TalosNonSiPerdeNiente {
          * che vede. Il difetto «WhatsApp si riempie e non parte» nasceva qui.
          */
         val nostro = nostroServizio(contesto)
+
+        /*
+         * ⛔⛔⛔ GLI ALTRI SERVIZI NON SI TOCCANO, e questa riga è nata da un
+         * difetto che stavo per consegnare.
+         *
+         * La prima versione del ciclo scriveva SOLO il nostro nome. Sul Pad
+         * dell'owner c'è **Wispr Flow** fra i servizi di accessibilità legati:
+         * quel ciclo lo avrebbe spento in silenzio. Lo stesso sarebbe successo
+         * a TalkBack — cioè avremmo tolto la voce a chi ne ha bisogno per usare
+         * il telefono, mentre «riparavamo» una cosa nostra.
+         *
+         * ⇒ L'elenco si LEGGE, si toglie il nostro nome se c'è, si svuota, e si
+         * riscrive con tutti gli altri PIÙ noi. Il ciclo che fa rilegare resta
+         * (l'elenco cambia due volte), ma nessun altro servizio ci va di mezzo.
+         *
+         * ⛔ Il separatore è `:`, non `,`: lo dice `AccessibilityManagerService`,
+         * e sbagliarlo trasformerebbe due servizi in un nome solo che non esiste.
+         */
+        val elencoOra = runCatching {
+            Settings.Secure.getString(
+                contesto.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+            )
+        }.getOrNull().orEmpty()
+        val altri = elencoOra.split(':')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.contains(contesto.packageName) }
+        val elencoNuovo = (altri + nostro).joinToString(":")
+        if (altri.isNotEmpty()) {
+            Log.i(MARCHIO, "conservo ${altri.size} altri servizi di accessibilità: non sono nostri da spegnere")
+        }
+
         val passi = listOf(
             listOf("settings", "put", "secure", "enabled_accessibility_services", "''"),
-            listOf("settings", "put", "secure", "enabled_accessibility_services", nostro),
+            listOf("settings", "put", "secure", "enabled_accessibility_services", elencoNuovo),
             listOf("settings", "put", "secure", "accessibility_enabled", "1"),
         )
         for (passo in passi) {
