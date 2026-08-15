@@ -1,4 +1,0 @@
-interface:
-  display_name: "Talos Engineering"
-  short_description: "AVM/TALOS operating model"
-  default_prompt: "Use this when working on AVM, KADMOS, TALOS, benchmarks, or the validator."

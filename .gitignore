@@ -40,10 +40,50 @@ mobile/.tmp-research/
 #
 # `evidence/` e' anche un artefatto di test: il banco di compatibilita' locale
 # ci scrive dentro screenshot del dispositivo dell'owner a ogni esecuzione.
-mobile/docs/superpowers/evidence/
-mobile/docs/superpowers/ledgers/
-mobile/docs/superpowers/plans/
-mobile/docs/superpowers/handoffs/
+# ⛔⛔ 2026-08-15 — LA REGOLA VALE PER **TUTTO** `superpowers/`, non per quattro
+# cartelle su otto.
+#
+# Owner: «TUTTI I DOCUMENTI INTERNI DEVONO ESSERE IGNORATI e tutto quello che c'e'
+# gia' nei commit deve escludere ASSOLUTAMENTE tutte le nostre fasi e
+# documentazioni. Mettiamoci pronti per una pubblicazione della repo gia' da ora».
+#
+# Il blocco qui sopra ne elencava quattro e ne lasciava fuori quattro: `research/`
+# (96 file), `specs/` (71), `decisions/`, `references/` e i documenti sciolti alla
+# radice. Sono esattamente i documenti che raccontano COME lavoriamo, su quale
+# dispositivo proviamo, che difetti ha avuto l'owner e con che nomi ci parliamo.
+#
+# ⛔ Una riga per cartella invecchia male: la prossima cartella nuova sarebbe
+# rientrata nell'indice senza che nessuno se ne accorgesse. Qui si ignora la
+# RADICE, e si tolgono le eccezioni una per una se mai serviranno.
+mobile/docs/superpowers/
+docs/superpowers/
+
+# Come lavoriamo: taccuini, competenze degli agenti, istruzioni di collaudo.
+.claude/
+.agents/
+.codex/
+AGENTS.md
+
+# I documenti di architettura che descrivono le FASI, non il prodotto: audit di
+# divario, ledger di implementazione, copioni di dimostrazione.
+docs/architecture/*audit*.md
+docs/architecture/*ledger*.md
+docs/architecture/*gap*.md
+docs/demo/
+mobile/docs/release-recovery.md
+
+# I fogli di lavoro sciolti che nascono in corsa.
+DA-PROVARE-TU.md
+RICERCA-*.md
+mobile/DA-PROVARE-TU.md
+
+# ⛔ COSA RESTA, e perche':
+#   README.md, docs/README.md          cosa e' TALOS, per chi arriva
+#   THIRD_PARTY_NOTICES.md             obbligo di licenza
+#   **/PROVENIENZA*.md                 da dove vengono i binari che spediamo:
+#                                      e' una questione di licenze, non di
+#                                      documentazione interna, e va spedita
+
 mobile/docs/PASSAGGIO-DI-CONSEGNE.md
 mobile/docs/desktop-mobile-delta-template.md
 mobile/docs/alignment/ORDINE-DI-LAVORO-DESKTOP.md
@@ -72,3 +112,6 @@ TODO.md
 
 # Rifiuto di Git Bash su Windows: un dump di crash della shell, non nostro.
 *.stackdump
+
+# Mockup delle schede: documento di lavoro, non codice dell'app.
+MOCKUP-SCHEDE.html
