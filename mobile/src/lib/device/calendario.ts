@@ -246,7 +246,7 @@ export async function talosScriviInCalendario(input: {
     /*
      * ⛔⛔⛔ «Scritto» adesso vuol dire RILETTO dal provider, non «l'insert ha
      * risposto». Owner 2026-08-14: TALOS ha detto «salvo l'impegno sul
-     * calendario ninozz142@gmail.com» e nel calendario non c'era niente.
+     * calendario persona@example.com» e nel calendario non c'era niente.
      *
      * ⇒ I due motivi nuovi si tengono DISTINTI, perché portano a due frasi
      * diverse: «il telefono ha rifiutato di scrivere» e «ha detto di aver

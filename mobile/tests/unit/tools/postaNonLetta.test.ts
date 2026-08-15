@@ -51,10 +51,10 @@ async function chiedi(posta: Posta): Promise<Esito> {
 
 describe('la posta non letta, e i tre stati', () => {
     it('conta le caselle e dice il totale, con il conto quando è uno solo', async () => {
-        const esito = await chiedi({ letto: true, caselle: [{ conto: 'ninozz142@gmail.com', nonLette: 3 }] })
+        const esito = await chiedi({ letto: true, caselle: [{ conto: 'persona@example.com', nonLette: 3 }] })
         expect(esito.ok).toBe(true)
         expect(esito.content).toContain('3 unread email')
-        expect(esito.content).toContain('ninozz142@gmail.com')
+        expect(esito.content).toContain('persona@example.com')
     })
 
     it('con due account li elenca tutti e due, e somma', async () => {

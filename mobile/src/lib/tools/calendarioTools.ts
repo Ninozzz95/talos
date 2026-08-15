@@ -437,7 +437,7 @@ export function createTalosCalendarTools(
                  * ⛔⛔ I DUE MODI DI NON RIUSCIRE, tenuti separati.
                  *
                  * Owner 2026-08-14: TALOS ha detto «salvo l'impegno sul
-                 * calendario ninozz142@gmail.com» e nel calendario non c'era
+                 * calendario persona@example.com» e nel calendario non c'era
                  * niente. La scrittura adesso si RILEGGE, e questi sono i due
                  * esiti che prima si travestivano da successo.
                  */

@@ -19,7 +19,7 @@ function evento(over: Partial<TalosEventoCalendario> = {}): TalosEventoCalendari
         fine: Date.parse('2026-08-15T16:00:00.000Z'),
         tuttoIlGiorno: false,
         luogo: 'Via Roma 12',
-        calendario: 'ninozz142@gmail.com',
+        calendario: 'persona@example.com',
         occupa: true,
         ...over,
     }
@@ -83,7 +83,7 @@ describe('calendar_read — come si racconta un impegno', () => {
     it('dice il luogo e QUALE calendario', async () => {
         const detto = await letto([evento()])
         expect(detto).toContain('Via Roma 12')
-        expect(detto).toContain('ninozz142@gmail.com')
+        expect(detto).toContain('persona@example.com')
     })
 
     /*
@@ -136,7 +136,7 @@ describe('calendar_read — come si racconta un impegno', () => {
             vi.fn(async () => ({
                 stato: 'letto' as const,
                 eventi: [],
-                calendari: ['Famiglia', 'ninozz142@gmail.com'],
+                calendari: ['Famiglia', 'persona@example.com'],
             })),
             vi.fn(async () => ({ stato: 'scritto' as const, calendario: 'x', inizioVero: null })),
         )
@@ -145,7 +145,7 @@ describe('calendar_read — come si racconta un impegno', () => {
             {} as never,
         )
         expect(esito.content).toContain('Famiglia')
-        expect(esito.content).toContain('ninozz142@gmail.com')
+        expect(esito.content).toContain('persona@example.com')
         // ⛔ E si dice alla PERSONA: un elenco che resta nel contesto del
         // modello non aiuta chi ha il calendario davanti e vede che ne manca uno.
         expect(esito.content).toMatch(/Tell the user which calendars/i)
@@ -190,9 +190,9 @@ describe('calendar_read — come si racconta un impegno', () => {
  * ⛔⛔⛔ «SALVO L'IMPEGNO» DETTO SU UN CALENDARIO VUOTO.
  *
  * Owner 2026-08-14, dal suo telefono, con lo schermo: chiesto di mettere un
- * impegno, TALOS chiede su quale calendario, lui sceglie `ninozz142@gmail.com`,
+ * impegno, TALOS chiede su quale calendario, lui sceglie `persona@example.com`,
  * TALOS risponde «Perfetto, salvo l'impegno sul calendario
- * ninozz142@gmail.com! 📅» — e nel calendario **non c'è niente**. Owner: «per
+ * persona@example.com! 📅» — e nel calendario **non c'è niente**. Owner: «per
  * nessun motivo impegno non inserito».
  *
  * Il giro dell'attrezzo c'era (1 s) e un `scritto = false` era già mappato su un

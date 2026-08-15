@@ -200,8 +200,8 @@ class TalosCalendarioPlugin : Plugin() {
          *
          * Owner 2026-08-14, dal suo telefono, con lo schermo: chiesto di mettere
          * un impegno, TALOS chiede su quale calendario, lui sceglie
-         * `ninozz142@gmail.com`, TALOS risponde «Perfetto, salvo l'impegno sul
-         * calendario ninozz142@gmail.com! 📅» — e nel calendario **non c'è
+         * `persona@example.com`, TALOS risponde «Perfetto, salvo l'impegno sul
+         * calendario persona@example.com! 📅» — e nel calendario **non c'è
          * niente**. Owner: «per nessun motivo impegno non inserito».
          *
          * Il giro dell'attrezzo c'era ed è durato 1 s, e il lato TypeScript un
