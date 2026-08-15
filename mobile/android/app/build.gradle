@@ -155,15 +155,16 @@ android {
             // sotto per il perche'.
             jniLibs.srcDirs += ["${buildDir}/ponte/jniLibs"]
             /*
-             * ⛔ Nemmeno il motore della parola di attivazione sta nella repo:
-             * ce lo mette `preparaMotoreVoce`, scaricando e verificando ogni
-             * impronta dichiarata in `PROVENIENZA-VOCE.md`. Tre cartelle perche'
-             * sono tre nature diverse — una libreria nativa, dei pesi letti a
-             * runtime, e l'interfaccia Kotlin che va COMPILATA con noi.
+             * ⛔ Nemmeno i modelli della parola di attivazione stanno nella
+             * repo: ce li mette `preparaOrecchioParola`, scaricando e
+             * verificando ogni impronta dichiarata in `PROVENIENZA-PAROLA.md`.
+             *
+             * Una cartella sola, e non tre come ai tempi di sherpa: adesso sono
+             * solo pesi letti a runtime. La libreria nativa la porta
+             * `onnxruntime-android` da Maven, e non c'e' nessuna interfaccia
+             * Kotlin da scaricare e compilare con noi.
              */
-            jniLibs.srcDirs += ["${buildDir}/voce/jniLibs"]
-            assets.srcDirs += ["${buildDir}/voce/assets"]
-            java.srcDirs += ["${buildDir}/voce/java"]
+            assets.srcDirs += ["${buildDir}/parola/assets"]
         }
     }
     packagingOptions {
@@ -213,6 +214,18 @@ dependencies {
     // P0 web-read SSRF boundary: maintained TLS/HTTP client with injectable
     // DNS so the exact validated A/AAAA set is used for the connection.
     implementation "com.squareup.okhttp3:okhttp:5.4.0"
+    /*
+     * ⛔⛔ IL MOTORE DELLA PAROLA DI ATTIVAZIONE — qui c'era sherpa-onnx.
+     *
+     * Non e' un cambio di gusto: il modello di sherpa non funzionava per questo
+     * compito, e la misura sta in `src/main/jniLibs/PROVENIENZA-PAROLA.md`.
+     * Adesso i tre modelli sono ONNX normali e il runtime arriva da Maven
+     * invece che da un archivio scompattato a mano.
+     *
+     * ⛔ `abiFilters 'arm64-v8a'` sopra vale anche per questa: nell'APK entra
+     * una sola architettura.
+     */
+    implementation "com.microsoft.onnxruntime:onnxruntime-android:1.29.0"
     /*
      * ⛔⛔ SHIZUKU E' USCITO — 2026-08-09.
      *
@@ -271,7 +284,6 @@ try {
 // cambiare qualcosa.
 import org.apache.commons.compress.archivers.ar.ArArchiveInputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import java.security.MessageDigest
 
@@ -428,136 +440,141 @@ tasks.register('preparaPonteAdb') {
 // ⛔ PRIMA della compilazione, sempre. Un ponte a metà non è un ponte, e un APK
 // senza questi file si installa benissimo e poi non sa accoppiarsi.
 /**
- * ⭐⭐ IL MOTORE DELLA PAROLA DI ATTIVAZIONE — scaricato e verificato, non commesso.
+ * ⭐⭐ I MODELLI DELLA PAROLA DI ATTIVAZIONE — scaricati e verificati, non commessi.
  *
  * Stessa disciplina del ponte `adb`, e per la stessa ragione: la verifica delle
  * impronte smette di essere un rito fatto una volta e diventa parte di OGNI
- * compilazione. La scheda leggibile e' `src/main/jniLibs/PROVENIENZA-VOCE.md`.
+ * compilazione. La scheda leggibile e' `src/main/jniLibs/PROVENIENZA-PAROLA.md`,
+ * e li' c'e' anche la MISURA che ha mandato via sherpa-onnx.
  *
- * ⛔ Tre destinazioni, perche' sono tre nature diverse:
- *   - `voce/jniLibs`  la libreria nativa (una sola: variante a collegamento
- *                     statico, MISURATA piu' piccola di quella con onnxruntime
- *                     separato — 23,6 MB contro 26,5)
- *   - `voce/assets`   i pesi del modello, letti a runtime dall'AssetManager
- *   - `voce/java`     l'interfaccia Kotlin, che va compilata insieme a noi
+ * ⛔ Una destinazione sola. Prima erano tre perche' sherpa portava una libreria
+ * nativa, dei pesi e delle fonti Kotlin da compilare con noi; adesso il runtime
+ * arriva da Maven e restano solo pesi letti a runtime.
+ *
+ * ⛔ Si verifica ANCHE il numero di byte, non solo l'impronta. Non aggiunge
+ * sicurezza — l'impronta basta — ma quando qualcosa non torna dice subito se hai
+ * scaricato un file diverso o una pagina di errore travestita da file.
  */
-tasks.register('preparaMotoreVoce') {
-    description = 'Scarica e verifica il motore della parola di attivazione dichiarato in PROVENIENZA-VOCE.md'
-    def scheda = file('src/main/jniLibs/PROVENIENZA-VOCE.md')
-    def fuori = file("${buildDir}/voce")
-    def cache = new File(gradle.gradleUserHomeDir, 'talos-motore-voce')
+tasks.register('preparaOrecchioParola') {
+    description = 'Scarica e verifica i modelli della parola di attivazione dichiarati in PROVENIENZA-PAROLA.md'
+    def scheda = file('src/main/jniLibs/PROVENIENZA-PAROLA.md')
+    def fuori = file("${buildDir}/parola/assets/parola")
+    // La cache sta FUORI da build/: un `clean` non deve costare un altro
+    // scaricamento di tre megabyte e mezzo.
+    def cache = new File(gradle.gradleUserHomeDir, 'talos-orecchio-parola')
 
     inputs.file scheda
     outputs.dir fuori
 
     doLast {
         if (!scheda.exists()) {
-            throw new GradleException("Manca ${scheda}: senza la scheda di provenienza il motore della voce non si costruisce.")
+            throw new GradleException(
+                    "Manca ${scheda}: senza la scheda di provenienza la parola di attivazione non si costruisce.")
         }
         def testo = scheda.getText('UTF-8')
 
-        def pacchetti = [:]
-        def dentro = [:]
-        def rinominati = [:]
-        def fonti = [:]
+        def attesi = [:]      // nome nell'APK -> [byte, impronta]
+        def rinominati = [:]  // nome nell'APK -> nome nel rilascio
+        def inCasa = [:]      // nome nell'APK -> [percorso nel repo, byte, impronta]
         def base = null
         testo.eachLine { riga ->
             def r = riga.trim()
             def b = (r =~ /^Base: `(\S+)`$/)
             if (b.matches()) { base = b[0][1]; return }
-            def p = (r =~ /^\|\s*(motore|modello)\s*\|\s*\[[^\]]+\]\((\S+)\)\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
-            if (p.matches()) { pacchetti[p[0][1]] = [p[0][2], p[0][3]]; return }
-            def d = (r =~ /^\|\s*`([^`]+)`\s*\|\s*(motore|modello)\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
-            if (d.matches()) { dentro[d[0][1]] = d[0][3]; return }
-            def n = (r =~ /^\|\s*`(kws\/[^`]+)`\s*\|\s*`([^`]+)`\s*\|$/)
-            if (n.matches()) { rinominati[n[0][1]] = n[0][2]; return }
-            def k = (r =~ /^\|\s*`([A-Za-z]+\.kt)`\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
-            if (k.matches()) { fonti[k[0][1]] = k[0][2] }
+            def f = (r =~ /^\|\s*`(parola\/[^`]+)`\s*\|\s*(\d+)\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
+            if (f.matches()) { attesi[f[0][1]] = [f[0][2].toLong(), f[0][3]]; return }
+            /*
+             * ⛔⛔ I FILE NATI IN CASA — quattro colonne, e non si scaricano.
+             *
+             * `talos.onnx` l'abbiamo addestrato noi: non esiste nessun URL da
+             * cui prenderlo, e la regola «niente binari nella repo» qui non si
+             * puo' applicare — il binario È la funzione, e senza di lui l'APK
+             * non ha la parola di attivazione.
+             *
+             * ⇒ Cambia DA DOVE arriva, non SE si verifica: peso e impronta si
+             * controllano identici agli altri. Se qualcuno tocca il file senza
+             * aggiornare la scheda, la build si ferma esattamente come per un
+             * file pubblicato che cambia sotto i piedi.
+             */
+            def c = (r =~ /^\|\s*`(parola\/[^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*(\d+)\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
+            if (c.matches()) { inCasa[c[0][1]] = [c[0][2], c[0][3].toLong(), c[0][4]]; return }
+            def n = (r =~ /^\|\s*`(parola\/[^`]+)`\s*\|\s*`([^`]+)`\s*\|$/)
+            if (n.matches()) { rinominati[n[0][1]] = n[0][2] }
         }
-        if (pacchetti.size() != 2 || dentro.isEmpty() || fonti.isEmpty() || base == null) {
+        if (attesi.isEmpty() || base == null) {
             throw new GradleException(
-                    "PROVENIENZA-VOCE.md non ha prodotto le righe attese (pacchetti=${pacchetti.size()}, " +
-                            "file=${dentro.size()}, fonti=${fonti.size()}, base=${base}). La tabella e' cambiata " +
-                            "e questo compito non la riconosce piu'. Non e' una scheda vuota.")
+                    "PROVENIENZA-PAROLA.md non ha prodotto le righe attese (file=${attesi.size()}, base=${base}). " +
+                            "La tabella e' cambiata e questo compito non la riconosce piu'. Non e' una scheda vuota.")
         }
 
         cache.mkdirs()
+        fuori.mkdirs()
 
-        def scarica = { String url, String impronta ->
-            def giu = new File(cache, url.tokenize('/').last())
+        attesi.each { apk, dati ->
+            def peso = dati[0]
+            def impronta = dati[1]
+            def nomeVero = rinominati.getOrDefault(apk, apk).tokenize('/').last()
+            def giu = new File(cache, nomeVero)
+
             if (!giu.exists() || improntaDi(giu.bytes) != impronta) {
-                logger.lifecycle("motore voce: scarico ${giu.name}")
-                giu.withOutputStream { uscita -> new URL(url).withInputStream { uscita << it } }
+                logger.lifecycle("parola: scarico ${nomeVero}")
+                giu.withOutputStream { uscita -> new URL(base + nomeVero).withInputStream { uscita << it } }
+            }
+            if (giu.length() != peso) {
+                def trovato = giu.length()
+                giu.delete()
+                throw new GradleException(
+                        "PESO DIVERSO per ${nomeVero}.\n  atteso  ${peso} byte\n  trovato ${trovato} byte\n" +
+                                "Quasi sempre vuol dire che al posto del file e' arrivata una pagina di errore.")
             }
             def vera = improntaDi(giu.bytes)
             if (vera != impronta) {
                 giu.delete()
                 throw new GradleException(
-                        "IMPRONTA DIVERSA per ${giu.name}.\n  atteso  ${impronta}\n  trovato ${vera}\n" +
-                                "Il pacchetto pubblicato non e' piu' quello dichiarato in PROVENIENZA-VOCE.md. " +
+                        "IMPRONTA DIVERSA per ${nomeVero}.\n  atteso  ${impronta}\n  trovato ${vera}\n" +
+                                "Il file pubblicato non e' piu' quello dichiarato in PROVENIENZA-PAROLA.md. " +
                                 "NON si aggiorna il numero senza sapere perche' e' cambiato.")
             }
-            return giu
+
+            def destinazione = new File(fuori.parentFile, apk)
+            destinazione.parentFile.mkdirs()
+            destinazione.bytes = giu.bytes
         }
 
-        def cercati = [:]
-        dentro.each { nome, impronta ->
-            def vero = rinominati.getOrDefault(nome, nome).tokenize('/').last()
-            cercati[vero] = [nome, impronta]
-        }
-
-        def presi = [] as Set
-        pacchetti.each { quale, riga ->
-            def archivio = scarica(riga[0], riga[1])
-            new BZip2CompressorInputStream(archivio.newInputStream()).withCloseable { flusso ->
-                new TarArchiveInputStream(flusso).withCloseable { tar ->
-                    def voce
-                    while ((voce = tar.nextEntry) != null) {
-                        if (voce.directory) continue
-                        def foglia = voce.name.tokenize('/').last()
-                        def atteso = cercati[foglia]
-                        if (atteso == null) continue
-                        if (quale == 'motore' && !voce.name.contains('arm64-v8a')) continue
-                        byte[] dati = tar.readAllBytes()
-                        def vera = improntaDi(dati)
-                        if (vera != atteso[1]) {
-                            throw new GradleException(
-                                    "IMPRONTA DIVERSA per ${atteso[0]} dentro ${archivio.name}.\n" +
-                                            "  atteso  ${atteso[1]}\n  trovato ${vera}")
-                        }
-                        def nome = atteso[0]
-                        def destinazione = nome.startsWith('kws/') ?
-                                new File(fuori, "assets/${nome}") :
-                                new File(fuori, "jniLibs/arm64-v8a/${nome}")
-                        destinazione.parentFile.mkdirs()
-                        destinazione.bytes = dati
-                        presi << nome
-                    }
-                }
+        /*
+         * ⛔ I NOSTRI: stessa verifica, altra provenienza.
+         *
+         * Non c'e' niente da scaricare — il file e' nel repo perche' l'abbiamo
+         * addestrato noi — ma peso e impronta si controllano lo stesso. Un
+         * modello sostituito di nascosto ferma la build come uno pubblicato che
+         * cambia sotto i piedi.
+         */
+        inCasa.each { apk, dati ->
+            def sorgente = file(dati[0])
+            def peso = dati[1]
+            def impronta = dati[2]
+            if (!sorgente.exists()) {
+                throw new GradleException(
+                        "MANCA ${dati[0]}, dichiarato in PROVENIENZA-PAROLA.md come modello nostro. " +
+                                "Senza, l'APK non ha la parola di attivazione: non e' un file opzionale.")
             }
-        }
-        def mancanti = dentro.keySet() - presi
-        if (!mancanti.isEmpty()) {
-            throw new GradleException("Non trovati dentro i pacchetti: ${mancanti.join(', ')}")
-        }
-
-        def sorgenti = new File(fuori, 'java/com/k2fsa/sherpa/onnx')
-        sorgenti.mkdirs()
-        fonti.each { nome, impronta ->
-            def giu = new File(cache, nome)
-            if (!giu.exists() || improntaDi(giu.bytes) != impronta) {
-                logger.lifecycle("motore voce: scarico ${nome}")
-                giu.withOutputStream { uscita -> new URL(base + nome).withInputStream { uscita << it } }
+            if (sorgente.length() != peso) {
+                throw new GradleException(
+                        "PESO DIVERSO per ${dati[0]}.\n  atteso  ${peso} byte\n  trovato ${sorgente.length()} byte\n" +
+                                "Il modello e' stato sostituito senza aggiornare la scheda.")
             }
-            def vera = improntaDi(giu.bytes)
+            def vera = improntaDi(sorgente.bytes)
             if (vera != impronta) {
-                giu.delete()
-                throw new GradleException("IMPRONTA DIVERSA per ${nome}.\n  atteso  ${impronta}\n  trovato ${vera}")
+                throw new GradleException(
+                        "IMPRONTA DIVERSA per ${dati[0]}.\n  atteso  ${impronta}\n  trovato ${vera}\n" +
+                                "NON si aggiorna il numero senza sapere quale addestramento ha prodotto questo file.")
             }
-            new File(sorgenti, nome).bytes = giu.bytes
+            def destinazione = new File(fuori.parentFile, apk)
+            destinazione.parentFile.mkdirs()
+            destinazione.bytes = sorgente.bytes
         }
-        logger.lifecycle("motore voce: ${presi.size()} file e ${fonti.size()} fonti verificati")
+        logger.lifecycle("parola: ${attesi.size()} scaricati + ${inCasa.size()} nostri, verificati contro PROVENIENZA-PAROLA.md")
     }
 }
 
-tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'preparaPonteAdb', 'preparaMotoreVoce' }
+tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'preparaPonteAdb', 'preparaOrecchioParola' }

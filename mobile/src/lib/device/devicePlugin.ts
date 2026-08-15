@@ -176,6 +176,13 @@ interface PonteDispositivo {
     openSettingsScreen(options: { action: string, forThisApp: boolean }): Promise<{ done: boolean, reason?: string, scope?: string }>
     compose(options: { kind: string, value: string, text?: string }): Promise<{ done: boolean, reason?: string }>
     status(): Promise<Record<string, unknown>>
+    location(): Promise<{
+        stato: string
+        latitudine?: number
+        longitudine?: number
+        precisioneMetri?: number
+        etaSecondi?: number
+    }>
     wallpaper(options: { imageBase64: string, where: string }): Promise<{ done: boolean, reason?: string, appliedTo: string }>
     keepAwake(options: { on: boolean }): Promise<{ done: boolean, reason?: string, on: boolean }>
     /**
@@ -336,6 +343,16 @@ export function createTalosDeviceSources(): TalosDeviceHardwareSources | null {
             catch {
                 return nonQui({})
             }
+        },
+        /**
+         * ⛔ Delega, e non duplica: `posizione.ts` sa già distinguere «negato»
+         * da «GPS spento» da «scaduta», ed è l'unico posto in cui quella
+         * classificazione va scritta. Due copie di quella logica divergono al
+         * primo Android nuovo.
+         */
+        async location() {
+            const { talosLeggiPosizione } = await import('@/lib/device/posizione')
+            return talosLeggiPosizione()
         },
         async status() {
             try {

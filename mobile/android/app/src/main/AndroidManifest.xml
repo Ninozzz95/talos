@@ -972,19 +972,42 @@
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
     <!--
-        Two permissions TALOS never asked for, removed.
+        ⭐⭐⭐ LA POSIZIONE, e adesso CHIESTA DI PROPOSITO.
 
-        `ioninappbrowser-android` declares ACCESS_FINE_LOCATION and
-        ACCESS_COARSE_LOCATION, and manifest merging put them in the APK — they
-        appeared in r13 and were absent in r12, found by dumping the permissions
-        of both rather than by reading anything.
+        ## La storia, perché la riga qui sotto era il suo contrario
 
-        TALOS does not use location anywhere. A distributed app that declares
-        fine location it never reads is asking to be distrusted, and the owner's
-        rule is explicit: GPS only with the user's say-so. If location is ever
-        genuinely wanted, it gets asked for on purpose — not inherited from a
-        library that happened to want it.
+        Fino al 2026-08-15 c'era `tools:node="remove"`, e la nota diceva:
+
+        > `ioninappbrowser-android` declares ACCESS_FINE_LOCATION and
+        > ACCESS_COARSE_LOCATION, and manifest merging put them in the APK.
+        > TALOS does not use location anywhere. A distributed app that declares
+        > fine location it never reads is asking to be distrusted. **If location
+        > is ever genuinely wanted, it gets asked for on purpose** — not
+        > inherited from a library that happened to want it.
+
+        Era giusta, ed è il motivo per cui questa riga cambia adesso e non è mai
+        cambiata prima: il permesso non si eredita, si chiede quando serve.
+
+        ## ⛔ Perché serve, e come si è visto che serviva
+
+        Owner 2026-08-15: «ho chiesto che ristorante mi consigli per cenare
+        stasera e lui mi ha dato una posizione completamente diversa».
+
+        MISURATO: TALOS non legge la posizione **da nessuna parte** — nessun
+        tool, niente nel contesto del modello, niente alla ricerca web. Quindi
+        quei nomi di locali il modello se li era inventati, ed è il difetto
+        peggiore della famiglia: una risposta sicura e falsa, su una cosa che la
+        persona sta per andare a fare davvero.
+
+        ⛔ FINE e COARSE insieme, e non è generosità: Android da API 31 lascia
+        alla persona la scelta fra «posizione precisa» e «approssimativa», e se
+        l'app dichiara solo FINE quella scelta **non le viene offerta**. Chiedere
+        entrambe è ciò che le lascia la scelta.
+
+        ⛔ Niente `ACCESS_BACKGROUND_LOCATION`: la posizione si legge quando la
+        persona chiede qualcosa che la richiede, con TALOS davanti. Un'app che
+        può leggere dove sei mentre non la guardi è un'altra app.
     -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 </manifest>

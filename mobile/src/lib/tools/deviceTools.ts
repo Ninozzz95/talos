@@ -50,6 +50,17 @@ export interface TalosDeviceToolSources {
     openSettings(action: string, forThisApp: boolean): Promise<Esito & { scope?: string }>
     compose(kind: string, value: string, text?: string): Promise<Esito>
     status(): Promise<Record<string, unknown>>
+    /**
+     * ⭐ DOVE SEI — vedi `src/lib/device/posizione.ts` per il difetto che l'ha
+     * resa necessaria: senza, il modello inventava città.
+     */
+    location(): Promise<{
+        stato: string
+        latitudine?: number
+        longitudine?: number
+        precisioneMetri?: number
+        etaSecondi?: number
+    }>
     wallpaper(imageBase64: string, where: string): Promise<Esito & { appliedTo: string }>
     keepAwake(on: boolean): Promise<Esito & { on: boolean }>
     /**
@@ -284,6 +295,89 @@ export function createTalosDeviceTools(
             },
         }) as TalosToolDefinition<never>,
 
+        /**
+         * ⭐⭐⭐ DOVE SEI — il tool che impedisce al modello di inventare una città.
+         *
+         * Owner 2026-08-15: «ho chiesto che ristorante mi consigli per cenare
+         * stasera e lui mi ha dato una posizione completamente diversa».
+         * MISURATO: TALOS non leggeva la posizione da nessuna parte, quindi
+         * quei nomi di locali erano inventati — una risposta sicura e falsa su
+         * una cosa che la persona sta per andare a fare davvero.
+         *
+         * ⛔⛔ LA REGOLA CHE LEGA STA NELLA DESCRIZIONE, non nel prompt di
+         * sistema. È una lezione già pagata (vedi «TRE GIORNI per una richiesta
+         * sola»): un modello che sceglie fra quaranta attrezzi legge la riga
+         * dell'attrezzo, non un paragrafo lontano. Quindi il QUANDO chiamarlo è
+         * scritto qui dentro, con gli esempi.
+         *
+         * ⛔ E il contrario: dire «chiamalo sempre» lo farebbe scattare anche su
+         * «che ore sono», accendendo il GPS per niente. La riga nomina i casi.
+         */
+        defineTalosTool({
+            name: 'device_location',
+            action: 'read',
+            title: 'Where the user is',
+            /*
+             * ⛔ SGRASSATA, e va detto cosa è rimasto e cosa no.
+             *
+             * La prima stesura elencava anche gli stati di ritorno e ripeteva
+             * «senza non conosci la città». 779 byte in uno schema col tetto
+             * misurato, per dire due volte la stessa cosa: gli stati il modello
+             * li riceve dal RISULTATO, con dentro già la frase da dire.
+             *
+             * ⛔ Ciò che NON si taglia è il QUANDO: è l'unica parte che cambia
+             * la decisione del modello, ed è il difetto che questo tool cura.
+             */
+            description: [
+                'Read where the phone is now, as latitude and longitude.',
+                'CALL THIS FIRST for anything that depends on where the user is:',
+                'recommending a restaurant, bar, shop or somewhere to go; "near me",',
+                '"nearby", "around here"; travel time from here; the weather where they are.',
+                'Naming places from a city the user is not in is worse than saying you do not know.',
+                'Do not call it for questions that do not depend on the place.',
+            ].join(' '),
+            input: z.object({}),
+            async run() {
+                const dove = await sources.location()
+                if (dove.stato !== 'letta') {
+                    /*
+                     * ⛔ Tre rifiuti diversi, tre frasi diverse — e nessuna è
+                     * «qualcosa è andato storto». La persona può fare qualcosa
+                     * in due casi su tre, e saperlo è la differenza fra una
+                     * risposta utile e un vicolo cieco.
+                     */
+                    const SENZA_POSIZIONE = 'This device cannot report a location. Ask the user which area they mean.'
+                    const MOTIVI: Record<string, string> = {
+                        negato: 'The user has not granted location permission. Tell them you need it to answer about places near them, and that they can grant it in TALOS settings under permissions.',
+                        spenta: 'Location services are switched off on the phone. Tell the user to turn them on, then ask again.',
+                        scaduta: 'No location fix arrived in time — this happens indoors. Tell the user, and offer to answer if they name the area.',
+                        'non-disponibile': SENZA_POSIZIONE,
+                    }
+                    return {
+                        ok: false,
+                        content: MOTIVI[dove.stato] ?? SENZA_POSIZIONE,
+                        code: `TALOS_LOCATION_${dove.stato.toUpperCase().replace(/-/g, '_')}`,
+                    }
+                }
+                /*
+                 * ⛔ L'ETÀ si dice, non si nasconde: un fix di un minuto fa va
+                 * benissimo per «ristoranti vicino» e va detto lo stesso, se no
+                 * il modello non ha modo di sapere quando è il caso di rileggere.
+                 */
+                return {
+                    ok: true,
+                    content: [
+                        `Latitude ${dove.latitudine}, longitude ${dove.longitudine}`,
+                        `(accurate to about ${dove.precisioneMetri} m, measured ${dove.etaSecondi} s ago).`,
+                        'Use these coordinates to work out the area, and say the place name you',
+                        'derived so the user can correct you if it is wrong.',
+                    ].join(' '),
+                }
+            },
+            // ⛔ Lo stesso cast dell'ultimo tool del file: `z.object({})` inferisce
+            // `Record<string, never>`, che non e' assegnabile all'array dichiarato
+            // `TalosToolDefinition<never>[]`. E' il modo gia' in uso qui.
+        }) as TalosToolDefinition<never>,
         defineTalosTool({
             name: 'device_torch',
             action: 'write',

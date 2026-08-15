@@ -160,7 +160,7 @@ describe('which rows a given device sees', () => {
          * della persona, letti e basta.
          */
         expect(rows.map((row) => row.id)).toEqual([
-            'microphone', 'notifications', 'contacts', 'calendar', 'mailCount', 'camera',
+            'microphone', 'notifications', 'contacts', 'calendar', 'mailCount', 'location', 'camera',
             'appLock', 'files', 'background', 'network',
             'notificationAccess', 'bridge', 'deviceControl', 'localModel',
         ])

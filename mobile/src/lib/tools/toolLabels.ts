@@ -51,6 +51,7 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     research_cancel: 'Stopping a research',
     research_delete: 'Deleting a research',
     device_status: 'Checking the phone',
+    device_location: 'Checking where you are',
     device_torch: 'Using the torch',
     device_media: 'Controlling playback',
     device_airplane: 'Switching airplane mode',
@@ -122,6 +123,7 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     research_cancel: 'toolActivity.researchCancel',
     research_delete: 'toolActivity.researchDelete',
     device_status: 'toolActivity.deviceStatus',
+    device_location: 'toolActivity.deviceLocation',
     device_torch: 'toolActivity.deviceTorch',
     device_media: 'toolActivity.deviceMedia',
     device_airplane: 'toolActivity.deviceAirplane',
@@ -288,6 +290,7 @@ export type TalosToolIconName =
     | 'web'
     | 'research'
     | 'phone'
+    | 'place'
     | 'torch'
     | 'volume'
     | 'audio'
@@ -346,6 +349,11 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
      * documento col globo, di nuovo.
      */
     device_status: 'phone',
+    // ⛔ Lo spillo e non il telefono: leggere DOVE SEI non e' leggere come sta
+    // il telefono, e due attrezzi con lo stesso disegno raccontano la stessa
+    // cosa mentre ne stanno facendo due. E' il dato piu' personale che questo
+    // elenco mostri: merita di essere riconoscibile a colpo d'occhio.
+    device_location: 'place',
     device_torch: 'torch',
     device_vibrate: 'phone',
     // ⛔ NON `volume`: alzare il volume e mettere in pausa sono due cose diverse,

@@ -472,6 +472,10 @@ export const TALOS_IT_MESSAGES = {
                 title: 'Calendario',
                 purpose: 'Rispondere a «che impegni ho domani» e mettere in agenda un appuntamento quando lo chiedi. Leggere e scrivere sono due permessi separati, chiesti in momenti diversi, e ogni appuntamento che TALOS scrive passa prima dalla tua conferma. Niente lascia il telefono.',
             },
+            location: {
+                title: 'Dove ti trovi',
+                purpose: 'Rispondere alle domande sui posti vicino a te: un ristorante per stasera, il negozio più vicino, quanto ci metti ad arrivare. TALOS legge la posizione nel momento in cui le serve, mai in sottofondo e mai ad app chiusa, e le coordinate non vanno oltre la risposta che hai chiesto.',
+            },
             camera: {
                 title: 'Fotocamera',
                 purpose: 'Scattare una foto da allegare a una chat. L’immagine va dove la mandi tu e da nessun’altra parte; TALOS non apre la fotocamera per conto suo.',
@@ -1108,6 +1112,7 @@ export const TALOS_IT_MESSAGES = {
         localModelDownload: 'Scarico un modello su questo telefono',
         localModelsStatus: 'Controllo un download in corso',
         deviceStatus: 'Controllo del telefono',
+        deviceLocation: 'Guardo dove sei',
         deviceMedia: 'Riproduzione',
         deviceAirplane: 'Modalità aereo',
         devicePowerSaving: 'Risparmio energetico',
@@ -1275,6 +1280,10 @@ export const TALOS_IT_MESSAGES = {
         localModelsStatus: {
             title: 'Controlla un download in corso',
             description: 'Riporta cosa si sta scaricando adesso e a che punto è. Legge solo questo dispositivo.',
+        },
+        deviceLocation: {
+            title: 'Guarda dove ti trovi',
+            description: 'Legge la posizione del telefono per rispondere a «qui vicino»: un ristorante, un negozio, quanto ci metti ad arrivare. La legge nel momento in cui serve, non di continuo, e mai mentre TALOS è chiuso.',
         },
         deviceStatus: {
             title: 'Controlla come sta il telefono',
@@ -2448,6 +2457,7 @@ export const TALOS_IT_MESSAGES = {
             local_model_inspect: { title: 'Controlla un modello su questo telefono', description: 'Legge dalla rete l’intestazione di un modello e capisce se gira qui, e quanto veloce.' },
             local_model_download: { title: 'Scarica un modello', description: 'Scarica un modello su questo dispositivo. Chiede sempre, qualunque sia la taglia.' },
             local_models_status: { title: 'Controlla un download', description: 'Riporta cosa si sta scaricando e a che punto è. Solo questo dispositivo.' },
+            device_location: { title: 'Guarda dove ti trovi', description: 'Legge la posizione per rispondere a «qui vicino»: un ristorante, un negozio, quanto ci metti. Solo nel momento in cui serve.' },
             device_status: { title: 'Guarda com’è il telefono', description: 'Legge batteria, spazio, memoria, suoneria e tipo di rete. Niente che identifichi te o questo telefono.' },
             device_airplane: { title: 'Accendi o spegni la modalità aereo', description: '⛔ Accendendola il telefono esce dalla rete e TALOS perde il collegamento privilegiato: dopo non potrà rispegnerla da solo.' },
             device_power_saving: { title: 'Accendi o spegni il risparmio energetico', description: 'Lo stesso interruttore delle impostazioni. Riduce le attività in secondo piano.' },

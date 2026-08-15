@@ -273,8 +273,31 @@ function byte(valore: unknown): number {
  * attrezzo non entra senza sgrassare ancora o senza alzare il tetto. Non lo
  * alzo adesso «per stare comodo» — alzarlo senza necessità è esattamente ciò
  * che la regola vieta, e un tetto alzato in anticipo non difende più niente.
+ *
+ * ## 2026-08-15 — il prossimo attrezzo è arrivato: 44.500 → 45.100
+ *
+ * È `device_location`, e nasce da un difetto che l'owner ha visto: «ho chiesto
+ * che ristorante mi consigli per cenare stasera e lui mi ha dato una posizione
+ * completamente diversa». MISURATO: TALOS non leggeva la posizione da nessuna
+ * parte, quindi il modello inventava la città.
+ *
+ * ⛔ PRIMA si è sgrassato, come vuole la regola. La prima stesura della
+ * descrizione pesava 779 byte ed elencava anche gli stati di ritorno — che il
+ * modello riceve **dal risultato**, già con dentro la frase da dire. Tolti:
+ * **−353 byte**, e il tool ne costa 456 netti.
+ *
+ * ⛔ Il resto NON si taglia: è il QUANDO chiamarlo, cioè l'unica parte che
+ * cambia la decisione del modello ed è esattamente ciò che cura il difetto. Qui
+ * vale la regola dell'owner — «mai azzoppare l'app per far tornare un tetto: se
+ * l'alternativa è peggiorare l'app, il tetto si alza».
+ *
+ *   44.470 (prima) + 456 (posizione) = **44.926**
+ *
+ * ⇒ Tetto a 45.100, cioè **174 byte** di margine. Stretto di proposito: un
+ * tetto che avanza spazio non difende niente, ed è la stessa disciplina con cui
+ * qui si erano lasciati 30 byte.
  */
-const TETTO_BYTE = 44_500
+const TETTO_BYTE = 45_100
 
 /**
  * ⛔ E nessun tool da solo può valere un ottavo di tutto.
