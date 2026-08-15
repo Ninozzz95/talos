@@ -5,7 +5,7 @@ A local-first agentic assistant that remembers what matters, writes code, contro
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-5%2C156%20passing-brightgreen.svg)](#building-it)
 [![Platform](https://img.shields.io/badge/platform-Android%2014%2B-3ddc84.svg)](#status)
-[![Models](https://img.shields.io/badge/models-cloud%20or%20local-blueviolet.svg)](#what-it-does)
+[![Local first](https://img.shields.io/badge/local--first-no%20backend-blueviolet.svg)](#local-first-is-not-a-setting)
 
 <!--
   ⛔ IL BADGE DELLA CI NON C'È, ED È VOLUTO.
@@ -14,18 +14,26 @@ A local-first agentic assistant that remembers what matters, writes code, contro
   Un badge che mente è peggio di un badge assente.
 -->
 
-```
-you:    manda a Shadina su WhatsApp che sto arrivando
-TALOS:  ✓ inviato
+## Local-first is not a setting
 
-        press=true via=viewId in 719 ms
-        obiettivo=PARTITO (campo-vuoto=true migrato=true prove=3/3)
-```
+There is no TALOS server. Not one that is optional, not one that is off by
+default — **there is no backend at all**, so there is nothing to opt out of.
+Your conversations, your documents and what TALOS remembers are encrypted on
+the phone, and the only thing that ever leaves it is the message you chose to
+send to the model provider you picked yourself.
 
-That second block is the point. TALOS does not say "sent" because it called a
-function: it says "sent" because three independent checks on the screen agree —
-the input field is empty, the text has moved into the conversation, and the send
-control is gone. When only one check agrees, it says so.
+Three things run on the device, with no network at all:
+
+| | |
+| --- | --- |
+| **The model, if you want** | llama.cpp is compiled into the app. Put a GGUF on the phone and the whole conversation — reasoning, tool calls, answers — happens with the radio off. |
+| **The wake word** | «hey TALOS» is recognised by a 868 KB ONNX model **trained in this repository**. No Google hotword, no cloud round-trip, no audio stored. |
+| **Everything it knows** | Chats, Library documents and memories live in an encrypted store on the phone. Search runs inside your own text. |
+
+Cloud models are supported, and many people will use them — they are still the
+better answer for hard questions today. The point is that it is **your**
+decision, made per conversation, and that the app does not stop being useful
+when you say no.
 
 ---
 
@@ -94,32 +102,54 @@ could not verify.
 
 ## What it does
 
+**Runs a model on the phone.** llama.cpp is built into the app, not shelled out
+to another one. Browse GGUF models from Hugging Face, see which ones actually
+fit your device's memory *before* downloading, and run them offline. The same
+tool contracts apply whether the model is a 3B on the phone or a frontier model
+behind an API — a capability written once works on both.
+
+**Remembers what matters, and shows you all of it.** Tell it something in the
+middle of a conversation and it keeps it, typed and scoped: a preference, a
+project fact, a procedure. Every memory is visible on one screen, editable,
+deletable — and injected as *untrusted disclosed context*, so it can never
+override a security rule.
+
+**Keeps your documents on your phone.** Hand it a file and it goes into an
+encrypted Library that is searchable inside the text. Nothing is uploaded. If
+you ask a question about a document, the reading happens here.
+
+**Listens for its name, locally.** «hey TALOS» is recognised by an ONNX model of
+868 KB, trained in this repository. Always-on, no network, no audio kept.
+
 **Talks to your phone.** Torch, volume, alarms, wallpaper, battery, storage,
 network, do-not-disturb. Reads your calendar and your unread mail count. Answers
 "what do I have tomorrow" from the actual calendar, not from its own notes.
 
-**Acts inside other apps.** Opens WhatsApp on the right conversation, fills the
-message, presses send, and verifies it left. Searches inside an app. Opens a
-place in Maps. The same machinery works on apps it has never seen: it reads the
-accessibility tree, it does not carry a list of hardcoded apps.
+**Acts inside other apps.** Opens an app on the right screen, fills a field,
+presses the button, and then verifies it actually happened. The same machinery
+works on apps it has never seen: it reads the accessibility tree, it does not
+carry a list of hardcoded apps.
 
 **Answers about where you are.** "A restaurant near me tonight" reads the phone's
 location at that moment — and does not read it for questions that have nothing
 to do with a place.
 
-**Listens for its name.** "hey TALOS" wakes it, with a wake-word model trained
-in this repository. No cloud round-trip, no Google hotword: 5.5 MB of ONNX that
-runs on the device.
-
-**Runs any model.** Anthropic, OpenAI, Google, OpenRouter, Ollama, or a local
-GGUF on the phone itself. The tool contracts are identical across all of them.
-
 ## What makes it different
 
-**It never claims what it did not verify.** «Opened» is not «done». Every action
-that can be checked, is checked, and the answer distinguishes *it worked*, *it
-did not work*, and *I could not confirm* — because those are three different
-things a person can act on.
+**It never claims what it did not verify.** «Opened» is not «done». When TALOS
+sends something inside another app, it does not report success because a
+function returned — it looks at the screen afterwards:
+
+```
+sent                       ← only after all three agree
+  field emptied            ← the text left the input
+  text migrated            ← it is now in the conversation, not in a draft
+  send control gone        ← the button that would send it no longer exists
+```
+
+Every action that can be checked, is checked, and the answer distinguishes *it
+worked*, *it did not work*, and *I could not confirm* — three different things a
+person can act on. The third is the one most assistants never say.
 
 **Nothing happens without a gate.** Every tool call passes a consent sheet or a
 grant you gave earlier. You can set any capability to always / ask / never, and

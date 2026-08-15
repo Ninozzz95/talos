@@ -154,7 +154,7 @@ describe('⭐⭐⭐ l\'ultimo centimetro non tocca al buio', () => {
     /*
      * ⭐⭐⭐ 2026-08-15: le prove diventano TRE, e questo test cambia con loro.
      *
-     * Owner: «"invio un messaggio a Shadina" non significa che l'abbia inviato
+     * Owner: «"invio un messaggio a un contatto" non significa che l'abbia inviato
      * veramente». `sparito` da solo era UNA euristica — un pulsante può sparire
      * perché la schermata è cambiata per altro. Adesso il nativo conta anche il
      * campo svuotato e il testo MIGRATO in un nodo non modificabile, cioè
