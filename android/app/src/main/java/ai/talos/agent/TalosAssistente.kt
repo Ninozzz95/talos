@@ -157,7 +157,7 @@ class TalosAssistente : VoiceInteractionService() {
          *
          *     «Non ho sentito niente. Tocca il microfono per riprovare.»
          *
-         * sopra una risposta che diceva «Ho inviato il messaggio a Shadina su
+         * sopra una risposta che diceva «Ho inviato il messaggio a un contatto su
          * WhatsApp». Cioè TALOS accusa la persona di non aver parlato subito
          * dopo aver eseguito quello che gli aveva chiesto. È la stessa famiglia
          * del difetto del 14 agosto, in un posto nuovo.
@@ -441,7 +441,7 @@ class TalosAssistenteSessione(private val servizio: TalosAssistenteSessioneServi
      *
      * ## Il difetto, owner 2026-08-15
      *
-     * > «se chiedo "invia un messaggio a Shadina" lui mette il messaggio nel
+     * > «se chiedo "invia un messaggio a un contatto" lui mette il messaggio nel
      * > campo input ma non lo invia, **la barra assistente non ricompare**, e se
      * > dico "invia" non invia nulla.»
      *

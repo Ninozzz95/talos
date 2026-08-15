@@ -8,7 +8,7 @@ import android.view.accessibility.AccessibilityNodeInfo
  * ## La richiesta
  *
  * Owner 2026-08-15: «mi piacerebbe dopo l'invio una conferma da parte della
- * chat, perché "invio un messaggio a Shadina" non significa che l'abbia inviato
+ * chat, perché "invio un messaggio a un contatto" non significa che l'abbia inviato
  * veramente. Dobbiamo inventare… un sistema di finalizzazione dell'obiettivo
  * **dinamico per tutte le app**».
  *
