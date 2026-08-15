@@ -142,5 +142,44 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         ai.talos.parola.TalosParola.riprendiSeVoluta(this);
+        riparaCioCheIlSistemaHaSpento();
+    }
+
+    /**
+     * ⭐⭐⭐ QUELLO CHE HAI ACCESO RESTA ACCESO.
+     *
+     * Owner 2026-08-15: «di assoluta critica e vitale importanza è che, alla
+     * chiusura e riapertura dell'applicazione, l'utente mantenga tutte le
+     * impostazioni di controllo del telefono, anche quelle di accessibilità
+     * tutte. D'ora in poi l'utente non deve perdere nulla».
+     *
+     * MISURATO sul Pad: scorrendo via TALOS dai recenti, l'elenco dei servizi di
+     * accessibilità continua a nominarci ma `accessibility_enabled` va a **0** —
+     * due righe che dovrebbero dire la stessa cosa e si contraddicono. L'occhio
+     * resta «acceso» in elenco e non vede più niente.
+     *
+     * ⛔ QUI, in `onResume`, e non in `onCreate`: il caso da curare è proprio la
+     * RIAPERTURA, e `onCreate` non scatta quando l'Activity è solo tornata
+     * davanti. Il posto sbagliato avrebbe curato metà dei casi.
+     *
+     * ⛔ E FUORI dal thread principale: il ponte fa I/O, e un avvio che aspetta
+     * una shell è un avvio che sembra rotto. La riparazione può arrivare un
+     * istante dopo — nessuno guarda l'occhio nel primo mezzo secondo.
+     *
+     * ⛔ Non accende NIENTE che la persona non abbia già acceso: la condizione è
+     * «TALOS è ancora nell'elenco». Vedi `TalosNonSiPerdeNiente`.
+     */
+    private void riparaCioCheIlSistemaHaSpento() {
+        final android.content.Context contesto = getApplicationContext();
+        new Thread(() -> {
+            try {
+                String esito = ai.talos.agent.TalosNonSiPerdeNiente.INSTANCE.riparaSeServe(contesto);
+                if (!"gia-a-posto".equals(esito) && !"niente-da-fare".equals(esito)) {
+                    android.util.Log.i("TalosAvvio", "accessibilità: " + esito);
+                }
+            } catch (Throwable ignorato) {
+                // Un avvio non fallisce mai per una riparazione mancata.
+            }
+        }, "talos-ripara").start();
     }
 }
