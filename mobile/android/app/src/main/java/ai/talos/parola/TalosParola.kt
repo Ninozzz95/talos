@@ -14,11 +14,6 @@ import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
-import com.k2fsa.sherpa.onnx.FeatureConfig
-import com.k2fsa.sherpa.onnx.KeywordSpotter
-import com.k2fsa.sherpa.onnx.KeywordSpotterConfig
-import com.k2fsa.sherpa.onnx.OnlineModelConfig
-import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
 import kotlin.concurrent.thread
 
 /**
@@ -40,10 +35,14 @@ import kotlin.concurrent.thread
  *
  * ## Come è fatto
  *
- * Un `AudioRecord` a 16 kHz mono, letto a blocchi da 100 ms, versato in uno
- * `OnlineStream` di sherpa-onnx. Il riconoscitore non trascrive: cerca **solo**
- * le parole dichiarate, in token BPE. Non c'è nessun testo che esce da qui, e
- * nessun audio che viene salvato.
+ * Un `AudioRecord` a 16 kHz mono, letto a blocchi da **80 ms**, versato in
+ * `TalosOrecchio`. Il riconoscitore non trascrive: dà un numero fra 0 e 1 per
+ * una parola sola. Non c'è nessun testo che esce da qui, e nessun audio che
+ * viene salvato.
+ *
+ * ⛔ Gli 80 ms non sono una preferenza: sono il passo su cui l'embedding è stato
+ * addestrato. Con blocchi di lunghezza diversa i fotogrammi non si allineano e
+ * il punteggio non sale mai — senza nessun errore.
  *
  * ⛔ `VOICE_RECOGNITION` come sorgente, e non `MIC`: è quella che i quattro
  * assistenti liberi censiti (Dicio, Sayboard, Kõnele, FUTO) usano **tutti**,
@@ -70,6 +69,20 @@ class TalosParola : Service() {
     @Volatile
     private var ceduto = false
 
+    /*
+     * Stato della sonda del livello — vedi il commento lungo nel ciclo. Vive qui
+     * e non nel ciclo perché deve sopravvivere fra un blocco e l'altro.
+     */
+    private var bloccoNumero = 0L
+    private var piccoDellaFinestra = 0
+    private val sondaAccesa: Boolean by lazy {
+        runCatching {
+            val classe = Class.forName("android.os.SystemProperties")
+            val leggi = classe.getMethod("get", String::class.java, String::class.java)
+            (leggi.invoke(null, "debug.talos.sonda", "0") as? String) == "1"
+        }.getOrDefault(false)
+    }
+
     /**
      * ⛔⛔ LA PRESA, tenuta come campo per poterla MOLLARE SUBITO.
      *
@@ -93,7 +106,7 @@ class TalosParola : Service() {
     @Volatile
     private var presa: AudioRecord? = null
 
-    private var motore: KeywordSpotter? = null
+    private var orecchio: TalosOrecchio? = null
 
     private val mano = android.os.Handler(android.os.Looper.getMainLooper())
 
@@ -148,8 +161,8 @@ class TalosParola : Service() {
     override fun onDestroy() {
         vivo = false
         istanza = null
-        motore?.release()
-        motore = null
+        orecchio?.chiudi()
+        orecchio = null
         super.onDestroy()
     }
 
@@ -184,12 +197,13 @@ class TalosParola : Service() {
     }
 
     private fun ciclo() {
-        val riconoscitore = runCatching { costruisci() }.getOrElse {
-            Log.e(MARCHIO, "il motore non si è aperto: ${it.message}")
+        val riconoscitore = TalosOrecchio.apri(assets, PAROLA)
+        if (riconoscitore == null) {
+            Log.e(MARCHIO, "il motore non si è aperto: mi fermo")
             stopSelf()
             return
         }
-        motore = riconoscitore
+        orecchio = riconoscitore
 
         val minimo = AudioRecord.getMinBufferSize(
             FREQUENZA,
@@ -211,12 +225,16 @@ class TalosParola : Service() {
             return
         }
 
-        // ⛔ Vuoto di proposito: le parole sono già quelle di
-        // `assets/kws/keywords.txt`, e ripeterle qui vorrebbe dire due sorgenti
-        // per lo stesso dato — l'errore che oggi è già costato due volte.
-        val flusso = riconoscitore.createStream("")
-        val blocco = ShortArray(FREQUENZA / 10)
-        val campioni = FloatArray(blocco.size)
+        /*
+         * ⛔⛔ IL BLOCCO È DI 1280 CAMPIONI, e non è arrotondabile.
+         *
+         * Prima era `FREQUENZA / 10`, cioè 1600 — 100 ms, un numero scelto
+         * perché è tondo. Il modello dell'embedding è addestrato su passi da
+         * 80 ms: con blocchi diversi i fotogrammi non si allineano e il
+         * punteggio non sale mai, senza che niente segnali un errore.
+         */
+        val blocco = ShortArray(TalosOrecchio.CAMPIONI_PER_BLOCCO)
+        var dentro = 0
         presa.startRecording()
         Log.i(MARCHIO, "in ascolto della parola")
 
@@ -234,7 +252,8 @@ class TalosParola : Service() {
                     // ascolta: qui si ripulisce soltanto. Rifarlo non fa danno e
                     // copre il caso in cui la bandierina arrivi da sola.
                     runCatching { presa.stop() }
-                    riconoscitore.reset(flusso)
+                    riconoscitore.azzera()
+                    dentro = 0
                     eraCeduto = true
                     Log.i(MARCHIO, "microfono ceduto a chi ascolta davvero")
                 }
@@ -246,7 +265,13 @@ class TalosParola : Service() {
                 eraCeduto = false
                 Log.i(MARCHIO, "microfono ripreso")
             }
-            val letti = presa.read(blocco, 0, blocco.size)
+            /*
+             * ⛔ Si legge riempiendo, non «un blocco per giro»: `read` può
+             * consegnare MENO di quanto chiesto, e trattare una consegna parziale
+             * come un blocco intero sposterebbe tutto l'allineamento in avanti
+             * per sempre — di nuovo un guasto silenzioso.
+             */
+            val letti = presa.read(blocco, dentro, blocco.size - dentro)
             if (letti <= 0) {
                 /*
                  * ⛔⛔ SI DORME, e non si gira a vuoto.
@@ -271,20 +296,111 @@ class TalosParola : Service() {
                 Thread.sleep(20)
                 continue
             }
-            for (i in 0 until letti) campioni[i] = blocco[i] / 32768.0f
-            flusso.acceptWaveform(campioni.copyOf(letti), FREQUENZA)
-            while (riconoscitore.isReady(flusso)) riconoscitore.decode(flusso)
-            val esito = riconoscitore.getResult(flusso)
-            if (esito.keyword.isNotEmpty()) {
-                riconoscitore.reset(flusso)
-                sentita(esito.keyword)
+            dentro += letti
+            if (dentro < blocco.size) continue
+            dentro = 0
+
+            /*
+             * ⛔⛔ IL GUADAGNO — «devo letteralmente urlare», owner 2026-08-15.
+             *
+             * ## Perché il volume conta, e non dovrebbe
+             *
+             * I campioni entrano nel modello mel come **int16 non normalizzati**
+             * (è giusto: quel modello è stato addestrato così, e dividerli per
+             * 32768 dà uno spettro completamente diverso — sta in
+             * `PROVENIENZA-PAROLA.md`). ⇒ Una frase detta piano produce uno
+             * spettro **più debole** di tutto ciò che il classificatore ha visto.
+             *
+             * E non l'ha mai visto per un motivo preciso, trovato nel codice
+             * della libreria di addestramento: `AugmentationConfig` espone solo
+             * `clip_duration`, `batch_size`, `rounds`, `background_paths`,
+             * `rir_paths`. **Nessun parametro di volume.** Le clip vengono
+             * sporcate con rumore e riverbero, ma mai attenuate: il modello ha
+             * sentito solo voce a volume pieno.
+             *
+             * ## La cura: si porta la voce al livello che il modello conosce
+             *
+             * Non è una normalizzazione cieca — quella amplificherebbe anche il
+             * silenzio, e un silenzio amplificato diventa un falso positivo.
+             * Tre guardie:
+             *
+             *   1. si alza **solo** se il picco è sopra `RUMORE_MINIMO`, cioè
+             *      solo quando c'è qualcosa che somiglia a una voce;
+             *   2. il fattore ha un **tetto** (`GUADAGNO_MASSIMO`): una voce
+             *      lontanissima non viene tirata su a forza fino a diventare
+             *      rumore squadrato;
+             *   3. **non si abbassa mai** chi è già forte: chi urla resta com'è,
+             *      e il comportamento che oggi funziona non cambia.
+             *
+             * ⇒ È la leva 2 delle quattro in
+             * `docs/superpowers/research/2026-08-15-hey-talos-iper-preciso.md`.
+             */
+            var picco = 0
+            for (c in blocco) { val v = if (c < 0) -c.toInt() else c.toInt(); if (v > picco) picco = v }
+            var fattoreUsato = 1f
+            if (picco in (RUMORE_MINIMO + 1)..<LIVELLO_ATTESO) {
+                fattoreUsato = minOf(LIVELLO_ATTESO.toFloat() / picco, GUADAGNO_MASSIMO)
+                for (i in blocco.indices) {
+                    blocco[i] = (blocco[i] * fattoreUsato).toInt().coerceIn(-32768, 32767).toShort()
+                }
+            }
+            /*
+             * ⛔ La sonda del guadagno: senza, «non scatta» non distingue «il
+             * guadagno non agisce» da «agisce e non basta» — due difetti in due
+             * posti diversi. Si scrive solo quando c'è qualcosa da sentire, se
+             * no allaga il registro con il silenzio.
+             */
+            if (picco > RUMORE_MINIMO) {
+                Log.i(MARCHIO, "livello: picco=$picco fattore=${"%.1f".format(fattoreUsato)}")
+            }
+
+            /*
+             * ⛔⛔ LA SONDA CHE PARLA ANCHE QUANDO NON SCATTA NIENTE.
+             *
+             * Il difetto che l'ha resa necessaria, misurato il 2026-08-15: le
+             * clip suonate dalle casse del PC non facevano scattare la parola, e
+             * il registro era **vuoto**. Vuoto non è un dato: non distingue
+             *
+             *   - «al microfono non arriva niente»  (aria, distanza, volume)
+             *   - «arriva ma sotto RUMORE_MINIMO»   (soglia tarata male)
+             *   - «arriva forte e il modello non riconosce» (modello)
+             *
+             * ⇒ Tre guasti in tre posti diversi, indistinguibili dallo stesso
+             * silenzio. Il picco massimo su una finestra scritto **sempre** li
+             * separa in una misura sola.
+             *
+             * ⛔ Ogni 25 blocchi, cioè ogni 2 secondi: abbastanza per seguire una
+             * prova, troppo poco per allagare il registro.
+             *
+             * ⛔ E si accende solo con `setprop debug.talos.sonda 1`: è
+             * strumentazione da banco, non una spia da tenere accesa addosso a
+             * chi usa l'app.
+             */
+            bloccoNumero++
+            if (sondaAccesa && bloccoNumero % BLOCCHI_FRA_SONDE == 0L) {
+                Log.i(MARCHIO, "sonda: picco=$piccoDellaFinestra soglia=$RUMORE_MINIMO")
+                piccoDellaFinestra = 0
+            } else if (picco > piccoDellaFinestra) {
+                piccoDellaFinestra = picco
+            }
+
+            val punteggio = riconoscitore.ascolta(blocco, blocco.size) ?: continue
+            /*
+             * ⛔ Si registrano anche i quasi: un punteggio a 0,3 dice che la
+             * parola è stata sentita e non creduta, ed è l'unico dato con cui si
+             * tara una soglia. Sopra 0,1 succede di rado, quindi non allaga il
+             * registro.
+             */
+            if (punteggio > CURIOSITA) Log.i(MARCHIO, "punteggio ${"%.3f".format(punteggio)}")
+            if (punteggio >= SOGLIA) {
+                riconoscitore.azzera()
+                sentita(punteggio)
             }
         }
 
         runCatching { presa.stop() }
         this.presa = null
         presa.release()
-        flusso.release()
     }
 
     /**
@@ -299,11 +415,11 @@ class TalosParola : Service() {
      * vero, e due padroni sullo stesso microfono fanno un'app che finge di
      * ascoltare.
      */
-    private fun sentita(parola: String) {
+    private fun sentita(punteggio: Float) {
         val adesso = SystemClock.elapsedRealtime()
         if (adesso - ultima < RIPOSO_MS) return
         ultima = adesso
-        Log.i(MARCHIO, "SENTITA «$parola»")
+        Log.i(MARCHIO, "SENTITA «$PAROLA» con ${"%.3f".format(punteggio)}")
         ceduto = true
         /*
          * ⛔⛔ LA CESSIONE HA UNA SCADENZA, se no la parola resta sorda per sempre.
@@ -326,9 +442,36 @@ class TalosParola : Service() {
          */
         mano.removeCallbacks(riprendiDaSolo)
         mano.postDelayed(riprendiDaSolo, CESSIONE_MASSIMA_MS)
-        val aperta = ai.talos.agent.TalosAssistente.apriComeAssistente()
+        /*
+         * ⛔⛔⛔ SE LA BARRA È GIÀ DAVANTI, NON SI CHIEDE UNA SESSIONE: SI CHIAMA.
+         *
+         * Owner 2026-08-14: «hey jarvis non funziona quando la barra è già
+         * aperta — se TALOS non è in listening, non fa ripartire l'ascolto come
+         * se premessi il pulsante del microfono».
+         *
+         * `showSession` su una sessione **già mostrata** non produce niente:
+         * nessun intent nuovo arriva alla barra, il lato web non conta nessuna
+         * chiamata nuova, e l'ascolto non riparte. Da fuori: la parola viene
+         * sentita — sta scritto in logcat — e non succede niente.
+         *
+         * ⇒ Con la barra davanti si manda un intent, che `onNewIntent` timbra
+         * come apertura nuova. Il lato web ha già la strada giusta per questo
+         * caso e la usa da giorni: `modo.chiamata += 1` → `vogliAscoltare`. È
+         * letteralmente «come premere il pulsante del microfono».
+         *
+         * ⛔ E solo quando è DAVANTI: a barra chiusa la strada dell'assistente
+         * resta la prima, perché è l'unica che porta il contesto dello schermo
+         * (`SHOW_WITH_ASSIST`) — e quello è metà del mestiere dell'assistente.
+         */
+        val davanti = ai.talos.TalosBarraActivity.eDavanti()
+        val aperta = if (davanti) {
+            Log.i(MARCHIO, "la barra è già davanti: le mando una chiamata nuova")
+            false
+        } else {
+            ai.talos.agent.TalosAssistente.apriComeAssistente()
+        }
         if (!aperta) {
-            Log.w(MARCHIO, "il sistema non ci ha dato la sessione: apro la barra da solo")
+            if (!davanti) Log.w(MARCHIO, "il sistema non ci ha dato la sessione: apro la barra da solo")
             runCatching {
                 startActivity(
                     Intent(
@@ -342,44 +485,131 @@ class TalosParola : Service() {
         }
     }
 
-    private fun costruisci(): KeywordSpotter {
-        val config = KeywordSpotterConfig(
-            featConfig = FeatureConfig(sampleRate = FREQUENZA, featureDim = 80),
-            modelConfig = OnlineModelConfig(
-                transducer = OnlineTransducerModelConfig(
-                    encoder = "kws/encoder.int8.onnx",
-                    decoder = "kws/decoder.int8.onnx",
-                    joiner = "kws/joiner.int8.onnx",
-                ),
-                tokens = "kws/tokens.txt",
-                modelType = "zipformer2",
-                // ⛔ Due thread e non uno: il modello gira per ore, e su un
-                // telefono il costo di un thread in più si sente meno del
-                // ritardo di riconoscimento con uno solo.
-                numThreads = 2,
-            ),
-            /*
-             * ⛔ IL FILE SERVE DAVVERO, e lasciarlo vuoto costa un crash muto.
-             *
-             * MISURATO sul Pad l'11 agosto: con `keywordsFile = ""` la libreria
-             * si carica, la configurazione arriva, e poi il processo muore con
-             * `F/sherpa-onnx: Read binary file: Load '' failed` — un errore
-             * FATALE su un percorso vuoto, che dall'app si vede solo come un
-             * servizio che riparte all'infinito.
-             *
-             * Passare le parole a `createStream()` NON sostituisce il file: le
-             * AGGIUNGE. La base va letta da qui.
-             */
-            keywordsFile = "kws/keywords.txt",
-        )
-        return KeywordSpotter(assetManager = assets, config = config)
-    }
-
     companion object {
         private const val MARCHIO = "TalosParola"
         private const val CANALE = "talos-parola"
         private const val AVVISO = 4711
         private const val FREQUENZA = 16_000
+
+        /**
+         * ⭐⭐⭐ LA NOSTRA PAROLA — `talos.onnx`, addestrato il 2026-08-15.
+         *
+         * Ha preso il posto di `hey_jarvis.onnx`, che era un banco di prova:
+         * un classificatore pubblicato da altri serviva a sapere se il
+         * montaggio su Android fosse giusto **prima** di spendere una notte ad
+         * addestrare. Ha scattato sul Pad, quindi la catena era sana.
+         *
+         * ⛔ Il codice non è cambiato per la sostituzione, ed era il punto: il
+         * nome dell'ingresso del modello lo legge `TalosOrecchio` dalla
+         * sessione (`x.1` per openWakeWord, `embeddings` per i modelli di
+         * `livekit-wakeword`), quindi cambiare parola è cambiare questa riga e
+         * il file. La provenienza, i numeri dell'addestramento e le due soglie
+         * stanno in `PROVENIENZA-PAROLA.md`.
+         */
+        private const val PAROLA = "talos.onnx"
+
+        /**
+         * ⛔⛔ 0,89 è MISURATO SUL NOSTRO MODELLO, non più un prestito.
+         *
+         * `train` ha calcolato i due punti di lavoro sul set di validazione:
+         *
+         * ```
+         *   soglia 0,50 →  Recall 88,2%   FPPH 0,53
+         *   soglia 0,89 →  Recall 74,8%   FPPH 0,00   ← questa
+         * ```
+         *
+         * Cioè: a 0,50 ti sente 88 volte su 100 ma si apre da sola **ogni due
+         * ore circa**; a 0,89 non si apre mai da sola ma ti perde **una volta
+         * su quattro**.
+         *
+         * ⛔⛔ SCESA DA 0,89 A 0,50 il 2026-08-15, e a decidere è stata la
+         * misura in stanza, non il laboratorio.
+         *
+         * Owner, provando l'APK: «adesso risponde **2 volte su 10**». Cioè un
+         * recall reale del ~20% dove il set di validazione ne prometteva 74,8.
+         * ⇒ Fra il laboratorio e la stanza si perdeva quasi tutto, e la soglia
+         * alta era la causa più diretta e più facile da togliere.
+         *
+         * 0,50 è anche il valore che openWakeWord dichiara come punto di
+         * partenza — «users are encouraged to determine the best threshold for
+         * their environment… a **lower** threshold may result in significantly
+         * better performance».
+         *
+         * ⛔ Il prezzo dichiarato: FPPH 0,53, cioè circa **una falsa apertura
+         * ogni due ore**. Si accetta come passo intermedio perché il difetto
+         * opposto — un assistente che non risponde 8 volte su 10 — è peggio, e
+         * perché le altre tre leve della ricerca (guadagno adattivo, VAD, clip
+         * attenuate in addestramento) servono proprio a riprendersi quei falsi
+         * senza rialzare la soglia.
+         *
+         * Il piano intero, con le fonti:
+         * `docs/superpowers/research/2026-08-15-hey-talos-iper-preciso.md`
+         *
+         * ⛔ Il valore precedente, 0,5, era il riferimento di openWakeWord: un
+         * numero giusto per il LORO classificatore, e senza significato per il
+         * nostro.
+         */
+        private const val SOGLIA = 0.5f
+
+        /** Sotto la soglia ma sopra questo, si scrive comunque: vedi `ciclo`. */
+        private const val CURIOSITA = 0.1f
+
+        /**
+         * ⛔ Il livello a cui il modello è abituato, e i due freni.
+         *
+         * `LIVELLO_ATTESO` è circa un terzo del fondo scala di un int16: è la
+         * zona in cui vivono le clip TTS su cui il classificatore è stato
+         * addestrato. `RUMORE_MINIMO` tiene fuori il silenzio — sotto quella
+         * soglia non c'è voce da alzare, c'è solo fruscio da non amplificare.
+         * `GUADAGNO_MASSIMO` impedisce che un sussurro lontano venga tirato su
+         * di venti volte fino a diventare un'altra cosa.
+         *
+         * ⛔ Tre numeri di partenza, non tre misure: vanno tarati su dieci
+         * tentativi veri con la voce dell'owner, a voce normale e bassa.
+         */
+        /*
+         * ⛔ 20.000, e il numero viene dalle CLIP CHE IL MODELLO HA VISTO.
+         *
+         * MISURATO il 2026-08-15 su 200 clip aumentate di addestramento:
+         *
+         *     picco mediano   32.768   (fondo scala)
+         *     primo quarto    19.816
+         *     minimo           4.632
+         *
+         * Cioè il classificatore ha imparato su voce forte, quasi sempre al
+         * massimo. Il primo valore (11.000) era una scommessa e puntava sotto
+         * l'intero primo quarto: portava la voce debole a un livello che il
+         * modello ha visto **di rado**.
+         *
+         * ⛔ E non 32.768: quello è il fondo scala, e mirarci significa
+         * tosare le creste di ogni voce già normale. Il primo quarto porta
+         * dentro la distribuzione senza saturare.
+         */
+        private const val LIVELLO_ATTESO = 20000
+
+        /*
+         * ⛔ 1.800 e non 500, e il numero viene dalla STANZA.
+         *
+         * MISURATO sul Pad con la sonda del guadagno, in silenzio:
+         *
+         *     livello: picco=514 fattore=8,0
+         *     livello: picco=590 fattore=8,0
+         *     livello: picco=632 fattore=8,0
+         *
+         * Cioè col primo valore (500) il guadagno amplificava **il fruscio**
+         * otto volte, e un fruscio amplificato è esattamente ciò che produce
+         * false attivazioni. Il fondo di questa stanza sta fra 500 e 650: la
+         * soglia va sopra, con margine.
+         *
+         * ⛔ E non troppo sopra: la clip attenuata al 15% che ha fatto scattare
+         * la parola arrivava al microfono con picco **11.918**, quindi c'è
+         * spazio abbondante. Il numero si rivede se cambia la stanza.
+         */
+        private const val RUMORE_MINIMO = 1800
+        private const val GUADAGNO_MASSIMO = 8f
+
+        /** Ogni quanti blocchi da 80 ms la sonda scrive il picco: 25 ≈ 2 s. */
+        private const val BLOCCHI_FRA_SONDE = 25L
 
         /**
          * Quanto al massimo la parola resta in disparte dopo aver aperto la
@@ -395,37 +625,16 @@ class TalosParola : Service() {
         @Volatile
         private var istanza: TalosParola? = null
 
-        /**
-         * ⛔⛔ LE PAROLE IN TOKEN BPE, e non si indovinano.
+        /*
+         * ⛔ Qui c'era `PAROLE`: «hey TALOS» scritta a mano in token BPE
+         * (`▁HE Y ▁TA LO S :1.5 #0.25`), con una nota lunga su come si
+         * scompone e su quanto fosse facile sbagliarla.
          *
-         * Il modello non riconosce lettere: riconosce **token**. La
-         * scomposizione dipende dal `bpe.model` di QUESTO modello e cambia da
-         * modello a modello. MISURATO l'11 agosto con `sentencepiece` sul
-         * `bpe.model` vero del pacchetto:
-         *
-         *     HEY TALOS  ->  ▁HE Y ▁TA LO S
-         *     TALOS      ->  ▁TA LO S
-         *
-         * ⛔ Una nota precedente diceva `▁T AL OS` ed era **sbagliata**: se la
-         * si fosse copiata, il riconoscitore avrebbe cercato una parola che non
-         * esiste e non si sarebbe attivato mai, senza dare nessun errore.
-         *
-         * ⭐ `HEY TALOS` ha la stessa forma di `HEY SIRI` (`▁HE Y ▁S I RI`), che
-         * è l'esempio di riferimento di questo modello: cinque token, nessuno
-         * fuori vocabolario.
-         *
-         * ## I due numeri in coda
-         *
-         * `:1.5` è il punteggio che aiuta la parola a sopravvivere alla ricerca,
-         * `#0.25` la soglia acustica minima. Sono i valori di riferimento della
-         * documentazione; ⛔ **vanno tarati con la voce dell'owner**, perché una
-         * parola corta come `TALOS` da sola si attiva più facilmente per sbaglio
-         * — per questo ha una soglia più alta della frase intera.
+         * Era anche CODICE MORTO — nessuno la leggeva, perché le parole vere
+         * stavano in `assets/kws/keywords.txt` — ma il punto è un altro: una
+         * parola SCRITTA è una speranza che il modello la pronunci come te.
+         * Adesso la parola si addestra, e non c'è nessuna stringa da azzeccare.
          */
-        private val PAROLE = listOf(
-            "▁HE Y ▁TA LO S :1.5 #0.25",
-            "▁TA LO S :1.0 #0.35",
-        ).joinToString("\n")
 
         /** Dove si ricorda che la persona la vuole accesa. */
         private const val MEMORIA = "talos_parola"
@@ -516,9 +725,30 @@ class TalosParola : Service() {
          * ⛔ Il servizio resta VIVO: spegnerlo e riaccenderlo costerebbe il
          * caricamento del modello a ogni frase.
          */
+        /**
+         * ⛔⛔ CHI ha chiesto il microfono, scritto nel registro.
+         *
+         * MISURATO il 2026-08-14: dopo un'attivazione la parola è rimasta sorda
+         * per 45 secondi e il registro diceva soltanto «nessuno ha preso il
+         * microfono: me lo riprendo» — cioè che la scadenza era arrivata, non
+         * **chi** aveva ceduto né **perché** nessuno avesse restituito. Con tre
+         * chiamanti possibili (la barra, la dettatura, l'orecchio anticipato)
+         * quel registro non permette di distinguere un'ipotesi dall'altra, e
+         * senza distinguerle si tira a indovinare.
+         *
+         * ⇒ Costa una riga per cessione, che succede una volta ogni chiamata.
+         */
+        private fun chiHaChiesto(): String {
+            val pila = Throwable().stackTrace
+            // 0 = questa funzione, 1 = cedi/riprendi, 2 = chi le ha chiamate.
+            return pila.getOrNull(2)?.let { "${it.className.substringAfterLast('.')}.${it.methodName}" }
+                ?: "sconosciuto"
+        }
+
         @JvmStatic
         fun cedi() {
             val chi = istanza ?: return
+            Log.i(MARCHIO, "microfono CEDUTO su richiesta di ${chiHaChiesto()}")
             chi.ceduto = true
             runCatching { chi.presa?.stop() }
             // ⛔ Anche la cessione chiesta da fuori scade: chi ascolta può
@@ -530,6 +760,7 @@ class TalosParola : Service() {
         @JvmStatic
         fun riprendi() {
             val chi = istanza ?: return
+            Log.i(MARCHIO, "microfono RESTITUITO da ${chiHaChiesto()}")
             chi.mano.removeCallbacks(chi.riprendiDaSolo)
             chi.ceduto = false
         }
