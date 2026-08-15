@@ -169,20 +169,59 @@ if (Test-Path $Destinazione) {
     exit 1
 }
 
-# ⛔ Si copiano SOLO i file tracciati, non la cartella. `git archive` prende
-# esattamente ciò che git conosce — quindi rispetta il `.gitignore` per
-# costruzione, e non porta con sé `node_modules`, i build, né i documenti che
-# abbiamo appena tolto dall'indice.
-Passo "estraggo i soli file tracciati con git archive"
+# ⛔⛔ SI PUBBLICA SOLO `mobile/`, non tutta AVM. Owner 2026-08-15: «per una repo
+# bella e completa cosa consigli?» — e i dati rispondono da soli:
+#
+#     mobile          1.545 file   600 file di test   lavorato oggi
+#     control-plane   1.400 file   165 test
+#     core              287 file     0 test
+#     validator          80 file    10 test   fermo dal 16 luglio
+#
+# Solo `mobile` ha una rete di sicurezza vera (5.143 test verdi). Pubblicare
+# accanto codice con zero test dice al visitatore che il progetto è disomogeneo,
+# e la prima segnalazione arriverà proprio sul pezzo che non si sa difendere.
+#
+# ⇒ AVM resta privata e intera. Quando `control-plane` sarà pronto si pubblica
+# accanto — non prima.
+#
+# ⛔ `git archive` prende esattamente ciò che git conosce: rispetta il
+# `.gitignore` per costruzione, e non porta con sé `node_modules`, i build, né i
+# documenti tolti dall'indice.
+# ⛔ E `mobile/` diventa la RADICE, non una sottocartella. Con
+# `AVM-PUBBLICA/mobile/README.md` GitHub non trova nessun README alla radice: chi
+# arriva atterra su una pagina che non spiega niente, ed e' il difetto peggiore
+# possibile in una vetrina — quello che si vede per primo.
+Passo "estraggo mobile/ (che diventa la radice) e i file di licenza"
 $tar = Join-Path $env:TEMP "talos-pubblica.tar"
-git archive --format=tar -o $tar HEAD
+$tarRadice = Join-Path $env:TEMP "talos-radice.tar"
+# `--prefix` vuoto + il percorso `mobile`: git archive di una sottocartella la
+# estrae SENZA il prefisso, cioe' esattamente appiattita.
+git archive --format=tar -o $tar HEAD:mobile
+$aLato = @('LICENSE', 'NOTICE', 'SECURITY.md', 'CONTRIBUTING.md',
+           'CODE_OF_CONDUCT.md', 'THIRD_PARTY_NOTICES.md', '.github')
+git archive --format=tar -o $tarRadice HEAD -- $aLato
 if (-not (Test-Path $tar)) { Male "git archive non ha prodotto niente"; exit 1 }
 Bene "archivio: $([math]::Round((Get-Item $tar).Length / 1MB, 1)) MB"
 
 New-Item -ItemType Directory -Force $Destinazione | Out-Null
 Passo "scompatto in $Destinazione"
 tar -xf $tar -C $Destinazione
-Remove-Item $tar -Force
+tar -xf $tarRadice -C $Destinazione
+Remove-Item $tar, $tarRadice -Force
+
+# ⛔ Il README parlava da dentro `mobile/`, quindi puntava a `../LICENSE`.
+# Adesso e' la radice: i rimandi vanno corretti, se no il primo link che una
+# persona prova e' morto.
+Passo "correggo i rimandi del README, che ora e' alla radice"
+$readme = Join-Path $Destinazione 'README.md'
+if (Test-Path $readme) {
+    $t = Get-Content $readme -Raw
+    $t = $t -replace '\]\(\.\./', ']('
+    $t = $t -replace 'cd mobile?
+', ''
+    Set-Content $readme $t -NoNewline
+    Bene "rimandi corretti"
+}
 $estratti = (Get-ChildItem $Destinazione -Recurse -File).Count
 Bene "$estratti file"
 
@@ -191,10 +230,14 @@ Bene "$estratti file"
 # «non lo fa», e questa è l'ultima occasione per accorgersene.
 Passo "controllo che NESSUN documento interno sia finito nella copia"
 $intrusi = 0
-foreach ($p in $INTERNI) {
-    $pieno = Join-Path $Destinazione $p
+foreach ($p in ($INTERNI + @('docs/superpowers'))) {
+    # ⛔ I percorsi sono APPIATTITI: `mobile/docs/superpowers` diventa
+    # `docs/superpowers`. Controllare il percorso vecchio non troverebbe niente
+    # e direbbe «pulito» su una cartella piena.
+    $corto = $p -replace '^mobile/', ''
+    $pieno = Join-Path $Destinazione $corto
     if (Test-Path $pieno) {
-        Male "INTRUSO: $p è finito nella cartella pubblica"
+        Male "INTRUSO: $corto è finito nella cartella pubblica"
         Remove-Item $pieno -Recurse -Force
         Nota "rimosso"
         $intrusi++
