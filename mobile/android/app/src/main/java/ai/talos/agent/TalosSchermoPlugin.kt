@@ -254,7 +254,7 @@ class TalosSchermoPlugin : Plugin() {
         val verificaMs = SystemClock.uptimeMillis() - t1
         /*
          * ⭐⭐⭐ LA FINALIZZAZIONE DELL'OBIETTIVO — owner 2026-08-15: «"invio un
-         * messaggio a Shadina" non significa che l'abbia inviato veramente».
+         * messaggio a un contatto" non significa che l'abbia inviato veramente».
          *
          * Il pulsante sparito era UNA prova. Adesso sono tre, e si contano:
          * campo svuotato, testo migrato in un nodo non modificabile, pulsante

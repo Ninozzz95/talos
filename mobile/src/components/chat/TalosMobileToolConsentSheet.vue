@@ -93,7 +93,7 @@ const haArgomenti = computed(() => {
  * schermo mostrava, dentro un riquadro grigio,
  *
  *     {
- *       "obiettivo": "Apri WhatsApp, trova la chat con Shadina…"
+ *       "obiettivo": "Apri WhatsApp, trova la chat con un contatto…"
  *     }
  *
  * Le graffe, le virgolette e l'indentazione non aiutano a decidere: sono la

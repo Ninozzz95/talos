@@ -524,7 +524,7 @@ async function talosUltimoCentimetro(
     }
     /*
      * ⭐⭐⭐ LA FINALIZZAZIONE DELL'OBIETTIVO — owner 2026-08-15: «"invio un
-     * messaggio a Shadina" non significa che l'abbia inviato veramente».
+     * messaggio a un contatto" non significa che l'abbia inviato veramente».
      *
      * Il nativo adesso conta TRE prove indipendenti invece di guardarne una:
      * il campo si è svuotato, il testo è MIGRATO in un nodo non modificabile

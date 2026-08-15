@@ -107,7 +107,7 @@ export interface TalosEsitoInvio {
     readonly sparito?: boolean
     /**
      * ⭐⭐⭐ LA FINALIZZAZIONE DELL'OBIETTIVO — owner 2026-08-15: «"invio un
-     * messaggio a Shadina" non significa che l'abbia inviato veramente».
+     * messaggio a un contatto" non significa che l'abbia inviato veramente».
      *
      * Tre stati e non due, perché sono tre cose diverse che una persona può
      * fare:
