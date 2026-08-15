@@ -32,3 +32,6 @@ tests/e2e/.auth/
 # ⇒ E la quarantena resta esclusa: si pubblica solo ciò che l'owner ha firmato.
 !docs/immagini/*.png
 docs/immagini/DA-APPROVARE/
+
+# Il registro delle approvazioni è un documento di lavoro interno.
+docs/immagini/APPROVATE.txt
