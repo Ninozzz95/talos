@@ -57,6 +57,22 @@ const ATTESI: Readonly<Record<string, string>> = {
      */
     'android.permission.READ_CALENDAR': 'calendar',
     /*
+     * ⭐ 2026-08-15: la POSIZIONE. Nasce da un difetto misurato — «ho chiesto
+     * che ristorante mi consigli per cenare stasera e lui mi ha dato una
+     * posizione completamente diversa». Il permesso non era dimenticato: era
+     * RIMOSSO dal manifest con `tools:node="remove"`, ereditato da una libreria
+     * e tolto di proposito quando TALOS non lo usava. Adesso lo usa, e quindi lo
+     * chiede di proposito.
+     *
+     * ⛔ FINE e COARSE sulla STESSA riga, per la stessa regola del calendario:
+     * le righe si raggruppano per SCOPO. Per una persona «dove sono» e' una cosa
+     * sola; che Android ne faccia due permessi (preciso e approssimativo) e' un
+     * dettaglio suo, e chiederli entrambi e' cio' che le lascia la scelta fra i
+     * due nel dialogo di sistema.
+     */
+    'android.permission.ACCESS_FINE_LOCATION': 'location',
+    'android.permission.ACCESS_COARSE_LOCATION': 'location',
+    /*
      * ⭐ 2026-08-14, la SCRITTURA. Stessa riga della lettura, e non e' pigrizia:
      * le righe si raggruppano per SCOPO, mai per `Manifest.permission` — per
      * una persona «il mio calendario» e' una cosa sola. Sono due permessi e due

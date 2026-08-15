@@ -61,7 +61,7 @@ export interface TalosPermissionRow {
     id:
         | 'microphone' | 'notifications' | 'appLock' | 'files' | 'background' | 'network'
         | 'notificationAccess' | 'bridge' | 'deviceControl' | 'localModel'
-        | 'contacts' | 'camera' | 'calendar' | 'mailCount'
+        | 'contacts' | 'camera' | 'calendar' | 'mailCount' | 'location'
     title: string
     kind: TalosPermissionKind
     /**
@@ -147,6 +147,26 @@ export const TALOS_PERMISSION_ROWS: readonly TalosPermissionRow[] = [
      * ⛔ C'era da prima e non era elencata: `CAMERA` è dichiarata nel manifest
      * dal selettore di immagini. Trovata dallo stesso censimento.
      */
+    /*
+     * ⭐⭐ DOVE SEI — 2026-08-15, e la riga nasce da un difetto visto.
+     *
+     * Owner: «ho chiesto che ristorante mi consigli per cenare stasera e lui mi
+     * ha dato una posizione completamente diversa». Il permesso era addirittura
+     * RIMOSSO dal manifest: TALOS non poteva sapere dove fosse, e il modello
+     * riempiva il vuoto inventando una citta'.
+     *
+     * ⛔ Il testo dice «nel momento in cui serve» perche' e' vero e verificabile:
+     * `device_location` si chiama quando la domanda dipende dal posto, e non c'e'
+     * nessun `ACCESS_BACKGROUND_LOCATION` — a app chiusa non si legge niente.
+     * Una riga di permessi che promettesse meno di cosi' sarebbe falsa, e una
+     * che promettesse di piu' lo sarebbe altrettanto.
+     */
+    {
+        id: 'location',
+        title: 'Where you are',
+        kind: 'runtime',
+        purpose: 'Answering questions about places near you — a restaurant tonight, the closest shop, how long it takes to get somewhere. TALOS reads the location at the moment it needs it, never in the background and never while it is closed, and the coordinates go no further than the answer you asked for.',
+    },
     {
         id: 'camera',
         title: 'Camera',

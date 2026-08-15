@@ -131,6 +131,7 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
      * deduce dai pixel, ed e' la misura di un metodo che qui non si usa.
      */
     { id: 'device_status', group: 'device', actions: ['read'] },
+    { id: 'device_location', group: 'device', actions: ['read'] },
     { id: 'device_torch', group: 'device', actions: ['write'] },
     { id: 'device_media', group: 'device', actions: ['write'] },
     { id: 'device_vibrate', group: 'device', actions: ['write'] },

@@ -68,6 +68,18 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     local_model_download: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
     local_models_status: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     device_status: { risk: 'R0', reversibility: 'read-only', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
+    /*
+     * ⛔ `readsPrivateData: true`, e non e' una formalita': DOVE SEI e' il dato
+     * piu' personale che questo telefono possa consegnare. `device_status` sta
+     * a R0 proprio perche' la sua descrizione promette «no location»; questo
+     * tool e' l'eccezione che quella promessa nominava.
+     *
+     * ⛔ R1 e non R0: leggere e' innocuo, ma il risultato finisce nel contesto
+     * della conversazione — cioe' viaggia verso il modello e resta nella
+     * cronologia. Non e' reversibile nel senso che conta: una coordinata detta
+     * non si ritira.
+     */
+    device_location: { risk: 'R1', reversibility: 'read-only', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     // Accendere un LED si spegne premendo di nuovo: reversibile per costruzione.
     // Mettere in pausa si disfa premendo di nuovo, e non tocca nessun dato.
     // ⛔ L'aereo taglia la rete, e con essa il ponte: siamo noi a non poterlo

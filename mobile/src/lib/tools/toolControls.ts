@@ -77,6 +77,13 @@ export const TALOS_DEFAULT_AGENT_TOOL_ENABLED = Object.freeze({
      * di serie avrebbe nascosto la funzione a chi non sa di doverla cercare.
      */
     device_status: true,
+    /*
+     * ⛔ ACCESO di suo, come gli altri `read` del telefono — ma acceso NON vuol
+     * dire che legge: la prima chiamata fa comparire il dialogo di sistema, e
+     * finché la persona non concede il tool risponde `negato` e lo dice. Lo
+     * spegnimento qui serve a chi non vuole nemmeno la domanda.
+     */
+    device_location: true,
     device_torch: true,
     device_media: true,
     device_airplane: true,

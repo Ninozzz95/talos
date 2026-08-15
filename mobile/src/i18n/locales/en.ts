@@ -468,6 +468,10 @@ export const TALOS_EN_MESSAGES = {
                 title: 'Calendar',
                 purpose: 'Answering "what do I have tomorrow", and putting an appointment in when you ask. Reading and writing are two separate permissions, asked at different moments, and every appointment TALOS writes is confirmed by you first. Nothing leaves the phone.',
             },
+            location: {
+                title: 'Where you are',
+                purpose: 'Answering questions about places near you — a restaurant tonight, the closest shop, how long it takes to get somewhere. TALOS reads the location at the moment it needs it, never in the background and never while it is closed, and the coordinates go no further than the answer you asked for.',
+            },
             camera: {
                 title: 'Camera',
                 purpose: 'Taking a photo to attach to a chat. The picture goes where you send it and nowhere else; TALOS never opens the camera on its own.',
@@ -1057,6 +1061,7 @@ export const TALOS_EN_MESSAGES = {
         localModelDownload: 'Downloading a model to this phone',
         localModelsStatus: 'Checking on a model download',
         deviceStatus: 'Checking the phone',
+        deviceLocation: 'Checking where you are',
         deviceMedia: 'Playback',
         deviceAirplane: 'Airplane mode',
         devicePowerSaving: 'Battery saver',
@@ -1217,6 +1222,10 @@ export const TALOS_EN_MESSAGES = {
         localModelsStatus: {
             title: 'Check on a model download',
             description: 'Report what is downloading right now and how far it has got. Reads this device only.',
+        },
+        deviceLocation: {
+            title: 'See where you are',
+            description: 'Reads the phone’s location to answer “near me” questions: a restaurant, a shop, how long it takes to get somewhere. Read at the moment it is needed, not continuously, and never while TALOS is closed.',
         },
         deviceStatus: {
             title: 'Check how the phone is',
@@ -2390,6 +2399,7 @@ export const TALOS_EN_MESSAGES = {
             local_model_inspect: { title: 'Check a model against this phone', description: 'Read a model header from the network and work out whether it runs here, and how fast.' },
             local_model_download: { title: 'Download a model', description: 'Download a model onto this device. Asks you every time, however large.' },
             local_models_status: { title: 'Check on a download', description: 'Report what is downloading and how far it has got. This device only.' },
+            device_location: { title: 'See where you are', description: 'Reads your location to answer “near me”: a restaurant, a shop, how long it takes. Only at the moment it is needed.' },
             device_status: { title: 'Check the phone', description: 'Reads battery, storage, memory, ringer mode and network type. Nothing that identifies you or this phone.' },
             device_airplane: { title: 'Turn airplane mode on or off', description: '⛔ Turning it on takes the phone off the network and TALOS loses its privileged link: it will not be able to turn it back off by itself.' },
             device_power_saving: { title: 'Turn battery saver on or off', description: 'The same switch as in settings. It reduces background activity.' },

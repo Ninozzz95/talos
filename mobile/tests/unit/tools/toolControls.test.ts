@@ -392,6 +392,23 @@ describe('Agent Tools control registry', () => {
              * mentre QUI (nome, titolo, azioni) non deve essersi mossa niente.
              */
             'device_unread_mail',
+            /*
+             * ⭐⭐ 2026-08-15, DOVE SEI: `device_location`.
+             *
+             * Owner: «ho chiesto che ristorante mi consigli per cenare stasera e
+             * lui mi ha dato una posizione completamente diversa». MISURATO:
+             * TALOS non leggeva la posizione da nessuna parte — nessun tool,
+             * niente nel contesto, niente alla ricerca — e il permesso era
+             * addirittura RIMOSSO dal manifest con `tools:node="remove"`. Quei
+             * nomi di locali il modello se li era inventati.
+             *
+             * ⛔ Stessa domanda di sempre, e qui vale doppio: nello stesso giro
+             * ho toccato `securityCatalog`, `toolControls` e le due lingue. Se
+             * togliendolo l'impronta storica NON tornasse `369a6da1…` byte per
+             * byte, vorrebbe dire che una di quelle modifiche ha mosso il
+             * contratto di un tool che c'era gia'. Il fatto che torni lo esclude.
+             */
+            'device_location',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -529,9 +546,15 @@ describe('Agent Tools control registry', () => {
          * il piano di controllo adesso contiene un attrezzo che LEGGE quanta
          * posta non hai aperto, e chi rilegge questa riga deve vederlo
          * dichiarato.
+         *
+         * ⛔ 2026-08-15: si muove di nuovo, e stavolta per un attrezzo che legge
+         * DOVE SEI. È il dato più personale che questo piano di controllo
+         * contenga, ed è marcato `readsPrivateData: true` in `securityCatalog` —
+         * l'unico `device_*` che lo sia. Chi rilegge questa riga deve vedere
+         * anche questo dichiarato, non scoprirlo da un'impronta cambiata.
          */
         expect(digestOf(controlPlane))
-            .toBe('89898d6464b8efb3b3628ccadd2acff97747e0022b4a728fe7de8d86e0560b60')
+            .toBe('625228fa20749020001a37577d8b09de504a137c31c0f878a12e5891bfcb64be')
         /*
          * ⭐ Ri-fissato 2026-08-08 per i TRE tool delle NOTIFICHE:
          * `device_notifications_list`, `device_notification_reply`,
@@ -871,12 +894,18 @@ describe('Agent Tools control registry', () => {
          *
          * ⛔ Un'impronta che si aggiorna «perché è rossa» non protegge più
          * niente: si aggiorna dopo aver detto QUALE byte è cambiato e perché.
+         *
+         * ⛔ 2026-08-15, secondo movimento nello stesso giorno: entra
+         * `device_location`. La prova che è SOLO un'aggiunta non è questa riga —
+         * è l'impronta STORICA qui sopra, che dopo aver escluso il tool nuovo
+         * torna `369a6da1…` byte per byte. Se avessi mosso il contratto di un
+         * attrezzo già esistente, quella non tornerebbe.
          */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('fe070174b5429c53d54ca2df3ed2e552042a956f0950ae03580d034b5d9f33d2')
+            .toBe('07262cbabc2034e85f8656fe56db779f3800befddc19a6dacdd6396e3cba89eb')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('138db062bfc59db790c191cd350f1c7d405fd5992bc7a36cc760d949e12852a4')
+            .toBe('0cca3a0c40845600a680d47acd3c6e0532a68f7cbdf40aafa9b74102f7cf29ae')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('f9608502fc5f88c55fcf14944df842e7006cf509baad882569d41aab0a320051')
+            .toBe('6d70595ffcf799f49ed9be1ca2798885488cf97631df61744a2571376e2df848')
     })
 })

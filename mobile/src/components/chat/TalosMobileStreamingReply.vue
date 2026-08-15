@@ -14,6 +14,7 @@ import {
     Globe,
     Image as ImageIcon,
     ListTodo,
+    MapPin,
     Mail,
     NotebookPen,
     Smartphone,
@@ -71,6 +72,7 @@ const TOOL_ICONS: Record<TalosToolIconName, unknown> = {
     // Il telefono ha i suoi segni: dargli quello del web o dei modelli direbbe
     // una cosa falsa su cosa sta succedendo.
     phone: Smartphone,
+    place: MapPin,
     torch: Flashlight,
     volume: Volume2,
     // ⛔ Play e non un altoparlante: il volume ha gia' il suo segno, e due
