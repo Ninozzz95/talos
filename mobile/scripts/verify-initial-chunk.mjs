@@ -175,7 +175,169 @@ import { resolve } from 'node:path'
  * lingua sono chunk a parte. ⇒ Non si peggiora un testo che legge una persona
  * per far quadrare questo tetto: non lo fa quadrare.
  */
-const DEFAULT_MAXIMUM_BYTES = 602_200
+/*
+ * ⛔⛔ E poi 603.000 — LA SCHEDA CON IL COMANDO, 2026-08-13, per decisione
+ * esplicita dell'owner dopo il testa a testa con Gemini:
+ *
+ *     «Scheda sempre. L'app si apre SOLO quando non c'è altro modo.»
+ *
+ * Non è un abbellimento: è la forma su cui perdiamo su quasi ogni riga della
+ * matrice. MISURATO — a «accendi la torcia» Gemini risponde in 12,1 s e lascia
+ * **l'interruttore acceso dentro la chat**, che si può ribaltare lì; noi
+ * rispondevamo in ~1 s e dicevamo «fatto», chiudendo il discorso. Loro
+ * consegnano uno STATO con cui si può ancora interagire, noi un ESITO.
+ *
+ * ⛔ E il peso è stato inseguito in QUATTRO forme misurate, prima di alzare:
+ *
+ *     componente statico nella lista dei messaggi   604.849   ⛔ +2.649
+ *     componente pigro, come la bolla-immagine      603.219   ⛔ +1.019
+ *     + validazione spostata nel chunk pigro        602.974   ⛔ +774
+ *     + tutto il ciclo dentro il componente         602.953   ⛔ +753
+ *
+ * Cioè 1.896 byte recuperati su 2.649. I 753 che restano non sono il disegno —
+ * quello è tutto nel chunk pigro — sono il gancio: l'elemento nel template, la
+ * preferenza di diagnostica che scende dalla schermata, e la riga che raccoglie
+ * le schede del turno nel controller.
+ *
+ * ⛔ Ricordare, se un domani si cerca peso qui: le TRADUZIONI non stanno in
+ * questo grafo (misurato il 13/8), e nemmeno il componente della scheda.
+ */
+/*
+ * ⛔ E poi 603.100 — LA ROTAZIONE (difetto S-1), 2026-08-13.
+ *
+ * Non è una funzione: è la cura di un difetto che si vedeva a schermo. Owner:
+ * «prova sia layout tablet che mobile e orientamenti portrait e landscape
+ * quando provi su dispositivo SEMPRE». Tre caselle su quattro erano pulite; la
+ * quarta — telefono, orizzontale — mostrava il **compositore sopra la
+ * risposta**, e scorrendo la bolla finiva **sotto l'intestazione**.
+ *
+ * I numeri, letti da `uiautomator`: schermo 2400×1080, la scheda disegnata a
+ * y 984-1080+, cioè oltre il bordo inferiore. Lo spazio riservato in fondo alla
+ * lista vale `--talos-composer-height`, e dopo una rotazione restava quello di
+ * prima: il compositore può restare alto uguale, è la FINESTRA che cambia.
+ *
+ * ⛔ Il peso è stato inseguito in CINQUE forme misurate:
+ *
+ *     ascoltatore su resize + orientationchange   603.218   ⛔ +218
+ *     solo resize                                 603.121   ⛔ +121
+ *     riuso del ResizeObserver che c'era già      603.070   ⛔ +70
+ *     handler in linea, senza funzione con nome   603.025   ⛔ +25
+ *     senza l'argomento che era già il default    603.013   ⛔ +13
+ *
+ * 205 byte recuperati su 218. Gli ultimi 13 sono la riga che osserva il
+ * riquadro della lista: senza, il difetto torna.
+ */
+/*
+ * ⛔ E poi 603.200 — VENTIQUATTRO CHAT TUTTE UGUALI, 2026-08-13.
+ *
+ * Nell'elenco del Pad ogni conversazione si chiamava «Nuova chat»: il titolo
+ * veniva salvato **tradotto**, e la rinomina dalla prima domanda lo confrontava
+ * con la costante **inglese**. In italiano non combaciavano mai. Cura: nel
+ * database va un gettone fermo, la parola nasce su chi disegna — quindi quattro
+ * punti passano da `titolo || t(...)` a `talosDaIntitolare(titolo) ? t(...)`.
+ *
+ * ⛔ Il peso è stato inseguito in DUE forme misurate:
+ *
+ *     costante esportata, passata dal controller   603.082   ⛔ +69
+ *     `undefined`: il valore predefinito bastava   603.080   ⛔ +67
+ *
+ * Solo 2 byte: la costante veniva già incorporata. I 67 che restano sono i
+ * quattro punti che disegnano, e comprimerli ancora scambierebbe chiarezza per
+ * byte — uno dei quattro (il pannello media) è già pigro e non pesa qui.
+ */
+/*
+ * ⛔⛔⛔ 603.200 → 603.400 — E QUI CAMBIA LA REGOLA D'USO DI QUESTO CANCELLO.
+ *
+ * Owner, 2026-08-14, verbatim:
+ *
+ *   «non dobbiamo azzoppare la nostra app per farla entrare nel grafo di
+ *   avvio, ricorda **mai cambiare i contratti** per fare entrare roba nel
+ *   grafo, se dobbiamo azzoppare la app allora **come ultima scelta alziamo il
+ *   tetto**, questo è importante»
+ *
+ * ## Cos'era successo, ed è la ragione per cui la regola arriva adesso
+ *
+ * Nelle ore prima, per far entrare 21 byte, avevo **unito in una frase sola**
+ * due difese del prompt di sistema che difendono cose diverse: quella contro
+ * l'iniezione dalle immagini e quella contro il dichiarare un esito prima che
+ * sia avvenuto. E avevo **riscritto il test** che custodiva le parole della
+ * prima, perché non passava più.
+ *
+ * Cioè: un contratto di sicurezza accorciato per far quadrare un numero, e la
+ * guardia allentata dietro, in silenzio. Il numero tornava e l'app era
+ * peggiorata — che è esattamente il modo in cui un tetto smette di proteggere e
+ * comincia a fare danno.
+ *
+ * ## ⛔ L'ordine in cui si prova, adesso e sempre
+ *
+ *  1. si toglie **peso vero** (codice morto, forme più snelle a parità di cosa
+ *     detta, pigrizia dove si può);
+ *  2. si sposta ciò che non serve all'avvio in un pezzo caricato a richiesta;
+ *  3. **⛔ mai** accorciare un contratto — un prompt di sicurezza, una
+ *     descrizione che il modello legge per decidere, una guardia;
+ *  4. **ultima scelta**: si alza il tetto e si scrive perché.
+ *
+ * ## I 191 byte di oggi
+ *
+ * Sono le quattro righe del prompt di sistema **rimesse intere**: immagini come
+ * dati · non descrivere ciò che non c'è · non dichiarare un esito prima della
+ * chiamata · non puoi leggere il calendario, e note e attività non sono
+ * l'agenda. Ognuna difende una cosa diversa; nessuna è ornamento.
+ */
+/*
+ * ⛔ 603.400 → 603.600, il 2026-08-14, per la CAPACITÀ CALENDARIO.
+ *
+ * Due attrezzi — leggere l'agenda e metterci un appuntamento — più il ponte
+ * verso il provider. Nasce da un difetto misurato: «che impegni ho domani?» e
+ * TALOS rispondeva «non hai compiti registrati», avendo guardato le PROPRIE
+ * note. Una risposta sicura e falsa sulla giornata di una persona.
+ *
+ * ⛔ Non ho inseguito il byte, e stavolta di proposito: vale la regola
+ * dell'owner scritta qui sopra. La descrizione di un attrezzo È un contratto —
+ * è ciò che il modello legge per decidere — e il ponte è già caricato a
+ * richiesta (`await import`), quindi non c'è peso da spostare altrove.
+ *
+ * ⭐ E ciò che compra è il sorpasso su Gemini, in tre punti misurati: vede i
+ * calendari LOCALI che lui non vede, scrive senza aprire nessuna app, e mette
+ * luogo e note che Google dichiara lui non saper modificare.
+ */
+/*
+ * ⛔ 603.600 → 605.000, il 2026-08-14, per la TERZA SCHEDA — «quale app».
+ *
+ * ## Cosa costa, misurato
+ *
+ * 297 byte, e non un byte è nei testi: i due file delle lingue sono già
+ * caricati a richiesta (`await import('@/i18n/locales/it')`), quindi le tre
+ * frasi nuove non toccano l'avvio. I 297 sono codice, in tre punti:
+ *
+ * | dove | cosa |
+ * |---|---|
+ * | `chatController` | la chiave della deduplica, che era **sbagliata** |
+ * | `TalosMobileMessageList` | il tocco che apre l'app scelta |
+ * | `TalosBarraRoot` | lo stesso, nell'assistente |
+ *
+ * ## ⛔ Perché non si toglie peso invece (l'ordine qui sopra, punti 1 e 2)
+ *
+ * Provato: i due ponti verso `schedaComandi` si possono spostare dentro il
+ * componente della scheda, che è pigro — valgono ~220 byte. Restano comunque
+ * ~77 byte sopra il tetto, perché il terzo pezzo **non è spostabile**: la
+ * deduplica delle schede vive dentro il giro del turno, e la sua chiave era
+ * `scheda.tool`, che ce l'ha **solo l'interruttore**. Agenda, sveglia e
+ * «quale app» finivano tutte sulla chiave vuota e ne sopravviveva una sola per
+ * turno. È una correzione, non una funzione: accorciarla sarebbe il punto 3.
+ *
+ * ⭐ E ciò che compra è la fine del difetto peggiore misurato sul Pad il
+ * 2026-08-13: col vero elenco delle app in mano, il modello ha risposto
+ * «WhatsApp, Telegram, Signal, Messenger, ChatGPT» — tre non installate e una
+ * inventata. Adesso l'elenco va dal telefono allo schermo senza passare dalle
+ * parole, e si tocca: la persona non dipende più da quanto il modello ricopia
+ * bene.
+ *
+ * ⛔ 605.000 e non 603.900: mille byte sono un budget, quattro sono una
+ * trappola sotto la prossima riga — è la stessa critica scritta più in alto su
+ * 600.000, e vale anche quando il tetto lo sto alzando io.
+ */
+const DEFAULT_MAXIMUM_BYTES = 605_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {
