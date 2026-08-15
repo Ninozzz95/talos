@@ -38,6 +38,23 @@ control is gone. When only one check agrees, it says so.
 what it would pick — with every source it read, and a note about the ones it
 could not verify.
 
+### Without leaving the app you are in
+
+<table>
+<tr>
+<td width="33%"><img src="docs/immagini/phone-5-assistant-listening.png" alt="TALOS listening over the home screen"></td>
+<td width="33%"><img src="docs/immagini/phone-3-assistant-alarm.png" alt="An alarm set from the assistant bar, with its card"></td>
+<td width="33%"><img src="docs/immagini/phone-4-assistant-torch.png" alt="The torch turned on, with a live switch and a verification line"></td>
+</tr>
+<tr>
+<td><b>Call it from anywhere</b><br>The bar opens on top of whatever is on screen. It does not take you into an app and leave you there.</td>
+<td><b>It does the thing</b><br>"Set an alarm for tomorrow at seven" — and the alarm comes back as a card, not as a sentence you have to trust.</td>
+<td><b>And proves it</b><br>A live switch you can still press, and a line that says the phone was actually checked.</td>
+</tr>
+</table>
+
+### What it remembers, and what it knows about your phone
+
 <table>
 <tr>
 <td width="33%"><img src="docs/immagini/phone-1-memory-write.png" alt="Teaching TALOS something it will remember"></td>
