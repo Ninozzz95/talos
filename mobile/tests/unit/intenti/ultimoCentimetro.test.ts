@@ -151,8 +151,17 @@ describe('⭐⭐⭐ l\'ultimo centimetro non tocca al buio', () => {
         expect(ponte.chiamate[0].viewId).toBe('com.whatsapp:id/send')
     })
 
+    /*
+     * ⭐⭐⭐ 2026-08-15: le prove diventano TRE, e questo test cambia con loro.
+     *
+     * Owner: «"invio un messaggio a Shadina" non significa che l'abbia inviato
+     * veramente». `sparito` da solo era UNA euristica — un pulsante può sparire
+     * perché la schermata è cambiata per altro. Adesso il nativo conta anche il
+     * campo svuotato e il testo MIGRATO in un nodo non modificabile, cioè
+     * diventato un pezzo di conversazione, e serve che due prove concordino.
+     */
     it('«inviato» si dice SOLO se il controllo d\'invio è sparito', async () => {
-        ponte.esito = { fatto: true, sparito: true }
+        ponte.esito = { fatto: true, sparito: true, obiettivo: 'PARTITO', campoSvuotato: true, testoMigrato: true, prove: 3 }
         const esito = await chiedi(CIAO)
         expect(esito.ok).toBe(true)
         expect(esito.content).toContain('Sent')
@@ -164,10 +173,13 @@ describe('⭐⭐⭐ l\'ultimo centimetro non tocca al buio', () => {
      * difetto di prima, stavolta con sicurezza.
      */
     it('⛔ PREMUTO ma non confermato NON è «inviato»', async () => {
-        ponte.esito = { fatto: true, sparito: false }
+        ponte.esito = {
+            fatto: true, sparito: false, obiettivo: 'NON_CONFERMATO',
+            campoSvuotato: true, testoMigrato: false, prove: 1,
+        }
         const esito = await chiedi(CIAO)
         expect(esito.content).not.toMatch(/^Sent/)
-        expect(esito.content).toMatch(/could not confirm/i)
+        expect(esito.content).toMatch(/of 3 checks confirm/i)
     })
 
     /*
@@ -179,7 +191,10 @@ describe('⭐⭐⭐ l\'ultimo centimetro non tocca al buio', () => {
      * cosa che non si annulla.
      */
     it('⛔ il DUBBIO non si risolve rifacendo: niente ok:false, e lo dice', async () => {
-        ponte.esito = { fatto: true, sparito: false }
+        ponte.esito = {
+            fatto: true, sparito: false, obiettivo: 'NON_CONFERMATO',
+            campoSvuotato: true, testoMigrato: false, prove: 1,
+        }
         const esito = await chiedi(CIAO)
         expect(esito.ok).toBe(true)
         expect(esito.code).toBeUndefined()

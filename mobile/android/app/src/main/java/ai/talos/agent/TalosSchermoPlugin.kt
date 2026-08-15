@@ -27,6 +27,21 @@ import com.getcapacitor.annotation.CapacitorPlugin
 class TalosSchermoPlugin : Plugin() {
 
     /**
+     * ⛔ 900 ms prima di tornare: quanto basta perché la persona veda la spunta
+     * comparire nell'app. È l'unica prova che ha che il messaggio è partito, e
+     * coprirla nello stesso istante gliela toglie.
+     */
+    private val RESPIRO_PRIMA_DEL_RIENTRO = 900L
+
+    /**
+     * ⛔ 250 ms prima di giudicare: il testo impiega qualche decina di
+     * millisecondi a passare dalla bozza alla conversazione, e chiedere troppo
+     * presto misura il mondo di prima dell'invio.
+     */
+    private val RESPIRO_PRIMA_DI_GIUDICARE = 250L
+
+
+    /**
      * Arma il freno: da adesso qualunque ingresso fisico ferma l'agente.
      *
      * ⛔ Il comando lo avvia chi possiede il ponte — qui si azzera soltanto il
@@ -237,16 +252,92 @@ class TalosSchermoPlugin : Plugin() {
         val t1 = SystemClock.uptimeMillis()
         val sparito = if (fatto) attendiCheSparisca(occhio, viewId, testoAtteso, descrizioni) else false
         val verificaMs = SystemClock.uptimeMillis() - t1
+        /*
+         * ⭐⭐⭐ LA FINALIZZAZIONE DELL'OBIETTIVO — owner 2026-08-15: «"invio un
+         * messaggio a Shadina" non significa che l'abbia inviato veramente».
+         *
+         * Il pulsante sparito era UNA prova. Adesso sono tre, e si contano:
+         * campo svuotato, testo migrato in un nodo non modificabile, pulsante
+         * sparito. Il perché per esteso in `TalosObiettivoFinito`.
+         *
+         * ⛔ Si guarda DOPO che il pulsante è sparito, non prima: la migrazione
+         * del testo dalla bozza alla conversazione impiega qualche decina di
+         * millisecondi, e chiedere troppo presto misura il mondo di prima.
+         */
+        Thread.sleep(RESPIRO_PRIMA_DI_GIUDICARE)
+        val obiettivo = TalosObiettivoFinito.verifica(occhio.rootInActiveWindow, testoAtteso, sparito)
+
         Log.i(
             "TalosOcchio",
             "premiPulsante: click=$fatto via=$via in $ms ms (salite=$salite) " +
-                "sparito=$sparito in $verificaMs ms",
+                "sparito=$sparito in $verificaMs ms | obiettivo=${obiettivo.verdetto} " +
+                "(campo-vuoto=${obiettivo.campoSvuotato} migrato=${obiettivo.testoMigrato} " +
+                "prove=${obiettivo.prove}/3)",
         )
+
+        /*
+         * ⭐⭐⭐ E ADESSO TALOS TORNA — owner 2026-08-15: «la barra assistente
+         * non ricompare».
+         *
+         * ## Perché QUI e non altrove
+         *
+         * Questo è l'unico punto del codice in cui si sa che l'azione è
+         * **finita e riuscita**: il pulsante è stato premuto e il testo è
+         * sparito dal campo. Tornare prima coprirebbe l'app mentre sta ancora
+         * lavorando; tornare senza `sparito` significherebbe tornare su un
+         * fallimento fingendo un successo.
+         *
+         * ## ⛔ Perché funziona, adesso che prima non funzionava
+         *
+         * Su Android 15+ un'app che ha ceduto lo schermo non può rilanciarsi:
+         * serve `SYSTEM_ALERT_WINDOW` più una finestra visibile. Era la ragione
+         * del pallino, che l'owner ha fatto obliterare.
+         *
+         * MISURATO sul OnePlus 13, con WhatsApp davanti:
+         *
+         *     Warning: Activity not started, its current task has been brought
+         *     to the front
+         *
+         * ⇒ **Non è un lancio, è un task riportato avanti.** Il nostro task
+         * esiste già — la barra è viva dietro WhatsApp — e portarlo davanti non
+         * è il background activity launch che Android vieta. È la differenza
+         * fra nascere e tornare.
+         *
+         * ⛔ E ci arriva l'OCCHIO, non la WebView: un `AccessibilityService`
+         * legato è un servizio di sistema, e ha il diritto di farlo anche
+         * quando l'app in primo piano è un'altra.
+         *
+         * ⛔ Un respiro prima: la conferma dell'app (la spunta, il fumetto che
+         * appare) è la prova che la persona vuole vedere. Coprirla nello stesso
+         * millisecondo la deruberebbe di quella prova.
+         */
+        if (fatto && obiettivo.verdetto == TalosObiettivoFinito.Verdetto.PARTITO) {
+            Thread({
+                runCatching {
+                    Thread.sleep(RESPIRO_PRIMA_DEL_RIENTRO)
+                    val contesto = TalosOcchio.aperto()?.applicationContext
+                    if (contesto == null) {
+                        Log.w("TalosOcchio", "rientro: l'occhio non c'è più, la barra non torna")
+                    } else {
+                        val tornata = TalosAssistente.rientra(contesto)
+                        Log.i("TalosOcchio", "rientro: barra richiamata=$tornata")
+                    }
+                }.onFailure { Log.w("TalosOcchio", "rientro non riuscito: ${it.javaClass.simpleName}") }
+            }, "talos-rientro").start()
+        }
+
         call.resolve(
             JSObject()
                 .put("fatto", fatto)
                 .put("via", via)
                 .put("sparito", sparito)
+                // ⛔ TRE stati, non due: «non confermato» è una risposta vera
+                // che la persona può usare, mentre costringere fra «inviato» e
+                // «fallito» obbliga a mentire una volta su due.
+                .put("obiettivo", obiettivo.verdetto.name)
+                .put("campoSvuotato", obiettivo.campoSvuotato)
+                .put("testoMigrato", obiettivo.testoMigrato)
+                .put("prove", obiettivo.prove)
                 .put("pacchettoVisto", pacchettoVisto)
                 .put("millisecondi", ms)
                 .put("verificaMs", verificaMs),
