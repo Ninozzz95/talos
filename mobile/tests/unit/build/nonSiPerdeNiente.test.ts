@@ -75,6 +75,47 @@ describe('⛔ chiudere e riaprire non deve far perdere niente', () => {
         expect(sorgente).toContain('non-ha-attecchito')
     })
 
+    it('⛔⛔ guarda se il servizio è LEGATO, non solo se è elencato', () => {
+        /*
+         * IL controllo che ha cambiato tutto. MISURATO sul OnePlus 13:
+         *
+         *     Bound services:   {}                              ← vuoto
+         *     Enabled services: {ai.talos.dev/…/TalosOcchio}     ← elencato
+         *     Crashed services: {ai.talos.dev/…/TalosOcchio}     ← crashato
+         *
+         * `accessibility_enabled` era 1 e l'occhio non riceveva UN evento. La
+         * prima versione di questa cura dichiarava «riparato» in quello stato:
+         * uno stato che DICE di funzionare è peggio di uno spento, perché
+         * nessuno va a guardarlo — ed è esattamente il difetto «WhatsApp si
+         * riempie e non parte».
+         */
+        const sorgente = leggi(RIPARAZIONE)
+        expect(sorgente).toContain('val legato: Boolean')
+        expect(sorgente).toContain('TalosOcchio.aperto() != null')
+        // e l'esito onesto per il caso peggiore
+        expect(sorgente).toContain('acceso-ma-non-legato')
+    })
+
+    it('⛔ SVUOTA e riscrive: riscrivere lo stesso valore non rilega niente', () => {
+        /*
+         * Android non ritenta il binding di un servizio marcato «crashed»
+         * finché l'elenco non CAMBIA, e riscrivere lo stesso valore non è un
+         * cambiamento. MISURATO: svuotato e riscritto, `Bound services` si
+         * popola e `Crashed services` si svuota.
+         */
+        const sorgente = leggi(RIPARAZIONE)
+        const ciclo = sorgente.slice(
+            sorgente.indexOf('val passi = listOf('),
+            sorgente.indexOf('for (passo in passi)'),
+        )
+        // Tre passi in quest'ordine: svuota, riscrivi, accendi. L'ordine È il
+        // contenuto — svuotare DOPO aver riscritto non rilega niente.
+        expect(ciclo.split('enabled_accessibility_services').length - 1).toBe(2)
+        expect(ciclo).toContain('nostro')
+        expect(ciclo).toContain('accessibility_enabled')
+        expect(ciclo.indexOf('nostro')).toBeGreaterThan(ciclo.indexOf('enabled_accessibility_services'))
+    })
+
     it('⛔ quando il ponte manca lo DICE, invece di tacere', () => {
         // `accessibility_enabled` è una Settings.Secure: senza ponte non si
         // scrive, e non è una scelta nostra. Un silenzio qui è indistinguibile
