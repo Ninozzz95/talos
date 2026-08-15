@@ -105,6 +105,31 @@ export interface TalosEsitoInvio {
     readonly motivo?: string
     /** ⭐ Il controllo d'invio è sparito ⇒ la bozza ha lasciato il campo. */
     readonly sparito?: boolean
+    /**
+     * ⭐⭐⭐ LA FINALIZZAZIONE DELL'OBIETTIVO — owner 2026-08-15: «"invio un
+     * messaggio a Shadina" non significa che l'abbia inviato veramente».
+     *
+     * Tre stati e non due, perché sono tre cose diverse che una persona può
+     * fare:
+     *
+     *   `PARTITO`         due prove indipendenti su tre concordano
+     *   `NON_PARTITO`     il testo è ANCORA nel campo: certezza negativa
+     *   `NON_CONFERMATO`  una prova sola: può essere andata, non lo sappiamo
+     *
+     * ⛔ `NON_PARTITO` è l'unico in cui riprovare è sicuro. Negli altri due un
+     * secondo tentativo può mandare il messaggio DUE VOLTE, e a una persona
+     * vera non si ritira.
+     *
+     * Il disegno per esteso: `TalosObiettivoFinito.kt`.
+     */
+    readonly obiettivo?: 'PARTITO' | 'NON_PARTITO' | 'NON_CONFERMATO'
+    /** Il testo non sta più in un nodo modificabile. */
+    readonly campoSvuotato?: boolean
+    /** ⭐ La prova forte: il testo è comparso in un nodo NON modificabile, cioè
+     *  è diventato un pezzo di conversazione invece di una bozza. */
+    readonly testoMigrato?: boolean
+    /** Quante delle tre prove hanno detto sì. */
+    readonly prove?: number
     /** Chi c'era davvero in primo piano, quando non era chi ci aspettavamo. */
     readonly pacchettoVisto?: string
     readonly millisecondi?: number

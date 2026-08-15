@@ -142,6 +142,46 @@ class TalosAssistente : VoiceInteractionService() {
             return apriLaBarra(contesto)
         }
 
+        /**
+         * ⭐⭐⭐ IL RIENTRO — la barra torna, e NON riapre il microfono.
+         *
+         * ## Perché non basta `chiama()`
+         *
+         * `chiama()` apre con `voce=1`, perché chi invoca l'assistente sta per
+         * parlare. Ma chi RIENTRA dopo che TALOS ha mandato un WhatsApp non sta
+         * parlando: sta guardando la spunta comparire.
+         *
+         * MISURATO sul OnePlus 13 il 2026-08-15, alla prima versione del
+         * rientro: la barra torna, riapre il microfono, nessuno dice niente, e
+         * dopo dieci secondi compare
+         *
+         *     «Non ho sentito niente. Tocca il microfono per riprovare.»
+         *
+         * sopra una risposta che diceva «Ho inviato il messaggio a Shadina su
+         * WhatsApp». Cioè TALOS accusa la persona di non aver parlato subito
+         * dopo aver eseguito quello che gli aveva chiesto. È la stessa famiglia
+         * del difetto del 14 agosto, in un posto nuovo.
+         *
+         * ⇒ `voce=0`: la barra torna, mostra com'è andata, e aspetta. Se la
+         * persona vuole dire altro, il microfono è a un tocco.
+         */
+        @JvmStatic
+        fun rientra(contesto: android.content.Context): Boolean = runCatching {
+            contesto.startActivity(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    android.net.Uri.parse("talos://barra?voce=0&nodi=0&immagine=0&rientro=1"),
+                    contesto,
+                    ai.talos.TalosBarraActivity::class.java,
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            Log.i(TAG, "$SEGNO rientro: la barra torna davanti, senza riaprire il microfono")
+            true
+        }.getOrElse {
+            Log.w(TAG, "$SEGNO rientro non riuscito: ${it.message}")
+            false
+        }
+
         /** L'ultima strada: la finestra nostra, senza contesto dello schermo. */
         private fun apriLaBarra(contesto: android.content.Context): Boolean = runCatching {
             contesto.startActivity(

@@ -522,16 +522,42 @@ async function talosUltimoCentimetro(
                 : `TALOS confirmed it in ${capacita.app}${domanda} but could not verify it closed. Tell the user exactly that and ask them to check. ⛔ Do NOT do it again: it may already have gone through.`,
         }
     }
-    if (esito.fatto && esito.sparito) {
+    /*
+     * ⭐⭐⭐ LA FINALIZZAZIONE DELL'OBIETTIVO — owner 2026-08-15: «"invio un
+     * messaggio a Shadina" non significa che l'abbia inviato veramente».
+     *
+     * Il nativo adesso conta TRE prove indipendenti invece di guardarne una:
+     * il campo si è svuotato, il testo è MIGRATO in un nodo non modificabile
+     * (cioè è diventato un pezzo di conversazione), il pulsante è sparito. Il
+     * disegno per esteso sta in `TalosObiettivoFinito.kt`.
+     *
+     * ⛔ Tre esiti e non due, e la differenza la legge la persona:
+     *
+     *   PARTITO         due prove su tre → si può dire «inviato»
+     *   NON_PARTITO     il campo è ancora pieno → certezza NEGATIVA, e va detta
+     *   NON_CONFERMATO  una prova sola → «guarda tu», che è una risposta vera
+     *
+     * ⛔ `NON_PARTITO` è l'unico caso in cui riprovare è sicuro: se il testo è
+     * ancora nel campo, quel messaggio non è uscito. Negli altri due il retry
+     * può mandarlo due volte, e un messaggio doppio a una persona vera non si
+     * annulla.
+     */
+    if (esito.fatto && esito.obiettivo === 'PARTITO') {
         return {
             ok: true,
-            content: `Sent. TALOS pressed send in ${capacita.app} and verified it left the input field. Tell the user it is sent, in one short sentence.`,
+            content: `Sent — verified. TALOS pressed send in ${capacita.app} and ${esito.prove} independent checks agree: the input field is empty and the text is now part of the conversation. Tell the user it is sent, in one short sentence.`,
+        }
+    }
+    if (esito.fatto && esito.obiettivo === 'NON_PARTITO') {
+        return {
+            ok: true,
+            content: `NOT sent. TALOS pressed send in ${capacita.app}, but the text is STILL in the input field — so nothing left. Tell the user plainly that it did not go, and offer to try again. This is the one case where trying again is safe.`,
         }
     }
     if (esito.fatto) {
         return {
             ok: true,
-            content: `TALOS pressed send in ${capacita.app}, but could not confirm the message left the input field. Tell the user exactly that and ask them to check the chat. ⛔ Do NOT press send again and do NOT call this tool again for this message: it may already have gone through, and a retry would send it twice.`,
+            content: `TALOS pressed send in ${capacita.app}, and only ${esito.prove} of 3 checks confirm it (field empty: ${esito.campoSvuotato}, text now in the conversation: ${esito.testoMigrato}). Tell the user exactly that and ask them to check the chat. ⛔ Do NOT press send again and do NOT call this tool again for this message: it may already have gone through, and a retry would send it twice.`,
         }
     }
     // Da qui in giù NON è stato premuto niente: riprovare è sicuro.
