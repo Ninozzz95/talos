@@ -111,9 +111,28 @@ describe('⛔ chiudere e riaprire non deve far perdere niente', () => {
         // Tre passi in quest'ordine: svuota, riscrivi, accendi. L'ordine È il
         // contenuto — svuotare DOPO aver riscritto non rilega niente.
         expect(ciclo.split('enabled_accessibility_services').length - 1).toBe(2)
-        expect(ciclo).toContain('nostro')
+        expect(ciclo).toContain('elencoNuovo')
         expect(ciclo).toContain('accessibility_enabled')
-        expect(ciclo.indexOf('nostro')).toBeGreaterThan(ciclo.indexOf('enabled_accessibility_services'))
+    })
+
+    it('⛔⛔⛔ NON spegne gli ALTRI servizi di accessibilità', () => {
+        /*
+         * Il difetto che stavo per consegnare, visto solo perché il Pad
+         * dell'owner ha **Wispr Flow** fra i servizi legati: il ciclo scriveva
+         * SOLO il nostro nome, e avrebbe spento Wispr in silenzio. Lo stesso
+         * sarebbe successo a TalkBack — cioè avremmo tolto la voce a chi ne ha
+         * bisogno per usare il telefono, mentre «riparavamo» una cosa nostra.
+         */
+        const sorgente = leggi(RIPARAZIONE)
+        // l'elenco si LEGGE prima di riscriverlo
+        expect(sorgente).toContain('ENABLED_ACCESSIBILITY_SERVICES')
+        // si tolgono solo i NOSTRI
+        expect(sorgente).toMatch(/filter\s*\{[^}]*!it\.contains\(contesto\.packageName\)/)
+        // e si riscrive con gli altri PIÙ noi
+        expect(sorgente).toContain('(altri + nostro)')
+        // ⛔ separatore `:`, non `,`: sbagliarlo fonde due servizi in un nome
+        // solo che non esiste.
+        expect(sorgente).toContain("joinToString(\":\")")
     })
 
     it('⛔ quando il ponte manca lo DICE, invece di tacere', () => {
