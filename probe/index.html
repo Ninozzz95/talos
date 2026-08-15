@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>TALOS — test ricerca intelligente</title>
+    <style>
+        :root { color-scheme: dark; }
+        body {
+            margin: 0; padding: 16px 14px calc(24px + env(safe-area-inset-bottom));
+            background: #0b0f11; color: #edf2f7;
+            font: 15px/1.5 system-ui, -apple-system, sans-serif;
+        }
+        h1 { font-size: 17px; margin: 0 0 4px; }
+        p.sub { margin: 0 0 14px; color: #7f9aa1; font-size: 13px; }
+        button {
+            appearance: none; border: 0; border-radius: 12px; padding: 12px 16px;
+            background: #6ad4d4; color: #04171a; font-weight: 600; font-size: 15px;
+            min-height: 48px; margin-right: 8px;
+        }
+        button[disabled] { opacity: .5; }
+        button.ghost { background: #142124; color: #edf2f7; }
+        button.small { font-size: 12px; padding: 8px 10px; min-height: 40px; font-weight: 500; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
+        th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #1f3238; vertical-align: top; }
+        th { color: #7f9aa1; font-weight: 500; }
+        .bad { color: #ef8589; }
+        pre {
+            margin-top: 16px; padding: 10px; border-radius: 10px; background: #10171a;
+            color: #a8c0c6; font-size: 11px; max-height: 40vh; overflow: auto; white-space: pre-wrap;
+        }
+        .wrap { overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <h1>Test della ricerca intelligente</h1>
+        <p class="sub">
+            <b>Round 3.</b> Ogni candidato gira ora in una <b>pagina pulita</b> (nel round 2 un
+            fallimento avvelenava tutti quelli dopo, e tre risultati erano falsi). In piu:
+            versioni a 8 bit mai provate, <b>fusione pesata</b> invece che alla pari, e un archivio
+            da <b>116 documenti</b> per vedere se la precisione regge quando il documento giusto
+            deve battere novanta vicini. Misura inoltre: quanto costa la <b>seconda</b> apertura (i modelli
+            gia scaricati restano in memoria del telefono), i modelli che la GPU aveva rifiutato
+            (riprovati su CPU), i <b>documenti lunghi spezzettati</b> come quelli veri, e la
+            <b>fusione</b> fra ricerca a parole chiave e ricerca per significato.
+            <b>Solo su Wi-Fi</b>, schermo acceso. Cio che avevi gia scaricato non si riscarica.
+            Nessun dato tuo viene usato: 24 note brevi, 8 documenti lunghi e 84 documenti di
+            disturbo, tutti finti. La pagina si ricarica da sola tra un candidato e l altro:
+            e voluto, non e un errore.
+        </p>
+        <button id="run">Avvia tutti in fila</button>
+        <button id="base" class="ghost">Solo riferimento</button>
+        <button id="reset" class="ghost">Azzera</button>
+        <button id="copy" class="ghost">Copia risultati</button>
+        <div id="picker" style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+
+        <div class="wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Candidato</th><th>Scaricato</th><th>Avvio<br>freddo/caldo</th>
+                        <th>Indicizza<br>(lunghi)</th><th>Query</th><th>1° colpo<br>corti</th>
+                        <th>1° colpo<br>lunghi</th><th>1° colpo<br>116 doc</th>
+                    </tr>
+                </thead>
+                <tbody id="rows"></tbody>
+            </table>
+        </div>
+        <pre id="log"></pre>
+    </div>
+    <script type="module" src="./main.ts"></script>
+</body>
+</html>

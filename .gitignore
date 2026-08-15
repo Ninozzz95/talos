@@ -1,0 +1,34 @@
+# Build output
+dist/
+
+# Test artifacts
+test-results/
+playwright-report/
+coverage/
+
+# Dependencies (also covered by the repo root ignore)
+node_modules/
+
+# Local env
+.env
+.env.local
+.env.*.local
+tests/e2e/.auth/
+
+# Gli scatti del telecomando: prove, non sorgenti.
+*.png
+
+# ⛔⛔ TRANNE le viste del README, che sono un SORGENTE.
+#
+# MISURATO 2026-08-15, un passo prima di pubblicare: la copia pubblicabile
+# non conteneva nessuna delle quattro immagini citate dal README — su GitHub
+# sarebbero stati quattro riquadri rotti, la prima cosa che una persona vede.
+#
+# La regola `*.png` qui sopra è giusta e resta: gli scatti di lavoro sono
+# prove, non sorgenti, e non devono finire nella cronologia. Ma le viste del
+# README sono l'opposto — sono il contenuto del documento, e senza di esse il
+# documento non esiste.
+#
+# ⇒ E la quarantena resta esclusa: si pubblica solo ciò che l'owner ha firmato.
+!docs/immagini/*.png
+docs/immagini/DA-APPROVARE/

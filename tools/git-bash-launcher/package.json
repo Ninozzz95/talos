@@ -1,0 +1,12 @@
+{
+    "name": "@talos-mobile/git-bash-launcher",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Isolated, separately-locked TALOS adapter that drives the android-assets tool through an interactive Git Bash session in a hidden ConPTY (bypassing the winpty alias) and renders the terminal via xterm headless. Dev/test tooling only; never distributed. Uses only the official npm packages, never VS Code copies.",
+    "license": "UNLICENSED",
+    "type": "module",
+    "devDependencies": {
+        "@xterm/headless": "6.1.0-beta.285",
+        "node-pty": "1.2.0-beta.13"
+    }
+}

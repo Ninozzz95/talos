@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <!-- Customize your theme here. -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+    </style>
+
+
+    <!-- Owner 2026-07-24: logo-less static splash. The frame is a solid DayNight
+         colour (values/ light, values-night/ dark) that matches the default
+         system-mode theme, with a TRANSPARENT icon, so the themed in-app boot
+         animation reads as starting directly. A per-theme static frame is
+         impossible at cold start (Android shows it before app code runs). -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@color/splashBackground</item>
+        <item name="windowSplashScreenBackground">@color/splashBackground</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon_none</item>
+    </style>
+
+    <!--
+        ⭐ IL VESTITO DELLA BARRA: trasparente, senza titolo, senza velo.
+
+        ⛔ `windowIsTranslucent` + `windowBackground` trasparente sono le due
+        righe che tengono VIVA l'app sotto: senza, il sistema smette di
+        disegnarla e la barra diventa una schermata come le altre — cioè
+        esattamente il difetto che l'owner ha bocciato («potrei farlo con un
+        tap»).
+
+        ⛔ E `windowIsFloating` NO: quello darebbe una finestra di dialogo
+        centrata e con i margini, mentre la forma misurata su Gemini è una
+        barra ancorata in basso a tutta larghezza.
+    -->
+    <style name="TalosBarra" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Translucent</item>
+        <!--
+            ⛔ LE DUE RIGHE CHE MANCAVANO, e ognuna spiega un difetto VISTO.
+
+            `dumpsys window` diceva `fmt=TRANSPARENT`: la finestra era dichiarata
+            bene, e la sonda CDP diceva che `html`, `body`, `#app` e la scena
+            erano tutti `rgba(0,0,0,0)`. Cioè web e finestra erano a posto e lo
+            schermo restava un rettangolo grigio uniforme, con una SECONDA
+            pillola sbiadita in alto che nel DOM non esiste (misurato: un solo
+            nodo `talos-barra`).
+
+            `colorBackgroundCacheHint` è il fondo che il tema AppCompat tiene
+            in cache e ridipinge sotto il contenuto: annullarlo è la riga
+            storica per una finestra che deve lasciar vedere cosa c'è dietro.
+
+            `windowDisablePreview` toglie l'ANTEPRIMA che il sistema disegna
+            prima che l'activity abbia il suo primo frame — ed è la sola cosa in
+            grado di mettere a schermo una pillola che non sta nel documento.
+        -->
+        <item name="android:colorBackgroundCacheHint">@null</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
+</resources>
