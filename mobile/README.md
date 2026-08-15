@@ -107,8 +107,12 @@ control is a live capability, not an acquired permission.
 
 ## Status
 
-Working and used daily on a OnePlus 13 (ColorOS) and a OnePlus Pad 3
-(OxygenOS). Android 14+.
+**Today: Android.** Working and used daily on a OnePlus 13 (ColorOS) and a
+OnePlus Pad 3 (OxygenOS). Android 14+.
+
+**Next: desktop and CLI**, sharing the same tools and the same contracts — so a
+capability written once works on both surfaces instead of drifting apart. Not
+here yet; this line will say so when it is.
 
 This is a young project, published because the interesting part is the
 harness — how an assistant grounds itself in a real screen and refuses to lie
