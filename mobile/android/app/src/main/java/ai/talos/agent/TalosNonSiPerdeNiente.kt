@@ -74,9 +74,32 @@ object TalosNonSiPerdeNiente {
     data class Stato(
         val elencato: Boolean,
         val masterAcceso: Boolean,
+        /**
+         * ⛔⛔ LEGATO — l'unico dato che dice se l'occhio VEDE.
+         *
+         * MISURATO sul OnePlus 13 il 2026-08-15, e mi ha smentito una cura:
+         *
+         *     Bound services:   {}                                  ← vuoto
+         *     Enabled services: {ai.talos.dev/…/TalosOcchio}         ← elencato
+         *     Crashed services: {ai.talos.dev/…/TalosOcchio}         ← crashato
+         *
+         * Cioè le impostazioni dicevano «acceso», `accessibility_enabled` era 1,
+         * e il servizio non riceveva UN SOLO evento. È lo stato in cui TALOS
+         * crede di poter premere «invia» su WhatsApp, prova, e non succede
+         * niente — il difetto che l'owner segnala dal 13 agosto.
+         *
+         * ⇒ `elencato` e `masterAcceso` sono ciò che il sistema PROMETTE.
+         * Questo è ciò che il sistema FA.
+         */
+        val legato: Boolean,
     ) {
-        /** Le due righe si contraddicono: elencato ma spento. */
-        val incoerente: Boolean get() = elencato && !masterAcceso
+        /**
+         * ⛔ Tre modi di essere rotti, non uno:
+         *  · elencato ma master spento  → chiuso dai recenti (Pad e 13)
+         *  · elencato e master acceso, ma NON legato → il servizio è marcato
+         *    «crashed» e Android non lo ritenta più
+         */
+        val incoerente: Boolean get() = elencato && (!masterAcceso || !legato)
     }
 
     fun leggi(contesto: Context): Stato {
@@ -92,6 +115,7 @@ object TalosNonSiPerdeNiente {
         return Stato(
             elencato = elenco.contains(contesto.packageName),
             masterAcceso = master == 1,
+            legato = TalosOcchio.aperto() != null,
         )
     }
 
@@ -102,6 +126,13 @@ object TalosNonSiPerdeNiente {
      * ⛔ Non lancia mai: questa funzione gira all'avvio dell'app, e un avvio che
      * fallisce perché il ponte è giù sarebbe una cura peggiore del male.
      */
+    /**
+     * Ripara se serve. Torna cosa è successo, così chi chiama può DIRLO invece
+     * di far finta di niente.
+     *
+     * ⛔ Non lancia mai: gira all'avvio dell'app, e un avvio che fallisce perché
+     * il ponte è giù sarebbe una cura peggiore del male.
+     */
     fun riparaSeServe(contesto: Context): String {
         val stato = leggi(contesto)
         if (!stato.elencato) {
@@ -109,37 +140,69 @@ object TalosNonSiPerdeNiente {
             // scelta vince: qui non si accende niente.
             return "niente-da-fare"
         }
-        if (stato.masterAcceso) return "gia-a-posto"
+        if (stato.masterAcceso && stato.legato) return "gia-a-posto"
 
-        Log.i(MARCHIO, "stato incoerente: TALOS è nell'elenco ma l'accessibilità è spenta")
+        Log.i(
+            MARCHIO,
+            "da riparare: elencato=${stato.elencato} master=${stato.masterAcceso} legato=${stato.legato}",
+        )
 
-        val esito = runCatching {
-            TalosPonteAdb.shell(
-                contesto,
-                listOf("settings", "put", "secure", "accessibility_enabled", "1"),
-                setOf("settings"),
-                riagganciaSeStaccato = true,
-            )
-        }.getOrNull()
-
-        if (esito?.codice != 0) {
-            Log.w(MARCHIO, "non riparato: il ponte non risponde (${esito?.motivo ?: "nessun ponte"})")
-            return "serve-il-ponte"
+        /*
+         * ⛔⛔ IL CICLO, e non una scrittura sola. MISURATO sul OnePlus 13:
+         *
+         * Scrivere `accessibility_enabled 1` su un servizio che il sistema ha
+         * marcato **crashed** lo lascia esattamente com'è — elencato, master a
+         * 1, e `Bound services:{}`. Android non ritenta il binding di un
+         * servizio crashato finché l'elenco non CAMBIA, e riscrivere lo stesso
+         * valore non è un cambiamento.
+         *
+         *     prima:  Bound {}   Enabled {TalosOcchio}   Crashed {TalosOcchio}
+         *     dopo il ciclo: Bound {TALOS — controllo del telefono}  Crashed {}
+         *
+         * ⇒ Si svuota e si riscrive: è la sola sequenza che fa rilegare il
+         * servizio, ed è la differenza fra un occhio che dice di vedere e uno
+         * che vede. Il difetto «WhatsApp si riempie e non parte» nasceva qui.
+         */
+        val nostro = nostroServizio(contesto)
+        val passi = listOf(
+            listOf("settings", "put", "secure", "enabled_accessibility_services", "''"),
+            listOf("settings", "put", "secure", "enabled_accessibility_services", nostro),
+            listOf("settings", "put", "secure", "accessibility_enabled", "1"),
+        )
+        for (passo in passi) {
+            val esito = runCatching {
+                TalosPonteAdb.shell(contesto, passo, setOf("settings"), riagganciaSeStaccato = true)
+            }.getOrNull()
+            if (esito?.codice != 0) {
+                Log.w(MARCHIO, "non riparato: il ponte non risponde (${esito?.motivo ?: "nessun ponte"})")
+                return "serve-il-ponte"
+            }
+            // ⛔ Un respiro fra i passi: il sistema deve accorgersi del cambio.
+            Thread.sleep(600)
         }
 
         /*
-         * ⛔ SI RILEGGE. Una scrittura che torna 0 non è una scrittura andata a
-         * buon fine: su queste ROM `settings put` può riuscire e il valore
-         * tornare indietro. È la stessa regola di «ogni scrittura si rilegge»
-         * che ci è costata tre giorni sul calendario.
+         * ⛔ SI RILEGGE, e si rilegge la cosa GIUSTA. Il primo tentativo di
+         * questa cura si accontentava di `masterAcceso` e dichiarava «riparato»
+         * su un occhio che non riceveva un solo evento: uno stato che DICE di
+         * funzionare è peggio di uno spento, perché nessuno va a guardarlo.
+         *
+         * ⛔ E il binding non è istantaneo: il servizio nasce, `onServiceConnected`
+         * arriva, e solo allora `aperto()` smette di essere null.
          */
-        val dopo = leggi(contesto)
-        return if (dopo.masterAcceso) {
-            Log.i(MARCHIO, "accessibilità riaccesa: l'occhio torna a vedere")
-            "riparato"
-        } else {
-            Log.w(MARCHIO, "scritto ma non ha attecchito: il valore è tornato a 0")
-            "non-ha-attecchito"
+        repeat(10) {
+            Thread.sleep(400)
+            if (leggi(contesto).legato) {
+                Log.i(MARCHIO, "occhio RILEGATO: torna a vedere davvero")
+                return "riparato"
+            }
         }
+
+        val dopo = leggi(contesto)
+        Log.w(
+            MARCHIO,
+            "non ha attecchito: master=${dopo.masterAcceso} legato=${dopo.legato}",
+        )
+        return if (dopo.masterAcceso) "acceso-ma-non-legato" else "non-ha-attecchito"
     }
 }
