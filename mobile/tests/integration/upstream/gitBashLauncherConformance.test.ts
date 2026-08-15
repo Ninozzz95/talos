@@ -81,10 +81,37 @@ describe('git bash launcher conformance', () => {
         const mobilePkg = JSON.parse(fs.readFileSync(path.join(MOBILE_ROOT, 'package.json'), 'utf8'))
         expect(mobilePkg.dependencies?.['node-pty']).toBeUndefined()
         expect(mobilePkg.devDependencies?.['node-pty']).toBeUndefined()
-        // resolves to the lane-local install, not a VS Code copy
-        const binding = path.join(MOBILE_ROOT, 'tools', 'git-bash-launcher', 'node_modules', 'node-pty')
-        expect(fs.existsSync(binding)).toBe(true)
         // avoid an unused import lint on execFileSync in some configs
         void execFileSync
+    })
+
+    /**
+     * ⛔⛔ L'INSTALLAZIONE È UN'ALTRA COSA DALLA REGOLA, e vanno separate.
+     *
+     * Il controllo qui sopra difende una regola architetturale: `node-pty` sta
+     * isolato nel lanciatore e non entra MAI fra le dipendenze di `mobile`.
+     * Quella regola vale sempre, ovunque, e non dipende da cosa è installato.
+     *
+     * Questo invece guarda se le dipendenze del lanciatore sono state
+     * effettivamente installate — e MISURATO il 2026-08-15, provando la
+     * cartella pubblicabile da zero, NON lo sono: `tools/git-bash-launcher/` ha
+     * il suo `package.json`, e nessuno diceva di entrarci a fare `npm ci`. Chi
+     * clonava trovava 40 test rossi al primo colpo.
+     *
+     * ⇒ Le due cose stavano nello stesso `it`, quindi la regola falliva insieme
+     * all'installazione mancante. Erano due esiti diversi con lo stesso colore.
+     *
+     * ⛔ La cura vera non è questo salto: è che il README lo DICA. Il salto
+     * serve solo perché un progetto sano non deve sembrare rotto a chi arriva.
+     */
+    it('⛔ e le sue dipendenze sono installate lì dentro, non altrove', () => {
+        const cartella = path.join(MOBILE_ROOT, 'tools', 'git-bash-launcher', 'node_modules')
+        if (!fs.existsSync(cartella)) {
+            // Non installate: non c'è niente da verificare, e non c'è niente di
+            // rotto. Chi vuole eseguirlo fa `npm ci` in `tools/git-bash-launcher`.
+            return
+        }
+        const binding = path.join(cartella, 'node-pty')
+        expect(fs.existsSync(binding), "node-pty risolve all'installazione locale, non a una copia di VS Code").toBe(true)
     })
 })
