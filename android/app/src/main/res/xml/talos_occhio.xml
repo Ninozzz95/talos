@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ⭐ L'OCCHIO. `canRetrieveWindowContent` serve a leggere l'albero.
+
+  ⛔⛔ QUESTA RIGA È IL FRENO. Il 2026-08-10 avevo concluso «gli eventi di
+  interazione non arrivano»: non arrivavano perché `typeViewClicked` NON era
+  dichiarato qui. Il servizio non era sordo, era tappato — e la conclusione
+  sbagliata è costata la funzione, perché il pilota si rifiutava di partire su
+  qualunque telefono senza il ponte adb acceso.
+
+  I quattro `typeView*` sono ciò che permette a TALOS di accorgersi che la
+  persona ha ripreso in mano il telefono, SENZA identità di shell. Toglierne uno
+  toglie un modo di fermare l'agente: vedi `TalosOcchio.onAccessibilityEvent`.
+
+  ⛔ NIENTE `flagRequestTouchExplorationMode`: cambierebbe il modo in cui la
+  persona usa il telefono, e noi vogliamo guardare, non prendere il posto.
+
+  ⭐⭐ `flagRequestAccessibilityButton` È IL TERZO MODO DI CHIAMARE TALOS.
+  Con questo flag il servizio può essere messo nella **scorciatoia di
+  accessibilità**: i due tasti del volume tenuti premuti, e il pulsante che
+  galleggia. MISURATO sul Pad il 2026-08-14:
+  `settings get secure accessibility_shortcut_target_service` è **vuoto** — cioè
+  la casella è libera, e senza il flag non saremmo nemmeno nell'elenco fra cui
+  scegliere.
+
+  ⛔ Il flag NON accende niente da solo e non chiede nessun permesso nuovo: la
+  persona ci mette dentro TALOS a mano, dalle impostazioni di sistema, e da lì
+  può toglierlo. L'ultimo tocco resta suo.
+
+  ⛔⛔ E il flag È LA DIFFERENZA FRA «CHIAMARE» E «ACCENDERE». MISURATO sul Pad
+  il 2026-08-14, tenendo i due tasti del volume:
+
+    con la scorciatoia su TALOS  → I TalosOcchio: chiamano TALOS
+                                   mCurrentFocus = TalosBarraActivity
+    con la scorciatoia altrove   → si ACCENDE TalkBack (che il flag non ce l'ha)
+
+  Cioè: un servizio senza `flagRequestAccessibilityButton` la scorciatoia lo
+  accende e lo spegne; uno che lo dichiara viene CHIAMATO e resta acceso. Senza
+  questa riga i due tasti spegnerebbero l'occhio invece di aprire TALOS — il
+  contrario esatto di quello che la persona ha chiesto.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeTouchInteractionStart|typeViewClicked|typeViewLongClicked|typeViewScrolled|typeViewTextSelectionChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:canRetrieveWindowContent="true"
+    android:accessibilityFlags="flagRequestAccessibilityButton"
+    android:notificationTimeout="100"
+    android:description="@string/app_name" />

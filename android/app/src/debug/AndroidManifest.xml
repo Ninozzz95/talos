@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    C0-bis — la sonda del processo separato, SOLO nelle build di debug.
+
+    AGP fonde questo manifest unicamente nella variante `debug`: in release il
+    provider non esiste, quindi non c'e' nessuna superficie esportata da
+    difendere. E' la stessa disciplina della variante di manifest che Kai 9000
+    usa per spegnere SMS e listener notifiche fuori da F-Droid — con la
+    differenza che qui la costruisce il sistema di build, non un controllo a
+    runtime.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        D3 — i permessi `development`, dichiarati per POTERLI provare.
+
+        `pm grant` funziona solo su permessi che l'app CHIEDE: senza queste
+        righe la prova non si puo' nemmeno cominciare.
+
+        Sono sei dei 32 che questo dispositivo espone (la memoria ne diceva 29:
+        contati sul Pad il 2026-08-07, sono 32). Scelti perche' sono quelli che i
+        tool della fase 9 vogliono davvero:
+
+          PACKAGE_USAGE_STATS   quali app usi e quando   -> usage_stats_read
+          BATTERY_STATS         chi consuma la batteria  -> battery_blame
+          GET_APP_OPS_STATS     chi accede a cosa        -> permissions_audit
+          DUMP                  dumpsys                  -> diagnostica
+          READ_LOGS             logcat                   -> il ciclo di coding (D21)
+          WRITE_SECURE_SETTINGS impostazioni di sistema
+
+        ⛔ Stanno nel source set `debug` finche' la prova non ha risposto. Se
+        sopravvivono al riavvio, lo strato 1 di D4 esiste e si dichiarano nel
+        manifest vero; se non sopravvivono, il contratto verso l'utente e' un
+        altro e va riscritto PRIMA di prometterlo.
+    -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.BATTERY_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.GET_APP_OPS_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.DUMP"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.READ_LOGS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!--
+        E1 — il premio piu' grosso, e il piu' incerto.
+
+        `EXECUTE_APP_FUNCTIONS` e' marcato `internal|role`: NON si concede a
+        richiesta, si ottiene TENENDO un ruolo. Se il ruolo di assistente lo
+        sblocca, TALOS puo' chiamare le funzioni delle ALTRE app con lo stesso
+        canale di Gemini — cioe' agire senza toccare lo schermo, che e' il
+        contrario del 43% dell'automazione UI.
+
+        NON VERIFICATO da nessuna delle due fonti. Va dichiarato per poterlo
+        chiedere: un permesso non dichiarato non compare nemmeno in dumpsys, e
+        la prova risponderebbe «no» per un motivo nostro.
+    -->
+    <uses-permission android:name="android.permission.EXECUTE_APP_FUNCTIONS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.EXECUTE_APP_FUNCTION"
+        tools:ignore="ProtectedPermissions" />
+
+    
+    <application>
+
+
+        <!--
+            ⛔ LA SONDA DELL'ASSISTENTE NON STA PIU' QUI, ed è una buona notizia.
+
+            Il 2026-08-11 ha risposto alla sua domanda — col ruolo assistente il
+            sistema consegna struttura E screenshot (49 nodi su Impostazioni, 212
+            sull'elenco app) — ed è stata promossa a funzione in `main`
+            (`TalosAssistente`). Tenerla anche qui vorrebbe dire DUE candidati
+            assistente nella build di sviluppo: due nomi per la stessa cosa, che
+            è un difetto che abbiamo già in coda con un altro nome.
+
+            Resta E1, non ancora provata: tenendo il ruolo, `EXECUTE_APP_FUNCTIONS`
+            si sblocca? È un permesso `internal|role`, e i due `uses-permission`
+            qui sopra esistono per poterlo chiedere.
+        -->
+        <provider
+            android:name="ai.talos.agent.TalosAgentProbeProvider"
+            android:authorities="${applicationId}.agentprobe"
+            android:process=":agent"
+            android:exported="true" />
+    </application>
+</manifest>

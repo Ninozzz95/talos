@@ -1,0 +1,55 @@
+# I cancelli, su ogni proposta di modifica.
+#
+# ⛔ Qui NON gira la build Android: vuole l'SDK, allunga ogni giro di parecchi
+# minuti, e il difetto che troverebbe (un errore Kotlin) lo trova comunque chi
+# la propone, perché senza build non ha potuto provarla su un telefono — che è
+# la regola del progetto. La build nativa gira sui tag, dove serve l'artefatto.
+name: gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      # ⛔ `ci` e non `install`: rispetta il lockfile alla lettera. Un `install`
+      # può risolvere una versione diversa da quella provata, e il primo posto
+      # in cui te ne accorgi è un test che fallisce per ragioni che non c'entrano.
+      - run: npm ci
+
+      # ⛔ Il lanciatore tiene le sue dipendenze native ISOLATE, di proposito:
+      # `node-pty` non deve mai finire nel package.json di mobile. Ma allora
+      # vanno installate a parte — e finché nessuno lo diceva, chi clonava la
+      # repo trovava 40 test rossi al primo colpo.
+      - name: dipendenze del lanciatore
+        run: npm ci
+        working-directory: mobile/tools/git-bash-launcher
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: test
+        run: npx vitest run
+
+      # ⛔ Il tetto del grafo d'avvio: l'app deve aprirsi in fretta, e questo
+      # gate è l'unico posto in cui una regressione di peso si vede prima che
+      # qualcuno la senta sul telefono.
+      - name: build
+        run: npm run build
+
+      - name: grafo d'avvio
+        run: node scripts/verify-initial-chunk.mjs

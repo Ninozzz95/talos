@@ -1,0 +1,580 @@
+apply plugin: 'com.android.application'
+// C0 (fase 9): il codice nuovo nasce in Kotlin, i plugin Java restano Java.
+apply plugin: 'kotlin-android'
+
+/**
+ * ⛔ La firma di rilascio, letta da FUORI il repository.
+ *
+ * ## Perche' non e' un dettaglio di configurazione
+ *
+ * Fuori dal Play Store non esiste rotazione delle chiavi. Il telefono accetta
+ * un aggiornamento solo se e' firmato dalla STESSA chiave dell'installazione
+ * che ha gia': perderla significa che nessuno potra' piu' aggiornare, e
+ * l'unica via sarebbe disinstallare — cioe' cancellare chat, Libreria e
+ * memoria di chi ci aveva creduto.
+ *
+ * E TALOS sara' pubblico e FOSS: una chiave finita nella storia di git e'
+ * pubblica per sempre, e la storia non si riscrive dopo che qualcuno ha
+ * clonato. Chi ce l'ha puo' pubblicare aggiornamenti che il telefono accetta
+ * come nostri.
+ *
+ * Quindi: il file della chiave vive fuori dal repository, e qui entra solo il
+ * PERCORSO, scritto in `keystore.properties` che il `.gitignore` esclude.
+ *
+ * ## Cosa succede se il file non c'e'
+ *
+ * Niente di rotto: il blocco `signingConfigs` non viene creato e il build di
+ * rilascio resta non firmato, come prima. Chi clona il repository per leggerlo
+ * o per contribuire non deve procurarsi una chiave per compilare.
+ */
+def proprietaFirma = new Properties()
+def fileFirma = rootProject.file('keystore.properties')
+if (fileFirma.exists()) {
+    fileFirma.withInputStream { proprietaFirma.load(it) }
+}
+def firmaDisponibile = proprietaFirma.containsKey('storeFile') &&
+        file(proprietaFirma['storeFile']).exists()
+
+android {
+    namespace = "ai.talos"
+    compileSdk = rootProject.ext.compileSdkVersion
+    // Fissato, non lasciato al valore predefinito di AGP: il motore locale è
+    // compilato da questo NDK e una versione diversa è un compilatore diverso.
+    ndkVersion = "27.0.12077973"
+    defaultConfig {
+        applicationId "ai.talos"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        ndk {
+            // Solo arm64. Da quando esiste codice nativo questa riga decide su
+            // quali telefoni l'app si installa: i 32 bit restano fuori. È una
+            // perdita accettata e non subita — Google impone i 64 bit dal 2019 e
+            // llama.cpp su ARM a 32 bit non è una strada seria — ma va detta,
+            // perché prima di oggi l'app si installava ovunque.
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                arguments '-DCMAKE_BUILD_TYPE=Release',
+                        '-DBUILD_SHARED_LIBS=ON',
+                        '-DLLAMA_BUILD_APP=OFF',
+                        '-DLLAMA_BUILD_COMMON=OFF',
+                        '-DLLAMA_BUILD_UI=OFF',
+                        '-DLLAMA_OPENSSL=OFF',
+                        // Il computer che compila non è il telefono che esegue:
+                        // GGML_NATIVE accorderebbe il codice su questa macchina.
+                        '-DGGML_NATIVE=OFF',
+                        // Le due che rendono l'app distribuibile: ggml costruisce
+                        // più varianti CPU e sceglie a runtime quella che il
+                        // telefono regge davvero. Con minSdk 26 il parco va da
+                        // ARMv8.0 in su, e una singola build accordata sul
+                        // telefono di oggi si rifiuterebbe di partire su quelli.
+                        '-DGGML_BACKEND_DL=ON',
+                        '-DGGML_CPU_ALL_VARIANTS=ON',
+                        '-DGGML_LLAMAFILE=OFF'
+            }
+        }
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+             //
+             // ⛔⛔ E le DUE aggiunte nostre, con la misura che le ha volute.
+             //
+             // MISURATO il 2026-08-09 aprendo l'APK: dentro c'erano 2,45 MB di
+             // SOURCEMAP di pdf.js (`pdf.worker.mjs.map` da sola pesa 1,21 MB)
+             // e 0,79 MB di un PDF di ESEMPIO che pdf.js si porta dietro per la
+             // sua pagina dimostrativa — `compressed.tracemonkey-pldi-09.pdf`,
+             // un articolo accademico del 2009 che con TALOS non c'entra nulla.
+             //
+             // Tre megabyte e mezzo su trentaquattro — il 10% — spediti a ogni
+             // persona che installa l'app, per servire il debug di una libreria
+             // di terzi che noi non stiamo debuggando. Una mappa serve a chi
+             // legge una traccia nel browser; nessuno legge tracce dentro un
+             // APK firmato sul telefono di qualcun altro.
+             //
+             // `*.map` e' volutamente largo: qualunque libreria vendorizzata ne
+             // porti una domani, resta fuori senza che nessuno se ne accorga —
+             // che e' il modo in cui questi tre megabyte erano entrati.
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.map:!compressed.tracemonkey-pldi-09.pdf'
+        }
+    }
+    // ⛔ PRIMA di `buildTypes`: Gradle risolve i nomi nell'ordine in cui
+    // legge il file, e un blocco di firma dichiarato dopo non esiste ancora
+    // quando il tipo di build lo cerca.
+    if (firmaDisponibile) {
+        signingConfigs {
+            rilascio {
+                storeFile file(proprietaFirma['storeFile'])
+                storePassword proprietaFirma['storePassword']
+                keyAlias proprietaFirma['keyAlias']
+                keyPassword proprietaFirma['keyPassword']
+                // Entrambi gli schemi: v2 e' il minimo per Android 7+, v3
+                // permette la sostituzione della chiave se un giorno servisse.
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+    buildTypes {
+        debug {
+            // Copia affiancata. Il computer nuovo ha una chiave di debug diversa
+            // da quella che ha firmato l'app sul telefono dell'owner, quindi un
+            // aggiornamento sul posto e' rifiutato e l'unica alternativa sarebbe
+            // disinstallare — cioe' cancellargli chat e libreria. Con
+            // -PtalosSideBySide l'app si installa come pacchetto separato e la
+            // sua resta intatta. Il FileProvider usa gia' ${applicationId},
+            // quindi le due autorita' non si scontrano. Senza la proprieta' il
+            // build e' identico a prima: questo blocco non fa nulla.
+            if (project.hasProperty('talosSideBySide')) {
+                applicationIdSuffix '.dev'
+                versionNameSuffix '-dev'
+            }
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (firmaDisponibile) {
+                signingConfig signingConfigs.rilascio
+            }
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path 'src/main/cpp/CMakeLists.txt'
+            // La stessa con cui llama.cpp costruisce il proprio esempio Android.
+            version '3.31.6'
+        }
+    }
+    sourceSets {
+        main {
+            // ⛔ I binari del ponte NON stanno nella repo: ce li mette
+            // `preparaPonteAdb` scaricandoli e verificandoli. Vedi il compito
+            // sotto per il perche'.
+            jniLibs.srcDirs += ["${buildDir}/ponte/jniLibs"]
+            /*
+             * ⛔ Nemmeno i modelli della parola di attivazione stanno nella
+             * repo: ce li mette `preparaOrecchioParola`, scaricando e
+             * verificando ogni impronta dichiarata in `PROVENIENZA-PAROLA.md`.
+             *
+             * Una cartella sola, e non tre come ai tempi di sherpa: adesso sono
+             * solo pesi letti a runtime. La libreria nativa la porta
+             * `onnxruntime-android` da Maven, e non c'e' nessuna interfaccia
+             * Kotlin da scaricare e compilare con noi.
+             */
+            assets.srcDirs += ["${buildDir}/parola/assets"]
+        }
+    }
+    packagingOptions {
+        jniLibs {
+            // Le librerie native vanno ESTRATTE all'installazione.
+            //
+            // Il predefinito moderno è lasciarle dentro l'APK e mapparle da lì:
+            // occupano meno spazio e si installa più in fretta. Ma ggml cerca i
+            // suoi backend ELENCANDO una cartella, e una cartella che non
+            // contiene file non elenca niente — il registro resta vuoto e ogni
+            // modello «non si apre». Costa ~11 MB sul dispositivo, e li paghiamo
+            // per tenere le sette varianti CPU scelte a runtime, che sono ciò
+            // che fa girare l'app anche sui telefoni vecchi che minSdk 26
+            // ammette.
+            useLegacyPackaging = true
+        }
+    }
+}
+
+/**
+ * ⛔ Le proprietà passate a Gradle NON arrivano da sole alla JVM dei test.
+ *
+ * Serve per `TalosPonteVeroTest`, l'unica prova che parla con un `adbd` in carne
+ * e ossa: senza bersaglio si salta da sola, e con `-Dtalos.adbd=IP:PORTA` si
+ * collega davvero. Senza questa riga la proprietà si perde per strada e la prova
+ * risulta «saltata» anche quando gliel'hai data — cioè mente su un esito.
+ */
+tasks.withType(Test).configureEach {
+    def bersaglio = System.getProperty('talos.adbd')
+    if (bersaglio != null) systemProperty 'talos.adbd', bersaglio
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    // TalosBiometricKeyPlugin: BiometricPrompt + CryptoObject, so the database
+    // key's second wrapping is bound to biometrics in the hardware Keystore.
+    implementation "androidx.biometric:biometric:1.1.0"
+    // P0 web-read SSRF boundary: maintained TLS/HTTP client with injectable
+    // DNS so the exact validated A/AAAA set is used for the connection.
+    implementation "com.squareup.okhttp3:okhttp:5.4.0"
+    /*
+     * ⛔⛔ IL MOTORE DELLA PAROLA DI ATTIVAZIONE — qui c'era sherpa-onnx.
+     *
+     * Non e' un cambio di gusto: il modello di sherpa non funzionava per questo
+     * compito, e la misura sta in `src/main/jniLibs/PROVENIENZA-PAROLA.md`.
+     * Adesso i tre modelli sono ONNX normali e il runtime arriva da Maven
+     * invece che da un archivio scompattato a mano.
+     *
+     * ⛔ `abiFilters 'arm64-v8a'` sopra vale anche per questa: nell'APK entra
+     * una sola architettura.
+     */
+    implementation "com.microsoft.onnxruntime:onnxruntime-android:1.29.0"
+    /*
+     * ⛔⛔ SHIZUKU E' USCITO — 2026-08-09.
+     *
+     * Qui c'erano `dev.rikka.shizuku:api` e `:provider`. Le due strade
+     * arrivavano alla STESSA identita' — uid 2000, la shell — e su OxygenOS 16,
+     * misurato, Shizuku non riusciva nemmeno ad autorizzarci: lo fa con un
+     * `pm grant` che questa ROM alla shell ha tolto. La strada «preferita» era
+     * quella che non funziona.
+     *
+     * Il ponte in casa fa lo stesso senza un'app di terzi da installare, e il
+     * suo accoppiamento e' provato contro il servizio vero di Android.
+     */
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    // Test-only: the download policy is proved against the SAME case table
+    // the TypeScript side runs, and that table is JSON. Android ships a
+    // stub org.json that throws in unit tests, so the real one is needed
+    // here — and only here; nothing of this reaches the APK.
+    testImplementation "org.json:json:20240303"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+// ---------------------------------------------------------------------------
+// ⛔⛔ IL PONTE ADB: i binari NON stanno nella repo, si scaricano e si VERIFICANO
+// ---------------------------------------------------------------------------
+//
+// ## Perché non sono committati
+//
+// Sono 56 file, 10,4 MB, e nessuno di essi l'abbiamo scritto noi. Metterli
+// nella repo pubblica di TALOS significherebbe lasciarceli PER SEMPRE: la
+// storia di git non si cancella, si riscrive. Undici megabyte di binari altrui
+// dentro il progetto di una persona, per una scorciatoia che per contratto è
+// temporanea (compito #47), sono un prezzo che non vale la pena pagare.
+//
+// ## ⭐ E scaricandoli si guadagna la cosa che serviva davvero
+//
+// La verifica delle impronte smette di essere un rito fatto una volta da me e
+// diventa parte di OGNI compilazione. Se domani Termux ripubblica un pacchetto
+// diverso, il build si ferma qui — non se ne accorge nessuno sei mesi dopo.
+//
+// La fonte di verità è `src/main/jniLibs/PROVENIENZA.md`, che invece nella repo
+// c'è: è un documento leggibile da una persona, ed è lì che si passa per
+// cambiare qualcosa.
+import org.apache.commons.compress.archivers.ar.ArArchiveInputStream
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
+import java.security.MessageDigest
+
+static String improntaDi(byte[] dati) {
+    return MessageDigest.getInstance('SHA-256').digest(dati).encodeHex().toString()
+}
+
+tasks.register('preparaPonteAdb') {
+    description = 'Scarica e verifica i binari del ponte ADB dichiarati in PROVENIENZA.md'
+    def scheda = file('src/main/jniLibs/PROVENIENZA.md')
+    def fuori = file("${buildDir}/ponte/jniLibs/arm64-v8a")
+    // La cache sta FUORI da build/: un `clean` non deve costare un altro
+    // scaricamento di dieci megabyte.
+    def cache = new File(gradle.gradleUserHomeDir, 'talos-ponte-adb')
+
+    inputs.file scheda
+    outputs.dir fuori
+
+    doLast {
+        if (!scheda.exists()) {
+            throw new GradleException("Manca ${scheda}: senza la scheda di provenienza il ponte non si costruisce.")
+        }
+        def testo = scheda.getText('UTF-8')
+
+        // Le tre tabelle, riconosciute dal numero di colonne.
+        def attesi = [:]      // nome nell'APK -> [pacchetto, impronta]
+        def pacchetti = [:]   // pacchetto -> [url, impronta del .deb]
+        def rinominati = [:]  // nome nell'APK -> nome vero dentro il pacchetto
+        testo.eachLine { riga ->
+            def r = riga.trim()
+            def m = (r =~ /^\|\s*`(\S+\.so)`\s*\|\s*(\S+)[^|]*\|[^|]*\|\s*`([0-9a-f]{64})`\s*\|$/)
+            if (m.matches()) { attesi[m[0][1]] = [m[0][2], m[0][3]]; return }
+            def d = (r =~ /^\|\s*(\S+)\s*\|\s*\[[^\]]+\]\((\S+)\)\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
+            if (d.matches()) { pacchetti[d[0][1]] = [d[0][2], d[0][3]]; return }
+            def n = (r =~ /^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|$/)
+            if (n.matches() && n[0][2].endsWith('.so')) { rinominati[n[0][2]] = n[0][1] }
+        }
+        if (attesi.isEmpty() || pacchetti.isEmpty()) {
+            throw new GradleException(
+                    "PROVENIENZA.md non ha prodotto nessuna riga: la tabella è cambiata e questo "
+                            + "compito non la riconosce più. Non è una scheda vuota.")
+        }
+
+        // Cosa serve da ciascun pacchetto: nome vero dentro -> nome nell'APK.
+        def daPrendere = [:].withDefault { [:] }
+        attesi.each { apk, dati ->
+            daPrendere[dati[0]][rinominati.getOrDefault(apk, apk)] = apk
+        }
+
+        cache.mkdirs()
+        fuori.mkdirs()
+        def scritti = [] as Set
+
+        daPrendere.each { pacchetto, voluti ->
+            def riga = pacchetti[pacchetto]
+            if (riga == null) {
+                throw new GradleException("PROVENIENZA.md cita il pacchetto '${pacchetto}' fra i file ma non fra i .deb.")
+            }
+            def url = riga[0]
+            def improntaDeb = riga[1]
+            def deb = new File(cache, url.tokenize('/').last())
+
+            if (!deb.exists() || improntaDi(deb.bytes) != improntaDeb) {
+                logger.lifecycle("ponte adb: scarico ${deb.name}")
+                deb.withOutputStream { uscita -> new URL(url).withInputStream { uscita << it } }
+            }
+            def improntaVera = improntaDi(deb.bytes)
+            if (improntaVera != improntaDeb) {
+                deb.delete()
+                throw new GradleException(
+                        "IMPRONTA DIVERSA per ${deb.name}.\n  atteso  ${improntaDeb}\n  trovato ${improntaVera}\n"
+                                + "Il pacchetto pubblicato non è più quello dichiarato in PROVENIENZA.md. "
+                                + "NON si aggiorna il numero senza sapere perché è cambiato.")
+            }
+
+            // Un .deb è un archivio `ar`; dentro, `data.tar.xz`.
+            byte[] corpo = null
+            deb.withInputStream { flusso ->
+                def ar = new ArArchiveInputStream(flusso)
+                def voce
+                while ((voce = ar.nextEntry) != null) {
+                    if (voce.name.startsWith('data.tar')) {
+                        corpo = voce.name.endsWith('.xz') ? new XZCompressorInputStream(ar).bytes : ar.bytes
+                        break
+                    }
+                }
+            }
+            if (corpo == null) throw new GradleException("${deb.name}: data.tar non trovato.")
+
+            // I .so sono spesso collegamenti: si tiene tutto e si scioglie dopo.
+            def contenuti = [:]
+            def collegamenti = [:]
+            new TarArchiveInputStream(new ByteArrayInputStream(corpo)).withCloseable { tar ->
+                def voce
+                while ((voce = tar.nextEntry) != null) {
+                    def percorso = voce.name
+                    /*
+                     * ⛔ Solo `bin/` e `lib/`, e non è pignoleria.
+                     *
+                     * Misurato: dentro `android-tools` ci sono TRE voci che si
+                     * chiamano `adb` — il programma da 2.864.304 byte in `bin/`,
+                     * e due file di completamento della shell da 13.786 e 202
+                     * byte sotto `share/`. Indicizzando per solo nome vinceva
+                     * l'ultima, e nell'APK sarebbe finito un file di 202 byte
+                     * al posto di adb. Il controllo dell'impronta l'ha visto —
+                     * ed è esattamente il caso per cui esiste.
+                     */
+                    if (!percorso.contains('/bin/') && !percorso.contains('/lib/')) continue
+                    def base = percorso.tokenize('/').last()
+                    /*
+                     * ⛔ `voce.isFile()` e non `voce.file`.
+                     *
+                     * Misurato il 2026-08-08: Groovy, per `voce.file`, preferisce
+                     * `getFile()` — che su una voce LETTA da un archivio vale
+                     * sempre `null`. Nessuna voce finiva nella mappa, e l'errore
+                     * che ne usciva («'libprotobuf.so' non trovato dentro il
+                     * pacchetto») accusava il pacchetto invece di questa riga.
+                     */
+                    if (voce.isSymbolicLink() || voce.isLink()) {
+                        collegamenti[base] = voce.linkName.tokenize('/').last()
+                    } else if (voce.isFile()) {
+                        contenuti[base] = tar.bytes
+                    }
+                }
+            }
+
+            voluti.each { vero, apk ->
+                def nome = vero
+                def giri = 0
+                while (contenuti[nome] == null && collegamenti[nome] != null && giri++ < 8) {
+                    nome = collegamenti[nome]
+                }
+                def dati = contenuti[nome]
+                if (dati == null) throw new GradleException("${deb.name}: '${vero}' non trovato dentro il pacchetto.")
+
+                def atteso = attesi[apk][1]
+                def trovata = improntaDi(dati)
+                if (trovata != atteso) {
+                    throw new GradleException(
+                            "IMPRONTA DIVERSA per ${apk} (da ${deb.name}).\n  atteso  ${atteso}\n  trovato ${trovata}")
+                }
+                new File(fuori, apk).bytes = dati
+                scritti << apk
+            }
+        }
+
+        if (scritti != attesi.keySet()) {
+            throw new GradleException("Mancano dal ponte: ${attesi.keySet() - scritti}")
+        }
+        logger.lifecycle("ponte adb: ${scritti.size()} binari verificati contro PROVENIENZA.md")
+    }
+}
+
+// ⛔ PRIMA della compilazione, sempre. Un ponte a metà non è un ponte, e un APK
+// senza questi file si installa benissimo e poi non sa accoppiarsi.
+/**
+ * ⭐⭐ I MODELLI DELLA PAROLA DI ATTIVAZIONE — scaricati e verificati, non commessi.
+ *
+ * Stessa disciplina del ponte `adb`, e per la stessa ragione: la verifica delle
+ * impronte smette di essere un rito fatto una volta e diventa parte di OGNI
+ * compilazione. La scheda leggibile e' `src/main/jniLibs/PROVENIENZA-PAROLA.md`,
+ * e li' c'e' anche la MISURA che ha mandato via sherpa-onnx.
+ *
+ * ⛔ Una destinazione sola. Prima erano tre perche' sherpa portava una libreria
+ * nativa, dei pesi e delle fonti Kotlin da compilare con noi; adesso il runtime
+ * arriva da Maven e restano solo pesi letti a runtime.
+ *
+ * ⛔ Si verifica ANCHE il numero di byte, non solo l'impronta. Non aggiunge
+ * sicurezza — l'impronta basta — ma quando qualcosa non torna dice subito se hai
+ * scaricato un file diverso o una pagina di errore travestita da file.
+ */
+tasks.register('preparaOrecchioParola') {
+    description = 'Scarica e verifica i modelli della parola di attivazione dichiarati in PROVENIENZA-PAROLA.md'
+    def scheda = file('src/main/jniLibs/PROVENIENZA-PAROLA.md')
+    def fuori = file("${buildDir}/parola/assets/parola")
+    // La cache sta FUORI da build/: un `clean` non deve costare un altro
+    // scaricamento di tre megabyte e mezzo.
+    def cache = new File(gradle.gradleUserHomeDir, 'talos-orecchio-parola')
+
+    inputs.file scheda
+    outputs.dir fuori
+
+    doLast {
+        if (!scheda.exists()) {
+            throw new GradleException(
+                    "Manca ${scheda}: senza la scheda di provenienza la parola di attivazione non si costruisce.")
+        }
+        def testo = scheda.getText('UTF-8')
+
+        def attesi = [:]      // nome nell'APK -> [byte, impronta]
+        def rinominati = [:]  // nome nell'APK -> nome nel rilascio
+        def inCasa = [:]      // nome nell'APK -> [percorso nel repo, byte, impronta]
+        def base = null
+        testo.eachLine { riga ->
+            def r = riga.trim()
+            def b = (r =~ /^Base: `(\S+)`$/)
+            if (b.matches()) { base = b[0][1]; return }
+            def f = (r =~ /^\|\s*`(parola\/[^`]+)`\s*\|\s*(\d+)\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
+            if (f.matches()) { attesi[f[0][1]] = [f[0][2].toLong(), f[0][3]]; return }
+            /*
+             * ⛔⛔ I FILE NATI IN CASA — quattro colonne, e non si scaricano.
+             *
+             * `talos.onnx` l'abbiamo addestrato noi: non esiste nessun URL da
+             * cui prenderlo, e la regola «niente binari nella repo» qui non si
+             * puo' applicare — il binario È la funzione, e senza di lui l'APK
+             * non ha la parola di attivazione.
+             *
+             * ⇒ Cambia DA DOVE arriva, non SE si verifica: peso e impronta si
+             * controllano identici agli altri. Se qualcuno tocca il file senza
+             * aggiornare la scheda, la build si ferma esattamente come per un
+             * file pubblicato che cambia sotto i piedi.
+             */
+            def c = (r =~ /^\|\s*`(parola\/[^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*(\d+)\s*\|\s*`([0-9a-f]{64})`\s*\|$/)
+            if (c.matches()) { inCasa[c[0][1]] = [c[0][2], c[0][3].toLong(), c[0][4]]; return }
+            def n = (r =~ /^\|\s*`(parola\/[^`]+)`\s*\|\s*`([^`]+)`\s*\|$/)
+            if (n.matches()) { rinominati[n[0][1]] = n[0][2] }
+        }
+        if (attesi.isEmpty() || base == null) {
+            throw new GradleException(
+                    "PROVENIENZA-PAROLA.md non ha prodotto le righe attese (file=${attesi.size()}, base=${base}). " +
+                            "La tabella e' cambiata e questo compito non la riconosce piu'. Non e' una scheda vuota.")
+        }
+
+        cache.mkdirs()
+        fuori.mkdirs()
+
+        attesi.each { apk, dati ->
+            def peso = dati[0]
+            def impronta = dati[1]
+            def nomeVero = rinominati.getOrDefault(apk, apk).tokenize('/').last()
+            def giu = new File(cache, nomeVero)
+
+            if (!giu.exists() || improntaDi(giu.bytes) != impronta) {
+                logger.lifecycle("parola: scarico ${nomeVero}")
+                giu.withOutputStream { uscita -> new URL(base + nomeVero).withInputStream { uscita << it } }
+            }
+            if (giu.length() != peso) {
+                def trovato = giu.length()
+                giu.delete()
+                throw new GradleException(
+                        "PESO DIVERSO per ${nomeVero}.\n  atteso  ${peso} byte\n  trovato ${trovato} byte\n" +
+                                "Quasi sempre vuol dire che al posto del file e' arrivata una pagina di errore.")
+            }
+            def vera = improntaDi(giu.bytes)
+            if (vera != impronta) {
+                giu.delete()
+                throw new GradleException(
+                        "IMPRONTA DIVERSA per ${nomeVero}.\n  atteso  ${impronta}\n  trovato ${vera}\n" +
+                                "Il file pubblicato non e' piu' quello dichiarato in PROVENIENZA-PAROLA.md. " +
+                                "NON si aggiorna il numero senza sapere perche' e' cambiato.")
+            }
+
+            def destinazione = new File(fuori.parentFile, apk)
+            destinazione.parentFile.mkdirs()
+            destinazione.bytes = giu.bytes
+        }
+
+        /*
+         * ⛔ I NOSTRI: stessa verifica, altra provenienza.
+         *
+         * Non c'e' niente da scaricare — il file e' nel repo perche' l'abbiamo
+         * addestrato noi — ma peso e impronta si controllano lo stesso. Un
+         * modello sostituito di nascosto ferma la build come uno pubblicato che
+         * cambia sotto i piedi.
+         */
+        inCasa.each { apk, dati ->
+            def sorgente = file(dati[0])
+            def peso = dati[1]
+            def impronta = dati[2]
+            if (!sorgente.exists()) {
+                throw new GradleException(
+                        "MANCA ${dati[0]}, dichiarato in PROVENIENZA-PAROLA.md come modello nostro. " +
+                                "Senza, l'APK non ha la parola di attivazione: non e' un file opzionale.")
+            }
+            if (sorgente.length() != peso) {
+                throw new GradleException(
+                        "PESO DIVERSO per ${dati[0]}.\n  atteso  ${peso} byte\n  trovato ${sorgente.length()} byte\n" +
+                                "Il modello e' stato sostituito senza aggiornare la scheda.")
+            }
+            def vera = improntaDi(sorgente.bytes)
+            if (vera != impronta) {
+                throw new GradleException(
+                        "IMPRONTA DIVERSA per ${dati[0]}.\n  atteso  ${impronta}\n  trovato ${vera}\n" +
+                                "NON si aggiorna il numero senza sapere quale addestramento ha prodotto questo file.")
+            }
+            def destinazione = new File(fuori.parentFile, apk)
+            destinazione.parentFile.mkdirs()
+            destinazione.bytes = sorgente.bytes
+        }
+        logger.lifecycle("parola: ${attesi.size()} scaricati + ${inCasa.size()} nostri, verificati contro PROVENIENZA-PAROLA.md")
+    }
+}
+
+tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'preparaPonteAdb', 'preparaOrecchioParola' }

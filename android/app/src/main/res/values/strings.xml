@@ -1,0 +1,14 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TALOS</string>
+    <string name="title_activity_main">TALOS</string>
+    <string name="package_name">ai.talos</string>
+    <string name="custom_url_scheme">ai.talos</string>
+    <!--
+        ⛔ Il nome dell'occhio nell'elenco dei servizi di accessibilita'.
+        NON «TALOS»: quella lista da' a un'app il diritto di leggere tutto lo
+        schermo, e una riga che dice solo il nome dell'app non spiega a nessuno
+        cosa sta per concedere. Qui si dice la CAPACITA'.
+    -->
+    <string name="talos_occhio_nome">TALOS — controllo del telefono</string>
+</resources>
