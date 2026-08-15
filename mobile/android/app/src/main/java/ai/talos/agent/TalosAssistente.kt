@@ -103,6 +103,61 @@ class TalosAssistente : VoiceInteractionService() {
          * Torna `false` se il sistema non ci sta tenendo accesi come assistente:
          * allora chi chiama apre la barra come ha sempre fatto.
          */
+        /**
+         * ⭐⭐⭐ CHIAMA TALOS — la porta unica per ogni scorciatoia.
+         *
+         * Le tre strade, in quest'ordine, e l'ordine È il contenuto:
+         *
+         * 1. **La barra è già davanti** → un intent NUOVO. `showSession` su una
+         *    sessione già mostrata non produce niente: nessun intent arriva alla
+         *    barra, il lato web non conta nessuna chiamata, l'ascolto non
+         *    riparte. È il difetto che l'owner ha visto il 2026-08-14 con «hey
+         *    jarvis a barra aperta», e la cura è mandare un intent che
+         *    `onNewIntent` timbra come apertura nuova.
+         * 2. **La sessione dell'assistente** (`showSession`) — l'unica che porta
+         *    il CONTESTO DELLO SCHERMO. Vedi [[due-porte-che-sembrano-una]]: il
+         *    gesto passa di qui e riceve `AssistStructure`; `startActivity`
+         *    apre la stessa finestra e non riceve niente.
+         * 3. **La barra da sola**, se il sistema non ci tiene accesi come
+         *    assistente. Meglio senza occhio che niente.
+         *
+         * ⛔ `TalosParola` ha ancora questa stessa forma scritta dentro di sé,
+         * con intorno la sua contabilità (`ceduto`, il riposo dell'eco). NON è
+         * stata spostata qui in questo giro per una ragione sola: quella strada
+         * si prova **con una voce vera**, e una cura che non si può riprovare non
+         * si tocca. Quando ci sarà `talos.onnx` e una prova ripetibile, quella
+         * copia sparisce e chiama questa.
+         */
+        @JvmStatic
+        fun chiama(contesto: android.content.Context, motivo: String): Boolean {
+            if (ai.talos.TalosBarraActivity.eDavanti()) {
+                Log.i(TAG, "$SEGNO $motivo: la barra è davanti, le mando una chiamata nuova")
+                return apriLaBarra(contesto)
+            }
+            if (apriComeAssistente()) {
+                Log.i(TAG, "$SEGNO $motivo: sessione assistente")
+                return true
+            }
+            Log.w(TAG, "$SEGNO $motivo: niente sessione, apro la barra da sola")
+            return apriLaBarra(contesto)
+        }
+
+        /** L'ultima strada: la finestra nostra, senza contesto dello schermo. */
+        private fun apriLaBarra(contesto: android.content.Context): Boolean = runCatching {
+            contesto.startActivity(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    android.net.Uri.parse("talos://barra?voce=1&nodi=0&immagine=0"),
+                    contesto,
+                    ai.talos.TalosBarraActivity::class.java,
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            true
+        }.getOrElse {
+            Log.w(TAG, "$SEGNO nemmeno la barra si è aperta: ${it.message}")
+            false
+        }
+
         @JvmStatic
         fun apriComeAssistente(): Boolean {
             val servizio = vivo ?: return false
@@ -164,6 +219,15 @@ class TalosAssistente : VoiceInteractionService() {
         @JvmStatic
         fun quantiNodiVisti(): Int = nodiVisti
 
+        /**
+         * ⭐ L'indirizzo della pagina che la persona sta guardando, o vuoto.
+         *
+         * ⛔ `@JvmStatic` come i due qui sopra: il ponte della barra è in Java,
+         * e una proprietà Kotlin dentro un `companion object` da lì non si vede.
+         */
+        @JvmStatic
+        fun indirizzoDellaPagina(): String = indirizzoPagina ?: ""
+
         @JvmStatic
         fun prendiIlTestoDiSchermo(): String {
             val ora = testoSchermo
@@ -176,10 +240,36 @@ class TalosAssistente : VoiceInteractionService() {
             testoSchermo = ""
         }
 
-        internal fun annota(nodi: Int, immagine: Boolean, testo: String = "") {
+        /**
+         * ⭐⭐⭐ L'INDIRIZZO DELLA PAGINA CHE LA PERSONA STA GUARDANDO.
+         *
+         * Owner, rilievo #4: «quando dici apri Chrome, Gemini apre Chrome e
+         * l'assistente si chiude. Rilanciare l'assistente con la NUOVA pagina
+         * mostrata, così la conversazione continua».
+         *
+         * ⛔ E NON si legge dallo schermo: Chrome lo CONSEGNA. Quando
+         * l'assistente viene mostrato come **sessione**, il sistema passa un
+         * `AssistContent`, e Chrome ci scrive dentro l'URL della scheda aperta
+         * (`onProvideAssistContent` → `setWebUri`, verificato nel codice di
+         * Chromium). Ricostruirlo dai pixel sarebbe indovinare una cosa che ci
+         * viene data.
+         *
+         * ⛔ In incognito Chrome non lo dà, di proposito. Allora resta `null`, e
+         * chi legge dice «non lo so» invece di inventare un indirizzo.
+         */
+        @Volatile var indirizzoPagina: String? = null
+            private set
+
+        internal fun annota(
+            nodi: Int,
+            immagine: Boolean,
+            testo: String = "",
+            indirizzo: String? = null,
+        ) {
             nodiVisti = nodi
             immagineVista = immagine
             if (testo.isNotEmpty()) testoSchermo = testo
+            indirizzoPagina = indirizzo
         }
     }
 }
@@ -269,11 +359,17 @@ class TalosAssistenteSessione(private val servizio: TalosAssistenteSessioneServi
         } else {
             ""
         }
-        TalosAssistente.annota(nodi, immagine, testo)
+        /*
+         * ⛔ `webUri` e non il testo: se la persona sta guardando una pagina,
+         * l'indirizzo è il dato utile — con quello TALOS la legge davvero,
+         * invece di ricostruirla dai nodi dello schermo.
+         */
+        val indirizzo = contenuto?.webUri?.toString()
+        TalosAssistente.annota(nodi, immagine, testo, indirizzo)
         Log.i(
             TalosAssistente.TAG,
             "${TalosAssistente.SEGNO} contesto finestre=$finestre nodi=$nodi" +
-                " contenuto=${contenuto != null}",
+                " contenuto=${contenuto != null} pagina=${indirizzo ?: "-"}",
         )
         /*
          * ⛔⛔ IL CONTESTO ARRIVA DOPO CHE LA BARRA È GIÀ APERTA — misurato.
@@ -298,6 +394,64 @@ class TalosAssistenteSessione(private val servizio: TalosAssistenteSessioneServi
          * sistema di comporre l'app sottostante, e Chrome spariva.)
          */
         if (barraAperta && nodi > 0) servizio.startActivity(intentDellaBarra())
+    }
+
+    /*
+     * ⛔⛔ LA SESSIONE NON MUORE PERCHÉ TALOS HA APERTO UN'APP.
+     *
+     * ## Il difetto, owner 2026-08-15
+     *
+     * > «se chiedo "invia un messaggio a Shadina" lui mette il messaggio nel
+     * > campo input ma non lo invia, **la barra assistente non ricompare**, e se
+     * > dico "invia" non invia nulla.»
+     *
+     * ## ⛔ Le due porte che chiudono, e non le abbiamo scritte noi
+     *
+     * Dalla documentazione di `VoiceInteractionSession`:
+     *
+     * > «Sessions automatically watch for requests that all system UI be closed
+     * > (such as when the user presses HOME), which will appear here.
+     * > **The default implementation always calls `finish()`.**»
+     *
+     * e per `onTaskFinished`: «The default implementation calls `finish()`».
+     *
+     * ⇒ Aprire un'app fa chiudere la system UI, quindi il sistema ci chiedeva di
+     * sparire e noi — non avendo scritto niente — obbedivamo. La conversazione
+     * finiva perché TALOS aveva fatto il suo lavoro.
+     *
+     * ## La politica: la sessione vive quanto la barra
+     *
+     * Non «mai chiudere» — sarebbe una sessione vocale immortale, e il sistema
+     * ha ragione a volerla chiudere quando non serve più. Ma finché la barra è
+     * a schermo, la conversazione è viva: chiuderla mentre la persona la sta
+     * usando è il difetto, non la prudenza.
+     *
+     * ⛔ E resta il vincolo che nessun codice può aggirare: per RIENTRARE dopo
+     * aver ceduto lo schermo serve una finestra ancora visibile
+     * (`SYSTEM_ALERT_WINDOW` + overlay visibile su Android 15+). Questa
+     * sovrascrittura tiene viva la sessione; **non basta da sola** a far
+     * ricomparire la barra. Il resto sta in
+     * `docs/superpowers/research/2026-08-15-rientro-assistente-dopo-apertura-app.md`.
+     */
+    override fun onCloseSystemDialogs() {
+        if (barraAperta) {
+            Log.i(TalosAssistente.TAG, "${TalosAssistente.SEGNO} resto viva: la barra è a schermo")
+            return
+        }
+        super.onCloseSystemDialogs()
+    }
+
+    /*
+     * ⛔ Stesso motivo: un'attività che finisce non è una conversazione che
+     * finisce. Il default chiuderebbe la sessione appena l'app aperta si
+     * congeda, che è esattamente il momento in cui TALOS deve tornare.
+     */
+    override fun onTaskFinished(intent: Intent?, taskId: Int) {
+        if (barraAperta) {
+            Log.i(TalosAssistente.TAG, "${TalosAssistente.SEGNO} attività finita, ma la barra c'è ancora")
+            return
+        }
+        super.onTaskFinished(intent, taskId)
     }
 
     override fun onHandleScreenshot(screenshot: Bitmap?) {
@@ -349,7 +503,46 @@ class TalosAssistenteSessione(private val servizio: TalosAssistenteSessioneServi
         // ⛔ PRIMA di costruire l'intent: è il timbro che dice «questa apertura
         // è una sola», e lo porteranno tutti gli intent di questa sessione.
         apertura = android.os.SystemClock.uptimeMillis()
+        /*
+         * ⛔⛔ IL MICROFONO SI APRE QUI, non nell'Activity — owner 2026-08-15:
+         * «possiamo anticipare ulteriormente il delay tra apertura barra
+         * assistente e il punto da cui TALOS effettivamente ascolta?».
+         *
+         * ## MISURATO sul Pad, prima della cura (t0 = `onShow`)
+         *
+         * ```
+         *   +  0 ms  onShow
+         *   + 99 ms  anticipato: microfono aperto PRIMA della WebView
+         *   +172 ms  anticipato: pronto
+         *   +344 ms  Soda: start detection    ← QUI recepisce le parole
+         *   +494 ms  primo volume (la WebView adotta, «1 eventi in coda»)
+         * ```
+         *
+         * I 99 ms in testa non erano lavoro nostro: erano **il lancio
+         * dell'Activity**. `accendi` stava in `TalosBarraActivity.onCreate` —
+         * il primo punto utile *dentro l'Activity*, e già prima di
+         * `super.onCreate` — ma l'Activity deve prima nascere.
+         *
+         * ⇒ La sessione e l'Activity vivono nello stesso processo, e
+         * `TalosOrecchioAnticipato` è un oggetto statico: da qui si arriva allo
+         * stesso microfono, un lancio di Activity prima.
+         *
+         * ⛔ RESTA anche in `onCreate` e non si sposta: quella è la strada di
+         * chi apre la barra **senza** passare da qui (la tendina, il pallino,
+         * `startActivity` diretto). `accendi` è idempotente (`if (acceso)
+         * return`) e si posta da sé sul thread giusto, quindi la seconda
+         * chiamata non costa niente. Toglierla di là spegnerebbe l'anticipo per
+         * tutti gli altri ingressi.
+         *
+         * ⛔ E SOLO per la voce: `intentDellaBarra()` porta `voce=1`, cioè
+         * questa apertura vuole il microfono. Un microfono acceso perché
+         * qualcuno ha aperto la barra per SCRIVERE è esattamente ciò che non si
+         * fa — la condizione è la stessa che l'Activity legge dall'indirizzo.
+         */
         val apri = intentDellaBarra()
+        if (apri.data?.getQueryParameter("voce") == "1") {
+            TalosOrecchioAnticipato.accendi(servizio)
+        }
         barraAperta = true
         /*
          * ⛔ `startActivity` e NON `startVoiceActivity`, e l'ho imparato

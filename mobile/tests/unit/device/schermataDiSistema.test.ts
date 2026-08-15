@@ -48,11 +48,17 @@ describe('⛔ la schermata di sistema non si fa indovinare al modello', () => {
     })
 
     it('⛔ e il verso opposto: `action.` in mezzo, dove Android lo mette davvero', () => {
-        // Tre delle nostre schermate scrivono `android.settings.action.X`, non
-        // `android.settings.ACTION_X`. Un modello le confonde in entrambi i
+        // Alcune delle nostre schermate scrivono `android.settings.action.X`,
+        // non `android.settings.ACTION_X`. Un modello le confonde in entrambi i
         // versi, e tutte e due le forme devono arrivare alla stessa pagina.
-        expect(talosSchermataDiSistema('android.settings.ACTION_MANAGE_OVERLAY_PERMISSION'))
-            .toBe('android.settings.action.MANAGE_OVERLAY_PERMISSION')
+        //
+        // ⛔ Qui c'era anche `MANAGE_OVERLAY_PERMISSION`, tolta il 2026-08-15
+        // insieme al pulsante flottante: una schermata che non serve piu' a
+        // nessuna nostra capacita' non si tiene in elenco «per sicurezza», se
+        // no il modello la puo' proporre e la persona ci finisce dentro senza
+        // motivo.
+        expect(talosSchermataDiSistema('android.settings.ACTION_MANAGE_WRITE_SETTINGS'))
+            .toBe('android.settings.action.MANAGE_WRITE_SETTINGS')
         expect(talosSchermataDiSistema('MANAGE_WRITE_SETTINGS'))
             .toBe('android.settings.action.MANAGE_WRITE_SETTINGS')
     })

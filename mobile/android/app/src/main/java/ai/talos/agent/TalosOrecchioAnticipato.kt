@@ -1,6 +1,7 @@
 package ai.talos.agent
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -65,6 +66,16 @@ object TalosOrecchioAnticipato {
 
     /** Nessuno si aggancia entro questo tempo ⇒ il microfono si chiude da solo. */
     private const val SOLITUDINE_MS = 12_000L
+
+    /**
+     * Quanto si aspetta prima di riaprire una sessione morta di silenzio.
+     *
+     * ⛔ Non zero: chiudere e riaprire nello stesso millisecondo mette questo
+     * riconoscitore in uno stato da cui non riparte — misurato l'11 agosto,
+     * `errore=CLIENT (5)`, ed è la ragione per cui `consegnaIlMotore` non
+     * annulla. Sessanta millesimi non si sentono e bastano.
+     */
+    private const val RESPIRO_RIAPERTURA_MS = 60L
 
     /**
      * ⛔⛔ L'EPOCA, e senza di lei la consegna del motore fa più danni del male
@@ -169,6 +180,94 @@ object TalosOrecchioAnticipato {
         ultimaFine = SystemClock.uptimeMillis()
     }
 
+    /**
+     * ⭐⭐⭐ L'INTENTO DI QUESTA SESSIONE, per poterla RIFARE senza rifare i conti.
+     *
+     * Serve alla ripartenza silenziosa qui sotto: la sessione che si riapre deve
+     * essere **identica** a quella che è morta, se no la firma cambia e il lato
+     * web non può più adottarla — cioè si curerebbe la sordità creando la
+     * sessione buttata che questo file esiste per evitare.
+     */
+    private var intentoDiQuestaSessione: Intent? = null
+
+    /** Vero appena arriva del TESTO: allora la sessione ha fatto il suo lavoro. */
+    @Volatile
+    private var qualcosaDetto = false
+
+    /**
+     * ⛔⛔⛔ IL SILENZIO NON CHIUDE L'ORECCHIO — e questa è la cura del difetto
+     * che l'owner ha descritto il 2026-08-14:
+     *
+     * > «Quando dico *hey jarvis* e parlo subito dopo che compare la barra, non
+     * > prende bene le mie parole… rischia di mangiarsi parole.»
+     *
+     * ## La misura, sul Pad, con la frase detta subito dopo la parola
+     *
+     *     16:50:20.806  anticipato: pronto a +140 ms     ← il microfono è aperto
+     *     16:50:22.244  barra: accendo l'ascolto          ← la WebView arriva a +1,6 s
+     *     16:50:22.304  anticipato: agganciato a +1639 ms
+     *     16:50:22.490  anticipato: PARLA a +1825 ms      ← la persona sta parlando
+     *     16:50:22.541  anticipato «errore» +1876ms NO_MATCH   ← e 51 ms dopo muore
+     *     16:50:23.046  barra: chiamo toggle              ← mezzo secondo di respiro
+     *     16:50:23.373  «pronto» PRESA +0ms               ← sessione nuova a +2,5 s
+     *
+     * Tre misure in tre aperture diverse: **+1836, +1864, +1876 ms**. È il
+     * riconoscitore di Google che applica il silenzio di fine frase — 1.600 ms —
+     * anche PRIMA che qualcuno abbia parlato: la sessione nasce in una stanza
+     * muta (la parola di attivazione è appena finita) e muore di quel silenzio
+     * proprio nell'istante in cui la WebView si aggancia.
+     *
+     * ⇒ Il buco è fra +1,9 s e +2,5 s, ed è esattamente dove una persona che
+     * vede comparire la barra comincia a parlare. Le parole ci cadevano dentro.
+     *
+     * ## ⛔ Perché si riapre invece di allungare il silenzio
+     *
+     * Allungare `EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS` cambierebbe
+     * anche la fine del turno — cioè quanto TALOS aspetta prima di mandare — che
+     * è un numero tarato altrove, contro un'altra misura (2.500 ms totali). Un
+     * parametro che serve a due cose è un parametro che un giorno si taglia
+     * sbagliando quale delle due.
+     *
+     * ⇒ Il turno finito senza una parola non è un esito: è la stessa attesa che
+     * continua. Si riapre **la stessa identica sessione**, e chi sta parlando
+     * non se ne accorge.
+     *
+     * ⛔ E si riapre SOLO se non è stato detto niente. Un NO_MATCH dopo che è
+     * arrivato del testo è un esito vero e sale al lato web, che sa cosa farne.
+     */
+    private fun ilSilenzioNonEUnEsito(errore: Int): Boolean {
+        if (qualcosaDetto) return false
+        if (errore != SpeechRecognizer.ERROR_NO_MATCH
+            && errore != SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+        ) return false
+        val riconoscitore = motore ?: return false
+        val intento = intentoDiQuestaSessione ?: return false
+        /*
+         * ⛔ E non all'infinito: dopo `SOLITUDINE_MS` il silenzio è una risposta.
+         * È lo stesso tetto che questo file usa già per «nessuno si è agganciato»
+         * — un microfono aperto senza nessuno che ascolti è la cosa che non deve
+         * succedere mai, e riaprirlo di continuo sarebbe proprio quello.
+         */
+        if (SystemClock.elapsedRealtime() - apertura >= SOLITUDINE_MS) return false
+        /*
+         * ⛔ Un respiro prima di ripartire: chiudere e riaprire nello stesso
+         * millisecondo è la cosa che questo riconoscitore non perdona — sta
+         * scritto in `consegnaIlMotore`, e ci è costata `errore=CLIENT (5)`.
+         * Qui non c'è nemmeno un `cancel()` di mezzo, ma il respiro resta.
+         */
+        mano.postDelayed({
+            if (!acceso) return@postDelayed
+            runCatching { riconoscitore.startListening(intento) }
+                .onFailure { Log.w(ORECCHIO, "anticipato: non si è riaperto — ${it.message}") }
+        }, RESPIRO_RIAPERTURA_MS)
+        Log.i(
+            ORECCHIO,
+            "anticipato: silenzio a +${SystemClock.elapsedRealtime() - apertura} ms,"
+                + " nessuno ha ancora parlato: riapro senza dirlo a nessuno",
+        )
+        return true
+    }
+
     private val solitudine = Runnable {
         if (consegna == null && acceso) {
             Log.i(ORECCHIO, "anticipato: nessuno si è agganciato, chiudo")
@@ -234,19 +333,23 @@ object TalosOrecchioAnticipato {
         // default e dichiareremmo un'altra cosa — cioè adotteremmo una sessione
         // che ascolta in un modo che nessuno ha chiesto.
         firma = talosFirmaRichiesta(lingua, automatica, consentite, parziali, offline, silenzio, minimo)
+        // ⛔ Si TIENE l'intento, non si ricalcola: la riapertura silenziosa deve
+        // ripartire con la sessione identica, se no la firma cambia e il lato
+        // web non può più adottarla. Vedi `ilSilenzioNonEUnEsito`.
+        val intento = talosIntentoDiAscolto(
+            context = context,
+            lingua = lingua,
+            automatica = automatica,
+            consentite = consentite,
+            parziali = parziali,
+            offline = offline,
+            silenzio = silenzio,
+            minimo = minimo,
+        )
+        intentoDiQuestaSessione = intento
+        qualcosaDetto = false
         try {
-            riconoscitore.startListening(
-                talosIntentoDiAscolto(
-                    context = context,
-                    lingua = lingua,
-                    automatica = automatica,
-                    consentite = consentite,
-                    parziali = parziali,
-                    offline = offline,
-                    silenzio = silenzio,
-                    minimo = minimo,
-                ),
-            )
+            riconoscitore.startListening(intento)
             Log.i(ORECCHIO, "anticipato: microfono aperto PRIMA della WebView")
         } catch (errore: Exception) {
             acceso = false
@@ -337,6 +440,7 @@ object TalosOrecchioAnticipato {
          */
         runCatching { riconoscitore.cancel() }
         motore = null
+        intentoDiQuestaSessione = null
         Log.i(ORECCHIO, "anticipato: consegno il motore caldo, la sessione si rifà")
         return riconoscitore
     }
@@ -347,6 +451,10 @@ object TalosOrecchioAnticipato {
         turnoFinito()
         consegna = null
         coda.clear()
+        // ⛔ Anche l'intento: senza, una riapertura già in coda troverebbe di che
+        // ripartire. La guardia su `acceso` basta, ma due guardie su un microfono
+        // che si riaccende da solo non sono troppe.
+        intentoDiQuestaSessione = null
         runCatching { motore?.cancel() }
     }
 
@@ -441,6 +549,10 @@ object TalosOrecchioAnticipato {
         override fun onError(error: Int) {
             eco("errore", "${talosNomeErrore(error)} ($error)")
             if (!viva()) return
+            // ⛔ PRIMA di `turnoFinito()`, che spegne `acceso`: un turno chiuso
+            // dal silenzio, senza che nessuno abbia parlato, non è finito — è la
+            // stessa attesa che continua. Vedi `ilSilenzioNonEUnEsito`.
+            if (ilSilenzioNonEUnEsito(error)) return
             turnoFinito()
             manda(Evento("errore", codice = talosNomeErrore(error)))
         }
@@ -460,6 +572,7 @@ object TalosOrecchioAnticipato {
         override fun onResults(results: Bundle?) {
             if (!viva()) return
             val testo = primaParola(results)
+            if (testo.isNotEmpty()) qualcosaDetto = true
             if (aSegmenti) {
                 if (testo.isNotEmpty()) manda(Evento("segmento", testo = testo))
                 return
@@ -472,13 +585,21 @@ object TalosOrecchioAnticipato {
         override fun onPartialResults(partialResults: Bundle?) {
             if (!viva()) return
             val testo = primaParola(partialResults)
-            if (testo.isNotEmpty()) manda(Evento("parziale", testo = testo))
+            if (testo.isEmpty()) return
+            // ⛔ È il TESTO che segna «qualcuno ha parlato», non `onBeginningOfSpeech`:
+            // MISURATO sul Pad, il motore ha annunciato PARLA a +1825 ms e 51 ms
+            // dopo ha risposto NO_MATCH senza una sola parola. Un rumore basta a
+            // far scattare quell'annuncio; solo il testo prova che c'è una voce.
+            qualcosaDetto = true
+            manda(Evento("parziale", testo = testo))
         }
 
         override fun onSegmentResults(segment: Bundle) {
             if (!viva()) return
             val testo = primaParola(segment)
-            if (testo.isNotEmpty()) manda(Evento("segmento", testo = testo))
+            if (testo.isEmpty()) return
+            qualcosaDetto = true
+            manda(Evento("segmento", testo = testo))
         }
 
         override fun onEndOfSegmentedSession() {

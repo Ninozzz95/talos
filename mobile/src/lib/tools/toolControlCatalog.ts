@@ -137,6 +137,14 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     { id: 'device_volume', group: 'device', actions: ['write'] },
     { id: 'device_alarm', group: 'device', actions: ['write'] },
     { id: 'device_open_app', group: 'device', actions: ['write'] },
+    /*
+     * ⛔ Lo screenshot è `write` E `read`: scrive un file in galleria, ma
+     * soprattutto LEGGE ciò che c'è sullo schermo in quel momento — che può
+     * essere la chat di un'altra persona, un conto in banca, un documento.
+     * L'ordine di questa riga segue la FABBRICA, non il gusto: un cancello
+     * confronta le due liste voce per voce.
+     */
+    { id: 'device_screenshot', group: 'device', actions: ['write', 'read'] },
     { id: 'device_open_settings', group: 'device', actions: ['write'] },
     /*
      * ⛔ `outbound` anche se e' la persona a premere: il testo ESCE dal
@@ -155,6 +163,12 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     // guardi il telefono vede. Quindi `read` insieme a `write`.
     { id: 'device_wallpaper', group: 'device', actions: ['write', 'read'] },
     { id: 'device_keep_awake', group: 'device', actions: ['write'] },
+    /*
+     * ⛔ Solo `read`, e legge roba della PERSONA: quanta posta non ha ancora
+     * aperto. Non manda niente e non tocca niente — ma chi ha chiuso «leggi»
+     * dev'essere fermato anche qui.
+     */
+    { id: 'device_unread_mail', group: 'device', actions: ['read'] },
     /*
      * T2 — le capacita' che passano dalla shell via Shizuku, o dal pannello
      * che galleggia quando la shell non c'e'. Misurato il 2026-08-08: il
@@ -179,4 +193,17 @@ export const TALOS_AGENT_TOOL_CONTROLS = Object.freeze([
     { id: 'device_screen_drive', group: 'device', actions: ['write', 'outbound'] },
     { id: 'app_azione', group: 'device', actions: ['write', 'outbound'] },
     { id: 'invia_file', group: 'device', actions: ['write', 'outbound'] },
+    /*
+     * ⭐⭐⭐ IL CALENDARIO — 2026-08-14, in LETTURA.
+     *
+     * ⛔ Sta in `personal` perché è roba della persona, non del telefono: chi
+     * vuole spegnerlo lo cerca accanto a note e attività, non fra torcia e
+     * volume. Ma sta IN FONDO alla lista, e non è un dettaglio: la guardia
+     * AGENT-TOOLS-01 pretende che l'ordine di questo catalogo sia **identico**
+     * a quello con cui il toolset costruisce gli attrezzi, e lì il calendario
+     * si aggiunge per ultimo. Il raggruppamento a schermo lo fa `group`, non
+     * la posizione.
+     */
+    { id: 'calendar_read', group: 'personal', actions: ['read'] },
+    { id: 'calendar_write', group: 'personal', actions: ['write'] },
 ] as const satisfies readonly TalosAgentToolControl[])

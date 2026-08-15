@@ -116,8 +116,9 @@ const composerShape = computed(() => talosComposerFlags(
     settings.state.shell.composer_plus,
 ))
 const {
-    catalogs,
     profiles,
+    refreshingModels,
+    discoveryProblems,
     segretiLetti,
     cataloghiNonLetti,
     selectedModelId,
@@ -425,21 +426,13 @@ const librarySelectedSourceCount = computed(
 const modelLabels = computed(() => Object.fromEntries(
     profiles.value.map((profile) => [profile.id, profile.display_name]),
 ))
-const refreshingModels = computed(() => Object.values(catalogs).some((catalog) => catalog.status === 'loading'))
-/**
- * The reasons the model list may be incomplete, already in the user's language.
- *
- * Only failures — a provider with no key saved is not a problem to report, it
- * is a provider the user has not set up. Deduplicated because two providers
- * failing the same way should say it once.
+/*
+ * ⛔ `refreshingModels` e `discoveryProblems` erano calcolati QUI, e la barra
+ * dell'assistente ne aveva bisogno degli stessi due (rilievo #9: «dalla barra
+ * il modello non si cambia»). Adesso arrivano dal controller, accanto ai
+ * `catalogs` da cui nascono: due superfici che ricavano lo stesso fatto dalla
+ * stessa fonte sono due risposte che un giorno divergono.
  */
-const discoveryProblems = computed(() => {
-    const seen = new Set<string>()
-    return Object.values(catalogs)
-        .filter((catalog) => catalog.status === 'error' && catalog.error)
-        .map((catalog) => ({ message: catalog.error as string, detail: catalog.errorDetail }))
-        .filter((problem) => !seen.has(problem.message) && seen.add(problem.message))
-})
 const attachmentBusy = computed(() => attachments.selecting.value)
 const attachmentError = computed(() => attachments.error.value)
 const composerExpanded = computed(() => (
@@ -994,8 +987,27 @@ onMounted(async () => {
     await draft.activateScope(activeSessionId.value ?? 'new')
     publishComposerHeight()
     if (typeof ResizeObserver !== 'undefined' && composerWrap.value) {
-        heightObserver = new ResizeObserver(() => publishComposerHeight())
+        /*
+         * ⛔⛔ DUE riquadri, e il secondo è la cura di S-1 — MISURATO sul Pad
+         * il 2026-08-13, telefono in orizzontale: il compositore copriva la
+         * risposta. Schermo 2400×1080, la scheda disegnata a y 984-1080+, cioè
+         * oltre il bordo. Lo spazio riservato in fondo vale
+         * `--talos-composer-height`, e dopo una rotazione restava quello di
+         * prima: il compositore può restare alto uguale, è la FINESTRA che
+         * cambia. Il riquadro della lista invece cambia sempre.
+         *
+         * ⛔ Riusare questo osservatore invece di un ascoltatore sulla finestra
+         * è costato 148 byte in meno al grafo d'avvio (603.218 → 603.070).
+         */
+        heightObserver = new ResizeObserver(() => {
+            publishComposerHeight()
+            // ⛔ Si torna in fondo SOLO se ci si era: chi stava leggendo un
+            // messaggio di ieri non dev'essere teletrasportato perché ha girato
+            // il telefono.
+            if (liveEdge.canAutoScroll()) void nextTick(scrollChatToBottom)
+        })
         heightObserver.observe(composerWrap.value)
+        if (chatScroll.value) heightObserver.observe(chatScroll.value)
     }
 })
 onBeforeUnmount(() => {
@@ -1248,6 +1260,7 @@ onBeforeUnmount(() => {
                     :has-older-messages="chat.state.hasOlderMessages"
                     :loading-older-messages="chat.state.loadingOlderMessages"
                     :pending-authorization-ids="attesePendenti"
+                    :diagnostica="settings.state.shell?.debug_diagnostics === true"
                     @reuse="reuseMessage"
                     @resend="resendMessage"
                     @retry="retryAssistantMessage"

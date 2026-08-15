@@ -30,6 +30,15 @@ internal const val ORECCHIO = "TalosOrecchio"
 private const val RESPIRO_CONSEGNA_MS = 250L
 
 /**
+ * Quanto si aspetta prima di riaprire una sessione morta di silenzio.
+ *
+ * ⛔ Non zero: chiudere e riaprire nello stesso millisecondo mette questo
+ * riconoscitore in uno stato da cui non riparte — misurato l'11 agosto,
+ * `errore=CLIENT (5)`. Sessanta millesimi non si sentono e bastano.
+ */
+private const val RESPIRO_RIAPERTURA_MS = 60L
+
+/**
  * ⭐⭐ I DUE TEMPI DELL'ASCOLTO — **una sola sorgente**, e sta qui.
  *
  * ## ⛔ Perché nel nativo e non nel lato web, dove erano
@@ -64,8 +73,37 @@ private const val RESPIRO_CONSEGNA_MS = 250L
  * là la conversazione è interrompibile e tagliare presto costa una frase
  * ripetuta; qui costa **il resto della domanda**. I due errori non pesano
  * uguale, quindi il numero non può essere lo stesso.
+ *
+ * ## ⭐ 2.200 → 1.600, e il numero l'ha scelto un CANCELLO, non io
+ *
+ * Owner 2026-08-14: «c'è un po' troppo tempo di delay tra la fine del mio
+ * discorso e quando viene inviato». Misurato: **3.100 ms**, perché dietro
+ * questa pausa ce n'è un'altra — la finestra di grazia della barra
+ * (`GRAZIA_MS`), che aspetta ancora prima di spedire.
+ *
+ * ⇒ Le due attese proteggevano dallo **stesso** rischio: che la frase non sia
+ * finita. Ma la grazia lo fa meglio, perché non è un'attesa cieca — se
+ * arrivano altre parole **annulla l'invio**. Pagare due volte la stessa
+ * assicurazione è il motivo per cui eravamo a 3,1 s contro i 300-800 ms che la
+ * letteratura sull'endpointing indica come soglia oltre la quale il ritardo si
+ * sente a ogni turno.
+ *
+ * ⛔⛔ E il primo tentativo è stato **1.400**, che un cancello esistente ha
+ * respinto: `dictationTempiCondivisi` pretende che questa soglia stia **sopra
+ * la moda dei 1.500 ms**, perché piantarla lì taglia a metà il gruppo più
+ * numeroso di «sto pensando, non ho finito» — cioè il difetto che l'owner
+ * aveva segnalato prima («non faccio in tempo a finire di parlare che invia»).
+ *
+ * Il cancello aveva ragione e non l'ho allentato: mi sono spostato io. 1.600 è
+ * il primo valore che sta sopra quella moda, e il totale scende comunque da
+ * 3.100 a 2.500 ms.
+ *
+ * ⛔ Il costo vero di abbassare questo numero non è tagliare la frase — è la
+ * finestra sorda di 437-560 ms fra la chiusura di una sessione e la
+ * riapertura, MISURATA e documentata su `RESPIRO_MS`. Chi riprende a parlare
+ * esattamente lì dentro non viene sentito.
  */
-internal const val TALOS_PAUSA_FINE_FRASE_MS = 2_200
+internal const val TALOS_PAUSA_FINE_FRASE_MS = 1_600
 
 /**
  * Quanto il microfono resta aperto ANCHE se non hai ancora aperto bocca.
@@ -129,6 +167,67 @@ internal const val TALOS_ATTESA_INIZIO_MS = 8_000
 class TalosDictationPlugin : Plugin() {
 
     private var motore: SpeechRecognizer? = null
+
+    /** L'intento della sessione in corso, per poterla rifare identica. */
+    private var intentoDiQuestaSessione: Intent? = null
+
+    /** Vero appena arriva del TESTO: allora la sessione ha fatto il suo lavoro. */
+    @Volatile
+    private var qualcosaDetto = false
+
+    /** Quando è stato aperto il microfono, per non riaprirlo all'infinito. */
+    private var ascoltoApertoA = 0L
+
+    /**
+     * ⛔⛔⛔ LA PAZIENZA DICHIARATA È OTTO SECONDI, E IL MOTORE NE DÀ MENO DI DUE.
+     *
+     * `TALOS_ATTESA_INIZIO_MS` dice quanto il microfono resta aperto **anche se
+     * non hai ancora aperto bocca**: otto secondi. Il riconoscitore di Google
+     * quel numero lo ignora — MISURATO sul Pad il 2026-08-14, tre aperture
+     * diverse: `NO_MATCH` a **+1.701, +1.732, +1.753 ms**. Applica il silenzio
+     * di fine frase (1.600 ms) anche prima che qualcuno abbia parlato.
+     *
+     * Chi sta sopra reagisce riaprendo dopo mezzo secondo di respiro, e la
+     * sessione nuova ci mette il suo: **~800 ms in cui il microfono non c'è**,
+     * proprio dove una persona che ha esitato un attimo comincia a parlare. È
+     * l'altra metà del difetto che l'owner ha descritto come «si mangia le
+     * parole», e la prima metà stava nell'orecchio anticipato.
+     *
+     * ⇒ Un turno chiuso dal silenzio, senza una sola parola, non è un esito: è
+     * la stessa attesa che continua. Si riapre la sessione identica, e chi sta
+     * sopra non se ne accorge — il buco passa da ~800 ms a ~110.
+     *
+     * ⛔ E si riapre SOLO fino agli otto secondi dichiarati: da lì in poi il
+     * silenzio è una risposta, e sale intatto. Questo è il numero che rende vera
+     * la promessa di `TALOS_ATTESA_INIZIO_MS` invece di lasciarla scritta.
+     *
+     * ⛔ Un `NO_MATCH` dopo che è arrivato del testo NON si tocca: è un esito
+     * vero, e chi sta sopra sa cosa farne.
+     */
+    private fun ilSilenzioNonEUnEsito(errore: Int): Boolean {
+        if (qualcosaDetto) return false
+        if (errore != SpeechRecognizer.ERROR_NO_MATCH
+            && errore != SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+        ) return false
+        val riconoscitore = motore ?: return false
+        val intento = intentoDiQuestaSessione ?: return false
+        val aperto = android.os.SystemClock.uptimeMillis() - ascoltoApertoA
+        if (ascoltoApertoA == 0L || aperto >= TALOS_ATTESA_INIZIO_MS) return false
+        // ⛔ Un respiro: chiudere e riaprire nello stesso millisecondo è la cosa
+        // che questo riconoscitore non perdona — `errore=CLIENT (5)`, misurato.
+        mano.postDelayed({
+            if (!inAscolto) return@postDelayed
+            runCatching { riconoscitore.startListening(intento) }
+                .onFailure {
+                    android.util.Log.w(ORECCHIO, "non si è riaperto: ${it.message}")
+                }
+        }, RESPIRO_RIAPERTURA_MS)
+        android.util.Log.i(
+            ORECCHIO,
+            "silenzio a +${aperto}ms, nessuno ha ancora parlato: riapro senza dirlo a nessuno",
+        )
+        return true
+    }
 
     /**
      * ⛔ Scarta gli eventi delle sessioni morte. Si incrementa a ogni avvio e a
@@ -518,9 +617,16 @@ class TalosDictationPlugin : Plugin() {
                     // nostri. Metterlo dopo lascerebbe scoperto proprio
                     // l'istante in cui il motore risponde più in fretta.
                     nata.set(true)
-                    riconoscitore.startListening(
-                        talosIntentoDiAscolto(context, lingua, automatica, consentite, parziali, offline, silenzio, minimo),
+                    // ⛔ L'intento si TIENE: la riapertura silenziosa (vedi
+                    // `ilSilenzioNonEUnEsito`) deve ripartire con la sessione
+                    // identica, non con una ricalcolata che potrebbe differire.
+                    val intento = talosIntentoDiAscolto(
+                        context, lingua, automatica, consentite, parziali, offline, silenzio, minimo,
                     )
+                    intentoDiQuestaSessione = intento
+                    qualcosaDetto = false
+                    ascoltoApertoA = android.os.SystemClock.uptimeMillis()
+                    riconoscitore.startListening(intento)
                     call.resolve(JSObject().put("started", true))
                 } catch (errore: Exception) {
                     inAscolto = false
@@ -593,6 +699,27 @@ class TalosDictationPlugin : Plugin() {
              * deve fermare tutto ciò che ascolta, non la metà che ricordiamo».
              */
             TalosOrecchioAnticipato.spegni()
+            /*
+             * ⛔⛔⛔ E LA PAROLA DI ATTIVAZIONE RIPRENDE — qui MANCAVA, e la
+             * mancanza rendeva TALOS sordo per 45 secondi.
+             *
+             * Owner 2026-08-14: «hey jarvis non funziona quando la barra è già
+             * aperta, se TALOS non è in listening non fa ripartire l'ascolto».
+             *
+             * La causa è la simmetria rotta fra i due modi di smettere:
+             * `stop()` restituiva il microfono alla parola, `cancel()` no. E la
+             * barra chiama SEMPRE `cancel()` — i dieci secondi che scadono,
+             * l'invio, il pulsante del microfono, il turno che si chiude. Quindi
+             * dopo ogni ascolto la parola restava «ceduta» fino alla scadenza
+             * della cessione, che è **45 secondi**: la barra a schermo, il
+             * servizio vivo, la notifica che dice che sta aspettando, e nessuno
+             * che sente niente.
+             *
+             * ⇒ Chi smette di ascoltare RESTITUISCE il microfono. Tutti e due i
+             * modi di smettere, senza eccezioni: un solo verbo mancante ha
+             * spento una funzione intera senza rompere niente di visibile.
+             */
+            ai.talos.parola.TalosParola.riprendi()
             // ⛔ Si annulla, NON si distrugge: l'istanza si riusa, e distruggerla
             // qui riporterebbe il difetto intermittente al giro dopo.
             runCatching { motore?.cancel() }
@@ -807,6 +934,9 @@ class TalosDictationPlugin : Plugin() {
         override fun onError(error: Int) {
             eco("errore", "${talosNomeErrore(error)} ($error)")
             if (!viva()) return
+            // ⛔ PRIMA di chiudere il turno: un silenzio senza una parola, dentro
+            // la pazienza dichiarata, non è un esito. Vedi `ilSilenzioNonEUnEsito`.
+            if (ilSilenzioNonEUnEsito(error)) return
             epoca += 1
             inAscolto = false
             sessioneInterrottaA = android.os.SystemClock.uptimeMillis()
@@ -823,6 +953,7 @@ class TalosDictationPlugin : Plugin() {
                 ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()
                 .orEmpty()
+            if (testo.isNotEmpty()) qualcosaDetto = true
             if (aSegmenti) {
                 /*
                  * ⛔ In una sessione a segmenti questo NON è «ha finito di
@@ -855,6 +986,12 @@ class TalosDictationPlugin : Plugin() {
                 ?.firstOrNull()
                 .orEmpty()
             if (testo.isNotEmpty()) {
+                // ⛔ È il TESTO che segna «qualcuno ha parlato», non
+                // `onBeginningOfSpeech`: MISURATO, il motore ha annunciato PARLA
+                // e 51 ms dopo ha risposto NO_MATCH senza una sola parola. Un
+                // rumore basta a far scattare l'annuncio; solo il testo prova
+                // che c'è una voce.
+                qualcosaDetto = true
                 notifyListeners("talosDictationPartial", JSObject().put("text", testo))
             }
         }
@@ -876,6 +1013,7 @@ class TalosDictationPlugin : Plugin() {
                 ?.firstOrNull()
                 .orEmpty()
             if (testo.isNotEmpty()) {
+                qualcosaDetto = true
                 notifyListeners("talosDictationSegment", JSObject().put("text", testo))
             }
         }

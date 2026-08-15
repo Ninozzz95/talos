@@ -51,9 +51,18 @@
  * cronologia e strumenti sono quelli veri, non una copia.
  */
 import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
-import { ArrowUp, Camera, Copy, Eye, EyeOff, FileText, Image, Library, Maximize2, Mic, Paperclip, Plus, Square, Volume2, VolumeX, X } from '@lucide/vue'
+import { ArrowUp, Camera, ChevronRight, Copy, Cpu, Eye, EyeOff, Image, Library, Maximize2, Mic, Paperclip, Plus, Square, Volume2, VolumeX, X } from '@lucide/vue'
 import TalosMobileMessageContent from '@/components/chat/TalosMobileMessageContent.vue'
 import { useTalosI18n } from '@/i18n'
+/*
+ * ⛔ STATICI, non pigri: si vedono nel primo istante in cui l'assistente si
+ * apre — nasce già in ascolto — e un caricamento differito darebbe mezzo
+ * secondo di onda assente proprio mentre la persona comincia a parlare. Sono
+ * due componenti minuscoli: il grafo d'avvio resta a 603.557 su 603.600.
+ */
+import TalosMicWaveform from '@/components/brand/TalosMicWaveform.vue'
+import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
+import TalosSciaParole from '@/components/brand/TalosSciaParole.vue'
 import { useChatController } from '@/stores/chatController'
 import { useTalosMobileDictation } from '@/composables/useTalosMobileDictation'
 import { talosDettaturaAnnota as annota } from '@/services/dictation'
@@ -99,6 +108,26 @@ const chat = controller.chat
 const consenso = computed(() => controller.pendingToolAuthorizations.value[0] ?? null)
 const consensoVisibile = computed(() =>
     consenso.value !== null && controller.toolAuthorizationPromptVisible.value)
+/**
+ * ⛔ PIGRA, per la stessa ragione per cui lo è in chat: statica costa **2.649
+ * byte** al grafo d'avvio, che ha un tetto di 603.600 e oggi ne usa 603.557.
+ * L'assistente si apre su una domanda, non su una scheda: arriva col primo
+ * messaggio che ne porta una.
+ */
+const TalosMobileSchedaAzione = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileSchedaAzione.vue'),
+)
+
+/**
+ * ⛔ PIGRO, e qui va bene: le fonti arrivano solo dopo una ricerca web, cioè
+ * secondi dopo l'apertura. La scia e l'onda sono statiche perché si vedono nel
+ * primo istante; questo no, e caricarlo subito costerebbe al grafo d'avvio —
+ * che ha dieci byte di margine.
+ */
+const TalosMobileSourcesChip = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileSourcesChip.vue'),
+)
+
 const SchedaConsenso = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileToolConsentSheet.vue'))
 
@@ -338,6 +367,46 @@ function fermaLAscolto(messaggio: string | null): void {
 }
 
 /**
+ * ⛔⛔⛔ «NON HO SENTITO NIENTE» SI DICE SOLO SE NON C'È NIENTE.
+ *
+ * ## Il difetto, misurato sul Pad il 2026-08-14
+ *
+ * Chiamata la barra con «hey TALOS», detto «Raccontami in quattro frasi come
+ * funziona la fotosintesi». Sullo schermo, **contemporaneamente**: la frase
+ * scritta per intero nel campo, e sotto la scritta «Non ho sentito niente.
+ * Tocca il microfono per riprovare.» La domanda non è mai partita.
+ *
+ * ## Due danni da una causa sola
+ *
+ * Il conto dei dieci secondi è «quanto aspetto che qualcuno dica la prima
+ * parola», ma alla scadenza chiamava `fermaLAscolto` **senza guardare il
+ * campo**. E `fermaLAscolto` mette `ascoltoVoluto` a falso — che è proprio il
+ * flag che la finestra di grazia controlla prima di spedire, concludendo «ha
+ * smesso lei, non mando».
+ *
+ * ⇒ Non solo diceva una cosa falsa: **buttava via la frase che aveva in mano**,
+ * e lo faceva in silenzio.
+ *
+ * ⛔ E la distinzione conta davvero, perché «la persona ha deciso di smettere»
+ * e «è scaduto il tempo che le avevo dato» portano a due comportamenti opposti:
+ * nel primo caso buttare via è giusto — l'ha chiesto lei — nel secondo è la
+ * nostra promessa che è scaduta, non la sua frase.
+ */
+function scadutaLAttesa(dove: string): void {
+    if (!bozza.value.trim()) {
+        annota(`barra: scaduta (${dove}) senza una parola, smetto e lo dico`)
+        fermaLAscolto(t('barra.nessunaVoce'))
+        return
+    }
+    annota(`barra: scaduta (${dove}) MA la frase c'è: chiudo l'ascolto e la mando`)
+    // ⛔ Prima la grazia, se no scatta dopo su un `ascoltoVoluto` gia' falso e
+    // decide di non mandare — cioè il difetto, di nuovo, un attimo più tardi.
+    annullaLaGrazia('scaduta con la frase in mano')
+    fermaLAscolto(null)
+    void invia()
+}
+
+/**
  * ⛔⛔ ASCOLTA = È LA NOSTRA INTENZIONE, non «il motore è agganciato adesso».
  *
  * Owner 2026-08-11, col video: «appena apro l'assistente la modalità ascolto si
@@ -397,41 +466,20 @@ const lavora = computed(() => chat.state.sending)
  * l'unica cosa che la persona vuole sapere: «mi sta sentendo davvero?». Sono i
  * 2,2 secondi che contano, a 80 ms l'uno.
  */
-const ONDE = 28
-const onde = ref<number[]>(new Array(ONDE).fill(0))
-let campionatore: ReturnType<typeof setInterval> | null = null
-
 /*
- * ⛔⛔ `immediate: true`, E SENZA QUESTA PAROLA L'ONDA È PIATTA NELL'ASSISTENTE.
+ * ⛔⛔ 2026-08-14: LA CODA È USCITA DA QUI, e con lei un difetto strutturale.
  *
- * Owner 2026-08-12, tre volte: «nella chat la waveform funziona bene, ma
- * nell'assistente è piatta». L'asimmetria era tutta qui, e l'ho cercata due
- * build nel nativo prima di guardare questa riga.
+ * Qui c'erano ventotto campioni, un `setInterval` e un guardiano su `ascolta`
+ * con `immediate: true` — quella parola era necessaria perché nella barra
+ * `ascoltoVoluto` nasce **già vero** (l'assistente si apre in ascolto), quindi
+ * un `watch` pigro non sarebbe mai scattato e le barre sarebbero restate a
+ * zero. Costò due build cercate nel nativo prima di guardare questa riga.
  *
- * `watch` è PIGRO: chiama solo su un CAMBIAMENTO. Nella chat `ascolta` parte
- * falso e diventa vero quando premi il microfono — un cambiamento, quindi il
- * campionatore parte. Nella barra `ascoltoVoluto` nasce **già vero**
- * (`ref(props.modo.daVoce)`, riga sopra), perché l'assistente si apre in
- * ascolto: `ascolta` non cambia mai, il guardiano non scatta mai, e le ventotto
- * barre restano a zero per sempre.
- *
- * ⛔ E il difetto non si vede leggendo il guardiano: è corretto. Si vede solo
- * mettendo insieme DUE righe distanti cento — dove nasce lo stato e chi lo
- * guarda. È la ragione per cui il volume arrivava (`db=1.48` nel diario) e lo
- * schermo restava fermo: due fatti veri e nessuno dei due sbagliato.
+ * ⇒ Adesso la coda vive dentro `TalosMicWaveform`, dove l'evento è il CICLO DI
+ * VITA del componente e quel modo di sbagliare non esiste più. E la chat
+ * eredita la stessa cosa invece della sua versione vecchia — owner
+ * 2026-08-14: «non ha senso usare componenti diversi».
  */
-watch(ascolta, (acceso) => {
-    if (acceso) {
-        if (campionatore !== null) return
-        campionatore = setInterval(() => {
-            // ⛔ Un array NUOVO: Vue non si accorge di uno `shift` in posto.
-            onde.value = [...onde.value.slice(1), dettatura.level.value]
-        }, 80)
-        return
-    }
-    if (campionatore !== null) { clearInterval(campionatore); campionatore = null }
-    onde.value = new Array(ONDE).fill(0)
-}, { immediate: true })
 
 /**
  * ⛔ Il campo è ALTO più di una riga ⇒ la pillola diventa una carta.
@@ -579,24 +627,21 @@ function riapriSePossibile(motivo: string): void {
         return
     }
     if (Date.now() >= scadenzaAscolto) {
-        annota(`barra: scaduta (${motivo}), smetto e lo dico`)
         /*
-         * ⛔⛔ E SI DICE. Prima si spegneva in silenzio: la pillola smetteva di
-         * pulsare e basta, e da fuori «ha finito di ascoltare», «non ha sentito
-         * niente» e «si è rotto» erano la stessa identica cosa.
-         *
-         * Un assistente che chiude il microfono senza dire perché costringe la
-         * persona a indovinare — ed è l'unico punto della barra in cui la
-         * risposta giusta («non ho sentito niente, riprova») era già scritta e
-         * non veniva mostrata a nessuno.
+         * ⛔⛔ E SI DICE — ma solo se è vero. Prima si spegneva in silenzio: la
+         * pillola smetteva di pulsare e basta, e da fuori «ha finito di
+         * ascoltare», «non ha sentito niente» e «si è rotto» erano la stessa
+         * identica cosa.
          *
          * ⛔ Questa è la SECONDA porta: quella che conta è il timer in
          * `vogliAscoltare`, perché questa qui si attraversa solo se il motore
          * riferisce qualcosa — e il caso che fa male è proprio quello in cui il
-         * motore ammutolisce. Restano tutte e due: chiudono lo stesso cancello da
-         * due lati, e non si contraddicono (`fermaLAscolto` è idempotente).
+         * motore ammutolisce. Restano tutte e due: chiudono lo stesso cancello
+         * da due lati, e adesso passano dalla stessa funzione, che è ciò che
+         * garantisce che non possano divergere di nuovo. Una diceva la verità e
+         * l'altra no era esattamente il difetto del 14 agosto.
          */
-        fermaLAscolto(t('barra.nessunaVoce'))
+        scadutaLAttesa(motivo)
         return
     }
     annota(`barra: riapro fra un respiro (${motivo})`)
@@ -718,8 +763,7 @@ function vogliAscoltare(motivo: string): void {
     if (timerAscolto !== null) clearTimeout(timerAscolto)
     timerAscolto = setTimeout(() => {
         timerAscolto = null
-        annota('barra: dieci secondi senza una parola, smetto e lo dico')
-        fermaLAscolto(t('barra.nessunaVoce'))
+        scadutaLAttesa('i dieci secondi')
     }, ATTESA_MS)
     if (dettatura.status.value === 'listening' || dettatura.status.value === 'starting') {
         annota(`barra: gia in ascolto, non tocco niente (${motivo})`)
@@ -732,6 +776,39 @@ function vogliAscoltare(motivo: string): void {
         annota(`barra: avvio ESPLOSO ${String(errore).slice(0, 80)}`)
     })
 }
+
+/**
+ * ⭐⭐ LE PAROLE FANNO RIPARTIRE IL CONTO — perché il conto chiedeva ALTRO.
+ *
+ * I dieci secondi rispondono a una domanda sola: «qualcuno ha detto la prima
+ * parola?». Ma erano armati **una volta**, all'apertura della barra, e non
+ * ripartivano mai. MISURATO sul Pad il 2026-08-14: barra aperta alle 12:15:49,
+ * parlato dalle 12:15:55, il motore chiude alle 12:15:58 — e alle 12:15:59 il
+ * conto scadeva. Chi ci pensa su sei secondi e poi parla per quattro veniva
+ * tagliato con la frase in mano.
+ *
+ * ⇒ Appena arriva la prima parola, quella domanda ha avuto risposta: il conto
+ * riparte da lì, e da lì in poi misura il silenzio DOPO aver parlato, che è
+ * un'attesa diversa e legittima.
+ *
+ * ⛔ Riparte, non sparisce: un microfono senza scadenza è un microfono che
+ * resta aperto finché non se ne accorge qualcuno, ed è la cosa che questa barra
+ * non deve fare mai.
+ */
+watch(
+    () => bozza.value.trim().length > 0,
+    (haParole, avevaParole) => {
+        if (!haParole || avevaParole === true) return
+        if (!ascoltoVoluto.value) return
+        annota('barra: prima parola, il conto dell\'attesa riparte da adesso')
+        scadenzaAscolto = Date.now() + ATTESA_MS
+        if (timerAscolto !== null) clearTimeout(timerAscolto)
+        timerAscolto = setTimeout(() => {
+            timerAscolto = null
+            scadutaLAttesa('i dieci secondi dopo la prima parola')
+        }, ATTESA_MS)
+    },
+)
 
 /**
  * ⛔⛔ IL PULSANTE FERMA DAVVERO — owner 2026-08-11: «il pulsante microfono
@@ -815,7 +892,27 @@ function alternaAscolto(): void {
  * ⇒ Le serve solo coprire il buco in cui siamo FISICAMENTE sordi fra due
  * sessioni — `RESPIRO_MS` = 500 ms, misurato — più un margine perché la prima
  * parziale della sessione nuova arrivi in tempo ad annullare l'invio. 900 ms
- * copre il buco con 400 di margine; il totale scende a **3,1 s**.
+ * copre il buco con 400 di margine.
+ *
+ * ## ⛔ 2026-08-14: il taglio successivo NON è stato qui
+ *
+ * Owner: «c'è un po' troppo tempo di delay tra la fine del mio discorso e
+ * quando viene inviato». Il totale era ancora **3.100 ms**, contro i 300-800 ms
+ * che la letteratura sull'endpointing indica come soglia oltre la quale il
+ * ritardo si sente a ogni turno.
+ *
+ * ⛔ Ma la grazia è già al suo MINIMO argomentato: sotto i 900 ms smette di
+ * coprire la finestra sorda di 437-560 ms, e quel che si guadagna in reattività
+ * si perde come parole non sentite — che è il difetto peggiore dei due.
+ *
+ * ⇒ Il taglio è andato dove l'attesa era **ridondante**: la pausa del motore,
+ * da 2.200 a 1.600 (`TALOS_PAUSA_FINE_FRASE_MS`, e la ragione sta lì). Le due
+ * attese proteggevano dallo stesso rischio, ma solo questa lo fa **guardando**:
+ * se arrivano altre parole annulla l'invio, mentre l'altra aspettava e basta.
+ *
+ *     1.600 ms   il motore aspetta il silenzio prima di chiudere il turno
+ *   +   900 ms   e la grazia copre il buco fra due sessioni
+ *   = 2.500 ms   fra l'ultima parola e la partenza della domanda
  *
  * ⛔ E la parte che manca non è un numero da limare: è l'endpointing semantico
  * (fase V3 del compito #99), l'unico modo di scendere davvero — «apri il...»
@@ -960,8 +1057,38 @@ watch(
  * dell'assistente non è ancora nella lista, e leggere solo la lista darebbe una
  * carta vuota per tutto il tempo in cui c'è più da vedere.
  */
+/*
+ * ⛔ La carta si apre se c'è UNA DOMANDA **oppure** un allegato partito.
+ *
+ * Prima guardava solo il testo, e mandando una foto senza scrivere niente lo
+ * schermo restava muto: la risposta arrivava e non aveva dove comparire. La
+ * prima cura scriveva i nomi degli allegati dentro `domanda` — funzionava, ma
+ * quei nomi finivano DUE volte a schermo, come titolo e come gettone.
+ *
+ * ⇒ La domanda resta il testo vero (vuoto se non c'è), e ciò che è partito lo
+ * dicono i gettoni, che esistono apposta.
+ */
+const cartaVisibile = computed(() => domanda.value !== '' || allegatiPartiti.value.length > 0)
 const risposta = computed(() => {
-    if (!domanda.value) return ''
+    /*
+     * ⛔⛔ LA GUARDIA GUARDA LA CARTA, non il testo — e il perché è un difetto
+     * che ho INTRODOTTO io, misurato dall'owner sullo schermo.
+     *
+     * Mandata una foto senza scrivere niente, la carta restava sullo scheletro
+     * dell'attesa **per sempre**: sei minuti, tre righe grigie. Eppure la
+     * risposta esisteva — nella chat intera si leggeva, arrivata da due minuti,
+     * con la sua miniatura.
+     *
+     * La causa era `if (!domanda.value) return ''`, e ci era finita per colpa
+     * della cura precedente: per togliere un doppione avevo riportato `domanda`
+     * al solo testo, e questa riga — scritta quando «senza domanda non c'è
+     * carta» era vero — ha continuato a valere su un mondo cambiato.
+     *
+     * ⇒ Due condizioni che devono dire la stessa cosa non si scrivono due
+     * volte: qui si usa `cartaVisibile`, la stessa che decide se la carta
+     * esiste. Se un giorno cambia una, cambiano entrambe.
+     */
+    if (!cartaVisibile.value) return ''
     const vivo = chat.state.streamingText
     if (vivo) return vivo
     for (let i = chat.messages.length - 1; i >= 0; i -= 1) {
@@ -972,8 +1099,88 @@ const risposta = computed(() => {
     return ''
 })
 
-const cartaVisibile = computed(() => domanda.value !== '')
 const attesa = computed(() => cartaVisibile.value && !risposta.value)
+
+/**
+ * ⭐⭐⭐ LA SCIA — le parole mentre le sente.
+ *
+ * Owner 2026-08-14: «stampare le parole mano mano che vengono sentite; in chat
+ * lo facciamo già, basta trasportarla sull'assistente, sopra la barra, animata
+ * in scorrimento orizzontale».
+ *
+ * ⛔ In chat le parole si vedono perché finiscono nel campo. Qui il campo è
+ * `v-show="!ascolta"`: **mentre ascolta è nascosto**, quindi chi parla non
+ * aveva nessun segno di essere capito — solo una pillola che pulsa. È la stessa
+ * famiglia di «la modalità ascolto rimane ma non ascolta»: da fuori, «ti sto
+ * seguendo» e «non ho sentito niente» erano identici.
+ *
+ * ⛔ È la BOZZA, non una copia: le parziali della dettatura ci finiscono già
+ * dentro (`base: () => bozza.value`). Tenere un secondo testo vorrebbe dire due
+ * verità su cosa TALOS ha capito, e quando divergono nessuno sa quale guardare.
+ */
+/*
+ * ⛔ Lo scorrimento e il disegno stanno dentro `TalosSciaParole`, lo stesso
+ * componente che usa la chat. Qui resta solo QUALI parole mostrare.
+ */
+const scia = computed(() => bozza.value.trim())
+
+/**
+ * ⭐⭐⭐ LE SCHEDE DELL'ULTIMA RISPOSTA — e da qui non si vedevano MAI.
+ *
+ * Owner 2026-08-14, con lo schermo: «Accendi la torcia» → «Fatto, Antonino! Ho
+ * acceso la torcia del telefono. 🔦», e nient'altro. In chat sotto quella frase
+ * c'è un interruttore con cui la spegni; nell'assistente c'era solo il testo.
+ *
+ * Non mancava la scheda della torcia: mancavano **tutte**, calendario compreso,
+ * perché `TalosMobileSchedaAzione` non era mai stata montata in questa
+ * superficie. ⇒ Chi usa TALOS a voce — cioè il modo per cui l'assistente esiste
+ * — non ne ha mai vista una.
+ *
+ * ⛔ Si guarda l'ULTIMO messaggio dell'assistente, non `streamingText`: durante
+ * la generazione il messaggio non esiste ancora e le schede nascono dagli
+ * attrezzi che hanno già risposto. Arrivano quando il messaggio nasce, che è il
+ * momento giusto — una levetta a metà risposta è una levetta su un fatto che
+ * potrebbe ancora cambiare.
+ */
+const metadatiDellaRisposta = computed<Record<string, unknown> | null>(() => {
+    if (!domanda.value) return null
+    for (let i = chat.messages.length - 1; i >= 0; i -= 1) {
+        const messaggio = chat.messages[i]
+        if (messaggio?.role === 'user') return null
+        if (messaggio?.role !== 'assistant') continue
+        return (messaggio.metadata as Record<string, unknown> | undefined) ?? null
+    }
+    return null
+})
+
+const schedeDellaRisposta = computed<Record<string, unknown> | null>(() => {
+    const metadata = metadatiDellaRisposta.value
+    return metadata?.cards ? metadata : null
+})
+
+/**
+ * ⭐⭐⭐ LE FONTI — lo STESSO chip della chat, che qui non c'era.
+ *
+ * MISURATO sul Pad il 2026-08-14: «cerca sul web quanto è alta la torre
+ * Eiffel» dall'assistente ⇒ risposta completa e **nessuna fonte**. Nella chat
+ * sotto la stessa risposta c'è il chip «Fonti» col pannello.
+ *
+ * ⛔ E per un attimo l'avevo curato nel modo sbagliato: una scheda `fonti`
+ * nuova, che sullo schermo faceva comparire le fonti **due volte** in due
+ * forme diverse. Il chip esistente è anche migliore — legge le favicon **da
+ * disco**, mai richieste alla rete (è una promessa di privacy, non
+ * un'ottimizzazione), e apre nel browser interno.
+ *
+ * ⇒ Il difetto non era «manca una scheda»: era «il chip vive in una superficie
+ * sola». Si monta quello. Owner, poche ore prima, sull'onda della dettatura:
+ * «non ha senso usare componenti diversi».
+ */
+const fontiDellaRisposta = computed<readonly unknown[]>(() => {
+    const fonti = metadatiDellaRisposta.value?.sources
+    return Array.isArray(fonti) ? fonti : []
+})
+
+
 
 /**
  * Lo stato che L'ORLO racconta, e l'unico posto dove viene deciso.
@@ -1158,6 +1365,58 @@ async function conIlMenuChiuso(azione: () => Promise<void>): Promise<void> {
 /** Gli ultimi file della Libreria: un elenco corto, non un archivio da sfogliare. */
 const libreriaRecente = computed(() => allegati.vaultFiles.slice(0, 4))
 
+/**
+ * ⛔⛔ DALLA BARRA IL MODELLO NON SI CAMBIAVA — rilievo #9 dell'owner.
+ *
+ * ## Il difetto, con le sue parole
+ *
+ * 12 agosto, provando i tool col motore locale: «per rifare la prova con Sonnet
+ * 5 bisogna **uscire dall'assistente**, perché dalla barra il modello non si
+ * cambia». Non era una comodità mancante: la barra è la superficie da cui TALOS
+ * si usa a voce, e chi la usa non sapeva nemmeno **quale cervello stesse
+ * rispondendo** — quindi non poteva attribuire una risposta sbagliata al modello
+ * invece che all'app. Un esito senza il nome di chi l'ha prodotto non si può
+ * giudicare.
+ *
+ * ## ⛔ Il chip ESISTE, mancava il montaggio
+ *
+ * Stessa forma del difetto delle fonti (vedi `fontiDellaRisposta`): il pannello
+ * di scelta è **lo stesso della chat**, `TalosMobileComposerModelPicker`, con i
+ * suoi gruppi per provider, la ricerca oltre i sei modelli e i motivi di una
+ * lista corta. Non ne ho scritto un secondo: due elenchi di modelli sono due
+ * elenchi che un giorno divergono.
+ *
+ * E la scelta passa da `controller.selectModel`, che il controller stesso
+ * dichiara «l'UNICA porta che scrive `composer_model`» — quindi cambiare qui
+ * cambia anche la chat, che è ciò che uno si aspetta da un'app sola.
+ *
+ * ⛔ PIGRO: il pannello è grande (ricerca, gruppi, capacità di ogni modello) e
+ * nella maggior parte delle aperture non si vedrà mai. Il grafo d'avvio della
+ * barra ha un tetto, e l'assistente deve poter comparire sopra un'altra app
+ * senza portarselo dietro. Solo il gettone è statico, perché si vede subito.
+ */
+const SceltaModello = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileComposerModelPicker.vue'),
+)
+const menuModello = ref(false)
+
+const profiloAttivo = computed(() =>
+    controller.profiles.value.find((p) => p.id === controller.selectedModelId.value) ?? null)
+
+/**
+ * ⛔ Il gettone NON dice mai una parola inventata: se un modello è scelto porta
+ * il suo nome, se non lo è dice «scegli un modello» — che è un invito, non un
+ * nome finto. E se non c'è **nessun** modello configurato il gettone non compare
+ * affatto: un comando che apre un elenco vuoto è un comando che non fa niente.
+ */
+const nomeModello = computed(() =>
+    profiloAttivo.value?.display_name ?? t('chat.chooseModel'))
+
+async function scegliModello(id: string): Promise<void> {
+    menuModello.value = false
+    await controller.selectModel(id)
+}
+
 async function chiudi(): Promise<void> {
     dettatura.cancel()
     try {
@@ -1259,11 +1518,32 @@ async function contestoDaMandare(): Promise<string> {
     if (!guardo.value || !contestoDisponibile.value) return ''
     try {
         const { registerPlugin } = await import('@capacitor/core')
-        const ponte = registerPlugin<{ contestoSchermo(): Promise<{ testo: string, nodi: number }> }>('TalosBarra')
+        const ponte = registerPlugin<{
+            contestoSchermo(): Promise<{ testo: string, nodi: number, pagina?: string }>
+        }>('TalosBarra')
         const visto = await ponte.contestoSchermo()
         const schermo = (visto?.testo ?? '').trim()
-        if (!schermo) return ''
-        return [t('barra.contextPrompt'), '"""', schermo, '"""', '', ''].join('\n')
+        const pagina = (visto?.pagina ?? '').trim()
+        if (!schermo && !pagina) return ''
+        /*
+         * ⭐⭐⭐ E L'INDIRIZZO DELLA PAGINA, quando c'è — rilievo #4.
+         *
+         * Il testo dello schermo è quello VISIBILE: su un articolo lungo è il
+         * primo schermo e basta. L'indirizzo apre tutto il resto, perché con
+         * quello il modello può leggere la pagina intera con `web_read` invece
+         * di rispondere sul frammento che si vede.
+         *
+         * ⛔ Va DETTO cos'è, come il testo: un URL nudo in cima a una domanda
+         * non dice a un modello se sia da aprire, da citare o da ignorare.
+         *
+         * ⛔ E si manda anche SENZA testo: su una pagina che l'occhio non riesce
+         * a leggere, l'indirizzo da solo è già tutto ciò che serve.
+         */
+        const righe = [t('barra.contextPrompt')]
+        if (pagina) righe.push(t('barra.contextPage', { page: pagina }))
+        if (schermo) righe.push('"""', schermo, '"""')
+        righe.push('', '')
+        return righe.join('\n')
     } catch {
         // ⛔ Nessun ponte, nessun contesto: la domanda parte nuda invece di non
         // partire. Una domanda senza schermo è utile; una che non parte no.
@@ -1271,9 +1551,35 @@ async function contestoDaMandare(): Promise<string> {
     }
 }
 
+/**
+ * ⛔ La chat pronta, per chi ne ha bisogno DAVVERO — cioè solo l'invio.
+ *
+ * Da quando l'ascolto parte PRIMA dell'apertura del database (vedi `onMounted`,
+ * e il motivo è che la persona parla guardando lo schermo, non SQLite), esiste
+ * una finestra in cui c'è una frase e non c'è ancora una sessione dove metterla.
+ * È stretta — la frase arriva dopo che qualcuno ha parlato — ma «stretta» è la
+ * misura di quanto raramente si presenta, non di quanto fa male quando capita.
+ */
+let pronta: Promise<void> | null = null
+
 async function invia(): Promise<void> {
     const testo = bozza.value.trim()
-    if (!testo || lavora.value) return
+    /*
+     * ⛔⛔ UN ALLEGATO DA SOLO BASTA — e senza questa riga il pulsante che ho
+     * appena reso visibile sarebbe stato un PULSANTE MORTO.
+     *
+     * Owner 2026-08-15: «non c'è un pulsante invia appena attach un file, resta
+     * il pulsante microfono». Mostrare il pulsante era metà cura: qui `invia`
+     * usciva subito se il testo era vuoto, quindi premerlo non avrebbe fatto
+     * niente — il difetto peggiore dei due, perché sembra funzionare.
+     *
+     * ⇒ Si manda quando c'è QUALCOSA da mandare: testo oppure allegati. La
+     * condizione è la stessa che decide se il pulsante si vede, e devono
+     * restare uguali: se un giorno divergono, torna il pulsante morto.
+     */
+    if ((!testo && allegati.items.length === 0) || lavora.value) return
+    // ⛔ Costa zero quando è già finita, e salva l'unico caso in cui non lo è.
+    if (pronta) await pronta
     // ⛔ La domanda è partita: da qui l'ascolto non si riaccende da solo.
     // Senza questa riga il microfono tornerebbe su mentre TALOS risponde.
     laVoceLaComandaLaPersona()
@@ -1282,6 +1588,19 @@ async function invia(): Promise<void> {
     // ⛔ Si ricorda QUI, dove la risposta è ancora vera: serve alla ripresa
     // automatica quando TALOS avrà finito di parlare (vedi `talosParla`).
     turnoNatoDiVoce = dettato
+    /*
+     * ⛔ La domanda è il TESTO, anche quando è vuoto.
+     *
+     * MISURATO sul Pad: mandando solo una foto, lo schermo restava muto — la
+     * carta si apriva solo con del testo, quindi la risposta arrivava e non
+     * aveva dove comparire. La prima cura metteva qui i nomi degli allegati, e
+     * risolveva; ma quei nomi comparivano **due volte**, come titolo e come
+     * gettone.
+     *
+     * ⇒ La carta adesso si apre anche per i soli allegati (vedi
+     * `cartaVisibile`), e cosa è partito lo dicono i gettoni. Una cosa sola,
+     * detta una volta sola.
+     */
     domanda.value = testo
     errore.value = null
     const metadati: Record<string, unknown> = {}
@@ -1336,8 +1655,36 @@ function tastoInvio(evento: KeyboardEvent): void {
 }
 
 onMounted(async () => {
-    await controller.init()
-    if (!chat.activeSession.value) await controller.newSession()
+    /*
+     * ⛔⛔⛔ IL MICROFONO PRIMA DEL DATABASE — owner 2026-08-14, e la riga era
+     * l'ULTIMA di questa funzione.
+     *
+     * > «quando dico hey jarvis e parlo subito dopo che compare la barra, non
+     * > prende bene le mie parole… l'ascolto DEVE iniziare appena la barra è
+     * > visibile, se no rischia di mangiarsi parole»
+     *
+     * Aveva ragione, e la causa sta nell'ordine. La barra si VEDE appena il
+     * componente è montato — `avvia.ts` suona il campanello dopo due giri di
+     * disegno, ~32 ms — mentre l'ascolto partiva dopo `controller.init()` (che
+     * apre SQLite e carica la sessione) ed eventualmente `newSession()`. Fra la
+     * barra a schermo e il microfono aperto c'era tutto quel lavoro, e chi
+     * parla guarda lo schermo, non il database.
+     *
+     * ⇒ Prima si apre l'orecchio, poi si prepara la chat. Nessuna delle due
+     * cose serve all'altra: la dettatura scrive in una `ref` locale, e la
+     * sessione serve solo all'INVIO — che arriva secondi dopo, quando l'init è
+     * finita da un pezzo.
+     *
+     * ⛔ Non è un `await` spostato: è la differenza fra un microfono che apre
+     * quando la persona vede la barra e uno che apre quando la persona ha già
+     * detto la prima parola. Una parola mangiata è una frase sbagliata.
+     */
+    if (props.modo.daVoce) vogliAscoltare('apertura della barra')
+    pronta = (async () => {
+        await controller.init()
+        if (!chat.activeSession.value) await controller.newSession()
+    })()
+    await pronta
     // ⛔ Senza, `vaultFiles` resta vuoto e la Libreria sembra non avere niente:
     // un elenco vuoto che in realtà non è ancora stato letto è una bugia.
     void allegati.initialize()
@@ -1355,7 +1702,6 @@ onMounted(async () => {
      * La barra esiste per NON farti uscire da dove sei. Coprire quel «dove sei»
      * nell'istante in cui compare è il contrario del suo mestiere.
      */
-    if (props.modo.daVoce) vogliAscoltare('apertura della barra')
 })
 </script>
 
@@ -1398,7 +1744,7 @@ onMounted(async () => {
             ><span /></button>
 
             <div class="corpo">
-                <p class="domanda">{{ domanda }}</p>
+                <p v-if="domanda" class="domanda">{{ domanda }}</p>
                 <!-- ⭐ Cosa è partito con la domanda. Vedi `allegatiPartiti`:
                      senza questa riga, «ho mandato la foto» e «ho mandato solo
                      il testo» sono indistinguibili. -->
@@ -1415,6 +1761,33 @@ onMounted(async () => {
                 <div v-else class="testo" data-testid="talos-barra-risposta">
                     <TalosMobileMessageContent :content="risposta" />
                 </div>
+                <!-- ⭐⭐⭐ LA SCHEDA, che qui NON C'ERA.
+
+                     Owner 2026-08-14, con lo schermo: «Accendi la torcia» →
+                     «Fatto, Antonino! Ho acceso la torcia del telefono. 🔦» e
+                     basta. In chat sotto quella frase c'è un interruttore; qui
+                     c'era solo il testo, perché questo componente non era mai
+                     stato montato nell'assistente.
+
+                     ⛔ E non mancava «la scheda della torcia»: mancavano TUTTE
+                     — calendario compreso. Chi usa TALOS a voce, cioè il modo
+                     per cui l'assistente esiste, non ne ha mai vista nemmeno
+                     una. È la richiesta dell'owner del 13 agosto, «sia da chat
+                     che da assistente», rimasta metà. -->
+                <TalosMobileSchedaAzione
+                    v-if="schedeDellaRisposta"
+                    :metadata="schedeDellaRisposta"
+                />
+
+                <!--
+                    ⭐ LE FONTI, sotto la risposta e mai sopra: si legge
+                    l'affermazione, poi si controlla su cosa poggia. È lo stesso
+                    componente della chat — vedi `fontiDellaRisposta`.
+                -->
+                <TalosMobileSourcesChip
+                    v-if="fontiDellaRisposta.length"
+                    :sources="fontiDellaRisposta as never"
+                />
             </div>
 
             <footer class="piede">
@@ -1454,16 +1827,110 @@ onMounted(async () => {
         <!-- Il menu degli allegati: compare SOPRA la pillola e se ne va, come i
              chip dei suggerimenti di Gemini — fuori dal pannello, non dentro,
              così la pillola non si gonfia mai. -->
+        <!--
+            ⛔⛔ LA TENDINA PARLA LA LINGUA DELLA CHAT — owner 2026-08-15:
+            «guarda la UI, molto brutta la tendina sotto alla sezione chat…
+            PARLO DELLA TENDA IN MODALITÀ ASSISTENTE».
+
+            ## Il confronto che l'ha condannata
+
+            La chat, per la stessa cosa, ha `TalosMobileComposerDrawer`: un
+            titolo che dice cosa è, una X per chiudere, e tre riquadri alti con
+            l'icona dentro un cerchio. Qui c'erano tre righe di testo con
+            un'icona grigia a sinistra, senza titolo e senza modo di chiudere.
+
+            ⇒ Due superfici che fanno la stessa cosa, e la seconda povera: è il
+            difetto che questo progetto insegue da settimane, applicato al
+            proprio menu.
+
+            ## ⛔ Perché NON si importa il componente della chat
+
+            `TalosMobileComposerSheet` è un foglio a tutto schermo con un fondo
+            nero al 30% e la sfocatura. Nella barra quel fondo coprirebbe l'app
+            sotto — e «l'app sotto si legge» è la prima regola di questa
+            superficie, misurata contro Gemini. ⇒ Si prende il LINGUAGGIO
+            (titolo, chiusura, riquadri, cerchi), non il guscio.
+        -->
         <div v-if="menuAllegati" class="menu" data-testid="talos-barra-menu-allegati">
-            <button type="button" class="voce" @click="conIlMenuChiuso(() => allegati.pickPhotos())">
-                <Image class="icona-piccola" aria-hidden="true" />{{ t('barra.attachPhotos') }}
-            </button>
-            <button type="button" class="voce" @click="conIlMenuChiuso(() => allegati.takePhoto())">
-                <Camera class="icona-piccola" aria-hidden="true" />{{ t('barra.attachCamera') }}
-            </button>
-            <button type="button" class="voce" @click="conIlMenuChiuso(() => allegati.selectFiles())">
-                <FileText class="icona-piccola" aria-hidden="true" />{{ t('barra.attachFile') }}
-            </button>
+            <div class="menu-testa">
+                <!--
+                    ⛔ NON `chat.addToChat`: qui non stai «aggiungendo alla
+                    chat», stai preparando il messaggio che sta per partire
+                    dall'assistente. Riusare la stringa della chat avrebbe
+                    portato in questa superficie una parola che descrive
+                    l'altra — lo stesso errore, in piccolo, del disegno che
+                    questa tendina aveva prima.
+                -->
+                <span class="menu-nome">{{ t('barra.addTitle') }}</span>
+                <button
+                    type="button"
+                    class="menu-chiudi"
+                    :aria-label="t('barra.close')"
+                    data-testid="talos-barra-menu-chiudi"
+                    @click="menuAllegati = false"
+                >
+                    <X class="icona-piccola" aria-hidden="true" />
+                </button>
+            </div>
+            <!--
+                ⛔ Tre riquadri in fila, come in chat: l'area da toccare è il
+                riquadro intero invece di una riga alta 40 px, e l'icona in un
+                cerchio si riconosce prima della parola. Le proporzioni sono le
+                stesse della chat (cerchio 48, riquadro alto quanto serve), così
+                chi passa dall'una all'altra non deve reimparare niente.
+            -->
+            <div class="griglia">
+                <button type="button" class="riquadro" @click="conIlMenuChiuso(() => allegati.selectFiles())">
+                    <span class="cerchio"><Paperclip class="icona-piccola" aria-hidden="true" /></span>
+                    {{ t('barra.attachFile') }}
+                </button>
+                <button type="button" class="riquadro" @click="conIlMenuChiuso(() => allegati.takePhoto())">
+                    <span class="cerchio"><Camera class="icona-piccola" aria-hidden="true" /></span>
+                    {{ t('barra.attachCamera') }}
+                </button>
+                <button type="button" class="riquadro" @click="conIlMenuChiuso(() => allegati.pickPhotos())">
+                    <span class="cerchio"><Image class="icona-piccola" aria-hidden="true" /></span>
+                    {{ t('barra.attachPhotos') }}
+                </button>
+            </div>
+            <!--
+                ⭐⭐ CHI STA RISPONDENDO, e da qui si cambia — rilievo #9.
+
+                ⛔ QUI DENTRO, non sopra la pillola. Owner 2026-08-15: «lo
+                mettiamo in una sezione nel riquadro che si apre premendo il
+                tasto più, sopra i file della libreria, così non occupiamo spazio
+                nella pillola assistente». Ha ragione due volte: la forma a
+                riposo della pillola è misurata contro Gemini e non si tocca, e
+                questo riquadro è già il posto dove la barra tiene ciò che
+                riguarda il turno che sta per partire — con cosa lo mandi, e ora
+                anche a chi.
+
+                Sopra la Libreria e sotto i tre modi di allegare: prima COME
+                mandi, poi CHI risponde, poi COSA hai già in casa.
+            -->
+            <template v-if="controller.profiles.value.length">
+                <div class="menu-titolo">
+                    <Cpu class="icona-piccola" aria-hidden="true" />{{ t('barra.model') }}
+                </div>
+                <button
+                    type="button"
+                    class="voce voce--modello"
+                    aria-haspopup="dialog"
+                    :aria-expanded="menuModello"
+                    :aria-label="`${t('chat.chooseModelProfile')}: ${nomeModello}`"
+                    data-testid="talos-barra-modello"
+                    @click="menuAllegati = false; menuModello = true"
+                >
+                    <TalosMobileProviderIcon
+                        v-if="profiloAttivo"
+                        :provider="profiloAttivo.provider"
+                        class="icona-piccola border-0 bg-transparent"
+                    />
+                    <span class="voce-nome">{{ nomeModello }}</span>
+                    <ChevronRight class="icona-piccola voce-freccia" aria-hidden="true" />
+                </button>
+            </template>
+
             <!-- ⛔ IL TITOLO C'È SEMPRE, e la sezione non sparisce quando è vuota.
                  Provato l'11 agosto: sul telefono di prova il vault era vuoto e
                  la Libreria non compariva affatto — un menu che a volte ha una
@@ -1497,6 +1964,54 @@ onMounted(async () => {
                     @click="allegati.remove(pezzo.id)"
                 ><X class="icona-piccola" aria-hidden="true" /></button>
             </span>
+        </div>
+
+        <!--
+            ⭐⭐⭐ LA SCIA — le parole mentre le sente, SOPRA la pillola.
+
+            Owner 2026-08-14: «stampare le parole mano mano che vengono sentite;
+            è una cosa che facciamo già in chat, basta trasportarla e ottimizzarla
+            sull'assistente, sopra la barra, animata in scorrimento orizzontale».
+
+            ⛔ In chat le parole si vedono perché finiscono nel campo di testo.
+            Qui il campo è `v-show="!ascolta"` — MENTRE ASCOLTA È NASCOSTO — e
+            quindi non si vedeva niente: chi parla non ha nessun segno che TALOS
+            lo stia capendo, solo una pillola che pulsa. È la stessa famiglia del
+            difetto «la modalità ascolto rimane ma non ascolta»: la persona non
+            può distinguere «ti sto seguendo» da «non ho sentito niente».
+
+            ⛔ SCORRE, non va a capo: una riga sola che si trascina verso
+            sinistra tiene l'ultima parola sempre in vista e non fa saltare la
+            pillola a ogni sillaba. Sopra la pillola, non dentro: dentro
+            cambierebbe la forma a riposo, che è misurata e non si tocca.
+        -->
+        <!--
+            ⛔ 2026-08-14: la scia era scritta QUI dentro, e la chat aveva la
+            sua versione diversa — un blocco che andava a capo. Owner: «non ha
+            senso usare componenti diversi». Adesso è lo stesso componente per
+            entrambe le superfici, e non possono più divergere.
+        -->
+        <div v-if="ascolta && scia" class="scia-posto" data-testid="talos-barra-scia">
+            <TalosSciaParole :testo="scia" />
+        </div>
+
+        <!--
+            ⭐⭐ CHI STA RISPONDENDO — l'elenco vero, aperto dalla riga «Modello».
+
+            Il perché per esteso sta su `SceltaModello` nello script. È lo STESSO
+            pannello della chat, non un secondo elenco.
+        -->
+        <div v-if="menuModello" class="menu menu--modelli" data-testid="talos-barra-menu-modello">
+            <SceltaModello
+                :model-profiles="controller.profiles.value"
+                :selected-model-profile-id="controller.selectedModelId.value"
+                :refreshing-models="controller.refreshingModels.value"
+                :discovery-problems="controller.discoveryProblems.value"
+                @select-model-profile="scegliModello"
+                @request-close="menuModello = false"
+                @refresh-models="void controller.refreshConfiguredProviders()"
+                @open-model-lab="menuModello = false; void apriInTalos()"
+            />
         </div>
 
         <!-- LA PILLOLA: la forma a riposo, e non cambia mai taglia. -->
@@ -1561,6 +2076,16 @@ onMounted(async () => {
                 sorpasso è che appena smetti il testo si vede e si può correggere
                 PRIMA di mandarlo. Toccare l'onda smette di ascoltare.
             -->
+            <!--
+                ⛔ 2026-08-14: le 28 barre erano disegnate QUI, e la chat usava
+                `TalosMicWaveform` — che spalmava un livello solo su una sagoma
+                fissa, con un respiro CSS che pulsava anche in silenzio. Owner:
+                «la versione chat ha la wave vecchia che non reagisce al suono…
+                non ha senso usare componenti diversi».
+
+                La storia del volume adesso vive dentro il componente, e le due
+                superfici la ereditano dallo stesso posto.
+            -->
             <button
                 v-if="ascolta"
                 type="button"
@@ -1569,12 +2094,7 @@ onMounted(async () => {
                 data-testid="talos-barra-onde"
                 @click="alternaAscolto"
             >
-                <i
-                    v-for="(altezza, indice) in onde"
-                    :key="indice"
-                    :style="{ '--altezza': altezza }"
-                    aria-hidden="true"
-                />
+                <TalosMicWaveform :level="dettatura.level.value" />
             </button>
 
             <textarea
@@ -1601,8 +2121,27 @@ onMounted(async () => {
             >
                 <Square class="icona" aria-hidden="true" />
             </button>
+            <!--
+                ⛔⛔ UN ALLEGATO PRONTO È GIÀ QUALCOSA DA MANDARE.
+
+                Owner 2026-08-15, guardando lo schermo: «non c'è un pulsante
+                invia appena attach un file, resta il pulsante microfono, **non
+                puoi non vederlo**».
+
+                Aveva ragione, e si vedeva negli scatti che avevo appena
+                guardato io: gettone `prova-talos.txt` sopra la pillola, e a
+                destra il microfono. La condizione guardava **solo il testo**,
+                quindi un file scelto restava lì senza nessun modo di mandarlo —
+                a meno di scrivere qualcosa che non serviva.
+
+                ⇒ «C'è qualcosa da mandare» non è «c'è del testo»: è testo
+                **oppure** allegati. E l'errore di metodo, che vale più della
+                riga: avevo verificato che il gettone comparisse, non che si
+                potesse **fare qualcosa** con quel gettone. Vedi
+                [[se-la-tocchi-la-provi-tutta]].
+            -->
             <button
-                v-else-if="bozza.trim()"
+                v-else-if="bozza.trim() || allegati.items.length"
                 type="submit"
                 class="azione"
                 :aria-label="t('barra.send')"
@@ -1737,6 +2276,23 @@ onMounted(async () => {
         0 22px 54px -14px rgb(0 0 0 / 78%);
     color: var(--foreground);
     font-family: var(--talos-font-ui);
+}
+
+/* ── IL POSTO DELLA SCIA ─────────────────────────────────────────────────── */
+/*
+ * ⛔ Qui resta SOLO la geometria — dove sta e quanto è larga. Come si disegna
+ * (una riga, lo scorrimento, la sfumatura) sta dentro `TalosSciaParole`, che è
+ * lo stesso componente della chat: due copie di quel CSS erano due disegni che
+ * un giorno divergono, ed erano già divergenti il giorno in cui sono nati.
+ *
+ * Stessa larghezza della pillola: è la sua voce, non un pannello a parte.
+ * Sopra, staccata di 8 px — dentro cambierebbe la forma a riposo, che è
+ * misurata su Gemini e non si tocca.
+ */
+.scia-posto {
+    width: 100%;
+    max-width: 440px;
+    margin-block-end: 8px;
 }
 
 /* ── LA PILLOLA ──────────────────────────────────────────────────────────── */
@@ -1977,16 +2533,21 @@ onMounted(async () => {
     background: none;
     border: 0;
 }
-.onde i {
-    width: 3px;
-    flex: none;
-    border-radius: 999px;
-    background: var(--primary);
-    /* Il minimo NON è zero: una barra alta zero sparisce, e una fila che si
-       accorcia fino a sparire sembra un guasto. Due pixel dicono «sono qui, e
-       adesso c'è silenzio» — che è vero e diverso da «mi sono spenta». */
-    height: calc(2px + var(--altezza, 0) * 22px);
-    transition: height 90ms linear;
+/*
+ * ⛔ Qui c'era `.onde i`, il disegno delle ventotto barre. È uscito insieme
+ * alla coda: adesso lo fa `TalosMicWaveform`, lo stesso componente della chat.
+ * `.onde` resta come POSTO — dove sta l'onda dentro la pillola, e quanto
+ * spazio prende — che è l'unica cosa che riguarda questa superficie.
+ *
+ * ⛔ E il minimo non-zero è sopravvissuto al trasloco: dentro il componente
+ * ogni barra parte da 3 px. Una fila che si accorcia fino a sparire sembra un
+ * guasto; qualche pixel dice «sono qui, e adesso c'è silenzio».
+ */
+.onde :deep(.talos-mic-waveform) {
+    inline-size: 100%;
+    /* Le barre della pillola sono il colore primario, non l'accento della
+       chat: è la stessa onda, dentro una superficie che ha il suo colore. */
+    --talos-accent: var(--primary);
 }
 
 /* ── LA CARTA — quando il testo non sta più su una riga ──────────────────
@@ -2440,7 +3001,13 @@ onMounted(async () => {
 
 .menu {
     width: 100%;
-    max-width: 300px;
+    /*
+     * ⛔ Era 300 px: un francobollo sotto una carta larga tre volte tanto, e la
+     * prima cosa che si notava guardando lo schermo. 460 è la stessa larghezza
+     * dei gettoni degli allegati e della scia — la colonna della barra resta
+     * UNA, e questa tendina finalmente ci sta dentro invece di galleggiarci.
+     */
+    max-width: 460px;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -2450,6 +3017,122 @@ onMounted(async () => {
     border: 1px solid color-mix(in oklab, var(--primary) 16%, var(--border));
     box-shadow: 0 0 0 1px rgb(0 0 0 / 28%), 0 18px 44px -14px rgb(0 0 0 / 78%);
     animation: barra-sale 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/*
+ * Il pannello dei modelli è più largo del menu allegati perché deve reggere il
+ * nome del modello, il provider e le sue capacità su una riga. 460 px è la
+ * stessa larghezza dei gettoni degli allegati: la colonna resta una.
+ */
+
+/*
+ * ⛔⛔ LA TENDINA PARLA LA LINGUA DELLA CHAT — owner 2026-08-15, «molto brutta».
+ *
+ * Il confronto che l'ha condannata: per la stessa cosa la chat ha un titolo,
+ * una X e tre riquadri alti con l'icona in un cerchio; qui c'erano tre righe di
+ * testo con un'icona grigia a sinistra, senza titolo e senza modo di chiudere.
+ *
+ * ⛔ Le misure NON sono inventate: sono quelle di `TalosMobileComposerDrawer`
+ * — cerchio 48, riquadro `min-h-24`, angoli `rounded-2xl`, orlo e fondo dai
+ * token del pannello. Chi passa dalla chat all'assistente non deve reimparare
+ * niente, ed è tutto il punto di riusare un linguaggio invece di inventarne uno.
+ */
+.menu-testa {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 6px 8px;
+}
+
+.menu-nome {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--foreground);
+}
+
+.menu-chiudi {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    min-height: 32px;
+    border-radius: 999px;
+    color: var(--muted-foreground);
+}
+
+.menu-chiudi:active {
+    background: color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+
+.griglia {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 0 2px 8px;
+}
+
+/*
+ * ⛔ L'area da toccare è il RIQUADRO, non una riga alta 40 px: su una barra che
+ * si usa con una mano sola mentre guardi un'altra app, un bersaglio piccolo è
+ * un bersaglio mancato.
+ */
+.riquadro {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 88px;
+    padding: 10px 4px;
+    border-radius: 16px;
+    border: 1px solid var(--talos-border, var(--border));
+    background: color-mix(in oklab, var(--card) 70%, transparent);
+    color: var(--foreground);
+    font-size: var(--text-2xs);
+    text-align: center;
+    line-height: 1.2;
+}
+
+.riquadro:active {
+    background: var(--talos-active, color-mix(in oklab, var(--primary) 18%, var(--card)));
+}
+
+/* Il cerchio dietro l'icona: si riconosce prima della parola. */
+.cerchio {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    background: var(--talos-active, color-mix(in oklab, var(--primary) 18%, var(--card)));
+}
+
+.menu--modelli {
+    max-width: 460px;
+    padding: 10px;
+}
+
+/*
+ * La riga del modello è una `.voce` come le altre del riquadro — stessa altezza,
+ * stesso tocco — con due differenze: il nome può essere lungo (si tronca invece
+ * di mandare a capo il menu) e la freccia dice che porta altrove.
+ */
+.voce--modello {
+    width: 100%;
+}
+
+.voce-nome {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.voce-freccia {
+    flex: none;
+    opacity: 0.6;
 }
 
 .voce {

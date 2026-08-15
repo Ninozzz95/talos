@@ -65,71 +65,9 @@
     <uses-permission android:name="android.permission.EXECUTE_APP_FUNCTION"
         tools:ignore="ProtectedPermissions" />
 
-    <!--
-        ⭐⭐ LA BOLLA — e perché SOLO qui, deciso dall'owner l'11 agosto 2026.
-
-        «Voglio solo che sia nella versione di sviluppo, non nella versione di
-        produzione. È solo una cosa che serve a me.»
-
-        La bolla è il pallino di TALOS sopra le altre app: un tocco e la barra si
-        apre, su qualunque ROM. Serve all'owner perché sul suo ColorOS cinese il
-        gesto dell'assistente non esiste — ma un pallino sempre in vista è una
-        scelta di gusto, e in produzione la porta è la scheda in tendina.
-
-        ⛔ Sta nel source set `debug` e NON dietro un interruttore a runtime: un
-        interruttore si può sbagliare, un file che nella release non viene
-        nemmeno compilato no. In produzione questa app non CHIEDE
-        `SYSTEM_ALERT_WINDOW`, che è fra i permessi più pesanti che esistano — e
-        il 2026-08-09 l'avevamo tolto proprio per non chiederlo senza usarlo.
-
-        ⛔ `FOREGROUND_SERVICE_SPECIAL_USE`: da Android 14 un servizio di primo
-        piano deve DICHIARARE a cosa serve. Qui non c'è un tipo che descriva
-        «tengo a schermo un pulsante», e inventarne uno vicino (`dataSync`)
-        sarebbe una dichiarazione falsa al sistema operativo.
-
-        ⛔⛔ E NON si mette `microphone`, benché il censimento del codice dei
-        concorrenti lo suggerisse.
-
-        Il 2026-08-11, cercando perché l'assistente non ascoltava, è emerso che
-        Dicio, Sayboard, Kõnele e FUTO dichiarano tutti
-        `foregroundServiceType="microphone"`, e che in `OomAdjuster.java` solo
-        quel bit concede `PROCESS_CAPABILITY_FOREGROUND_MICROPHONE`. Era l'unica
-        differenza strutturale fra noi e loro, quindi la tentazione di copiarla
-        era forte.
-
-        Due ragioni per non farlo, e la seconda vale più della prima:
-
-          1. **Quei quattro registrano audio DA DENTRO IL SERVIZIO.** Il nostro
-             no: apre una finestra con un pulsante, e il microfono lo apre
-             l'Activity della barra, che quando ascolta è in cima allo schermo e
-             quindi ha già la capability come `TOP`. Dichiarare un tipo che non
-             usiamo è la stessa bugia di `dataSync`, con in più il rischio di
-             policy.
-          2. **La premessa non regge alla misura.** Se ci silenziassero, l'audio
-             arriverebbe a zero: `setRecordSilenced` consegna byte tutti nulli
-             senza nessun errore. MISURATO con la sonda `TalosOrecchio` sul
-             livello del microfono: picchi da 1,84 a 10,0 mentre la barra
-             ascoltava. Non siamo silenziati.
-
-        ⛔ Cosa lo farebbe cambiare idea, scritto qui perché non si debba
-        ridedurre: un `logcat` con `TalosOrecchio` che mostra `picco` piatto
-        vicino a zero mentre qualcuno sta parlando. Quello — e solo quello — è
-        silenziamento, e allora questa riga va rivista insieme al posto in cui
-        il microfono viene davvero aperto.
-    -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-
+    
     <application>
 
-        <service
-            android:name="ai.talos.bolla.TalosBolla"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Pulsante flottante di sviluppo per aprire la barra dell'assistente" />
-        </service>
 
         <!--
             ⛔ LA SONDA DELL'ASSISTENTE NON STA PIU' QUI, ed è una buona notizia.

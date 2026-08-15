@@ -141,13 +141,6 @@ export const TALOS_DEVICE_CAPABILITIES: readonly TalosCapability[] = Object.free
         permission: 'android.permission.PACKAGE_USAGE_STATS',
         settingsAction: 'android.settings.USAGE_ACCESS_SETTINGS',
     },
-    {
-        id: 'floating_button',
-        tier: 'special',
-        regime: 'ask',
-        permission: 'android.permission.SYSTEM_ALERT_WINDOW',
-        settingsAction: 'android.settings.action.MANAGE_OVERLAY_PERMISSION',
-    },
 
     // ── Shizuku o il ponte: vivi finché loro sono vivi.
     { id: 'wifi_toggle', tier: 'shell', regime: 'ask', permission: null, settingsAction: 'android.settings.WIFI_SETTINGS' },
@@ -185,12 +178,37 @@ export const TALOS_DEVICE_CAPABILITIES: readonly TalosCapability[] = Object.free
      * schermata è risultato **identico**: 336 nodi contro 336, 166 testi contro
      * 166. Il servizio non aggiunge niente che il ponte non veda già.
      *
-     * ⇒ Per questo `tier: 'shell'` e `settingsAction: null`. Non c'è una
-     * schermata dove concederlo, perché non c'è niente da concedere: o il ponte
-     * è collegato, o questa capacità non c'è. Il passo mancante è la pagina dei
-     * privilegi, non una casella in Accessibilità.
+     * ⇒ Per questo `tier: 'shell'`. Non c'è una casella in **Accessibilità** da
+     * spuntare, perché non c'è niente da concedere lì: o il ponte è collegato,
+     * o questa capacità non c'è.
+     *
+     * ## ⛔ Ma una schermata C'È, e per due giorni qui stava scritto `null`
+     *
+     * Rilievo #10 dell'owner: «"controlla il mio telefono" **non porta alla
+     * schermata giusta**». Riprodotto sul Pad il 2026-08-15 col ponte spento:
+     * TALOS ha detto benissimo che il ponte era giù, ha offerto di aprire la
+     * pagina — e ha aperto **«Informazioni app» di TALOS**, dove il ponte non
+     * si riattiva. Non era un capriccio del modello: qui non c'era nessuna
+     * azione, quindi ha preso la più vicina che conosceva.
+     *
+     * MISURATO nello stesso minuto, dalla shell:
+     *
+     * ```
+     *   am start -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS
+     *   → com.android.settings.Settings$DevelopmentSettingsDashboardActivity
+     * ```
+     *
+     * È la schermata delle **Opzioni sviluppatore**, dove sta il Debug wireless
+     * — cioè l'unico posto da cui una persona riaggancia il ponte. ⇒ Il passo
+     * mancante non era «una casella in Accessibilità»: era **questa riga**.
      */
-    { id: 'screen_read', tier: 'shell', regime: 'read', permission: null, settingsAction: null },
+    {
+        id: 'screen_read',
+        tier: 'shell',
+        regime: 'read',
+        permission: null,
+        settingsAction: 'android.settings.APPLICATION_DEVELOPMENT_SETTINGS',
+    },
 ])
 
 export function talosCapability(id: string): TalosCapability | null {

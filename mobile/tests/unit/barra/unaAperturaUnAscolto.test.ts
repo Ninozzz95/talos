@@ -393,19 +393,42 @@ describe('⭐ la waveform viene dal VOLUME, non da un ciclo CSS', () => {
 
     it('lo schermo: barre alte quanto il volume, e nessuna animazione a ciclo', () => {
         const barra = leggi('src/components/barra/TalosBarraRoot.vue')
+        const onda = leggi('src/components/brand/TalosMicWaveform.vue')
 
-        expect(barra).toContain('height: calc(2px + var(--altezza, 0) * 22px)')
         /*
-         * ⛔⛔ `immediate: true` — la riga senza la quale l'onda è piatta
-         * nell'assistente e viva nella chat. `watch` è pigro: chiama su un
-         * CAMBIAMENTO. Nella barra `ascoltoVoluto` nasce già vero (l'assistente
-         * si apre in ascolto), quindi `ascolta` non cambia mai e il campionatore
-         * non parte. Misurato tre volte dall'owner prima che guardassi qui.
+         * ⛔⛔ 2026-08-14: LA CODA È USCITA DALLA BARRA, e questo presidio l'ha
+         * seguita. Owner: «la versione chat ha la wave vecchia che non reagisce
+         * al suono… non ha senso usare componenti diversi».
+         *
+         * Prima le ventotto barre erano disegnate dentro `TalosBarraRoot` e la
+         * chat usava un `TalosMicWaveform` che spalmava UN livello su una
+         * sagoma fissa — tutte le barre insieme, più un respiro CSS che pulsava
+         * anche in silenzio. Due componenti per la stessa cosa, già divergenti
+         * il giorno in cui sono nati.
+         *
+         * ⇒ La storia del volume vive nel componente condiviso, e il presidio
+         * guarda LÌ. E in più pretende che nessuna delle due superfici se ne
+         * riscriva una copia: è la divergenza, non il disegno, il difetto.
          */
-        expect(barra).toMatch(/watch\(ascolta,[\s\S]{0,900}?\{ immediate: true \}\)/)
-        // ⛔ La firma del difetto vecchio: un'animazione infinita sulle barre.
+        expect(onda).toContain('storia.value.slice(1)')
+        expect(onda).toContain('const PASSO_MS = 80')
+        // ⛔ La firma del difetto vecchio: un'animazione infinita sulle barre,
+        // che si muoveva anche quando non stava sentendo niente.
+        // ⛔ Si guarda l'USO, non la parola: il commento nel componente cita
+        // l'animazione vecchia come esempio del difetto, ed è giusto che ci sia.
+        expect(onda).not.toMatch(/@keyframes\s+talosMicBreath/)
+        expect(onda).not.toMatch(/animation:\s*talosMicBreath/)
+        expect(onda).not.toMatch(/animation:[^;]*infinite/)
         expect(barra).not.toContain('animation: barra-livello')
         expect(barra).not.toContain('@keyframes barra-livello')
+        /*
+         * ⛔ E la barra NON tiene più un campionatore suo: se lo rifacesse,
+         * tornerebbero due code che possono divergere — e con esse il difetto
+         * dell'onda piatta nell'assistente, che era costato due build cercate
+         * nel nativo.
+         */
+        expect(barra).not.toMatch(/setInterval\([\s\S]{0,120}?80\)/)
+        expect(barra).toContain('<TalosMicWaveform :level="dettatura.level.value" />')
         // Mentre parli si vede l'onda, non il testo che si riscrive da solo.
         expect(barra).toMatch(/<button\s+v-if="ascolta"[\s\S]{0,260}?class="onde"/)
         expect(barra).toContain('v-show="!ascolta"')
@@ -527,7 +550,7 @@ describe('⛔ a mani libere vuol dire per TUTTI i turni, non per il primo', () =
         )
     })
 
-    it('l\'attesa prima dell\'invio scende da 3,8 s a 3,1 s', () => {
+    it('l\'attesa prima dell\'invio scende da 3,8 s a 2,5 s', () => {
         const barra = leggi('src/components/barra/TalosBarraRoot.vue')
         const plugin = leggi('android/app/src/main/java/ai/talos/agent/TalosDictationPlugin.kt')
 
@@ -535,17 +558,50 @@ describe('⛔ a mani libere vuol dire per TUTTI i turni, non per il primo', () =
          * ⛔ I due tempi erano IN FILA e ridondanti: 2.200 ms di silenzio chiesti
          * al motore — più del doppio degli 800-1.200 che usano gli agenti vocali
          * — e poi altri 1.600 di grazia per rispondere alla STESSA domanda.
-         * Alla grazia basta coprire il buco in cui siamo sordi fra due sessioni
-         * (`RESPIRO_MS` = 500, misurato) più un margine.
+         *
+         * Il primo taglio (12/8) è stato sulla grazia: 1.600 → 900, cioè il buco
+         * sordo fra due sessioni più un margine. Il secondo (14/8, owner: «c'è un
+         * po' troppo delay») è andato sulla pausa del motore: 2.200 → 1.600.
+         *
+         * ⛔ Il secondo taglio ha PROVATO 1.400 e un altro cancello l'ha
+         * respinto — `dictationTempiCondivisi` pretende di stare sopra la moda
+         * dei 1.500 ms delle pause di pensiero. Il cancello non è stato
+         * allentato: si è spostato il numero. Sta scritto qui perché il
+         * prossimo che vorrà limare trovi già la risposta.
+         *
+         * ⛔ Il numero che NON si tocca è la grazia, ed è il senso di questa
+         * prova: sotto il respiro smette di coprire la finestra in cui siamo
+         * fisicamente sordi, e il guadagno in reattività si paga in parole non
+         * sentite. Delle due attese, quella si toglie e questa no, perché la
+         * grazia GUARDA — annulla l'invio se arrivano altre parole — mentre
+         * l'altra aspettava e basta.
          */
         expect(barra).toContain('const GRAZIA_MS = 900')
         expect(barra).toContain('const RESPIRO_MS = 500')
-        expect(plugin).toContain('TALOS_PAUSA_FINE_FRASE_MS = 2_200')
-        // ⛔ E la grazia non può scendere sotto il buco, o si manderebbe la
-        // domanda mentre TALOS è ancora fisicamente sordo.
+        expect(plugin).toContain('TALOS_PAUSA_FINE_FRASE_MS = 1_600')
+
         const grazia = Number(/const GRAZIA_MS = ([\d_]+)/.exec(barra)?.[1]?.replace(/_/g, ''))
         const respiro = Number(/const RESPIRO_MS = ([\d_]+)/.exec(barra)?.[1]?.replace(/_/g, ''))
+        const pausa = Number(/TALOS_PAUSA_FINE_FRASE_MS = ([\d_]+)/.exec(plugin)?.[1]?.replace(/_/g, ''))
+
+        // La grazia non può scendere sotto il buco, o si manderebbe la domanda
+        // mentre TALOS è ancora fisicamente sordo.
         expect(grazia).toBeGreaterThan(respiro)
+        /*
+         * ⛔ E il totale ha un TETTO, che è la cosa che l'owner sente: oltre due
+         * secondi e mezzo fra l'ultima parola e la partenza, il ritardo si nota
+         * a ogni singolo turno. Un tetto sul totale morde anche se domani
+         * qualcuno alza uno dei due pezzi «di poco».
+         */
+        expect(pausa + grazia).toBeLessThanOrEqual(2_500)
+        /*
+         * ⛔ E un PAVIMENTO. Il pavimento vero — sopra la moda dei 1.500 ms — lo
+         * tiene `dictationTempiCondivisi`, ed è quello che ha respinto 1.400.
+         * Qui si ripete più largo di proposito: due cancelli sullo stesso numero
+         * si contraddicono, uno solo si dimentica. Questo dice «non scendere
+         * sotto il secondo», quello dice esattamente dove sta il confine.
+         */
+        expect(pausa).toBeGreaterThan(1_000)
     })
 })
 

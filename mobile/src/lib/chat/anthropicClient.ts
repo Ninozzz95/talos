@@ -117,7 +117,7 @@ type MergedTurn = BuildAnthropicRequestInput['turns'][number] & {
  */
 function mergeToolRuns(turns: BuildAnthropicRequestInput['turns']): MergedTurn[] {
     const merged: MergedTurn[] = []
-    for (const turn of turns) {
+    for (const turn of senzaTurniVuoti(turns)) {
         const previous = merged[merged.length - 1]
         if (turn.role === 'tool' && previous?.role === 'tool') {
             previous.toolResults = [
@@ -128,7 +128,87 @@ function mergeToolRuns(turns: BuildAnthropicRequestInput['turns']): MergedTurn[]
         }
         merged.push({ ...turn })
     }
-    return merged
+    return rispondiAlleChiamateOrFANE(merged)
+}
+
+/**
+ * ⛔⛔⛔ UN TURNO ASSISTANT VUOTO AVVELENA LA CHAT — la seconda metà del difetto.
+ *
+ * ## Misurato sul Pad il 2026-08-14
+ *
+ * Curate le chiamate orfane, la chat rotta ha risposto (08:09). Ma appena si
+ * chiedeva di nuovo un'azione tornava `PROVIDER_CHAT_FAILED`. La sonda ha
+ * mostrato il resto: un turno assistant senza testo esce come
+ * `{"role":"assistant","content":""}`, e Anthropic rifiuta i messaggi vuoti.
+ *
+ * ⇒ **Ogni invio fallito ne lascia uno.** Quindi un errore ne genera un altro,
+ * e la conversazione peggiora da sola a ogni tentativo: è il motivo per cui una
+ * chat rotta non si riprendeva **nemmeno riprovando**.
+ *
+ * ## Perché si TOGLIE, mentre la chiamata orfana si CONSERVA
+ *
+ * Non è una scelta diversa, è la stessa: si tiene ciò che è un fatto. Una
+ * chiamata orfana dice «il modello ha chiesto qualcosa», ed è vero. Un turno
+ * assistant vuoto non dice niente — è il residuo di una risposta che non è mai
+ * arrivata. Conservarlo non custodisce una verità, propaga un guasto.
+ *
+ * ⛔ I turni con `tool_use`, immagini o allegati NON sono vuoti anche se il
+ * testo manca: il contenuto è nei blocchi. Si guarda tutto, non solo `content`.
+ */
+function senzaTurniVuoti(turns: BuildAnthropicRequestInput['turns']): BuildAnthropicRequestInput['turns'] {
+    return turns.filter((turn) => turn.role !== 'assistant'
+        || turn.content.trim() !== ''
+        || (turn.toolCalls?.length ?? 0) > 0
+        || (turn.parts?.length ?? 0) > 0)
+}
+
+/**
+ * ⛔⛔⛔ OGNI `tool_use` DEVE AVERE LA SUA RISPOSTA, o la conversazione è morta.
+ *
+ * ## Il difetto, misurato sul Pad il 2026-08-14
+ *
+ * Una richiesta è fallita **dopo** che il modello aveva emesso `tool_use` e
+ * **prima** che salvassimo il risultato. Da quel momento quella chat ha
+ * risposto `PROVIDER_CHAT_FAILED` a **ogni** messaggio successivo, per sempre:
+ * Anthropic esige che ogni `tool_use` sia risposto da un `tool_result` nel
+ * messaggio utente subito dopo, e lì non c'era.
+ *
+ * ⇒ Non è un caso raro e non è colpa di un esperimento: **qualunque**
+ * interruzione fra la chiamata e il risultato — un errore del provider, un
+ * invio annullato, l'app chiusa nel mezzo — lascia la conversazione
+ * inutilizzabile. E non guarisce da sola: più si scrive, più si ripete.
+ *
+ * ## Perché si risponde invece di CANCELLARE la chiamata
+ *
+ * Togliere il `tool_use` cancellerebbe dalla storia il fatto che il modello ha
+ * chiesto qualcosa — e quel fatto è vero, è successo, ed è la ragione per cui
+ * la risposta dopo ha senso. Si conserva la domanda e si dice la verità sul
+ * suo esito: **non è stato eseguito**. Il modello legge una storia coerente
+ * invece di una amputata.
+ *
+ * ⛔ La riga è in inglese di proposito: la legge il modello, non la persona.
+ */
+function rispondiAlleChiamateOrFANE(turns: MergedTurn[]): MergedTurn[] {
+    const fuori: MergedTurn[] = []
+    for (const [indice, turn] of turns.entries()) {
+        fuori.push(turn)
+        if (!turn.toolCalls?.length) continue
+        const dopo = turns[indice + 1]
+        const risposti = new Set((dopo?.role === 'tool'
+            ? dopo.toolResults ?? [{ id: dopo.toolCallId ?? '' }]
+            : []).map((r) => r.id))
+        const orfane = turn.toolCalls.filter((call) => !risposti.has(call.id))
+        if (!orfane.length) continue
+        fuori.push({
+            role: 'tool',
+            content: '',
+            toolResults: orfane.map((call) => ({
+                id: call.id,
+                content: 'Not run: the request was interrupted before this tool could run.',
+            })),
+        })
+    }
+    return fuori
 }
 
 /**

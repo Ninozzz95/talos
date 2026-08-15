@@ -61,7 +61,7 @@ export interface TalosPermissionRow {
     id:
         | 'microphone' | 'notifications' | 'appLock' | 'files' | 'background' | 'network'
         | 'notificationAccess' | 'bridge' | 'deviceControl' | 'localModel'
-        | 'contacts' | 'camera'
+        | 'contacts' | 'camera' | 'calendar' | 'mailCount'
     title: string
     kind: TalosPermissionKind
     /**
@@ -104,6 +104,44 @@ export const TALOS_PERMISSION_ROWS: readonly TalosPermissionRow[] = [
         title: 'Contacts',
         kind: 'runtime',
         purpose: 'Sending a message to someone by name. TALOS looks up the name you said and takes the number for that one message — it does not read, copy or send your address book anywhere.',
+    },
+    /*
+     * ⭐⭐⭐ IL CALENDARIO, in lettura — 2026-08-14.
+     *
+     * Nasce da un difetto misurato: «che impegni ho domani?» e TALOS rispondeva
+     * «non hai compiti registrati per domani», avendo guardato le PROPRIE note
+     * e attività. Non è «non lo so»: è una risposta sicura e falsa sulla
+     * giornata di una persona.
+     *
+     * ⛔ La riga dice «leggere», e lo dice perché è vero: `WRITE_CALENDAR` non
+     * è nel manifest. Scrivere in agenda è un'altra decisione, in un altro
+     * momento, con un'altra riga.
+     */
+    {
+        id: 'calendar',
+        title: 'Calendar',
+        kind: 'runtime',
+        purpose: 'Answering "what do I have tomorrow", and putting an appointment in when you ask. Reading and writing are two separate permissions, asked at different moments, and every single appointment TALOS writes is confirmed by you first. Nothing leaves the phone.',
+    },
+    /*
+     * ⭐⭐ IL CONTATORE DI GMAIL — 2026-08-14, e non è un permesso di Android.
+     *
+     * Lo definisce Gmail (`com.google.android.gm.permission.READ_CONTENT_PROVIDER`)
+     * ed è `dangerous`, MISURATO col telefono: `dumpsys package permission …`
+     * risponde `prot=dangerous`, e col permesso solo dichiarato nel manifest il
+     * provider rispondeva `SecurityException`. Cioè si chiede alla persona, come
+     * il calendario — e quindi va elencato qui, dove la persona può ritrovarlo.
+     *
+     * ⛔ La riga dice «quanti», e lo dice perché è vero: da questa strada il
+     * testo di una email non è raggiungibile. Scrivere «legge la posta» sarebbe
+     * più spaventoso del vero, e chi legge una schermata di permessi merita la
+     * misura esatta di ciò che sta concedendo.
+     */
+    {
+        id: 'mailCount',
+        title: 'Unread mail count',
+        kind: 'runtime',
+        purpose: 'Answering "how much unread mail do I have". TALOS reads Gmail’s own counter on this phone and gets a number, per account — never the sender, the subject or the text of an email, which this route cannot reach at all. Nothing leaves the phone.',
     },
     /*
      * ⛔ C'era da prima e non era elencata: `CAMERA` è dichiarata nel manifest

@@ -63,6 +63,19 @@ export interface TalosToolResult {
      */
     senzaEffetto?: boolean
     /**
+     * ⭐⭐⭐ LA SCHEDA che la chat deve disegnare per questo risultato.
+     *
+     * Decisione dell'owner del 2026-08-13: «scheda sempre, l'app si apre solo
+     * quando non c'è altro modo». Dopo «accendi la torcia» la persona deve
+     * trovarsi **l'interruttore**, non la parola «fatto» — perché è quello che
+     * fa Gemini, ed è misurato che funziona meglio.
+     *
+     * ⛔ La dichiara il TOOL e non la schermata: una mappa `nome → componente`
+     * dentro la vista sarebbe un secondo posto da tenere allineato, e il primo
+     * a invecchiare. È lo schema che la letteratura chiama *generative UI*.
+     */
+    scheda?: import('@/lib/tools/tracciaAzione').TalosScheda
+    /**
      * ⛔ A8 — da dove viene il testo che sta in `content`.
      *
      * Facoltativo, e quando manca si ricade sulla bandiera statica del tool. Va
@@ -320,6 +333,75 @@ export function talosToolsForAnthropic(tools: ReadonlyArray<TalosToolDefinition<
         description: tool.description,
         input_schema: schemaOf(tool),
     }))
+}
+
+/**
+ * ⭐⭐⭐ LA RICERCA DEGLI ATTREZZI DI ANTHROPIC — il nome esatto, dalla doc.
+ *
+ * Due varianti: `regex`, dove il modello scrive un pattern Python, e `bm25`,
+ * dove scrive in **lingua naturale**. Qui si usa BM25, e non per gusto: le
+ * nostre descrizioni sono in inglese e chi scrive a TALOS scrive in italiano.
+ * Con BM25 il ponte fra «annulla la sveglia» e `alarm` lo fa il modello, che
+ * sa entrambe le lingue; con una regex lo dovrebbe fare una stringa di 200
+ * caratteri, che non lo sa.
+ *
+ * ⛔ NON porta `defer_loading`: differire anche l'attrezzo di ricerca è il
+ * primo dei due errori che la documentazione elenca, e rende 400.
+ */
+export const TALOS_RICERCA_ATTREZZI_ANTHROPIC = Object.freeze({
+    type: 'tool_search_tool_bm25_20251119',
+    name: 'tool_search_tool_bm25',
+})
+
+/**
+ * ⭐⭐⭐ GLI ATTREZZI PER ANTHROPIC, APERTI A GRADI.
+ *
+ * ## Come funziona, in una riga
+ *
+ * Si spediscono **tutti** gli schemi, come sempre — l'API ne ha bisogno lato
+ * server per cercare — ma quelli marcati `defer_loading: true` **non entrano
+ * nel prefisso del prompt**. Il modello li scopre cercandoli, e l'API espande
+ * la definizione in linea nel corpo della conversazione.
+ *
+ * ⇒ Due conseguenze che valgono più del risparmio:
+ *  - **la cache del prompt resta valida**, perché il prefisso non si muove;
+ *  - **nessun giro in più**, perché la ricerca gira sui server di Anthropic
+ *    dentro lo stesso turno.
+ *
+ * ## ⛔ La guardia contro il 400
+ *
+ * «Almeno un attrezzo deve avere `defer_loading=false`». I nostri quattro
+ * sempre-in-vista dipendono dai permessi: `web_search` sparisce se non c'è un
+ * motore configurato, e in un caso limite potrebbero mancare tutti e quattro.
+ * Allora non si differisce niente e si torna alla forma di prima — una lista
+ * lunga è un difetto di efficienza, un 400 è una risposta che non arriva.
+ */
+export function talosAttrezziAnthropicAGradi(
+    tools: ReadonlyArray<TalosToolDefinition<never>>,
+    vaDifferito: (nome: string) => boolean,
+): unknown[] {
+    const inVista = tools.filter((tool) => !vaDifferito(tool.name))
+    if (inVista.length === 0) return talosToolsForAnthropic(tools)
+    const riga = (tool: TalosToolDefinition<never>, differito: boolean) => ({
+        name: tool.name,
+        description: tool.description,
+        input_schema: schemaOf(tool),
+        ...(differito ? { defer_loading: true } : {}),
+    })
+    /*
+     * ⛔⛔ L'ORDINE NON È ESTETICO: i differiti PRIMA, i sempre-in-vista IN
+     * FONDO. Il taglio della cache di `promptCache` va sull'ULTIMO attrezzo, e
+     * un differito non può portare `cache_control` — 400, nessuna risposta.
+     * Visto sul Pad il 2026-08-13 alle 23:52 con Claude Haiku 4.5.
+     *
+     * Garantirlo qui con un ordinamento costa zero byte; cercarlo là ne costava
+     * 62 al grafo d'avvio, che ha un tetto suo.
+     */
+    return [
+        TALOS_RICERCA_ATTREZZI_ANTHROPIC,
+        ...tools.filter((tool) => vaDifferito(tool.name)).map((tool) => riga(tool, true)),
+        ...inVista.map((tool) => riga(tool, false)),
+    ]
 }
 
 /**

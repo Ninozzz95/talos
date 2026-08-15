@@ -125,7 +125,40 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="market" />
         </intent>
+        <!--
+            ⛔ Il provider di Gmail va dichiarato anche QUI, non basta il
+            permesso: da Android 11 un provider di un'altra app è invisibile
+            finché non lo si nomina, e `content://com.google.android.gm/…`
+            fallirebbe come se Gmail non ci fosse.
+        -->
+        <package android:name="com.google.android.gm" />
     </queries>
+
+    <!--
+        ⭐⭐⭐ QUANTE EMAIL NON LETTE — l'ultima cosa che Gemini faceva e noi no.
+        MISURATO sul Pad il 2026-08-14: alla domanda «quante email non lette ho»
+        lui risponde col numero; TALOS apriva Gmail e basta.
+
+        ## ⛔ Perché QUESTA strada e non l'API di Google
+
+        `gmail.readonly` è uno scope **ristretto**: verifica Google più
+        assessment CASA — per gli scope ristretti si arriva al **Tier 3, un
+        penetration test** con laboratorio approvato, da rifare **ogni 12 mesi**.
+        E finché l'app resta in «Testing», l'unico stato raggiungibile senza
+        quella trafila, il **refresh token scade ogni 7 giorni**: la persona
+        dovrebbe riautorizzare TALOS ogni settimana, per sempre.
+
+        ⇒ Gmail espone un **content provider pubblico e documentato** che dà
+        etichette e conteggi. È un permesso normale, dichiarato qui, senza
+        nessun giro dal cloud e senza nessuna approvazione esterna — che è
+        esattamente il modo in cui questo progetto preferisce sapere le cose:
+        si chiede al telefono.
+
+        ⛔ E dà i CONTEGGI, non il testo: mittente e oggetto restano quelli che
+        legge `device_notifications_list`. Un permesso che desse il contenuto
+        delle email non lo vogliamo, e questo non lo dà.
+    -->
+    <uses-permission android:name="com.google.android.gm.permission.READ_CONTENT_PROVIDER" />
 
 
     <!--
@@ -247,8 +280,28 @@
             Zero permessi nuovi, zero microfono sempre aperto: il tasto apre la
             barra, e da lì la persona parla come già fa oggi.
         -->
+        <!--
+            ⛔⛔⛔ `configChanges` — E QUI NON C'ERA, mentre MainActivity ce l'ha.
+
+            MISURATO sul Pad il 2026-08-14, ruotando con l'assistente aperto e la
+            risposta sullo schermo: la carta **sparisce** — risposta, scheda della
+            torcia, tutto — e la pillola resta schiacciata dentro il dock del
+            launcher, col campo ridotto a una fila di puntini.
+
+            Senza questa riga Android DISTRUGGE e RICREA l'activity a ogni
+            rotazione. E questa è `singleTask` con la WebView che si monta una
+            volta sola: la barra ricreata torna vuota, e la conversazione in
+            corso non esiste più. È l'unica superficie dell'app che lo faceva,
+            perche' e' l'unica a cui mancava la riga.
+
+            ⇒ Le stesse chiavi di MainActivity, non un sottoinsieme: due elenchi
+            diversi per la stessa WebView sono due comportamenti diversi a
+            seconda di dove la apri, ed e' il difetto che questa casa ha gia'
+            pagato con i tempi della dettatura.
+        -->
         <activity
             android:name=".TalosBarraActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:theme="@style/TalosBarra"
             android:launchMode="singleTask"
             android:excludeFromRecents="true"
@@ -296,6 +349,7 @@
             android:name="ai.talos.parola.TalosParola"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
 
         <service
             android:name=".TalosTendina"
@@ -718,6 +772,14 @@
          refuses the service outright if they disagree. POST_NOTIFICATIONS is
          requested because the notification IS the service on Android 13+. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!--
+        ⛔ Obbligatorio da Android 14 per il tipo `specialUse`. MISURATO senza:
+        `startForeground` lancia, il servizio resta in un limbo e il sistema lo
+        uccide con `ForegroundServiceDidNotStartInTimeException` — cioè un
+        crash, non un rifiuto. Serve al servizio che tiene a schermo il pallino
+        del ritorno.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!--
@@ -780,27 +842,24 @@
          `API_V23` qui sopra. Vedi il commento lì.
     -->
         <!--
-        ⛔⛔ SYSTEM_ALERT_WINDOW E' STATO TOLTO — 2026-08-09.
+        ⛔⛔ SYSTEM_ALERT_WINDOW NON C'E', ED E' LA SECONDA VOLTA CHE SE NE VA.
 
-        Serviva alla finestrella che teneva il campo del codice sopra
-        Impostazioni. Owner: «appena entro in dev settings la finestra
-        flottante viene coperta». Da Android 15 le opzioni sviluppatore
-        dichiarano il contenuto protetto dalla condivisione schermo, e su
-        OxygenOS quella protezione si porta via anche le finestre disegnate
-        sopra: la flottante non veniva nascosta per un difetto nostro, veniva
-        nascosta per progetto.
+        Tolto il 2026-08-09, rimesso il 2026-08-15 per il pallino, tolto di
+        nuovo il 2026-08-15 quando l'owner ha chiesto di obliterare il pallino.
 
-        Al suo posto c'e' una NOTIFICA con campo di risposta — la stessa strada
-        di Shizuku (`AdbPairingService`). PROVATO sul Pad con le opzioni
-        sviluppatore in primo piano: notifica viva, pulsante, campo di
-        scrittura aperto, tastiera su.
+        Perche' era tornato: su Android 15+ un'app che ha ceduto lo schermo puo'
+        tornare davanti solo con questo permesso E una finestra ancora visibile.
+        Il pallino era quella finestra.
 
-        ⇒ Un permesso che non serve piu' non si tiene «per sicurezza»:
-        `SYSTEM_ALERT_WINDOW` e' fra i piu' pesanti che un'app possa chiedere, e
-        chiederlo senza usarlo e' esattamente cio' che insegna a concedere
-        senza leggere. Se il compito #29 (il pulsante flottante che chiama
-        TALOS da fuori) lo vorra' davvero, se lo richiedera' allora, con la sua
-        ragione sotto gli occhi.
+        Perche' se n'e' andato: il pallino e' stato rimosso su richiesta
+        dell'owner, e un permesso senza piu' un motivo e' solo un permesso in
+        piu' da spiegare. E' fra i piu' pesanti che un'app possa chiedere —
+        Google lo tratta come tale, e la persona lo vede scritto.
+
+        ⛔ Se un giorno qualcuno lo rimette, deve rimettere anche la ragione qui
+        accanto, e sapere che il cancello in
+        `tests/unit/build/niente-pallino-niente-bottone.test.ts` va cambiato
+        insieme. Non si riapre per sbaglio.
     -->
         <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Il volume dei flussi audio. Normale: nessun dialogo. -->
@@ -874,6 +933,43 @@
         la rubrica prima di aver capito a cosa serve.
     -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!--
+        ⭐⭐⭐ IL CALENDARIO, in LETTURA — 2026-08-14.
+
+        Nasce da un difetto misurato, non da un'idea: «che impegni ho domani?» e
+        TALOS rispondeva «non hai compiti registrati per domani», avendo guardato
+        le PROPRIE note e attività. Non è «non lo so»: è una risposta sicura e
+        falsa sulla giornata di una persona.
+
+        ⭐ E leggere dal PROVIDER, non da un account, e' anche il punto in cui
+        superiamo Gemini: lui legge dall'account Google e NON vede i calendari
+        locali. Sul Pad ce n'e' uno, ed e' invisibile per lui.
+
+        ⛔ PERICOLOSO, e si chiede a runtime quando serve — mai all'avvio. La sua
+        riga nella schermata dei permessi non e' facoltativa: c'e' una guardia
+        che legge questo file e fallisce se manca.
+
+        ⛔ La SCRITTURA e' un permesso SEPARATO e si chiede in un altro momento:
+        leggere l'agenda e' privato ma reversibile, scriverci dentro cambia la
+        giornata di una persona. Due permessi, due decisioni, due dialoghi.
+    -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+
+    <!--
+        ⭐⭐⭐ SCRIVERE IN AGENDA — 2026-08-14, e qui superiamo Gemini due volte.
+
+        1. SENZA APRIRE NIENTE. Android offre `ACTION_INSERT`, che non chiede
+           permessi ma apre l'app Calendario con un modulo da confermare: e'
+           l'errore che la sveglia ci ha appena mostrato, `EXTRA_SKIP_UI`
+           ignorato e Orologio in faccia. Scrivendo sul provider non si sposta
+           nessuno.
+        2. LUOGO E DESCRIZIONE. Google dichiara che Gemini NON sa modificarli.
+
+        ⛔ PERICOLOSO, e ogni scrittura passa comunque dalla scheda di consenso:
+        il permesso apre la porta, la scheda decide il singolo gesto.
+    -->
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
     <!--
         Two permissions TALOS never asked for, removed.

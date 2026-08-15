@@ -19,6 +19,7 @@ import { createTalosPrivilegedTools } from '@/lib/tools/privilegedTools'
 import { createTalosNotificationTools } from '@/lib/tools/notificationTools'
 import { createTalosSchermoTools } from '@/lib/tools/schermoTools'
 import { talosIntentiTools } from '@/lib/tools/intentiTools'
+import { createTalosCalendarTools } from '@/lib/tools/calendarioTools'
 import {
     talosToolRequiredActions,
     talosToolsForAnthropic,
@@ -152,6 +153,16 @@ function everyExecutableTool() {
         // accorga, che è esattamente il difetto che questo test esiste per
         // impedire.
         ...talosIntentiTools({ fileDellaLibreria: vi.fn(async () => []) }),
+        /*
+         * ⭐ Il CALENDARIO — 2026-08-14. Senza questa riga la guardia non lo
+         * vedrebbe, cioè il tool nuovo resterebbe fuori dal pannello dei
+         * permessi senza che nessuno se ne accorga: è il difetto che questo
+         * test esiste per impedire, ed è già successo due volte.
+         */
+        ...createTalosCalendarTools(
+            vi.fn(async () => ({ stato: 'letto' as const, eventi: [] })),
+            vi.fn(async () => ({ stato: 'scritto' as const, calendario: 'x' })),
+        ),
     ]
 }
 
@@ -340,6 +351,47 @@ describe('Agent Tools control registry', () => {
              * il contratto — che è l'unica cosa che questa guardia sa dire.
              */
             'invia_file',
+            /*
+             * ⭐⭐⭐ 2026-08-14, IL CALENDARIO: `calendar_read`.
+             *
+             * Nato da un difetto misurato: «che impegni ho domani?» e TALOS
+             * rispondeva «non hai compiti registrati», avendo guardato le
+             * PROPRIE note. Una risposta sicura e falsa sulla giornata di una
+             * persona.
+             *
+             * ⛔ Stessa domanda di sempre: se togliendolo l'impronta storica
+             * NON tornasse, vorrebbe dire che aggiungendolo ho mosso il
+             * contratto di un tool che c'era già.
+             */
+            'calendar_read', 'calendar_write',
+            /*
+             * ⭐⭐ 2026-08-14, LO SCREENSHOT: `device_screenshot`.
+             *
+             * L'unica lacuna trovata dal censimento contro Gemini — «fai uno
+             * screenshot» era la sola richiesta a cui nessun attrezzo
+             * rispondeva.
+             *
+             * ⛔ Stessa domanda di sempre: se togliendolo l'impronta storica
+             * NON tornasse, vorrebbe dire che aggiungendolo ho mosso il
+             * contratto di un tool che c'era gia'. Il fatto che torni
+             * `369a6da1…` byte per byte dimostra che e' cresciuta la LISTA,
+             * non il contratto.
+             */
+            'device_screenshot',
+            /*
+             * ⭐⭐ 2026-08-14, LA POSTA NON LETTA: `device_unread_mail`.
+             *
+             * La seconda lacuna del censimento contro Gemini: «quante email non
+             * lette ho» era una domanda a cui nessun attrezzo rispondeva.
+             *
+             * ⛔ Stessa domanda di sempre: se togliendolo l'impronta storica NON
+             * tornasse, vorrebbe dire che aggiungendolo ho mosso il contratto di
+             * un tool che c'era già. E qui la domanda conta più del solito,
+             * perché nello stesso giro ho accorciato di proposito la descrizione
+             * di sei `research_*` — quella riga vive sotto, nei tre dialetti,
+             * mentre QUI (nome, titolo, azioni) non deve essersi mossa niente.
+             */
+            'device_unread_mail',
         ].includes(tool.name))
         expect(digestOf(controlPlaneOf(withoutNotesWrite)))
             .toBe('369a6da1a52e717bbe9e92b780151ac3da57352d21177064cf399a81356fff67')
@@ -422,8 +474,64 @@ describe('Agent Tools control registry', () => {
          * la lista, non il contratto: i tool di ieri parlano ai provider
          * esattamente come parlavano ieri.
          */
+        /*
+         * ⭐⭐⭐ 2026-08-13, NONO cambio: `device_alarm` impara a SPEGNERE.
+         *
+         * Non un attrezzo nuovo — una **sezione in più su quello che c'era**.
+         * Sul Pad, «annulla la sveglia delle 7 e 30» lasciava la sveglia
+         * armata, ne creava una seconda e apriva l'Orologio: il modello aveva
+         * solo l'attrezzo che le mette, e l'ha richiamato.
+         *
+         * Un `device_alarm_dismiss` separato è stato scritto e poi **tolto**:
+         * costava 309 byte di superficie e un attrezzo in più su 63, quando la
+         * documentazione avverte che la scelta degrada oltre i 30-50. Il verso
+         * mancante sta meglio dentro il suo verso, dichiarato da `off`.
+         *
+         * ⛔ Qui si muove il contratto di un tool **preesistente** — titolo e
+         * descrizione di `device_alarm` — ed è deliberato. L'impronta storica
+         * (`369a6da1…`) non se ne accorge perché il blocco sopra esclude tutto
+         * il gruppo del telefono dal 2026-08-08: la garanzia che regge è quella
+         * sui tre dialetti, che infatti si muovono insieme.
+         */
+        /*
+         * ⭐⭐ 2026-08-14, DECIMO cambio: `device_screenshot`.
+         *
+         * L'unica lacuna trovata dal censimento contro Gemini: «fai uno
+         * screenshot» era la sola richiesta a cui **nessun attrezzo**
+         * rispondeva, e TALOS finiva per spiegare un limite con una causa
+         * dedotta invece che con un «non lo so fare».
+         *
+         * ⛔ E l'impronta STORICA (`369a6da1…`) NON si è mossa: il blocco qui
+         * sopra lo esclude e la riproduce byte per byte. È cresciuta la lista,
+         * non il contratto.
+         *
+         * ⛔ Questo secondo numero invece si muove, ed è il gesto deliberato:
+         * il piano di controllo adesso contiene un attrezzo che LEGGE lo
+         * schermo, e chi rilegge questa riga deve vedere che qualcuno l'ha
+         * dichiarato.
+         */
+        /*
+         * ⭐⭐ 2026-08-14, UNDICESIMO cambio: `device_unread_mail`.
+         *
+         * La seconda lacuna del censimento contro Gemini — «quante email non
+         * lette ho» — chiusa dal contatore pubblico di Gmail sul telefono, non
+         * dall'API di Google (scope ristretto, assessment CASA, e un token che
+         * in «Testing» scade ogni 7 giorni: TALOS smetterebbe di leggere la
+         * posta una volta a settimana, per sempre).
+         *
+         * ⛔ L'impronta STORICA (`369a6da1…`) NON si è mossa: il blocco qui
+         * sopra lo esclude e la riproduce byte per byte — e stavolta è la
+         * conferma che serviva davvero, perché nello stesso giro sei
+         * `research_*` hanno perso una riga di descrizione. Le descrizioni
+         * vivono nei DIALETTI, qui vive il contratto: e il contratto è fermo.
+         *
+         * ⛔ Questo secondo numero invece si muove, ed è il gesto deliberato:
+         * il piano di controllo adesso contiene un attrezzo che LEGGE quanta
+         * posta non hai aperto, e chi rilegge questa riga deve vederlo
+         * dichiarato.
+         */
         expect(digestOf(controlPlane))
-            .toBe('09624654d0a3a46a52e2c5b212b14c38b8258fee3321f9ff28254beba65e2a60')
+            .toBe('89898d6464b8efb3b3628ccadd2acff97747e0022b4a728fe7de8d86e0560b60')
         /*
          * ⭐ Ri-fissato 2026-08-08 per i TRE tool delle NOTIFICHE:
          * `device_notifications_list`, `device_notification_reply`,
@@ -488,18 +596,46 @@ describe('Agent Tools control registry', () => {
                 ? { ...tool, description: previousDownloadDescription }
                 : tool
         ))
+        /*
+         * ⛔⛔ Ri-fissate 2026-08-14, e QUESTA volta non per un tool nuovo: sei
+         * `research_*` hanno perso una riga di descrizione, di proposito.
+         *
+         * La riga era «Call research_list first to get the research id.», e
+         * stava scritta DUE volte per attrezzo: nella descrizione e nel
+         * `.describe()` del campo `id`, che è il posto più vicino al gesto — il
+         * modello la legge mentre riempie proprio quel campo. Una delle due
+         * copie era peso puro: **298 byte** su sei attrezzi.
+         *
+         * ⛔ Perché toglierla invece di alzare il tetto degli schemi: il tetto
+         * serviva per `device_unread_mail` (414 byte), e la regola dell'owner
+         * dice di sgrassare PRIMA e di alzare solo se non resta altro. Qui
+         * restava: 44.354 + 414 − 298 = **44.470**, sotto il tetto di 44.500
+         * che non si è mosso.
+         *
+         * ⛔ E si vede da DOVE si muove: qui, nei dialetti, che portano le
+         * descrizioni. L'impronta del piano di controllo (`369a6da1…`) è ferma
+         * byte per byte — nessun nome, titolo o permesso è cambiato.
+         */
         expect(digestOf(talosToolsForAnthropic(beforeDescriptionUpdate as never)))
-            .toBe('75d9782cd2c555ac0fd7ca0fa9eb59b666ea0e834d7d0907615a919bd7e46ec6')
+            .toBe('5674f0945c2f976d9051b59d9126c086aec06aa95a59a72b0d4ff0c40c972281')
         expect(digestOf(talosToolsForOpenAi(beforeDescriptionUpdate as never)))
-            .toBe('b0681b4eb5360b75fef3ed62c5db431e0976098c1cf89aec9e3745003de25819')
+            .toBe('f033acbae8e56319f0a00c9c963df5b59b1b6f41e2e06c11d9678ec6b9015d96')
         expect(digestOf(talosToolsForGemini(beforeDescriptionUpdate as never)))
-            .toBe('7721578c61b818493cf37f104af81204a76c1616b7ba14878d9c677ca0045b00')
+            .toBe('b4f4768a16612cd4e0f6eefc4ac17f7d2b3de1f7b7c8bef1a23e1f525dbfb9fe')
 
-        // Gli stessi tre dialetti SENZA i tool nuovi: identici a ieri.
+        /*
+         * Gli stessi tre dialetti SENZA i tool nuovi. ⛔ Fino al 2026-08-14
+         * questa riga diceva «identici a ieri», ed era il senso del confronto:
+         * oggi NON lo sono più, e non perché sia entrato un attrezzo — questa
+         * lista lo esclude — ma perché sei descrizioni preesistenti sono state
+         * accorciate apposta (vedi il blocco qui sopra). Lasciare la vecchia
+         * frase avrebbe fatto leggere «niente si è mosso» a chi guardava tre
+         * numeri diversi.
+         */
         expect(digestOf(talosToolsForAnthropic(withoutNotesWrite as never)))
-            .toBe('8903bcf9aad1954b61d2bed23eacc170c0259b78fa0a293cef0927129373d3f5')
+            .toBe('737c93a85b550d7c1ec9ada5ac2fb6168553549a49d92071bd1bc784baf1802c')
         expect(digestOf(talosToolsForOpenAi(withoutNotesWrite as never)))
-            .toBe('9291e14e238147c8459bef3a66a0f9dae841130b40fb67f927bcf67e9969b058')
+            .toBe('f50b839bad2ae17111d1e3c78cfcdb1722a6efb0073c8a36c465de7f08cdf336')
         /*
          * ⛔ 2026-08-10: SOLO l'impronta Gemini si muove qui, e non e' una
          * deriva del contratto — e' il TRADUTTORE verso Gemini che e' cambiato.
@@ -510,7 +646,7 @@ describe('Agent Tools control registry', () => {
          * "additionalProperties"», e Gemini rifiutava l'INTERA conversazione.
          */
         expect(digestOf(talosToolsForGemini(withoutNotesWrite as never)))
-            .toBe('234e68152ed95f3ca85254a5c2f208414df79ec242c26e0a0dedd7138efaf8ef')
+            .toBe('6fc38f2c4a35ba8576f825da191b1abc4da6862bd90f935b6db3340aab243ed1')
 
         /*
          * ⭐ Ri-fissati 2026-08-08 anche per i TRE tool delle NOTIFICHE.
@@ -660,11 +796,87 @@ describe('Agent Tools control registry', () => {
          * ⭐⭐⭐ 2026-08-13, `invia_file`: i tre dialetti si muovono INSIEME,
          * come dev'essere per un tool nuovo — e l'impronta STORICA resta ferma.
          */
+        /*
+         * ⭐⭐⭐ 2026-08-13, `device_alarm_dismiss`: idem, i tre insieme. È il
+         * verso mancante della sveglia, misurato sul Pad — vedi il blocco delle
+         * esclusioni qui sopra.
+         */
+        /*
+         * ⛔⛔⛔ 2026-08-14, `calendar_write`: il contratto è cambiato APPOSTA,
+         * e queste tre righe si muovono insieme perché il campo è uno solo.
+         *
+         * MISURATO sul Pad alle 13:33, chat pulita: «metti in agenda **domani**
+         * alle 21» — domani era sabato 15 — è finito su **lunedì 17**, mentre
+         * TALOS diceva «domenica 16». Tre giorni diversi per una richiesta sola.
+         * `time_now` sul telefono rispondeva giusto: il modello non l'ha
+         * chiamato e ha dedotto «oggi».
+         *
+         * ⇒ La descrizione di `from` adesso lo ORDINA: «For a relative date
+         * ("tomorrow") call time_now FIRST». Riprovato in chat nuova: chiesto
+         * sabato 15 alle 17, `dtstart` letto dal provider = sabato 15 alle 17.
+         *
+         * ⛔ E l'impronta STORICA più sotto NON si muove: `calendar_write` è
+         * escluso da quel blocco, quindi il suo restare verde dimostra che
+         * nessun altro contratto è cambiato di nascosto insieme a questo.
+         */
+        /*
+         * ⛔ Mossa il 2026-08-14 per `device_screenshot`: un attrezzo in più
+         * cambia il dialetto Anthropic, ed è deliberato. L'impronta STORICA più
+         * sotto non si muove, e il suo restare verde è la prova che nessun
+         * contratto preesistente è cambiato di nascosto insieme a questo.
+         */
+        /*
+         * ⛔⛔ 2026-08-15, `device_open_settings`: la DESCRIZIONE è cambiata per
+         * il rilievo #10 dell'owner, «"controlla il mio telefono" non porta alla
+         * schermata giusta».
+         *
+         * Due modifiche, e la seconda paga la prima:
+         *
+         * 1. L'elenco delle schermate note guadagna
+         *    `android.settings.APPLICATION_DEVELOPMENT_SETTINGS` — misurata sul
+         *    Pad, apre `DevelopmentSettingsDashboardActivity`, cioè le Opzioni
+         *    sviluppatore dove sta il Debug wireless. Senza quella riga, col
+         *    ponte spento TALOS offriva di aprire «la pagina dei privilegi» e
+         *    apriva **«Informazioni app»**, perché nessuna azione gliela
+         *    indicava.
+         * 2. Spariscono i due esempi in testa alla descrizione
+         *    (`WIFI_SETTINGS`, `SOUND_SETTINGS`): erano **già dentro** l'elenco
+         *    completo due righe sotto. 64 byte per dire due volte la stessa
+         *    cosa, in uno schema col tetto misurato — e servivano proprio per
+         *    stare sotto quel tetto dopo la (1).
+         *
+         * ⛔ L'impronta STORICA (`369a6da1…`) NON si muove: `device_open_settings`
+         * è nella lista delle esclusioni dall'8 agosto, quindi il suo restare
+         * verde è la prova che nessun contratto più vecchio è cambiato di
+         * nascosto insieme a questo.
+         */
+        /*
+         * ⛔ IMPRONTE RIFATTE il 2026-08-15, e la ragione è UNA sola.
+         *
+         * L'owner ha chiesto di obliterare il pallino e il pulsante flottante.
+         * Con loro se n'è andata la capacità `floating_button`, e quindi la sua
+         * schermata `android.settings.action.MANAGE_OVERLAY_PERMISSION`, che
+         * `TALOS_SCHERMATE_DI_SISTEMA` deriva dal catalogo e `device_open_settings`
+         * elenca nella propria descrizione. Meno una schermata ⇒ descrizione più
+         * corta ⇒ impronta diversa.
+         *
+         * ⛔ E non è un'affermazione: le due liste sono state confrontate prima
+         * di toccare questi numeri, HEAD contro adesso —
+         *
+         *     SPARITE: android.settings.action.MANAGE_OVERLAY_PERMISSION
+         *     NUOVE:   android.settings.APPLICATION_DEVELOPMENT_SETTINGS
+         *
+         * — e la seconda era già dentro l'impronta precedente (è la (1) qui
+         * sopra). Cioè la differenza è esattamente una, ed è quella voluta.
+         *
+         * ⛔ Un'impronta che si aggiorna «perché è rossa» non protegge più
+         * niente: si aggiorna dopo aver detto QUALE byte è cambiato e perché.
+         */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('16a459c4b98887dc53db2a598a402b2ddde3342dc8d00aef66d43d6918ab4891')
+            .toBe('fe070174b5429c53d54ca2df3ed2e552042a956f0950ae03580d034b5d9f33d2')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('9081937474d003279b5025b1681bb1bf17706e5393647aaba50fafa95bc852f5')
+            .toBe('138db062bfc59db790c191cd350f1c7d405fd5992bc7a36cc760d949e12852a4')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('b931eca4db9361a36b43ed3f11b01e2367a5c2c1a4caeb7cc2ba315e81c2a9ea')
+            .toBe('f9608502fc5f88c55fcf14944df842e7006cf509baad882569d41aab0a320051')
     })
 })

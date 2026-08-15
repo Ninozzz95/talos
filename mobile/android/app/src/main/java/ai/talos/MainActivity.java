@@ -50,6 +50,7 @@ public class MainActivity extends BridgeActivity {
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosSchermoPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // ⭐ La rubrica: senza, ogni intent «manda a <persona>» resta impossibile.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosRubricaPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
+        { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosCalendarioPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // Il riconoscitore DI CASA: il plugin di terzi passa una lingua sola e
         // nessuna chiave di rilevamento — misurato nel suo sorgente.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosDictationPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }

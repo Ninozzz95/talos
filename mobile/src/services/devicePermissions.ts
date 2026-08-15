@@ -18,8 +18,16 @@ interface TalosDevicePermissionsPlugin {
         batteryExempt?: boolean
         manufacturer?: string
         brand?: string
+        runtime?: Record<string, string>
     }>
     requestNotifications(): Promise<{ state: string }>
+    /**
+     * ⭐ Chiede uno dei quattro col dialogo di sistema, e rilegge lo stato.
+     *
+     * `known: false` quando l'alias non è fra quelli che questa schermata sa
+     * chiedere: chi chiama lo dice invece di far finta di aver chiesto.
+     */
+    requestRuntime(options: { alias: string }): Promise<{ state: string, known: boolean }>
     requestBatteryExemption(): Promise<{ opened: boolean, alreadyExempt: boolean, route?: string }>
     openAppSettings(): Promise<{ opened: boolean }>
     openNotificationSettings(): Promise<{ opened: boolean }>
@@ -55,6 +63,19 @@ export interface TalosDeviceState {
     manufacturer: string
     /** Il marchio sulla scocca: un POCO espone `Xiaomi` e `POCO`. */
     brand: string
+    /**
+     * ⭐⭐ Lo stato dei permessi che si CHIEDONO, riga per riga.
+     *
+     * Owner 2026-08-14: contatti, calendario, conteggio della posta e
+     * fotocamera comparivano nella pagina **senza stato e senza pulsante** —
+     * un cerchio vuoto. Cioè la schermata che promette di dire tutto taceva
+     * proprio sulla domanda per cui una persona la apre.
+     *
+     * ⛔ Le chiavi sono gli `id` delle righe, non i nomi di Android: la pagina
+     * raggruppa per SCOPO, e `READ_CONTACTS` non è una cosa che qualcuno
+     * vuole — mandare un messaggio a una persona sì.
+     */
+    runtime: Readonly<Record<string, TalosPermissionState>>
 }
 
 export async function readTalosDeviceState(): Promise<TalosDeviceState> {
@@ -69,6 +90,9 @@ export async function readTalosDeviceState(): Promise<TalosDeviceState> {
             batteryExempt: false,
             manufacturer: '',
             brand: '',
+            // Fuori da Android non c'è niente da concedere: mappa vuota, e le
+            // righe restano mute invece di promettere un pulsante.
+            runtime: {},
         }
     }
     const [device, biometric] = await Promise.all([
@@ -88,6 +112,14 @@ export async function readTalosDeviceState(): Promise<TalosDeviceState> {
         batteryExempt: device?.batteryExempt === true,
         manufacturer: device?.manufacturer ?? '',
         brand: device?.brand ?? '',
+        /*
+         * ⛔ Senza ponte la mappa è VUOTA, non piena di «prompt»: una riga
+         * senza risposta non deve dire «non richiesto» — che è un fatto — ma
+         * tacere, come faceva prima. Fingere uno stato è peggio che non averlo.
+         */
+        runtime: Object.fromEntries(
+            Object.entries(device?.runtime ?? {}).map(([id, valore]) => [id, asState(valore)]),
+        ),
     }
 }
 
@@ -102,6 +134,20 @@ export async function requestTalosMicrophone(): Promise<void> {
     // disagree about what the user said.
     const { requestTalosDictationPermission } = await import('@/services/dictation')
     await requestTalosDictationPermission()
+}
+
+/**
+ * Chiede uno dei quattro permessi di runtime, e torna lo stato RILETTO.
+ *
+ * ⛔ Torna `null` quando il ponte non c'è o l'alias non è conosciuto: chi
+ * chiama non deve poter confondere «non ho potuto chiedere» con «ha detto no».
+ */
+export async function requestTalosRuntimePermission(
+    alias: string,
+): Promise<TalosPermissionState | null> {
+    const esito = await plugin.requestRuntime({ alias }).catch(() => null)
+    if (esito === null || esito.known === false) return null
+    return asState(esito.state)
 }
 
 export async function openTalosAppSettings(kind: 'app' | 'notifications' = 'app'): Promise<void> {

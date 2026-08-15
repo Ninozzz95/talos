@@ -523,3 +523,46 @@ describe('read-only tool set', () => {
         expect(audit).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed' }))
     })
 })
+
+/**
+ * ⛔⛔⛔ CHE GIORNO È SI DICE, non si fa dedurre al modello.
+ *
+ * ## Il difetto, misurato sul Pad il 2026-08-14
+ *
+ * «cosa ho in programma questo weekend?» → «Oggi è **giovedì** 14 agosto. Il
+ * weekend è sabato 16 e domenica 17». Era **venerdì**, e il weekend era sabato
+ * 15: gli eventi elencati erano giusti, le date con cui li ha etichettati no.
+ *
+ * ## Due cause nella stessa riga, e nessuna era il calendario
+ *
+ * 1. Si rendeva `toISOString()`, cioè **UTC**, mentre la descrizione prometteva
+ *    «local». A Roma d'estate sono due ore: **fra mezzanotte e le 2 il giorno
+ *    era ancora quello prima**, per ogni domanda che dice «oggi».
+ * 2. Il nome del giorno non c'era, quindi il modello lo calcolava — ed è
+ *    esattamente il genere di conto in cui sbaglia in silenzio.
+ */
+describe('time_now — la data che il modello NON deve dedurre', () => {
+    async function orarioDetto(iso: string): Promise<string> {
+        const tools = createTalosReadTools(sources({ now: () => iso }))
+        const esito = await executeTalosTool(byName(tools, 'time_now'), {}, deps())
+        return esito.content
+    }
+
+    it('⛔⛔ dice il GIORNO DELLA SETTIMANA per nome', async () => {
+        // 2026-08-14 è un VENERDÌ. Il modello non deve doverlo calcolare.
+        expect(await orarioDetto('2026-08-14T08:39:00.000Z')).toContain('Friday')
+    })
+
+    it('⛔ dice il FUSO, perché senza non si sa di quale «oggi» si parla', async () => {
+        const detto = await orarioDetto('2026-08-14T08:39:00.000Z')
+        expect(detto).toMatch(/\([A-Za-z]+\/[A-Za-z_]+\)|\(UTC\)/)
+    })
+
+    /*
+     * ⛔ L'ISO resta: è ciò che serve a chi costruisce un intervallo per il
+     * calendario. Si aggiunge la forma leggibile, non si sostituisce.
+     */
+    it('⛔ e l’ISO resta, perché serve a costruire gli intervalli', async () => {
+        expect(await orarioDetto('2026-08-14T08:39:00.000Z')).toContain('2026-08-14T08:39:00.000Z')
+    })
+})

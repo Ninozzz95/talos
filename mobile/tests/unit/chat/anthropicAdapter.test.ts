@@ -180,3 +180,66 @@ describe('C45-RED-19E declared output ceiling flows from catalogue to request', 
         expect(request.mock.calls[0][0].data.max_tokens).toBe(128000)
     })
 })
+
+/**
+ * ⛔⛔⛔ DOPO UN RISULTATO DI TOOL, IL SILENZIO È LEGITTIMO.
+ *
+ * ## Misurato sul Pad il 2026-08-14
+ *
+ * «spegni la torcia» → la torcia si spegneva davvero (08:26:23 in `dumpsys`),
+ * compariva «Torcia spenta.», e **subito dopo** `PROVIDER_CHAT_FAILED`. Ogni
+ * volta, su ogni chat, con ogni modello Anthropic.
+ *
+ * La causa è una differenza fra provider: **Claude parla INSIEME alla
+ * chiamata**, Gemini tace. Al giro finale — quello dopo il risultato — Claude
+ * non ha più niente da dire e chiude senza testo e senza chiamate. Noi lo
+ * dichiaravamo malformato.
+ *
+ * ⇒ È la stessa differenza che produceva il testo doppio.
+ */
+describe('risposta vuota dopo un tool', () => {
+    it('⛔⛔ una risposta VUOTA dopo un tool result NON è un errore', async () => {
+        const { transport } = transportWith({
+            status: 200,
+            data: { model: 'claude-a', stop_reason: 'end_turn', content: [] },
+        })
+
+        const esito = await anthropicAdapter.complete({
+            model: {
+                id: 'claude-a', provider: 'anthropic', displayName: 'Claude A',
+                chatCompatibility: 'supported', inputModalities: ['text'],
+                outputModalities: ['text'], supportedParameters: [],
+            },
+            turns: [
+                { role: 'user', content: 'spegni la torcia' },
+                { role: 'assistant', content: 'Torcia spenta.', toolCalls: [{ id: 't1', name: 'device_torch', arguments: '{}' }] },
+                { role: 'tool', content: 'done', toolCallId: 't1' },
+            ],
+            effort: 'off', thinking: false,
+        } as never, { apiKey: 'k' }, transport)
+
+        expect(esito.text).toBe('')
+    })
+
+    /*
+     * ⛔ E LA GUARDIA RESTA dove è nata: al primo giro una risposta senza testo
+     * e senza chiamate è davvero un guasto — il modello non ha detto niente e
+     * non ha chiesto niente, e senza questa riga si vedrebbe una bolla vuota.
+     */
+    it('⛔ ma al PRIMO giro una risposta vuota resta un errore', async () => {
+        const { transport } = transportWith({
+            status: 200,
+            data: { model: 'claude-a', stop_reason: 'end_turn', content: [] },
+        })
+
+        await expect(anthropicAdapter.complete({
+            model: {
+                id: 'claude-a', provider: 'anthropic', displayName: 'Claude A',
+                chatCompatibility: 'supported', inputModalities: ['text'],
+                outputModalities: ['text'], supportedParameters: [],
+            },
+            turns: [{ role: 'user', content: 'ciao' }],
+            effort: 'off', thinking: false,
+        } as never, { apiKey: 'k' }, transport)).rejects.toThrow()
+    })
+})

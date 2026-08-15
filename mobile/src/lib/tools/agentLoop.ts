@@ -84,6 +84,15 @@ export interface TalosAgentLoopDeps {
         images?: TalosMobileInputPart[]
         /** Vault bindings to keep on the final assistant message. */
         messageAttachments?: AppendChatAttachmentInput[]
+        /**
+         * ⛔ Vero quando l'attrezzo NON ha cambiato niente nel mondo.
+         *
+         * Dichiarato qui perché il ciclo lo usa: un preambolo che annuncia
+         * un'azione che poi non è avvenuta si toglie. Prima non era in questo
+         * contratto, e il valore moriva sul ponte del controller senza che il
+         * tipo se ne accorgesse.
+         */
+        senzaEffetto?: boolean
     }>
     /**
      * ⛔ B2 — il piano, chiesto PRIMA che qualsiasi cosa parta.
@@ -566,6 +575,24 @@ async function continueTalosAgentLoop(
 
         if (!resumeRequestedRound) {
             state.rounds += 1
+            /*
+             * ⛔ IL PREAMBOLO SI TIENE, ed è deliberato: la persona l'ha già
+             * VISTO scorrere. Toglierlo lo farebbe sparire nel momento in cui
+             * il messaggio durevole sostituisce lo stream — un difetto già
+             * pagato, custodito dal test «keeps the preamble the user already
+             * watched being streamed».
+             *
+             * ⛔⛔ E allora la balbuzie vista sul Pad il 2026-08-14 alle 00:02
+             * con Claude Haiku 4.5 —
+             *
+             *     «Torcia accesa.»  /  «Torcia accesa.»
+             *     «Torcia spenta.»  /  «La torcia è spenta.»
+             *
+             * — NON si cura qui: la cura sta nel prompt, perché il difetto è
+             * che il modello ANNUNCIA UN ESITO prima di aver chiamato. Non è
+             * solo una ripetizione: è una frase che dichiara fatto ciò che non
+             * è ancora successo, cioè la stessa famiglia di R-30.
+             */
             say(completion.text)
         }
         resumeRequestedRound = false
@@ -677,6 +704,38 @@ async function continueTalosAgentLoop(
                 toolName: call.name,
             }
         })
+
+        /*
+         * ⛔⛔⛔ UN PREAMBOLO CHE ANNUNCIA CIÒ CHE NON È SUCCESSO SI TOGLIE.
+         *
+         * ## Visto sul Pad il 2026-08-14
+         *
+         *     «Sveglia delle 07:00 annullata.»          ← detto PRIMA di chiamare
+         *     «Ho mandato il comando al telefono…»      ← l'esito, onesto
+         *
+         * E l'orologio contava **quattro sveglie armate**. La prima riga era
+         * falsa nel momento in cui è stata scritta.
+         *
+         * ## Perché QUI e non buttando sempre il preambolo
+         *
+         * Il preambolo si tiene, di regola: la persona l'ha già visto scorrere,
+         * e toglierlo lo farebbe sparire sotto gli occhi — c'è un test che lo
+         * custodisce, ed è giusto.
+         *
+         * Ma quel test parte da un preambolo **vero e utile** («Guardo nella tua
+         * Libreria»). Quando l'attrezzo dichiara di **non aver avuto effetto**,
+         * un annuncio di averlo fatto è una bugia **per costruzione**: non c'è
+         * niente da custodire. Mostrare per sempre una frase falsa è peggio che
+         * vederne sparire una vera.
+         *
+         * ⛔ Si toglie SOLO se ogni attrezzo di quel giro è senza effetto: se
+         * anche uno solo ha fatto qualcosa, il preambolo può raccontarlo.
+         */
+        if (completion.text && outcomes.length > 0
+            && outcomes.every((esito) => (esito as { senzaEffetto?: boolean }).senzaEffetto === true)
+            && state.spoken[state.spoken.length - 1] === completion.text) {
+            state.spoken.pop()
+        }
 
         // Provider order, never completion order.
         const seen: TalosMobileInputPart[] = []

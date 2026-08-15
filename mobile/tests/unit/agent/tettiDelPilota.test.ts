@@ -127,6 +127,61 @@ describe('⛔ i tetti del pilota', () => {
         expect(corsa.fine.motivo).toBe('occhio-chiuso')
     })
 
+    /*
+     * ⛔⛔ E LA RISPOSTA ILLEGGIBILE VALE UN TENTATIVO, non la corsa — #13.
+     *
+     * MISURATO sul Pad il 2026-08-15, chiesto «apri WhatsApp, cerca la chat con
+     * Antonino e dimmi solo il titolo»:
+     *
+     * ```
+     * pilota: fine={"motivo":"modello-non-capito",
+     *               "scarto":"indiceFuoriElenco","dettaglio":"-1"} passi=0
+     * ```
+     *
+     * **passi=0**: il pilota non ha fatto niente. Il modello aveva detto
+     * `indice: -1` — «qui non c'è niente da toccare», convenzione che il
+     * contratto non prevede — perché lo sguardo era ancora sulla schermata di
+     * partenza. Un'azione che FALLISCE aveva due tentativi; una risposta che
+     * non si LEGGE ne aveva zero, pur essendo il caso più facile da recuperare.
+     */
+    it('⛔ una risposta illeggibile RIPROVA, e la seconda buona salva la corsa', async () => {
+        let giro = 0
+        const p = porte({
+            chiedi: vi.fn(async () => (giro++ === 0
+                ? '{"azione":"tocca","indice":-1,"perche":"qui non c\'è niente"}'
+                : '{"azione":"fine","testo":"trovato"}')),
+        })
+        const corsa = await talosGuidaLoSchermo(p)
+
+        expect(corsa.fine, 'il -1 non deve più uccidere la corsa').toEqual({
+            motivo: 'fine', testo: 'trovato',
+        })
+        expect(p.chiedi, 'deve aver ridomandato').toHaveBeenCalledTimes(2)
+        // ⛔ E la seconda domanda NON è la prima: la storia porta lo scarto e
+        // dice cosa fare invece, se no si ottiene due volte la stessa risposta.
+        const rimprovero = corsa.storia.find((r) => r.includes('indiceFuoriElenco'))
+        expect(rimprovero, `storia: ${JSON.stringify(corsa.storia)}`).toBeDefined()
+        expect(rimprovero).toContain('-1')
+        expect(rimprovero).toContain('apri_app')
+    })
+
+    it('⛔ ma il tetto resta il SUO: due risposte illeggibili di fila e stop', async () => {
+        const p = porte({
+            chiedi: vi.fn(async () => '{"azione":"tocca","indice":-1,"perche":"niente"}'),
+        })
+        const corsa = await talosGuidaLoSchermo(p)
+
+        expect(corsa.fine).toEqual({
+            motivo: 'modello-non-capito', scarto: 'indiceFuoriElenco', dettaglio: '-1',
+        })
+        // `fallimentiDiFila: 2` è la decisione dell'owner del 2026-08-10: due
+        // tentativi, non tre. Un secondo contatore accanto al primo sarebbe un
+        // tetto nuovo deciso da noi.
+        expect(p.chiedi).toHaveBeenCalledTimes(2)
+        expect(p.agisci, 'nessun dito ha toccato niente').not.toHaveBeenCalled()
+        expect(corsa.passi, 'nessun passo: nessuno ha toccato lo schermo').toBe(0)
+    })
+
     it('una riga che non si capisce ferma la corsa invece di far toccare a caso', async () => {
         const p = porte({ chiedi: vi.fn(async () => 'Certo! Adesso tocco il pulsante.') })
         const corsa = await talosGuidaLoSchermo(p)

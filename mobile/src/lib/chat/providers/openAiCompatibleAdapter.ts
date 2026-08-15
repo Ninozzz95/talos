@@ -286,7 +286,13 @@ function responsesCompletionData(
     return data
 }
 
-function compatibleCompletionData(
+/**
+ * ⛔ Esportata per essere PROVABILE: la forma del corpo è ciò che un provider
+ * accetta o rifiuta, e una chiamata orfana qui dentro rende una conversazione
+ * inutilizzabile per sempre. Un invariante di quel peso deve avere un test che
+ * lo guarda direttamente, non attraverso un trasporto finto.
+ */
+export function compatibleCompletionData(
     config: OpenAiCompatibleConfig,
     input: TalosMobileCompletionInput,
     stream: boolean,
@@ -302,7 +308,7 @@ function compatibleCompletionData(
 ): Record<string, unknown> {
     const messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }> = []
     if (input.system?.trim()) messages.push({ role: 'system', content: input.system })
-    for (const turn of input.turns) {
+    for (const [indice, turn] of input.turns.entries()) {
         if (turn.role === 'tool') {
             // A tool RESULT is its own role here, tied to the call it answers.
             messages.push({ role: 'tool', content: turn.content, tool_call_id: turn.toolCallId ?? '' } as never)
@@ -319,6 +325,34 @@ function compatibleCompletionData(
             }))
         }
         messages.push(message as never)
+        /*
+         * ⛔⛔⛔ E OGNI CHIAMATA DEVE AVERE LA SUA RISPOSTA, o la conversazione
+         * è morta — lo stesso difetto misurato su Anthropic il 2026-08-14,
+         * qui perché il vincolo è identico: «an assistant message with
+         * tool_calls must be followed by tool messages responding to each
+         * tool_call_id».
+         *
+         * Se una richiesta si interrompe fra la chiamata e il risultato — un
+         * errore del provider, un invio annullato, l'app chiusa nel mezzo —
+         * resta una chiamata orfana. E siccome la storia si rispedisce
+         * **intera** a ogni turno, quella chat smette di funzionare **per
+         * sempre**, non una volta.
+         *
+         * ⛔ Si RISPONDE, non si cancella la chiamata: togliere il `tool_calls`
+         * cancellerebbe dalla storia il fatto che il modello ha chiesto
+         * qualcosa, che è vero ed è la ragione per cui la risposta dopo ha
+         * senso. Si conserva la domanda e si dice la verità sul suo esito.
+         */
+        for (const call of turn.toolCalls ?? []) {
+            const risposta = input.turns.slice(indice + 1)
+                .find((dopo) => dopo.role !== 'tool' || dopo.toolCallId === call.id)
+            if (risposta?.role === 'tool') continue
+            messages.push({
+                role: 'tool',
+                content: 'Not run: the request was interrupted before this tool could run.',
+                tool_call_id: call.id,
+            } as never)
+        }
     }
     const data: Record<string, unknown> = { model: input.model.id, messages, stream }
     if (tetto !== undefined) data.max_tokens = tetto

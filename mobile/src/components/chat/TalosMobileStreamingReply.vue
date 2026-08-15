@@ -14,6 +14,7 @@ import {
     Globe,
     Image as ImageIcon,
     ListTodo,
+    Mail,
     NotebookPen,
     Smartphone,
     Sparkles,
@@ -78,6 +79,10 @@ const TOOL_ICONS: Record<TalosToolIconName, unknown> = {
     audio: Play,
     voice: AudioLines,
     document: FileText,
+    // ⛔ La busta e non il foglio: contare la posta non è leggere un documento,
+    // e due attrezzi con lo stesso disegno raccontano la stessa cosa mentre ne
+    // stanno facendo due.
+    mail: Mail,
     image: ImageIcon,
     download: Download,
     tool: Wrench,

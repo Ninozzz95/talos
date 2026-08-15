@@ -9,6 +9,7 @@ import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
 import { createTalosTasksWriteTools } from '@/lib/tools/tasksWriteTools'
 import { talosBytesToBase64 } from '@/lib/bytesToBase64'
+import { createTalosCalendarTools } from '@/lib/tools/calendarioTools'
 import {
     createTalosReadTools,
     type TalosLibraryListEntry,
@@ -564,6 +565,30 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
         now,
     }
 
+    /*
+     * ⭐⭐⭐ IL CALENDARIO, senza condizioni — 2026-08-14.
+     *
+     * Come i modelli locali qui sotto: non c'è niente da cablare, perché la
+     * porta è il PROVIDER del telefono e il permesso è la sua serratura. Se la
+     * persona non l'ha dato, il tool lo dice — e dirlo è precisamente ciò che
+     * mancava il giorno in cui TALOS rispondeva «non hai impegni» avendo
+     * guardato le proprie note.
+     */
+    const calendarTools = createTalosCalendarTools(
+        async (da, a, conFestivita) => {
+            const { talosLeggiCalendario } = await import('@/lib/device/calendario')
+            return talosLeggiCalendario(da, a, conFestivita)
+        },
+        async (input) => {
+            const { talosScriviInCalendario } = await import('@/lib/device/calendario')
+            return talosScriviInCalendario(input)
+        },
+        async (input) => {
+            const { talosModificaInCalendario } = await import('@/lib/device/calendario')
+            return talosModificaInCalendario(input)
+        },
+    )
+
     const all = createTalosReadTools(sources)
     const readExportBytes = deps.readVaultFileBytes
     const saveExport = deps.saveVaultFileToDevice
@@ -600,7 +625,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
      * and in the notification — one of everything, and no seam to get wrong.
      */
     const modelTools = createTalosLocalModelTools()
-    const tutti = [...all, ...libraryExports, ...policyTools, ...modelTools]
+    const tutti = [...all, ...libraryExports, ...policyTools, ...modelTools, ...calendarTools]
     return {
         tools: tutti,
         isEnabled,
@@ -693,6 +718,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...libraryExports,
                 ...policyTools,
                 ...modelTools,
+                ...calendarTools,
                 ...(web ? createTalosWebTools(web) : []),
                 ...(research ? createTalosResearchTools(research) : []),
                 ...(memoryWrite ? createTalosMemoryWriteTools(memoryWrite) : []),

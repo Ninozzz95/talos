@@ -136,6 +136,26 @@ export function createTalosWebTools(sources: TalosWebToolSources): TalosToolDefi
                     '',
                     ...lines,
                 ].join('\n')),
+                /*
+                 * ⛔⛔ QUI HO AGGIUNTO UNA SCHEDA `fonti`, E L'HO TOLTA. 2026-08-14.
+                 *
+                 * Le fonti avevano GIÀ una casa: `TalosMobileSourcesChip`, il
+                 * chip sotto la risposta che l'owner ha disegnato il 26/7. E la
+                 * sua è migliore della mia: legge le favicon **da disco** — mai
+                 * richieste alla rete, che è una promessa di privacy scritta nel
+                 * suo commento — e apre nel browser interno, dove va ogni link
+                 * di TALOS. La mia apriva una scheda esterna.
+                 *
+                 * ⇒ Avevo duplicato una funzione già fatta meglio, e sullo
+                 * schermo le fonti comparivano DUE volte in due forme diverse.
+                 * È la stessa cosa che l'owner mi aveva appena fatto notare
+                 * sull'onda della dettatura: «non ha senso usare componenti
+                 * diversi».
+                 *
+                 * Il buco vero era un altro: il chip vive solo nella lista dei
+                 * messaggi, quindi **nell'assistente le fonti non si vedevano
+                 * affatto**. La cura è montare quello, non farne un secondo.
+                 */
             }
         },
     })

@@ -54,15 +54,43 @@ const EXTENSIONS: Readonly<Record<string, string>> = {
     jpeg: 'jpg', jpg: 'jpg', png: 'png', webp: 'webp', gif: 'gif', heic: 'heic',
 }
 
+/**
+ * ⛔⛔ IL NOME DELLA FOTO LO LEGGE UNA PERSONA, non un programma.
+ *
+ * ## Il difetto, visto sul Pad il 2026-08-15
+ *
+ * Scattata una foto dall'assistente, il gettone diceva:
+ *
+ *     photo-1786794313985.jpg
+ *
+ * Owner: «lato UI ci sono delle incongruenze, devi pensare come un **utente
+ * umano finale** non come debugger adb». Ha ragione: quel numero è
+ * `Date.now()`, e per chi guarda non significa niente. È l'unica cosa che dice
+ * COSA hai allegato, e non lo dice.
+ *
+ * ⇒ Adesso: `Foto 15-08 alle 13.45.jpg`. La stessa informazione — quando —
+ * scritta per chi la deve leggere.
+ *
+ * ⛔ E resta un nome di FILE valido: niente `:` né `/`, che su Android e nelle
+ * intestazioni di caricamento rompono. Il punto al posto dei due punti è la
+ * scelta che tiene insieme le due cose.
+ *
+ * ⛔ Vale per TUTTE E DUE le superfici, perché il nome nasce qui: chat e
+ * assistente non possono divergere su come si chiama una foto.
+ */
 function named(format: string | undefined, index: number, now: number): {
     name: string
     mediaType: string
 } {
     const key = (format ?? 'jpeg').toLowerCase()
     const extension = EXTENSIONS[key] ?? 'jpg'
-    const suffix = index > 0 ? `-${index + 1}` : ''
+    const suffix = index > 0 ? ` (${index + 1})` : ''
+    const quando = new Date(now)
+    const due = (n: number): string => String(n).padStart(2, '0')
+    const giorno = `${due(quando.getDate())}-${due(quando.getMonth() + 1)}`
+    const ora = `${due(quando.getHours())}.${due(quando.getMinutes())}`
     return {
-        name: `photo-${now}${suffix}.${extension}`,
+        name: `Foto ${giorno} alle ${ora}${suffix}.${extension}`,
         mediaType: extension === 'jpg' ? 'image/jpeg' : `image/${extension}`,
     }
 }
