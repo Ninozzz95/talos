@@ -39,7 +39,7 @@ object TalosPonteStato {
         if (SEGNI.any { errore.contains(it, ignoreCase = true) }) return true
         /*
          * ⛔ Il terzo caso NON è una frase: è una frase con l'INDIRIZZO in
-         * mezzo — `device '192.168.1.95:33331' not found`. La prima versione
+         * mezzo — `device '192.0.2.95:33331' not found`. La prima versione
          * cercava «device not found» come stringa unica e non lo trovava mai;
          * l'ha scoperto il test, non il telefono.
          */

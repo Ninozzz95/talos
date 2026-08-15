@@ -128,7 +128,7 @@ function testPinnedProviderTransportAllowsOnlyLoopbackOllama(): void
     assertPinnedTransport(($seenOptions[CURLOPT_RESOLVE] ?? null) === ['127.0.0.1:11434:127.0.0.1'], 'Ollama loopback socket must be pinned.');
 
     try {
-        $transport('http://192.168.1.10:11434/v1/chat/completions', [], [], 1000);
+        $transport('http://192.0.2.10:11434/v1/chat/completions', [], [], 1000);
     } catch (RuntimeException) {
         return;
     }

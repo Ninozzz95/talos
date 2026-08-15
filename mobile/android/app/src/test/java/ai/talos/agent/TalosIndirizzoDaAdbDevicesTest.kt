@@ -25,7 +25,7 @@ class TalosIndirizzoDaAdbDevicesTest {
     @Test
     fun `legge indirizzo e porta dalla riga vera`() {
         // La riga esatta stampata dal Pad, tabulazione compresa.
-        assertEquals("192.168.1.95:45853", TalosPonteAdb.indirizzoDi("192.168.1.95:45853\tdevice"))
+        assertEquals("192.0.2.95:45853", TalosPonteAdb.indirizzoDi("192.0.2.95:45853\tdevice"))
     }
 
     @Test
@@ -35,18 +35,18 @@ class TalosIndirizzoDaAdbDevicesTest {
 
     @Test
     fun `un seriale USB non e' un indirizzo`() {
-        assertNull(TalosPonteAdb.indirizzoDi("2ea6573c\tdevice"))
+        assertNull(TalosPonteAdb.indirizzoDi("abc12345\tdevice"))
     }
 
     @Test
     fun `una porta che non e' un numero non passa`() {
-        assertNull(TalosPonteAdb.indirizzoDi("192.168.1.95:porta\tdevice"))
+        assertNull(TalosPonteAdb.indirizzoDi("192.0.2.95:porta\tdevice"))
     }
 
     @Test
     fun `una porta fuori dai limiti non passa`() {
-        assertNull(TalosPonteAdb.indirizzoDi("192.168.1.95:70000\tdevice"))
-        assertNull(TalosPonteAdb.indirizzoDi("192.168.1.95:0\tdevice"))
+        assertNull(TalosPonteAdb.indirizzoDi("192.0.2.95:70000\tdevice"))
+        assertNull(TalosPonteAdb.indirizzoDi("192.0.2.95:0\tdevice"))
     }
 
     @Test

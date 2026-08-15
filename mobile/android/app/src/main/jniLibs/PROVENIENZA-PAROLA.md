@@ -116,9 +116,10 @@ tracciati:
     Binary file mobile/android/app/src/main/parola/talos.onnx matches
 
 Dentro il modello, cinque volte, il percorso completo della cartella di chi lo
-ha addestrato:
+ha addestrato — nome utente compreso (qui riscritto, per non rifare l'errore
+mentre lo si racconta):
 
-    C:\Users\Antonino\AppData\Local\Temp\claude\...
+    C:\Users\<nome utente>\AppData\Local\Temp\...\parola-gpu\venv\...
 
 Sono le `pkg.torch.onnx.stack_trace` che PyTorch incorpora nell'export per
 aiutare chi fa debug. ⛔ E non e' un documento interno: e' un file che finisce
