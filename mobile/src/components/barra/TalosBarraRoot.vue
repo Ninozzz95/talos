@@ -1715,6 +1715,61 @@ onMounted(async () => {
              Misurata su Gemini l'11 agosto, non dedotta — vedi `.onda`. -->
         <div class="onda" data-testid="talos-barra-onda" aria-hidden="true" />
 
+        <!--
+            ⛔⛔ QUELLO CHE STAI DICENDO ADESSO STA SOPRA QUELLO CHE TALOS HA
+            DETTO PRIMA — e la posizione è una richiesta dell'owner, non un gusto.
+
+            Owner 2026-08-15: «le parole rilevate da TALOS assistente, se c'è la
+            card della chat con TALOS, vengono messe **tra la barra di input e la
+            risposta**. Se la card della risposta è stampata, le parole rilevate e
+            anche i TOAST di fallimento o riconoscimento vocale devono essere
+            messe **sopra la card della risposta**».
+
+            Prima stavano dopo la carta, cioè schiacciate nei pochi pixel fra una
+            carta alta e la pillola: il posto meno guardato dello schermo, per la
+            cosa che cambia a ogni sillaba.
+
+            ⛔ UN SOLO POSTO NEL DOM, e non due rami. `.scena` è una colonna con
+            `justify-content: flex-end`: se la carta c'è, questi due le stanno
+            sopra; se non c'è, scendono da soli verso la pillola. Un blocco che
+            cambia posto a seconda dello stato è peggio di uno che sta fermo —
+            l'occhio lo perde ogni volta.
+
+            ⛔ E stanno INSIEME, scia e avviso, perché sono la stessa famiglia:
+            entrambi dicono com'è andato l'ascolto. Separarli rimetterebbe uno dei
+            due nel posto che l'owner ha nominato come sbagliato.
+        -->
+        <!--
+            ⭐⭐⭐ LA SCIA — le parole mentre le sente, sopra tutto il resto.
+
+            Owner 2026-08-14: «stampare le parole mano mano che vengono sentite;
+            è una cosa che facciamo già in chat, basta trasportarla e ottimizzarla
+            sull'assistente, sopra la barra, animata in scorrimento orizzontale».
+
+            ⛔ In chat le parole si vedono perché finiscono nel campo di testo.
+            Qui il campo è `v-show="!ascolta"` — MENTRE ASCOLTA È NASCOSTO — e
+            quindi non si vedeva niente: chi parla non ha nessun segno che TALOS
+            lo stia capendo, solo una pillola che pulsa. È la stessa famiglia del
+            difetto «la modalità ascolto rimane ma non ascolta»: la persona non
+            può distinguere «ti sto seguendo» da «non ho sentito niente».
+
+            ⛔ SCORRE, non va a capo: una riga sola che si trascina verso
+            sinistra tiene l'ultima parola sempre in vista e non fa saltare la
+            pillola a ogni sillaba. E FUORI dalla pillola, non dentro: dentro
+            cambierebbe la forma a riposo, che è misurata e non si tocca.
+        -->
+        <!--
+            ⛔ 2026-08-14: la scia era scritta QUI dentro, e la chat aveva la
+            sua versione diversa — un blocco che andava a capo. Owner: «non ha
+            senso usare componenti diversi». Adesso è lo stesso componente per
+            entrambe le superfici, e non possono più divergere.
+        -->
+        <div v-if="ascolta && scia" class="scia-posto" data-testid="talos-barra-scia">
+            <TalosSciaParole :testo="scia" />
+        </div>
+
+        <p v-if="errore" class="errore" role="alert">{{ errore }}</p>
+
         <!-- LA CARTA: un oggetto separato, che va e viene. La pillola non si
              gonfia mai — è la forma misurata su Gemini l'11 agosto. -->
         <article
@@ -1821,8 +1876,6 @@ onMounted(async () => {
                 </button>
             </footer>
         </article>
-
-        <p v-if="errore" class="errore" role="alert">{{ errore }}</p>
 
         <!-- Il menu degli allegati: compare SOPRA la pillola e se ne va, come i
              chip dei suggerimenti di Gemini — fuori dal pannello, non dentro,
@@ -1964,35 +2017,6 @@ onMounted(async () => {
                     @click="allegati.remove(pezzo.id)"
                 ><X class="icona-piccola" aria-hidden="true" /></button>
             </span>
-        </div>
-
-        <!--
-            ⭐⭐⭐ LA SCIA — le parole mentre le sente, SOPRA la pillola.
-
-            Owner 2026-08-14: «stampare le parole mano mano che vengono sentite;
-            è una cosa che facciamo già in chat, basta trasportarla e ottimizzarla
-            sull'assistente, sopra la barra, animata in scorrimento orizzontale».
-
-            ⛔ In chat le parole si vedono perché finiscono nel campo di testo.
-            Qui il campo è `v-show="!ascolta"` — MENTRE ASCOLTA È NASCOSTO — e
-            quindi non si vedeva niente: chi parla non ha nessun segno che TALOS
-            lo stia capendo, solo una pillola che pulsa. È la stessa famiglia del
-            difetto «la modalità ascolto rimane ma non ascolta»: la persona non
-            può distinguere «ti sto seguendo» da «non ho sentito niente».
-
-            ⛔ SCORRE, non va a capo: una riga sola che si trascina verso
-            sinistra tiene l'ultima parola sempre in vista e non fa saltare la
-            pillola a ogni sillaba. Sopra la pillola, non dentro: dentro
-            cambierebbe la forma a riposo, che è misurata e non si tocca.
-        -->
-        <!--
-            ⛔ 2026-08-14: la scia era scritta QUI dentro, e la chat aveva la
-            sua versione diversa — un blocco che andava a capo. Owner: «non ha
-            senso usare componenti diversi». Adesso è lo stesso componente per
-            entrambe le superfici, e non possono più divergere.
-        -->
-        <div v-if="ascolta && scia" class="scia-posto" data-testid="talos-barra-scia">
-            <TalosSciaParole :testo="scia" />
         </div>
 
         <!--
