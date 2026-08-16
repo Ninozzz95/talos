@@ -469,6 +469,32 @@ Other active directions include:
 
 ---
 
+# Install
+
+Releases carry a signed APK for `arm64-v8a`, Android 8.0 or newer. It does not
+come from the Play Store, so Android will ask you to confirm an app from an
+unknown source — that is expected.
+
+Two commands are worth running before you install it. The first checks you
+downloaded the file that was published:
+
+```bash
+sha256sum TALOS-<version>.apk     # compare with the hash in the release notes
+```
+
+The second checks the file was built by this repository, from this code, by the
+workflow you can read — not by someone who rebuilt it elsewhere:
+
+```bash
+gh attestation verify TALOS-<version>.apk --repo Ninozzz95/talos
+```
+
+That second one is the point. A build provenance attestation nobody verifies is
+decoration, so the command lives here and in every release, rather than in a
+documentation page.
+
+---
+
 # Build
 
 ## Requirements
