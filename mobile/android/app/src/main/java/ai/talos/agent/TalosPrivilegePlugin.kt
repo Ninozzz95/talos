@@ -123,6 +123,24 @@ class TalosPrivilegePlugin : Plugin() {
         }
         val ora = context.getSharedPreferences(MEMORIA_PONTE, android.content.Context.MODE_PRIVATE)
             .getBoolean(SEMPRE_ACCESO, false)
+
+        /*
+         * ⭐⭐⭐ ACCENDERLA FA UNA COSA VERA, NON RICORDA UNA PREFERENZA.
+         *
+         * Owner 2026-08-16, guardando questa casella: «il check in fondo serve
+         * per abilitare automaticamente il debug wireless. Era quello il motivo
+         * per cui te l'ho fatto vedere».
+         *
+         * Prima non lo faceva: si limitava a ricordare un sì e ad aspettare che
+         * la persona riaccendesse il Debug wireless a mano. ⇒ Adesso chiede ad
+         * adbd di restare in ascolto su una porta fissa, e da lì il ponte si
+         * riaggancia da solo col Debug wireless SPENTO. Il perché e le misure
+         * stanno in `TalosPonteAdb.fissaLaPorta`.
+         *
+         * ⛔ Gira fuori dal thread dei plugin, come ogni cosa che tocca il
+         * ponte: `fissaLaPorta` riavvia adbd e si ricollega, sono secondi.
+         */
+        if (ora) TalosFilaPonte.esegui { TalosPonteAdb.fissaLaPorta(context) }
         call.resolve(JSObject().put("attivo", ora))
     }
 

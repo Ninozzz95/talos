@@ -921,30 +921,47 @@ export const TALOS_EN_MESSAGES = {
     },
     privilege: {
         keepAlive: 'Keep it alive',
-        keepAliveBody: 'TALOS keeps listening and reconnects by itself as soon as you turn Wireless debugging back on, even outside this screen. ⛔ It cannot turn it on: that switch belongs to the system.',
+        /*
+         * ⛔ Two jobs, and only one is saying what it does. The other is naming
+         * the price: with the port pinned, adbd listens on the whole local
+         * network, not just inside the phone. Nobody gets in without an
+         * authorised key, but it is wider than Wireless debugging — and whoever
+         * turns something on deserves to know what it opens, in one line.
+         */
+        keepAliveBody: 'The bridge reconnects on its own, without turning Wireless debugging back on. While it is on, anyone on your network can see the port: getting in still needs the TALOS key.',
         assistantTitle: 'TALOS as your assistant',
         assistantBody: 'The bar only opens once TALOS is your assistant. One tap, and Android asks you.',
         assistantHeld: 'TALOS is your assistant. Call it from any app and the bar comes up.',
         assistantAsk: 'Make TALOS the assistant',
         assistantManual: 'Neither Android nor the bridge could set it. Do it by hand: Settings → Apps → Default apps → Digital assistant. If the list is empty, turn on wireless debugging below and press again.',
         presetTitle: 'How you call it',
-        presetIntro: 'Every way to open TALOS without touching its icon. ⛔ The ones the phone governs, TALOS cannot switch on: you choose, in the system screen, and you can take it back there.',
+        /*
+         * ⛔⛔ Six paragraphs for six rows. Every row used to explain ANDROID'S
+         * ARCHITECTURE — who owns the gesture, what a default assistant is, why
+         * the shortcut slot is single. All true, all written to excuse a limit
+         * rather than to make it usable.
+         *
+         * ⇒ A row says what it is and what changes for the reader. The
+         * "depends on the phone" part already lives in the status label next to
+         * it: "Try it" says the same thing in two words, at a glance.
+         */
+        presetIntro: 'Every way to open TALOS without touching its icon.',
         preset: {
             accensione: {
                 title: 'Press and hold the power button',
-                body: 'It calls the phone’s default assistant: for that to be TALOS, TALOS has to be the assistant. ⛔ But the role is not enough: the phone decides whether to route that gesture to the assistant, and some do not (measured on a OnePlus 13 running ColorOS: the call is intercepted and reaches nobody). Try it: if TALOS opens, from then on the power menu opens with power + volume up. If it does not, the two volume keys and “hey TALOS” still work.',
+                body: 'Opens the phone’s assistant. ⛔ But the phone decides whether to route the gesture: if it does not open, the volume keys and “hey TALOS” still work.',
             },
             gesto: {
                 title: 'Swipe in from the screen corner',
-                body: 'The swipe from the bottom corner, if you navigate by gestures. It calls the same default assistant, so the same condition applies, and the same "depends on the phone".',
+                body: 'The swipe from the bottom corner, if you navigate by gestures.',
             },
             home: {
                 title: 'Press and hold Home',
-                body: 'If you navigate with three buttons instead of gestures, this is the equivalent: hold the middle button. It still calls the default assistant, so the same condition applies. ⛔ With gesture navigation there is no Home button: there the row above is the one that counts.',
+                body: 'If you navigate with three buttons, hold the middle one.',
             },
             volume: {
                 title: 'Press and hold both volume keys',
-                body: 'This one does not depend on the default assistant either: it is the accessibility shortcut, and it points straight at TALOS. ⛔ The first time you hold both keys Android asks you to confirm: that is normal, and it happens once. ⛔ And this slot is ONE per phone: put another service in it (TalkBack, say) and TALOS is out, and this row goes back to "Not set yet".',
+                body: 'Goes straight to TALOS, skipping the assistant. Android asks you to confirm the first time. The slot is one per phone: another service takes it and TALOS is out.',
             },
         },
         presetSummary: '{ready} of {total} work right now.',
@@ -958,14 +975,19 @@ export const TALOS_EN_MESSAGES = {
         presetGoRole: 'Open the phone’s assistants',
         presetGoShortcut: 'Open accessibility',
         wakeTitle: 'The words “hey TALOS”',
-        wakeBody: 'Say “hey TALOS” and the assistant opens, hands free. ⛔ The microphone stays on to wait for those two words: TALOS neither transcribes nor stores anything, but the microphone is on — and while it is, a persistent notification says so.',
-        wakeOn: 'TALOS is waiting for “hey TALOS”. The microphone is on: the notification says so, and turns it off.',
+        /*
+         * ⛔ The microphone staying on STAYS in the text: it is the only part of
+         * this row that changes the reader's decision. What went is the
+         * explanation of how the recogniser works.
+         */
+        wakeBody: 'Say “hey TALOS” and it opens. Keeps the microphone on to wait for you, transcribing nothing.',
+        wakeOn: 'TALOS is waiting for you. The microphone is on: turn it off from the notification.',
         wakeAsk: 'Turn on “hey TALOS”',
         wakeOff: 'Stop waiting for the word',
         assistantAsking: 'Asking Android…',
         assistantBridging: 'Setting it with the bridge…',
         pageTitle: 'Phone control',
-        intro: 'TALOS acts on the phone with the same identity your computer uses over a cable. The bridge is inside TALOS: no third-party app, no root, and no special permissions.',
+        intro: 'TALOS acts on the phone with the same identity as a cable. No third-party app, no root.',
         statusHeading: 'Status',
         missingTitle: 'Shizuku is not installed',
         missingBody: 'Shizuku is the app that lends TALOS the identity to act. It is free and open source, and without it TALOS stays inside its own boundaries.',
