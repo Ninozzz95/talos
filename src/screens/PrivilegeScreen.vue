@@ -732,6 +732,14 @@ onMounted(() => {
      * ⇒ Un evento che portasse `connected` dentro di sé sarebbe il pannello che
      * mente del compito #33, con un travestimento nuovo.
      */
+    // ⛔ Si legge dal NATIVO, che è dove il valore vive davvero: la vigilanza
+    // deve valere anche a processo appena nato, prima che la WebView parli.
+    void (async () => {
+        const esito = await (p as { ponteSempreAcceso?: (o: { attivo?: boolean }) => Promise<{ attivo: boolean }> })
+            .ponteSempreAcceso?.({})
+        if (esito) sempreAcceso.value = esito.attivo === true
+    })()
+
     p.addListener?.('talosPonteScosso', () => {
         /*
          * ⛔ MISURATO sul Pad il 2026-08-10: riacceso il Debug wireless, TALOS
@@ -762,6 +770,22 @@ onMounted(() => {
      */
     document.addEventListener('visibilitychange', quandoTorna)
 })
+
+/**
+ * ⭐ Lo stato dello switch «mantieni acceso». Vive nel NATIVO
+ * (SharedPreferences) e non qui: la vigilanza deve funzionare anche quando
+ * questa schermata non è mai stata aperta in questa sessione.
+ */
+const sempreAcceso = ref(false)
+
+async function cambiaSempreAcceso(attivo: boolean): Promise<void> {
+    // ⛔ Ottimista di proposito: la casella deve rispondere al dito subito. Se
+    // il nativo dice altro, il valore vero torna indietro e vince lui.
+    sempreAcceso.value = attivo
+    const p = plugin() as { ponteSempreAcceso?: (o: { attivo: boolean }) => Promise<{ attivo: boolean }> } | null
+    const esito = await p?.ponteSempreAcceso?.({ attivo })
+    if (esito) sempreAcceso.value = esito.attivo === true
+}
 
 function quandoTorna(): void {
     if (document.visibilityState !== 'visible') { smettiDiSorvegliare(); return }
@@ -1129,6 +1153,39 @@ onUnmounted(() => {
                 <span class="font-mono text-[var(--talos-text)]">{{ identita }}</span>
             </p>
         </section>
+
+        <!--
+            ⭐ «MANTIENI ACCESO» — e dice meno di quanto il nome prometta,
+            perché è tutto quello che Android concede.
+
+            MISURATO 2026-08-16: TALOS non può accendere il debug wireless da
+            solo — `settings put adb_wifi_enabled 1` scrive il valore e la
+            porta TLS resta chiusa, `setprop persist.adb.tls_server.enable` è
+            rifiutato, `pm grant WRITE_SECURE_SETTINGS` è signature|privileged.
+
+            ⇒ Quello che questo switch fa: tenere TALOS in ascolto del ritorno
+            del ponte anche quando questa schermata è chiusa. La chiave resta
+            autorizzata, quindi appena l'interruttore di sistema torna su il
+            riaggancio è immediato.
+
+            ⛔ E la sottodidascalia lo dice: una casella che promette più di
+            quello che fa è peggio di una che manca.
+        -->
+        <label
+            class="flex items-start justify-between gap-3 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] p-3"
+            data-testid="talos-ponte-sempre-acceso"
+        >
+            <span class="flex flex-col gap-0.5">
+                <span class="text-sm text-[var(--talos-text)]">{{ t('privilege.keepAlive') }}</span>
+                <span class="text-xs text-[var(--talos-muted)]">{{ t('privilege.keepAliveBody') }}</span>
+            </span>
+            <input
+                type="checkbox"
+                class="mt-0.5 size-5 shrink-0 accent-[var(--talos-accent)]"
+                :checked="sempreAcceso"
+                @change="void cambiaSempreAcceso(($event.target as HTMLInputElement).checked)"
+            >
+        </label>
 
         <button
             type="button"

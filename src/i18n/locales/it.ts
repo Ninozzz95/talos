@@ -952,6 +952,8 @@ export const TALOS_IT_MESSAGES = {
         codeCopyFailed: 'Impossibile copiare il codice.',
     },
     privilege: {
+        keepAlive: 'Mantieni acceso',
+        keepAliveBody: 'TALOS resta in ascolto e si ricollega da solo appena riaccendi il Debug wireless, anche fuori da questa schermata. ⛔ Accenderlo non lo può fare: quell’interruttore lo tocca solo il sistema.',
         assistantTitle: 'TALOS come assistente',
         assistantBody: 'La barra si apre solo quando TALOS è il tuo assistente. Un tocco, e te lo chiede Android.',
         assistantHeld: 'TALOS è il tuo assistente. Chiamalo da qualunque app e la barra compare.',

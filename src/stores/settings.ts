@@ -134,6 +134,30 @@ export interface TalosMobileShellPreferences {
      *  preset. Opt-in — a restart is required to apply, so switching prompts
      *  the user (restart now / on next close). */
     launcher_icon_follows_theme: boolean
+    /**
+     * ⭐ «Mantieni acceso» — owner 2026-08-16: «mettiamo uno switch nelle
+     * impostazioni, così l'utente decide se vuole debug wireless mantenuto
+     * sempre acceso oppure attivarlo manualmente ogni volta».
+     *
+     * ⛔ E il nome dice meno di quanto sembra, per forza: MISURATO che TALOS
+     * NON può accendere il debug wireless da solo. Tre leve, tre porte chiuse
+     * — `settings put adb_wifi_enabled 1` scrive il valore ma non apre la
+     * porta TLS, `setprop persist.adb.tls_server.enable` è rifiutato
+     * («Failed to set property»), e `pm grant WRITE_SECURE_SETTINGS` è
+     * signature|privileged. Quell'interruttore lo tocca solo il sistema.
+     *
+     * ⇒ Quello che questo switch fa davvero: tiene TALOS in ascolto del
+     * ritorno del ponte **anche fuori dalla schermata Controllo telefono**,
+     * dove oggi quella vigilanza vive e muore. La chiave di TALOS resta
+     * autorizzata dal sistema (`dumpsys adb` la elenca), quindi appena
+     * l'interruttore torna su il riaggancio è immediato: non serve
+     * riappaiare, serve solo che qualcuno stia guardando.
+     *
+     * ⛔ Spento di default: un ponte che si riaggancia da solo in ogni
+     * momento è più vicino a «permesso acquisito» che a «capacità viva», e
+     * quella scelta è della persona.
+     */
+    ponte_sempre_acceso: boolean
     /** Owner 2026-07-25: let the model in ANY chat read the GLOBAL Library
      *  (injected as context). Opt-in — adds tokens to each message. */
     library_context_enabled: boolean
@@ -322,6 +346,8 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     composer_shape: TALOS_DEFAULT_COMPOSER_SHAPE,
     composer_plus: TALOS_DEFAULT_COMPOSER_PLUS,
     launcher_icon_follows_theme: false,
+    // ⛔ Spento: la vigilanza continua è una scelta, non un default.
+    ponte_sempre_acceso: false,
     library_context_enabled: false,
     library_context_policy: null,
     /**
@@ -369,6 +395,9 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         immersive_header: typeof record.immersive_header === 'boolean'
             ? record.immersive_header
             : DEFAULT_SHELL_PREFERENCES.immersive_header,
+        ponte_sempre_acceso: typeof record.ponte_sempre_acceso === 'boolean'
+            ? record.ponte_sempre_acceso
+            : DEFAULT_SHELL_PREFERENCES.ponte_sempre_acceso,
         composer_shape: talosComposerShapeExists(record.composer_shape)
             ? record.composer_shape
             : DEFAULT_SHELL_PREFERENCES.composer_shape,

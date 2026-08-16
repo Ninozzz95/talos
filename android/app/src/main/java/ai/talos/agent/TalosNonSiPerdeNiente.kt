@@ -66,6 +66,59 @@ object TalosNonSiPerdeNiente {
         "${contesto.packageName}/ai.talos.agent.TalosOcchio"
 
     /**
+     * ⭐⭐⭐ L'ORECCHIO CHE MUORE IN TASCA — e non era Android.
+     *
+     * MISURATO sul Pad il 2026-08-15, contando le battute della sonda di
+     * `TalosParola` (una ogni 2 s):
+     *
+     *     schermo acceso ......... 4 battute in 20 s
+     *     schermo spento ......... 1
+     *     dopo 3 minuti spento ... 0     ← l'orecchio è MORTO
+     *
+     * ⛔ E TALOS aveva già tutto ciò che Android chiede: `TalosParola` è un
+     * foreground service con `types=0x80` (microphone), e la documentazione è
+     * esplicita — «if an app implements a foreground service it is exempted by
+     * both App Standby and Doze».
+     *
+     * ⇒ Quindi non era il doze di Google. È il **DeepSleep** che OPPO/OnePlus
+     * aggiungono sopra, più severo del comportamento documentato: la stessa
+     * famiglia del ruolo d'assistente intercettato su ColorOS. La ROM smentisce
+     * la documentazione, e lo scopri solo misurando.
+     *
+     * La stessa misura, dopo la riga qui sotto:
+     *
+     *     schermo spento ......... 2 battute
+     *     dopo 3 minuti spento ... 3     ⭐ VIVO
+     *
+     * ⛔ E questo è ESATTAMENTE ciò per cui il ponte esiste: ha i privilegi di
+     * shell che un'app non ha, e li usa per riportare il telefono al
+     * comportamento che Android stesso dichiara. Non è un trucco: è rimettere
+     * la ROM in riga con la sua documentazione.
+     *
+     * ⛔ Si perde a ogni riavvio, come il ponte. Finché il debug wireless non
+     * si riaccende da solo, questa riga va rifatta a ogni avvio — ed è per
+     * questo che vive qui, dove ci si passa comunque.
+     */
+    private fun esentaDalRisparmio(contesto: Context) {
+        val esito = runCatching {
+            TalosPonteAdb.shell(
+                contesto,
+                listOf("dumpsys", "deviceidle", "whitelist", "+${contesto.packageName}"),
+                setOf("dumpsys"),
+                riagganciaSeStaccato = true,
+            )
+        }.getOrNull()
+        // ⛔ Non è un fallimento da gridare: senza ponte la funzione degrada,
+        // non si rompe. L'orecchio continua a funzionare a schermo acceso, che
+        // è il caso in cui la persona sta usando il telefono.
+        if (esito?.codice == 0) {
+            Log.i(MARCHIO, "orecchio esentato dal risparmio energetico")
+        } else {
+            Log.i(MARCHIO, "niente esenzione dal risparmio: serve il ponte (${esito?.motivo ?: "assente"})")
+        }
+    }
+
+    /**
      * Lo stato delle due righe che devono dire la stessa cosa.
      *
      * ⛔ `elencato` NON basta a dire «funziona»: è esattamente la coppia che
@@ -134,6 +187,15 @@ object TalosNonSiPerdeNiente {
      * il ponte è giù sarebbe una cura peggiore del male.
      */
     fun riparaSeServe(contesto: Context): String {
+        /*
+         * ⛔ L'esenzione dal risparmio si chiede SEMPRE, anche quando l'occhio
+         * è già a posto: riguarda l'ORECCHIO, che è un'altra funzione, e si
+         * perde a ogni riavvio. Metterla dopo i `return` qui sotto la
+         * eseguirebbe solo nei giri in cui c'è qualcosa da riparare — cioè
+         * quasi mai, che è il modo più silenzioso di non funzionare.
+         */
+        esentaDalRisparmio(contesto)
+
         val stato = leggi(contesto)
         if (!stato.elencato) {
             // La persona ci ha tolti dall'elenco, o non ci ha mai messi. La sua

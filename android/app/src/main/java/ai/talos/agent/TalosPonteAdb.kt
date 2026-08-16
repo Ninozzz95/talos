@@ -416,7 +416,14 @@ object TalosPonteAdb {
      * già fallita, e una volta sola: se il riaggancio non riesce, il ripiego
      * parte come prima e dice la verità.
      */
-    private fun riaggancia(context: Context): Boolean {
+    /**
+     * ⛔ PUBBLICA da 2026-08-16: la vigilanza di «mantieni acceso» la chiama
+     * dal nativo, quando la scossa dice che il debug wireless è tornato. Fino
+     * a ieri l'unico riaggancio era quello dentro un comando che una persona
+     * aveva chiesto — e fuori dalla schermata Controllo telefono nessuno
+     * guardava.
+     */
+    fun riaggancia(context: Context): Boolean {
         /*
          * ⭐ Prima quello che la sentinella ha già visto arrivare.
          *
