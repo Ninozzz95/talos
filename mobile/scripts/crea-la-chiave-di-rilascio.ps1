@@ -19,7 +19,15 @@
 
 param(
     [string]$Dove = "$env:USERPROFILE\Desktop\TALOS-CHIAVE",
-    [string]$Alias = 'talos'
+    [string]$Alias = 'talos',
+    # ⛔ `-GeneraPassword` serve quando lo script non gira davanti a una
+    # tastiera: ne fabbrica una lunga e casuale invece di chiederla. La password
+    # finisce SOLO nel file dei segreti, che sta fuori dal repository e che va
+    # cancellato dopo averla messa al sicuro.
+    #
+    # Non e' una scorciatoia comoda: una password digitata di fretta e' piu'
+    # debole di 32 caratteri casuali, e questa chiave non si cambia mai piu'.
+    [switch]$GeneraPassword
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,14 +76,27 @@ if (Test-Path $chiave) {
 # ── le password ─────────────────────────────────────────────────────────────
 # ⛔ Non le invento io e non le scrivo su disco: le digiti tu, e restano tue.
 Titolo 'LE DUE PASSWORD'
-Riga 'Ne servono due: una per il contenitore, una per la chiave dentro.'
-Riga 'Possono essere uguali. Minimo sei caratteri, e vanno CONSERVATE'
-Riga 'insieme al file — senza, il file non serve a niente.'
-""
-$storePassword = Read-Host '  password del contenitore' -AsSecureString
-$keyPassword = Read-Host '  password della chiave   ' -AsSecureString
-$sp = [System.Net.NetworkCredential]::new('', $storePassword).Password
-$kp = [System.Net.NetworkCredential]::new('', $keyPassword).Password
+if ($GeneraPassword) {
+    # 32 caratteri da un generatore crittografico. Uguale per contenitore e
+    # chiave: due password diverse non aggiungono sicurezza qui — chi apre il
+    # contenitore ha gia' il file — e raddoppiano solo le cose da non perdere.
+    $alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+    $byte = [byte[]]::new(32)
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($byte)
+    $sp = -join ($byte | ForEach-Object { $alfabeto[$_ % $alfabeto.Length] })
+    $kp = $sp
+    Riga 'Generata una password di 32 caratteri casuali.'
+    Riga '⛔ La trovi nel file dei segreti, e da nessun altra parte.'
+} else {
+    Riga 'Ne servono due: una per il contenitore, una per la chiave dentro.'
+    Riga 'Possono essere uguali. Minimo sei caratteri, e vanno CONSERVATE'
+    Riga 'insieme al file — senza, il file non serve a niente.'
+    ""
+    $storePassword = Read-Host '  password del contenitore' -AsSecureString
+    $keyPassword = Read-Host '  password della chiave   ' -AsSecureString
+    $sp = [System.Net.NetworkCredential]::new('', $storePassword).Password
+    $kp = [System.Net.NetworkCredential]::new('', $keyPassword).Password
+}
 if ($sp.Length -lt 6 -or $kp.Length -lt 6) {
     ""; Riga '⛔ Almeno sei caratteri per entrambe. Rilancia.'; exit 1
 }
@@ -101,10 +122,47 @@ Riga "creata: $chiave"
 # Una chiave che non si riapre è un file, non una chiave — e lo si scoprirebbe
 # il giorno della release.
 Titolo '⛔ LA PROVA — si riapre davvero?'
-& $keytool -list -v -keystore $chiave -storepass $sp -alias $Alias 2>&1 |
-    Select-String -Pattern 'Alias name|Valid from|SHA-256' | ForEach-Object { Riga $_.ToString().Trim() }
-if ($LASTEXITCODE -ne 0) { throw 'la chiave non si rilegge: non usarla' }
-Riga '✓ si riapre con le password che hai digitato'
+#
+# ⛔⛔ UN DIFETTO VERO, E UNA MIA MISURA SBAGLIATA. Entrambi il 2026-08-16.
+#
+# IL DIFETTO. Il filtro cercava «Alias name», «Valid from», «SHA-256». Su
+# questo computer keytool parla ITALIANO: «Nome alias», «Valido da». Non
+# stampava niente, e sotto compariva lo stesso la spunta verde. Una prova che
+# non mostra nulla e poi dice «✓» non e' una prova: e' una rassicurazione.
+#
+# ⛔ LA MIA MISURA SBAGLIATA, che vale piu' del difetto. Avevo scritto qui che
+# «keytool esce con 0 anche con la password sbagliata», e ci avevo costruito
+# sopra un ragionamento — lo stesso difetto di `adb connect` e di `settings`.
+# Era FALSO. Rimisurato in isolamento:
+#
+#     -list                      password sbagliata -> exit 1
+#     -list -v -alias talos      password sbagliata -> exit 1
+#     -list -v -alias talos      password giusta    -> exit 0
+#
+# Il mio `exit=0` veniva da `$LASTEXITCODE` letto DOPO una pipeline: in
+# PowerShell rifletteva `Select-Object`, non keytool. ⇒ Avevo misurato il mio
+# strumento invece del programma, ed e' la stessa forma dell'errore delle due
+# misure che non tornavano — quando un numero sorprende, il primo sospettato e'
+# come lo si e' preso.
+#
+# ⇒ Il controllo sull'uscita resta lo stesso, ma per la ragione VERA: e' piu'
+# robusto guardare che ci sia l'alias che ci si aspetta, invece di fidarsi di
+# un codice — e stampa la prova invece di dichiararla.
+$prova = (& $keytool -list -v -keystore $chiave -storepass $sp -alias $Alias 2>&1) -join "`n"
+if ($prova -notmatch [regex]::Escape($Alias)) {
+    ""
+    Riga '⛔ La chiave NON si rilegge con la password appena usata.'
+    Riga '   Non usarla: cancella la cartella e rilancia.'
+    Riga "   keytool ha risposto: $($prova.Split("`n")[0])"
+    exit 1
+}
+# Le righe utili, in qualunque lingua parli keytool: si cercano i DUE PUNTI e
+# le parole che esistono in entrambe.
+$prova.Split("`n") |
+    Where-Object { $_ -match '(?i)alias|SHA-256|RSA|valid' } |
+    Select-Object -First 4 |
+    ForEach-Object { Riga $_.Trim() }
+Riga '✓ si riapre, e l''alias e'' quello giusto'
 
 # ── i quattro segreti ───────────────────────────────────────────────────────
 $base64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($chiave))
@@ -126,7 +184,7 @@ $base64
 
 --- 2 ---
 Nome:   TALOS_KEYSTORE_PASSWORD
-Valore: la password del CONTENITORE che hai digitato
+Valore: $sp
 
 --- 3 ---
 Nome:   TALOS_KEY_ALIAS
@@ -134,10 +192,19 @@ Valore: $Alias
 
 --- 4 ---
 Nome:   TALOS_KEY_PASSWORD
-Valore: la password della CHIAVE che hai digitato
+Valore: $kp
 
-⛔ Quando li hai incollati tutti e quattro, CANCELLA QUESTO FILE.
-   Il file .jks invece NON si cancella: è la chiave.
+
+⛔⛔ PRIMA DI CANCELLARE QUESTO FILE
+====================================
+
+La password qui sopra NON esiste da nessun'altra parte. Non e' recuperabile
+dalla chiave, non ce l'ho io, non ce l'ha GitHub.
+
+Mettila al sicuro INSIEME al file .jks — un gestore di password, o un foglio
+in un cassetto, ma non solo su questo computer.
+
+Poi cancella questo file. Il .jks NON si cancella: e' la chiave.
 "@ | Set-Content -Path $fileSegreti -Encoding UTF8
 
 Titolo 'FATTO — e adesso tre cose, in questo ordine'
