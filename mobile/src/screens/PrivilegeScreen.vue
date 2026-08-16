@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+    talosApriPaginaAssistente,
     talosChiediRuoloAssistente,
     talosLeggiRuoloAssistente,
     talosNominaAssistenteColPonte,
@@ -191,7 +192,17 @@ const chiamate = computed<readonly TalosRigaChiamata[]>(() => {
         pronto: ruolo.value.held,
         stato: ruolo.value.held ? t('privilege.presetState.pronto') : t('privilege.presetState.da-mettere'),
         titolo: t('privilege.assistantTitle'),
-        corpo: ruolo.value.held ? t('privilege.assistantHeld') : t('privilege.assistantBody'),
+        /*
+         * ⛔ Nella fase `sistema` il corpo cambia: la persona è appena tornata
+         * da una pagina di Android e la domanda che ha in testa è «e adesso
+         * cosa tocco?». Ripeterle a cosa serve il ruolo sarebbe rispondere a
+         * una domanda che non ha più.
+         */
+        corpo: ruolo.value.held
+            ? t('privilege.assistantHeld')
+            : faseRuolo.value === 'sistema'
+                ? t('privilege.assistantPageHint')
+                : t('privilege.assistantBody'),
         comando: ruolo.value.held
             ? undefined
             : {
@@ -200,7 +211,17 @@ const chiamate = computed<readonly TalosRigaChiamata[]>(() => {
                     ? t('privilege.assistantAsking')
                     : faseRuolo.value === 'ponte'
                         ? t('privilege.assistantBridging')
-                        : t('privilege.assistantAsk'),
+                        /*
+                         * ⛔ In `sistema` il pulsante NON resta spento e NON
+                         * dice «sto chiedendo»: non stiamo aspettando niente —
+                         * quella pagina non torna nessun esito. Un pulsante
+                         * spento davanti a una persona rientrata senza aver
+                         * scelto è un vicolo cieco; riaprirle la pagina è
+                         * l'unica cosa utile che possiamo offrirle.
+                         */
+                        : faseRuolo.value === 'sistema'
+                            ? t('privilege.assistantOnPage')
+                            : t('privilege.assistantAsk'),
                 forte: true,
                 spento: faseRuolo.value === 'chiedo' || faseRuolo.value === 'ponte',
                 fai: () => { void attivaAssistente() },
@@ -298,7 +319,14 @@ async function leggiRuolo(): Promise<void> {
  * già verde quando rientra. È l'unica cosa che rende una schermata «viva»
  * invece che una fotografia scattata all'apertura.
  */
-type TalosFaseRuolo = 'fermo' | 'chiedo' | 'ponte' | 'niente'
+/**
+ * `sistema` = la persona è sulla pagina «App assistente digitale» di Android.
+ *
+ * ⛔ È uno stato in cui NON stiamo aspettando una risposta: quella pagina non
+ * ne torna nessuna. Sta lì per dire al pulsante di smettere di girare e alla
+ * scheda cosa scrivere — il ruolo vero lo rilegge `appStateChange` al rientro.
+ */
+type TalosFaseRuolo = 'fermo' | 'chiedo' | 'sistema' | 'ponte' | 'niente'
 const faseRuolo = ref<TalosFaseRuolo>('fermo')
 
 /** Chi torna in primo piano fa da sveglia: si rilegge, sempre. */
@@ -400,7 +428,20 @@ async function ascoltaIlRitorno(): Promise<void> {
 }
 
 async function attivaAssistente(): Promise<void> {
-    if (faseRuolo.value !== 'fermo') return
+    /*
+     * ⛔ La guardia blocca solo ciò che è IN VOLO, non ogni fase diversa da
+     * `fermo`.
+     *
+     * Prima era `!== 'fermo'`, e con le fasi nuove sarebbe diventata una
+     * trappola: in `sistema` la persona è rientrata dalla pagina di Android e
+     * il pulsante le dice «riapri quella pagina» — se il primo `return` lo
+     * ingoia, quel pulsante non fa niente. Un pulsante morto è il difetto che
+     * questa schermata insegue da settimane, e l'avrei rimesso io.
+     *
+     * `chiedo` e `ponte` sono attese vere e restano bloccate: due richieste
+     * sovrapposte allo stesso sistema si pestano i piedi.
+     */
+    if (faseRuolo.value === 'chiedo' || faseRuolo.value === 'ponte') return
     faseRuolo.value = 'chiedo'
     // La promessa si chiude quando si chiude la FINESTRA: è il sistema a dire
     // com'è andata, non un cronometro nostro.
@@ -420,6 +461,34 @@ async function attivaAssistente(): Promise<void> {
      * detto cosa vuole; che la sua ROM non abbia mostrato la finestra è un
      * fatto nostro da risolvere, non una domanda da rigirarle.
      */
+
+    /*
+     * ⭐⭐⭐ PRIMA LA PAGINA DI SISTEMA, POI semmai il ponte — 2026-08-16.
+     *
+     * Fin qui, quando la finestra non compariva, l'unica strada era il ponte
+     * ADB. E la finestra non compare MAI: `roles.xml` di AOSP dichiara il ruolo
+     * assistente `requestable="false"`, quindi `createRequestRoleIntent` nasce
+     * e muore. MISURATO sul Pad togliendo il ruolo a TALOS per la prova:
+     * 53 ms, `RESULT_CANCELED`, schermo fermo sull'app.
+     *
+     * ⇒ Chi non ha il ponte non poteva diventare assistente. Mai.
+     *
+     * La pagina «App assistente digitale» invece si apre da qualunque app, ha
+     * TALOS nell'elenco (il manifest lo qualifica: `VoiceInteractionService`,
+     * `VoiceInteractionSessionService`, `RecognitionService`) ed è un tocco dal
+     * selettore. Nessun permesso di sistema, nessun ponte, nessun cavo.
+     *
+     * ⛔ Il ponte resta, e resta DOPO: è più comodo per chi ce l'ha già, ma non
+     * può essere l'unica porta. E qui non si tenta da soli — la persona è
+     * appena uscita verso una schermata di Android, e partire col ponte mentre
+     * lei sceglie vorrebbe dire fare due cose contemporaneamente sullo stesso
+     * telefono.
+     */
+    if (await talosApriPaginaAssistente()) {
+        faseRuolo.value = 'sistema'
+        return
+    }
+
     faseRuolo.value = 'ponte'
     const { App } = await import('@capacitor/app')
     // ⛔ Il pacchetto si CHIEDE: `ai.talos` e `ai.talos.dev` sono due
