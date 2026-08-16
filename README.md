@@ -166,12 +166,9 @@ upload is shown as flagged, before you download it, not after.
 
 ## And then it is just the model you are talking to
 
-<img src="docs/immagini/tablet-7-local-in-chat.png" alt="A 4B model running on the device, answering with a structured table">
-
-A 4B model, on the tablet, no network — answering with a structured comparison
-table. Same conversation surface, same tools, same permission vocabulary as a
-frontier model behind an API key. The chip in the composer is the only thing
-that changes.
+Once a model is loaded it uses the same conversation surface, the same tools and
+the same permission vocabulary as a frontier model behind an API key. The chip in
+the composer is the only thing that changes.
 
 **Measured on a OnePlus Pad 3**, `Holo-3.1-4B Q4_K_M` (4.84B parameters), at 8
 threads:
