@@ -66,6 +66,14 @@ class TalosParola : Service() {
 
     private var vivo = false
 
+    /**
+     * ⛔ Il thread del ciclo, TENUTO — perché `onDestroy` possa aspettarlo
+     * invece di chiudergli le sessioni ONNX sotto i piedi. Vedi la nota su
+     * `onDestroy`: senza questo riferimento, premere «smetti di aspettare la
+     * parola» uccideva il processo.
+     */
+    private var lavoratore: Thread? = null
+
     @Volatile
     private var ceduto = false
 
@@ -154,13 +162,56 @@ class TalosParola : Service() {
         }
         avviaInPrimoPiano()
         vivo = true
-        thread(name = "talos-parola") { ciclo() }
+        // ⛔ Il thread si TIENE: senza un riferimento, `onDestroy` non può
+        // aspettarlo, e la cura qui sotto non esisterebbe.
+        lavoratore = thread(name = "talos-parola") { ciclo() }
         return START_NOT_STICKY
     }
 
+    /**
+     * ⛔⛔ SPEGNERE UN THREAD CHE STA USANDO UNA SESSIONE ONNX LA UCCIDE — e per
+     * un po' ha ucciso l'app intera.
+     *
+     * Owner 2026-08-16: «quando premo *smetti di ascoltare la parola*
+     * l'applicazione crasha». RIPRODOTTO premendo «Smetti di aspettare la
+     * parola» in Controllo del telefono — il processo cambia pid, cioè muore:
+     *
+     *     FATAL EXCEPTION: talos-parola
+     *       at TalosOrecchio.spettro(TalosOrecchio.kt:184)   ← mel.run(...)
+     *       at TalosOrecchio.ascolta(TalosOrecchio.kt:168)
+     *       at TalosParola.ciclo(TalosParola.kt:387)
+     *
+     * La corsa era questa: `onDestroy` gira sul thread principale, mette
+     * `vivo = false` e chiama subito `orecchio.chiudi()`, che chiude le tre
+     * sessioni ONNX. Ma il thread `talos-parola` era **già dentro** `run()` su
+     * quelle sessioni, e il flag lo guarda solo al giro dopo. Gli si toglie il
+     * pavimento da sotto mentre cammina.
+     *
+     * ⇒ E un'eccezione su un thread non gestito **non si limita a quel
+     * thread**: si porta via il processo. Per questo il difetto si vedeva come
+     * «l'app crasha» e non come «l'ascolto si è fermato male».
+     *
+     * ⛔ La cura NON è un try/catch attorno a `run()`: ingoierebbe anche gli
+     * errori veri del modello, e lascerebbe comunque il ciclo a girare su
+     * sessioni morte. Si aspetta che il ciclo ESCA, e solo allora si chiude —
+     * che è la stessa forma già usata in questo file per `AudioRecord`.
+     *
+     * ⛔ E si aspetta con un TETTO: `onDestroy` gira sul thread principale, e
+     * bloccarlo senza limite è un ANR. Un giro del ciclo dura quanto un blocco
+     * di audio (80 ms): due secondi sono venticinque giri, cioè larghissimo. Se
+     * scade si chiude lo stesso — meglio un rischio residuo che un'app bloccata.
+     */
     override fun onDestroy() {
         vivo = false
         istanza = null
+        val chiUsava = lavoratore
+        lavoratore = null
+        if (chiUsava != null && chiUsava.isAlive) {
+            runCatching { chiUsava.join(ATTESA_USCITA_MS) }
+            if (chiUsava.isAlive) {
+                Log.w(MARCHIO, "il ciclo non è uscito in $ATTESA_USCITA_MS ms: chiudo lo stesso")
+            }
+        }
         orecchio?.chiudi()
         orecchio = null
         super.onDestroy()
@@ -487,6 +538,14 @@ class TalosParola : Service() {
 
     companion object {
         private const val MARCHIO = "TalosParola"
+
+        /**
+         * ⛔ Il tetto dell'attesa in `onDestroy`, che gira sul thread
+         * principale: bloccarlo senza limite è un ANR. Un giro del ciclo dura
+         * quanto un blocco di audio (80 ms), quindi due secondi sono
+         * venticinque giri — larghissimo, e comunque limitato.
+         */
+        private const val ATTESA_USCITA_MS = 2_000L
         private const val CANALE = "talos-parola"
         private const val AVVISO = 4711
         private const val FREQUENZA = 16_000
