@@ -11,12 +11,33 @@ import type { TalosEventoCalendario } from '@/lib/device/calendario'
  * domani?» e TALOS rispondeva «non hai compiti registrati», avendo guardato le
  * PROPRIE note. Una risposta sicura e falsa sulla giornata di una persona.
  */
+/**
+ * ⛔ L'ORA SI FISSA DA OROLOGIO, NON DA ISTANTE.
+ *
+ * Qui c'era `Date.parse('2026-08-15T15:00:00.000Z')` con accanto il commento
+ * «→ 17:00 (Europe/Rome)», e l'attesa scritta a mano era `17:00–18:00`. Vero
+ * su questo computer, falso ovunque altro: MISURATO il 2026-08-16, la stessa
+ * suite fa 30 verdi con `TZ=Europe/Rome` e due rossi con `TZ=UTC` — che è il
+ * fuso di ogni runner di GitHub, e di chiunque cloni il repo fuori dall'Italia.
+ *
+ * ⇒ Questi due test parlano di COME SI SCRIVE un orario, non di quale istante
+ * sia. Allora l'istante si costruisce dai pezzi dell'orologio locale: così le
+ * 17:00 sono le 17:00 dappertutto, e l'attesa resta leggibile invece di
+ * diventare un calcolo.
+ *
+ * ⛔ Il caso «tutto il giorno» qui sotto fa il contrario di proposito — fissa
+ * mezzanotte UTC — perché lì il fuso È il soggetto della prova.
+ */
+function oraLocale(anno: number, mese: number, giorno: number, ore: number): number {
+    return new Date(anno, mese - 1, giorno, ore, 0, 0, 0).getTime()
+}
+
 function evento(over: Partial<TalosEventoCalendario> = {}): TalosEventoCalendario {
     return {
         titolo: 'Dentista',
-        // 2026-08-15 17:00 → 18:00 (Europe/Rome)
-        inizio: Date.parse('2026-08-15T15:00:00.000Z'),
-        fine: Date.parse('2026-08-15T16:00:00.000Z'),
+        // 2026-08-15, dalle 17:00 alle 18:00 sull'orologio di chi legge.
+        inizio: oraLocale(2026, 8, 15, 17),
+        fine: oraLocale(2026, 8, 15, 18),
         tuttoIlGiorno: false,
         luogo: 'Via Roma 12',
         calendario: 'persona@example.com',

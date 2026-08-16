@@ -123,7 +123,31 @@ afterAll(() => {
     for (const r of roots) fs.rmSync(r, { recursive: true, force: true })
 })
 
-describe('android assets conformance (product tool)', () => {
+/*
+ * ⛔ QUESTO GRUPPO PROVA UNO STRUMENTO CHE È DICHIARATAMENTE SOLO WINDOWS.
+ *
+ * Non è una scorciatoia per far diventare verde un cancello: è lo strumento
+ * stesso a dirlo, in `tools/android-assets/generate.mjs`, quando rifiuta di
+ * partire altrove:
+ *
+ *     unsupported platform <piattaforma>/<arch>; M1 asset generation is
+ *     scoped to win32/x64 (Linux portability gate open)
+ *
+ * E la prova gli sta dietro: uccide processi con `taskkill /PID /T /F` e
+ * fabbrica giunzioni NTFS con `cmd /c mklink /J` per verificare che una radice
+ * `res` sostituita a metà transazione venga riconosciuta. Su Linux non esiste
+ * niente di tutto ciò.
+ *
+ * MISURATO il 2026-08-16: su `ubuntu-latest` questi 29 test cadevano tutti, e
+ * il badge del repo pubblico diceva rosso su un progetto sano. Un test che
+ * fallisce dove non è applicabile non sta controllando niente — sta solo
+ * facendo rumore, e il rumore consuma la fiducia nel cancello.
+ *
+ * ⇒ Su Windows morde esattamente come prima. Altrove dichiara di non
+ * applicarsi. Quando la porta della portabilità a Linux si aprirà — è un
+ * cancello già aperto nel codice — questa riga è il posto da cui ripartire.
+ */
+describe.skipIf(process.platform !== 'win32')('android assets conformance (product tool)', () => {
     it('temporary generation contains the exact 43-file on-disk set and promotes exactly 42 managed', async () => {
         const { root, res } = setupWorkspace()
         const r = await runTool(root)
