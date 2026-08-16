@@ -1,0 +1,196 @@
+# La release: un APK firmato, con la prova di dove è nato.
+#
+# Si accende su un tag `v*`. Non su ogni push: una release è un atto, e gli atti
+# si chiedono esplicitamente.
+#
+#     git tag v0.1.0 && git push origin v0.1.0
+#
+# ## ⛔ Cosa serve PRIMA, e non lo può fare un workflow
+#
+# La **keystore**. La genera l'owner, si perde una volta sola, e senza quella
+# chiave nessun aggiornamento futuro può installarsi sopra: l'unica via sarebbe
+# disinstallare, cioè cancellare a una persona le sue chat e la sua libreria.
+#
+# Va nei GitHub Secrets del repository, mai nel repo:
+#
+#     TALOS_KEYSTORE_BASE64   la keystore, in base64
+#     TALOS_KEYSTORE_PASSWORD la password del contenitore
+#     TALOS_KEY_ALIAS         il nome della chiave dentro
+#     TALOS_KEY_PASSWORD      la password della chiave
+#
+# ⛔ Se mancano, il workflow **si ferma subito e lo dice**. Non produce un APK
+# non firmato: un artefatto non firmato dentro una release ha l'aria di essere
+# installabile, e non lo è — o peggio, lo è una volta sola e poi blocca ogni
+# aggiornamento.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+# ⛔ `attestations: write` è ciò che permette la firma di provenienza; `contents:
+# write` serve a creare la release. Nient'altro: un token che può più di quanto
+# serve è un token che un giorno farà più di quanto doveva.
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # ⛔ Il primo passo è il controllo che evita l'artefatto inutile. Se la
+      # chiave non c'è, meglio saperlo in dieci secondi che dopo otto minuti di
+      # build — e con un messaggio che dice COSA manca, non «signing failed».
+      - name: la chiave c'è?
+        env:
+          KEYSTORE: ${{ secrets.TALOS_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE" ]; then
+            echo "::error::manca il secret TALOS_KEYSTORE_BASE64. Senza keystore non si pubblica: un APK non firmato sembra installabile e blocca ogni aggiornamento futuro."
+            exit 1
+          fi
+          echo "keystore presente"
+
+      # La versione viene dal tag e da nient'altro: `v0.1.0` -> `0.1.0`.
+      # Il `versionCode` è il numero della corsa, che cresce in modo monotono
+      # per costruzione — è l'unica proprietà che Android chiede davvero.
+      - id: versione
+        name: la versione la decide il tag
+        run: |
+          nome="${GITHUB_REF_NAME#v}"
+          echo "nome=$nome" >> "$GITHUB_OUTPUT"
+          echo "codice=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "release $nome (versionCode ${GITHUB_RUN_NUMBER})"
+
+      - id: dove
+        name: dove sta l'app
+        run: |
+          if [ -f mobile/package.json ]; then dir=mobile; else dir=.; fi
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.18.0'
+          cache: npm
+          cache-dependency-path: ${{ steps.dove.outputs.dir }}/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - run: npm ci
+        working-directory: ${{ steps.dove.outputs.dir }}
+
+      # ⛔ I cancelli girano ANCHE qui, e non è una ripetizione della CI: la CI
+      # prova il ramo, questo prova il commit che diventa un artefatto firmato
+      # e immutabile. Ciò che esce da qui non si corregge — si pubblica una
+      # versione nuova.
+      - name: typecheck
+        run: npm run typecheck
+        working-directory: ${{ steps.dove.outputs.dir }}
+
+      - name: test
+        run: npx vitest run
+        working-directory: ${{ steps.dove.outputs.dir }}
+
+      - name: build web
+        run: npm run build
+        working-directory: ${{ steps.dove.outputs.dir }}
+
+      - name: sync android
+        run: npx cap sync android
+        working-directory: ${{ steps.dove.outputs.dir }}
+
+      # La chiave esiste solo dentro il runner, e solo per il tempo del build.
+      # `keystore.properties` è già ciò che il build.gradle si aspetta.
+      - name: monta la chiave
+        working-directory: ${{ steps.dove.outputs.dir }}/android
+        env:
+          KEYSTORE: ${{ secrets.TALOS_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.TALOS_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.TALOS_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.TALOS_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE" | base64 -d > talos-release.jks
+          {
+            echo "storeFile=talos-release.jks"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > keystore.properties
+
+      - name: costruisci l'APK firmato
+        working-directory: ${{ steps.dove.outputs.dir }}/android
+        run: |
+          ./gradlew assembleRelease --console=plain \
+            -PtalosVersionName=${{ steps.versione.outputs.nome }} \
+            -PtalosVersionCode=${{ steps.versione.outputs.codice }}
+
+      # ⛔ «Success» non basta: si guarda DENTRO l'APK. Un build che riesce con
+      # la firma disattivata produce un artefatto che sembra buono e non lo è —
+      # e lo si scopre sul telefono di qualcun altro.
+      - id: apk
+        name: ⛔ è davvero firmato, e con la versione giusta?
+        working-directory: ${{ steps.dove.outputs.dir }}/android
+        run: |
+          set -euo pipefail
+          origine=app/build/outputs/apk/release/app-release.apk
+          nome="TALOS-${{ steps.versione.outputs.nome }}.apk"
+          cp "$origine" "../../$nome"
+          cd ../..
+
+          strumenti=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$strumenti/apksigner" verify --print-certs "$nome"
+
+          impronta=$(sha256sum "$nome" | cut -d' ' -f1)
+          echo "sha256=$impronta" >> "$GITHUB_OUTPUT"
+          echo "nome=$nome" >> "$GITHUB_OUTPUT"
+          echo "peso=$(du -m "$nome" | cut -f1) MB" >> "$GITHUB_OUTPUT"
+          echo "sha256: $impronta"
+
+      # La provenienza SLSA: lega l'artefatto al workflow, al commit e al
+      # repository, con un certificato effimero su un registro di trasparenza.
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ steps.apk.outputs.nome }}
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ steps.apk.outputs.nome }}
+          generate_release_notes: true
+          # ⛔ La riga che fa la differenza fra una firma e un ornamento: il
+          # comando per verificarla sta NELLA release, non in una pagina di
+          # documentazione che nessuno apre.
+          body: |
+            ## Installazione
+
+            Questo APK non viene dal Play Store: Android lo tratta come «app da
+            origine sconosciuta» e ti chiederà conferma. È normale.
+
+            **Solo arm64-v8a, Android 8.0 o superiore.**
+
+            ## Controlla di aver scaricato quello giusto
+
+            ```bash
+            sha256sum ${{ steps.apk.outputs.nome }}
+            # ${{ steps.apk.outputs.sha256 }}
+            ```
+
+            E che sia nato davvero qui, da questo codice:
+
+            ```bash
+            gh attestation verify ${{ steps.apk.outputs.nome }} --repo ${{ github.repository }}
+            ```
+
+            ## Su cosa è stato provato
+
+            Due dispositivi: un OnePlus 13 e un OnePlus Pad 3. Due telefoni sono
+            un campione piccolo, e le ROM Android divergono parecchio su
+            accessibilità, esecuzione in background e blocco schermo.

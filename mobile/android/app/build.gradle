@@ -45,8 +45,46 @@ android {
         applicationId "ai.talos"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        /*
+         * ⛔⛔ LA VERSIONE LA DECIDE IL TAG, NON QUESTA RIGA.
+         *
+         * Un numero scritto qui e un tag scritto su GitHub sono due fonti per
+         * lo stesso fatto, e due fonti divergono: il giorno che qualcuno
+         * pubblica `v0.2.0` dimenticando di toccare il gradle, l'APK dentro la
+         * release dice `1.0` e nessuno se ne accorge — perche' il numero che si
+         * vede sulla pagina e' quello del tag, e quello che il telefono mostra
+         * nelle impostazioni e' questo.
+         *
+         * ⇒ Il workflow passa `-PtalosVersionName=0.1.0 -PtalosVersionCode=1`.
+         * Senza quelle proprieta' — cioe' per chiunque compili in locale — i
+         * valori qui sotto restano, e non serve procurarsi niente.
+         *
+         * ## Perche' `versionCode` e' un intero separato e non deriva dal nome
+         *
+         * Android confronta SOLO `versionCode` per decidere se un pacchetto e'
+         * un aggiornamento, e deve crescere in modo monotono. Derivarlo dal
+         * nome (0.1.0 -> 100) sembra elegante e si rompe alla prima versione a
+         * due cifre. ⇒ Lo si passa esplicito, e la release note dice quale.
+         */
+        versionCode project.hasProperty('talosVersionCode')
+                ? project.property('talosVersionCode').toInteger()
+                : 1
+        /*
+         * ⛔ IL RIPIEGO E' `0.0.0`, ED E' UNA SCELTA.
+         *
+         * Trovato provando al contrario: col ripiego a `"1.0-dev"` una build
+         * locale usciva `1.0-dev-dev`, perche' il tipo debug aggiunge gia' il
+         * suo `-dev`. Ma il difetto vero era un altro, e stava nell'altra
+         * direzione: un ripiego `"1.0"` avrebbe fatto sembrare una release
+         * VERA un pacchetto costruito a mano senza tag.
+         *
+         * `0.0.0` non puo' mentire in nessuno dei due versi: non si confonde
+         * con niente di pubblicato, e non puo' MAI risultare piu' alta di una
+         * versione vera.
+         */
+        versionName project.hasProperty('talosVersionName')
+                ? project.property('talosVersionName')
+                : "0.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             // Solo arm64. Da quando esiste codice nativo questa riga decide su
