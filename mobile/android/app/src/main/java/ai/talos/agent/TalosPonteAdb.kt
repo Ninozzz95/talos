@@ -512,6 +512,21 @@ object TalosPonteAdb {
      * @return `true` se la porta risulta fissata E il ponte è riagganciato lì.
      */
     fun fissaLaPorta(context: Context): Boolean {
+        /*
+         * ⛔ LA SONDA STA QUI PERCHÉ SENZA HO GIRATO IN TONDO.
+         *
+         * 2026-08-16: la casella entrava nelle preferenze, il ponte risultava
+         * collegato, e la porta restava a zero. Tre ipotesi diverse, tutte
+         * plausibili rileggendo il codice, tutte sbagliate. La regola vale
+         * anche per me: si STRUMENTA prima di ipotizzare.
+         *
+         * Ogni passo dice il suo esito con `adb logcat -s TalosPonte`.
+         */
+        val prima = esegui(context, listOf("devices"), attesaMs = 10_000)
+        android.util.Log.i(
+            "TalosPonte",
+            "fissaLaPorta: dispositivi ok=${prima.ok} uscita=${prima.uscita.replace("\n", " | ").take(160)}",
+        )
         if (giaFissata(context) && collega(context, INDIRIZZO_LOCALE).ok) return true
 
         /*
@@ -520,7 +535,11 @@ object TalosPonteAdb {
          * subito sotto ci si ricollega, e il verdetto lo dà quella connessione,
          * non l'uscita di questo comando.
          */
-        esegui(context, listOf("tcpip", PORTA_FISSA.toString()), attesaMs = 15_000)
+        val acceso = esegui(context, listOf("tcpip", PORTA_FISSA.toString()), attesaMs = 15_000)
+        android.util.Log.i(
+            "TalosPonte",
+            "fissaLaPorta: tcpip ok=${acceso.ok} motivo=${acceso.motivo} uscita=${acceso.uscita.replace("\n", " | ").take(200)}",
+        )
 
         /*
          * ⛔⛔ PRIMA CI SI RICOLLEGA, POI SI CHIEDE — e l'ordine non è
@@ -555,6 +574,43 @@ object TalosPonteAdb {
             riagganciaSeStaccato = false,
         )
         return esito.ok && esito.uscita.trim() == PORTA_FISSA.toString()
+    }
+
+    /**
+     * Richiude la porta fissa: adbd torna ad ascoltare solo dal cavo.
+     *
+     * ⛔ È il verso contrario di `fissaLaPorta`, e senza di lui quella casella
+     * sarebbe un interruttore che va solo in su. Su una cosa che apre una porta
+     * sulla rete locale, «si accende e non si spegne» è peggio che non averla.
+     *
+     * ⛔ Il ponte cade qui dentro, perché `usb` riavvia adbd. È voluto: chi
+     * toglie la spunta sta chiedendo esattamente questo. Se il Debug wireless è
+     * acceso il riaggancio riparte da solo; se è spento il ponte resta giù, ed
+     * è lo stato che la persona ha scelto.
+     */
+    fun chiudiLaPorta(context: Context): Boolean {
+        /*
+         * ⛔⛔ `-s <indirizzo>`, NON `usb` nudo — ed è la stessa lezione del
+         * `git -C <percorso>` invece di `cd … ; git push`.
+         *
+         * MISURATO sul Pad il 2026-08-16: spegnendo la levetta la preferenza
+         * andava a `false` e la porta restava a 5555. Il comando `usb` nudo
+         * chiede al server adb di parlare al «dispositivo», e se il server ne
+         * ha più d'uno — qui c'è la porta fissa, e può esserci ancora il
+         * trasporto TLS — fallisce con «more than one device» **senza che si
+         * veda**: l'uscita non arriva a nessuno, e l'interruttore diventa a
+         * senso unico.
+         *
+         * ⇒ Un comando che agisce su una cosa deve NOMINARE quella cosa. Se
+         * l'indirizzo è sbagliato adb si ferma; se è ambiguo il contesto,
+         * nessuno se ne accorge.
+         */
+        val chiuso = esegui(context, listOf("-s", INDIRIZZO_LOCALE, "usb"), attesaMs = 15_000)
+        android.util.Log.i(
+            "TalosPonte",
+            "chiudiLaPorta: ok=${chiuso.ok} uscita=${chiuso.uscita.replace("\n", " | ").take(160)}",
+        )
+        return !giaFissata(context)
     }
 
     /** Chiude il server, e con esso la porta locale che teneva aperta. */

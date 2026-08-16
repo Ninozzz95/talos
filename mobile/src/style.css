@@ -362,6 +362,47 @@
     -webkit-touch-callout: none;
 }
 
+/* ⛔ LA LEVETTA STA QUI PERCHÉ ORA LA USANO IN DUE.
+
+   Nasceva scoped dentro TalosMobileSchedaAzione.vue, che è il posto giusto
+   finché un componente è l'unico a disegnarla. Il 2026-08-16 l'owner ha chiesto
+   una levetta anche per «Mantieni acceso», in Controllo del telefono — e uno
+   stile `scoped` non attraversa i componenti: la classe si sarebbe applicata da
+   una parte sola, con l'altra a mostrare un bottone nudo.
+
+   ⇒ Un comando che compare in due schermate non è un dettaglio di un
+   componente: è un pezzo del linguaggio dell'app, e vive con gli altri. I
+   colori restano quelli del theme engine — `--primary`, `--muted`, `--border` —
+   così cambiando tema cambia anche lei. */
+.talos-levetta {
+    inline-size: 2.9rem;
+    block-size: 1.7rem;
+    flex: none;
+    position: relative;
+    padding: 0;
+    border-radius: 99px;
+    background: var(--primary);
+    border: 1px solid var(--primary);
+    cursor: pointer;
+    transition: background .18s ease, border-color .18s ease;
+}
+.talos-levetta::after {
+    content: "";
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-end: 2px;
+    inline-size: 1.25rem;
+    block-size: 1.25rem;
+    border-radius: 50%;
+    background: var(--primary-foreground);
+}
+.talos-levetta[aria-checked="false"] { background: var(--muted); border-color: var(--border); }
+.talos-levetta[aria-checked="false"]::after {
+    inset-inline-end: auto;
+    inset-inline-start: 2px;
+    background: var(--muted-foreground);
+}
+
 /* F1-T4 animation mandate: every interactive element gets a simple, engine-tuned
    micro-interaction. Durations/easings come from the motion-v6 interaction CSS
    vars published on the shell root (talosInteractionMotionStyleV6); the engine

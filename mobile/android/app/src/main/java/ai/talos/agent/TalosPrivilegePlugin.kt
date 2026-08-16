@@ -125,6 +125,22 @@ class TalosPrivilegePlugin : Plugin() {
             .getBoolean(SEMPRE_ACCESO, false)
 
         /*
+         * ⛔⛔⛔ SOLO SE QUALCUNO HA SCELTO. Una DOMANDA non ha effetti.
+         *
+         * La schermata chiama questo stesso metodo con `{}` — senza `attivo` —
+         * appena si apre, per sapere com'è messa la levetta. La prima versione
+         * eseguiva l'effetto **in ogni caso**: quindi aprire «Controllo del
+         * telefono» con la levetta spenta faceva partire `chiudiLaPorta`, cioè
+         * `adb usb`, cioè **il ponte cadeva ogni volta che guardavi la
+         * schermata**. Una pagina che si guarda non può cambiare il telefono.
+         *
+         * ⇒ È la stessa regola già scritta in `TalosPonteAdb.shell` per
+         * `riagganciaSeStaccato`: chi CHIEDE ha la risposta e basta, chi AGISCE
+         * paga l'effetto. Qui la si riconosce da `attivo != null`.
+         */
+        val scelto = attivo != null
+
+        /*
          * ⭐⭐⭐ ACCENDERLA FA UNA COSA VERA, NON RICORDA UNA PREFERENZA.
          *
          * Owner 2026-08-16, guardando questa casella: «il check in fondo serve
@@ -140,7 +156,26 @@ class TalosPrivilegePlugin : Plugin() {
          * ⛔ Gira fuori dal thread dei plugin, come ogni cosa che tocca il
          * ponte: `fissaLaPorta` riavvia adbd e si ricollega, sono secondi.
          */
-        if (ora) TalosFilaPonte.esegui { TalosPonteAdb.fissaLaPorta(context) }
+        /*
+         * ⛔⛔ E SPEGNERLA RICHIUDE LA PORTA — se no la casella va in un verso solo.
+         *
+         * Provata al contrario prima di consegnarla: accendendo si apre una
+         * porta sulla rete locale, e togliendo la spunta restava aperta fino al
+         * riavvio del telefono. Una casella che apre e non chiude non è una
+         * scelta: è un interruttore rotto, e su una cosa che riguarda la rete è
+         * peggio che non averla.
+         *
+         * ⛔ `usb` riavvia adbd senza la porta TCP, quindi il ponte cade li'
+         * per li'. Non è un effetto collaterale: è precisamente ciò che la
+         * persona ha chiesto togliendo la spunta. Se il Debug wireless è
+         * acceso, il riaggancio riparte da solo; se è spento, il ponte resta
+         * giù — ed è lo stato che ha scelto.
+         */
+        if (scelto) {
+            TalosFilaPonte.esegui {
+                if (ora) TalosPonteAdb.fissaLaPorta(context) else TalosPonteAdb.chiudiLaPorta(context)
+            }
+        }
         call.resolve(JSObject().put("attivo", ora))
     }
 
