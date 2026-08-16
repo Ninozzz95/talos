@@ -52,18 +52,33 @@ export function creaManoDelloSchermo(sorgenti: TalosManoSorgenti) {
     return async (azione: TalosAzione): Promise<{ fatto: boolean, motivo?: string }> => {
         switch (azione.azione) {
             case 'tocca':
+            case 'premiALungo':
             case 'scrivi':
+            case 'imposta':
             case 'scorri': {
                 if (azione.indice === undefined) return { fatto: false, motivo: 'indiceMancante' }
                 const esito = await TalosSchermoBridge.agisci({
                     indice: azione.indice,
                     azione: azione.azione,
                     ...(azione.testo === undefined ? {} : { testo: azione.testo }),
+                    /*
+                     * ⛔⛔ QUI LA DIREZIONE SI PERDEVA — trovato il 2026-08-16.
+                     *
+                     * `talosIstruzioneDelPilota` la chiedeva al modello, il
+                     * modello la produceva, e questa chiamata non la passava:
+                     * il nativo scorreva **sempre in avanti**. «Scorri su» per
+                     * tornare in cima a una lista la faceva scendere, e non se
+                     * ne accorgeva nessuno perché l'azione RIUSCIVA — solo dal
+                     * verso sbagliato.
+                     */
+                    ...(azione.direzione === undefined ? {} : { direzione: azione.direzione }),
+                    ...(azione.valore === undefined ? {} : { valore: azione.valore }),
                 })
                 return { fatto: esito.fatto, ...(esito.motivo ? { motivo: esito.motivo } : {}) }
             }
             case 'indietro':
-            case 'home': {
+            case 'home':
+            case 'recenti': {
                 const esito = await TalosSchermoBridge.sistema({ azione: azione.azione })
                 return { fatto: esito.fatto, ...(esito.motivo ? { motivo: esito.motivo } : {}) }
             }

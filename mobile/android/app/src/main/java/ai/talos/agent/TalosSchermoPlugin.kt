@@ -608,7 +608,15 @@ class TalosSchermoPlugin : Plugin() {
                      * `pesoDelloSguardo.test.ts`, che si rompe se ci finiscono.
                      */
                     .put("posizione", e.posizione)
-                    .put("inLista", e.inLista),
+                    .put("inLista", e.inLista)
+                    // ⛔ Il cursore porta la sua scala, se no `imposta` e' cieca.
+                    .also { o ->
+                        e.scala?.let { (min, max, ora) ->
+                            o.put("minimo", min.toDouble())
+                                .put("massimo", max.toDouble())
+                                .put("valore", ora.toDouble())
+                        }
+                    },
             )
         }
         call.resolve(
@@ -654,6 +662,13 @@ class TalosSchermoPlugin : Plugin() {
         val quale = when (call.getString("azione")) {
             "indietro" -> AccessibilityService.GLOBAL_ACTION_BACK
             "home" -> AccessibilityService.GLOBAL_ACTION_HOME
+            /*
+             * ⛔ Le recenti servono a una cosa che le altre due non fanno:
+             * TORNARE all'app di prima senza sapere come si chiama. «Rimetti
+             * quello di prima» è una frase che una persona dice, e senza questa
+             * l'unica strada era `home` più indovinare l'icona.
+             */
+            "recenti" -> AccessibilityService.GLOBAL_ACTION_RECENTS
             else -> {
                 call.resolve(JSObject().put("fatto", false).put("motivo", "azioneSconosciuta"))
                 return
@@ -683,7 +698,15 @@ class TalosSchermoPlugin : Plugin() {
             return
         }
         val t0 = SystemClock.uptimeMillis()
-        val motivo = occhio.esegui(indice, azione, call.getString("testo"))
+        val motivo = occhio.esegui(
+            indice,
+            azione,
+            call.getString("testo"),
+            // ⛔ La direzione arrivava fin qui e moriva: il modello la produceva
+            // e `scorri` andava sempre avanti. Trovato il 2026-08-16.
+            call.getString("direzione"),
+            call.getDouble("valore"),
+        )
         val esito = JSObject()
             .put("fatto", motivo == null)
             .put("millisecondi", SystemClock.uptimeMillis() - t0)
