@@ -293,7 +293,12 @@ $tarRadice = Join-Path $env:TEMP "talos-radice.tar"
 # `--prefix` vuoto + il percorso `mobile`: git archive di una sottocartella la
 # estrae SENZA il prefisso, cioe' esattamente appiattita.
 git archive --format=tar -o $tar HEAD:mobile
-$aLato = @('LICENSE', 'NOTICE', 'SECURITY.md', 'CONTRIBUTING.md',
+# ⛔ `CHANGELOG.md` sta in questa lista perche' il workflow di release LO
+# PRETENDE: se manca la sezione della versione, la release non esce. Senza
+# questa riga il file resterebbe nel repo di sviluppo, la copia pubblica non
+# l'avrebbe, e il cancello scatterebbe sul tag — cioe' quando non si puo' piu'
+# rimediare senza rifare il tag.
+$aLato = @('LICENSE', 'NOTICE', 'SECURITY.md', 'CONTRIBUTING.md', 'CHANGELOG.md',
            'CODE_OF_CONDUCT.md', 'THIRD_PARTY_NOTICES.md', '.github')
 git archive --format=tar -o $tarRadice HEAD -- $aLato
 if (-not (Test-Path $tar)) { Male "git archive non ha prodotto niente"; exit 1 }
