@@ -85,6 +85,36 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      # ⛔⛔ L'NDK ESATTO, INSTALLATO A MANO — e non è pedanteria.
+      #
+      # `app/build.gradle` fissa `ndkVersion = "27.0.12077973"` e dice perché:
+      # «il motore locale è compilato da questo NDK e una versione diversa è un
+      # compilatore diverso». Quel pin non si tocca per far contento un runner.
+      #
+      # MISURATO il 2026-08-16 leggendo il manifesto dell'immagine
+      # `ubuntu-latest`: ha 27.3.13750724, 28.2.13676358 e 29.0.14206865. La
+      # nostra NON c'è. ⇒ Senza questo passo il primo tag sarebbe morto dentro
+      # il build nativo, lasciando un tag pubblicato e nessuna release — e un
+      # tag, con le release immutabili accese, non si sposta.
+      #
+      # ⭐ Trovato PRIMA di taggare, guardando cosa ha davvero il runner invece
+      # di dare per scontato che «l'Android SDK c'è».
+      - name: l'NDK che il motore locale pretende
+        run: |
+          set -euo pipefail
+          atteso=$(grep -oE 'ndkVersion = "[^"]+"' \
+            "${{ steps.dove.outputs.dir }}/android/app/build.gradle" | cut -d'"' -f2)
+          echo "il build pretende NDK $atteso"
+          if [ -d "$ANDROID_HOME/ndk/$atteso" ]; then
+            echo "gia' presente"
+          else
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$atteso"
+          fi
+          test -d "$ANDROID_HOME/ndk/$atteso" \
+            || { echo "::error::NDK $atteso non installabile su questo runner"; exit 1; }
+          echo "NDK $atteso pronto"
+
       - run: npm ci
         working-directory: ${{ steps.dove.outputs.dir }}
 
