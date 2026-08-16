@@ -65,6 +65,14 @@ class TalosOcchio : AccessibilityService() {
          * sua scala è un elemento che il modello può solo guardare.
          */
         val scala: Triple<Float, Float, Float>? = null,
+        /**
+         * ⛔ Serve a NUMERARE come si vede, e non attraversa il ponte.
+         *
+         * Il riquadro non va al modello — costerebbe quattro numeri per
+         * elemento senza dirgli niente che non veda già dall'ordine. Serve
+         * qui, per ordinare prima di assegnare gli indici.
+         */
+        val riquadro: android.graphics.Rect = android.graphics.Rect(),
     )
 
     /**
@@ -307,6 +315,7 @@ class TalosOcchio : AccessibilityService() {
             }
             fuori.add(
                 Elemento(
+                    // ⛔ Provvisorio: l'indice VERO si assegna dopo l'ordinamento.
                     indice = fuori.size,
                     tipo = tipo,
                     etichetta = etichetta,
@@ -315,9 +324,46 @@ class TalosOcchio : AccessibilityService() {
                     posizione = posizione,
                     inLista = inLista,
                     scala = n.rangeInfo?.let { Triple(it.min, it.max, it.current) },
+                    riquadro = riquadro,
                 ),
             )
         }
+        /*
+         * ⭐⭐⭐ SI NUMERA COME SI VEDE — e il numero che lo impone è brutale.
+         *
+         * MISURATO il 2026-08-16 su tre schermate vere: quanti indici erano già
+         * in ordine visivo?
+         *
+         *     Impostazioni ...  0 su 19
+         *     Applicazioni ...  1 su 18
+         *     Play Store .....  2 su 32
+         *
+         * ⇒ Praticamente ZERO. La visita dell'albero è in profondità, e
+         * l'ordine di scoperta non ha niente a che fare con quello di schermo.
+         * Su `Applicazioni`, «il primo» per indice era «Accessibilità di
+         * Android» mentre il primo che si vede in cima era «Indietro».
+         *
+         * ## Perché è più grosso degli ordinali
+         *
+         * Il modello vede un elenco numerato e ci ragiona sopra come farebbe
+         * una persona: «il terzo», «quello sotto», «il primo contatto». Con una
+         * numerazione arbitraria quel ragionamento è **sempre sbagliato**, e non
+         * fallisce mai in modo visibile: tocca semplicemente un'altra cosa.
+         *
+         * GUI-Owl dichiara gli ordinali un problema aperto. Una parte di quel
+         * problema è questa, e costa **zero token**: stessa lista, altro ordine.
+         *
+         * ⛔ Lo spareggio finale è l'ordine di scoperta, non niente: due
+         * elementi sovrapposti devono numerarsi sempre allo stesso modo, se no
+         * la lista balla fra due sguardi sulla stessa schermata ferma.
+         */
+        val ordinati = fuori
+            .sortedWith(
+                compareBy({ it.riquadro.top }, { it.riquadro.left }, { it.indice }),
+            )
+            .mapIndexed { i, e -> e.copy(indice = i) }
+        fuori.clear()
+        fuori.addAll(ordinati)
         sguardo = fuori
         sguardoAl = SystemClock.uptimeMillis()
         /*

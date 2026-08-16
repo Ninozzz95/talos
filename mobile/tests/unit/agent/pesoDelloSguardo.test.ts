@@ -132,12 +132,13 @@ const dentroUnaLista = (n: Nodo): boolean => {
 interface Visto {
     nodo: Nodo
     elemento: TalosElementoSchermo
+    riquadro: { t: number, l: number }
 }
 
 /** Lo stesso filtro di `TalosOcchio.interattivi()`. */
 function guarda(xml: string): Visto[] {
     const radice = albero(xml)
-    const grezzi: Nodo[] = []
+    const grezzi: Array<{ nodo: Nodo, t: number, l: number }> = []
     const pila = [radice]
     while (pila.length) {
         const n = pila.pop()!
@@ -146,10 +147,10 @@ function guarda(xml: string): Visto[] {
         const riquadro = /\[(-?\d+),(-?\d+)]\[(-?\d+),(-?\d+)]/.exec(n.attr.bounds ?? '')
         if (!riquadro) continue
         if (+riquadro[3]! - +riquadro[1]! <= 0 || +riquadro[4]! - +riquadro[2]! <= 0) continue
-        grezzi.push(n)
+        grezzi.push({ nodo: n, t: +riquadro[2]!, l: +riquadro[1]! })
     }
     const fuori: Visto[] = []
-    for (const n of grezzi) {
+    for (const { nodo: n, t, l } of grezzi) {
         const a = n.attr
         const tipo = (a.class ?? '').includes('EditText')
             ? 'campo'
@@ -170,6 +171,7 @@ function guarda(xml: string): Visto[] {
         const etichetta = propria || (tipo === 'scorri' ? '' : etichettaDalSottoalbero(n))
         fuori.push({
             nodo: n,
+            riquadro: { t, l },
             elemento: {
                 indice: fuori.length,
                 tipo,
@@ -180,7 +182,18 @@ function guarda(xml: string): Visto[] {
             },
         })
     }
+    /*
+     * ⭐ Si numera COME SI VEDE — la stessa cosa che fa `TalosOcchio` sul
+     * dispositivo. Lo spareggio finale è l'ordine di scoperta, così due
+     * elementi sovrapposti si numerano sempre allo stesso modo.
+     */
     return fuori
+        .map((v, ordineDiScoperta) => ({ v, ordineDiScoperta }))
+        .sort((a, b) =>
+            (a.v.riquadro.t - b.v.riquadro.t)
+            || (a.v.riquadro.l - b.v.riquadro.l)
+            || (a.ordineDiScoperta - b.ordineDiScoperta))
+        .map(({ v }, i) => ({ ...v, elemento: { ...v.elemento, indice: i } }))
 }
 
 /** B — la proposta della ricerca: gli undici campi, nel testo. */
@@ -289,6 +302,40 @@ describe('quanto costa vedere meglio', () => {
          * funziona», non a promettere una cifra che cambierebbe con l'app.
          */
         expect(salvati / muti).toBeGreaterThan(0.7)
+    })
+
+    /*
+     * ⭐⭐⭐ IL DIFETTO PIÙ GROSSO DEI TRE, e nessuno lo vedeva.
+     *
+     * MISURATO il 2026-08-16: quanti indici erano già in ordine visivo?
+     * Impostazioni **0 su 19**, Applicazioni **1 su 18**, Play Store **2 su 32**.
+     *
+     * La visita dell'albero è in profondità, e l'ordine di scoperta non ha
+     * niente a che fare con quello di schermo. Su `Applicazioni`, «il primo»
+     * per indice era «Accessibilità di Android» mentre in cima si vedeva
+     * «Indietro».
+     *
+     * ⇒ Il modello ragiona sull'elenco numerato come farebbe una persona — «il
+     * terzo», «quello sopra», «il primo contatto» — e con una numerazione
+     * arbitraria quel ragionamento è **sempre sbagliato**, senza mai fallire in
+     * modo visibile: tocca semplicemente un'altra cosa.
+     */
+    it('⭐⭐ gli indici seguono l\'ordine in cui si VEDE, non quello dell\'albero', () => {
+        for (const m of misure) {
+            const y = m.visti.map((v) => v.riquadro.t)
+            const crescente = y.every((v, i) => i === 0 || y[i - 1]! <= v)
+            expect(crescente, `${m.nome}: gli indici non scendono lungo lo schermo`).toBe(true)
+        }
+    })
+
+    it('⛔ a parità di riga si va da SINISTRA a destra', () => {
+        for (const m of misure) {
+            for (let i = 1; i < m.visti.length; i += 1) {
+                const a = m.visti[i - 1]!.riquadro
+                const b = m.visti[i]!.riquadro
+                if (a.t === b.t) expect(a.l).toBeLessThanOrEqual(b.l)
+            }
+        }
     })
 
     it('⛔ AL CONTRARIO: chi non ha un nome resta senza, non se ne inventa uno', () => {
