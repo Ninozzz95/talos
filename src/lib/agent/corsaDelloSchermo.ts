@@ -66,6 +66,9 @@ export async function talosCorsaDelloSchermo(
         aspetta: (ms) => new Promise((ok) => { setTimeout(ok, ms) }),
     })
     const corsa = await talosGuidaLoSchermo({
+        // ⛔ Le parole della PERSONA, non il prompt costruito: la guardia degli
+        // ordinali deve leggere «il primo contatto» come è stato detto.
+        obiettivo: montaggio.obiettivo,
         guarda: () => TalosSchermoBridge.guarda().catch(() => null),
         agisci: esegui,
         /*

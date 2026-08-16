@@ -265,6 +265,48 @@ jobs:
         with:
           subject-path: ${{ steps.apk.outputs.nome }}
 
+      # ⛔⛔ IL CANCELLO SUL CHANGELOG — regola dell'owner, 2026-08-16.
+      #
+      #   «ad ogni release mi raccomando non creare del testo statico, o meglio
+      #    assieme al testo statico metti anche il changelog breve delle fix e
+      #    delle implementazioni nuove, regola da ora in poi»
+      #
+      # La v0.1.0 e' uscita con SOLE istruzioni: come si installa, come si
+      # verifica l'impronta, su quali due dispositivi. Tutto vero, tutto
+      # IDENTICO a ogni release futura, e non diceva a nessuno cosa fosse
+      # cambiato. L'unico riferimento al contenuto era il «Full Changelog»
+      # automatico, che manda a una lista di commit grezzi: e' il materiale da
+      # cui si scrive un changelog, non un changelog.
+      #
+      # ⛔ Il cancello sta QUI e non in una lista di cose da ricordare, perche'
+      # una regola che vive in una testa salta al primo turno lungo — stessa
+      # ragione del cancello sugli screenshot. Se la sezione manca la release
+      # NON esce: un tag da rifare costa meno di una release muta, e con le
+      # release immutabili una release muta non si corregge piu'.
+      - id: changelog
+        name: il changelog di questa versione, o non si pubblica
+        run: |
+          if [ ! -f CHANGELOG.md ]; then
+            echo "::error::CHANGELOG.md non esiste: questa release non potrebbe dire cosa e' cambiato"
+            exit 1
+          fi
+          # La sezione va da `## <tag>` fino al `## ` successivo.
+          sezione=$(awk -v cercata="## ${GITHUB_REF_NAME}" '
+            $0 == cercata { dentro = 1; next }
+            dentro && /^## / { exit }
+            dentro { print }
+          ' CHANGELOG.md)
+          if [ -z "$(printf '%s' "$sezione" | tr -d '[:space:]')" ]; then
+            echo "::error::CHANGELOG.md non ha una sezione '## ${GITHUB_REF_NAME}'. Scrivila prima di taggare: cosa e' nuovo, cosa e' stato corretto."
+            exit 1
+          fi
+          {
+            echo "testo<<FINE_DEL_CHANGELOG"
+            printf '%s\n' "$sezione"
+            echo "FINE_DEL_CHANGELOG"
+          } >> "$GITHUB_OUTPUT"
+          echo "changelog di ${GITHUB_REF_NAME}: $(printf '%s' "$sezione" | wc -l) righe"
+
       - uses: softprops/action-gh-release@v3
         with:
           files: ${{ steps.apk.outputs.nome }}
@@ -272,29 +314,39 @@ jobs:
           # ⛔ La riga che fa la differenza fra una firma e un ornamento: il
           # comando per verificarla sta NELLA release, non in una pagina di
           # documentazione che nessuno apre.
+          # ⛔ Il testo delle note è in INGLESE, come tutto ciò che si pubblica.
+          # La v0.1.0 era uscita in italiano: l'ho corretta a mano, ma la
+          # SORGENTE era rimasta italiana, quindi la release dopo sarebbe
+          # tornata italiana da sola. Correggere il sintomo e lasciare la causa
+          # è come non aver corretto niente.
           body: |
-            ## Installazione
+            ## What changed
 
-            Questo APK non viene dal Play Store: Android lo tratta come «app da
-            origine sconosciuta» e ti chiederà conferma. È normale.
+            ${{ steps.changelog.outputs.testo }}
 
-            **Solo arm64-v8a, Android 8.0 o superiore.**
+            ## Install
 
-            ## Controlla di aver scaricato quello giusto
+            This APK does not come from the Play Store, so Android treats it as
+            an app from an unknown source and will ask you to confirm. That is
+            expected.
+
+            **arm64-v8a only, Android 8.0 or later.**
+
+            ## Check you got the right file
 
             ```bash
             sha256sum ${{ steps.apk.outputs.nome }}
             # ${{ steps.apk.outputs.sha256 }}
             ```
 
-            E che sia nato davvero qui, da questo codice:
+            And that it really came from this source, built here:
 
             ```bash
             gh attestation verify ${{ steps.apk.outputs.nome }} --repo ${{ github.repository }}
             ```
 
-            ## Su cosa è stato provato
+            ## What it was tested on
 
-            Due dispositivi: un OnePlus 13 e un OnePlus Pad 3. Due telefoni sono
-            un campione piccolo, e le ROM Android divergono parecchio su
-            accessibilità, esecuzione in background e blocco schermo.
+            Two devices: a OnePlus 13 and a OnePlus Pad 3. Two devices are a
+            small sample, and Android ROMs diverge a good deal on
+            accessibility, background execution and lock screen behaviour.
