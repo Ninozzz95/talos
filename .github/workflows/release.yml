@@ -148,9 +148,28 @@ jobs:
           KEY_ALIAS: ${{ secrets.TALOS_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.TALOS_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           echo "$KEYSTORE" | base64 -d > talos-release.jks
+          # ⛔⛔ IL PERCORSO DEVE ESSERE ASSOLUTO, e l'ho misurato.
+          #
+          # `app/build.gradle` fa `file(proprietaFirma['storeFile'])`, e dentro
+          # quel file `file()` risolve rispetto al MODULO `app/`, non alla
+          # cartella `android/` dove scriviamo la chiave. Con
+          # `storeFile=talos-release.jks` Gradle cerca in
+          # `android/app/talos-release.jks`, non lo trova, e `firmaDisponibile`
+          # resta FALSO.
+          #
+          # ⇒ Il build riesce lo stesso — «BUILD SUCCESSFUL» — e produce
+          # `app-release-UNSIGNED.apk`. Riprodotto in locale il 2026-08-16
+          # copiando esattamente questo layout: 48 secondi di build, esito
+          # verde, e nessun APK firmato.
+          #
+          # ⛔ E la lezione sta in come l'ho quasi mancato: la mia prova locale
+          # usava un percorso ASSOLUTO, quindi passava. Provare una cosa in una
+          # forma diversa da quella che andra' in produzione non la prova —
+          # dice solo che esiste una forma che funziona.
           {
-            echo "storeFile=talos-release.jks"
+            echo "storeFile=$PWD/talos-release.jks"
             echo "storePassword=$STORE_PASSWORD"
             echo "keyAlias=$KEY_ALIAS"
             echo "keyPassword=$KEY_PASSWORD"
