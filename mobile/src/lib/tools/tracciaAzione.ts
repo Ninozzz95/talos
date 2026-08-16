@@ -241,6 +241,42 @@ export type TalosScheda =
      * capacità sull'app scelta. Un elenco che si può solo leggere lascia alla
      * persona il compito di ridire un nome che TALOS ha già.
      */
+    /**
+     * ⭐⭐⭐ QUALCOSA CHE ORA ESISTE — e prima non lasciava traccia.
+     *
+     * Censimento 2026-08-16: sette capacità creano qualcosa che **resta** —
+     * note, attività, documenti, immagini, ricerche, memorie, file esportati —
+     * e nessuna lasciava una scheda. È la stessa famiglia dell'evento in
+     * agenda, curata il giorno prima per la stessa ragione:
+     *
+     *   **una nota creata ha la stessa faccia di una nota detta e mai creata.**
+     *
+     * E come l'evento non si vede: a differenza della torcia, non c'è niente
+     * nel mondo che ti dica se è successo. Te ne accorgi il giorno dopo,
+     * quando cerchi la nota e non c'è.
+     *
+     * ⛔ E porta la STRADA per aprirla, non solo il nome. Un elenco che si può
+     * solo leggere lascia alla persona il compito di ritrovare da sé una cosa
+     * che TALOS ha appena messo da qualche parte — è lo stesso difetto per cui
+     * `quale-app` porta i pacchetti invece dei nomi.
+     *
+     * ⛔ Il `dove` è la rotta interna già esistente (`/library/…`,
+     * `/notes/…`): non si inventa una navigazione nuova per una scheda.
+     */
+    | {
+        readonly tipo: 'creato'
+        /** Il nome della cosa, come la persona la cercherà. */
+        readonly titolo: string
+        /**
+         * Che cosa è, in una parola già tradotta: «Nota», «Documento».
+         * ⛔ Non l'id del tool: quella è una parola per noi, non per chi legge.
+         */
+        readonly genere: string
+        /** Una riga di contorno, se c'è: «340 parole», «2,1 MB». */
+        readonly dettaglio?: string
+        /** La rotta interna che la apre. Senza, la scheda mostra e basta. */
+        readonly dove?: string
+    }
     | {
         readonly tipo: 'quale-app'
         /** La capacità da richiamare con l'app scelta. */
