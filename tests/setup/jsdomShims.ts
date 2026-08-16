@@ -83,4 +83,39 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.hasPointerCapture
  * ⛔ E non è un mock: è il modulo VERO, caricato prima invece che dopo. I test
  * continuano a esercitare il renderer di produzione.
  */
-void import('@/lib/talosMessageMarkdown')
+/*
+ * ⛔⛔ E IL 2026-08-16 HA INSEGNATO CHE È UN ELENCO, NON UN CASO SINGOLO.
+ *
+ * Avevo dichiarato il difetto risolto perché una corsa verde non lo mostrava.
+ * Sbagliato: è **intermittente**. Dipende da quanto ci mette il runner a
+ * smontare l'ambiente rispetto a quanto ci mette un import a risolversi, e su
+ * Linux quel margine cambia da corsa a corsa.
+ *
+ *     corsa 10:14 UTC   exit 1, ZERO test falliti
+ *     EnvironmentTeardownError: Cannot load
+ *       '/src/lib/browser/browserContracts.ts'
+ *       imported from src/lib/browser/browserEvidence.ts
+ *
+ * ⇒ Una corsa pulita non prova l'assenza di un guasto intermittente. Il primo
+ * modulo qui sotto è arrivato da una corsa, il secondo da un'altra, e non c'è
+ * ragione di credere che siano finiti.
+ *
+ * ## La regola, per chi ne trova un terzo
+ *
+ * Non è una lista di moduli «problematici»: è la lista dei moduli che una
+ * ROTTA PIGRA tira dentro. `mobileRoutes.ts` carica gli schermi con
+ * `() => import(...)`, e un test che monta qualcosa di quella catena lascia
+ * l'import in volo. Quando la CI ne nomina uno nuovo, va aggiunto qui — con la
+ * data e la corsa, così si vede se l'elenco cresce o si è fermato.
+ *
+ * ⛔ Se un giorno diventasse lungo, la cura non è allungarlo ancora: è smettere
+ * di caricare le rotte pigramente NEI TEST, dove il guadagno non esiste.
+ */
+const TIRATI_DENTRO_SUBITO = [
+    // 2026-08-15, corsa locale: markdown-it dietro il renderer dei messaggi
+    () => import('@/lib/talosMessageMarkdown'),
+    // 2026-08-16, corsa 31941140063: la catena del browser dentro ChatScreen
+    () => import('@/lib/browser/browserEvidence'),
+]
+
+for (const tira of TIRATI_DENTRO_SUBITO) void tira()
