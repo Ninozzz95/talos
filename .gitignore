@@ -38,3 +38,23 @@ docs/immagini/DA-APPROVARE/
 # l'owner. Serve a noi e al cancello di pubblicazione, non a chi apre il repo.
 # MISURATO: era finito nel primo push, fra le immagini.
 docs/immagini/APPROVATE.txt
+
+# ⛔⛔⛔ MATERIALE CRITTOGRAFICO — ovunque nell'albero, non solo in android/.
+#
+# La regola esisteva solo in `mobile/android/.gitignore`, quindi una chiave
+# lasciata in QUALUNQUE altra cartella sarebbe entrata in git. MISURATO il
+# 2026-08-16: `mobile/talos-release.jks`, `talos-release.jks` e
+# `mobile/scripts/talos-release.jks` sarebbero tutte finite dentro.
+#
+# ⇒ E una chiave nella storia di un repository pubblico e' pubblica PER SEMPRE:
+# cancellarla dopo non serve, perche' chi ha gia' clonato ce l'ha, e chi ce l'ha
+# puo' firmare aggiornamenti che i telefoni accettano come nostri.
+#
+# La chiave di TALOS vive FUORI dal repository — vedi
+# `mobile/scripts/crea-la-chiave-di-rilascio.ps1`, che la scrive sul Desktop.
+# Queste righe sono la rete sotto, per il giorno che qualcuno la sposta.
+*.jks
+*.keystore
+*.p12
+*.pfx
+keystore.properties

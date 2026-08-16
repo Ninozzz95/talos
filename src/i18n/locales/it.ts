@@ -965,7 +965,7 @@ export const TALOS_IT_MESSAGES = {
         keepAliveBody: 'Il ponte si riaggancia da solo, senza riaccendere il Debug wireless. Finché è acceso, chi è sulla tua rete vede la porta: per entrarci serve comunque la chiave di TALOS.',
         assistantTitle: 'TALOS come assistente',
         assistantBody: 'La barra si apre solo quando TALOS è il tuo assistente. Un tocco, e te lo chiede Android.',
-        assistantHeld: 'TALOS è il tuo assistente. Chiamalo da qualunque app e la barra compare.',
+        assistantHeld: 'Chiamalo da qualunque app: la barra compare.',
         assistantAsk: 'Rendi TALOS il tuo assistente',
         assistantManual: 'Né Android né il ponte ci sono riusciti. Fallo a mano: Impostazioni → App → App predefinite → Assistente digitale. Se l’elenco è vuoto, accendi il Debug wireless qui sotto e ripremi.',
         presetTitle: 'Come lo chiami',
@@ -987,7 +987,7 @@ export const TALOS_IT_MESSAGES = {
         preset: {
             accensione: {
                 title: 'Tasto di accensione tenuto premuto',
-                body: 'Apre l’assistente del telefono. ⛔ Ma è il telefono a decidere se girare il gesto: se non si apre, restano i tasti del volume e «hey TALOS».',
+                body: 'Apre l’assistente del telefono. Ma è il telefono a decidere se girare il gesto: se non si apre, restano i tasti del volume e «hey TALOS».',
             },
             gesto: {
                 title: 'Gesto dall’angolo dello schermo',
@@ -1077,7 +1077,19 @@ export const TALOS_IT_MESSAGES = {
         reconnectBody: 'Il Debug wireless si spegne a ogni riavvio del telefono. Se ti sei già accoppiato una volta, TALOS si ricollega da solo: non serve un altro codice.',
         reconnectAction: 'Ricollega',
         readyTitle: 'TALOS è collegato al tuo telefono',
-        readyBody: 'Può accendere il Wi-Fi, cambiare le impostazioni, leggere quali app hai. Il collegamento cade al riavvio del telefono, e allora basta ricollegarlo — l\'accoppiamento resta.',
+        /*
+         * ⛔ QUESTA RIGA E QUELLA DI «MANTIENI ACCESO» SI CONTRADDICEVANO.
+         *
+         * Qui c'era «il collegamento cade al riavvio, e allora basta
+         * ricollegarlo»; due centimetri sotto, «il ponte si riaggancia da
+         * solo». Due riquadri adiacenti che raccontano due mondi diversi: chi
+         * legge non impara, sceglie a caso a quale credere.
+         *
+         * ⇒ Da quando la porta fissa funziona, il riavvio è l'UNICO confine
+         * rimasto — e va detto una volta sola, qui, dove si parla del
+         * collegamento.
+         */
+        readyBody: 'Può accendere il Wi-Fi, cambiare le impostazioni, leggere quali app hai. Solo il riavvio del telefono lo stacca: l\'accoppiamento resta, e basta ricollegarlo una volta.',
         pairTitle: 'Accoppia TALOS al tuo telefono',
         pairBody: 'Apri le opzioni sviluppatore, accendi «Debug wireless», poi tocca «Accoppia dispositivo con codice di accoppiamento». Scrivi qui le sei cifre che compaiono: gli indirizzi li trova TALOS.',
         pairAction: 'Accoppia',

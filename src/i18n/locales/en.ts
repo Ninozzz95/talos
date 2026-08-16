@@ -931,7 +931,7 @@ export const TALOS_EN_MESSAGES = {
         keepAliveBody: 'The bridge reconnects on its own, without turning Wireless debugging back on. While it is on, anyone on your network can see the port: getting in still needs the TALOS key.',
         assistantTitle: 'TALOS as your assistant',
         assistantBody: 'The bar only opens once TALOS is your assistant. One tap, and Android asks you.',
-        assistantHeld: 'TALOS is your assistant. Call it from any app and the bar comes up.',
+        assistantHeld: 'Call it from any app: the bar comes up.',
         assistantAsk: 'Make TALOS the assistant',
         assistantManual: 'Neither Android nor the bridge could set it. Do it by hand: Settings → Apps → Default apps → Digital assistant. If the list is empty, turn on wireless debugging below and press again.',
         presetTitle: 'How you call it',
@@ -949,7 +949,7 @@ export const TALOS_EN_MESSAGES = {
         preset: {
             accensione: {
                 title: 'Press and hold the power button',
-                body: 'Opens the phone’s assistant. ⛔ But the phone decides whether to route the gesture: if it does not open, the volume keys and “hey TALOS” still work.',
+                body: 'Opens the phone’s assistant. But the phone decides whether to route the gesture: if it does not open, the volume keys and “hey TALOS” still work.',
             },
             gesto: {
                 title: 'Swipe in from the screen corner',
@@ -1028,7 +1028,16 @@ export const TALOS_EN_MESSAGES = {
         reconnectBody: 'Wireless debugging switches off every time the phone restarts. If you have paired once already, TALOS reconnects on its own — no new code needed.',
         reconnectAction: 'Reconnect',
         readyTitle: 'TALOS is connected to your phone',
-        readyBody: 'It can turn Wi-Fi on, change settings, see which apps you have. The connection drops when the phone restarts, and then you just reconnect — the pairing stays.',
+        /*
+         * ⛔ This row and «Keep it on» contradicted each other: one said the
+         * connection drops and you reconnect, the other said it reconnects by
+         * itself. Two adjacent boxes telling two different stories teach
+         * nothing — the reader just picks one to believe.
+         *
+         * ⇒ Since the pinned port works, a restart is the ONLY boundary left,
+         * and it belongs here, where the connection is discussed.
+         */
+        readyBody: 'It can turn Wi-Fi on, change settings, see which apps you have. Only a phone restart breaks it: the pairing stays, and you reconnect once.',
         pairTitle: 'Pair TALOS with your phone',
         pairBody: 'Open developer options, turn on "Wireless debugging", then tap "Pair device with pairing code". Type the six digits here: TALOS finds the addresses itself.',
         pairAction: 'Pair',
