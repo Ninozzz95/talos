@@ -6,6 +6,41 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.2
+
+### New
+
+- **You can make TALOS your assistant without plugging anything in.** Until now,
+  if Android did not show the "become the assistant" dialog, the only way left
+  was the ADB bridge — a cable or wireless debugging. And Android never shows
+  that dialog: the assistant role is declared non-requestable in AOSP itself, so
+  the request opens and closes in 53 milliseconds with nothing on screen.
+  Measured on device. TALOS now takes you straight to the system page where you
+  pick your assistant, with TALOS in the list. The bridge is still there, but
+  last.
+- The button that used to promise "one tap and Android asks you" now says what
+  actually happens. A prompt nobody will ever see is worse than no promise.
+
+### Fixed
+
+- **Two of the ten permission rows never said whether they were granted.** "Where
+  you are" and "Files you choose" showed a dashed circle and no words, while the
+  other eight said "Allowed" — so the absence of a word was doing the work of a
+  word, on a page whose only job is answering "do you have it or not?". Anyone
+  using a screen reader had no way to tell at all.
+  - Location is a real permission and the app simply never asked the system
+    about it. It does now — and it checks approximate location only, because
+    Android 12 lets you grant approximate without precise, and checking both
+    would have reported "not granted" to someone who had just granted it.
+  - Files has no permission behind it — you grant access by picking the file —
+    so the row now says so instead of looking like something you forgot.
+
+### Known limits
+
+- Unchanged from v0.1.1: opening an app that is already running resumes it where
+  you left it, so a screen task can land inside the wrong screen. TALOS says it
+  could not get there rather than claiming it did.
+
 ## v0.1.1
 
 ### New

@@ -89,6 +89,52 @@ jobs:
           if [ -f mobile/package.json ]; then dir=mobile; else dir=.; fi
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
 
+      # ⛔⛔ IL CANCELLO SUL CHANGELOG — regola dell'owner, 2026-08-16.
+      #
+      #   «ad ogni release mi raccomando non creare del testo statico, o meglio
+      #    assieme al testo statico metti anche il changelog breve delle fix e
+      #    delle implementazioni nuove, regola da ora in poi»
+      #
+      # La v0.1.0 e' uscita con SOLE istruzioni: come si installa, come si
+      # verifica l'impronta, su quali due dispositivi. Tutto vero, tutto
+      # IDENTICO a ogni release futura, e non diceva a nessuno cosa fosse
+      # cambiato. L'unico riferimento al contenuto era il «Full Changelog»
+      # automatico, che manda a una lista di commit grezzi: e' il materiale da
+      # cui si scrive un changelog, non un changelog.
+      #
+      # ⛔ Il cancello sta QUI e non in una lista di cose da ricordare, perche'
+      # una regola che vive in una testa salta al primo turno lungo — stessa
+      # ragione del cancello sugli screenshot.
+      #
+      # ⛔⛔ E sta in TESTA, non accanto alla pubblicazione. Nella prima
+      # stesura l'avevo messo dopo il build: sarebbe fallito dopo ~12 minuti di
+      # NDK, gradle e firma, cioe' col tag gia' speso. Un cancello che costa
+      # dodici minuti per dire «manca una sezione» non e' un cancello, e' una
+      # punizione. Qui costa 2 secondi, e il tag si cancella e si rifa'.
+      - id: changelog
+        name: il changelog di questa versione, o non si parte nemmeno
+        run: |
+          if [ ! -f CHANGELOG.md ]; then
+            echo "::error::CHANGELOG.md non esiste: questa release non potrebbe dire cosa e' cambiato"
+            exit 1
+          fi
+          # La sezione va da `## <tag>` fino al `## ` successivo.
+          sezione=$(awk -v cercata="## ${GITHUB_REF_NAME}" '
+            $0 == cercata { dentro = 1; next }
+            dentro && /^## / { exit }
+            dentro { print }
+          ' CHANGELOG.md)
+          if [ -z "$(printf '%s' "$sezione" | tr -d '[:space:]')" ]; then
+            echo "::error::CHANGELOG.md non ha una sezione '## ${GITHUB_REF_NAME}'. Scrivila prima di taggare: cosa e' nuovo, cosa e' stato corretto."
+            exit 1
+          fi
+          {
+            echo "testo<<FINE_DEL_CHANGELOG"
+            printf '%s\n' "$sezione"
+            echo "FINE_DEL_CHANGELOG"
+          } >> "$GITHUB_OUTPUT"
+          echo "changelog di ${GITHUB_REF_NAME}: $(printf '%s' "$sezione" | wc -l) righe"
+
       - uses: actions/setup-node@v7
         with:
           node-version: '24.18.0'
@@ -264,48 +310,6 @@ jobs:
       - uses: actions/attest@v4
         with:
           subject-path: ${{ steps.apk.outputs.nome }}
-
-      # ⛔⛔ IL CANCELLO SUL CHANGELOG — regola dell'owner, 2026-08-16.
-      #
-      #   «ad ogni release mi raccomando non creare del testo statico, o meglio
-      #    assieme al testo statico metti anche il changelog breve delle fix e
-      #    delle implementazioni nuove, regola da ora in poi»
-      #
-      # La v0.1.0 e' uscita con SOLE istruzioni: come si installa, come si
-      # verifica l'impronta, su quali due dispositivi. Tutto vero, tutto
-      # IDENTICO a ogni release futura, e non diceva a nessuno cosa fosse
-      # cambiato. L'unico riferimento al contenuto era il «Full Changelog»
-      # automatico, che manda a una lista di commit grezzi: e' il materiale da
-      # cui si scrive un changelog, non un changelog.
-      #
-      # ⛔ Il cancello sta QUI e non in una lista di cose da ricordare, perche'
-      # una regola che vive in una testa salta al primo turno lungo — stessa
-      # ragione del cancello sugli screenshot. Se la sezione manca la release
-      # NON esce: un tag da rifare costa meno di una release muta, e con le
-      # release immutabili una release muta non si corregge piu'.
-      - id: changelog
-        name: il changelog di questa versione, o non si pubblica
-        run: |
-          if [ ! -f CHANGELOG.md ]; then
-            echo "::error::CHANGELOG.md non esiste: questa release non potrebbe dire cosa e' cambiato"
-            exit 1
-          fi
-          # La sezione va da `## <tag>` fino al `## ` successivo.
-          sezione=$(awk -v cercata="## ${GITHUB_REF_NAME}" '
-            $0 == cercata { dentro = 1; next }
-            dentro && /^## / { exit }
-            dentro { print }
-          ' CHANGELOG.md)
-          if [ -z "$(printf '%s' "$sezione" | tr -d '[:space:]')" ]; then
-            echo "::error::CHANGELOG.md non ha una sezione '## ${GITHUB_REF_NAME}'. Scrivila prima di taggare: cosa e' nuovo, cosa e' stato corretto."
-            exit 1
-          fi
-          {
-            echo "testo<<FINE_DEL_CHANGELOG"
-            printf '%s\n' "$sezione"
-            echo "FINE_DEL_CHANGELOG"
-          } >> "$GITHUB_OUTPUT"
-          echo "changelog di ${GITHUB_REF_NAME}: $(printf '%s' "$sezione" | wc -l) righe"
 
       - uses: softprops/action-gh-release@v3
         with:

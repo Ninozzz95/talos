@@ -585,6 +585,52 @@ class TalosPrivilegePlugin : Plugin() {
             "shizuku", "developer" -> android.content.Intent(
                 android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS,
             )
+            /*
+             * ⭐⭐⭐ DIVENTARE L'ASSISTENTE SENZA IL PONTE — 2026-08-16.
+             *
+             * ## Perché serviva
+             *
+             * `createRequestRoleIntent(ROLE_ASSISTANT)` NON apre nessuna
+             * finestra, e non è una stranezza delle ROM cinesi: in `roles.xml`
+             * di AOSP il ruolo assistente è dichiarato
+             *
+             *     <role name="android.app.role.ASSISTANT" … requestable="false" …>
+             *
+             * MISURATO sul Pad il 2026-08-16, con TALOS tolto dal ruolo per la
+             * prova e rimesso subito dopo:
+             *
+             *     {"opened":true,"shown":false,"elapsedMs":53,
+             *      "granted":false,"resultCode":0}
+             *
+             * 53 ms e `RESULT_CANCELED`: l'activity nasce e muore. ⛔ E
+             * `isRoleAvailable` torna **true** lo stesso — dice che il ruolo
+             * ESISTE, non che si possa CHIEDERE. Erano due domande diverse
+             * trattate come una.
+             *
+             * ⇒ Senza questa porta l'unica strada rimasta era il ponte ADB.
+             *
+             * ## Perché QUESTA azione e non il collegamento diretto
+             *
+             * Il selettore vero è
+             * `com.android.permissioncontroller/…role.ui.DefaultAppActivity`,
+             * raggiungibile con `MANAGE_DEFAULT_APP` + `EXTRA_ROLE_NAME`. Da
+             * `adb shell` funziona e mostra l'elenco con TALOS dentro — ma:
+             *
+             *     exported=true  permission=android.permission.MANAGE_ROLE_HOLDERS
+             *
+             * cioè è riservata al sistema. Da qui sarebbe una SecurityException,
+             * cioè un pulsante morto — il difetto che inseguiamo da settimane.
+             *
+             * `ACTION_VOICE_INPUT_SETTINGS` invece risolve su
+             * `com.android.settings/.Settings${'$'}ManageAssistActivity`,
+             * `exported=true` e **senza riga `permission`**: aperta a chiunque.
+             * Atterra su «App assistente digitale», che ha in cima la riga
+             * «App assistente digitale predefinita» — un tocco dal selettore,
+             * con TALOS nell'elenco perché il manifest lo qualifica.
+             */
+            "assistant" -> android.content.Intent(
+                android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS,
+            )
             else -> {
                 call.reject("TALOS_PRIVILEGE_UNKNOWN_TARGET")
                 return
