@@ -14,6 +14,7 @@ import {
     talosPesoDegliAttrezzi,
     talosVaDifferito,
 } from '@/lib/tools/aperturaProgressiva'
+import { talosProfiloCompilato, talosRegistraProfilo } from '@/lib/tools/improntaDelProfilo'
 import { createAnthropicToolCallAccumulator, parseAnthropicToolCalls } from '@/lib/tools/wire'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
 import type { TalosMobileProviderAdapter } from '@/lib/chat/providerContracts'
@@ -63,15 +64,48 @@ import { talosNumericUsage } from '@/lib/chat/providers/usage'
  */
 const APERTURA_A_GRADI_ANTHROPIC = false
 
-function attrezziDaSpedire(tools: NonNullable<Parameters<typeof talosToolsForAnthropic>[0]>): unknown[] {
-    if (!APERTURA_A_GRADI_ANTHROPIC) return talosToolsForAnthropic(tools)
+function listaPerIlFilo(
+    tools: NonNullable<Parameters<typeof talosToolsForAnthropic>[0]>,
+): { lista: unknown[], nome: string } {
+    if (!APERTURA_A_GRADI_ANTHROPIC) {
+        return { lista: talosToolsForAnthropic(tools), nome: 'anthropic/interi' }
+    }
     const peso = talosPesoDegliAttrezzi(
         tools,
         (tool) => (talosToolsForAnthropic([tool])[0] as { input_schema?: unknown }).input_schema,
     )
     return talosConvieneAprireAGradi(tools, peso)
-        ? talosAttrezziAnthropicAGradi(tools, talosVaDifferito)
-        : talosToolsForAnthropic(tools)
+        ? { lista: talosAttrezziAnthropicAGradi(tools, talosVaDifferito), nome: 'anthropic/a-gradi' }
+        : { lista: talosToolsForAnthropic(tools), nome: 'anthropic/sotto-soglia' }
+}
+
+function attrezziDaSpedire(tools: NonNullable<Parameters<typeof talosToolsForAnthropic>[0]>): unknown[] {
+    const { lista, nome } = listaPerIlFilo(tools)
+    /*
+     * ⭐⭐ L'IMPRONTA DEL PROFILO, calcolata QUI perché è qui che nasce il
+     * prefisso — Fase 1.1.
+     *
+     * La cache dei prompt combacia per prefisso esatto e gli attrezzi stanno
+     * davanti a tutto: attrezzi → sistema → messaggi. Se questa lista cambia
+     * fra due messaggi della stessa conversazione, muore l'INTERA cache, non la
+     * parte cambiata — e finora sarebbe successo in silenzio, arrivando come un
+     * numero di token più alto senza nessuno che sappia perché.
+     *
+     * ⛔ In TALOS la causa probabile non è l'apertura a gradi (i differiti
+     * stanno già nel prefisso come abbozzi: la lista non cresce a conversazione
+     * aperta). È un PERMESSO cambiato: concedere o togliere un potere cambia
+     * quali attrezzi vengono offerti, quindi il prefisso, quindi la cache.
+     *
+     * Costa un `JSON.stringify` di una lista che stiamo comunque per
+     * serializzare per spedirla.
+     */
+    const esito = talosRegistraProfilo(talosProfiloCompilato(nome, lista, tools))
+    if (!esito.sopravvive) {
+        // ⛔ `warn` e non `info`: `console.info` non arriva in logcat, ed è già
+        // costato un giro di diagnosi a vuoto in questo progetto.
+        console.warn(`talos: il prefisso è cambiato, cache dei prompt persa — ${esito.perche}`)
+    }
+    return lista
 }
 
 /**

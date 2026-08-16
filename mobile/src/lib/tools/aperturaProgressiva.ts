@@ -93,7 +93,8 @@ export function talosPesoDegliAttrezzi(
  * che è pieno di `_` e di nomi composti, e per la domanda «sfondo i 10k token?»
  * conta solo questa.
  */
-const BYTE_PER_TOKEN = 3.7
+export const TALOS_BYTE_PER_TOKEN = 3.7
+const BYTE_PER_TOKEN = TALOS_BYTE_PER_TOKEN
 
 /** Le due soglie della documentazione Anthropic, in una funzione sola. */
 export function talosConvieneAprireAGradi(
