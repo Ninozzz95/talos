@@ -11,6 +11,20 @@ const REAL_MAIN = path.join(MOBILE_ROOT, 'android', 'app', 'src', 'main')
 const TOOL = path.join(MOBILE_ROOT, 'tools', 'android-assets', 'generate.mjs')
 const LAUNCHER = path.join(MOBILE_ROOT, 'tools', 'git-bash-launcher', 'launch.mjs')
 const BASH_CANDIDATES = ['C:/Program Files/Git/bin/bash.exe', 'C:/Program Files/Git/usr/bin/bash.exe']
+
+/**
+ * Dove sta Git Bash su questo computer — e `undefined` se non c'è.
+ *
+ * ⛔ Prima questa ricerca stava DENTRO il test, e la sua assenza diventava un
+ * fallimento: «git-bash present: expected undefined to be truthy». MISURATO il
+ * 2026-08-16 su `ubuntu-latest`, dove Git Bash non esiste e non può esistere —
+ * il lanciatore serve proprio ad aggirare `winpty`, che è una cosa di Windows.
+ *
+ * Un ambiente che non ha lo strumento non è un ambiente in cui lo strumento è
+ * rotto. ⇒ Dove Git Bash c'è, la prova gira e morde. Dove non c'è, dichiara di
+ * non applicarsi invece di dire il falso.
+ */
+const BASH_PATH = BASH_CANDIDATES.find((candidato) => fs.existsSync(candidato))
 const roots: string[] = []
 
 function sha256(file: string): string {
@@ -43,10 +57,9 @@ afterAll(() => {
     for (const r of roots) { try { fs.rmSync(r, { recursive: true, force: true }) } catch { /* pty handle race */ } }
 })
 
-describe('git bash launcher conformance', () => {
+describe.skipIf(!BASH_PATH)('git bash launcher conformance', () => {
     it('git bash launcher bypasses winpty and renders cancelled result after ctrl c', async () => {
-        const bashPath = BASH_CANDIDATES.find((c) => fs.existsSync(c))
-        expect(bashPath, 'git-bash present').toBeTruthy()
+        const bashPath = BASH_PATH!
         const { runGitBashSigintJourney, extractCancelledJson } = await import(pathToFileURL(LAUNCHER).href)
 
         const { root, res } = setupWorkspace()
