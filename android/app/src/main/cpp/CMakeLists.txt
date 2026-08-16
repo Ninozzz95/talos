@@ -29,9 +29,19 @@ if(NOT EXISTS ${LLAMA_SRC}/CMakeLists.txt)
     # Il sottomodulo è la cosa che un clone non porta se non gliela chiedi. Un
     # errore che lo dice per nome costa un minuto; uno che parla di header
     # mancanti costa un pomeriggio.
+    # ⛔ Il comando NON nomina `mobile/`: questo stesso file vive in due
+    # repository con due disposizioni — nello sviluppo l'app sta in `mobile/`,
+    # nel repository pubblicato quella cartella È la radice. Un percorso scritto
+    # a mano manderebbe metà dei lettori in una cartella che non esiste, e
+    # un'istruzione che manda in un posto inesistente è peggio di nessuna
+    # istruzione: la si segue, e si cerca il guasto dalla parte sbagliata.
+    #
+    # Senza argomento, `git submodule update` li aggiorna tutti — ed è giusto
+    # così: ce n'è uno solo, e se un giorno ce ne fosse un altro servirebbe
+    # comunque.
     message(FATAL_ERROR
         "llama.cpp non è nella cartella ${LLAMA_SRC}. È un sottomodulo git: "
-        "esegui `git submodule update --init --depth 1 mobile/third_party/llama.cpp`")
+        "esegui `git submodule update --init --depth 1` dalla radice del repository")
 endif()
 
 # `LLAMA_BUILD_COMMON` vale `${LLAMA_STANDALONE}`, che è FALSO quando llama.cpp
