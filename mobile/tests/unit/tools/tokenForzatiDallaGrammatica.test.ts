@@ -4,36 +4,27 @@ import { talosToolsForLocalEngine } from '@/lib/tools/registry'
 import { TALOS_AGENT_TOOL_IDS } from '@/lib/tools/toolControls'
 
 /**
- * ⭐⭐⭐ QUANTI TOKEN DI UNA TOOL CALL SONO GIÀ DECISI DALLA GRAMMATICA?
+ * Quanta parte di una tool call è decisa dal CONTRATTO e non dal modello.
  *
- * È la misura che decide se la tesi di Zethos (§8 di
- * `docs/superpowers/research/2026-08-16-zethos-in-casa-o-upstream.md`) è la
- * feature di punta o una nota a piè di pagina — e va fatta PRIMA di prometterla.
+ * Una chiamata a un attrezzo non è testo libero: la cornice JSON, le chiavi del
+ * protocollo, i nomi dei campi e i separatori sono fissati dallo schema. Il
+ * modello sceglie davvero solo i valori.
  *
- * ## Perché la domanda ha senso
- *
- * Quando la grammatica ammette **un solo** carattere possibile, l'output del
- * modello è irrilevante: quel carattere è già deciso. Un motore che se ne
- * accorge può scriverlo senza eseguire il forward pass — e aggiornare la KV di
- * tutto il tratto con **un solo prefill parallelo** invece di N passi
- * autoregressivi.
- *
- * ⛔ E il guadagno dipende dal dispositivo. MISURATO sul Pad 3, Holo-3.1-4B
- * Q4_K_M a 8 thread: prefill **65,1 tok/s**, decodifica **12,2 tok/s** —
- * rapporto **5,3×**. Ogni carattere spostato dalla decodifica al prefill costa
- * cinque volte meno. Su una GPU da datacentre quel rapporto è molto più
- * stretto: è il motivo per cui là la tecnica dà «oltre il 30%» e qui può dare
- * molto di più.
+ * ⇒ Questa misura dice **quanto è grande quella differenza**, ed è utile per
+ * una ragione concreta: quando si valuta un modello piccolo sul tool calling,
+ * la percentuale di output «corretto» è gonfiata da tutto ciò che non poteva
+ * essere sbagliato. Sapere che più della metà era già decisa cambia come si
+ * legge quel punteggio.
  *
  * ## Come si misura senza mentire
  *
  * Non si simula un tokenizer: si conta sui **caratteri** della chiamata vera,
- * chiedendo a ogni posizione se la forma JSON del contratto lascia una sola
+ * chiedendo a ogni posizione se la forma del contratto lascia una sola
  * possibilità. È una misura CONSERVATIVA — un tokenizer BPE raggruppa più
- * caratteri forzati in un token solo, quindi la frazione di TOKEN forzati è
- * ≥ della frazione di caratteri forzati.
+ * caratteri fissi in un token solo, quindi la frazione di TOKEN fissi è ≥ della
+ * frazione di caratteri fissi.
  *
- * ⛔ Non conta come «forzato» il contenuto libero: i valori delle stringhe, i
+ * ⛔ Non conta come «deciso» il contenuto libero: i valori delle stringhe, i
  * numeri, tutto ciò che il modello sceglie davvero.
  */
 
@@ -99,33 +90,15 @@ describe('⭐ quanto di una tool call è già deciso dalla grammatica', () => {
         for (const r of righe) console.log(r)
         console.log(`\n  TOTALE: ${forzati}/${totale} = ${percentuale}% dei caratteri`)
 
-        /*
-         * ⛔ Il conto sta QUI e non in una slide, così invecchia insieme al
-         * codice: se un giorno gli schemi cambiano forma, il numero cambia da
-         * solo e nessuno racconta in giro una cifra che non vale più.
-         *
-         * Le due velocità sono MISURATE sul Pad 3 (Holo-3.1-4B Q4_K_M, 8
-         * thread). Il resto è aritmetica, e va detto che è una PROIEZIONE: dice
-         * quanto varrebbe la tecnica, non quanto ha reso — quello lo dirà il
-         * dispositivo quando la tecnica esisterà.
-         */
-        const PREFILL = 65.1
-        const DECODIFICA = 12.2
-        const quota = forzati / totale
-        const oggi = 1 / DECODIFICA
-        const conSalto = (1 - quota) / DECODIFICA + quota / PREFILL
-        console.log(
-            `\n  PROIEZIONE (prefill ${PREFILL} contro decodifica ${DECODIFICA} tok/s, misurati sul Pad 3):`,
-        )
-        console.log(`    emissione di una tool call: ${(oggi / conSalto).toFixed(2)}× piu' veloce`)
-        console.log('    ⛔ e\' una proiezione da due misure, non una misura.')
+        console.log('\n  ⇒ piu\' della meta\' di una tool call non poteva essere sbagliata:')
+        console.log('    un punteggio di tool calling va letto sapendolo.')
 
         /*
-         * ⛔ La soglia non è un obiettivo: è il punto sotto il quale la tesi non
-         * regge. Se la frazione forzata scendesse sotto un terzo, spostarla non
-         * cambierebbe l'esito percepito e Zethos dovrebbe puntare altrove.
+         * ⛔ La soglia non è un obiettivo: è il punto sotto il quale questa
+         * misura smetterebbe di dire qualcosa di utile su come si legge un
+         * punteggio di tool calling.
          */
-        expect(percentuale, 'sotto un terzo la tesi del jump-forward non regge').toBeGreaterThan(33)
+        expect(percentuale, 'sotto un terzo la misura non direbbe piu\' niente').toBeGreaterThan(33)
     })
 
     /**

@@ -447,12 +447,18 @@ Titolo "FATTO — e adesso tocca a te"
 "     2. aggiungi LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md"
 "     3. rileggi il README con gli occhi di chi arriva e non sa niente"
 "     4. prova che si compili da zero:"
-"          cd $Destinazione\mobile ; npm ci ; npm run typecheck ; npx vitest run"
+# ⛔ `$Destinazione\mobile` NON ESISTE, e questa riga lo diceva da settimane.
+#    Nella copia pubblicata l'app È la radice: è tutto il senso
+#    dell'appiattimento. Chi avesse seguito l'istruzione sarebbe finito in una
+#    cartella che non c'è, e avrebbe concluso che la copia è rotta.
+#    ⇒ Un'istruzione che manda in un posto inesistente è peggio di nessuna
+#    istruzione: la prima volta la si segue, e si perde tempo a cercare l'errore
+#    dalla parte sbagliata.
+"          cd $Destinazione ; npm ci ; npm run typecheck ; npx vitest run"
 ""
 "  Poi, e solo poi:"
-"     cd $Destinazione"
-"     git remote add origin <la repo NUOVA, mai usata prima>"
-"     git push -u origin main"
+"     git -C $Destinazione remote add origin <la repo NUOVA, mai usata prima>"
+"     git -C $Destinazione push -u origin main"
 ""
 "  ⛔ La repo di destinazione dev'essere NUOVA e mai stata un fork privato di"
 "     questa: se lo fosse, tutto ciò che c'era nel fork prima della"
