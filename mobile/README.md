@@ -651,10 +651,10 @@ number in this README exists because a person ran it on a real device and looked
 at the result. Every guard exists because a person hit the failure it prevents.
 Every rejected approach was rejected by a person who had a reason.
 
-An AI editor is a very fast pair of hands. It is not the one deciding what to
-build, whether the thing actually works, or what to do when the measurement says
-something inconvenient. Those are the parts that make a product, and they had a
-single author.
+If you disagree with building software this way, I understand it and I respect
+it — it is a fair position, and one held by people worth listening to. Thank you
+for caring enough to read this far. The result is here to be installed, tried and
+judged, which is the only test that settles anything.
 
 ---
 
