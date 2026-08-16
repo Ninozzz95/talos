@@ -822,7 +822,41 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
     // deliberate opt-in persists because the flag is then already true.
     if (value.library_defaults_v1 !== true) {
         shellParsed.library_context_enabled = false
-        shellParsed.library_autosave_generated = false
+    }
+    /**
+     * ⛔⛔ QUI UNA MIGRAZIONE PIÙ VECCHIA ZITTIVA UNA DECISIONE PIÙ NUOVA.
+     *
+     * Trovato il 2026-08-16, guardando lo schermo dell'owner: «Salva
+     * automaticamente i file generati» era **spento**, e il default dichiarato
+     * venti righe sopra è `true`, con la sua ragione scritta:
+     *
+     * > Owner 2026-07-27: *«on by default. A document the model made and did
+     * > not save is simply lost — the chat scrolls away and the bytes go with
+     * > it, which is not a preference so much as a bug with a switch on it.»*
+     *
+     * La migrazione `library_defaults_v1` è della revisione di sicurezza del
+     * **25 luglio**, cioè DUE GIORNI PRIMA, e spegneva **tutti e due** gli
+     * interruttori. Quella revisione aveva ragione su `library_context_enabled`
+     * — mandare l'intera Libreria a un fornitore terzo è un consenso esplicito
+     * — ma il salvataggio automatico è finito dentro per compagnia: è locale,
+     * è un file della persona, e non esce da nessuna parte.
+     *
+     * ⇒ Risultato: quel `true` era **irraggiungibile da qualunque strada**. Su
+     * un'installazione nuova `parseTalosMobileSettings(null)` non ha la
+     * bandiera, quindi la migrazione gira lo stesso e lo spegne. Un default che
+     * nessun percorso può produrre non è un default: è codice morto che sembra
+     * una decisione.
+     *
+     * ⛔ E per chi la migrazione l'ha già passata non basta smettere di
+     * spegnerlo: ha `false` persistito. Quindi serve UN GIRO che lo rimetta —
+     * e vale la regola già scritta in questo file per gli altri default: un
+     * valore uguale al vecchio default è indistinguibile da «mai toccato». Qui
+     * la cosa è ancora più netta, perché quel `false` **non è mai stato una
+     * scelta di nessuno**: era una forzatura.
+     */
+    if (value.library_autosave_defaults_v2 !== true) {
+        shellParsed.library_autosave_generated
+            = DEFAULT_SHELL_PREFERENCES.library_autosave_generated
     }
     // Owner 2026-07-25: "di default large font size e small chat font size".
     // Same lesson as above — a changed default only reaches fresh installs, so
@@ -960,6 +994,10 @@ export function useSettingsStore(): SettingsStore {
                 presentation_v2: true,
                 defaults_v3: true,
                 library_defaults_v1: true,
+                // ⛔ La bandiera del giro che RIMETTE il salvataggio automatico
+                // al suo default: senza, girerebbe a ogni avvio e una scelta
+                // deliberata di spegnerlo non reggerebbe mai.
+                library_autosave_defaults_v2: true,
                 type_defaults_v1: true,
                 composer_split_v1: true,
                 shell: next.shell,

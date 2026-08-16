@@ -92,7 +92,6 @@ vi.mock('@/services/databaseProtection', () => ({
 // The provider key panel is reused wholesale rather than reimplemented; it
 // drags the whole model catalogue in, which this test does not need.
 vi.mock('@/components/talos/models/TalosMobileProviderRuntimePanel.vue', () => ({
-    __esModule: true,
     // `__esModule` matters: without it defineAsyncComponent treats the module
     // itself as the component and Vue reads properties off the mock.
     __esModule: true,
@@ -172,7 +171,18 @@ describe('what TALOS says it is, before asking for anything', () => {
          * nomina la capacita' sopravvive, ed e' anche quello che interessa a chi
          * legge la schermata: agire sul telefono.
          */
-        expect(text).toMatch(/on the phone itself/i) // acting on the phone itself
+        /*
+         * ⛔ E il 2026-08-16 la stessa lezione si e' ripetuta un gradino sotto.
+         *
+         * Qui c'era `/on the phone itself/i` — la CAPACITA', giusto — ma
+         * agganciata a una FORMULAZIONE sola. Agire sul telefono e' passato da
+         * «in arrivo» a fatto, il testo e' diventato «it acts inside your other
+         * apps», e questa riga e' andata rossa proprio mentre la schermata
+         * diceva una cosa piu' vera di prima.
+         *
+         * ⇒ Si accettano le forme in cui quella capacita' si dice davvero.
+         */
+        expect(text).toMatch(/acts inside your other apps|taps the button/i)
         expect(text).toMatch(/encrypted sync/i) // cloud, optional, off by default
         expect(text).toMatch(/encrypted Library/i) // the phone's own files
         wrapper.unmount()
@@ -189,20 +199,61 @@ describe('what TALOS says it is, before asking for anything', () => {
     it('keeps what is built apart from what is coming', async () => {
         // The modal this replaces mixed them, and the owner called it fake.
         const wrapper = await mountStory()
-        // The invariant that matters: nothing unbuilt is described in the
-        // present tense. Acting on the phone and cloud sync exist only in the
-        // future list, so the four things TALOS says it DOES must not mention
-        // them. (Named by capability, not by dependency: the dependency was
-        // Shizuku, it is gone, and a test pinned to a mechanism dies with it.)
-        const built = wrapper.findAll('li').map((node) => node.text())
-            .filter((text) => /encrypted on this phone|download a model|remembers what you tell|second model|Library/i.test(text))
-        expect(built.length).toBeGreaterThanOrEqual(4)
-        expect(built.join(' ')).not.toMatch(/on the phone itself|sync/i)
-        // And the future list says all three, in the future tense.
-        const coming = wrapper.findAll('li').map((node) => node.text()).join(' ')
+        /*
+         * L'invariante che conta: **niente di non costruito e' descritto al
+         * presente**, e niente di costruito resta nel futuro.
+         *
+         * ⛔ E il 2026-08-16 il secondo verso ha morso davvero. Agire sul
+         * telefono era in «in arrivo» da quando la funzione non c'era; adesso
+         * c'e', e il ponte non chiede nemmeno piu' il Debug wireless. Una
+         * promessa al futuro su una cosa gia' fatta non e' prudenza: fa
+         * sembrare l'app piu' piccola di quello che e', e chi la legge crede
+         * di non poterla usare.
+         *
+         * ⇒ Restano in arrivo SOLO Zethos e la sincronizzazione. Se un giorno
+         * uno dei due esce, questo test va rosso — ed e' esattamente il suo
+         * lavoro.
+         */
+        const voci = wrapper.findAll('li').map((node) => node.text())
+        const built = voci.filter((text) =>
+            /encrypted on this phone|download a model|acts inside|verified state|wake word|remembers what you tell|second model|Library/i.test(text))
+        expect(built.length).toBeGreaterThanOrEqual(6)
+        // Niente di NON costruito raccontato come se ci fosse.
+        expect(built.join(' ')).not.toMatch(/zethos|encrypted sync/i)
+        // E il futuro dice quei due, e solo quelli.
+        const coming = voci.join(' ')
         expect(coming).toMatch(/zethos/i)
-        expect(coming).toMatch(/on the phone itself/i)
         expect(coming).toMatch(/encrypted sync/i)
+        wrapper.unmount()
+    })
+
+    /*
+     * ⭐ OTTO TITOLI A COLPO D'OCCHIO — owner 2026-08-16.
+     *
+     * Con otto tratti aperti la prima pagina era un muro di testo, e un muro si
+     * salta tutto invece di leggerne un pezzo. Adesso si vedono i titoli e si
+     * apre solo quello che interessa.
+     *
+     * ⛔ Si prova che sono `<details>` NATIVI e non un accordion nostro: da
+     * quello dipendono la tastiera, `aria-expanded` e la ricerca nel testo del
+     * browser — tre cose che un accordion fatto a mano deve ricablare, e tre
+     * modi di sbagliarle.
+     */
+    it('mostra i titoli, e tiene le descrizioni dentro un collasso', async () => {
+        const wrapper = await mountStory()
+        const collassi = wrapper.findAll('details')
+        expect(collassi.length).toBeGreaterThanOrEqual(6)
+
+        // Ogni collasso ha il TITOLO come intestazione…
+        const primo = collassi[0]!
+        expect(primo.find('summary').exists()).toBe(true)
+        expect(primo.find('summary').text()).toMatch(/no account/i)
+        // …e la descrizione DENTRO, non nell'intestazione.
+        expect(primo.find('summary').text()).not.toMatch(/there is no us to reach/i)
+        expect(primo.text()).toMatch(/there is no us to reach/i)
+
+        // ⛔ Chiusi in partenza: se si aprissero da soli, il muro tornerebbe.
+        expect(collassi.every((d) => d.attributes('open') === undefined)).toBe(true)
         wrapper.unmount()
     })
 
@@ -467,6 +518,24 @@ describe('first-run setup', () => {
         expect(spy).not.toHaveBeenCalled()
         // E si puo chiudere senza concedere.
         expect(wrapper.find('[data-testid="talos-intro-cta"]').exists()).toBe(true)
+
+        /*
+         * ⭐ E NON C'E' SOLO IL BACKGROUND — owner 2026-08-16: «i permessi
+         * devono essere completi, assicurati che ci siano anche quelli del
+         * controllo del dispositivo, e skippabili».
+         *
+         * Il passo ne chiedeva UNO; gli altri nove esistevano solo in
+         * Impostazioni, dove chi ha appena installato l'app non sa di dover
+         * andare. La prima volta che il microfono serviva, la richiesta
+         * arrivava a freddo in mezzo a un'altra cosa.
+         *
+         * ⛔ E il pannello e' QUELLO delle Impostazioni, non una copia: le
+         * righe e i loro stati vivono in `permissionRows.ts` e cambiano, e due
+         * schermate che li disegnano per conto loro divergono al primo cambio.
+         */
+        expect(wrapper.find('[data-testid="talos-setup-all-permissions"]').exists()).toBe(true)
+        // ⛔ E nemmeno mostrarli chiede niente da solo.
+        expect(spy).not.toHaveBeenCalled()
         wrapper.unmount()
     })
 

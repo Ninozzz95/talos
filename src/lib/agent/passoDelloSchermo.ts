@@ -31,12 +31,86 @@
 /** Un elemento come lo vede il pilota: poche cose, tutte utili a decidere. */
 export interface TalosElementoSchermo {
     indice: number
-    /** `tocca` · `campo` · `scorri` · `interruttore` */
-    tipo: 'tocca' | 'campo' | 'scorri' | 'interruttore'
+    /** `tocca` · `campo` · `scorri` · `interruttore` · `cursore` */
+    tipo: 'tocca' | 'campo' | 'scorri' | 'interruttore' | 'cursore'
     /** Testo o descrizione: ciò che una persona leggerebbe. */
     etichetta: string
     /** Solo per gli interruttori: acceso o spento adesso. */
     attivo?: boolean
+    /**
+     * ⛔ Solo per i cursori — e senza questi tre `imposta` è inutilizzabile.
+     *
+     * «Alza il volume» non si esegue se non si sa dov'è adesso; «mettilo a
+     * metà» nemmeno, se non si sa qual è il massimo. Un cursore senza la sua
+     * scala è un elemento che il modello può soltanto guardare.
+     */
+    valore?: number
+    minimo?: number
+    massimo?: number
+
+    /**
+     * ⭐⭐ I DUE CAMPI CHE IL MODELLO NON VEDE — e che costano ZERO token.
+     *
+     * Servono a risolvere gli ordinali («il primo contatto») **nel codice**,
+     * non nella testa del modello. Non entrano in [talosOsservazione]: entrano
+     * solo nel risolutore.
+     *
+     * ⛔ È qui la differenza con lo stato dell'arte. GUI-Owl manda tutto al
+     * modello e lo lascia ragionare sull'ordine; noi mandiamo l'elenco compatto
+     * di sempre e l'ordine lo risolve una funzione deterministica. Chi lo manda
+     * al modello paga i campi a **ogni passo** del ciclo, e sbaglia quando il
+     * modello conta male.
+     */
+    posizione?: number
+    /** «Il primo» ha senso solo dentro un contenitore che scorre. */
+    inLista?: boolean
+}
+
+/**
+ * ⛔ Il cappello sull'etichetta — e il numero che lo impone.
+ *
+ * MISURATO il 2026-08-16 su tre schermate vere del Pad (OnePlus Wi-Fi, AOSP
+ * applicazioni, Play Store), 69 elementi interattivi. I numeri li stampa
+ * `pesoDelloSguardo.test.ts`, che è la fonte: qui sono una copia che quel test
+ * fa cadere se smette di essere vera.
+ *
+ * | formato | token per sguardo | pulsanti muti recuperati |
+ * |---|---:|---:|
+ * | senza recupero | 277 | 0 su 50 |
+ * | i undici campi nel testo | **4.794 (17,3×)** | 50 su 50 |
+ * | col recupero **asciugato** | **535 (1,93×)** | **44 su 50** |
+ *
+ * Senza il cappello il recupero costava 768 token (2,8×): veniva quasi tutto
+ * dal Play Store, dove il `contentDescription`
+ * di una scheda è titolo **più** editore, categorie e «Valutazione a stelle…»
+ * separati da `\n`: 135 caratteri per dire «Crunchyroll».
+ *
+ * ⇒ Il nome è **il primo capoverso** — è così che Android le compone. Si taglia
+ * lì, e si cappa: la mediana delle etichette recuperate è **18 caratteri**, e
+ * 33 su 44 stanno già sotto il tetto senza essere toccate.
+ *
+ * ⛔ E il verso contrario, che è il vero motivo per cui questa funzione esiste
+ * separata: un'etichetta vuota deve restare vuota. Se inventasse un nome per i
+ * sei pulsanti che a schermo non ne hanno, l'unico modo di accorgersene sarebbe
+ * vedere TALOS premere quello sbagliato.
+ */
+export const TALOS_ETICHETTA_MAX = 40
+
+/**
+ * ⛔ Un cursore che dice `7.000000476837158` non aiuta nessuno.
+ *
+ * `RangeInfo` porta dei `float`, e un volume da 0 a 15 arriva con la coda
+ * binaria attaccata. Si arrotonda a un decimale e si toglie lo `.0`: al modello
+ * serve «7 da 0 a 15», non la precisione della virgola mobile.
+ */
+function arrotonda(n: number): string {
+    return String(Math.round(n * 10) / 10)
+}
+
+export function talosEtichettaAsciutta(grezza: string, max = TALOS_ETICHETTA_MAX): string {
+    const primo = grezza.replace(/\r\n|\r|\n/g, '\n').split('\n')[0]?.trim() ?? ''
+    if (primo.length <= max) return primo
+    return `${primo.slice(0, max - 1).trimEnd()}…`
 }
 
 /**
@@ -49,14 +123,66 @@ export interface TalosElementoSchermo {
  */
 export const TALOS_AZIONI = [
     'tocca',
+    'premiALungo',
     'scrivi',
     'scorri',
+    'imposta',
     'indietro',
     'home',
+    'recenti',
     'apri_app',
     'attendi',
     'fine',
 ] as const
+
+/**
+ * ⭐ Le tre aggiunte del 2026-08-16, e perché ognuna passa il filtro.
+ *
+ * GUI-Owl (tabella 9) dichiara dieci azioni: `key, click, long_press, swipe,
+ * type, answer, system_button, open, wait, terminate`. Noi ne avevamo **otto
+ * dichiarate ma tre eseguibili**. Adesso il ponte le esegue davvero, e ognuna
+ * ha risposto alla domanda che questo file pone a tutte:
+ *
+ * | azione | perché serve | come si verifica |
+ * |---|---|---|
+ * | `premiALungo` | il menu contestuale non si apre altrimenti — rinomina, elimina, seleziona | lo schermo cambia, e chi guida riguarda |
+ * | `recenti` | «rimetti quello di prima» senza sapere come si chiama l'app | il pacchetto in primo piano cambia |
+ * | `imposta` | ⭐ i cursori | **rileggendo `rangeInfo`**: porta la propria prova |
+ *
+ * ## ⛔⛔ E quello che il DISPOSITIVO ha insegnato su `imposta`
+ *
+ * Tre difetti in fila, e nessuno dei tre lo poteva trovare un test.
+ *
+ * 1. **L'occhio non vedeva i cursori.** Un `AbsSeekBar` dichiara
+ *    `clickable=false`, `checkable=false`, `scrollable=false` e non è un
+ *    `EditText`: cadeva nell'`else` di `interattivi()`. `imposta` era **codice
+ *    morto** — il modello non ha mai visto un cursore in vita sua.
+ * 2. **`ACTION_SET_PROGRESS` viene DICHIARATA, ACCETTATA e IGNORATA.** Sul Pad,
+ *    `azioniDichiarate` contiene `16908349` (è lei), `performAction` risponde
+ *    `true`, e il valore resta dov'era. Un `fatto: true` con niente di fatto.
+ *    ⇒ Adesso si rilegge, e se non si è mosso si ripiega sui passi
+ *    (`SCROLL_FORWARD`/`BACKWARD`, che il widget onora): 1200 → 800 **in due
+ *    passi**, verificati uno per uno.
+ * 3. **La rilettura era troppo presta.** `refresh()` rispondeva col valore
+ *    vecchio e il ciclo concludeva «non si muove più» mentre il cursore stava
+ *    ancora scendendo. Trenta millisecondi di pausa, ed è lo stesso inciampo
+ *    del tocco che parte prima che lo scorrimento si fermi.
+ *
+ * ⇒ E gli esiti si dicono **diversi**: `nonEUnCursore`, `impostaNonHaMosso` e
+ * `impostaArrivataA:900` portano chi guida a tre decisioni diverse.
+ *
+ * ## ⛔ E la quarta che NON è entrata: `trascina`
+ *
+ * Il piano la chiedeva. Non c'è, e la ragione va scritta invece che taciuta:
+ * un trascinamento vero pretende `dispatchGesture`, cioè **coordinate** — e
+ * l'invariante di `TalosOcchio` è *«si agisce sul NODO, non sul pixel»*,
+ * proprio perché la conversione in pixel sbaglia sugli elementi coperti.
+ *
+ * Per i cursori, che erano il caso d'uso vero, `imposta` fa di meglio: è
+ * esatta e verificabile, mentre uno `swipe` ti lascia senza sapere dove sei
+ * arrivato. Resta fuori il riordino per trascinamento — e resta fuori finché
+ * non sappiamo **verificarlo**, che è la regola di questo elenco.
+ */
 
 export type TalosAzioneNome = typeof TALOS_AZIONI[number]
 
@@ -66,8 +192,16 @@ export interface TalosAzione {
     indice?: number
     /** Il testo da scrivere, o il nome dell'app da aprire, o il motivo di `fine`. */
     testo?: string
-    /** Per `scorri`: dove. */
+    /**
+     * Per `scorri`: dove.
+     *
+     * ⛔ `su` vuol dire «fammi vedere quello che sta SOPRA», non «muovi il
+     * contenuto verso l'alto». Le due letture portano allo stesso gesto fatto
+     * al contrario, e l'istruzione al modello lo dice con le parole.
+     */
     direzione?: 'su' | 'giu' | 'sinistra' | 'destra'
+    /** Per `imposta`: dove portare il cursore, nella sua scala. */
+    valore?: number
     /**
      * ⭐ PERCHÉ. Non è decorazione: è ciò che TALOS racconta ad alta voce mentre
      * guida, ed è l'unico modo che ha una persona di capire che sta sbagliando
@@ -94,8 +228,26 @@ export interface TalosAzione {
 export function talosOsservazione(elementi: readonly TalosElementoSchermo[]): string {
     return elementi
         .map((e) => {
-            const stato = e.tipo === 'interruttore' ? (e.attivo ? ' [acceso]' : ' [spento]') : ''
-            return `${e.indice} ${e.tipo} ${JSON.stringify(e.etichetta)}${stato}`
+            /*
+             * ⛔ Il cursore mostra DOVE È e fin dove arriva. Costa ~4 token per
+             * cursore, e ce n'è una manciata per schermata: è il prezzo minimo
+             * perché «alza il volume» sia una richiesta eseguibile invece che
+             * un tiro a indovinare.
+             */
+            const stato = e.tipo === 'interruttore'
+                ? (e.attivo ? ' [acceso]' : ' [spento]')
+                : e.tipo === 'cursore' && e.valore !== undefined
+                    ? ` [${arrotonda(e.valore)} da ${arrotonda(e.minimo ?? 0)} a ${arrotonda(e.massimo ?? 0)}]`
+                    : ''
+            /*
+             * ⛔ `posizione` e `inLista` NON entrano qui, ed è deliberato: sono
+             * per il risolutore degli ordinali, che gira nel codice. Metterli
+             * nel testo li farebbe pagare a ogni passo del ciclo per un lavoro
+             * che una funzione fa meglio e gratis. Il conto sta in
+             * `pesoDelloSguardo.test.ts`, e si rompe se qualcuno li aggiunge.
+             */
+            const etichetta = talosEtichettaAsciutta(e.etichetta)
+            return `${e.indice} ${e.tipo} ${JSON.stringify(etichetta)}${stato}`
         })
         .join('\n')
 }
@@ -123,11 +275,17 @@ export function talosIstruzioneDelPilota(input: {
         '',
         'Rispondi SOLO con una riga JSON, senza spiegazioni fuori dal JSON:',
         '{"azione":"<nome>","indice":<numero>,"testo":"<testo>",',
-        ' "direzione":"su|giu|sinistra|destra","perche":"<in poche parole>"}',
+        ' "direzione":"su|giu|sinistra|destra","valore":<numero>,',
+        ' "perche":"<in poche parole>"}',
         '',
         `Azioni: ${TALOS_AZIONI.join(', ')}.`,
-        '- tocca / scrivi / scorri vogliono "indice"',
+        '- tocca / premiALungo / scrivi / scorri / imposta vogliono "indice"',
         '- scrivi vuole anche "testo"',
+        '- premiALungo apre i menu contestuali (rinomina, elimina, seleziona)',
+        '- scorri vuole "direzione". "su" vuol dire FAMMI VEDERE QUELLO SOPRA,',
+        '  "giu" quello sotto. Senza direzione si va avanti.',
+        '- imposta vuole "valore": e\' per i cursori, e li porta esattamente li\'',
+        '- recenti riapre l\'app di prima, quando non sai come si chiama',
         '- apri_app vuole "testo" col nome dell\'app',
         '- fine quando l\'obiettivo e\' raggiunto o impossibile, con "perche"',
         '',
@@ -148,6 +306,7 @@ export type TalosMotivoScarto =
     | 'indiceMancante'
     | 'indiceFuoriElenco'
     | 'testoMancante'
+    | 'valoreMancante'
 
 export type TalosLetturaAzione =
     | { ok: true; azione: TalosAzione }
@@ -188,6 +347,7 @@ export function talosLeggiAzione(
     }
     const azione = nome as TalosAzioneNome
     const vuoleIndice = azione === 'tocca' || azione === 'scrivi'
+        || azione === 'premiALungo' || azione === 'imposta'
     const indice = typeof o.indice === 'number' ? o.indice : undefined
     if (vuoleIndice && indice === undefined) {
         return { ok: false, motivo: 'indiceMancante', dettaglio: azione }
@@ -205,6 +365,17 @@ export function talosLeggiAzione(
         || o.direzione === 'sinistra' || o.direzione === 'destra'
         ? o.direzione
         : undefined
+    /*
+     * ⛔ `imposta` senza valore non si esegue «al centro»: un cursore portato a
+     * caso è un volume, una luminosità o un limite di spesa messo a caso. Si
+     * scarta, e chi guida riprova sapendo cosa manca.
+     */
+    const valore = typeof o.valore === 'number' && Number.isFinite(o.valore)
+        ? o.valore
+        : undefined
+    if (azione === 'imposta' && valore === undefined) {
+        return { ok: false, motivo: 'valoreMancante', dettaglio: azione }
+    }
     return {
         ok: true,
         azione: {
@@ -212,6 +383,7 @@ export function talosLeggiAzione(
             ...(indice !== undefined ? { indice } : {}),
             ...(testo !== undefined ? { testo } : {}),
             ...(direzione ? { direzione } : {}),
+            ...(valore !== undefined ? { valore } : {}),
             ...(typeof o.perche === 'string' && o.perche.trim()
                 ? { perche: o.perche.trim() }
                 : {}),
