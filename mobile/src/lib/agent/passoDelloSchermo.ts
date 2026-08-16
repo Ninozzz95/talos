@@ -37,6 +37,59 @@ export interface TalosElementoSchermo {
     etichetta: string
     /** Solo per gli interruttori: acceso o spento adesso. */
     attivo?: boolean
+
+    /**
+     * ⭐⭐ I DUE CAMPI CHE IL MODELLO NON VEDE — e che costano ZERO token.
+     *
+     * Servono a risolvere gli ordinali («il primo contatto») **nel codice**,
+     * non nella testa del modello. Non entrano in [talosOsservazione]: entrano
+     * solo nel risolutore.
+     *
+     * ⛔ È qui la differenza con lo stato dell'arte. GUI-Owl manda tutto al
+     * modello e lo lascia ragionare sull'ordine; noi mandiamo l'elenco compatto
+     * di sempre e l'ordine lo risolve una funzione deterministica. Chi lo manda
+     * al modello paga i campi a **ogni passo** del ciclo, e sbaglia quando il
+     * modello conta male.
+     */
+    posizione?: number
+    /** «Il primo» ha senso solo dentro un contenitore che scorre. */
+    inLista?: boolean
+}
+
+/**
+ * ⛔ Il cappello sull'etichetta — e il numero che lo impone.
+ *
+ * MISURATO il 2026-08-16 su tre schermate vere del Pad (OnePlus Wi-Fi, AOSP
+ * applicazioni, Play Store), 69 elementi interattivi. I numeri li stampa
+ * `pesoDelloSguardo.test.ts`, che è la fonte: qui sono una copia che quel test
+ * fa cadere se smette di essere vera.
+ *
+ * | formato | token per sguardo | pulsanti muti recuperati |
+ * |---|---:|---:|
+ * | senza recupero | 277 | 0 su 50 |
+ * | i undici campi nel testo | **4.794 (17,3×)** | 50 su 50 |
+ * | col recupero **asciugato** | **535 (1,93×)** | **44 su 50** |
+ *
+ * Senza il cappello il recupero costava 768 token (2,8×): veniva quasi tutto
+ * dal Play Store, dove il `contentDescription`
+ * di una scheda è titolo **più** editore, categorie e «Valutazione a stelle…»
+ * separati da `\n`: 135 caratteri per dire «Crunchyroll».
+ *
+ * ⇒ Il nome è **il primo capoverso** — è così che Android le compone. Si taglia
+ * lì, e si cappa: la mediana delle etichette recuperate è **18 caratteri**, e
+ * 33 su 44 stanno già sotto il tetto senza essere toccate.
+ *
+ * ⛔ E il verso contrario, che è il vero motivo per cui questa funzione esiste
+ * separata: un'etichetta vuota deve restare vuota. Se inventasse un nome per i
+ * sei pulsanti che a schermo non ne hanno, l'unico modo di accorgersene sarebbe
+ * vedere TALOS premere quello sbagliato.
+ */
+export const TALOS_ETICHETTA_MAX = 40
+
+export function talosEtichettaAsciutta(grezza: string, max = TALOS_ETICHETTA_MAX): string {
+    const primo = grezza.replace(/\r\n|\r|\n/g, '\n').split('\n')[0]?.trim() ?? ''
+    if (primo.length <= max) return primo
+    return `${primo.slice(0, max - 1).trimEnd()}…`
 }
 
 /**
@@ -95,7 +148,15 @@ export function talosOsservazione(elementi: readonly TalosElementoSchermo[]): st
     return elementi
         .map((e) => {
             const stato = e.tipo === 'interruttore' ? (e.attivo ? ' [acceso]' : ' [spento]') : ''
-            return `${e.indice} ${e.tipo} ${JSON.stringify(e.etichetta)}${stato}`
+            /*
+             * ⛔ `posizione` e `inLista` NON entrano qui, ed è deliberato: sono
+             * per il risolutore degli ordinali, che gira nel codice. Metterli
+             * nel testo li farebbe pagare a ogni passo del ciclo per un lavoro
+             * che una funzione fa meglio e gratis. Il conto sta in
+             * `pesoDelloSguardo.test.ts`, e si rompe se qualcuno li aggiunge.
+             */
+            const etichetta = talosEtichettaAsciutta(e.etichetta)
+            return `${e.indice} ${e.tipo} ${JSON.stringify(etichetta)}${stato}`
         })
         .join('\n')
 }
