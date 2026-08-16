@@ -221,6 +221,31 @@ export function createTalosDocumentTools(
             const size = Math.max(1, Math.round(document.bytes.byteLength / 1024))
             return {
                 ok: true,
+                /*
+                 * ⛔ Il dettaglio porta la DIMENSIONE, che qui non è un
+                 * abbellimento: questo attrezzo riapre il file dopo averlo
+                 * scritto, e i KB sono ciò che quella rilettura ha trovato. Un
+                 * documento da 0 KB scritto «con successo» si riconosce a colpo
+                 * d'occhio, e la frase da sola non lo farebbe vedere.
+                 */
+                scheda: {
+                    tipo: 'creato' as const,
+                    titolo: document.fileName,
+                    genere: 'Documento',
+                    dettaglio: `${size} KB`,
+                    /*
+                     * ⛔ NIENTE `dove`, e l'ho scoperto guardando le rotte
+                     * invece di assumerle: la Libreria vive su `/context` e NON
+                     * ha una rotta per singolo file. Avevo scritto
+                     * `/library/${saved.id}`, che non esiste — un pulsante che
+                     * non porta da nessuna parte è peggio di nessun pulsante,
+                     * ed è la stessa regola per cui la sveglia tace
+                     * sull'annulla che la ROM non le lascia fare.
+                     *
+                     * ⇒ Quando la Libreria avrà una schermata per file, il
+                     * `dove` arriva qui.
+                     */
+                },
                 content: [
                     `Created "${document.fileName}" (${size} KB) and saved it to the Library.`,
                     // What the check actually found, so the model can repeat
