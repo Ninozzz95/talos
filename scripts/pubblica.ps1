@@ -1,7 +1,12 @@
-# ⭐ PUBBLICA — un comando solo, e l'ultimo passo resta tuo.
+# ⭐ PUBBLICA — un comando solo, e il via resta tuo.
 #
-# Rigenera la cartella pubblicabile, la controlla, e ti dice ESATTAMENTE cosa
-# incollare per spingere. Non spinge: `git push` è dell'owner, sempre.
+# Rigenera la cartella pubblicabile, la controlla, e mostra ESATTAMENTE il
+# comando per spingere. Non spinge da sé: il push si CHIEDE, ogni volta.
+#
+# ⛔ Regola cambiata il 2026-08-16 — prima era «MAI PUSH», adesso l'owner ha
+# detto: «sei autorizzato a fare push, ma sempre solo dopo la mia
+# autorizzazione». Il gesto che conta è la conferma del PreToolUse hook
+# (.claude/hooks/mai-push.mjs), non una frase in un messaggio.
 #
 #   .\scripts\pubblica.ps1            guarda e basta
 #   .\scripts\pubblica.ps1 -Prepara   rigenera la copia e mostra il comando
@@ -66,15 +71,20 @@ if (-not $avanti -or [int]$avanti -eq 0) {
 
 ""
 "═" * 72
-"  ADESSO TOCCA A TE — incolla questo"
+"  PRONTO — ma il via lo dai tu"
 "═" * 72
 ""
 "    git -C $CopiaPosix push"
 ""
-Riga "Nella chat di Claude Code, mettici un `!` davanti:"
+Riga "Dal 2026-08-16 questo comando può lanciarlo anche Claude, ma SOLO dopo che"
+Riga "gliel'hai autorizzato per questo push: te lo chiede dicendo cosa esce, e"
+Riga "l'hook lo ferma finché non confermi tu."
+""
+Riga "Se preferisci lanciarlo tu, nella chat mettici un `!` davanti:"
 ""
 "    ! git -C $CopiaPosix push"
 ""
-Riga "⛔ Non usare `cd <percorso> ; git push`: se il cd fallisce, il push parte"
-Riga "   dalla cartella corrente e va sul repo sbagliato. Con `git -C` non può."
+Riga "⛔ In nessuno dei due casi si usa `cd <percorso> ; git push`: se il cd"
+Riga "   fallisce, il push parte dalla cartella corrente e va sul repo sbagliato."
+Riga "   Con `git -C` non può — e l'hook nega la forma sciolta."
 ""
