@@ -118,6 +118,22 @@ export function createTalosLibraryExportTools(
             return {
                 ok: true,
                 content: `Saved "${result.displayName}" to the location the user chose and verified all ${result.bytesWritten} bytes.`,
+                /*
+                 * ⛔ Il file è uscito dalla Libreria e sta dove l'ha messo la
+                 * persona: **niente `dove`**, perché TALOS non sa aprire una
+                 * cartella di sistema e un pulsante che non porta da nessuna
+                 * parte è peggio di nessun pulsante.
+                 *
+                 * ⇒ E i byte sono nel dettaglio, non nella frase soltanto:
+                 * «verificato» qui vuol dire che sono stati RILETTI dopo la
+                 * scrittura, ed è il numero che lo dimostra.
+                 */
+                scheda: {
+                    tipo: 'creato' as const,
+                    titolo: result.displayName,
+                    genere: 'File salvato',
+                    dettaglio: `${result.bytesWritten} byte`,
+                },
                 evidence: {
                     library_file_id: selected.id,
                     file_name: result.displayName,
