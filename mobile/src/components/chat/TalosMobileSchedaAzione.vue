@@ -686,34 +686,10 @@ const parolaStato = (acceso: boolean): string => (acceso
     font-size: calc(1.1rem * var(--talos-ui-scale, 1));
     line-height: 1;
 }
-.talos-levetta {
-    inline-size: 2.9rem;
-    block-size: 1.7rem;
-    flex: none;
-    position: relative;
-    padding: 0;
-    border-radius: 99px;
-    background: var(--primary);
-    border: 1px solid var(--primary);
-    cursor: pointer;
-    transition: background .18s ease, border-color .18s ease;
-}
-.talos-levetta::after {
-    content: "";
-    position: absolute;
-    inset-block-start: 2px;
-    inset-inline-end: 2px;
-    inline-size: 1.25rem;
-    block-size: 1.25rem;
-    border-radius: 50%;
-    background: var(--primary-foreground);
-}
-.talos-levetta[aria-checked="false"] { background: var(--muted); border-color: var(--border); }
-.talos-levetta[aria-checked="false"]::after {
-    inset-inline-end: auto;
-    inset-inline-start: 2px;
-    background: var(--muted-foreground);
-}
+/* ⛔ `.talos-levetta` è stata promossa a `src/style.css` il 2026-08-16, perché
+   ora la disegnano anche le impostazioni: uno stile `scoped` non attraversa i
+   componenti, e tenerne due copie significa che un giorno divergono. Qui non
+   resta niente — la scheda continua a usarla, la prende da lì. */
 .talos-levetta:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 
 /*
