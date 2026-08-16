@@ -99,6 +99,40 @@ function rowTitle(row: TalosPermissionRow): string {
 function rowPurpose(row: TalosPermissionRow): string {
     return t(`privacyPermissions.rows.${row.id}.purpose`)
 }
+
+/**
+ * ⭐⭐ COSA DICE UNA RIGA CHE NON HA UNO STATO DA LEGGERE — 2026-08-16.
+ *
+ * MISURATO sul Pad: «Dove ti trovi» e «File scelti da te» non dicevano niente,
+ * né a schermo né nel nome accessibile. Le altre otto dicevano «Consentito», e
+ * l'unica differenza era un cerchietto tratteggiato: l'ASSENZA di una parola
+ * faceva il lavoro di una parola. È lo stesso difetto del 14 agosto, quando
+ * quattro righe comparivano con un cerchio vuoto e nient'altro.
+ *
+ * Per la posizione la causa era nel nativo — il plugin non la raccontava, ed è
+ * stata aggiunta. Ma restano righe che uno stato **non ce l'hanno per natura**:
+ *
+ *     kind 'none'    → non è un permesso. I file si concedono SCEGLIENDOLI nel
+ *                      selettore di sistema; il blocco app, il controllo del
+ *                      telefono e i modelli locali non chiedono niente a nessuno.
+ *     kind 'install' → concesso all'installazione, non revocabile.
+ *
+ * ⛔ E resta il caso in cui lo stato è ignoto perché il sistema non ha ancora
+ * risposto: lì si TACE, ed è voluto. Dire «non richiesto» quando non lo
+ * sappiamo è inventare un fatto, e su questa pagina un fatto inventato vale
+ * doppio. Per questo la funzione torna `null` invece di una frase generica.
+ */
+function etichettaSenzaStato(row: TalosPermissionRow): string | null {
+    if (row.kind === 'install') return t('privacyPermissions.grantedAtInstall')
+    if (row.kind === 'none') return t('privacyPermissions.nothingToGrant')
+    return null
+}
+
+/** Ciò che una riga dice di sé: lo stato se c'è, altrimenti la sua natura. */
+function etichettaDellaRiga(row: TalosPermissionRow): string | null {
+    const stato = stateOf(row)
+    return stato ? permissionLabel(stato) : etichettaSenzaStato(row)
+}
 function permissionLabel(state: TalosPermissionState): string {
     const key = state === 'prompt-with-rationale' ? 'rationale' : state
     return t(`privacyPermissions.states.${key}`)
@@ -166,7 +200,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
             :data-permission-row="row.id"
             class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3"
             role="group"
-            :aria-label="stateOf(row) ? `${rowTitle(row)}, ${permissionLabel(stateOf(row)!)}` : rowTitle(row)"
+            :aria-label="etichettaDellaRiga(row) ? `${rowTitle(row)}, ${etichettaDellaRiga(row)}` : rowTitle(row)"
         >
             <div class="flex items-center gap-2">
                 <CircleCheck
@@ -185,14 +219,10 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
                      is not a state, and a screen reader gets it from the group's
                      own label. -->
                 <span
-                    v-if="stateOf(row)"
+                    v-if="etichettaDellaRiga(row)"
                     class="ml-auto text-2xs uppercase tracking-wide text-[var(--talos-muted)]"
-                    aria-live="polite"
-                >{{ permissionLabel(stateOf(row)!) }}</span>
-                <span
-                    v-else-if="row.kind === 'install'"
-                    class="ml-auto text-2xs uppercase tracking-wide text-[var(--talos-muted)]"
-                >{{ t('privacyPermissions.grantedAtInstall') }}</span>
+                    :aria-live="stateOf(row) ? 'polite' : undefined"
+                >{{ etichettaDellaRiga(row) }}</span>
             </div>
 
             <p class="mt-1.5 text-xs leading-5 text-[var(--talos-muted)]">{{ rowPurpose(row) }}</p>
