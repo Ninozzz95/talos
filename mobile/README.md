@@ -1,4 +1,6 @@
-# TALOS
+<p align="center">
+  <img src="docs/immagini/talos-logo.png" alt="TALOS" width="420">
+</p>
 
 <p align="center">
   <strong>Your AI. Your phone. Your models. Your rules.</strong>
@@ -111,6 +113,84 @@ The local path includes:
 - progressive tool disclosure to avoid paying the full tool surface on every turn.
 
 A local model and a cloud model do **not** need identical harness settings. TALOS already treats the local path as a different performance envelope instead of pretending that one prompt fits every model.
+
+---
+
+# Running a model on the phone, without pretending
+
+Most apps that "support local models" hand you a list and let you find out the
+hard way. A 3 GB download either runs, or swaps, or gets killed by the kernel
+halfway through your first sentence — and you learn which by trying.
+
+TALOS answers the question **before** the download.
+
+<img src="docs/immagini/tablet-6-local-catalogue.png" alt="Browsing Hugging Face with a fits-in-memory filter">
+
+Hugging Face, browsable from the phone, filtered by what **this** device can
+actually hold. Every row carries its own memory bar and its own verdict, and
+`Fits in memory` is a filter you can switch on — not a label you read afterwards.
+Publisher, licence, parameter band and popularity are there because picking a
+model is a real decision, not a lucky dip.
+
+## Every quantisation, measured against your RAM
+
+<img src="docs/immagini/tablet-5-local-quantisations.png" alt="Quantisations of one model, each with its memory bar and measured speed">
+
+One repository, its quantisations side by side. The bar is not a size comparison
+— it is **your** memory, with the model in it.
+
+```text
+Q4_K_M   2.6 GB   Memory: little room · about 6.6 tokens/second
+                  Fits in memory: 810 MB of RAM left once it is loaded
+                  Checked at 4096 tokens of context
+Q5_K_S   2.8 GB   Memory is tight
+```
+
+Three things that row does, and each one exists because the alternative was
+misleading:
+
+- **It says what is left**, not what is used. `810 MB of RAM left once it is
+  loaded` is the number that decides whether the phone stays usable.
+- **It names the context it assumed.** A model checked at 4096 tokens needs more
+  at 16k, and a verdict that hides its assumption is a verdict you cannot trust.
+- **It reports the speed it measured**, on this device, not a figure from a
+  spec sheet.
+
+> Peak RSS lies about local models: `llama.cpp` maps the weights with `mmap`, and
+> those pages are discardable. Measured on one 1.79 GiB model — 3,869 MB peak,
+> but only **2,031 MB** that cannot be dropped. TALOS sizes against the number
+> that matters, which is why models other apps refuse will run here.
+
+TALOS also surfaces what Hugging Face says about the file itself — a flagged
+upload is shown as flagged, before you download it, not after.
+
+## And then it is just the model you are talking to
+
+<img src="docs/immagini/tablet-7-local-in-chat.png" alt="A 4B model running on the device, answering with a structured table">
+
+A 4B model, on the tablet, no network — answering with a structured comparison
+table. Same conversation surface, same tools, same permission vocabulary as a
+frontier model behind an API key. The chip in the composer is the only thing
+that changes.
+
+**Measured on a OnePlus Pad 3**, `Holo-3.1-4B Q4_K_M` (4.84B parameters), at 8
+threads:
+
+| | tokens/second |
+| --- | ---: |
+| prefill, 512 tokens | **65.1** ± 0.7 |
+| prefill, 2048 tokens | **58.3** ± 1.2 |
+| generation, 128 tokens | **12.2** ± 0.1 |
+
+One agent step — 2,000 tokens in, 100 out — takes **43.3 s** on that model, and
+35.3 s on a Qwen2.5-3B that has never been trained for device control. The 4B
+scores 71.0% on AndroidWorld. That trade is the kind of choice TALOS puts in
+your hands instead of making for you.
+
+**This is an active engineering front, not a finished one.** Speculative
+decoding, an NPU backend, and per-phase thread counts are measured work in
+progress — and the rule for all of them is the project's rule: nothing is true
+until the device says so, thermal state included.
 
 ---
 
