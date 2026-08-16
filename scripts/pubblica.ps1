@@ -69,6 +69,41 @@ if (-not $avanti -or [int]$avanti -eq 0) {
     exit 0
 }
 
+# ⛔⛔ IL CANCELLO SULLE NOTE DI RELEASE — regola dell'owner, 2026-08-16.
+#
+#   «ad ogni release mi raccomando non creare del testo statico, o meglio
+#    assieme al testo statico metti anche il changelog breve delle fix e delle
+#    implementazioni nuove, regola da ora in poi»
+#
+# La v0.1.0 era uscita con SOLE istruzioni: come si installa, come si verifica
+# l'impronta, su quali due dispositivi. Tutto vero, tutto identico in ogni
+# release, e non diceva a nessuno cosa fosse cambiato. L'unico riferimento al
+# contenuto era il link automatico «Full Changelog», che manda a una lista di
+# commit grezzi — che è il materiale da cui si scrive un changelog, non uno.
+#
+# ⛔ Sta QUI e non nella memoria di Claude perché una regola che vive in una
+# testa salta al primo turno lungo. Stessa ragione degli screenshot approvati.
+$ultimoTag = git -C $Copia describe --tags --abbrev=0 2>$null
+if ($ultimoTag) {
+    $note = gh release view $ultimoTag --repo Ninozzz95/talos --json body -q .body 2>$null
+    if ($note) {
+        $haCambiamenti = $note -match '(?im)^\s*#{1,4}\s*(what.s (in |new)|changes|changelog|fixed|added|known limits)'
+        ""
+        if ($haCambiamenti) {
+            Riga "✓ le note di $ultimoTag hanno un changelog, non solo il testo statico"
+        } else {
+            "═" * 72
+            "  ⛔ LE NOTE DI $ultimoTag SONO SOLO TESTO STATICO"
+            "═" * 72
+            Riga "Regola dell'owner: accanto alle istruzioni ci va SEMPRE il changelog"
+            Riga "breve — cosa è nuovo e cosa è stato corretto. Il link «Full Changelog»"
+            Riga "non conta: è una lista di commit, non un changelog."
+            Riga ""
+            Riga "Si sistema con:  gh release edit $ultimoTag --repo Ninozzz95/talos --notes-file <file>"
+        }
+    }
+}
+
 ""
 "═" * 72
 "  PRONTO — ma il via lo dai tu"
