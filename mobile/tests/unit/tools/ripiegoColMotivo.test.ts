@@ -140,3 +140,67 @@ describe('il ripiego sul pannello porta con sé il motivo', () => {
         expect(senzaMotivo).not.toContain('not connected')
     })
 })
+
+/**
+ * ⛔⛔ LA SCHEDA DELL'INTERRUTTORE, e il caso in cui NON deve esserci.
+ *
+ * Censimento 2026-08-16: su 69 capacità solo quattro avevano una scheda, e
+ * otto delle rimaste sono interruttori identici alla torcia. Passano tutti da
+ * `esitoDi`, quindi la scheda si aggiunge in un punto solo.
+ *
+ * ⛔ Ma `esitoDi` ha tre rami, e il secondo è una trappola: col pannello aperto
+ * l'esito è `ok: true` e **niente è cambiato** — la persona deve ancora toccare
+ * l'interruttore. Una scheda lì mostrerebbe una levetta nello stato che nessuno
+ * ha raggiunto: «una bugia con una levetta sopra», come dice il commento su
+ * `device_torch`.
+ */
+describe('la scheda di un interruttore, e quando NON deve esserci', () => {
+    function conEsito(esito: Parameters<typeof strumenti>[0], nome = 'wifi') {
+        const strumento = strumenti(esito).find((t) => t.name.includes(nome))!
+        return strumento.run as (input: unknown) => Promise<{
+            ok: boolean
+            content: string
+            scheda?: { tipo: string, tool: string, acceso: boolean }
+        }>
+    }
+
+    it('c è quando la cosa è DAVVERO successa', async () => {
+        const esito = await conEsito({ done: true, via: 'shell' })({ on: true })
+        expect(esito.ok).toBe(true)
+        expect(esito.scheda).toEqual({ tipo: 'interruttore', tool: 'device_wifi', acceso: true })
+    })
+
+    it('e porta lo stato CHIESTO, acceso o spento', async () => {
+        const spento = await conEsito({ done: true, via: 'shell' })({ on: false })
+        expect(spento.scheda?.acceso).toBe(false)
+    })
+
+    it('⛔⛔ NIENTE scheda col pannello aperto: li nulla e ancora successo', async () => {
+        /*
+         * È il caso che conta. `ok: true` ma il testo dice esplicitamente «it is
+         * NOT done yet»: una levetta accanto a quella frase la smentirebbe, e
+         * fra le due la persona crederebbe alla levetta.
+         */
+        const esito = await conEsito({ done: true, via: 'panel' })({ on: true })
+        expect(esito.ok).toBe(true)
+        expect(esito.content).toMatch(/NOT done yet/i)
+        expect(esito.scheda).toBeUndefined()
+    })
+
+    it('⛔ e niente scheda quando è proprio fallito', async () => {
+        const esito = await conEsito({ done: false, via: 'none', reason: 'no-shizuku' })({ on: true })
+        expect(esito.ok).toBe(false)
+        expect(esito.scheda).toBeUndefined()
+    })
+
+    it('⛔ «non disturbare» NON ha una levetta: ha quattro modalità', async () => {
+        /*
+         * Contro la simmetria, di proposito. Una levetta a due stati mostrerebbe
+         * «acceso» sia per «solo le cose importanti» sia per «silenzio totale» —
+         * che è la differenza fra sentire la sveglia e non sentirla.
+         */
+        const esito = await conEsito({ done: true, via: 'shell' }, 'do_not_disturb')({ mode: 'none' })
+        expect(esito.ok).toBe(true)
+        expect(esito.scheda).toBeUndefined()
+    })
+})
