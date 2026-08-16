@@ -368,6 +368,38 @@ if ($gitPrecedente) {
     git init -q -b main
 }
 git add -A
+
+# ⛔⛔ IL BIT DI ESECUZIONE NON VIAGGIA CON IL CONTENUTO.
+#
+# Copy-Item copia i byte; il permesso di esecuzione e' un attributo che su
+# Windows non esiste nemmeno, e che git tiene come MODO del file (100755 contro
+# 100644). Copiando e ri-aggiungendo, tutto diventa 100644.
+#
+# MISURATO il 2026-08-16, e a caro prezzo: il primo tag di TALOS e' morto con
+#
+#     ##[error]Process completed with exit code 126
+#
+# — «comando non eseguibile» — perche' `android/gradlew` era arrivato nel
+# repository pubblicato senza il bit. Su Windows non si nota: e' il primo
+# runner Linux a inciamparci, cioe' la release.
+#
+# ⇒ Si chiede al repository di ORIGINE quali file sono eseguibili, e si dichiara
+# lo stesso nella copia. Non un elenco scritto a mano: `git ls-files -s` sa gia'
+# la risposta, e resta vera quando qualcuno aggiunge uno script nuovo.
+$eseguibili = @(git -C $Repo ls-files -s -- 'mobile/') |
+    Where-Object { $_ -like '100755 *' } |
+    ForEach-Object { ($_ -split "`t")[-1] } |
+    ForEach-Object { $_.Substring('mobile/'.Length) }
+
+if ($eseguibili.Count -gt 0) {
+    foreach ($f in $eseguibili) {
+        if (Test-Path (Join-Path $Destinazione $f)) { git update-index --chmod=+x -- $f }
+    }
+    Bene "$($eseguibili.Count) file eseguibili, dichiarati tali anche nella copia"
+} else {
+    Bene 'nessun file eseguibile da riportare'
+}
+
 $messaggio = if ($gitPrecedente) {
     "Sync from the development repository
 
