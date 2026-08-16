@@ -35,6 +35,12 @@ permissions:
   contents: write
   id-token: write
   attestations: write
+  # ⛔ `artifact-metadata` e' un ambito NUOVO, generalmente disponibile dal
+  # 13 gennaio 2026, e `actions/attest` lo richiede. Verificato che sia una
+  # chiave valida PRIMA di scriverla: un permesso non riconosciuto non fa
+  # fallire un passo, rende invalido l'INTERO workflow — non parte niente, e
+  # l'errore parla di sintassi, non di permessi.
+  artifact-metadata: write
 
 jobs:
   apk:
@@ -240,7 +246,22 @@ jobs:
 
       # La provenienza SLSA: lega l'artefatto al workflow, al commit e al
       # repository, con un certificato effimero su un registro di trasparenza.
-      - uses: actions/attest-build-provenance@v4
+      # La provenienza SLSA: lega l'artefatto al workflow, al commit e al
+      # repository, con un certificato effimero su un registro di trasparenza.
+      #
+      # ⛔ `actions/attest` e NON `attest-build-provenance`: quest'ultimo, dal
+      # v4, e' «simply a wrapper on top of actions/attest», e la sua stessa
+      # documentazione dice che «new implementations should use actions/attest
+      # instead». La nostra e' nuova.
+      #
+      # ⛔ E si e' scoperto solo CERCANDO. Il workflow di questa release e'
+      # stato scritto a memoria, ed e' costato cinque corse fallite su difetti
+      # che stavano tutti nel primo risultato di una query sola. Questa riga e'
+      # l'unica scritta dopo aver letto — e infatti ha portato con se' un
+      # permesso in piu' che nessuno avrebbe indovinato.
+      #
+      # Senza `predicate-type` genera provenienza SLSA, che e' cio' che serve.
+      - uses: actions/attest@v4
         with:
           subject-path: ${{ steps.apk.outputs.nome }}
 
