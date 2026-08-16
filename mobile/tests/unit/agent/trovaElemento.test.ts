@@ -70,6 +70,40 @@ describe('⭐ il pulsante SENZA testo — il caso «sticker»', () => {
     })
 })
 
+/**
+ * ⛔⛔ IL CASO CHE HA TROVATO IL TELEFONO, e che i miei test non vedevano.
+ *
+ * MISURATO sulle Impostazioni del Pad il 2026-08-16: la prima voce è **«Wi-Fi»**
+ * e cercando **«wifi»** il risultato era **«assente»**. Il trattino diventa uno
+ * spazio — giustamente — e `wi fi` non contiene `wifi`.
+ *
+ * I test di prima usavano tutte parole singole: «sticker», «Adesivi», «Invia».
+ * Il caso più comune che esista non era coperto da nessuno.
+ */
+describe('⛔ le parole spezzate: «Wi-Fi» e «wifi» sono la stessa cosa', () => {
+    it('⭐ il caso vero del Pad: «wifi» trova «Wi-Fi»', () => {
+        const esito = talosTrovaElemento([el(0, 'Bluetooth'), el(1, 'Wi-Fi')], 'wifi')
+        expect(esito.esito).toBe('trovato')
+        if (esito.esito === 'trovato') expect(esito.elemento.etichetta).toBe('Wi-Fi')
+    })
+
+    it('e nell\'altro verso: «wi-fi» trova un\'etichetta attaccata', () => {
+        expect(talosTrovaElemento([el(0, 'WiFi')], 'wi-fi').esito).toBe('trovato')
+    })
+
+    it('vale per le altre forme spezzate che si incontrano ovunque', () => {
+        expect(talosTrovaElemento([el(0, 'E-mail')], 'email').esito).toBe('trovato')
+        expect(talosTrovaElemento([el(0, 'Non disturbare')], 'nondisturbare').esito).toBe('trovato')
+        expect(talosTrovaElemento([el(0, 'Play Store')], 'playstore').esito).toBe('trovato')
+    })
+
+    it('⛔ AL CONTRARIO: togliere gli spazi non fa combaciare tutto', () => {
+        // «cane» e «can e» sì; «cane» e «bottone» no, anche senza spazi.
+        expect(talosTrovaElemento([el(0, 'Bluetooth')], 'wifi').esito).toBe('assente')
+        expect(talosTrovaElemento([el(0, 'Impostazioni')], 'sticker').esito).toBe('assente')
+    })
+})
+
 describe('⛔⛔ quando due combaciano UGUALE non si sceglie', () => {
     it('due etichette identiche danno `ambiguo`, non la prima', () => {
         const esito = talosTrovaElemento([el(0, 'Salva'), el(1, 'Salva')], 'salva')
