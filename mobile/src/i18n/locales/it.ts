@@ -953,30 +953,53 @@ export const TALOS_IT_MESSAGES = {
     },
     privilege: {
         keepAlive: 'Mantieni acceso',
-        keepAliveBody: 'TALOS resta in ascolto e si ricollega da solo appena riaccendi il Debug wireless, anche fuori da questa schermata. ⛔ Accenderlo non lo può fare: quell’interruttore lo tocca solo il sistema.',
+        /*
+         * ⛔ QUESTA RIGA HA DUE COMPITI, E UNO SOLO È DIRE COSA FA.
+         *
+         * L'altro è dire il prezzo: con la porta fissa adbd ascolta su tutta la
+         * rete locale, non solo dentro il telefono. Non entra nessuno senza una
+         * chiave autorizzata, ma è più larga del Debug wireless — e chi accende
+         * una cosa ha diritto di sapere cosa apre, in una riga, non in un
+         * paragrafo.
+         */
+        keepAliveBody: 'Il ponte si riaggancia da solo, senza riaccendere il Debug wireless. Finché è acceso, chi è sulla tua rete vede la porta: per entrarci serve comunque la chiave di TALOS.',
         assistantTitle: 'TALOS come assistente',
         assistantBody: 'La barra si apre solo quando TALOS è il tuo assistente. Un tocco, e te lo chiede Android.',
         assistantHeld: 'TALOS è il tuo assistente. Chiamalo da qualunque app e la barra compare.',
         assistantAsk: 'Rendi TALOS il tuo assistente',
         assistantManual: 'Né Android né il ponte ci sono riusciti. Fallo a mano: Impostazioni → App → App predefinite → Assistente digitale. Se l’elenco è vuoto, accendi il Debug wireless qui sotto e ripremi.',
         presetTitle: 'Come lo chiami',
-        presetIntro: 'Ogni modo di aprire TALOS senza toccare la sua icona. ⛔ Quelli che passano dal telefono non li può accendere TALOS: la scelta la fai tu, nella schermata di sistema, e da lì la puoi togliere.',
+        /*
+         * ⛔⛔ SEI PARAGRAFI PER SEI RIGHE — owner 2026-08-16, guardando questa
+         * schermata: «guarda quanto cazzo di testo è scritto… in una
+         * applicazione di produzione è troppo testo».
+         *
+         * Aveva ragione, e la causa è precisa: ogni riga spiegava
+         * l'ARCHITETTURA DI ANDROID — chi decide il gesto, cosa è
+         * l'assistente predefinito, perché la scorciatoia è una sola. Roba vera,
+         * scritta per farsi perdonare un limite invece che per farlo capire.
+         *
+         * ⇒ La regola nuova: una riga dice COS'È e COSA CAMBIA per chi legge.
+         * Il «dipende dal telefono» vive già nell'etichetta di stato accanto —
+         * «Da provare» lo dice in due parole, e lo dice a colpo d'occhio.
+         */
+        presetIntro: 'Ogni modo di aprire TALOS senza toccarne l’icona.',
         preset: {
             accensione: {
                 title: 'Tasto di accensione tenuto premuto',
-                body: 'Chiama l’assistente predefinito del telefono: perché sia TALOS, TALOS dev’essere l’assistente. ⛔ Ma il ruolo non basta: è il telefono a decidere se girare quel gesto all’assistente, e alcuni non lo fanno (misurato su OnePlus 13 con ColorOS: la chiamata viene intercettata e non arriva a nessuno). Provalo: se si apre TALOS, da quel momento il menu di spegnimento si apre con accensione + volume su. Se non si apre, restano i due tasti del volume e «hey TALOS».',
+                body: 'Apre l’assistente del telefono. ⛔ Ma è il telefono a decidere se girare il gesto: se non si apre, restano i tasti del volume e «hey TALOS».',
             },
             gesto: {
                 title: 'Gesto dall’angolo dello schermo',
-                body: 'La strisciata dall’angolo in basso, se navighi a gesti. Chiama lo stesso assistente predefinito, quindi vale la stessa condizione, e lo stesso «dipende dal telefono».',
+                body: 'La strisciata dall’angolo in basso, se navighi a gesti.',
             },
             home: {
                 title: 'Tasto Home tenuto premuto',
-                body: 'Se navighi con i tre tasti invece che a gesti, questo è il gesto equivalente: tieni premuto il tasto centrale. Chiama sempre l’assistente predefinito, quindi vale la stessa condizione. ⛔ Con la navigazione a gesti il tasto Home non esiste: lì conta la riga qui sopra.',
+                body: 'Se navighi con i tre tasti, tieni premuto quello centrale.',
             },
             volume: {
                 title: 'I due tasti del volume tenuti premuti',
-                body: 'Anche questo NON dipende dall’assistente predefinito: è la scorciatoia di accessibilità, e punta direttamente a TALOS. ⛔ La prima volta che tieni premuti i due tasti, Android ti chiede conferma: è normale, e succede una volta sola. ⛔ E questa casella è UNA sola per tutto il telefono: se ci metti un altro servizio (TalkBack, per esempio) TALOS ne esce, e questa riga torna a dire «Da mettere».',
+                body: 'Va dritto a TALOS, senza passare dall’assistente. La prima volta Android chiede conferma. La casella è una sola per tutto il telefono: un altro servizio la prende, e TALOS ne esce.',
             },
         },
         presetSummary: '{ready} di {total} funzionano adesso.',
@@ -990,8 +1013,13 @@ export const TALOS_IT_MESSAGES = {
         presetGoRole: 'Apri gli assistenti del telefono',
         presetGoShortcut: 'Apri l’accessibilità',
         wakeTitle: 'La parola «hey TALOS»',
-        wakeBody: 'Basta dire «hey TALOS» e si apre da solo, senza toccare niente. ⛔ Il microfono resta acceso per aspettare quelle due parole: TALOS non trascrive e non salva nulla, ma il microfono è acceso — e mentre lo è, lo dice con una notifica fissa.',
-        wakeOn: 'TALOS sta aspettando «hey TALOS». Il microfono è acceso: la notifica lo dice, e da lì si spegne.',
+        /*
+         * ⛔ Il microfono acceso RESTA scritto, e non è una svista: è l'unica
+         * cosa di questa riga che cambia la decisione di chi legge. Quello che
+         * è caduto è la spiegazione di come funziona il riconoscitore.
+         */
+        wakeBody: 'Dici «hey TALOS» e si apre. Tiene il microfono acceso per aspettarti, senza trascrivere niente.',
+        wakeOn: 'TALOS ti sta aspettando. Il microfono è acceso: si spegne dalla notifica.',
         wakeAsk: 'Attiva «hey TALOS»',
         wakeOff: 'Smetti di aspettare la parola',
         assistantAsking: 'Sto chiedendo ad Android…',
@@ -1001,7 +1029,7 @@ export const TALOS_IT_MESSAGES = {
          * ⛔ Nessuna promessa qui. Chi apre questa pagina vuole sapere se TALOS
          * può toccare il telefono, e la risposta onesta comincia dicendo COME.
          */
-        intro: 'TALOS agisce sul telefono con la stessa identità che usa il computer quando lo colleghi via cavo. Il ponte è dentro TALOS: nessuna app di terzi, niente root, e nessun permesso speciale.',
+        intro: 'TALOS agisce sul telefono con la stessa identità del cavo. Nessuna app di terzi, niente root.',
         statusHeading: 'Stato',
         // Le quattro porte, e ognuna ha un solo passo successivo.
         missingTitle: 'Shizuku non è installato',
