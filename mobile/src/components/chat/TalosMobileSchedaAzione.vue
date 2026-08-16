@@ -27,6 +27,7 @@
  * — la stessa preferenza che la schermata Doctor commuta già.
  */
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
 import { TALOS_METADATA_SCHEDE, type TalosScheda } from '@/lib/tools/tracciaAzione'
@@ -71,6 +72,17 @@ function eUnaScheda(valore: unknown): valore is TalosScheda {
                 && typeof (a as Record<string, unknown>)?.pacchetto === 'string'
                 && (a as Record<string, unknown>).pacchetto !== '')
     }
+    /**
+     * ⛔ Il titolo è OBBLIGATORIO: una scheda «creato» senza il nome della cosa
+     * direbbe soltanto «è successo qualcosa», che è meno della frase accanto.
+     * Il `dove` invece è facoltativo, e quando manca la scheda mostra e basta —
+     * meglio niente pulsante che un pulsante che non porta da nessuna parte.
+     */
+    if (r.tipo === 'creato') {
+        return typeof r.titolo === 'string' && r.titolo !== ''
+            && typeof r.genere === 'string' && r.genere !== ''
+    }
+
     return r.tipo === 'interruttore'
         && typeof r.tool === 'string' && r.tool !== ''
         && typeof r.acceso === 'boolean'
@@ -85,6 +97,20 @@ const eAgenda = (s: TalosScheda): s is SchedaAgenda => s.tipo === 'agenda'
 const eInterruttore = (s: TalosScheda): s is SchedaInterruttore => s.tipo === 'interruttore'
 const eSveglia = (s: TalosScheda): s is SchedaSveglia => s.tipo === 'sveglia'
 const eQualeApp = (s: TalosScheda): s is SchedaQualeApp => s.tipo === 'quale-app'
+type SchedaCreato = Extract<TalosScheda, { tipo: 'creato' }>
+const eCreato = (s: TalosScheda): s is SchedaCreato => s.tipo === 'creato'
+
+/**
+ * ⛔ La rotta arriva dall'attrezzo che ha creato la cosa, e resta INTERNA: si
+ * accetta solo un percorso che comincia per «/». Una scheda è dato che passa
+ * dal modello, e un `dove` fatto arrivare come `https://…` o `javascript:`
+ * sarebbe una porta aperta da un testo generato.
+ */
+const rotta = useRouter()
+function apri(dove: string): void {
+    if (!dove.startsWith('/') || dove.startsWith('//')) return
+    void rotta.push(dove)
+}
 
 const props = defineProps<{
     /**
@@ -345,6 +371,43 @@ const parolaStato = (acceso: boolean): string => (acceso
                     >{{ s.etichetta }}</span>
                 </span>
             </div>
+
+            <!--
+                ⭐⭐⭐ QUALCOSA CHE ORA ESISTE — sette capacità che non lasciavano
+                traccia: note, attività, documenti, immagini, ricerche, memorie,
+                file esportati.
+
+                ⛔ È la famiglia dell'evento in agenda: «una nota creata ha la
+                stessa faccia di una nota detta e mai creata». E come l'evento
+                non si vede — a differenza della torcia, non c'è niente nel
+                mondo che ti dica se è successo.
+
+                ⛔ Il `<button>` c'è SOLO col `dove`: un comando che non porta
+                da nessuna parte è peggio di nessun comando, ed è la stessa
+                regola per cui la sveglia tace sull'annulla che la ROM non le
+                lascia fare.
+
+                ⛔ Colori: nessuno scritto qui. `border-border`, `bg-muted`,
+                `text-muted-foreground` vengono dal theme engine, come tutte le
+                altre schede — cambiare tema le cambia tutte insieme.
+            -->
+            <component
+                :is="eCreato(s) && s.dove ? 'button' : 'div'"
+                v-if="eCreato(s)"
+                :type="s.dove ? 'button' : undefined"
+                class="talos-controllo flex w-full items-center gap-2 border border-border bg-muted text-left"
+                :class="s.dove ? 'talos-pressable' : ''"
+                data-testid="talos-scheda-creato"
+                @click="s.dove ? apri(s.dove) : undefined"
+            >
+                <span class="talos-nome min-w-0 flex-1">
+                    <span class="block truncate">{{ s.titolo }}</span>
+                    <span class="mt-px block text-xs text-muted-foreground">
+                        {{ s.genere }}<template v-if="s.dettaglio"> · {{ s.dettaglio }}</template>
+                    </span>
+                </span>
+                <span v-if="s.dove" class="talos-freccia flex-none" aria-hidden="true">›</span>
+            </component>
 
             <!--
                 ⭐⭐⭐ QUALE APP — l'elenco vero, TOCCABILE.
