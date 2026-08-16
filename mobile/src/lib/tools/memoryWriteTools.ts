@@ -125,6 +125,22 @@ export function createTalosMemoryWriteTools(
                         ok: true,
                         content: `Remembered as «${saved.title}»: ${content}`,
                         evidence: { title: saved.title, kind: input.kind },
+                        /*
+                         * ⛔ SOLO in questo ramo. Sopra c'è l'altro `ok: true`,
+                         * quello del doppione, che dice esplicitamente «Nothing
+                         * new was written»: una scheda «creato» accanto a quella
+                         * frase la smentirebbe — è la stessa regola del pannello
+                         * di sistema aperto negli interruttori.
+                         */
+                        scheda: {
+                            tipo: 'creato' as const,
+                            titolo: saved.title,
+                            genere: 'Memoria',
+                        // ⛔ NIENTE `dove`: `create` per la memoria non
+                        // restituisce l'id — l'ha detto il typecheck, non io.
+                        // La scheda mostra e basta, invece di offrire un
+                        // pulsante che non saprebbe dove andare.
+                        },
                     }
                 } catch (failure) {
                     // Un guasto detto per nome. Un «va bene» su una memoria mai
