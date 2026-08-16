@@ -111,11 +111,49 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.hasPointerCapture
  * ⛔ Se un giorno diventasse lungo, la cura non è allungarlo ancora: è smettere
  * di caricare le rotte pigramente NEI TEST, dove il guadagno non esiste.
  */
+/*
+ * ⛔⛔⛔ LA CURA STRUTTURALE L'HO PROVATA, E HA PEGGIORATO TUTTO.
+ *
+ * L'elenco qui sotto non convergeva — tre corse, tre moduli diversi — e la
+ * regola che avevo scritto io diceva: «se diventa lungo, smetti di caricare le
+ * rotte pigramente nei test». Sembrava ovvia. L'ho fatta, chiamando
+ * `preloadTalosMobileRoutes()` per i file jsdom.
+ *
+ * MISURATO, e non c'e' stato bisogno di discuterne:
+ *
+ *     prima   5.173 passati, 0 falliti, setup  12,6 s
+ *     dopo      250 FALLITI,            setup 122,8 s
+ *     e l'errore del teardown era comunque tornato
+ *
+ * ⇒ Tirare dentro venticinque schermi nel setup non e' un precarico: e'
+ * ESEGUIRE meta' dell'app prima di ogni file di test. Gli schermi hanno effetti
+ * al montaggio — store, plugin, cose globali — e i test trovavano un mondo gia'
+ * sporco.
+ *
+ * ⛔ La lezione, che vale piu' della cura mancata: una regola scritta in un
+ * commento resta un'IPOTESI finche' non la si misura. L'avevo scritta come se
+ * fosse una conclusione, e mi ci sono fidato per non pensarci una seconda
+ * volta.
+ *
+ * ⇒ L'elenco resta, sapendo che e' un tampone. La cura vera va CERCATA, non
+ * dedotta: probabilmente sta nel modo in cui vitest smonta l'ambiente mentre un
+ * import e' in volo, non in cosa si precarica.
+ */
 const TIRATI_DENTRO_SUBITO = [
     // 2026-08-15, corsa locale: markdown-it dietro il renderer dei messaggi
     () => import('@/lib/talosMessageMarkdown'),
     // 2026-08-16, corsa 31941140063: la catena del browser dentro ChatScreen
     () => import('@/lib/browser/browserEvidence'),
+    /*
+     * ⛔ E QUI HO PROVATO AD AGGIUNGERE `@/components/ui/button`, per la corsa
+     * 31945732536 che nominava `class-variance-authority`. Ha rotto DIECI test
+     * in un file — misurato, non temuto.
+     *
+     * ⇒ Nemmeno il tampone si allunga a piacere: precaricare un modulo lo
+     * ESEGUE, e un modulo con effetti al caricamento cambia il mondo che i
+     * test si aspettano. Il tampone funziona solo per moduli inerti, e non c'e'
+     * modo di saperlo se non provando.
+     */
 ]
 
 for (const tira of TIRATI_DENTRO_SUBITO) void tira()
