@@ -369,6 +369,52 @@ if ($gitPrecedente) {
 }
 git add -A
 
+# ⛔⛔⛔ I SOTTOMODULI: SENZA, IL REPOSITORY PUBBLICO NON SI COMPILA.
+#
+# `llama.cpp` non e' dentro il repository: e' un SOTTOMODULO, cioe' un puntatore
+# a un commit di un altro progetto. Copiando i file, nella copia arrivava una
+# CARTELLA VUOTA e nessuna dichiarazione — quindi chi clonava non aveva il
+# motore locale, e il README lo invita a compilare.
+#
+# MISURATO il 2026-08-16, e dopo il tag: la release e' morta con
+#
+#     CMake Error: llama.cpp non e' nella cartella .../third_party/llama.cpp
+#
+# — cioe' con il messaggio che il nostro CMakeLists gia' scriveva per nome, che
+# e' l'unica ragione per cui la diagnosi e' costata un minuto invece di un
+# pomeriggio.
+#
+# ⇒ Si riscrive `.gitmodules` con il percorso APPIATTITO (`mobile/` sparisce) e
+# si rimette il puntatore al MEDESIMO commit, con `--cacheinfo 160000`. Cosi'
+# chi clona il repository pubblico ottiene esattamente le stesse sorgenti — e
+# l'attribuzione a monte resta dov'e', invece di copiarci dentro il codice di
+# qualcun altro.
+$sottomoduli = @(git -C $Repo submodule status) | Where-Object { $_.Trim() }
+if ($sottomoduli.Count -gt 0) {
+    $righe = @()
+    foreach ($s in $sottomoduli) {
+        $pezzi = $s.Trim() -split '\s+'
+        $sha = $pezzi[0].TrimStart('+', '-', 'U')
+        $percorso = $pezzi[1]
+        if (-not $percorso.StartsWith('mobile/')) { continue }
+        $piatto = $percorso.Substring('mobile/'.Length)
+        $url = (git -C $Repo config -f .gitmodules "submodule.$percorso.url")
+        $righe += "[submodule `"$piatto`"]"
+        $righe += "`tpath = $piatto"
+        $righe += "`turl = $url"
+        $righe += "`tshallow = true"
+        # ⛔ La cartella copiata (vuota) va tolta dall'indice, se no git la
+        # tratta come cartella normale e il puntatore non entra.
+        git rm -r -q --cached --ignore-unmatch -- $piatto 2>$null | Out-Null
+        git update-index --add --cacheinfo "160000,$sha,$piatto"
+        Bene "sottomodulo $piatto -> $($sha.Substring(0,7)) ($url)"
+    }
+    if ($righe.Count -gt 0) {
+        $righe -join "`n" | Set-Content (Join-Path $Destinazione '.gitmodules') -Encoding UTF8 -NoNewline
+        git add -- .gitmodules
+    }
+}
+
 # ⛔⛔ IL BIT DI ESECUZIONE NON VIAGGIA CON IL CONTENUTO.
 #
 # Copy-Item copia i byte; il permesso di esecuzione e' un attributo che su
