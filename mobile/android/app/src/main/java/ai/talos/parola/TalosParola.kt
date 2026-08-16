@@ -466,6 +466,23 @@ class TalosParola : Service() {
      * vero, e due padroni sullo stesso microfono fanno un'app che finge di
      * ascoltare.
      */
+    /**
+     * ⛔ DUE domande, non una: lo schermo può essere spento **o** acceso sul
+     * blocco, e sono due casi diversi che vogliono la stessa risposta.
+     *
+     * `isInteractive` dice se lo schermo è acceso — non se è sbloccato.
+     * `isKeyguardLocked` dice se il blocco è alzato, anche a schermo acceso.
+     * Guardarne una sola lascia scoperto metà del caso: il telefono sul tavolo
+     * che si è appena acceso per una notifica è interattivo E bloccato.
+     */
+    private fun schermoSpentoOBloccato(): Boolean {
+        val energia = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        val blocco = getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+        val spento = energia?.isInteractive == false
+        val chiuso = blocco?.isKeyguardLocked == true
+        return spento || chiuso
+    }
+
     private fun sentita(punteggio: Float) {
         val adesso = SystemClock.elapsedRealtime()
         if (adesso - ultima < RIPOSO_MS) return
@@ -514,6 +531,57 @@ class TalosParola : Service() {
          * resta la prima, perché è l'unica che porta il contesto dello schermo
          * (`SHOW_WITH_ASSIST`) — e quello è metà del mestiere dell'assistente.
          */
+        /*
+         * ⭐⭐⭐ SCHERMO SPENTO O TELEFONO BLOCCATO — la porta più stretta.
+         *
+         * Owner 2026-08-16: «da telefono bloccato, se dico la parola di
+         * attivazione lo schermo si sveglia, e appena lo sblocco parte subito
+         * l'assistente».
+         *
+         * ## Le due strade che sembravano ovvie, e sono chiuse
+         *
+         * ⛔ **Full-screen intent**: da Android 14 `USE_FULL_SCREEN_INTENT` è
+         * concesso d'ufficio solo ad app di **chiamate e sveglie**, e dal 22
+         * gennaio 2025 il Play Store lo REVOCA all'installazione per tutte le
+         * altre. Costruirci sopra è costruire su un permesso che il negozio
+         * toglie da solo.
+         *
+         * ⛔ **Wake lock `ACQUIRE_CAUSES_WAKEUP`**: deprecato da API 17, e oggi
+         * Android lo segnala come consumo anomalo nelle metriche di vitals.
+         *
+         * ## La strada aperta, e ce l'avevamo già
+         *
+         * Per lanciare un'activity da background serve un'eccezione BAL, e la
+         * documentazione ne elenca una che ci riguarda testualmente: «The app
+         * has the SYSTEM_ALERT_WINDOW permission granted by the user» — cioè
+         * il permesso della barra flottante, già concesso.
+         *
+         * ⛔ E due cose che NON sono eccezioni, contro l'intuizione: il
+         * servizio di accessibilità attivo, e un foreground service col
+         * microfono. TALOS li ha entrambi e non contano.
+         *
+         * ⇒ L'accensione dello schermo la fa l'Activity con
+         * `setShowWhenLocked` + `setTurnScreenOn`, e il resto — che la barra
+         * sopra il blocco resti MUTA — sta in `TalosBarraActivity`.
+         *
+         * ⛔⛔ E la barra sopra il lockscreen è muta per una ragione che viene
+         * prima della tecnica: se rispondesse, chiunque prenda il telefono
+         * dal tavolo potrebbe farsi leggere agenda, messaggi e memoria.
+         */
+        val bloccato = schermoSpentoOBloccato()
+        if (bloccato) {
+            Log.i(MARCHIO, "schermo spento o bloccato: apro la barra MUTA e aspetto lo sblocco")
+            runCatching {
+                startActivity(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        android.net.Uri.parse("talos://barra?voce=1&nodi=0&immagine=0&bloccato=1"),
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }.onFailure { Log.w(MARCHIO, "non ho potuto aprire la barra da bloccato: ${it.message}") }
+            return
+        }
+
         val davanti = ai.talos.TalosBarraActivity.eDavanti()
         val aperta = if (davanti) {
             Log.i(MARCHIO, "la barra è già davanti: le mando una chiamata nuova")
