@@ -66,6 +66,14 @@ class TalosParola : Service() {
 
     private var vivo = false
 
+    /**
+     * ⛔ Il thread del ciclo, TENUTO — perché `onDestroy` possa aspettarlo
+     * invece di chiudergli le sessioni ONNX sotto i piedi. Vedi la nota su
+     * `onDestroy`: senza questo riferimento, premere «smetti di aspettare la
+     * parola» uccideva il processo.
+     */
+    private var lavoratore: Thread? = null
+
     @Volatile
     private var ceduto = false
 
@@ -154,13 +162,56 @@ class TalosParola : Service() {
         }
         avviaInPrimoPiano()
         vivo = true
-        thread(name = "talos-parola") { ciclo() }
+        // ⛔ Il thread si TIENE: senza un riferimento, `onDestroy` non può
+        // aspettarlo, e la cura qui sotto non esisterebbe.
+        lavoratore = thread(name = "talos-parola") { ciclo() }
         return START_NOT_STICKY
     }
 
+    /**
+     * ⛔⛔ SPEGNERE UN THREAD CHE STA USANDO UNA SESSIONE ONNX LA UCCIDE — e per
+     * un po' ha ucciso l'app intera.
+     *
+     * Owner 2026-08-16: «quando premo *smetti di ascoltare la parola*
+     * l'applicazione crasha». RIPRODOTTO premendo «Smetti di aspettare la
+     * parola» in Controllo del telefono — il processo cambia pid, cioè muore:
+     *
+     *     FATAL EXCEPTION: talos-parola
+     *       at TalosOrecchio.spettro(TalosOrecchio.kt:184)   ← mel.run(...)
+     *       at TalosOrecchio.ascolta(TalosOrecchio.kt:168)
+     *       at TalosParola.ciclo(TalosParola.kt:387)
+     *
+     * La corsa era questa: `onDestroy` gira sul thread principale, mette
+     * `vivo = false` e chiama subito `orecchio.chiudi()`, che chiude le tre
+     * sessioni ONNX. Ma il thread `talos-parola` era **già dentro** `run()` su
+     * quelle sessioni, e il flag lo guarda solo al giro dopo. Gli si toglie il
+     * pavimento da sotto mentre cammina.
+     *
+     * ⇒ E un'eccezione su un thread non gestito **non si limita a quel
+     * thread**: si porta via il processo. Per questo il difetto si vedeva come
+     * «l'app crasha» e non come «l'ascolto si è fermato male».
+     *
+     * ⛔ La cura NON è un try/catch attorno a `run()`: ingoierebbe anche gli
+     * errori veri del modello, e lascerebbe comunque il ciclo a girare su
+     * sessioni morte. Si aspetta che il ciclo ESCA, e solo allora si chiude —
+     * che è la stessa forma già usata in questo file per `AudioRecord`.
+     *
+     * ⛔ E si aspetta con un TETTO: `onDestroy` gira sul thread principale, e
+     * bloccarlo senza limite è un ANR. Un giro del ciclo dura quanto un blocco
+     * di audio (80 ms): due secondi sono venticinque giri, cioè larghissimo. Se
+     * scade si chiude lo stesso — meglio un rischio residuo che un'app bloccata.
+     */
     override fun onDestroy() {
         vivo = false
         istanza = null
+        val chiUsava = lavoratore
+        lavoratore = null
+        if (chiUsava != null && chiUsava.isAlive) {
+            runCatching { chiUsava.join(ATTESA_USCITA_MS) }
+            if (chiUsava.isAlive) {
+                Log.w(MARCHIO, "il ciclo non è uscito in $ATTESA_USCITA_MS ms: chiudo lo stesso")
+            }
+        }
         orecchio?.chiudi()
         orecchio = null
         super.onDestroy()
@@ -415,6 +466,23 @@ class TalosParola : Service() {
      * vero, e due padroni sullo stesso microfono fanno un'app che finge di
      * ascoltare.
      */
+    /**
+     * ⛔ DUE domande, non una: lo schermo può essere spento **o** acceso sul
+     * blocco, e sono due casi diversi che vogliono la stessa risposta.
+     *
+     * `isInteractive` dice se lo schermo è acceso — non se è sbloccato.
+     * `isKeyguardLocked` dice se il blocco è alzato, anche a schermo acceso.
+     * Guardarne una sola lascia scoperto metà del caso: il telefono sul tavolo
+     * che si è appena acceso per una notifica è interattivo E bloccato.
+     */
+    private fun schermoSpentoOBloccato(): Boolean {
+        val energia = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        val blocco = getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+        val spento = energia?.isInteractive == false
+        val chiuso = blocco?.isKeyguardLocked == true
+        return spento || chiuso
+    }
+
     private fun sentita(punteggio: Float) {
         val adesso = SystemClock.elapsedRealtime()
         if (adesso - ultima < RIPOSO_MS) return
@@ -463,6 +531,57 @@ class TalosParola : Service() {
          * resta la prima, perché è l'unica che porta il contesto dello schermo
          * (`SHOW_WITH_ASSIST`) — e quello è metà del mestiere dell'assistente.
          */
+        /*
+         * ⭐⭐⭐ SCHERMO SPENTO O TELEFONO BLOCCATO — la porta più stretta.
+         *
+         * Owner 2026-08-16: «da telefono bloccato, se dico la parola di
+         * attivazione lo schermo si sveglia, e appena lo sblocco parte subito
+         * l'assistente».
+         *
+         * ## Le due strade che sembravano ovvie, e sono chiuse
+         *
+         * ⛔ **Full-screen intent**: da Android 14 `USE_FULL_SCREEN_INTENT` è
+         * concesso d'ufficio solo ad app di **chiamate e sveglie**, e dal 22
+         * gennaio 2025 il Play Store lo REVOCA all'installazione per tutte le
+         * altre. Costruirci sopra è costruire su un permesso che il negozio
+         * toglie da solo.
+         *
+         * ⛔ **Wake lock `ACQUIRE_CAUSES_WAKEUP`**: deprecato da API 17, e oggi
+         * Android lo segnala come consumo anomalo nelle metriche di vitals.
+         *
+         * ## La strada aperta, e ce l'avevamo già
+         *
+         * Per lanciare un'activity da background serve un'eccezione BAL, e la
+         * documentazione ne elenca una che ci riguarda testualmente: «The app
+         * has the SYSTEM_ALERT_WINDOW permission granted by the user» — cioè
+         * il permesso della barra flottante, già concesso.
+         *
+         * ⛔ E due cose che NON sono eccezioni, contro l'intuizione: il
+         * servizio di accessibilità attivo, e un foreground service col
+         * microfono. TALOS li ha entrambi e non contano.
+         *
+         * ⇒ L'accensione dello schermo la fa l'Activity con
+         * `setShowWhenLocked` + `setTurnScreenOn`, e il resto — che la barra
+         * sopra il blocco resti MUTA — sta in `TalosBarraActivity`.
+         *
+         * ⛔⛔ E la barra sopra il lockscreen è muta per una ragione che viene
+         * prima della tecnica: se rispondesse, chiunque prenda il telefono
+         * dal tavolo potrebbe farsi leggere agenda, messaggi e memoria.
+         */
+        val bloccato = schermoSpentoOBloccato()
+        if (bloccato) {
+            Log.i(MARCHIO, "schermo spento o bloccato: apro la barra MUTA e aspetto lo sblocco")
+            runCatching {
+                startActivity(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        android.net.Uri.parse("talos://barra?voce=1&nodi=0&immagine=0&bloccato=1"),
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }.onFailure { Log.w(MARCHIO, "non ho potuto aprire la barra da bloccato: ${it.message}") }
+            return
+        }
+
         val davanti = ai.talos.TalosBarraActivity.eDavanti()
         val aperta = if (davanti) {
             Log.i(MARCHIO, "la barra è già davanti: le mando una chiamata nuova")
@@ -487,6 +606,14 @@ class TalosParola : Service() {
 
     companion object {
         private const val MARCHIO = "TalosParola"
+
+        /**
+         * ⛔ Il tetto dell'attesa in `onDestroy`, che gira sul thread
+         * principale: bloccarlo senza limite è un ANR. Un giro del ciclo dura
+         * quanto un blocco di audio (80 ms), quindi due secondi sono
+         * venticinque giri — larghissimo, e comunque limitato.
+         */
+        private const val ATTESA_USCITA_MS = 2_000L
         private const val CANALE = "talos-parola"
         private const val AVVISO = 4711
         private const val FREQUENZA = 16_000

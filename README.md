@@ -1,17 +1,20 @@
 # TALOS
 
-A local-first agentic assistant that remembers what matters, writes code, controls your device and runs models locally — private by design.
+A local-first agentic assistant that remembers what matters, controls your device and runs models on it — private by design.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-5%2C156%20passing-brightgreen.svg)](#building-it)
+[![Tests](https://img.shields.io/badge/tests-5%2C161%20passing-brightgreen.svg)](#building-it)
 [![Platform](https://img.shields.io/badge/platform-Android%2014%2B-3ddc84.svg)](#status)
 [![Local first](https://img.shields.io/badge/local--first-no%20backend-blueviolet.svg)](#local-first-is-not-a-setting)
+[![CI](https://github.com/Ninozzz95/talos/actions/workflows/ci.yml/badge.svg)](https://github.com/Ninozzz95/talos/actions/workflows/ci.yml)
 
 <!--
-  ⛔ IL BADGE DELLA CI NON C'È, ED È VOLUTO.
-  La CI esiste (.github/workflows/ci.yml) ma non è mai girata: il badge sarebbe
-  verde per finta. Si aggiunge dopo il primo push, quando dice una cosa vera.
-  Un badge che mente è peggio di un badge assente.
+  ⛔ IL BADGE DELLA CI È ARRIVATO SOLO ADESSO, ED È IL PUNTO.
+  Per giorni non c'era, di proposito: la CI esisteva ma non era mai girata, e
+  un badge verde per finta è peggio di un badge assente.
+  E fino al 2026-08-16 sarebbe stato ROSSO A BUILD SANO — 5.161 test passati e
+  `vitest run` che usciva con 1 per quattro errori di teardown. Curato quello,
+  il badge dice una cosa vera. Se torna rosso, è rotto qualcosa davvero.
 -->
 
 ## Local-first is not a setting
@@ -119,7 +122,9 @@ encrypted Library that is searchable inside the text. Nothing is uploaded. If
 you ask a question about a document, the reading happens here.
 
 **Listens for its name, locally.** «hey TALOS» is recognised by an ONNX model of
-868 KB, trained in this repository. Always-on, no network, no audio kept.
+868 KB, trained in this repository. Always-on, no network, no audio kept — and
+with the bridge connected it keeps listening with the screen off, because the
+phone's own battery saver would otherwise stop it after three minutes.
 
 **Talks to your phone.** Torch, volume, alarms, wallpaper, battery, storage,
 network, do-not-disturb. Reads your calendar and your unread mail count. Answers
@@ -164,7 +169,7 @@ mock presented as real.
 ```bash
 npm ci
 npm run typecheck            # must be silent
-npx vitest run               # 5,156 tests, must be green
+npx vitest run               # 5,161 tests, must be green
 npm run build
 npx cap sync android
 cd android && ./gradlew assembleDebug -PtalosSideBySide
@@ -220,9 +225,11 @@ apps natively.
 | OnePlus Pad 3 | Android 15 · OxygenOS | tablet layout |
 
 ⛔ Two devices is a small sample, and they already behave differently from each
-other — the accessibility service, the assistant gesture and the app lock all
-work differently between the two ROMs. If TALOS misbehaves on yours, that is
-useful and worth an issue.
+other — the accessibility service, the assistant gesture, the lock screen and
+the battery saver all behave differently between the two ROMs. Some of what
+Android documents simply is not true on a given phone, and the only way to know
+is to measure it there. If TALOS misbehaves on yours, that is useful and worth
+an issue.
 
 **Mid-range and above.** TALOS runs a wake-word model, reads the screen while it
 acts, and can run a language model on the device itself — cheap on a flagship,
@@ -287,7 +294,7 @@ contributions in English are welcome.
 <details>
 <summary><b>Is it stable?</b></summary>
 
-It is used daily and has 5,156 tests, but it is young and it has been measured
+It is used daily and has 5,161 tests, but it is young and it has been measured
 on two devices. Treat it as something to try, not as something to depend on yet.
 </details>
 

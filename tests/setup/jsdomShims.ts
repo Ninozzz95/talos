@@ -51,3 +51,36 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.hasPointerCapture
     Element.prototype.setPointerCapture = () => {}
     Element.prototype.releasePointerCapture = () => {}
 }
+
+/**
+ * ⛔⛔ LA SUITE ERA VERDE E USCIVA CON CODICE 1 — e la CI l'avrebbe letto rosso.
+ *
+ * MISURATO il 2026-08-15, un'ora dopo la pubblicazione del repo:
+ *
+ *     Test Files  569 passed | 3 skipped (572)
+ *     Tests       5156 passed | 10 skipped (5166)
+ *     exit code   1
+ *
+ * Nessun test fallito, e comunque `npx vitest run` esce con 1:
+ *
+ *     Vitest caught 4 unhandled errors during the test run.
+ *     EnvironmentTeardownError: Cannot load '/node_modules/markdown-it/index.mjs'
+ *     imported from src/lib/talosMessageMarkdown.ts after the environment was
+ *     torn down.
+ *
+ * ⇒ `markdown-it` è pesante e viene risolto pigramente: quando il file di test
+ * che lo innesca finisce, vitest smonta l'ambiente — e l'import arriva dopo,
+ * su un ambiente che non c'è più. Non è un difetto dell'app: nessuno di quegli
+ * errori corrisponde a un comportamento sbagliato in produzione.
+ *
+ * ⛔ Ma conta lo stesso: `.github/workflows/ci.yml` esegue `npx vitest run`, e
+ * una CI **rossa a build sano** dal primo giorno è peggio di una CI assente —
+ * si impara a ignorarla, e la prima volta che diventa rossa per un motivo vero
+ * non se ne accorge nessuno.
+ *
+ * ⇒ La cura è tirarlo dentro SUBITO, nel setup: l'import si risolve mentre
+ * l'ambiente è vivo, e non resta niente in sospeso da consegnare dopo.
+ * ⛔ E non è un mock: è il modulo VERO, caricato prima invece che dopo. I test
+ * continuano a esercitare il renderer di produzione.
+ */
+void import('@/lib/talosMessageMarkdown')

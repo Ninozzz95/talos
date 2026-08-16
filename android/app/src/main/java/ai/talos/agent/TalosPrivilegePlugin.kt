@@ -54,6 +54,76 @@ class TalosPrivilegePlugin : Plugin() {
      */
     private val scossa = TalosScossaPonte { causa ->
         notifyListeners("talosPonteScosso", JSObject().put("causa", causa))
+        riagganciaSeRichiesto(causa)
+    }
+
+    /**
+     * ⭐⭐ «MANTIENI ACCESO» — la vigilanza che vive FUORI dalla sua schermata.
+     *
+     * Owner 2026-08-16: «mettiamo uno switch nelle impostazioni, così l'utente
+     * decide se vuole il debug wireless mantenuto sempre acceso oppure
+     * attivarlo manualmente ogni volta».
+     *
+     * ⛔ E il nome promette più di quanto Android conceda. MISURATO: TALOS NON
+     * può accendere il debug wireless da solo — `settings put adb_wifi_enabled
+     * 1` scrive il valore e la porta TLS resta chiusa, `setprop
+     * persist.adb.tls_server.enable` risponde «Failed to set property», e
+     * `pm grant WRITE_SECURE_SETTINGS` è rifiutato perché è
+     * signature|privileged. Quell'interruttore lo tocca solo il sistema.
+     *
+     * ⇒ Quello che si può fare, e che questo fa: **essere lì quando torna**.
+     * Il riaggancio automatico esisteva già, ma viveva dentro la schermata
+     * Controllo telefono — chiusa quella, nessuno guardava più. Qui vive nel
+     * plugin, cioè quanto il processo.
+     *
+     * ⛔ E la chiave non si perde mai: `dumpsys adb` elenca TALOS fra le
+     * `user_keys` autorizzate, e il sistema ricorda su quale Wi-Fi. Al ritorno
+     * dell'interruttore non serve riappaiare — serve solo qualcuno che provi.
+     *
+     * ⛔ Spento di default, e la scelta è della persona: un ponte che si
+     * riaggancia sempre è più vicino a «permesso acquisito» che a «capacità
+     * viva», che è ciò che TALOS dichiara di essere.
+     */
+    private fun riagganciaSeRichiesto(causa: String) {
+        // Solo quando il debug wireless TORNA: sulle altre cause non c'è niente
+        // di nuovo da tentare, e ritentare a vuoto è rumore che costa batteria.
+        if (causa != "debug-wireless-acceso" && causa != "rete-arrivata") return
+        val voluto = context.getSharedPreferences(MEMORIA_PONTE, android.content.Context.MODE_PRIVATE)
+            .getBoolean(SEMPRE_ACCESO, false)
+        if (!voluto) return
+        // ⛔ MAI sul thread dei plugin: il ponte fa I/O di rete. È la regola
+        // che questo file ripete più volte, e vale anche qui.
+        Thread {
+            runCatching {
+                if (TalosPonteAdb.collegato(context)) return@runCatching
+                val tornato = TalosPonteAdb.riaggancia(context)
+                android.util.Log.i(
+                    "TalosPonte",
+                    if (tornato) "mantieni-acceso: ponte ripreso dopo «$causa»"
+                    else "mantieni-acceso: nessun ponte dopo «$causa»",
+                )
+                if (tornato) {
+                    notifyListeners("talosPonteScosso", JSObject().put("causa", "riagganciato"))
+                }
+            }
+        }.start()
+    }
+
+    /**
+     * Lo switch, dal lato della persona. Il valore vive in SharedPreferences e
+     * non in memoria: la vigilanza deve valere anche quando il processo è
+     * appena nato e la WebView non ha ancora detto niente.
+     */
+    @PluginMethod
+    fun ponteSempreAcceso(call: PluginCall) {
+        val attivo = call.getBoolean("attivo")
+        if (attivo != null) {
+            context.getSharedPreferences(MEMORIA_PONTE, android.content.Context.MODE_PRIVATE)
+                .edit().putBoolean(SEMPRE_ACCESO, attivo).apply()
+        }
+        val ora = context.getSharedPreferences(MEMORIA_PONTE, android.content.Context.MODE_PRIVATE)
+            .getBoolean(SEMPRE_ACCESO, false)
+        call.resolve(JSObject().put("attivo", ora))
     }
 
     override fun load() {
@@ -984,6 +1054,12 @@ class TalosPrivilegePlugin : Plugin() {
     private var ultimoRifiuto: String? = null
 
     private companion object {
+        /** Dove vive lo switch «mantieni acceso»: SharedPreferences e non
+         *  memoria — deve valere anche a processo appena nato, prima che la
+         *  WebView abbia detto qualcosa. */
+        const val MEMORIA_PONTE = "talos-ponte"
+        const val SEMPRE_ACCESO = "sempre-acceso"
+
         /**
          * I programmi che il ponte accetta di lanciare: cinque nomi, tutti di
          * Android, tutti con una superficie che sappiamo descrivere.
