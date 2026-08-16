@@ -518,6 +518,22 @@ NDK 27.0.12077973
 
 You also need a compatible JDK and Android SDK/NDK toolchain.
 
+## Get the sources
+
+The local inference engine is a git submodule, not a copy in this repository —
+so the upstream project keeps its own history and attribution.
+
+```bash
+git clone https://github.com/Ninozzz95/talos.git
+cd talos
+git submodule update --init --depth 1
+```
+
+> **On Windows, do this first:** `git config --global core.longpaths true`.
+> Some paths inside llama.cpp exceed the 260-character limit and the checkout
+> stops halfway with `Filename too long`, leaving a submodule that looks present
+> and is incomplete.
+
 ## Web / unit build
 
 ```bash
