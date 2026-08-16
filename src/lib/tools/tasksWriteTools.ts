@@ -114,6 +114,15 @@ export function createTalosTasksWriteTools(
                         ok: true,
                         content: `Added the task «${saved.title}» (id ${saved.id}).`,
                         evidence: { id: saved.id, title: saved.title, priority: input.priority },
+                        // ⛔ Stessa famiglia della nota e dell'evento: un'attività
+                        // creata aveva la stessa faccia di una mai creata, e non
+                        // si vede finché non la cerchi. Vedi `tracciaAzione`.
+                        scheda: {
+                            tipo: 'creato' as const,
+                            titolo: saved.title,
+                            genere: 'Attività',
+                            dove: `/tasks/${saved.id}`,
+                        },
                     }
                 } catch (failure) {
                     return failed('TALOS_TASK_CREATE_FAILED', 'That task could not be saved on this device.', failure)

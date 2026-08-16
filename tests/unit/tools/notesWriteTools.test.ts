@@ -121,3 +121,55 @@ describe('C45-RED-19G notes write tools', () => {
             .rejects.toThrow('TALOS_NOTE_NOT_FOUND')
     })
 })
+
+/**
+ * ⛔⛔ UNA NOTA CREATA AVEVA LA STESSA FACCIA DI UNA NOTA MAI CREATA.
+ *
+ * Censimento 2026-08-16: su 69 capacità, sette creano qualcosa che RESTA —
+ * note, attività, documenti, immagini, ricerche, memorie, file esportati — e
+ * nessuna lasciava una scheda. È la famiglia dell'evento in agenda, curata il
+ * giorno prima, e con lo stesso aggravante: a differenza della torcia non c'è
+ * niente nel mondo che ti dica se è successo. Te ne accorgi il giorno dopo.
+ */
+describe('la scheda di una nota creata', () => {
+    function conCreate(create: unknown) {
+        return toolsOver({ create, update: vi.fn(), remove: vi.fn() } as never).create
+    }
+    const chiesta = { title: 'Codice cancello', content: 'Il codice è nel cassetto.' } as never
+
+    it('porta il nome, il genere e la strada per aprirla', async () => {
+        const tool = conCreate(vi.fn(async () => ({ id: 'note-7', title: 'Codice cancello' })))
+        const esito = await tool.run(chiesta, {} as never) as {
+            ok: boolean
+            scheda?: { tipo: string, titolo: string, genere: string, dove?: string }
+        }
+        expect(esito.ok).toBe(true)
+        expect(esito.scheda).toEqual({
+            tipo: 'creato',
+            titolo: 'Codice cancello',
+            genere: 'Nota',
+            dove: '/notes/note-7',
+        })
+    })
+
+    it('⛔ il titolo è quello SALVATO, non quello chiesto', async () => {
+        /*
+         * Se l'archivio l'ha ripulito o troncato, la scheda deve mostrare ciò
+         * che la persona troverà nell'elenco — non ciò che il modello ha
+         * mandato. Una scheda che mostra il titolo chiesto la manderebbe a
+         * cercare una nota con un nome che non esiste.
+         */
+        const tool = conCreate(vi.fn(async () => ({ id: 'note-8', title: 'Titolo ripulito' })))
+        const esito = await tool.run(chiesta, {} as never) as { scheda?: { titolo: string } }
+        expect(esito.scheda?.titolo).toBe('Titolo ripulito')
+    })
+
+    it('⛔ nessuna scheda se la nota NON è stata salvata', async () => {
+        // Una scheda su un fallimento mostrerebbe una nota che non esiste, con
+        // la faccia di una che esiste — e col pulsante per aprirla.
+        const tool = conCreate(vi.fn(async () => { throw new Error('disco pieno') }))
+        const esito = await tool.run(chiesta, {} as never) as { ok: boolean, scheda?: unknown }
+        expect(esito.ok).toBe(false)
+        expect(esito.scheda).toBeUndefined()
+    })
+})

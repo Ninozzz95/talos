@@ -94,6 +94,28 @@ export function createTalosNotesWriteTools(
                         // altrimenti costerebbe un elenco intero per ritrovarlo.
                         content: `Saved the note «${saved.title}» (id ${saved.id}).`,
                         evidence: { id: saved.id, title: saved.title },
+                        /*
+                         * ⛔⛔ LA SCHEDA — perché una nota creata aveva la stessa
+                         * faccia di una nota detta e mai creata.
+                         *
+                         * Censimento 2026-08-16: sette capacità creano qualcosa
+                         * che resta e nessuna lasciava traccia sullo schermo. È
+                         * la famiglia dell'evento in agenda, e con lo stesso
+                         * aggravante: a differenza della torcia, non c'è niente
+                         * nel mondo che ti dica se è successo. Te ne accorgi il
+                         * giorno dopo, quando cerchi la nota e non c'è.
+                         *
+                         * ⛔ Il titolo è quello SALVATO, non quello chiesto: se
+                         * l'archivio l'ha ripulito o troncato, la scheda mostra
+                         * ciò che la persona troverà nell'elenco — non ciò che
+                         * il modello ha mandato.
+                         */
+                        scheda: {
+                            tipo: 'creato' as const,
+                            titolo: saved.title,
+                            genere: 'Nota',
+                            dove: `/notes/${saved.id}`,
+                        },
                     }
                 } catch (failure) {
                     return failed('TALOS_NOTE_CREATE_FAILED', 'That note could not be saved on this device.', failure)

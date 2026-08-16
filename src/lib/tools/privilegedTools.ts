@@ -50,10 +50,41 @@ export interface TalosPrivilegedToolSources {
     reasonOf(reason: string | undefined): string
 }
 
-function esitoDi(sources: TalosPrivilegedToolSources, r: Esito, fatto: string) {
+/**
+ * ⛔⛔ LA SCHEDA DELL'INTERRUTTORE — otto capacità con una riga sola.
+ *
+ * Censimento 2026-08-16: su 69 capacità, **quattro** avevano una scheda. Otto
+ * di quelle rimaste sono interruttori identici alla torcia — Wi-Fi, Bluetooth,
+ * modalità aereo, non disturbare, risparmio energetico — cioè uno stato
+ * acceso/spento che la persona può ancora cambiare senza riscrivere niente.
+ *
+ * E il tipo `interruttore` esiste già e li disegna tutti: passano tutti da
+ * questa funzione, quindi la scheda si aggiunge **in un punto solo**.
+ *
+ * ⛔⛔ E SOLO nel ramo in cui la cosa è DAVVERO successa.
+ *
+ * `esitoDi` distingue tre casi, e il secondo è quello che conta: col pannello
+ * aperto l'esito è `ok: true` ma **niente è cambiato** — la persona deve ancora
+ * toccare l'interruttore. Una scheda lì mostrerebbe una levetta nello stato che
+ * nessuno ha ancora raggiunto: è la stessa bugia già nominata su
+ * `device_torch`, «un interruttore che mostra uno stato che non è stato
+ * raggiunto è una bugia con una levetta sopra».
+ */
+function esitoDi(
+    sources: TalosPrivilegedToolSources,
+    r: Esito,
+    fatto: string,
+    scheda?: { tool: string, acceso: boolean },
+) {
     // `shell` e `native` dicono la STESSA cosa a chi legge — «l'ho fatto io» —
     // e si distinguono solo su come. È `panel` che è un'altra cosa.
-    if (r.done && (r.via === 'shell' || r.via === 'native')) return { ok: true, content: fatto }
+    if (r.done && (r.via === 'shell' || r.via === 'native')) {
+        return {
+            ok: true,
+            content: fatto,
+            ...(scheda ? { scheda: { tipo: 'interruttore' as const, ...scheda } } : {}),
+        }
+    }
     if (r.done && r.via === 'panel') {
         /*
          * ⛔ `ok: true` ma il testo non dice «fatto»: la porta è aperta e la
@@ -102,7 +133,7 @@ export function createTalosPrivilegedTools(
             input: z.object({ on: z.boolean() }),
             async run(input) {
                 const r = await sources.wifi(input.on)
-                return esitoDi(sources, r, input.on ? 'Wi-Fi on.' : 'Wi-Fi off.')
+                return esitoDi(sources, r, input.on ? 'Wi-Fi on.' : 'Wi-Fi off.', { tool: 'device_wifi', acceso: input.on })
             },
         }) as TalosToolDefinition<never>,
 
@@ -114,7 +145,7 @@ export function createTalosPrivilegedTools(
             input: z.object({ on: z.boolean() }),
             async run(input) {
                 const r = await sources.bluetooth(input.on)
-                return esitoDi(sources, r, input.on ? 'Bluetooth on.' : 'Bluetooth off.')
+                return esitoDi(sources, r, input.on ? 'Bluetooth on.' : 'Bluetooth off.', { tool: 'device_bluetooth', acceso: input.on })
             },
         }) as TalosToolDefinition<never>,
 
@@ -132,7 +163,7 @@ export function createTalosPrivilegedTools(
             input: z.object({ on: z.boolean() }),
             async run(input) {
                 const r = await sources.airplane(input.on)
-                return esitoDi(sources, r, input.on ? 'Airplane mode on.' : 'Airplane mode off.')
+                return esitoDi(sources, r, input.on ? 'Airplane mode on.' : 'Airplane mode off.', { tool: 'device_airplane', acceso: input.on })
             },
         }) as TalosToolDefinition<never>,
 
@@ -144,7 +175,7 @@ export function createTalosPrivilegedTools(
             input: z.object({ on: z.boolean() }),
             async run(input) {
                 const r = await sources.powerSaving(input.on)
-                return esitoDi(sources, r, input.on ? 'Battery saver on.' : 'Battery saver off.')
+                return esitoDi(sources, r, input.on ? 'Battery saver on.' : 'Battery saver off.', { tool: 'device_power_saving', acceso: input.on })
             },
         }) as TalosToolDefinition<never>,
 
@@ -161,6 +192,20 @@ export function createTalosPrivilegedTools(
             input: z.object({ mode: z.enum(['off', 'priority', 'none', 'alarms']) }),
             async run(input) {
                 const r = await sources.doNotDisturb(input.mode)
+                /*
+                 * ⛔ NIENTE SCHEDA QUI, ed è una scelta contro la simmetria.
+                 *
+                 * Gli altri quattro di questo file sono acceso/spento. «Non
+                 * disturbare» ha QUATTRO modalità — off, priority, none,
+                 * alarms — e una levetta a due stati direbbe una cosa falsa:
+                 * mostrerebbe «acceso» sia per «solo le cose importanti» sia
+                 * per «silenzio totale», che sono la differenza fra sentire la
+                 * sveglia e non sentirla.
+                 *
+                 * ⇒ Questa capacità merita una scheda, ma di un tipo che non
+                 * esiste ancora: quattro scelte, non due. Meglio nessuna scheda
+                 * che una che semplifica una scelta di sicurezza.
+                 */
                 return esitoDi(sources, r, input.mode === 'off'
                     ? 'The phone can ring again.'
                     : `Do Not Disturb set to ${input.mode}.`)
