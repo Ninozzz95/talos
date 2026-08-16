@@ -211,6 +211,21 @@ export function createTalosResearchTools(
                         content: `Started the research «${input.question.trim()}» (id ${id}). `
                             + 'It runs in the background and keeps going even if the app is closed.',
                         evidence: { id, depth: input.depth },
+                        /*
+                         * ⛔ Il genere dice «avviata», non «fatta»: questa
+                         * ricerca gira in sottofondo per minuti e la scheda la
+                         * si guarda mentre sta ancora lavorando. Chiamarla
+                         * «Ricerca» e basta suggerirebbe che ci sia già un
+                         * rapporto da leggere, che è precisamente la cosa che
+                         * non c'è ancora.
+                         */
+                        scheda: {
+                            tipo: 'creato' as const,
+                            titolo: input.question.trim(),
+                            genere: 'Ricerca avviata',
+                            dettaglio: input.depth,
+                            dove: `/research/${id}`,
+                        },
                     }
                 } catch (failure) {
                     return fallito('TALOS_RESEARCH_START_FAILED', 'That research could not be started on this device.', failure)
