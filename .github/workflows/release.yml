@@ -40,7 +40,18 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     steps:
+      # ⛔ `submodules: recursive` — senza, `third_party/llama.cpp` arriva come
+      # cartella VUOTA e il build nativo muore in configurazione CMake. Il
+      # motore locale non e' dentro questo repository: e' un puntatore a un
+      # commit di ggml-org/llama.cpp, e un checkout non lo porta se non glielo
+      # chiedi.
+      #
+      # MISURATO il 2026-08-16: la seconda corsa di release e' morta cosi', al
+      # passo 16 su 19. `gates` non l'aveva mai scoperto perche' non compila il
+      # nativo — un cancello che non esegue una cosa non la sta provando.
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       # ⛔ Il primo passo è il controllo che evita l'artefatto inutile. Se la
       # chiave non c'è, meglio saperlo in dieci secondi che dopo otto minuti di
