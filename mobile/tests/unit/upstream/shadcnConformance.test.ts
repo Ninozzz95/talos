@@ -6,6 +6,16 @@ import { describe, expect, it } from 'vitest'
 const ROOT = path.resolve(__dirname, '..', '..', '..')
 const MANIFEST_PATH = path.join(ROOT, 'upstream', 'shadcn-vue-2.8.0-manifest.json')
 
+/**
+ * Questa copia del repository porta con sé le ricerche interne?
+ *
+ * Nello sviluppo sì — sono 98 documenti in `docs/superpowers/research/`. Nella
+ * copia pubblicata no, per scelta: sono appunti di lavoro, non prodotto. Il
+ * controllo che ci si ancora sopra deve saperlo, invece di scambiare
+ * un'assenza voluta per un guasto.
+ */
+const CON_RICERCHE = fs.existsSync(path.join(ROOT, 'docs', 'superpowers', 'research'))
+
 function sha256(file: string): string {
     return createHash('sha256').update(fs.readFileSync(file)).digest('hex')
 }
@@ -82,8 +92,29 @@ describe('shadcn upstream conformance', () => {
             expect(row.accepted_sha256).not.toBe(row.upstream_sha256)
             expect(row.reason.trim().length).toBeGreaterThan(20)
             expect(row.research).toBe('mobile/docs/superpowers/research/2026-07-29-p0-localization-conformance-closure-research.md')
-            const researchPath = path.join(ROOT, row.research.replace(/^mobile\//, ''))
-            expect(fs.existsSync(researchPath), `${row.research} must exist`).toBe(true)
+            /*
+             * ⛔ QUESTA META' DELLA REGOLA VALE SOLO DOVE LE RICERCHE CI SONO.
+             *
+             * Il manifesto DEVE sempre dichiarare a quale ricerca è ancorata una
+             * divergenza da upstream — quella riga sopra gira dappertutto, ed è
+             * la parte che conta. Ma che il documento esista si può controllare
+             * solo dove il documento vive: le 98 ricerche di
+             * `docs/superpowers/` restano sul computer di chi sviluppa e non
+             * vengono pubblicate, per scelta.
+             *
+             * MISURATO il 2026-08-16: nel repo pubblicato questo `expect`
+             * falliva con «must exist», e non perché qualcosa fosse rotto —
+             * perché stava chiedendo a una copia di esibire una prova che quella
+             * copia, di proposito, non porta con sé.
+             *
+             * ⇒ Non si annacqua: dove le ricerche ci sono, morde come prima.
+             * Dove non ci sono, tace e dice il perché, invece di dichiarare
+             * rosso un progetto sano.
+             */
+            if (CON_RICERCHE) {
+                const researchPath = path.join(ROOT, row.research.replace(/^mobile\//, ''))
+                expect(fs.existsSync(researchPath), `${row.research} must exist`).toBe(true)
+            }
         }
     })
 
