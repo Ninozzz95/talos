@@ -31,7 +31,11 @@ jobs:
   mobile:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # ⛔ @v7 e non @v4: le versioni v4 dichiarano `using: node20`, e dal
+      # 2025-09-19 GitHub le fa girare forzatamente su Node 24 stampando un
+      # avviso a ogni corsa. Un avviso che compare sempre smette di essere
+      # letto, e quando ne arriva uno che conta nessuno lo vede.
+      - uses: actions/checkout@v7
 
       # Una domanda sola, e tutti i passi dopo ne dipendono. Se un giorno la
       # disposizione cambia ancora, cambia qui e basta.
@@ -55,7 +59,7 @@ jobs:
       # c'era scritto 20, che porta npm 10 — un cancello che gira su un runtime
       # che il progetto non supporta non sta provando la stessa cosa che gira
       # sul computer di chi scrive.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24.18.0'
           cache: npm
