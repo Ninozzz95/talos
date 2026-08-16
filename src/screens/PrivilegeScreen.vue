@@ -1171,7 +1171,21 @@ onUnmounted(() => {
             ⛔ E la sottodidascalia lo dice: una casella che promette più di
             quello che fa è peggio di una che manca.
         -->
-        <label
+        <!--
+            ⛔ UNA LEVETTA, NON UNA CASELLA — owner 2026-08-16: «metti uno
+            switch invece della casella».
+
+            E non è solo gusto: una casella è la forma di «scegli fra opzioni»,
+            una levetta è la forma di «questa cosa è accesa o spenta». Qui
+            accendere FA una cosa — apre la porta fissa del ponte — e spegnere
+            la richiude. È uno stato del telefono, non una preferenza in un
+            modulo.
+
+            ⇒ Si riusa `talos-levetta`, la stessa delle schede in chat: chi
+            l'ha vista lì la riconosce qui, e i colori li decide il theme
+            engine invece di `accent-[…]` scritto sulla riga.
+        -->
+        <div
             class="flex items-start justify-between gap-3 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] p-3"
             data-testid="talos-ponte-sempre-acceso"
         >
@@ -1179,13 +1193,16 @@ onUnmounted(() => {
                 <span class="text-sm text-[var(--talos-text)]">{{ t('privilege.keepAlive') }}</span>
                 <span class="text-xs text-[var(--talos-muted)]">{{ t('privilege.keepAliveBody') }}</span>
             </span>
-            <input
-                type="checkbox"
-                class="mt-0.5 size-5 shrink-0 accent-[var(--talos-accent)]"
-                :checked="sempreAcceso"
-                @change="void cambiaSempreAcceso(($event.target as HTMLInputElement).checked)"
-            >
-        </label>
+            <button
+                type="button"
+                role="switch"
+                class="talos-levetta mt-0.5"
+                :aria-checked="sempreAcceso"
+                :aria-label="t('privilege.keepAlive')"
+                data-testid="talos-ponte-sempre-acceso-levetta"
+                @click="void cambiaSempreAcceso(!sempreAcceso)"
+            />
+        </div>
 
         <button
             type="button"
