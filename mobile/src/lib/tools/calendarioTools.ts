@@ -497,6 +497,50 @@ export function createTalosCalendarTools(
                     content: `Created on "${esito.calendario}", and read back to confirm.${quandoDavvero}`
                         + ' Tell the user that exact day and time — it comes from the phone, not from you.'
                         + ' If it is not what they asked for, say so and offer to fix it.',
+                    /*
+                     * ⛔⛔ LA SCHEDA DELL'EVENTO APPENA CREATO — e mancava, con
+                     * una conseguenza che nessuno aveva collegato.
+                     *
+                     * Owner 2026-08-15, tre schermate dell'assistente a
+                     * confronto: sveglia → scheda «07:00 Alarm»; torcia →
+                     * scheda con l'interruttore e «✓ Verified on the phone»;
+                     * evento in calendario → **niente**, solo la frase.
+                     *
+                     * ⛔ E non era una dimenticanza: era il buco lasciato da
+                     * una cura giusta. `calendar_read` produce la scheda
+                     * `agenda`, e `smentita()` in `chatController` la BUTTA se
+                     * nello stesso turno una scrittura riesce dopo — perché
+                     * un'agenda che mostra ancora l'evento cancellato è
+                     * peggio di nessuna agenda (misurato il 14 agosto).
+                     *
+                     * ⇒ Quella regola resta giusta, ma buttava la scheda
+                     * vecchia SENZA metterne una nuova: scrivere in agenda era
+                     * l'unica azione che TOGLIEVA informazione dallo schermo.
+                     *
+                     * ⛔ E il giorno viene da `inizioVero`, cioè dal PROVIDER —
+                     * la stessa fonte della frase qui sopra. Prendere la data
+                     * dall'input del modello darebbe una scheda che conferma
+                     * l'errore del modello invece di smentirlo: è precisamente
+                     * il difetto da due giorni che `quandoDavvero` cura.
+                     */
+                    scheda: {
+                        tipo: 'agenda' as const,
+                        voci: [{
+                            titolo: input.title,
+                            // Solo l'ora, come nella scheda della lettura: il
+                            // giorno lo dice la frase, la scheda risponde a
+                            // «a che ora». ⛔ E se il provider non l'ha
+                            // restituita, si tace invece di inventarla.
+                            quando: esito.inizioVero === null
+                                ? ''
+                                : new Date(esito.inizioVero).toLocaleTimeString(undefined, {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                }),
+                            ...(input.location ? { luogo: input.location } : {}),
+                            ...(esito.calendario ? { calendario: esito.calendario } : {}),
+                        }],
+                    },
                 }
             },
         }) as TalosToolDefinition<never>,

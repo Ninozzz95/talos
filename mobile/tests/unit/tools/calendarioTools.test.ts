@@ -467,3 +467,84 @@ describe('⛔ la scheda dell\'agenda muore con la scrittura che la smentisce', (
         expect(controller).toContain('!smentita(i,')
     })
 })
+
+/**
+ * ⛔⛔ CREARE UN EVENTO NON LASCIAVA NESSUNA SCHEDA — e non era una dimenticanza.
+ *
+ * Owner 2026-08-15, tre schermate dell'assistente a confronto:
+ *
+ *     sveglia  → scheda «07:00 · Alarm»
+ *     torcia   → scheda con l'interruttore e «✓ Verified on the phone»
+ *     evento   → NIENTE, solo la frase
+ *
+ * Il buco nasce da una cura giusta: `calendar_read` produce la scheda `agenda`,
+ * e `smentita()` in `chatController` la BUTTA quando nello stesso turno una
+ * scrittura riesce dopo — perché un'agenda che mostra ancora l'evento
+ * cancellato è peggio di nessuna agenda. Quella regola resta, ma buttava la
+ * vecchia senza metterne una nuova: scrivere in agenda era l'unica azione che
+ * TOGLIEVA informazione dallo schermo.
+ */
+describe('un evento creato torna come SCHEDA, non solo come frase', () => {
+    const quando = Date.parse('2026-08-16T12:00:00.000Z')
+    function conEsito(esito: unknown) {
+        return createTalosCalendarTools(
+            vi.fn(async () => ({ stato: 'letto' as const, eventi: [], calendari: [] })),
+            vi.fn(async () => esito as never),
+        ).find((t) => t.name === 'calendar_write')!
+    }
+    const scritto = { stato: 'scritto', calendario: 'lavoro@example.com', inizioVero: quando }
+    const domanda = {
+        title: 'Riunione', from: '2026-08-16T12:00:00Z', to: '2026-08-16T13:00:00Z',
+        location: 'Via Roma 12',
+    } as never
+
+    it('la scheda esiste, ed è del tipo che il componente sa già disegnare', async () => {
+        const esito = await conEsito(scritto).run(domanda, {} as never)
+        expect(esito.ok).toBe(true)
+        const scheda = (esito as { scheda?: { tipo?: string, voci?: unknown[] } }).scheda
+        expect(scheda?.tipo).toBe('agenda')
+        expect(scheda?.voci).toHaveLength(1)
+    })
+
+    it('porta il titolo, il luogo e il calendario VERO', async () => {
+        const esito = await conEsito(scritto).run(domanda, {} as never)
+        const voce = (esito as { scheda: { voci: Array<Record<string, string>> } }).scheda.voci[0]!
+        expect(voce.titolo).toBe('Riunione')
+        expect(voce.luogo).toBe('Via Roma 12')
+        // ⛔ Il calendario è quello che il PROVIDER dice, non quello chiesto.
+        expect(voce.calendario).toBe('lavoro@example.com')
+    })
+
+    it('⛔ ora presa dal PROVIDER, non da quello che il modello ha chiesto', async () => {
+        /*
+         * È la stessa regola di `quandoDavvero` nella frase: il 14 agosto il
+         * modello aveva sbagliato il giorno di DUE, e la sola fonte che non
+         * poteva essere d'accordo con lui era la riga riletta dal provider.
+         * Una scheda che prende la data dall'input confermerebbe l'errore
+         * invece di smentirlo.
+         */
+        const altroGiorno = Date.parse('2026-08-18T09:30:00.000Z')
+        const esito = await conEsito({ ...scritto, inizioVero: altroGiorno }).run(domanda, {} as never)
+        const voce = (esito as { scheda: { voci: Array<Record<string, string>> } }).scheda.voci[0]!
+        const atteso = new Date(altroGiorno).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+        expect(voce.quando).toBe(atteso)
+        expect(voce.quando).not.toBe('')
+    })
+
+    it('⛔ TACE sull ora se il provider non la restituisce, invece di inventarla', async () => {
+        const esito = await conEsito({ ...scritto, inizioVero: null }).run(domanda, {} as never)
+        const voce = (esito as { scheda: { voci: Array<Record<string, string>> } }).scheda.voci[0]!
+        expect(voce.quando).toBe('')
+        expect(voce.titolo).toBe('Riunione')
+    })
+
+    it('⛔ nessuna scheda quando la scrittura NON è riuscita', async () => {
+        // Una scheda su un fallimento è la bugia peggiore: mostra un evento che
+        // non esiste, con la faccia di uno che esiste.
+        for (const fallito of [{ stato: 'rifiutato' }, { stato: 'non-rileggibile' }]) {
+            const esito = await conEsito(fallito).run(domanda, {} as never)
+            expect(esito.ok, JSON.stringify(fallito)).toBe(false)
+            expect((esito as { scheda?: unknown }).scheda, JSON.stringify(fallito)).toBeUndefined()
+        }
+    })
+})
