@@ -637,6 +637,27 @@ A useful contribution should preserve the central project rule:
 
 ---
 
+# On how this was built
+
+TALOS was written with heavy use of AI coding editors — Claude Opus 5 and
+GPT-5.6 among them. That is worth stating plainly rather than leaving to be
+guessed at, and the comments throughout this codebase make it obvious anyway.
+
+What those tools did not do is decide anything.
+
+The vision, the ideas, the architecture, the testing, the implementation calls
+and every single operational step came from **one human mind**. Every measured
+number in this README exists because a person ran it on a real device and looked
+at the result. Every guard exists because a person hit the failure it prevents.
+Every rejected approach was rejected by a person who had a reason.
+
+An AI editor is a very fast pair of hands. It is not the one deciding what to
+build, whether the thing actually works, or what to do when the measurement says
+something inconvenient. Those are the parts that make a product, and they had a
+single author.
+
+---
+
 # License
 
 [Apache License 2.0](LICENSE).
