@@ -31,12 +31,25 @@ export interface PonteSchermo {
         manoSulloSchermo: boolean
         byteDiTocchi: number
     }>
-    agisci(options: { indice: number, azione: string, testo?: string }): Promise<{
+    agisci(options: {
+        indice: number
+        azione: string
+        testo?: string
+        /**
+         * ⛔ Fino al 2026-08-16 questo campo NON esisteva qui, e l'istruzione
+         * del pilota lo chiedeva al modello lo stesso: `scorri` andava sempre
+         * in avanti, e «scorri su» faceva scendere la lista. Un parametro che
+         * il modello produce e nessuno legge è peggio di uno assente.
+         */
+        direzione?: string
+        /** Solo per `imposta`: dove portare un cursore. */
+        valore?: number
+    }): Promise<{
         fatto: boolean
         millisecondi: number
         motivo?: string
     }>
-    /** Indietro e Home: azioni di SISTEMA, senza indice. */
+    /** Indietro, Home e Recenti: azioni di SISTEMA, senza indice. */
     sistema(options: { azione: string }): Promise<{ fatto: boolean, motivo?: string }>
     armaIlFreno(): Promise<{ armato: boolean, comando: string[], percorso: string }>
     /** ⭐ L'ultimo centimetro: preme UN pulsante, con le tre guardie. */

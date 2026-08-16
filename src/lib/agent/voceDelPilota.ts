@@ -64,10 +64,22 @@ export interface TalosPassoDaDire {
 /** I verbi, in rotazione. ⛔ Nessuno nomina indici, pacchetti o elementi. */
 const VERBI: Record<TalosAzioneNome, readonly string[]> = {
     tocca: ['tocco', 'apro', 'vado su', 'premo'],
+    /*
+     * ⛔ Si dice che è LUNGA. Chi guarda deve capire perché lo schermo sta per
+     * fare una cosa diversa dal solito — un menu che salta fuori senza
+     * preavviso sembra un difetto, non un'intenzione.
+     */
+    premiALungo: ['tengo premuto', 'premo a lungo', 'apro il menu'],
     scrivi: ['scrivo', 'digito'],
     scorri: ['scorro', 'scendo', 'cerco più giù'],
+    /*
+     * ⛔ Il valore NON si dice qui: i verbi non nominano numeri, come non
+     * nominano indici. Il «a quanto» sta nella scheda, dove si può rileggere.
+     */
+    imposta: ['sposto il cursore', 'regolo'],
     indietro: ['torno indietro', 'faccio un passo indietro'],
     home: ['vado alla schermata iniziale', 'torno alla home'],
+    recenti: ['riapro quella di prima', 'guardo le app aperte'],
     apri_app: ['apro', 'faccio partire'],
     attendi: ['aspetto che carichi', 'un attimo che carica'],
     fine: ['ci siamo'],

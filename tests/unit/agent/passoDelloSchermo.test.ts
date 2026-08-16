@@ -91,6 +91,70 @@ describe('⛔ il lettore delle azioni', () => {
     })
 })
 
+describe('⭐ le azioni aggiunte il 2026-08-16', () => {
+    const offerti = [0, 1, 2, 3, 4, 5]
+
+    it('`premiALungo` si legge, e pretende un indice come `tocca`', () => {
+        const ok = talosLeggiAzione('{"azione":"premiALungo","indice":3,"perche":"menu"}', offerti)
+        expect(ok.ok).toBe(true)
+        const ko = talosLeggiAzione('{"azione":"premiALungo","perche":"menu"}', offerti)
+        expect(ko.ok).toBe(false)
+        if (!ko.ok) expect(ko.motivo).toBe('indiceMancante')
+    })
+
+    it('`recenti` NON pretende un indice: non c\'è un elemento a schermo', () => {
+        const esito = talosLeggiAzione('{"azione":"recenti","perche":"torno a WhatsApp"}', offerti)
+        expect(esito.ok).toBe(true)
+    })
+
+    it('⛔ `imposta` SENZA valore si scarta: un cursore a caso è un volume a caso', () => {
+        const esito = talosLeggiAzione('{"azione":"imposta","indice":2,"perche":"alzo"}', offerti)
+        expect(esito.ok).toBe(false)
+        if (!esito.ok) expect(esito.motivo).toBe('valoreMancante')
+    })
+
+    it('⛔ `imposta` a ZERO passa: zero è un valore, non un campo vuoto', () => {
+        const esito = talosLeggiAzione('{"azione":"imposta","indice":2,"valore":0}', offerti)
+        expect(esito.ok).toBe(true)
+        if (esito.ok) expect(esito.azione.valore).toBe(0)
+    })
+
+    it('⛔ un valore che non è un numero non diventa NaN a valle', () => {
+        for (const grezzo of ['"trenta"', 'null', 'true']) {
+            const esito = talosLeggiAzione(`{"azione":"imposta","indice":2,"valore":${grezzo}}`, offerti)
+            expect(esito.ok).toBe(false)
+        }
+    })
+
+    it('⭐ il cursore mostra DOVE È: senza, «alza il volume» è un tiro a indovinare', () => {
+        const testo = talosOsservazione([
+            { indice: 0, tipo: 'cursore', etichetta: 'Suoneria', valore: 7, minimo: 0, massimo: 15 },
+        ])
+        expect(testo).toBe('0 cursore "Suoneria" [7 da 0 a 15]')
+    })
+
+    it('⛔ i float di RangeInfo non arrivano al modello con la coda binaria', () => {
+        const testo = talosOsservazione([
+            { indice: 0, tipo: 'cursore', etichetta: 'Volume', valore: 7.000000476837158, minimo: 0, massimo: 15 },
+        ])
+        expect(testo).toContain('[7 da 0 a 15]')
+        expect(testo).not.toContain('7.0000')
+    })
+
+    it('⛔ AL CONTRARIO: un cursore senza scala non inventa dei numeri', () => {
+        const testo = talosOsservazione([{ indice: 0, tipo: 'cursore', etichetta: 'Ignoto' }])
+        expect(testo).toBe('0 cursore "Ignoto"')
+    })
+
+    it('⛔ l\'istruzione SPIEGA cosa vuol dire «su», invece di lasciarlo indovinare', () => {
+        const testo = talosIstruzioneDelPilota({ obiettivo: 'x' })
+        expect(testo).toContain('FAMMI VEDERE QUELLO SOPRA')
+        for (const nome of ['premiALungo', 'imposta', 'recenti']) {
+            expect(testo).toContain(nome)
+        }
+    })
+})
+
 describe('⛔ l\'osservazione compatta', () => {
     it('una riga per elemento, e lo stato solo dove esiste', () => {
         expect(talosOsservazione([
@@ -127,7 +191,19 @@ describe('⛔ l\'istruzione del pilota', () => {
     })
 
     it('⛔ resta corta: è il motivo per cui questo file esiste', () => {
-        // Il prefisso della chat misura ~9.500 token; qui si sta sotto i 400.
+        /*
+         * ⛔ IL MARGINE SI È ASSOTTIGLIATO, e va detto invece di lasciar
+         * credere che ce ne sia.
+         *
+         * MISURATO il 2026-08-16, dopo le tre azioni nuove: **1.433 byte ≈ 387
+         * token** su un obiettivo vero. Il tetto è 1.600, quindi restano ~45
+         * token. Prima delle aggiunte eravamo a ~320.
+         *
+         * ⇒ L'istruzione si paga a OGNI passo, esattamente come l'osservazione
+         * (che ne costa ~180). La prossima azione che si aggiunge non si
+         * aggiunge scrivendo tre righe di spiegazione: o le si toglie da
+         * un'altra parte, o si alza il tetto sapendo cosa si sta comprando.
+         */
         expect(talosIstruzioneDelPilota({ obiettivo: 'x' }).length).toBeLessThan(1_600)
     })
 

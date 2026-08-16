@@ -1,4 +1,5 @@
 import { talosFraseDaDire } from '@/lib/agent/voceDelPilota'
+import { talosLeggiOrdinale, talosNesimoInLista } from '@/lib/agent/trovaElemento'
 import { talosTracciaFuori } from '@/lib/device/traccia'
 import {
     talosLeggiAzione,
@@ -103,6 +104,14 @@ export interface TalosSguardo {
 
 /** Le porte: il ponte, il modello, la voce, l'orologio. */
 export interface TalosPortePilota {
+    /**
+     * ⛔ Cosa ha chiesto la PERSONA, con le sue parole.
+     *
+     * Serve alla guardia degli ordinali: senza la frase originale, «il primo
+     * contatto» è indistinguibile da «un contatto», e l'unico a saperlo
+     * sarebbe il modello — cioè proprio quello che qui si controlla.
+     */
+    obiettivo: string
     guarda(): Promise<TalosSguardo | null>
     agisci(azione: TalosAzione): Promise<{ fatto: boolean, motivo?: string }>
     /** Il modello. Riceve osservazione e storia, torna la sua riga cruda. */
@@ -301,6 +310,54 @@ export async function talosGuidaLoSchermo(
             ...(ultima ? { precedente: ultima.azione } : {}),
             ...(ultima?.etichetta ? { etichettaPrecedente: ultima.etichetta } : {}),
         })
+        /*
+         * ⭐⭐⭐ LA GUARDIA DEGLI ORDINALI — «il primo contatto» dev'essere IL PRIMO.
+         *
+         * Owner 2026-08-15: «se io voglio chiedere a TALOS mentre sono su
+         * WhatsApp di cliccare sul **primo contatto**». GUI-Owl dichiara gli
+         * ordinali un problema aperto (`arXiv 2508.15144`), e il pezzo che
+         * mancava era che gli indici non erano nemmeno in ordine di schermo —
+         * misurato: 0 su 19. Adesso lo sono, quindi «il primo» è calcolabile.
+         *
+         * ⇒ Qui non si sceglie al posto del modello: si CONTROLLA. Il modello
+         * propone un indice, e se la persona ha detto «il primo» e quell'indice
+         * non è il primo della lista, non si tocca: si rimanda indietro con
+         * scritto quale sarebbe.
+         *
+         * ## ⛔ Le due condizioni che tengono fuori i falsi allarmi
+         *
+         * 1. **Solo se il bersaglio è in lista.** Un ordinale fra pulsanti
+         *    sparsi in una barra è un modo di dire, non una posizione.
+         * 2. **Solo se le ETICHETTE differiscono.** In Android la stessa voce
+         *    compare spesso due volte — il contenitore cliccabile e il figlio
+         *    che porta il nome (MISURATO sul Play Store: indici 0 e 1 con la
+         *    stessa identica etichetta). Sono la stessa cosa vista due volte, e
+         *    bloccarle sarebbe un allarme a ogni singolo passo.
+         *
+         * ⛔ E il costo di sbagliare è asimmetrico, che è il motivo per cui la
+         * guardia esiste: un falso allarme costa un giro, ed è limitato da
+         * `fallimentiDiFila`. Aprire la chat sbagliata costa a una persona.
+         */
+        const ordinale = talosLeggiOrdinale(porte.obiettivo)
+        if (ordinale && bersaglio?.inLista && azione.azione !== 'fine') {
+            const atteso = talosNesimoInLista(sguardo.elementi, ordinale)
+            if (atteso && atteso.indice !== bersaglio.indice
+                && atteso.etichetta !== bersaglio.etichetta) {
+                passi -= 1
+                fallimenti += 1
+                storia.push(
+                    `Passo ${passi + 1}: NON eseguita. Hai scelto ${bersaglio.indice} `
+                    + `(${JSON.stringify(bersaglio.etichetta)}), ma è stato chiesto `
+                    + `«${ordinale}» e nella lista quello è ${atteso.indice} `
+                    + `(${JSON.stringify(atteso.etichetta)}). Rispondi di nuovo.`,
+                )
+                if (fallimenti >= limiti.fallimentiDiFila) {
+                    return chiudi({ motivo: 'troppi-fallimenti', ultimo: 'ordinale-sbagliato' })
+                }
+                continue
+            }
+        }
+
         if (frase) porte.racconta(frase)
         ultima = { azione: azione.azione, etichetta: bersaglio?.etichetta }
 
