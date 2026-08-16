@@ -19,12 +19,22 @@
  * che l'owner ha chiesto. ⇒ Si rasterizza, con il font incorporato al momento
  * dello scatto.
  *
- * ## Perché un colore solo
+ * ## ⛔ DUE VARIANTI, e perché non una sola
  *
- * Nell'app «TALOS» è chiaro sotto un marchio ambra, perché il fondo è scuro. Un
- * README si legge su DUE fondi: bianco e nero. Il bianco sparirebbe sul chiaro.
- * ⇒ Il blocco è tutto nell'ambra del tema — leggibile su entrambi, e fedele
- * all'accento del marchio.
+ * Owner 2026-08-16: «la scritta TALOS in Orbitron deve essere BIANCA, non
+ * bronzo». Giusto: nell'app è così — chiara sotto un marchio ambra.
+ *
+ * Ma nell'app il fondo è scuro, sempre. Un README si legge su DUE fondi, e il
+ * bianco su bianco sparisce. La prima versione aveva risolto facendo tutto
+ * ambra, che è leggibile ovunque ma non è quello che l'app mostra.
+ *
+ * ⇒ Si generano DUE immagini con i colori veri del tema — `--talos-text` del
+ * tema scuro e di quello chiaro — e le sceglie `<picture>` con
+ * `prefers-color-scheme`. Il marchio resta ambra in entrambe, perché
+ * l'accento non cambia col tema.
+ *
+ * Nessuno dei due fondi viene sacrificato, e su quello scuro — dove la maggior
+ * parte legge — è esattamente la schermata nuova chat.
  *
  *   node scripts/intestazione-readme.mjs
  */
@@ -34,7 +44,15 @@ import { chromium } from 'playwright'
 
 const RADICE = resolve(import.meta.dirname, '..')
 const ACCENTO = '#c98b32'
-const FUORI = resolve(RADICE, 'docs/immagini/talos-logo.png')
+
+/*
+ * I colori veri del tema `forge`, presi dal file delle identita' cromatiche:
+ * e' `--talos-text` sul tema scuro e su quello chiaro. Non scelti a occhio.
+ */
+const VARIANTI = [
+    { nome: 'talos-logo.png', parola: '#edf2f7', per: 'tema scuro' },
+    { nome: 'talos-logo-chiaro.png', parola: '#111827', per: 'tema chiaro' },
+]
 
 const marchio = readFileSync(resolve(RADICE, 'public/talos/brand/logo-short.svg'), 'utf8')
     .replace(/<!--[\s\S]*?-->/g, '')
@@ -44,7 +62,7 @@ const font = readFileSync(
     resolve(RADICE, 'dist/assets/orbitron-latin-600-normal-mazHmDYu.woff2'),
 ).toString('base64')
 
-const pagina = `<!doctype html>
+const pagina = (COLORE_PAROLA) => `<!doctype html>
 <meta charset="utf-8">
 <style>
   @font-face {
@@ -73,7 +91,7 @@ const pagina = `<!doctype html>
     font-size: 132px;
     line-height: 1;
     letter-spacing: 0;
-    color: ${ACCENTO};
+    color: ${COLORE_PAROLA};
   }
 </style>
 <div class="blocco">
@@ -82,14 +100,14 @@ const pagina = `<!doctype html>
 </div>`
 
 const browser = await chromium.launch()
-const pag = await browser.newPage({ viewport: { width: 1200, height: 620 }, deviceScaleFactor: 2 })
-await pag.setContent(pagina)
-await pag.evaluate(() => document.fonts.ready)
-const blocco = await pag.locator('.blocco')
-mkdirSync(dirname(FUORI), { recursive: true })
-await blocco.screenshot({ path: FUORI, omitBackground: true })
+for (const variante of VARIANTI) {
+    const pag = await browser.newPage({ viewport: { width: 1200, height: 620 }, deviceScaleFactor: 2 })
+    await pag.setContent(pagina(variante.parola))
+    await pag.evaluate(() => document.fonts.ready)
+    const fuori = resolve(RADICE, 'docs/immagini', variante.nome)
+    mkdirSync(dirname(fuori), { recursive: true })
+    await pag.locator('.blocco').screenshot({ path: fuori, omitBackground: true })
+    await pag.close()
+    console.log(`  ${variante.nome.padEnd(24)} ${(readFileSync(fuori).length / 1024).toFixed(0)} KB   parola ${variante.parola} (${variante.per})`)
+}
 await browser.close()
-
-const peso = readFileSync(FUORI).length
-console.log(`  scritta ${FUORI}`)
-console.log(`  ${(peso / 1024).toFixed(0)} KB, fondo trasparente, ${ACCENTO}`)
