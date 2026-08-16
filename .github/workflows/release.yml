@@ -171,10 +171,22 @@ jobs:
         working-directory: ${{ steps.dove.outputs.dir }}/android
         run: |
           set -euo pipefail
+          # ⛔ `$GITHUB_WORKSPACE`, NON `../..`.
+          #
+          # Questo passo gira in `<dir>/android`. Con l'app in `mobile/` quel
+          # `../..` arrivava alla radice del checkout; con l'app ALLA RADICE —
+          # cioe' nel repository pubblicato, cioe' proprio dove la release si fa
+          # — `./android/../..` finisce FUORI dal workspace. L'APK sarebbe
+          # atterrato in un posto che l'attestazione e la pubblicazione non
+          # guardano nemmeno.
+          #
+          # ⇒ Lo stesso difetto del `cd` prima di `git push`: un percorso
+          # relativo che dipende da dove sei e' un percorso che un giorno
+          # cambia sotto i piedi. Si nomina la destinazione.
           origine=app/build/outputs/apk/release/app-release.apk
           nome="TALOS-${{ steps.versione.outputs.nome }}.apk"
-          cp "$origine" "../../$nome"
-          cd ../..
+          cp "$origine" "$GITHUB_WORKSPACE/$nome"
+          cd "$GITHUB_WORKSPACE"
 
           strumenti=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           "$strumenti/apksigner" verify --print-certs "$nome"
