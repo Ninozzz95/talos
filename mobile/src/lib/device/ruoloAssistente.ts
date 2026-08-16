@@ -61,6 +61,7 @@ export interface TalosEsitoRichiestaRuolo {
 interface PonteRuolo {
     assistantRole(): Promise<TalosStatoRuoloAssistente>
     requestAssistantRole(): Promise<TalosEsitoRichiestaRuolo>
+    open(options: { target: string }): Promise<{ opened: boolean }>
 }
 
 const Ponte = registerPlugin<PonteRuolo>('TalosPrivilege')
@@ -109,6 +110,34 @@ export async function talosChiediRuoloAssistente(): Promise<TalosEsitoRichiestaR
         // ⛔ `shown: false` anche qui: senza ponte non è comparso niente, e chi
         // legge deve poter tentare l'altra strada invece di credere a un no.
         return { opened: false, shown: false, granted: false, reason: 'no-bridge' }
+    }
+}
+
+/**
+ * ⭐⭐⭐ LA STRADA SENZA PONTE: la pagina di sistema dell'assistente.
+ *
+ * Quando la finestra del ruolo non compare — e su AOSP non compare MAI, perché
+ * `roles.xml` dichiara il ruolo assistente `requestable="false"` — l'unica cosa
+ * che restava era il ponte ADB. Questa è l'altra: si porta la persona sulla
+ * pagina «App assistente digitale», dove TALOS è nell'elenco e serve un tocco.
+ *
+ * MISURATO sul Pad il 2026-08-16, togliendo il ruolo a TALOS per la prova:
+ *
+ *     richiesta in-app  →  53 ms, RESULT_CANCELED, nessuna finestra
+ *     pagina di sistema →  «App assistente digitale», TALOS nell'elenco
+ *
+ * ⛔ Non torna nessun esito, e non può: la pagina è di Android e si chiude
+ * quando vuole la persona. Chi chiama deve rileggere il ruolo AL RIENTRO — che
+ * è già ciò che fa `appStateChange` — invece di credere a un sì che nessuno ha
+ * detto. `opened` dice solo che la pagina si è aperta.
+ */
+export async function talosApriPaginaAssistente(): Promise<boolean> {
+    try {
+        const esito = await Ponte.open({ target: 'assistant' })
+        return esito?.opened === true
+    } catch {
+        // Su web, o su una ROM senza quella pagina: chi chiama passerà oltre.
+        return false
     }
 }
 

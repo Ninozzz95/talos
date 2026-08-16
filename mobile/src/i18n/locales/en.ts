@@ -436,6 +436,14 @@ export const TALOS_EN_MESSAGES = {
     privacyPermissions: {
         intro: 'TALOS asks for something only when a feature needs it, at the moment you use that feature. Android always has the final word — you can change any of these in the system settings.',
         grantedAtInstall: 'Granted at install',
+        /*
+         * ⛔ Reads as an answer, not as an absence. These rows describe things
+         * with no permission behind them — files are granted by picking them in
+         * the system chooser, the rest ask nothing of anyone — and until today
+         * they showed a dashed circle and no words at all, on a page whose one
+         * job is answering "do you have it or not?".
+         */
+        nothingToGrant: 'Nothing to grant',
         allowSteps: 'To allow it: open the system settings, tap Permissions, then turn on {permission}.',
         openSystemSettings: 'Open system settings',
         makerStepsTitle: 'Extra steps this phone asks for',
@@ -938,9 +946,18 @@ export const TALOS_EN_MESSAGES = {
          */
         keepAliveBody: 'The bridge reconnects on its own, without turning Wireless debugging back on. While it is on, anyone on your network can see the port: getting in still needs the TALOS key.',
         assistantTitle: 'TALOS as your assistant',
-        assistantBody: 'The bar only opens once TALOS is your assistant. One tap, and Android asks you.',
+        /*
+         * ⛔ Diceva «One tap, and Android asks you». Android does NOT ask:
+         * `roles.xml` declares the assistant role `requestable="false"`, so the
+         * in-app request opens and closes in 53 ms without a dialog (measured
+         * on the Pad, 2026-08-16). A line that promises a prompt nobody will
+         * ever see is the kind of copy that makes a screen untrustworthy.
+         */
+        assistantBody: 'The bar only opens once TALOS is your assistant. Android will not switch it from inside an app, so this opens the page where you pick it.',
         assistantHeld: 'Call it from any app: the bar comes up.',
         assistantAsk: 'Make TALOS the assistant',
+        assistantOnPage: 'Open that page again',
+        assistantPageHint: 'On the page that just opened, tap “Default digital assistant app” and choose TALOS. Come back here and this card updates by itself.',
         assistantManual: 'Neither Android nor the bridge could set it. Do it by hand: Settings → Apps → Default apps → Digital assistant. If the list is empty, turn on wireless debugging below and press again.',
         presetTitle: 'How you call it',
         /*
