@@ -1,6 +1,6 @@
 # TALOS
 
-A local-first agentic assistant that remembers what matters, controls your device and runs models on it — private by design.
+A local-first agentic workspace that remembers what matters, writes code, controls your device and runs models locally — private by design.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-5%2C161%20passing-brightgreen.svg)](#building-it)
