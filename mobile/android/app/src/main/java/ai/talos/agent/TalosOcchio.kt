@@ -47,6 +47,16 @@ class TalosOcchio : AccessibilityService() {
         val etichetta: String,
         val attivo: Boolean?,
         val nodo: AccessibilityNodeInfo,
+        /**
+         * ⭐⭐ Che posto occupa fra i fratelli, e se sta in una lista.
+         *
+         * Servono a risolvere gli ordinali — «il primo contatto» — **nel
+         * codice**, non nella testa del modello. Attraversano il ponte e si
+         * fermano al risolutore: in `talosOsservazione()` non entrano, quindi
+         * costano **zero token**. Il conto sta in `pesoDelloSguardo.test.ts`.
+         */
+        val posizione: Int,
+        val inLista: Boolean,
     )
 
     /**
@@ -230,13 +240,19 @@ class TalosOcchio : AccessibilityService() {
      * non a schermo, e toccarli non fa niente o fa qualcosa altrove.
      */
     fun interattivi(): List<Elemento> {
+        val t0 = SystemClock.uptimeMillis()
         val radice = rootInActiveWindow ?: return emptyList()
         val fuori = mutableListOf<Elemento>()
-        val pila = ArrayDeque<AccessibilityNodeInfo>()
-        pila.addLast(radice)
+        // Si porta dietro la posizione fra i fratelli e se si è già dentro un
+        // contenitore che scorre: risalire i genitori dopo costerebbe un giro
+        // per nodo, e questi due dati si sanno già mentre si scende.
+        data class Passo(val nodo: AccessibilityNodeInfo, val posizione: Int, val inLista: Boolean)
+        val pila = ArrayDeque<Passo>()
+        pila.addLast(Passo(radice, -1, false))
         while (pila.isNotEmpty()) {
-            val n = pila.removeLast()
-            for (i in 0 until n.childCount) n.getChild(i)?.let { pila.addLast(it) }
+            val (n, posizione, inLista) = pila.removeLast()
+            val listaQui = inLista || n.isScrollable || sembraUnaLista(n)
+            for (i in 0 until n.childCount) n.getChild(i)?.let { pila.addLast(Passo(it, i, listaQui)) }
             if (!n.isVisibleToUser) continue
             val riquadro = android.graphics.Rect().also { n.getBoundsInScreen(it) }
             if (riquadro.width() <= 0 || riquadro.height() <= 0) continue
@@ -247,7 +263,18 @@ class TalosOcchio : AccessibilityService() {
                 n.isClickable || n.isLongClickable -> "tocca"
                 else -> continue
             }
-            val etichetta = (n.text ?: n.contentDescription ?: "").toString().trim()
+            val propria = (n.text ?: n.contentDescription ?: "").toString().trim()
+            /*
+             * ⛔ Il recupero NON si fa sui contenitori che scorrono: uno
+             * scorrimento non ha bisogno di un nome per essere fatto, e
+             * battezzarli sarebbe testo pagato per niente. Misurati: 4 dei 54
+             * muti sulle tre schermate di prova.
+             */
+            val etichetta = if (propria.isNotEmpty() || tipo == "scorri") {
+                propria
+            } else {
+                nomeDalSottoalbero(n)
+            }
             fuori.add(
                 Elemento(
                     indice = fuori.size,
@@ -255,12 +282,110 @@ class TalosOcchio : AccessibilityService() {
                     etichetta = etichetta,
                     attivo = if (n.isCheckable) n.isChecked else null,
                     nodo = n,
+                    posizione = posizione,
+                    inLista = inLista,
                 ),
             )
         }
         sguardo = fuori
         sguardoAl = SystemClock.uptimeMillis()
+        /*
+         * ⛔ LA SONDA DEL RECUPERO — perché l'88% è misurato su TRE schermate.
+         *
+         * Il test `pesoDelloSguardo.test.ts` conta su fixture congelate: dice
+         * che il metodo funziona su quelle. Questa riga lo fa dire al telefono
+         * su OGNI schermata vera che passa, e con il costo in millisecondi
+         * accanto — perché uno sguardo costava 2-26 ms e il recupero è lavoro
+         * in più che nessun test in laboratorio può misurare.
+         *
+         * Se un giorno l'88% cade su un'app che non abbiamo mai provato, si
+         * vede qui invece di vedersi da TALOS che preme il pulsante sbagliato.
+         */
+        val muti = fuori.count { it.tipo == "tocca" && it.etichetta.isEmpty() }
+        val recuperati = fuori.count {
+            it.tipo == "tocca" && it.etichetta.isNotEmpty() &&
+                (it.nodo.text ?: it.nodo.contentDescription ?: "").toString().isBlank()
+        }
+        Log.i(
+            TAG,
+            "sguardo: ${fuori.size} elementi, recuperati dal sottoalbero $recuperati, " +
+                "ancora ciechi $muti, ${SystemClock.uptimeMillis() - t0} ms",
+        )
         return fuori
+    }
+
+    /** `RecyclerView`, `ListView`, `GridView`, `ViewPager`: liste che non si dichiarano scorribili. */
+    private fun sembraUnaLista(n: AccessibilityNodeInfo): Boolean {
+        val classe = n.className?.toString() ?: return false
+        return classe.endsWith("RecyclerView") ||
+            classe.endsWith("ListView") ||
+            classe.endsWith("GridView") ||
+            classe.endsWith("ViewPager") ||
+            classe.endsWith("ViewPager2")
+    }
+
+    /**
+     * ⭐⭐⭐ IL NOME STA NEI FIGLI — e questa riga vale il 88% dei pulsanti muti.
+     *
+     * ## Perché chiedere al contenitore è la domanda sbagliata
+     *
+     * In Android il nodo cliccabile è quasi sempre un contenitore nudo:
+     *
+     * ```xml
+     * <node clickable="true"  resource-id=""            class="LinearLayout" text="">
+     *   <node clickable="false" resource-id="…:id/title" text="Wi-Fi">
+     * ```
+     *
+     * Chiedere l'etichetta al padre è come chiedere il titolo alla copertina
+     * invece che al frontespizio. ⛔ La prima misura fatta così diede **4%**, e
+     * concludeva che questa strada non esisteva: era una risposta esatta a una
+     * domanda sbagliata.
+     *
+     * ## ⛔ La misura, e il fatto che NON È UNA COSTANTE
+     *
+     * Due misure, lo stesso giorno, e dicono numeri diversi:
+     *
+     * ```
+     * tre schermate congelate (OnePlus, AOSP, Play Store)   44/50 = 88%
+     * il Play Store DAL VIVO, col carosello aperto          22/29 = 76%
+     * ```
+     *
+     * ⇒ Il tasso **dipende da quanto è grafica la schermata**, e sta fra il
+     * 75% e il 95%. ⛔ Chi lo cita come «il 95%» sta citando un campione, non
+     * una proprietà: la prima misura di tutte diede **4%** perché chiedeva al
+     * contenitore, e un numero preciso ottenuto dalla domanda sbagliata è il
+     * modo più efficace di progettare la cosa costosa al posto di quella
+     * gratis.
+     *
+     * Quelli che restano sono i casi da **screenshot ritagliato**, e il giro
+     * col modello visivo si paga **solo lì**.
+     *
+     * ## Perché in ampiezza, e perché il tetto è largo
+     *
+     * MISURATO sulla schermata viva, sui 21 recuperati:
+     *
+     * ```
+     * nodi da guardare prima di trovarlo   mediana 2, max 6
+     * profondità del figlio che ha il nome mediana 1, max 3
+     * oltre il tetto di 40 nodi            ZERO
+     * ```
+     *
+     * ⇒ Il nome è davvero a un passo, e [MAX_NODI_SOTTOALBERO] non ha mai
+     * morso: esiste per l'albero patologico, non per il caso normale. E lo
+     * sguardo intero è costato **35 ms** su 34 elementi.
+     */
+    private fun nomeDalSottoalbero(n: AccessibilityNodeInfo): String {
+        val coda = ArrayDeque<AccessibilityNodeInfo>()
+        for (i in 0 until n.childCount) n.getChild(i)?.let { coda.addLast(it) }
+        var visti = 0
+        while (coda.isNotEmpty() && visti < MAX_NODI_SOTTOALBERO) {
+            val f = coda.removeFirst()
+            visti += 1
+            val t = (f.text ?: f.contentDescription ?: "").toString().trim()
+            if (t.isNotEmpty()) return t
+            for (i in 0 until f.childCount) f.getChild(i)?.let { coda.addLast(it) }
+        }
+        return ""
     }
 
     /**
@@ -345,6 +470,16 @@ class TalosOcchio : AccessibilityService() {
          * 16 ms) che toccare al buio.
          */
         private const val VITA_SGUARDO_MS = 500L
+
+        /**
+         * ⛔ Quanti nodi si guardano al massimo cercando il nome di un muto.
+         *
+         * Il nome utile sta a uno o due passi — la ricerca è in ampiezza
+         * proprio per trovarlo lì. Questo tetto esiste perché una schermata
+         * con un sottoalbero enorme e tutto muto non possa trasformare uno
+         * sguardo da 2-26 ms in qualcosa che si sente.
+         */
+        private const val MAX_NODI_SOTTOALBERO = 40
 
         /**
          * ⛔ Quanto si resta sordi dopo una NOSTRA azione.

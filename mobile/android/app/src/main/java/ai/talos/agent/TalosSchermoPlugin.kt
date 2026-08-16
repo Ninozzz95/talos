@@ -600,7 +600,15 @@ class TalosSchermoPlugin : Plugin() {
                     .put("indice", e.indice)
                     .put("tipo", e.tipo)
                     .put("etichetta", e.etichetta)
-                    .also { if (e.attivo != null) it.put("attivo", e.attivo) },
+                    .also { if (e.attivo != null) it.put("attivo", e.attivo) }
+                    /*
+                     * ⛔ Questi due attraversano il ponte e si FERMANO al
+                     * risolutore degli ordinali: `talosOsservazione()` non li
+                     * scrive, quindi il modello non li paga. Il conto sta in
+                     * `pesoDelloSguardo.test.ts`, che si rompe se ci finiscono.
+                     */
+                    .put("posizione", e.posizione)
+                    .put("inLista", e.inLista),
             )
         }
         call.resolve(
