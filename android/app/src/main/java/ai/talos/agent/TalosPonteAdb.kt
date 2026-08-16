@@ -432,6 +432,21 @@ object TalosPonteAdb {
          * perché questo riaggancio sta **dentro** un comando che una persona ha
          * chiesto in chat: sono sei secondi in cui non succede niente a schermo.
          */
+        /*
+         * ⭐⭐⭐ PRIMA DI TUTTO LA PORTA FISSA, SE C'È.
+         *
+         * È dentro il telefono, quindi non passa dalla rete, non aspetta mDNS e
+         * non dipende dal Debug wireless — che è il punto: se la persona ha
+         * acceso «Mantieni acceso», questa riga è l'unica che serve, e il
+         * riaggancio diventa immediato invece di un censimento da sei secondi.
+         *
+         * ⛔ Se la porta non è fissata, `adb connect` su una porta chiusa
+         * fallisce subito (connessione rifiutata): costa un tentativo, non
+         * un'attesa. Chiedere prima «è fissata?» costerebbe di più, perché
+         * quella domanda vuole a sua volta una shell, cioè un ponte.
+         */
+        if (collega(context, INDIRIZZO_LOCALE).ok) return true
+
         val subito = TalosSentinelle.collegamento.indirizzoPronto()
         if (subito != null && collega(context, subito).ok) return true
         // ⛔ Il censimento resta come ripiego: un indirizzo visto mezz'ora fa
@@ -439,6 +454,163 @@ object TalosPonteAdb {
         // cache invece che per un ponte assente.
         return scopri(context, ANNUNCIO_COLLEGAMENTO).filter { it != subito }
             .any { collega(context, it).ok }
+    }
+
+    /** La porta fissa su cui chiediamo ad adbd di restare in ascolto. */
+    const val PORTA_FISSA = 5555
+
+    /** Dove ci si riaggancia una volta fissata la porta: dentro il telefono. */
+    const val INDIRIZZO_LOCALE = "127.0.0.1:$PORTA_FISSA"
+
+    /**
+     * ⭐⭐⭐ IL PONTE SMETTE DI DIPENDERE DAL DEBUG WIRELESS.
+     *
+     * ## La domanda era sbagliata, e per settimane
+     *
+     * Owner 2026-08-16, due volte: «trova un modo per abilitare automaticamente
+     * il debug wireless», e davanti al mio no: **«impossibile NON ESISTE»**.
+     *
+     * Aveva ragione. Avevo misurato tre porte chiuse — `settings put
+     * adb_wifi_enabled`, `setprop persist.adb.*`, `pm grant
+     * WRITE_SECURE_SETTINGS` — e concluso «non si può». Ma erano tre modi di
+     * fare **la stessa domanda**: come accendo l'interruttore. Nessuno chiedeva:
+     * come faccio a non averne bisogno.
+     *
+     * ## Cosa fa davvero questa funzione
+     *
+     * `tcpip` non tocca l'interruttore: chiede ad **adbd** di riavviarsi in
+     * ascolto su una porta TCP fissa. Da quel momento il ponte si riaggancia a
+     * `127.0.0.1:5555` con la chiave che è già autorizzata.
+     *
+     * MISURATO sul Pad il 2026-08-16, in quest'ordine:
+     *
+     *     tcpip 5555                             «restarting in TCP mode»
+     *     getprop service.adb.tcp.port           5555
+     *     settings put global adb_wifi_enabled 0    ← SPENTO
+     *     getprop service.adb.tcp.port           5555      ancora
+     *     connessione da 127.0.0.1               risponde
+     *
+     * ⇒ Col Debug wireless a **zero** il ponte vive lo stesso.
+     *
+     * ## ⛔ Il prezzo, che va detto e non nascosto
+     *
+     * adbd finisce in ascolto su **tutte** le interfacce, non solo su
+     * localhost: chi è sulla stessa rete vede la porta. Non entra — servirebbe
+     * una chiave autorizzata, e l'autenticazione RSA di adb resta — ma è una
+     * superficie più larga del Debug wireless, che invece è protetto da TLS.
+     *
+     * ⇒ Per questo NON si fa da soli: lo accende la persona, con la casella
+     * «Mantieni acceso», e la riga glielo dice.
+     *
+     * ## ⛔ E il confine che resta
+     *
+     * `service.adb.tcp.port` non è `persist.`, e `persist.adb.tcp.port` è
+     * rifiutata da SELinux (`u:object_r:default_prop:s0` contro
+     * `u:r:shell:s0`, misurato). Dopo un riavvio la persona deve riaccendere il
+     * Debug wireless **una volta**: da lì in poi non serve più.
+     *
+     * @return `true` se la porta risulta fissata E il ponte è riagganciato lì.
+     */
+    fun fissaLaPorta(context: Context): Boolean {
+        /*
+         * ⛔ LA SONDA STA QUI PERCHÉ SENZA HO GIRATO IN TONDO.
+         *
+         * 2026-08-16: la casella entrava nelle preferenze, il ponte risultava
+         * collegato, e la porta restava a zero. Tre ipotesi diverse, tutte
+         * plausibili rileggendo il codice, tutte sbagliate. La regola vale
+         * anche per me: si STRUMENTA prima di ipotizzare.
+         *
+         * Ogni passo dice il suo esito con `adb logcat -s TalosPonte`.
+         */
+        val prima = esegui(context, listOf("devices"), attesaMs = 10_000)
+        android.util.Log.i(
+            "TalosPonte",
+            "fissaLaPorta: dispositivi ok=${prima.ok} uscita=${prima.uscita.replace("\n", " | ").take(160)}",
+        )
+        if (giaFissata(context) && collega(context, INDIRIZZO_LOCALE).ok) return true
+
+        /*
+         * ⛔ `tcpip` RIAVVIA adbd, quindi la connessione da cui parte muore
+         * subito dopo. Non è un errore: è il modo in cui funziona. Per questo
+         * subito sotto ci si ricollega, e il verdetto lo dà quella connessione,
+         * non l'uscita di questo comando.
+         */
+        val acceso = esegui(context, listOf("tcpip", PORTA_FISSA.toString()), attesaMs = 15_000)
+        android.util.Log.i(
+            "TalosPonte",
+            "fissaLaPorta: tcpip ok=${acceso.ok} motivo=${acceso.motivo} uscita=${acceso.uscita.replace("\n", " | ").take(200)}",
+        )
+
+        /*
+         * ⛔⛔ PRIMA CI SI RICOLLEGA, POI SI CHIEDE — e l'ordine non è
+         * stilistico.
+         *
+         * La prima versione era `giaFissata(context) && collega(…)`. Sembrava
+         * a posto rileggendola, ed era rotta sempre: `giaFissata` gira un
+         * `getprop` **attraverso il ponte**, e il ponte lo ha appena ucciso
+         * `tcpip` un microsecondo prima. La domanda arrivava a una connessione
+         * morta, rispondeva «no», e la funzione dichiarava fallita una cosa
+         * che era riuscita.
+         *
+         * ⇒ Chi verifica un riavvio non può usare il canale che il riavvio
+         * chiude. Prima si riapre il canale, poi gli si parla.
+         */
+        if (!collega(context, INDIRIZZO_LOCALE).ok) return false
+        return giaFissata(context)
+    }
+
+    /**
+     * adbd sta già ascoltando sulla porta fissa?
+     *
+     * ⛔ Si chiede al telefono, non a un valore ricordato: il ponte può essere
+     * stato fissato in una sessione precedente, e può essere caduto con un
+     * riavvio. Vale la stessa regola di `collegato()`.
+     */
+    fun giaFissata(context: Context): Boolean {
+        val esito = shell(
+            context,
+            listOf("getprop", "service.adb.tcp.port"),
+            ammessi = setOf("getprop"),
+            riagganciaSeStaccato = false,
+        )
+        return esito.ok && esito.uscita.trim() == PORTA_FISSA.toString()
+    }
+
+    /**
+     * Richiude la porta fissa: adbd torna ad ascoltare solo dal cavo.
+     *
+     * ⛔ È il verso contrario di `fissaLaPorta`, e senza di lui quella casella
+     * sarebbe un interruttore che va solo in su. Su una cosa che apre una porta
+     * sulla rete locale, «si accende e non si spegne» è peggio che non averla.
+     *
+     * ⛔ Il ponte cade qui dentro, perché `usb` riavvia adbd. È voluto: chi
+     * toglie la spunta sta chiedendo esattamente questo. Se il Debug wireless è
+     * acceso il riaggancio riparte da solo; se è spento il ponte resta giù, ed
+     * è lo stato che la persona ha scelto.
+     */
+    fun chiudiLaPorta(context: Context): Boolean {
+        /*
+         * ⛔⛔ `-s <indirizzo>`, NON `usb` nudo — ed è la stessa lezione del
+         * `git -C <percorso>` invece di `cd … ; git push`.
+         *
+         * MISURATO sul Pad il 2026-08-16: spegnendo la levetta la preferenza
+         * andava a `false` e la porta restava a 5555. Il comando `usb` nudo
+         * chiede al server adb di parlare al «dispositivo», e se il server ne
+         * ha più d'uno — qui c'è la porta fissa, e può esserci ancora il
+         * trasporto TLS — fallisce con «more than one device» **senza che si
+         * veda**: l'uscita non arriva a nessuno, e l'interruttore diventa a
+         * senso unico.
+         *
+         * ⇒ Un comando che agisce su una cosa deve NOMINARE quella cosa. Se
+         * l'indirizzo è sbagliato adb si ferma; se è ambiguo il contesto,
+         * nessuno se ne accorge.
+         */
+        val chiuso = esegui(context, listOf("-s", INDIRIZZO_LOCALE, "usb"), attesaMs = 15_000)
+        android.util.Log.i(
+            "TalosPonte",
+            "chiudiLaPorta: ok=${chiuso.ok} uscita=${chiuso.uscita.replace("\n", " | ").take(160)}",
+        )
+        return !giaFissata(context)
     }
 
     /** Chiude il server, e con esso la porta locale che teneva aperta. */
