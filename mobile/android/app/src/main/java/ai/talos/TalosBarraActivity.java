@@ -235,7 +235,52 @@ public class TalosBarraActivity extends MainActivity {
          * spegnimento se nessuno si aggancia — lo decide `TalosOrecchioAnticipato`.
          */
         final android.net.Uri deciso = getIntent() == null ? null : getIntent().getData();
-        if (deciso != null && "1".equals(deciso.getQueryParameter("voce"))) {
+
+        /*
+         * ⭐⭐⭐ SOPRA IL BLOCCO — e MUTA, che è la parte che conta.
+         *
+         * Owner 2026-08-16: «da telefono bloccato, se dico la parola lo schermo
+         * si sveglia, e appena lo sblocco parte subito l'assistente».
+         *
+         * ⛔⛔ LA DOMANDA DI SICUREZZA VIENE PRIMA DI QUELLA TECNICA.
+         *
+         * Se la barra rispondesse sopra il lockscreen, un telefono bloccato sul
+         * tavolo diventerebbe un microfono che serve CHIUNQUE — e le risposte
+         * contengono agenda, messaggi, memoria. La parola detta si TIENE e non
+         * si esegue: l'assistente parte all'istante dello sblocco, che è
+         * esattamente ciò che l'owner ha chiesto.
+         *
+         * ⇒ Qui si accende solo lo schermo. L'ascolto anticipato NON parte
+         * (vedi la condizione qui sotto): sopra il blocco la barra si vede, e
+         * basta.
+         *
+         * ⛔ `setShowWhenLocked` + `setTurnScreenOn` insieme, e non uno solo:
+         * il secondo da solo accende lo schermo su un'activity che il
+         * lockscreen coprirebbe. Da API 27 sono questi due metodi, non più i
+         * flag di finestra, che sono deprecati.
+         *
+         * ⛔ E `requestDismissKeyguard` NON chiede di saltare il blocco: chiede
+         * al sistema di MOSTRARE la richiesta di sblocco. È la persona a
+         * sbloccare, con la sua faccia o il suo PIN — noi arriviamo dopo.
+         */
+        final boolean daBloccato = deciso != null && "1".equals(deciso.getQueryParameter("bloccato"));
+        if (daBloccato && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true);
+            setTurnScreenOn(true);
+            final android.app.KeyguardManager blocco =
+                    (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+            if (blocco != null) {
+                blocco.requestDismissKeyguard(this, null);
+            }
+        }
+
+        /*
+         * ⛔ Sopra il blocco il microfono NON si accende. La condizione era
+         * «voce=1»; adesso è «voce=1 e non siamo sul lockscreen», perché una
+         * barra muta con il microfono aperto sarebbe il peggio dei due mondi:
+         * ascolta e non può rispondere.
+         */
+        if (deciso != null && "1".equals(deciso.getQueryParameter("voce")) && !daBloccato) {
             ai.talos.agent.TalosOrecchioAnticipato.accendi(this);
         }
 
