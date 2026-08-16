@@ -108,8 +108,19 @@ jobs:
           if [ -d "$ANDROID_HOME/ndk/$atteso" ]; then
             echo "gia' presente"
           else
-            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$atteso"
+            # ⛔ `sdkmanager` NON si assume in `cmdline-tools/latest/`: il
+            # manifesto dell'immagine dichiara la VERSIONE dei command line
+            # tools, non la disposizione delle cartelle. Si cerca — e' la
+            # stessa regola per cui il cancello chiede al checkout dove sta
+            # l'app invece di scriverlo.
+            gestore=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -1)
+            if [ -z "$gestore" ]; then
+              echo "::error::sdkmanager non trovato sotto $ANDROID_HOME/cmdline-tools"
+              exit 1
+            fi
+            echo "sdkmanager: $gestore"
+            yes | "$gestore" --licenses > /dev/null 2>&1 || true
+            "$gestore" "ndk;$atteso"
           fi
           test -d "$ANDROID_HOME/ndk/$atteso" \
             || { echo "::error::NDK $atteso non installabile su questo runner"; exit 1; }
