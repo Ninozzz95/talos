@@ -920,6 +920,8 @@ export const TALOS_EN_MESSAGES = {
         codeCopyFailed: 'Code copy failed.',
     },
     privilege: {
+        keepAlive: 'Keep it alive',
+        keepAliveBody: 'TALOS keeps listening and reconnects by itself as soon as you turn Wireless debugging back on, even outside this screen. ⛔ It cannot turn it on: that switch belongs to the system.',
         assistantTitle: 'TALOS as your assistant',
         assistantBody: 'The bar only opens once TALOS is your assistant. One tap, and Android asks you.',
         assistantHeld: 'TALOS is your assistant. Call it from any app and the bar comes up.',
