@@ -30,6 +30,10 @@ const SCHERMO: TalosSguardo = {
 function porte(su: Partial<TalosPortePilota> & { sguardo?: () => TalosSguardo | null } = {}) {
     let orologio = 0
     const base: TalosPortePilota = {
+        // ⛔ Senza ordinale nella frase, la guardia degli ordinali non scatta:
+        // questi casi provano i TETTI, e un obiettivo che dicesse «il primo»
+        // farebbe scattare un controllo che non c'entra con quello che provano.
+        obiettivo: 'cerca il meteo',
         guarda: vi.fn(async () => (su.sguardo ? su.sguardo() : SCHERMO)),
         agisci: vi.fn(async () => ({ fatto: true })),
         chiedi: vi.fn(async () => '{"azione":"tocca","indice":1,"perche":"tocco Invio"}'),
