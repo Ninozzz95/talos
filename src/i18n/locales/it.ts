@@ -439,6 +439,14 @@ export const TALOS_IT_MESSAGES = {
     privacyPermissions: {
         intro: 'TALOS chiede un’autorizzazione soltanto quando una funzione ne ha bisogno, nel momento in cui la usi. Android ha sempre l’ultima parola: puoi modificarle nelle impostazioni di sistema.',
         grantedAtInstall: 'Concessa all’installazione',
+        /*
+         * ⛔ Si legge come una risposta, non come un'assenza. Queste righe
+         * descrivono cose senza nessun permesso dietro — i file si concedono
+         * scegliendoli nel selettore, le altre non chiedono niente a nessuno —
+         * e fino a oggi mostravano un cerchietto tratteggiato e zero parole, su
+         * una pagina il cui unico mestiere è rispondere «ce l'ha, o no?».
+         */
+        nothingToGrant: 'Niente da concedere',
         allowSteps: 'Per consentirlo: apri le impostazioni di sistema, tocca Autorizzazioni, quindi attiva {permission}.',
         openSystemSettings: 'Apri impostazioni di sistema',
         makerStepsTitle: 'Passi in più chiesti da questo telefono',
@@ -972,9 +980,18 @@ export const TALOS_IT_MESSAGES = {
          */
         keepAliveBody: 'Il ponte si riaggancia da solo, senza riaccendere il Debug wireless. Finché è acceso, chi è sulla tua rete vede la porta: per entrarci serve comunque la chiave di TALOS.',
         assistantTitle: 'TALOS come assistente',
-        assistantBody: 'La barra si apre solo quando TALOS è il tuo assistente. Un tocco, e te lo chiede Android.',
+        /*
+         * ⛔ Diceva «Un tocco, e te lo chiede Android». Android NON lo chiede:
+         * `roles.xml` dichiara il ruolo assistente `requestable="false"`, e la
+         * richiesta in-app si apre e si chiude in 53 ms senza mostrare niente
+         * (misurato sul Pad il 2026-08-16). Promettere una finestra che nessuno
+         * vedrà mai è ciò che rende una schermata inaffidabile.
+         */
+        assistantBody: 'La barra si apre solo quando TALOS è il tuo assistente. Android non lo cambia da dentro un’app, quindi questo apre la pagina dove lo scegli.',
         assistantHeld: 'Chiamalo da qualunque app: la barra compare.',
         assistantAsk: 'Rendi TALOS il tuo assistente',
+        assistantOnPage: 'Riapri quella pagina',
+        assistantPageHint: 'Nella pagina che si è aperta, tocca «App assistente digitale predefinita» e scegli TALOS. Torna qui: la scheda si aggiorna da sola.',
         assistantManual: 'Né Android né il ponte ci sono riusciti. Fallo a mano: Impostazioni → App → App predefinite → Assistente digitale. Se l’elenco è vuoto, accendi il Debug wireless qui sotto e ripremi.',
         presetTitle: 'Come lo chiami',
         /*

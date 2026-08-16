@@ -70,10 +70,58 @@ import com.getcapacitor.annotation.PermissionCallback;
          */
         @Permission(alias = "mailCount", strings = {
             "com.google.android.gm.permission.READ_CONTENT_PROVIDER"
+        }),
+        /*
+         * ⭐⭐ LA QUINTA RIGA CHE TACEVA — 2026-08-16.
+         *
+         * «Dove ti trovi» era dichiarata `kind: 'runtime'` in
+         * `permissionRows.ts` — cioè PROMETTE uno stato — e qui non c'era.
+         * `stateOf()` tornava `null`, la riga non diceva né «Consentito» né
+         * altro, e il nome accessibile era «Dove ti trovi» e basta: chi usa uno
+         * screen reader non aveva NESSUN modo di sapere se era concessa.
+         *
+         * ⛔⛔ E l'alias contiene SOLO la posizione approssimata, non tutte e
+         * due, benché il manifest le dichiari entrambe.
+         *
+         * Capacitor, `Bridge.getPermissionStates` (Bridge.java:1250):
+         *
+         *     // multiple permissions with the same alias must all be true,
+         *     // otherwise all false.
+         *
+         * E da Android 12 la persona sceglie fra «Precisa» e «Approssimata»:
+         * scegliendo Approssimata, COARSE è concessa e FINE no. Con un alias a
+         * due permessi questa riga avrebbe detto «non concessa» a chi l'aveva
+         * appena CONCESSA — cioè avrebbe inventato un fatto falso, che è
+         * esattamente ciò che questa schermata vieta a sé stessa.
+         *
+         * Con la sola COARSE la risposta è vera in tutti e due i casi:
+         * scegliendo «Precisa» Android concede anche la grossolana. Ed è ciò
+         * che la riga promette davvero — «un ristorante per stasera, il negozio
+         * più vicino» non ha bisogno del metro.
+         */
+        @Permission(alias = "location", strings = {
+            Manifest.permission.ACCESS_COARSE_LOCATION
         })
     }
 )
 public class TalosDevicePermissionsPlugin extends Plugin {
+
+    /**
+     * ⛔ UN ELENCO SOLO, letto sia da chi RIPORTA lo stato sia da chi CHIEDE.
+     *
+     * Prima erano due liste scritte a mano, in due punti a ottanta righe di
+     * distanza: il ciclo di `state()` e il controllo dentro `requestRuntime()`.
+     * Due elenchi che devono coincidere coincidono finché qualcuno non ne
+     * aggiorna uno — ed è successo: «Dove ti trovi» è entrata fra le righe
+     * della schermata e non in nessuno dei due, restando muta per sempre senza
+     * che niente fallisse.
+     *
+     * Con una costante sola, aggiungere una riga è UN posto, e dimenticarsene
+     * non è più possibile.
+     */
+    private static final String[] RUNTIME_ALIASES = {
+        "contacts", "calendar", "camera", "mailCount", "location"
+    };
 
     /**
      * Below Android 13 there is no notification permission at all: notifications
@@ -103,7 +151,7 @@ public class TalosDevicePermissionsPlugin extends Plugin {
          * direbbe «Consentito» su un permesso tolto la settimana scorsa.
          */
         JSObject runtime = new JSObject();
-        for (String alias : new String[] { "contacts", "calendar", "camera", "mailCount" }) {
+        for (String alias : RUNTIME_ALIASES) {
             runtime.put(alias, getPermissionState(alias).toString());
         }
         result.put("runtime", runtime);
@@ -199,14 +247,21 @@ public class TalosDevicePermissionsPlugin extends Plugin {
     @PluginMethod
     public void requestRuntime(PluginCall call) {
         String alias = call.getString("alias", "");
-        if (!"contacts".equals(alias) && !"calendar".equals(alias)
-            && !"camera".equals(alias) && !"mailCount".equals(alias)) {
+        if (!conosciuto(alias)) {
             // Un alias che non conosciamo non è un incidente: è una riga che
             // questa schermata non sa chiedere, e chi chiama deve poterlo dire.
             call.resolve(new JSObject().put("state", "prompt").put("known", false));
             return;
         }
         requestPermissionForAlias(alias, call, "runtimeResult");
+    }
+
+    /** Sta in `RUNTIME_ALIASES`, cioè: questa schermata lo sa sia leggere che chiedere. */
+    private static boolean conosciuto(String alias) {
+        for (String noto : RUNTIME_ALIASES) {
+            if (noto.equals(alias)) return true;
+        }
+        return false;
     }
 
     @PermissionCallback
