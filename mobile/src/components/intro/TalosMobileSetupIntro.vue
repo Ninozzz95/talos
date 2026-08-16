@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, inject, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { ArrowLeft, Check, ShieldCheck } from '@lucide/vue'
+import { ArrowLeft, Check, ChevronDown, ShieldCheck } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileSettingsLanguagePanel from '@/components/talos/settings/TalosMobileSettingsLanguagePanel.vue'
 import { TALOS_SETUP_STEPS, talosSetupProgress, type TalosSetupStepId } from '@/lib/onboarding/setupProgress'
@@ -33,6 +33,15 @@ const TalosMobileAppLockModal = defineAsyncComponent(
 )
 const TalosMobileProviderRuntimePanel = defineAsyncComponent(
     () => import('@/components/talos/models/TalosMobileProviderRuntimePanel.vue'),
+)
+/*
+ * ⛔ Pigro come il pannello dei provider, e per lo stesso motivo: interroga il
+ * telefono sullo stato di dieci permessi, e quel lavoro non deve pesare
+ * sull'avvio di chi non arriva mai all'ultimo passo. Il tetto del bundle
+ * iniziale ha 2.115 byte liberi.
+ */
+const TalosMobileSettingsPrivacyPanel = defineAsyncComponent(
+    () => import('@/components/talos/settings/TalosMobileSettingsPrivacyPanel.vue'),
 )
 
 const settings = useSettingsStore()
@@ -137,22 +146,46 @@ const haDecisoAutonomia = ref(false)
 
 
 const index = ref(0)
+/**
+ * ⛔ LA LINGUA VIENE PRIMA DELLA STORIA, ed è giusto così.
+ *
+ * Owner 2026-08-16, correggendomi mentre stavo invertendo l'ordine: la storia
+ * **va letta nella lingua giusta**. Metterla per prima significherebbe far
+ * leggere a qualcuno otto paragrafi in una lingua che non ha scelto, e poi
+ * chiedergli quale preferisce — cioè scusarsi dopo.
+ *
+ * ⇒ Prima si sceglie come parlarsi, poi si dice chi si è.
+ */
 const stage = ref<'language' | 'story' | 'setup'>(
     TALOS_INTRO_LANGUAGE_PAGE_ENABLED ? 'language' : 'story',
 )
 const step = computed(() => TALOS_SETUP_STEPS[index.value]!)
 const onLastStep = computed(() => index.value === TALOS_SETUP_STEPS.length - 1)
 
+/**
+ * ⛔ TRE TRATTI NUOVI, e uno spostato da «in arrivo» — 2026-08-16.
+ *
+ * `comingShizuku` prometteva le azioni sul telefono «col ponte in casa, sempre
+ * tipizzate, mostrate in anteprima»: **è uscito**, e da allora il ponte non
+ * chiede nemmeno più il Debug wireless. Una promessa che si legge come futura
+ * quando la funzione c'è già fa sembrare l'app più piccola di quello che è.
+ *
+ * ⇒ Diventa un tratto (`traitActs`), e con lui entrano le due cose che il
+ * README racconta e la storia taceva: che «fatto» è uno **stato verificato**, e
+ * che la parola di richiamo gira **qui**.
+ */
 const traits = computed(() => [
     { title: t('onboarding.traitNoAccountTitle'), body: t('onboarding.traitNoAccountBody') },
     { title: t('onboarding.traitModelsTitle'), body: t('onboarding.traitModelsBody') },
+    { title: t('onboarding.traitActsTitle'), body: t('onboarding.traitActsBody') },
+    { title: t('onboarding.traitVerifiedTitle'), body: t('onboarding.traitVerifiedBody') },
+    { title: t('onboarding.traitWakeTitle'), body: t('onboarding.traitWakeBody') },
     { title: t('onboarding.traitMemoryTitle'), body: t('onboarding.traitMemoryBody') },
     { title: t('onboarding.traitTwoModelsTitle'), body: t('onboarding.traitTwoModelsBody') },
     { title: t('onboarding.traitFilesTitle'), body: t('onboarding.traitFilesBody') },
 ])
 const coming = computed(() => [
     t('onboarding.comingZethos'),
-    t('onboarding.comingShizuku'),
     t('onboarding.comingSync'),
 ])
 
@@ -383,10 +416,35 @@ function onKeydown(event: KeyboardEvent): void {
                     <span class="text-[var(--talos-muted)]">{{ t('onboarding.storySubtitle') }}</span>
                 </h1>
 
-                <ul class="mt-8 flex flex-col gap-6">
-                    <li v-for="trait in traits" :key="trait.title" class="border-l-2 border-[var(--talos-accent)] pl-4">
-                        <p class="text-md font-medium leading-6">{{ trait.title }}</p>
-                        <p class="mt-1.5 text-sm leading-6 text-[var(--talos-muted)]">{{ trait.body }}</p>
+                <!--
+                    ⭐ OTTO TITOLI A COLPO D'OCCHIO, e si apre solo quello che
+                    interessa. Owner 2026-08-16: «le sezioni nella prima pagina
+                    falle collassabili, con la descrizione dentro il collapse
+                    espandibile e il titolo come titolo del collapse».
+
+                    Con otto tratti aperti la prima pagina era un muro di testo:
+                    chi arriva qui non sa ancora cosa gli interessa, e un muro
+                    si salta tutto invece di leggerne un pezzo.
+
+                    ⛔ `<details>` NATIVO, non un accordion nostro: tastiera,
+                    `aria-expanded` e la ricerca nel testo del browser
+                    funzionano da soli. Un accordion fatto a mano è tre cose da
+                    ricablare e tre modi di sbagliarle.
+                -->
+                <ul class="mt-8 flex flex-col gap-3">
+                    <li v-for="trait in traits" :key="trait.title">
+                        <details class="talos-intro-trait border-l-2 border-[var(--talos-accent)] pl-4">
+                            <summary
+                                class="talos-pressable flex min-h-touch cursor-pointer list-none items-center gap-2 text-md font-medium leading-6 marker:content-none"
+                            >
+                                <span class="flex-1">{{ trait.title }}</span>
+                                <ChevronDown
+                                    class="talos-intro-trait-chevron size-4 shrink-0 text-[var(--talos-muted)] transition-transform duration-200"
+                                    aria-hidden="true"
+                                />
+                            </summary>
+                            <p class="pb-1.5 pt-1 text-sm leading-6 text-[var(--talos-muted)]">{{ trait.body }}</p>
+                        </details>
                     </li>
                 </ul>
 
@@ -648,6 +706,40 @@ function onKeydown(event: KeyboardEvent): void {
                     <p class="mt-4 text-sm leading-6 text-[var(--talos-muted)]">
                         {{ t('onboarding.backgroundLater') }}
                     </p>
+
+                    <!--
+                        ⭐ E QUI CI SONO TUTTI GLI ALTRI — owner 2026-08-16:
+                        «i permessi devono essere completi, assicurati che ci
+                        siano anche quelli del controllo del dispositivo, e
+                        skippabili».
+
+                        Il passo si chiamava «Background» e ne chiedeva UNO. Gli
+                        altri nove esistevano solo in Impostazioni, dove chi ha
+                        appena installato l'app non sa di dover andare: la prima
+                        volta che il microfono serviva, la richiesta arrivava a
+                        freddo, in mezzo a un'altra cosa.
+
+                        ⛔ Si RIUSA il pannello delle Impostazioni, non se ne
+                        disegna un secondo. Le righe, i loro stati e i passi in
+                        piu' dei produttori vivono in `permissionRows.ts` e
+                        cambiano; due schermate che li disegnano per conto loro
+                        divergono al primo cambio — ed e' la stessa regola che
+                        questa modale si e' gia' data per l'autonomia.
+
+                        Skippabile per costruzione: nessuna riga blocca
+                        «Finisci», e ognuna si concede per conto suo.
+                    -->
+                    <div class="mt-8 border-t border-[var(--talos-border)] pt-6">
+                        <h2 class="text-md font-semibold leading-6">
+                            {{ t('onboarding.permissionsAllTitle') }}
+                        </h2>
+                        <p class="mt-2 text-sm leading-6 text-[var(--talos-muted)]">
+                            {{ t('onboarding.permissionsAllBody') }}
+                        </p>
+                        <div class="mt-4" data-testid="talos-setup-all-permissions">
+                            <TalosMobileSettingsPrivacyPanel />
+                        </div>
+                    </div>
                 </template>
             </section>
 
@@ -707,3 +799,23 @@ function onKeydown(event: KeyboardEvent): void {
         />
     </div>
 </template>
+
+<style scoped>
+/*
+ * ⛔ Il triangolino di sistema si toglie in DUE modi, non uno.
+ *
+ * `::marker` è lo standard e non basta: WebKit — cioè la WebView di Android,
+ * cioè ogni telefono su cui gira TALOS — disegna il suo con
+ * `::-webkit-details-marker`. Toglierne uno solo lascia il triangolo dove la
+ * gente lo vede davvero, e non dove lo si prova.
+ */
+.talos-intro-trait > summary::marker { content: ""; }
+.talos-intro-trait > summary::-webkit-details-marker { display: none; }
+
+/* La freccia dice se è aperto, e resta ferma se il sistema chiede quiete. */
+.talos-intro-trait[open] .talos-intro-trait-chevron { transform: rotate(180deg); }
+
+@media (prefers-reduced-motion: reduce) {
+    .talos-intro-trait-chevron { transition: none; }
+}
+</style>
