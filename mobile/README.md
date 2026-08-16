@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="docs/immagini/talos-logo.png" alt="TALOS" width="420">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/immagini/talos-logo-chiaro.png">
+    <img src="docs/immagini/talos-logo.png" alt="TALOS" width="420">
+  </picture>
 </p>
 
 <p align="center">
