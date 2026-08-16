@@ -129,22 +129,47 @@ function parenti(parola: string): readonly string[] {
  * combaciano allo stesso modo», e con dei punteggi continui due candidati non
  * pareggiano quasi mai — cioè l'ambiguità sparirebbe proprio dove serve.
  */
+/**
+ * ⛔⛔ SI CONFRONTA ANCHE SENZA SPAZI — e lo ha trovato il telefono.
+ *
+ * MISURATO il 2026-08-16 sulle Impostazioni del Pad: la prima voce della lista
+ * è **«Wi-Fi»**, e cercando **«wifi»** il risultato era **«assente»**.
+ *
+ * `talosNormalizza('Wi-Fi')` dà `wi fi` — il trattino diventa uno spazio, ed è
+ * giusto che lo diventi — mentre `wifi` resta attaccato. Due forme della stessa
+ * parola che non si incontrano mai.
+ *
+ * ⇒ È il caso **più comune che esista**, e i miei test non lo vedevano perché
+ * usavano tutte parole singole: «sticker», «Adesivi», «Invia». Vale per «Wi-Fi»,
+ * «E-mail», «Non disturbare» detto «nondisturbare», «Play Store» detto
+ * «playstore».
+ */
+const compatta = (t: string): string => t.replace(/ /g, '')
+
+function gradino(r: string, e: string): number {
+    if (e === r) return 4
+    if (e.split(' ').includes(r)) return 3
+    if (e.includes(r)) return 2
+    // Ultimo tentativo: senza spazi da entrambe le parti.
+    const rc = compatta(r)
+    const ec = compatta(e)
+    if (rc === '' ) return 0
+    if (ec === rc) return 4
+    if (ec.includes(rc)) return 2
+    return 0
+}
+
 function quanto(richiesta: string, etichetta: string): number {
     if (etichetta === '') return 0
     const r = talosNormalizza(richiesta)
     const e = talosNormalizza(etichetta)
     if (r === '' ) return 0
-    if (e === r) return 4
-    const paroleE = e.split(' ')
-    if (paroleE.includes(r)) return 3
-    if (e.includes(r)) return 2
+    let massimo = gradino(r, e)
     for (const p of parenti(r)) {
         if (p === r) continue
-        if (e === p) return 4
-        if (paroleE.includes(p)) return 3
-        if (e.includes(p)) return 2
+        massimo = Math.max(massimo, gradino(p, e))
     }
-    return 0
+    return massimo
 }
 
 /**
