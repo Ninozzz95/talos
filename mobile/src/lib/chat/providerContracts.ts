@@ -63,6 +63,20 @@ export interface TalosMobileCompletionResult {
     reasoning?: string
     /** Tools the model asked to run, in the shared representation. */
     toolCalls?: TalosToolCall[]
+    /**
+     * ⭐⭐ Blocchi che il fornitore pretende indietro IMMUTATI al giro dopo.
+     *
+     * Oggi sono i due della ricerca attrezzi di Anthropic — `server_tool_use` e
+     * `tool_search_tool_result` — e sono deliberatamente `unknown[]`: darsi
+     * un'interfaccia vorrebbe dire dichiarare di aver capito una forma che non
+     * e' nostra, e riscriverla e' esattamente cio' che la documentazione vieta.
+     *
+     * ⛔ Sta nel CONTRATTO e non solo nell'adattatore, e la ragione e' un
+     * difetto gia' pagato in questo progetto: uno spread passa il typecheck
+     * anche quando il tipo non dichiara il campo, e il valore muore in
+     * silenzio al ponte successivo. Se non e' qui, non arriva a nessuno.
+     */
+    providerBlocks?: readonly unknown[]
 }
 
 /** F2-T4 — live streaming callbacks handed to a provider adapter. */

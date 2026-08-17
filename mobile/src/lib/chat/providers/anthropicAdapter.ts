@@ -96,6 +96,43 @@ import { talosNumericUsage } from '@/lib/chat/providers/usage'
  */
 const APERTURA_A_GRADI_ANTHROPIC = false
 
+/**
+ * ⭐⭐⭐ I BLOCCHI CHE VANNO RIMANDATI INDIETRO IMMUTATI.
+ *
+ * La ricerca degli attrezzi lato server produce due tipi che nascono dentro
+ * Anthropic e che la documentazione chiede di replicare **unmodified** alla
+ * voce «continuing the conversation». Non replicarli e' il difetto per cui
+ * l'apertura a gradi e' spenta: al secondo giro la conversazione parte monca.
+ *
+ * ## ⛔ Un elenco CHIUSO, non «tutto quello che non riconosco»
+ *
+ * Verrebbe comodo conservare ogni blocco che non e' `text` ne' `tool_use`.
+ * Sarebbe sbagliato in due modi:
+ *
+ *   - i blocchi `thinking` FIRMATI finirebbero qui dentro, e rimandarli senza
+ *     la loro firma e' un 400 documentato — quello che ci ha gia' fatto fallire
+ *     il secondo giro di ogni conversazione con gli strumenti;
+ *   - un tipo nuovo inventato domani da Anthropic verrebbe rispedito senza che
+ *     nessuno abbia deciso che si puo'.
+ *
+ * ⇒ Si conserva cio' che si e' capito, e si lascia cadere il resto. Un elenco
+ * chiuso invecchia in modo VISIBILE: quando servira' un terzo tipo, mancherA'
+ * e lo si vedra' — mentre un elenco aperto sbaglia in silenzio.
+ */
+export const TALOS_BLOCCHI_DA_CONSERVARE: readonly string[] = Object.freeze([
+    'server_tool_use',
+    'tool_search_tool_result',
+])
+
+export function talosBlocchiDaConservare(contenuto: unknown): readonly unknown[] {
+    if (!Array.isArray(contenuto)) return []
+    return contenuto.filter((blocco) => {
+        if (typeof blocco !== 'object' || blocco === null) return false
+        const tipo = (blocco as { type?: unknown }).type
+        return typeof tipo === 'string' && TALOS_BLOCCHI_DA_CONSERVARE.includes(tipo)
+    })
+}
+
 function listaPerIlFilo(
     tools: NonNullable<Parameters<typeof talosToolsForAnthropic>[0]>,
 ): { lista: unknown[], nome: string } {
@@ -310,6 +347,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             .map((part) => part.text ?? '')
             .join('')
         const toolCalls = parseAnthropicToolCalls(parsed.data.content)
+        const blocchiDelFornitore = talosBlocchiDaConservare(parsed.data.content)
         // A turn that only requests tools carries no text — refusing it as
         // malformed would break the loop before it began.
         //
@@ -324,6 +362,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             finishReason: parsed.data.stop_reason ?? null,
             usage: talosNumericUsage(parsed.data.usage),
             ...(toolCalls.length ? { toolCalls } : {}),
+            ...(blocchiDelFornitore.length ? { providerBlocks: blocchiDelFornitore } : {}),
         }
     },
     // F2-T4: native fetch SSE. Anthropic permits browser-origin calls only with

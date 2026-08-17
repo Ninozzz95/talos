@@ -44,6 +44,19 @@ export interface TalosAgentCompletion {
     finishReason?: string | null
     reasoning?: string
     toolCalls?: TalosToolCall[]
+    /**
+     * ⭐⭐⭐ I blocchi che il fornitore pretende indietro immutati.
+     *
+     * Oggi: `server_tool_use` e `tool_search_tool_result` della ricerca attrezzi
+     * di Anthropic. ⛔ E il posto dove contano di più è proprio QUI: la ricerca
+     * lato server avviene **dentro** il giro dell'agente, quindi i blocchi
+     * nascono in un giro e devono sopravvivere a tutti quelli dopo.
+     *
+     * Un giro che li perde produce esattamente il difetto per cui l'apertura a
+     * gradi è spenta: la torcia si accende al primo colpo, e al secondo il
+     * provider risponde 400.
+     */
+    providerBlocks?: readonly unknown[]
 }
 
 export interface TalosAgentLoopDeps {
@@ -193,6 +206,21 @@ export interface TalosAgentLoopCheckpointV1 {
     rounds: number
     stoppedByLimit: boolean
     messageAttachments: AppendChatAttachmentInput[]
+    /**
+     * ⭐⭐ I blocchi del fornitore raccolti fin qui.
+     *
+     * ⛔ OPZIONALE, e non per comodità: un punto di controllo salvato PRIMA che
+     * questo campo esistesse non ce l'ha, e pretenderlo farebbe fallire la
+     * ripresa di una conversazione che la persona aveva lasciato in sospeso —
+     * cioè romperemmo qualcosa che oggi funziona per aggiungere qualcosa che
+     * oggi non c'è. Assente vuol dire «nessuno», che per quei checkpoint è
+     * anche la verità: sono nati prima della ricerca lato server.
+     *
+     * ⛔ E devono stare QUI, non solo in `completion`: la ripresa avviene dopo
+     * un consenso, cioè proprio nelle conversazioni in cui il modello stava
+     * facendo qualcosa di serio, e `completion` porta solo l'ultimo giro.
+     */
+    blocchiDelFornitore?: readonly unknown[]
 }
 
 /**
@@ -242,6 +270,18 @@ interface MutableAgentLoopState {
     rounds: number
     stoppedByLimit: boolean
     messageAttachments: AppendChatAttachmentInput[]
+    /**
+     * ⭐⭐⭐ I blocchi del fornitore di TUTTI i giri, non dell'ultimo.
+     *
+     * `outcomeOf` fa lo spread dell'ultima completion, e per ogni altro campo va
+     * bene. Per questi no: la ricerca degli attrezzi lato server avviene al
+     * PRIMO giro — è come il modello scopre quale strumento gli serve — e
+     * all'ultimo giro non c'è più. Prendere solo l'ultima completion vorrebbe
+     * dire perdere proprio i blocchi che esistono.
+     *
+     * ⇒ Si accumulano, nell'ordine in cui sono arrivati, come `executed`.
+     */
+    blocchiDelFornitore: unknown[]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -338,6 +378,12 @@ function checkpointOf(
         rounds: state.rounds,
         stoppedByLimit: state.stoppedByLimit,
         messageAttachments: state.messageAttachments.map((entry) => ({ ...entry })),
+        // ⛔ Si SCRIVE solo se ce n'è: un array vuoto in ogni checkpoint di ogni
+        // conversazione è peso salvato per niente, e rende più difficile
+        // leggere a occhio un checkpoint quando qualcosa va storto.
+        ...(state.blocchiDelFornitore.length
+            ? { blocchiDelFornitore: [...state.blocchiDelFornitore] }
+            : {}),
     }
 }
 
@@ -394,6 +440,20 @@ async function reidrata(
     }))
 }
 
+/**
+ * Aggiunge alla corsa i blocchi del giro appena chiuso.
+ *
+ * ⛔ Va chiamata a OGNI assegnamento di `state.completion`, e sono più di uno:
+ * il giro normale e la ripresa da un punto di controllo. Curarne uno solo vuol
+ * dire che una conversazione ripresa dopo un consenso perde la ricerca — cioè
+ * proprio le conversazioni che hanno chiesto un permesso, che sono quelle in
+ * cui il modello stava facendo qualcosa di serio.
+ */
+function raccogliIBlocchi(state: MutableAgentLoopState): void {
+    const nuovi = state.completion?.providerBlocks
+    if (nuovi?.length) state.blocchiDelFornitore.push(...nuovi)
+}
+
 function outcomeOf(
     state: MutableAgentLoopState,
     completion: TalosAgentCompletion,
@@ -402,6 +462,16 @@ function outcomeOf(
     return {
         ...completion,
         text: state.spoken.join('\n\n'),
+        /*
+         * ⛔ DOPO lo spread, e di proposito: `...completion` porterebbe qui i
+         * blocchi dell'ULTIMO giro soltanto, e la ricerca lato server sta nel
+         * primo. Questa riga li sostituisce con quelli raccolti lungo tutta la
+         * corsa — o li toglie, se non ce n'è nessuno, invece di lasciare un
+         * array vuoto che poi finisce salvato.
+         */
+        ...(state.blocchiDelFornitore.length
+            ? { providerBlocks: state.blocchiDelFornitore }
+            : { providerBlocks: undefined }),
         executed: state.executed,
         rounds: state.rounds,
         stoppedByLimit: state.stoppedByLimit,
@@ -787,6 +857,7 @@ async function continueTalosAgentLoop(
             giroAVuoto ? [...state.turns, ANCORAGGIO] : state.turns,
             giroAVuoto ? { senzaStrumenti: true } : undefined,
         )
+        raccogliIBlocchi(state)
     }
 }
 
@@ -803,6 +874,9 @@ export async function runTalosAgentLoop(
         rounds: 0,
         stoppedByLimit: false,
         messageAttachments: [],
+        // Il primo giro può già portarne: la ricerca lato server è come il
+        // modello scopre quale strumento gli serve, quindi accade subito.
+        blocchiDelFornitore: [...(completion.providerBlocks ?? [])],
     }, deps, false)
 }
 
@@ -826,9 +900,13 @@ export async function resumeTalosAgentLoop(
         rounds: checkpoint.rounds,
         stoppedByLimit: checkpoint.stoppedByLimit,
         messageAttachments: checkpoint.messageAttachments.map((entry) => ({ ...entry })),
+        // Assente su un checkpoint vecchio: vale «nessuno», che per quelli è
+        // anche vero — sono nati prima che la ricerca lato server esistesse.
+        blocchiDelFornitore: [...(checkpoint.blocchiDelFornitore ?? [])],
     }
     if (checkpoint.stage === 'before_model') {
         state.completion = await deps.complete(state.turns)
+        raccogliIBlocchi(state)
     }
     return continueTalosAgentLoop(state, deps, checkpoint.stage === 'before_tools')
 }

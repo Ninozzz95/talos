@@ -138,6 +138,10 @@ export function buildChatCompletion(
                     finishReason: streamed.finishReason ?? null,
                     reasoning: streamed.reasoning,
                     toolCalls: streamed.toolCalls,
+                    // ⛔ Anche qui: sono DUE le strade che tornano un risultato,
+                    // e curarne una sola vuol dire che il difetto resta per chi
+                    // usa lo streaming — cioè per quasi tutti.
+                    providerBlocks: streamed.providerBlocks,
                     usage: streamed.usage ?? null,
                 }
             } catch (error) {
@@ -177,6 +181,20 @@ export function buildChatCompletion(
             finishReason: result.finishReason ?? null,
             reasoning: result.reasoning,
             toolCalls: result.toolCalls,
+            /*
+             * ⛔ Copiato A MANO, e il typecheck NON poteva accorgersene.
+             *
+             * Questo è un oggetto costruito campo per campo: un campo
+             * opzionale che nessuno copia resta `undefined`, e resta valido.
+             * Cioè il valore sarebbe arrivato fin qui — attraversando il
+             * contratto dell'adattatore e il tipo del negozio, entrambi
+             * dichiarati — per sparire nell'ultima riga senza un errore.
+             *
+             * È letteralmente il difetto «il valore che muore all'ultimo
+             * ponte», e l'unico modo di trovarlo era seguire il dato a mano
+             * fino a qui invece di fidarsi del compilatore.
+             */
+            providerBlocks: result.providerBlocks,
             usage: result.usage ?? null,
         }
     }

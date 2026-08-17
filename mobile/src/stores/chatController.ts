@@ -4894,6 +4894,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     : {}),
                 finishReason: completion.finishReason ?? null,
                 toolCalls: completion.toolCalls,
+                // ⛔ Il SESTO ponte. Anthropic pretende indietro immutati
+                // `server_tool_use` e `tool_search_tool_result`, e ogni riga di
+                // questo tipo che non li copia li fa sparire senza un errore.
+                providerBlocks: completion.providerBlocks,
                 // Defect #5: the reasoning reaches the store, which persists it
                 // with the message instead of letting it evaporate.
                 reasoning: completion.reasoning,
