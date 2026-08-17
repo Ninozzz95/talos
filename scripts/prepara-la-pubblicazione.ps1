@@ -477,6 +477,55 @@ if ((git status --porcelain).Count -eq 0) {
 # ───────────────────────────────────────────────────────────────────────────
 #  5. LA VERIFICA — l'originale è intatto?
 # ───────────────────────────────────────────────────────────────────────────
+Titolo "VERIFICA — la copia NOMINA una ricerca che non deve uscire?"
+# ⛔⛔⛔ IL CANCELLO CHE NON DIPENDE DALLA MIA ATTENZIONE.
+#
+# Owner 2026-08-17: «da GitHub voglio che sia eliminato completamente ogni
+# riferimento ai competitor e anche eliminati tutti i benchmark di test per
+# questo harness — nessuno deve scoprire che abbiamo fatto questo tipo di
+# ricerche».
+#
+# Il 2026-08-18 la storia si è ripetuta: un COMMENTO scritto quella notte
+# diceva «25% / 0% / 38% su tre harness» e «gli stessi harness passano da 6/10
+# a 10/10». La storia era stata ripulita a settembre; il commento nuovo la
+# rimetteva dentro dalla porta principale.
+#
+# ⇒ La letteratura sui leak dice esattamente questo: i commenti sono il posto
+# dove la roadmap trapela, e gli scanner li cercano lì. Un cancello che vive
+# nella memoria di chi pubblica non è un cancello.
+#
+# ⛔ Le parole si cercano SOLO nella copia, e solo dove le scriviamo noi:
+# `deepseek` e `openrouter` sono provider che TALOS supporta davvero, `hermes`
+# è un formato di tool call, e `harness`/`benchmark` esistono dentro llama.cpp.
+# Un cancello che grida su quelli verrebbe spento al terzo falso allarme.
+$nostri = @(
+    'src', 'tests', 'CHANGELOG.md', 'README.md', 'docs',
+    'android/app/src/main/java'
+) | ForEach-Object { Join-Path $Destinazione $_ } | Where-Object { Test-Path $_ }
+
+# ⛔ Il nome del banco e dei task, non i nomi dei provider: quelli sono pubblici.
+$vietate = 'aider', 'prime-agent', 'TALOS-BANCO', 'corsaCoding', 'sconto-fedelta',
+           'scorta-minima', 'tre harness', 'gli harness', 'sugli harness',
+           'banco di coding', 'corsaDiCoding', 'falsifica\.mjs'
+$trovate = @()
+foreach ($dove in $nostri) {
+    foreach ($parola in $vietate) {
+        $hit = Get-ChildItem $dove -Recurse -File -ErrorAction SilentlyContinue |
+               Where-Object { $_.Extension -in '.ts', '.tsx', '.js', '.mjs', '.kt', '.java', '.md' } |
+               Select-String -Pattern $parola -SimpleMatch:$false -ErrorAction SilentlyContinue
+        foreach ($h in $hit) {
+            $trovate += "$($h.Path.Replace($Destinazione, '')):$($h.LineNumber)  «$parola»"
+        }
+    }
+}
+if ($trovate) {
+    Male "$($trovate.Count) riferimenti alla ricerca interna sono nella copia PUBBLICABILE:"
+    $trovate | Select-Object -Unique | ForEach-Object { Nota $_ }
+    Nota "⛔ Toglili dall'ORIGINALE e rifai: qui la copia si rigenera, la repo pubblica no."
+    exit 1
+}
+Bene "nessun riferimento alla ricerca interna nella copia"
+
 Titolo "VERIFICA — le immagini sono ARRIVATE nella copia?"
 # ⛔⛔ Il controllo di prima guarda l'ORIGINALE, e non basta.
 #
