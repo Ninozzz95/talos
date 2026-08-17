@@ -2516,7 +2516,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         keeper.release()
                         trace.finish('ok')
                         return {
-                            text: deps.translate('chat.toolAuthorizationPending', { count: 1 }),
+                            /*
+                             * ⛔ VUOTO, e non la frase dell'avviso. Quella
+                             * adesso la disegna il chip sotto il messaggio: se
+                             * restasse qui, tornerebbe a essere testo — e in
+                             * questo ramo diventerebbe l'INTERO messaggio.
+                             */
+                            text: '',
                             metadata: {
                                 ...(sendRuntime.libraryDecision
                                     ? {
@@ -2525,6 +2531,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                     }
                                     : {}),
                                 tool_authorization_pending_checkpoint_id: checkpoint.id,
+                                tool_authorization_pending_count: 1,
                             },
                             finishReason: 'tool_authorization',
                         }
@@ -4544,6 +4551,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         .join('\n\n'),
                     metadata: {
                         tool_authorization_pending_checkpoint_id: next.id,
+                        tool_authorization_pending_count: next.requests.length,
                     },
                     finishReason: 'tool_authorization',
                     reasoning: completion.reasoning,
@@ -4619,6 +4627,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             ? { library_answer_guard: libraryAnswerGuardTrace }
                             : {}),
                         tool_authorization_pending_checkpoint_id: markerCheckpoint.id,
+                        tool_authorization_pending_count: markerCheckpoint.requests.length,
                     },
                     finishReason: 'tool_authorization',
                     reasoning: completion.reasoning,
