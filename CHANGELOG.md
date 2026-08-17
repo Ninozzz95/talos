@@ -6,6 +6,43 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.6
+
+### Fixed
+
+- **"Hey TALOS" not answering on a tablet.** Ten attempts in a real room, at
+  normal speaking volume, produced **zero** activations — the highest score was
+  0.383 against a 0.50 threshold. The wake word now answers **10 out of 10** on
+  the same device, in the same room, with the same voice.
+  - The cause was not the model, the microphone, the room noise or the volume.
+    Each of those was ruled out by measurement: attenuating the audio by 18 dB
+    still scored 0.951, and at the room's real 16 dB signal-to-noise ratio the
+    model still hit 0.967. It was the build that was installed.
+  - The threshold stays at **0.50**, and that is a decision made from data
+    rather than instinct. The ten real detections land between **0.544 and
+    0.949**; the loudest thing in the room that is not the wake word reaches
+    **0.319**. Raising the threshold to 0.60 would lose two detections in ten
+    and prevent nothing, because there is nothing to prevent.
+
+### New
+
+- **TALOS no longer asks you to approve something that cannot work.** Before a
+  permission card appears, TALOS now checks whether what the action assumes
+  actually exists — a contact, a file, an app. If it does not, nothing is asked
+  and nothing runs, and TALOS tells you what is missing instead.
+  - It answers in **three** states, not two, and the third is the one that
+    matters: "I could not tell". A denied contacts permission means TALOS does
+    not know whether your contact exists — so it proceeds rather than claiming
+    the contact is not there. Treating "I don't know" as "no" is the same
+    mistake seen from the other side.
+
+### Internal
+
+- Two diagnostic switches for the wake word, **off by default** and turned on by
+  creating a file: one writes the raw audio the model receives, the other swaps
+  the microphone source. From now on "it doesn't work on my phone" is settled by
+  pulling the bytes and replaying them, rather than by guessing.
+
 ## v0.1.5
 
 ### New
