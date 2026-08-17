@@ -6,7 +6,7 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
-## v0.1.3
+## v0.1.4
 
 Everything below is one story: TALOS presses "send" for you, and this release is
 about it never lying to you about whether it did.
