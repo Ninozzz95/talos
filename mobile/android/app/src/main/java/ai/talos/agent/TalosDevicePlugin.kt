@@ -2019,4 +2019,151 @@ class TalosDevicePlugin : Plugin() {
             )
         }, 500)
     }
+
+    /**
+     * ⭐⭐⭐ GUARDARE UN PDF DENTRO TALOS — e senza un solo byte di libreria.
+     *
+     * ## Il difetto, misurato sul Pad il 2026-08-17
+     *
+     * TALOS genera un PDF, lo salva in Libreria, e la scheda lo mostra col nome
+     * e il peso. Toccandola non succede NIENTE: e un etichetta muta. L owner:
+     * «il PDF bisogna poterlo visualizzare dentro la app».
+     *
+     * ## ⛔ Perche il renderer di Android e non una libreria
+     *
+     * Cercato prima di scrivere, ed e una scelta con dei numeri dietro:
+     *
+     *   PdfRenderer (framework)   0 byte di APK, 0 dipendenze, da API 21
+     *   AndroidPdfViewer/Pdfium   ~16 MB di .so, una copia per architettura
+     *   pdf.js dentro la WebView  megabyte di JS nel grafo d avvio, che ha
+     *                             un tetto di 605.000 byte
+     *
+     * ⇒ La terza sarebbe stata la piu comoda da scrivere e l unica che non
+     * possiamo permetterci: il tetto d avvio esiste perche il motore locale
+     * gira su questo telefono, e un visualizzatore non e una ragione per
+     * alzarlo.
+     *
+     * ## ⛔ Rende UNA pagina per chiamata, e dice quante ce ne sono
+     *
+     * Rendere tutto insieme vorrebbe dire tenere N bitmap a piena risoluzione
+     * in memoria per un documento di cui la persona guardera la prima pagina.
+     * Chi chiama sfoglia; noi rispondiamo una pagina alla volta e diciamo
+     * `pagine` cosi sa dove puo andare.
+     *
+     * ⛔ E la larghezza la decide CHI CHIAMA, perche solo lui sa quanto e largo
+     * lo schermo. Un valore scritto qui sarebbe un telefono indovinato.
+     */
+    @PluginMethod
+    fun renderizzaPdf(call: PluginCall) {
+        val percorso = call.getString("percorso").orEmpty()
+        val pagina = call.getInt("pagina") ?: 0
+        val larghezza = (call.getInt("larghezza") ?: 1080).coerceIn(200, 4096)
+        if (percorso.isEmpty()) {
+            call.resolve(JSObject().put("done", false).put("reason", "no-path"))
+            return
+        }
+        var descrittore: android.os.ParcelFileDescriptor? = null
+        var renderer: android.graphics.pdf.PdfRenderer? = null
+        try {
+            /*
+             * ⛔ Si accetta sia un `content://` sia un percorso di file: la
+             * Libreria conserva `private_uri`, e chi ha scelto un file dal
+             * telefono ha un content URI. Indovinare quale sia vorrebbe dire
+             * funzionare per una sorgente sola.
+             */
+            descrittore = if (percorso.startsWith("content://")) {
+                context.contentResolver.openFileDescriptor(Uri.parse(percorso), "r")
+            } else {
+                /*
+                 * ⛔⛔ IL PERCORSO DELLA LIBRERIA E' RELATIVO — e il primo giro
+                 * sul Pad e' fallito esattamente qui.
+                 *
+                 * Il visualizzatore si apriva e diceva «Non sono riuscito ad
+                 * aprire questo PDF». Il motivo l'ho saputo perche' lo faccio
+                 * VIAGGIARE: senza, sarebbe stato un riquadro vuoto e avrei
+                 * cercato il difetto nel renderer.
+                 *
+                 * `private_uri` non e' un percorso di sistema: e' una chiave
+                 * RELATIVA dentro `Directory.Data` di Capacitor — per esempio
+                 * `talos-vault/files/abc.pdf`. Da qui, aprirla come file
+                 * assoluto cerca `/talos-vault/...` sulla radice, che non
+                 * esiste.
+                 *
+                 * ⇒ Un percorso che non comincia per `/` si risolve dentro
+                 * `filesDir`, che e' cio' che `Directory.Data` significa sul
+                 * lato Android. E' la stessa famiglia del valore che muore
+                 * all'ultimo ponte: giusto per quattro strati, sbagliato nel
+                 * quinto.
+                 */
+                val file = java.io.File(percorso.removePrefix("file://"))
+                val vero = if (file.isAbsolute) file else java.io.File(context.filesDir, percorso)
+                if (!vero.exists()) {
+                    call.resolve(
+                        JSObject().put("done", false).put("reason", "not-found"),
+                    )
+                    return
+                }
+                android.os.ParcelFileDescriptor.open(
+                    vero,
+                    android.os.ParcelFileDescriptor.MODE_READ_ONLY,
+                )
+            }
+            if (descrittore == null) {
+                call.resolve(JSObject().put("done", false).put("reason", "not-readable"))
+                return
+            }
+            renderer = android.graphics.pdf.PdfRenderer(descrittore)
+            val quante = renderer.pageCount
+            if (quante == 0) {
+                call.resolve(JSObject().put("done", false).put("reason", "empty").put("pagine", 0))
+                return
+            }
+            /*
+             * ⛔ La pagina si LIMITA invece di far esplodere: una richiesta
+             * fuori intervallo e un errore di chi chiama, e restituire la prima
+             * pagina con `pagine` accanto gli dice come rimediare. Un'eccezione
+             * qui diventerebbe uno schermo bianco senza spiegazione.
+             */
+            val quale = pagina.coerceIn(0, quante - 1)
+            val foglio = renderer.openPage(quale)
+            val altezza = (larghezza.toLong() * foglio.height / foglio.width).toInt().coerceAtLeast(1)
+            val tela = android.graphics.Bitmap.createBitmap(
+                larghezza, altezza, android.graphics.Bitmap.Config.ARGB_8888,
+            )
+            /*
+             * ⛔ Fondo BIANCO prima di rendere. Un PDF disegna solo il proprio
+             * inchiostro: senza questa riga il resto resta trasparente, e su un
+             * tema scuro un documento nero su bianco diventa nero su nero —
+             * cioe illeggibile, con TALOS che dice di averlo mostrato.
+             */
+            tela.eraseColor(android.graphics.Color.WHITE)
+            foglio.render(tela, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            foglio.close()
+            val sacco = java.io.ByteArrayOutputStream()
+            tela.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, sacco)
+            tela.recycle()
+            call.resolve(
+                JSObject()
+                    .put("done", true)
+                    .put("pagine", quante)
+                    .put("pagina", quale)
+                    .put("larghezza", larghezza)
+                    .put("altezza", altezza)
+                    .put(
+                        "png",
+                        "data:image/png;base64,"
+                            + android.util.Base64.encodeToString(sacco.toByteArray(), android.util.Base64.NO_WRAP),
+                    ),
+            )
+        } catch (e: Exception) {
+            // ⛔ Il motivo VIAGGIA: «non si apre» e «non e un PDF» portano a due
+            // frasi diverse per chi legge, e a due decisioni diverse.
+            call.resolve(
+                JSObject().put("done", false).put("reason", e.javaClass.simpleName),
+            )
+        } finally {
+            try { renderer?.close() } catch (_: Exception) {}
+            try { descrittore?.close() } catch (_: Exception) {}
+        }
+    }
 }
