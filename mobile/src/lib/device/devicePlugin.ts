@@ -93,6 +93,35 @@ interface PonteDispositivo {
      */
     iconeApp(options: { pacchetti: string[] }): Promise<{ icone: Record<string, string> }>
     /**
+     * ⭐⭐⭐ Una pagina di PDF, come immagine — e senza un byte di libreria.
+     *
+     * Il difetto, sul Pad il 2026-08-17: TALOS genera un PDF, lo salva in
+     * Libreria, la scheda lo mostra col nome e il peso, e toccandola non
+     * succede NIENTE. Owner: «il PDF bisogna poterlo visualizzare dentro la
+     * app».
+     *
+     * ⛔ Lo rende `PdfRenderer`, che sta nel framework Android: zero
+     * dipendenze, zero `.so`, zero byte nel grafo d'avvio — che ha un tetto di
+     * 605.000. Una libreria di terze parti ne avrebbe portati ~16 MB di
+     * nativo, e pdf.js dentro la WebView avrebbe pagato proprio sul tetto.
+     *
+     * ⛔ UNA pagina per chiamata, e `pagine` dice quante ce ne sono: rendere
+     * tutto insieme vorrebbe dire tenere N bitmap a piena risoluzione per un
+     * documento di cui si guarderà la prima pagina.
+     *
+     * ⛔ E `larghezza` la decide chi chiama, perché solo lui sa quanto è largo
+     * lo schermo.
+     */
+    renderizzaPdf(options: { percorso: string, pagina?: number, larghezza?: number }): Promise<{
+        done: boolean
+        reason?: string
+        pagine?: number
+        pagina?: number
+        larghezza?: number
+        altezza?: number
+        png?: string
+    }>
+    /**
      * ⭐⭐⭐ Lancia un'AZIONE con i parametri negli extra, non dentro un URI.
      *
      * MISURATO il 2026-08-13: `translate.google.com/?text=girasole` apre il

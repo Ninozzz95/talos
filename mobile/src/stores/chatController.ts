@@ -3402,7 +3402,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                 sendIdentity.sessionId, sendIdentity.modelProfileId,
                                 { toolName: 'document_create' },
                             ))
-                            return { id: saved.id }
+                            // ⛔ Il PERCORSO viaggia con l'id: senza, la scheda
+                            // del PDF resta un'etichetta muta — misurato.
+                            return { id: saved.id, percorso: saved.private_uri }
                         },
                     }),
                     /**
