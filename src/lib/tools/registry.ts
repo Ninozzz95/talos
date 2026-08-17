@@ -148,6 +148,51 @@ export interface TalosToolDefinition<Input = unknown> {
      * cioè dove basta rileggere quello che si è appena scritto. Una verifica che
      * costa una seconda chiamata di rete non è una verifica: è un altro tool.
      */
+    /**
+     * ⭐⭐⭐ LA PRECONDIZIONE: «esiste ciò che questa azione presume?», chiesta
+     * **PRIMA** — prima della scheda di consenso, prima di `run`.
+     *
+     * ## È la metà simmetrica di `verify`, e mancava
+     *
+     * ```
+     * premesse   esiste ciò che presumo?      →  PRIMA del consenso
+     * run        l'azione
+     * verify     l'effetto c'è davvero?       →  DOPO
+     * ```
+     *
+     * `verify` impedisce di dire «fatto» su una cosa non fatta. `premesse`
+     * impedisce una cosa peggiore: **chiedere alla persona di autorizzare
+     * un'azione che è già impossibile**. Ogni scheda mostrata per una premessa
+     * falsa è un consenso speso per niente — e insegna a toccare «Consenti»
+     * senza leggere, che è il danno vero.
+     *
+     * ⇒ Misurato sul banco di coding: riconoscere una premessa falsa è una
+     * **scelta** del modello, e le scelte hanno una distribuzione (25% / 0% /
+     * 38% su tre harness). La cura non è chiedere al modello di essere più
+     * diligente: è togliere a quella decisione il potere di arrivare alla
+     * persona. Con il cancello, gli stessi harness passano da 6/10 a 10/10.
+     *
+     * ## ⛔ Dove sta l'aggancio, e perché lì
+     *
+     * Nell'**esecutore**, non dentro `run` e non nel testo che il modello
+     * produce: un controllo che vive nell'output del modello lo si scavalca
+     * scrivendo un altro output. Qui il modello propone e il runtime decide, ed
+     * è la stessa mossa del compilatore col type checker.
+     *
+     * ## ⛔ E il tri-stato arriva fino all'effetto
+     *
+     * - `presente` ⇒ si prosegue, come sempre
+     * - `assente`  ⇒ **terminale**: niente scheda, niente `run`, e al modello si
+     *   dice *cosa* manca — se no riprova identico
+     * - `ignoto`   ⇒ ⛔ **si prosegue**. Non sapere non autorizza a rifiutare:
+     *   bloccare su `ignoto` renderebbe TALOS inutile appena un permesso è
+     *   negato, e insegnerebbe che «non lo so» è un «no».
+     *
+     * Facoltativo di proposito, come `verify`: si dichiara dove la risposta è
+     * **gratis** — una lettura locale già a disposizione. Una premessa che costa
+     * una chiamata di rete non è una premessa: è un altro tool.
+     */
+    premesse?(input: Input, context: TalosToolContext): Promise<TalosPremessaEsito>
     verify?(
         input: Input,
         /**
@@ -172,6 +217,34 @@ export interface TalosToolDefinition<Input = unknown> {
 export type TalosToolVerdict =
     | { held: true }
     | { held: false, reason: string }
+
+/**
+ * ⭐⭐⭐ L'esito di una PREMESSA — e gli stati sono **tre**, mai due.
+ *
+ * ## Perché non è un booleano
+ *
+ * «Non l'ho trovato» e «non c'è» sono due affermazioni diverse: la prima è un
+ * fatto su di me, la seconda è un fatto sul mondo. Un sistema che le confonde
+ * dice «assente» quando ha solo fallito una lettura — e su un telefono quella
+ * bugia diventa «il contatto Marco non esiste» detto a chi ce l'ha in rubrica,
+ * perché il permesso era negato.
+ *
+ * ```
+ * presente  l'ho visto
+ * assente   ho guardato TUTTO ciò che dovevo, e non c'è
+ * ignoto    non posso dirlo — permesso negato, ponte giù, elenco troncato
+ * ```
+ *
+ * ⛔ `assente` **solo** con copertura completa. Permesso negato, ponte caduto,
+ * timeout, elenco parziale: tutti `ignoto`. Chi dichiara `assente` per un
+ * fallimento di lettura ha già perso la proprietà per cui questo tipo esiste.
+ */
+export type TalosPremessaEsito =
+    | { stato: 'presente' }
+    /** `perche` va al MODELLO e alla persona: nomina cosa manca, e dove. */
+    | { stato: 'assente', perche: string }
+    /** `perche` nomina l'ostacolo — «permesso contatti negato», non «errore». */
+    | { stato: 'ignoto', perche: string }
 
 export function defineTalosTool<Input>(definition: TalosToolDefinition<Input>): TalosToolDefinition<Input> {
     return definition
