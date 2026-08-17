@@ -56,10 +56,30 @@ export interface TalosProfiloCompilato {
     readonly attrezzi: readonly string[]
     /** Quelli che il modello dovrà cercarsi: portano `defer_loading`. */
     readonly differiti: readonly string[]
-    /** I byte della superficie, come vengono serializzati. */
+    /** I byte della superficie, come vengono serializzati e SPEDITI. */
     readonly byteSchema: number
     /** Stima con la costante misurata su QUESTI schemi, non sull'inglese medio. */
     readonly tokenStimati: number
+    /**
+     * ⭐⭐ I byte che il MODELLO vede davvero — e non sono gli stessi.
+     *
+     * MISURATO il 2026-08-17, sulla suite intera con tutti gli attrezzi accesi:
+     *
+     *     spediti, forma intera      17.132 byte
+     *     spediti, forma a gradi     17.541 byte   ⛔ PIU' GRANDI
+     *     visti dal modello, a gradi  ~1.400 byte
+     *
+     * L'apertura a gradi manda comunque lo schema INTERO di ogni attrezzo, e ci
+     * aggiunge `defer_loading: true` piu' la riga della ricerca: sul filo pesa
+     * un po' di piu'. Il risparmio non e' nella trasmissione — e' in cio' che
+     * entra nel contesto del modello, e quindi nei token che il fornitore conta.
+     *
+     * ⛔ Senza questa distinzione l'impronta avrebbe riportato «a gradi costa di
+     * piu'», che e' vero sul filo e falso su cio' che conta. Un numero giusto
+     * che risponde alla domanda sbagliata e' indistinguibile da uno sbagliato.
+     */
+    readonly byteInVista: number
+    readonly tokenInVista: number
     readonly poteri: TalosPoteriDelProfilo
     /** L'impronta dei byte spediti. Cambia ⇔ la cache è morta. */
     readonly impronta: string
@@ -139,12 +159,18 @@ export function talosProfiloCompilato(
         if (potere) poteri[potere] += 1
     }
 
+    // Ciò che il modello si trova davanti: tutto tranne i differiti.
+    const inVista = attrezziSpediti.filter((riga) => !eDifferita(riga))
+    const byteInVista = JSON.stringify(inVista).length
+
     return Object.freeze({
         nome,
         attrezzi: Object.freeze(attrezzi),
         differiti: Object.freeze(differiti),
         byteSchema,
         tokenStimati: Math.round(byteSchema / TALOS_BYTE_PER_TOKEN),
+        byteInVista,
+        tokenInVista: Math.round(byteInVista / TALOS_BYTE_PER_TOKEN),
         poteri: Object.freeze(poteri),
         impronta: talosImprontaDeiByte(serializzato),
     })
