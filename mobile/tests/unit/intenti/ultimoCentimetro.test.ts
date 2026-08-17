@@ -231,6 +231,39 @@ describe('⭐⭐⭐ l\'ultimo centimetro non tocca al buio', () => {
         expect(esito.code).toBe('TALOS_INVIO_PONTE_CHIUSO')
         expect(esito.content).toMatch(/[Nn]othing was sent/)
     })
+
+    /*
+     * ⛔⛔⛔ «Nothing was sent» NON BASTA — misurato sul Pad il 2026-08-17.
+     *
+     * Con l'occhio spento lo strumento ha restituito esattamente quel testo, e
+     * il modello ha risposto alla persona:
+     *
+     *     «Il messaggio "prova tre" è stato inviato a Antonino Rizzo. ✓
+     *      … ma non riesco a premere Invia»
+     *
+     * L'invio dichiarato E il fallimento, nella stessa risposta, in
+     * quest'ordine. Verificato che non fosse partito: il testo era ancora nel
+     * campo di WhatsApp.
+     *
+     * ⇒ Ogni altro ramo di `intentiTools` porta il divieto scritto a lettere.
+     * Questi motivi erano gli unici senza — ed erano gli unici in cui il
+     * modello ha mentito. Il divieto DEVE esserci in tutti, compreso il
+     * ripiego per un motivo che ancora non conosciamo: un motivo nuovo è
+     * proprio il caso in cui nessuno ha scritto la regola.
+     */
+    it.each([
+        ['occhio-chiuso'],
+        ['app-non-in-primo-piano'],
+        ['testo-non-arrivato'],
+        ['non-trovato'],
+        ['un-motivo-mai-visto'],
+    ])('⛔ «%s» VIETA di aprire con «inviato»', async (motivo) => {
+        ponte.esito = { fatto: false, motivo }
+        const esito = await chiedi(CIAO)
+        expect(esito.ok).toBe(false)
+        expect(esito.content).toMatch(/Do NOT open with "sent"/)
+        expect(esito.content).toMatch(/did NOT leave/)
+    })
 })
 
 /**

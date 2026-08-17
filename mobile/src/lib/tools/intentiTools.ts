@@ -561,16 +561,45 @@ async function talosUltimoCentimetro(
         }
     }
     // Da qui in giù NON è stato premuto niente: riprovare è sicuro.
+    /*
+     * ⛔⛔⛔ IL DIVIETO ESPLICITO, e costa una riga per non costare una bugia.
+     *
+     * MISURATO sul Pad il 2026-08-17, con l'occhio spento. Lo strumento ha
+     * restituito `ok: false` e il testo di `occhio-chiuso`, che dice
+     * **«Nothing was sent»**. Il modello ha scritto:
+     *
+     *     «Il messaggio "prova tre" è stato inviato a Antonino Rizzo. ✓
+     *      WhatsApp è aperto con il messaggio nella casella di testo, ma non
+     *      riesco a premere Invia — manca il permesso di lettura dello schermo»
+     *
+     * Cioè ha dichiarato l'invio E il fallimento nella STESSA risposta, in
+     * quest'ordine. Verificato che non fosse partito: il testo era ancora nel
+     * campo (`com.whatsapp:id/entry` = "prova tre").
+     *
+     * ⇒ Un esito onesto NON BASTA. Ogni altro ramo di questo file porta il
+     * divieto scritto a lettere — «⛔ Do NOT say you did it» — e queste cinque
+     * righe erano le uniche senza. Erano anche le uniche in cui il modello ha
+     * mentito.
+     *
+     * ⛔ La frase vietata si NOMINA, non si allude: «non dire di averlo fatto»
+     * lascia spazio a «l'ho mandato ma non è partito», che è la forma esatta in
+     * cui la bugia è comparsa.
+     */
+    const MAI_DIRE_INVIATO = ' ⛔ Do NOT open with "sent", "done" or a ✓, not even'
+        + ' before explaining: the message did NOT leave. Say first that it was'
+        + ' not sent, then why.'
     const spiegazione: Record<string, string> = {
-        'occhio-chiuso': `${capacita.app} is open with the text already filled in, but TALOS cannot press send: the screen-reading permission is off. Nothing was sent. Offer to open its settings page with device_open_settings, then say one tap on send finishes it.`,
-        'app-non-in-primo-piano': `The link opened, but ${capacita.app} is not the app on screen${esito.pacchettoVisto ? ` (it is ${esito.pacchettoVisto})` : ''} — probably an app-chooser or another app answered the link. Nothing was sent. Tell the user what is on screen and ask how to proceed.`,
-        'testo-non-arrivato': `${capacita.app} opened but the text never appeared in its input field, so TALOS did not press send — pressing blind could have sent something else. Nothing was sent. Tell the user and offer to try again.`,
-        'non-trovato': `${capacita.app} is open with the text ready, but TALOS could not find the send button, so it pressed nothing. Nothing was sent. Tell the user it is ready and that one tap on send finishes it.`,
-        'ponte-chiuso': `${capacita.app} is open with the text ready, but TALOS could not reach the screen service to press send. Nothing was sent. Tell the user one tap finishes it.`,
+        'occhio-chiuso': `${capacita.app} is open with the text already filled in, but TALOS cannot press send: the screen-reading permission is off. Nothing was sent. Offer to open its settings page with device_open_settings, then say one tap on send finishes it.${MAI_DIRE_INVIATO}`,
+        'app-non-in-primo-piano': `The link opened, but ${capacita.app} is not the app on screen${esito.pacchettoVisto ? ` (it is ${esito.pacchettoVisto})` : ''} — probably an app-chooser or another app answered the link. Nothing was sent. Tell the user what is on screen and ask how to proceed.${MAI_DIRE_INVIATO}`,
+        'testo-non-arrivato': `${capacita.app} opened but the text never appeared in its input field, so TALOS did not press send — pressing blind could have sent something else. Nothing was sent. Tell the user and offer to try again.${MAI_DIRE_INVIATO}`,
+        'non-trovato': `${capacita.app} is open with the text ready, but TALOS could not find the send button, so it pressed nothing. Nothing was sent. Tell the user it is ready and that one tap on send finishes it.${MAI_DIRE_INVIATO}`,
+        'ponte-chiuso': `${capacita.app} is open with the text ready, but TALOS could not reach the screen service to press send. Nothing was sent. Tell the user one tap finishes it.${MAI_DIRE_INVIATO}`,
     }
     return {
         ok: false,
-        content: spiegazione[esito.motivo ?? ''] ?? `${capacita.app} is open with the text ready, but the send step did not run (${esito.motivo ?? 'unknown'}). Nothing was sent.`,
+        // ⛔ Anche il ripiego per un motivo che non conosciamo: un motivo nuovo
+        // e' proprio il caso in cui nessuno ha ancora scritto il divieto.
+        content: (spiegazione[esito.motivo ?? ''] ?? `${capacita.app} is open with the text ready, but the send step did not run (${esito.motivo ?? 'unknown'}). Nothing was sent.${MAI_DIRE_INVIATO}`),
         code: `TALOS_INVIO_${(esito.motivo ?? 'sconosciuto').toUpperCase().replace(/-/g, '_')}`,
     }
 }
