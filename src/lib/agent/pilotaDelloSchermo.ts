@@ -80,7 +80,12 @@ export const TALOS_LIMITI_PREDEFINITI: Readonly<TalosLimitiDelPilota> = Object.f
 })
 
 export type TalosFineCorsa =
-    | { motivo: 'fine', testo?: string }
+    /**
+     * ⛔ `esito` porta ciò che il modello ha DICHIARATO: `fine` significava due
+     * cose opposte — raggiunto e impossibile — e chi leggeva diceva «Fatto» a
+     * tutte e due. Vedi `TalosAzione.esito`.
+     */
+    | { motivo: 'fine', testo?: string, esito?: 'riuscito' | 'fallito' }
     | { motivo: 'mano-sullo-schermo', passo: number }
     | { motivo: 'freno-non-armato' }
     | { motivo: 'occhio-chiuso' }
@@ -363,7 +368,11 @@ export async function talosGuidaLoSchermo(
 
         if (azione.azione === 'fine') {
             storia.push(talosRigaDiStoria(passi, azione))
-            return chiudi({ motivo: 'fine', testo: azione.testo })
+            return chiudi({
+                motivo: 'fine',
+                ...(azione.testo !== undefined ? { testo: azione.testo } : {}),
+                ...(azione.esito ? { esito: azione.esito } : {}),
+            })
         }
 
         const esito = await porte.agisci(azione)
@@ -389,8 +398,38 @@ export async function talosGuidaLoSchermo(
  */
 export function talosFraseDiFine(fine: TalosFineCorsa): string {
     switch (fine.motivo) {
-        case 'fine':
-            return fine.testo?.trim() ? `Fatto: ${fine.testo.trim()}` : 'Fatto.'
+        /*
+         * ⭐⭐⭐ «FATTO» SOLO SE L'HA DETTO — e prima lo diceva anche a chi si era
+         * arreso.
+         *
+         * Questa frase esce dall'altoparlante mentre TALOS sta pilotando
+         * un'altra app e non e' a schermo: e' l'unica cosa che la persona sente.
+         * Diceva «Fatto.» su OGNI `fine`, compreso il `fine` che significa
+         * «non ci riesco, mi fermo».
+         *
+         * ⛔ E i due rami non sono simmetrici, per una ragione misurata dalla
+         * letteratura: gli agenti terminano «without explicitly verifying that
+         * the required artifacts were actually produced». Un «riuscito»
+         * autodichiarato e' una PRETESA. Quindi:
+         *
+         *   fallito     si crede, e si dice — nessuno si arrende per sbaglio
+         *   riuscito    e' la sua opinione, e la frase resta «Fatto»
+         *   non detto   NON diventa «Fatto»: e' un modello che non ha risposto
+         *
+         * ⛔ L'ultimo ramo e' il piu' importante. Trattare il silenzio come un
+         * successo e' il difetto di partenza rimesso dentro dalla porta di
+         * servizio.
+         */
+        case 'fine': {
+            const cosa = fine.testo?.trim()
+            if (fine.esito === 'fallito') {
+                return cosa ? `Non ci sono riuscito: ${cosa}` : 'Non ci sono riuscito, e mi fermo qui.'
+            }
+            if (fine.esito === 'riuscito') return cosa ? `Fatto: ${cosa}` : 'Fatto.'
+            return cosa
+                ? `Mi fermo qui: ${cosa}`
+                : 'Mi fermo qui, ma non so dirti se ci sono riuscito.'
+        }
         case 'mano-sullo-schermo':
             return 'Ti ho sentito toccare lo schermo, quindi mi fermo qui.'
         case 'freno-non-armato':

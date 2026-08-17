@@ -34,7 +34,12 @@ export interface TalosDocumentToolSources {
     }): Promise<TalosGeneratedDocument>
     verify(document: TalosGeneratedDocument): Promise<{ ok: boolean; detail: string }>
     /** Puts it in the user's Library, and returns how it can be referred to. */
-    save(document: TalosGeneratedDocument): Promise<{ id: string }>
+    /**
+     * ⛔ Torna anche il PERCORSO, non solo l'id: la scheda deve poter aprire il
+     * documento, e l'id da solo non basta perche' la Libreria non ha una rotta
+     * per singolo file — vedi la nota sul `dove`, poco sotto.
+     */
+    save(document: TalosGeneratedDocument): Promise<{ id: string, percorso?: string }>
     /** True when the user has switched diagnostics on; see talosFailureMessage. */
     diagnostics(): boolean
 }
@@ -183,7 +188,7 @@ export function createTalosDocumentTools(
                 }
             }
 
-            let saved: { id: string }
+            let saved: { id: string, percorso?: string }
             try {
                 saved = await sources.save(document)
             } catch (error) {
@@ -244,7 +249,19 @@ export function createTalosDocumentTools(
                      *
                      * ⇒ Quando la Libreria avrà una schermata per file, il
                      * `dove` arriva qui.
+                     *
+                     * ⭐⭐⭐ Ma un PDF non aspetta quella schermata — owner
+                     * 2026-08-17: «il PDF bisogna poterlo visualizzare dentro
+                     * la app». Misurato sul Pad: la scheda mostrava nome e peso
+                     * e toccandola non succedeva NIENTE.
+                     *
+                     * ⇒ `pdf` porta il percorso, e il tocco apre il
+                     * visualizzatore invece di navigare. Non e' un `dove`
+                     * travestito: e' un'altra cosa, e i due non si confondono.
                      */
+                    ...(document.mediaType === 'application/pdf' && saved.percorso
+                        ? { pdf: saved.percorso }
+                        : {}),
                 },
                 content: [
                     `Created "${document.fileName}" (${size} KB) and saved it to the Library.`,

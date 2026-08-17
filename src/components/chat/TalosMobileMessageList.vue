@@ -97,6 +97,25 @@ function attesaViva(message: TalosMobileMessageView): boolean {
     return id !== null && (props.pendingAuthorizationIds ?? []).includes(id)
 }
 
+/**
+ * ⛔ Quante richieste aspettano, per la frase del chip.
+ *
+ * Prima il numero viaggiava dentro il TESTO del messaggio, perche' la frase
+ * gia' tradotta veniva incollata alla risposta del modello. Adesso il testo
+ * resta la risposta e basta, quindi il numero deve arrivare dai metadati.
+ *
+ * ⛔ Il ripiego e' `1` e non `0`: il chip compare solo quando c'e' un'attesa
+ * viva, quindi «zero richieste in attesa» sarebbe una frase falsa in un
+ * riquadro che esiste proprio perche' una richiesta c'e'. Un metadato mancante
+ * e' un'informazione persa, non un'attesa sparita.
+ */
+function quanteInAttesa(message: TalosMobileMessageView): number {
+    const quante = message.metadata?.tool_authorization_pending_count
+    return typeof quante === 'number' && Number.isFinite(quante) && quante > 0
+        ? Math.round(quante)
+        : 1
+}
+
 const { t } = useTalosI18n()
 
 
@@ -491,27 +510,58 @@ function messageStateLabel(state: string): string {
                         >
                             <Mic class="size-4" aria-hidden="true" />
                         </span>
+                        <!--
+                            ⭐⭐⭐ LA RISPOSTA SI LEGGE SEMPRE, E L'AVVISO E' UN CHIP.
+
+                            ## Il difetto, fotografato dall'owner il 2026-08-17
+
+                            «bisogna levare questo avviso che spunta, dovrebbe
+                            spuntare nella chat ma invece si vede questa orribile
+                            enorme sezione: e' una cosa che dice la chat ma viene
+                            stampata in questo chip».
+
+                            Erano DUE difetti sovrapposti, e il secondo peggiore:
+
+                            1. `chatController` incollava la stringa dell'avviso
+                               DENTRO il testo del messaggio (`join('\n\n')`), e
+                               questo riquadro mostrava `message.content` — cioe'
+                               la prosa del modello PIU' l'avviso, tutto dentro
+                               un bottone.
+                            2. ⛔ E il bottone stava al posto di
+                               `TalosMobileMessageContent`, con un `v-else`.
+                               Quindi la risposta del modello non veniva
+                               nemmeno renderizzata: niente markdown, niente
+                               elenchi, niente grassetti — testo crudo dentro un
+                               riquadro bordato. Chi legge non vede un avviso:
+                               vede la sua risposta rovinata.
+
+                            ⇒ Le due cose sono due cose. Il messaggio si disegna
+                            come qualunque altro, e l'avviso e' un chip SOTTO —
+                            piccolo, con la sua frase, toccabile.
+
+                            ⛔ La ricerca sui pattern di chat del 2026 dice la
+                            stessa cosa: gli stati pendenti sono elementi
+                            separati, mai testo inline, e la carta passa da
+                            «pending» a «risolto» senza toccare il messaggio.
+                        -->
                         <div class="min-w-0 flex-1">
+                            <TalosMobileMessageContent :content="message.content" />
                             <button
                                 v-if="attesaViva(message)"
                                 type="button"
                                 data-testid="talos-authorization-pending-open"
-                                class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-xl border border-[var(--talos-accent)]/50 bg-[var(--talos-active)] px-3 text-left text-sm"
+                                class="talos-pressable mt-2 flex min-h-touch w-full items-center gap-2 rounded-xl border border-[var(--talos-accent)]/50 bg-[var(--talos-active)] px-3 text-left text-sm"
                                 @click="emit('reviewAuthorization')"
                             >
                                 <ShieldQuestion class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                                <span class="min-w-0 flex-1">{{ message.content }}</span>
+                                <span class="min-w-0 flex-1">{{ $t('chat.toolAuthorizationPending', { count: quanteInAttesa(message) }) }}</span>
                                 <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                             </button>
                             <p
                                 v-else-if="checkpointDi(message)"
                                 data-testid="talos-authorization-pending-done"
-                                class="text-xs leading-5 text-[var(--talos-muted)]"
+                                class="mt-2 text-xs leading-5 text-[var(--talos-muted)]"
                             >{{ $t('chat.toolAuthorizationSettled') }}</p>
-                            <TalosMobileMessageContent
-                                v-else
-                                :content="message.content"
-                            />
                         </div>
                     </div>
                     <!-- Owner 2026-07-26: the "Sources" pill, under the answer

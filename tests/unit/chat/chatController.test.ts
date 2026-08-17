@@ -4833,4 +4833,65 @@ describe('riprova e rinvia, con quello che c’era attaccato', () => {
         expect(dopo[0]!.id).not.toBe(prima[0]!.id)
         expect(dopo[0]!.grant_id).toBe(prima[0]!.grant_id)
     })
+
+    /**
+     * ⭐⭐⭐ UNA CAPACITA SPENTA SI DICE — se no il modello la INVENTA.
+     *
+     * Fotografato dall'owner il 2026-08-17, senza chiave di ricerca:
+     *
+     *   «non ho uno strumento di ricerca web semplice — l'unico modo che ho
+     *    per cercare su internet e la deep research»
+     *
+     * E FALSO: `web_search` e `web_read` esistono, sono due dei 69 attrezzi.
+     *
+     * ⛔ Ma dal posto in cui sta il modello quella frase e ONESTA: senza motore
+     * i due tool non vengono costruiti affatto, quindi non li vede. Non ha
+     * allucinato — ha descritto un elenco vero e ne ha tratto la conclusione
+     * sbagliata, perche nessuno gli aveva detto che l'assenza era una
+     * CONFIGURAZIONE e non un limite.
+     *
+     * ⛔ E il danno non e la frase: e che la persona conclude «TALOS non sa
+     * cercare» e smette di chiederglielo. Una capacita che c'e, persa per un
+     * silenzio.
+     */
+    describe('⭐⭐⭐ la ricerca web spenta si DICE', () => {
+        const sistemaDi = (request: { mock: { calls: [{ url: string, data: { system?: string } }][] } }) => request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+            .map((call) => call.data.system ?? '')
+
+        it('⛔⛔ senza motore, il modello SA che manca la chiave e dove si mette', async () => {
+            const { deps, store } = makeDeps()
+            store.set('anthropic', 'sk-ant')
+            const controller = createChatController(deps)
+            await controller.init()
+            await controller.send('cerca sul web che tempo fa')
+
+            const sistema = sistemaDi(deps.transport.request as never)[0] ?? ''
+            expect(sistema).toContain('TALOS_WEB_SEARCH_NOT_CONFIGURED')
+            // ⛔ E il DIVIETO, che e la meta che cura il difetto vero: senza,
+            // il modello resta libero di dire «non ho la ricerca web».
+            expect(sistema).toMatch(/do NOT say you have no web search/i)
+            expect(sistema).toMatch(/Settings/i)
+        })
+
+        /*
+         * ⛔ IL VERSO CONTRARIO, e non e un dettaglio: questa riga entra nel
+         * PREFISSO CONGELATO, quello che paga il prefill una volta sola. Se
+         * comparisse anche con la chiave configurata, sposterebbe il prefisso
+         * di ogni messaggio di chi la ricerca ce l'ha — cioe farebbe pagare a
+         * tutti la cura di pochi.
+         */
+        it('⛔⛔ ma col motore configurato NON compare, e il prefisso non si muove', async () => {
+            const { deps, store } = makeDeps()
+            store.set('anthropic', 'sk-ant')
+            deps.settings.state.search.source = 'tavily'
+            const controller = createChatController(deps)
+            await controller.init()
+            await controller.send('cerca sul web che tempo fa')
+
+            const sistema = sistemaDi(deps.transport.request as never)[0] ?? ''
+            expect(sistema).not.toContain('TALOS_WEB_SEARCH_NOT_CONFIGURED')
+        })
+    })
 })

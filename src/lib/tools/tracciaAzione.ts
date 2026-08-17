@@ -325,6 +325,19 @@ export type TalosScheda =
         readonly dettaglio?: string
         /** La rotta interna che la apre. Senza, la scheda mostra e basta. */
         readonly dove?: string
+        /**
+         * ⭐⭐⭐ Il percorso di un PDF, che si APRE invece di navigare.
+         *
+         * Owner 2026-08-17: «il PDF bisogna poterlo visualizzare dentro la
+         * app». Misurato sul Pad: la scheda mostrava «TALOS in tre righe.pdf ·
+         * Documento · 10 KB» e toccandola non succedeva niente.
+         *
+         * ⛔ NON e' un `dove` travestito. `dove` e' una rotta interna e porta
+         * altrove; questo apre un visualizzatore sopra la chat e la
+         * conversazione resta dov'e'. Confonderli vorrebbe dire far sparire la
+         * chat per guardare una pagina.
+         */
+        readonly pdf?: string
     }
     | {
         readonly tipo: 'quale-app'
