@@ -6,6 +6,41 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.5
+
+### New
+
+- **PDFs open inside TALOS.** A document TALOS generates now shows its pages in
+  the app — swipe through them, close, and the conversation is still where you
+  left it. Until now the card showed the name and the size and tapping it did
+  nothing.
+  - It renders through Android's own PDF engine, so it adds **no library to the
+    app**: 31 bytes to the startup path, against the ~16 MB of native code a
+    PDF library would have brought.
+
+### Fixed
+
+- **"Done." said out loud to a task TALOS had just given up on.** When TALOS
+  drives the screen for you it ends the run by saying what happened — and it
+  said "Done" whether it had finished or abandoned, because those were the same
+  outcome internally. They are now two, and there is a third: if TALOS does not
+  say which, you are told that too, rather than being told it worked.
+- **A pending permission request swallowed the answer.** When TALOS needed your
+  approval mid-task, the notice was glued onto the reply and the whole thing was
+  drawn inside the notice's box — so the answer lost its formatting and the box
+  filled the screen. The answer is now an answer, and the notice is a small chip
+  under it.
+- **"I have no web search" — said while the capability existed.** With no search
+  provider key set, the two web tools are not built at all, so the model could
+  not see them and concluded it had none. TALOS now says the search key is
+  missing and where to add it, instead of leaving you to conclude it cannot
+  search.
+
+### Known limits
+
+- Unchanged from v0.1.4: verified on one device, a OnePlus Pad 3 running Android
+  16 with ColorOS.
+
 ## v0.1.4
 
 Everything below is one story: TALOS presses "send" for you, and this release is
