@@ -1543,6 +1543,23 @@ export function talosIntentiTools(
              * modificare il testo, ed è il punto in cui lo superiamo.
              */
             confirmation: 'always',
+            /*
+             * ⛔⛔ LA STESSA PREMESSA DI `invia_file`, e qui pesa di più: questa è
+             * la via che manda i messaggi a persone vere, e la scheda è
+             * `confirmation: 'always'` — cioè si chiede SEMPRE.
+             *
+             * `run` risolveva già il contatto col tri-stato completo, ma **dopo**
+             * la scheda: si chiedeva alla persona di autorizzare un messaggio a
+             * qualcuno che non è in rubrica, e solo dopo le si diceva che non
+             * c'era. Un consenso speso per niente sulla superficie più delicata
+             * che abbiamo.
+             *
+             * ⛔ L'app NON si controlla qui: `app` non è un'applicazione
+             * installata, è il nome di una **capacità** del registro. La premessa
+             * `app-installed` risponderebbe a un'altra domanda — e una premessa
+             * che risponde alla domanda sbagliata è peggio di nessuna premessa.
+             */
+            premesse: (input) => talosPremessaContatto((input as { contatto?: string }).contatto),
             async run(input) {
                 // ⭐ Prima le generiche: non hanno un'app propria, la chiedono
                 // al dispositivo. Vengono prima perché non toccano la rubrica.
