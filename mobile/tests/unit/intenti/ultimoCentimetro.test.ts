@@ -306,6 +306,28 @@ describe('⭐⭐⭐ l\'ultimo centimetro non tocca al buio', () => {
         expect(esito.scheda).toMatchObject({ tipo: 'invio', partito: false })
     })
 
+    /*
+     * ⛔⛔ LA SCHERMATA GIUSTA, NOMINATA — Pad, 2026-08-17.
+     *
+     * Con questa riga che diceva solo «offer to open its settings page», il
+     * modello ha aperto l'ACCESSO ALLE NOTIFICHE e ha detto alla persona di
+     * abilitare «il permesso di lettura notifiche (o dello schermo, a seconda
+     * della versione)»: pagina sbagliata, ipotesi travestita da istruzione, e
+     * un invito a concedere un permesso che legge TUTTE le notifiche.
+     */
+    it('⛔ «occhio-chiuso» dice che la schermata e GIA aperta, e vieta di aprirne altre', async () => {
+        ponte.esito = { fatto: false, motivo: 'occhio-chiuso' }
+        const esito = await chiedi(CIAO)
+        /*
+         * ⛔ Non «chiedi al modello di aprirla»: gliel'avevo scritto a lettere,
+         * con tanto di «not the notification-access screen», e ha aperto le
+         * notifiche lo stesso. La apre il codice; al modello si dice solo di
+         * non aprirne un'altra.
+         */
+        expect(esito.content).toMatch(/ALREADY opened the accessibility settings/i)
+        expect(esito.content).toMatch(/do not open any other screen/i)
+    })
+
     it('⛔ ma «non lo so» NON produce nessuna scheda', async () => {
         /*
          * Una prova su tre: il messaggio POTREBBE essere partito. Una scheda
