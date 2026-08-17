@@ -140,3 +140,8 @@ mobile/docs/immagini/DA-APPROVARE/
 *.p12
 *.pfx
 keystore.properties
+
+# ⛔ Il banco di misura degli harness sta FUORI dal repository, come le
+# ricerche: vive in TALOS-BANCO/ e non deve rientrare per sbaglio. La storia e'
+# stata riscritta una volta per toglierlo; questa riga evita il secondo giro.
+banco/
