@@ -1053,6 +1053,10 @@ export async function talosPremessaContatto(
         return {
             stato: 'assente',
             perche: `"${nome}" is not in the contact list`,
+            /* ⛔ Per la rubrica la copertura è implicita: o si legge tutta o non
+             * si legge — e il «non si legge» è già uscito come `ignoto` sopra. */
+            copertura: 'completa',
+            fatto: { famiglia: 'contact-exists', nome },
         }
     }
     /*
@@ -1141,7 +1145,7 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
          * rubrica non ha senso far autorizzare l'invio, e ogni scheda spesa cosi
          * insegna a toccare «Consenti» senza leggere.
          */
-        premesse: (input: { contatto?: string }) => talosPremessaContatto(input.contatto),
+        premesse: (input) => talosPremessaContatto((input as { contatto?: string }).contatto),
         async run(input): Promise<TalosToolResult> {
             /*
              * ⛔⛔ LA SECONDA SORGENTE, e passa PRIMA della libreria.
