@@ -810,6 +810,34 @@ export const TALOS_IT_MESSAGES = {
          * voci si toccano e la cosa parte.
          */
         cardWhichApp: 'Con quale app?',
+        cardWhichFile: 'Quale file?',
+        /*
+         * ⛔ La PAROLA, non solo un colore o una spunta. Un segno rosso e uno
+         * verde si somigliano per chi non li distingue, e questa scheda esiste
+         * proprio perché un ✓ è comparso su un messaggio mai partito.
+         */
+        cardSent: 'Inviato',
+        cardNotSent: 'NON inviato',
+        /*
+         * ⛔ Corti abbastanza da stare su una riga accanto a «NON inviato», e
+         * ognuno nomina una cosa su cui si può agire. «errore sconosciuto» non
+         * c'è di proposito: quando il motivo non si sa, la scheda non ne mostra
+         * nessuno invece di una parola che non spiega niente.
+         */
+        cardNotSentWhy: {
+            occhio: 'la lettura dello schermo è spenta',
+            'altra-app': 'ha risposto un’altra app',
+            testo: 'il testo non è arrivato',
+            pulsante: 'pulsante Invia non trovato',
+            ponte: 'il servizio dello schermo non ha risposto',
+        },
+        /*
+         * ⛔ Dice cosa SUCCEDE toccandolo, non cosa manca: «Attiva la lettura
+         * dello schermo» prometterebbe che il tocco accende il permesso, e
+         * invece porta all'elenco dove lo accende la persona. La riga sopra ha
+         * già detto qual è il problema; questa dice la mossa.
+         */
+        cardOpenA11ySettings: 'Apri le impostazioni di accessibilità',
         cardAppOpened: 'Aperta',
         /*
          * ⛔ «Non si è aperta» e NON «Errore»: il telefono aveva detto di saperlo

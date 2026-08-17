@@ -89,6 +89,30 @@ export function talosScegliFile(
 ): TalosSceltaFile {
     const ago = piatto(cercato)
     if (ago === '' || file.length === 0) return { esito: 'nessuno', cePero: file }
+    /*
+     * ⭐⭐⭐ LO SCALINO ZERO: L'ID — e senza, la domanda non aveva risposta.
+     *
+     * MISURATO sul Pad il 2026-08-17, guidando l'invio di un allegato. Nella
+     * Libreria c'erano DUE `nota-talos.txt`, e TALOS ha fatto la cosa giusta:
+     * ha chiesto quale. La persona ha risposto «il primo», il modello ha detto
+     * «uso l'ID del primo» — e poi:
+     *
+     *   «Il tool invia_file non ha completato l'invio perche' ha trovato due
+     *    file con lo stesso nome... Il tool ha restituito un errore di
+     *    ambiguita' che non e' stato risolto nelle chiamate successive.»
+     *
+     * ⇒ Un VICOLO CIECO. La corrispondenza guardava solo il NOME, e due omonimi
+     * hanno lo stesso nome per definizione: qualunque risposta ricadeva
+     * nell'ambiguita' di prima. Lo strumento faceva una domanda che non poteva
+     * accettare la risposta — la stessa forma dell'elenco vero dentro un
+     * `ok:false`, che invita a dire una cosa che non serve a niente.
+     *
+     * ⛔ Va PRIMA di ogni scalino sul nome: l'id e' esatto per costruzione, e
+     * chi lo passa ha gia' scelto. E resta l'unica cosa che distingue due file
+     * omonimi — il nome no, e nemmeno il contenuto, che sul Pad era identico.
+     */
+    const perId = file.filter((f) => f.id === cercato.trim())
+    if (perId.length === 1) return { esito: 'trovato', file: perId[0]! }
     const scalini: ((chiave: string) => boolean)[] = [
         (chiave) => chiave === ago,
         (chiave) => chiave.startsWith(ago),

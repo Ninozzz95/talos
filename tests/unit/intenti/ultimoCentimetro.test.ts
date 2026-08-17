@@ -101,6 +101,8 @@ async function chiedi(input: Record<string, unknown>) {
         ok: boolean
         content: string
         code?: string
+        senzaEffetto?: boolean
+        scheda?: Record<string, unknown>
     }>)(input, {})
 }
 
@@ -230,6 +232,215 @@ describe('⭐⭐⭐ l\'ultimo centimetro non tocca al buio', () => {
         expect(esito.ok).toBe(false)
         expect(esito.code).toBe('TALOS_INVIO_PONTE_CHIUSO')
         expect(esito.content).toMatch(/[Nn]othing was sent/)
+    })
+
+    /*
+     * ⛔⛔⛔ «Nothing was sent» NON BASTA — misurato sul Pad il 2026-08-17.
+     *
+     * Con l'occhio spento lo strumento ha restituito esattamente quel testo, e
+     * il modello ha risposto alla persona:
+     *
+     *     «Il messaggio "prova tre" è stato inviato a Antonino Rizzo. ✓
+     *      … ma non riesco a premere Invia»
+     *
+     * L'invio dichiarato E il fallimento, nella stessa risposta, in
+     * quest'ordine. Verificato che non fosse partito: il testo era ancora nel
+     * campo di WhatsApp.
+     *
+     * ⇒ Ogni altro ramo di `intentiTools` porta il divieto scritto a lettere.
+     * Questi motivi erano gli unici senza — ed erano gli unici in cui il
+     * modello ha mentito. Il divieto DEVE esserci in tutti, compreso il
+     * ripiego per un motivo che ancora non conosciamo: un motivo nuovo è
+     * proprio il caso in cui nessuno ha scritto la regola.
+     */
+    it.each([
+        ['occhio-chiuso'],
+        ['app-non-in-primo-piano'],
+        ['testo-non-arrivato'],
+        ['non-trovato'],
+        ['un-motivo-mai-visto'],
+    ])('⛔ «%s» VIETA di aprire con «inviato»', async (motivo) => {
+        ponte.esito = { fatto: false, motivo }
+        const esito = await chiedi(CIAO)
+        expect(esito.ok).toBe(false)
+        expect(esito.content).toMatch(/Do NOT open with "sent"/)
+        expect(esito.content).toMatch(/did NOT leave/)
+    })
+
+    /*
+     * ⛔⛔⛔ E la SCHEDA, perché i divieti scritti non sono bastati.
+     *
+     * Il 2026-08-17, con tre divieti già in piedi — la riga nel prompt di
+     * sistema, «Nothing was sent» nell'esito, e il divieto esplicito — il
+     * modello ha aperto lo stesso con «è stato inviato ✓».
+     *
+     * ⇒ La scheda la disegna l'app e non passa dalle sue parole. Questi test
+     * la custodiscono su OGNI ramo, compreso il motivo sconosciuto: un motivo
+     * nuovo è proprio quello per cui nessuno ha scritto la regola.
+     */
+    it.each([
+        ['occhio-chiuso'],
+        ['app-non-in-primo-piano'],
+        ['testo-non-arrivato'],
+        ['non-trovato'],
+        ['un-motivo-mai-visto'],
+    ])('⛔ «%s» porta una SCHEDA che dice NON partito', async (motivo) => {
+        ponte.esito = { fatto: false, motivo }
+        const esito = await chiedi(CIAO)
+        expect(esito.scheda).toMatchObject({ tipo: 'invio', partito: false })
+        // ⛔ `partito` deve essere il booleano, non un valore «quasi falso»:
+        // una scheda che dicesse «inviato» per sbaglio sarebbe una bugia con
+        // l'aria di una prova.
+        expect((esito.scheda as { partito: unknown }).partito).toBe(false)
+    })
+
+    it('⛔ AL CONTRARIO: quando PARTE davvero, la scheda lo dice', async () => {
+        ponte.esito = { fatto: true, obiettivo: 'PARTITO', prove: 3 }
+        const esito = await chiedi(CIAO)
+        expect(esito.scheda).toMatchObject({ tipo: 'invio', partito: true })
+        // E senza `perche`: un motivo su un invio riuscito non vuol dire niente.
+        expect((esito.scheda as { perche?: string }).perche).toBeUndefined()
+    })
+
+    it('⛔ e «premuto ma il testo è ancora lì» è NON partito, non un dubbio', async () => {
+        ponte.esito = { fatto: true, obiettivo: 'NON_PARTITO', prove: 1 }
+        const esito = await chiedi(CIAO)
+        expect(esito.scheda).toMatchObject({ tipo: 'invio', partito: false })
+    })
+
+    /*
+     * ⛔⛔ LA SCHERMATA GIUSTA, NOMINATA — Pad, 2026-08-17.
+     *
+     * Con questa riga che diceva solo «offer to open its settings page», il
+     * modello ha aperto l'ACCESSO ALLE NOTIFICHE e ha detto alla persona di
+     * abilitare «il permesso di lettura notifiche (o dello schermo, a seconda
+     * della versione)»: pagina sbagliata, ipotesi travestita da istruzione, e
+     * un invito a concedere un permesso che legge TUTTE le notifiche.
+     */
+    /*
+     * ⭐⭐⭐ E POI, LO STESSO GIORNO, LO STRUMENTO HA DETTO CHE ERA UNA GARA.
+     *
+     * Dal registro delle activity del Pad, 900 millesimi:
+     *
+     *     05:31:14.098  TALOS      apre WhatsApp  (wa.me)
+     *     05:31:14.135  TALOS      apre ACCESSIBILITY_SETTINGS   ← 37 ms dopo
+     *     05:31:14.155  WhatsApp   .contact.ui.picker.ContactPicker
+     *     05:31:14.927  WhatsApp   .Conversation
+     *     05:31:14.959  WhatsApp   .home.ui.HomeActivity
+     *     05:31:14.980  WhatsApp   .Conversation
+     *
+     * Le impostazioni si erano aperte DAVVERO — poi WhatsApp ha continuato a
+     * lanciare finestre e le ha sepolte. «Sono già aperte sullo schermo» era
+     * vero per 37 millesimi, e la persona leggeva di guardare un elenco che non
+     * c'era. ⇒ Adesso il comando sta sulla scheda, e lo tocca la persona.
+     */
+    it('⛔ «occhio-chiuso» manda alla SCHEDA, e non promette uno schermo che non sappiamo', async () => {
+        ponte.esito = { fatto: false, motivo: 'occhio-chiuso' }
+        const esito = await chiedi(CIAO)
+        expect(esito.content).toMatch(/card below/i)
+        /*
+         * ⛔ E il modello NON deve aprire niente da sé: rifarebbe la gara, e due
+         * volte ha aperto la pagina sbagliata — l'accesso alle notifiche —
+         * invitando la persona a concedere un permesso che legge TUTTE le
+         * notifiche. Gliel'avevo scritto a lettere e ha aperto le notifiche lo
+         * stesso.
+         */
+        expect(esito.content).toMatch(/do NOT open any settings screen yourself/i)
+        // ⛔ E soprattutto: non si dice più che sono «già aperte».
+        expect(esito.content).not.toMatch(/ALREADY opened/i)
+    })
+
+    /*
+     * ⭐⭐⭐ IL PERMESSO SBAGLIATO, NOMINATO — Pad, 2026-08-17, TRE volte.
+     *
+     * La riga diceva «the screen-reading permission is off», chiarissima, e il
+     * modello ha scritto alla persona «abilita il permesso di ACCESSO ALLE
+     * NOTIFICHE per TALOS» e, in un altro giro, «il permesso di lettura
+     * notifiche (o dello schermo, a seconda della versione)».
+     *
+     * ⇒ Dire qual è quello giusto NON basta: era già scritto ed era già
+     * sbagliato. La frase vietata si NOMINA, come per «inviato».
+     */
+    it('⛔⛔ «occhio-chiuso» nomina il permesso SBAGLIATO per vietarlo', async () => {
+        ponte.esito = { fatto: false, motivo: 'occhio-chiuso' }
+        const esito = await chiedi(CIAO)
+        expect(esito.content).toMatch(/NOT notification access/i)
+        expect(esito.content).toMatch(/depending on the version/i)
+    })
+
+    /*
+     * ⛔ AL CONTRARIO: se il pulsante non si trova, la lettura dello schermo
+     * c'è. Nominare il permesso lì insegnerebbe a concedere una cosa che non
+     * risolve niente.
+     */
+    it('⛔ ma «non-trovato» NON nomina nessun permesso', async () => {
+        ponte.esito = { fatto: false, motivo: 'non-trovato' }
+        const esito = await chiedi(CIAO)
+        expect(esito.content).not.toMatch(/notification access/i)
+    })
+
+    /*
+     * ⭐⭐⭐ `senzaEffetto` — il campo che toglie il PREAMBOLO falso.
+     *
+     * Il modello annuncia PRIMA di chiamare: il suo primo turno è
+     * `["text","tool_use"]`, misurato con una sonda diretta all'API. Quel testo
+     * a volte è al passato — «Il messaggio è stato inviato ✓» — e il giro
+     * dell'agente lo incolla alla conclusione onesta, producendo:
+     *
+     *     «Il messaggio è stato inviato ✓
+     *      Il messaggio non è stato inviato.»
+     *
+     * ⛔ `agentLoop` sa già toglierlo: se OGNI attrezzo del giro dichiara
+     * `senzaEffetto`, il preambolo si scarta. Questo strumento non lo
+     * dichiarava, e quattro divieti scritti hanno inseguito il modello mentre
+     * il meccanismo giusto stava spento per un campo mancante.
+     */
+    it.each([
+        ['occhio-chiuso'],
+        ['app-non-in-primo-piano'],
+        ['testo-non-arrivato'],
+        ['non-trovato'],
+        ['un-motivo-mai-visto'],
+    ])('⛔ «%s» dichiara senzaEffetto, cosi il preambolo falso sparisce', async (motivo) => {
+        ponte.esito = { fatto: false, motivo }
+        const esito = await chiedi(CIAO)
+        expect(esito.senzaEffetto).toBe(true)
+    })
+
+    it('⛔ e anche «premuto ma il testo e ancora li»', async () => {
+        ponte.esito = { fatto: true, obiettivo: 'NON_PARTITO', prove: 1 }
+        const esito = await chiedi(CIAO)
+        expect(esito.senzaEffetto).toBe(true)
+    })
+
+    it('⛔ AL CONTRARIO: se e PARTITO il preambolo resta', async () => {
+        // Lì il preambolo raccontava una cosa vera, e toglierlo sarebbe
+        // cancellare una frase giusta.
+        ponte.esito = { fatto: true, obiettivo: 'PARTITO', prove: 3 }
+        const esito = await chiedi(CIAO)
+        expect(esito.senzaEffetto).toBeUndefined()
+    })
+
+    it('⛔ e nel DUBBIO resta: il messaggio potrebbe essere partito', async () => {
+        /*
+         * Una prova su tre. Togliere il preambolo qui cancellerebbe una frase
+         * che potrebbe essere vera — e il dubbio si racconta, non si nasconde.
+         */
+        ponte.esito = { fatto: true, obiettivo: 'NON_CONFERMATO', prove: 1 }
+        const esito = await chiedi(CIAO)
+        expect(esito.senzaEffetto).toBeUndefined()
+    })
+
+    it('⛔ ma «non lo so» NON produce nessuna scheda', async () => {
+        /*
+         * Una prova su tre: il messaggio POTREBBE essere partito. Una scheda
+         * che dicesse «non inviato» qui sarebbe falsa la metà delle volte, e
+         * una che dicesse «forse» insegnerebbe a non fidarsi anche delle altre.
+         * ⇒ Qui parla solo la frase, che sa dire «guarda tu».
+         */
+        ponte.esito = { fatto: true, obiettivo: 'NON_CONFERMATO', prove: 1 }
+        const esito = await chiedi(CIAO)
+        expect(esito.scheda).toBeUndefined()
     })
 })
 
@@ -531,5 +742,71 @@ describe('⭐⭐⭐ le capacità che l\'app se la fanno dire dal telefono', () =
         const esito = await chiedi({ ...MANDA, app: 'Keep' })
         expect(esito.content).toMatch(/NOT sent/)
         expect(esito.content).not.toMatch(/^Sent/)
+    })
+})
+
+/*
+ * ⭐⭐⭐ LA PROVA CHE ATTRAVERSA TUTTO — dal ponte spento alla frase letta.
+ *
+ * ⛔ I test qui sopra provano che lo strumento ALZA la bandiera. Il test in
+ * `agentLoop.test.ts` prova che il giro, vedendo la bandiera, TOGLIE il
+ * preambolo. Nessuno dei due prova che le due metà si tocchino: fra loro c'è
+ * l'esecutore, e la stessa lezione è già costata una volta — «un test sulla
+ * funzione pura deve attraversare il chiamante».
+ *
+ * ⇒ Qui l'esito VERO dello strumento entra nel giro VERO, e si guarda la
+ * stringa che finisce sullo schermo. È la scena misurata sul Pad:
+ *
+ *     «Il messaggio "prova cinque" è stato inviato ✓
+ *      Il messaggio non è stato inviato, manca il permesso…»
+ */
+describe('⭐⭐⭐ il preambolo bugiardo, dallo strumento fino allo schermo', () => {
+    const PREAMBOLO_FALSO = 'Il messaggio «ciao» è stato inviato a Marco ✓'
+    const CONCLUSIONE = 'Il messaggio non è stato inviato: manca la lettura dello schermo.'
+
+    async function giro(esitoDelPonte: Record<string, unknown>) {
+        const { runTalosAgentLoop } = await import('@/lib/tools/agentLoop')
+        ponte.esito = esitoDelPonte
+        const esito = await chiedi(CIAO)
+        const complete = vi.fn()
+            .mockResolvedValueOnce({
+                text: PREAMBOLO_FALSO,
+                toolCalls: [{ id: 'c1', name: 'app_azione', arguments: {} }],
+            })
+            .mockResolvedValueOnce({ text: CONCLUSIONE })
+        return await runTalosAgentLoop(
+            [{ role: 'user', content: 'manda ciao a Marco' }],
+            { complete, execute: async () => esito },
+        )
+    }
+
+    it('⛔⛔ «inviato ✓» seguito da «non inviato» NON arriva piu allo schermo', async () => {
+        const esito = await giro({ fatto: false, motivo: 'occhio-chiuso' })
+
+        expect(esito.text).toBe(CONCLUSIONE)
+        expect(esito.text).not.toContain('inviato a Marco ✓')
+    })
+
+    it('⛔ e vale anche per «premuto ma il testo e ancora li»', async () => {
+        const esito = await giro({ fatto: true, obiettivo: 'NON_PARTITO', prove: 1 })
+
+        expect(esito.text).toBe(CONCLUSIONE)
+    })
+
+    it('⛔ AL CONTRARIO: se e PARTITO davvero il preambolo RESTA', async () => {
+        /*
+         * Non è un dettaglio: togliere il preambolo qui vorrebbe dire far
+         * sparire dallo scorrimento una frase che la persona aveva già letto,
+         * e che era vera.
+         */
+        const esito = await giro({ fatto: true, obiettivo: 'PARTITO', prove: 3 })
+
+        expect(esito.text).toContain(PREAMBOLO_FALSO)
+    })
+
+    it('⛔ e nel DUBBIO resta: potrebbe essere partito', async () => {
+        const esito = await giro({ fatto: true, obiettivo: 'NON_CONFERMATO', prove: 1 })
+
+        expect(esito.text).toContain(PREAMBOLO_FALSO)
     })
 })

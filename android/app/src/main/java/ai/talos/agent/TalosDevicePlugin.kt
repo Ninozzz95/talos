@@ -1351,6 +1351,48 @@ class TalosDevicePlugin : Plugin() {
         // tutte le app invece della nostra riga.
         val perQuestaApp = call.getBoolean("forThisApp", false) == true
         val dato = Uri.fromParts("package", context.packageName, null)
+        /*
+         * ⭐⭐⭐ LA PAGINA DOVE TALOS C'E' DAVVERO — misurato sul Pad, 2026-08-17.
+         *
+         * Aperte le impostazioni di accessibilita', su questo telefono si vede:
+         * «Menu Accessibilita'», «Pulsante Accessibilita'», «Scelta rapida dalla
+         * schermata di blocco», «App scaricate». TALOS NON C'E': sta dentro «App
+         * scaricate», un livello sotto. E la nostra frase diceva «trova TALOS
+         * nella lista».
+         *
+         * ⛔ Chiesto al telefono, non scritto a memoria. `dumpsys package`
+         * elenca un'AZIONE — non un nome di classe da far invecchiare con la
+         * prossima ROM:
+         *
+         *   oplus.intent.action.settings.ACCESSIBILITY_DOWNLOAD
+         *
+         * ⛔ E NON e' l'ACTION_ACCESSIBILITY_DETAILS_SETTINGS di AOSP, che
+         * porterebbe dritti alla scheda del servizio con la levetta: quella e'
+         * chiusa a un'app normale — il telefono dice `prot=signature|installer`.
+         *
+         * ⇒ Si prova la piu' precisa e si torna sempre alla generale. Su un
+         * telefono che non e' OPPO/OnePlus l'azione non risolve e non succede
+         * niente: nessun ramo, nessuna condizione sul produttore.
+         */
+        val piuPrecisa = when (azione) {
+            Settings.ACTION_ACCESSIBILITY_SETTINGS ->
+                "oplus.intent.action.settings.ACCESSIBILITY_DOWNLOAD"
+            else -> null
+        }
+        if (piuPrecisa != null && !perQuestaApp) {
+            /*
+             * ⛔ `chiedendoPrima = true`, al contrario delle due righe sotto: qui
+             * NON e' un'azione di sistema che il filtro di visibilita' nasconde,
+             * e' un'azione di UN produttore. Chiedere prima costa una query e
+             * evita di far partire un intent che quasi ovunque non risolve.
+             */
+            val preciso = avvia(Intent(piuPrecisa), chiedendoPrima = true)
+            if (preciso.optBoolean("done", false)) {
+                preciso.put("scope", "service")
+                call.resolve(preciso)
+                return
+            }
+        }
         // ⛔ `chiedendoPrima = false`: queste sono schermate di SISTEMA, e
         // chiedere chi risponde a un intent di sistema ottiene «non te lo dico»
         // dal filtro di visibilita' dei pacchetti — non «non esiste». Il perche'

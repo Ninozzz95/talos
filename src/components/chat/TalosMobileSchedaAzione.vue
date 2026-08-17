@@ -72,6 +72,21 @@ function eUnaScheda(valore: unknown): valore is TalosScheda {
                 && typeof (a as Record<string, unknown>)?.pacchetto === 'string'
                 && (a as Record<string, unknown>).pacchetto !== '')
     }
+    /*
+     * ⛔ Stesse ragioni di `quale-app`, con l'ID al posto del pacchetto: è ciò
+     * che il tocco consegna, ed è l'unica cosa che distingue due file con lo
+     * stesso nome. Una voce col solo nome sarebbe un pulsante che riporta
+     * esattamente al giro chiuso da cui questa scheda nasce.
+     *
+     * ⛔ E sotto le DUE voci non si disegna: con un file solo non c'era
+     * ambiguità, e un elenco di uno è una domanda senza dubbio.
+     */
+    if (r.tipo === 'quale-file') {
+        return Array.isArray(r.file) && r.file.length > 1
+            && r.file.every((f) => typeof (f as Record<string, unknown>)?.nome === 'string'
+                && typeof (f as Record<string, unknown>)?.id === 'string'
+                && (f as Record<string, unknown>).id !== '')
+    }
     /**
      * ⛔ Il titolo è OBBLIGATORIO: una scheda «creato» senza il nome della cosa
      * direbbe soltanto «è successo qualcosa», che è meno della frase accanto.
@@ -81,6 +96,18 @@ function eUnaScheda(valore: unknown): valore is TalosScheda {
     if (r.tipo === 'creato') {
         return typeof r.titolo === 'string' && r.titolo !== ''
             && typeof r.genere === 'string' && r.genere !== ''
+    }
+
+    /*
+     * ⛔ `app` e `partito` sono OBBLIGATORI, e `partito` deve essere un
+     * booleano VERO — non «truthy». Questa scheda esiste perché il modello ha
+     * scritto «inviato ✓» su un messaggio che non era partito: se un valore
+     * storto la facesse comparire come «inviato», avremmo costruito una seconda
+     * bugia, e questa con l'aria di essere una prova.
+     */
+    if (r.tipo === 'invio') {
+        return typeof r.app === 'string' && r.app !== ''
+            && typeof r.partito === 'boolean'
     }
 
     return r.tipo === 'interruttore'
@@ -93,10 +120,37 @@ type SchedaAgenda = Extract<TalosScheda, { tipo: 'agenda' }>
 type SchedaInterruttore = Extract<TalosScheda, { tipo: 'interruttore' }>
 type SchedaSveglia = Extract<TalosScheda, { tipo: 'sveglia' }>
 type SchedaQualeApp = Extract<TalosScheda, { tipo: 'quale-app' }>
+type SchedaQualeFile = Extract<TalosScheda, { tipo: 'quale-file' }>
+type SchedaInvio = Extract<TalosScheda, { tipo: 'invio' }>
+const eInvio = (s: TalosScheda): s is SchedaInvio => s.tipo === 'invio'
+
+/**
+ * ⛔⛔ UN MOTIVO CHE NON CONOSCIAMO NON SI DISEGNA — visto sul Pad, 2026-08-17.
+ *
+ * La prima versione di questa scheda salvava il motivo come frase inglese
+ * pronta. Appena è diventato una chiave da tradurre, le schede GIÀ SALVATE si
+ * sono ridisegnate col componente nuovo e sullo schermo è comparso:
+ *
+ *     WhatsApp · NON inviato · chat.cardNotSentWhy.screen reading is off
+ *
+ * Cioè la chiave grezza, dentro il riquadro che deve essere il più credibile
+ * della schermata. ⛔ Una migrazione di forma non tocca ciò che è già sul
+ * disco, e questo vale per ogni scheda che verrà.
+ *
+ * ⇒ Si disegna SOLO un motivo riconosciuto. Gli altri spariscono, e resta
+ * «NON inviato» — che è la cosa vera e la sola che decide cosa si fa dopo.
+ */
+const MOTIVI_NOTI = ['occhio', 'altra-app', 'testo', 'pulsante', 'ponte'] as const
+const motivoLeggibile = (s: SchedaInvio): string | null => (
+    s.perche && (MOTIVI_NOTI as readonly string[]).includes(s.perche)
+        ? t(`chat.cardNotSentWhy.${s.perche}`)
+        : null
+)
 const eAgenda = (s: TalosScheda): s is SchedaAgenda => s.tipo === 'agenda'
 const eInterruttore = (s: TalosScheda): s is SchedaInterruttore => s.tipo === 'interruttore'
 const eSveglia = (s: TalosScheda): s is SchedaSveglia => s.tipo === 'sveglia'
 const eQualeApp = (s: TalosScheda): s is SchedaQualeApp => s.tipo === 'quale-app'
+const eQualeFile = (s: TalosScheda): s is SchedaQualeFile => s.tipo === 'quale-file'
 type SchedaCreato = Extract<TalosScheda, { tipo: 'creato' }>
 const eCreato = (s: TalosScheda): s is SchedaCreato => s.tipo === 'creato'
 
@@ -142,6 +196,36 @@ const { t } = useTalosI18n()
 async function commutaComando(tool: string, acceso: boolean): Promise<boolean> {
     const { talosCommutaDaScheda } = await import('@/lib/tools/schedaComandi')
     return talosCommutaDaScheda(tool, acceso)
+}
+
+/**
+ * ⭐⭐⭐ APRIRE LE IMPOSTAZIONI COL DITO — vedi `talosApriImpostazioniDaScheda`.
+ *
+ * ⛔ Lo stato è UNO per la scheda, non uno per riga: di pulsanti così ce n'è al
+ * massimo uno, e tenere una mappa per un elemento solo è una struttura che
+ * mente su quanti casi copre.
+ */
+const apreImpostazioni = ref(false)
+const esitoImpostazioni = ref('')
+
+async function apriImpostazioni(): Promise<void> {
+    if (apreImpostazioni.value) return
+    apreImpostazioni.value = true
+    esitoImpostazioni.value = ''
+    try {
+        const { talosApriImpostazioniDaScheda } = await import('@/lib/tools/schedaComandi')
+        const fatto = await talosApriImpostazioniDaScheda('android.settings.ACCESSIBILITY_SETTINGS')
+        /*
+         * ⛔ Se non si è aperta LO SI DICE. Un pulsante che si spegne e basta
+         * lascia credere di aver fatto qualcosa — è la stessa bugia del segno
+         * «Fatto» su una cosa non fatta, spostata dentro un comando.
+         */
+        esitoImpostazioni.value = fatto ? '' : t('chat.cardAppRefused')
+    } catch {
+        esitoImpostazioni.value = t('chat.cardAppRefused')
+    } finally {
+        apreImpostazioni.value = false
+    }
 }
 
 async function apriConApp(
@@ -291,6 +375,47 @@ async function scegli(s: SchedaQualeApp, pacchetto: string): Promise<void> {
 }
 
 /**
+ * ⭐⭐⭐ QUALE FILE — la sorella di «quale app», e nasce da un LOOP.
+ *
+ * MISURATO sul Pad il 2026-08-17. Due `nota-talos.txt` nella Libreria: l'esito
+ * dello strumento portava i numeri, gli id e l'istruzione a lettere di
+ * richiamare con l'id. La persona ha risposto «1» e il modello ha rifatto la
+ * STESSA domanda — richiamava col nome, riotteneva l'ambiguità, riscriveva
+ * l'elenco. Un giro chiuso.
+ *
+ * ⇒ Adesso il dito porta l'id, che è l'unica cosa che distingue due omonimi.
+ */
+const esitoFile = ref<Record<string, 'manda' | 'mandato' | 'rifiutato'>>({})
+
+/*
+ * ⛔ Le parole sono quelle dell'INVIO, non quelle dell'apertura: qui il tocco
+ * manda un file a una persona vera. «Non si e' aperta» direbbe una cosa su una
+ * finestra, e lascerebbe credere che il file sia comunque partito.
+ */
+function parolaFile(id: string): string {
+    const esito = esitoFile.value[id]
+    if (esito === 'mandato') return t('chat.cardSent')
+    if (esito === 'rifiutato') return t('chat.cardNotSent')
+    return ''
+}
+
+async function scegliFile(s: SchedaQualeFile, id: string): Promise<void> {
+    if (esitoFile.value[id] === 'manda') return
+    esitoFile.value = { ...esitoFile.value, [id]: 'manda' }
+    try {
+        const { talosMandaFileDaScheda } = await import('@/lib/tools/schedaComandi')
+        const fatto = await talosMandaFileDaScheda(id, {
+            ...(s.app ? { app: s.app } : {}),
+            ...(s.contatto ? { contatto: s.contatto } : {}),
+            ...(s.testo ? { testo: s.testo } : {}),
+        })
+        esitoFile.value = { ...esitoFile.value, [id]: fatto === true ? 'mandato' : 'rifiutato' }
+    } catch {
+        esitoFile.value = { ...esitoFile.value, [id]: 'rifiutato' }
+    }
+}
+
+/**
  * ⛔ Lo stato è detto anche a PAROLE, non solo dal colore della levetta.
  *
  * È il pavimento di accessibilità che le linee guida 2026 sulle chat mettono
@@ -410,6 +535,90 @@ const parolaStato = (acceso: boolean): string => (acceso
             </component>
 
             <!--
+                ⭐⭐⭐ È PARTITO, O NO — e questa riga vince sulla prosa.
+
+                MISURATO sul Pad il 2026-08-17, con la lettura dello schermo
+                spenta: TALOS ha scritto «Il messaggio "prova cinque" è stato
+                inviato ✓» e, subito sotto, «Il messaggio non è stato
+                inviato». Verificato che non fosse partito.
+
+                ⛔ Le difese di PAROLE erano già tutte in piedi — la riga nel
+                prompt, l'esito `ok: false` che dice «Nothing was sent», e il
+                divieto esplicito aggiunto lo stesso giorno. Tre, e ha aperto
+                lo stesso con «inviato».
+
+                ⇒ Questa scheda non chiede al modello di ricopiare bene: la
+                disegna l'app. È la stessa scelta di «quale app».
+
+                ⛔ Nessun colore scritto a mano: `text-danger` e `text-success`
+                vengono dal theme engine come tutto il resto. E il simbolo NON
+                è l'unica differenza — c'è la parola, perché un segno rosso e
+                uno verde si confondono, e chi non distingue i colori vedrebbe
+                due schede identiche.
+            -->
+            <div
+                v-if="eInvio(s)"
+                class="talos-controllo flex items-center gap-2 border border-border bg-muted"
+                data-testid="talos-scheda-invio"
+            >
+                <span class="talos-nome min-w-0 flex-1">
+                    <span class="block truncate">{{ s.app }}</span>
+                    <span
+                        class="mt-px block text-xs"
+                        :class="s.partito ? 'text-muted-foreground' : 'text-[var(--talos-danger,#dc5b5b)]'"
+                    >{{ s.partito ? t('chat.cardSent') : t('chat.cardNotSent') }}<template
+                        v-if="!s.partito && motivoLeggibile(s)"
+                    > · {{ motivoLeggibile(s) }}</template></span>
+                </span>
+                <span class="talos-freccia flex-none" aria-hidden="true">{{ s.partito ? '✓' : '⛔' }}</span>
+            </div>
+
+            <!--
+                ⭐⭐⭐ IL COMANDO, invece della gara che perdevamo.
+
+                MISURATO sul Pad il 2026-08-17, dal registro delle activity.
+                TALOS apriva da solo le impostazioni, 37 ms dopo aver aperto
+                WhatsApp — e nei successivi 850 ms WhatsApp lanciava altre
+                quattro finestre e le seppelliva. La risposta diceva «le
+                impostazioni sono già aperte sullo schermo» e sullo schermo
+                c'era WhatsApp.
+
+                ⛔ Non si cura aspettando di più: quanto duri la catena di
+                lancio è un fatto di QUELL'app su QUEL telefono.
+
+                ⇒ Lo schermo cambia quando lo tocca la persona, che è anche
+                l'unico momento in cui è pronta a usarlo.
+
+                ⛔ Solo per `occhio`: è l'unico motivo con una schermata giusta
+                e conosciuta. Per gli altri non sappiamo dove mandare nessuno, e
+                un pulsante che apre a caso è peggio di nessun pulsante.
+            -->
+            <button
+                v-if="eInvio(s) && !s.partito && s.perche === 'occhio'"
+                type="button"
+                class="talos-app flex w-full items-center border border-border bg-muted text-left"
+                :aria-busy="apreImpostazioni"
+                :disabled="apreImpostazioni"
+                data-testid="talos-scheda-apri-impostazioni"
+                @click="apriImpostazioni()"
+            >
+                <span class="talos-nome flex-1">
+                    {{ t('chat.cardOpenA11ySettings') }}
+                    <!--
+                        ⛔ La riga dell'esito c'è SEMPRE, anche vuota: una zona
+                        `aria-live` creata nel momento in cui cambia non viene
+                        annunciata — il lettore di schermo deve averla già
+                        osservata.
+                    -->
+                    <span
+                        class="talos-esito block text-xs text-muted-foreground"
+                        aria-live="polite"
+                    >{{ esitoImpostazioni }}</span>
+                </span>
+                <span class="talos-freccia" aria-hidden="true">›</span>
+            </button>
+
+            <!--
                 ⭐⭐⭐ QUALE APP — l'elenco vero, TOCCABILE.
 
                 MISURATO sul Pad il 2026-08-13: col medesimo elenco in mano, il
@@ -464,6 +673,47 @@ const parolaStato = (acceso: boolean): string => (acceso
                             class="talos-esito block text-xs text-muted-foreground"
                             aria-live="polite"
                         >{{ parolaEsito(s, a.pacchetto) }}</span>
+                    </span>
+                    <span class="talos-freccia" aria-hidden="true">›</span>
+                </button>
+            </template>
+
+            <!--
+                ⭐⭐⭐ QUALE FILE — e nasce da un GIRO CHIUSO.
+
+                MISURATO sul Pad il 2026-08-17. Due `nota-talos.txt` nella
+                Libreria. L'esito portava i numeri, gli id, e a lettere
+                «call this tool again with "file" set to that entry's id». La
+                persona ha risposto «1» e il modello ha rifatto la STESSA
+                domanda: richiamava col nome, riotteneva l'ambiguità,
+                riscriveva l'elenco.
+
+                ⛔ È la lezione già scritta due volte in `intentiTools`: una
+                istruzione scritta NON vincola il modello. Se una cosa deve
+                succedere, la fa il codice.
+
+                ⛔ Il NUMERO c'è davanti a ogni voce: due file con lo stesso
+                nome sono indistinguibili anche per chi guarda, e senza un
+                riferimento la domanda resterebbe senza risposta pure col dito.
+            -->
+            <template v-if="eQualeFile(s)">
+                <p class="talos-domanda">{{ t('chat.cardWhichFile') }}</p>
+                <button
+                    v-for="(f, n) in s.file"
+                    :key="f.id"
+                    type="button"
+                    class="talos-app flex w-full items-center border border-border bg-muted text-left"
+                    :aria-busy="esitoFile[f.id] === 'manda'"
+                    :disabled="esitoFile[f.id] === 'manda'"
+                    data-testid="talos-scheda-file"
+                    @click="scegliFile(s, f.id)"
+                >
+                    <span class="talos-nome flex-1">
+                        {{ n + 1 }}. {{ f.nome }}
+                        <span
+                            class="talos-esito block text-xs text-muted-foreground"
+                            aria-live="polite"
+                        >{{ parolaFile(f.id) }}</span>
                     </span>
                     <span class="talos-freccia" aria-hidden="true">›</span>
                 </button>

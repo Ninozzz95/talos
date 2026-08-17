@@ -130,3 +130,65 @@ describe('il segno «Fatto» racconta solo gli effetti nel mondo', () => {
         expect(talosAzioniEseguite(righe)).toEqual([{ tool: 'invia_file' }])
     })
 })
+
+/**
+ * ⭐⭐⭐ IL VICOLO CIECO — una domanda senza risposta possibile.
+ *
+ * MISURATO sul Pad il 2026-08-17, guidando l'invio di un allegato. Nella
+ * Libreria c'erano DUE `nota-talos.txt`. TALOS ha fatto la cosa giusta — ha
+ * chiesto quale — la persona ha risposto «il primo», e poi:
+ *
+ *   «Il tool invia_file non ha completato l'invio perche' ha trovato due file
+ *    con lo stesso nome... Il tool ha restituito un errore di ambiguita' che
+ *    non e' stato risolto nelle chiamate successive.»
+ *
+ * ⇒ La corrispondenza guardava solo il NOME, e due omonimi hanno lo stesso nome
+ * per definizione: qualunque risposta ricadeva nell'ambiguita' di prima. Lo
+ * strumento faceva una domanda che non poteva accettare la risposta.
+ *
+ * ⛔ Non si vedeva rileggendo: si e' vista guidando il giro fino in fondo.
+ */
+describe('⭐⭐⭐ due file omonimi si distinguono per ID', () => {
+    const UNO: TalosFileMandabile = {
+        id: '934665d7-8a14-4f14-ad65-b8451295911d',
+        nome: 'nota-talos.txt', tipo: 'text/plain', percorso: 'talos-vault/files/a.txt',
+    }
+    const DUE: TalosFileMandabile = {
+        id: '9bf6b0fc-ac76-47e6-8bba-c67e22a7e89d',
+        nome: 'nota-talos.txt', tipo: 'text/plain', percorso: 'talos-vault/files/b.txt',
+    }
+
+    it('⛔ col NOME resta ambiguo — e cosi era un vicolo cieco', () => {
+        expect(talosScegliFile([UNO, DUE], 'nota-talos.txt').esito).toBe('ambiguo')
+    })
+
+    it('⛔⛔ ma con l\'ID si risolve, ed e la sola cosa che li distingue', () => {
+        expect(talosScegliFile([UNO, DUE], UNO.id)).toEqual({ esito: 'trovato', file: UNO })
+        expect(talosScegliFile([UNO, DUE], DUE.id)).toEqual({ esito: 'trovato', file: DUE })
+    })
+
+    /*
+     * ⛔ L'id va provato PRIMA di ogni scalino sul nome: e' esatto per
+     * costruzione, e chi lo passa ha gia' scelto.
+     */
+    it('⛔ e l\'ID vince anche su un nome che corrisponderebbe', () => {
+        const esca: TalosFileMandabile = {
+            id: 'f9', nome: '934665d7-8a14-4f14-ad65-b8451295911d.txt',
+            tipo: 'text/plain', percorso: 'talos-vault/files/c.txt',
+        }
+        expect(talosScegliFile([UNO, esca], UNO.id)).toEqual({ esito: 'trovato', file: UNO })
+    })
+
+    /*
+     * ⛔ AL CONTRARIO: un id che non c'e' NON diventa «trovato» pescando a caso.
+     * Ricade sulla ricerca per nome, e se non corrisponde niente dice «nessuno»
+     * — mandare un file a caso a una persona vera non si annulla.
+     */
+    it('⛔ un ID che non esiste non pesca niente', () => {
+        expect(talosScegliFile([UNO, DUE], 'id-che-non-esiste').esito).toBe('nessuno')
+    })
+
+    it('⛔ e con UN SOLO file omonimo l\'id non serve: il nome basta', () => {
+        expect(talosScegliFile([UNO], 'nota-talos.txt')).toEqual({ esito: 'trovato', file: UNO })
+    })
+})

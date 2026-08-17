@@ -296,8 +296,47 @@ function byte(valore: unknown): number {
  * ⇒ Tetto a 45.100, cioè **174 byte** di margine. Stretto di proposito: un
  * tetto che avanza spazio non difende niente, ed è la stessa disciplina con cui
  * qui si erano lasciati 30 byte.
+ *
+ * ## 2026-08-17 — 45.100 → 45.200, e stavolta lo sgrassare COSTAVA
+ *
+ * Il difetto, sul Pad: «manda il file X a Y» e `invia_file` **non parte mai**.
+ * Il registro delle notifiche dice quale attrezzo è girato davvero — «Ricerca
+ * nella Libreria», e basta. Il modello cerca, racconta il contenuto dei file, e
+ * non manda.
+ *
+ * ⛔ La descrizione di `invia_file` non diceva MAI cosa fa: due note sui
+ * parametri, senza un verbo. Accanto, `library_search` dichiara il territorio a
+ * lettere — «Use it BEFORE answering questions about the user's own files».
+ *
+ * ⛔ E la prima sonda ha detto che non c'entrava: tre attrezzi in gara,
+ * `invia_file` scelto **12/12** con la descrizione vecchia. Era una sonda
+ * TROPPO FACILE. Rimessi i concorrenti veri — `library_search`, `library_read`,
+ * `library_export`, `document_create`, `app_azione`, `device_screen_drive` —
+ * quattro formulazioni per tre giri ciascuna:
+ *
+ *   | forma                       | byte | invia_file scelto |
+ *   |-----------------------------|------|-------------------|
+ *   | quella di prima             |  130 |  8/12             |
+ *   | + «do NOT search first»     |  217 |  9/12             |
+ *   | + il verbo, stretto         |  248 | 10/12             |
+ *   | **quella adottata**         |  318 | **12/12**         |
+ *
+ * «scrivi a X su WhatsApp allegando Y» andava **0/3** a `library_search`.
+ *
+ * ⛔ PRIMA si è sgrassato, come vuole la regola — e lo sgrassare è stato
+ * MISURATO invece che dato per buono. «this tool matches the name itself»
+ * sembrava ripetere la frase dopo; tolta (−35 byte) il punteggio è sceso a
+ * **10/12**, e proprio la formulazione che falliva è tornata a 1/3. Non era
+ * grasso: è la parte che dice al modello che non deve cercare prima.
+ *
+ *   44.926 (prima) + 190 (il verbo davanti) = **45.116**
+ *
+ * ⇒ Tetto a 45.200, cioè **84 byte** di margine — più stretto di prima, come
+ * vuole la disciplina di questo file. E vale la regola dell'owner: «mai
+ * azzoppare l'app per far tornare un tetto». Qui l'alternativa era un attrezzo
+ * che il modello non chiama, cioè una funzione che non esiste.
  */
-const TETTO_BYTE = 45_100
+const TETTO_BYTE = 45_200
 
 /**
  * ⛔ E nessun tool da solo può valere un ottavo di tutto.

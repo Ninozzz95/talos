@@ -56,6 +56,30 @@ export interface AnthropicChatTurn {
     toolCalls?: Array<{ id: string; name: string; arguments: string }>
     /** Set on a tool turn: which call this result answers. */
     toolCallId?: string
+    /**
+     * ⭐⭐⭐ I BLOCCHI DEL FORNITORE, VERBATIM — e perché non si possono rifare.
+     *
+     * La ricerca degli attrezzi lato server produce due tipi di blocco che
+     * nascono e muoiono dentro Anthropic: `server_tool_use` e
+     * `tool_search_tool_result`. La documentazione, alla voce «continuing the
+     * conversation», chiede di rimandarli indietro **immutati**.
+     *
+     * ⛔ «Immutati» è la parola che decide la forma di questo campo. Non si
+     * possono ricostruire dai nostri dati — non sono una chiamata nostra, non
+     * hanno un nome che conosciamo, e il loro contenuto è di Anthropic. L'unica
+     * cosa onesta è tenerli **così come sono arrivati** e rimetterli in fila
+     * nello stesso ordine.
+     *
+     * ⇒ Il tipo è `unknown[]` di proposito: darsi un'interfaccia vorrebbe dire
+     * dichiarare di aver capito una forma che il fornitore può cambiare, e la
+     * prima volta che la cambia noi la romperemmo riscrivendola.
+     *
+     * ⛔ Senza questo campo l'apertura a gradi non si può accendere: al secondo
+     * giro la conversazione parte monca e il provider risponde 400. Costa
+     * ~4.094 token per messaggio tenerla spenta — misurato, vedi
+     * `anthropicAdapter`.
+     */
+    providerBlocks?: readonly unknown[]
 }
 
 export interface BuildAnthropicRequestInput {
@@ -154,11 +178,22 @@ function mergeToolRuns(turns: BuildAnthropicRequestInput['turns']): MergedTurn[]
  *
  * ⛔ I turni con `tool_use`, immagini o allegati NON sono vuoti anche se il
  * testo manca: il contenuto è nei blocchi. Si guarda tutto, non solo `content`.
+ *
+ * ⛔⛔ E i BLOCCHI DEL FORNITORE contano come contenuto — trovato da un test,
+ * il 2026-08-17, mentre si rimetteva in piedi l'apertura a gradi.
+ *
+ * Un turno che porta solo `server_tool_use` e il suo risultato è il caso
+ * NORMALE della ricerca lato server: il modello cerca, e in quel giro non ha
+ * ancora niente da dire. Senza questa riga quel turno spariva — e con lui i
+ * blocchi che l'API pretende indietro immutati, cioè esattamente la cosa che
+ * si stava aggiungendo. La cura si sarebbe cancellata da sola, in silenzio, e
+ * il sintomo sarebbe stato lo stesso 400 di prima.
  */
 function senzaTurniVuoti(turns: BuildAnthropicRequestInput['turns']): BuildAnthropicRequestInput['turns'] {
     return turns.filter((turn) => turn.role !== 'assistant'
         || turn.content.trim() !== ''
         || (turn.toolCalls?.length ?? 0) > 0
+        || (turn.providerBlocks?.length ?? 0) > 0
         || (turn.parts?.length ?? 0) > 0)
 }
 
@@ -310,10 +345,26 @@ export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicReque
             content: turn.role === 'tool'
                 ? (turn.toolResults ?? [{ id: turn.toolCallId ?? '', content: turn.content }])
                     .map((result) => ({ type: 'tool_result', tool_use_id: result.id, content: result.content }))
-                : turn.toolCalls?.length
+                : turn.toolCalls?.length || turn.providerBlocks?.length
                     ? [
+                        /*
+                         * ⛔ I BLOCCHI DEL FORNITORE VANNO PRIMA DEL TESTO.
+                         *
+                         * `server_tool_use` e il suo `tool_search_tool_result`
+                         * sono ciò che il modello ha fatto PRIMA di parlare: la
+                         * ricerca degli attrezzi precede la risposta. Rimetterli
+                         * dopo il testo racconterebbe una storia in cui il
+                         * modello risponde e poi cerca, e la coerenza di quella
+                         * sequenza è ciò che l'API verifica.
+                         *
+                         * ⛔ E si rimettono COSÌ COME SONO: nessuna
+                         * normalizzazione, nessun campo aggiunto. La
+                         * documentazione dice «unmodified», e qualunque cosa
+                         * facessimo qui sarebbe una modifica.
+                         */
+                        ...(turn.providerBlocks ?? []),
                         ...(turn.content ? [{ type: 'text', text: turn.content }] : []),
-                        ...turn.toolCalls.map((call) => ({
+                        ...(turn.toolCalls ?? []).map((call) => ({
                             type: 'tool_use',
                             id: call.id,
                             name: call.name,
