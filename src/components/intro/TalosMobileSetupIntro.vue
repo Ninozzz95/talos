@@ -268,6 +268,33 @@ async function next(): Promise<void> {
             if (haDecisoAutonomia.value) {
                 // Gli STESSI tre valori che le Impostazioni leggono, non una copia.
                 await settings.setToolPermissions({ ...toolPermissions.value })
+                /*
+                 * ⭐⭐⭐ «SEMPRE» ACCENDE ANCHE LA LIBRERIA — owner 2026-08-17.
+                 *
+                 * «se imposto sempre in decidi tutto in un colpo, lo switch
+                 * "Consenti alle chat di usare la Libreria" in predefiniti AI
+                 * deve essere abilitato».
+                 *
+                 * Il difetto che chiude: chi sceglie «sempre» ha appena detto,
+                 * con un gesto solo, che TALOS può leggere, scrivere e uscire in
+                 * rete — e poi trovava la sua Libreria staccata, per un
+                 * interruttore in un'altra schermata che non aveva mai visto.
+                 * Un consenso ampio seguito da una capacità spenta si legge come
+                 * un guasto, non come una scelta.
+                 *
+                 * ⛔ SOLO su «sempre», e solo se tutti e tre. «chiedi» vuol dire
+                 * «domandamelo di volta in volta», e attaccare la Libreria a
+                 * ogni messaggio non è una domanda che si può fare di volta in
+                 * volta: è ambientale. «nega» lascia spento ciò che è già
+                 * spento, quindi non c'è niente da fare.
+                 *
+                 * ⛔ E NON si spegne mai da qui: questo è l'unico verso che
+                 * l'owner ha chiesto, e spegnere una capacità che la persona
+                 * potrebbe aver acceso apposta sarebbe una decisione mia.
+                 */
+                const tutteSempre = (['read', 'write', 'outbound'] as const)
+                    .every((azione) => toolPermissions.value[azione] === 'allow')
+                if (tutteSempre) await settings.setShell({ library_context_enabled: true })
             }
         } finally {
             decidingAutonomy.value = false

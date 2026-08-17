@@ -52,6 +52,22 @@ about it never lying to you about whether it did.
   for "write to X on WhatsApp attaching Y" it was chosen 0 times out of 3. It is
   now 12 out of 12.
 
+### Changed, for new installs only
+
+These are the values a phone gets when it installs TALOS for the first time.
+Nothing moves on a phone that already has the app: a default is what you get
+before you choose, and changing it is not permission to change your mind for
+you.
+
+- Interface text now starts at **Default** instead of Large. Every larger step
+  is still one tap away in Settings, and the phone's own text-size setting keeps
+  applying underneath.
+- The composer starts as the **compact** bar.
+- The app icon **follows the theme** you have on, without being asked.
+- Choosing **"Always"** in the one-tap autonomy screen now also turns on "Let
+  chats use the Library". Saying yes to everything in one gesture and then
+  finding your own Library disconnected reads as a fault, not a choice.
+
 ### New
 
 - **A card under the answer says whether it left.** "WhatsApp — NOT sent · screen
