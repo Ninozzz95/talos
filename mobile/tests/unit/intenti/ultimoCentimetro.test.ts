@@ -351,6 +351,35 @@ describe('⭐⭐⭐ l\'ultimo centimetro non tocca al buio', () => {
     })
 
     /*
+     * ⭐⭐⭐ IL PERMESSO SBAGLIATO, NOMINATO — Pad, 2026-08-17, TRE volte.
+     *
+     * La riga diceva «the screen-reading permission is off», chiarissima, e il
+     * modello ha scritto alla persona «abilita il permesso di ACCESSO ALLE
+     * NOTIFICHE per TALOS» e, in un altro giro, «il permesso di lettura
+     * notifiche (o dello schermo, a seconda della versione)».
+     *
+     * ⇒ Dire qual è quello giusto NON basta: era già scritto ed era già
+     * sbagliato. La frase vietata si NOMINA, come per «inviato».
+     */
+    it('⛔⛔ «occhio-chiuso» nomina il permesso SBAGLIATO per vietarlo', async () => {
+        ponte.esito = { fatto: false, motivo: 'occhio-chiuso' }
+        const esito = await chiedi(CIAO)
+        expect(esito.content).toMatch(/NOT notification access/i)
+        expect(esito.content).toMatch(/depending on the version/i)
+    })
+
+    /*
+     * ⛔ AL CONTRARIO: se il pulsante non si trova, la lettura dello schermo
+     * c'è. Nominare il permesso lì insegnerebbe a concedere una cosa che non
+     * risolve niente.
+     */
+    it('⛔ ma «non-trovato» NON nomina nessun permesso', async () => {
+        ponte.esito = { fatto: false, motivo: 'non-trovato' }
+        const esito = await chiedi(CIAO)
+        expect(esito.content).not.toMatch(/notification access/i)
+    })
+
+    /*
      * ⭐⭐⭐ `senzaEffetto` — il campo che toglie il PREAMBOLO falso.
      *
      * Il modello annuncia PRIMA di chiamare: il suo primo turno è

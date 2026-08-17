@@ -337,6 +337,35 @@ export type TalosScheda =
             readonly pacchetto: string
         }>
     }
+    /**
+     * ⭐⭐⭐ QUALE FILE — la sorella di `quale-app`, e nasce da un LOOP.
+     *
+     * MISURATO sul Pad il 2026-08-17. Due `nota-talos.txt` nella Libreria.
+     * TALOS chiede quale, l'esito dello strumento porta i numeri E gli id e dice
+     * a lettere «call this tool again with "file" set to that entry's id». La
+     * persona risponde «1», e il modello **rifà la stessa domanda**: richiama col
+     * NOME, riottiene l'ambiguità, riscrive l'elenco. Un giro chiuso.
+     *
+     * ⛔ È la lezione già scritta due volte in `intentiTools`: un'istruzione
+     * scritta NON vincola il modello. Se una cosa deve succedere, la fa il
+     * codice.
+     *
+     * ⇒ L'elenco va dallo strumento allo schermo e si TOCCA, come per le app: il
+     * dito porta l'id, e l'id è l'unica cosa che distingue due omonimi.
+     */
+    | {
+        readonly tipo: 'quale-file'
+        /** L'app di destinazione già scelta, da ripassare identica. */
+        readonly app?: string
+        /** Il destinatario già raccolto, da ripassare identico. */
+        readonly contatto?: string
+        /** Il messaggio che accompagna il file, se c'era. */
+        readonly testo?: string
+        readonly file: ReadonlyArray<{
+            readonly nome: string
+            readonly id: string
+        }>
+    }
 
 export const TALOS_METADATA_SCHEDE = 'cards'
 

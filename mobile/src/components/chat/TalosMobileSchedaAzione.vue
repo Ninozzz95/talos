@@ -72,6 +72,21 @@ function eUnaScheda(valore: unknown): valore is TalosScheda {
                 && typeof (a as Record<string, unknown>)?.pacchetto === 'string'
                 && (a as Record<string, unknown>).pacchetto !== '')
     }
+    /*
+     * ⛔ Stesse ragioni di `quale-app`, con l'ID al posto del pacchetto: è ciò
+     * che il tocco consegna, ed è l'unica cosa che distingue due file con lo
+     * stesso nome. Una voce col solo nome sarebbe un pulsante che riporta
+     * esattamente al giro chiuso da cui questa scheda nasce.
+     *
+     * ⛔ E sotto le DUE voci non si disegna: con un file solo non c'era
+     * ambiguità, e un elenco di uno è una domanda senza dubbio.
+     */
+    if (r.tipo === 'quale-file') {
+        return Array.isArray(r.file) && r.file.length > 1
+            && r.file.every((f) => typeof (f as Record<string, unknown>)?.nome === 'string'
+                && typeof (f as Record<string, unknown>)?.id === 'string'
+                && (f as Record<string, unknown>).id !== '')
+    }
     /**
      * ⛔ Il titolo è OBBLIGATORIO: una scheda «creato» senza il nome della cosa
      * direbbe soltanto «è successo qualcosa», che è meno della frase accanto.
@@ -105,6 +120,7 @@ type SchedaAgenda = Extract<TalosScheda, { tipo: 'agenda' }>
 type SchedaInterruttore = Extract<TalosScheda, { tipo: 'interruttore' }>
 type SchedaSveglia = Extract<TalosScheda, { tipo: 'sveglia' }>
 type SchedaQualeApp = Extract<TalosScheda, { tipo: 'quale-app' }>
+type SchedaQualeFile = Extract<TalosScheda, { tipo: 'quale-file' }>
 type SchedaInvio = Extract<TalosScheda, { tipo: 'invio' }>
 const eInvio = (s: TalosScheda): s is SchedaInvio => s.tipo === 'invio'
 
@@ -134,6 +150,7 @@ const eAgenda = (s: TalosScheda): s is SchedaAgenda => s.tipo === 'agenda'
 const eInterruttore = (s: TalosScheda): s is SchedaInterruttore => s.tipo === 'interruttore'
 const eSveglia = (s: TalosScheda): s is SchedaSveglia => s.tipo === 'sveglia'
 const eQualeApp = (s: TalosScheda): s is SchedaQualeApp => s.tipo === 'quale-app'
+const eQualeFile = (s: TalosScheda): s is SchedaQualeFile => s.tipo === 'quale-file'
 type SchedaCreato = Extract<TalosScheda, { tipo: 'creato' }>
 const eCreato = (s: TalosScheda): s is SchedaCreato => s.tipo === 'creato'
 
@@ -354,6 +371,47 @@ async function scegli(s: SchedaQualeApp, pacchetto: string): Promise<void> {
         esitoApp.value = { ...esitoApp.value, [chiave]: fatto === true ? 'aperta' : 'rifiutata' }
     } catch {
         esitoApp.value = { ...esitoApp.value, [chiave]: 'rifiutata' }
+    }
+}
+
+/**
+ * ⭐⭐⭐ QUALE FILE — la sorella di «quale app», e nasce da un LOOP.
+ *
+ * MISURATO sul Pad il 2026-08-17. Due `nota-talos.txt` nella Libreria: l'esito
+ * dello strumento portava i numeri, gli id e l'istruzione a lettere di
+ * richiamare con l'id. La persona ha risposto «1» e il modello ha rifatto la
+ * STESSA domanda — richiamava col nome, riotteneva l'ambiguità, riscriveva
+ * l'elenco. Un giro chiuso.
+ *
+ * ⇒ Adesso il dito porta l'id, che è l'unica cosa che distingue due omonimi.
+ */
+const esitoFile = ref<Record<string, 'manda' | 'mandato' | 'rifiutato'>>({})
+
+/*
+ * ⛔ Le parole sono quelle dell'INVIO, non quelle dell'apertura: qui il tocco
+ * manda un file a una persona vera. «Non si e' aperta» direbbe una cosa su una
+ * finestra, e lascerebbe credere che il file sia comunque partito.
+ */
+function parolaFile(id: string): string {
+    const esito = esitoFile.value[id]
+    if (esito === 'mandato') return t('chat.cardSent')
+    if (esito === 'rifiutato') return t('chat.cardNotSent')
+    return ''
+}
+
+async function scegliFile(s: SchedaQualeFile, id: string): Promise<void> {
+    if (esitoFile.value[id] === 'manda') return
+    esitoFile.value = { ...esitoFile.value, [id]: 'manda' }
+    try {
+        const { talosMandaFileDaScheda } = await import('@/lib/tools/schedaComandi')
+        const fatto = await talosMandaFileDaScheda(id, {
+            ...(s.app ? { app: s.app } : {}),
+            ...(s.contatto ? { contatto: s.contatto } : {}),
+            ...(s.testo ? { testo: s.testo } : {}),
+        })
+        esitoFile.value = { ...esitoFile.value, [id]: fatto === true ? 'mandato' : 'rifiutato' }
+    } catch {
+        esitoFile.value = { ...esitoFile.value, [id]: 'rifiutato' }
     }
 }
 
@@ -615,6 +673,47 @@ const parolaStato = (acceso: boolean): string => (acceso
                             class="talos-esito block text-xs text-muted-foreground"
                             aria-live="polite"
                         >{{ parolaEsito(s, a.pacchetto) }}</span>
+                    </span>
+                    <span class="talos-freccia" aria-hidden="true">›</span>
+                </button>
+            </template>
+
+            <!--
+                ⭐⭐⭐ QUALE FILE — e nasce da un GIRO CHIUSO.
+
+                MISURATO sul Pad il 2026-08-17. Due `nota-talos.txt` nella
+                Libreria. L'esito portava i numeri, gli id, e a lettere
+                «call this tool again with "file" set to that entry's id». La
+                persona ha risposto «1» e il modello ha rifatto la STESSA
+                domanda: richiamava col nome, riotteneva l'ambiguità,
+                riscriveva l'elenco.
+
+                ⛔ È la lezione già scritta due volte in `intentiTools`: una
+                istruzione scritta NON vincola il modello. Se una cosa deve
+                succedere, la fa il codice.
+
+                ⛔ Il NUMERO c'è davanti a ogni voce: due file con lo stesso
+                nome sono indistinguibili anche per chi guarda, e senza un
+                riferimento la domanda resterebbe senza risposta pure col dito.
+            -->
+            <template v-if="eQualeFile(s)">
+                <p class="talos-domanda">{{ t('chat.cardWhichFile') }}</p>
+                <button
+                    v-for="(f, n) in s.file"
+                    :key="f.id"
+                    type="button"
+                    class="talos-app flex w-full items-center border border-border bg-muted text-left"
+                    :aria-busy="esitoFile[f.id] === 'manda'"
+                    :disabled="esitoFile[f.id] === 'manda'"
+                    data-testid="talos-scheda-file"
+                    @click="scegliFile(s, f.id)"
+                >
+                    <span class="talos-nome flex-1">
+                        {{ n + 1 }}. {{ f.nome }}
+                        <span
+                            class="talos-esito block text-xs text-muted-foreground"
+                            aria-live="polite"
+                        >{{ parolaFile(f.id) }}</span>
                     </span>
                     <span class="talos-freccia" aria-hidden="true">›</span>
                 </button>

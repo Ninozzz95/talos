@@ -18,6 +18,9 @@ vi.mock('@/i18n', () => ({
             'chat.cardAppOpened': 'Aperta',
             'chat.cardAppRefused': 'Non si è aperta',
             'chat.cardOpenA11ySettings': 'Apri le impostazioni di accessibilità',
+            'chat.cardWhichFile': 'Quale file?',
+            'chat.cardSent': 'Inviato',
+            'chat.cardNotSent': 'NON inviato',
         }[chiave] ?? chiave),
     }),
 }))
@@ -52,9 +55,11 @@ const comandi = {
     commuta: async (_tool: string, _acceso: boolean): Promise<boolean> => true,
     apri: async (_c: string, _v: Record<string, string>, _p: string): Promise<boolean> => true,
     impostazioni: async (_azione: string): Promise<boolean> => true,
+    mandaFile: async (_id: string, _dove: Record<string, string>): Promise<boolean> => true,
     commutati: [] as Array<[string, boolean]>,
     aperti: [] as Array<[string, Record<string, string>, string]>,
     schermate: [] as string[],
+    fileMandati: [] as Array<[string, Record<string, string>]>,
 }
 
 vi.mock('@/lib/tools/schedaComandi', () => ({
@@ -69,6 +74,10 @@ vi.mock('@/lib/tools/schedaComandi', () => ({
     talosApriImpostazioniDaScheda: async (azione: string) => {
         comandi.schermate.push(azione)
         return comandi.impostazioni(azione)
+    },
+    talosMandaFileDaScheda: async (id: string, dove: Record<string, string>) => {
+        comandi.fileMandati.push([id, dove])
+        return comandi.mandaFile(id, dove)
     },
 }))
 
@@ -113,7 +122,9 @@ beforeEach(() => {
     comandi.impostazioni = async () => true
     comandi.commutati = []
     comandi.aperti = []
+    comandi.mandaFile = async () => true
     comandi.schermate = []
+    comandi.fileMandati = []
 })
 
 describe('TalosMobileSchedaAzione', () => {
@@ -607,5 +618,94 @@ describe('⭐⭐⭐ la scheda porta il comando, non la parola «fatto»', () => 
             props: { metadata: { cards: [{ tipo: 'invio', app: 'WhatsApp', partito: true }] } },
         })
         expect(bottone(w).exists()).toBe(false)
+    })
+})
+
+
+/**
+ * ⭐⭐⭐ QUALE FILE — la scheda che chiude un GIRO CHIUSO.
+ *
+ * MISURATO sul Pad il 2026-08-17. Due `nota-talos.txt` nella Libreria. L'esito
+ * dello strumento portava i numeri, gli id, e a lettere «call this tool again
+ * with "file" set to that entry's id». La persona ha risposto «1», e il modello
+ * ha rifatto la STESSA domanda: richiamava col nome, riotteneva l'ambiguita',
+ * riscriveva l'elenco.
+ *
+ * ⛔ Una istruzione scritta NON vincola il modello. Se una cosa deve succedere,
+ * la fa il codice — e qui la fa il dito.
+ */
+describe('⭐⭐⭐ due file omonimi si scelgono col DITO', () => {
+    const DUE = {
+        metadata: {
+            cards: [{
+                tipo: 'quale-file',
+                app: 'WhatsApp',
+                contatto: 'Antonino Rizzo',
+                file: [
+                    { nome: 'nota-talos.txt', id: 'a-1' },
+                    { nome: 'nota-talos.txt', id: 'b-2' },
+                ],
+            }],
+        },
+    }
+    const righe = (w: ReturnType<typeof mount>) => w.findAll('[data-testid="talos-scheda-file"]')
+
+    it('⛔ le due righe ci sono, NUMERATE', () => {
+        const w = mount(TalosMobileSchedaAzione, { props: DUE })
+        expect(righe(w)).toHaveLength(2)
+        // ⛔ Il numero serve: due nomi identici non si distinguono a occhio.
+        expect(righe(w)[0].text()).toContain('1.')
+        expect(righe(w)[1].text()).toContain('2.')
+    })
+
+    it('⛔⛔ il tocco porta l ID, non il nome', async () => {
+        const w = mount(TalosMobileSchedaAzione, { props: DUE })
+        await righe(w)[1].trigger('click')
+        await respiro(w)
+        expect(comandi.fileMandati).toHaveLength(1)
+        expect(comandi.fileMandati[0][0]).toBe('b-2')
+    })
+
+    /*
+     * ⛔ E porta anche il RESTO: app e destinatario erano gia' stati raccolti, e
+     * perderli qui vorrebbe dire ricominciare a chiedere da capo.
+     */
+    it('⛔ e si porta dietro app e destinatario', async () => {
+        const w = mount(TalosMobileSchedaAzione, { props: DUE })
+        await righe(w)[0].trigger('click')
+        await respiro(w)
+        expect(comandi.fileMandati[0][1]).toEqual({ app: 'WhatsApp', contatto: 'Antonino Rizzo' })
+    })
+
+    it('⛔ se non parte LO DICE, e lo dice con la parola dell INVIO', async () => {
+        comandi.mandaFile = async () => false
+        const w = mount(TalosMobileSchedaAzione, { props: DUE })
+        await righe(w)[0].trigger('click')
+        await respiro(w)
+        expect(righe(w)[0].text()).toContain('NON inviato')
+    })
+
+    /*
+     * ⛔ AL CONTRARIO: con UN file solo non c'era ambiguita', e un elenco di uno
+     * e' una domanda senza dubbio.
+     */
+    it('⛔ con UN file solo la scheda non si disegna', () => {
+        const w = mount(TalosMobileSchedaAzione, {
+            props: { metadata: { cards: [{ tipo: 'quale-file', file: [{ nome: 'x.txt', id: 'a' }] }] } },
+        })
+        expect(righe(w)).toHaveLength(0)
+    })
+
+    /*
+     * ⛔ E una voce senza id non si disegna: e' proprio cio' che il tocco
+     * consegna, e senza riporterebbe al giro chiuso da cui questa scheda nasce.
+     */
+    it('⛔ e una voce SENZA id non si disegna', () => {
+        const w = mount(TalosMobileSchedaAzione, {
+            props: { metadata: { cards: [{ tipo: 'quale-file', file: [
+                { nome: 'x.txt', id: 'a' }, { nome: 'x.txt', id: '' },
+            ] }] } },
+        })
+        expect(righe(w)).toHaveLength(0)
     })
 })
