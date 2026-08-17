@@ -264,6 +264,59 @@ describe('⭐⭐⭐ l\'ultimo centimetro non tocca al buio', () => {
         expect(esito.content).toMatch(/Do NOT open with "sent"/)
         expect(esito.content).toMatch(/did NOT leave/)
     })
+
+    /*
+     * ⛔⛔⛔ E la SCHEDA, perché i divieti scritti non sono bastati.
+     *
+     * Il 2026-08-17, con tre divieti già in piedi — la riga nel prompt di
+     * sistema, «Nothing was sent» nell'esito, e il divieto esplicito — il
+     * modello ha aperto lo stesso con «è stato inviato ✓».
+     *
+     * ⇒ La scheda la disegna l'app e non passa dalle sue parole. Questi test
+     * la custodiscono su OGNI ramo, compreso il motivo sconosciuto: un motivo
+     * nuovo è proprio quello per cui nessuno ha scritto la regola.
+     */
+    it.each([
+        ['occhio-chiuso'],
+        ['app-non-in-primo-piano'],
+        ['testo-non-arrivato'],
+        ['non-trovato'],
+        ['un-motivo-mai-visto'],
+    ])('⛔ «%s» porta una SCHEDA che dice NON partito', async (motivo) => {
+        ponte.esito = { fatto: false, motivo }
+        const esito = await chiedi(CIAO)
+        expect(esito.scheda).toMatchObject({ tipo: 'invio', partito: false })
+        // ⛔ `partito` deve essere il booleano, non un valore «quasi falso»:
+        // una scheda che dicesse «inviato» per sbaglio sarebbe una bugia con
+        // l'aria di una prova.
+        expect((esito.scheda as { partito: unknown }).partito).toBe(false)
+    })
+
+    it('⛔ AL CONTRARIO: quando PARTE davvero, la scheda lo dice', async () => {
+        ponte.esito = { fatto: true, obiettivo: 'PARTITO', prove: 3 }
+        const esito = await chiedi(CIAO)
+        expect(esito.scheda).toMatchObject({ tipo: 'invio', partito: true })
+        // E senza `perche`: un motivo su un invio riuscito non vuol dire niente.
+        expect((esito.scheda as { perche?: string }).perche).toBeUndefined()
+    })
+
+    it('⛔ e «premuto ma il testo è ancora lì» è NON partito, non un dubbio', async () => {
+        ponte.esito = { fatto: true, obiettivo: 'NON_PARTITO', prove: 1 }
+        const esito = await chiedi(CIAO)
+        expect(esito.scheda).toMatchObject({ tipo: 'invio', partito: false })
+    })
+
+    it('⛔ ma «non lo so» NON produce nessuna scheda', async () => {
+        /*
+         * Una prova su tre: il messaggio POTREBBE essere partito. Una scheda
+         * che dicesse «non inviato» qui sarebbe falsa la metà delle volte, e
+         * una che dicesse «forse» insegnerebbe a non fidarsi anche delle altre.
+         * ⇒ Qui parla solo la frase, che sa dire «guarda tu».
+         */
+        ponte.esito = { fatto: true, obiettivo: 'NON_CONFERMATO', prove: 1 }
+        const esito = await chiedi(CIAO)
+        expect(esito.scheda).toBeUndefined()
+    })
 })
 
 /**

@@ -83,6 +83,18 @@ function eUnaScheda(valore: unknown): valore is TalosScheda {
             && typeof r.genere === 'string' && r.genere !== ''
     }
 
+    /*
+     * ⛔ `app` e `partito` sono OBBLIGATORI, e `partito` deve essere un
+     * booleano VERO — non «truthy». Questa scheda esiste perché il modello ha
+     * scritto «inviato ✓» su un messaggio che non era partito: se un valore
+     * storto la facesse comparire come «inviato», avremmo costruito una seconda
+     * bugia, e questa con l'aria di essere una prova.
+     */
+    if (r.tipo === 'invio') {
+        return typeof r.app === 'string' && r.app !== ''
+            && typeof r.partito === 'boolean'
+    }
+
     return r.tipo === 'interruttore'
         && typeof r.tool === 'string' && r.tool !== ''
         && typeof r.acceso === 'boolean'
@@ -93,6 +105,31 @@ type SchedaAgenda = Extract<TalosScheda, { tipo: 'agenda' }>
 type SchedaInterruttore = Extract<TalosScheda, { tipo: 'interruttore' }>
 type SchedaSveglia = Extract<TalosScheda, { tipo: 'sveglia' }>
 type SchedaQualeApp = Extract<TalosScheda, { tipo: 'quale-app' }>
+type SchedaInvio = Extract<TalosScheda, { tipo: 'invio' }>
+const eInvio = (s: TalosScheda): s is SchedaInvio => s.tipo === 'invio'
+
+/**
+ * ⛔⛔ UN MOTIVO CHE NON CONOSCIAMO NON SI DISEGNA — visto sul Pad, 2026-08-17.
+ *
+ * La prima versione di questa scheda salvava il motivo come frase inglese
+ * pronta. Appena è diventato una chiave da tradurre, le schede GIÀ SALVATE si
+ * sono ridisegnate col componente nuovo e sullo schermo è comparso:
+ *
+ *     WhatsApp · NON inviato · chat.cardNotSentWhy.screen reading is off
+ *
+ * Cioè la chiave grezza, dentro il riquadro che deve essere il più credibile
+ * della schermata. ⛔ Una migrazione di forma non tocca ciò che è già sul
+ * disco, e questo vale per ogni scheda che verrà.
+ *
+ * ⇒ Si disegna SOLO un motivo riconosciuto. Gli altri spariscono, e resta
+ * «NON inviato» — che è la cosa vera e la sola che decide cosa si fa dopo.
+ */
+const MOTIVI_NOTI = ['occhio', 'altra-app', 'testo', 'pulsante', 'ponte'] as const
+const motivoLeggibile = (s: SchedaInvio): string | null => (
+    s.perche && (MOTIVI_NOTI as readonly string[]).includes(s.perche)
+        ? t(`chat.cardNotSentWhy.${s.perche}`)
+        : null
+)
 const eAgenda = (s: TalosScheda): s is SchedaAgenda => s.tipo === 'agenda'
 const eInterruttore = (s: TalosScheda): s is SchedaInterruttore => s.tipo === 'interruttore'
 const eSveglia = (s: TalosScheda): s is SchedaSveglia => s.tipo === 'sveglia'
@@ -408,6 +445,45 @@ const parolaStato = (acceso: boolean): string => (acceso
                 </span>
                 <span v-if="s.dove" class="talos-freccia flex-none" aria-hidden="true">›</span>
             </component>
+
+            <!--
+                ⭐⭐⭐ È PARTITO, O NO — e questa riga vince sulla prosa.
+
+                MISURATO sul Pad il 2026-08-17, con la lettura dello schermo
+                spenta: TALOS ha scritto «Il messaggio "prova cinque" è stato
+                inviato ✓» e, subito sotto, «Il messaggio non è stato
+                inviato». Verificato che non fosse partito.
+
+                ⛔ Le difese di PAROLE erano già tutte in piedi — la riga nel
+                prompt, l'esito `ok: false` che dice «Nothing was sent», e il
+                divieto esplicito aggiunto lo stesso giorno. Tre, e ha aperto
+                lo stesso con «inviato».
+
+                ⇒ Questa scheda non chiede al modello di ricopiare bene: la
+                disegna l'app. È la stessa scelta di «quale app».
+
+                ⛔ Nessun colore scritto a mano: `text-danger` e `text-success`
+                vengono dal theme engine come tutto il resto. E il simbolo NON
+                è l'unica differenza — c'è la parola, perché un segno rosso e
+                uno verde si confondono, e chi non distingue i colori vedrebbe
+                due schede identiche.
+            -->
+            <div
+                v-if="eInvio(s)"
+                class="talos-controllo flex items-center gap-2 border border-border bg-muted"
+                data-testid="talos-scheda-invio"
+            >
+                <span class="talos-nome min-w-0 flex-1">
+                    <span class="block truncate">{{ s.app }}</span>
+                    <span
+                        class="mt-px block text-xs"
+                        :class="s.partito ? 'text-muted-foreground' : 'text-[var(--talos-danger,#dc5b5b)]'"
+                    >{{ s.partito ? t('chat.cardSent') : t('chat.cardNotSent') }}<template
+                        v-if="!s.partito && motivoLeggibile(s)"
+                    > · {{ motivoLeggibile(s) }}</template></span>
+                </span>
+                <span class="talos-freccia flex-none" aria-hidden="true">{{ s.partito ? '✓' : '⛔' }}</span>
+            </div>
 
             <!--
                 ⭐⭐⭐ QUALE APP — l'elenco vero, TOCCABILE.
