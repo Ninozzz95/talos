@@ -82,3 +82,41 @@ describe('la premessa del contatto', () => {
         // vedrà: è il limite di una tabella scritta a mano, e va detto.
     })
 })
+
+describe('gli attrezzi che la dichiarano', () => {
+    it('⭐⭐ invia_file E app_azione la portano: sono le due vie che escono dal telefono', async () => {
+        const { talosIntentiTools } = await import('@/lib/tools/intentiTools')
+        /*
+         * ⛔ Senza le sorgenti dei file `invia_file` non viene offerto affatto —
+         * ed è giusto: un attrezzo che manda file, dove non ci sono file, è una
+         * capacità dichiarata e morta. Il test l'ha scoperto, e va detto qui.
+         */
+        const tutti = talosIntentiTools({
+            fileDellaLibreria: async () => [],
+            fileDalTelefono: async () => null,
+        } as never)
+        const conPremesse = tutti
+            .filter((t) => typeof (t as { premesse?: unknown }).premesse === 'function')
+            .map((t) => t.name).sort()
+
+        expect(conPremesse).toContain('app_azione')
+        expect(conPremesse).toContain('invia_file')
+
+        /*
+         * ⛔ IL VERSO CONTRARIO, e la prima stesura lo sbagliava: chiedeva che
+         * esistesse un attrezzo SENZA premesse in questo elenco. Ma questo
+         * fabbricante ne produce due, e tutti e due nominano un contatto —
+         * l'asserzione era rossa su un codice sano.
+         *
+         * ⇒ L'invariante vero è un altro: la premessa del contatto sta **solo**
+         * dove lo schema ha un campo `contatto`. Attaccata altrove costerebbe
+         * una lettura della rubrica a ogni uso — cioè un permesso chiesto per
+         * niente, alla persona, per una domanda che non la riguarda.
+         */
+        for (const attrezzo of tutti) {
+            const haPremesse = typeof (attrezzo as { premesse?: unknown }).premesse === 'function'
+            const forma = (attrezzo.input as { shape?: Record<string, unknown> }).shape ?? {}
+            expect(haPremesse).toBe('contatto' in forma)
+        }
+    })
+})
