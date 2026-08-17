@@ -166,11 +166,12 @@ export interface TalosToolDefinition<Input = unknown> {
      * falsa è un consenso speso per niente — e insegna a toccare «Consenti»
      * senza leggere, che è il danno vero.
      *
-     * ⇒ Misurato sul banco di coding: riconoscere una premessa falsa è una
-     * **scelta** del modello, e le scelte hanno una distribuzione (25% / 0% /
-     * 38% su tre harness). La cura non è chiedere al modello di essere più
-     * diligente: è togliere a quella decisione il potere di arrivare alla
-     * persona. Con il cancello, gli stessi harness passano da 6/10 a 10/10.
+     * ⇒ E riconoscere una premessa falsa è una **scelta** del modello, non una
+     * sua proprietà: le scelte hanno una distribuzione, e una distribuzione non
+     * è un invariante. La cura non è chiedere al modello di essere più
+     * diligente — i divieti decadono dal 73% al 33% fra il turno 5 e il turno 16
+     * (arXiv 2604.20911). È togliere a quella decisione il potere di arrivare
+     * alla persona.
      *
      * ## ⛔ Dove sta l'aggancio, e perché lì
      *
