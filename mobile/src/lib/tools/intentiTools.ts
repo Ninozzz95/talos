@@ -555,6 +555,7 @@ async function talosUltimoCentimetro(
             ok: true,
             content: `NOT sent. TALOS pressed send in ${capacita.app}, but the text is STILL in the input field — so nothing left. Tell the user plainly that it did not go, and offer to try again. This is the one case where trying again is safe.`,
             scheda: { tipo: 'invio' as const, app: capacita.app, partito: false },
+            senzaEffetto: true,
         }
     }
     if (esito.fatto) {
@@ -613,7 +614,16 @@ async function talosUltimoCentimetro(
          * `android.settings.ACCESSIBILITY_SETTINGS` è verificata sul Pad —
          * apre `com.android.settings/.Settings$AccessibilitySettingsActivity`.
          */
-        'occhio-chiuso': `${capacita.app} is open with the text already filled in, but TALOS cannot press send: the screen-reading permission is off. Nothing was sent. TALOS has ALREADY opened the accessibility settings — do not open any other screen. Say to turn TALOS on in the list that is now on screen, and that one tap on send finishes it.${MAI_DIRE_INVIATO}`,
+        /*
+         * ⛔ NON dire «le impostazioni sono già aperte»: era vero per 37
+         * millesimi, poi la catena di lancio di WhatsApp le seppelliva. Adesso
+         * il comando sta sulla scheda, e la persona lo tocca quando vuole —
+         * quindi qui si racconta LA SCHEDA, non uno schermo che non sappiamo.
+         *
+         * ⛔ E non aprire niente: `device_open_settings` rifarebbe la gara, e
+         * due volte ha aperto la pagina SBAGLIATA — l'accesso alle notifiche.
+         */
+        'occhio-chiuso': `${capacita.app} is open with the text already filled in, but TALOS cannot press send: the screen-reading permission is off. Nothing was sent. Do NOT open any settings screen yourself: the card below this answer carries a button that opens the right one. Say that the message is ready in ${capacita.app}, that the button below turns the permission on, and that one tap on send finishes it.${MAI_DIRE_INVIATO}`,
         'app-non-in-primo-piano': `The link opened, but ${capacita.app} is not the app on screen${esito.pacchettoVisto ? ` (it is ${esito.pacchettoVisto})` : ''} — probably an app-chooser or another app answered the link. Nothing was sent. Tell the user what is on screen and ask how to proceed.${MAI_DIRE_INVIATO}`,
         'testo-non-arrivato': `${capacita.app} opened but the text never appeared in its input field, so TALOS did not press send — pressing blind could have sent something else. Nothing was sent. Tell the user and offer to try again.${MAI_DIRE_INVIATO}`,
         'non-trovato': `${capacita.app} is open with the text ready, but TALOS could not find the send button, so it pressed nothing. Nothing was sent. Tell the user it is ready and that one tap on send finishes it.${MAI_DIRE_INVIATO}`,
@@ -666,24 +676,29 @@ async function talosUltimoCentimetro(
      *
      * Azione verificata sul Pad: apre
      * `com.android.settings/.Settings$AccessibilitySettingsActivity`.
+     *
+     * ⭐⭐⭐ E POI, IL 17, LO STRUMENTO HA DETTO CHE ERA UNA GARA — E CHE LA
+     * PERDEVAMO. Dal registro delle activity, 900 millesimi:
+     *
+     *     05:31:14.098  TALOS      apre WhatsApp  (wa.me)
+     *     05:31:14.135  TALOS      apre ACCESSIBILITY_SETTINGS   ← 37 ms dopo
+     *     05:31:14.155  WhatsApp   .contact.ui.picker.ContactPicker
+     *     05:31:14.927  WhatsApp   .Conversation
+     *     05:31:14.959  WhatsApp   .home.ui.HomeActivity
+     *     05:31:14.980  WhatsApp   .Conversation
+     *
+     * Le impostazioni si erano aperte DAVVERO. Poi WhatsApp ha continuato a
+     * lanciare finestre per altri 850 ms e le ha sepolte: sullo schermo c'era
+     * WhatsApp, e noi dicevamo alla persona di guardare un elenco che non
+     * c'era. Una frase vera per 37 millesimi.
+     *
+     * ⛔ E non si cura aspettando: quanto duri la catena di lancio è un fatto di
+     * QUELL'app su QUEL telefono, e un'attesa scritta a mano sarebbe indovinata.
+     *
+     * ⇒ Si smette di correre. L'apertura passa alla SCHEDA, che porta il
+     * comando e lo esegue quando lo tocca la persona — l'unico momento in cui è
+     * pronta a usarlo. Vedi `talosApriImpostazioniDaScheda`.
      */
-    if (esito.motivo === 'occhio-chiuso') {
-        /*
-         * ⛔ Il `try` sta FUORI dalla promessa, e non è pedanteria: un `.catch()`
-         * prende una promessa rifiutata, non un `TypeError` sincrono. Su un
-         * ponte che non espone il metodo — un APK vecchio, o una prova con un
-         * finto parziale — l'intero strumento sarebbe esploso, trasformando
-         * «non inviato» in un errore senza spiegazione. L'ha trovato un test,
-         * non una rilettura.
-         */
-        try {
-            await TalosDeviceBridge
-                .openSettingsScreen?.({ action: 'android.settings.ACCESSIBILITY_SETTINGS', forThisApp: false })
-        } catch {
-            // Se non si apre non si cambia il racconto: il messaggio resta «non
-            // inviato», che è la cosa vera e la sola che conta qui.
-        }
-    }
     const perche: Record<string, 'occhio' | 'altra-app' | 'testo' | 'pulsante' | 'ponte'> = {
         'occhio-chiuso': 'occhio',
         'app-non-in-primo-piano': 'altra-app',
@@ -706,6 +721,34 @@ async function talosUltimoCentimetro(
             partito: false,
             ...(perche[esito.motivo ?? ''] ? { perche: perche[esito.motivo ?? ''] } : {}),
         },
+        /*
+         * ⭐⭐⭐ IL CAMPO CHE MANCAVA — ed era tutta la bugia.
+         *
+         * Il modello annuncia PRIMA di chiamare: il suo primo turno è
+         * `["text", "tool_use"]`, e quel testo — misurato con una sonda diretta
+         * — è a volte al futuro («Vado a inviare…») e a volte al passato
+         * («Il messaggio è stato inviato ✓»). Il giro dell'agente incolla il
+         * preambolo alla conclusione, e viene fuori:
+         *
+         *     «Il messaggio è stato inviato ✓
+         *      Il messaggio non è stato inviato.»
+         *
+         * ⛔ E la cura c'era GIÀ, in `agentLoop`: se ogni attrezzo del giro
+         * dichiara `senzaEffetto`, il preambolo si toglie — «mostrare per
+         * sempre una frase falsa è peggio che vederne sparire una vera».
+         *
+         * Solo che questo strumento non lo dichiarava. Quattro divieti scritti
+         * inseguivano il modello, e il meccanismo che risolve stava a tre righe
+         * di distanza, spento per un campo mancante.
+         *
+         * ⛔ Aprire le impostazioni non conta come effetto: l'effetto che il
+         * preambolo annuncia è l'INVIO, e quello non c'è stato.
+         *
+         * ⛔ E NON si mette su `NON_CONFERMATO`: lì il messaggio potrebbe
+         * essere partito davvero, e togliere il preambolo cancellerebbe una
+         * frase VERA. Il dubbio si racconta, non si nasconde.
+         */
+        senzaEffetto: true,
     }
 }
 

@@ -921,6 +921,41 @@
     -->
     <uses-permission android:name="android.permission.REORDER_TASKS" />
     <!--
+        ⭐⭐⭐ LA PAGINA DOVE TALOS C'E' DAVVERO — misurato sul Pad, 2026-08-17.
+
+        L'invio fallisce perche' la lettura dello schermo e' spenta, e la scheda
+        porta un pulsante che apre le impostazioni di accessibilita'. Aperte,
+        pero', su questo telefono si vede: «Menu Accessibilita'», «Pulsante
+        Accessibilita'», «Scelta rapida dalla schermata di blocco», «App
+        scaricate». TALOS NON C'E': sta un livello piu' sotto, dentro «App
+        scaricate». La persona legge «trova TALOS nella lista» e non lo trova.
+
+        Chiesto al telefono, non a una tabella. `dumpsys package` elenca:
+
+          oplus.intent.action.settings.ACCESSIBILITY_DOWNLOAD
+            -> OplusSettingsActivity$OplusAccessibilityDownloadedSettingsActivity
+
+        E' un'AZIONE, non un nome di classe: niente da far invecchiare con la
+        prossima ROM. Chiede questo permesso, e il telefono dice cos'e':
+
+            prot=normal   sourcePackage=com.android.settings
+
+        ⛔ `normal` vuol dire: concesso all'installazione, nessuna richiesta alla
+        persona, nessun accesso a dati. Permette UNA cosa — lanciare una
+        schermata di impostazioni che il produttore ha gia' dichiarato esportata.
+
+        ⛔ E su ogni telefono che non e' un OPPO/OnePlus questo permesso non
+        esiste: un permesso non dichiarato dal sistema semplicemente non viene
+        concesso, l'azione non risolve, e si apre l'elenco generale come prima.
+        Vedi `openSettingsScreen`: si PROVA la piu' precisa, e il ripiego c'e'
+        sempre.
+
+        ⛔ NON e' l'ACTION_ACCESSIBILITY_DETAILS_SETTINGS di AOSP, che porterebbe
+        dritti alla scheda del servizio: quella e' chiusa a un'app normale —
+        chiesto al telefono, `prot=signature|installer`.
+    -->
+    <uses-permission android:name="oplus.permission.settings.LAUNCH_FOR_EXPORT" />
+    <!--
         ⭐⭐ LA RUBRICA — il fondamento di ogni intent «manda a <persona>».
 
         MISURATO sul Pad il 2026-08-13: allo stesso compito Gemini risponde

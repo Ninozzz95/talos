@@ -806,6 +806,13 @@ export const TALOS_EN_MESSAGES = {
             pulsante: 'send button not found',
             ponte: 'the screen service did not answer',
         },
+        /*
+         * ⛔ Says what the tap does, not what is missing: «Turn on screen
+         * reading» would promise that the tap grants the permission, when it
+         * opens the list where the person grants it. The line above already
+         * named the problem; this one names the move.
+         */
+        cardOpenA11ySettings: 'Open accessibility settings',
         cardAppOpened: 'Opened',
         cardAppRefused: 'It would not open',
         memoryUsedOne: '1 memory used',

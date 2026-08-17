@@ -181,6 +181,36 @@ async function commutaComando(tool: string, acceso: boolean): Promise<boolean> {
     return talosCommutaDaScheda(tool, acceso)
 }
 
+/**
+ * ⭐⭐⭐ APRIRE LE IMPOSTAZIONI COL DITO — vedi `talosApriImpostazioniDaScheda`.
+ *
+ * ⛔ Lo stato è UNO per la scheda, non uno per riga: di pulsanti così ce n'è al
+ * massimo uno, e tenere una mappa per un elemento solo è una struttura che
+ * mente su quanti casi copre.
+ */
+const apreImpostazioni = ref(false)
+const esitoImpostazioni = ref('')
+
+async function apriImpostazioni(): Promise<void> {
+    if (apreImpostazioni.value) return
+    apreImpostazioni.value = true
+    esitoImpostazioni.value = ''
+    try {
+        const { talosApriImpostazioniDaScheda } = await import('@/lib/tools/schedaComandi')
+        const fatto = await talosApriImpostazioniDaScheda('android.settings.ACCESSIBILITY_SETTINGS')
+        /*
+         * ⛔ Se non si è aperta LO SI DICE. Un pulsante che si spegne e basta
+         * lascia credere di aver fatto qualcosa — è la stessa bugia del segno
+         * «Fatto» su una cosa non fatta, spostata dentro un comando.
+         */
+        esitoImpostazioni.value = fatto ? '' : t('chat.cardAppRefused')
+    } catch {
+        esitoImpostazioni.value = t('chat.cardAppRefused')
+    } finally {
+        apreImpostazioni.value = false
+    }
+}
+
 async function apriConApp(
     capacita: string,
     valori: Readonly<Record<string, string>>,
@@ -484,6 +514,51 @@ const parolaStato = (acceso: boolean): string => (acceso
                 </span>
                 <span class="talos-freccia flex-none" aria-hidden="true">{{ s.partito ? '✓' : '⛔' }}</span>
             </div>
+
+            <!--
+                ⭐⭐⭐ IL COMANDO, invece della gara che perdevamo.
+
+                MISURATO sul Pad il 2026-08-17, dal registro delle activity.
+                TALOS apriva da solo le impostazioni, 37 ms dopo aver aperto
+                WhatsApp — e nei successivi 850 ms WhatsApp lanciava altre
+                quattro finestre e le seppelliva. La risposta diceva «le
+                impostazioni sono già aperte sullo schermo» e sullo schermo
+                c'era WhatsApp.
+
+                ⛔ Non si cura aspettando di più: quanto duri la catena di
+                lancio è un fatto di QUELL'app su QUEL telefono.
+
+                ⇒ Lo schermo cambia quando lo tocca la persona, che è anche
+                l'unico momento in cui è pronta a usarlo.
+
+                ⛔ Solo per `occhio`: è l'unico motivo con una schermata giusta
+                e conosciuta. Per gli altri non sappiamo dove mandare nessuno, e
+                un pulsante che apre a caso è peggio di nessun pulsante.
+            -->
+            <button
+                v-if="eInvio(s) && !s.partito && s.perche === 'occhio'"
+                type="button"
+                class="talos-app flex w-full items-center border border-border bg-muted text-left"
+                :aria-busy="apreImpostazioni"
+                :disabled="apreImpostazioni"
+                data-testid="talos-scheda-apri-impostazioni"
+                @click="apriImpostazioni()"
+            >
+                <span class="talos-nome flex-1">
+                    {{ t('chat.cardOpenA11ySettings') }}
+                    <!--
+                        ⛔ La riga dell'esito c'è SEMPRE, anche vuota: una zona
+                        `aria-live` creata nel momento in cui cambia non viene
+                        annunciata — il lettore di schermo deve averla già
+                        osservata.
+                    -->
+                    <span
+                        class="talos-esito block text-xs text-muted-foreground"
+                        aria-live="polite"
+                    >{{ esitoImpostazioni }}</span>
+                </span>
+                <span class="talos-freccia" aria-hidden="true">›</span>
+            </button>
 
             <!--
                 ⭐⭐⭐ QUALE APP — l'elenco vero, TOCCABILE.
