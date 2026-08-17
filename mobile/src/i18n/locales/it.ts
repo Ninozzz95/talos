@@ -830,6 +830,13 @@ export const TALOS_IT_MESSAGES = {
             pulsante: 'pulsante Invia non trovato',
             ponte: 'il servizio dello schermo non ha risposto',
         },
+        /*
+         * ⛔ Dice cosa SUCCEDE toccandolo, non cosa manca: «Attiva la lettura
+         * dello schermo» prometterebbe che il tocco accende il permesso, e
+         * invece porta all'elenco dove lo accende la persona. La riga sopra ha
+         * già detto qual è il problema; questa dice la mossa.
+         */
+        cardOpenA11ySettings: 'Apri le impostazioni di accessibilità',
         cardAppOpened: 'Aperta',
         /*
          * ⛔ «Non si è aperta» e NON «Errore»: il telefono aveva detto di saperlo

@@ -17,6 +17,7 @@ vi.mock('@/i18n', () => ({
             'chat.cardWhichApp': 'Con quale app?',
             'chat.cardAppOpened': 'Aperta',
             'chat.cardAppRefused': 'Non si è aperta',
+            'chat.cardOpenA11ySettings': 'Apri le impostazioni di accessibilità',
         }[chiave] ?? chiave),
     }),
 }))
@@ -50,8 +51,10 @@ vi.mock('@/lib/device/devicePlugin', () => ({
 const comandi = {
     commuta: async (_tool: string, _acceso: boolean): Promise<boolean> => true,
     apri: async (_c: string, _v: Record<string, string>, _p: string): Promise<boolean> => true,
+    impostazioni: async (_azione: string): Promise<boolean> => true,
     commutati: [] as Array<[string, boolean]>,
     aperti: [] as Array<[string, Record<string, string>, string]>,
+    schermate: [] as string[],
 }
 
 vi.mock('@/lib/tools/schedaComandi', () => ({
@@ -62,6 +65,10 @@ vi.mock('@/lib/tools/schedaComandi', () => ({
     talosApriDaScheda: async (c: string, v: Record<string, string>, p: string) => {
         comandi.aperti.push([c, v, p])
         return comandi.apri(c, v, p)
+    },
+    talosApriImpostazioniDaScheda: async (azione: string) => {
+        comandi.schermate.push(azione)
+        return comandi.impostazioni(azione)
     },
 }))
 
@@ -103,8 +110,10 @@ async function respiro(w: { vm: { $nextTick: () => Promise<unknown> } }): Promis
 beforeEach(() => {
     comandi.commuta = async () => true
     comandi.apri = async () => true
+    comandi.impostazioni = async () => true
     comandi.commutati = []
     comandi.aperti = []
+    comandi.schermate = []
 })
 
 describe('TalosMobileSchedaAzione', () => {
@@ -505,5 +514,98 @@ describe('⛔ le icone delle app: vere, e chieste solo quando si disegnano', () 
         expect(w.get('.talos-icona').attributes('aria-hidden')).toBe('true')
         expect(w.get('.talos-icona img').attributes('alt')).toBe('')
         w.unmount()
+    })
+})
+
+/**
+ * ⭐⭐⭐ IL COMANDO INVECE DELLA GARA — e la gara la perdevamo.
+ *
+ * MISURATO sul Pad il 2026-08-17, dal registro delle activity. L'invio fallisce
+ * perché la lettura dello schermo è spenta, e lo strumento apriva da solo le
+ * impostazioni. In 900 millesimi:
+ *
+ *     05:31:14.098  TALOS      apre WhatsApp  (wa.me)
+ *     05:31:14.135  TALOS      apre ACCESSIBILITY_SETTINGS   ← 37 ms dopo
+ *     05:31:14.155  WhatsApp   .contact.ui.picker.ContactPicker
+ *     05:31:14.927  WhatsApp   .Conversation
+ *     05:31:14.959  WhatsApp   .home.ui.HomeActivity
+ *     05:31:14.980  WhatsApp   .Conversation
+ *
+ * Le impostazioni si erano aperte DAVVERO. Poi WhatsApp ha continuato a
+ * lanciare finestre e le ha sepolte — e la risposta diceva «sono già aperte
+ * sullo schermo» mentre a schermo c'era WhatsApp.
+ *
+ * ⇒ Lo schermo cambia quando lo tocca la persona.
+ */
+describe('⭐⭐⭐ la scheda porta il comando, non la parola «fatto»', () => {
+    const INVIO_OCCHIO = {
+        metadata: {
+            cards: [{ tipo: 'invio', app: 'WhatsApp', partito: false, perche: 'occhio' }],
+        },
+    }
+    const bottone = (w: ReturnType<typeof mount>) => w.find('[data-testid="talos-scheda-apri-impostazioni"]')
+
+    it('⛔ il pulsante c\'e quando la lettura dello schermo e spenta', () => {
+        const w = mount(TalosMobileSchedaAzione, { props: INVIO_OCCHIO })
+        expect(bottone(w).exists()).toBe(true)
+        expect(bottone(w).text()).toContain('Apri le impostazioni di accessibilità')
+    })
+
+    it('⛔ e il tocco chiede LA SCHERMATA GIUSTA', async () => {
+        const w = mount(TalosMobileSchedaAzione, { props: INVIO_OCCHIO })
+        await bottone(w).trigger('click')
+        await respiro(w)
+        expect(comandi.schermate).toEqual(['android.settings.ACCESSIBILITY_SETTINGS'])
+    })
+
+    /*
+     * ⛔ Un pulsante che si spegne e basta lascia credere di aver fatto
+     * qualcosa: è il segno «Fatto» su una cosa non fatta, spostato in un
+     * comando.
+     */
+    it('⛔ se non si apre LO DICE', async () => {
+        comandi.impostazioni = async () => false
+        const w = mount(TalosMobileSchedaAzione, { props: INVIO_OCCHIO })
+        await bottone(w).trigger('click')
+        await respiro(w)
+        expect(bottone(w).text()).toContain('Non si è aperta')
+    })
+
+    it('⛔ e se si apre NON dice niente', async () => {
+        const w = mount(TalosMobileSchedaAzione, { props: INVIO_OCCHIO })
+        await bottone(w).trigger('click')
+        await respiro(w)
+        expect(bottone(w).text()).not.toContain('Non si è aperta')
+    })
+
+    /*
+     * ⛔ AL CONTRARIO, e sono i casi che tengono il pulsante al suo posto: per
+     * gli altri motivi non sappiamo dove mandare la persona, e un comando che
+     * apre a caso è peggio di nessun comando.
+     */
+    it.each([
+        ['altra-app'],
+        ['testo'],
+        ['pulsante'],
+        ['ponte'],
+    ])('⛔ NIENTE pulsante per «%s»: non sapremmo dove mandare nessuno', (perche) => {
+        const w = mount(TalosMobileSchedaAzione, {
+            props: { metadata: { cards: [{ tipo: 'invio', app: 'WhatsApp', partito: false, perche }] } },
+        })
+        expect(bottone(w).exists()).toBe(false)
+    })
+
+    it('⛔ e NIENTE pulsante senza motivo: non c\'e niente da aprire', () => {
+        const w = mount(TalosMobileSchedaAzione, {
+            props: { metadata: { cards: [{ tipo: 'invio', app: 'WhatsApp', partito: false }] } },
+        })
+        expect(bottone(w).exists()).toBe(false)
+    })
+
+    it('⛔⛔ e NIENTE pulsante se il messaggio E PARTITO', () => {
+        const w = mount(TalosMobileSchedaAzione, {
+            props: { metadata: { cards: [{ tipo: 'invio', app: 'WhatsApp', partito: true }] } },
+        })
+        expect(bottone(w).exists()).toBe(false)
     })
 })
