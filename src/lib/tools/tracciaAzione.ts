@@ -213,6 +213,55 @@ export type TalosScheda =
         readonly quando: string
         readonly etichetta?: string
     }
+    /**
+     * ⭐⭐⭐ È PARTITO, O NO — la scheda che il modello non può contraddire.
+     *
+     * MISURATO sul Pad il 2026-08-17, con la lettura dello schermo spenta:
+     *
+     *     TALOS: «Il messaggio "prova cinque" è stato inviato ✓
+     *             Il messaggio non è stato inviato, manca il permesso…»
+     *
+     * L'invio dichiarato E il fallimento nella stessa risposta, in
+     * quest'ordine. Verificato che non fosse partito: il testo era ancora nel
+     * campo di WhatsApp, e in chat quel messaggio non c'è.
+     *
+     * ## ⛔ E le difese di parole erano GIÀ tutte in piedi
+     *
+     *   - il prompt dice «Never state an outcome before the tool that produces
+     *     it has returned» — c'era, ed è stata ignorata;
+     *   - l'esito dello strumento dice «Nothing was sent» ed è `ok: false`;
+     *   - il 2026-08-17 ci ho aggiunto anche «⛔ Do NOT open with "sent"».
+     *
+     * Tre divieti scritti, e il modello ha aperto lo stesso con «inviato ✓».
+     *
+     * ⇒ È la stessa lezione di `quale-app`: finché la verità passa dalle
+     * PAROLE del modello, dipende dal fatto che le ricopi bene. La scheda la
+     * disegna l'app, e non può mentire — chi guarda lo schermo vede «NON
+     * INVIATO» sotto una frase che dice il contrario, e crede alla scheda.
+     *
+     * ⛔ `partito` è un booleano e non tre stati: qui si sa. Il caso «non lo so»
+     * — una prova su tre — NON produce questa scheda, perché una scheda che
+     * dicesse «forse» insegnerebbe a non fidarsi anche delle altre.
+     */
+    | {
+        readonly tipo: 'invio'
+        /** L'app che avrebbe dovuto mandarlo: «WhatsApp», «Telegram». */
+        readonly app: string
+        readonly partito: boolean
+        /**
+         * Solo quando NON è partito: il MOTIVO, come chiave da tradurre.
+         *
+         * ⛔ Una chiave e non una frase, e l'ho scoperto guardando lo schermo:
+         * la prima versione portava il testo inglese pronto, e sul Pad in
+         * italiano la scheda diceva «NON inviato · screen reading is off».
+         * Metà riga tradotta e metà no, dentro il riquadro che deve essere il
+         * più credibile della schermata.
+         *
+         * ⇒ Le schede sorelle fanno già così: `quale-app` porta i nomi delle
+         * app (che sono nomi propri) e le sue parole vengono da `t()`.
+         */
+        readonly perche?: 'occhio' | 'altra-app' | 'testo' | 'pulsante' | 'ponte'
+    }
 /*
  * ⛔ Qui c'era un tipo `fonti`, aggiunto e tolto il 2026-08-14: le fonti hanno
  * già la loro casa in `TalosMobileSourcesChip`, che le mostra meglio (favicon
@@ -286,6 +335,35 @@ export type TalosScheda =
         readonly app: ReadonlyArray<{
             readonly nome: string
             readonly pacchetto: string
+        }>
+    }
+    /**
+     * ⭐⭐⭐ QUALE FILE — la sorella di `quale-app`, e nasce da un LOOP.
+     *
+     * MISURATO sul Pad il 2026-08-17. Due `nota-talos.txt` nella Libreria.
+     * TALOS chiede quale, l'esito dello strumento porta i numeri E gli id e dice
+     * a lettere «call this tool again with "file" set to that entry's id». La
+     * persona risponde «1», e il modello **rifà la stessa domanda**: richiama col
+     * NOME, riottiene l'ambiguità, riscrive l'elenco. Un giro chiuso.
+     *
+     * ⛔ È la lezione già scritta due volte in `intentiTools`: un'istruzione
+     * scritta NON vincola il modello. Se una cosa deve succedere, la fa il
+     * codice.
+     *
+     * ⇒ L'elenco va dallo strumento allo schermo e si TOCCA, come per le app: il
+     * dito porta l'id, e l'id è l'unica cosa che distingue due omonimi.
+     */
+    | {
+        readonly tipo: 'quale-file'
+        /** L'app di destinazione già scelta, da ripassare identica. */
+        readonly app?: string
+        /** Il destinatario già raccolto, da ripassare identico. */
+        readonly contatto?: string
+        /** Il messaggio che accompagna il file, se c'era. */
+        readonly testo?: string
+        readonly file: ReadonlyArray<{
+            readonly nome: string
+            readonly id: string
         }>
     }
 

@@ -135,6 +135,23 @@ export interface ChatTurn {
      * handed a result, which is exactly why they shipped unwired.
      */
     toolName?: string
+    /**
+     * ⭐⭐ Blocchi del fornitore da rimandare indietro VERBATIM al giro dopo.
+     *
+     * Oggi: `server_tool_use` e `tool_search_tool_result` della ricerca attrezzi
+     * di Anthropic. La documentazione li vuole «unmodified», quindi qui non si
+     * normalizza, non si valida e non si riscrive niente — si conserva.
+     *
+     * ⛔ `unknown[]` di proposito. Un'interfaccia sarebbe una dichiarazione di
+     * aver capito una forma che non e' nostra, e il giorno che il fornitore la
+     * cambia saremmo noi a romperla riscrivendola.
+     *
+     * ⛔ Sta sul TURNO e non solo nel risultato di una chiamata: una chat
+     * riaperta domani deve poterli rimandare, se no spedisce una conversazione
+     * monca — la stessa famiglia della chiamata orfana che avvelena una chat
+     * per sempre.
+     */
+    providerBlocks?: readonly unknown[]
 }
 
 // F2-T4 streaming: the completion may stream partial text through handlers.
@@ -186,6 +203,18 @@ export interface ChatCompletionResult {
      */
     usage?: Record<string, number> | null
     toolCalls?: TalosToolCall[]
+    /**
+     * ⭐⭐ Blocchi che il fornitore pretende indietro immutati — il QUINTO ponte.
+     *
+     * Dichiararlo qui non è ripetizione: `TalosMobileCompletionResult` (il
+     * contratto dell'adattatore) e questo tipo sono due cose diverse, e senza
+     * questa riga il valore sarebbe arrivato fin qui per morire in silenzio.
+     *
+     * ⛔ È esattamente il difetto che questo progetto ha già pagato — un valore
+     * che non arrivava al quinto strato — e stavolta l'ha trovato il typecheck,
+     * perché il campo è DICHIARATO invece di viaggiare dentro uno spread.
+     */
+    providerBlocks?: readonly unknown[]
     /** Defect #5: kept beside the answer, never mixed into it. */
     reasoning?: string
     /**
@@ -1293,6 +1322,11 @@ export function createChatStore<Runtime = undefined>(
                 ...(reply.toolCalls?.length
                     ? { tool_calls: reply.toolCalls, finish_reason: reply.finishReason ?? null }
                     : {}),
+                // ⛔ Salvati, o la cura dura un messaggio solo: il perché sta
+                // accanto al lettore, in `storiaConLeChiamate`.
+                ...(reply.providerBlocks?.length
+                    ? { provider_blocks: reply.providerBlocks }
+                    : {}),
                 ...(thinking ? { reasoning: thinking } : {}),
                 ...(reply.sources?.length ? { sources: reply.sources } : {}),
             }
@@ -1604,6 +1638,11 @@ export function createChatStore<Runtime = undefined>(
                 ...(reply.metadata ?? {}),
                 ...(reply.toolCalls?.length
                     ? { tool_calls: reply.toolCalls, finish_reason: reply.finishReason ?? null }
+                    : {}),
+                // ⛔ Salvati, o la cura dura un messaggio solo: il perché sta
+                // accanto al lettore, in `storiaConLeChiamate`.
+                ...(reply.providerBlocks?.length
+                    ? { provider_blocks: reply.providerBlocks }
                     : {}),
                 // Defect #5: persisted, so it survives the session and reaches
                 // the export — a reasoning trace you cannot revisit is a demo.

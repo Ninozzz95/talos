@@ -28,6 +28,34 @@ import {
 } from '@/lib/tools/registry'
 
 /**
+ * ⭐⭐⭐ IL PERMESSO SI NOMINA, E SI NOMINA ANCHE QUELLO SBAGLIATO.
+ *
+ * MISURATO sul Pad il 2026-08-17, TRE volte, su due percorsi diversi. La riga
+ * dello strumento diceva «the screen-reading permission is off» — chiarissima —
+ * e il modello ha scritto alla persona:
+ *
+ *     «abilita il permesso di ACCESSO ALLE NOTIFICHE per TALOS»
+ *
+ * e, in un altro giro, «il permesso di lettura notifiche (o dello schermo, a
+ * seconda della versione)». Cioe': il permesso sbagliato, un'ipotesi travestita
+ * da istruzione, e un invito a concedere una cosa che legge TUTTE le notifiche
+ * di TUTTE le app — per mandare un messaggio.
+ *
+ * ⛔ Dire qual e' quello giusto NON basta: era gia' scritto, ed era gia'
+ * sbagliato. E' la stessa lezione di «inviato»: la frase vietata si NOMINA, non
+ * si allude. Un divieto generico lascia spazio proprio alla forma in cui la
+ * bugia si presenta.
+ *
+ * ⛔ E il permesso e' UNO: nessun «a seconda della versione». Se davvero
+ * cambiasse, sarebbe un fatto da misurare sul telefono, non da far indovinare
+ * al modello davanti alla persona.
+ */
+const IL_PERMESSO_GIUSTO = ' ⛔ The permission is called "screen reading" /'
+    + ' accessibility, and it is NOT notification access. Never name notification'
+    + ' access here, and never say "depending on the version": there is exactly'
+    + ' one permission and it is the accessibility one.'
+
+/**
  * ⭐⭐⭐ UN TOOL SOLO per OTTO app — e per quelle che verranno.
  *
  * ## Perché non otto tool
@@ -546,12 +574,16 @@ async function talosUltimoCentimetro(
         return {
             ok: true,
             content: `Sent — verified. TALOS pressed send in ${capacita.app} and ${esito.prove} independent checks agree: the input field is empty and the text is now part of the conversation. Tell the user it is sent, in one short sentence.`,
+            // La scheda dice la stessa cosa della frase, e la dice l'app.
+            scheda: { tipo: 'invio' as const, app: capacita.app, partito: true },
         }
     }
     if (esito.fatto && esito.obiettivo === 'NON_PARTITO') {
         return {
             ok: true,
             content: `NOT sent. TALOS pressed send in ${capacita.app}, but the text is STILL in the input field — so nothing left. Tell the user plainly that it did not go, and offer to try again. This is the one case where trying again is safe.`,
+            scheda: { tipo: 'invio' as const, app: capacita.app, partito: false },
+            senzaEffetto: true,
         }
     }
     if (esito.fatto) {
@@ -561,17 +593,195 @@ async function talosUltimoCentimetro(
         }
     }
     // Da qui in giù NON è stato premuto niente: riprovare è sicuro.
+    /*
+     * ⛔⛔⛔ IL DIVIETO ESPLICITO, e costa una riga per non costare una bugia.
+     *
+     * MISURATO sul Pad il 2026-08-17, con l'occhio spento. Lo strumento ha
+     * restituito `ok: false` e il testo di `occhio-chiuso`, che dice
+     * **«Nothing was sent»**. Il modello ha scritto:
+     *
+     *     «Il messaggio "prova tre" è stato inviato a Antonino Rizzo. ✓
+     *      WhatsApp è aperto con il messaggio nella casella di testo, ma non
+     *      riesco a premere Invia — manca il permesso di lettura dello schermo»
+     *
+     * Cioè ha dichiarato l'invio E il fallimento nella STESSA risposta, in
+     * quest'ordine. Verificato che non fosse partito: il testo era ancora nel
+     * campo (`com.whatsapp:id/entry` = "prova tre").
+     *
+     * ⇒ Un esito onesto NON BASTA. Ogni altro ramo di questo file porta il
+     * divieto scritto a lettere — «⛔ Do NOT say you did it» — e queste cinque
+     * righe erano le uniche senza. Erano anche le uniche in cui il modello ha
+     * mentito.
+     *
+     * ⛔ La frase vietata si NOMINA, non si allude: «non dire di averlo fatto»
+     * lascia spazio a «l'ho mandato ma non è partito», che è la forma esatta in
+     * cui la bugia è comparsa.
+     */
+    const MAI_DIRE_INVIATO = ' ⛔ Do NOT open with "sent", "done" or a ✓, not even'
+        + ' before explaining: the message did NOT leave. Say first that it was'
+        + ' not sent, then why.'
     const spiegazione: Record<string, string> = {
-        'occhio-chiuso': `${capacita.app} is open with the text already filled in, but TALOS cannot press send: the screen-reading permission is off. Nothing was sent. Offer to open its settings page with device_open_settings, then say one tap on send finishes it.`,
-        'app-non-in-primo-piano': `The link opened, but ${capacita.app} is not the app on screen${esito.pacchettoVisto ? ` (it is ${esito.pacchettoVisto})` : ''} — probably an app-chooser or another app answered the link. Nothing was sent. Tell the user what is on screen and ask how to proceed.`,
-        'testo-non-arrivato': `${capacita.app} opened but the text never appeared in its input field, so TALOS did not press send — pressing blind could have sent something else. Nothing was sent. Tell the user and offer to try again.`,
-        'non-trovato': `${capacita.app} is open with the text ready, but TALOS could not find the send button, so it pressed nothing. Nothing was sent. Tell the user it is ready and that one tap on send finishes it.`,
-        'ponte-chiuso': `${capacita.app} is open with the text ready, but TALOS could not reach the screen service to press send. Nothing was sent. Tell the user one tap finishes it.`,
+        /*
+         * ⛔⛔ LA SCHERMATA SI NOMINA, o il modello ne sceglie una sbagliata.
+         *
+         * MISURATO sul Pad il 2026-08-17. Questa riga diceva soltanto «offer to
+         * open its settings page with device_open_settings», e il modello ha
+         * aperto l'ACCESSO ALLE NOTIFICHE, dicendo alla persona: «abilita il
+         * permesso di lettura notifiche (o dello schermo, a seconda della
+         * versione)». Cioè:
+         *
+         *   - la pagina sbagliata;
+         *   - un'ipotesi — «a seconda della versione» — travestita da
+         *     istruzione;
+         *   - e soprattutto un invito a concedere un permesso che legge TUTTE
+         *     le notifiche, contenuto compreso, quando ciò che serve è un'altra
+         *     cosa.
+         *
+         * ⇒ È la regola che questo progetto si è già dato per le schermate: il
+         * modello non deve indovinarle. Qui l'azione esatta è scritta, e
+         * `android.settings.ACCESSIBILITY_SETTINGS` è verificata sul Pad —
+         * apre `com.android.settings/.Settings$AccessibilitySettingsActivity`.
+         */
+        /*
+         * ⛔ NON dire «le impostazioni sono già aperte»: era vero per 37
+         * millesimi, poi la catena di lancio di WhatsApp le seppelliva. Adesso
+         * il comando sta sulla scheda, e la persona lo tocca quando vuole —
+         * quindi qui si racconta LA SCHEDA, non uno schermo che non sappiamo.
+         *
+         * ⛔ E non aprire niente: `device_open_settings` rifarebbe la gara, e
+         * due volte ha aperto la pagina SBAGLIATA — l'accesso alle notifiche.
+         */
+        'occhio-chiuso': `${capacita.app} is open with the text already filled in, but TALOS cannot press send: the screen-reading permission is off. Nothing was sent. Do NOT open any settings screen yourself: the card below this answer carries a button that opens the right one. Say that the message is ready in ${capacita.app}, that the button below turns the permission on, and that one tap on send finishes it.${IL_PERMESSO_GIUSTO}${MAI_DIRE_INVIATO}`,
+        'app-non-in-primo-piano': `The link opened, but ${capacita.app} is not the app on screen${esito.pacchettoVisto ? ` (it is ${esito.pacchettoVisto})` : ''} — probably an app-chooser or another app answered the link. Nothing was sent. Tell the user what is on screen and ask how to proceed.${MAI_DIRE_INVIATO}`,
+        'testo-non-arrivato': `${capacita.app} opened but the text never appeared in its input field, so TALOS did not press send — pressing blind could have sent something else. Nothing was sent. Tell the user and offer to try again.${MAI_DIRE_INVIATO}`,
+        /*
+         * ⛔ Qui NON si nomina il permesso: il pulsante non si e' trovato, e la
+         * lettura dello schermo c'e'. Nominarlo insegnerebbe alla persona a
+         * concedere una cosa che non risolve niente.
+         */
+        'non-trovato': `${capacita.app} is open with the text ready, but TALOS could not find the send button, so it pressed nothing. Nothing was sent. Tell the user it is ready and that one tap on send finishes it.${MAI_DIRE_INVIATO}`,
+        'ponte-chiuso': `${capacita.app} is open with the text ready, but TALOS could not reach the screen service to press send. Nothing was sent. Tell the user one tap finishes it.${MAI_DIRE_INVIATO}`,
+    }
+    /*
+     * ⛔⛔⛔ LA SCHEDA, perché tre divieti scritti non erano bastati.
+     *
+     * MISURATO sul Pad il 2026-08-17: con la lettura dello schermo spenta il
+     * modello ha aperto con «Il messaggio "prova cinque" è stato inviato ✓» e
+     * si è smentito nella riga dopo. Verificato che non fosse partito.
+     *
+     * Le difese di parole c'erano tutte: la riga nel prompt di sistema, questo
+     * esito `ok: false` che dice «Nothing was sent», e il divieto esplicito
+     * aggiunto poche ore prima. Non sono bastate, e non possono bastare: finché
+     * la verità passa dalla PROSA, dipende dal fatto che il modello la ricopi.
+     *
+     * ⇒ La scheda la disegna l'app. Chi guarda vede «NON inviato» sotto una
+     * frase che dice il contrario, e crede alla scheda — che è la cosa giusta,
+     * perché la scheda ha letto il telefono.
+     */
+    /*
+     * ⛔ CHIAVI, non frasi. La prima versione portava l'inglese già pronto e
+     * sul Pad in italiano la scheda diceva «NON inviato · screen reading is
+     * off»: metà riga tradotta e metà no, proprio nel riquadro che deve essere
+     * il più credibile della schermata. Visto guardando lo schermo, non
+     * rileggendo il codice.
+     */
+    /*
+     * ⛔⛔⛔ LA SCHERMATA LA APRE LO STRUMENTO, non il modello.
+     *
+     * MISURATO sul Pad il 2026-08-17, DUE volte:
+     *
+     *   1. l'esito diceva «offer to open its settings page» e il modello ha
+     *      aperto l'ACCESSO ALLE NOTIFICHE, dicendo alla persona di abilitare
+     *      «il permesso di lettura notifiche (o dello schermo, a seconda della
+     *      versione)» — pagina sbagliata, ipotesi travestita da istruzione, e
+     *      un invito a concedere un permesso che legge TUTTE le notifiche;
+     *   2. gliel'ho scritta a lettere — `android.settings.ACCESSIBILITY_SETTINGS`,
+     *      «not the notification-access screen» — e ha aperto di nuovo le
+     *      notifiche.
+     *
+     * ⇒ Un'istruzione scritta NON vincola il modello. È la stessa lezione della
+     * scheda: se una cosa deve succedere, la fa il codice.
+     *
+     * ⛔ Si apre SOLO per `occhio-chiuso`, che è l'unico motivo con una
+     * schermata giusta e conosciuta. Per gli altri il modello resta libero,
+     * perché lì non sappiamo dove mandare la persona e aprire a caso sarebbe
+     * peggio che non aprire.
+     *
+     * Azione verificata sul Pad: apre
+     * `com.android.settings/.Settings$AccessibilitySettingsActivity`.
+     *
+     * ⭐⭐⭐ E POI, IL 17, LO STRUMENTO HA DETTO CHE ERA UNA GARA — E CHE LA
+     * PERDEVAMO. Dal registro delle activity, 900 millesimi:
+     *
+     *     05:31:14.098  TALOS      apre WhatsApp  (wa.me)
+     *     05:31:14.135  TALOS      apre ACCESSIBILITY_SETTINGS   ← 37 ms dopo
+     *     05:31:14.155  WhatsApp   .contact.ui.picker.ContactPicker
+     *     05:31:14.927  WhatsApp   .Conversation
+     *     05:31:14.959  WhatsApp   .home.ui.HomeActivity
+     *     05:31:14.980  WhatsApp   .Conversation
+     *
+     * Le impostazioni si erano aperte DAVVERO. Poi WhatsApp ha continuato a
+     * lanciare finestre per altri 850 ms e le ha sepolte: sullo schermo c'era
+     * WhatsApp, e noi dicevamo alla persona di guardare un elenco che non
+     * c'era. Una frase vera per 37 millesimi.
+     *
+     * ⛔ E non si cura aspettando: quanto duri la catena di lancio è un fatto di
+     * QUELL'app su QUEL telefono, e un'attesa scritta a mano sarebbe indovinata.
+     *
+     * ⇒ Si smette di correre. L'apertura passa alla SCHEDA, che porta il
+     * comando e lo esegue quando lo tocca la persona — l'unico momento in cui è
+     * pronta a usarlo. Vedi `talosApriImpostazioniDaScheda`.
+     */
+    const perche: Record<string, 'occhio' | 'altra-app' | 'testo' | 'pulsante' | 'ponte'> = {
+        'occhio-chiuso': 'occhio',
+        'app-non-in-primo-piano': 'altra-app',
+        'testo-non-arrivato': 'testo',
+        'non-trovato': 'pulsante',
+        'ponte-chiuso': 'ponte',
     }
     return {
         ok: false,
-        content: spiegazione[esito.motivo ?? ''] ?? `${capacita.app} is open with the text ready, but the send step did not run (${esito.motivo ?? 'unknown'}). Nothing was sent.`,
+        // ⛔ Anche il ripiego per un motivo che non conosciamo: un motivo nuovo
+        // e' proprio il caso in cui nessuno ha ancora scritto il divieto.
+        content: (spiegazione[esito.motivo ?? ''] ?? `${capacita.app} is open with the text ready, but the send step did not run (${esito.motivo ?? 'unknown'}). Nothing was sent.${MAI_DIRE_INVIATO}`),
         code: `TALOS_INVIO_${(esito.motivo ?? 'sconosciuto').toUpperCase().replace(/-/g, '_')}`,
+        // ⛔ La scheda c'è SEMPRE, anche per un motivo che non sappiamo
+        // nominare: «non inviato» resta vero comunque, ed è la sola cosa che
+        // decide cosa fa la persona dopo.
+        scheda: {
+            tipo: 'invio' as const,
+            app: capacita.app,
+            partito: false,
+            ...(perche[esito.motivo ?? ''] ? { perche: perche[esito.motivo ?? ''] } : {}),
+        },
+        /*
+         * ⭐⭐⭐ IL CAMPO CHE MANCAVA — ed era tutta la bugia.
+         *
+         * Il modello annuncia PRIMA di chiamare: il suo primo turno è
+         * `["text", "tool_use"]`, e quel testo — misurato con una sonda diretta
+         * — è a volte al futuro («Vado a inviare…») e a volte al passato
+         * («Il messaggio è stato inviato ✓»). Il giro dell'agente incolla il
+         * preambolo alla conclusione, e viene fuori:
+         *
+         *     «Il messaggio è stato inviato ✓
+         *      Il messaggio non è stato inviato.»
+         *
+         * ⛔ E la cura c'era GIÀ, in `agentLoop`: se ogni attrezzo del giro
+         * dichiara `senzaEffetto`, il preambolo si toglie — «mostrare per
+         * sempre una frase falsa è peggio che vederne sparire una vera».
+         *
+         * Solo che questo strumento non lo dichiarava. Quattro divieti scritti
+         * inseguivano il modello, e il meccanismo che risolve stava a tre righe
+         * di distanza, spento per un campo mancante.
+         *
+         * ⛔ Aprire le impostazioni non conta come effetto: l'effetto che il
+         * preambolo annuncia è l'INVIO, e quello non c'è stato.
+         *
+         * ⛔ E NON si mette su `NON_CONFERMATO`: lì il messaggio potrebbe
+         * essere partito davvero, e togliere il preambolo cancellerebbe una
+         * frase VERA. Il dubbio si racconta, non si nasconde.
+         */
+        senzaEffetto: true,
     }
 }
 
@@ -715,33 +925,91 @@ async function talosPremiInvioFile(
         pacchetto,
         attesaMs: ATTESA_APP_MS,
     }).catch((): TalosEsitoInvio => ({ fatto: false, motivo: 'ponte-chiuso' }))
-    if (esito.fatto && esito.sparito) {
+    /*
+     * ⭐⭐⭐ LE STESSE TRE PROVE DEL MESSAGGIO — e qui erano rimaste UNA.
+     *
+     * Il 15 agosto l'owner ha detto, del messaggio: «"invio un messaggio a un
+     * contatto" non significa che l'abbia inviato veramente». `sparito` da solo
+     * era UNA euristica, e un pulsante puo' sparire perche' la schermata e'
+     * cambiata per altro. Il messaggio e' passato a tre prove; l'allegato e'
+     * rimasto qui, a dire «was SENT» su quell'unica euristica.
+     *
+     * ⛔ Trovato guardando la SORELLA, non questo file: chi tocca una superficie
+     * la guarda tutta. Un file mandato per sbaglio a una persona vera non si
+     * annulla piu' di un messaggio.
+     */
+    if (esito.fatto && esito.obiettivo === 'PARTITO') {
         return {
             ok: true,
-            content: `"${nomeFile}" was SENT in ${nomeApp}: the send button is gone, which is the proof.`,
+            content: `"${nomeFile}" was SENT in ${nomeApp} — verified: ${esito.prove} independent checks agree. Tell the user it is sent, in one short sentence.`,
             contentOrigin: 'user-direct',
+            scheda: { tipo: 'invio' as const, app: nomeApp, partito: true },
+        }
+    }
+    if (esito.fatto && esito.obiettivo === 'NON_PARTITO') {
+        return {
+            ok: true,
+            content: `NOT sent. TALOS pressed send for "${nomeFile}" in ${nomeApp}, but the attachment is STILL there — so nothing left. Tell the user plainly that it did not go, and offer to try again. This is the one case where trying again is safe.`,
+            contentOrigin: 'user-direct',
+            scheda: { tipo: 'invio' as const, app: nomeApp, partito: false },
+            senzaEffetto: true,
         }
     }
     if (esito.fatto) {
         /*
-         * ⛔ Premuto e il pulsante e' ancora li'. NON si ripreme: se invece era
-         * partito, il secondo tocco manderebbe il file DUE volte. Il dubbio si
-         * dice, non si risolve rifacendo — e' la stessa regola del messaggio.
+         * ⛔ Premuto e non confermato. NON si ripreme: se invece era partito, il
+         * secondo tocco manderebbe il file DUE volte. Il dubbio si dice, non si
+         * risolve rifacendo — e' la stessa regola del messaggio.
+         *
+         * ⛔ E NIENTE scheda, come per il messaggio: una scheda che dicesse
+         * «forse» insegnerebbe a non fidarsi anche delle altre. Qui parla solo
+         * la frase. E niente `senzaEffetto`: il file potrebbe essere partito, e
+         * togliere il preambolo cancellerebbe una frase vera.
          */
         return {
             ok: true,
-            content: `TALOS pressed send for "${nomeFile}" in ${nomeApp}, but could not confirm it left. Ask the user to look; do NOT press again, it would send it twice.`,
+            content: `TALOS pressed send for "${nomeFile}" in ${nomeApp}, and only ${esito.prove ?? 0} of 3 checks confirm it left. Tell the user exactly that and ask them to look; do NOT press again, it would send it twice.`,
             contentOrigin: 'user-direct',
         }
     }
+    /*
+     * ⛔ IL DIVIETO, come sul messaggio: un esito onesto NON BASTA. Il modello
+     * apre con «inviato ✓» e si smentisce nella riga dopo — misurato sul Pad, e
+     * non c'e' ragione per cui l'allegato ne sia immune.
+     */
+    const MAI_DIRE_INVIATO = ' ⛔ Do NOT open with "sent", "done" or a ✓, not even'
+        + ' before explaining: the file did NOT leave. Say first that it was not'
+        + ' sent, then why.'
     const perche: Record<string, string> = {
-        'occhio-chiuso': `${nomeApp} has "${nomeFile}" attached and ready, but TALOS cannot press send: the screen-reading permission is off. Nothing was sent. Offer to open its settings page with device_open_settings.`,
-        'app-non-in-primo-piano': `${nomeApp} is not in front any more, so TALOS did not press anything. The file is attached: one tap on send finishes it.`,
+        /*
+         * ⛔ Questa riga diceva «Offer to open its settings page with
+         * device_open_settings». Misurato sul Pad il 2026-08-17 sul percorso
+         * gemello: con quella frase il modello ha aperto l'ACCESSO ALLE
+         * NOTIFICHE — pagina sbagliata, e un invito a concedere un permesso che
+         * legge TUTTE le notifiche. E aprirla da qui rifarebbe la gara con la
+         * catena di lancio dell'app, che perdiamo.
+         */
+        'occhio-chiuso': `${nomeApp} has "${nomeFile}" attached and ready, but TALOS cannot press send: the screen-reading permission is off. Nothing was sent. Do NOT open any settings screen yourself: the card below this answer carries a button that opens the right one. Say the file is ready, that the button below turns the permission on, and that one tap on send finishes it.${IL_PERMESSO_GIUSTO}${MAI_DIRE_INVIATO}`,
+        'app-non-in-primo-piano': `${nomeApp} is not in front any more, so TALOS did not press anything. The file is attached: one tap on send finishes it.${MAI_DIRE_INVIATO}`,
+    }
+    const motivoScheda: Record<string, 'occhio' | 'altra-app' | 'testo' | 'pulsante' | 'ponte'> = {
+        'occhio-chiuso': 'occhio',
+        'app-non-in-primo-piano': 'altra-app',
+        'non-trovato': 'pulsante',
+        'ponte-chiuso': 'ponte',
     }
     return {
         ok: true,
-        content: perche[esito.motivo ?? ''] ?? `${pronto} (send step: ${esito.motivo ?? 'unknown'})`,
+        content: perche[esito.motivo ?? ''] ?? `${pronto} (send step: ${esito.motivo ?? 'unknown'})${MAI_DIRE_INVIATO}`,
         contentOrigin: 'user-direct',
+        // ⛔ La scheda c'e' SEMPRE, anche per un motivo che non sappiamo
+        // nominare: «non inviato» resta vero comunque.
+        scheda: {
+            tipo: 'invio' as const,
+            app: nomeApp,
+            partito: false,
+            ...(motivoScheda[esito.motivo ?? ''] ? { perche: motivoScheda[esito.motivo ?? ''] } : {}),
+        },
         senzaEffetto: true,
     }
 }
@@ -760,9 +1028,45 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
          * e il tetto complessivo è 42.000: la prima stesura ne costava 880 e
          * sfondava. Quello che resta è ciò che il modello non può dedurre.
          */
+        /*
+         * ⭐⭐⭐ IL VERBO DAVANTI — e i 188 byte in più sono MISURATI.
+         *
+         * Il muro, sul Pad il 2026-08-17: «manda il file X a Y» e `invia_file`
+         * non parte mai. Il registro delle notifiche dice quale attrezzo è
+         * girato davvero: **«Ricerca nella Libreria»**, e basta. Il modello
+         * cerca, racconta il contenuto, e non manda.
+         *
+         * ⛔ E questa descrizione non diceva MAI cosa fa lo strumento: erano due
+         * note sui parametri, senza un verbo. Accanto, `library_search` dichiara
+         * il territorio a lettere — «Use it BEFORE answering questions about the
+         * user's own files».
+         *
+         * ⛔ La prima sonda diceva che non c'entrava: tre attrezzi in gara,
+         * `invia_file` scelto 12/12 con la descrizione vecchia. Era una sonda
+         * TROPPO FACILE. Rimessi i concorrenti veri — `library_search`,
+         * `library_read`, `library_export`, `document_create`, `app_azione`,
+         * `device_screen_drive` — quattro formulazioni per tre giri:
+         *
+         *   | forma                    | byte | invia_file scelto |
+         *   |--------------------------|------|-------------------|
+         *   | quella di prima          |  130 |  8/12             |
+         *   | + «do NOT search first»  |  217 |  9/12             |
+         *   | + il verbo, stretto      |  248 | 10/12             |
+         *   | **questa**               |  318 | **12/12**         |
+         *
+         * E «scrivi a X su WhatsApp allegando Y» andava **0/3** a
+         * `library_search`: con questa va 3/3.
+         *
+         * ⛔ Le forme corte NON bastano, e sono state provate prima di pagare:
+         * la differenza che conta è nominare l'innesco per esteso — «send,
+         * share or forward» — non alludervi.
+         */
         description: [
-            '"file" is matched against the real Library; if several match, ask instead of',
-            'guessing. Omit "app" to list the apps that accept it.',
+            'Send a Library file to a person through another app. Use this whenever the',
+            'user asks to send, share or forward a file — do NOT search the Library first,',
+            'this tool matches the name itself. "file" is matched against the real Library;',
+            'if several match, ask instead of guessing. Omit "app" to list the apps that',
+            'accept it.',
         ].join(' '),
         input: z.object({
             /*
@@ -860,7 +1164,32 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
                     senzaEffetto: true,
                 }
             }
-            const file = await fonti.fileDellaLibreria()
+            /*
+             * ⭐⭐⭐ CIECO NON È VUOTO — e la differenza l'ha detta il Pad.
+             *
+             * MISURATO il 2026-08-17: con `nota-talos.txt` presente in DUE
+             * copie, TALOS ha risposto «il file nota-talos.txt che menzioni non
+             * è presente nella mia Library». Una frase su un fatto che non
+             * aveva verificato, detta con la sicurezza di chi ha guardato.
+             *
+             * A monte c'era un `catch { return [] }`: un elenco vuoto
+             * significava DUE cose — la Libreria è vuota, oppure non si è
+             * riuscito a leggerla — e qui diventavano la stessa.
+             *
+             * ⛔ Sono TRE stati, come per l'elenco delle app: «ce ne sono»,
+             * «non ce n'è nessuno», «non ho potuto guardare». Il terzo NON si
+             * racconta come il secondo: la persona sa che quel file c'è, e
+             * sentirsi dire il contrario insegna a non fidarsi delle volte in
+             * cui è vero.
+             */
+            const file = await fonti.fileDellaLibreria().catch(() => null)
+            if (file === null) {
+                return {
+                    ok: false,
+                    content: 'TALOS could NOT read the Library, so it does not know whether that file exists. Nothing was sent. ⛔ Do NOT say the file is missing or that the Library is empty — that was never checked. Say the Library could not be read, and that Library access can be turned on in TALOS settings.',
+                    code: 'TALOS_FILE_LIBRERIA_ILLEGGIBILE',
+                }
+            }
             const scelta = talosScegliFile(file, input.file)
             if (scelta.esito === 'nessuno') {
                 /*
@@ -881,13 +1210,58 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
                 }
             }
             if (scelta.esito === 'ambiguo') {
+                /*
+                 * ⭐⭐⭐ LA DOMANDA ADESSO HA UNA RISPOSTA — Pad, 2026-08-17.
+                 *
+                 * Due `nota-talos.txt` nella Libreria. TALOS ha chiesto quale,
+                 * la persona ha risposto «il primo», e poi:
+                 *
+                 *   «Il tool invia_file non ha completato l'invio... ha
+                 *    restituito un errore di ambiguita' che non e' stato
+                 *    risolto nelle chiamate successive.»
+                 *
+                 * Un vicolo cieco: la ricerca guardava solo il NOME, e due
+                 * omonimi hanno lo stesso nome per definizione — ogni risposta
+                 * ricadeva nell'ambiguita' di prima. Lo strumento faceva una
+                 * domanda che non poteva accettare la risposta.
+                 *
+                 * ⇒ Adesso l'elenco porta un NUMERO che la persona puo' dire e
+                 * un id che lo strumento sa accettare, e la riga dice
+                 * esattamente cosa rimettere in `file`. Il costo lo paga solo
+                 * chi finisce qui: nella descrizione dello strumento — che
+                 * viaggia in OGNI messaggio — non c'e' una parola in piu'.
+                 */
+                const elenco = scelta.fra
+                    .map((f, i) => `${i + 1}. "${f.nome}" (id: ${f.id})`)
+                    .join('; ')
                 return {
                     ok: true,
-                    content: `More than one Library file matches "${input.file}": ${
-                        scelta.fra.map((f) => f.nome).join(', ')
-                    }. Ask the user which one, naming ONLY these. Nothing was sent. Do NOT offer to pick one at random and do NOT pick one yourself: the files may differ and it goes to a real person.`,
+                    /*
+                     * ⛔ La riga dice al modello di NON rifare l'elenco: c'è già
+                     * sotto la risposta, e ripeterlo a parole invita la persona
+                     * a rispondere «1» — che è esattamente il giro chiuso
+                     * misurato sul Pad.
+                     */
+                    content: `More than one Library file matches "${input.file}": ${elenco}. Nothing was sent. The card below this answer lists them and the user picks one with a tap — say that in ONE short sentence and do NOT repeat the list, do NOT ask them to type a number, and do NOT call this tool again until they have tapped. Do NOT pick one yourself: the files may differ and it goes to a real person.`,
                     contentOrigin: 'user-direct',
                     senzaEffetto: true,
+                    /*
+                     * ⭐⭐⭐ L'ELENCO CHE SI TOCCA — e prima era un LOOP.
+                     *
+                     * L'esito portava numeri, id, e l'istruzione a lettere di
+                     * richiamare con l'id. La persona ha risposto «1» e il
+                     * modello ha rifatto la stessa domanda: richiamava col NOME,
+                     * riotteneva l'ambiguità, riscriveva l'elenco.
+                     *
+                     * ⇒ Adesso il dito porta l'id. Come per «quale app».
+                     */
+                    scheda: {
+                        tipo: 'quale-file' as const,
+                        ...(input.app ? { app: input.app } : {}),
+                        ...(input.contatto ? { contatto: input.contatto } : {}),
+                        ...(input.testo ? { testo: input.testo } : {}),
+                        file: scelta.fra.map((f) => ({ nome: f.nome, id: f.id })),
+                    },
                     evidence: { cercato: input.file, fra: scelta.fra.map((f) => f.nome) },
                 }
             }
@@ -986,9 +1360,54 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
     }) as TalosToolDefinition<never>
 }
 
+/**
+ * ⭐⭐⭐ Le sorgenti dell'ULTIMO toolset, per il tocco sulla scheda.
+ *
+ * ⛔ Il tocco arriva DOPO che lo strumento ha già girato — la scheda nasce da un
+ * suo esito — quindi qui c'è sempre ciò che serve. E il toolset si costruisce
+ * una volta sola: non è uno stato che vive di vita propria, è il riferimento a
+ * quello che l'app ha già in mano.
+ *
+ * ⛔ `null` NON si finge riuscito: senza sorgenti il tocco torna `false` e la
+ * riga della scheda lo dice, invece di sembrare partito.
+ */
+let fontiCorrenti: TalosFontiFile | null = null
+
+/**
+ * ⭐⭐⭐ MANDA IL FILE SCELTO COL DITO — vedi `talosMandaFileDaScheda`.
+ *
+ * ⛔ Rientra dalla porta principale, con `file` messo all'ID: da oggi
+ * `talosScegliFile` prova l'id prima di ogni scalino sul nome, quindi due
+ * omonimi si separano qui e in nessun altro posto.
+ */
+export async function talosMandaFilePerId(
+    id: string,
+    dove: { readonly app?: string, readonly contatto?: string, readonly testo?: string },
+): Promise<boolean> {
+    if (!fontiCorrenti || !id.trim()) return false
+    const strumento = talosIntentiTools(fontiCorrenti).find((t) => t.name === 'invia_file')
+    if (!strumento) return false
+    const esito = await (strumento.run as unknown as (i: unknown, c: unknown) => Promise<{
+        ok: boolean
+        scheda?: { tipo: string }
+    }>)({
+        file: id,
+        ...(dove.app ? { app: dove.app } : {}),
+        ...(dove.contatto ? { contatto: dove.contatto } : {}),
+        ...(dove.testo ? { testo: dove.testo } : {}),
+    }, {})
+    /*
+     * ⛔ «Riuscito» vuol dire «non è tornato a chiedere QUALE FILE»: se la scheda
+     * che esce è di nuovo `quale-file`, il tocco non ha risolto niente e dirlo
+     * fatto sarebbe la solita bugia in forma di comando.
+     */
+    return esito.ok === true && esito.scheda?.tipo !== 'quale-file'
+}
+
 export function talosIntentiTools(
     fonti?: TalosFontiFile,
 ): readonly TalosToolDefinition<never>[] {
+    if (fonti) fontiCorrenti = fonti
     return [
         defineTalosTool({
             name: 'app_azione',

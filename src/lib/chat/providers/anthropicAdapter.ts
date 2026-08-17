@@ -14,6 +14,7 @@ import {
     talosPesoDegliAttrezzi,
     talosVaDifferito,
 } from '@/lib/tools/aperturaProgressiva'
+import { talosProfiloCompilato, talosRegistraProfilo } from '@/lib/tools/improntaDelProfilo'
 import { createAnthropicToolCallAccumulator, parseAnthropicToolCalls } from '@/lib/tools/wire'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
 import type { TalosMobileProviderAdapter } from '@/lib/chat/providerContracts'
@@ -56,22 +57,244 @@ import { talosNumericUsage } from '@/lib/chat/providers/usage'
  * ha sempre fatto. **Meglio un prefisso grande che una risposta che non
  * arriva** — ed è ciò che l'owner ha visto due volte stanotte.
  *
+ * ## ⭐ QUANTO COSTA TENERLO SPENTO — misurato il 2026-08-17
+ *
+ * Sulla suite vera, con tutti gli attrezzi accesi (20 offerti: 10 di lettura,
+ * 6 di scrittura, 4 in uscita), guardando ciò che entra nel CONTESTO del
+ * modello e non ciò che viaggia sul filo:
+ *
+ *     spento (schemi interi)   17.132 byte   ~4.630 token   a OGNI messaggio
+ *     acceso (a gradi)          1.984 byte     ~536 token   16 differiti su 20
+ *     ⇒ risparmio                                    88%
+ *
+ * ⛔ E sul FILO l'apertura a gradi pesa 409 byte in PIÙ (17.541 contro 17.132):
+ * manda comunque ogni schema e ci aggiunge `defer_loading` più la riga della
+ * ricerca. Chi misura i byte spediti conclude che costa di più — vero, e
+ * risponde alla domanda sbagliata. Il numero sta in
+ * `tests/unit/tools/quantoCostaAnthropic.test.ts`, che lo ristampa a ogni corsa.
+ *
+ * ## ⛔ E la forma della cura, perché non si riscopra da capo
+ *
+ * Serve che un turno dell'assistente sappia portarsi dietro i blocchi del
+ * fornitore **verbatim**. Oggi si ricostruisce come `[testo?, ...tool_use]` in
+ * `buildAnthropicRequest`, e quei due tipi non esistono nel nostro modello.
+ * Sono QUATTRO strati, e vanno fatti insieme o il valore muore all'ultimo:
+ *
+ *     1. l'adattatore li CATTURA dalla risposta
+ *     2. il turno ha dove tenerli
+ *     3. la persistenza li salva e li rilegge
+ *     4. `buildAnthropicRequest` li rimette in fila, nell'ordine originale
+ *
+ * ⛔ Il quarto senza il terzo è il difetto peggiore: una chat salvata che al
+ * riaperto spedisce una conversazione monca. Vedi «una chiamata orfana
+ * avvelena la chat per sempre».
+ *
  * ⛔ Il codice e i test dell'apertura a gradi NON si cancellano: sono giusti e
  * misurati (63 attrezzi → 4 nel prefisso, −96%). Quando la storia saprà
  * portarsi dietro quei due blocchi, qui si rimette `talosConvieneAprireAGradi`
  * e il resto è già al suo posto.
  */
+/*
+ * ⭐⭐⭐ PROVATO ACCESO il 2026-08-17, e RISPENTO — con un motivo NUOVO.
+ *
+ * La catena dei sette ponti è fatta e regge: i blocchi `server_tool_use` e
+ * `tool_search_tool_result` adesso sopravvivono a tutto — l'adattatore li
+ * cattura, i due contratti li dichiarano, il giro dell'agente li ACCUMULA (
+ * nascono al primo giro e all'ultimo non ci sono più), il punto di controllo
+ * li porta attraverso un consenso, i metadati li salvano per domani.
+ *
+ * ⛔⛔ MA NON BASTAVA, e il telefono lo ha detto in modo netto.
+ *
+ * Provato sul Pad, stessa domanda, unica variabile questo interruttore:
+ *
+ *     ACCESO   «TALOS non può accedere alle informazioni hardware del tuo
+ *               dispositivo. Non posso leggerti la capacità della batteria»
+ *
+ *     SPENTO   «Il tuo telefono ha il 90% di batteria. È collegato a una presa
+ *               ma non sta caricando… Il dispositivo è un OnePlus Pad 3 con
+ *               Android 16»  — e la torcia si accende davvero
+ *
+ * ⇒ Con l'apertura a gradi accesa il modello NON TROVA gli strumenti differiti.
+ * La ricerca lato server non glieli sta consegnando, e lui conclude in buona
+ * fede di non avere quelle capacità — che è la bugia peggiore che questa app
+ * possa dire, perché è dichiarata con sicurezza.
+ *
+ * ⛔ Il difetto non era UNO. La storia monca era reale ed è curata; sotto c'era
+ * un secondo problema che nessuno poteva vedere finché il primo non era
+ * risolto. È il motivo per cui questa riga NON si accende su un test verde:
+ * i test provavano la forma dei messaggi, e la forma era giusta.
+ *
+ * ## ⇒ E POI SI E' CAPITO, con nove sonde dirette all'API
+ *
+ * `una sonda diretta, fuori dal repository`. Il cablaggio e' TUTTO GIUSTO — e il difetto e'
+ * altrove, in un posto che nessuna riga di codice nostro puo' toccare.
+ *
+ * ### Cosa funziona, misurato
+ *
+ *     token in ingresso, stesso messaggio, sola variabile la forma
+ *       2 attrezzi in vista, nessuna ricerca            597
+ *       5 attrezzi, 2 differiti                         785
+ *       5 attrezzi, NESSUN differito                    881
+ *       18 attrezzi, 16 differiti                       792
+ *
+ * ⇒ `defer_loading` MORDE: i differiti spariscono dal prefisso, e scala —
+ * passare da 2 a 16 differiti costa SETTE token. ⛔ E funziona anche senza
+ * l'intestazione beta `advanced-tool-use-2025-11-20`: identici 785.
+ *
+ * E il modello VEDE la ricerca. Chiesto di elencare i suoi strumenti:
+ *
+ *     tool_search_tool_bm25
+ *     time_now
+ *
+ * — con `device_battery` correttamente nascosto.
+ *
+ * ### ⛔⛔ Cosa NON funziona, ed e' il muro
+ *
+ *     domanda secca                     ⛔ non cerca   ["text"]
+ *     ordine esplicito NEL MESSAGGIO    ✓ CERCA        ["text","server_tool_use",
+ *                                                       "tool_search_tool_result","text"]
+ *     ordine nel SYSTEM PROMPT          ⛔ non cerca   ["text"]
+ *
+ * ⇒ Claude Haiku 4.5 non usa la ricerca di sua iniziativa, e il system prompt
+ * NON lo convince. Solo la persona, chiedendolo a parole sue, lo fa cercare.
+ * Provato anche con Sonnet 5: non cerca, chiama `memory_search` — cioe'
+ * preferisce uno strumento che vede a uno che dovrebbe trovare.
+ *
+ * ⇒ Accendere questa riga vuol dire che TALOS risponde «non posso farlo» a ogni
+ * capacita' differita, tranne quando la persona indovina di dirgli «cerca fra i
+ * tuoi strumenti». E' peggio di un prefisso grande: e' un'app che nega di saper
+ * fare cose che sa fare.
+ *
+ * ## ⭐ E la strada che questo apre, che e' meglio dell'originale
+ *
+ * Il meccanismo di Anthropic toglie gli strumenti dal prefisso e si fida che il
+ * modello li cerchi. Noi abbiamo gia' l'altra meta': `catalogoCompatto`, un
+ * INDICE degli strumenti — 38.386 → 5.087 byte, −87% — che oggi serve gli altri
+ * fornitori. Le due cose non sono alternative: l'indice dice al modello CHE
+ * COSA esiste, `defer_loading` evita di pagarne gli schemi.
+ *
+ * ⇒ Indice compatto in vista + schemi differiti = il modello sa di poter
+ * cercare perche' vede i nomi, e paga solo cio' che apre. Nessuno dei due
+ * meccanismi, da solo, fa questo.
+ *
+ * ### ⭐⭐⭐ PROVATO, e funziona — con l'economia misurata
+ *
+ * Con l'indice dei nomi nel system prompt, il modello CERCA e poi chiama
+ * davvero lo strumento differito:
+ *
+ *     ["server_tool_use","tool_search_tool_result","text","tool_use"]
+ *                                                        └ device_battery
+ *
+ * Tre strategie, 16 strumenti del dispositivo, stesso modello:
+ *
+ *                                    senza strumento   con strumento
+ *     A) tutti visibili (oggi)            1.798            1.793
+ *     B) differiti, senza indice            761         ⛔ ROTTA: nega
+ *     C) differiti + indice                 872            1.908
+ *
+ * ⇒ **C risparmia 926 token** su un messaggio che non usa strumenti, e ne costa
+ * **115 in piu'** su uno che li usa. In una chat la gran parte dei messaggi e'
+ * conversazione ⇒ C vince, e vince molto.
+ *
+ * ⛔ E il pareggio si sposta col numero di strumenti: piu' ne offriamo, piu' A
+ * peggiora e C resta fermo. Oggi sono 20; il piano ne prevede molti di piu'.
+ *
+ * ⛔⛔ Una misura sola stava per farmi buttare l'idea. Guardando solo il caso
+ * «con strumento» — 1.908 contro 1.793 — la conclusione era «costa di piu', non
+ * serve». Era vera su meta' dei messaggi e falsa sull'altra meta', che e' la
+ * piu' numerosa. ⇒ Un'economia non si misura sul caso peggiore da solo.
+ *
+ * ### ⇒ Cosa serve per accenderla, in ordine
+ *
+ *   1. l'indice: `catalogoCompatto` lo produce gia' (−87%), oggi per gli altri
+ *      fornitori. Va messo nel system prompt anche per Anthropic;
+ *   2. `defer_loading` sugli schemi, che e' gia' scritto e provato qui;
+ *   3. la catena dei sette ponti, gia' fatta.
+ *
+ * ⛔ Sono numeri di UNA prompt, UN modello, 16 strumenti. La forma e' netta, il
+ * numero esatto no.
+ */
 const APERTURA_A_GRADI_ANTHROPIC = false
 
-function attrezziDaSpedire(tools: NonNullable<Parameters<typeof talosToolsForAnthropic>[0]>): unknown[] {
-    if (!APERTURA_A_GRADI_ANTHROPIC) return talosToolsForAnthropic(tools)
+/**
+ * ⭐⭐⭐ I BLOCCHI CHE VANNO RIMANDATI INDIETRO IMMUTATI.
+ *
+ * La ricerca degli attrezzi lato server produce due tipi che nascono dentro
+ * Anthropic e che la documentazione chiede di replicare **unmodified** alla
+ * voce «continuing the conversation». Non replicarli e' il difetto per cui
+ * l'apertura a gradi e' spenta: al secondo giro la conversazione parte monca.
+ *
+ * ## ⛔ Un elenco CHIUSO, non «tutto quello che non riconosco»
+ *
+ * Verrebbe comodo conservare ogni blocco che non e' `text` ne' `tool_use`.
+ * Sarebbe sbagliato in due modi:
+ *
+ *   - i blocchi `thinking` FIRMATI finirebbero qui dentro, e rimandarli senza
+ *     la loro firma e' un 400 documentato — quello che ci ha gia' fatto fallire
+ *     il secondo giro di ogni conversazione con gli strumenti;
+ *   - un tipo nuovo inventato domani da Anthropic verrebbe rispedito senza che
+ *     nessuno abbia deciso che si puo'.
+ *
+ * ⇒ Si conserva cio' che si e' capito, e si lascia cadere il resto. Un elenco
+ * chiuso invecchia in modo VISIBILE: quando servira' un terzo tipo, mancherA'
+ * e lo si vedra' — mentre un elenco aperto sbaglia in silenzio.
+ */
+export const TALOS_BLOCCHI_DA_CONSERVARE: readonly string[] = Object.freeze([
+    'server_tool_use',
+    'tool_search_tool_result',
+])
+
+export function talosBlocchiDaConservare(contenuto: unknown): readonly unknown[] {
+    if (!Array.isArray(contenuto)) return []
+    return contenuto.filter((blocco) => {
+        if (typeof blocco !== 'object' || blocco === null) return false
+        const tipo = (blocco as { type?: unknown }).type
+        return typeof tipo === 'string' && TALOS_BLOCCHI_DA_CONSERVARE.includes(tipo)
+    })
+}
+
+function listaPerIlFilo(
+    tools: NonNullable<Parameters<typeof talosToolsForAnthropic>[0]>,
+): { lista: unknown[], nome: string } {
+    if (!APERTURA_A_GRADI_ANTHROPIC) {
+        return { lista: talosToolsForAnthropic(tools), nome: 'anthropic/interi' }
+    }
     const peso = talosPesoDegliAttrezzi(
         tools,
         (tool) => (talosToolsForAnthropic([tool])[0] as { input_schema?: unknown }).input_schema,
     )
     return talosConvieneAprireAGradi(tools, peso)
-        ? talosAttrezziAnthropicAGradi(tools, talosVaDifferito)
-        : talosToolsForAnthropic(tools)
+        ? { lista: talosAttrezziAnthropicAGradi(tools, talosVaDifferito), nome: 'anthropic/a-gradi' }
+        : { lista: talosToolsForAnthropic(tools), nome: 'anthropic/sotto-soglia' }
+}
+
+function attrezziDaSpedire(tools: NonNullable<Parameters<typeof talosToolsForAnthropic>[0]>): unknown[] {
+    const { lista, nome } = listaPerIlFilo(tools)
+    /*
+     * ⭐⭐ L'IMPRONTA DEL PROFILO, calcolata QUI perché è qui che nasce il
+     * prefisso — Fase 1.1.
+     *
+     * La cache dei prompt combacia per prefisso esatto e gli attrezzi stanno
+     * davanti a tutto: attrezzi → sistema → messaggi. Se questa lista cambia
+     * fra due messaggi della stessa conversazione, muore l'INTERA cache, non la
+     * parte cambiata — e finora sarebbe successo in silenzio, arrivando come un
+     * numero di token più alto senza nessuno che sappia perché.
+     *
+     * ⛔ In TALOS la causa probabile non è l'apertura a gradi (i differiti
+     * stanno già nel prefisso come abbozzi: la lista non cresce a conversazione
+     * aperta). È un PERMESSO cambiato: concedere o togliere un potere cambia
+     * quali attrezzi vengono offerti, quindi il prefisso, quindi la cache.
+     *
+     * Costa un `JSON.stringify` di una lista che stiamo comunque per
+     * serializzare per spedirla.
+     */
+    const esito = talosRegistraProfilo(talosProfiloCompilato(nome, lista, tools))
+    if (!esito.sopravvive) {
+        // ⛔ `warn` e non `info`: `console.info` non arriva in logcat, ed è già
+        // costato un giro di diagnosi a vuoto in questo progetto.
+        console.warn(`talos: il prefisso è cambiato, cache dei prompt persa — ${esito.perche}`)
+    }
+    return lista
 }
 
 /**
@@ -244,6 +467,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             .map((part) => part.text ?? '')
             .join('')
         const toolCalls = parseAnthropicToolCalls(parsed.data.content)
+        const blocchiDelFornitore = talosBlocchiDaConservare(parsed.data.content)
         // A turn that only requests tools carries no text — refusing it as
         // malformed would break the loop before it began.
         //
@@ -258,6 +482,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             finishReason: parsed.data.stop_reason ?? null,
             usage: talosNumericUsage(parsed.data.usage),
             ...(toolCalls.length ? { toolCalls } : {}),
+            ...(blocchiDelFornitore.length ? { providerBlocks: blocchiDelFornitore } : {}),
         }
     },
     // F2-T4: native fetch SSE. Anthropic permits browser-origin calls only with
