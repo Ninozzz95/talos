@@ -53,8 +53,29 @@ export function talosRacconto(corsa: TalosCorsaDelPilota): string {
         ? `\nWhat happened, step by step:\n${corsa.storia.join('\n')}`
         : ''
     const tempo = ` (${corsa.passi} steps, ${Math.round(corsa.millisecondi / 1000)}s)`
+    /*
+     * ⭐⭐⭐ «Done» SOLO SE L'HA DETTO — e prima lo diceva anche a chi si era
+     * arreso.
+     *
+     * `fine` significava due cose opposte, «obiettivo raggiunto» e «obiettivo
+     * impossibile», e questa riga le raccontava tutte e due come «Done». Il
+     * modello leggeva «Done» dalla corsa che si era appena arresa, e lo
+     * ripeteva alla persona.
+     *
+     * ⛔ E il ramo che conta di piu' e' il terzo: un `fine` SENZA esito non
+     * diventa «Done». E' un modello che non ha risposto alla domanda, e dare
+     * per riuscito cio' che non e' stato dichiarato e' il difetto di partenza
+     * rimesso dentro dalla porta di servizio.
+     */
     if (corsa.fine.motivo === 'fine') {
-        return `Done${tempo}. ${corsa.fine.testo ?? ''}${passi}`.trim()
+        const detto = corsa.fine.testo ?? ''
+        if (corsa.fine.esito === 'fallito') {
+            return `GAVE UP${tempo}. TALOS could not reach the goal and stopped by itself. ${detto} ⛔ Do NOT say it is done. Tell the user where it got to and what stopped it.${passi}`.trim()
+        }
+        if (corsa.fine.esito === 'riuscito') {
+            return `Done${tempo}. ${detto}${passi}`.trim()
+        }
+        return `Stopped${tempo}, without saying whether it worked. ${detto} ⛔ Do NOT claim success: it was never claimed. Tell the user what the steps below show, and ask them to check.${passi}`.trim()
     }
     /*
      * ⛔ Il motivo si dice al modello in una forma che lo fa AGIRE, come ogni
