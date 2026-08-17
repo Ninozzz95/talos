@@ -14,6 +14,7 @@ import {
 } from '@/lib/intenti/registro'
 import { talosInvioPerPacchetto } from '@/lib/intenti/registro'
 import { talosRisolviContatto } from '@/lib/intenti/rubrica'
+import type { TalosPremessaEsito } from '@/lib/tools/registry'
 import { TalosDeviceBridge } from '@/lib/device/devicePlugin'
 import { TalosSchermoBridge, type TalosEsitoInvio } from '@/lib/device/ponteSchermo'
 import {
@@ -1014,6 +1015,59 @@ async function talosPremiInvioFile(
     }
 }
 
+
+/**
+ * ⭐⭐⭐ LA PRIMA PREMESSA VERA: «il contatto esiste?», chiesta PRIMA della scheda.
+ *
+ * Fino a ieri la domanda si faceva dentro `run`, cioe DOPO che la persona aveva
+ * gia toccato «Consenti». Cioe: le si chiedeva di autorizzare un invio a
+ * qualcuno che non e in rubrica, e solo dopo le si diceva che non c'era.
+ *
+ * ⛔ E la rubrica aveva GIA la risposta giusta a tre stati — e stato il difetto
+ * del 2026-08-13, trovato in quattro strati in un giorno solo. Qui non si fa
+ * altro che portarla fino all'effetto senza schiacciarla:
+ *
+ *   uno, molti .................... presente  (chi sia, lo decide `run`)
+ *   nessuno ....................... assente   ho guardato TUTTA la rubrica
+ *   permesso-mancante, ponte-chiuso  ignoto   NON ho potuto guardare
+ *
+ * ⛔⛔ La riga che conta e la terza. Senza il permesso ai contatti TALOS non sa
+ * se «Marco» esista: dire «non esiste» a chi ce l'ha in rubrica e una bugia
+ * detta con l'aria di aver controllato. `ignoto` prosegue, e sara `run` a
+ * spiegare che manca il permesso.
+ */
+export async function talosPremessaContatto(
+    nome: string | undefined,
+): Promise<TalosPremessaEsito> {
+    // Nessun destinatario nominato: non c'e nessuna premessa da controllare.
+    if (!nome?.trim()) return { stato: 'presente' }
+    let esito
+    try {
+        esito = await talosRisolviContatto(nome)
+    }
+    catch {
+        return { stato: 'ignoto', perche: 'the contact list could not be read' }
+    }
+    if (esito.stato === 'uno' || esito.stato === 'molti') return { stato: 'presente' }
+    if (esito.stato === 'nessuno') {
+        return {
+            stato: 'assente',
+            perche: `"${nome}" is not in the contact list`,
+        }
+    }
+    /*
+     * ⛔ `permesso-mancante` e `ponte-chiuso` sono IGNOTO, non ASSENTE: sono
+     * fallimenti di lettura, e un fallimento di lettura non e la prova che una
+     * persona non esista.
+     */
+    return {
+        stato: 'ignoto',
+        perche: esito.stato === 'permesso-mancante'
+            ? 'the contact permission is not granted, so the list could not be read'
+            : 'the contact bridge did not answer',
+    }
+}
+
 function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
     return defineTalosTool({
         name: 'invia_file',
@@ -1082,6 +1136,12 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
             contatto: z.string().optional().describe('Who to send it to.'),
             invia: z.boolean().optional().describe('False = prepare only. Omitted = send.'),
         }),
+        /*
+         * ⛔ Chiesta PRIMA della scheda di consenso: se il destinatario non e in
+         * rubrica non ha senso far autorizzare l'invio, e ogni scheda spesa cosi
+         * insegna a toccare «Consenti» senza leggere.
+         */
+        premesse: (input: { contatto?: string }) => talosPremessaContatto(input.contatto),
         async run(input): Promise<TalosToolResult> {
             /*
              * ⛔⛔ LA SECONDA SORGENTE, e passa PRIMA della libreria.
