@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
     /** Le azioni che la persona ha DECISO, distinte dai valori ereditati. */
     toolsChosen: [] as string[],
     toolPermissions: [] as Array<Record<string, string>>,
+    shell: [] as Array<Record<string, unknown>>,
     secrets: {} as Record<string, boolean>,
     account: { display_name: '' },
     savedNames: [] as string[],
@@ -40,6 +41,9 @@ vi.mock('@/stores/settings', () => ({
             for (const action of Object.keys(patch)) {
                 if (!state.toolsChosen.includes(action)) state.toolsChosen.push(action)
             }
+        }),
+        setShell: vi.fn(async (patch: Record<string, unknown>) => {
+            state.shell.push(patch)
         }),
     }),
 }))
@@ -109,6 +113,7 @@ beforeEach(() => {
     state.memoryExisting = false
     state.toolsChosen.length = 0
     state.toolPermissions.length = 0
+    state.shell.length = 0
     for (const key of Object.keys(state.secrets)) delete state.secrets[key]
 })
 
@@ -559,6 +564,85 @@ describe('first-run setup', () => {
         // exist on this device yet.
         expect(wrapper.text()).not.toMatch(/roadmap/i)
         expect(wrapper.text()).not.toMatch(/step \d of 6/i)
+        wrapper.unmount()
+    })
+})
+
+
+/**
+ * ⭐⭐⭐ «SEMPRE» ACCENDE ANCHE LA LIBRERIA — owner 2026-08-17.
+ *
+ * «se imposto sempre in "decidi tutto in un colpo", lo switch "Consenti alle
+ * chat di usare la Libreria" in predefiniti AI deve essere abilitato».
+ *
+ * ⛔ Il difetto che chiude: chi tocca «sempre» ha appena detto, con un gesto
+ * solo, che TALOS può leggere, scrivere e uscire in rete — e poi trovava la
+ * propria Libreria staccata, per un interruttore in un'altra schermata che non
+ * aveva mai visto. Un consenso ampio seguito da una capacità spenta si legge
+ * come un guasto, non come una scelta.
+ */
+describe('⭐⭐⭐ il consenso ampio accende la Libreria', () => {
+    // ⛔ La stessa navigazione dei test qui sopra, non una mia: se l'intro
+    // cambia forma, questi si rompono INSIEME agli altri invece di divergere.
+    async function finoAllAutonomia() {
+        const wrapper = await mountSetup()
+        await wrapper.get('[data-testid="talos-setup-name"]').setValue('Nino')
+        for (let step = 0; step < 3; step += 1) {
+            await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+            await flushPromises()
+        }
+        return wrapper
+    }
+
+    it('⛔⛔ «sempre» accende «Consenti alle chat di usare la Libreria»', async () => {
+        const wrapper = await finoAllAutonomia()
+        await wrapper.get('[data-testid="talos-tool-permissions-all-allow"]').trigger('click')
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+
+        expect(state.shell).toEqual([{ library_context_enabled: true }])
+        wrapper.unmount()
+    })
+
+    /*
+     * ⛔ IL VERSO CONTRARIO, e sono i due che tengono onesta la regola.
+     * «chiedi» vuol dire «domandamelo di volta in volta», e attaccare la
+     * Libreria a OGNI messaggio non è una domanda che si può fare di volta in
+     * volta: è ambientale. Accenderla lì vorrebbe dire dare per concessa
+     * proprio la cosa su cui la persona ha chiesto di essere interpellata.
+     */
+    it('⛔ ma «chiedi» NON la accende', async () => {
+        const wrapper = await finoAllAutonomia()
+        await wrapper.get('[data-testid="talos-tool-permissions-all-ask"]').trigger('click')
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+
+        expect(state.shell).toEqual([])
+        wrapper.unmount()
+    })
+
+    it('⛔ e «nega» nemmeno', async () => {
+        const wrapper = await finoAllAutonomia()
+        await wrapper.get('[data-testid="talos-tool-permissions-all-deny"]').trigger('click')
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+
+        expect(state.shell).toEqual([])
+        wrapper.unmount()
+    })
+
+    /*
+     * ⛔ E se la scheda non viene toccata affatto, non si scrive NIENTE — né i
+     * permessi né la Libreria. È la regola che c'era già: scrivere passando
+     * oltre marcherebbe come «scelto» un valore che nessuno ha guardato.
+     */
+    it('⛔ e passando oltre senza toccare non si scrive niente', async () => {
+        const wrapper = await finoAllAutonomia()
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+
+        expect(state.shell).toEqual([])
+        expect(state.toolPermissions).toEqual([])
         wrapper.unmount()
     })
 })
