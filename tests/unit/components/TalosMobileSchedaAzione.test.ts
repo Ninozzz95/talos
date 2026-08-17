@@ -709,3 +709,66 @@ describe('⭐⭐⭐ due file omonimi si scelgono col DITO', () => {
         expect(righe(w)).toHaveLength(0)
     })
 })
+
+
+/**
+ * ⭐⭐⭐ IL PDF SI APRE — e prima la scheda era un'etichetta MUTA.
+ *
+ * MISURATO sul Pad il 2026-08-17. TALOS genera un PDF, lo salva in Libreria, e
+ * la scheda lo mostra: «TALOS in tre righe.pdf · Documento · 10 KB». Toccandola
+ * non succede NIENTE. Owner: «il PDF bisogna poterlo visualizzare dentro la
+ * app».
+ *
+ * ⛔ Un'etichetta che sembra un comando e non lo e' e' peggio di un'etichetta e
+ * basta: chi legge tocca, non succede niente, e conclude che l'app e' rotta.
+ *
+ * ⛔ E il visualizzatore rende con `PdfRenderer` del framework Android — zero
+ * dipendenze, zero `.so`, zero byte nel grafo d'avvio, che ha un tetto di
+ * 605.000. Una libreria ne avrebbe portati ~16 MB di nativo; pdf.js dentro la
+ * WebView avrebbe pagato proprio su quel tetto.
+ */
+describe('⭐⭐⭐ la scheda di un PDF si apre', () => {
+    const conPdf = (extra: Record<string, unknown> = {}) => mount(TalosMobileSchedaAzione, {
+        props: {
+            metadata: {
+                cards: [{
+                    tipo: 'creato',
+                    titolo: 'TALOS in tre righe.pdf',
+                    genere: 'Documento',
+                    dettaglio: '10 KB',
+                    pdf: 'content://ai.talos/files/abc.pdf',
+                    ...extra,
+                }],
+            },
+        },
+    })
+    const riga = (w: ReturnType<typeof mount>) => w.get('[data-testid="talos-scheda-creato"]')
+
+    it('⛔⛔ col pdf la riga e un BOTTONE, non un riquadro muto', () => {
+        expect(riga(conPdf()).element.tagName).toBe('BUTTON')
+    })
+
+    it('⛔ e porta il chevron, cosi si vede che si tocca', () => {
+        expect(riga(conPdf()).text()).toContain('›')
+    })
+
+    /*
+     * ⛔ AL CONTRARIO, ed e il caso che tiene onesta la riga sopra: una scheda
+     * SENZA pdf e senza rotta resta un riquadro. Se diventasse un bottone,
+     * torneremmo al difetto di partenza — un comando che non fa niente.
+     */
+    it('⛔⛔ ma senza pdf e senza rotta NON e un bottone', () => {
+        const w = mount(TalosMobileSchedaAzione, {
+            props: {
+                metadata: {
+                    cards: [{ tipo: 'creato', titolo: 'nota.txt', genere: 'Documento' }],
+                },
+            },
+        })
+        expect(w.get('[data-testid="talos-scheda-creato"]').element.tagName).toBe('DIV')
+    })
+
+    it('⛔ il visualizzatore NON c e finche nessuno tocca', () => {
+        expect(conPdf().find('[data-testid="talos-pdf-viewer"]').exists()).toBe(false)
+    })
+})

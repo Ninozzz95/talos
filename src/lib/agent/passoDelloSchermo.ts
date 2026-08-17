@@ -214,6 +214,46 @@ export interface TalosAzione {
      * mancante — non come un errore fatale.
      */
     perche?: string
+    /**
+     * ⭐⭐⭐ SOLO PER `fine`: ce l'ha fatta, o si è arreso?
+     *
+     * ## Il difetto, ed era una bugia detta AD ALTA VOCE
+     *
+     * `fine` significava due cose opposte — «obiettivo raggiunto» e «obiettivo
+     * impossibile, mi fermo» — e la fine della corsa non le distingueva. Quindi
+     * `talosFraseDiFine` diceva **«Fatto.»** a chi ascolta e `talosRacconto`
+     * diceva **«Done»** al modello, anche quando il modello si era appena
+     * arreso. Due bugie da una riga sola, e la prima esce dall'altoparlante
+     * mentre TALOS non è nemmeno a schermo.
+     *
+     * ⛔ È la stessa famiglia dell'«inviato ✓» su un messaggio fermo nel campo,
+     * e stava nel pilota da prima.
+     *
+     * ## Perché un campo, e non «lo si deduce dal testo»
+     *
+     * Dedurlo vorrebbe dire leggere una frase in italiano scritta dal modello e
+     * indovinare se è contenta. Il `terminate` dello stato dell'arte porta lo
+     * stato — `success` o `failure` — ed è la ragione per cui funziona: chi si
+     * arrende lo DICHIARA, e chi legge non deve interpretare.
+     *
+     * ## ⛔⛔ E i due valori NON valgono uguale
+     *
+     * La letteratura del 2026 dice che gli agenti «terminate execution without
+     * explicitly verifying that the required artifacts or persisted state
+     * changes were actually produced»: un `success` autodichiarato **non è una
+     * prova**, è una pretesa. È la regola di casa — *«il modello ha detto» non è
+     * «il sistema ha osservato»* — vista da dentro il pilota.
+     *
+     * ⇒ `fallito` si crede: nessuno si dichiara fallito per sbaglio, e chi si
+     * arrende sta dando l'informazione più utile della corsa.
+     * ⇒ `riuscito` è la sua opinione, e la frase finale non deve trattarla come
+     * una verifica.
+     *
+     * ⛔ Il ripiego NON è «riuscito». Un `fine` senza esito è un modello che non
+     * ha risposto alla domanda, e dare per riuscito ciò che non è stato
+     * dichiarato è esattamente il difetto di partenza.
+     */
+    esito?: 'riuscito' | 'fallito'
 }
 
 /**
@@ -386,6 +426,15 @@ export function talosLeggiAzione(
             ...(valore !== undefined ? { valore } : {}),
             ...(typeof o.perche === 'string' && o.perche.trim()
                 ? { perche: o.perche.trim() }
+                : {}),
+            /*
+             * ⛔ Si legge SOLO per `fine`, e solo se e uno dei due valori. Un
+             * `esito` su un tocco non vuol dire niente, e un valore inventato
+             * non si traduce in «riuscito»: sparisce, e chi legge trattera la
+             * corsa come non dichiarata.
+             */
+            ...(azione === 'fine' && (o.esito === 'riuscito' || o.esito === 'fallito')
+                ? { esito: o.esito }
                 : {}),
         },
     }

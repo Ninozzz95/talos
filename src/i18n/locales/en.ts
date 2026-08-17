@@ -1731,6 +1731,9 @@ export const TALOS_EN_MESSAGES = {
         privilegedBridge: 'The bridge that lets TALOS act on the phone is no longer running: this happens after every restart. Start it from Settings → Phone control.',
     },
     library: {
+        pdfNonSiApre: 'TALOS could not open this PDF.',
+        pdfPrecedente: 'Previous page',
+        pdfSuccessiva: 'Next page',
         /* A row that will not open is a file the person believes they have. */
         fileMissing: 'This file is no longer on this device',
         title: 'Library',

@@ -61,9 +61,14 @@ function messaggio(extra: Record<string, unknown> = {}) {
     return {
         id: 'm1',
         role: 'assistant' as const,
-        content: '1 richiesta di autorizzazione per uno strumento è in attesa.',
+        // ⛔ Dal 2026-08-17 il contenuto è la RISPOSTA, non l'avviso: la frase
+        // dell'avviso la mette il chip, e il numero arriva dai metadati.
+        content: 'Genero il PDF e lo salvo in Libreria.',
         createdAt: '2026-08-08T06:33:00.000Z',
-        metadata: { tool_authorization_pending_checkpoint_id: CHECKPOINT },
+        metadata: {
+            tool_authorization_pending_checkpoint_id: CHECKPOINT,
+            tool_authorization_pending_count: 1,
+        },
         ...extra,
     }
 }
@@ -134,5 +139,90 @@ describe('la riga dell’attesa dice la verità di adesso', () => {
         const congelata = '1 richiesta di autorizzazione per uno strumento è in attesa.'
         expect(congelata).toContain('in attesa')
         expect(/<button/i.test(congelata)).toBe(false)
+    })
+})
+
+
+/**
+ * ⭐⭐⭐ LA RISPOSTA SI LEGGE, E L'AVVISO E' UN CHIP.
+ *
+ * ## Il difetto, fotografato dall'owner il 2026-08-17
+ *
+ * «bisogna levare questo avviso che spunta, dovrebbe spuntare nella chat ma
+ * invece si vede questa orribile enorme sezione: e' una cosa che dice la chat
+ * ma viene stampata in questo chip».
+ *
+ * Erano DUE difetti sovrapposti, e il secondo peggiore:
+ *
+ *   1. `chatController` incollava la frase dell'avviso DENTRO il testo del
+ *      messaggio, e il riquadro mostrava `message.content` — cioe' la prosa del
+ *      modello PIU' l'avviso, tutto dentro un bottone.
+ *   2. ⛔ Il bottone stava AL POSTO di `TalosMobileMessageContent`, con un
+ *      `v-else`: la risposta non veniva nemmeno renderizzata. Niente markdown,
+ *      niente elenchi, niente grassetti. Chi legge non vede un avviso: vede la
+ *      sua risposta rovinata.
+ */
+describe('⭐⭐⭐ l attesa non mangia la risposta', () => {
+    /*
+     * ⛔ Il `$t` qui rende chiave E parametri: i test sopra confrontano la
+     * chiave nuda e restano verdi, ma senza i parametri non si potrebbe
+     * provare che il NUMERO arriva davvero dai metadati — che e' meta della
+     * cura.
+     */
+    const conAttesa = (metadata: Record<string, unknown>) => mount(TalosMobileMessageList, {
+        props: {
+            messages: [{
+                ...messaggio(),
+                content: 'Genero il **PDF** e lo salvo in Libreria.',
+                metadata,
+            }] as never,
+            sending: false,
+            pendingAuthorizationIds: [CHECKPOINT],
+        },
+        global: {
+            stubs: { teleport: true },
+            mocks: {
+                $t: (chiave: string, p?: Record<string, unknown>) => (p
+                    ? `${chiave} ${JSON.stringify(p)}`
+                    : chiave),
+            },
+        },
+    })
+    const DUE = { tool_authorization_pending_checkpoint_id: CHECKPOINT, tool_authorization_pending_count: 2 }
+
+    /*
+     * ⛔ Si guarda l'EFFETTO, non il componente: il renderer arriva con un
+     * `import()` pigro e cercarlo per nome direbbe «non c'e'» anche quando la
+     * cura funziona. Quello che conta e' che la risposta sia sulla pagina E
+     * fuori dal chip — prima non era ne' l'uno ne' l'altro.
+     */
+    it('⛔⛔ la risposta resta sulla pagina, fuori dal riquadro', () => {
+        const w = conAttesa(DUE)
+        expect(w.text()).toContain('Libreria')
+        const chip = w.get('[data-testid="talos-authorization-pending-open"]')
+        expect(chip.text()).not.toContain('Libreria')
+    })
+
+    it('⛔ e il chip NON contiene la risposta', () => {
+        const chip = conAttesa(DUE).get('[data-testid="talos-authorization-pending-open"]')
+        expect(chip.text()).not.toContain('Genero')
+        expect(chip.text()).not.toContain('Libreria')
+    })
+
+    it('⛔ il chip porta il numero, e viene dai METADATI', () => {
+        const chip = conAttesa(DUE).get('[data-testid="talos-authorization-pending-open"]')
+        expect(chip.text()).toContain('2')
+    })
+
+    /*
+     * ⛔ Un metadato mancante NON diventa «zero in attesa»: il chip esiste solo
+     * quando un'attesa c'e', e «0 richieste» sarebbe una frase falsa dentro il
+     * riquadro che quella richiesta rappresenta.
+     */
+    it('⛔ e senza il numero non dice ZERO', () => {
+        const chip = conAttesa({ tool_authorization_pending_checkpoint_id: CHECKPOINT })
+            .get('[data-testid="talos-authorization-pending-open"]')
+        expect(chip.text()).toContain('1')
+        expect(chip.text()).not.toContain(':0')
     })
 })
