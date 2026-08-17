@@ -27,18 +27,18 @@
 
 TALOS is an **agentic workspace built around the phone itself**.
 
-It can use a frontier model through your own API key, a local Ollama endpoint, or a GGUF model running inside the Android app. The same agent can search the web, work with your documents, remember things, manage tasks and calendar entries, create content, inspect device state, control Android features, and act inside other apps.
+It can use a frontier model through your own API key, an Ollama endpoint, or a GGUF model running inside the Android app. The same agent can search the web, work with documents, remember things, manage tasks and calendars, create content, inspect device state, control Android features, and act inside other apps.
 
-What makes TALOS different is not just *what* it can call. It is **how the harness controls those calls**:
+The harness controls those actions through:
 
-- **69 typed tools**, grouped into personal data, Library, web, creation, models, and device capabilities.
-- **Progressive tool disclosure** instead of dumping every schema into every model turn.
-- **Explicit `read / write / outbound` authority**, with `allow / ask / deny` and `ask` as the default.
-- **Postcondition verification** for actions that can be checked.
-- **Local-first state**: no TALOS backend sits between you and your data.
-- **Model independence**: OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Ollama, and local llama.cpp all sit behind the same product surface.
+- **69 typed tools** across personal data, Library, web, creation, models and device capabilities;
+- **progressive tool disclosure** instead of sending every schema on every turn;
+- explicit **`read / write / outbound` authority** with `allow / ask / deny`;
+- **postcondition verification** for observable actions;
+- **local-first state**, with no required TALOS backend;
+- model independence across OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Ollama and local llama.cpp.
 
-> TALOS tries to separate **“the model said it worked”** from **“the system observed that it worked.”**
+> TALOS separates **“the model said it worked”** from **“the system observed that it worked.”**
 
 ---
 
@@ -46,7 +46,7 @@ What makes TALOS different is not just *what* it can call. It is **how the harne
 
 <img src="docs/immagini/tablet-1-table.png" alt="TALOS comparing live sources on a tablet">
 
-TALOS can do research, compare sources, and present structured results without turning every task into a wall of chat.
+TALOS can research, compare sources and present structured results without turning every task into a wall of chat.
 
 <table>
 <tr>
@@ -55,9 +55,9 @@ TALOS can do research, compare sources, and present structured results without t
 <td width="33%"><img src="docs/immagini/phone-4-assistant-torch.png" alt="Torch controlled and verified by TALOS"></td>
 </tr>
 <tr>
-<td><b>Available over what you are doing</b><br>TALOS can surface as an assistant over the current app instead of forcing you through a separate workflow.</td>
+<td><b>Available over what you are doing</b><br>TALOS can surface over the current app instead of forcing a separate workflow.</td>
 <td><b>Acts on the phone</b><br>Alarms, settings, apps, media and other device capabilities are exposed as typed tools.</td>
-<td><b>Checks the result</b><br>Where a postcondition is observable, success is based on what happened — not only on a returned string.</td>
+<td><b>Checks the result</b><br>Where a postcondition is observable, success depends on what actually happened.</td>
 </tr>
 </table>
 
@@ -67,28 +67,28 @@ TALOS can do research, compare sources, and present structured results without t
 
 | Area | Capabilities |
 | --- | --- |
-| **Chat & reasoning** | Persistent multi-turn conversations, streaming, reasoning display, dictation, attachments, model switching |
-| **Web & research** | Web search/read plus durable research runs that can be listed, read, renamed, paused, resumed, cancelled and deleted |
-| **Library / Context Vault** | Keep files on-device, search them, read them into context, export them, rename/delete them and control how they may enter model context |
+| **Chat & reasoning** | Persistent conversations, streaming, reasoning display, dictation, attachments, model switching |
+| **Web & research** | Web search/read and durable research runs that can be listed, read, renamed, paused, resumed, cancelled and deleted |
+| **Library / Context Vault** | Keep files on-device, search/read them into context, export, rename/delete and control context access |
 | **Memory** | Search, write, update and delete typed personal/project memory |
-| **Personal workspace** | Notes, tasks and calendar reads/writes from the same agent surface |
-| **Creation** | Create documents and invoke configured image generation |
-| **Local models** | Discover, inspect, download and run GGUF models through the native llama.cpp engine |
+| **Personal workspace** | Notes, tasks and calendar reads/writes |
+| **Creation** | Document creation and configured image generation |
+| **Local models** | Discover, inspect, download and run GGUF models through native llama.cpp |
 | **Cloud / self-hosted models** | OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter and Ollama |
 | **Android control** | Device status, location, torch, media, vibration, volume, alarms, apps, screenshots, settings, speech, wallpaper, wake lock |
-| **System controls** | Wi-Fi, Bluetooth, airplane mode, power saving, Do Not Disturb and selected system settings where the device permits them |
+| **System controls** | Wi-Fi, Bluetooth, airplane mode, power saving, Do Not Disturb and selected system settings where permitted |
 | **Notifications & mail** | Unread-mail state, notification listing, reply and dismiss flows |
 | **Cross-app actions** | Accessibility-driven screen understanding and actions inside other Android apps |
-| **Voice** | Local wake word plus speech input/output surfaces |
-| **Diagnostics** | Device/runtime diagnostics designed to report unavailable capabilities instead of silently pretending they exist |
+| **Voice** | Local wake word and speech input/output |
+| **Diagnostics** | Runtime capability checks that distinguish unavailable features from successful ones |
 
-Not every Android ROM exposes the same capabilities. TALOS treats **unsupported**, **denied**, **failed**, and **verified success** as different states.
+Android ROMs expose different capabilities. TALOS treats **unsupported**, **denied**, **failed** and **verified success** as distinct states.
 
 ---
 
 # One agent, many model backends
 
-TALOS is deliberately not tied to one model vendor.
+TALOS is not tied to one model vendor.
 
 | Backend | Connection |
 | --- | --- |
@@ -98,49 +98,29 @@ TALOS is deliberately not tied to one model vendor.
 | **DeepSeek** | Your API key |
 | **OpenRouter** | Your API key |
 | **Ollama** | Your endpoint |
-| **Local** | GGUF through the llama.cpp engine embedded in the Android app |
+| **Local** | GGUF through llama.cpp embedded in the Android app |
 
-The provider adapters are lazy-loaded: a conversation using a local model does not need to pull every cloud-provider implementation into the initial application path.
+Provider adapters are lazy-loaded, so a local conversation does not need every cloud-provider implementation in the initial application path.
 
 ## Local really means local
 
-With a compatible GGUF loaded, model inference happens on the device.
+With a compatible GGUF loaded, inference happens on-device.
 
-The local path includes:
+The local path includes native llama.cpp integration, device/model-specific runtime tuning, KV-cache selection, persistent prefix-state caching, local tool-schema simplification for constrained grammars and progressive tool disclosure.
 
-- native llama.cpp integration;
-- device/model-specific runtime tuning;
-- KV-cache selection;
-- persistent prefix-state caching;
-- local tool-schema simplification for constrained grammars;
-- progressive tool disclosure to avoid paying the full tool surface on every turn.
+Local and cloud models can use different harness settings because they operate under different performance constraints.
 
-A local model and a cloud model do **not** need identical harness settings. TALOS already treats the local path as a different performance envelope instead of pretending that one prompt fits every model.
-
----
-
-# Running a model on the phone, without pretending
-
-Most apps that "support local models" hand you a list and let you find out the
-hard way. A 3 GB download either runs, or swaps, or gets killed by the kernel
-halfway through your first sentence — and you learn which by trying.
-
-TALOS answers the question **before** the download.
+## Know whether a model fits before downloading it
 
 <img src="docs/immagini/tablet-6-local-catalogue.png" alt="Browsing Hugging Face with a fits-in-memory filter">
 
-Hugging Face, browsable from the phone, filtered by what **this** device can
-actually hold. Every row carries its own memory bar and its own verdict, and
-`Fits in memory` is a filter you can switch on — not a label you read afterwards.
-Publisher, licence, parameter band and popularity are there because picking a
-model is a real decision, not a lucky dip.
+TALOS can browse Hugging Face from the phone and filter models by what **this device** can actually hold. Each model includes a memory verdict, while publisher, licence, parameter band and popularity help make the choice explicit.
 
-## Every quantisation, measured against your RAM
+### Every quantisation, measured against your RAM
 
 <img src="docs/immagini/tablet-5-local-quantisations.png" alt="Quantisations of one model, each with its memory bar and measured speed">
 
-One repository, its quantisations side by side. The bar is not a size comparison
-— it is **your** memory, with the model in it.
+Quantisations are shown against the device's actual memory:
 
 ```text
 Q4_K_M   2.6 GB   Memory: little room · about 6.6 tokens/second
@@ -149,32 +129,19 @@ Q4_K_M   2.6 GB   Memory: little room · about 6.6 tokens/second
 Q5_K_S   2.8 GB   Memory is tight
 ```
 
-Three things that row does, and each one exists because the alternative was
-misleading:
+TALOS reports:
 
-- **It says what is left**, not what is used. `810 MB of RAM left once it is
-  loaded` is the number that decides whether the phone stays usable.
-- **It names the context it assumed.** A model checked at 4096 tokens needs more
-  at 16k, and a verdict that hides its assumption is a verdict you cannot trust.
-- **It reports the speed it measured**, on this device, not a figure from a
-  spec sheet.
+- **RAM left after loading**, not just model size;
+- the **context length** assumed by the estimate;
+- **measured speed** on the device.
 
-> Peak RSS lies about local models: `llama.cpp` maps the weights with `mmap`, and
-> those pages are discardable. Measured on one 1.79 GiB model — 3,869 MB peak,
-> but only **2,031 MB** that cannot be dropped. TALOS sizes against the number
-> that matters, which is why models other apps refuse will run here.
+> Peak RSS can misrepresent local-model memory because `llama.cpp` maps weights with `mmap`. On one measured 1.79 GiB model, peak RSS was 3,869 MB while only **2,031 MB** could not be dropped. TALOS sizes against the latter.
 
-TALOS also surfaces what Hugging Face says about the file itself — a flagged
-upload is shown as flagged, before you download it, not after.
+Hugging Face file warnings are also surfaced before download.
 
-## And then it is just the model you are talking to
+Once loaded, a local model uses the same conversation surface, tools and permission vocabulary as a frontier API model.
 
-Once a model is loaded it uses the same conversation surface, the same tools and
-the same permission vocabulary as a frontier model behind an API key. The chip in
-the composer is the only thing that changes.
-
-**Measured on a OnePlus Pad 3**, `Holo-3.1-4B Q4_K_M` (4.84B parameters), at 8
-threads:
+**Measured on a OnePlus Pad 3**, `Holo-3.1-4B Q4_K_M` (4.84B parameters), at 8 threads:
 
 | | tokens/second |
 | --- | ---: |
@@ -182,31 +149,21 @@ threads:
 | prefill, 2048 tokens | **58.3** ± 1.2 |
 | generation, 128 tokens | **12.2** ± 0.1 |
 
-One agent step — 2,000 tokens in, 100 out — takes **43.3 s** on that model, and
-35.3 s on a Qwen2.5-3B that has never been trained for device control. The 4B
-scores 71.0% on AndroidWorld. That trade is the kind of choice TALOS puts in
-your hands instead of making for you.
+One agent step — 2,000 tokens in, 100 out — takes **43.3 s** on that model and **35.3 s** on a Qwen2.5-3B not trained for device control. The 4B scores **71.0% on AndroidWorld**.
 
-**This is an active engineering front, not a finished one.** Speculative
-decoding, an NPU backend, and per-phase thread counts are measured work in
-progress — and the rule for all of them is the project's rule: nothing is true
-until the device says so, thermal state included.
+Speculative decoding, an NPU backend and per-phase thread counts remain measured work in progress. Thermal state is part of those measurements.
 
 ---
 
 # The harness is the product
 
-A model is only one part of an agent.
+TALOS currently exposes **69 typed tools**. With all available tools enabled, 68 definitions are offered to the model — image generation appears only when configured — weighing **45,116 bytes (~12,194 tokens)** per turn.
 
-TALOS currently exposes **69 typed tools**. Switching all of them on offers 68 definitions to the model — image generation appears only when an image provider is configured, because a tool that is offered and always fails is worse than one that is not offered — and those definitions weigh **44,926 bytes (~12,142 tokens)** of tool surface per turn.
-
-That measurement is not a claim you have to take on trust:
+You can reproduce the measurement:
 
 ```bash
 npx vitest run tests/unit/tools/pesoDegliSchemi.test.ts
 ```
-
-So TALOS does not blindly send all of them.
 
 ```text
                     USER
@@ -243,36 +200,35 @@ So TALOS does not blindly send all of them.
 
 ## Progressive tool disclosure
 
-TALOS has measured two separate ways of reducing tool overhead:
+When supported, TALOS uses native deferred loading. Otherwise, cloud and local models can receive a **compact catalog** and request full schemas on demand.
 
-- When a provider offers native deferred loading, TALOS can keep most tools out of the active prompt surface until needed.
-- For other providers and local models, TALOS can expose a **compact catalog** and reveal full schemas on demand.
-
-With progressive disclosure on, four tools stay in front of the model and the rest are revealed on demand. The same test measures what that leaves in the prefix:
+With progressive disclosure enabled:
 
 ```text
-44,926 bytes  (68 tools)
+45,116 bytes  (68 tools)
       ↓
  1,868 bytes  (4 tools)
 ```
 
-— about a **96% reduction** in what the model pays for on every turn. Opening a tool costs one extra round trip, once, the first time it is needed.
+That is about a **96% reduction** in persistent tool surface. Revealing a tool costs one additional round trip the first time it is needed.
 
-The important part is not only price. Large tool sets can also make smaller models select the wrong capability.
+Besides reducing prompt cost, smaller tool surfaces can help constrained models avoid selecting the wrong capability.
 
 ---
 
-# It acts under explicit authority
+# Authority, verification and data safety
 
-TALOS uses one permission vocabulary everywhere:
+## Explicit authority
+
+Every capability uses the same permission vocabulary:
 
 | Power | Meaning |
 | --- | --- |
-| **read** | The capability may observe user/device/private state |
-| **write** | The capability may change local state or cause an action |
-| **outbound** | Data or an action may cross the device boundary |
+| **read** | Observe user/device/private state |
+| **write** | Change local state or cause an action |
+| **outbound** | Send data or an action across the device boundary |
 
-Each one can be:
+Each can be:
 
 ```text
 allow
@@ -280,7 +236,7 @@ ask
 deny
 ```
 
-The default is:
+Default:
 
 ```text
 read     → ask
@@ -288,19 +244,13 @@ write    → ask
 outbound → ask
 ```
 
-An approval is bound to the validated tool input rather than to a vague natural-language promise.
+Approval is bound to validated tool input, so choosing a tool and being authorized to execute it are separate decisions.
 
-That means the model choosing a tool and the executor being allowed to run it are two different decisions.
+## Postcondition verification
 
----
+A tool returning `"success": true` does not necessarily prove the world changed.
 
-# It verifies actions instead of trusting the model
-
-A tool returning `"success": true` is not necessarily evidence that the world changed.
-
-TALOS tools can define a postcondition verifier.
-
-For a cross-app send flow, for example, evidence can include things such as:
+Tools can define postcondition verification. For a cross-app send flow, evidence might include:
 
 ```text
 input field emptied
@@ -308,7 +258,7 @@ message appeared in the conversation
 send control is no longer in the previous state
 ```
 
-A result can therefore become:
+Results can therefore become:
 
 ```text
 VERIFIED SUCCESS
@@ -316,15 +266,11 @@ FAILED
 UNABLE TO CONFIRM
 ```
 
-Those states are intentionally different.
+This also helps when a request times out after an external side effect already occurred: TALOS can inspect the resulting state instead of blindly retrying and duplicating the action.
 
-The reverse case matters too: a request can time out after an external side effect actually occurred. TALOS can verify the resulting state instead of blindly retrying and duplicating the action.
+## Private and untrusted data
 
----
-
-# Private and untrusted data are tracked differently
-
-TALOS already distinguishes content coming from:
+TALOS distinguishes content originating as:
 
 ```text
 user-direct
@@ -332,47 +278,36 @@ derived
 external
 ```
 
-and tracks whether an agent chain has seen:
+and tracks whether an agent chain has encountered:
 
 ```text
 private data
 untrusted external content
 ```
 
-before allowing a later transmitting capability.
+before a later transmitting capability is allowed.
 
-This is designed around a simple rule:
+Reading private data, consuming untrusted content and then transmitting outward is treated as more dangerous than any one operation alone.
 
-> Reading something private, reading something untrusted, and then sending data outward is materially more dangerous than any one of those operations alone.
-
-Memories and documents are context — **not authority**. Content stored by TALOS cannot override the security policy simply because it was remembered earlier.
+Memories and documents are **context, not authority**: stored content cannot override the security policy.
 
 ---
 
-# Local-first is an architecture, not a toggle
+# Local-first by architecture
 
 **There is no TALOS backend today.**
 
-TALOS does not proxy your conversations through a TALOS server.
+TALOS does not proxy conversations through a TALOS server. Conversations, Library content, memory and settings stay on-device. Cloud-model traffic goes directly to the configured provider; web capabilities contact the service required for the requested operation.
 
-Your local state — conversations, Library content, memory and settings — stays on the device. Cloud-model traffic goes to the provider you configured; web capabilities contact the service required for the operation you invoked.
+Three important paths work without a TALOS server:
 
-Three important paths can run without a TALOS server:
+- **Local inference** — GGUF models run directly through native llama.cpp.
+- **Local wake word** — “Hey TALOS” uses a small ONNX model without a cloud round trip.
+- **Local personal state** — Library, memories, notes, tasks and conversations live on-device.
 
-### Local inference
-The native llama.cpp engine can run a GGUF model directly on Android.
+A future optional backend/sync architecture is intended as **replication and execution infrastructure**, not as a requirement for TALOS to function locally.
 
-### Local wake word
-“Hey TALOS” is recognized by a small ONNX model prepared for the app. Wake-word recognition does not require a cloud round trip.
-
-### Local personal state
-Library, memories, notes, tasks and conversation state live on-device.
-
-A future optional sync/backend architecture is an active engineering direction, but it is intended to be **replication and execution infrastructure**, not a requirement for TALOS to exist locally.
-
----
-
-# Memory you can inspect
+## Memory you can inspect
 
 <table>
 <tr>
@@ -387,11 +322,9 @@ A future optional sync/backend architecture is an active engineering direction, 
 
 ---
 
-# Android is not just a display target
+# Android is an agent environment
 
-TALOS can reason about the actual device state and expose Android as an agent environment.
-
-Examples currently represented in the tool surface include:
+TALOS can inspect real device state and expose Android capabilities through typed tools:
 
 ```text
 status        location       torch
@@ -405,7 +338,7 @@ notification reply/dismiss   calendar
 screen driving               file sharing
 ```
 
-Some controls require Android system permission, Accessibility, or the optional ADB bridge. Availability is checked at runtime.
+Some operations require Android system permissions, Accessibility or the optional ADB bridge. Availability is checked at runtime.
 
 ---
 
@@ -441,9 +374,7 @@ Some controls require Android system permission, Accessibility, or the optional 
 
 # Current engineering direction
 
-The project is moving toward a **next-generation adaptive harness**, not toward coupling itself more tightly to one model.
-
-The active R&D direction is to make the harness itself measurable and replaceable:
+TALOS is moving toward a **next-generation adaptive harness**, rather than tighter coupling to one model:
 
 ```text
 task
@@ -457,9 +388,9 @@ task
 compiled harness profile
 ```
 
-The goal is for different models to receive different tool surfaces, context policies and execution strategies based on measured performance.
+The goal is to give different models different tool surfaces, context policies and execution strategies based on measured performance.
 
-Other active directions include:
+Active directions also include:
 
 - a coding workspace;
 - code intelligence and execution backends;
@@ -468,33 +399,27 @@ Other active directions include:
 - optional backend/device synchronization;
 - desktop/CLI surfaces.
 
-**These are roadmap directions, not claims about what is already shipped.**
+**These are roadmap directions, not claims about shipped functionality.**
 
 ---
 
 # Install
 
-Releases carry a signed APK for `arm64-v8a`, Android 8.0 or newer. It does not
-come from the Play Store, so Android will ask you to confirm an app from an
-unknown source — that is expected.
+Releases include a signed APK for **`arm64-v8a` on Android 8.0+**. Because TALOS is not distributed through the Play Store, Android will ask you to confirm installation from an unknown source.
 
-Two commands are worth running before you install it. The first checks you
-downloaded the file that was published:
+Verify the downloaded file against the release hash:
 
 ```bash
-sha256sum TALOS-<version>.apk     # compare with the hash in the release notes
+sha256sum TALOS-<version>.apk
 ```
 
-The second checks the file was built by this repository, from this code, by the
-workflow you can read — not by someone who rebuilt it elsewhere:
+Then verify that it was built by this repository's workflow:
 
 ```bash
 gh attestation verify TALOS-<version>.apk --repo Ninozzz95/talos
 ```
 
-That second one is the point. A build provenance attestation nobody verifies is
-decoration, so the command lives here and in every release, rather than in a
-documentation page.
+The provenance command is intentionally documented here and in each release so the attestation can actually be checked.
 
 ---
 
@@ -502,14 +427,14 @@ documentation page.
 
 ## Requirements
 
-The current repository pins its JavaScript toolchain:
+JavaScript toolchain:
 
 ```text
 Node >= 24.18.0 and < 25
 npm  >= 11.16.0 and < 12
 ```
 
-Android build configuration currently uses:
+Android configuration:
 
 ```text
 compileSdk 36
@@ -519,12 +444,11 @@ arm64-v8a only
 NDK 27.0.12077973
 ```
 
-You also need a compatible JDK and Android SDK/NDK toolchain.
+A compatible JDK and Android SDK/NDK toolchain are also required.
 
 ## Get the sources
 
-The local inference engine is a git submodule, not a copy in this repository —
-so the upstream project keeps its own history and attribution.
+Local inference uses llama.cpp as a git submodule:
 
 ```bash
 git clone https://github.com/Ninozzz95/talos.git
@@ -532,10 +456,7 @@ cd talos
 git submodule update --init --depth 1
 ```
 
-> **On Windows, do this first:** `git config --global core.longpaths true`.
-> Some paths inside llama.cpp exceed the 260-character limit and the checkout
-> stops halfway with `Filename too long`, leaving a submodule that looks present
-> and is incomplete.
+> **Windows:** run `git config --global core.longpaths true` first. Some llama.cpp paths exceed the traditional 260-character limit and otherwise leave an incomplete checkout.
 
 ## Web / unit build
 
@@ -554,24 +475,22 @@ cd android
 ./gradlew assembleDebug -PtalosSideBySide
 ```
 
-`-PtalosSideBySide` builds the development package beside an existing release installation instead of replacing its local data.
+`-PtalosSideBySide` installs the development package beside an existing release instead of replacing its local data.
 
 ### Optional Git Bash launcher tests
-
-The launcher intentionally keeps its native dependency isolated:
 
 ```bash
 cd tools/git-bash-launcher
 npm ci
 ```
 
-`node-pty` should not be added to the main application's dependency graph.
+The launcher's `node-pty` dependency is intentionally isolated and should not be added to the main application dependency graph.
 
 ---
 
 # Platform status
 
-The Android build currently declares:
+The Android build declares:
 
 ```text
 minSdk 26
@@ -579,15 +498,17 @@ targetSdk 36
 ABI arm64-v8a
 ```
 
-The project is actively validated on modern Android hardware, including a OnePlus phone and tablet. OEM Android variants differ materially in Accessibility, background execution, lock-screen behavior and battery management, so TALOS prefers measured capability checks over hardcoded assumptions.
+TALOS is actively validated on modern Android hardware, including a OnePlus phone and tablet.
 
-This is a young project. It is used actively, but it should still be treated as experimental software rather than infrastructure you cannot afford to lose.
+OEM variants differ in Accessibility, background execution, lock-screen behavior and battery management, so TALOS prefers runtime capability checks over hardcoded assumptions.
+
+This is a young, actively used project and should still be treated as **experimental software**, not irreplaceable infrastructure.
 
 ---
 
 # Permissions
 
-TALOS asks for powerful Android capabilities only when the corresponding feature needs them.
+Powerful Android permissions are requested only when the corresponding feature needs them.
 
 | Permission / capability | Why TALOS may need it |
 | --- | --- |
@@ -600,26 +521,17 @@ TALOS asks for powerful Android capabilities only when the corresponding feature
 | **Notifications** | Inspect, reply to or dismiss notification state where allowed |
 | **ADB bridge** | Selected system operations Android apps cannot normally perform |
 
-The permission screen is only one layer. Agent tools still pass through TALOS's own `read / write / outbound` policy.
+Android permissions are only one layer: agent tools must still pass TALOS's own `read / write / outbound` policy.
 
 ---
 
 # What TALOS is not
 
-**Not a TALOS-hosted SaaS proxy.**  
-There is no required TALOS cloud backend today.
-
-**Not tied to one model company.**  
-The model is selected by the user.
-
-**Not a blind macro engine.**  
-Tools have typed contracts, security metadata and — where possible — postconditions.
-
-**Not “local” only because the UI is local.**  
-TALOS includes an actual native local inference path.
-
-**Not finished.**  
-Some Android behaviors remain device/OEM-specific, and major coding/harness capabilities are active engineering work.
+- **Not a TALOS-hosted SaaS proxy.** There is no required TALOS cloud backend today.
+- **Not tied to one model company.** The user selects the model.
+- **Not a blind macro engine.** Tools have typed contracts, security metadata and, where possible, postconditions.
+- **Not “local” only because the UI is local.** TALOS has a native local inference path.
+- **Not finished.** Android behavior remains partly device/OEM-specific, while major coding and harness capabilities remain active engineering work.
 
 ---
 
@@ -627,11 +539,9 @@ Some Android behaviors remain device/OEM-specific, and major coding/harness capa
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-The codebase deliberately contains extensive comments explaining **the measured failure that caused a guard or architectural decision to exist**. Many comments are written in Italian; identifiers and APIs are English.
+The codebase contains extensive comments explaining **the measured failure behind guards and architectural decisions**. Many comments are in Italian; identifiers and APIs are English.
 
 Issues and pull requests in English are welcome.
-
-A useful contribution should preserve the central project rule:
 
 > If TALOS claims that something happened in the real world, there should be a way to demonstrate why it believes that.
 
@@ -639,22 +549,13 @@ A useful contribution should preserve the central project rule:
 
 # On how this was built
 
-TALOS was written with heavy use of AI coding editors — Claude Opus 5 and
-GPT-5.6 among them. That is worth stating plainly rather than leaving to be
-guessed at, and the comments throughout this codebase make it obvious anyway.
+TALOS was written with heavy use of AI coding editors, including Claude Opus 5 and GPT-5.6.
 
-What those tools did not do is decide anything.
+Those tools did not decide the product.
 
-The vision, the ideas, the architecture, the testing, the implementation calls
-and every single operational step came from **one human mind**. Every measured
-number in this README exists because a person ran it on a real device and looked
-at the result. Every guard exists because a person hit the failure it prevents.
-Every rejected approach was rejected by a person who had a reason.
+The vision, ideas, architecture, testing, implementation decisions and operational steps came from **one human mind**. Every measured number in this README comes from a real-device test; guards exist because the failure they prevent was encountered and investigated.
 
-If you disagree with building software this way, I understand it and I respect
-it — it is a fair position, and one held by people worth listening to. Thank you
-for caring enough to read this far. The result is here to be installed, tried and
-judged, which is the only test that settles anything.
+Using AI this heavily to build software is a legitimate point of disagreement. The project is here to be installed, tested and judged by its actual behavior.
 
 ---
 
