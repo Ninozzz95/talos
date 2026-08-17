@@ -895,6 +895,22 @@ describe('Agent Tools control registry', () => {
          * ⛔ Un'impronta che si aggiorna «perché è rossa» non protegge più
          * niente: si aggiorna dopo aver detto QUALE byte è cambiato e perché.
          *
+         * ⛔ 2026-08-17: si muove SOLO `invia_file`, e la sua descrizione ha una
+         * misura dietro. Il difetto: «manda il file X a Y» e quel tool non parte
+         * mai — il registro delle notifiche del Pad dice che gira soltanto
+         * «Ricerca nella Libreria». La descrizione non diceva MAI cosa fa lo
+         * strumento; `library_search` invece dichiara il territorio a lettere.
+         * Sonda diretta all'API coi concorrenti veri, quattro formulazioni per
+         * tre giri: 8/12 con quella vecchia, **12/12** con il verbo davanti.
+         *
+         * ⛔ E NON è un'affermazione. Impronte per singolo tool, HEAD contro
+         * adesso:
+         *
+         *     app_azione   926aa3f0d86ba449 → 926aa3f0d86ba449   (fermo)
+         *     invia_file   facb4686812f04e8 → b896aad7a5547963   (mosso)
+         *
+         * Cioè la differenza è esattamente una, ed è quella voluta.
+         *
          * ⛔ 2026-08-15, secondo movimento nello stesso giorno: entra
          * `device_location`. La prova che è SOLO un'aggiunta non è questa riga —
          * è l'impronta STORICA qui sopra, che dopo aver escluso il tool nuovo
@@ -902,10 +918,10 @@ describe('Agent Tools control registry', () => {
          * attrezzo già esistente, quella non tornerebbe.
          */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('07262cbabc2034e85f8656fe56db779f3800befddc19a6dacdd6396e3cba89eb')
+            .toBe('9410c23f6293b683eb6f20d6a2a763ade5bda89b2a1fd9e5ddbd490ec6859843')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('0cca3a0c40845600a680d47acd3c6e0532a68f7cbdf40aafa9b74102f7cf29ae')
+            .toBe('0469e951548ed52a335f76416bea7ea4124850c71f7b9846e259b2e890abefee')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('6d70595ffcf799f49ed9be1ca2798885488cf97631df61744a2571376e2df848')
+            .toBe('1baf044ff544096f955b8f1ffdf8bb63f0287b29a95514b5d91235945838668f')
     })
 })
