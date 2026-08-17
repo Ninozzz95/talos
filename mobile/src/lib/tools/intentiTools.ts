@@ -1128,7 +1128,32 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
                     senzaEffetto: true,
                 }
             }
-            const file = await fonti.fileDellaLibreria()
+            /*
+             * ⭐⭐⭐ CIECO NON È VUOTO — e la differenza l'ha detta il Pad.
+             *
+             * MISURATO il 2026-08-17: con `nota-talos.txt` presente in DUE
+             * copie, TALOS ha risposto «il file nota-talos.txt che menzioni non
+             * è presente nella mia Library». Una frase su un fatto che non
+             * aveva verificato, detta con la sicurezza di chi ha guardato.
+             *
+             * A monte c'era un `catch { return [] }`: un elenco vuoto
+             * significava DUE cose — la Libreria è vuota, oppure non si è
+             * riuscito a leggerla — e qui diventavano la stessa.
+             *
+             * ⛔ Sono TRE stati, come per l'elenco delle app: «ce ne sono»,
+             * «non ce n'è nessuno», «non ho potuto guardare». Il terzo NON si
+             * racconta come il secondo: la persona sa che quel file c'è, e
+             * sentirsi dire il contrario insegna a non fidarsi delle volte in
+             * cui è vero.
+             */
+            const file = await fonti.fileDellaLibreria().catch(() => null)
+            if (file === null) {
+                return {
+                    ok: false,
+                    content: 'TALOS could NOT read the Library, so it does not know whether that file exists. Nothing was sent. ⛔ Do NOT say the file is missing or that the Library is empty — that was never checked. Say the Library could not be read, and that Library access can be turned on in TALOS settings.',
+                    code: 'TALOS_FILE_LIBRERIA_ILLEGGIBILE',
+                }
+            }
             const scelta = talosScegliFile(file, input.file)
             if (scelta.esito === 'nessuno') {
                 /*

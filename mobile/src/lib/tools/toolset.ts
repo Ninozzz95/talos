@@ -415,21 +415,29 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
      * — abbastanza per elencare, niente per mandare. Manca `private_uri`, che è
      * l'unica cosa che il ponte nativo può trasformare in un `content://`.
      *
-     * ⛔ E rende `[]` invece di lanciare quando la libreria è spenta: il tool
-     * dirà «non c'è nessun file», che è vero da dove sta lui, invece di far
-     * fallire l'intero messaggio.
+     * ⛔⛔ E NON ingoia più l'errore — era una bugia, ed è stata misurata.
+     *
+     * Qui c'era `catch { return [] }`, con scritto accanto che il tool avrebbe
+     * detto «non c'è nessun file», «che è vero da dove sta lui». NON è vero:
+     * `[]` significa DUE cose diverse — la Libreria è vuota, oppure non sono
+     * riuscito a guardarla — e il tool le raccontava tutte e due come la prima.
+     *
+     * MISURATO sul Pad il 2026-08-17, con `nota-talos.txt` presente in DUE
+     * copie: TALOS ha risposto «il file nota-talos.txt che menzioni **non è
+     * presente nella mia Library**». Una frase su un fatto che non aveva
+     * verificato, detta con la sicurezza di chi ha guardato.
+     *
+     * ⇒ L'errore SALE. Chi lo prende è `invia_file`, che sa dire la terza cosa:
+     * «non sono riuscito a leggere la Libreria». È la stessa lezione di CIECO
+     * non è FALLITO e dei tre stati dentro un `ok:false`.
      */
     async function fileDaMandare() {
-        try {
-            return (await librarySummaries()).map((file) => ({
-                id: file.id,
-                nome: file.display_name,
-                tipo: file.media_type,
-                percorso: file.private_uri,
-            }))
-        } catch {
-            return []
-        }
+        return (await librarySummaries()).map((file) => ({
+            id: file.id,
+            nome: file.display_name,
+            tipo: file.media_type,
+            percorso: file.private_uri,
+        }))
     }
 
     /**

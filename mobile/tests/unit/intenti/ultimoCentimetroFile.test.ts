@@ -215,3 +215,50 @@ describe('⭐⭐⭐ e non manda il modello ad aprire la schermata sbagliata', ()
         expect(esito.content).toMatch(/Do NOT open with "sent"/i)
     })
 })
+
+
+/**
+ * ⭐⭐⭐ CIECO NON È VUOTO — e la differenza l'ha detta il Pad.
+ *
+ * MISURATO il 2026-08-17: con `nota-talos.txt` presente in DUE copie, TALOS ha
+ * risposto «il file nota-talos.txt che menzioni **non è presente nella mia
+ * Library**». Una frase su un fatto che non aveva verificato, detta con la
+ * sicurezza di chi ha guardato.
+ *
+ * A monte c'era un `catch { return [] }` con scritto accanto che il tool
+ * avrebbe detto «non c'è nessun file», «che è vero da dove sta lui». Non era
+ * vero: `[]` significava DUE cose, e qui diventavano la stessa.
+ */
+describe('⭐⭐⭐ «non ho potuto guardare» NON è «non c e»', () => {
+    function conLibreria(libreria: () => Promise<unknown>) {
+        return talosIntentiTools({ fileDellaLibreria: libreria as never })
+            .find((t) => t.name === 'invia_file')!
+    }
+    const chiedi2 = async (s: { run: unknown }) => await (s.run as (i: unknown, c: unknown) => Promise<{
+        ok: boolean, content: string, code?: string
+    }>)(MANDA, {})
+
+    it('⛔⛔ se la Libreria non si legge NON dice che il file manca', async () => {
+        const esito = await chiedi2(conLibreria(async () => { throw new Error('TALOS_LIBRARY_DISABLED') }))
+        expect(esito.code).toBe('TALOS_FILE_LIBRERIA_ILLEGGIBILE')
+        expect(esito.content).toMatch(/could NOT read the Library/i)
+        expect(esito.content).toMatch(/Do NOT say the file is missing/i)
+    })
+
+    /*
+     * ⛔ AL CONTRARIO, ed è il caso che tiene onesto il primo: una Libreria
+     * DAVVERO vuota si racconta come vuota. Confondere i due versi vorrebbe
+     * dire scambiare una bugia con l'altra.
+     */
+    it('⛔ ma una Libreria DAVVERO vuota si dice vuota', async () => {
+        const esito = await chiedi2(conLibreria(async () => []))
+        expect(esito.code).not.toBe('TALOS_FILE_LIBRERIA_ILLEGGIBILE')
+        expect(esito.content).toMatch(/Library is empty/i)
+    })
+
+    it('⛔ e con i file dentro si va avanti come sempre', async () => {
+        const esito = await chiedi2(conLibreria(async () => [NOTA]))
+        expect(esito.code).toBeUndefined()
+        expect(esito.content).not.toMatch(/could NOT read/i)
+    })
+})
