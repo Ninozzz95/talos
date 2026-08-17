@@ -592,7 +592,28 @@ async function talosUltimoCentimetro(
         + ' before explaining: the message did NOT leave. Say first that it was'
         + ' not sent, then why.'
     const spiegazione: Record<string, string> = {
-        'occhio-chiuso': `${capacita.app} is open with the text already filled in, but TALOS cannot press send: the screen-reading permission is off. Nothing was sent. Offer to open its settings page with device_open_settings, then say one tap on send finishes it.${MAI_DIRE_INVIATO}`,
+        /*
+         * ⛔⛔ LA SCHERMATA SI NOMINA, o il modello ne sceglie una sbagliata.
+         *
+         * MISURATO sul Pad il 2026-08-17. Questa riga diceva soltanto «offer to
+         * open its settings page with device_open_settings», e il modello ha
+         * aperto l'ACCESSO ALLE NOTIFICHE, dicendo alla persona: «abilita il
+         * permesso di lettura notifiche (o dello schermo, a seconda della
+         * versione)». Cioè:
+         *
+         *   - la pagina sbagliata;
+         *   - un'ipotesi — «a seconda della versione» — travestita da
+         *     istruzione;
+         *   - e soprattutto un invito a concedere un permesso che legge TUTTE
+         *     le notifiche, contenuto compreso, quando ciò che serve è un'altra
+         *     cosa.
+         *
+         * ⇒ È la regola che questo progetto si è già dato per le schermate: il
+         * modello non deve indovinarle. Qui l'azione esatta è scritta, e
+         * `android.settings.ACCESSIBILITY_SETTINGS` è verificata sul Pad —
+         * apre `com.android.settings/.Settings$AccessibilitySettingsActivity`.
+         */
+        'occhio-chiuso': `${capacita.app} is open with the text already filled in, but TALOS cannot press send: the screen-reading permission is off. Nothing was sent. TALOS has ALREADY opened the accessibility settings — do not open any other screen. Say to turn TALOS on in the list that is now on screen, and that one tap on send finishes it.${MAI_DIRE_INVIATO}`,
         'app-non-in-primo-piano': `The link opened, but ${capacita.app} is not the app on screen${esito.pacchettoVisto ? ` (it is ${esito.pacchettoVisto})` : ''} — probably an app-chooser or another app answered the link. Nothing was sent. Tell the user what is on screen and ask how to proceed.${MAI_DIRE_INVIATO}`,
         'testo-non-arrivato': `${capacita.app} opened but the text never appeared in its input field, so TALOS did not press send — pressing blind could have sent something else. Nothing was sent. Tell the user and offer to try again.${MAI_DIRE_INVIATO}`,
         'non-trovato': `${capacita.app} is open with the text ready, but TALOS could not find the send button, so it pressed nothing. Nothing was sent. Tell the user it is ready and that one tap on send finishes it.${MAI_DIRE_INVIATO}`,
@@ -621,6 +642,48 @@ async function talosUltimoCentimetro(
      * il più credibile della schermata. Visto guardando lo schermo, non
      * rileggendo il codice.
      */
+    /*
+     * ⛔⛔⛔ LA SCHERMATA LA APRE LO STRUMENTO, non il modello.
+     *
+     * MISURATO sul Pad il 2026-08-17, DUE volte:
+     *
+     *   1. l'esito diceva «offer to open its settings page» e il modello ha
+     *      aperto l'ACCESSO ALLE NOTIFICHE, dicendo alla persona di abilitare
+     *      «il permesso di lettura notifiche (o dello schermo, a seconda della
+     *      versione)» — pagina sbagliata, ipotesi travestita da istruzione, e
+     *      un invito a concedere un permesso che legge TUTTE le notifiche;
+     *   2. gliel'ho scritta a lettere — `android.settings.ACCESSIBILITY_SETTINGS`,
+     *      «not the notification-access screen» — e ha aperto di nuovo le
+     *      notifiche.
+     *
+     * ⇒ Un'istruzione scritta NON vincola il modello. È la stessa lezione della
+     * scheda: se una cosa deve succedere, la fa il codice.
+     *
+     * ⛔ Si apre SOLO per `occhio-chiuso`, che è l'unico motivo con una
+     * schermata giusta e conosciuta. Per gli altri il modello resta libero,
+     * perché lì non sappiamo dove mandare la persona e aprire a caso sarebbe
+     * peggio che non aprire.
+     *
+     * Azione verificata sul Pad: apre
+     * `com.android.settings/.Settings$AccessibilitySettingsActivity`.
+     */
+    if (esito.motivo === 'occhio-chiuso') {
+        /*
+         * ⛔ Il `try` sta FUORI dalla promessa, e non è pedanteria: un `.catch()`
+         * prende una promessa rifiutata, non un `TypeError` sincrono. Su un
+         * ponte che non espone il metodo — un APK vecchio, o una prova con un
+         * finto parziale — l'intero strumento sarebbe esploso, trasformando
+         * «non inviato» in un errore senza spiegazione. L'ha trovato un test,
+         * non una rilettura.
+         */
+        try {
+            await TalosDeviceBridge
+                .openSettingsScreen?.({ action: 'android.settings.ACCESSIBILITY_SETTINGS', forThisApp: false })
+        } catch {
+            // Se non si apre non si cambia il racconto: il messaggio resta «non
+            // inviato», che è la cosa vera e la sola che conta qui.
+        }
+    }
     const perche: Record<string, 'occhio' | 'altra-app' | 'testo' | 'pulsante' | 'ponte'> = {
         'occhio-chiuso': 'occhio',
         'app-non-in-primo-piano': 'altra-app',
