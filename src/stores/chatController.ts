@@ -2516,7 +2516,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         keeper.release()
                         trace.finish('ok')
                         return {
-                            text: deps.translate('chat.toolAuthorizationPending', { count: 1 }),
+                            /*
+                             * ⛔ VUOTO, e non la frase dell'avviso. Quella
+                             * adesso la disegna il chip sotto il messaggio: se
+                             * restasse qui, tornerebbe a essere testo — e in
+                             * questo ramo diventerebbe l'INTERO messaggio.
+                             */
+                            text: '',
                             metadata: {
                                 ...(sendRuntime.libraryDecision
                                     ? {
@@ -2525,6 +2531,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                     }
                                     : {}),
                                 tool_authorization_pending_checkpoint_id: checkpoint.id,
+                                tool_authorization_pending_count: 1,
                             },
                             finishReason: 'tool_authorization',
                         }
@@ -3395,7 +3402,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                 sendIdentity.sessionId, sendIdentity.modelProfileId,
                                 { toolName: 'document_create' },
                             ))
-                            return { id: saved.id }
+                            // ⛔ Il PERCORSO viaggia con l'id: senza, la scheda
+                            // del PDF resta un'etichetta muta — misurato.
+                            return { id: saved.id, percorso: saved.private_uri }
                         },
                     }),
                     /**
@@ -3662,6 +3671,51 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 ? catalogo.talosIstruzioneCatalogo(offeredTools as never)
                 : ''
 
+            /*
+             * ⭐⭐⭐ UNA CAPACITÀ SPENTA SI DICE — se no il modello la INVENTA.
+             *
+             * ## Il difetto, fotografato dall'owner il 2026-08-17
+             *
+             * Senza una chiave di ricerca configurata, TALOS ha risposto:
+             * «non ho uno strumento di ricerca web semplice — l'unico modo che
+             * ho per cercare su internet è la deep research». È **falso**:
+             * `web_search` e `web_read` esistono, sono due dei 69 attrezzi, e
+             * il README li elenca.
+             *
+             * ⛔ Ma dal posto in cui sta il modello quella frase è ONESTA: senza
+             * motore, i due tool non vengono costruiti affatto, quindi non li
+             * vede. Non ha allucinato: ha descritto un elenco vero e ne ha
+             * tratto la conclusione sbagliata, perché nessuno gli aveva detto
+             * che l'assenza era una CONFIGURAZIONE e non un limite.
+             *
+             * ⛔ E il danno non è la frase: è che la persona conclude «TALOS non
+             * sa cercare» e smette di chiederglielo. Una capacità che c'è, persa
+             * per un silenzio.
+             *
+             * ## Perché una riga nel prompt e non un tool che fallisce
+             *
+             * Offrire `web_search` e farlo fallire sempre è già stato escluso
+             * altrove in questo file, con la ragione scritta: «un tool offerto
+             * che fallisce sempre è peggio di uno assente, perché il modello lo
+             * promette e poi non lo mantiene». La regola resta.
+             *
+             * ⇒ La ricerca sugli agenti del 2026 dice la stessa cosa da un'altra
+             * parte: a un modello non si dà un errore, si dà un **piano di
+             * recupero**. Qui il piano è una frase sola che dice cosa manca e
+             * dove si mette.
+             *
+             * ⛔ E costa SOLO a chi non ha il motore: con la chiave configurata
+             * questa stringa è vuota e il prefisso congelato non si muove di un
+             * byte.
+             */
+            const senzaMotoreDiRicerca = !sendRuntime.search.source
+                ? '\n\nTALOS_WEB_SEARCH_NOT_CONFIGURED: web search and web reading'
+                    + ' exist as capabilities but are OFF because no search provider key is set.'
+                    + ' If the user asks you to search the web, do NOT say you have no web search'
+                    + ' and do NOT offer deep research as a substitute. Say plainly that the search'
+                    + ' key is missing, and that it is added in Settings → Search.'
+                : ''
+
             const documentToolOffered = offeredTools.some(
                 (tool: { name: string }) => tool.name === 'document_create',
             )
@@ -3741,7 +3795,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      */
                     system: (sendIdentity.surface === 'browse'
                         ? tonePrompt + TALOS_BROWSE_APPENDIX
-                        : tonePrompt) + indiceNelPrompt,
+                        : tonePrompt) + indiceNelPrompt + senzaMotoreDiRicerca,
                 }),
                 deps.transport,
             )
@@ -4544,6 +4598,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         .join('\n\n'),
                     metadata: {
                         tool_authorization_pending_checkpoint_id: next.id,
+                        tool_authorization_pending_count: next.requests.length,
                     },
                     finishReason: 'tool_authorization',
                     reasoning: completion.reasoning,
@@ -4619,6 +4674,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             ? { library_answer_guard: libraryAnswerGuardTrace }
                             : {}),
                         tool_authorization_pending_checkpoint_id: markerCheckpoint.id,
+                        tool_authorization_pending_count: markerCheckpoint.requests.length,
                     },
                     finishReason: 'tool_authorization',
                     reasoning: completion.reasoning,

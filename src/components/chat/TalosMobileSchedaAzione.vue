@@ -26,7 +26,7 @@
  * lingua di chi usa il telefono. Compaiono solo con `debug_diagnostics` acceso
  * — la stessa preferenza che la schermata Doctor commuta già.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { TALOS_TOOL_LABEL_KEYS } from '@/lib/tools/toolLabels'
@@ -387,6 +387,23 @@ async function scegli(s: SchedaQualeApp, pacchetto: string): Promise<void> {
  */
 const esitoFile = ref<Record<string, 'manda' | 'mandato' | 'rifiutato'>>({})
 
+/**
+ * ⭐⭐⭐ IL PDF CHE SI APRE — owner 2026-08-17, «il PDF bisogna poterlo
+ * visualizzare dentro la app».
+ *
+ * MISURATO sul Pad: la scheda mostrava «TALOS in tre righe.pdf · Documento ·
+ * 10 KB» e toccandola non succedeva NIENTE. Un'etichetta muta che sembra un
+ * comando è peggio di un'etichetta e basta: chi legge tocca, non succede
+ * niente, e conclude che l'app è rotta.
+ *
+ * ⛔ Il visualizzatore arriva con un `import()` pigro, come tutto il resto qui:
+ * chi non apre mai un PDF non ne paga un byte nel grafo d'avvio.
+ */
+const pdfAperto = ref<{ percorso: string, nome: string } | null>(null)
+const VisualizzatorePdf = defineAsyncComponent(
+    () => import('@/components/talos/library/TalosMobilePdfViewer.vue'),
+)
+
 /*
  * ⛔ Le parole sono quelle dell'INVIO, non quelle dell'apertura: qui il tocco
  * manda un file a una persona vera. «Non si e' aperta» direbbe una cosa su una
@@ -517,13 +534,15 @@ const parolaStato = (acceso: boolean): string => (acceso
                 altre schede — cambiare tema le cambia tutte insieme.
             -->
             <component
-                :is="eCreato(s) && s.dove ? 'button' : 'div'"
+                :is="eCreato(s) && (s.dove || s.pdf) ? 'button' : 'div'"
                 v-if="eCreato(s)"
-                :type="s.dove ? 'button' : undefined"
+                :type="s.dove || s.pdf ? 'button' : undefined"
                 class="talos-controllo flex w-full items-center gap-2 border border-border bg-muted text-left"
-                :class="s.dove ? 'talos-pressable' : ''"
+                :class="s.dove || s.pdf ? 'talos-pressable' : ''"
                 data-testid="talos-scheda-creato"
-                @click="s.dove ? apri(s.dove) : undefined"
+                @click="s.pdf
+                    ? (pdfAperto = { percorso: s.pdf, nome: s.titolo })
+                    : (s.dove ? apri(s.dove) : undefined)"
             >
                 <span class="talos-nome min-w-0 flex-1">
                     <span class="block truncate">{{ s.titolo }}</span>
@@ -531,7 +550,7 @@ const parolaStato = (acceso: boolean): string => (acceso
                         {{ s.genere }}<template v-if="s.dettaglio"> · {{ s.dettaglio }}</template>
                     </span>
                 </span>
-                <span v-if="s.dove" class="talos-freccia flex-none" aria-hidden="true">›</span>
+                <span v-if="s.dove || s.pdf" class="talos-freccia flex-none" aria-hidden="true">›</span>
             </component>
 
             <!--
@@ -788,6 +807,25 @@ const parolaStato = (acceso: boolean): string => (acceso
                 >{{ dettaglio }}</span>
             </p>
         </div>
+
+        <!--
+            ⭐⭐⭐ IL PDF SI GUARDA QUI DENTRO, e la chat resta dov'è.
+
+            Owner 2026-08-17: «il PDF bisogna poterlo visualizzare dentro la
+            app». Misurato sul Pad: la scheda mostrava nome e peso, e toccarla
+            non faceva niente.
+
+            ⛔ Sopra la chat, non al posto suo: guardare una pagina non deve
+            costare la conversazione. È la stessa scelta del visualizzatore di
+            immagini, che c'era già.
+        -->
+        <component
+            :is="VisualizzatorePdf"
+            v-if="pdfAperto"
+            :percorso="pdfAperto.percorso"
+            :nome="pdfAperto.nome"
+            @chiudi="pdfAperto = null"
+        />
     </div>
 </template>
 
