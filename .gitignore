@@ -64,6 +64,17 @@ docs/superpowers/
 .codex/
 AGENTS.md
 
+# ⛔ Le scorie che gli strumenti di lavoro lasciano cadere nella cartella.
+#
+# Non e' ordine: e' una decisione dell'owner. Un file di cronologia lasciato qui
+# racconta con che cosa si e' lavorato, e quella e' esattamente la traccia che il
+# 2026-08-17 e' stata ripulita da tutta la storia pubblica. Il cancello sta qui,
+# non nella memoria di chi committa.
+.aider*
+.pi/
+.hermes/
+.dsh/
+
 # I documenti di architettura che descrivono le FASI, non il prodotto: audit di
 # divario, ledger di implementazione, copioni di dimostrazione.
 docs/architecture/*audit*.md
