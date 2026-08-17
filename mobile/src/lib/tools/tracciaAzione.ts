@@ -213,6 +213,55 @@ export type TalosScheda =
         readonly quando: string
         readonly etichetta?: string
     }
+    /**
+     * ⭐⭐⭐ È PARTITO, O NO — la scheda che il modello non può contraddire.
+     *
+     * MISURATO sul Pad il 2026-08-17, con la lettura dello schermo spenta:
+     *
+     *     TALOS: «Il messaggio "prova cinque" è stato inviato ✓
+     *             Il messaggio non è stato inviato, manca il permesso…»
+     *
+     * L'invio dichiarato E il fallimento nella stessa risposta, in
+     * quest'ordine. Verificato che non fosse partito: il testo era ancora nel
+     * campo di WhatsApp, e in chat quel messaggio non c'è.
+     *
+     * ## ⛔ E le difese di parole erano GIÀ tutte in piedi
+     *
+     *   - il prompt dice «Never state an outcome before the tool that produces
+     *     it has returned» — c'era, ed è stata ignorata;
+     *   - l'esito dello strumento dice «Nothing was sent» ed è `ok: false`;
+     *   - il 2026-08-17 ci ho aggiunto anche «⛔ Do NOT open with "sent"».
+     *
+     * Tre divieti scritti, e il modello ha aperto lo stesso con «inviato ✓».
+     *
+     * ⇒ È la stessa lezione di `quale-app`: finché la verità passa dalle
+     * PAROLE del modello, dipende dal fatto che le ricopi bene. La scheda la
+     * disegna l'app, e non può mentire — chi guarda lo schermo vede «NON
+     * INVIATO» sotto una frase che dice il contrario, e crede alla scheda.
+     *
+     * ⛔ `partito` è un booleano e non tre stati: qui si sa. Il caso «non lo so»
+     * — una prova su tre — NON produce questa scheda, perché una scheda che
+     * dicesse «forse» insegnerebbe a non fidarsi anche delle altre.
+     */
+    | {
+        readonly tipo: 'invio'
+        /** L'app che avrebbe dovuto mandarlo: «WhatsApp», «Telegram». */
+        readonly app: string
+        readonly partito: boolean
+        /**
+         * Solo quando NON è partito: il MOTIVO, come chiave da tradurre.
+         *
+         * ⛔ Una chiave e non una frase, e l'ho scoperto guardando lo schermo:
+         * la prima versione portava il testo inglese pronto, e sul Pad in
+         * italiano la scheda diceva «NON inviato · screen reading is off».
+         * Metà riga tradotta e metà no, dentro il riquadro che deve essere il
+         * più credibile della schermata.
+         *
+         * ⇒ Le schede sorelle fanno già così: `quale-app` porta i nomi delle
+         * app (che sono nomi propri) e le sue parole vengono da `t()`.
+         */
+        readonly perche?: 'occhio' | 'altra-app' | 'testo' | 'pulsante' | 'ponte'
+    }
 /*
  * ⛔ Qui c'era un tipo `fonti`, aggiunto e tolto il 2026-08-14: le fonti hanno
  * già la loro casa in `TalosMobileSourcesChip`, che le mostra meglio (favicon

@@ -786,6 +786,26 @@ export const TALOS_EN_MESSAGES = {
         cardProofRead: 'Verified on the phone',
         cardSwitchOff: 'Off',
         cardWhichApp: 'Which app?',
+        /*
+         * ⛔ The WORD, not only a colour or a tick. A red glyph and a green one
+         * look the same to a person who cannot tell them apart, and this card
+         * exists precisely because a ✓ appeared over a message that never left.
+         */
+        cardSent: 'Sent',
+        cardNotSent: 'NOT sent',
+        /*
+         * ⛔ Short enough to sit on one line next to «NOT sent», and each one
+         * names what a person could actually do about it. «unknown error» is
+         * not in this list on purpose: when the reason is unknown the card
+         * shows no reason at all rather than a word that explains nothing.
+         */
+        cardNotSentWhy: {
+            occhio: 'screen reading is off',
+            'altra-app': 'another app answered',
+            testo: 'the text never arrived',
+            pulsante: 'send button not found',
+            ponte: 'the screen service did not answer',
+        },
         cardAppOpened: 'Opened',
         cardAppRefused: 'It would not open',
         memoryUsedOne: '1 memory used',

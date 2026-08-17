@@ -546,12 +546,15 @@ async function talosUltimoCentimetro(
         return {
             ok: true,
             content: `Sent — verified. TALOS pressed send in ${capacita.app} and ${esito.prove} independent checks agree: the input field is empty and the text is now part of the conversation. Tell the user it is sent, in one short sentence.`,
+            // La scheda dice la stessa cosa della frase, e la dice l'app.
+            scheda: { tipo: 'invio' as const, app: capacita.app, partito: true },
         }
     }
     if (esito.fatto && esito.obiettivo === 'NON_PARTITO') {
         return {
             ok: true,
             content: `NOT sent. TALOS pressed send in ${capacita.app}, but the text is STILL in the input field — so nothing left. Tell the user plainly that it did not go, and offer to try again. This is the one case where trying again is safe.`,
+            scheda: { tipo: 'invio' as const, app: capacita.app, partito: false },
         }
     }
     if (esito.fatto) {
@@ -595,12 +598,51 @@ async function talosUltimoCentimetro(
         'non-trovato': `${capacita.app} is open with the text ready, but TALOS could not find the send button, so it pressed nothing. Nothing was sent. Tell the user it is ready and that one tap on send finishes it.${MAI_DIRE_INVIATO}`,
         'ponte-chiuso': `${capacita.app} is open with the text ready, but TALOS could not reach the screen service to press send. Nothing was sent. Tell the user one tap finishes it.${MAI_DIRE_INVIATO}`,
     }
+    /*
+     * ⛔⛔⛔ LA SCHEDA, perché tre divieti scritti non erano bastati.
+     *
+     * MISURATO sul Pad il 2026-08-17: con la lettura dello schermo spenta il
+     * modello ha aperto con «Il messaggio "prova cinque" è stato inviato ✓» e
+     * si è smentito nella riga dopo. Verificato che non fosse partito.
+     *
+     * Le difese di parole c'erano tutte: la riga nel prompt di sistema, questo
+     * esito `ok: false` che dice «Nothing was sent», e il divieto esplicito
+     * aggiunto poche ore prima. Non sono bastate, e non possono bastare: finché
+     * la verità passa dalla PROSA, dipende dal fatto che il modello la ricopi.
+     *
+     * ⇒ La scheda la disegna l'app. Chi guarda vede «NON inviato» sotto una
+     * frase che dice il contrario, e crede alla scheda — che è la cosa giusta,
+     * perché la scheda ha letto il telefono.
+     */
+    /*
+     * ⛔ CHIAVI, non frasi. La prima versione portava l'inglese già pronto e
+     * sul Pad in italiano la scheda diceva «NON inviato · screen reading is
+     * off»: metà riga tradotta e metà no, proprio nel riquadro che deve essere
+     * il più credibile della schermata. Visto guardando lo schermo, non
+     * rileggendo il codice.
+     */
+    const perche: Record<string, 'occhio' | 'altra-app' | 'testo' | 'pulsante' | 'ponte'> = {
+        'occhio-chiuso': 'occhio',
+        'app-non-in-primo-piano': 'altra-app',
+        'testo-non-arrivato': 'testo',
+        'non-trovato': 'pulsante',
+        'ponte-chiuso': 'ponte',
+    }
     return {
         ok: false,
         // ⛔ Anche il ripiego per un motivo che non conosciamo: un motivo nuovo
         // e' proprio il caso in cui nessuno ha ancora scritto il divieto.
         content: (spiegazione[esito.motivo ?? ''] ?? `${capacita.app} is open with the text ready, but the send step did not run (${esito.motivo ?? 'unknown'}). Nothing was sent.${MAI_DIRE_INVIATO}`),
         code: `TALOS_INVIO_${(esito.motivo ?? 'sconosciuto').toUpperCase().replace(/-/g, '_')}`,
+        // ⛔ La scheda c'è SEMPRE, anche per un motivo che non sappiamo
+        // nominare: «non inviato» resta vero comunque, ed è la sola cosa che
+        // decide cosa fa la persona dopo.
+        scheda: {
+            tipo: 'invio' as const,
+            app: capacita.app,
+            partito: false,
+            ...(perche[esito.motivo ?? ''] ? { perche: perche[esito.motivo ?? ''] } : {}),
+        },
     }
 }
 
