@@ -13,6 +13,7 @@ import {
     type TalosToolContext,
     type TalosToolDefinition,
     type TalosToolResult,
+    type TalosPremessaEsito,
     type TalosToolVerdict,
 } from '@/lib/tools/registry'
 import {
@@ -74,8 +75,16 @@ export interface TalosToolAuditRow {
     action: TalosToolAction
     /** Complete capability set, including the primary `action`. */
     requiredActions: readonly TalosToolAction[]
-    /** `refused_busy` is OURS, not the user's: see the consent bridge. */
-    status: 'succeeded' | 'failed' | 'denied' | 'refused_busy'
+    /**
+     * `refused_busy` is OURS, not the user's: see the consent bridge.
+     *
+     * ⛔ `premise_absent` è distinto da `denied` di proposito, e la differenza
+     * conta per chi legge il registro fra sei mesi: `denied` è **la persona che
+     * ha detto no**, `premise_absent` è **il runtime che non l'ha nemmeno
+     * disturbata**. Schiacciarli in uno solo farebbe sembrare rifiuti umani
+     * delle decisioni della macchina, e viceversa.
+     */
+    status: 'succeeded' | 'failed' | 'denied' | 'refused_busy' | 'premise_absent'
     /** Il rischio effettivo al momento della chiamata, catena inclusa. */
     risk?: 'R0' | 'R1' | 'R2' | 'R3' | 'R4'
     /** Vero quando le tre condizioni della trifecta erano tutte presenti. */
@@ -397,6 +406,58 @@ export async function executeTalosTool(
     const input = preflight.status === 'ready'
         ? preflight.input
         : preflight.request.input
+
+    /*
+     * ⭐⭐⭐ LE PREMESSE, e stanno QUI: dopo la validazione, PRIMA del consenso.
+     *
+     * L'ordine è tutto. Un controllo dopo la scheda non impedisce niente —
+     * la persona ha già speso il suo «Consenti» per un'azione impossibile, e
+     * quello che impara è a toccare senza leggere.
+     *
+     * ⛔ E sta nell'ESECUTORE, non dentro `run` e non nel testo che il modello
+     * produce: un controllo che vive nell'output del modello lo si scavalca
+     * scrivendo un altro output. Qui il modello propone, il runtime decide.
+     *
+     * ⛔⛔ `ignoto` PROSEGUE, e non è una svista: non sapere non autorizza a
+     * rifiutare. Bloccare su `ignoto` renderebbe TALOS inutile appena un
+     * permesso è negato o il ponte cade, e insegnerebbe che «non lo so» è un
+     * «no» — che è l'esatto difetto che il tri-stato esiste per impedire, preso
+     * dall'altro verso.
+     */
+    if (tool.premesse) {
+        let premessa: TalosPremessaEsito
+        try {
+            premessa = await tool.premesse(input as never, deps.context)
+        } catch {
+            /*
+             * ⛔ Una premessa che esplode è `ignoto`, non `assente`: un
+             * controllo rotto non è la prova che una cosa non esista. Fallire
+             * qui in `assente` bloccherebbe azioni legittime ogni volta che il
+             * controllo stesso ha un difetto — e in silenzio.
+             */
+            premessa = { stato: 'ignoto', perche: 'il controllo della premessa non ha risposto' }
+        }
+        if (premessa.stato === 'assente') {
+            await record(deps, {
+                tool: tool.name,
+                action: tool.action,
+                requiredActions,
+                status: 'premise_absent',
+                input,
+            })
+            /*
+             * ⛔ Si dice COSA manca. Un modello a cui si risponde «non si può»
+             * senza dire perché riprova identico — è la stessa ragione per cui
+             * `TalosToolVerdict` pretende un `reason`.
+             */
+            return {
+                ok: false,
+                content: `Not run: ${premessa.perche}. Nothing was asked of the user and nothing was changed.`,
+                code: 'TALOS_TOOL_PREMISE_ABSENT',
+            }
+        }
+    }
+
     if (preflight.status === 'authorization_required') {
         let answer: boolean | 'busy' | 'unanswered' = false
         try {

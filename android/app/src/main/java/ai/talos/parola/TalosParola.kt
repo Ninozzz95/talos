@@ -14,6 +14,9 @@ import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
+import java.io.BufferedOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import kotlin.concurrent.thread
 
 /**
@@ -113,6 +116,15 @@ class TalosParola : Service() {
      */
     @Volatile
     private var presa: AudioRecord? = null
+
+    /**
+     * La sonda dei byte grezzi: `null` quando nessuno l'ha chiesta.
+     *
+     * ⛔ Si chiude in `onDestroy` **e** all'uscita del ciclo: un file lasciato
+     * aperto da un servizio che gira per ore riempie il disco della persona
+     * senza che niente lo dica.
+     */
+    private var registraGrezzo: BufferedOutputStream? = null
 
     private var orecchio: TalosOrecchio? = null
 
@@ -214,6 +226,8 @@ class TalosParola : Service() {
         }
         orecchio?.chiudi()
         orecchio = null
+        runCatching { registraGrezzo?.close() }
+        registraGrezzo = null
         super.onDestroy()
     }
 
@@ -261,13 +275,47 @@ class TalosParola : Service() {
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
         )
+        /*
+         * ⛔⛔ LA SORGENTE SI PUÒ SCAMBIARE, e serve a rispondere a UNA domanda.
+         *
+         * `VOICE_RECOGNITION` resta il difetto — è la sorgente che i quattro
+         * assistenti usano. Ma la letteratura è netta: la soppressione del
+         * rumore **introduce artefatti a cui il riconoscimento automatico è
+         * vulnerabile**, e ogni costruttore ne mette di suoi. ⇒ «Va meglio con
+         * `MIC` grezzo?» non è una domanda a cui si risponde leggendo: si
+         * risponde provando **su questo dispositivo, in questa stanza**.
+         *
+         * Il file `sorgente-mic` in `files/` la cambia. Niente ricompilazione
+         * per provare, e il difetto non si muove per nessun altro.
+         */
+        val sorgente = if (File(filesDir, "sorgente-mic").exists()) {
+            Log.w(MARCHIO, "SORGENTE DI PROVA: MIC grezzo invece di VOICE_RECOGNITION")
+            MediaRecorder.AudioSource.MIC
+        } else {
+            MediaRecorder.AudioSource.VOICE_RECOGNITION
+        }
         val presa = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            sorgente,
             FREQUENZA,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
             maxOf(minimo, FREQUENZA * 2),
         )
+
+        /*
+         * ⛔ La sonda dei byte grezzi: si apre solo se qualcuno l'ha chiesta, e
+         * si chiude sempre — un file lasciato aperto su un servizio che gira per
+         * ore riempie il disco della persona senza che nessuno se ne accorga.
+         */
+        registraGrezzo = if (File(filesDir, "registra-parola").exists()) {
+            runCatching {
+                val dove = File(getExternalFilesDir(null), "parola-grezza.pcm")
+                Log.w(MARCHIO, "SONDA GREZZA ACCESA: scrivo in $dove")
+                BufferedOutputStream(FileOutputStream(dove, false))
+            }.getOrNull()
+        } else {
+            null
+        }
         this.presa = presa
         if (presa.state != AudioRecord.STATE_INITIALIZED) {
             Log.e(MARCHIO, "il microfono non si è inizializzato")
@@ -350,6 +398,45 @@ class TalosParola : Service() {
             dentro += letti
             if (dentro < blocco.size) continue
             dentro = 0
+
+            /*
+             * ⛔⛔⛔ LA SONDA CHE SCRIVE I BYTE VERI — e nasce da una misura.
+             *
+             * 2026-08-17, sul Pad: dieci «hey TALOS» a voce, punteggio più alto
+             * **0,383** contro una soglia di 0,50. Zero attivazioni. Sulla
+             * registrazione della STESSA voce lo stesso modello dà 0,95.
+             *
+             * Quattro sospettati esclusi uno per uno, misurando:
+             *   guadagno .......... a −18 dB il punteggio resta 0,951
+             *   livello ........... la voce arriva più debole, ma non basta
+             *   rumore ............ a 16 dB di rapporto: 9 attivazioni, picco 0,967
+             *   microfono conteso . `ai.talos` ha RECORD_AUDIO negato
+             *
+             * ⇒ Resta ciò che nessun ragionamento raggiunge: **che cosa arriva
+             * davvero al modello su questo dispositivo**. La letteratura indica
+             * il sospettato: la soppressione del rumore introduce artefatti a
+             * cui il riconoscimento automatico è vulnerabile, e `VOICE_RECOGNITION`
+             * su ColorOS può applicarne di aggressivi. Ma sospettare non è sapere.
+             *
+             * ⛔ Si accende creando un file e si spegne cancellandolo — niente
+             * ricompilazione per provare, e niente scrittura per chi non l'ha
+             * chiesta. Ed è PRIMA del guadagno di proposito: il modello lo si
+             * vuole vedere com'è entrato, non com'è stato aggiustato.
+             */
+            val sonda = registraGrezzo
+            if (sonda != null) {
+                runCatching {
+                    val byte = ByteArray(blocco.size * 2)
+                    for (i in blocco.indices) {
+                        byte[i * 2] = (blocco[i].toInt() and 0xFF).toByte()
+                        byte[i * 2 + 1] = ((blocco[i].toInt() shr 8) and 0xFF).toByte()
+                    }
+                    sonda.write(byte)
+                }.onFailure {
+                    Log.w(MARCHIO, "la sonda grezza non scrive: ${it.message}")
+                    registraGrezzo = null
+                }
+            }
 
             /*
              * ⛔⛔ IL GUADAGNO — «devo letteralmente urlare», owner 2026-08-15.
@@ -452,6 +539,10 @@ class TalosParola : Service() {
         runCatching { presa.stop() }
         this.presa = null
         presa.release()
+        /* ⛔ La sonda si chiude QUI e non solo in onDestroy: il ciclo può uscire
+         * da solo (microfono perso, motore caduto) senza che il servizio muoia. */
+        runCatching { registraGrezzo?.close() }
+        registraGrezzo = null
     }
 
     /**
