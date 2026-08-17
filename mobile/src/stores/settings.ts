@@ -345,7 +345,9 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     immersive_header: true,
     composer_shape: TALOS_DEFAULT_COMPOSER_SHAPE,
     composer_plus: TALOS_DEFAULT_COMPOSER_PLUS,
-    launcher_icon_follows_theme: false,
+    // Owner 2026-08-17: "icona app coordinata al tema abilitato di default".
+    // The launcher icon follows whichever theme is on, without being asked.
+    launcher_icon_follows_theme: true,
     // ⛔ Spento: la vigilanza continua è una scelta, non un default.
     ponte_sempre_acceso: false,
     library_context_enabled: false,
@@ -809,6 +811,37 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
      */
     if (value.defaults_v3 !== true) {
         shellParsed.immersive_header = true
+        /*
+         * ⛔⛔ `'standard'` SCRITTO, non letto dal predefinito di oggi.
+         *
+         * Questa è la migrazione del 23 luglio, e il suo approdo è il default
+         * DI ALLORA. Finché leggeva `DEFAULT_SHELL_PREFERENCES`, ogni cambio
+         * futuro del predefinito si trasformava in una riscrittura per chi era
+         * fermo a prima della v3 — cioè un cambio a installazioni ESISTENTI,
+         * che è precisamente ciò che l'owner ha escluso il 2026-08-17: «stavo
+         * parlando delle installazioni nuove, non default per i già
+         * installati».
+         *
+         * ⇒ Una migrazione porta a un valore STORICO. Se punta al presente non
+         * è una migrazione: è un default che si applica all'indietro ogni volta
+         * che qualcuno lo cambia, e nessuno se ne accorge.
+         *
+         * ⛔⛔ E SOLO SE C'È QUALCOSA DA MIGRARE — l'ha trovato il test dei
+         * predefiniti freschi, scritto un'ora prima proprio per questo.
+         *
+         * Questa migrazione gira anche a chi installa adesso, perché la
+         * bandiera manca in tutti e due i casi. Senza questa guardia il valore
+         * storico avrebbe vinto anche lì, e il nuovo predefinito non lo avrebbe
+         * prodotto NESSUN percorso: il difetto che in memoria si chiama «il
+         * default irraggiungibile», dove una migrazione del 25 luglio zittiva
+         * una decisione del 27.
+         *
+         * ⇒ Una migrazione sposta un valore SALVATO. Se non c'è niente di
+         * salvato non c'è niente da spostare, e comanda il predefinito.
+         */
+        if (typeof value.shell === 'object' && value.shell !== null) {
+            shellParsed.composer_shape = 'standard'
+        }
         // Re-review 2026-07-25: bubble_scale is now the user-facing CHAT TEXT SIZE.
         // Forcing it here shipped 'Small' pre-selected and overwrote an explicit choice.
         if (motionParsed.mode === 'off') motionParsed.mode = 'complex'

@@ -180,15 +180,30 @@ describe('the composer, as two settings rather than three switches or one fused 
      * those are orthogonal. These are about the part that goes wrong quietly —
      * the people who already had EITHER of the two older shapes stored.
      */
-    it('defaults to the standard bar with the bottom drawer, and unknown values fall closed', () => {
+    /*
+     * ⛔ 2026-08-17: la barra di un'installazione NUOVA e' `compact` — owner,
+     * «la forma del compositore a compatto». Vale solo per chi installa adesso:
+     * ogni riga qui sotto che parla di un'installazione ESISTENTE continua a
+     * dire `standard`, ed e' la ragione per cui non sono state cambiate tutte
+     * insieme con una sostituzione.
+     */
+    it('defaults to the COMPACT bar with the bottom drawer, and unknown values fall closed', () => {
         const fresh = parseTalosMobileSettings(null).shell
-        expect(fresh.composer_shape).toBe('standard')
+        expect(fresh.composer_shape).toBe('compact')
         expect(fresh.composer_plus).toBe('drawer')
 
         const junk = parseTalosMobileSettings(JSON.stringify({
             composer_split_v1: true,
             shell: { composer_shape: 'a-shape-we-never-shipped', composer_plus: 'telepathy' },
         })).shell
+        /*
+         * ⛔ `standard`, e la differenza NON e una svista: qui c e uno `shell`
+         * SALVATO, quindi e un'installazione esistente, e cade sul valore
+         * storico. La riga sopra non ha niente di salvato ed e la nuova.
+         * Le due stanno nello stesso test apposta: se un giorno diventassero
+         * uguali, vorrebbe dire che il predefinito ha ricominciato ad applicarsi
+         * all indietro.
+         */
         expect(junk.composer_shape).toBe('standard')
         expect(junk.composer_plus).toBe('drawer')
     })
@@ -251,7 +266,11 @@ describe('defaults v3 (owner #15)', () => {
     it('fresh installs get immersive+drawer+compact+complex', () => {
         const parsed = parseTalosMobileSettings(null)
         expect(parsed.shell.immersive_header).toBe(true)
-        expect(parsed.shell.composer_shape).toBe('standard')
+        // ⛔ 2026-08-17: `compact` per chi installa adesso. La migrazione v3 qui
+        // sopra continua a portare a `standard` chi era fermo a prima — ma solo
+        // se aveva qualcosa di SALVATO, se no il predefinito nuovo non sarebbe
+        // stato prodotto da nessun percorso.
+        expect(parsed.shell.composer_shape).toBe('compact')
         expect(parsed.motion_v6.mode).toBe('complex')
     })
 

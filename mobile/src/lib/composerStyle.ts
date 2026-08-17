@@ -46,7 +46,8 @@ export type TalosComposerPlusSurface = 'drawer' | 'menu'
 export const TALOS_COMPOSER_SHAPES: readonly TalosComposerShape[] = ['classic', 'standard', 'compact']
 export const TALOS_COMPOSER_PLUS_SURFACES: readonly TalosComposerPlusSurface[] = ['drawer', 'menu']
 
-export const TALOS_DEFAULT_COMPOSER_SHAPE: TalosComposerShape = 'standard'
+// Owner 2026-08-17, looking at the app: "la forma del compositore a compatto".
+export const TALOS_DEFAULT_COMPOSER_SHAPE: TalosComposerShape = 'compact'
 export const TALOS_DEFAULT_COMPOSER_PLUS: TalosComposerPlusSurface = 'drawer'
 
 export function talosComposerShapeExists(value: unknown): value is TalosComposerShape {
@@ -122,5 +123,24 @@ export function talosComposerFromLegacy(legacy: Record<string, unknown>): {
     if (legacy.immersive_composer === true) return { shape: 'compact', plus: 'menu' }
     if (legacy.composer_drawer === false) return { shape: 'classic', plus: TALOS_DEFAULT_COMPOSER_PLUS }
     if (legacy.plus_dropdown === true) return { shape: 'standard', plus: 'menu' }
-    return { shape: TALOS_DEFAULT_COMPOSER_SHAPE, plus: TALOS_DEFAULT_COMPOSER_PLUS }
+    /*
+     * ⛔⛔ QUESTA RIGA È SCRITTA, NON DEDOTTA DAL PREDEFINITO — e la differenza
+     * l'ha trovata un test, non una rilettura.
+     *
+     * Il 2026-08-17 il predefinito del compositore passa a `compact` (owner:
+     * «la forma del compositore a compatto»), e ha detto anche per chi vale:
+     * «stavo parlando delle installazioni NUOVE, non default per i già
+     * installati».
+     *
+     * Qui però non siamo su un'installazione nuova: siamo sulla traduzione di
+     * una scelta VECCHIA. `composer_drawer: true` vuol dire che quella persona
+     * aveva acceso il cassetto, cioè la barra standard — e finché questa riga
+     * leggeva il predefinito, cambiarlo le riscriveva la scelta sotto il naso.
+     * Un cambio di predefinito che si trasforma in migrazione è esattamente
+     * quello che l'owner ha escluso.
+     *
+     * ⇒ `standard` sta scritto. Il prossimo che cambia il predefinito non tocca
+     * chi ha già scelto, e non deve accorgersene da solo.
+     */
+    return { shape: 'standard', plus: TALOS_DEFAULT_COMPOSER_PLUS }
 }

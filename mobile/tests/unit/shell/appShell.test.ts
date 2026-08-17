@@ -646,7 +646,14 @@ describe('il dialogo dell icona non c entra con le altre preferenze', () => {
         iconSpy.evaluate.mockClear()
 
         const settings = useSettingsStore()
-        await settings.setShell({ launcher_icon_follows_theme: true })
+        /*
+         * ⛔ Si SPEGNE, non si accende. Dal 2026-08-17 l'icona segue il tema di
+         * predefinito (owner: «icona app coordinata al tema abilitato di
+         * default»), quindi accenderla non e' piu un cambiamento — e un test che
+         * scrive un valore uguale a quello che c'e' gia non prova che il
+         * watcher noti qualcosa. Prova solo che non esplode.
+         */
+        await settings.setShell({ launcher_icon_follows_theme: false })
         await flushPromises()
 
         // Il filtro non deve essere diventato un tappo: la cosa che il watcher
