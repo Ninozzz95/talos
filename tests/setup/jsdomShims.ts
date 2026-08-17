@@ -157,3 +157,47 @@ const TIRATI_DENTRO_SUBITO = [
 ]
 
 for (const tira of TIRATI_DENTRO_SUBITO) void tira()
+
+/**
+ * ⭐⭐⭐ THE TEARDOWN RACE — exit 1 with ZERO failing tests, and the third cure
+ * is the one the tool itself documents.
+ *
+ * The release of v0.1.3 died here, after 3m52s of CI:
+ *
+ *     EnvironmentTeardownError: Cannot load
+ *     '/node_modules/class-variance-authority/dist/index.mjs' imported from
+ *     src/components/ui/button/index.ts after the environment was torn down.
+ *
+ * Zero tests red. A gate that is red while everything passes is a gate nobody
+ * reads — the same sentence is already written above this one, about scrollTo.
+ *
+ * ## ⛔ Two cures were burned before this one, and both were LOCAL
+ *
+ * The pattern is always the same and it is not a bug in our code: a component
+ * starts a lazy `import()` while mounting, the test finishes, Vitest tears the
+ * environment down, and the import resolves into a world that no longer exists.
+ * Every component in this app imports lazily on purpose — that is how the
+ * startup graph stays under its ceiling — so the race is available to any test
+ * that mounts anything.
+ *
+ * ⇒ Which is exactly why the fix belongs HERE and not in a test file: patching
+ * the file that happened to be red leaves the race armed in the other ~90.
+ *
+ * ## The remedy, from Vitest's own API
+ *
+ * `vi.dynamicImportSettled()` waits for every pending dynamic import —
+ * including imports started by those imports — plus one `setTimeout` tick, so
+ * the synchronous work that follows them has run too. Reported against Vitest
+ * 4.1 (ours is 4.1.10) precisely for "mounting a component with dynamic
+ * imports".
+ *
+ * ⛔ It runs only where a DOM exists: the ~220 files that test a pure function
+ * mount nothing, and making them all await something would be paying 220 times
+ * for a race they cannot have.
+ */
+if (typeof document !== 'undefined') {
+    const { afterEach, vi } = await import('vitest')
+    afterEach(async () => {
+        await vi.dynamicImportSettled()
+    })
+}
