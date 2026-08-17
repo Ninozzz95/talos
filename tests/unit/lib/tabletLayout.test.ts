@@ -76,7 +76,9 @@ describe('shell.tablet_sidebar_width persistence (F6)', () => {
         expect(fresh.state.shell.tablet_sidebar_width).toBe(372)
         // The sibling shell flags stay untouched by the patch.
         expect(fresh.state.shell.immersive_header).toBe(true)
-        expect(fresh.state.shell.composer_shape).toBe('standard')
+        // ⛔ 2026-08-17: questo magazzino nasce senza niente di salvato, quindi
+        // e un'installazione NUOVA e prende il predefinito nuovo.
+        expect(fresh.state.shell.composer_shape).toBe('compact')
     })
 })
 

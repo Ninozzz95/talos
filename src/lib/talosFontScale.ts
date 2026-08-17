@@ -20,9 +20,19 @@ export const TALOS_FONT_SCALES = ['small', 'default', 'large', 'xlarge'] as cons
 
 export type TalosFontScale = (typeof TALOS_FONT_SCALES)[number]
 
-// Owner 2026-07-25: ships at `large` — the system type is deliberately bigger
-// than the chat body, which he wants small.
-export const TALOS_DEFAULT_FONT_SCALE: TalosFontScale = 'large'
+/*
+ * Owner 2026-08-17, looking at the app: "di default la grandezza dei testi
+ * dell'interfaccia deve essere settata a predefinita non grande". This replaces
+ * his 2026-07-25 decision that it should ship at `large`.
+ *
+ * ⛔ Lowering a text-size default is an accessibility decision, so it was
+ * checked rather than assumed. WCAG 1.4.4 and the platform guides say an app
+ * must honour the device's text-size setting *unless it offers its own* — and
+ * this is ours. `default` is the factor 1.0 step: it does not shrink anything,
+ * it stops multiplying, and the device scale underneath still applies. Every
+ * larger step stays one tap away.
+ */
+export const TALOS_DEFAULT_FONT_SCALE: TalosFontScale = 'default'
 
 const FACTORS: Record<TalosFontScale, number> = {
     small: 0.9,
