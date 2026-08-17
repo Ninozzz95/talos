@@ -57,6 +57,38 @@ import { talosNumericUsage } from '@/lib/chat/providers/usage'
  * ha sempre fatto. **Meglio un prefisso grande che una risposta che non
  * arriva** — ed è ciò che l'owner ha visto due volte stanotte.
  *
+ * ## ⭐ QUANTO COSTA TENERLO SPENTO — misurato il 2026-08-17
+ *
+ * Sulla suite vera, con tutti gli attrezzi accesi (20 offerti: 10 di lettura,
+ * 6 di scrittura, 4 in uscita), guardando ciò che entra nel CONTESTO del
+ * modello e non ciò che viaggia sul filo:
+ *
+ *     spento (schemi interi)   17.132 byte   ~4.630 token   a OGNI messaggio
+ *     acceso (a gradi)          1.984 byte     ~536 token   16 differiti su 20
+ *     ⇒ risparmio                                    88%
+ *
+ * ⛔ E sul FILO l'apertura a gradi pesa 409 byte in PIÙ (17.541 contro 17.132):
+ * manda comunque ogni schema e ci aggiunge `defer_loading` più la riga della
+ * ricerca. Chi misura i byte spediti conclude che costa di più — vero, e
+ * risponde alla domanda sbagliata. Il numero sta in
+ * `tests/unit/tools/quantoCostaAnthropic.test.ts`, che lo ristampa a ogni corsa.
+ *
+ * ## ⛔ E la forma della cura, perché non si riscopra da capo
+ *
+ * Serve che un turno dell'assistente sappia portarsi dietro i blocchi del
+ * fornitore **verbatim**. Oggi si ricostruisce come `[testo?, ...tool_use]` in
+ * `buildAnthropicRequest`, e quei due tipi non esistono nel nostro modello.
+ * Sono QUATTRO strati, e vanno fatti insieme o il valore muore all'ultimo:
+ *
+ *     1. l'adattatore li CATTURA dalla risposta
+ *     2. il turno ha dove tenerli
+ *     3. la persistenza li salva e li rilegge
+ *     4. `buildAnthropicRequest` li rimette in fila, nell'ordine originale
+ *
+ * ⛔ Il quarto senza il terzo è il difetto peggiore: una chat salvata che al
+ * riaperto spedisce una conversazione monca. Vedi «una chiamata orfana
+ * avvelena la chat per sempre».
+ *
  * ⛔ Il codice e i test dell'apertura a gradi NON si cancellano: sono giusti e
  * misurati (63 attrezzi → 4 nel prefisso, −96%). Quando la storia saprà
  * portarsi dietro quei due blocchi, qui si rimette `talosConvieneAprireAGradi`
