@@ -72,6 +72,29 @@ export async function talosApriDaScheda(
 }
 
 /**
+ * ⭐⭐⭐ IL FILE SCELTO COL DITO — e prima era un giro chiuso.
+ *
+ * MISURATO sul Pad il 2026-08-17. Due `nota-talos.txt` nella Libreria. L'esito
+ * dello strumento portava i numeri, gli id, e a lettere «call this tool again
+ * with "file" set to that entry's id». La persona ha risposto «1», e il modello
+ * ha rifatto la STESSA domanda: richiamava col nome, riotteneva l'ambiguità,
+ * riscriveva l'elenco.
+ *
+ * ⛔ È la lezione già scritta due volte in `intentiTools`: un'istruzione scritta
+ * NON vincola il modello. Se una cosa deve succedere, la fa il codice.
+ *
+ * ⇒ Il dito porta l'id, che è l'unica cosa che distingue due omonimi — il nome
+ * no, e nemmeno il contenuto, che sul Pad era identico.
+ */
+export async function talosMandaFileDaScheda(
+    id: string,
+    dove: { readonly app?: string, readonly contatto?: string, readonly testo?: string },
+): Promise<boolean> {
+    const { talosMandaFilePerId } = await import('@/lib/tools/intentiTools')
+    return talosMandaFilePerId(id, dove).catch(() => false)
+}
+
+/**
  * ⭐⭐⭐ IL COMANDO INVECE DELLA GARA — e la gara l'avevamo persa.
  *
  * MISURATO sul Pad il 2026-08-17, dal registro delle activity. L'invio fallisce

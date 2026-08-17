@@ -810,6 +810,7 @@ export const TALOS_IT_MESSAGES = {
          * voci si toccano e la cosa parte.
          */
         cardWhichApp: 'Con quale app?',
+        cardWhichFile: 'Quale file?',
         /*
          * ⛔ La PAROLA, non solo un colore o una spunta. Un segno rosso e uno
          * verde si somigliano per chi non li distingue, e questa scheda esiste
