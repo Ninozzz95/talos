@@ -94,6 +94,51 @@ import { talosNumericUsage } from '@/lib/chat/providers/usage'
  * portarsi dietro quei due blocchi, qui si rimette `talosConvieneAprireAGradi`
  * e il resto è già al suo posto.
  */
+/*
+ * ⭐⭐⭐ PROVATO ACCESO il 2026-08-17, e RISPENTO — con un motivo NUOVO.
+ *
+ * La catena dei sette ponti è fatta e regge: i blocchi `server_tool_use` e
+ * `tool_search_tool_result` adesso sopravvivono a tutto — l'adattatore li
+ * cattura, i due contratti li dichiarano, il giro dell'agente li ACCUMULA (
+ * nascono al primo giro e all'ultimo non ci sono più), il punto di controllo
+ * li porta attraverso un consenso, i metadati li salvano per domani.
+ *
+ * ⛔⛔ MA NON BASTAVA, e il telefono lo ha detto in modo netto.
+ *
+ * Provato sul Pad, stessa domanda, unica variabile questo interruttore:
+ *
+ *     ACCESO   «TALOS non può accedere alle informazioni hardware del tuo
+ *               dispositivo. Non posso leggerti la capacità della batteria»
+ *
+ *     SPENTO   «Il tuo telefono ha il 90% di batteria. È collegato a una presa
+ *               ma non sta caricando… Il dispositivo è un OnePlus Pad 3 con
+ *               Android 16»  — e la torcia si accende davvero
+ *
+ * ⇒ Con l'apertura a gradi accesa il modello NON TROVA gli strumenti differiti.
+ * La ricerca lato server non glieli sta consegnando, e lui conclude in buona
+ * fede di non avere quelle capacità — che è la bugia peggiore che questa app
+ * possa dire, perché è dichiarata con sicurezza.
+ *
+ * ⛔ Il difetto non era UNO. La storia monca era reale ed è curata; sotto c'era
+ * un secondo problema che nessuno poteva vedere finché il primo non era
+ * risolto. È il motivo per cui questa riga NON si accende su un test verde:
+ * i test provavano la forma dei messaggi, e la forma era giusta.
+ *
+ * ## ⇒ Cosa resta da capire, prima di riaccenderla
+ *
+ * Perché `tool_search_tool_bm25` non restituisce gli strumenti differiti. Le
+ * tre piste, in ordine di costo:
+ *   1. le descrizioni: la ricerca è BM25 sul testo, e le nostre descrizioni
+ *      sono in inglese mentre chi scrive è in italiano — «quanta batteria» non
+ *      combacia con nulla se la descrizione non nomina «battery»;
+ *   2. il modello non chiama affatto la ricerca, e allora è un problema di
+ *      prompt, non di catalogo;
+ *   3. la chiamiamo male noi.
+ *
+ * ⛔ La prima si distingue dalle altre due guardando UNA cosa: se nella
+ * risposta compare un blocco `server_tool_use`. Se non compare, il modello non
+ * ha nemmeno cercato.
+ */
 const APERTURA_A_GRADI_ANTHROPIC = false
 
 /**
