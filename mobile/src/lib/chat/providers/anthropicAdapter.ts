@@ -176,6 +176,43 @@ import { talosNumericUsage } from '@/lib/chat/providers/usage'
  * ⇒ Indice compatto in vista + schemi differiti = il modello sa di poter
  * cercare perche' vede i nomi, e paga solo cio' che apre. Nessuno dei due
  * meccanismi, da solo, fa questo.
+ *
+ * ### ⭐⭐⭐ PROVATO, e funziona — con l'economia misurata
+ *
+ * Con l'indice dei nomi nel system prompt, il modello CERCA e poi chiama
+ * davvero lo strumento differito:
+ *
+ *     ["server_tool_use","tool_search_tool_result","text","tool_use"]
+ *                                                        └ device_battery
+ *
+ * Tre strategie, 16 strumenti del dispositivo, stesso modello:
+ *
+ *                                    senza strumento   con strumento
+ *     A) tutti visibili (oggi)            1.798            1.793
+ *     B) differiti, senza indice            761         ⛔ ROTTA: nega
+ *     C) differiti + indice                 872            1.908
+ *
+ * ⇒ **C risparmia 926 token** su un messaggio che non usa strumenti, e ne costa
+ * **115 in piu'** su uno che li usa. In una chat la gran parte dei messaggi e'
+ * conversazione ⇒ C vince, e vince molto.
+ *
+ * ⛔ E il pareggio si sposta col numero di strumenti: piu' ne offriamo, piu' A
+ * peggiora e C resta fermo. Oggi sono 20; il piano ne prevede molti di piu'.
+ *
+ * ⛔⛔ Una misura sola stava per farmi buttare l'idea. Guardando solo il caso
+ * «con strumento» — 1.908 contro 1.793 — la conclusione era «costa di piu', non
+ * serve». Era vera su meta' dei messaggi e falsa sull'altra meta', che e' la
+ * piu' numerosa. ⇒ Un'economia non si misura sul caso peggiore da solo.
+ *
+ * ### ⇒ Cosa serve per accenderla, in ordine
+ *
+ *   1. l'indice: `catalogoCompatto` lo produce gia' (−87%), oggi per gli altri
+ *      fornitori. Va messo nel system prompt anche per Anthropic;
+ *   2. `defer_loading` sugli schemi, che e' gia' scritto e provato qui;
+ *   3. la catena dei sette ponti, gia' fatta.
+ *
+ * ⛔ Sono numeri di UNA prompt, UN modello, 16 strumenti. La forma e' netta, il
+ * numero esatto no.
  */
 const APERTURA_A_GRADI_ANTHROPIC = false
 
