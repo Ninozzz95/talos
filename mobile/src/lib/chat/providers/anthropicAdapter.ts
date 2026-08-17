@@ -124,20 +124,58 @@ import { talosNumericUsage } from '@/lib/chat/providers/usage'
  * risolto. È il motivo per cui questa riga NON si accende su un test verde:
  * i test provavano la forma dei messaggi, e la forma era giusta.
  *
- * ## ⇒ Cosa resta da capire, prima di riaccenderla
+ * ## ⇒ E POI SI E' CAPITO, con nove sonde dirette all'API
  *
- * Perché `tool_search_tool_bm25` non restituisce gli strumenti differiti. Le
- * tre piste, in ordine di costo:
- *   1. le descrizioni: la ricerca è BM25 sul testo, e le nostre descrizioni
- *      sono in inglese mentre chi scrive è in italiano — «quanta batteria» non
- *      combacia con nulla se la descrizione non nomina «battery»;
- *   2. il modello non chiama affatto la ricerca, e allora è un problema di
- *      prompt, non di catalogo;
- *   3. la chiamiamo male noi.
+ * `una sonda diretta, fuori dal repository`. Il cablaggio e' TUTTO GIUSTO — e il difetto e'
+ * altrove, in un posto che nessuna riga di codice nostro puo' toccare.
  *
- * ⛔ La prima si distingue dalle altre due guardando UNA cosa: se nella
- * risposta compare un blocco `server_tool_use`. Se non compare, il modello non
- * ha nemmeno cercato.
+ * ### Cosa funziona, misurato
+ *
+ *     token in ingresso, stesso messaggio, sola variabile la forma
+ *       2 attrezzi in vista, nessuna ricerca            597
+ *       5 attrezzi, 2 differiti                         785
+ *       5 attrezzi, NESSUN differito                    881
+ *       18 attrezzi, 16 differiti                       792
+ *
+ * ⇒ `defer_loading` MORDE: i differiti spariscono dal prefisso, e scala —
+ * passare da 2 a 16 differiti costa SETTE token. ⛔ E funziona anche senza
+ * l'intestazione beta `advanced-tool-use-2025-11-20`: identici 785.
+ *
+ * E il modello VEDE la ricerca. Chiesto di elencare i suoi strumenti:
+ *
+ *     tool_search_tool_bm25
+ *     time_now
+ *
+ * — con `device_battery` correttamente nascosto.
+ *
+ * ### ⛔⛔ Cosa NON funziona, ed e' il muro
+ *
+ *     domanda secca                     ⛔ non cerca   ["text"]
+ *     ordine esplicito NEL MESSAGGIO    ✓ CERCA        ["text","server_tool_use",
+ *                                                       "tool_search_tool_result","text"]
+ *     ordine nel SYSTEM PROMPT          ⛔ non cerca   ["text"]
+ *
+ * ⇒ Claude Haiku 4.5 non usa la ricerca di sua iniziativa, e il system prompt
+ * NON lo convince. Solo la persona, chiedendolo a parole sue, lo fa cercare.
+ * Provato anche con Sonnet 5: non cerca, chiama `memory_search` — cioe'
+ * preferisce uno strumento che vede a uno che dovrebbe trovare.
+ *
+ * ⇒ Accendere questa riga vuol dire che TALOS risponde «non posso farlo» a ogni
+ * capacita' differita, tranne quando la persona indovina di dirgli «cerca fra i
+ * tuoi strumenti». E' peggio di un prefisso grande: e' un'app che nega di saper
+ * fare cose che sa fare.
+ *
+ * ## ⭐ E la strada che questo apre, che e' meglio dell'originale
+ *
+ * Il meccanismo di Anthropic toglie gli strumenti dal prefisso e si fida che il
+ * modello li cerchi. Noi abbiamo gia' l'altra meta': `catalogoCompatto`, un
+ * INDICE degli strumenti — 38.386 → 5.087 byte, −87% — che oggi serve gli altri
+ * fornitori. Le due cose non sono alternative: l'indice dice al modello CHE
+ * COSA esiste, `defer_loading` evita di pagarne gli schemi.
+ *
+ * ⇒ Indice compatto in vista + schemi differiti = il modello sa di poter
+ * cercare perche' vede i nomi, e paga solo cio' che apre. Nessuno dei due
+ * meccanismi, da solo, fa questo.
  */
 const APERTURA_A_GRADI_ANTHROPIC = false
 
