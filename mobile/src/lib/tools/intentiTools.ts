@@ -1028,9 +1028,45 @@ function talosToolInviaFile(fonti: TalosFontiFile): TalosToolDefinition<never> {
          * e il tetto complessivo è 42.000: la prima stesura ne costava 880 e
          * sfondava. Quello che resta è ciò che il modello non può dedurre.
          */
+        /*
+         * ⭐⭐⭐ IL VERBO DAVANTI — e i 188 byte in più sono MISURATI.
+         *
+         * Il muro, sul Pad il 2026-08-17: «manda il file X a Y» e `invia_file`
+         * non parte mai. Il registro delle notifiche dice quale attrezzo è
+         * girato davvero: **«Ricerca nella Libreria»**, e basta. Il modello
+         * cerca, racconta il contenuto, e non manda.
+         *
+         * ⛔ E questa descrizione non diceva MAI cosa fa lo strumento: erano due
+         * note sui parametri, senza un verbo. Accanto, `library_search` dichiara
+         * il territorio a lettere — «Use it BEFORE answering questions about the
+         * user's own files».
+         *
+         * ⛔ La prima sonda diceva che non c'entrava: tre attrezzi in gara,
+         * `invia_file` scelto 12/12 con la descrizione vecchia. Era una sonda
+         * TROPPO FACILE. Rimessi i concorrenti veri — `library_search`,
+         * `library_read`, `library_export`, `document_create`, `app_azione`,
+         * `device_screen_drive` — quattro formulazioni per tre giri:
+         *
+         *   | forma                    | byte | invia_file scelto |
+         *   |--------------------------|------|-------------------|
+         *   | quella di prima          |  130 |  8/12             |
+         *   | + «do NOT search first»  |  217 |  9/12             |
+         *   | + il verbo, stretto      |  248 | 10/12             |
+         *   | **questa**               |  318 | **12/12**         |
+         *
+         * E «scrivi a X su WhatsApp allegando Y» andava **0/3** a
+         * `library_search`: con questa va 3/3.
+         *
+         * ⛔ Le forme corte NON bastano, e sono state provate prima di pagare:
+         * la differenza che conta è nominare l'innesco per esteso — «send,
+         * share or forward» — non alludervi.
+         */
         description: [
-            '"file" is matched against the real Library; if several match, ask instead of',
-            'guessing. Omit "app" to list the apps that accept it.',
+            'Send a Library file to a person through another app. Use this whenever the',
+            'user asks to send, share or forward a file — do NOT search the Library first,',
+            'this tool matches the name itself. "file" is matched against the real Library;',
+            'if several match, ask instead of guessing. Omit "app" to list the apps that',
+            'accept it.',
         ].join(' '),
         input: z.object({
             /*
