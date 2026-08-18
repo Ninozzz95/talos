@@ -53,7 +53,7 @@ async function mockProvider(page: Page): Promise<void> {
 async function sendMessage(page: Page, text: string): Promise<void> {
     const composer = page.getByLabel('Message TALOS')
     await composer.fill(text)
-    await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+    await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
     await composer.press('Enter')
     await expect(page.getByText('Understood.', { exact: true }).first()).toBeVisible()
 }
@@ -71,7 +71,23 @@ async function holdRow(page: Page, index: number): Promise<void> {
     await page.mouse.down()
     await page.waitForTimeout(650)
     await page.mouse.up()
-    await expect(page.locator('[data-testid="talos-chats-row-menu"]')).toBeVisible()
+    /*
+     * ⛔⛔ IL TIENI-PREMUTO SELEZIONA, non apre un menu.
+     *
+     * Questo aiutante aspettava `talos-chats-row-menu`, un testid RIMOSSO il
+     * 4 agosto dal refactor «⋮ visibile e tieni-premuto che seleziona, come
+     * nella Ricerca» — perché le due liste della stessa app rispondevano in modo
+     * opposto allo stesso dito.
+     *
+     * ⇒ Il test non era rotto: era fermo a un'app che non esiste più, da due
+     * settimane. Nessuno se n'è accorto perché la CI non eseguiva i test nel
+     * browser.
+     *
+     * ⛔ Si aspetta la BARRA DI SELEZIONE, che è l'effetto vero del gesto: se
+     * domani cambia di nuovo, questo test lo dice invece di cercare un elemento
+     * che non c'è.
+     */
+    await expect(page.locator('[data-testid="talos-chats-selection-bar"]')).toBeVisible()
 }
 
 test('the delete confirmation is never a trap, whatever the shell is doing', async ({ page }) => {
@@ -122,9 +138,15 @@ test('several chats go in one pass from the selection mode', async ({ page }) =>
     const rows = page.locator('[data-testid="talos-chats-row"]')
     await expect(rows).toHaveCount(2)
 
-    // Enter from a held row: it selects the row the thumb was already on.
+    /*
+     * Enter from a held row: it selects the row the thumb was already on.
+     *
+     * ⛔ Qui c'era anche un click su `talos-chats-select`, la voce «Seleziona»
+     * del menu per riga. Il refactor del 4 agosto ha tolto quel menu e reso il
+     * tieni-premuto un gesto di SELEZIONE: il click cercava una voce che non
+     * esiste piu, e il test aspettava sessanta secondi prima di dirlo.
+     */
     await holdRow(page, 0)
-    await page.getByTestId('talos-chats-select').click()
     await expect(page.getByTestId('talos-chats-selection-bar')).toContainText('1 selected')
 
     await page.getByRole('button', { name: 'All' }).click()
@@ -147,13 +169,12 @@ test('leaving the selection mode restores the ordinary row actions', async ({ pa
 
     await openChatsPage(page)
     await holdRow(page, 0)
-    await page.getByTestId('talos-chats-select').click()
     await expect(page.getByTestId('talos-chats-selection-bar')).toBeVisible()
 
     await page.getByLabel('Cancel selection').click()
     await expect(page.getByTestId('talos-chats-selection-bar')).toHaveCount(0)
     // The hold gesture is gated while selecting; it must come back afterwards.
     await holdRow(page, 0)
-    await expect(page.locator('[data-testid="talos-chats-row-menu"]')).toBeVisible()
+    await expect(page.locator('[data-testid="talos-row-actions-menu"]')).toBeVisible()
     await expect(page.locator('[data-testid="talos-chats-row"]')).toHaveCount(1)
 })

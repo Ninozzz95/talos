@@ -102,7 +102,7 @@ test('#19 a pasted URL survives into the sent message text', async ({ page }) =>
     await composer.fill(text)
     // The URL must still be in the field after the browse suggestion appears.
     await expect(composer).toHaveValue(text)
-    await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+    await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
     await composer.press('Enter')
     await expect(page.getByText('Understood, checking that page.', { exact: true })).toBeVisible()
     // #19 contract: the visible user message still contains the URL (scoped to
@@ -123,7 +123,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
 
         const composer = page.getByLabel('Message TALOS')
         await composer.fill('Ciao, prima chat')
-        await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+        await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
         await composer.press('Enter')
         await expect(page.getByText('Understood, checking that page.', { exact: true })).toBeVisible()
 
@@ -194,7 +194,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await closeToolSheet(page)
         const composer = page.getByLabel('Message TALOS')
         await composer.fill('Che piano abbiamo?')
-        await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+        await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
         await composer.press('Enter')
         await expect(page.getByText('Ricevuto, uso il contesto.', { exact: true })).toBeVisible()
 
@@ -253,7 +253,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
 
         const composer = page.getByLabel('Message TALOS')
         await composer.fill('Chat da esportare')
-        await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+        await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
         await composer.press('Enter')
         await expect(page.getByText('Understood, checking that page.', { exact: true })).toBeVisible()
 
@@ -289,7 +289,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
 
         const composer = page.getByLabel('Message TALOS')
         await composer.fill('Verifica il reasoning persistito')
-        await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+        await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
         await composer.press('Enter')
         await expect(page.getByText(E2E_REASONING_ANSWER, { exact: true })).toBeVisible()
 
@@ -335,7 +335,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
 
         const composer = page.getByLabel('Message TALOS')
         await composer.fill('Chat da archiviare')
-        await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+        await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
         await composer.press('Enter')
         await expect(page.getByText('Understood, checking that page.', { exact: true })).toBeVisible()
 
@@ -350,12 +350,13 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await page.waitForFunction(() => getComputedStyle(document.body).pointerEvents !== 'none')
 
         // F5.1 (owner): TAP-AND-HOLD opens the row dropdown.
-        const box = (await row.first().boundingBox())!
-        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-        await page.mouse.down()
-        await page.waitForTimeout(650)
-        await page.mouse.up()
-        const menu = page.locator('[data-testid="talos-chats-row-menu"]')
+        /*
+         * ⛔ Il ⋮ APRE IL MENU; il tieni-premuto SELEZIONA. Il refactor del
+         * 4 agosto ha separato i due gesti perche le due liste della stessa app
+         * rispondevano in modo opposto allo stesso dito. Qui serve il menu.
+         */
+        await row.first().locator('[data-testid^="talos-chats-menu-"]').click()
+        const menu = page.locator('[data-testid="talos-row-actions-menu"]')
         await expect(menu).toBeVisible()
         await menu.getByRole('menuitem', { name: 'Archive' }).click()
 
@@ -383,7 +384,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
 
         const composer = page.getByLabel('Message TALOS')
         await composer.fill('Ciao, chat da lista')
-        await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+        await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
         await composer.press('Enter')
         await expect(page.getByText('Understood, checking that page.', { exact: true })).toBeVisible()
 
@@ -395,16 +396,17 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         // F5.1: actions live in the hold dropdown.
         async function holdFirstRow(): Promise<void> {
             await page.waitForFunction(() => getComputedStyle(document.body).pointerEvents !== 'none')
-            const box = (await row.first().boundingBox())!
-            await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-            await page.mouse.down()
-            await page.waitForTimeout(650)
-            await page.mouse.up()
-            await expect(page.locator('[data-testid="talos-chats-row-menu"]')).toBeVisible()
+            /*
+             * ⛔ Il ⋮ APRE IL MENU; il tieni-premuto SELEZIONA. Il refactor del
+             * 4 agosto ha separato i due gesti perche le due liste della stessa app
+             * rispondevano in modo opposto allo stesso dito. Qui serve il menu.
+             */
+            await row.first().locator('[data-testid^="talos-chats-menu-"]').click()
+            await expect(page.locator('[data-testid="talos-row-actions-menu"]')).toBeVisible()
         }
 
         await holdFirstRow()
-        await page.locator('[data-testid="talos-chats-row-menu"]').getByRole('menuitem', { name: 'Rename' }).click()
+        await page.locator('[data-testid="talos-row-actions-menu"]').getByRole('menuitem', { name: 'Rename' }).click()
         const nameInput = page.getByLabel('Chat name')
         await nameInput.fill('Lista rinominata')
         await page.getByRole('button', { name: 'Save', exact: true }).click()
@@ -412,7 +414,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await expect(row.first()).toContainText('Lista rinominata')
 
         await holdFirstRow()
-        await page.locator('[data-testid="talos-chats-row-menu"]').getByRole('menuitem', { name: 'Delete' }).click()
+        await page.locator('[data-testid="talos-row-actions-menu"]').getByRole('menuitem', { name: 'Delete' }).click()
         await expect(page.getByText('Delete chat?', { exact: true })).toBeVisible()
         await page.getByRole('button', { name: 'Delete', exact: true }).click()
         await expect(page.locator('[data-testid="talos-chats-row"]')).toHaveCount(0)
@@ -425,7 +427,7 @@ test('font size and chat message size remain independent in both directions and 
 
     const composer = page.getByLabel('Message TALOS')
     await composer.fill('Verifica che i due controlli tipografici siano indipendenti')
-    await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+    await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
     await composer.press('Enter')
     await expect(page.getByText('Understood, checking that page.', { exact: true })).toBeVisible()
 

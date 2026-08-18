@@ -50,7 +50,7 @@ test('#28 scrolling up shows the back-to-bottom pill and tapping it rejoins the 
 
     const composer = page.getByLabel('Message TALOS')
     await composer.fill('Scrivi una risposta molto lunga')
-    await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+    await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
     await composer.press('Enter')
     await expect(page.getByText('Riga 90 della risposta lunga.', { exact: true })).toBeVisible()
 
