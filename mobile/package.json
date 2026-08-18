@@ -31,6 +31,7 @@
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
     "test:local-models:device": "node scripts/run-local-model-compatibility.mjs",
+    "verify:android:permission-metadata": "node scripts/verify-release-permission-metadata.mjs",
     "test:scripts": "node --test scripts/verify-parity-ledger.test.mjs",
     "verify:parity": "npm run test:scripts && node scripts/verify-parity-ledger.mjs docs/feature-parity.json",
     "typecheck": "vue-tsc -b --force",
