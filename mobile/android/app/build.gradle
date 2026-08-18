@@ -181,8 +181,34 @@ android {
             }
         }
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            /*
+             * ⛔⛔ R8 ACCESO, e le regole vengono da un INVENTARIO.
+             *
+             * 26 plugin Capacitor: coperti dalle sue stesse consumerProguardFiles
+             * — verificato nel suo build.gradle, non supposto. 5 classi con
+             * metodi nativi: tenute per nome, perché il legame fra Java e C++ è
+             * un nome dentro il simbolo. Sta scritto in proguard-rules.pro quale
+             * riga risponde a quale fatto.
+             *
+             * ⛔ proguard-android-OPTIMIZE.txt e non proguard-android.txt: il
+             * primo lascia lavorare le ottimizzazioni, il secondo le disattiva.
+             * Accendere R8 col file che spegne metà del suo lavoro è prendersi
+             * il rischio senza il guadagno.
+             *
+             * ⛔⛔⛔ E NON BASTA CHE COMPILI. R8 rompe a RUNTIME, sul primo
+             * percorso che raggiunge una classe per nome — cioè quando la
+             * persona apre qualcosa. Prima di pubblicare, ogni plugin va toccato
+             * una volta sul dispositivo. Il fatto che questo build produca un
+             * APK non è la prova che l'app funzioni.
+             */
+            minifyEnabled true
+            /*
+             * ⛔ DOPO R8, mai prima: le risorse si tolgono in base a ciò che il
+             * codice RIMASTO usa davvero, e prima di R8 il codice rimasto non si
+             * sa ancora quale sia.
+             */
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (firmaDisponibile) {
                 signingConfig signingConfigs.rilascio
             }
