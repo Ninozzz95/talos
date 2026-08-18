@@ -55,7 +55,7 @@ jobs:
       # MISURATO il 2026-08-16: la seconda corsa di release e' morta cosi', al
       # passo 16 su 19. `gates` non l'aveva mai scoperto perche' non compila il
       # nativo — un cancello che non esegue una cosa non la sta provando.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           submodules: recursive
 
@@ -135,18 +135,18 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "changelog di ${GITHUB_REF_NAME}: $(printf '%s' "$sezione" | wc -l) righe"
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24.18.0'
           cache: npm
           cache-dependency-path: ${{ steps.dove.outputs.dir }}/package-lock.json
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
 
       # ⛔⛔ L'NDK ESATTO, INSTALLATO A MANO — e non è pedanteria.
       #
@@ -307,11 +307,11 @@ jobs:
       # permesso in piu' che nessuno avrebbe indovinato.
       #
       # Senza `predicate-type` genera provenienza SLSA, che e' cio' che serve.
-      - uses: actions/attest@v4
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: ${{ steps.apk.outputs.nome }}
 
-      - uses: softprops/action-gh-release@v3
+      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           files: ${{ steps.apk.outputs.nome }}
           generate_release_notes: true

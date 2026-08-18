@@ -428,6 +428,43 @@ std::string talos_apply_chat_template(common_chat_templates * templates, JNIEnv 
 }
 
 
+/**
+ * ⛔⛔⛔ LA SERRATURA DEL MOTORE — e sta FUORI dalla sessione, di proposito.
+ *
+ * Il difetto che chiude: applyGrammar() esegue common_sampler_free(session->sampler)
+ * e rimette un campionatore nuovo, mentre nativeGenerate() dereferenzia lo stesso
+ * puntatore per campionare. Due thread, uno libera e l'altro legge: non una race
+ * di valore, un USE-AFTER-FREE.
+ *
+ * ## Perché GLOBALE e non un campo di talos_session
+ *
+ * Perché nativeClose() distrugge la sessione. Una serratura che vive dentro
+ * l'oggetto distrutto non può proteggere la sua stessa distruzione: se un thread
+ * la sta aspettando quando l'oggetto muore, il comportamento non è definito —
+ * si sarebbe scambiato un difetto con uno più difficile da vedere.
+ *
+ * Una serratura globale sopravvive a qualunque sessione, quindi anche la chiusura
+ * può prenderla. E non costa niente: TALOS tiene aperto un modello alla volta.
+ *
+ * ## ⛔ Chi NON la prende, e non è una svista
+ *
+ *     nativeTokensProduced    atomico
+ *     nativeTextSoFar         text_lock suo
+ *     nativeCancel            atomico
+ *     nativeLastTimings       tempi_lock suo
+ *
+ * Sono le VEDETTE: il loro mestiere è rispondere «a che punto sei?» MENTRE la
+ * generazione va avanti. Se prendessero questa serratura aspetterebbero la fine
+ * della generazione per dire a che punto è — cioè risponderebbero sempre alla
+ * domanda sbagliata, e la barra di avanzamento si riempirebbe tutta insieme
+ * alla fine. E `cancel` in particolare aspetterebbe la cosa che deve fermare.
+ *
+ * ⛔ La si prende solo agli ingressi JNI, mai negli helper: applyGrammar() è
+ * chiamata da dentro un ingresso già chiuso a chiave, e prenderla di nuovo
+ * bloccherebbe il thread contro se stesso.
+ */
+static std::mutex g_motore;
+
 talos_session * as_session(jlong handle) {
     return reinterpret_cast<talos_session *>(handle);
 }
@@ -826,6 +863,7 @@ JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlong handle,
                                                        jobjectArray roles, jobjectArray contents,
                                                        jstring toolsJson, jboolean pensa) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr) return env->NewStringUTF("");
 
@@ -938,6 +976,7 @@ Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlo
  */
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeParseReply(JNIEnv * env, jclass, jlong handle, jstring reply) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     const std::string text = jstring_to_utf8(env, reply);
     if (session == nullptr || !session->chat_ready) {
@@ -1143,6 +1182,7 @@ Java_ai_talos_TalosLlamaNative_nativeCancel(JNIEnv *, jclass, jlong handle) {
 
 JNIEXPORT jint JNICALL
 Java_ai_talos_TalosLlamaNative_nativeContextTokens(JNIEnv *, jclass, jlong handle) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     return session == nullptr ? 0 : (jint) llama_n_ctx(session->ctx);
 }
@@ -1394,6 +1434,7 @@ Java_ai_talos_TalosLlamaNative_nativeReopenContext(JNIEnv * env, jclass, jlong h
                                                    jint threads, jint contextTokens,
                                                    jint threadsBatch, jint microBatch,
                                                    jstring kvType, jboolean deterministic) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr || session->model == nullptr) return 0;
 
@@ -1473,6 +1514,7 @@ Java_ai_talos_TalosLlamaNative_nativeContextRebuilds(JNIEnv *, jclass) {
  */
 JNIEXPORT jlongArray JNICALL
 Java_ai_talos_TalosLlamaNative_nativeRuntimeConfig(JNIEnv * env, jclass, jlong handle) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr || session->ctx == nullptr) return nullptr;
     jlong valori[3] = {
@@ -1494,6 +1536,7 @@ Java_ai_talos_TalosLlamaNative_nativeOpensSinceStart(JNIEnv *, jclass) {
 
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeKvCacheType(JNIEnv * env, jclass, jlong handle) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr) return nullptr;
     return env->NewStringUTF(session->kv_type.c_str());
@@ -1546,6 +1589,7 @@ Java_ai_talos_TalosLlamaNative_nativeKvCacheType(JNIEnv * env, jclass, jlong han
  */
 JNIEXPORT jlongArray JNICALL
 Java_ai_talos_TalosLlamaNative_nativeModelShape(JNIEnv * env, jclass, jlong handle) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr || session->model == nullptr) return nullptr;
 
@@ -1579,6 +1623,7 @@ Java_ai_talos_TalosLlamaNative_nativeModelShape(JNIEnv * env, jclass, jlong hand
 JNIEXPORT jint JNICALL
 Java_ai_talos_TalosLlamaNative_nativePromptTokens(JNIEnv * env, jclass, jlong handle,
                                                   jstring promptText) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr || promptText == nullptr) return 0;
     const std::string prompt = jstring_to_utf8(env, promptText);
@@ -1597,6 +1642,7 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
                                               jstring promptText, jint maxTokens,
                                               jboolean stopAtEndOfGeneration,
                                               jboolean reusePrefix) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr) return nullptr;
 
@@ -1887,6 +1933,7 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeTuneThreads(JNIEnv * env, jclass, jlong handle,
                                                  jintArray candidates, jint probeTokens) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr) return nullptr;
 
@@ -2021,6 +2068,7 @@ Java_ai_talos_TalosLlamaNative_nativeLastTimings(JNIEnv * env, jclass, jlong han
 JNIEXPORT jlong JNICALL
 Java_ai_talos_TalosLlamaNative_nativeSaveState(JNIEnv * env, jclass, jlong handle,
                                                jstring pathJ) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr || session->ctx == nullptr) return 0;
     // Una cache vuota si salverebbe benissimo e non servirebbe a nulla: il giro
@@ -2089,6 +2137,7 @@ Java_ai_talos_TalosLlamaNative_nativeSaveState(JNIEnv * env, jclass, jlong handl
 JNIEXPORT jlong JNICALL
 Java_ai_talos_TalosLlamaNative_nativeTrimAndSaveState(JNIEnv * env, jclass, jlong handle,
                                                       jstring pathJ, jstring prefissoJ) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr || session->ctx == nullptr) return 0;
     const std::string prefisso = jstring_to_utf8(env, prefissoJ);
@@ -2159,6 +2208,7 @@ Java_ai_talos_TalosLlamaNative_nativeTrimAndSaveState(JNIEnv * env, jclass, jlon
 JNIEXPORT jint JNICALL
 Java_ai_talos_TalosLlamaNative_nativeLoadState(JNIEnv * env, jclass, jlong handle,
                                                jstring pathJ) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr || session->ctx == nullptr) return 0;
     const std::string path = jstring_to_utf8(env, pathJ);
@@ -2191,6 +2241,7 @@ Java_ai_talos_TalosLlamaNative_nativeLoadState(JNIEnv * env, jclass, jlong handl
 
 JNIEXPORT void JNICALL
 Java_ai_talos_TalosLlamaNative_nativeClose(JNIEnv *, jclass, jlong handle) {
+    std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr) return;
     if (session->sampler != nullptr) common_sampler_free(session->sampler);

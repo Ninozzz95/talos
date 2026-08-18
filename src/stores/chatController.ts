@@ -4131,6 +4131,23 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         authorizationRequest: authorizationFor(call.id),
                         callId: call.id,
                     })
+                    /*
+                     * ⛔⛔ IL TERMINALE SI PASSA, non si appiattisce.
+                     *
+                     * Qui c'era `status !== 'authorization_required' => ready`, e
+                     * quella riga rendeva inutile ogni decisione già presa dal
+                     * preflight: tool spento, argomenti invalidi, permesso
+                     * negato, premessa assente — tutto diventava «pronta».
+                     *
+                     * ⇒ Una chiamata epistemicamente impossibile entrava nel
+                     * piano, veniva mostrata alla persona come un passo
+                     * eseguibile, e diventava errore solo dopo. Una premessa
+                     * assente non deve comparire nemmeno come passo approvabile.
+                     */
+                    if (result.status === 'terminal') {
+                        await registraAzione(result.audit)
+                        return { status: 'terminal' as const, outcome: result.result }
+                    }
                     if (result.status !== 'authorization_required') {
                         return { status: 'ready' as const }
                     }

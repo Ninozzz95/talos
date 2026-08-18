@@ -37,6 +37,15 @@ def firmaDisponibile = proprietaFirma.containsKey('storeFile') &&
 
 android {
     namespace = "ai.talos"
+
+    buildFeatures {
+        // ⛔ Da AGP 8 la generazione di BuildConfig e' SPENTA per impostazione
+        // predefinita. Serve accesa perche' `BuildConfig.DEBUG` e' una
+        // `static final boolean`: il compilatore elimina il ramo morto, e il
+        // codice diagnostico non finisce nel bytecode di rilascio. Un controllo
+        // a runtime lo lascerebbe li dentro, spento ma presente.
+        buildConfig true
+    }
     compileSdk = rootProject.ext.compileSdkVersion
     // Fissato, non lasciato al valore predefinito di AGP: il motore locale è
     // compilato da questo NDK e una versione diversa è un compilatore diverso.
@@ -172,8 +181,54 @@ android {
             }
         }
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            /*
+             * ⛔⛔ R8 ACCESO, e le regole vengono da un INVENTARIO.
+             *
+             * 26 plugin Capacitor: coperti dalle sue stesse consumerProguardFiles
+             * — verificato nel suo build.gradle, non supposto. 5 classi con
+             * metodi nativi: tenute per nome, perché il legame fra Java e C++ è
+             * un nome dentro il simbolo. Sta scritto in proguard-rules.pro quale
+             * riga risponde a quale fatto.
+             *
+             * ⛔ proguard-android-OPTIMIZE.txt e non proguard-android.txt: il
+             * primo lascia lavorare le ottimizzazioni, il secondo le disattiva.
+             * Accendere R8 col file che spegne metà del suo lavoro è prendersi
+             * il rischio senza il guadagno.
+             *
+             * ⛔⛔⛔ E NON BASTA CHE COMPILI. R8 rompe a RUNTIME, sul primo
+             * percorso che raggiunge una classe per nome — cioè quando la
+             * persona apre qualcosa. Prima di pubblicare, ogni plugin va toccato
+             * una volta sul dispositivo. Il fatto che questo build produca un
+             * APK non è la prova che l'app funzioni.
+             */
+            minifyEnabled true
+            /*
+             * ⛔ DOPO R8, mai prima: le risorse si tolgono in base a ciò che il
+             * codice RIMASTO usa davvero, e prima di R8 il codice rimasto non si
+             * sa ancora quale sia.
+             */
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            /*
+             * ⛔⛔ E L'AFFIANCAMENTO VALE ANCHE QUI — anzi, soprattutto qui.
+             *
+             * La ragione è la stessa del blocco debug: la chiave di firma di
+             * questa macchina non è quella che ha firmato l'app sul telefono
+             * dell'owner, quindi un aggiornamento sul posto viene rifiutato e
+             * l'unica alternativa sarebbe disinstallare — cioè cancellargli chat
+             * e libreria.
+             *
+             * ⇒ Ma su una release pesa di più: è la build con R8 acceso, cioè
+             * quella che PUÒ rompersi a runtime. Provarla è esattamente il
+             * momento in cui non si vuole avere l'app vera in mezzo.
+             *
+             * Senza la proprietà il build è identico a prima: questo blocco non
+             * fa nulla.
+             */
+            if (project.hasProperty('talosSideBySide')) {
+                applicationIdSuffix '.dev'
+                versionNameSuffix '-dev'
+            }
             if (firmaDisponibile) {
                 signingConfig signingConfigs.rilascio
             }

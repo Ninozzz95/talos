@@ -6,6 +6,105 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.7
+
+An external engineering review went through the whole codebase and found
+twenty-two issues. This release closes thirteen of them, plus one the review had
+missed. Every fix below was reproduced with a failing test before it was written,
+and the build was installed and used on a real tablet before this went out.
+
+### Fixed
+
+- **A local model could have sent your conversation to a stranger.** TALOS lets
+  you point it at a model running on your own machine, over plain HTTP. It
+  checked that address carefully — it even refuses host *names*, because a name
+  is resolved later and by someone else. But it only checked the **first hop**.
+  A server answering `302 Location: https://somewhere-else` would have carried
+  your prompt, and the authorization header with it, straight out of the network
+  you had allowed.
+  - Redirects are now refused outright, on both the streaming path and the native
+    bridge, and the boundary cannot be switched off by the code that calls it.
+  - The test for this stands up **two real servers** and checks whether the body
+    reaches the second one. Before the fix, it did.
+
+- **"I could not check" was being reported as "done".** When an action succeeded
+  but the check that would confirm it failed, TALOS kept the success and dropped
+  the doubt. For anything that changes the world — sending a message, writing a
+  file — that is the wrong half to keep.
+  - There are now four outcomes instead of two, and the new one refuses to become
+    either neighbour. Calling it a failure is worse than calling it a success: a
+    failure is an instruction to try again, and trying again is how the same
+    message gets sent twice.
+
+- **The database migration wrote a full copy of your data in the clear.** When an
+  older installation moves onto a managed key, TALOS exports everything, writes
+  it to disk, destroys the original and imports it back. That intermediate file
+  was readable — for a few seconds, data that spends the rest of its life behind
+  a PIN was plain text on the filesystem.
+  - It is now encrypted, and it is written to a temporary name, read back and
+    compared, and only then renamed. The old file is destroyed after that, never
+    before.
+  - **Journals written by an older version are still readable.** If your app was
+    killed mid-migration and you update before reopening it, the new code finds
+    the old file and resumes from it. Without that, an update meant to protect
+    your data would have destroyed it.
+
+- **Your PIN now protects the key with Argon2id.** The previous protection was
+  PBKDF2 at 210,000 iterations, which is no longer what current guidance
+  recommends. Existing PINs keep working and are upgraded silently the next time
+  you unlock — and if that upgrade fails for any reason, you still get in.
+  - The record now states which protection it uses, and that statement is
+    authenticated: a record altered to claim weaker protection simply will not
+    open.
+
+- **A malformed backup file could freeze the app.** Backup files declare the cost
+  of the protection they were written with, and TALOS obeyed that declaration
+  without limits. A file claiming four gigabytes of memory would have asked a
+  phone for four gigabytes. The test that found this ran for **five minutes**
+  before being killed; it now finishes in milliseconds.
+  - A file says what it was written with. It does not decide how much work your
+    device is willing to do.
+
+- **Any app on your phone could start TALOS's internal profiler.** A diagnostic
+  tool, meant for hunting a startup problem, could be triggered from outside with
+  a single command. It is now absent from release builds entirely — not disabled,
+  absent, verified by reading the compiled bytecode.
+
+- **A crash in the local engine, under the right timing.** Preparing a prompt and
+  generating a reply could touch the same piece of memory from two different
+  threads, one freeing it while the other read it. Everything that touches the
+  engine now runs in a single ordered sequence, and anything that breaks that
+  order fails immediately with a message naming both threads instead of crashing
+  silently.
+  - Calling the engine after closing it now reports a clear error too. Before, it
+    handed the closed engine's address back to the native layer.
+
+### New
+
+- **A security policy for the app's own web layer.** TALOS's interface runs in a
+  web view that can reach the phone's native features, so an injected script
+  there would not steal a session — it would use the device. The app now declares
+  what it is allowed to load and execute, and an injected script does not run.
+  - The policy is checked by loading the real app in a real browser and asking it
+    whether it had to block anything. That test caught a first version of the
+    policy that would have prevented **everyone from unlocking their database**.
+
+### Changed
+
+- **The app is 6.4 MB smaller** — 42.6 MB down to 36.2 MB, measured on the same
+  build twice. Unused code and resources are now removed at build time.
+
+### Internal
+
+- Android, the C++ engine and the browser tests now run on every proposed change.
+  They did not before, and that is how the engine crash reached this codebase.
+  - The browser suite turned out to be **completely broken** — all fifty-two
+    tests — because a language screen loads late and covers the button the tests
+    press. Nobody knew, because nothing ran them.
+- Build actions are pinned to exact commits rather than moving tags, the build
+  toolchain verifies its own download against a published checksum, and automatic
+  updates keep those pins current.
+
 ## v0.1.6
 
 ### Fixed

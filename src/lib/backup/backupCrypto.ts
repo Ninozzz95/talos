@@ -132,6 +132,59 @@ function daBase64(value: string): Uint8Array {
  * l'intestazione deve poter essere letta senza la passphrase, altrimenti non si
  * saprebbe nemmeno con quali parametri provare ad aprire.
  */
+export interface TalosParametriArgon2id {
+    memoryKiB: number
+    iterations: number
+    parallelism: number
+}
+
+/**
+ * La derivazione, una sola in tutta l'app.
+ *
+ * ⛔ Esposta perche' la usa anche il record del PIN. Due copie della stessa
+ * derivazione sono due posti dove sbagliare i parametri, e uno dei due lo
+ * scoprirebbe qualcuno che non riesce piu ad aprire il proprio database.
+ *
+ * ⛔ E qui NON si ripiega su PBKDF2 se il modulo non c'e. Un ripiego silenzioso
+ * trasforma «protetto con Argon2id» in «protetto con qualcos'altro» senza che
+ * nessuno lo sappia.
+ */
+export async function talosDerivaChiaveArgon2id(
+    passphrase: string,
+    salt: Uint8Array,
+    parametri: TalosParametriArgon2id = TALOS_BACKUP_KDF,
+): Promise<Uint8Array> {
+    let argon2id: (options: {
+        password: string
+        salt: Uint8Array
+        parallelism: number
+        iterations: number
+        memorySize: number
+        hashLength: number
+        outputType: 'binary'
+    }) => Promise<Uint8Array>
+
+    try {
+        ({ argon2id } = await import('hash-wasm'))
+    } catch {
+        throw new TalosBackupCryptoError(
+            'TALOS_BACKUP_KDF_UNAVAILABLE',
+            'The key-derivation module could not be loaded, so nothing was written or opened '
+            + 'with weaker protection.',
+        )
+    }
+
+    return argon2id({
+        password: passphrase,
+        salt,
+        parallelism: parametri.parallelism,
+        iterations: parametri.iterations,
+        memorySize: parametri.memoryKiB,
+        hashLength: TALOS_BACKUP_KDF.keyBytes,
+        outputType: 'binary',
+    })
+}
+
 export async function talosEncryptBackup(
     plaintext: Uint8Array,
     passphrase: string,
@@ -175,6 +228,45 @@ export async function talosEncryptBackup(
  * aprirsi. Ma il nome dell'algoritmo si controlla — un file che dichiara un KDF
  * che non conosciamo non si apre, invece di essere aperto «alla meglio».
  */
+/**
+ * ⛔⛔⛔ QUANTO LAVORO QUESTO DISPOSITIVO E DISPOSTO A FARE.
+ *
+ * `talosDecryptBackup` legge memoria, iterazioni e parallelismo dall'intestazione
+ * del file, ed e giusto: un backup scritto quando i numeri raccomandati erano
+ * altri deve continuare ad aprirsi.
+ *
+ * Ma li passava ad Argon2id SENZA LIMITI. Un file fabbricato che dichiara
+ * `memoryKiB: 4_000_000` chiede quattro gigabyte a un telefono. Non e una
+ * decifratura che fallisce: e l'app che si pianta, per un file arrivato via chat.
+ *
+ * ⇒ Il file dice CON QUALI parametri e stato scritto. Non decide quanto lavoro
+ * questa macchina e disposta a fare.
+ *
+ * ⛔ Sono LIMITI, non raccomandazioni. Il minimo sta sotto i 19 MiB di OWASP
+ * apposta — un file vecchio, scritto quando le raccomandazioni erano altre, deve
+ * restare leggibile. Il cancello ferma l'assurdo, non il diverso.
+ */
+export const TALOS_BACKUP_KDF_LIMITI = Object.freeze({
+    /** 8 MiB … 256 MiB. Sotto non e un Argon2id serio, sopra un telefono muore. */
+    memoryKiB: Object.freeze({ min: 8_192, max: 262_144 }),
+    iterations: Object.freeze({ min: 1, max: 16 }),
+    parallelism: Object.freeze({ min: 1, max: 8 }),
+})
+
+function dentroAiLimiti(envelope: TalosBackupEnvelope): string | null {
+    const controlli: Array<[string, number, { min: number, max: number }]> = [
+        ['memoryKiB', envelope.memoryKiB, TALOS_BACKUP_KDF_LIMITI.memoryKiB],
+        ['iterations', envelope.iterations, TALOS_BACKUP_KDF_LIMITI.iterations],
+        ['parallelism', envelope.parallelism, TALOS_BACKUP_KDF_LIMITI.parallelism],
+    ]
+    for (const [nome, valore, limite] of controlli) {
+        if (!Number.isInteger(valore) || valore < limite.min || valore > limite.max) {
+            return `${nome}=${String(valore)} (accettati ${limite.min}…${limite.max})`
+        }
+    }
+    return null
+}
+
 export async function talosDecryptBackup(
     envelope: TalosBackupEnvelope,
     ciphertext: Uint8Array,
@@ -184,6 +276,20 @@ export async function talosDecryptBackup(
         throw new TalosBackupCryptoError(
             'TALOS_BACKUP_ALGORITHM_UNKNOWN',
             'This backup was written with a protection this version does not know how to open.',
+        )
+    }
+
+    /*
+     * ⛔ PRIMA di caricare il modulo e di chiedere memoria. Un file che dichiara
+     * quattro gigabyte non deve arrivare fino al punto in cui si prova a
+     * darglieli: il difetto non e che la decifratura fallisca, e che la macchina
+     * si fermi provandoci.
+     */
+    const fuori = dentroAiLimiti(envelope)
+    if (fuori !== null) {
+        throw new TalosBackupCryptoError(
+            'TALOS_BACKUP_KDF_PARAMS_REFUSED',
+            'This backup declares a protection cost this device will not attempt: ' + fuori + '.',
         )
     }
 

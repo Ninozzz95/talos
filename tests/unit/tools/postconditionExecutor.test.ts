@@ -125,7 +125,7 @@ describe('A5 — un errore su un effetto REALE viene PROMOSSO', () => {
 })
 
 describe('A5 — la verifica non puo rompere il tool', () => {
-    it('se verify stessa solleva, vince quello che ha detto run', async () => {
+    it('se verify stessa solleva, non vince NESSUNO dei due', async () => {
         const esito = await executeTalosTool(
             scrittore({
                 run: async () => ({ ok: true, content: 'fatto' }),
@@ -135,10 +135,24 @@ describe('A5 — la verifica non puo rompere il tool', () => {
             deps(),
         )
 
-        // «Non lo so» non e' «non e' andata».
-        expect(esito.ok).toBe(true)
+        /*
+         * ⛔⛔⛔ QUESTO TEST DIFENDEVA IL DIFETTO, con una motivazione che suona
+         * giusta: diceva «non lo so» non e' «non e' andata», e concludeva
+         * `ok: true`.
+         *
+         * La premessa era vera. La conclusione no: «non lo so» non e' «non e'
+         * andata», ma non e' nemmeno «e' andata». Il terzo stato veniva
+         * schiacciato sul primo dei due, cioe' sulla lettura piu' comoda — ed e'
+         * esattamente il modo in cui si arriva a dire «inviato» di un messaggio
+         * che nessuno ha visto partire.
+         *
+         * ⇒ Restano vere tutte e due le meta: non e' un fallimento (dirlo farebbe
+         * ritentare, e ritentare duplica l'effetto) e non e' una riuscita.
+         */
+        expect(esito.ok).toBe(false)
+        expect(esito.code).toBe('TALOS_TOOL_EFFECT_UNKNOWN')
+        expect(esito.content).toMatch(/may or may not/i)
     })
-
     it('un tool senza postcondizione non ne paga il costo, e l audit lo dice', async () => {
         const audit = vi.fn(async () => {})
         const esito = await executeTalosTool(

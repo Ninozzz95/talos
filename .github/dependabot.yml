@@ -1,0 +1,24 @@
+version: 2
+
+# Workflow actions are pinned to full commit SHAs, which is the only way to make
+# an action reference immutable: a tag like `@v7` can be moved to new code by
+# whoever controls the action's repository, and every workflow using it would
+# pull that code on the next run.
+#
+# A SHA pin closes that door and opens a smaller one: pinned versions never move
+# on their own, so a security fix in an action would never reach us. Dependabot
+# is the other half of the trade — it reads the `# v7` comment next to each pin,
+# and opens a pull request that updates both the SHA and the comment together.
+#
+# Only `github-actions` is listed here, deliberately. Adding npm and Gradle would
+# open a steady stream of pull requests across the whole dependency tree, which
+# is a different decision with a different cost, and it is not the one being made
+# by pinning the actions.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore(ci)

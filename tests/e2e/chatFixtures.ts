@@ -70,8 +70,54 @@ export async function mockChatProvider(page: Page, reply = 'Understood.'): Promi
     })
 }
 
+/**
+ * ⛔⛔⛔ L'INTRO COPRE TUTTO, E VA CHIUSA PRIMA DI QUALUNQUE COSA.
+ *
+ * Il setup e2e falliva da chissa quando: `[aria-label="Open menu"]` esisteva nel
+ * DOM ma non diventava mai «visible, enabled and stable». Guardando il DOM non
+ * si capiva; guardando lo SCHERMO si e visto subito — una schermata di scelta
+ * lingua a tutto campo, con il pulsante dietro.
+ *
+ * ⛔ E nessuno se n'era accorto perche la CI non esegue mai i test e2e. Un test
+ * che non gira non e un test: e un file.
+ *
+ * ⇒ Si chiude col pulsante vero, quello che userebbe una persona. Non
+ * scrivendo a mano la chiave in `localStorage`: cosi la prova attraversa
+ * davvero il percorso, e il giorno in cui l'intro cambia forma questo si
+ * accorge invece di continuare a passare su un mondo che non esiste piu.
+ */
+export async function saltaIntroSePresente(page: Page): Promise<void> {
+    const intro = page.getByTestId('talos-intro-modal')
+    /*
+     * ⛔⛔ SI ASPETTA CHE COMPAIA, non si guarda se c'e gia.
+     *
+     * L'intro e un componente a caricamento pigro dietro un cancello che legge
+     * uno stato salvato: fra l'apertura della pagina e la sua comparsa passa un
+     * tempo variabile. Chiedere `count()` subito dava zero in una corsa e uno
+     * nella successiva — la stessa suite, due mondi diversi.
+     *
+     * ⇒ E la ragione per cui questo test era rotto in modo intermittente e
+     * nessuno riusciva a dargli un nome.
+     *
+     * ⛔ E un'osservazione sul PRODOTTO, non sul test: se l'intro arriva dopo,
+     * per un istante l'app e toccabile prima di essere coperta. Una persona puo
+     * premere qualcosa e vedersi il gesto inghiottito. Non lo sistemo qui — e
+     * un'altra cosa — ma non lo lascio nemmeno senza nome.
+     */
+    await intro.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null)
+    if (await intro.count() === 0) return
+    const salta = page.getByTestId('talos-setup-skip')
+    // ⛔ Un'attesa breve e con un tetto: se l'intro non c'e non si paga niente,
+    // e se c'e ma non si chiude il test deve fallire per QUELLO, non per un
+    // pulsante irraggiungibile trenta secondi dopo.
+    await salta.waitFor({ state: 'visible', timeout: 10_000 })
+    await salta.click()
+    await intro.waitFor({ state: 'detached', timeout: 10_000 })
+}
+
 /** Save a key and pick the model, through the real Settings flow. */
 export async function configureChatProvider(page: Page, key = 'e2e-key'): Promise<void> {
+    await saltaIntroSePresente(page)
     await page.locator(MENU).click()
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
