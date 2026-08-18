@@ -47,21 +47,6 @@ public class MainActivity extends BridgeActivity {
         // And says so when it ends. The keeper's notification is the work in
         // progress; this is the one the person is actually waiting for, and it
         // carries the address of the thing that finished.
-        /*
-         * ⛔⛔⛔ IL DETTATO SICURO — PRIMA di super.onCreate, con gli altri.
-         *
-         * I `registerPlugin` qui riempiono `initialPlugins`, che il Bridge
-         * costruisce in super.onCreate come: prima i plugin del capacitor.plugins.json
-         * (il capgo), POI initialPlugins. La mappa e' un put e vince l'ULTIMO —
-         * quindi il nostro, che arriva dopo, sovrascrive il capgo. Stesso nome
-         * «SpeechRecognition».
-         *
-         * ⛔ Registrarlo DOPO super.onCreate NON funziona — provato, il crash
-         * restava: a quel punto il Bridge e' gia costruito, e addPlugin finisce
-         * in un builder che nessuno rilegge. Il log lo diceva: la traccia
-         * arrivava ancora a app.capgo...checkPermissions.
-         */
-        registerPlugin(ai.talos.agent.TalosSpeechSicuro.class);
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(TalosDonePlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // ⭐ «hey TALOS»: l'interruttore della parola di attivazione.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.parola.TalosParolaPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
@@ -157,6 +142,29 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         Log.i("TalosAvvio", "super.onCreate: " + (android.os.SystemClock.uptimeMillis() - tSuper) + " ms");
     }
+    /**
+     * ⛔⛔⛔ IL DETTATO SICURO VINCE SUL CAPGO — dal punto giusto, senza toccare il build.
+     *
+     * Ho provato due strade sbagliate. Prima: registrare TalosSpeechSicuro in
+     * onCreate — la sonda ha dimostrato che NON basta, il capgo auto-caricato
+     * vince. Poi: un hook Gradle che filtrava il capacitor.plugins.json — rompeva
+     * l'impacchettamento sul CI (packageRelease FAILED) perche' un task che
+     * riscrive un asset condiviso confonde il tracciamento degli input di gradle.
+     * Verde in locale, rosso sul runner: la peggior specie di difetto.
+     *
+     * ⇒ La via pulita e' QUI. `load()` di BridgeActivity aggiunge `initialPlugins`
+     * al builder DOPO i plugin auto-caricati (il capgo). La mappa dei plugin e'
+     * un put per nome: chi arriva dopo vince. Aggiungendo TalosSpeechSicuro a
+     * initialPlugins prima di super.load(), la nostra sottoclasse — stesso nome
+     * «SpeechRecognition» — sovrascrive il capgo che crasha su getPermissionState
+     * null. Niente build da toccare, niente asset da riscrivere.
+     */
+    @Override
+    protected void load() {
+        initialPlugins.add(ai.talos.agent.TalosSpeechSicuro.class);
+        super.load();
+    }
+
 
     /**
      * ⭐⭐ «HEY TALOS» TORNA VIVA QUANDO L'APP TORNA DAVANTI.

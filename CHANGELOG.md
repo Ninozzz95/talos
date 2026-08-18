@@ -31,6 +31,12 @@ Another crash-fix release, found on the owner's own device.
   a short grace period and only releases it under real memory pressure, so a
   quick glance at another app doesn't cost you the wait when you return.
 
+- **Long replies from the local model stream more smoothly.** Watching a reply
+  arrive used to recopy the whole answer from scratch on every refresh, so the
+  longer the reply, the more work each update cost — growing with the square of
+  the length. TALOS now passes only the newly written text, keeping long answers
+  as light as short ones.
+
 ## v0.1.8
 
 A crash-fix release. The headline is a startup crash on the OnePlus 13, found on

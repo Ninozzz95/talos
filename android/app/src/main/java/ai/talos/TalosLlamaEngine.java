@@ -402,6 +402,18 @@ public final class TalosLlamaEngine implements AutoCloseable {
         return TalosLlamaNative.nativeTextSoFar(handle);
     }
 
+    /**
+     * ⭐ Solo il testo NUOVO dall'ultima chiamata — il delta, per lo streaming.
+     *
+     * ⛔ Vedetta come textSoFar: si chiama MENTRE l'attore genera, quindi NON
+     * passa da soloAttore. Ma a differenza di textSoFar ha uno stato — il
+     * puntatore `drained` nel nativo — quindi va chiamata da un thread SOLO. Il
+     * watcher della generazione e' quel thread; nessun altro la usa.
+     */
+    public String drainText() {
+        return TalosLlamaNative.nativeDrainText(handle);
+    }
+
     public int tokensProduced() {
         return TalosLlamaNative.nativeTokensProduced(handle);
     }

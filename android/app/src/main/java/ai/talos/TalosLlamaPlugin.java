@@ -17,7 +17,6 @@ import java.io.File;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -516,11 +515,10 @@ public class TalosLlamaPlugin extends Plugin {
                 // Watching is the only thing outside it: it reads already
                 // published text under the lock that published it.
                 final AtomicBoolean done = new AtomicBoolean(false);
-                final AtomicInteger sent = new AtomicInteger(0);
                 Thread watcher = new Thread(() -> {
                     while (!done.get()) {
                         try {
-                            sent.set(emitDelta(engine, sent.get()));
+                            emitDelta(engine);
                             Thread.sleep(POLL_INTERVAL_MS);
                         } catch (InterruptedException interrupted) {
                             Thread.currentThread().interrupt();
@@ -546,7 +544,7 @@ public class TalosLlamaPlugin extends Plugin {
                     }
                     // One last read AFTER the generation has finished. The final
                     // tokens land between the last poll and the end.
-                    emitDelta(engine, sent.get());
+                    emitDelta(engine);
                 }
 
                 /**
@@ -583,14 +581,22 @@ public class TalosLlamaPlugin extends Plugin {
         });
     }
 
-    /** Emits what is new since `sent`, and returns the new watermark. */
-    private int emitDelta(TalosLlamaEngine engine, int sent) {
-        String text = engine.textSoFar();
-        if (text == null || text.length() <= sent) return sent;
+    /**
+     * Emette il testo NUOVO da consegnare a Vue.
+     *
+     * ⛔ Il delta lo calcola il NATIVO: `drainText` torna solo i byte mai
+     * consegnati, tagliati all'ultimo carattere completo. Prima il taglio era in
+     * Java (`substring(sent)`) e il nativo copiava TUTTA la risposta a ogni
+     * sguardo — quadratico sulla lunghezza. Il parametro `sent` sparisce:
+     * il puntatore vive nel nativo, e due contatori sarebbero due modi di
+     * dissentire su quanto e' stato mandato.
+     */
+    private void emitDelta(TalosLlamaEngine engine) {
+        String delta = engine.drainText();
+        if (delta == null || delta.isEmpty()) return;
         JSObject event = new JSObject();
-        event.put("delta", text.substring(sent));
+        event.put("delta", delta);
         notifyListeners("token", event);
-        return text.length();
     }
 
     /**
