@@ -6,7 +6,10 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
-## v0.1.9
+## v0.1.10
+
+<!-- v0.1.9 was tagged but never produced a signed APK: its first build failed in
+     packaging. This is the release that ships that work, under a clean version. -->
 
 Another crash-fix release, found on the owner's own device.
 
