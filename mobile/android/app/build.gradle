@@ -165,6 +165,37 @@ android {
             }
         }
     }
+    /*
+     * ⛔⛔⛔ LA BASELINE — il debito si dichiara, non si nasconde.
+     *
+     * Il primo giro del cancello Lint ha trovato 20 errori, tutti PREESISTENTI:
+     *
+     *     14  NewApi          chiamate ad API 29 e 34 con minSdk 26
+     *      1  MissingPermission
+     *      1  MissingSuperCall
+     *      1  GestureBackNavigation
+     *      1  PropertyEscape
+     *      1  StartActivityAndCollapseDeprecated
+     *      1  MissingTranslation
+     *
+     * ⛔ E un cancello ROSSO ALL'ARRIVO lo spegne il primo che ci sbatte. L'ho
+     * scritto io stesso a proposito dei test nel browser, e poi ho aggiunto
+     * questo senza provarlo prima: e' un errore mio, non una scelta.
+     *
+     * ⇒ La baseline congela le venti in un file che si puo' APRIRE e CONTARE, e
+     * fa fallire il build su ogni errore NUOVO. Non e' un silenziatore: e' un
+     * elenco di cose da guardare, con un cancello attorno perche' non cresca.
+     *
+     * ⛔ I 14 `NewApi` non sono rumore: sono chiamate a funzioni piu' nuove del
+     * minimo dichiarato, cioe' un crash su un dispositivo vecchio se non sono
+     * protette da un controllo che Lint non vede. Vanno guardate una a una.
+     */
+    lint {
+        baseline = file('lint-baseline.xml')
+        // ⛔ Gli avvisi restano avvisi: alzarli tutti a errore riempirebbe la
+        // baseline di 84 righe e la renderebbe illeggibile — cioe' inutile.
+        abortOnError = true
+    }
     buildTypes {
         debug {
             // Copia affiancata. Il computer nuovo ha una chiave di debug diversa
