@@ -164,3 +164,40 @@ export function talosPreferFewerThreads(
         .filter((r) => r[campo] >= migliore * 0.97)
         .reduce((basso, r) => Math.min(basso, r.threads), Number.POSITIVE_INFINITY)
 }
+/**
+ * ⛔⛔⛔ LA SCELTA STA ACCANTO ALLA REGOLA, non presso chi la chiama.
+ *
+ * Prima viveva dentro `threadTuningRun.ts`, e faceva così:
+ *
+ * ```ts
+ * const threadsBatch = talosPreferFewerThreads(misura.grid, 'prefill') === null
+ *     ? misura.threadsBatch
+ *     : Math.max(...misura.grid.filter((r) => r.prefill > 0).map((r) => r.threads))
+ * ```
+ *
+ * Chiamava la regola **solo per vedere se fosse nulla**, e poi ne buttava la
+ * risposta per prendere il numero di thread PIÙ ALTO fra quelli provati.
+ *
+ * Il commento accanto diceva «il prefill prende il massimo perché SCALA». È vero
+ * quasi sempre — ma «quasi sempre» è esattamente il motivo per cui si misura. Su
+ * un dispositivo dove otto thread perdono contro sei per contesa di memoria o
+ * per calore, TALOS osservava correttamente la regressione **e poi sceglieva
+ * otto lo stesso**.
+ *
+ * ⇒ Una misura che non può cambiare la decisione non è una misura: è una
+ * cerimonia. E costa — ogni thread in più è calore, che si paga sulle risposte
+ * lunghe, e un core che non resta all'interfaccia.
+ *
+ * ⛔ E i due criteri restano DIVERSI, perché i due lavori lo sono: il prefill
+ * scala coi thread, la generazione no. Ma tutti e due partono dal numero
+ * MISURATO migliore, e a parità entro il 3% preferiscono il più basso. È la
+ * stessa regola applicata a due colonne, non due politiche.
+ */
+export function talosScegliThread(
+    misura: TalosMeasuredTuning,
+): { threads: number, threadsBatch: number } {
+    return {
+        threadsBatch: talosPreferFewerThreads(misura.grid, 'prefill') ?? misura.threadsBatch,
+        threads: talosPreferFewerThreads(misura.grid, 'decode') ?? misura.threads,
+    }
+}
