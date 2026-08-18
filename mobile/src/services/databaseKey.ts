@@ -1,3 +1,4 @@
+import { talosDerivaChiaveArgon2id } from '@/lib/backup/backupCrypto'
 import { SecureStorage } from '@aparajita/capacitor-secure-storage'
 import { talosBridgeCall } from '@/lib/talosBridge'
 import type { SecureKeyBackend } from '@/services/secureKeyStore'
@@ -124,7 +125,18 @@ function parseWrapped(value: unknown): WrappedRecord | null {
             salt: parsed.salt,
             iv: parsed.iv,
             payload: parsed.payload,
-            iterations: typeof parsed.iterations === 'number' && parsed.iterations > 0
+            /*
+             * ⛔ UN TETTO. Prima bastava > 0: un record manomesso con due
+             * miliardi di iterazioni non e una decifratura che fallisce, e
+             * l'app che non si apre piu, con un PIN giusto. Fuori dai limiti
+             * si usa il valore che questa versione ha scritto — se il record
+             * e stato toccato, la decifratura fallira comunque, ma dopo un
+             * tempo umano invece che mai.
+             */
+            iterations: typeof parsed.iterations === 'number'
+                && Number.isInteger(parsed.iterations)
+                && parsed.iterations >= LIMITI_V1.min
+                && parsed.iterations <= LIMITI_V1.max
                 ? parsed.iterations
                 : PBKDF2_ITERATIONS,
         }
@@ -139,7 +151,18 @@ async function readPlain(backend: SecureKeyBackend): Promise<string | null> {
 }
 
 export async function talosDatabaseKeyIsProtected(backend: SecureKeyBackend = defaultBackend): Promise<boolean> {
-    if (parseWrapped(await backend.get(WRAPPED_KEY)) === null) return false
+    /*
+     * ⛔⛔ TUTTI E DUE I FORMATI. Un difetto che ho introdotto io e che i test
+     * gia scritti hanno preso al primo giro: `protect` scriveva v2 e questa
+     * riga riconosceva solo il v1, quindi l'app concludeva che non ci fosse
+     * nessun PIN — su un database che invece era protetto.
+     *
+     * ⇒ Ogni posto che CHIEDE «e protetta?» deve conoscere ogni formato che
+     * qualcosa e in grado di scrivere. Aggiungere una versione significa
+     * cercare tutti i posti che leggono, non solo quello che apre.
+     */
+    const grezzo = await backend.get(WRAPPED_KEY)
+    if (parseV2(grezzo) === null && parseWrapped(grezzo) === null) return false
     // SF: `set(wrapped)` then `remove(plain)` is the safe order, but a failed
     // remove used to leave the key in the clear while the app claimed to be
     // protected. Half-protected is NOT protected — and re-attempting the
@@ -192,6 +215,148 @@ export async function resolveTalosDatabaseKey(backend: SecureKeyBackend = defaul
  * migration left a stored key the database had never seen — and the next
  * attempt then SKIPPED the migration, wrapping a key that opens nothing.
  */
+/**
+ * ⛔⛔⛔ IL RECORD DEL PIN, VERSIONE 2 — e la versione è il punto.
+ *
+ * Il v1 avvolge la chiave del database con PBKDF2-SHA256 a 210.000 iterazioni, e
+ * il commento accanto lo chiamava «il valore OWASP». Non lo è più: la guida
+ * corrente mette Argon2id come prima scelta, e chiede 600.000 iterazioni a
+ * PBKDF2 quando PBKDF2 è obbligato.
+ *
+ * ⇒ La cura NON è cambiare la costante. Cambiare il numero rompe ogni record già
+ * scritto — chi ha un PIN non entra più — e lascia il formato senza un modo di
+ * dire quale protezione stia usando. Serve una VERSIONE.
+ *
+ * ## ⛔ L'intestazione è autenticata
+ *
+ * Versione, algoritmo e parametri entrano in AES-GCM come dati aggiuntivi. Senza,
+ * chi può toccare il record può abbassarli e presentare un file che dichiara una
+ * protezione più debole di quella con cui è stato scritto. Con l'AAD quel record
+ * semplicemente non si apre: la promessa e il contenuto vivono insieme.
+ *
+ * ## E i parametri hanno un TETTO anche qui
+ *
+ * Il v1 accettava qualunque `iterations > 0`. Un record manomesso con due
+ * miliardi di iterazioni non è una decifratura che fallisce: è l'app che non si
+ * apre più, con un PIN giusto.
+ */
+
+/** Argon2id, minimo di riferimento OWASP 2026. */
+const ARGON2_PIN = Object.freeze({ memoryKiB: 19_456, iterations: 2, parallelism: 1 })
+
+/**
+ * ⛔ Il v1 ha scritto SOLO 210.000. La finestra è larga per non escludere una
+ * versione più vecchia che non conosco, e stretta abbastanza da tenere il costo
+ * dentro qualcosa che un telefono fa in un tempo umano.
+ */
+const LIMITI_V1 = Object.freeze({ min: 100_000, max: 1_000_000 })
+
+const LIMITI_V2 = Object.freeze({
+    memoryKiB: Object.freeze({ min: 8_192, max: 262_144 }),
+    iterations: Object.freeze({ min: 1, max: 16 }),
+    parallelism: Object.freeze({ min: 1, max: 8 }),
+})
+
+interface WrappedV2 {
+    version: 2
+    kdf: 'argon2id'
+    params: { memoryKiB: number, iterations: number, parallelism: number }
+    salt: string
+    nonce: string
+    ciphertext: string
+}
+
+/**
+ * ⛔ I byte autenticati: gli stessi campi, nello stesso ordine, sempre. Ordine
+ * diverso significa AAD diversa, cioè un record che non si apre più — quindi
+ * l'ordine è scritto qui a mano e non lasciato a `JSON.stringify` di un oggetto
+ * costruito altrove.
+ */
+function intestazioneAutenticata(record: Pick<WrappedV2, 'version' | 'kdf' | 'params'>): Uint8Array {
+    return new TextEncoder().encode(JSON.stringify({
+        version: record.version,
+        kdf: record.kdf,
+        params: {
+            memoryKiB: record.params.memoryKiB,
+            iterations: record.params.iterations,
+            parallelism: record.params.parallelism,
+        },
+    }))
+}
+
+function parseV2(value: unknown): WrappedV2 | null {
+    if (typeof value !== 'string' || value === '') return null
+    let parsed: Partial<WrappedV2>
+    try { parsed = JSON.parse(value) as Partial<WrappedV2> }
+    catch { return null }
+    if (parsed.version !== 2 || parsed.kdf !== 'argon2id') return null
+    const p = parsed.params
+    if (!p || typeof p !== 'object') return null
+    const dentro = (valore: unknown, limite: { min: number, max: number }) =>
+        typeof valore === 'number' && Number.isInteger(valore)
+        && valore >= limite.min && valore <= limite.max
+    if (!dentro(p.memoryKiB, LIMITI_V2.memoryKiB)
+        || !dentro(p.iterations, LIMITI_V2.iterations)
+        || !dentro(p.parallelism, LIMITI_V2.parallelism)) return null
+    if (typeof parsed.salt !== 'string' || typeof parsed.nonce !== 'string'
+        || typeof parsed.ciphertext !== 'string') return null
+    return {
+        version: 2, kdf: 'argon2id',
+        params: { memoryKiB: p.memoryKiB, iterations: p.iterations, parallelism: p.parallelism },
+        salt: parsed.salt, nonce: parsed.nonce, ciphertext: parsed.ciphertext,
+    }
+}
+
+/**
+ * ⛔⛔ La chiave decifrata dev'essere ESATTAMENTE quello che ci aspettiamo.
+ *
+ * 32 byte in esadecimale, 64 caratteri. Senza questo controllo, una decifratura
+ * che riesce per caso — o un record scritto da qualcos'altro — consegnerebbe una
+ * stringa qualunque a SQLCipher, che aprirebbe un database illeggibile e
+ * sembrerebbe una perdita di dati invece di un errore.
+ */
+function chiaveValida(candidata: string): boolean {
+    return /^[0-9a-f]{64}$/.test(candidata)
+}
+
+async function avvolgiV2(chiave: string, pin: string): Promise<WrappedV2> {
+    const salt = crypto.getRandomValues(new Uint8Array(16))
+    const nonce = crypto.getRandomValues(new Uint8Array(12))
+    const kek = await talosDerivaChiaveArgon2id(pin, salt, ARGON2_PIN)
+    const kekWeb = await crypto.subtle.importKey('raw', kek as BufferSource, 'AES-GCM', false, ['encrypt'])
+    const testa = { version: 2 as const, kdf: 'argon2id' as const, params: { ...ARGON2_PIN } }
+    const cifrato = await crypto.subtle.encrypt(
+        {
+            name: 'AES-GCM',
+            iv: nonce as BufferSource,
+            additionalData: intestazioneAutenticata(testa) as BufferSource,
+        },
+        kekWeb,
+        new TextEncoder().encode(chiave) as BufferSource,
+    )
+    return {
+        ...testa,
+        salt: toBase64(salt),
+        nonce: toBase64(nonce),
+        ciphertext: toBase64(new Uint8Array(cifrato)),
+    }
+}
+
+async function apriV2(record: WrappedV2, pin: string): Promise<string> {
+    const kek = await talosDerivaChiaveArgon2id(pin, fromBase64(record.salt), record.params)
+    const kekWeb = await crypto.subtle.importKey('raw', kek as BufferSource, 'AES-GCM', false, ['decrypt'])
+    const chiaro = await crypto.subtle.decrypt(
+        {
+            name: 'AES-GCM',
+            iv: fromBase64(record.nonce) as BufferSource,
+            additionalData: intestazioneAutenticata(record) as BufferSource,
+        },
+        kekWeb,
+        fromBase64(record.ciphertext) as BufferSource,
+    )
+    return new TextDecoder().decode(chiaro)
+}
+
 export function mintTalosDatabaseKey(): string {
     return randomKey()
 }
@@ -210,20 +375,12 @@ export async function protectTalosDatabaseKey(
     backend: SecureKeyBackend = defaultBackend,
 ): Promise<void> {
     const key = cached ?? await resolveTalosDatabaseKey(backend)
-    const salt = crypto.getRandomValues(new Uint8Array(16))
-    const iv = crypto.getRandomValues(new Uint8Array(12))
-    const kek = await deriveKek(pin.trim(), salt, PBKDF2_ITERATIONS)
-    const payload = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv: iv as BufferSource },
-        kek,
-        new TextEncoder().encode(key),
-    )
-    const record: WrappedRecord = {
-        salt: toBase64(salt),
-        iv: toBase64(iv),
-        payload: toBase64(new Uint8Array(payload)),
-        iterations: PBKDF2_ITERATIONS,
-    }
+    /*
+     * ⛔ Si scrive SEMPRE v2. Il v1 resta solo per aprire cio che esiste gia:
+     * un formato vecchio che continua a nascere non e compatibilita, e debito
+     * che si rinnova da solo.
+     */
+    const record = await avvolgiV2(key, pin.trim())
     await backend.set(WRAPPED_KEY, JSON.stringify(record))
     // Order matters: the wrapped copy exists BEFORE the plaintext one is
     // destroyed, so a crash in between leaves the data recoverable, never lost.
@@ -236,8 +393,25 @@ export async function unlockTalosDatabaseKey(
     pin: string,
     backend: SecureKeyBackend = defaultBackend,
 ): Promise<string> {
-    const record = parseWrapped(await backend.get(WRAPPED_KEY))
+    const grezzo = await backend.get(WRAPPED_KEY)
+
+    // ── v2: la strada normale da qui in avanti ───────────────────────────────
+    const v2 = parseV2(grezzo)
+    if (v2) {
+        let chiave: string
+        try { chiave = await apriV2(v2, pin.trim()) }
+        catch { throw new Error('TALOS_DB_KEY_UNLOCK_FAILED: wrong PIN or damaged record.') }
+        if (!chiaveValida(chiave)) {
+            throw new Error('TALOS_DB_KEY_UNLOCK_FAILED: wrong PIN or damaged record.')
+        }
+        cached = chiave
+        return chiave
+    }
+
+    // ── v1: si apre, e poi si SALE di versione ───────────────────────────────
+    const record = parseWrapped(grezzo)
     if (!record) throw new Error('TALOS_DB_KEY_UNLOCK_FAILED: no protected key on this device.')
+    let chiave: string
     try {
         const kek = await deriveKek(pin.trim(), fromBase64(record.salt), record.iterations)
         const plain = await crypto.subtle.decrypt(
@@ -245,12 +419,60 @@ export async function unlockTalosDatabaseKey(
             kek,
             fromBase64(record.payload) as BufferSource,
         )
-        const key = new TextDecoder().decode(plain)
-        cached = key
-        return key
+        chiave = new TextDecoder().decode(plain)
     } catch {
         throw new Error('TALOS_DB_KEY_UNLOCK_FAILED: wrong PIN or damaged record.')
     }
+    if (!chiaveValida(chiave)) {
+        throw new Error('TALOS_DB_KEY_UNLOCK_FAILED: wrong PIN or damaged record.')
+    }
+    cached = chiave
+
+    /*
+     * ⛔⛔⛔ LA MIGRAZIONE AVVIENE QUI, E FALLIRE NON DEVE COSTARE NIENTE.
+     *
+     * Il PIN esiste solo in questo istante: e' l'unico momento in cui si puo'
+     * riscrivere il record sotto un Argon2id senza chiedere di nuovo qualcosa
+     * alla persona.
+     *
+     * ⛔ Ma lo sblocco e' GIA' RIUSCITO. Se qualcosa va storto qui — il modulo
+     * della derivazione non si carica, la scrittura fallisce — l'unica risposta
+     * accettabile e' tenersi il v1 e andare avanti: la persona ha dato il PIN
+     * giusto e deve entrare. Un fallimento della migrazione che diventa un
+     * fallimento dello sblocco chiuderebbe fuori qualcuno dal proprio database
+     * per un miglioramento che non aveva chiesto.
+     *
+     * ⛔ E il nuovo record si RIAPRE PRIMA DI SCRIVERLO. Scrivere e poi scoprire
+     * che non si apre significa aver distrutto l'unica copia funzionante: il
+     * controllo va fatto quando il vecchio e' ancora al suo posto, non dopo.
+     */
+    try {
+        const nuovo = await avvolgiV2(chiave, pin.trim())
+        const riaperta = await apriV2(nuovo, pin.trim())
+        /*
+         * ⛔⛔ QUESTA RIGA NON E COPERTA DA UN TEST, e lo dico invece di
+         * lasciarlo scoprire a qualcuno.
+         *
+         * Una mutazione che la toglie NON fa diventare rosso niente: per
+         * provarla servirebbe che `avvolgiV2` e `apriV2` — che sono una la
+         * coppia dell'altra — si contraddicessero, e non c'e modo di indurlo
+         * senza iniettare un guasto nella crittografia.
+         *
+         * ⇒ Resta comunque. Non protegge da un attacco: protegge da un difetto
+         * MIO nella coppia qui sopra. Senza, quel difetto si manifesterebbe
+         * come una persona che non entra piu nel proprio database, dopo un
+         * aggiornamento, con il PIN giusto in mano. Con, si manifesta come una
+         * migrazione che non avviene — e il v1 continua a funzionare.
+         *
+         * Una riga non coperta che rende un difetto silenzioso invece che
+         * catastrofico vale piu della copertura che le manca.
+         */
+        if (riaperta === chiave) await backend.set(WRAPPED_KEY, JSON.stringify(nuovo))
+    } catch {
+        // Si resta sul v1. Lo sblocco e' avvenuto, ed e' quello che conta.
+    }
+
+    return chiave
 }
 
 /** Turn the lock off: the key goes back under device-only protection. */
