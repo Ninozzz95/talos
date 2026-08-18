@@ -122,8 +122,8 @@ test('uses the selected model to preview cancel insert replace and finally send'
     // nothing at all, and under four workers the model was sometimes still
     // resolving. Every other spec waits for this; this one did not, which is
     // why it was the only test that flaked when the suite went parallel.
-    await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
-    await page.getByLabel('Send message').click()
+    await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
+    await page.getByTestId('talos-composer-action').click()
     await expect(page.getByText('Provider accepted the final enhanced prompt.', { exact: true })).toBeVisible()
     await expect(page.getByTestId('talos-mobile-message-list').getByText(replaced, { exact: true }))
         .toBeVisible()

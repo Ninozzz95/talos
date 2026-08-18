@@ -240,6 +240,15 @@ test('settings subsection back returns to the categories list, not straight to c
 
     // Categories list is shown first.
     await expect(page.locator('[data-testid="settings-category-pane"]')).toBeVisible()
+    /*
+     * ⛔ Si porta la voce SOTTO GLI OCCHI prima di toccarla.
+     *
+     * Le impostazioni sono una lista lunga dentro uno scorrevole. La voce
+     * si trova nel DOM ma non diventa mai «visible, enabled and stable»
+     * per Playwright, che aspetta sessanta secondi e poi rinuncia — pur
+     * essendo cliccabile, come ho verificato sondando la pagina viva.
+     */
+    await page.locator('[data-settings-tab="account"]').scrollIntoViewIfNeeded()
     await page.locator('[data-settings-tab="account"]').click()
 
     // Detail pane open; the sheet header reflects the subsection + Back arrow.

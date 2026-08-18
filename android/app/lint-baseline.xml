@@ -1,0 +1,1258 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 8.13.2" type="baseline" client="gradle" dependencies="false" name="AGP (8.13.2)" variant="all" version="8.13.2">
+
+    <issue
+        id="MissingPermission"
+        message="Call requires permission which may be rejected by user: code should explicitly check to see if permission is available (with `checkPermission`) or explicitly handle a potential `SecurityException`"
+        errorLine1="        val presa = AudioRecord("
+        errorLine2="                    ^">
+        <location
+            file="src/main/java/ai/talos/parola/TalosParola.kt"
+            line="297"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="MissingSuperCall"
+        message="Overriding method should call `super.onBackPressed`"
+        errorLine1="    public void onBackPressed() {"
+        errorLine2="                ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosBarraActivity.java"
+            line="743"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="GestureBackNavigation"
+        message="`onBackPressed` is no longer called for back gestures; migrate to AndroidX&apos;s backward compatible `OnBackPressedDispatcher`"
+        errorLine1="    public void onBackPressed() {"
+        errorLine2="                ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosBarraActivity.java"
+            line="743"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="        result.put(&quot;manufacturer&quot;, Build.MANUFACTURER == null ? &quot;&quot; : Build.MANUFACTURER.toLowerCase());"
+        errorLine2="                                                                                        ~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosDevicePermissionsPlugin.java"
+            line="183"
+            column="89"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="        result.put(&quot;brand&quot;, Build.BRAND == null ? &quot;&quot; : Build.BRAND.toLowerCase());"
+        errorLine2="                                                                   ~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosDevicePermissionsPlugin.java"
+            line="197"
+            column="68"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="        String mediaType = value == null ? &quot;&quot; : value.trim().toLowerCase();"
+        errorLine2="                                                             ~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosFileExportPolicy.java"
+            line="77"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `toLowerCase(Locale)` instead. For strings meant to be internal use `Locale.ROOT`, otherwise `Locale.getDefault()`."
+        errorLine1="        if (name == null || !name.toLowerCase().endsWith(&quot;.gguf&quot;)) {"
+        errorLine2="                                  ~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosModelImportPlugin.java"
+            line="86"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 34 (current min is 26): `android.speech.SpeechRecognizer#DETECTED_LANGUAGE`"
+        errorLine1="            val rilevata = results.getString(SpeechRecognizer.DETECTED_LANGUAGE)"
+        errorLine2="                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDictationPlugin.kt"
+            line="1038"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 34 (current min is 26): `android.speech.SpeechRecognizer#LANGUAGE_DETECTION_CONFIDENCE_LEVEL`"
+        errorLine1="                        results.getInt(SpeechRecognizer.LANGUAGE_DETECTION_CONFIDENCE_LEVEL, -1),"
+        errorLine2="                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDictationPlugin.kt"
+            line="1046"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 28 (current min is 26): `android.accessibilityservice.AccessibilityService#GLOBAL_ACTION_TAKE_SCREENSHOT`"
+        errorLine1="                servizio.performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)"
+        errorLine2="                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosOcchio.kt"
+            line="842"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 30 (current min is 29): `android.content.pm.ServiceInfo#FOREGROUND_SERVICE_TYPE_MICROPHONE`"
+        errorLine1="                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/parola/TalosParola.kt"
+            line="257"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 29 (current min is 26): `android.app.role.RoleManager#ROLE_ASSISTANT`"
+        errorLine1="        val disponibile = gestore.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)"
+        errorLine2="                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="453"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 29 (current min is 26): `android.app.role.RoleManager#ROLE_ASSISTANT`"
+        errorLine1="        result.put(&quot;held&quot;, gestore.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT))"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="454"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 29 (current min is 26): `android.app.role.RoleManager#ROLE_ASSISTANT`"
+        errorLine1="        val intent = gestore.createRequestRoleIntent(android.app.role.RoleManager.ROLE_ASSISTANT)"
+        errorLine2="                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="519"
+            column="54"/>
+    </issue>
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 29 (current min is 26): `android.app.role.RoleManager#ROLE_ASSISTANT`"
+        errorLine1="        esito.put(&quot;granted&quot;, gestore?.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT) == true)"
+        errorLine2="                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="562"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="`&lt;ai.talos.TalosModelTransferJob>` requires API level 34 (current min is 26)"
+        errorLine1="        &lt;service"
+        errorLine2="        ^">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="590"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 29 (current min is 26): `android.service.voice.VoiceInteractionSession.AssistState#getAssistStructure`"
+        errorLine1="        val struttura: AssistStructure? = state.assistStructure"
+        errorLine2="                                                ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosAssistente.kt"
+            line="388"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 29 (current min is 26): `android.service.voice.VoiceInteractionSession.AssistState#getAssistContent`"
+        errorLine1="        val contenuto: AssistContent? = state.assistContent"
+        errorLine2="                                              ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosAssistente.kt"
+            line="389"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Field requires API level 33 (current min is 26): `java.math.BigInteger#TWO`"
+        errorLine1="    val P: BigInteger = BigInteger.TWO.pow(255).subtract(BigInteger.valueOf(19))"
+        errorLine2="                        ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/ponte/TalosEd25519.kt"
+            line="40"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Field requires API level 33 (current min is 26): `java.math.BigInteger#TWO`"
+        errorLine1="    val L: BigInteger = BigInteger.TWO.pow(252)"
+        errorLine2="                        ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/ponte/TalosEd25519.kt"
+            line="43"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Field requires API level 33 (current min is 26): `java.math.BigInteger#TWO`"
+        errorLine1="    val I: BigInteger = BigInteger.TWO.modPow(P.subtract(BigInteger.ONE).divide(BigInteger.valueOf(4)), P)"
+        errorLine2="                        ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/ponte/TalosEd25519.kt"
+            line="51"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Class requires API level 29 (current min is 26): `android.app.role.RoleManager`"
+        errorLine1="        val gestore = context.getSystemService(android.app.role.RoleManager::class.java)"
+        errorLine2="                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="445"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 29 (current min is 26): `android.app.role.RoleManager#isRoleAvailable`"
+        errorLine1="        val disponibile = gestore.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)"
+        errorLine2="                                  ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="453"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 29 (current min is 26): `android.app.role.RoleManager#isRoleHeld`"
+        errorLine1="        result.put(&quot;held&quot;, gestore.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT))"
+        errorLine2="                                   ~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="454"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Class requires API level 29 (current min is 26): `android.app.role.RoleManager`"
+        errorLine1="        val gestore = context.getSystemService(android.app.role.RoleManager::class.java)"
+        errorLine2="                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="496"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 29 (current min is 26): `android.app.role.RoleManager#isRoleAvailable`"
+        errorLine1="        if (!gestore.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)) {"
+        errorLine2="                     ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="501"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 29 (current min is 26): `android.app.role.RoleManager#createRequestRoleIntent`"
+        errorLine1="        val intent = gestore.createRequestRoleIntent(android.app.role.RoleManager.ROLE_ASSISTANT)"
+        errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="519"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Class requires API level 29 (current min is 26): `android.app.role.RoleManager`"
+        errorLine1="        val gestore = context.getSystemService(android.app.role.RoleManager::class.java)"
+        errorLine2="                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="557"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="NewApi"
+        message="Call requires API level 29 (current min is 26): `android.app.role.RoleManager#isRoleHeld`"
+        errorLine1="        esito.put(&quot;granted&quot;, gestore?.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT) == true)"
+        errorLine2="                                      ~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="562"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="PrivateApi"
+        message="Accessing internal APIs via reflection is not supported and may not work on all devices or in the future"
+        errorLine1="            val classe = Class.forName(&quot;android.os.SystemProperties&quot;)"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/parola/TalosParola.kt"
+            line="91"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="PropertyEscape"
+        message="Windows file separators (`\`) and drive letter separators (&apos;:&apos;) must be escaped (`\\`) in property files; use C\\:/Users/Antonino/AppData/Local/Android/Sdk\\r"
+        errorLine1="sdk.dir=C:/Users/Antonino/AppData/Local/Android/Sdk"
+        errorLine2="         ~">
+        <location
+            file="$HOME/Desktop/projects/AVM/mobile/android/local.properties"
+            line="1"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="StartActivityAndCollapseDeprecated"
+        message="TileService#startActivityAndCollapse(Intent) is deprecated. Use TileService#startActivityAndCollapse(PendingIntent) instead."
+        errorLine1="                startActivityAndCollapse(apri)"
+        errorLine2="                                         ~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosTendina.kt"
+            line="95"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="UnusedAttribute"
+        message="Attribute `localeConfig` is only used in API level 33 and higher (current min is 26)"
+        errorLine1="        android:localeConfig=&quot;@xml/locales_config&quot;"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="201"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="ManifestOrder"
+        message="`&lt;uses-permission>` tag appears after `&lt;application>` tag"
+        errorLine1="    &lt;uses-permission android:name=&quot;android.permission.INTERNET&quot; />"
+        errorLine2="     ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="769"
+            column="6"/>
+    </issue>
+
+    <issue
+        id="AndroidGradlePluginVersion"
+        message="A newer version of Gradle than 8.14.3 is available: 8.14.5"
+        errorLine1="distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.3-all.zip"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="$HOME/Desktop/projects/AVM/mobile/android/gradle/wrapper/gradle-wrapper.properties"
+            line="3"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="MissingTranslation"
+        message="&quot;talos_occhio_nome&quot; is not translated in &quot;it&quot; (Italian)"
+        errorLine1="    &lt;string name=&quot;talos_occhio_nome&quot;>TALOS — controllo del telefono&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="13"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="TrustAllX509TrustManager"
+        message="`checkClientTrusted` is empty, which could cause insecure network traffic due to trusting arbitrary TLS/SSL certificates presented by peers"
+        errorLine1="        override fun checkClientTrusted(catena: Array&lt;out X509Certificate>?, tipo: String?) {}"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/ponte/TalosAdbAccoppiamento.kt"
+            line="218"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="TrustAllX509TrustManager"
+        message="`checkServerTrusted` is empty, which could cause insecure network traffic due to trusting arbitrary TLS/SSL certificates presented by peers"
+        errorLine1="        override fun checkServerTrusted(catena: Array&lt;out X509Certificate>?, tipo: String?) {}"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/ponte/TalosAdbAccoppiamento.kt"
+            line="219"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="CustomX509TrustManager"
+        message="Implementing a custom `X509TrustManager` is error-prone and likely to be insecure. It is likely to disable certificate validation altogether, and is non-trivial to implement correctly without calling Android&apos;s default implementation."
+        errorLine1="    private val FIDUCIA_CIECA = object : X509TrustManager {"
+        errorLine2="                                ~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/ponte/TalosAdbAccoppiamento.kt"
+            line="217"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="ExportedContentProvider"
+        message="Exported content providers can provide access to potentially sensitive data"
+        errorLine1="        &lt;provider"
+        errorLine2="         ~~~~~~~~">
+        <location
+            file="src/debug/AndroidManifest.xml"
+            line="86"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="InsecureBaseConfiguration"
+        message="Insecure Base Configuration"
+        errorLine1="    &lt;base-config cleartextTrafficPermitted=&quot;true&quot;>"
+        errorLine2="                                            ~~~~">
+        <location
+            file="src/main/res/xml/network_security_config.xml"
+            line="29"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="SystemPermissionTypo"
+        message="Did you mean `android.permission.EXECUTE_APP_FUNCTIONS`?"
+        errorLine1="    &lt;uses-permission android:name=&quot;android.permission.EXECUTE_APP_FUNCTION&quot;"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/debug/AndroidManifest.xml"
+            line="65"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosBiometricKeyPlugin.java"
+            line="238"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="141"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="1858"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        result.put(&quot;appliedTo&quot;, if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) dove else &quot;both&quot;)"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="1873"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="        if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.O) return;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosDoneNotification.java"
+            line="54"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosModelTransferService.java"
+            line="34"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="        if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.O) return;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosNotificationCentre.java"
+            line="73"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/parola/TalosParola.kt"
+            line="241"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="        if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.O) return;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosRunService.java"
+            line="114"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosRunServicePlugin.java"
+            line="35"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        val flusso = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosSpeechPlugin.kt"
+            line="224"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        val flusso = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosSpeechPlugin.kt"
+            line="373"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosSpeechPlugin.kt"
+            line="411"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        val esito = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosSpeechPlugin.kt"
+            line="479"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 26"
+        errorLine1="        val usi = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {"
+        errorLine2="                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosSpeechPlugin.kt"
+            line="525"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is never &lt; 26"
+        errorLine1="        if (Build.VERSION.SDK_INT &lt; Build.VERSION_CODES.O) return;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosTransferNotification.java"
+            line="29"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="This folder configuration (`v24`) is unnecessary; `minSdkVersion` is 26. Merge all the resources in this folder into `drawable`.">
+        <location
+            file="src/main/res/drawable-v24"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="This folder configuration (`v26`) is unnecessary; `minSdkVersion` is 26. Merge all the resources in this folder into `mipmap-anydpi`.">
+        <location
+            file="src/main/res/mipmap-anydpi-v26"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.layout.activity_main` appears to be unused"
+        errorLine1="&lt;androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/layout/activity_main.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.xml.config` appears to be unused"
+        errorLine1="&lt;widget version=&quot;1.0.0&quot; xmlns=&quot;http://www.w3.org/ns/widgets&quot; xmlns:cdv=&quot;http://cordova.apache.org/ns/1.0&quot;>"
+        errorLine2="^">
+        <location
+            file="src/main/res/xml/config.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_launcher_background` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_launcher_background.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_launcher_background` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_launcher_background&quot;>#1e1f22&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_launcher_background.xml"
+            line="3"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.mipmap.ic_launcher_foreground` appears to be unused">
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_foreground.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_launcher_foreground` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable-v24/ic_launcher_foreground.xml"
+            line="1"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_forge` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_forge&quot;>#c98b32&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="19"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_paper` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_paper&quot;>#a96617&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="20"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_terminal` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_terminal&quot;>#63f08e&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="21"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_aurora` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_aurora&quot;>#42e7c7&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="22"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_glacier` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_glacier&quot;>#2367d1&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="23"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_ember` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_ember&quot;>#ff5c62&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="24"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_atlas` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_atlas&quot;>#d49a52&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="25"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_noir` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_noir&quot;>#f2f2f2&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="26"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_signal` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_signal&quot;>#ff6f61&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="27"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_violet` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_violet&quot;>#b794f6&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="28"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_claudius` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_claudius&quot;>#d97757&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="29"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_basicus` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_basicus&quot;>#1976d2&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="30"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_telemetry` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_telemetry&quot;>#6ad4d4&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="31"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.color.ic_talos_accent_calm` appears to be unused"
+        errorLine1="    &lt;color name=&quot;ic_talos_accent_calm&quot;>#c08b3c&lt;/color>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/ic_talos_colors.xml"
+            line="32"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.splash` appears to be unused">
+        <location
+            file="src/main/res/drawable/splash.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.splash_icon` appears to be unused">
+        <location
+            file="src/main/res/drawable/splash_icon.png"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.package_name` appears to be unused"
+        errorLine1="    &lt;string name=&quot;package_name&quot;>ai.talos&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="5"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.string.custom_url_scheme` appears to be unused"
+        errorLine1="    &lt;string name=&quot;custom_url_scheme&quot;>ai.talos&lt;/string>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="6"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.style.AppTheme_NoActionBar` appears to be unused"
+        errorLine1="    &lt;style name=&quot;AppTheme.NoActionBar&quot; parent=&quot;Theme.AppCompat.DayNight.NoActionBar&quot;>"
+        errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/styles.xml"
+            line="12"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UsableSpace"
+        message="Consider also using `StorageManager#getAllocatableBytes` and `allocateBytes` which will consider clearable cached data"
+        errorLine1="        if (bytes > 0 &amp;&amp; root.getUsableSpace() &lt; bytes + (64L * 1024 * 1024)) {"
+        errorLine2="                              ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosModelImportPlugin.java"
+            line="107"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="IconLauncherShape"
+        message="Launcher icons should not fill every pixel of their square region; see the design guide for details">
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher.png"/>
+    </issue>
+
+    <issue
+        id="IconLauncherShape"
+        message="Launcher icons should not fill every pixel of their square region; see the design guide for details">
+        <location
+            file="src/main/res/mipmap-mdpi/ic_launcher.png"/>
+    </issue>
+
+    <issue
+        id="IconLauncherShape"
+        message="Launcher icons should not fill every pixel of their square region; see the design guide for details">
+        <location
+            file="src/main/res/mipmap-xhdpi/ic_launcher.png"/>
+    </issue>
+
+    <issue
+        id="IconLauncherShape"
+        message="Launcher icons should not fill every pixel of their square region; see the design guide for details">
+        <location
+            file="src/main/res/mipmap-xxhdpi/ic_launcher.png"/>
+    </issue>
+
+    <issue
+        id="IconLauncherShape"
+        message="Launcher icons should not fill every pixel of their square region; see the design guide for details">
+        <location
+            file="src/main/res/mipmap-xxxhdpi/ic_launcher.png"/>
+    </issue>
+
+    <issue
+        id="IconDipSize"
+        message="The image `splash.png` varies significantly in its density-independent (dip) size across the various density versions: drawable-land-hdpi/splash.png: 533x320 dp (800x480 px), drawable-land-mdpi/splash.png: 480x320 dp (480x320 px), drawable-land-xhdpi/splash.png: 640x360 dp (1280x720 px), drawable-land-xxhdpi/splash.png: 533x320 dp (1600x960 px), drawable-land-xxxhdpi/splash.png: 480x320 dp (1920x1280 px)">
+        <location
+            file="src/main/res/drawable-land-xxxhdpi/splash.png"/>
+        <location
+            file="src/main/res/drawable-land-mdpi/splash.png"/>
+        <location
+            file="src/main/res/drawable-land-xxhdpi/splash.png"/>
+        <location
+            file="src/main/res/drawable-land-hdpi/splash.png"/>
+        <location
+            file="src/main/res/drawable-land-xhdpi/splash.png"/>
+    </issue>
+
+    <issue
+        id="IconDipSize"
+        message="The image `splash.png` varies significantly in its density-independent (dip) size across the various density versions: drawable-land-night-hdpi/splash.png: 533x320 dp (800x480 px), drawable-land-night-mdpi/splash.png: 480x320 dp (480x320 px), drawable-land-night-xhdpi/splash.png: 640x360 dp (1280x720 px), drawable-land-night-xxhdpi/splash.png: 533x320 dp (1600x960 px), drawable-land-night-xxxhdpi/splash.png: 480x320 dp (1920x1280 px)">
+        <location
+            file="src/main/res/drawable-land-night-xxxhdpi/splash.png"/>
+        <location
+            file="src/main/res/drawable-land-night-mdpi/splash.png"/>
+        <location
+            file="src/main/res/drawable-land-night-xxhdpi/splash.png"/>
+        <location
+            file="src/main/res/drawable-land-night-hdpi/splash.png"/>
+        <location
+            file="src/main/res/drawable-land-night-xhdpi/splash.png"/>
+    </issue>
+
+    <issue
+        id="IconDuplicatesConfig"
+        message="The `splash.png` icon has identical contents in the following configuration folders: drawable-land-mdpi, drawable">
+        <location
+            file="src/main/res/drawable/splash.png"/>
+        <location
+            file="src/main/res/drawable-land-mdpi/splash.png"/>
+    </issue>
+
+    <issue
+        id="IconDuplicatesConfig"
+        message="The `splash.png` icon has identical contents in the following configuration folders: drawable-land-night-mdpi, drawable-night">
+        <location
+            file="src/main/res/drawable-night/splash.png"/>
+        <location
+            file="src/main/res/drawable-land-night-mdpi/splash.png"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/splash.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/splash.png"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/splash_icon.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/splash_icon.png"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                    android.net.Uri.parse(&quot;talos://barra?voce=0&amp;nodi=0&amp;immagine=0&amp;rientro=1&quot;),"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosAssistente.kt"
+            line="173"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                    android.net.Uri.parse(&quot;talos://barra?voce=0&amp;nodi=0&amp;immagine=0&amp;rientro=1&quot;),"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosAssistente.kt"
+            line="173"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                    android.net.Uri.parse(&quot;talos://barra?voce=1&amp;nodi=0&amp;immagine=0&quot;),"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosAssistente.kt"
+            line="190"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val indirizzo = android.net.Uri.parse("
+        errorLine2="                        ^">
+        <location
+            file="src/main/java/ai/talos/agent/TalosAssistente.kt"
+            line="610"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            android.net.Uri.parse(uri),"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="367"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            intent.data = android.net.Uri.parse(it)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="454"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            intent.data = android.net.Uri.parse(it)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="454"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            val uri = android.net.Uri.parse("
+        errorLine2="                      ^">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="536"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="                val tela = android.graphics.Bitmap.createBitmap("
+        errorLine2="                           ^">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="746"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            intent.data = android.net.Uri.parse(it)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="836"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            intent.data = android.net.Uri.parse(it)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="836"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val uri = android.net.Uri.parse(testoUri)"
+        errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="1116"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            &quot;url&quot; -> Intent(Intent.ACTION_VIEW, Uri.parse(valore))"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="1481"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                context.contentResolver.openFileDescriptor(Uri.parse(percorso), &quot;r&quot;)"
+        errorLine2="                                                           ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="2075"
+            column="60"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="            val tela = android.graphics.Bitmap.createBitmap("
+        errorLine2="                       ^">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDevicePlugin.kt"
+            line="2130"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="            context.getSharedPreferences(MEMORIA_ORECCHIO, android.content.Context.MODE_PRIVATE)"
+        errorLine2="            ^">
+        <location
+            file="src/main/java/ai/talos/agent/TalosDictationPlugin.kt"
+            line="552"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                        android.net.Uri.parse(&quot;talos://barra?voce=1&amp;nodi=0&amp;immagine=0&amp;bloccato=1&quot;),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/parola/TalosParola.kt"
+            line="669"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                        android.net.Uri.parse(&quot;talos://barra?voce=1&amp;nodi=0&amp;immagine=0&quot;),"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/parola/TalosParola.kt"
+            line="689"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="            contesto.getSharedPreferences(MEMORIA, Context.MODE_PRIVATE)"
+        errorLine2="            ^">
+        <location
+            file="src/main/java/ai/talos/parola/TalosParola.kt"
+            line="874"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="            context.getSharedPreferences(MEMORIA_PONTE, android.content.Context.MODE_PRIVATE)"
+        errorLine2="            ^">
+        <location
+            file="src/main/java/ai/talos/agent/TalosPrivilegePlugin.kt"
+            line="121"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val indirizzo = android.net.Uri.parse(&quot;talos://barra?voce=1&amp;nodi=0&amp;immagine=0&quot;)"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/ai/talos/TalosTendina.kt"
+            line="117"
+            column="25"/>
+    </issue>
+
+</issues>

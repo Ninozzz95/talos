@@ -15,7 +15,22 @@ const SEEDED_SETTINGS = {
                 presentation_v2: true,
                 shell: { immersive_header: false, composer_drawer: false },
                 // Returning user: unified setup is already resolved.
-                onboarding: { intro_version: 3, intro_outcome: 'completed', setup_dismissed: true },
+                /*
+                 * ⛔⛔⛔ QUESTO NUMERO DEVE SEGUIRE `TALOS_MOBILE_INTRO_VERSION`.
+                 *
+                 * Il cancello dell'intro e `intro_version < TALOS_MOBILE_INTRO_VERSION`.
+                 * Quando la costante e salita a 4 questo seme e rimasto a 3, e da
+                 * quel momento l'intro si e riaperta in OGNI test: una schermata a
+                 * tutto campo davanti al pulsante che i test premono.
+                 *
+                 * ⛔ Meta della suite e stata rossa per giorni senza che nessuno lo
+                 * sapesse, perche la CI non eseguiva i test nel browser.
+                 *
+                 * ⇒ C'e un test che confronta questo numero con la costante e
+                 * fallisce se divergono: `tests/unit/e2e/semeIntro.test.ts`. Non
+                 * fidarsi della memoria di chi alza la versione.
+                 */
+                onboarding: { intro_version: 4, intro_outcome: 'completed', setup_dismissed: true },
             }),
         }],
     }],
