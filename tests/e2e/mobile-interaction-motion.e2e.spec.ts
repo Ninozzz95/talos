@@ -35,7 +35,7 @@ test.use({
                         immersive_composer: true,
                     },
                     onboarding: {
-                        intro_version: 2,
+                        intro_version: 4,
                         intro_outcome: 'completed',
                         setup_dismissed: true,
                     },
@@ -205,6 +205,15 @@ test('MOTION-E2E-03 reduced motion applies final state immediately without inter
 
     await openSettings(page)
     await clearRecords(page)
+    /*
+     * ⛔ Si porta la voce SOTTO GLI OCCHI prima di toccarla.
+     *
+     * Le impostazioni sono una lista lunga dentro uno scorrevole. La voce
+     * si trova nel DOM ma non diventa mai «visible, enabled and stable»
+     * per Playwright, che aspetta sessanta secondi e poi rinuncia — pur
+     * essendo cliccabile, come ho verificato sondando la pagina viva.
+     */
+    await page.locator('[data-settings-tab="appearance"]').scrollIntoViewIfNeeded()
     await page.locator('[data-settings-tab="appearance"]').click()
     await expect(page.getByTestId('settings-detail-pane')).toBeVisible()
     await expect.poll(() => page.evaluate(() => (

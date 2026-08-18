@@ -55,7 +55,7 @@ async function mockProvider(page: Page): Promise<void> {
 async function sendMessage(page: Page, text: string): Promise<void> {
     const composer = page.getByLabel('Message TALOS')
     await composer.fill(text)
-    await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+    await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
     await composer.press('Enter')
     await expect(page.getByText('Understood.', { exact: true }).first()).toBeVisible()
 }

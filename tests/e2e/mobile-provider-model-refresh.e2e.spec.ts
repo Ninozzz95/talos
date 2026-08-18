@@ -85,7 +85,7 @@ test('saving a key refreshes models immediately and preserves context across two
 
     const composer = page.getByLabel('Message TALOS')
     await composer.fill('Remember alpha as the value.')
-    await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+    await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
     await composer.press('Enter')
     await expect(page.getByText('Alpha is recorded.', { exact: true })).toBeVisible()
 
@@ -119,6 +119,6 @@ test('failed discovery keeps chat reachable and does not reopen Settings', async
     await expect(page.locator(SHEET)).toHaveCount(0)
     await expect(page.getByLabel('Message TALOS')).toBeEnabled()
     await page.getByLabel('Message TALOS').fill('Composer remains usable')
-    await expect(page.getByLabel('Send message')).toBeDisabled()
+    await expect(page.getByTestId('talos-composer-action')).toBeDisabled()
     await expect(page.locator(SHEET)).toHaveCount(0)
 })

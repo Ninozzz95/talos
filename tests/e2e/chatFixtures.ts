@@ -32,7 +32,7 @@ export const TALOS_IMMERSIVE_SEED = {
                 defaults_v3: true,
                 presentation_v2: true,
                 shell: { immersive_header: true, composer_drawer: false },
-                onboarding: { intro_version: 3, intro_outcome: 'completed', setup_dismissed: true },
+                onboarding: { intro_version: 4, intro_outcome: 'completed', setup_dismissed: true },
             }),
         }],
     }],
@@ -158,7 +158,7 @@ export async function configureChatProvider(page: Page, key = 'e2e-key'): Promis
 export async function sendChatMessage(page: Page, text: string, reply = 'Understood.'): Promise<void> {
     const composer = page.getByLabel('Message TALOS')
     await composer.fill(text)
-    await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+    await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
     await composer.press('Enter')
     await expect(page.getByText(reply, { exact: true }).first()).toBeVisible()
 }

@@ -30,7 +30,7 @@ test.use({
                     defaults_v3: true,
                     presentation_v2: true,
                     shell: { immersive_header: true, composer_drawer: true },
-                    onboarding: { intro_version: 2, intro_outcome: 'completed', setup_dismissed: true },
+                    onboarding: { intro_version: 4, intro_outcome: 'completed', setup_dismissed: true },
                 }),
             }],
         }],
@@ -78,7 +78,7 @@ test('sends a message end-to-end on the immersive + drawer-composer default', as
 
     const composer = page.getByLabel('Message TALOS')
     await composer.fill('Ciao dal default spedito')
-    await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+    await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
     await composer.press('Enter')
     await expect(page.getByText('Shipped-default reply.', { exact: true })).toBeVisible()
 })
