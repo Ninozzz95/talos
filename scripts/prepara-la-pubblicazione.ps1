@@ -579,14 +579,29 @@ Titolo "FATTO — e adesso tocca a te"
 "     2. aggiungi LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md"
 "     3. rileggi il README con gli occhi di chi arriva e non sa niente"
 "     4. prova che si compili da zero:"
-# ⛔ `$Destinazione\mobile` NON ESISTE, e questa riga lo diceva da settimane.
-#    Nella copia pubblicata l'app È la radice: è tutto il senso
-#    dell'appiattimento. Chi avesse seguito l'istruzione sarebbe finito in una
-#    cartella che non c'è, e avrebbe concluso che la copia è rotta.
-#    ⇒ Un'istruzione che manda in un posto inesistente è peggio di nessuna
-#    istruzione: la prima volta la si segue, e si perde tempo a cercare l'errore
-#    dalla parte sbagliata.
-"          cd $Destinazione ; npm ci ; npm run typecheck ; npx vitest run"
+    # ⛔⛔ IL TYPECHECK SÌ, I TEST NO — e non è pigrizia.
+    #
+    # MISURATO 2026-08-18: `npx vitest run` nella copia dà **37 rossi** che
+    # nell'originale sono verdi. La causa non è la copia: è Windows.
+    #
+    # Git converte i fine riga in checkout, quindi i file di lavoro della copia
+    # hanno CRLF mentre i generatori producono LF. I test che confrontano un
+    # file generato con quello su disco vedono una differenza a ogni riga e
+    # dicono «STALE» su tutte le icone del launcher.
+    #
+    # ⛔ Il BLOB committato è LF, byte per byte identico all'originale — 3251
+    # contro 3251, verificato. Sulla CI, che gira su Linux, quei test passano, e
+    # infatti erano verdi.
+    #
+    # ⇒ Un'istruzione che produce 37 rossi su una copia sana è peggio di nessuna
+    # istruzione: la prima volta la si segue, si conclude che la copia è rotta e
+    # si va a cercare il guasto dalla parte sbagliata. È la stessa lezione della
+    # riga qui sopra che mandava in `mobile/`, una cartella che non esiste.
+    "          cd $Destinazione ; npm ci ; npm run typecheck"
+    ""
+    "  ⛔ NON lanciare i test qui: su Windows i fine riga della copia sono CRLF e"
+    "     una trentina di test di parità falliscono su una copia SANA. I test si"
+    "     guardano nell'originale, o sulla CI dopo il push."
 ""
 "  Poi, e solo poi:"
 "     git -C $Destinazione remote add origin <la repo NUOVA, mai usata prima>"
