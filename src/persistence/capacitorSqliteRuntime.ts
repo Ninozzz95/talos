@@ -122,6 +122,8 @@ function createDefaultGateway(): TalosCapacitorSqliteGateway {
     }
 }
 
+import { cifraGiornale, decifraGiornale, giornaleECifrato } from '@/persistence/giornaleMigrazione'
+
 const MIGRATION_FILE = 'talos-db-migration.json'
 
 async function managedDatabaseSecret(): Promise<TalosDatabaseSecret> {
@@ -147,10 +149,59 @@ export function createCapacitorSqliteRuntime(
         platform: Capacitor.getPlatform() === 'web' ? 'web' : 'native',
         gateway: createDefaultGateway(),
         secret: managedDatabaseSecret,
+        /**
+         * ⛔⛔⛔ SI SCRIVE DI FIANCO, SI RILEGGE, E SOLO ALLORA SI RINOMINA.
+         *
+         * Subito dopo questa chiamata il database viene DISTRUTTO. Prima era una
+         * `writeFile` sola: l'API promette «scrivi un file», e non promette
+         * niente su fsync, rinomina atomica o sincronizzazione della cartella.
+         * Prima di una cancellazione irreversibile la garanzia va POSSEDUTA, non
+         * dedotta dal fatto che una promessa si sia risolta.
+         *
+         * Tre passi, e ognuno toglie un modo di perdere i dati:
+         *
+         * ```
+         * scrivi su .tmp    un file a metà non ha ancora il nome che conta
+         * rileggi e CONFRONTA   la scrittura è arrivata davvero, e per intero
+         * rinomina          il nome buono compare solo su un file completo
+         * ```
+         *
+         * ⛔ La rilettura non è una fsync e non fa finta di esserlo: non prova
+         * che i byte siano sul supporto. Prova che sono arrivati allo strato che
+         * li serve, che è dove capitano il troncamento e la codifica sbagliata —
+         * i modi in cui questa scrittura fallisce davvero. La garanzia piena
+         * vuole codice nativo, ed è scritta come debito qui sotto, non spacciata
+         * per fatta.
+         *
+         * ⛔ E se il confronto non torna si SOLLEVA. Chi chiama non cancella
+         * niente, e la persona resta con il database che aveva.
+         */
         persistMigration: async (payload) => {
             const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem')
+            const provvisorio = `${MIGRATION_FILE}.tmp`
             await Filesystem.writeFile({
-                path: MIGRATION_FILE, data: payload, directory: Directory.Data, encoding: Encoding.UTF8,
+                path: provvisorio, data: payload, directory: Directory.Data, encoding: Encoding.UTF8,
+            })
+            const riletto = await Filesystem.readFile({
+                path: provvisorio, directory: Directory.Data, encoding: Encoding.UTF8,
+            })
+            const testo = typeof riletto.data === 'string' ? riletto.data : await riletto.data.text()
+            if (testo !== payload) {
+                throw new Error(
+                    'TALOS_DB_JOURNAL_UNVERIFIED: the migration journal did not read back as written,'
+                    + ' so nothing was deleted.',
+                )
+            }
+            /*
+             * ⛔ La rinomina cancella il file di destinazione se c'e gia: un
+             * giornale precedente rimasto li apparterrebbe a una migrazione
+             * fallita, e tenerlo significherebbe riprendere quella invece di
+             * questa. Ma si cancella DOPO che il nuovo e stato verificato, mai
+             * prima.
+             */
+            await Filesystem.rename({
+                from: provvisorio, to: MIGRATION_FILE,
+                directory: Directory.Data, toDirectory: Directory.Data,
             })
         },
         /**
@@ -183,11 +234,17 @@ export function createCapacitorSqliteRuntime(
             }
         },
         clearMigration: async () => {
-            try {
-                const { Filesystem, Directory } = await import('@capacitor/filesystem')
-                await Filesystem.deleteFile({ path: MIGRATION_FILE, directory: Directory.Data })
-            } catch {
-                // Already gone: the migration is finished either way.
+            const { Filesystem, Directory } = await import('@capacitor/filesystem')
+            /*
+             * ⛔ Anche il provvisorio. Un .tmp rimasto indietro e una copia di
+             * tutto il database che sopravvive alla migrazione che l'ha prodotta.
+             */
+            for (const nome of [MIGRATION_FILE, `${MIGRATION_FILE}.tmp`]) {
+                try {
+                    await Filesystem.deleteFile({ path: nome, directory: Directory.Data })
+                } catch {
+                    // Already gone: the migration is finished either way.
+                }
             }
         },
         prepareWebStore: prepareOfficialWebStore,
@@ -263,7 +320,24 @@ export function createCapacitorSqliteRuntime(
         if (options.platform === 'native') {
             const pending = await options.readMigration()
             if (pending) {
-                await resumeMigration(pending)
+                /*
+                 * ⛔⛔ La chiave si chiede SOLO se il giornale e cifrato.
+                 *
+                 * Risolverla a ogni avvio potrebbe far comparire la richiesta del
+                 * PIN dove oggi non compare, e un giornale in sospeso e raro.
+                 * Quando c'e ed e cifrato, invece, la persona deve comunque
+                 * sbloccare: il database che sta per tornare dentro e protetto
+                 * dalla stessa chiave.
+                 *
+                 * ⛔ E un giornale VECCHIO in chiaro passa di qui INTATTO. Chi
+                 * aggiorna TALOS con una migrazione a meta ha il database gia
+                 * distrutto: non saperlo leggere sarebbe la perdita di tutte le
+                 * sue chat durante un aggiornamento fatto per proteggerle.
+                 */
+                const chiaro = giornaleECifrato(pending)
+                    ? await decifraGiornale(pending, (await options.secret()).secret)
+                    : pending
+                await resumeMigration(chiaro)
             }
         }
 
@@ -365,7 +439,13 @@ export function createCapacitorSqliteRuntime(
             // user waits on a modal — a kill between the delete and the import
             // destroyed every chat with the only copy in RAM. It goes to disk
             // first, and `establish()` resumes from it on the next launch.
-            await options.persistMigration(payload)
+            /*
+             * ⛔ CIFRATO. Il giornale e una copia dell'INTERO database: in chiaro
+             * abbassava, per la durata della migrazione, la protezione che l'app
+             * mantiene tutto il resto del tempo. La chiave e quella NUOVA —
+             * l'unica che esista ancora quando il giornale va riletto.
+             */
+            await options.persistMigration(await cifraGiornale(payload, secret))
             try {
                 // SF-CRITICAL: deleting AFTER closeConnection can never work —
                 // the plugin drops the connection from its dictionary and the

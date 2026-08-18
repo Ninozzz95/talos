@@ -113,6 +113,27 @@ export async function talosFetchStream(request: TalosStreamRequest): Promise<voi
         headers: request.headers,
         body: JSON.stringify(request.body),
         signal: request.signal,
+        /*
+         * ⛔⛔⛔ NON SI SEGUONO I REDIRECT, e non è prudenza generica.
+         *
+         * «Questa richiesta resta locale» non è «l'URL di partenza era locale».
+         * TALOS permette il testo in chiaro verso indirizzi privati, perché un
+         * modello che gira sul computer della persona parla HTTP e basta — e la
+         * classificazione di quell'indirizzo è già severa, rifiuta perfino i
+         * nomi. Ma guardava SOLO IL PRIMO SALTO.
+         *
+         * `follow` è il valore predefinito dello standard, quindi bastava che il
+         * server locale rispondesse `302 Location: https://qualcuno` e il prompt
+         * — con le sue intestazioni di autorizzazione — usciva dalla classe di
+         * rete autorizzata. Senza TLS non c'è nemmeno niente che lo copra.
+         *
+         * ⇒ Un POST a un'API di chat a cui si risponde con un 30x non è un caso
+         * da seguire in silenzio: è un caso da NOMINARE. Se un giorno servisse
+         * davvero, la strada è ricevere il 30x, riclassificare la destinazione
+         * con la stessa politica e consentire solo i salti che restano nella
+         * stessa classe — non spegnere questa riga.
+         */
+        redirect: 'error',
     })
     if (!response.ok) {
         let detail = ''

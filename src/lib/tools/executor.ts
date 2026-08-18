@@ -14,7 +14,6 @@ import {
     type TalosToolDefinition,
     type TalosToolResult,
     type TalosPremessaEsito,
-    type TalosToolVerdict,
 } from '@/lib/tools/registry'
 import {
     TALOS_EMPTY_CHAIN,
@@ -84,7 +83,14 @@ export interface TalosToolAuditRow {
      * disturbata**. Schiacciarli in uno solo farebbe sembrare rifiuti umani
      * delle decisioni della macchina, e viceversa.
      */
-    status: 'succeeded' | 'failed' | 'denied' | 'refused_busy' | 'premise_absent'
+    /**
+     * ⛔ `effect_unknown` non e' un fallimento e non e' una riuscita.
+     *
+     * L'attrezzo ha cambiato qualcosa nel mondo, o forse no, e il controllo che
+     * avrebbe deciso e' morto. Metterlo fra i falliti farebbe ritentare, e
+     * ritentare un effetto gia' applicato manda due volte lo stesso messaggio.
+     */
+    status: 'succeeded' | 'failed' | 'denied' | 'refused_busy' | 'premise_absent' | 'effect_unknown'
     /** Il rischio effettivo al momento della chiamata, catena inclusa. */
     risk?: 'R0' | 'R1' | 'R2' | 'R3' | 'R4'
     /** Vero quando le tre condizioni della trifecta erano tutte presenti. */
@@ -98,6 +104,14 @@ export interface TalosToolAuditRow {
      * che ha morso.
      */
     verified?: boolean
+    /**
+     * ⛔ Quale dei QUATTRO esiti ha avuto il controllo.
+     *
+     * `verified` da solo non bastava: era assente sia quando l'attrezzo non
+     * dichiara un controllo sia quando il controllo e' esploso, e quelle due
+     * righe portano a due decisioni opposte.
+     */
+    postcondizione?: 'nessuna' | 'retta' | 'smentita' | 'ignota'
     input: unknown
     /**
      * ⛔ Riuscito ma senza effetto nel mondo: ha elencato, disambiguato o
@@ -211,6 +225,32 @@ async function record(deps: TalosToolExecutionDeps, row: TalosToolAuditRow): Pro
     } catch {
         // A failed audit write must not swallow the tool's answer; the Doctor
         // ring already carries storage failures.
+    }
+}
+
+/**
+ * ⛔ UN SOLO valutatore, chiamato dal preflight — e da nessun altro posto.
+ *
+ * Duplicarlo fra preflight ed esecuzione significherebbe due punti da tenere
+ * allineati per una domanda sola. `executeTalosTool` chiama comunque il
+ * preflight a ogni esecuzione, resume compresi: quindi la premessa viene
+ * ricontrollata FRESCA prima del `run`, senza una riga in piu.
+ */
+async function talosValutaPremessa(
+    tool: TalosToolDefinition<never>,
+    input: unknown,
+    deps: TalosToolExecutionDeps,
+): Promise<TalosPremessaEsito | null> {
+    if (!tool.premesse) return null
+    try {
+        return await tool.premesse(input as never, deps.context)
+    }
+    catch {
+        /*
+         * ⛔ Una premessa che esplode è `ignoto`, non `assente`: un controllo
+         * rotto non è la prova che una cosa non esista.
+         */
+        return { stato: 'ignoto', perche: 'il controllo della premessa non ha risposto' }
     }
 }
 
@@ -362,6 +402,67 @@ export async function preflightTalosToolExecution(
             },
         }
     }
+    /*
+     * ⭐⭐⭐ LE PREMESSE, e stanno QUI — dopo i dinieghi puri, PRIMA di «chiedi».
+     *
+     * ⛔⛔ Prima vivevano solo in `executeTalosTool()`, e il test che le provava
+     * chiamava quella funzione direttamente. Passava. Ma la CHAT non chiama
+     * quella: chiama prima questo preflight, e se risponde
+     * `authorization_required` crea il checkpoint e mostra la scheda — poi
+     * esegue. ⇒ In produzione la persona spendeva il consenso PRIMA che qualcuno
+     * avesse controllato la premessa: esattamente ciò che le premesse esistono
+     * per impedire, con un test verde sopra.
+     *
+     * ⛔ E l'ordine non è «premessa prima di tutto»: viene DOPO la risoluzione
+     * dell'autorità, perché un tool già negato non deve far leggere niente. Un
+     * diniego che costa una lettura è una lettura non autorizzata.
+     */
+    const premessa = await talosValutaPremessa(tool, parsed.value, deps)
+    if (premessa?.stato === 'assente') {
+        return {
+            status: 'terminal',
+            result: {
+                ok: false,
+                content: `Not run: ${premessa.perche}. Nothing was asked of the user and nothing was changed.`,
+                code: 'TALOS_TOOL_PREMISE_ABSENT',
+            },
+            audit: {
+                tool: tool.name,
+                action: tool.action,
+                requiredActions,
+                status: 'premise_absent',
+                input: parsed.value,
+            },
+        }
+    }
+    /*
+     * ⛔⛔ `ignoto` PROSEGUE per difetto, e per i coding mutation NO.
+     *
+     * Su una capacità del telefono, «non riesco a provare che la torcia sia
+     * spenta» può ancora consentire un comando idempotente. Su «questa funzione
+     * esiste ed è il bersaglio che sto per sostituire?» **non autorizza una
+     * mutazione strutturale**. ⇒ È una proprietà semantica del tool, non una
+     * preferenza dell'utente: sta nel tool, non nelle impostazioni.
+     */
+    if (premessa?.stato === 'ignoto' && tool.premiseUnknownPolicy === 'reject') {
+        return {
+            status: 'terminal',
+            result: {
+                ok: false,
+                content: `Not run: the required premise could not be established (${premessa.perche}).`,
+                code: 'TALOS_TOOL_PREMISE_UNKNOWN',
+            },
+            audit: {
+                tool: tool.name,
+                action: tool.action,
+                requiredActions,
+                status: 'failed',
+                input: parsed.value,
+                error: `TALOS_TOOL_PREMISE_UNKNOWN:${premessa.perche}`,
+            },
+        }
+    }
+
     if (resolution.status === 'ask') {
         return {
             status: 'authorization_required',
@@ -408,56 +509,12 @@ export async function executeTalosTool(
         : preflight.request.input
 
     /*
-     * ⭐⭐⭐ LE PREMESSE, e stanno QUI: dopo la validazione, PRIMA del consenso.
-     *
-     * L'ordine è tutto. Un controllo dopo la scheda non impedisce niente —
-     * la persona ha già speso il suo «Consenti» per un'azione impossibile, e
-     * quello che impara è a toccare senza leggere.
-     *
-     * ⛔ E sta nell'ESECUTORE, non dentro `run` e non nel testo che il modello
-     * produce: un controllo che vive nell'output del modello lo si scavalca
-     * scrivendo un altro output. Qui il modello propone, il runtime decide.
-     *
-     * ⛔⛔ `ignoto` PROSEGUE, e non è una svista: non sapere non autorizza a
-     * rifiutare. Bloccare su `ignoto` renderebbe TALOS inutile appena un
-     * permesso è negato o il ponte cade, e insegnerebbe che «non lo so» è un
-     * «no» — che è l'esatto difetto che il tri-stato esiste per impedire, preso
-     * dall'altro verso.
+     * ⛔ Le premesse NON si ricontrollano qui, e non è una dimenticanza:
+     * `preflightTalosToolExecution()` qui sopra le ha già valutate, e viene
+     * chiamato a OGNI esecuzione — resume dopo consenso compresi. Ricontrollarle
+     * anche qui sarebbe un secondo punto da tenere allineato per una domanda
+     * sola, e i due si sarebbero disallineati alla prima modifica.
      */
-    if (tool.premesse) {
-        let premessa: TalosPremessaEsito
-        try {
-            premessa = await tool.premesse(input as never, deps.context)
-        } catch {
-            /*
-             * ⛔ Una premessa che esplode è `ignoto`, non `assente`: un
-             * controllo rotto non è la prova che una cosa non esista. Fallire
-             * qui in `assente` bloccherebbe azioni legittime ogni volta che il
-             * controllo stesso ha un difetto — e in silenzio.
-             */
-            premessa = { stato: 'ignoto', perche: 'il controllo della premessa non ha risposto' }
-        }
-        if (premessa.stato === 'assente') {
-            await record(deps, {
-                tool: tool.name,
-                action: tool.action,
-                requiredActions,
-                status: 'premise_absent',
-                input,
-            })
-            /*
-             * ⛔ Si dice COSA manca. Un modello a cui si risponde «non si può»
-             * senza dire perché riprova identico — è la stessa ragione per cui
-             * `TalosToolVerdict` pretende un `reason`.
-             */
-            return {
-                ok: false,
-                content: `Not run: ${premessa.perche}. Nothing was asked of the user and nothing was changed.`,
-                code: 'TALOS_TOOL_PREMISE_ABSENT',
-            }
-        }
-    }
-
     if (preflight.status === 'authorization_required') {
         let answer: boolean | 'busy' | 'unanswered' = false
         try {
@@ -549,21 +606,50 @@ export async function executeTalosTool(
     // inclusa, non quello dichiarato a tavolino.
     const effectiveRisk = talosEffectiveRisk(deps.chain ?? TALOS_EMPTY_CHAIN, security)
     /**
-     * Chiede la postcondizione, e non lascia che sia lei a rompere il tool.
+     * Chiede la postcondizione, e distingue i QUATTRO esiti possibili.
      *
-     * Se `verify` stessa fallisce si restituisce `null` — «non lo so» — e il
-     * risultato di `run` resta l'ultima parola. Una verifica che trasforma un
-     * successo in errore perche' e' andata storta LEI sarebbe la cura peggiore
-     * della malattia.
+     * ⛔⛔ Prima ne tornava due, e nascondeva la differenza che conta: `null`
+     * significava sia «questo attrezzo non dichiara un controllo» sia «il
+     * controllo c'era ed è esploso». Due stati opposti nella stessa casella, e
+     * l'audit non poteva separarli — chi lo legge per capire se un effetto sia
+     * avvenuto trovava la stessa riga in tutti e due i casi.
+     *
+     * ```
+     * nessuna    l'attrezzo non ne dichiara una — non c'era niente da controllare
+     * retta      chiesta, e l'effetto è li
+     * smentita   chiesta, e l'effetto NON è li — la difesa ha morso
+     * ignota     chiesta, e il controllore è morto — non si sa
+     * ```
+     *
+     * ⛔ `ignota` non è `retta` con un asterisco: per un attrezzo che cambia
+     * qualcosa è la differenza fra «fatto» e «forse». Ma non è nemmeno
+     * `smentita`: dire che è fallito quando forse è riuscito porta a ripetere,
+     * e ripetere un effetto già applicato è come mandare due volte lo stesso
+     * messaggio. Nessuna delle due bugie comode va bene.
      */
+    type TalosPostcondizione =
+        | { esito: 'nessuna' }
+        | { esito: 'retta' }
+        | { esito: 'smentita', perche: string }
+        | { esito: 'ignota', perche: string }
+
     async function postcondizione(
         result: TalosToolResult | null,
-    ): Promise<TalosToolVerdict | null> {
-        if (!tool.verify) return null
+    ): Promise<TalosPostcondizione> {
+        if (!tool.verify) return { esito: 'nessuna' }
         try {
-            return await tool.verify(input as never, result, deps.context)
-        } catch {
-            return null
+            const verdetto = await tool.verify(input as never, result, deps.context)
+            return verdetto.held ? { esito: 'retta' } : { esito: 'smentita', perche: verdetto.reason }
+        }
+        catch (esplosa) {
+            /*
+             * ⛔ Una verifica che si rompe non deve rompere l'attrezzo — quello
+             * era giusto e resta. Ma il suo silenzio non vale come conferma.
+             */
+            return {
+                esito: 'ignota',
+                perche: esplosa instanceof Error ? esplosa.message : String(esplosa),
+            }
         }
     }
 
@@ -576,8 +662,10 @@ export async function executeTalosTool(
          * smette di controllare, e il modello riferisce come compiuto qualcosa
          * che non esiste.
          */
-        const verdetto = result.ok ? await postcondizione(result) : null
-        if (verdetto && !verdetto.held) {
+        const verdetto: TalosPostcondizione = result.ok
+            ? await postcondizione(result)
+            : { esito: 'nessuna' }
+        if (verdetto.esito === 'smentita') {
             await record(deps, {
                 tool: tool.name,
                 action: tool.action,
@@ -587,12 +675,47 @@ export async function executeTalosTool(
                 verified: false,
                 input,
                 evidence: result.evidence,
-                error: verdetto.reason,
+                error: verdetto.perche,
             })
             return {
                 ok: false,
                 code: 'TALOS_TOOL_POSTCONDITION_FAILED',
-                content: `"${tool.title}" reported success but the change is not there: ${verdetto.reason}`,
+                content: `"${tool.title}" reported success but the change is not there: ${verdetto.perche}`,
+            }
+        }
+        /*
+         * ⛔⛔⛔ L'EFFETTO IGNOTO, e solo per gli attrezzi che cambiano qualcosa.
+         *
+         * `run` ha detto «fatto» ma il controllore è morto: non si sa se
+         * l'effetto sia nel mondo. Per una lettura non cambia niente — non ha
+         * toccato nulla, e il contenuto vale comunque. Per una scrittura o un
+         * invio no: chiamarlo successo insegna a fidarsi di una parola non
+         * verificata, ed è esattamente il modo in cui si finisce a dire
+         * «inviato» di un messaggio che nessuno ha visto partire.
+         *
+         * ⛔ E il testo dice di NON ripetere alla cieca. È la parte che protegge
+         * una persona vera: un secondo invio non si ritira, e il modello, se
+         * legge «fallito», riprova — perché è la cosa ragionevole da fare
+         * davanti a un fallimento. Qui non è un fallimento: è un dubbio.
+         */
+        if (verdetto.esito === 'ignota' && tool.action !== 'read') {
+            await record(deps, {
+                tool: tool.name,
+                action: tool.action,
+                requiredActions,
+                status: 'effect_unknown',
+                risk: effectiveRisk,
+                postcondizione: 'ignota',
+                input,
+                evidence: result.evidence,
+                error: verdetto.perche,
+            })
+            return {
+                ok: false,
+                code: 'TALOS_TOOL_EFFECT_UNKNOWN',
+                content: `"${tool.title}" reported success but the check that would confirm it failed`
+                    + ` (${verdetto.perche}). The change may or may not have been applied:`
+                    + ` do not repeat this call without checking the current state first.`,
             }
         }
         if (result.ok) {
@@ -625,7 +748,8 @@ export async function executeTalosTool(
             ...(result.senzaEffetto ? { senzaEffetto: true } : {}),
             ...(result.scheda ? { scheda: result.scheda } : {}),
             risk: effectiveRisk,
-            ...(verdetto ? { verified: true } : {}),
+            postcondizione: verdetto.esito,
+            ...(verdetto.esito === 'retta' ? { verified: true } : {}),
             input,
             evidence: result.evidence,
             ...(result.ok ? {} : { error: result.content }),
@@ -663,7 +787,7 @@ export async function executeTalosTool(
          * scoperto dopo».
          */
         const salvato = await postcondizione(null)
-        if (salvato?.held) {
+        if (salvato.esito === 'retta') {
             await record(deps, {
                 tool: tool.name,
                 action: tool.action,
@@ -677,6 +801,41 @@ export async function executeTalosTool(
             return {
                 ok: true,
                 content: `"${tool.title}" completed. The call reported an error, but the change is there.`,
+            }
+        }
+        /*
+         * ⛔⛔⛔ E LA CASELLA DOVE FALLISCONO TUTTI E DUE.
+         *
+         * `run` ha sollevato, e anche il controllore che avrebbe dovuto dirci se
+         * l'effetto ci fosse. Non si sa niente — e proprio qui la tentazione è
+         * dire «fallito», perché è la parola che sembra prudente.
+         *
+         * ⛔ Non lo è. È l'istruzione che fa ritentare, e il commento qui sopra
+         * lo dice già per l'altra metà: ritentare è cio che produce il doppione.
+         * Un secondo invio non si ritira.
+         *
+         * ⇒ Si dichiara il dubbio, e si dice di guardare prima di rifare. È la
+         * stessa regola del kernel: fra «fatto» e «non fatto» c'è «non lo so», e
+         * schiacciarlo su uno dei due è sempre una bugia — solo che una delle
+         * due bugie costa a una persona vera.
+         */
+        if (salvato.esito === 'ignota' && tool.action !== 'read') {
+            await record(deps, {
+                tool: tool.name,
+                action: tool.action,
+                requiredActions,
+                status: 'effect_unknown',
+                risk: effectiveRisk,
+                postcondizione: 'ignota',
+                input,
+                evidence: { errore: detail, controllo: salvato.perche },
+            })
+            return {
+                ok: false,
+                code: 'TALOS_TOOL_EFFECT_UNKNOWN',
+                content: `"${tool.title}" failed, and the check that would say whether anything happened`
+                    + ` failed too (${salvato.perche}). The change may or may not have been applied:`
+                    + ` do not repeat this call without checking the current state first.`,
             }
         }
         await record(deps, {

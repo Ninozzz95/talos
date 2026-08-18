@@ -194,6 +194,22 @@ export interface TalosToolDefinition<Input = unknown> {
      * una chiamata di rete non è una premessa: è un altro tool.
      */
     premesse?(input: Input, context: TalosToolContext): Promise<TalosPremessaEsito>
+    /**
+     * ⛔⛔ CHE FARE QUANDO LA PREMESSA È `ignoto` — e il default resta `continue`.
+     *
+     * Su una capacità del telefono, «non riesco a provare che la torcia sia
+     * spenta» può ancora consentire un comando idempotente: rifiutare sempre
+     * renderebbe TALOS inutile appena un permesso è negato o un ponte cade.
+     *
+     * Ma su «questa funzione esiste ed è il bersaglio che sto per sostituire?»
+     * un `ignoto` **non autorizza una mutazione strutturale**. Le mutazioni di
+     * codice dichiarano `reject`.
+     *
+     * ⛔ È una proprietà semantica del TOOL, non una preferenza dell'utente: non
+     * va nelle impostazioni. Un utente non può sapere per quali predicati «non
+     * lo so» è tollerabile.
+     */
+    premiseUnknownPolicy?: 'continue' | 'reject'
     verify?(
         input: Input,
         /**
@@ -241,11 +257,69 @@ export type TalosToolVerdict =
  * fallimento di lettura ha già perso la proprietà per cui questo tipo esiste.
  */
 export type TalosPremessaEsito =
-    | { stato: 'presente' }
-    /** `perche` va al MODELLO e alla persona: nomina cosa manca, e dove. */
-    | { stato: 'assente', perche: string }
+    | { stato: 'presente', fatto?: TalosFattoPresunto }
+    /**
+     * ⛔ `perche` va al MODELLO e alla persona: nomina cosa manca, e dove.
+     *
+     * ⛔⛔ E `copertura` è **obbligatoria**: dichiarare assente qualcosa senza
+     * dire fin dove si è guardato è la bugia esatta che questo tipo impedisce.
+     * Vedi `TalosCopertura`.
+     */
+    | { stato: 'assente', perche: string, copertura: TalosCopertura, fatto?: TalosFattoPresunto }
     /** `perche` nomina l'ostacolo — «permesso contatti negato», non «errore». */
-    | { stato: 'ignoto', perche: string }
+    | { stato: 'ignoto', perche: string, fatto?: TalosFattoPresunto }
+
+/**
+ * ⛔⛔⛔ FIN DOVE SI È GUARDATO — e senza, `assente` non significa niente.
+ *
+ * Per un contatto la copertura è implicita: la rubrica o si legge tutta o non si
+ * legge, e non c'è una terza possibilità. **Per il codice no**, ed è la ragione
+ * per cui questo campo esiste prima che la sezione codice sia scritta:
+ *
+ * ```
+ * «scontoFedelta non c'è in src/prezzo.mjs»   dimostrabile
+ * «scontoFedelta non c'è nel progetto»        quasi mai dimostrabile
+ * ```
+ *
+ * Un file che non si lascia leggere, un'estensione che non sappiamo trattare, un
+ * elenco troncato: ognuno rompe la seconda affermazione e lascia intatta la
+ * prima. Chi dichiara `completa` avendo saltato un file ha detto una cosa falsa
+ * con l'aria di aver controllato.
+ *
+ * ⛔ `parziale` NON autorizza un `assente`: esiste per l'audit, cioè per poter
+ * dire dopo perché quella risposta era `ignoto`.
+ */
+export type TalosCopertura =
+    /** Ho guardato **tutto** l'ambito dichiarato, e ogni parte si è lasciata leggere. */
+    | 'completa'
+    /** Qualcosa nell'ambito non si è lasciato leggere. ⇒ l'esito non può essere `assente`. */
+    | 'parziale'
+
+/**
+ * ⭐⭐ CHE COSA si presume, e DOVE — la stessa forma per la chat e per il codice.
+ *
+ * Owner 2026-08-18: «il kernel deve occuparsi **anche di coding**, non solo
+ * chat… anche nella app mobile andrà la nuova sezione codice».
+ *
+ * ⇒ Un kernel per gli attrezzi e uno per il codice sarebbero **due**, e due
+ * divergono: uno guadagna la copertura per ambito, l'altro no, e il giorno in
+ * cui la sezione codice chiede «questa funzione esiste?» si scopre che la
+ * risposta la sa solo l'altro. Le famiglie cambiano; la forma no.
+ */
+export interface TalosFattoPresunto {
+    /**
+     * `contact-exists`, `app-installed`, `symbol-declared`, `file-exists`…
+     *
+     * ⛔ Una stringa e non un'enumerazione chiusa: le famiglie nasceranno da
+     * ciò che gli attrezzi presumono davvero, e un'enumerazione qui costringe a
+     * toccare questo file — cioè il contratto pubblico — per ogni attrezzo nuovo.
+     */
+    famiglia: string
+    /** Il nome presunto: un contatto, un pacchetto, un simbolo. */
+    nome: string
+    /** Dove si presume che sia: un file, una cartella, l'intero dispositivo. */
+    ambito?: string
+}
 
 export function defineTalosTool<Input>(definition: TalosToolDefinition<Input>): TalosToolDefinition<Input> {
     return definition

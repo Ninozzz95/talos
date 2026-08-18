@@ -59,6 +59,30 @@ export interface TalosAgentCompletion {
     providerBlocks?: readonly unknown[]
 }
 
+/**
+ * Cosa torna un attrezzo — o il preflight quando ha gia deciso da solo.
+ *
+ * ⛔ Estratto perche adesso lo produce anche il preflight: due forme per la
+ * stessa cosa si sarebbero disallineate alla prima aggiunta di un campo.
+ */
+export interface TalosEsitoDiStrumento {
+    content: string
+    ok: boolean
+    /** Anything the model should LOOK at, handed over on a user turn. */
+    images?: TalosMobileInputPart[]
+    /** Vault bindings to keep on the final assistant message. */
+    messageAttachments?: AppendChatAttachmentInput[]
+    /**
+     * ⛔ Vero quando l'attrezzo NON ha cambiato niente nel mondo.
+     *
+     * Dichiarato qui perché il ciclo lo usa: un preambolo che annuncia
+     * un'azione che poi non è avvenuta si toglie. Prima non era in questo
+     * contratto, e il valore moriva sul ponte del controller senza che il
+     * tipo se ne accorgesse.
+     */
+    senzaEffetto?: boolean
+}
+
 export interface TalosAgentLoopDeps {
     /** One provider round trip. */
     /**
@@ -88,25 +112,26 @@ export interface TalosAgentLoopDeps {
     preflight?(call: TalosToolCall): Promise<
         | { status: 'ready' }
         | { status: 'authorization_required'; request: unknown }
+        /**
+         * ⛔⛔ GIÀ DECISA — non deve arrivare né al piano né all'esecuzione.
+         *
+         * Il preflight sa già rispondere così per tool spento, argomenti
+         * invalidi, permesso negato e premessa assente. Finché il contratto
+         * conosceva solo `ready`, chi lo implementa appiattiva tutto il resto —
+         * e una chiamata epistemicamente impossibile entrava nel piano, veniva
+         * mostrata alla persona come un passo eseguibile, e diventava errore
+         * solo dopo. Una premessa assente non deve comparire nemmeno come passo
+         * approvabile.
+         *
+         * ⛔ E NON si tenta comunque `execute()`: fra preflight ed esecuzione lo
+         * stato può cambiare, e rieseguire fuori dal piano trasformerebbe un
+         * passo escluso in un effetto non pianificato. Un terminale è il
+         * risultato DI QUEL preflight, non un invito a riprovare.
+         */
+        | { status: 'terminal'; outcome: TalosEsitoDiStrumento }
     >
     /** Runs one call through the permission gate and the audit trail. */
-    execute(call: TalosToolCall): Promise<{
-        content: string
-        ok: boolean
-        /** Anything the model should LOOK at, handed over on a user turn. */
-        images?: TalosMobileInputPart[]
-        /** Vault bindings to keep on the final assistant message. */
-        messageAttachments?: AppendChatAttachmentInput[]
-        /**
-         * ⛔ Vero quando l'attrezzo NON ha cambiato niente nel mondo.
-         *
-         * Dichiarato qui perché il ciclo lo usa: un preambolo che annuncia
-         * un'azione che poi non è avvenuta si toglie. Prima non era in questo
-         * contratto, e il valore moriva sul ponte del controller senza che il
-         * tipo se ne accorgesse.
-         */
-        senzaEffetto?: boolean
-    }>
+    execute(call: TalosToolCall): Promise<TalosEsitoDiStrumento>
     /**
      * ⛔ B2 — il piano, chiesto PRIMA che qualsiasi cosa parta.
      *
@@ -539,14 +564,33 @@ function chiaveDiChiamata(call: TalosToolCall): string {
     }
 }
 
-async function pendingPreflights(
+/**
+ * Il preflight di TUTTO il giro, in una volta.
+ *
+ * ⛔ Torna tre insiemi e non uno: le richieste di autorizzazione (che sospendono
+ * il giro intero), i terminali (che hanno già il loro esito) e le chiamate
+ * davvero eseguibili — le sole che il piano deve vedere.
+ */
+async function preflightDelGiro(
     calls: readonly TalosToolCall[],
     preflight: NonNullable<TalosAgentLoopDeps['preflight']>,
-): Promise<unknown[]> {
-    const resolutions = await Promise.all(calls.map((call) => preflight(call)))
-    return resolutions.flatMap((resolution) => (
-        resolution.status === 'authorization_required' ? [resolution.request] : []
-    ))
+): Promise<{
+    requests: unknown[]
+    terminali: Map<string, TalosEsitoDiStrumento>
+    eseguibili: TalosToolCall[]
+}> {
+    const risolte = await Promise.all(
+        calls.map(async (call) => ({ call, esito: await preflight(call) })),
+    )
+    return {
+        requests: risolte.flatMap(({ esito }) => (
+            esito.status === 'authorization_required' ? [esito.request] : []
+        )),
+        terminali: new Map(risolte.flatMap(({ call, esito }) => (
+            esito.status === 'terminal' ? [[call.id, esito.outcome] as const] : []
+        ))),
+        eseguibili: risolte.filter(({ esito }) => esito.status === 'ready').map(({ call }) => call),
+    }
 }
 
 async function persistBeforeModel(
@@ -689,9 +733,15 @@ async function continueTalosAgentLoop(
 
         // Whole-round barrier: one unresolved sibling means NO sibling runs.
         // This is what makes a durable before-tools checkpoint replayable.
-        const requests = deps.preflight
-            ? await pendingPreflights(nuove, deps.preflight)
-            : []
+        const pre = deps.preflight
+            ? await preflightDelGiro(nuove, deps.preflight)
+            : { requests: [], terminali: new Map<string, TalosEsitoDiStrumento>(), eseguibili: nuove }
+        const requests = pre.requests
+        /*
+         * ⛔ Se un fratello va autorizzato, NIENTE parte — nemmeno i terminali.
+         * Al resume si ricalcola tutto con lo stato fresco: un terminale è il
+         * risultato di QUEL preflight, non una sentenza da persistere.
+         */
         if (requests.length) {
             state.completion = completion
             return outcomeOf(state, completion, {
@@ -709,13 +759,14 @@ async function continueTalosAgentLoop(
          * prima significherebbe mostrare un piano che contiene passi che il
          * permesso avrebbe tolto comunque.
          */
+        const plannabili = pre.eseguibili
         const decisione = deps.plan
-            ? await deps.plan(nuove)
-            : { admitted: nuove.map((call) => call.id), cancelled: false }
+            ? await deps.plan(plannabili)
+            : { admitted: plannabili.map((call) => call.id), cancelled: false }
         const ammesse = new Set(decisione.admitted)
         const eseguibili = decisione.cancelled
             ? []
-            : nuove.filter((call) => ammesse.has(call.id))
+            : plannabili.filter((call) => ammesse.has(call.id))
 
         deps.onToolRound?.(eseguibili)
         const risultati = await runCallsTogether(eseguibili, deps.execute, maxParallel)
@@ -729,7 +780,16 @@ async function continueTalosAgentLoop(
         let scorrimento = 0
         for (let indice = 0; indice < runnable.length; indice += 1) {
             const call = runnable[indice]!
-            if (ripetuta(call)) {
+            /*
+             * ⛔ IL TERMINALE HA LA PRECEDENZA su tutto il resto: il preflight
+             * ha già deciso, e la sua decisione è l'esito. Rimetterlo in coda a
+             * `execute` significherebbe rieseguire fuori dal piano una chiamata
+             * che il piano non ha mai visto.
+             */
+            const terminale = pre.terminali.get(call.id)
+            if (terminale) {
+                outcomes[indice] = terminale
+            } else if (ripetuta(call)) {
                 /*
                  * Non si finge un successo e non si finge un errore: si dice
                  * cosa e' gia' successo, e si dice cosa fare adesso. Un modello

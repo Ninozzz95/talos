@@ -58,6 +58,16 @@ public class TalosLlamaPlugin extends Plugin {
     private static final long POLL_INTERVAL_MS = 90L;
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+
+    /**
+     * ⛔ Quanto si aspetta la chiusura pulita prima di procedere comunque.
+     *
+     * NON MISURATO sul dispositivo: va tarato guardando quanto ci mette davvero
+     * una generazione ad accorgersi dell'annullamento sul Pad. Un secondo e mezzo
+     * sta largamente sotto la soglia di ANR e lascia spazio a una decodifica in
+     * corso di finire il token che ha per le mani.
+     */
+    private static final long CHIUSURA_MAX_MS = 1500L;
     private final AtomicReference<TalosLlamaEngine> openEngine = new AtomicReference<>(null);
     private final AtomicReference<String> openPath = new AtomicReference<>(null);
     /** True from the moment a generation is accepted until it has finished. */
@@ -762,8 +772,7 @@ public class TalosLlamaPlugin extends Plugin {
      */
     @PluginMethod
     public void chatPrompt(PluginCall call) {
-        TalosLlamaEngine engine = openEngine.get();
-        if (engine == null) {
+        if (openEngine.get() == null) {
             call.reject("TALOS_LLAMA_NO_MODEL");
             return;
         }
@@ -801,23 +810,47 @@ public class TalosLlamaPlugin extends Plugin {
         // predefinito qui è ACCESO — chi non manda il campo ha il
         // comportamento di prima, e nessun invio cambia senza dirlo.
         boolean pensa = !Boolean.FALSE.equals(call.getBoolean("thinking", Boolean.TRUE));
-        String prompt = engine.chatPrompt(roles, contents, toolsJson, pensa);
-        if (prompt == null || prompt.isEmpty()) {
-            // Named, so the interface can say WHY instead of producing a worse
-            // answer that looks like the model's fault.
-            call.reject("TALOS_LLAMA_NO_CHAT_TEMPLATE");
-            return;
-        }
-        int promptTokens = engine.promptTokens(prompt);
-        if (promptTokens <= 0) {
-            call.reject("TALOS_LLAMA_PROMPT_TOKENIZATION_FAILED");
-            return;
-        }
-        JSObject result = new JSObject();
-        result.put("prompt", prompt);
-        result.put("promptTokens", promptTokens);
-        result.put("contextTokens", engine.contextTokens());
-        call.resolve(result);
+        /*
+         * ⛔⛔⛔ DA QUI IN GIÙ SI PASSA DALL'ATTORE, e non è una rifinitura.
+         *
+         * Questa chiamata arriva fino a common_sampler_free() nel C++, dove il
+         * campionatore viene liberato e sostituito. Servita dal thread del plugin
+         * mentre nativeGenerate() campiona sullo stesso puntatore, apriva una
+         * finestra di USE-AFTER-FREE: non una race di valore, memoria liberata e
+         * poi letta.
+         *
+         * ⛔ La lettura degli argomenti resta fuori apposta: un rifiuto per un
+         * campo mancante non deve mettersi in fila dietro una generazione lunga.
+         * Dentro l'attore ci va solo ciò che tocca il motore.
+         *
+         * ⛔ E il motore si rilegge QUI: fra la richiesta e il turno dell'attore
+         * la persona può aver chiuso il modello, e l'oggetto di prima sarebbe un
+         * manico verso una sessione distrutta.
+         */
+        worker.execute(() -> {
+            TalosLlamaEngine attivo = openEngine.get();
+            if (attivo == null) {
+                call.reject("TALOS_LLAMA_NO_MODEL");
+                return;
+            }
+            String prompt = attivo.chatPrompt(roles, contents, toolsJson, pensa);
+            if (prompt == null || prompt.isEmpty()) {
+                // Named, so the interface can say WHY instead of producing a worse
+                // answer that looks like the model's fault.
+                call.reject("TALOS_LLAMA_NO_CHAT_TEMPLATE");
+                return;
+            }
+            int promptTokens = attivo.promptTokens(prompt);
+            if (promptTokens <= 0) {
+                call.reject("TALOS_LLAMA_PROMPT_TOKENIZATION_FAILED");
+                return;
+            }
+            JSObject result = new JSObject();
+            result.put("prompt", prompt);
+            result.put("promptTokens", promptTokens);
+            result.put("contextTokens", attivo.contextTokens());
+            call.resolve(result);
+        });
     }
 
     /**
@@ -909,8 +942,41 @@ public class TalosLlamaPlugin extends Plugin {
             getContext().getApplicationContext().unregisterComponentCallbacks(pressioneMemoria);
             pressioneMemoria = null;
         }
-        closeOpenModel();
-        worker.shutdownNow();
+        /*
+         * ⛔⛔ PRIMA SI ANNULLA, POI SI CHIUDE — e la chiusura passa dall'attore.
+         *
+         * Chiudere qui, dal thread principale, mentre l'attore sta generando
+         * significa distruggere la sessione sotto i piedi di chi la sta usando.
+         * L'ordine delle chiamate in Java non è una garanzia in C++: un
+         * entrypoint nativo già entrato continua a lavorare su memoria che nel
+         * frattempo qualcuno ha liberato.
+         *
+         * ⛔ `cancel` è atomico e deve restare FUORI dall'attore: metterlo in
+         * fila dietro la generazione che deve fermare sarebbe un girotondo.
+         * Serve proprio a farla finire presto, così la chiusura non aspetta.
+         *
+         * ⛔ E l'attesa è LIMITATA: bloccare il thread principale senza tetto
+         * durante la distruzione dell'Activity è un ANR. Se il tempo scade si
+         * procede comunque — il processo sta morendo, e un modello non chiuso
+         * costa meno di un'app che si pianta chiudendosi.
+         *
+         * ⇒ La stessa forma che il codice usava già per la pressione di memoria,
+         * sessanta righe più in basso: `worker.execute(this::closeOpenModel)`.
+         * Il difetto era che la stessa operazione passava dall'attore in un
+         * punto e lo scavalcava nell'altro.
+         */
+        TalosLlamaEngine vivo = openEngine.get();
+        if (vivo != null) vivo.cancel();
+        worker.execute(this::closeOpenModel);
+        worker.shutdown();
+        try {
+            if (!worker.awaitTermination(CHIUSURA_MAX_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                worker.shutdownNow();
+            }
+        } catch (InterruptedException interrotto) {
+            worker.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**

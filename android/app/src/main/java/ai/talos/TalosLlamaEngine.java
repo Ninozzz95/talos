@@ -117,8 +117,71 @@ public final class TalosLlamaEngine implements AutoCloseable {
     private final long handle;
     private boolean closed;
 
+    /**
+     * ⛔⛔⛔ IL THREAD CHE POSSIEDE QUESTO MOTORE.
+     *
+     * Il C++ tiene un talos_session* dietro un jlong: un puntatore grezzo, senza
+     * conteggio di riferimenti e senza serratura sul campionatore. Due thread che
+     * entrano insieme possono liberarlo da una parte e dereferenziarlo dall'altra —
+     * che non è una race di valore: è un USE-AFTER-FREE.
+     *
+     * Nel plugin quasi tutto passa da un executor a thread singolo, cioè un attore.
+     * Ma «quasi» non è una garanzia: bastava una entrypoint servita dal thread del
+     * plugin per rompere l'invariante, e ce n'era una — chatPrompt, che arriva fino
+     * a common_sampler_free().
+     *
+     * ⇒ L'invariante smette di essere una convenzione e diventa un controllo: il
+     * proprietario è IL THREAD CHE HA APERTO IL MOTORE, chiunque sia. In produzione
+     * è il worker, in un test è il thread del test. Non c'è niente da configurare, e
+     * chi sgarra lo scopre alla prima chiamata invece che dentro un crash nativo
+     * senza stack leggibile.
+     *
+     * ⛔ Le vedette sono ESCLUSE apposta — textSoFar, tokensProduced, cancel,
+     * lastTimings. Il loro mestiere è chiedere «a che punto sei?» MENTRE l'attore
+     * genera: obbligarle a passare dall'attore le farebbe aspettare la fine, cioè
+     * risponderebbero sempre alla domanda sbagliata. Toccano solo atomici e mutex
+     * loro, e per questo possono.
+     */
+    private final Thread attore;
+
     private TalosLlamaEngine(long handle) {
         this.handle = handle;
+        this.attore = Thread.currentThread();
+    }
+
+    /**
+     * ⛔ Lancia invece di tornare un errore: un'invariante di memoria violata non
+     * è una condizione da gestire. Un'eccezione con due nomi di thread dentro dice
+     * esattamente chi ha sbagliato; un use-after-free dice «SIGSEGV» e basta.
+     */
+    private void soloAttore(String cosa) {
+        Thread ora = Thread.currentThread();
+        if (ora == attore) return;
+        throw new IllegalStateException(
+            "TALOS_LLAMA_FUORI_DALL_ATTORE: " + cosa + " chiamata dal thread \"" + ora.getName()
+            + "\", ma il motore appartiene a \"" + attore.getName() + "\"");
+    }
+    /**
+     * ⛔⛔⛔ E LA SESSIONE DEV'ESSERE ANCORA VIVA.
+     *
+     * `closed` esisteva già, ma lo leggeva solo `close()` per non chiudere due
+     * volte. Nessun altro metodo lo guardava: dopo `close()`, `chatPrompt()`
+     * passava lo stesso `handle` al C++ — dove è un talos_session* già distrutto.
+     *
+     * ⇒ Questo use-after-free non ha bisogno di due thread né di una finestra
+     * temporale: basta l'ordine sbagliato delle chiamate, e succede sempre.
+     * Era più facile da innescare della race che stavo chiudendo.
+     *
+     * ⛔ `close()` NON passa di qui, e non è una dimenticanza: chiudere due
+     * volte deve restare innocuo, altrimenti un try-with-resources attorno a un
+     * `close()` esplicito diventerebbe un'eccezione.
+     */
+    private void vivo(String cosa) {
+        soloAttore(cosa);
+        if (closed) {
+            throw new IllegalStateException(
+                "TALOS_LLAMA_SESSIONE_CHIUSA: " + cosa + " dopo close(); il modello va riaperto");
+        }
     }
 
     /**
@@ -197,6 +260,7 @@ public final class TalosLlamaEngine implements AutoCloseable {
 
     /** La cache creata davvero — {@code "q8_0"} o {@code "f16"} —, non quella chiesta. */
     public String kvCacheType() {
+        vivo("kvCacheType");
         String type = TalosLlamaNative.nativeKvCacheType(handle);
         return type == null ? "f16" : type;
     }
@@ -209,6 +273,7 @@ public final class TalosLlamaEngine implements AutoCloseable {
      *     dopo si ricalcola — quindi non serve distinguerli qui.
      */
     public long saveState(String path) {
+        vivo("saveState");
         return TalosLlamaNative.nativeSaveState(handle, path);
     }
 
@@ -219,6 +284,7 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * In cambio, il turno successivo di QUESTA chat riprocessa i suoi token.
      */
     public long trimAndSaveState(String path, String prefisso) {
+        vivo("trimAndSaveState");
         return TalosLlamaNative.nativeTrimAndSaveState(handle, path, prefisso);
     }
 
@@ -233,6 +299,7 @@ public final class TalosLlamaEngine implements AutoCloseable {
      *     combaciava — la condizione normale la prima volta.
      */
     public int loadState(String path) {
+        vivo("loadState");
         return TalosLlamaNative.nativeLoadState(handle, path);
     }
 
@@ -291,10 +358,12 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * microbatch. Chiesti al contesto, non ripetuti dalla richiesta.
      */
     public long[] runtimeConfig() {
+        vivo("runtimeConfig");
         return TalosLlamaNative.nativeRuntimeConfig(handle);
     }
 
     public int contextTokens() {
+        vivo("contextTokens");
         return TalosLlamaNative.nativeContextTokens(handle);
     }
 
@@ -307,6 +376,7 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * chiama deve degradare a «tetto non misurabile» invece di andare in errore.
      */
     public long[] modelShape() {
+        vivo("modelShape");
         try {
             return TalosLlamaNative.nativeModelShape(handle);
         } catch (UnsatisfiedLinkError older) {
@@ -316,6 +386,7 @@ public final class TalosLlamaEngine implements AutoCloseable {
 
     /** Exact prompt size according to this model, not a byte/character estimate. */
     public int promptTokens(String prompt) {
+        vivo("promptTokens");
         return TalosLlamaNative.nativePromptTokens(handle, prompt);
     }
 
@@ -362,6 +433,7 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * anche la grammatica che rende la chiamata valida per costruzione.
      */
     public String chatPrompt(String[] roles, String[] contents, String toolsJson, boolean pensa) {
+        vivo("chatPrompt");
         return TalosLlamaNative.nativeApplyChatTemplate(handle, roles, contents, toolsJson, pensa);
     }
 
@@ -373,6 +445,7 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * intera nel contenuto: si perde la separazione, mai il testo.
      */
     public String parseReply(String reply) {
+        vivo("parseReply");
         return TalosLlamaNative.nativeParseReply(handle, reply);
     }
 
@@ -458,6 +531,7 @@ public final class TalosLlamaEngine implements AutoCloseable {
      */
     public Run run(String prompt, int maxTokens, ThermalSource thermal,
                    Mode mode) throws InterruptedException {
+        vivo("run");
         AtomicReference<String> produced = new AtomicReference<>(null);
         Thread worker = new Thread(
                 () -> produced.set(TalosLlamaNative.nativeGenerate(
@@ -514,6 +588,7 @@ public final class TalosLlamaEngine implements AutoCloseable {
 
     @Override
     public void close() {
+        soloAttore("close");
         if (closed) return;
         closed = true;
         TalosLlamaNative.nativeClose(handle);
