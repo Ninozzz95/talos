@@ -28,7 +28,7 @@ function fonti(iniziale = SORGENTE) {
     let albero: TalosSorgente[] = [{ percorso: PREZZO, testo: iniziale }]
     const scritture: Array<readonly TalosSorgente[]> = []
     const f: TalosFontiCodice = {
-        sorgenti: async () => albero,
+        leggiSpazio: async () => ({ sorgenti: albero, elenco: 'completo' as const }),
         scrivi: async (s) => { scritture.push(s); albero = [...s] as TalosSorgente[] },
         libreria: async () => componiLibreria(async (n) => {
             try { return await readFile(`node_modules/typescript/lib/${n}`, 'utf8') }
@@ -146,7 +146,7 @@ describe('⛔⛔ il percorso è parte dell\'autorità', () => {
     it('⛔ e l\'attrezzo lo rifiuta PRIMA di leggere qualunque cosa', async () => {
         const letture: number[] = []
         const spia: TalosFontiCodice = {
-            sorgenti: async () => { letture.push(1); return [] },
+            leggiSpazio: async () => { letture.push(1); return { sorgenti: [], elenco: 'completo' as const } },
             scrivi: async () => {},
         }
         const esito = await executeTalosTool(attrezzo(spia) as never, {
@@ -182,7 +182,7 @@ type TalosToolDefinitionConVerify = ReturnType<typeof talosCodiceTools>[number]
 
 describe('⛔⛔ quando lo spazio di lavoro non si legge', () => {
     const cieco: TalosFontiCodice = {
-        sorgenti: async () => { throw new Error('il ponte non risponde') },
+        leggiSpazio: async () => { throw new Error('il ponte non risponde') },
         scrivi: async () => { throw new Error('non deve succedere') },
     }
 
@@ -225,5 +225,35 @@ describe('⭐⭐ il catalogo non si ricostruisce a ogni domanda', () => {
         }, deps())
         expect((await t.premesse!({ file: PREZZO, nome: 'totale' } as never)).stato).toBe('assente')
         expect((await t.premesse!({ file: PREZZO, nome: 'sommaRighe' } as never)).stato).toBe('presente')
+    })
+})
+
+describe('⛔⛔⛔ uno spazio di lavoro letto a META', () => {
+    const meta: TalosFontiCodice = {
+        leggiSpazio: async () => ({
+            sorgenti: [{ percorso: PREZZO, testo: SORGENTE }],
+            elenco: { troncato: 'stopped after 500 files' },
+        }),
+        scrivi: async () => { throw new Error('non deve succedere') },
+    }
+
+    it('non dice «non esiste»: dice che non lo sa, e RIFIUTA', async () => {
+        const esito = await preflightTalosToolExecution(attrezzo(meta) as never, {
+            file: 'src/altro.ts', nome: 'scontoFedelta', codice: 'x',
+        }, deps())
+        expect(esito.status).toBe('terminal')
+        expect(esito.status === 'terminal' && esito.result.code).toBe('TALOS_TOOL_PREMISE_UNKNOWN')
+        /*
+         * ⛔ Senza questo, un tetto sul telefono trasformerebbe ogni file non
+         * elencato in «il file non esiste» — e il modello, sentendoselo dire,
+         * proverebbe a crearlo sopra un file che c'è gia.
+         */
+    })
+
+    it('⭐ ma cio che HA visto resta valido: il troncamento non cancella i testimoni', async () => {
+        const esito = await preflightTalosToolExecution(attrezzo(meta) as never, {
+            file: PREZZO, nome: 'totale', codice: 'x',
+        }, deps())
+        expect(esito.status).not.toBe('terminal')
     })
 })
