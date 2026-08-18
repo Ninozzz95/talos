@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineTalosTool, type TalosPremessaEsito, type TalosToolDefinition } from '@/lib/tools/registry'
-import { costruisciCatalogo, risolviSimbolo, type TalosSorgente } from '@/lib/kernel/catalogo'
+import { costruisciCatalogo, risolviSimbolo, type TalosCatalogo, type TalosSorgente } from '@/lib/kernel/catalogo'
 import { sostituisciEsistente } from '@/lib/kernel/mutazione'
 import type { TalosLibreriaStandard } from '@/lib/kernel/semantica'
 
@@ -83,10 +83,22 @@ export function percorsoAmmesso(grezzo: string): string | null {
  * ⛔ Chiesta PRIMA della scheda di consenso: se la funzione non c'è, non ha senso
  * far autorizzare una modifica che non può riuscire.
  */
+/**
+ * Dove resta il catalogo fra una domanda e l'altra.
+ *
+ * ⛔ È una cache, non una fonte: il testo si riconfronta **sempre** con quello
+ * appena letto dallo spazio di lavoro. Se un file cambia fuori da TALOS — un
+ * altro editor, un `git checkout` — la voce vecchia non viene riusata, perché
+ * il testo non coincide più. Non c'è un momento in cui il catalogo parli al
+ * posto del disco.
+ */
+export interface TalosCacheCatalogo { ultimo?: TalosCatalogo }
+
 export async function premessaBersaglio(
     fonti: TalosFontiCodice,
     file: string,
     nome: string,
+    cache?: TalosCacheCatalogo,
 ): Promise<TalosPremessaEsito> {
     const percorso = percorsoAmmesso(file)
     if (!percorso) {
@@ -108,10 +120,21 @@ export async function premessaBersaglio(
             fatto: { famiglia: 'symbol-declared', nome, ambito: percorso },
         }
     }
-    return risolviSimbolo(await costruisciCatalogo(sorgenti), nome, percorso)
+    const catalogo = await costruisciCatalogo(sorgenti, cache?.ultimo)
+    if (cache) cache.ultimo = catalogo
+    return risolviSimbolo(catalogo, nome, percorso)
 }
 
 export function talosCodiceTools(fonti: TalosFontiCodice): readonly TalosToolDefinition<never>[] {
+    /*
+     * ⭐ Uno per set di attrezzi, condiviso fra la premessa e la postcondizione.
+     *
+     * Misurato sul sorgente vero di TALOS: **508 ms** a costruzione fredda,
+     * **2 ms** con un file cambiato. Senza questo, ogni domanda «esiste?» paga
+     * mezzo secondo su un computer — e su un telefono ben di più, tutto speso
+     * PRIMA che alla persona venga chiesto se autorizza.
+     */
+    const cache: TalosCacheCatalogo = {}
     return [
         defineTalosTool({
             name: 'coding_edit_existing',
@@ -144,7 +167,7 @@ export function talosCodiceTools(fonti: TalosFontiCodice): readonly TalosToolDef
             }),
             premesse: (input) => {
                 const i = input as { file: string, nome: string }
-                return premessaBersaglio(fonti, i.file, i.nome)
+                return premessaBersaglio(fonti, i.file, i.nome, cache)
             },
             async run(input) {
                 const i = input as { file: string, nome: string, codice: string }
@@ -191,7 +214,8 @@ export function talosCodiceTools(fonti: TalosFontiCodice): readonly TalosToolDef
                 const percorso = percorsoAmmesso(i.file)
                 if (!percorso) return { held: false, reason: 'the path is not valid' }
                 try {
-                    const catalogo = await costruisciCatalogo(await fonti.sorgenti())
+                    const catalogo = await costruisciCatalogo(await fonti.sorgenti(), cache.ultimo)
+                    cache.ultimo = catalogo
                     const dopo = risolviSimbolo(catalogo, i.nome, percorso)
                     return dopo.stato === 'presente'
                         ? { held: true }

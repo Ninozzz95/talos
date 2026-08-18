@@ -42,29 +42,77 @@ export interface TalosCatalogo {
     perFile: ReadonlyMap<string, { copertura: TalosCoperturaFile, nomi: ReadonlySet<string> }>
     /** Per ogni nome: in quali file è dichiarato. */
     perNome: ReadonlyMap<string, readonly string[]>
+    /**
+     * ⛔ Il testo ESATTO da cui ogni voce è nata.
+     *
+     * Serve a sapere che cosa è cambiato senza ri-analizzare, e si confronta
+     * per uguaglianza di stringa — **niente digest**. Un digest introduce una
+     * probabilità di collisione, e una collisione qui significa riusare le
+     * dichiarazioni di un file che è cambiato: autorizzare una modifica su una
+     * funzione che non c'è più. La probabilità è piccola, la conseguenza no, e
+     * il confronto esatto costa pochi millisecondi su tutto il progetto.
+     */
+    testi: ReadonlyMap<string, string | null>
 }
 
 /** Un file letto ma illeggibile non è un file vuoto: dichiara IGNOTO. */
 const ILLEGGIBILE: TalosCoperturaFile = 'sorgenteInvalida'
 
-export async function costruisciCatalogo(sorgenti: readonly TalosSorgente[]): Promise<TalosCatalogo> {
+export async function costruisciCatalogo(
+    sorgenti: readonly TalosSorgente[],
+    /**
+     * Il catalogo di prima, se c'è: le voci dei file **identici** si riusano
+     * invece di ri-analizzarle.
+     *
+     * ⭐ Misurato sul sorgente vero di TALOS: 452 file, 4,56 MB, **514 ms** per
+     * una costruzione fredda — contro **0,0146 ms** per una risoluzione. Il
+     * parse costa 35.000 volte il lookup, e il catalogo si ricostruisce a ogni
+     * premessa: su un telefono sono secondi di attesa muta **prima** che alla
+     * persona venga chiesto se autorizza.
+     *
+     * ⛔ Ometterlo resta corretto, sempre: è una cache, non una fonte. Se il
+     * riuso divergesse anche una volta da una costruzione fredda, la velocità
+     * sarebbe comprata con una bugia intermittente.
+     */
+    precedente?: TalosCatalogo,
+): Promise<TalosCatalogo> {
     const perFile = new Map<string, { copertura: TalosCoperturaFile, nomi: ReadonlySet<string> }>()
     const perNome = new Map<string, string[]>()
+    const testi = new Map<string, string | null>()
 
     for (const { percorso, testo } of sorgenti) {
+        /*
+         * ⛔ Il riuso richiede DUE condizioni, e la seconda non è ridondante:
+         * un file mai visto dà `undefined`, e `undefined === undefined` sarebbe
+         * un falso riuso se `testo` potesse essere `undefined`. Chiedere anche
+         * a `perFile` toglie la domanda invece di rispondere bene.
+         */
+        const gia = precedente?.perFile.get(percorso)
+        if (gia && precedente!.testi.get(percorso) === testo) {
+            perFile.set(percorso, gia)
+            for (const nome of gia.nomi) {
+                const dove = perNome.get(nome)
+                if (dove) dove.push(percorso)
+                else perNome.set(nome, [percorso])
+            }
+            testi.set(percorso, testo)
+            continue
+        }
         if (testo === null) {
             perFile.set(percorso, { copertura: ILLEGGIBILE, nomi: new Set() })
+            testi.set(percorso, null)
             continue
         }
         const esito = await dichiaratiIn(testo, percorso)
         perFile.set(percorso, { copertura: esito.copertura, nomi: esito.nomi })
+        testi.set(percorso, testo)
         for (const nome of esito.nomi) {
             const dove = perNome.get(nome)
             if (dove) dove.push(percorso)
             else perNome.set(nome, [percorso])
         }
     }
-    return { perFile, perNome }
+    return { perFile, perNome, testi }
 }
 
 /** L'ambito è un FILE (ha un'estensione) o una CARTELLA? */
