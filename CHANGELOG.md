@@ -6,6 +6,20 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.12
+
+A permission-fix release, verified on the owner's OnePlus Pad.
+
+### Fixed
+
+- **Granting a runtime permission no longer crashes the release build.** R8 was
+  removing the Capacitor permission metadata that TALOS reads when it asks for
+  microphone, notifications, contacts, location, camera, calendar or mail
+  access. The release now retains that contract, and the real Android artifact
+  gate checks the aliases and platform permission strings before publication.
+  The grant, denial, permanent-denial and system-settings paths were exercised
+  on a OnePlus Pad running Android 16 without an application FATAL.
+
 ## v0.1.11
 
 <!-- v0.1.9 and v0.1.10 were tagged but never produced a signed APK: their builds
