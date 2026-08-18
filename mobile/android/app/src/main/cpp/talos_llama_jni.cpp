@@ -122,6 +122,13 @@ struct talos_session {
      */
     std::mutex  text_lock;
     std::string text;
+    /*
+     * ⛔ Quanti byte di `text` sono GIA' stati consegnati a Java, per il drain
+     * incrementale. Senza, ogni sguardo copiava tutta la risposta accumulata:
+     * su una risposta lunga i byte trasferiti crescono col QUADRATO della
+     * lunghezza, mentre il modello ne produce in modo lineare.
+     */
+    size_t text_drained = 0;
 
     /**
      * Il tempo fino alla prima parola, SPEZZATO.
@@ -1174,6 +1181,50 @@ Java_ai_talos_TalosLlamaNative_nativeTextSoFar(JNIEnv * env, jclass, jlong handl
     return env->NewStringUTF(session->text.substr(0, talos_utf8_intero(session->text)).c_str());
 }
 
+/**
+ * ⭐⭐⭐ IL DELTA VERO — solo i byte mai consegnati prima.
+ *
+ * `nativeTextSoFar` copiava tutta la risposta a ogni sguardo (ogni 90 ms), e
+ * Java ne mandava a Vue solo la coda nuova. Ma il costo era GIA' stato pagato:
+ * il pezzo caro e' la copia native->Java, e quella era l'intera stringa. Su una
+ * risposta lunga i byte attraversati crescono col QUADRATO della lunghezza.
+ *
+ * Questa funzione consegna soltanto i byte da `text_drained` in poi, e avanza il
+ * puntatore. Il totale copiato attraverso il ponte torna LINEARE.
+ *
+ * ⛔ E il confine UTF-8 e' il punto delicato: se la coda nuova finisce a meta' di
+ * un carattere multibyte, quel resto NON si manda — si lascia in `text`, non si
+ * avanza `drained` oltre, e il prossimo giro lo raccogliera' completo. Mandare
+ * mezzo carattere alla macchina virtuale e' un crash, non un carattere strano.
+ *
+ * ⛔ `nativeTextSoFar` resta: il benchmark e il recupero da errore leggono il
+ * testo intero, e non e' quella la strada calda. Questa e' per lo streaming.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeDrainText(JNIEnv * env, jclass, jlong handle) {
+    talos_session * session = as_session(handle);
+    if (session == nullptr) return env->NewStringUTF("");
+    std::lock_guard<std::mutex> guard(session->text_lock);
+
+    const size_t totale = session->text.size();
+    // Niente di nuovo: la coda e' vuota, e restituire "" costa una stringa vuota
+    // invece dell'intera risposta.
+    if (session->text_drained >= totale) return env->NewStringUTF("");
+
+    // I byte non ancora consegnati, tagliati all'ultimo carattere COMPLETO.
+    const std::string coda = session->text.substr(session->text_drained);
+    const size_t completi = talos_utf8_intero(coda);
+    if (completi == 0) {
+        // La coda e' solo l'inizio di un carattere multibyte: si aspetta il
+        // resto. `drained` NON avanza, cosi' il prossimo giro riparte da qui.
+        return env->NewStringUTF("");
+    }
+
+    session->text_drained += completi;
+    return env->NewStringUTF(coda.substr(0, completi).c_str());
+}
+
+
 JNIEXPORT void JNICALL
 Java_ai_talos_TalosLlamaNative_nativeCancel(JNIEnv *, jclass, jlong handle) {
     talos_session * session = as_session(handle);
@@ -1656,6 +1707,7 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         // risposta nuova crescere da zero, non la coda di quella prima.
         std::lock_guard<std::mutex> guard(session->text_lock);
         session->text.clear();
+        session->text_drained = 0;
     }
     /**
      * ⭐ LE DUE MODALITÀ, dichiarate invece che sottintese.

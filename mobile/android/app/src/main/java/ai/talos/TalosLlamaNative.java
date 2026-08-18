@@ -242,6 +242,16 @@ final class TalosLlamaNative {
     static native String nativeTextSoFar(long handle);
 
     /**
+     * ⭐ Solo i byte MAI restituiti prima — il delta vero, per lo streaming.
+     *
+     * {@code nativeTextSoFar} copia tutta la risposta a ogni sguardo, e su una
+     * risposta lunga i byte attraversati crescono col quadrato. Questa torna solo
+     * la coda nuova, tagliata all'ultimo carattere UTF-8 completo, e avanza un
+     * puntatore nel nativo: il totale copiato torna lineare.
+     */
+    static native String nativeDrainText(long handle);
+
+    /**
      * Formatta una conversazione col template che il GGUF si porta dentro.
      *
      * Stringa vuota se il file non ne dichiara uno. È un esito, non un guasto
