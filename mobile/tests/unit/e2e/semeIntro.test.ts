@@ -1,46 +1,78 @@
 import { expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { TALOS_MOBILE_INTRO_VERSION } from '@/composables/useTalosMobileIntroState'
 
 /**
- * ⛔⛔⛔ IL SEME DEI TEST DEVE SEGUIRE LA COSTANTE.
+ * ⛔⛔⛔ OGNI SEME DEI TEST DEVE SEGUIRE LA COSTANTE.
  *
- * Il cancello dell'intro è `intro_version < TALOS_MOBILE_INTRO_VERSION`. La
- * configurazione dei test nel browser semina un utente di ritorno, cioè un
- * `intro_version` già pari alla versione corrente.
+ * Il cancello dell'intro è `intro_version < TALOS_MOBILE_INTRO_VERSION`. I test
+ * nel browser seminano un utente di ritorno, cioè un `intro_version` già pari
+ * alla versione corrente.
  *
- * Quando la costante è salita a 4, quel seme è rimasto a 3. Da quel momento
- * l'intro si è riaperta in **ogni** test: una schermata a tutto campo davanti al
- * pulsante che i test premono. Metà della suite è stata rossa per giorni.
+ * Quando la costante è salita a 4, quei semi sono rimasti indietro. Da quel
+ * momento l'intro si è riaperta: una schermata a tutto campo davanti al pulsante
+ * che i test premono. Metà della suite è stata rossa per settimane.
  *
  * ⛔ Nessuno l'ha visto perché la CI non eseguiva i test nel browser — e quando
  * finalmente li ho eseguiti io, il comando finiva con `| tail`, che restituisce
  * il proprio codice di uscita e non quello di Playwright. Due schermi davanti
  * allo stesso guasto.
  *
- * ⇒ Questo test costa millisecondi e sta nella suite veloce, quella che gira
- * sempre. Chi alza la versione dell'intro lo scopre subito, non fra dieci minuti
- * di browser e non fra una settimana.
+ * ## ⛔ E la prima versione di questo guardiano non bastava
  *
- * ⛔ Legge la configurazione come TESTO di proposito: importarla tirerebbe
- * dentro Playwright nella suite unitaria, e un guardiano che rallenta ciò che
- * protegge finisce spento.
+ * Guardava solo `playwright.config.ts`. Passava, mentre TRE spec avevano semi
+ * propri fermi a **2** — più vecchi ancora di quello che avevo appena corretto.
+ *
+ * ⇒ Un guardiano che copre un posto solo, su una cosa che vive in sei, dà la
+ * sensazione della protezione senza la protezione. Qui si guardano tutti i file
+ * dei test, e chi ne aggiunge uno nuovo è coperto senza doverlo sapere.
+ *
+ * ⛔ Costa millisecondi e sta nella suite veloce, quella che gira sempre. Chi
+ * alza la versione dell'intro lo scopre subito, non fra dieci minuti di browser
+ * e non fra una settimana.
  */
 
-it('⛔ il seme dell\'intro nella configurazione e2e segue la costante', () => {
-    const config = readFileSync('playwright.config.ts', 'utf8')
-    const trovato = config.match(/intro_version:\s*(\d+)/)
+interface Seme { file: string, versione: number }
 
-    expect(trovato, 'il seme `intro_version` non è più nella configurazione e2e').not.toBeNull()
-    expect(Number(trovato![1])).toBe(TALOS_MOBILE_INTRO_VERSION)
+function semi(): Seme[] {
+    const percorsi = ['playwright.config.ts']
+    for (const nome of readdirSync('tests/e2e')) {
+        if (nome.endsWith('.ts')) percorsi.push(`tests/e2e/${nome}`)
+    }
+    const fuori: Seme[] = []
+    for (const file of percorsi) {
+        for (const m of readFileSync(file, 'utf8').matchAll(/intro_version:\s*(\d+)/g)) {
+            fuori.push({ file, versione: Number(m[1]) })
+        }
+    }
+    return fuori
+}
+
+it('⛔ ogni seme dell\'intro segue la costante', () => {
+    const trovati = semi()
+
+    // ⛔ Se il guardiano non trova NIENTE non è verde: è cieco. Un test che
+    // passa perché non ha guardato è peggio di uno che non esiste.
+    expect(trovati.length, 'nessun seme trovato: il guardiano non sta guardando niente')
+        .toBeGreaterThan(0)
+
+    const vecchi = trovati.filter((s) => s.versione !== TALOS_MOBILE_INTRO_VERSION)
+    expect(
+        vecchi,
+        `semi fermi a una versione vecchia (la costante è ${TALOS_MOBILE_INTRO_VERSION}):\n`
+        + vecchi.map((s) => `  ${s.file}: ${s.versione}`).join('\n'),
+    ).toEqual([])
+
     /*
-     * ⛔ Se questo diventa rosso: NON abbassare la costante. Alza il seme nella
-     * configurazione, perché il seme descrive «una persona che ha già visto
-     * l'intro» — e quella persona ha visto l'ultima, non la penultima.
+     * ⛔ Se questo diventa rosso: NON abbassare la costante. Alza i semi, perché
+     * un seme descrive «una persona che ha già visto l'intro» — e quella persona
+     * ha visto l'ultima, non la penultima.
      */
 })
 
-it('⛔ e ce n\'è uno solo: due semi divergerebbero in silenzio', () => {
-    const config = readFileSync('playwright.config.ts', 'utf8')
-    expect(config.match(/intro_version:\s*\d+/g) ?? []).toHaveLength(1)
+it('⛔ e i semi sono più d\'uno: coprirne uno solo non è coprirli', () => {
+    // La prova che il guardiano guarda davvero in giro, non solo nel file che
+    // avevo in mente il giorno in cui l'ho scritto.
+    const file = new Set(semi().map((s) => s.file))
+    expect(file.size).toBeGreaterThan(1)
 })

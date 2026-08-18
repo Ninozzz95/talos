@@ -32,6 +32,15 @@ async function openLanguageSettings(page: Page): Promise<void> {
     await page.locator('[data-testid="talos-mobile-sidebar"]')
         .getByLabel('Open Settings').click()
     await expect(page.locator(SHEET)).toBeVisible()
+    /*
+     * ⛔ Si porta la voce SOTTO GLI OCCHI prima di toccarla.
+     *
+     * Le impostazioni sono una lista lunga dentro uno scorrevole. La voce
+     * si trova nel DOM ma non diventa mai «visible, enabled and stable»
+     * per Playwright, che aspetta sessanta secondi e poi rinuncia — pur
+     * essendo cliccabile, come ho verificato sondando la pagina viva.
+     */
+    await page.locator('[data-settings-tab="language"]').scrollIntoViewIfNeeded()
     await page.locator('[data-settings-tab="language"]').click()
     await expect(page.locator('[data-testid="talos-settings-language"]')).toBeVisible()
 }

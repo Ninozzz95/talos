@@ -11,7 +11,7 @@ test.use({
                     defaults_v3: true,
                     presentation_v2: true,
                     onboarding: {
-                        intro_version: 2,
+                        intro_version: 4,
                         intro_outcome: 'completed',
                         setup_dismissed: true,
                     },
@@ -28,6 +28,15 @@ test('AGENT-TOOLS-09 switches and enabled count survive reload', async ({ page }
     await page.locator('[data-testid="talos-mobile-sidebar"]')
         .getByRole('button', { name: 'Open Settings' })
         .click()
+    /*
+     * ⛔ Si porta la voce SOTTO GLI OCCHI prima di toccarla.
+     *
+     * Le impostazioni sono una lista lunga dentro uno scorrevole. La voce
+     * si trova nel DOM ma non diventa mai «visible, enabled and stable»
+     * per Playwright, che aspetta sessanta secondi e poi rinuncia — pur
+     * essendo cliccabile, come ho verificato sondando la pagina viva.
+     */
+    await page.locator('[data-settings-tab="agent_tools"]').scrollIntoViewIfNeeded()
     await page.locator('[data-settings-tab="agent_tools"]').click()
 
     const panel = page.getByTestId('talos-settings-agent-tools')
@@ -51,6 +60,15 @@ test('AGENT-TOOLS-09 switches and enabled count survive reload', async ({ page }
     await expect(panel).toContainText('12 of 14 enabled')
 
     await page.reload()
+    /*
+     * ⛔ Si porta la voce SOTTO GLI OCCHI prima di toccarla.
+     *
+     * Le impostazioni sono una lista lunga dentro uno scorrevole. La voce
+     * si trova nel DOM ma non diventa mai «visible, enabled and stable»
+     * per Playwright, che aspetta sessanta secondi e poi rinuncia — pur
+     * essendo cliccabile, come ho verificato sondando la pagina viva.
+     */
+    await page.locator('[data-settings-tab="agent_tools"]').scrollIntoViewIfNeeded()
     await page.locator('[data-settings-tab="agent_tools"]').click()
     const reloadedPanel = page.getByTestId('talos-settings-agent-tools')
     await expect(reloadedPanel.locator('[data-agent-tool="library_search"] input[role="switch"]'))
