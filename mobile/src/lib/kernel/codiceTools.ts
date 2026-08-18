@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineTalosTool, type TalosPremessaEsito, type TalosToolDefinition } from '@/lib/tools/registry'
-import { costruisciCatalogo, risolviSimbolo, type TalosCatalogo, type TalosSorgente } from '@/lib/kernel/catalogo'
+import { costruisciCatalogo, risolviSimbolo, type TalosCatalogo, type TalosElencoFile, type TalosSorgente } from '@/lib/kernel/catalogo'
 import { sostituisciEsistente } from '@/lib/kernel/mutazione'
 import type { TalosLibreriaStandard } from '@/lib/kernel/semantica'
 
@@ -38,9 +38,22 @@ import type { TalosLibreriaStandard } from '@/lib/kernel/semantica'
  * Access Framework, su un desktop da un filesystem, nei test da una mappa.
  * Legare il kernel a uno dei tre lo renderebbe inutile negli altri due.
  */
+/**
+ * Che cosa si è riusciti a leggere dello spazio di lavoro.
+ *
+ * ⛔⛔ `elenco` non è un dettaglio di comodo: senza, una sorgente che tronca —
+ * per un tetto, per una cartella illeggibile — produce cataloghi che dicono
+ * ASSENTE su file che esistono. La coppia deve viaggiare **insieme**, o il
+ * chiamante dimentica di chiedere.
+ */
+export interface TalosLetturaSpazio {
+    sorgenti: readonly TalosSorgente[]
+    elenco: TalosElencoFile
+}
+
 export interface TalosFontiCodice {
     /** Tutti i sorgenti dello spazio di lavoro, con percorsi relativi. */
-    sorgenti(): Promise<readonly TalosSorgente[]>
+    leggiSpazio(): Promise<TalosLetturaSpazio>
     /** Scrive l'albero promosso. Chiamata SOLO dopo che i cancelli hanno detto sì. */
     scrivi(sorgenti: readonly TalosSorgente[]): Promise<void>
     /** La libreria standard, se disponibile — senza, la garanzia si restringe. */
@@ -109,9 +122,9 @@ export async function premessaBersaglio(
             fatto: { famiglia: 'symbol-declared', nome, ambito: file },
         }
     }
-    let sorgenti: readonly TalosSorgente[]
+    let letto: TalosLetturaSpazio
     try {
-        sorgenti = await fonti.sorgenti()
+        letto = await fonti.leggiSpazio()
     }
     catch {
         return {
@@ -120,7 +133,7 @@ export async function premessaBersaglio(
             fatto: { famiglia: 'symbol-declared', nome, ambito: percorso },
         }
     }
-    const catalogo = await costruisciCatalogo(sorgenti, { precedente: cache?.ultimo })
+    const catalogo = await costruisciCatalogo(letto.sorgenti, { precedente: cache?.ultimo, elenco: letto.elenco })
     if (cache) cache.ultimo = catalogo
     return risolviSimbolo(catalogo, nome, percorso)
 }
@@ -176,7 +189,7 @@ export function talosCodiceTools(fonti: TalosFontiCodice): readonly TalosToolDef
                     return { ok: false, content: `"${i.file}" is not a valid workspace path.`, code: 'TALOS_CODE_PATH_REFUSED' }
                 }
 
-                const sorgenti = await fonti.sorgenti()
+                const { sorgenti } = await fonti.leggiSpazio()
                 const libreria = (await fonti.libreria?.()) ?? undefined
                 const esito = await sostituisciEsistente(sorgenti, { percorso, nome: i.nome }, i.codice, libreria)
 
@@ -214,7 +227,8 @@ export function talosCodiceTools(fonti: TalosFontiCodice): readonly TalosToolDef
                 const percorso = percorsoAmmesso(i.file)
                 if (!percorso) return { held: false, reason: 'the path is not valid' }
                 try {
-                    const catalogo = await costruisciCatalogo(await fonti.sorgenti(), { precedente: cache.ultimo })
+                    const letto = await fonti.leggiSpazio()
+                    const catalogo = await costruisciCatalogo(letto.sorgenti, { precedente: cache.ultimo, elenco: letto.elenco })
                     cache.ultimo = catalogo
                     const dopo = risolviSimbolo(catalogo, i.nome, percorso)
                     return dopo.stato === 'presente'
