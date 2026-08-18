@@ -22,7 +22,17 @@ export interface TalosMobileHttpTransport {
     request(request: TalosMobileHttpRequest): Promise<TalosMobileHttpResponse>
 }
 
-type NativeRequest = (request: TalosMobileHttpRequest) => Promise<{
+/**
+ * ⛔⛔ `disableRedirects` e OBBLIGATORIO nel tipo, non facoltativo.
+ *
+ * Facoltativo significherebbe che si puo costruire una richiesta nativa senza,
+ * e allora il confine dipenderebbe da chi si ricorda di metterlo. Cosi non
+ * compila: e il tipo a non lasciare passare la forma sbagliata, e non serve un
+ * controllo a runtime che qualcuno prima o poi toglie.
+ */
+type NativeRequest = (
+    request: TalosMobileHttpRequest & { disableRedirects: true },
+) => Promise<{
     status: number
     data: unknown
     headers?: Record<string, string>
@@ -34,7 +44,15 @@ export function createTalosMobileHttpTransport(
     return {
         async request(request) {
             try {
-                const response = await nativeRequest(request)
+                /*
+                 * ⛔⛔ E il ponte nativo non li segue nemmeno lui.
+                 *
+                 * Si impone QUI e non si legge da `request`: un confine che chi
+                 * chiama puo spegnere non e un confine. Il binding di Capacitor
+                 * espone `disableRedirects`, quindi non serve un involucro
+                 * nativo nostro — c'era gia, e nessuno lo usava.
+                 */
+                const response = await nativeRequest({ ...request, disableRedirects: true })
                 return {
                     status: response.status,
                     data: response.data,
