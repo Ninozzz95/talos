@@ -1,42 +1,4 @@
 
-// ⛔⛔⛔ IL DETTATO SICURO DEVE VINCERE SUL CAPGO — a ogni build, per sempre.
-//
-// Il plugin @capgo/capacitor-speech-recognition crasha su getPermissionState
-// null (verificato sul dispositivo dell'owner: FATAL aprendo la Diagnostica).
-// TalosSpeechSicuro lo sottoclassa e lo corregge, MA il capgo si auto-registra
-// da capacitor.plugins.json e VINCE — provato con una sonda sul Bridge:
-//
-//     SpeechRecognition risolto a: app.capgo.speechrecognition.SpeechRecognitionPlugin
-//
-// ⛔ Non basta registrare la sottoclasse in MainActivity: la sonda ha
-// dimostrato che l'auto-caricamento vince comunque, in qualunque ordine. L'unica
-// cosa che ha funzionato — provata sul dispositivo, non supposta — e' togliere
-// il capgo dal json:
-//
-//     SpeechRecognition risolto a: ai.talos.agent.TalosSpeechSicuro   ← FATAL: 0
-//
-// Il json e' GENERATO da `cap sync`, quindi immodificabile a mano: una modifica
-// diretta sparirebbe al prossimo sync. Questo task lo rifiltra a ogni build,
-// PRIMA della compilazione. E' idempotente: se il capgo non c'e', non fa niente.
-tasks.register('togliCapgoSpeechDalRegistro') {
-    description = 'Toglie il plugin capgo del dettato dal registro generato: la nostra sottoclasse sicura lo sostituisce'
-    def registro = file('src/main/assets/capacitor.plugins.json')
-    doLast {
-        // Nessun registro ancora generato (`cap sync` non e' passato): niente da
-        // filtrare, e non e' un errore.
-        if (!registro.exists()) return
-
-        def voci = new groovy.json.JsonSlurper().parse(registro)
-        def tenute = voci.findAll { !(it.classpath?.contains('speechrecognition.SpeechRecognitionPlugin')) }
-        if (tenute.size() == voci.size()) return   // gia' assente: idempotente
-
-        // ⛔ setPrettyPrint mantiene la forma multi-riga del file generato, cosi'
-        // il diff (per chi lo guardasse) resta leggibile invece di una riga sola.
-        registro.text = new groovy.json.JsonBuilder(tenute).toPrettyString() + '\n'
-        println "TALOS: tolto il plugin capgo del dettato dal registro (${voci.size() - tenute.size()}) — TalosSpeechSicuro lo sostituisce"
-    }
-}
-
 apply plugin: 'com.android.application'
 // C0 (fase 9): il codice nuovo nasce in Kotlin, i plugin Java restano Java.
 apply plugin: 'kotlin-android'
@@ -783,4 +745,4 @@ tasks.register('preparaOrecchioParola') {
     }
 }
 
-tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'preparaPonteAdb', 'preparaOrecchioParola', 'togliCapgoSpeechDalRegistro' }
+tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'preparaPonteAdb', 'preparaOrecchioParola' }
