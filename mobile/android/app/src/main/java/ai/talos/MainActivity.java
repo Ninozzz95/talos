@@ -11,7 +11,28 @@ public class MainActivity extends BridgeActivity {
         // L'attrezzo che ha trovato chi bloccava l'avvio per dieci secondi.
         // Spento salvo richiesta esplicita: campionare costa un thread, e la
         // caccia e' finita. Come si arma sta scritto su TalosSpiaIlThread.
-        if (getIntent() != null && getIntent().getBooleanExtra("talos_spia", false)) {
+        //
+        // ⛔⛔⛔ E `BuildConfig.DEBUG` NON e' un controllo a runtime.
+        //
+        // Questa activity e' esportata per forza — un intent-filter su una
+        // activity non esportata non viene mai consultato dal sistema, e senza
+        // non ci sarebbe l'icona nel launcher. Ma esportata significa che
+        // QUALUNQUE app sul telefono puo' lanciarla, e con
+        //
+        //     am start -n ai.talos/.MainActivity --ez talos_spia true
+        //
+        // faceva partire un campionatore per quindici secondi: consumo di
+        // risorse innescabile da fuori, senza che nessuno lo autorizzi, e pile
+        // di thread scritte nei log.
+        //
+        // `BuildConfig.DEBUG` e' una `static final boolean`, quindi il
+        // compilatore Java elimina il ramo morto (JLS 14.21 tiene aperta questa
+        // strada apposta, per la compilazione condizionale). Nel bytecode di
+        // rilascio la chiamata NON C'E' — non e' spenta, e' assente. E lo si
+        // puo' verificare guardando il .class, che e' l'unico modo di saperlo
+        // invece di crederlo.
+        if (BuildConfig.DEBUG
+                && getIntent() != null && getIntent().getBooleanExtra("talos_spia", false)) {
             TalosSpiaIlThread.perQuindiciSecondi();
         }
         // Owner 2026-07-24: per-theme launcher icon switching (activity-alias toggles).

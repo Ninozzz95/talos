@@ -37,6 +37,15 @@ def firmaDisponibile = proprietaFirma.containsKey('storeFile') &&
 
 android {
     namespace = "ai.talos"
+
+    buildFeatures {
+        // ⛔ Da AGP 8 la generazione di BuildConfig e' SPENTA per impostazione
+        // predefinita. Serve accesa perche' `BuildConfig.DEBUG` e' una
+        // `static final boolean`: il compilatore elimina il ramo morto, e il
+        // codice diagnostico non finisce nel bytecode di rilascio. Un controllo
+        // a runtime lo lascerebbe li dentro, spento ma presente.
+        buildConfig true
+    }
     compileSdk = rootProject.ext.compileSdkVersion
     // Fissato, non lasciato al valore predefinito di AGP: il motore locale è
     // compilato da questo NDK e una versione diversa è un compilatore diverso.
