@@ -205,6 +205,49 @@ export function hostInMemoria(
     }
 }
 
+/**
+ * ⛔⛔⛔ LE SOPPRESSIONI — zittire un errore non è risolverlo.
+ *
+ * Il guard confronta le diagnostiche prima e dopo. Ma una diagnostica può
+ * sparire in due modi opposti:
+ *
+ *   correggendo il riferimento     ← quello che vogliamo
+ *   mettendoci sopra `@ts-ignore`  ← quello che NON deve passare
+ *
+ * Nel secondo caso il conteggio non aumenta — anzi resta uguale — e un guard che
+ * guarda solo quello dice di sì. **Riprodotto con un test rosso** prima di
+ * scrivere questa funzione.
+ *
+ * ⇒ Una soppressione INTRODOTTA è essa stessa una mutazione semantica, e va
+ * contata come tale. Quelle che c'erano già non bloccano niente: sono debito
+ * preesistente, come gli errori preesistenti.
+ */
+const SOPPRESSIONI = /@ts-(ignore|expect-error|nocheck)\b/g
+
+export function contaSoppressioni(sorgenti: readonly TalosSorgente[]): Map<string, number> {
+    const per = new Map<string, number>()
+    for (const { percorso, testo } of sorgenti) {
+        if (testo === null) continue
+        const quante = testo.match(SOPPRESSIONI)?.length ?? 0
+        if (quante > 0) per.set(percorso, quante)
+    }
+    return per
+}
+
+/** Le soppressioni AGGIUNTE passando da un albero all'altro. */
+export function soppressioniIntrodotte(
+    prima: readonly TalosSorgente[],
+    dopo: readonly TalosSorgente[],
+): Array<{ percorso: string, quante: number }> {
+    const eranO = contaSoppressioni(prima)
+    const fuori: Array<{ percorso: string, quante: number }> = []
+    for (const [percorso, adesso] of contaSoppressioni(dopo)) {
+        const differenza = adesso - (eranO.get(percorso) ?? 0)
+        if (differenza > 0) fuori.push({ percorso, quante: differenza })
+    }
+    return fuori
+}
+
 /** Le diagnostiche di riferimento non risolto di un albero di sorgenti. */
 export async function riferimentiNonRisolti(
     sorgenti: readonly TalosSorgente[],
@@ -268,6 +311,22 @@ export async function cancelloSemantico(
         return {
             stato: 'ignoto',
             perche: `the semantic guard could not run (${errore instanceof Error ? errore.message.slice(0, 80) : 'errore'})`,
+            fatto,
+        }
+    }
+
+    /*
+     * ⛔⛔ LE SOPPRESSIONI PRIMA DELLE DIAGNOSTICHE, e l'ordine conta: una
+     * soppressione introdotta rende il confronto delle diagnostiche cieco
+     * proprio dove serviva vedere. Contarle dopo significherebbe farsi dire
+     * «nessun errore nuovo» da un albero in cui l'errore è stato nascosto.
+     */
+    const zittite = soppressioniIntrodotte(prima, dopo)
+    if (zittite.length > 0) {
+        return {
+            stato: 'assente',
+            perche: `the change adds ${zittite.reduce((s, z) => s + z.quante, 0)} new compiler-error suppression(s) (@ts-ignore / @ts-expect-error) in ${zittite.map((z) => z.percorso).join(', ')}. Silencing an error is not fixing it.`,
+            copertura: 'completa',
             fatto,
         }
     }
