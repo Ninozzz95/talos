@@ -173,8 +173,14 @@ test('leaving the selection mode restores the ordinary row actions', async ({ pa
 
     await page.getByLabel('Cancel selection').click()
     await expect(page.getByTestId('talos-chats-selection-bar')).toHaveCount(0)
-    // The hold gesture is gated while selecting; it must come back afterwards.
+    /*
+     * Il gesto e sospeso mentre si seleziona, e deve tornare dopo.
+     *
+     * ⛔ Qui si aspettava il MENU. Ma il tieni-premuto non apre piu un menu:
+     * SELEZIONA — e `holdRow` lo verifica gia. Quello che questo test vuole
+     * sapere e che il gesto FUNZIONI ANCORA dopo essere uscito dalla selezione,
+     * e la prova di quello e la barra che ricompare.
+     */
     await holdRow(page, 0)
-    await expect(page.locator('[data-testid="talos-row-actions-menu"]')).toBeVisible()
     await expect(page.locator('[data-testid="talos-chats-row"]')).toHaveCount(1)
 })
