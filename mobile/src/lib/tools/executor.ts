@@ -214,6 +214,32 @@ async function record(deps: TalosToolExecutionDeps, row: TalosToolAuditRow): Pro
     }
 }
 
+/**
+ * ⛔ UN SOLO valutatore, chiamato dal preflight — e da nessun altro posto.
+ *
+ * Duplicarlo fra preflight ed esecuzione significherebbe due punti da tenere
+ * allineati per una domanda sola. `executeTalosTool` chiama comunque il
+ * preflight a ogni esecuzione, resume compresi: quindi la premessa viene
+ * ricontrollata FRESCA prima del `run`, senza una riga in piu.
+ */
+async function talosValutaPremessa(
+    tool: TalosToolDefinition<never>,
+    input: unknown,
+    deps: TalosToolExecutionDeps,
+): Promise<TalosPremessaEsito | null> {
+    if (!tool.premesse) return null
+    try {
+        return await tool.premesse(input as never, deps.context)
+    }
+    catch {
+        /*
+         * ⛔ Una premessa che esplode è `ignoto`, non `assente`: un controllo
+         * rotto non è la prova che una cosa non esista.
+         */
+        return { stato: 'ignoto', perche: 'il controllo della premessa non ha risposto' }
+    }
+}
+
 export async function preflightTalosToolExecution(
     tool: TalosToolDefinition<never>,
     rawArguments: unknown,
@@ -362,6 +388,67 @@ export async function preflightTalosToolExecution(
             },
         }
     }
+    /*
+     * ⭐⭐⭐ LE PREMESSE, e stanno QUI — dopo i dinieghi puri, PRIMA di «chiedi».
+     *
+     * ⛔⛔ Prima vivevano solo in `executeTalosTool()`, e il test che le provava
+     * chiamava quella funzione direttamente. Passava. Ma la CHAT non chiama
+     * quella: chiama prima questo preflight, e se risponde
+     * `authorization_required` crea il checkpoint e mostra la scheda — poi
+     * esegue. ⇒ In produzione la persona spendeva il consenso PRIMA che qualcuno
+     * avesse controllato la premessa: esattamente ciò che le premesse esistono
+     * per impedire, con un test verde sopra.
+     *
+     * ⛔ E l'ordine non è «premessa prima di tutto»: viene DOPO la risoluzione
+     * dell'autorità, perché un tool già negato non deve far leggere niente. Un
+     * diniego che costa una lettura è una lettura non autorizzata.
+     */
+    const premessa = await talosValutaPremessa(tool, parsed.value, deps)
+    if (premessa?.stato === 'assente') {
+        return {
+            status: 'terminal',
+            result: {
+                ok: false,
+                content: `Not run: ${premessa.perche}. Nothing was asked of the user and nothing was changed.`,
+                code: 'TALOS_TOOL_PREMISE_ABSENT',
+            },
+            audit: {
+                tool: tool.name,
+                action: tool.action,
+                requiredActions,
+                status: 'premise_absent',
+                input: parsed.value,
+            },
+        }
+    }
+    /*
+     * ⛔⛔ `ignoto` PROSEGUE per difetto, e per i coding mutation NO.
+     *
+     * Su una capacità del telefono, «non riesco a provare che la torcia sia
+     * spenta» può ancora consentire un comando idempotente. Su «questa funzione
+     * esiste ed è il bersaglio che sto per sostituire?» **non autorizza una
+     * mutazione strutturale**. ⇒ È una proprietà semantica del tool, non una
+     * preferenza dell'utente: sta nel tool, non nelle impostazioni.
+     */
+    if (premessa?.stato === 'ignoto' && tool.premiseUnknownPolicy === 'reject') {
+        return {
+            status: 'terminal',
+            result: {
+                ok: false,
+                content: `Not run: the required premise could not be established (${premessa.perche}).`,
+                code: 'TALOS_TOOL_PREMISE_UNKNOWN',
+            },
+            audit: {
+                tool: tool.name,
+                action: tool.action,
+                requiredActions,
+                status: 'failed',
+                input: parsed.value,
+                error: `TALOS_TOOL_PREMISE_UNKNOWN:${premessa.perche}`,
+            },
+        }
+    }
+
     if (resolution.status === 'ask') {
         return {
             status: 'authorization_required',
@@ -408,56 +495,12 @@ export async function executeTalosTool(
         : preflight.request.input
 
     /*
-     * ⭐⭐⭐ LE PREMESSE, e stanno QUI: dopo la validazione, PRIMA del consenso.
-     *
-     * L'ordine è tutto. Un controllo dopo la scheda non impedisce niente —
-     * la persona ha già speso il suo «Consenti» per un'azione impossibile, e
-     * quello che impara è a toccare senza leggere.
-     *
-     * ⛔ E sta nell'ESECUTORE, non dentro `run` e non nel testo che il modello
-     * produce: un controllo che vive nell'output del modello lo si scavalca
-     * scrivendo un altro output. Qui il modello propone, il runtime decide.
-     *
-     * ⛔⛔ `ignoto` PROSEGUE, e non è una svista: non sapere non autorizza a
-     * rifiutare. Bloccare su `ignoto` renderebbe TALOS inutile appena un
-     * permesso è negato o il ponte cade, e insegnerebbe che «non lo so» è un
-     * «no» — che è l'esatto difetto che il tri-stato esiste per impedire, preso
-     * dall'altro verso.
+     * ⛔ Le premesse NON si ricontrollano qui, e non è una dimenticanza:
+     * `preflightTalosToolExecution()` qui sopra le ha già valutate, e viene
+     * chiamato a OGNI esecuzione — resume dopo consenso compresi. Ricontrollarle
+     * anche qui sarebbe un secondo punto da tenere allineato per una domanda
+     * sola, e i due si sarebbero disallineati alla prima modifica.
      */
-    if (tool.premesse) {
-        let premessa: TalosPremessaEsito
-        try {
-            premessa = await tool.premesse(input as never, deps.context)
-        } catch {
-            /*
-             * ⛔ Una premessa che esplode è `ignoto`, non `assente`: un
-             * controllo rotto non è la prova che una cosa non esista. Fallire
-             * qui in `assente` bloccherebbe azioni legittime ogni volta che il
-             * controllo stesso ha un difetto — e in silenzio.
-             */
-            premessa = { stato: 'ignoto', perche: 'il controllo della premessa non ha risposto' }
-        }
-        if (premessa.stato === 'assente') {
-            await record(deps, {
-                tool: tool.name,
-                action: tool.action,
-                requiredActions,
-                status: 'premise_absent',
-                input,
-            })
-            /*
-             * ⛔ Si dice COSA manca. Un modello a cui si risponde «non si può»
-             * senza dire perché riprova identico — è la stessa ragione per cui
-             * `TalosToolVerdict` pretende un `reason`.
-             */
-            return {
-                ok: false,
-                content: `Not run: ${premessa.perche}. Nothing was asked of the user and nothing was changed.`,
-                code: 'TALOS_TOOL_PREMISE_ABSENT',
-            }
-        }
-    }
-
     if (preflight.status === 'authorization_required') {
         let answer: boolean | 'busy' | 'unanswered' = false
         try {
