@@ -43,6 +43,24 @@ export interface TalosTuningKey {
      * misura presa con quello di prima non descrive più niente.
      */
     appBuild: string
+    /**
+     * ⛔⛔⛔ QUALE MOTORE, non solo quale app.
+     *
+     * `appBuild` cambia quando si ricostruisce l'app. Ma il motore nativo vive in
+     * un sottomodulo che si puo promuovere SENZA toccare la versione dell'app —
+     * ed e successo il 18 agosto: llama.cpp da b10218 a b10354, per una
+     * correzione che riaccende l'affinita CPU su Android.
+     *
+     * Una misura presa col motore vecchio, dove ogni thread girava su tutti i
+     * core, descriveva un mondo che il motore nuovo non ha piu. E niente lo
+     * diceva.
+     *
+     * ⭐ La cache dei prefissi usava GIA questo campo nella propria identita.
+     * Quando due memorie della stessa app non sono d'accordo su cosa identifichi
+     * una cosa, una delle due sta sbagliando — e si sapeva quale.
+     */
+    engineBuild: string
+
     /** Il percorso del modello: due file possono chiamarsi uguale. */
     modelPath: string
     /**
@@ -81,6 +99,7 @@ export function talosSameTuningKey(a: TalosTuningKey, b: TalosTuningKey): boolea
     return a.deviceModel === b.deviceModel
         && a.cpuCores === b.cpuCores
         && a.appBuild === b.appBuild
+        && a.engineBuild === b.engineBuild
         && a.modelPath === b.modelPath
         && a.modelBytes === b.modelBytes
         && a.modelModifiedAt === b.modelModifiedAt

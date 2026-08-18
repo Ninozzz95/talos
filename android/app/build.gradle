@@ -122,6 +122,49 @@ android {
                         '-DGGML_BACKEND_DL=ON',
                         '-DGGML_CPU_ALL_VARIANTS=ON',
                         '-DGGML_LLAMAFILE=OFF'
+                /*
+                 * ⛔⛔⛔ HWASAN, SOLO A RICHIESTA: `-PtalosHwasan`.
+                 *
+                 * I test in Java provano che nessuno PUÒ arrivare al codice
+                 * nativo pericoloso. Non provano che quel codice sia sano — le
+                 * guardie fermano la chiamata prima, quindi il pezzo rischioso
+                 * non viene nemmeno eseguito. Dicono «la porta è chiusa a
+                 * chiave», non «dietro non c'è il burrone».
+                 *
+                 * HWAddress Sanitizer guarda dietro la porta: è lo strumento
+                 * corrente su ARM64 per gli use-after-free, vede le librerie
+                 * JNI — e NON vede il codice Java, quindi è esattamente
+                 * complementare a quei test, non un doppione.
+                 *
+                 * ⛔ STL CONDIVISA, e non è un dettaglio: `new` e `delete` della
+                 * libreria standard sono compilati senza frame pointer, e HWASan
+                 * porta la propria versione — che non può sostituire nulla se la
+                 * STL è legata staticamente dentro l'app.
+                 *
+                 * ⛔ Fuori dal giro normale apposta. Rallenta, cambia il modo in
+                 * cui la memoria viene allocata, e una build così non è quella
+                 * che si spedisce: è quella con cui si guarda.
+                 */
+                if (project.hasProperty('talosHwasan')) {
+                    /*
+                     * ⛔ FLAG ESPLICITI, non `ANDROID_SANITIZE`.
+                     *
+                     * Con `-DANDROID_SANITIZE=hwaddress` la STL passava davvero a
+                     * condivisa — quindi gli argomenti arrivavano — ma la libreria
+                     * usciva SENZA un solo simbolo del sanitizer e senza dipendere
+                     * dal suo runtime. Verificato con `llvm-readelf` sull'APK, non
+                     * dedotto: l'opzione veniva accettata e ignorata.
+                     *
+                     * ⇒ I flag del compilatore non si possono ignorare, e CMake li
+                     * propaga a tutti i sottoprogetti — llama.cpp e ggml compresi,
+                     * che e dove vive il codice da guardare.
+                     */
+                    arguments '-DANDROID_STL=c++_shared',
+                            '-DCMAKE_C_FLAGS=-fsanitize=hwaddress -fno-omit-frame-pointer',
+                            '-DCMAKE_CXX_FLAGS=-fsanitize=hwaddress -fno-omit-frame-pointer',
+                            '-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=hwaddress',
+                            '-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=hwaddress'
+                }
             }
         }
         aaptOptions {

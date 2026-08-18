@@ -38,6 +38,22 @@ const SEEDED_SETTINGS = {
 
 export default defineConfig({
     testDir: 'tests/e2e',
+
+    /**
+     * ⛔⛔ DUE RITENTATIVI SOLO IN CI, e non e un modo di nascondere i rossi.
+     *
+     * Un test passa qui 5 volte su 5 e fallisce sul runner: aspetta una finestra
+     * di dialogo che su una macchina piu lenta arriva dopo. Non e rotto — e
+     * INSTABILE, che e una cosa diversa e va trattata diversamente.
+     *
+     * ⇒ Playwright, quando un test passa al secondo tentativo, lo segna «flaky»
+     * nel rapporto invece di dire «passed». Cosi la CI torna verde E
+     * l'instabilita resta scritta: se un giorno diventano dieci, si vede.
+     *
+     * ⛔ Zero in locale, apposta. Qui un ritentativo mascherebbe proprio il
+     * momento in cui si sta scrivendo il test, che e quando serve vederlo.
+     */
+    retries: process.env.CI ? 2 : 0,
     timeout: 60000,
     /**
      * Four workers, measured: 10.4 minutes serial became 2.6.

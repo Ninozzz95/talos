@@ -75,8 +75,24 @@ describe('la trifecta, dentro l\'esecutore', () => {
         expect(richiesta.reason).toBe('trifecta')
         // E il rischio è quello EFFETTIVO, salito per via della catena.
         expect(richiesta.risk).toBe('R4')
-        // Su R4 «consenti sempre» non si offre: sarebbe una firma in bianco.
-        expect(richiesta.allowPersistent).toBe(false)
+        /*
+         * ⛔⛔ E QUI IL «SEMPRE» SI OFFRE LO STESSO — regola dell'owner, 18
+         * agosto: «anche la ricerca web deve avere consenti sempre».
+         *
+         * La regola generale resta quella di prima: su R4, con una scrittura,
+         * un «sempre» sarebbe una firma in bianco. Questo test la difendeva, e
+         * la difende ancora — per tutti gli altri.
+         *
+         * ⇒ `web_search` ha l'ECCEZIONE dichiarata nel catalogo, e il registro
+         * completo sta in `toolSecurityDeclared.test.ts`. Non è la regola ad
+         * essersi ammorbidita: è un tool che ha chiesto il permesso di essere
+         * un'eccezione, e l'ha ottenuto per nome.
+         *
+         * ⛔ La domanda della trifecta RESTA — è la riga qui sopra: si chiede
+         * comunque, e si dice perché. Quello che cambia è che adesso la
+         * risposta può valere anche per le volte dopo.
+         */
+        expect(richiesta.allowPersistent).toBe(true)
     })
 
     /**

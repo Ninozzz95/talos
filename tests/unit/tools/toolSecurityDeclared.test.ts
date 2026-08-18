@@ -124,11 +124,30 @@ describe('ogni tool dichiara la propria sicurezza', () => {
      *   eccezione, per la stessa ragione: è una cosa che si fa venti volte al
      *   giorno, e chiederla venti volte è un modo per farsi disattivare.
      */
-    it('⛔ SOLO DUE possono essere consentiti per sempre, e sappiamo quali', () => {
+    it('⛔ POCHI possono essere consentiti per sempre, e sappiamo quali e perché', () => {
         const conEccezione = Object.entries(TALOS_TOOL_SECURITY)
             .filter(([, riga]) => (riga as { sempreConsentibile?: true }).sempreConsentibile)
             .map(([id]) => id)
 
-        expect(conEccezione.sort()).toEqual(['app_azione', 'device_screen_drive'])
+        /*
+         * ⛔ IL REGISTRO, con la ragione di ognuna accanto:
+         *
+         *   app_azione            R3, aprire un'app: si usa in continuazione e
+         *                         non lascia niente dietro di sé
+         *   device_screen_drive   R4 IRREVERSIBILE — la più pesante del registro:
+         *                         sta qui perché l'owner l'ha decisa, non perché
+         *                         sia innocua
+         *   web_search            18 agosto, regola dell'owner: «anche la ricerca
+         *                         web deve avere consenti sempre». Archivia i
+         *                         link trovati, quindi dichiara `write`, e la
+         *                         regola generale glielo negava a R4 — cioè quasi
+         *                         sempre, perché una ricerca fa scattare la
+         *                         trifecta da sola
+         *
+         * ⇒ Ogni riga aggiunta al catalogo fa arrossire questo test finché
+         * qualcuno non la NOMINA qui. Un'eccezione che cresce in silenzio è il
+         * modo in cui un veto smette di essere un veto.
+         */
+        expect(conEccezione.sort()).toEqual(['app_azione', 'device_screen_drive', 'web_search'])
     })
 })

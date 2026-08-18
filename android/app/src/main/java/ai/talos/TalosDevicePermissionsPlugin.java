@@ -13,6 +13,7 @@ import android.provider.Settings;
 import androidx.core.app.NotificationManagerCompat;
 
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -138,7 +139,7 @@ public class TalosDevicePermissionsPlugin extends Plugin {
         } else {
             // Capacitor's own state, which carries the bit Android does not:
             // `denied` here means permanently denied, `prompt` means never asked.
-            result.put("notifications", getPermissionState("notifications").toString());
+            result.put("notifications", statoPermesso("notifications"));
             result.put("notificationsRuntime", true);
         }
         result.put("microphone", micState());
@@ -152,7 +153,7 @@ public class TalosDevicePermissionsPlugin extends Plugin {
          */
         JSObject runtime = new JSObject();
         for (String alias : RUNTIME_ALIASES) {
-            runtime.put(alias, getPermissionState(alias).toString());
+            runtime.put(alias, statoPermesso(alias));
         }
         result.put("runtime", runtime);
         /**
@@ -229,7 +230,7 @@ public class TalosDevicePermissionsPlugin extends Plugin {
 
     @PermissionCallback
     private void notificationsResult(PluginCall call) {
-        call.resolve(new JSObject().put("state", getPermissionState("notifications").toString()));
+        call.resolve(new JSObject().put("state", statoPermesso("notifications")));
     }
 
     /**
@@ -268,7 +269,7 @@ public class TalosDevicePermissionsPlugin extends Plugin {
     private void runtimeResult(PluginCall call) {
         String alias = call.getString("alias", "");
         call.resolve(new JSObject()
-            .put("state", getPermissionState(alias).toString())
+            .put("state", statoPermesso(alias))
             .put("known", true));
     }
 
@@ -365,5 +366,48 @@ public class TalosDevicePermissionsPlugin extends Plugin {
 
     private Context context() {
         return getContext();
+    }
+
+    /**
+     * ⛔⛔⛔ `getPermissionState` PUÒ TORNARE NULL, e su un OnePlus 13 lo fa.
+     *
+     * Il 18 agosto TALOS moriva all'avvio su PJZ110 (Android 16), e il log era
+     * inequivocabile:
+     *
+     *     FATAL EXCEPTION: CapacitorPlugins
+     *     Caused by: java.lang.NullPointerException
+     *       at com.getcapacitor.Bridge.getPermissionStates
+     *       at ai.talos.TalosDevicePermissionsPlugin.state
+     *
+     * Quattro punti di questo file scrivevano `getPermissionState(alias).toString()`
+     * senza rete. Uno solo basta: il plugin muore su un thread di Capacitor, e con
+     * lui l'app — prima ancora che la persona veda qualcosa.
+     *
+     * ⛔ E non è «un telefono strano»: e' l'API che dichiara di poter tornare
+     * null, e noi che non lo leggevamo. Sul Pad non capitava, e sul Pad avevamo
+     * provato — che e' esattamente il modo in cui un difetto arriva a un'altra
+     * persona.
+     *
+     * ## ⇒ E la risposta giusta non e' «negato»
+     *
+     * Dire «denied» a un permesso di cui non si conosce lo stato e' inventare un
+     * fatto: la scheda mostrerebbe un pulsante «Consenti» su qualcosa che magari
+     * e' gia' concesso, oppure nasconderebbe una funzione che invece c'e'.
+     *
+     * `unknown` e' il terzo stato che questo progetto usa dappertutto: chi legge
+     * sa che non lo sappiamo, e puo' chiedere invece di dedurre.
+     */
+    private String statoPermesso(String alias) {
+        try {
+            PermissionState stato = getPermissionState(alias);
+            return stato == null ? "unknown" : stato.toString();
+        } catch (RuntimeException nonDichiarato) {
+            /*
+             * ⛔ Anche un alias che Capacitor non conosce finisce qui invece di
+             * uccidere il processo. Un permesso che non sappiamo leggere e' un
+             * permesso IGNOTO, non un'app che si chiude.
+             */
+            return "unknown";
+        }
     }
 }
