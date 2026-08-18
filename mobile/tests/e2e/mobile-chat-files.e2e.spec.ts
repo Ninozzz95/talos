@@ -153,6 +153,15 @@ test('sends text and image evidence, downloads device copies, reuses Vault files
     await page.locator(MENU).click()
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
+    /*
+     * ⛔ Si porta la voce SOTTO GLI OCCHI prima di toccarla.
+     *
+     * Le impostazioni sono una lista lunga dentro uno scorrevole. La voce
+     * si trova nel DOM ma non diventa mai «visible, enabled and stable»
+     * per Playwright, che aspetta sessanta secondi e poi rinuncia — pur
+     * essendo cliccabile, come ho verificato sondando la pagina viva.
+     */
+    await page.locator('[data-settings-tab="ai_defaults"]').scrollIntoViewIfNeeded()
     await page.locator('[data-settings-tab="ai_defaults"]').click()
     await page.getByRole('switch', { name: 'Let chats use your Library' }).check()
     await expect(page.getByTestId('talos-library-mode-chooser')).toHaveAttribute('data-policy-source', 'pending')

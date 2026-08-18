@@ -450,6 +450,15 @@ test('font size and chat message size remain independent in both directions and 
             await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
         }
         await expect(sheet).toBeVisible()
+        /*
+         * ⛔ Si porta la voce SOTTO GLI OCCHI prima di toccarla.
+         *
+         * Le impostazioni sono una lista lunga dentro uno scorrevole. La voce
+         * si trova nel DOM ma non diventa mai «visible, enabled and stable»
+         * per Playwright, che aspetta sessanta secondi e poi rinuncia — pur
+         * essendo cliccabile, come ho verificato sondando la pagina viva.
+         */
+        await page.locator('[data-settings-tab="appearance"]').scrollIntoViewIfNeeded()
         await page.locator('[data-settings-tab="appearance"]').click()
         await expect(page.getByText('Chat message size', { exact: true })).toBeVisible()
     }

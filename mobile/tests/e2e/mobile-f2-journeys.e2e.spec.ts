@@ -42,7 +42,7 @@ const SEEN_NOT_DISMISSED = {
                 defaults_v3: true,
             presentation_v2: true,
             shell: { immersive_header: false, composer_drawer: false },
-            onboarding: { intro_version: 3, intro_outcome: 'completed', setup_dismissed: false },
+            onboarding: { intro_version: 4, intro_outcome: 'completed', setup_dismissed: false },
             }),
         }],
     }],
@@ -131,6 +131,15 @@ test('immersive header toggle swaps the header bar for floating pills', async ({
     await expect(page.locator(HEADER)).toBeVisible({ timeout: 15000 })
     await page.locator('[aria-label="Open menu"]').click()
     await page.locator('[data-testid="talos-mobile-sidebar"] [aria-label="Open Settings"]').click()
+    /*
+     * ⛔ Si porta la voce SOTTO GLI OCCHI prima di toccarla.
+     *
+     * Le impostazioni sono una lista lunga dentro uno scorrevole. La voce
+     * si trova nel DOM ma non diventa mai «visible, enabled and stable»
+     * per Playwright, che aspetta sessanta secondi e poi rinuncia — pur
+     * essendo cliccabile, come ho verificato sondando la pagina viva.
+     */
+    await page.locator('[data-settings-tab="appearance"]').scrollIntoViewIfNeeded()
     await page.locator('[data-settings-tab="appearance"]').click()
     await page.getByTestId('talos-appearance-advanced').locator('summary').click()
     await page.locator('[role="switch"][aria-label="Immersive header"]').click()
@@ -147,6 +156,15 @@ test('Account panel replays first-run setup from Settings', async ({ page }) => 
     await expect(page.locator(HEADER)).toBeVisible({ timeout: 15000 })
     await page.locator('[aria-label="Open menu"]').click()
     await page.locator('[data-testid="talos-mobile-sidebar"] [aria-label="Open Settings"]').click()
+    /*
+     * ⛔ Si porta la voce SOTTO GLI OCCHI prima di toccarla.
+     *
+     * Le impostazioni sono una lista lunga dentro uno scorrevole. La voce
+     * si trova nel DOM ma non diventa mai «visible, enabled and stable»
+     * per Playwright, che aspetta sessanta secondi e poi rinuncia — pur
+     * essendo cliccabile, come ho verificato sondando la pagina viva.
+     */
+    await page.locator('[data-settings-tab="account"]').scrollIntoViewIfNeeded()
     await page.locator('[data-settings-tab="account"]').click()
     await page.locator('[data-testid="talos-setup-replay"]').click()
     await expect(page.locator(INTRO)).toBeVisible({ timeout: 15000 })
@@ -161,6 +179,15 @@ test('app lock arms with a PIN, gates the cold start, and only a real PIN unlock
     await expect(page.locator(HEADER)).toBeVisible({ timeout: 15000 })
     await page.locator('[aria-label="Open menu"]').click()
     await page.locator('[data-testid="talos-mobile-sidebar"] [aria-label="Open Settings"]').click()
+    /*
+     * ⛔ Si porta la voce SOTTO GLI OCCHI prima di toccarla.
+     *
+     * Le impostazioni sono una lista lunga dentro uno scorrevole. La voce
+     * si trova nel DOM ma non diventa mai «visible, enabled and stable»
+     * per Playwright, che aspetta sessanta secondi e poi rinuncia — pur
+     * essendo cliccabile, come ho verificato sondando la pagina viva.
+     */
+    await page.locator('[data-settings-tab="account"]').scrollIntoViewIfNeeded()
     await page.locator('[data-settings-tab="account"]').click()
     await page.locator('[data-testid="talos-applock-toggle"]').click()
     // F4-#25: OTP-style setup — 6 digits, then the confirm step auto-arms.

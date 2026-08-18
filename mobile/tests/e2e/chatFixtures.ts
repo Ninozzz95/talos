@@ -32,7 +32,7 @@ export const TALOS_IMMERSIVE_SEED = {
                 defaults_v3: true,
                 presentation_v2: true,
                 shell: { immersive_header: true, composer_drawer: false },
-                onboarding: { intro_version: 3, intro_outcome: 'completed', setup_dismissed: true },
+                onboarding: { intro_version: 4, intro_outcome: 'completed', setup_dismissed: true },
             }),
         }],
     }],

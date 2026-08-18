@@ -109,14 +109,30 @@ test('LIB-ALL-LINK-E2E-01 carries a typoed web request through provider, Tavily,
     await model.getByRole('button', { name: /Use .* as default model/ }).click()
     await page.getByTestId('talos-sheet-back').click()
     await page.getByTestId('talos-sheet-back').click()
-    await expect(page.getByTestId('settings-category-pane')).toBeVisible()
+    /*
+     * ⛔ Si porta la voce SOTTO GLI OCCHI prima di toccarla.
+     *
+     * Le impostazioni sono una lista lunga dentro uno scorrevole. La voce
+     * si trova nel DOM ma non diventa mai «visible, enabled and stable»
+     * per Playwright, che aspetta sessanta secondi e poi rinuncia — pur
+     * essendo cliccabile, come ho verificato sondando la pagina viva.
+     */
+    await page.locator('[data-settings-tab="search"]').scrollIntoViewIfNeeded()
     await page.locator('[data-settings-tab="search"]').click()
     await page.getByTestId('talos-search-source-tavily').click()
     await page.getByTestId('talos-search-key').fill('tvly-e2e-library-key')
     await page.getByRole('button', { name: 'Save key', exact: true }).click()
     await expect(page.getByTestId('talos-search-key-set')).toBeVisible()
     await page.getByTestId('talos-sheet-back').click()
-    await expect(page.getByTestId('settings-category-pane')).toBeVisible()
+    /*
+     * ⛔ Si porta la voce SOTTO GLI OCCHI prima di toccarla.
+     *
+     * Le impostazioni sono una lista lunga dentro uno scorrevole. La voce
+     * si trova nel DOM ma non diventa mai «visible, enabled and stable»
+     * per Playwright, che aspetta sessanta secondi e poi rinuncia — pur
+     * essendo cliccabile, come ho verificato sondando la pagina viva.
+     */
+    await page.locator('[data-settings-tab="agent_tools"]').scrollIntoViewIfNeeded()
     await page.locator('[data-settings-tab="agent_tools"]').click()
     await setToolPermission(page, 'write')
     await setToolPermission(page, 'outbound')
