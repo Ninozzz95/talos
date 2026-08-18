@@ -272,7 +272,7 @@ async function talosTuningFor(
  */
 async function talosTuningKeyFor(
     path: string,
-    device: { deviceModel: string, cpuCores: number | null },
+    device: { deviceModel: string, cpuCores: number | null, engineBuild?: string | null },
 ): Promise<TalosTuningKey | null> {
     const { models } = await talosLocalInstalledModels().catch(() => ({ models: [] }))
     const file = models.find((candidate) => candidate.path === path)
@@ -281,6 +281,14 @@ async function talosTuningKeyFor(
         deviceModel: device.deviceModel,
         cpuCores: device.cpuCores,
         appBuild: TALOS_APP_BUILD,
+        /*
+         * ⛔ Il ripiego sulla build dell'app è lo STESSO della cache dei
+         * prefissi, e per la stessa ragione: un lato nativo più vecchio non sa
+         * dichiarare la propria versione, e lì si resta prudenti — si invalida
+         * troppo invece che troppo poco. Una misura buttata via costa una
+         * taratura; una misura sbagliata riusata costa ogni risposta.
+         */
+        engineBuild: device.engineBuild ?? TALOS_APP_BUILD,
         modelPath: file.path,
         modelBytes: file.bytes,
         modelModifiedAt: file.modifiedAt,

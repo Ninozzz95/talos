@@ -36,6 +36,14 @@ export interface TalosThreadTuningContext {
     deviceModel: string
     cpuCores: number
     appBuild: string
+    /**
+     * ⛔ Quale MOTORE, non solo quale app: il sottomodulo nativo si puo promuovere
+     * senza toccare la versione dell'app, ed e successo il 18 agosto. Facoltativo
+     * perche un lato nativo piu vecchio non sa dichiararsi, e allora si ripiega
+     * sulla build dell'app — prudenti, cioe si invalida troppo invece che troppo
+     * poco.
+     */
+    engineBuild?: string | null
 }
 
 export interface TalosThreadTuningOutcome {
@@ -90,6 +98,7 @@ export async function talosRunThreadTuning(
         deviceModel: context.deviceModel,
         cpuCores: context.cpuCores,
         appBuild: context.appBuild,
+        engineBuild: context.engineBuild ?? context.appBuild,
         modelPath: context.modelPath,
         modelBytes: context.modelBytes,
         modelModifiedAt: context.modelModifiedAt,
