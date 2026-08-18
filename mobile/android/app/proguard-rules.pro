@@ -9,11 +9,12 @@
 # invece che per un riferimento.
 #
 #   26 plugin Capacitor     registrati con `registerPlugin(X.class)` e trovati
-#                           per annotazione. ⭐ NON servono regole nostre:
-#                           `@capacitor/android` dichiara `consumerProguardFiles`
-#                           e le sue regole tengono `@CapacitorPlugin`, i
-#                           `@PluginMethod` e ogni sottoclasse di `Plugin`.
-#                           Verificato nel suo build.gradle, non supposto.
+#                           per annotazione. Le consumer rules tengono i
+#                           plugin e i metodi, ma la prova release del
+#                           2026-08-18 ha mostrato che R8 full-mode rimuoveva
+#                           i membri delle annotazioni che il framework legge
+#                           via reflection. Il blocco qui sotto è quindi
+#                           app-specifico e risponde a quel fatto misurato.
 #
 #   5 classi con `native`   ai.talos.TalosLlamaNative, TalosLlamaEngine,
 #                           TalosBiometricKeyPlugin, TalosBackendChoice,
@@ -22,7 +23,26 @@
 #   1 FindClass dal C++     "java/lang/IllegalStateException" — una classe della
 #                           piattaforma, che R8 non tocca.
 #
-# ⇒ Serve una regola sola.
+# ⇒ Servono il ponte JNI e il contratto runtime delle annotazioni.
+
+# ⛔⛔⛔ CAPACITOR PERMISSION METADATA — PERM-RED-01/02.
+#
+# Capacitor 8 costruisce il registro dei permessi da `@CapacitorPlugin` e dalle
+# `@Permission` annidate. In R8 full-mode `-keepattributes` non conserva da
+# solo il payload: anche l'interfaccia dell'annotazione e i suoi membri devono
+# essere keepati esplicitamente. La prova dell'APK release precedente mostrava
+# infatti solo `name`, senza `permissions`, e i metodi del framework finivano in
+# un NPE quando cercavano gli alias.
+#
+# Queste sono le sole annotazioni Capacitor usate nel contratto nativo TALOS.
+# Si conserva il loro nome, il corpo e i default; non si disabilita R8 sul resto
+# dell'app e non si tocca node_modules.
+-keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault
+-keep @interface com.getcapacitor.annotation.CapacitorPlugin { *; }
+-keep @interface com.getcapacitor.annotation.Permission { *; }
+-keep @interface com.getcapacitor.annotation.PermissionCallback { *; }
+-keep @interface com.getcapacitor.annotation.ActivityCallback { *; }
+-keep @interface com.getcapacitor.PluginMethod { *; }
 
 # ⛔ Il legame fra Java e C++ è un NOME, e sta scritto nel simbolo nativo:
 #

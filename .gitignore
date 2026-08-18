@@ -121,6 +121,16 @@ PROMPT-NUOVA-SESSIONE.md
 COLLAUDO-INTENTI.md
 TODO.md
 
+# Passaggi di consegne finali fra sessioni Codex/Claude: restano locali.
+# I file già tracciati sotto mobile/docs rimangono nell'indice finché l'owner
+# non chiede esplicitamente di rimuoverli.
+HANDOFF-CODEX-*.md
+
+# Documentazione generata nella corsia mobile: non entra nell'indice Git.
+# I file già tracciati restano versionati finché l'owner non chiede
+# esplicitamente di rimuoverli dall'indice con una modifica separata.
+mobile/docs/
+
 # Rifiuto di Git Bash su Windows: un dump di crash della shell, non nostro.
 *.stackdump
 
