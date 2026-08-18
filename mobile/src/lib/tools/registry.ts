@@ -194,6 +194,22 @@ export interface TalosToolDefinition<Input = unknown> {
      * una chiamata di rete non è una premessa: è un altro tool.
      */
     premesse?(input: Input, context: TalosToolContext): Promise<TalosPremessaEsito>
+    /**
+     * ⛔⛔ CHE FARE QUANDO LA PREMESSA È `ignoto` — e il default resta `continue`.
+     *
+     * Su una capacità del telefono, «non riesco a provare che la torcia sia
+     * spenta» può ancora consentire un comando idempotente: rifiutare sempre
+     * renderebbe TALOS inutile appena un permesso è negato o un ponte cade.
+     *
+     * Ma su «questa funzione esiste ed è il bersaglio che sto per sostituire?»
+     * un `ignoto` **non autorizza una mutazione strutturale**. Le mutazioni di
+     * codice dichiarano `reject`.
+     *
+     * ⛔ È una proprietà semantica del TOOL, non una preferenza dell'utente: non
+     * va nelle impostazioni. Un utente non può sapere per quali predicati «non
+     * lo so» è tollerabile.
+     */
+    premiseUnknownPolicy?: 'continue' | 'reject'
     verify?(
         input: Input,
         /**
