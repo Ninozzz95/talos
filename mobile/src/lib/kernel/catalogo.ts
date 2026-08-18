@@ -53,13 +53,31 @@ export interface TalosCatalogo {
      * il confronto esatto costa pochi millisecondi su tutto il progetto.
      */
     testi: ReadonlyMap<string, string | null>
+    /**
+     * ⛔⛔⛔ L'ALTRO LIVELLO DI COPERTURA.
+     *
+     * `perFile` dice **se ho potuto leggere** ciascun file che ho elencato.
+     * Questo dice **se ho elencato tutti i file che ci sono** — e sono due
+     * domande diverse, che avevo confuso in una.
+     *
+     * Non è teorico: su un telefono lo spazio di lavoro ha un tetto, e una
+     * cartella può fallire a metà lettura. Con l'elenco parziale un file che
+     * esiste ma non è stato visto produce «ASSENTE: il file non esiste» — la
+     * bugia peggiore che questo kernel possa dire, perché ha la forma esatta
+     * della verità che sa produrre.
+     */
+    elenco: TalosElencoFile
 }
+
+/** `completo` = ho visto tutti i file dell'ambito. Altrimenti, perché no. */
+export type TalosElencoFile = 'completo' | { troncato: string }
 
 /** Un file letto ma illeggibile non è un file vuoto: dichiara IGNOTO. */
 const ILLEGGIBILE: TalosCoperturaFile = 'sorgenteInvalida'
 
 export async function costruisciCatalogo(
     sorgenti: readonly TalosSorgente[],
+    opzioni?: {
     /**
      * Il catalogo di prima, se c'è: le voci dei file **identici** si riusano
      * invece di ri-analizzarle.
@@ -74,8 +92,13 @@ export async function costruisciCatalogo(
      * riuso divergesse anche una volta da una costruzione fredda, la velocità
      * sarebbe comprata con una bugia intermittente.
      */
-    precedente?: TalosCatalogo,
+        precedente?: TalosCatalogo
+        /** ⛔ Chi elenca i file DICHIARA se l'elenco era completo. Il difetto
+         * di prima era che nessuno lo chiedeva, quindi era sempre «sì». */
+        elenco?: TalosElencoFile
+    },
 ): Promise<TalosCatalogo> {
+    const precedente = opzioni?.precedente
     const perFile = new Map<string, { copertura: TalosCoperturaFile, nomi: ReadonlySet<string> }>()
     const perNome = new Map<string, string[]>()
     const testi = new Map<string, string | null>()
@@ -112,7 +135,7 @@ export async function costruisciCatalogo(
             else perNome.set(nome, [percorso])
         }
     }
-    return { perFile, perNome, testi }
+    return { perFile, perNome, testi, elenco: opzioni?.elenco ?? 'completo' }
 }
 
 /** L'ambito è un FILE (ha un'estensione) o una CARTELLA? */
@@ -138,6 +161,13 @@ export function risolviSimbolo(
     ambito: string,
 ): TalosPremessaEsito {
     const fatto = { famiglia: 'symbol-declared', nome, ambito }
+    /*
+     * ⛔⛔ PRIMA DI TUTTO IL RESTO: un elenco parziale toglie il potere di dire
+     * «non c'è», e non quello di dire «c'è». Averlo visto è una prova che il
+     * troncamento non tocca — quindi il controllo sta qui e i testimoni si
+     * cercano lo stesso, poco sotto.
+     */
+    const parziale = catalogo.elenco === 'completo' ? null : catalogo.elenco.troncato
     const file = [...catalogo.perFile.keys()].filter((p) => dentroAmbito(p, ambito))
 
     if (file.length === 0) {
@@ -152,6 +182,7 @@ export function risolviSimbolo(
          *   una CARTELLA che non c'è .. un refuso nell'ambito è indistinguibile
          *                              da un albero non ancora scritto ⇒ IGNOTO
          */
+        if (parziale) return { stato: 'ignoto', perche: `the workspace listing is incomplete (${parziale}), so nothing can be ruled out in ${ambito}`, fatto }
         if (ambitoEUnFile(ambito)) {
             return { stato: 'assente', perche: `"${nome}" is not declared in ${ambito} (the file does not exist)`, copertura: 'completa', fatto }
         }
@@ -173,6 +204,14 @@ export function risolviSimbolo(
         return {
             stato: 'ignoto',
             perche: `${scoperti.length} file(s) in ${ambito} could not be read (${perche}), starting with ${scoperti[0]}`,
+            fatto,
+        }
+    }
+
+    if (parziale) {
+        return {
+            stato: 'ignoto',
+            perche: `every listed file in ${ambito} was read, but the listing itself is incomplete (${parziale})`,
             fatto,
         }
     }

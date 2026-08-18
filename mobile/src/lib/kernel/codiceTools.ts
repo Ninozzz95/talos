@@ -120,7 +120,7 @@ export async function premessaBersaglio(
             fatto: { famiglia: 'symbol-declared', nome, ambito: percorso },
         }
     }
-    const catalogo = await costruisciCatalogo(sorgenti, cache?.ultimo)
+    const catalogo = await costruisciCatalogo(sorgenti, { precedente: cache?.ultimo })
     if (cache) cache.ultimo = catalogo
     return risolviSimbolo(catalogo, nome, percorso)
 }
@@ -214,7 +214,7 @@ export function talosCodiceTools(fonti: TalosFontiCodice): readonly TalosToolDef
                 const percorso = percorsoAmmesso(i.file)
                 if (!percorso) return { held: false, reason: 'the path is not valid' }
                 try {
-                    const catalogo = await costruisciCatalogo(await fonti.sorgenti(), cache.ultimo)
+                    const catalogo = await costruisciCatalogo(await fonti.sorgenti(), { precedente: cache.ultimo })
                     cache.ultimo = catalogo
                     const dopo = risolviSimbolo(catalogo, i.nome, percorso)
                     return dopo.stato === 'presente'
