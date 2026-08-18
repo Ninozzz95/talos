@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dichiaratiIn, eTypeScript } from '@/lib/kernel/simboli'
+import { caricaCompilatore, dichiaratiIn, genereDi } from '@/lib/kernel/simboli'
 
 /**
  * ⛔⛔ Il test che conta non è «trova i nomi»: è che NON confonda una menzione
@@ -75,12 +75,21 @@ describe('chi dichiara un nome', () => {
         }
     })
 
-    it('la lingua la decide l\'estensione', () => {
-        expect(eTypeScript('a.ts')).toBe(true)
-        expect(eTypeScript('a.tsx')).toBe(true)
-        expect(eTypeScript('a.mts')).toBe(true)
-        expect(eTypeScript('a.mjs')).toBe(false)
-        expect(eTypeScript('a.js')).toBe(false)
+    it('la lingua la decide l\'estensione, e sono QUATTRO generi', async () => {
+        const ts = await caricaCompilatore()
+        expect(genereDi(ts, 'a.ts')).toBe(ts.ScriptKind.TS)
+        expect(genereDi(ts, 'a.mts')).toBe(ts.ScriptKind.TS)
+        expect(genereDi(ts, 'a.tsx')).toBe(ts.ScriptKind.TSX)
+        expect(genereDi(ts, 'a.jsx')).toBe(ts.ScriptKind.JSX)
+        expect(genereDi(ts, 'a.mjs')).toBe(ts.ScriptKind.JS)
+        expect(genereDi(ts, 'a.js')).toBe(ts.ScriptKind.JS)
+    })
+
+    it('⭐⭐ e vede le RIESPORTAZIONI CON RINOMINA — cosa che babel non faceva', async () => {
+        const trovati = await nomi('export { conSconto as sconto } from "./prezzo"\n', 'riesporta.ts')
+        expect(trovati).toContain('sconto')
+        // ⛔ È la risposta che ha fatto buttare la versione a babel: quel parser
+        // avrebbe detto che `sconto` non è dichiarato in nessun file.
     })
 
     it('⭐ JSX e decoratori non fanno cadere il parse', async () => {
