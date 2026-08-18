@@ -125,7 +125,7 @@ test('LIB-ALL-LINK-E2E-01 carries a typoed web request through provider, Tavily,
     const composer = page.getByLabel('Message TALOS')
     const prompt = 'fai una ricerca weeb delle aziende in italia con yacht auto e ville'
     await composer.fill(prompt)
-    await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+    await expect(page.getByTestId('talos-composer-action')).toBeEnabled({ timeout: 15_000 })
     await composer.press('Enter')
     await expect(page.getByText(
         'Ho trovato due fonti e le ho salvate nella Libreria.',

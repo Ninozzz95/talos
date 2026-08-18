@@ -109,18 +109,26 @@ test('persists contextual chat sessions through reload, rename, switch and activ
     }
 
     // F5.1: row actions live in the hold dropdown.
-    async function holdRowByTitle(title: string): Promise<void> {
-        // The sidebar drawer input-locks the body while animating out.
+    /**
+     * ⛔⛔ IL MENU SI APRE COL ⋮, non tenendo premuto.
+     *
+     * Il refactor del 4 agosto — «⋮ visibile e tieni-premuto che seleziona, come
+     * nella Ricerca» — ha separato i due gesti, perche le due liste della stessa
+     * app rispondevano in modo opposto allo stesso dito:
+     *
+     *     tieni premuto  →  SELEZIONA la riga
+     *     tocca il ⋮     →  apre il menu delle azioni
+     *
+     * Questo aiutante teneva premuto e aspettava un menu. Aspettava sessanta
+     * secondi, poi diceva che il menu non c'era — vero, ma per il motivo
+     * sbagliato.
+     */
+    async function apriMenuRiga(title: string): Promise<void> {
         await page.waitForFunction(() => getComputedStyle(document.body).pointerEvents !== 'none')
         const row = page.getByTestId('talos-chats-row').filter({ hasText: title })
-        const box = (await row.first().boundingBox())!
-        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-        await page.mouse.down()
-        await page.waitForTimeout(650)
-        await page.mouse.up()
-        await expect(page.locator('[data-testid="talos-chats-row-menu"]')).toBeVisible()
+        await row.first().locator('[data-testid^="talos-chats-menu-"]').click()
+        await expect(page.locator('[data-testid="talos-row-actions-menu"]')).toBeVisible()
     }
-
     await openChatsPage()
     await expect(page.getByTestId('talos-sidebar-chats-entry')).toHaveCount(0)
     await expect(page.getByTestId('talos-chats-row')).toHaveCount(2)
@@ -130,8 +138,8 @@ test('persists contextual chat sessions through reload, rename, switch and activ
     await expect(page.getByText('Secondary thread is isolated.', { exact: true })).toHaveCount(0)
 
     await openChatsPage()
-    await holdRowByTitle(firstTitle)
-    await page.locator('[data-testid="talos-chats-row-menu"]').getByRole('menuitem', { name: 'Rename' }).click()
+    await apriMenuRiga(firstTitle)
+    await page.locator('[data-testid="talos-row-actions-menu"]').getByRole('menuitem', { name: 'Rename' }).click()
     await page.getByLabel('Chat name').fill('Primary evidence')
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(page.getByTestId('talos-chats-row').filter({ hasText: 'Primary evidence' })).toBeVisible()
@@ -144,8 +152,8 @@ test('persists contextual chat sessions through reload, rename, switch and activ
 
     await openChatsPage()
     // F5.1: delete lives in the hold dropdown.
-    await holdRowByTitle('Primary evidence')
-    await page.locator('[data-testid="talos-chats-row-menu"]').getByRole('menuitem', { name: 'Delete' }).click()
+    await apriMenuRiga('Primary evidence')
+    await page.locator('[data-testid="talos-row-actions-menu"]').getByRole('menuitem', { name: 'Delete' }).click()
     await expect(page.getByRole('heading', { name: 'Delete chat?' })).toBeVisible()
     await page.getByRole('button', { name: 'Delete', exact: true }).click()
     await expect(page.getByTestId('talos-chats-row')).toHaveCount(1)
