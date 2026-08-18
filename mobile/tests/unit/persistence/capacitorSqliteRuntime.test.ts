@@ -8,6 +8,7 @@ import {
 } from '@/persistence/capacitorSqliteRuntime'
 import { TALOS_CHAT_DATABASE_NAME, TALOS_CHAT_DATABASE_VERSION } from '@/persistence/chatDatabaseSchema'
 import type { TalosSqlConnection } from '@/persistence/sqliteTypes'
+import { decifraGiornale } from '@/persistence/giornaleMigrazione'
 
 function connection(): TalosSqlConnection {
     return {
@@ -143,6 +144,7 @@ describe('createCapacitorSqliteRuntime', () => {
         })
         db.isOpen = vi.fn().mockResolvedValue(true)
         const seams = migration()
+        const nuovaChiave = 'g'.repeat(64)
         const runtime = createCapacitorSqliteRuntime({
             platform: 'native',
             gateway: value,
@@ -151,13 +153,27 @@ describe('createCapacitorSqliteRuntime', () => {
             ...seams,
         })
         await runtime.connect()
-        await expect(runtime.adoptManagedSecret('g'.repeat(64))).rejects.toThrow(/TALOS_DB_ADOPT_FAILED/)
-        // The payload must still be readable: a kill or a failure here used to
-        // destroy every chat with the only copy in a local variable.
-        expect(await seams.readMigration()).toContain('talos')
+        await expect(runtime.adoptManagedSecret(nuovaChiave)).rejects.toThrow(/TALOS_DB_ADOPT_FAILED/)
+
+        // Il payload deve restare RECUPERABILE: un'uccisione o un fallimento qui
+        // distruggeva ogni chat, con l'unica copia dentro una variabile locale.
+        const suDisco = await seams.readMigration()
+        expect(suDisco).not.toBeNull()
+
+        /*
+         * ⛔⛔ Questo test controllava `toContain('talos')` — cioe' che il nome
+         * del database fosse LEGGIBILE nel file. Era un modo indiretto di dire
+         * «e' l'export», e nel farlo fissava la copia in chiaro come se fosse la
+         * proprieta' voluta.
+         *
+         * ⇒ La domanda vera non e' «c'e' quella stringa dentro»: e' «da questo
+         * file si riesce a tirare fuori l'export?». Che e' piu' forte, e non
+         * chiede al giornale di essere leggibile da chiunque passi.
+         */
+        expect(suDisco).not.toContain('talos')
+        expect(await decifraGiornale(suDisco!, nuovaChiave)).toContain('talos')
         expect(seams.clearMigration).not.toHaveBeenCalled()
     })
-
     it('boots the pinned jeep-sqlite loader through its real runtime exports', async () => {
         document.querySelectorAll('jeep-sqlite').forEach((element) => element.remove())
         const upstreamLoader = await import('jeep-sqlite/loader')
