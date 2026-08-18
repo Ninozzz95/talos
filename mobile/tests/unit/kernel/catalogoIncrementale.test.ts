@@ -25,7 +25,7 @@ const base: TalosSorgente[] = [
 describe('il catalogo riusa ciò che non è cambiato', () => {
     it('⭐ un file identico NON si ri-analizza', async () => {
         const primo = await costruisciCatalogo(base)
-        const secondo = await costruisciCatalogo(base, primo)
+        const secondo = await costruisciCatalogo(base, { precedente: primo })
         expect(secondo.perFile.get(A)!.nomi).toBe(primo.perFile.get(A)!.nomi)
         expect(secondo.perFile.get(B)!.nomi).toBe(primo.perFile.get(B)!.nomi)
     })
@@ -42,12 +42,12 @@ describe('il catalogo riusa ciò che non è cambiato', () => {
          * prima generazione li passa tutti.
          */
         const primo = await costruisciCatalogo(base)
-        const secondo = await costruisciCatalogo(base, primo)
-        const terzo = await costruisciCatalogo(base, secondo)
+        const secondo = await costruisciCatalogo(base, { precedente: primo })
+        const terzo = await costruisciCatalogo(base, { precedente: secondo })
         expect(terzo.perFile.get(A)!.nomi).toBe(primo.perFile.get(A)!.nomi)
         expect(terzo.perFile.get(B)!.nomi).toBe(primo.perFile.get(B)!.nomi)
 
-        const quarto = await costruisciCatalogo(base, terzo)
+        const quarto = await costruisciCatalogo(base, { precedente: terzo })
         expect(quarto.perFile.get(A)!.nomi).toBe(primo.perFile.get(A)!.nomi)
     })
 
@@ -55,7 +55,7 @@ describe('il catalogo riusa ciò che non è cambiato', () => {
         const primo = await costruisciCatalogo(base)
         const dopo = await costruisciCatalogo([
             { percorso: A, testo: 'export function gamma() { return 1 }\n' }, base[1]!,
-        ], primo)
+        ], { precedente: primo })
 
         expect(dopo.perFile.get(A)!.nomi).not.toBe(primo.perFile.get(A)!.nomi)
         expect(risolviSimbolo(dopo, 'gamma', A).stato).toBe('presente')
@@ -67,7 +67,7 @@ describe('il catalogo riusa ciò che non è cambiato', () => {
 
     it('⛔ un file CANCELLATO sparisce, dai file e dai nomi', async () => {
         const primo = await costruisciCatalogo(base)
-        const dopo = await costruisciCatalogo([base[0]!], primo)
+        const dopo = await costruisciCatalogo([base[0]!], { precedente: primo })
         expect(dopo.perFile.has(B)).toBe(false)
         expect(risolviSimbolo(dopo, 'beta', B).stato).not.toBe('presente')
     })
@@ -75,7 +75,7 @@ describe('il catalogo riusa ciò che non è cambiato', () => {
     it('⛔ un file NUOVO entra', async () => {
         const primo = await costruisciCatalogo(base)
         const dopo = await costruisciCatalogo(
-            [...base, { percorso: 'src/c.ts', testo: 'export class Delta {}\n' }], primo)
+            [...base, { percorso: 'src/c.ts', testo: 'export class Delta {}\n' }], { precedente: primo })
         expect(risolviSimbolo(dopo, 'Delta', 'src/c.ts').stato).toBe('presente')
     })
 
@@ -85,7 +85,7 @@ describe('il catalogo riusa ciò che non è cambiato', () => {
         // riuso — un file diventerebbe permanentemente vuoto.
         const cieco = await costruisciCatalogo([{ percorso: A, testo: null }])
         expect(risolviSimbolo(cieco, 'alfa', A).stato).toBe('ignoto')
-        const visto = await costruisciCatalogo([base[0]!], cieco)
+        const visto = await costruisciCatalogo([base[0]!], { precedente: cieco })
         expect(risolviSimbolo(visto, 'alfa', A).stato).toBe('presente')
     })
 
@@ -95,7 +95,7 @@ describe('il catalogo riusa ciò che non è cambiato', () => {
             { percorso: A, testo: 'export function gamma() { return 1 }\nexport type Eps = 1\n' },
             base[1]!,
         ]
-        const caldo = await costruisciCatalogo(cambiato, primo)
+        const caldo = await costruisciCatalogo(cambiato, { precedente: primo })
         const freddo = await costruisciCatalogo(cambiato)
 
         const chiavi = (c: typeof caldo) => [...c.perNome.entries()]
