@@ -9,7 +9,15 @@ const source = readFileSync(resolve(
 
 function generateBody(): string {
     const start = source.indexOf('public void generate(PluginCall call) {')
-    const end = source.indexOf('\n    /** Emits what is new since `sent`', start)
+    /*
+     * ⛔ Il confine è il commento del metodo che segue `generate`, e va tenuto
+     * allineato al sorgente. Il 18/8 `emitDelta` è passato a leggere il delta
+     * dal nativo (drainText) e il suo commento è cambiato, rompendo questo
+     * delimitatore mentre il comportamento di `generate` era intatto — la
+     * release è fallita in CI su questo. Ancorare al testo di un commento è
+     * fragile; ma un confine che non c'è lo sarebbe di più.
+     */
+    const end = source.indexOf('Emette il testo NUOVO da consegnare a Vue', start)
     expect(start).toBeGreaterThanOrEqual(0)
     expect(end).toBeGreaterThan(start)
     return source.slice(start, end)

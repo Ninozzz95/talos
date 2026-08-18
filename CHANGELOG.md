@@ -6,7 +6,11 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
-## v0.1.10
+## v0.1.11
+
+<!-- v0.1.9 and v0.1.10 were tagged but never produced a signed APK: their builds
+     failed (packaging, then a stale test delimiter). This is the release that
+     ships the work, under a clean version. -->
 
 <!-- v0.1.9 was tagged but never produced a signed APK: its first build failed in
      packaging. This is the release that ships that work, under a clean version. -->
