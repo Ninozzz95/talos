@@ -1,6 +1,6 @@
 import type * as TS from 'typescript'
 import { caricaCompilatore, ESTENSIONI_SORGENTE, estensioneDi, genereDi } from '@/lib/kernel/simboli'
-import { cancelloSemantico } from '@/lib/kernel/semantica'
+import { cancelloSemantico, type TalosLibreriaStandard } from '@/lib/kernel/semantica'
 import type { TalosSorgente } from '@/lib/kernel/catalogo'
 
 /**
@@ -105,6 +105,7 @@ export async function sostituisciEsistente(
     sorgenti: readonly TalosSorgente[],
     bersaglio: TalosBersaglio,
     nuovoTesto: string,
+    libreria?: TalosLibreriaStandard,
 ): Promise<TalosEsitoMutazione> {
     const ts = await caricaCompilatore()
 
@@ -164,7 +165,7 @@ export async function sostituisciEsistente(
     ))
 
     /* ── G2: il candidato introduce riferimenti che non esistono? ──────────── */
-    const semantico = await cancelloSemantico(sorgenti, albereNuovo)
+    const semantico = await cancelloSemantico(sorgenti, albereNuovo, libreria)
     if (semantico.stato === 'assente') {
         return { stato: 'rifiutata', perche: 'riferimenti', messaggio: semantico.perche }
     }
