@@ -58,3 +58,6 @@ docs/immagini/APPROVATE.txt
 *.p12
 *.pfx
 keystore.properties
+
+# ⛔ I modelli sono gigabyte: un file grande in git e un file grande PER SEMPRE.
+.modelli/
