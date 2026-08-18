@@ -6,6 +6,31 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.9
+
+Another crash-fix release, found on the owner's own device.
+
+### Fixed
+
+- **Opening Diagnostics crashed the app.** Every time. The diagnostics screen
+  checks whether dictation has microphone access, and that check read a
+  permission whose state the phone answered with "nothing" — the same class of
+  bug as the OnePlus 13 startup crash in the last release, but this time inside
+  the third-party dictation component, on a thread no JavaScript safety net can
+  reach.
+  - Fixed at the native layer: TALOS now wraps that component with a safe version
+    that reports **unknown** instead of falling over. Verified on a real device —
+    Diagnostics opens, shows its report, and stays up.
+
+### Changed
+
+- **The local model is no longer thrown away the moment you switch apps.**
+  Before, leaving TALOS for a second discarded the model even with memory to
+  spare, and coming back paid the full cold-open cost — measured at four seconds
+  warm, nearly nine cold, all of it in the loading. TALOS now keeps the model for
+  a short grace period and only releases it under real memory pressure, so a
+  quick glance at another app doesn't cost you the wait when you return.
+
 ## v0.1.8
 
 A crash-fix release. The headline is a startup crash on the OnePlus 13, found on

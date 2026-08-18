@@ -300,6 +300,13 @@ public class TalosLlamaPlugin extends Plugin {
                 return;
             }
             openEngine.set(engine);
+            /*
+             * ⛔ L'uso locale e' tornato: un contratto a tempo pendente si
+             * annulla. Senza, il modello appena aperto potrebbe sparire fra un
+             * secondo perche' una vecchia finestra stava per scadere — cioe' il
+             * peggior momento possibile, subito dopo aver pagato l'apertura.
+             */
+            contrattoCaldo.ripreso();
             openPath.set(path);
             lastOpenMs = (System.nanoTime() - inizioApertura) / 1_000_000L;
             lastOpenReusedWeights = false;
@@ -1009,6 +1016,7 @@ public class TalosLlamaPlugin extends Plugin {
      * scritta e mai eseguita.
      */
     private ComponentCallbacks2 pressioneMemoria;
+    private final TalosContrattoCaldo contrattoCaldo = new TalosContrattoCaldo();
 
     @Override
     public void load() {
@@ -1029,10 +1037,16 @@ public class TalosLlamaPlugin extends Plugin {
             // prossimo segnale ci ritroverà liberi.
             return;
         }
-        final boolean fuoriDallaVista = level >= TRIM_MEMORY_UI_HIDDEN;
-        final boolean sottoPressione = level >= TRIM_MEMORY_RUNNING_LOW;
-        if (!fuoriDallaVista && !sottoPressione) return;
-        worker.execute(this::closeOpenModel);
+        /*
+         * ⛔ La decisione la prende `TalosContrattoCaldo`, provata a tavolino con
+         * una tabella di casi. Qui restano solo gli effetti: chiedere, e chiudere
+         * dentro l'attore. Prima questa riga scaricava a OGNI UI_HIDDEN — anche
+         * col telefono pieno di memoria — e riaprire costa 4 secondi caldi,
+         * misurati sul Pad.
+         */
+        if (contrattoCaldo.vaScaricato(level, android.os.SystemClock.uptimeMillis())) {
+            worker.execute(this::closeOpenModel);
+        }
     }
 
     /**
