@@ -209,6 +209,26 @@ android {
              */
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            /*
+             * ⛔⛔ E L'AFFIANCAMENTO VALE ANCHE QUI — anzi, soprattutto qui.
+             *
+             * La ragione è la stessa del blocco debug: la chiave di firma di
+             * questa macchina non è quella che ha firmato l'app sul telefono
+             * dell'owner, quindi un aggiornamento sul posto viene rifiutato e
+             * l'unica alternativa sarebbe disinstallare — cioè cancellargli chat
+             * e libreria.
+             *
+             * ⇒ Ma su una release pesa di più: è la build con R8 acceso, cioè
+             * quella che PUÒ rompersi a runtime. Provarla è esattamente il
+             * momento in cui non si vuole avere l'app vera in mezzo.
+             *
+             * Senza la proprietà il build è identico a prima: questo blocco non
+             * fa nulla.
+             */
+            if (project.hasProperty('talosSideBySide')) {
+                applicationIdSuffix '.dev'
+                versionNameSuffix '-dev'
+            }
             if (firmaDisponibile) {
                 signingConfig signingConfigs.rilascio
             }
