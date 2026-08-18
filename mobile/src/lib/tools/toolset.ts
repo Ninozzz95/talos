@@ -4,6 +4,7 @@ import { createTalosPrivilegedTools } from '@/lib/tools/privilegedTools'
 import { createTalosPrivilegedSources } from '@/lib/device/privilegedSources'
 import { createTalosNotificationTools } from '@/lib/tools/notificationTools'
 import { createTalosSchermoTools } from '@/lib/tools/schermoTools'
+import { talosCodiceTools } from '@/lib/kernel/codiceTools'
 import { talosIntentiTools } from '@/lib/tools/intentiTools'
 import { createTalosLibraryWriteTools } from '@/lib/tools/libraryWriteTools'
 import { createTalosNotesWriteTools } from '@/lib/tools/notesWriteTools'
@@ -141,6 +142,15 @@ export interface TalosToolsetDeps {
      * modello che TALOS promette cose che non fa.
      */
     schermo?(): import('@/lib/tools/schermoTools').TalosSchermoToolSources | null
+
+    /**
+     * ⭐⭐⭐ Lo spazio di lavoro del codice.
+     *
+     * ⛔ Assente finché la persona non ha aperto un progetto: senza, gli attrezzi
+     * del codice non compaiono affatto. Un attrezzo che c'è e fallisce sempre
+     * insegna al modello a provarci lo stesso — e a raccontare l'esito.
+     */
+    codice?(): import('@/lib/kernel/codiceTools').TalosFontiCodice | null
     /**
      * La Libreria, in scrittura: rinominare e togliere.
      *
@@ -763,6 +773,7 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                     fileDalTelefono,
                 }) : []),
                 ...(deps.schermo?.() ? createTalosSchermoTools(deps.schermo()!) : []),
+                ...(deps.codice?.() ? talosCodiceTools(deps.codice()!) : []),
                 ...(libraryWrite ? createTalosLibraryWriteTools(libraryWrite) : []),
                 ...(notesWrite ? createTalosNotesWriteTools(notesWrite) : []),
                 ...(tasksWrite ? createTalosTasksWriteTools(tasksWrite) : []),
