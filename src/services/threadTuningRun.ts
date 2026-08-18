@@ -36,6 +36,14 @@ export interface TalosThreadTuningContext {
     deviceModel: string
     cpuCores: number
     appBuild: string
+    /**
+     * ⛔ Quale MOTORE, non solo quale app: il sottomodulo nativo si puo promuovere
+     * senza toccare la versione dell'app, ed e successo il 18 agosto. Facoltativo
+     * perche un lato nativo piu vecchio non sa dichiararsi, e allora si ripiega
+     * sulla build dell'app — prudenti, cioe si invalida troppo invece che troppo
+     * poco.
+     */
+    engineBuild?: string | null
 }
 
 export interface TalosThreadTuningOutcome {
@@ -80,7 +88,7 @@ export async function talosRunThreadTuning(
     context: TalosThreadTuningContext,
 ): Promise<TalosThreadTuningOutcome> {
     const [{ talosMeasureThreadTuning }, { talosRememberTuning, talosNoteTuningFailure },
-        { talosPreferFewerThreads }] = await Promise.all([
+        { talosScegliThread }] = await Promise.all([
         import('@/services/localEngine'),
         import('@/services/tuningProfileStore'),
         import('@/lib/models/engineTuning'),
@@ -90,6 +98,7 @@ export async function talosRunThreadTuning(
         deviceModel: context.deviceModel,
         cpuCores: context.cpuCores,
         appBuild: context.appBuild,
+        engineBuild: context.engineBuild ?? context.appBuild,
         modelPath: context.modelPath,
         modelBytes: context.modelBytes,
         modelModifiedAt: context.modelModifiedAt,
@@ -118,15 +127,15 @@ export async function talosRunThreadTuning(
     }
 
     /*
-     * Il prefill prende il massimo perché SCALA; la generazione prende il numero
-     * più basso entro il 3% del massimo perché NON scala, e ogni thread in meno
-     * è un core che resta alla UI. Sono i due criteri opposti dell'8B, applicati
-     * dalla funzione che li possiede.
+     * ⛔ La scelta NON si rifà qui: la possiede `talosScegliThread`, accanto alla
+     * regola del 3% che la sostiene.
+     *
+     * Prima questo punto chiamava la regola per il prefill **solo per vedere se
+     * fosse nulla**, e poi ne buttava la risposta per prendere il numero di
+     * thread più alto fra quelli provati. Su un dispositivo dove otto perdono
+     * contro sei, TALOS osservava la regressione e sceglieva otto lo stesso.
      */
-    const threadsBatch = talosPreferFewerThreads(misura.grid, 'prefill') === null
-        ? misura.threadsBatch
-        : Math.max(...misura.grid.filter((r) => r.prefill > 0).map((r) => r.threads))
-    const threads = talosPreferFewerThreads(misura.grid, 'decode') ?? misura.threads
+    const { threads, threadsBatch } = talosScegliThread(misura)
 
     const prefill = misura.grid.find((riga) => riga.threads === threadsBatch)
     const decode = misura.grid.find((riga) => riga.threads === threads)
