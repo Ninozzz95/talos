@@ -53,7 +53,28 @@ export const TALOS_TOOL_SECURITY: Readonly<Record<TalosAgentToolId, TalosToolSec
     tasks_complete: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     tasks_update: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     tasks_delete: { risk: 'R2', reversibility: 'irreversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
-    web_search: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
+    /*
+     * ⛔⛔⛔ L'UNICA ECCEZIONE DICHIARATA, e ha un nome perché non si eredita.
+     *
+     * Regola dell'owner, 18 agosto: «anche la ricerca web deve avere consenti
+     * sempre». Estende quella del 10 agosto — «nessuno escluso in lettura» — a
+     * un caso che quella, letta alla lettera, non copriva.
+     *
+     * `web_search` non si limita a cercare: ARCHIVIA i link trovati nella
+     * Libreria, quindi dichiara `write`, e la dichiarazione è onesta. La regola
+     * generale nega il «sempre» quando il rischio è R4 e c'è una scrittura — e
+     * su una ricerca la catena arriva a R4 quasi sempre, perché contenuto non
+     * fidato più rete più dati privati è la trifecta.
+     *
+     * ⇒ Il pulsante spariva proprio sulla funzione che si usa dieci volte al
+     * giorno. Non è la regola a essere sbagliata: serviva un'eccezione, e il
+     * meccanismo esisteva già qui, scritto e mai usato da nessuno.
+     *
+     * ⛔ Il compromesso, detto per intero: questo «sempre» autorizza per sempre
+     * anche l'archiviazione dei link. È una scrittura piccola e reversibile —
+     * voci di Libreria che si cancellano — ma è una scrittura.
+     */
+    web_search: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true, sempreConsentibile: true },
     web_read: { risk: 'R2', reversibility: 'reversible', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
     document_create: { risk: 'R1', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     generate_image: { risk: 'R2', reversibility: 'reversible', readsPrivateData: true, readsUntrustedContent: false, canTransmit: true },
