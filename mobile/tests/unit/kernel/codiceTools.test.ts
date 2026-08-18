@@ -207,3 +207,23 @@ describe('⛔⛔ quando lo spazio di lavoro non si legge', () => {
         expect(esito.status === 'terminal' && esito.result.code).not.toBe('TALOS_TOOL_PREMISE_ABSENT')
     })
 })
+
+describe('⭐⭐ il catalogo non si ricostruisce a ogni domanda', () => {
+    it('la seconda premessa riusa la prima, e resta corretta', async () => {
+        const w = fonti()
+        const t = attrezzo(w.fonti)
+        const uno = await t.premesse!({ file: PREZZO, nome: 'totale' } as never)
+        const due = await t.premesse!({ file: PREZZO, nome: 'conSconto' } as never)
+        expect(uno.stato).toBe('presente')
+        expect(due.stato).toBe('presente')
+
+        // ⛔ E dopo una modifica VERA il catalogo si accorge: se riusasse alla
+        // cieca direbbe «presente» su una funzione che non c'è più.
+        await executeTalosTool(t as never, {
+            file: PREZZO, nome: 'totale',
+            codice: 'export function sommaRighe(righe: number[]) { return righe.length }',
+        }, deps())
+        expect((await t.premesse!({ file: PREZZO, nome: 'totale' } as never)).stato).toBe('assente')
+        expect((await t.premesse!({ file: PREZZO, nome: 'sommaRighe' } as never)).stato).toBe('presente')
+    })
+})
