@@ -6,6 +6,52 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.8
+
+A crash-fix release. The headline is a startup crash on the OnePlus 13, found on
+the owner's own phone and fixed against it.
+
+### Fixed
+
+- **TALOS crashed on launch on the OnePlus 13.** The app died before it could
+  draw anything, every time. The cause was a permission-state read that Android
+  is allowed to answer with "nothing" — and on this device it does. TALOS read
+  that "nothing" as a value and fell over.
+  - It no longer does. A permission whose state cannot be read is now reported as
+    **unknown** rather than crashing — because guessing "denied" would be
+    inventing a fact, showing an "Allow" button for something perhaps already
+    granted, or hiding a feature that is actually there.
+  - Verified on the OnePlus 13 itself: zero crashes, launch in 1.3 seconds, the
+    screen drawn. Not deduced from an exit code — looked at.
+
+- **The local model wasted its own warm-up.** TALOS remembers the best
+  thread setup for each phone and model, so it doesn't re-measure every time. But
+  it wasn't noticing when the engine underneath changed — this release ships a
+  new build of the local engine, and a setup measured with the old one would have
+  been reused with the new. The memory now knows which engine it was measured
+  with.
+
+### Changed
+
+- **"Always allow" is back on web search.** It had quietly disappeared: after a
+  search, the safety chain would rise to its highest level and drop the "always"
+  option — on the one action people use ten times a day. Searching the web is now
+  an explicit exception, so the choice you make can hold for next time. The
+  question still appears the first time, and still says why.
+
+- **The local engine runs on the right cores.** On Android, the code that pins
+  work to specific CPU cores was being compiled out entirely — every thread ran
+  everywhere. This release picks up the upstream fix. On the owner's tablet, the
+  engine now measurably prefers **six threads over eight**, where eight was not
+  only slower but wildly inconsistent — one run in three collapsing to a third of
+  its speed.
+
+### Internal
+
+- Android, the native C++ engine and the browser tests now run on every proposed
+  change. A whole class of defect — including a native crash and this release's
+  OnePlus 13 crash — lived in the layer the old checks never touched.
+
 ## v0.1.7
 
 An external engineering review went through the whole codebase and found
