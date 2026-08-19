@@ -16,6 +16,7 @@ interface TalosDevicePermissionsPlugin {
         notificationsRuntime: boolean
         microphone: string
         batteryExempt?: boolean
+        accessibilityEnabled?: boolean
         manufacturer?: string
         brand?: string
         runtime?: Record<string, string>
@@ -50,6 +51,8 @@ export interface TalosDeviceState {
     /** False below Android 13, where there is no notification permission. */
     notificationsRuntime: boolean
     biometricHardware: boolean
+    /** Whether TALOS's screen-reading service is enabled in Android settings. */
+    accessibilityEnabled: boolean
     /**
      * Se il telefono ha smesso di sospendere TALOS.
      *
@@ -87,6 +90,7 @@ export async function readTalosDeviceState(): Promise<TalosDeviceState> {
             notifications: 'prompt',
             notificationsRuntime: false,
             biometricHardware: false,
+            accessibilityEnabled: false,
             batteryExempt: false,
             manufacturer: '',
             brand: '',
@@ -106,6 +110,7 @@ export async function readTalosDeviceState(): Promise<TalosDeviceState> {
         notifications: asState(device?.notifications ?? 'prompt'),
         notificationsRuntime: device?.notificationsRuntime ?? false,
         biometricHardware: biometric,
+        accessibilityEnabled: device?.accessibilityEnabled === true,
         // Falso quando il ponte non risponde: meglio dire «da sistemare» e far
         // toccare un pulsante che funziona, che dire «a posto» per una cosa che
         // non abbiamo potuto verificare.

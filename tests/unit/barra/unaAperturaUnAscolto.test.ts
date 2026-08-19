@@ -139,7 +139,9 @@ describe('⛔ una apertura dell\'assistente apre UN solo ascolto', () => {
         // Le due porte d'apertura passano di lì — e nessuna delle due chiama più
         // `toggle()` a mano, che sull'ascolto già partito SPEGNE.
         expect(barra).toContain("vogliAscoltare('apertura della barra')")
-        expect(barra).toContain('vogliAscoltare(`chiamata nuova (${props.modo.chiamata})`)')
+        expect(barra).toContain('const motivo = props.modo.bargeIn')
+        expect(barra).toContain('`chiamata nuova (${props.modo.chiamata})`')
+        expect(barra).toContain('vogliAscoltare(motivo)')
         expect(barra).not.toContain("annota('barra: toggle da onMounted')")
         expect(barra).not.toContain("annota('barra: toggle dalla CHIAMATA')")
     })

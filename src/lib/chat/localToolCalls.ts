@@ -55,6 +55,24 @@ export interface TalosChiamateNude {
 }
 
 /**
+ * A few small GGUF templates emit the compact tool-details protocol as a
+ * naked line instead of JSON. Keep the grammar deliberately closed: names are
+ * identifiers separated by commas, never arbitrary prose.
+ */
+const PLAIN_TOOL_DETAILS = /^[ \t]*tool_details[ \t]*:[ \t]*([A-Za-z0-9_]+(?:[ \t]*,[ \t]*[A-Za-z0-9_]+)*)[ \t]*$/i
+
+function nomiDaRigaToolDetails(riga: string): string[] | null {
+    const trovato = PLAIN_TOOL_DETAILS.exec(riga)
+    if (!trovato) return null
+    return trovato[1]!.split(',').map((nome) => nome.trim())
+}
+
+/** Used by the streaming separator and the final renderer to hide this syntax. */
+export function talosIsPlainToolDetailsLine(testo: string): boolean {
+    return PLAIN_TOOL_DETAILS.test(testo)
+}
+
+/**
  * ⭐⭐ LA CHIAMATA SCRITTA A PAROLE — quella che nessuno raccoglieva.
  *
  * ## Il difetto, riprodotto TRE volte sul Pad il 2026-08-09
@@ -102,23 +120,34 @@ export function talosRecuperaChiamateNude(
     if (!testo || offerti.size === 0) return { calls: [], text: testo }
 
     const calls: Array<{ name: string, arguments: string }> = []
+    const testoSenzaRighe = testo.split('\n').map((riga) => {
+        const nomi = nomiDaRigaToolDetails(riga)
+        if (!nomi || !offerti.has('tool_details') || nomi.some((nome) => !offerti.has(nome))) {
+            return riga
+        }
+        calls.push({
+            name: 'tool_details',
+            arguments: JSON.stringify({ names: nomi }),
+        })
+        return ''
+    }).join('\n')
     let resto = ''
     let indice = 0
 
-    while (indice < testo.length) {
-        const apre = testo.indexOf('{', indice)
-        if (apre === -1) { resto += testo.slice(indice); break }
-        const chiude = fineOggetto(testo, apre)
-        if (chiude === -1) { resto += testo.slice(indice); break }
+    while (indice < testoSenzaRighe.length) {
+        const apre = testoSenzaRighe.indexOf('{', indice)
+        if (apre === -1) { resto += testoSenzaRighe.slice(indice); break }
+        const chiude = fineOggetto(testoSenzaRighe, apre)
+        if (chiude === -1) { resto += testoSenzaRighe.slice(indice); break }
 
-        const candidato = testo.slice(apre, chiude + 1)
+        const candidato = testoSenzaRighe.slice(apre, chiude + 1)
         const chiamata = comeChiamata(candidato, offerti)
         if (chiamata) {
-            resto += testo.slice(indice, apre)
+            resto += testoSenzaRighe.slice(indice, apre)
             calls.push(chiamata)
         }
         else {
-            resto += testo.slice(indice, chiude + 1)
+            resto += testoSenzaRighe.slice(indice, chiude + 1)
         }
         indice = chiude + 1
     }
@@ -271,13 +300,15 @@ export function talosSenzaProtocolloDeiTool(testo: string): string {
      * («expected '\nC = 2 kg.' to be 'C = 2 kg.'») proprio perché l'uscita
      * anticipata saltava la ripulitura.
      */
-    if (!testo.includes('<')) return testo.trim()
     let fuori = testo
-    for (const tag of TAG_DEL_PROTOCOLLO) {
-        fuori = fuori
-            .replace(new RegExp(`<${tag}(?:\\s[^>]*)?>[^]*?</${tag}>`, 'gi'), '')
-            .replace(new RegExp(`</?${tag}(?:\\s[^>]*)?>`, 'gi'), '')
+    if (fuori.includes('<')) {
+        for (const tag of TAG_DEL_PROTOCOLLO) {
+            fuori = fuori
+                .replace(new RegExp(`<${tag}(?:\\s[^>]*)?>[^]*?</${tag}>`, 'gi'), '')
+                .replace(new RegExp(`</?${tag}(?:\\s[^>]*)?>`, 'gi'), '')
+        }
     }
+    fuori = fuori.replace(/(^|\n)[ \t]*tool_details[ \t]*:[ \t]*[A-Za-z0-9_]+(?:[ \t]*,[ \t]*[A-Za-z0-9_]+)*[ \t]*(?=\n|$)/gi, '$1')
     // ⛔ Le righe vuote lasciate dietro sono parte del difetto: una risposta che
     // comincia con tre a capo sembra rotta anche quando non lo è più.
     return fuori.replace(/\n{3,}/g, '\n\n').trim()

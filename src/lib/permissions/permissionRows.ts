@@ -25,6 +25,8 @@ export type TalosPermissionState =
     | 'prompt-with-rationale'
     /** Permanently denied: the dialog will NEVER appear again. */
     | 'denied'
+    /** Android special access: enabled only from Accessibility settings. */
+    | 'not-enabled'
 
 export type TalosPermissionKind =
     /** Asked at the moment of use; the user can say no. */
@@ -61,7 +63,7 @@ export interface TalosPermissionRow {
     id:
         | 'microphone' | 'notifications' | 'appLock' | 'files' | 'background' | 'network'
         | 'notificationAccess' | 'bridge' | 'deviceControl' | 'localModel'
-        | 'contacts' | 'camera' | 'calendar' | 'mailCount' | 'location'
+        | 'contacts' | 'camera' | 'calendar' | 'mailCount' | 'location' | 'accessibility'
     title: string
     kind: TalosPermissionKind
     /**
@@ -212,6 +214,12 @@ export const TALOS_PERMISSION_ROWS: readonly TalosPermissionRow[] = [
         kind: 'install',
         purpose: 'Reaching the AI provider you configured. Nothing is sent anywhere else, and nothing leaves the device until you send a message.',
     },
+    {
+        id: 'accessibility',
+        title: 'Screen reading',
+        kind: 'special',
+        purpose: 'Reading the visible screen so TALOS can understand the app you are using and control it when you ask. It does not enable an accessibility button, a volume-key shortcut or listening to volume keys; Android Accessibility settings remain the only place to enable or disable this access.',
+    },
     /*
      * ⛔⭐⭐ LE QUATTRO RIGHE CHE MANCAVANO, e le prime due sono le più potenti
      * che TALOS abbia.
@@ -256,6 +264,26 @@ export const TALOS_PERMISSION_ROWS: readonly TalosPermissionRow[] = [
 ]
 
 /**
+ * The onboarding asks only about access that Android can actually ask for or
+ * revoke. The full settings page intentionally keeps the other rows as a
+ * transparency catalogue; showing them here would make an automatic or
+ * internal capability look like a user-controlled permission.
+ *
+ * Battery exemption has its own dedicated onboarding step, so it is not
+ * repeated in the compact permission panel.
+ */
+const TALOS_ONBOARDING_PERMISSION_IDS = new Set<TalosPermissionRow['id']>([
+    'microphone', 'notifications', 'contacts', 'calendar', 'mailCount', 'location', 'camera',
+    'accessibility', 'notificationAccess',
+])
+
+export function talosOnboardingPermissionRows(
+    rows: readonly TalosPermissionRow[],
+): TalosPermissionRow[] {
+    return rows.filter((row) => TALOS_ONBOARDING_PERMISSION_IDS.has(row.id))
+}
+
+/**
  * The state, in the words the system itself uses.
  *
  * "Blocked by Android" rather than "Denied" is taken from Firefox: the user did
@@ -268,7 +296,16 @@ export function talosPermissionLabel(state: TalosPermissionState): string {
         case 'prompt': return 'Not requested'
         case 'prompt-with-rationale': return 'Not allowed'
         case 'denied': return 'Blocked by Android'
+        case 'not-enabled': return 'Not enabled'
     }
+}
+
+export function talosPermissionStateTranslationKey(state: TalosPermissionState): string {
+    return state === 'prompt-with-rationale'
+        ? 'rationale'
+        : state === 'not-enabled'
+            ? 'notEnabled'
+            : state
 }
 
 /**
@@ -280,7 +317,7 @@ export function talosPermissionLabel(state: TalosPermissionState): string {
  */
 export function talosPermissionAction(state: TalosPermissionState): 'request' | 'settings' | 'none' {
     if (state === 'granted') return 'none'
-    return state === 'denied' ? 'settings' : 'request'
+    return state === 'denied' || state === 'not-enabled' ? 'settings' : 'request'
 }
 
 /**

@@ -45,6 +45,7 @@ vi.mock('@/services/devicePermissions', () => ({
         notificationsRuntime: true,
         biometricHardware: true,
         batteryExempt: true,
+        accessibilityEnabled: false,
         manufacturer: 'oneplus',
         brand: 'oneplus',
         runtime: finto.runtime,

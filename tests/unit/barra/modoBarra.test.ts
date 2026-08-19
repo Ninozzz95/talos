@@ -18,6 +18,8 @@ describe('⛔ il modo barra si legge dall\'indirizzo di lancio', () => {
         // Vedi `unaAperturaUnAscolto.test.ts` per cosa ci si fa.
         expect(modo).toEqual({
             daVoce: true,
+            bloccata: false,
+            bargeIn: false,
             contesto: { nodi: 319, immagine: true },
             apertura: null,
         })
@@ -29,9 +31,21 @@ describe('⛔ il modo barra si legge dall\'indirizzo di lancio', () => {
         // chiave invece del suo valore passerebbe il primo caso e sbaglierebbe
         // questo — e la barra aprirebbe il microfono a chi non ha parlato.
         expect(talosModoBarraDa('talos://barra?nodi=49'))
-            .toEqual({ daVoce: false, contesto: { nodi: 49, immagine: false }, apertura: null })
+            .toEqual({
+                daVoce: false,
+                bloccata: false,
+                bargeIn: false,
+                contesto: { nodi: 49, immagine: false },
+                apertura: null,
+            })
         expect(talosModoBarraDa('talos://barra?voce=0&nodi=49&immagine=0'))
-            .toEqual({ daVoce: false, contesto: { nodi: 49, immagine: false }, apertura: null })
+            .toEqual({
+                daVoce: false,
+                bloccata: false,
+                bargeIn: false,
+                contesto: { nodi: 49, immagine: false },
+                apertura: null,
+            })
     })
 
     it('⛔ l\'app aperta dall\'ICONA non ha nessun indirizzo, e resta l\'app', () => {
@@ -52,6 +66,15 @@ describe('⛔ il modo barra si legge dall\'indirizzo di lancio', () => {
         // scritti a mano dall'altra parte del ponte: la differenza non deve
         // decidere se la funzione esiste.
         expect(talosModoBarraDa('talos:barra?nodi=7')?.contesto.nodi).toBe(7)
+    })
+
+    it('distingue una barra muta sopra il blocco e una wake-word in barge-in', () => {
+        expect(talosModoBarraDa(
+            'talos://barra?voce=1&nodi=0&immagine=0&bloccato=1',
+        )).toMatchObject({ daVoce: true, bloccata: true, bargeIn: false })
+        expect(talosModoBarraDa(
+            'talos://barra?voce=1&nodi=0&immagine=0&barge=1',
+        )).toMatchObject({ daVoce: true, bloccata: false, bargeIn: true })
     })
 
     it('⛔ un conteggio che non è un numero vale ZERO, cioè «non vedo niente»', () => {

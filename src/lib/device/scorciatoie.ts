@@ -217,5 +217,5 @@ export function talosPreset(
             stato: scorciatoie.volume ? 'pronto' : 'da-mettere',
             schermata: 'android.settings.ACCESSIBILITY_SETTINGS',
         },
-    ]
+    ].filter((preset) => preset.id !== 'volume') as TalosPreset[]
 }

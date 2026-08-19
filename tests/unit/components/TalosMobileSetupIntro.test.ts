@@ -539,6 +539,13 @@ describe('first-run setup', () => {
          * schermate che li disegnano per conto loro divergono al primo cambio.
          */
         expect(wrapper.find('[data-testid="talos-setup-all-permissions"]').exists()).toBe(true)
+        expect(wrapper.find('[data-permission-row="accessibility"]').exists()).toBe(true)
+        expect(wrapper.find('[data-permission-row="network"]').exists()).toBe(false)
+        expect(wrapper.find('[data-permission-row="appLock"]').exists()).toBe(false)
+        expect(wrapper.find('[data-permission-row="files"]').exists()).toBe(false)
+        expect(wrapper.find('[data-permission-row="deviceControl"]').exists()).toBe(false)
+        expect(wrapper.find('[data-permission-row="localModel"]').exists()).toBe(false)
+        expect(wrapper.find('[data-permission-row="bridge"]').exists()).toBe(false)
         // ⛔ E nemmeno mostrarli chiede niente da solo.
         expect(spy).not.toHaveBeenCalled()
         wrapper.unmount()

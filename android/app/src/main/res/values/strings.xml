@@ -11,4 +11,5 @@
         cosa sta per concedere. Qui si dice la CAPACITA'.
     -->
     <string name="talos_occhio_nome">TALOS — controllo del telefono</string>
+    <string name="talos_occhio_descrizione">Legge lo schermo per capire l’app aperta e controllarla quando glielo chiedi. Non attiva scorciatoie o pulsanti di accessibilità.</string>
 </resources>

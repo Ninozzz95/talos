@@ -153,8 +153,8 @@ export const TALOS_IT_MESSAGES = {
         backgroundAllow: 'Lascia lavorare TALOS in background',
         backgroundDone: 'Fatto: TALOS può lavorare anche a schermo spento.',
         backgroundLater: 'Puoi saltarla e concederla più tardi da Impostazioni, Privacy e autorizzazioni. Finché non lo fai, tieni TALOS aperto durante i lavori lunghi.',
-        permissionsAllTitle: 'E tutto il resto che può toccare',
-        permissionsAllBody: 'Ognuno si concede adesso o più tardi, e nessuno è obbligatorio: quelli che salti restano qui, in Impostazioni, Privacy e autorizzazioni. Senza, la funzione che li usa te lo dirà invece di fallire in silenzio.',
+        permissionsAllTitle: 'Permessi e accessi speciali di Android',
+        permissionsAllBody: 'Qui ci sono gli accessi che Android può chiederti di concedere o revocare. Puoi gestirli adesso o più tardi; tutto il resto che TALOS può fare è spiegato in Impostazioni, Privacy e autorizzazioni senza farlo passare per un permesso Android.',
         pinTitle: 'Il PIN è la chiave',
         pinBody: 'TALOS lo usa per cifrare chat e file su questo telefono. Per sbloccarli non viene inviato nulla altrove.',
         pinConsequence: 'Se perdi il PIN, i dati non potranno più essere aperti. Non esiste recupero.',
@@ -449,6 +449,7 @@ export const TALOS_IT_MESSAGES = {
         nothingToGrant: 'Niente da concedere',
         allowSteps: 'Per consentirlo: apri le impostazioni di sistema, tocca Autorizzazioni, quindi attiva {permission}.',
         openSystemSettings: 'Apri impostazioni di sistema',
+        openAccessibilitySettings: 'Apri Accessibilità',
         makerStepsTitle: 'Passi in più chiesti da questo telefono',
         makerSteps: {
                 colorosAutoLaunch: 'Impostazioni → App → Avvio automatico: attivalo per TALOS.',
@@ -471,6 +472,7 @@ export const TALOS_IT_MESSAGES = {
             prompt: 'Non richiesto',
             rationale: 'Non consentito',
             denied: 'Bloccato da Android',
+            notEnabled: 'Non attivata',
         },
         rows: {
             /*
@@ -523,6 +525,10 @@ export const TALOS_IT_MESSAGES = {
             network: {
                 title: 'Accesso alla rete',
                 purpose: 'Raggiunge il provider AI che hai configurato. Nulla viene inviato altrove e niente lascia il dispositivo finché non invii un messaggio.',
+            },
+            accessibility: {
+                title: 'Lettura dello schermo',
+                purpose: 'Leggere ciò che è visibile sullo schermo per capire l’app aperta e controllarla quando glielo chiedi. Non attiva scorciatoie, pulsanti o ascolto dei tasti del volume: il consenso si gestisce nelle impostazioni Accessibilità di Android.',
             },
             notificationAccess: {
                 title: 'Lettura delle tue notifiche',

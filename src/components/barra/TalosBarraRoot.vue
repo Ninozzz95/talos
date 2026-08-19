@@ -325,8 +325,10 @@ const ATTESA_MS = 10_000
  * questo buco si paga di rado.
  */
 const RESPIRO_MS = 500
-const ascoltoVoluto = ref(props.modo.daVoce)
-let scadenzaAscolto = props.modo.daVoce ? Date.now() + ATTESA_MS : 0
+const ascoltoVoluto = ref(props.modo.daVoce && !props.modo.bloccata)
+let scadenzaAscolto = props.modo.daVoce && !props.modo.bloccata
+    ? Date.now() + ATTESA_MS
+    : 0
 
 /**
  * ⛔⛔ UN LIMITE È UN TIMER, non una scadenza che qualcuno passa a controllare.
@@ -824,6 +826,9 @@ watch(
  * comunque — si smette, e si smette anche di volerlo.
  */
 function alternaAscolto(): void {
+    // Sopra il keyguard la barra è deliberatamente muta: solo il callback
+    // Android di sblocco può consegnare una chiamata voce alla WebView.
+    if (props.modo.bloccata) return
     // ⛔ Toccare il microfono annulla l'attesa: chi ferma l'ascolto non vuole
     // che parta una domanda mezzo secondo dopo.
     annullaLaGrazia('microfono toccato')
@@ -1045,8 +1050,18 @@ watch(
 watch(
     () => props.modo.chiamata,
     () => {
-        if (!props.modo.daVoce) return
-        vogliAscoltare(`chiamata nuova (${props.modo.chiamata})`)
+        if (!props.modo.daVoce || props.modo.bloccata) return
+        const motivo = props.modo.bargeIn
+            ? `barge-in wake-word (${props.modo.chiamata})`
+            : `chiamata nuova (${props.modo.chiamata})`
+        if (props.modo.bargeIn) {
+            // `useTalosMobileDictation.start()` chiama la stessa funzione
+            // `zittisci` prima del riconoscitore. Il ramo esplicito rende il
+            // contratto leggibile e impedisce che un futuro percorso di wake
+            // riapra il microfono lasciando il TTS in coda.
+            annota('barra: barge-in, il TTS viene fermato prima dell ascolto')
+        }
+        vogliAscoltare(motivo)
     },
 )
 
@@ -1273,6 +1288,28 @@ let turnoNatoDiVoce = false
 /** Quanto si aspetta prima di credere che la voce abbia finito. Vedi sotto. */
 const ASSESTAMENTO_MS = 600
 let assestamento: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Il keyguard è un confine, non uno stato grafico. Su una activity `singleTask`
+ * può arrivare mentre questa radice è già montata: inizializzare
+ * `ascoltoVoluto` a false copre soltanto l'avvio a freddo. Appena il nativo ci
+ * consegna `bloccata=1`, si annullano quindi tutte le intenzioni già vive e si
+ * fermano sia il riconoscitore sia il TTS. Il solo percorso che li riapre è il
+ * nuovo intent `bloccato=0` emesso dal callback Android di sblocco riuscito.
+ */
+watch(
+    () => props.modo.bloccata,
+    (bloccata) => {
+        if (!bloccata) return
+        turnoNatoDiVoce = false
+        if (assestamento !== null) { clearTimeout(assestamento); assestamento = null }
+        annullaLaGrazia('dispositivo bloccato')
+        fermaLAscolto(null)
+        void lettura.stop('dispositivo bloccato')
+        annota('barra: keyguard, TTS e riconoscitore spenti')
+    },
+    { immediate: true },
+)
 
 /**
  * ⛔⛔ «HA FINITO» È UNA CONGIUNZIONE, NON UN SEGNALE SOLO.
@@ -1679,7 +1716,7 @@ onMounted(async () => {
      * quando la persona vede la barra e uno che apre quando la persona ha già
      * detto la prima parola. Una parola mangiata è una frase sbagliata.
      */
-    if (props.modo.daVoce) vogliAscoltare('apertura della barra')
+    if (props.modo.daVoce && !props.modo.bloccata) vogliAscoltare('apertura della barra')
     pronta = (async () => {
         await controller.init()
         if (!chat.activeSession.value) await controller.newSession()
