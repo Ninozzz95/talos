@@ -1,6 +1,7 @@
 import type { TalosDeviceIssue } from '@/lib/talosDeviceLog'
 import type { TalosDoctorRow } from '@/lib/diagnostics/doctorSections'
 import type { TalosSendTrace } from '@/lib/diagnostics/sendTrace'
+import type { TalosLocalModelParityReport } from '@/lib/models/localModelParityDiagnostics'
 
 /**
  * Everything the owner needs, in one paste.
@@ -44,6 +45,7 @@ export interface TalosDiagnosticsReport {
     checks: TalosDoctorRow[]
     issues: TalosDeviceIssue[]
     sends: TalosSendTrace[]
+    localModelParity?: TalosLocalModelParityReport
 }
 
 export interface TalosDiagnosticsInput {
@@ -53,6 +55,7 @@ export interface TalosDiagnosticsInput {
     issues: readonly TalosDeviceIssue[]
     traces: readonly TalosSendTrace[]
     diagnosticsEnabled: boolean
+    localModelParity?: TalosLocalModelParityReport | null
 }
 
 /**
@@ -150,5 +153,6 @@ export function buildTalosDiagnosticsReport(
                 tools: round.tools.map((tool) => ({ ...tool })),
             })),
         })),
+        ...(input.localModelParity ? { localModelParity: input.localModelParity } : {}),
     }
 }

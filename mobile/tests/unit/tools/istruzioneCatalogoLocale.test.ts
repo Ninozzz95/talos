@@ -5,6 +5,7 @@ import {
     TALOS_DETTAGLI_STRUMENTO,
     talosIndiceCompatto,
     talosIstruzioneCatalogo,
+    talosIstruzioneRispostaDiretta,
 } from '@/lib/tools/catalogoCompatto'
 
 /**
@@ -40,6 +41,17 @@ const TOOLS = [
     finto('device_torch', 'Turn the torch on or off. Works on any phone.'),
     finto('device_volume', 'Read or set a volume stream.'),
 ] as never[]
+
+describe('LOCAL-PARITY-DIRECT-FORM-12', () => {
+    it('vieta aggiunte alla resa richiesta', () => {
+        const t = talosIstruzioneRispostaDiretta()
+        expect(t).toMatch(/No tools this turn/i)
+        expect(t).toMatch(/only what the user requested/i)
+        expect(t).toMatch(/labels/i)
+        expect(t).toMatch(/quotes/i)
+        expect(t).toMatch(/lead-ins/i)
+    })
+})
 
 describe('⛔ l\'istruzione del catalogo deve far fare il PRIMO PASSO', () => {
     it('è IMPERATIVA: dice prima questo, poi quello — non descrive uno stato', () => {
@@ -117,6 +129,13 @@ describe('⛔ l\'istruzione del catalogo deve far fare il PRIMO PASSO', () => {
         expect(t).toMatch(/language they wrote in/)
         expect(t, 'e vieta il pensiero ad alta voce che si vedeva a schermo')
             .toMatch(/do not explain which tools you considered/)
+    })
+
+    it('LOCAL-PARITY-NO-SPURIOUS-TOOL-09 dice quando NON chiamare strumenti', () => {
+        const t = talosIstruzioneCatalogo(TOOLS)
+        expect(t).toMatch(/Do not call any tool for plain conversation/i)
+        expect(t).toMatch(/exact text/i)
+        expect(t).toMatch(/greetings/i)
     })
 
     it('porta l\'esempio in PROSA, col primo tool vero e senza JSON', () => {

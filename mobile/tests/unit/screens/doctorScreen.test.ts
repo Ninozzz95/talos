@@ -27,6 +27,11 @@ const harness = vi.hoisted(() => ({
          * incompleto nascondeva il difetto vero al posto di trovarlo.
          */
         chat: { state: { persistenceStatus: 'ready', persistenceError: null }, activeSession: { value: null } },
+        selectedProviderModel: { value: null as null | {
+            id: string, provider: 'local', displayName: string,
+            chatCompatibility: 'unknown', supportedParameters: string[],
+            inputModalities: string[], outputModalities: string[],
+        } },
         traces: () => [],
         clearTraces: vi.fn(),
     },
@@ -52,6 +57,10 @@ vi.mock('@/services/appLock', () => ({ biometricUnlockAvailable: () => Promise.r
 // every selector below failing for the wrong reason.
 vi.mock('@capacitor/share', () => ({ Share: { canShare: () => Promise.resolve({ value: true }) } }))
 vi.mock('@/services/clipboard', () => ({ writeTalosClipboardText: vi.fn().mockResolvedValue(undefined) }))
+const parityRunner = vi.hoisted(() => ({ run: vi.fn() }))
+vi.mock('@/services/localModelParityDiagnostics', () => ({
+    runTalosLocalModelParityDiagnostics: parityRunner.run,
+}))
 vi.mock('@/lib/talosDeviceLog', () => ({
     talosDeviceIssues: () => [],
     talosWithTimeout: <T>(work: Promise<T>) => work,
@@ -80,6 +89,23 @@ async function chooseSection(wrapper: Awaited<ReturnType<typeof openDoctor>>, id
 beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    harness.controller.selectedProviderModel.value = null
+    parityRunner.run.mockResolvedValue({
+        schema: 'talos.local-model-parity/1',
+        verdict: 'compatible',
+        model: { name: 'gemma.gguf', bytes: 123, modifiedAt: 7 },
+        appBuild: 'R-test',
+        engineBuild: 'llama-test',
+        toolTransport: 'prompt-json-v1',
+        templateCapabilities: {
+            supportsTools: false, supportsToolCalls: false, supportsSystemRole: true,
+        },
+        fingerprint: '0123456789abcdef',
+        summary: { passed: 6, failed: 0, skipped: 0 },
+        checks: [
+            { id: 'plain_text', status: 'pass', durationMs: 10, code: 'TALOS_LOCAL_PARITY_OK' },
+        ],
+    })
 })
 
 describe('DoctorScreen', () => {
@@ -147,6 +173,36 @@ describe('DoctorScreen', () => {
 
         expect(harness.settings.setShell).toHaveBeenCalledWith({ debug_diagnostics: true })
         expect(harness.controller.clearTraces).not.toHaveBeenCalled()
+        wrapper.unmount()
+    })
+
+    it('prova esplicitamente il locale selezionato e mostra un verdetto compatto', async () => {
+        harness.controller.selectedProviderModel.value = {
+            id: '/models/gemma.gguf', provider: 'local', displayName: 'Gemma',
+            chatCompatibility: 'unknown', supportedParameters: [],
+            inputModalities: ['text'], outputModalities: ['text'],
+        }
+        const wrapper = await openDoctor()
+        await chooseSection(wrapper, 'advanced')
+
+        await wrapper.get('[data-testid="talos-doctor-local-parity-run"]').trigger('click')
+        await flushPromises()
+
+        expect(parityRunner.run).toHaveBeenCalledWith({
+            model: harness.controller.selectedProviderModel.value,
+        })
+        const result = wrapper.get('[data-testid="talos-doctor-local-parity-result"]')
+        expect(result.text()).toMatch(/compatibile|compatible/i)
+        expect(result.text()).toContain('6')
+        expect(result.get('[data-testid="talos-doctor-local-parity-transport"]').text())
+            .toMatch(/prompt JSON v1/i)
+        wrapper.unmount()
+    })
+
+    it('non mostra il banco di parità senza un modello locale selezionato', async () => {
+        const wrapper = await openDoctor()
+        await chooseSection(wrapper, 'advanced')
+        expect(wrapper.find('[data-testid="talos-doctor-local-parity-run"]').exists()).toBe(false)
         wrapper.unmount()
     })
 })

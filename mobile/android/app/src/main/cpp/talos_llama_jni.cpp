@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <atomic>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -381,14 +382,23 @@ std::string jstring_to_utf8(JNIEnv * env, jstring value) {
  * fatto prima descriverebbe un prompt diverso da quello che parte.
  */
 std::string talos_apply_chat_template(common_chat_templates * templates, JNIEnv * env,
-                                      jobjectArray roles, jobjectArray contents,
+                                      jstring messagesJson,
                                       jstring toolsJson, bool pensa) {
-    if (templates == nullptr || roles == nullptr || contents == nullptr) return {};
-    const jsize count = env->GetArrayLength(roles);
-    if (count != env->GetArrayLength(contents) || count <= 0) return {};
+    if (templates == nullptr || messagesJson == nullptr) return {};
 
     common_chat_templates_inputs inputs;
     inputs.add_generation_prompt = true;
+    const std::string messages = jstring_to_utf8(env, messagesJson);
+    try {
+        inputs.messages = common_chat_msgs_parse_oaicompat(
+                nlohmann::ordered_json::parse(messages));
+    } catch (const std::exception &) {
+        // Anche il testo dell'eccezione di un parser può citare il frammento
+        // rifiutato: il codice stabile basta, la conversazione non va in log.
+        TALOS_LOGE("messaggi chat non interpretabili");
+        return {};
+    }
+    if (inputs.messages.empty()) return {};
     const std::string tools = jstring_to_utf8(env, toolsJson);
     if (!tools.empty()) {
         try {
@@ -416,20 +426,36 @@ std::string talos_apply_chat_template(common_chat_templates * templates, JNIEnv 
      * chiesto. Chi lo accende continua ad averlo.
      */
     inputs.enable_thinking = pensa;
-    inputs.messages.reserve((size_t) count);
-    for (jsize index = 0; index < count; index += 1) {
-        auto role = (jstring) env->GetObjectArrayElement(roles, index);
-        auto content = (jstring) env->GetObjectArrayElement(contents, index);
-        common_chat_msg message;
-        message.role = jstring_to_utf8(env, role);
-        message.content = jstring_to_utf8(env, content);
-        inputs.messages.push_back(std::move(message));
-        env->DeleteLocalRef(role);
-        env->DeleteLocalRef(content);
-    }
     try {
         return common_chat_templates_apply(templates, inputs).prompt;
     } catch (const std::exception &) {
+        return {};
+    }
+}
+
+/**
+ * La mappa delle capability del Jinja DEL GGUF, non una classificazione
+ * indovinata dal nome del modello. Il template può contenere IP, istruzioni o
+ * testo dell'utente: qui attraversano il confine soltanto tre booleani stabili.
+ */
+std::string talos_template_capabilities_json(common_chat_templates * templates) {
+    if (templates == nullptr) return {};
+    try {
+        const std::map<std::string, bool> caps = common_chat_templates_get_caps(templates);
+        const auto value_of = [&caps](const char * key) {
+            const auto found = caps.find(key);
+            // Un campo assente non è supporto implicito. L'API upstream
+            // corrente lo restituisce sempre; il ripiego protegge un futuro
+            // cambiamento di forma senza promuovere una sintassi inesistente.
+            return found != caps.end() && found->second;
+        };
+        nlohmann::ordered_json out;
+        out["supportsTools"] = value_of("supports_tools");
+        out["supportsToolCalls"] = value_of("supports_tool_calls");
+        out["supportsSystemRole"] = value_of("supports_system_role");
+        return out.dump();
+    } catch (const std::exception &) {
+        TALOS_LOGE("capability del template non leggibili");
         return {};
     }
 }
@@ -868,7 +894,7 @@ Java_ai_talos_TalosLlamaNative_nativeTokensProduced(JNIEnv *, jclass, jlong hand
  */
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlong handle,
-                                                       jobjectArray roles, jobjectArray contents,
+                                                       jstring messagesJson,
                                                        jstring toolsJson, jboolean pensa) {
     std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
@@ -879,11 +905,19 @@ Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlo
         return env->NewStringUTF("");
     }
 
-    const jsize count = env->GetArrayLength(roles);
-    if (count != env->GetArrayLength(contents) || count <= 0) return env->NewStringUTF("");
-
     common_chat_templates_inputs inputs;
     inputs.add_generation_prompt = true;
+    const std::string messages = jstring_to_utf8(env, messagesJson);
+    try {
+        inputs.messages = common_chat_msgs_parse_oaicompat(
+                nlohmann::ordered_json::parse(messages));
+    } catch (const std::exception &) {
+        // Anche il testo dell'eccezione di un parser può citare il frammento
+        // rifiutato: il codice stabile basta, la conversazione non va in log.
+        TALOS_LOGE("messaggi chat non interpretabili");
+        return env->NewStringUTF("");
+    }
+    if (inputs.messages.empty()) return env->NewStringUTF("");
     /**
      * I TOOL, passati al template invece che descritti a parole nel prompt.
      *
@@ -927,18 +961,6 @@ Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlo
      * chiesto. Chi lo accende continua ad averlo.
      */
     inputs.enable_thinking = pensa == JNI_TRUE;
-    inputs.messages.reserve((size_t) count);
-    for (jsize index = 0; index < count; index += 1) {
-        auto role = (jstring) env->GetObjectArrayElement(roles, index);
-        auto content = (jstring) env->GetObjectArrayElement(contents, index);
-        common_chat_msg message;
-        message.role = jstring_to_utf8(env, role);
-        message.content = jstring_to_utf8(env, content);
-        inputs.messages.push_back(std::move(message));
-        env->DeleteLocalRef(role);
-        env->DeleteLocalRef(content);
-    }
-
     try {
         session->chat = common_chat_templates_apply(session->templates.get(), inputs);
         session->chat_ready = true;
@@ -1411,7 +1433,7 @@ static talos_forma_gguf talos_forma_dai_metadati(const std::string & path) {
  */
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativePlanPrompt(JNIEnv * env, jclass, jstring modelPath,
-                                                jobjectArray roles, jobjectArray contents,
+                                                jstring messagesJson,
                                                 jstring toolsJson, jboolean pensa) {
     const std::string path = jstring_to_utf8(env, modelPath);
     if (path.empty()) return nullptr;
@@ -1432,7 +1454,7 @@ Java_ai_talos_TalosLlamaNative_nativePlanPrompt(JNIEnv * env, jclass, jstring mo
         return nullptr;
     }
     if (templates) {
-        prompt = talos_apply_chat_template(templates.get(), env, roles, contents, toolsJson,
+        prompt = talos_apply_chat_template(templates.get(), env, messagesJson, toolsJson,
                                            pensa == JNI_TRUE);
     }
     if (!prompt.empty()) {
@@ -1452,6 +1474,33 @@ Java_ai_talos_TalosLlamaNative_nativePlanPrompt(JNIEnv * env, jclass, jstring mo
              (long long) forma.kvHeads, (long long) forma.headDim,
              (long long) forma.weightBytes);
     return env->NewStringUTF(json);
+}
+
+/**
+ * Legge le capability del template senza caricare i tensori. È un preflight:
+ * chi usa il risultato decide se passare il contratto OpenAI direttamente al
+ * Jinja o usare il profilo prompt; non costruisce né restituisce un prompt.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeTemplateCapabilities(JNIEnv * env, jclass,
+                                                          jstring modelPath) {
+    const std::string path = jstring_to_utf8(env, modelPath);
+    if (path.empty()) return nullptr;
+
+    llama_model_params model_params = llama_model_default_params();
+    model_params.vocab_only = true;
+    llama_model * model = llama_model_load_from_file(path.c_str(), model_params);
+    if (model == nullptr) return nullptr;
+
+    std::string capabilities;
+    try {
+        common_chat_templates_ptr templates = common_chat_templates_init(model, "");
+        capabilities = talos_template_capabilities_json(templates.get());
+    } catch (const std::exception &) {
+        TALOS_LOGE("capability del template non inizializzabili");
+    }
+    llama_model_free(model);
+    return capabilities.empty() ? nullptr : env->NewStringUTF(capabilities.c_str());
 }
 
 /**
