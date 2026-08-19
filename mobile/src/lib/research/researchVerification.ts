@@ -38,7 +38,34 @@ import type { TalosResearchClaim } from '@/lib/research/researchSynthesis'
  * less than no pass at all, because it looks like one.
  */
 
-export type TalosResearchSupport = 'yes' | 'partial' | 'no' | 'unchecked'
+/**
+ * ⛔⛔ CONTESA-01 — «contesa» non è «parziale», e confonderle mente.
+ *
+ * - **parziale**: la fonte dice una parte di quello che si afferma. Una
+ *   fonte, un verdetto a metà.
+ * - **contesa**: una fonte dice di sì e un'altra dice di no. Due fonti, due
+ *   verdetti opposti, e nessuna metà da nessuna parte.
+ *
+ * Registrarle come la stessa cosa lusinga il rapporto proprio dove è più
+ * fragile: una contesa segnata «parziale» si legge come «quasi sostenuta»,
+ * mentre vuol dire che il mondo non è d'accordo.
+ *
+ * ⛔ Ricerca del 2026-08-20: i conflitti sono di tre tipi distinti — nelle
+ * prove, fra le fonti sulle prove, dentro la stessa fonte — e la pratica
+ * concorde è mostrare **entrambe** le versioni col perché differiscono
+ * (metodo, portata, data, disciplina). Non si media, e non si sceglie in
+ * silenzio la più comoda.
+ */
+export type TalosResearchSupport = 'yes' | 'partial' | 'no' | 'unchecked' | 'contested'
+
+/** Una fonte che dice il CONTRARIO, col suo passaggio: la scheda le affianca. */
+export interface TalosResearchOpposing {
+    readonly url: string
+    readonly title: string
+    /** Il passaggio come sta nella fonte, non come il modello lo ha riscritto. */
+    readonly passage: string
+    readonly span: TalosResearchSpan | null
+}
 
 /** Where the passage sits in the kept text, so the reader can be shown it. */
 export interface TalosResearchSpan {
@@ -65,6 +92,14 @@ export interface TalosResearchChecks {
     /** Who returned the verdict, and when. Null when nobody did — and why is in the reason. */
     readonly judge: string | null
     readonly judgedAt: string | null
+    /**
+     * ⛔ CONTESA-01 — le fonti che dicono il contrario, col loro passaggio.
+     *
+     * Opzionale perché una verifica vecchia non le ha: assente vuol dire
+     * «non guardato», non «non ce ne sono». Le due cose si leggono uguali
+     * solo se non ti importa di sbagliare.
+     */
+    readonly opposing?: readonly TalosResearchOpposing[]
 }
 
 export interface TalosResearchVerifiedClaim {
@@ -355,12 +390,34 @@ export async function talosResearchVerify(
 }
 
 /** The line at the top of the report: how much of this actually held up. */
+/**
+ * ⛔ CONTESA-01 — il verdetto FINALE, dopo aver guardato anche le contrarie.
+ *
+ * Contesa vuol dire **disaccordo**, e il disaccordo esiste solo se il
+ * giudice aveva detto di sì (o in parte) e qualcuno dice di no. Se il
+ * giudice ha già detto «no», una fonte contraria non è un conflitto: è la
+ * stessa cosa detta due volte, e chiamarla contesa toglierebbe forza a un
+ * «no» che invece è solido.
+ *
+ * ⛔ E una NON verificata non diventa contesa: se nessuno ha giudicato non
+ * c'è niente con cui l'altra fonte possa essere in disaccordo.
+ */
+export function talosResearchContestedVerdict(
+    support: TalosResearchSupport,
+    opposing: readonly TalosResearchOpposing[] | undefined,
+): TalosResearchSupport {
+    if (!opposing?.length) return support
+    return support === 'yes' || support === 'partial' ? 'contested' : support
+}
+
 export function talosResearchVerifiedStanding(claims: readonly TalosResearchVerifiedClaim[]): {
     readonly total: number
     readonly supported: number
     readonly partial: number
     readonly unsupported: number
     readonly unchecked: number
+    /** ⛔ CONTESA-01: a parte, mai dentro le parziali né dentro le sostenute. */
+    readonly contested: number
 } {
     const count = (support: TalosResearchSupport) =>
         claims.filter((entry) => entry.checks.claimSupported === support).length
@@ -374,5 +431,9 @@ export function talosResearchVerifiedStanding(claims: readonly TalosResearchVeri
         // and "we checked, and the source does not say it" are different
         // admissions, and merging them would flatter the second.
         unchecked: count('unchecked'),
+        // ⛔ E la contesa sta fuori da tutte e tre: non è una sostenuta con
+        // una riserva, non è una parziale, e non è un'ammissione di non
+        // sapere. È il mondo che non concorda, ed è un esito suo.
+        contested: count('contested'),
     }
 }
