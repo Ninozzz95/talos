@@ -6,6 +6,29 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.13
+
+The voice and local-model usability release, verified on the owner's OnePlus
+Pad running Android 16.
+
+### Fixed
+
+- **Waking TALOS from a locked device no longer puts the assistant above the
+  lock screen.** Android keeps its normal authentication surface in front;
+  TALOS stays silent and hidden until the keyguard has really disappeared.
+  Immediately after unlock, the assistant is handed the microphone and enters
+  listening mode. The cold and warm paths were exercised on the real Pad,
+  including the short visual transition after authentication.
+- **Barge-in now stops TALOS while it is speaking and starts listening again**
+  through the wake-word path, without opening a second recognition session.
+- **Voice permission and accessibility state are represented by their real
+  Android state.** Non-actionable permissions are not presented as toggles in
+  onboarding, while actionable settings remain available in Settings.
+- **Local-model and permission flows no longer leak internal tool labels or
+  crash while reading native permission metadata.** The affected native and
+  web paths have focused regression coverage and were rebuilt into the final
+  APK.
+
 ## v0.1.12
 
 A permission-fix release, verified on the owner's OnePlus Pad.

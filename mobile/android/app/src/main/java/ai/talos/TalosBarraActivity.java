@@ -138,6 +138,14 @@ public class TalosBarraActivity extends MainActivity {
      */
     private boolean aspettoUnRisultato = false;
 
+    /**
+     * La wake-word ha chiesto ad Android di accendere lo schermo e mostrare il
+     * proprio keyguard; la barra resta interamente dietro il blocco e non può
+     * ancora ascoltare. Diventa false solo dopo l'autenticazione riuscita e la
+     * consegna del nuovo intent alla WebView.
+     */
+    private boolean inAttesaDiSblocco = false;
+
     @Override
     public void startActivityForResult(Intent intent, int requestCode, Bundle options) {
         aspettoUnRisultato = true;
@@ -237,7 +245,7 @@ public class TalosBarraActivity extends MainActivity {
         final android.net.Uri deciso = getIntent() == null ? null : getIntent().getData();
 
         /*
-         * ⭐⭐⭐ SOPRA IL BLOCCO — e MUTA, che è la parte che conta.
+         * ⭐⭐⭐ DIETRO IL BLOCCO — invisibile e muta, che è la parte che conta.
          *
          * Owner 2026-08-16: «da telefono bloccato, se dico la parola lo schermo
          * si sveglia, e appena lo sblocco parte subito l'assistente».
@@ -251,28 +259,19 @@ public class TalosBarraActivity extends MainActivity {
          * esattamente ciò che l'owner ha chiesto.
          *
          * ⇒ Qui si accende solo lo schermo. L'ascolto anticipato NON parte
-         * (vedi la condizione qui sotto): sopra il blocco la barra si vede, e
-         * basta.
+         * (vedi la condizione qui sotto) e l'Activity resta dietro il keyguard:
+         * prima del PIN deve vedersi esclusivamente l'interfaccia Android.
          *
-         * ⛔ `setShowWhenLocked` + `setTurnScreenOn` insieme, e non uno solo:
-         * il secondo da solo accende lo schermo su un'activity che il
-         * lockscreen coprirebbe. Da API 27 sono questi due metodi, non più i
-         * flag di finestra, che sono deprecati.
+         * ⛔ `setShowWhenLocked(true)` è vietato: il suo contratto Android è
+         * precisamente mostrare questa Activity sopra il lockscreen. Usiamo
+         * solo `setTurnScreenOn(true)`; il keyguard continua così a coprire
+         * TALOS mentre presenta la normale autenticazione di sistema.
          *
          * ⛔ E `requestDismissKeyguard` NON chiede di saltare il blocco: chiede
          * al sistema di MOSTRARE la richiesta di sblocco. È la persona a
          * sbloccare, con la sua faccia o il suo PIN — noi arriviamo dopo.
          */
-        final boolean daBloccato = deciso != null && "1".equals(deciso.getQueryParameter("bloccato"));
-        if (daBloccato && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true);
-            setTurnScreenOn(true);
-            final android.app.KeyguardManager blocco =
-                    (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
-            if (blocco != null) {
-                blocco.requestDismissKeyguard(this, null);
-            }
-        }
+        final boolean daBloccato = preparaRisveglioDaBlocco(getIntent());
 
         /*
          * ⛔ Sopra il blocco il microfono NON si accende. La condizione era
@@ -336,6 +335,119 @@ public class TalosBarraActivity extends MainActivity {
          */
         rendiTrasparenteLaWebView("onCreate");
         trattieniIlPrimoFrame();
+    }
+
+    /**
+     * Un solo gate per il risveglio, sia a freddo (`onCreate`) sia quando la
+     * `singleTask` esiste già (`onNewIntent`).
+     *
+     * Il caso caldo non è teorico: sul Pad il 2026-08-19 il keyguard era
+     * visibile ma il riconoscitore aperto prima del blocco continuava a
+     * produrre segmenti, perché questa logica viveva soltanto in `onCreate`.
+     * Qui la prima azione è quindi fisica: si chiude il riconoscitore nativo;
+     * il lato web riceverà subito dopo lo stesso stato e chiuderà anche timer e
+     * TTS. Soltanto il callback Android di sblocco può riaprire l'orecchio.
+     */
+    private boolean preparaRisveglioDaBlocco(Intent intent) {
+        final android.net.Uri indirizzo = intent == null ? null : intent.getData();
+        final boolean daBloccato = indirizzo != null
+                && "1".equals(indirizzo.getQueryParameter("bloccato"));
+        if (!daBloccato) return false;
+
+        inAttesaDiSblocco = true;
+        ai.talos.agent.TalosOrecchioAnticipato.INSTANCE.spegni();
+        Log.i(SEGNO, "wake: TALOS nascosto dietro keyguard, riconoscitore spento");
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(false);
+            setTurnScreenOn(true);
+        } else {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+        }
+
+        final android.app.KeyguardManager blocco =
+                (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+        if (blocco == null) {
+            Log.w(SEGNO, "keyguard non disponibile: la barra resta muta");
+            return true;
+        }
+        if (!blocco.isDeviceLocked() && !blocco.isKeyguardLocked()) {
+            // L'intent può arrivare un istante dopo uno sblocco già concluso
+            // e dopo che anche la transizione visuale è sparita.
+            // Si posta sul main loop: in `onCreate` deve prima finire il
+            // contratto di BridgeActivity.
+            new android.os.Handler(android.os.Looper.getMainLooper())
+                .post(this::avviaAscoltoDopoSblocco);
+            return true;
+        }
+
+        blocco.requestDismissKeyguard(this,
+            new android.app.KeyguardManager.KeyguardDismissCallback() {
+                @Override
+                public void onDismissSucceeded() {
+                    runOnUiThread(() -> avviaAscoltoDopoSblocco());
+                }
+
+                @Override
+                public void onDismissCancelled() {
+                    Log.i(SEGNO, "sblocco annullato: la barra resta muta");
+                }
+
+                @Override
+                public void onDismissError() {
+                    Log.w(SEGNO, "sblocco non riuscito: la barra resta muta");
+                }
+            });
+        return true;
+    }
+
+    private boolean dispositivoBloccato() {
+        final android.app.KeyguardManager blocco =
+                (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+        return blocco != null && blocco.isDeviceLocked();
+    }
+
+    private boolean schermoSpentoOBloccato() {
+        final android.os.PowerManager alimentazione =
+                (android.os.PowerManager) getSystemService(POWER_SERVICE);
+        return dispositivoBloccato() || (alimentazione != null && !alimentazione.isInteractive());
+    }
+
+    /**
+     * Consegnato dal callback Android solo dopo che la persona ha sbloccato il
+     * dispositivo. Prima di questo punto nessun riconoscitore viene acceso e
+     * nessuna domanda può partire sopra il keyguard.
+     */
+    private void avviaAscoltoDopoSblocco() {
+        if (!inAttesaDiSblocco || isFinishing()) return;
+        final android.app.KeyguardManager blocco =
+                (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+        if (blocco != null && (blocco.isDeviceLocked() || blocco.isKeyguardLocked())) {
+            // Alcuni lockscreen consegnano il callback quando l'utente è già
+            // autenticato ma prima della rimozione visuale del keyguard.
+            // Riprova sul main thread senza aprire mai il microfono durante
+            // quella transizione.
+            getWindow().getDecorView().postDelayed(this::avviaAscoltoDopoSblocco, 120L);
+            return;
+        }
+        inAttesaDiSblocco = false;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(false);
+            setTurnScreenOn(false);
+        } else {
+            getWindow().clearFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                    | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            );
+        }
+        ai.talos.agent.TalosOrecchioAnticipato.accendi(this);
+        final String apertura = String.valueOf(android.os.SystemClock.uptimeMillis());
+        final Intent intent = new Intent(this, TalosBarraActivity.class);
+        intent.setData(android.net.Uri.parse(
+            "talos://barra?voce=1&nodi=0&immagine=0&bloccato=0&apertura=" + apertura
+        ));
+        Log.i(SEGNO, "sblocco riuscito: consegno l'assistente e apro l'ascolto");
+        onNewIntent(intent);
     }
 
     /**
@@ -456,6 +568,10 @@ public class TalosBarraActivity extends MainActivity {
     public void onPause() {
         super.onPause();
         viva = false;
+        if (schermoSpentoOBloccato()) {
+            ai.talos.agent.TalosOrecchioAnticipato.INSTANCE.spegni();
+            Log.i(SEGNO, "schermo spento o keyguard: il riconoscitore viene chiuso subito");
+        }
         Log.i(SEGNO, "davanti=false (onPause) personaAndataVia=" + personaAndataVia);
         /*
          * ⛔ Si guarda CHI ha chiuso, non SE si sta chiudendo: misurato, la barra
@@ -602,6 +718,7 @@ public class TalosBarraActivity extends MainActivity {
     protected void onNewIntent(Intent intent) {
         setIntent(intent);
         timbraLApertura();
+        preparaRisveglioDaBlocco(getIntent());
         super.onNewIntent(getIntent());
     }
 
@@ -652,6 +769,10 @@ public class TalosBarraActivity extends MainActivity {
     @Override
     protected void onUserLeaveHint() {
         super.onUserLeaveHint();
+        if (inAttesaDiSblocco || dispositivoBloccato()) {
+            android.util.Log.i("TalosBarra", "sblocco in corso: onUserLeaveHint non chiude la barra");
+            return;
+        }
         // ⛔ Prima di `finish()`: è questo flag a dire a `onPause` che la
         // conversazione è finita per volontà della persona, e che quindi non
         // deve restare nessun pallino.

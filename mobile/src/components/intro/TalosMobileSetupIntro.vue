@@ -764,7 +764,7 @@ function onKeydown(event: KeyboardEvent): void {
                             {{ t('onboarding.permissionsAllBody') }}
                         </p>
                         <div class="mt-4" data-testid="talos-setup-all-permissions">
-                            <TalosMobileSettingsPrivacyPanel />
+                            <TalosMobileSettingsPrivacyPanel onboarding />
                         </div>
                     </div>
                 </template>

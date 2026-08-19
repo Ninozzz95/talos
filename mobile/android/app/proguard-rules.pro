@@ -68,3 +68,8 @@
 # corregge.
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# ONNX Runtime's Android JNI bridge reflects over these Java binding classes
+# when converting the first native tensor result. The official Android guide
+# requires this keep rule for R8-minimized applications.
+-keep class ai.onnxruntime.** { *; }

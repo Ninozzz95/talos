@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import {
     talosBackgroundExtraSteps,
     talosPermissionAction,
+    talosPermissionStateTranslationKey,
+    talosOnboardingPermissionRows,
     visibleTalosPermissionRows,
     type TalosPermissionRow,
     type TalosPermissionState,
@@ -31,11 +33,16 @@ import {
  * permission exists, the boundary of what TALOS does with it, and a way out to
  * the setting that governs it once asking is no longer possible.
  */
+const props = withDefaults(defineProps<{ onboarding?: boolean }>(), {
+    onboarding: false,
+})
+
 const device = ref<TalosDeviceState>({
     microphone: 'prompt',
     notifications: 'prompt',
     notificationsRuntime: false,
     biometricHardware: false,
+    accessibilityEnabled: false,
     // Falso finché non l'abbiamo chiesto al sistema: la riga dirà «da
     // sistemare» per un istante e poi la verità, che è meglio del contrario.
     batteryExempt: false,
@@ -48,15 +55,19 @@ const device = ref<TalosDeviceState>({
 const { t } = useTalosI18n()
 const busy = ref<string | null>(null)
 
-const rows = computed(() => visibleTalosPermissionRows({
-    // Below Android 13 there is no notification permission to show at all.
-    notifications: device.value.notificationsRuntime,
-    biometricHardware: device.value.biometricHardware,
-}))
+const rows = computed(() => {
+    const visible = visibleTalosPermissionRows({
+        // Below Android 13 there is no notification permission to show at all.
+        notifications: device.value.notificationsRuntime,
+        biometricHardware: device.value.biometricHardware,
+    })
+    return props.onboarding ? talosOnboardingPermissionRows(visible) : visible
+})
 
 function stateOf(row: TalosPermissionRow): TalosPermissionState | null {
     if (row.id === 'microphone') return device.value.microphone
     if (row.id === 'notifications') return device.value.notifications
+    if (row.id === 'accessibility') return device.value.accessibilityEnabled ? 'granted' : 'not-enabled'
     /*
      * ⭐⭐ LE QUATTRO RIGHE CHE NON DICEVANO SE ERANO CONCESSE — 2026-08-14.
      *
@@ -134,8 +145,7 @@ function etichettaDellaRiga(row: TalosPermissionRow): string | null {
     return stato ? permissionLabel(stato) : etichettaSenzaStato(row)
 }
 function permissionLabel(state: TalosPermissionState): string {
-    const key = state === 'prompt-with-rationale' ? 'rationale' : state
-    return t(`privacyPermissions.states.${key}`)
+    return t(`privacyPermissions.states.${talosPermissionStateTranslationKey(state)}`)
 }
 
 /**
@@ -158,6 +168,11 @@ async function act(row: TalosPermissionRow): Promise<void> {
     if (state === null) return
     busy.value = row.id
     try {
+        if (row.id === 'accessibility') {
+            const { talosApriImpostazioniDaScheda } = await import('@/lib/tools/schedaComandi')
+            await talosApriImpostazioniDaScheda('android.settings.ACCESSIBILITY_SETTINGS')
+            return
+        }
         if (talosPermissionAction(state) === 'settings') {
             await openTalosAppSettings(row.id === 'notifications' ? 'notifications' : 'app')
             return
@@ -243,6 +258,15 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
                     @click="act(row)"
                 >{{ t('privacyPermissions.openSystemSettings') }}</Button>
             </template>
+            <Button
+                v-else-if="stateOf(row) === 'not-enabled'"
+                type="button"
+                variant="outline"
+                data-testid="talos-permission-accessibility-settings"
+                class="mt-2 min-h-touch w-full rounded-xl text-sm"
+                :disabled="busy === row.id"
+                @click="act(row)"
+            >{{ t('privacyPermissions.openAccessibilitySettings') }}</Button>
             <Button
                 v-else-if="stateOf(row) && talosPermissionAction(stateOf(row)!) === 'request'"
                 type="button"
