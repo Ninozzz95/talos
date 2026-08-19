@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildTalosDiagnosticsReport } from '@/lib/diagnostics/diagnosticsReport'
+import { buildTalosLocalModelParityReport } from '@/lib/models/localModelParityDiagnostics'
 import type { TalosSendTrace } from '@/lib/diagnostics/sendTrace'
 
 /**
@@ -150,5 +151,29 @@ describe('the one thing the owner copies and pastes back', () => {
         const report = buildTalosDiagnosticsReport({ ...INPUT, diagnosticsEnabled: false, traces: [] })
         expect(report.timingsRecorded).toBe(false)
         expect(report.sends).toEqual([])
+    })
+
+    it('porta il verdetto del GGUF senza esportare il percorso del dispositivo', () => {
+        const localModelParity = buildTalosLocalModelParityReport({
+            modelPath: '/storage/emulated/0/Android/data/ai.talos/files/models/gemma.gguf',
+            modelBytes: 123,
+            modelModifiedAt: 7,
+            appBuild: 'R-test',
+            engineBuild: 'llama-test',
+            toolTransport: 'prompt-json-v1',
+            templateCapabilities: {
+                supportsTools: false, supportsToolCalls: false, supportsSystemRole: true,
+            },
+            checks: [{
+                id: 'plain_text', status: 'pass', durationMs: 10,
+                code: 'TALOS_LOCAL_PARITY_OK',
+            }],
+        })
+        const report = buildTalosDiagnosticsReport({ ...INPUT, localModelParity })
+
+        expect(report.localModelParity?.model.name).toBe('gemma.gguf')
+        expect(report.localModelParity?.toolTransport).toBe('prompt-json-v1')
+        expect(report.localModelParity?.templateCapabilities?.supportsTools).toBe(false)
+        expect(JSON.stringify(report.localModelParity)).not.toContain('/storage/emulated')
     })
 })

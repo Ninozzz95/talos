@@ -49,6 +49,39 @@ describe('agent loop', () => {
         expect(outcome.executed).toEqual([{ call: call('c1'), ok: false }])
     })
 
+    it('LOCAL-PARITY-NO-SPURIOUS-TOOL-09 does not execute a catalog-only call', async () => {
+        const hidden = call('m1', 'memory_search', '{"query":"TALOS_TESTO_101"}')
+        const complete = vi.fn()
+            .mockResolvedValueOnce({ text: '', toolCalls: [hidden] })
+            .mockResolvedValueOnce({ text: 'TALOS_TESTO_101' })
+        const execute = vi.fn(async () => ({ content: 'should not be read', ok: true }))
+        const preflight = vi.fn(async () => ({
+            status: 'terminal' as const,
+            outcome: {
+                ok: false,
+                senzaEffetto: true,
+                content: 'The tool was not run because its schema was not requested.',
+            },
+        }))
+
+        const outcome = await runTalosAgentLoop([{ role: 'user', content: 'reply exactly' }], {
+            complete,
+            preflight,
+            execute,
+        })
+
+        expect(preflight).toHaveBeenCalledWith(hidden)
+        expect(execute).not.toHaveBeenCalled()
+        expect(complete.mock.calls[1]![0]).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                role: 'tool',
+                toolCallId: 'm1',
+                content: expect.stringContaining('schema was not requested'),
+            }),
+        ]))
+        expect(outcome.text).toBe('TALOS_TESTO_101')
+    })
+
     it('chains rounds while the model keeps asking', async () => {
         const complete = vi.fn()
             .mockResolvedValueOnce({ text: '', toolCalls: [call('c1')] })

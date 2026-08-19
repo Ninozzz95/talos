@@ -97,6 +97,81 @@ export function talosDimenticaSvelati(sessione: string | null): void {
 export const TALOS_DETTAGLI_STRUMENTO = 'tool_details'
 
 /**
+ * The compact index is descriptive, not an execution grant. A model may name
+ * every capability in the index, but the exact schema must have been requested
+ * before that capability can cross the executor boundary. `tool_details` is the
+ * one read-only exception because it is the operation that reveals schemas.
+ */
+export function talosToolDelCatalogoEseguibile(
+    nome: string,
+    svelati: ReadonlySet<string>,
+): boolean {
+    return nome === TALOS_DETTAGLI_STRUMENTO || svelati.has(nome)
+}
+
+/**
+ * A turn that explicitly asks for text only must not receive a function list.
+ *
+ * This is deliberately not a generic intent classifier. It recognizes only a
+ * closed user contract (an exact/direct answer, or an explicit request not to
+ * use tools). An ordinary question remains false, as does an operational ask
+ * that merely says to answer after the action.
+ */
+export function talosRichiestaDirettaSenzaTool(testo: string): boolean {
+    const pulito = testo.trim()
+    if (!pulito) return false
+    if (/\b(?:senza\s+(?:usare\s+)?(?:alcun[oi]?\s+)?strument[io]|without\s+(?:using\s+)?(?:any\s+)?tools?)\b/i.test(pulito)) {
+        return true
+    }
+    const compito = pulito.replace(/^(?:adesso|ora|now|then)\s+/i, '')
+    if (/^(?:rispondi|ripeti)\s+esattamente\s+(?:con\s+)?/i.test(compito)) return true
+    if (/^(?:answer|reply|respond|repeat)\s+exactly\s+(?:with\s+)?/i.test(compito)) return true
+    if (/^(?:rispondi|ripeti)\s+solo\s+(?!(?:dopo|quando|se)\b)/i.test(compito)) return true
+    return /^(?:answer|reply|respond|repeat)\s+only\s+(?!(?:after|when|if)\b)/i.test(compito)
+}
+
+/** Kept with the direct-turn gate so this text stays out of the boot chunk. */
+export function talosIstruzioneRispostaDiretta(): string {
+    return '\nNo tools this turn. Output only what the user requested. Do not add '
+        + 'labels, quotes, explanations, or lead-ins.'
+}
+
+/**
+ * Executes only closed text transformations whose answer is already present
+ * in the conversation. Everything else remains model work.
+ */
+export function talosRispostaDirettaDeterministica(
+    richiesta: string,
+    rispostaPrecedente: string | null,
+): string | null {
+    const letterale = /^(?:rispondi|ripeti)\s+esattamente\s+con\s+(.+?)\s+e\s+basta[.!]?\s*$/i
+        .exec(richiesta.trim())
+    if (letterale?.[1]) return letterale[1]
+
+    const ultimaIt = /^(?:(?:adesso|ora)\s+)?ripeti\s+solo\s+l(?:['’]\s*|\s+)ultima\s+parola\s+della\s+tua\s+risposta\s+precedente[.!]?\s*$/i
+    const ultimaEn = /^(?:now\s+)?repeat\s+only\s+the\s+last\s+word\s+(?:of|from)\s+your\s+previous\s+(?:answer|response)[.!]?\s*$/i
+    if ((!ultimaIt.test(richiesta.trim()) && !ultimaEn.test(richiesta.trim()))
+        || !rispostaPrecedente) return null
+    const parole = rispostaPrecedente.match(/[\p{L}\p{N}_-]+(?:['’][\p{L}\p{N}_-]+)*/gu)
+    return parole?.[parole.length - 1] ?? null
+}
+
+export function talosTurnoDiretto(
+    turni: ReadonlyArray<{ role: string, content: string }>,
+): { senzaTool: boolean, istruzione: string, risposta: string | null } {
+    const userIndex = turni.map((turno) => turno.role).lastIndexOf('user')
+    const richiesta = turni[userIndex]?.content ?? ''
+    const precedente = turni.slice(0, userIndex).reverse()
+        .find((turno) => turno.role === 'assistant')?.content ?? null
+    const senzaTool = talosRichiestaDirettaSenzaTool(richiesta)
+    return {
+        senzaTool,
+        istruzione: senzaTool ? talosIstruzioneRispostaDiretta() : '',
+        risposta: talosRispostaDirettaDeterministica(richiesta, precedente),
+    }
+}
+
+/**
  * Una riga per strumento: nome e **prima frase** della descrizione.
  *
  * ⛔ La prima frase e non un riassunto nostro: la descrizione è già scritta per
@@ -174,6 +249,9 @@ export function talosIstruzioneCatalogo(
         '',
         'The tools listed below EXIST on this device and work. You do not have',
         'their input schemas yet, so you cannot call them directly.',
+        'Do not call any tool for plain conversation, exact text, greetings, or',
+        'explanations. Use a tool only when the user explicitly asks you to',
+        'retrieve data, change something, or perform an action.',
         '',
         `To use any of them: FIRST call ${TALOS_DETTAGLI_STRUMENTO}, naming every`,
         'tool you intend to use in this message. THEN call those tools.',
