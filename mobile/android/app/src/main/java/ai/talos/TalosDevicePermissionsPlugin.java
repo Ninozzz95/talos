@@ -2,6 +2,8 @@ package ai.talos;
 
 import android.annotation.SuppressLint;
 import android.Manifest;
+import android.accessibilityservice.AccessibilityServiceInfo;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -9,6 +11,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.view.accessibility.AccessibilityManager;
 
 import androidx.core.app.NotificationManagerCompat;
 
@@ -20,6 +23,8 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+
+import ai.talos.agent.TalosOcchio;
 
 /**
  * What the device has actually granted, and the one door out to system settings.
@@ -143,6 +148,7 @@ public class TalosDevicePermissionsPlugin extends Plugin {
             result.put("notificationsRuntime", true);
         }
         result.put("microphone", micState());
+        result.put("accessibilityEnabled", isTalosAccessibilityEnabled());
         /*
          * ⭐ Lo stato dei quattro, chiesto al sistema a ogni lettura.
          *
@@ -409,5 +415,18 @@ public class TalosDevicePermissionsPlugin extends Plugin {
              */
             return "unknown";
         }
+    }
+
+    /** Android's live answer: enabled services, not a remembered preference. */
+    private boolean isTalosAccessibilityEnabled() {
+        AccessibilityManager manager = (AccessibilityManager) getContext()
+            .getSystemService(Context.ACCESSIBILITY_SERVICE);
+        if (manager == null) return false;
+        String expected = new ComponentName(getContext(), TalosOcchio.class).flattenToString();
+        for (AccessibilityServiceInfo service : manager.getEnabledAccessibilityServiceList(
+            AccessibilityServiceInfo.FEEDBACK_ALL_MASK)) {
+            if (expected.equals(service.getId())) return true;
+        }
+        return false;
     }
 }

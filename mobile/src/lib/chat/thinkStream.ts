@@ -1,3 +1,5 @@
+import { talosIsPlainToolDetailsLine } from '@/lib/chat/localToolCalls'
+
 /**
  * Separa il ragionamento dal contenuto MENTRE arriva, non alla fine.
  *
@@ -129,6 +131,41 @@ function codaAmbigua(testo: string, marcatore: string): number {
     return 0
 }
 
+/** Hold only a possible protocol line suffix, so ordinary prose stays live. */
+function creaFiltroRigaToolDetails(): (delta: string, chiudendo: boolean) => string {
+    let attesa = ''
+    return (delta: string, chiudendo: boolean): string => {
+        let input = attesa + delta
+        attesa = ''
+        let output = ''
+        for (;;) {
+            const nuovaRiga = input.indexOf('\n')
+            if (nuovaRiga >= 0) {
+                const riga = input.slice(0, nuovaRiga)
+                if (!talosIsPlainToolDetailsLine(riga)) output += `${riga}\n`
+                input = input.slice(nuovaRiga + 1)
+                continue
+            }
+            if (!input) break
+            const minuscolo = input.trimStart().toLowerCase()
+            const possibile = 'tool_details'.startsWith(minuscolo)
+                || minuscolo.startsWith('tool_details:')
+            if (!chiudendo && possibile) {
+                attesa = input
+                break
+            }
+            if (chiudendo && talosIsPlainToolDetailsLine(input)) break
+            output += input
+            break
+        }
+        if (chiudendo) {
+            if (attesa && !talosIsPlainToolDetailsLine(attesa)) output += attesa
+            attesa = ''
+        }
+        return output
+    }
+}
+
 export function talosCreateThinkSplitter(): TalosThinkSplitter {
     /**
      * Tre stati e non un booleano, da quando i marcatori sono due paia:
@@ -138,6 +175,8 @@ export function talosCreateThinkSplitter(): TalosThinkSplitter {
      */
     let stato: 'testo' | 'ragionamento' | 'chiamata' = 'testo'
     let sospeso = ''
+    const filtraTesto = creaFiltroRigaToolDetails()
+    const filtraRagionamento = creaFiltroRigaToolDetails()
     /** Quale chiusura sta aspettando lo stato «chiamata»: le aperture sono due. */
     let chiusuraAttesa: string = TOOL_CHIUSURA
 
@@ -215,12 +254,19 @@ export function talosCreateThinkSplitter(): TalosThinkSplitter {
     return {
         push(delta: string): TalosThinkSlice {
             sospeso += delta
-            return consuma(false)
+            const fetta = consuma(false)
+            return {
+                text: filtraTesto(fetta.text, false),
+                reasoning: filtraRagionamento(fetta.reasoning, false),
+            }
         },
         flush(): TalosThinkSlice {
             const esito = consuma(true)
             sospeso = ''
-            return esito
+            return {
+                text: filtraTesto(esito.text, true),
+                reasoning: filtraRagionamento(esito.reasoning, true),
+            }
         },
     }
 }

@@ -46,7 +46,6 @@ describe('i preset per chiamare TALOS', () => {
             accensione: 'manca-ruolo',
             gesto: 'manca-ruolo',
             home: 'manca-ruolo',
-            volume: 'da-mettere',
         })
     })
 
@@ -107,13 +106,13 @@ describe('i preset per chiamare TALOS', () => {
          * il ruolo lì non si può avere. Se questo preset lo pretendesse,
          * l'unica via rimasta su quel telefono risulterebbe spenta.
          */
-        expect(stato(false, COL_VOLUME).volume).toBe('pronto')
-        expect(stato(true, COL_VOLUME).volume).toBe('pronto')
+        expect(stato(false, COL_VOLUME).volume).toBeUndefined()
+        expect(stato(true, COL_VOLUME).volume).toBeUndefined()
     })
 
     it('⛔ il ruolo NON accende la scorciatoia, e la scorciatoia non dà il ruolo', () => {
         // Il verso contrario: avere il ruolo non mette TALOS nella scorciatoia.
-        expect(stato(true, NIENTE).volume).toBe('da-mettere')
+        expect(stato(true, NIENTE).volume).toBeUndefined()
         expect(stato(false, COL_VOLUME).accensione).toBe('manca-ruolo')
     })
 
@@ -125,7 +124,7 @@ describe('i preset per chiamare TALOS', () => {
         }
         const perId = Object.fromEntries(talosPreset(false, NIENTE).map((v) => [v.id, v.schermata]))
         expect(perId.accensione).toBe('android.settings.VOICE_INPUT_SETTINGS')
-        expect(perId.volume).toBe('android.settings.ACCESSIBILITY_SETTINGS')
+        expect(perId.volume).toBeUndefined()
     })
 
     it('⛔ la scheda AVVISA che la prima volta il telefono chiede conferma', () => {
@@ -166,7 +165,7 @@ describe('i preset per chiamare TALOS', () => {
          * «provato».
          */
         const ids = talosPreset(true, COL_VOLUME).map((v) => v.id)
-        expect(ids).toEqual(['accensione', 'gesto', 'home', 'volume'])
+        expect(ids).toEqual(['accensione', 'gesto', 'home'])
     })
 
     /*

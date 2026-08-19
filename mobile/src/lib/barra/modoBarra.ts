@@ -52,6 +52,10 @@ export interface TalosModoBarra {
      * sentire — e' la stessa regola gia' misurata per il composer.
      */
     readonly daVoce: boolean
+    /** La barra è stata aperta sopra il keyguard: prima dello sblocco è muta. */
+    readonly bloccata: boolean
+    /** La wake-word ha interrotto una lettura TTS già in corso. */
+    readonly bargeIn: boolean
     readonly contesto: TalosContestoBarra
     /**
      * ⭐⭐ L'IDENTITÀ DELL'APERTURA — «questa chiamata è una sola».
@@ -107,6 +111,8 @@ export function talosModoBarraDa(indirizzo: string | null | undefined): TalosMod
     const parametri = letto.searchParams
     return {
         daVoce: parametri.get('voce') === '1',
+        bloccata: parametri.get('bloccato') === '1',
+        bargeIn: parametri.get('barge') === '1',
         contesto: {
             nodi: numeroNonNegativo(parametri.get('nodi')),
             immagine: parametri.get('immagine') === '1',

@@ -50,7 +50,10 @@ describe('le chiamate di un modello locale', () => {
  * OTTO secondi: la divergenza fra i due motori era esattamente questa.
  */
 describe('la chiamata che il modello locale scrive a parole', () => {
-    const OFFERTI = new Set(['device_torch', 'library_search'])
+    const OFFERTI = new Set([
+        'device_torch', 'library_search', 'tool_details',
+        'library_list', 'notes_list', 'tasks_list',
+    ])
 
     it('promuove l oggetto nudo, ESATTAMENTE quello visto sul Pad', () => {
         const esito = talosRecuperaChiamateNude(
@@ -139,5 +142,28 @@ describe('la chiamata che il modello locale scrive a parole', () => {
         )
         expect(esito.calls.map((call) => call.name))
             .toEqual(['device_torch', 'library_search'])
+    })
+
+    it('promuove la riga tool_details che i modelli piccoli emettono senza JSON', () => {
+        const esito = talosRecuperaChiamateNude(
+            'tool_details: library_list, notes_list, tasks_list',
+            OFFERTI,
+        )
+        expect(esito.calls).toEqual([
+            {
+                name: 'tool_details',
+                arguments: '{"names":["library_list","notes_list","tasks_list"]}',
+            },
+        ])
+        expect(esito.text).toBe('')
+    })
+
+    it('non promuove la riga se contiene uno strumento non offerto', () => {
+        const esito = talosRecuperaChiamateNude(
+            'tool_details: library_list, secret_tool',
+            OFFERTI,
+        )
+        expect(esito.calls).toEqual([])
+        expect(esito.text).toContain('tool_details')
     })
 })

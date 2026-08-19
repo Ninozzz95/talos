@@ -5,6 +5,8 @@ import {
     talosResolveMakerFamily,
     talosPermissionLabel,
     talosPermissionAction,
+    talosPermissionStateTranslationKey,
+    talosOnboardingPermissionRows,
     visibleTalosPermissionRows,
 } from '@/lib/permissions/permissionRows'
 
@@ -86,12 +88,18 @@ describe('what each state is called', () => {
         expect(talosPermissionLabel('granted')).toBe('Allowed')
         expect(talosPermissionLabel('prompt')).toBe('Not requested')
         expect(talosPermissionLabel('prompt-with-rationale')).toBe('Not allowed')
+        expect(talosPermissionLabel('not-enabled')).toBe('Not enabled')
     })
 
     it('blames Android for a block Android imposed', () => {
         // Lifted from Firefox: the user did this in system settings, and saying
         // so tells them where to undo it. "Denied" would read as TALOS refusing.
         expect(talosPermissionLabel('denied')).toBe('Blocked by Android')
+    })
+
+    it('maps the special accessibility state to the locale key that exists', () => {
+        expect(talosPermissionStateTranslationKey('not-enabled')).toBe('notEnabled')
+        expect(talosPermissionStateTranslationKey('prompt-with-rationale')).toBe('rationale')
     })
 })
 
@@ -105,6 +113,7 @@ describe('what the button does', () => {
         // Past a permanent denial the system dialog never appears again: a
         // button that "asks" would do nothing at all, silently.
         expect(talosPermissionAction('denied')).toBe('settings')
+        expect(talosPermissionAction('not-enabled')).toBe('settings')
     })
 
     it('offers nothing to press when it is already allowed', () => {
@@ -162,7 +171,7 @@ describe('which rows a given device sees', () => {
         expect(rows.map((row) => row.id)).toEqual([
             'microphone', 'notifications', 'contacts', 'calendar', 'mailCount', 'location', 'camera',
             'appLock', 'files', 'background', 'network',
-            'notificationAccess', 'bridge', 'deviceControl', 'localModel',
+            'accessibility', 'notificationAccess', 'bridge', 'deviceControl', 'localModel',
         ])
     })
 
@@ -185,6 +194,7 @@ describe('which rows a given device sees', () => {
 
         expect(speciali).toContain('notificationAccess')
         expect(speciali).toContain('bridge')
+        expect(speciali).toContain('accessibility')
         /*
          * ⛔ LA FINESTRA SOPRA LE ALTRE APP NON C'E' PIU', ed e' rimasta qui
          * mezza giornata: aggiunta il 2026-08-15 per il pallino del rientro,
@@ -231,6 +241,22 @@ describe('which rows a given device sees', () => {
             expect(row.purpose, `${row.id} usa una formula generica`)
                 .not.toMatch(/required for full functionality|necessario per il funzionamento/i)
         }
+    })
+})
+
+describe('what the onboarding is allowed to call a permission', () => {
+    it('keeps Android-grantable access and excludes defaults and app capabilities', () => {
+        const rows = talosOnboardingPermissionRows(TALOS_PERMISSION_ROWS)
+        expect(rows.map((row) => row.id)).toEqual([
+            'microphone', 'notifications', 'contacts', 'calendar', 'mailCount', 'location', 'camera',
+            'accessibility', 'notificationAccess',
+        ])
+        expect(rows.map((row) => row.id)).not.toContain('network')
+        expect(rows.map((row) => row.id)).not.toContain('appLock')
+        expect(rows.map((row) => row.id)).not.toContain('files')
+        expect(rows.map((row) => row.id)).not.toContain('bridge')
+        expect(rows.map((row) => row.id)).not.toContain('deviceControl')
+        expect(rows.map((row) => row.id)).not.toContain('localModel')
     })
 })
 

@@ -562,15 +562,17 @@ class TalosParola : Service() {
      * blocco, e sono due casi diversi che vogliono la stessa risposta.
      *
      * `isInteractive` dice se lo schermo è acceso — non se è sbloccato.
-     * `isKeyguardLocked` dice se il blocco è alzato, anche a schermo acceso.
-     * Guardarne una sola lascia scoperto metà del caso: il telefono sul tavolo
-     * che si è appena acceso per una notifica è interattivo E bloccato.
+     * `isDeviceLocked` dice se le app sono ancora inaccessibili e serve
+     * autenticazione; `isKeyguardLocked` invece dice solo che il keyguard è
+     * visibile, anche quando è banalmente dismissibile o già trusted.
+     * Guardare lo stato del dispositivo evita di confondere un keyguard
+     * occluso dalla barra con un dispositivo realmente protetto.
      */
     private fun schermoSpentoOBloccato(): Boolean {
         val energia = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
         val blocco = getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
         val spento = energia?.isInteractive == false
-        val chiuso = blocco?.isKeyguardLocked == true
+        val chiuso = blocco?.isDeviceLocked == true
         return spento || chiuso
     }
 
@@ -686,7 +688,10 @@ class TalosParola : Service() {
                 startActivity(
                     Intent(
                         Intent.ACTION_VIEW,
-                        android.net.Uri.parse("talos://barra?voce=1&nodi=0&immagine=0"),
+                        // La barra è già davanti: il wake-word è un vero
+                        // barge-in, non una seconda apertura generica. Il lato
+                        // web fermerà il TTS nativo prima di armare la dettatura.
+                        android.net.Uri.parse("talos://barra?voce=1&nodi=0&immagine=0&barge=1"),
                         this,
                         ai.talos.TalosBarraActivity::class.java,
                     ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
