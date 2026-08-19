@@ -166,4 +166,42 @@ describe('la chiamata che il modello locale scrive a parole', () => {
         expect(esito.calls).toEqual([])
         expect(esito.text).toContain('tool_details')
     })
+
+    /**
+     * LOCAL-PARITY-TOOL-PROTOCOL-01 — trascrizione fedele di `melo.jpg`.
+     *
+     * Gemma 3 4B non ha usato JSON o il wrapper del suo template: ha scritto
+     * un piccolo pseudo-YAML preceduto da `TOOL_CODE`. Prima di questa prova il
+     * blocco finiva nella bolla e nel database come se fosse una risposta.
+     */
+    it('recupera il blocco TOOL_CODE visto con Gemma 3 nello screenshot melo', () => {
+        const esito = talosRecuperaChiamateNude(
+            'Okay, let\'s start.\n\nTOOL_CODE\n'
+                + 'tool: memory_search\n'
+                + 'args:\n'
+                + 'query: "Google Gemma tre quattro B it quantizzazione 4 km"',
+            new Set([...OFFERTI, 'memory_search']),
+        )
+
+        expect(esito.calls).toEqual([{
+            name: 'memory_search',
+            arguments: '{"query":"Google Gemma tre quattro B it quantizzazione 4 km"}',
+        }])
+        expect(esito.text).toBe("Okay, let's start.")
+        expect(esito.text).not.toMatch(/TOOL_CODE|memory_search|query:/)
+    })
+
+    it('non promuove TOOL_CODE se nomina uno strumento non offerto', () => {
+        const testo = 'TOOL_CODE\ntool: device_wipe\nargs:\ntutto: true'
+        expect(talosRecuperaChiamateNude(testo, OFFERTI)).toEqual({
+            calls: [],
+            text: testo,
+        })
+    })
+
+    it('non scambia una spiegazione in prosa per TOOL_CODE', () => {
+        const testo = 'Il formato TOOL_CODE usa una riga tool e una sezione args.'
+        expect(talosRecuperaChiamateNude(testo, new Set([...OFFERTI, 'memory_search'])))
+            .toEqual({ calls: [], text: testo })
+    })
 })

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 
 const localEngine = vi.hoisted(() => {
     class TalosLocalEngineOpenError extends Error {
@@ -30,6 +31,7 @@ const localEngine = vi.hoisted(() => {
         talosLocalEngineOpenWithFallback: vi.fn(),
         talosLocalEngineChatPlan: vi.fn(),
         talosLocalEnginePlanPrompt: vi.fn(),
+        talosLocalEngineTemplateCapabilities: vi.fn(),
         /*
          * Non una spia: il valore VERO, perche' l'aritmetica del tetto ci si
          * appoggia e una spia che risponde `undefined` non farebbe fallire il
@@ -176,6 +178,12 @@ describe('LOCAL-CONTEXT-PARITY-01 local chat open', () => {
         localEngine.talosLocalEngineOpenWithFallback.mockReset()
         localEngine.talosLocalEngineChatPlan.mockReset()
         localEngine.talosLocalEnginePlanPrompt.mockReset()
+        localEngine.talosLocalEngineTemplateCapabilities.mockReset()
+        localEngine.talosLocalEngineTemplateCapabilities.mockResolvedValue({
+            supportsTools: true,
+            supportsToolCalls: true,
+            supportsSystemRole: true,
+        })
         // Il lato nativo che NON sa contare prima di aprire: è la build più
         // vecchia, ed è il caso che deve continuare a funzionare com'era.
         localEngine.talosLocalEnginePlanPrompt.mockResolvedValue(null)
@@ -801,5 +809,201 @@ describe('⛔ F3 — il catalogo non finisce in chat', () => {
         expect(esito.reasoning ?? '').not.toContain('tool_call')
         // E la prosa vera che stava attorno non si perde.
         expect(esito.reasoning ?? '').toContain('Poi rispondo.')
+    })
+})
+
+/**
+ * LOCAL-PARITY-TOOL-RESULT-02 — un locale deve ricevere il risultato nella
+ * stessa forma canonica dei provider API. llama.cpp sa già renderizzare
+ * `assistant.tool_calls` e `role: tool`; questo test protegge il ponte che
+ * prima li cancellava.
+ */
+describe('LOCAL-PARITY-TOOL-RESULT-02 round-trip del risultato locale', () => {
+    it('porta tool_calls, tool_call_id e nome fino a entrambi i planner nativi', async () => {
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true, backends: 'CPU', loadedPath: null, shape: null,
+        })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue(null)
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue(null)
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'p', promptTokens: 100, contextTokens: 4096,
+        })
+        localEngine.talosLocalEngineGenerate.mockResolvedValue({
+            text: 'Il valore è TALOS_NONCE_417.', tokens: 8,
+        })
+
+        const turns = [
+            { role: 'user', content: 'Trova il valore.' },
+            {
+                role: 'assistant',
+                content: '',
+                toolCalls: [{
+                    id: 'call_17', name: 'talos_diagnostic_echo',
+                    arguments: '{"value":"TALOS_NONCE_417"}',
+                }],
+            },
+            {
+                role: 'tool',
+                content: 'TALOS_NONCE_417',
+                toolCallId: 'call_17',
+                toolName: 'talos_diagnostic_echo',
+            },
+        ]
+
+        await localAdapter.complete(
+            {
+                ...richiestaLocale(),
+                turns,
+            } as never,
+            { apiKey: null, endpoint: null },
+            (() => { throw new Error('local must not use transport') }) as never,
+        )
+
+        const planned = localEngine.talosLocalEnginePlanPrompt.mock.calls.at(-1)?.[1]
+        const rendered = localEngine.talosLocalEngineChatPlan.mock.calls.at(-1)?.[0]
+        for (const value of [planned, rendered]) {
+            expect(value).toEqual(expect.arrayContaining([
+                expect.objectContaining({
+                    role: 'assistant',
+                    tool_calls: [expect.objectContaining({ id: 'call_17' })],
+                }),
+                expect.objectContaining({
+                    role: 'tool',
+                    name: 'talos_diagnostic_echo',
+                    tool_call_id: 'call_17',
+                    content: 'TALOS_NONCE_417',
+                }),
+            ]))
+        }
+    })
+
+    it('LOCAL-PARITY-TEMPLATE-TRANSPORT-06 usa prompt-json-v1 per Gemma senza passare role tool al Jinja', async () => {
+        localEngine.talosLocalEngineTemplateCapabilities.mockResolvedValue({
+            supportsTools: false,
+            supportsToolCalls: false,
+            supportsSystemRole: true,
+        })
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true, backends: 'CPU', loadedPath: null, shape: null,
+        })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue(null)
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue(null)
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'gemma-prompt', promptTokens: 100, contextTokens: 4096,
+        })
+        localEngine.talosLocalEngineGenerate.mockResolvedValue({ text: 'TALOS_NONCE_417', tokens: 4 })
+
+        const diagnosticTool = {
+            name: 'talos_diagnostic_echo',
+            title: 'Diagnostic echo',
+            description: 'Return one diagnostic value.',
+            action: 'read' as const,
+            input: z.object({ value: z.string() }),
+            run: async () => ({ content: '' }),
+        }
+        const turns = [
+            { role: 'user', content: 'Trova il valore.' },
+            {
+                role: 'assistant',
+                content: '',
+                toolCalls: [{
+                    id: 'call_17', name: 'talos_diagnostic_echo',
+                    arguments: '{"value":"TALOS_NONCE_417"}',
+                }],
+            },
+            {
+                role: 'tool',
+                content: 'TALOS_NONCE_417',
+                toolCallId: 'call_17',
+                toolName: 'talos_diagnostic_echo',
+            },
+        ]
+
+        await localAdapter.complete({
+            ...richiestaLocale(),
+            model: {
+                ...richiestaLocale().model,
+                id: '/models/gemma.gguf',
+                displayName: 'Gemma',
+            },
+            turns,
+            tools: [diagnosticTool],
+        } as never, { apiKey: null, endpoint: null }, (() => {
+            throw new Error('local must not use transport')
+        }) as never)
+
+        const planned = localEngine.talosLocalEnginePlanPrompt.mock.calls.at(-1)
+        const rendered = localEngine.talosLocalEngineChatPlan.mock.calls.at(-1)
+        for (const candidate of [planned?.[1], rendered?.[0]]) {
+            const projected = candidate as Array<{ role: string, content?: string }> | undefined
+            expect(projected?.map((turn) => turn.role)).toEqual(['system', 'user', 'assistant', 'user'])
+            expect(projected?.some((turn) => turn.role === 'tool')).toBe(false)
+            expect(projected?.[0]?.content).toContain('TALOS prompt-json-v1 tool protocol')
+            expect(projected?.at(-1)?.content).toContain('TALOS_NONCE_417')
+        }
+        expect(planned?.[2]).toBeUndefined()
+        expect(rendered?.[1]).toBeUndefined()
+    })
+
+    it('LOCAL-PARITY-SYSTEM-ROLE-07 non invia system a Gemma e conserva i bit nella cache', async () => {
+        localEngine.talosLocalEngineTemplateCapabilities.mockClear()
+        localEngine.talosLocalEngineTemplateCapabilities.mockResolvedValue({
+            supportsTools: false,
+            supportsToolCalls: false,
+            supportsSystemRole: false,
+        })
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true, backends: 'CPU', loadedPath: null, shape: null,
+        })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue(null)
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue(null)
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'gemma-systemless', promptTokens: 100, contextTokens: 4096,
+        })
+        localEngine.talosLocalEngineGenerate.mockResolvedValue({ text: 'Pronto', tokens: 2 })
+
+        const model = {
+            ...richiestaLocale().model,
+            id: '/models/gemma-systemless.gguf',
+            displayName: 'Gemma systemless',
+        }
+        const input = {
+            ...richiestaLocale(),
+            model,
+            system: 'TALOS_SYSTEM_SENTINEL',
+            tools: [{
+                name: 'talos_diagnostic_echo', title: 'Diagnostic echo',
+                description: 'Return one diagnostic value.', action: 'read' as const,
+                input: z.object({ value: z.string() }), run: async () => ({ content: '' }),
+            }],
+        }
+
+        await localAdapter.complete(input as never, { apiKey: null, endpoint: null }, (() => {
+            throw new Error('local must not use transport')
+        }) as never)
+
+        const first = (localEngine.talosLocalEngineChatPlan.mock.calls.at(-1)?.[0]) as Array<{ role: string, content?: string }> | undefined
+        expect(first?.map((turn) => turn.role)).toEqual(['user'])
+        expect(first?.[0]?.content).toContain('TALOS_SYSTEM_SENTINEL')
+        expect(first?.[0]?.content).toContain('TALOS prompt-json-v1 tool protocol')
+
+        // The cache must keep the measured `supportsSystemRole` bit with the
+        // strategy. A second read that says otherwise cannot change the wire
+        // shape for the same exact installed file during this app build.
+        localEngine.talosLocalEngineTemplateCapabilities.mockResolvedValue({
+            supportsTools: true,
+            supportsToolCalls: true,
+            supportsSystemRole: true,
+        })
+        await localAdapter.complete(input as never, { apiKey: null, endpoint: null }, (() => {
+            throw new Error('local must not use transport')
+        }) as never)
+
+        const second = (localEngine.talosLocalEngineChatPlan.mock.calls.at(-1)?.[0]) as Array<{ role: string }> | undefined
+        expect(second?.map((turn) => turn.role)).toEqual(['user'])
+        expect(localEngine.talosLocalEngineTemplateCapabilities).toHaveBeenCalledTimes(1)
     })
 })

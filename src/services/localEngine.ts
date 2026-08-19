@@ -67,6 +67,20 @@ export interface TalosLocalEngineStatus {
     engineBuild: string | null
 }
 
+/**
+ * What the GGUF's own Jinja template actually renders. These are observed from
+ * llama.cpp's capability analyzer; absence is never interpreted as tool
+ * support.
+ */
+export interface TalosLocalTemplateCapabilities {
+    supportsTools: boolean
+    supportsToolCalls: boolean
+    supportsSystemRole: boolean
+}
+
+/** The wire strategy chosen after inspecting the embedded GGUF template. */
+export type TalosLocalToolTransport = 'native-template' | 'prompt-json-v1'
+
 export interface TalosLocalEngineOpenResult {
     /** What the engine actually granted, which may be less than was asked for. */
     contextTokens: number
@@ -199,7 +213,7 @@ interface TalosLlamaPlugin {
     /** Il fabbisogno e la forma, letti senza caricare i pesi. */
     planPrompt(options: {
         path: string
-        turns: ReadonlyArray<{ role: string, content: string }>
+        turns: ReadonlyArray<TalosLocalEngineTurn>
         tools?: readonly unknown[]
         /**
          * ⛔ Se il modello deve RAGIONARE. Assente = sì, come prima.
@@ -224,8 +238,13 @@ interface TalosLlamaPlugin {
         }>
         unreadable?: Array<{ path: string, reason: string }>
     }>
+    /**
+     * Reads only the Jinja capability map from a vocab-only GGUF open. The
+     * template source itself never crosses the bridge.
+     */
+    templateCapabilities(options: { path: string }): Promise<{ capabilities: string }>
     chatPrompt(options: {
-        turns: ReadonlyArray<{ role: string, content: string }>
+        turns: ReadonlyArray<TalosLocalEngineTurn>
         /** Vedi `planPrompt.thinking`: assente = sì, come prima. */
         thinking?: boolean
         /**
@@ -244,6 +263,23 @@ interface TalosLlamaPlugin {
         event: 'token',
         handler: (payload: { delta: string }) => void,
     ): Promise<{ remove: () => Promise<void> }>
+}
+
+/**
+ * Semantic chat message handed to llama.cpp's OpenAI-compatible parser.
+ * Optional fields preserve assistant tool calls and their result identity;
+ * punctuation remains the GGUF template's responsibility.
+ */
+export interface TalosLocalEngineTurn {
+    role: string
+    content?: string
+    tool_calls?: ReadonlyArray<{
+        id?: string
+        type: 'function'
+        function: { name: string, arguments: string }
+    }>
+    name?: string
+    tool_call_id?: string
 }
 
 const plugin = registerPlugin<TalosLlamaPlugin>('TalosLlama')
@@ -420,6 +456,37 @@ export async function talosLocalEngineStatus(): Promise<TalosLocalEngineStatus> 
             available: false, backends: '', loadedPath: null,
             shape: null, kvCacheType: null, engineBuild: null,
         }
+    }
+}
+
+function templateCapabilitiesOf(raw: unknown): TalosLocalTemplateCapabilities | null {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+    const record = raw as Record<string, unknown>
+    const supportsTools = record.supportsTools
+    const supportsToolCalls = record.supportsToolCalls
+    const supportsSystemRole = record.supportsSystemRole
+    if (
+        typeof supportsTools !== 'boolean'
+        || typeof supportsToolCalls !== 'boolean'
+        || typeof supportsSystemRole !== 'boolean'
+    ) return null
+    return { supportsTools, supportsToolCalls, supportsSystemRole }
+}
+
+/**
+ * Preflights the embedded template without loading model tensors. A malformed,
+ * unavailable, or old native bridge is an unknown capability result, never an
+ * implicit assertion that a GGUF can render OpenAI tool turns.
+ */
+export async function talosLocalEngineTemplateCapabilities(
+    path: string,
+): Promise<TalosLocalTemplateCapabilities | null> {
+    try {
+        const response = await plugin.templateCapabilities({ path })
+        if (typeof response?.capabilities !== 'string') return null
+        return templateCapabilitiesOf(JSON.parse(response.capabilities))
+    } catch {
+        return null
     }
 }
 
@@ -609,7 +676,7 @@ export async function talosLocalInstalledModels(): Promise<TalosLocalModelListin
  * is a refusal to be shown, not a case to paper over.
  */
 export async function talosLocalEngineChatPlan(
-    turns: ReadonlyArray<{ role: string, content: string }>,
+    turns: ReadonlyArray<TalosLocalEngineTurn>,
     tools?: readonly unknown[],
     thinking = true,
 ): Promise<TalosLocalEngineChatPlan> {
@@ -647,7 +714,7 @@ export async function talosLocalEngineChatPlan(
  */
 export async function talosLocalEnginePlanPrompt(
     path: string,
-    turns: ReadonlyArray<{ role: string, content: string }>,
+    turns: ReadonlyArray<TalosLocalEngineTurn>,
     tools?: readonly unknown[],
     thinking = true,
 ): Promise<{ promptTokens: number, shape: TalosModelShape | null } | null> {
@@ -665,7 +732,7 @@ export async function talosLocalEnginePlanPrompt(
 
 /** Compatibility projection for callers that only need the formatted text. */
 export async function talosLocalEngineChatPrompt(
-    turns: ReadonlyArray<{ role: string, content: string }>,
+    turns: ReadonlyArray<TalosLocalEngineTurn>,
     tools?: readonly unknown[],
 ): Promise<string> {
     return (await talosLocalEngineChatPlan(turns, tools)).prompt

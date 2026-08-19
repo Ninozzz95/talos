@@ -12,6 +12,7 @@ import {
     type TalosLocalEngineStatus,
     talosLocalEngineChatPlan,
     talosLocalEnginePlanPrompt,
+    talosLocalEngineTemplateCapabilities,
     talosKvBytesPerElement,
     talosLocalEngineCancel,
     talosLocalEngineGenerate,
@@ -22,6 +23,8 @@ import {
     talosFreezePrefix,
     talosThawPrefix,
     talosEvictPrefixes,
+    type TalosLocalTemplateCapabilities,
+    type TalosLocalToolTransport,
 } from '@/services/localEngine'
 import {
     talosPrefixCacheFileName,
@@ -47,6 +50,10 @@ import {
 } from '@/lib/chat/localToolCalls'
 import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/thinkStream'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
+import {
+    talosLocalToolTransportOf,
+    talosProjectLocalToolConversation,
+} from '@/lib/chat/localToolPromptProtocol'
 
 /**
  * The engine on this device, answering through the same contract as everyone
@@ -113,26 +120,65 @@ interface TalosPianoDiApertura {
     kvCacheType: string
 }
 
+/** The OpenAI-compatible message shape consumed directly by llama.cpp. */
+export interface TalosLocalChatMessage {
+    role: 'system' | 'user' | 'assistant' | 'tool'
+    content?: string
+    tool_calls?: Array<{
+        id: string
+        type: 'function'
+        function: { name: string, arguments: string }
+    }>
+    name?: string
+    tool_call_id?: string
+}
+
 /**
- * Turns the conversation into what the engine expects.
+ * Turns the conversation into llama.cpp's canonical message contract.
  *
- * Tool turns are dropped rather than translated. A GGUF chat template knows
- * `system`, `user` and `assistant` and nothing else, so a tool result rendered
- * through it would arrive as an unlabelled block of text in the middle of the
- * conversation — worse than absent, because the model would read it as
- * something the user said.
+ * This used to delete every `tool` turn and every assistant `toolCalls` value
+ * under the assumption that a GGUF template only knew three roles. llama.cpp's
+ * own `common_chat_msg` contract has `tool_calls`, `tool_name` and
+ * `tool_call_id`, and Hugging Face's template guidance defines `role: tool` as
+ * the standard result turn. Deleting them meant a local model could request a
+ * tool and then never receive what that tool returned.
+ *
+ * Provider-specific punctuation still stays out of TypeScript: these are
+ * semantic messages, and `common_chat_msgs_parse_oaicompat()` plus the GGUF's
+ * Jinja template render the exact syntax the model was trained on.
  */
-function conversationOf(input: TalosMobileCompletionInput): Array<{ role: string, content: string }> {
-    const turns: Array<{ role: string, content: string }> = []
+export function conversationOf(input: TalosMobileCompletionInput): TalosLocalChatMessage[] {
+    const turns: TalosLocalChatMessage[] = []
     if (input.system) turns.push({ role: 'system', content: input.system })
     for (const turn of input.turns) {
-        // Only the two roles a GGUF template knows how to punctuate. The
-        // compiler confirms `tool` is the only other one a turn can carry, and
-        // it is exactly the one that must not be rendered.
-        if (turn.role !== 'user' && turn.role !== 'assistant') continue
         const content = typeof turn.content === 'string' ? turn.content : ''
-        if (content === '') continue
-        turns.push({ role: turn.role, content })
+        if (turn.role === 'tool') {
+            // A result without the call identity is malformed for strict
+            // templates. Do not relabel it as user prose; omit it and let the
+            // agent loop's existing invariant surface the fault.
+            if (!turn.toolCallId || !turn.toolName) continue
+            turns.push({
+                role: 'tool',
+                content,
+                name: turn.toolName,
+                tool_call_id: turn.toolCallId,
+            })
+            continue
+        }
+
+        const toolCalls = turn.role === 'assistant' && turn.toolCalls?.length
+            ? turn.toolCalls.map((call) => ({
+                id: call.id,
+                type: 'function' as const,
+                function: { name: call.name, arguments: call.arguments },
+            }))
+            : undefined
+        if (content === '' && !toolCalls?.length) continue
+        turns.push({
+            role: turn.role,
+            ...(content !== '' ? { content } : {}),
+            ...(toolCalls?.length ? { tool_calls: toolCalls } : {}),
+        })
     }
     return turns
 }
@@ -314,6 +360,11 @@ async function talosTuningKeyFor(
  */
 const IDENTITA_FILE = new Map<string, { bytes: number, modifiedAt: number }>()
 const PREFISSO_RESO = new Map<string, string>()
+interface TalosTemplateTransportDecision {
+    transport: TalosLocalToolTransport
+    capabilities: TalosLocalTemplateCapabilities | null
+}
+const TRASPORTO_TOOL = new Map<string, TalosTemplateTransportDecision>()
 
 async function identitaFileDi(path: string): Promise<{ bytes: number, modifiedAt: number } | null> {
     const memo = IDENTITA_FILE.get(path)
@@ -329,6 +380,34 @@ async function identitaFileDi(path: string): Promise<{ bytes: number, modifiedAt
         return null
     }
     return IDENTITA_FILE.get(path) ?? null
+}
+
+/**
+ * The model's name is not a protocol. Cache the actual Jinja capability
+ * preflight by file identity and app build, so the small vocab-only read is
+ * paid once per installed GGUF rather than once per turn.
+ */
+async function trasportoToolDi(path: string): Promise<TalosTemplateTransportDecision> {
+    const identita = await identitaFileDi(path)
+    const chiave = [
+        path,
+        identita?.bytes ?? '',
+        identita?.modifiedAt ?? '',
+        TALOS_APP_BUILD,
+    ].join('\0')
+    const memo = TRASPORTO_TOOL.get(chiave)
+    if (memo) return memo
+
+    const capability = await talosLocalEngineTemplateCapabilities(path)
+    // An old or malformed bridge cannot be treated as a native tool template.
+    // The prompted profile preserves ordinary chat-role alternation and still
+    // earns compatibility only through the real parity diagnostic.
+    const decision: TalosTemplateTransportDecision = {
+        transport: talosLocalToolTransportOf(capability),
+        capabilities: capability,
+    }
+    TRASPORTO_TOOL.set(chiave, decision)
+    return decision
 }
 
 /**
@@ -688,8 +767,16 @@ async function run(
      * decide se questo modello può chiamare qualcosa, e non qui.
      */
     const offered = talosModelSupportsToolCalling(input.model) ? input.tools : undefined
-    const tools = offered?.length ? talosToolsForLocalEngine(offered) : undefined
-    const turns = conversationOf(input)
+    const wireTools = offered?.length ? talosToolsForLocalEngine(offered) : undefined
+    const template = await trasportoToolDi(input.model.id)
+    const projection = talosProjectLocalToolConversation({
+        transport: template.transport,
+        capabilities: template.capabilities,
+        turns: conversationOf(input),
+        tools: wireTools,
+    })
+    const turns = projection.turns
+    const tools = projection.templateTools
 
     /**
      * ⭐ Prima si conta, poi si apre. UNA volta.
@@ -777,9 +864,15 @@ async function run(
      * volta e dopo ogni cambio di modello, di contesto o di testo. Si calcola,
      * che è ciò che si faceva prima di tutto questo.
      */
-    const congelato = await prefissoCongelatoDi(
-        input.model.id, input.system, tools, status, plan.contextTokens, pensa,
-    )
+    // `prompt-json-v1` injects its catalog into the projected system turn; the
+    // native prefix freezer only knows the original input.system. Until that
+    // profile has its own verified prefix identity, do not freeze a different
+    // prompt and risk thawing it into another conversation.
+    const congelato = template.transport === 'native-template' || !wireTools?.length
+        ? await prefissoCongelatoDi(
+            input.model.id, input.system, tools, status, plan.contextTokens, pensa,
+        )
+        : null
     if (congelato) await talosThawPrefix(congelato.percorso)
 
     let generation

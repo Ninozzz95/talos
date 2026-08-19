@@ -1,4 +1,7 @@
-import { talosIsPlainToolDetailsLine } from '@/lib/chat/localToolCalls'
+import {
+    talosIsPlainToolDetailsLine,
+    talosIsToolCodeHeaderLine,
+} from '@/lib/chat/localToolCalls'
 
 /**
  * Separa il ragionamento dal contenuto MENTRE arriva, non alla fine.
@@ -166,6 +169,59 @@ function creaFiltroRigaToolDetails(): (delta: string, chiudendo: boolean) => str
     }
 }
 
+/**
+ * Nasconde il blocco multilinea TOOL_CODE mentre arriva.
+ *
+ * Una regex sul singolo chunk non basta: nello screenshot reale l'output era
+ * abbastanza lungo da poter attraversare piu' repaint, e `TOO` / `L_CODE`
+ * possono stare in chunk diversi. Si lavora per righe e, riconosciuta
+ * l'intestazione esatta, si scarta fino alla riga vuota o alla fine.
+ */
+function creaFiltroBloccoToolCode(): (delta: string, chiudendo: boolean) => string {
+    let attesa = ''
+    let dentro = false
+    return (delta: string, chiudendo: boolean): string => {
+        let input = attesa + delta
+        attesa = ''
+        let output = ''
+
+        for (;;) {
+            const nuovaRiga = input.indexOf('\n')
+            if (nuovaRiga < 0) break
+            const riga = input.slice(0, nuovaRiga)
+            input = input.slice(nuovaRiga + 1)
+            if (dentro) {
+                if (riga.trim() === '') {
+                    dentro = false
+                    output += '\n'
+                }
+                continue
+            }
+            if (talosIsToolCodeHeaderLine(riga)) {
+                dentro = true
+                continue
+            }
+            output += `${riga}\n`
+        }
+
+        if (dentro) {
+            // A fine risposta il protocollo senza riga vuota e' comunque
+            // completo per i nostri scopi: si scarta la coda.
+            if (!chiudendo) attesa = input
+            return output
+        }
+
+        const possibile = 'tool_code'.startsWith(input.trimStart().toLowerCase())
+        if (!chiudendo && possibile) {
+            attesa = input
+        } else {
+            output += input
+        }
+        if (chiudendo) attesa = ''
+        return output
+    }
+}
+
 export function talosCreateThinkSplitter(): TalosThinkSplitter {
     /**
      * Tre stati e non un booleano, da quando i marcatori sono due paia:
@@ -177,6 +233,8 @@ export function talosCreateThinkSplitter(): TalosThinkSplitter {
     let sospeso = ''
     const filtraTesto = creaFiltroRigaToolDetails()
     const filtraRagionamento = creaFiltroRigaToolDetails()
+    const filtraToolCodeTesto = creaFiltroBloccoToolCode()
+    const filtraToolCodeRagionamento = creaFiltroBloccoToolCode()
     /** Quale chiusura sta aspettando lo stato «chiamata»: le aperture sono due. */
     let chiusuraAttesa: string = TOOL_CHIUSURA
 
@@ -256,16 +314,20 @@ export function talosCreateThinkSplitter(): TalosThinkSplitter {
             sospeso += delta
             const fetta = consuma(false)
             return {
-                text: filtraTesto(fetta.text, false),
-                reasoning: filtraRagionamento(fetta.reasoning, false),
+                text: filtraTesto(filtraToolCodeTesto(fetta.text, false), false),
+                reasoning: filtraRagionamento(
+                    filtraToolCodeRagionamento(fetta.reasoning, false), false,
+                ),
             }
         },
         flush(): TalosThinkSlice {
             const esito = consuma(true)
             sospeso = ''
             return {
-                text: filtraTesto(esito.text, true),
-                reasoning: filtraRagionamento(esito.reasoning, true),
+                text: filtraTesto(filtraToolCodeTesto(esito.text, true), true),
+                reasoning: filtraRagionamento(
+                    filtraToolCodeRagionamento(esito.reasoning, true), true,
+                ),
             }
         },
     }

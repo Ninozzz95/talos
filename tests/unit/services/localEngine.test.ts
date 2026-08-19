@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const bridge = vi.hoisted(() => ({
     open: vi.fn(),
     chatPrompt: vi.fn(),
+    templateCapabilities: vi.fn(),
     generate: vi.fn(),
     addListener: vi.fn(),
 }))
@@ -15,6 +16,7 @@ const {
     TalosLocalEngineGenerationError,
     TalosLocalEngineOpenError,
     talosLocalEngineChatPlan,
+    talosLocalEngineTemplateCapabilities,
     talosLocalEngineGenerate,
     talosLocalEngineOpen,
     talosLocalEngineOpenWithFallback,
@@ -28,6 +30,7 @@ describe('LOCAL-OPEN-FALLBACK-02 bounded native open fallback', () => {
     beforeEach(() => {
         bridge.open.mockReset()
         bridge.chatPrompt.mockReset()
+        bridge.templateCapabilities.mockReset()
         bridge.generate.mockReset()
         bridge.addListener.mockReset()
         bridge.addListener.mockResolvedValue({ remove: vi.fn().mockResolvedValue(undefined) })
@@ -84,6 +87,31 @@ describe('LOCAL-OPEN-FALLBACK-02 bounded native open fallback', () => {
                 promptTokens: 5779,
                 contextTokens: 4096,
             })
+    })
+
+    it('LOCAL-PARITY-TEMPLATE-CAPS-07 decodes only the explicit upstream template capability bits', async () => {
+        bridge.templateCapabilities.mockResolvedValue({
+            capabilities: JSON.stringify({
+                supportsTools: true,
+                supportsToolCalls: true,
+                supportsSystemRole: false,
+            }),
+        })
+
+        await expect(talosLocalEngineTemplateCapabilities('/models/qwen.gguf')).resolves.toEqual({
+            supportsTools: true,
+            supportsToolCalls: true,
+            supportsSystemRole: false,
+        })
+        expect(bridge.templateCapabilities).toHaveBeenCalledWith({ path: '/models/qwen.gguf' })
+    })
+
+    it('LOCAL-PARITY-TEMPLATE-CAPS-07 rejects malformed or partial bridge values', async () => {
+        bridge.templateCapabilities.mockResolvedValue({
+            capabilities: JSON.stringify({ supportsTools: true }),
+        })
+
+        await expect(talosLocalEngineTemplateCapabilities('/models/gemma.gguf')).resolves.toBeNull()
     })
 
     it('C45-RED-18I normalizes a native context rejection instead of leaking it from the worker', async () => {

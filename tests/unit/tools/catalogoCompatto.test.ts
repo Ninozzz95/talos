@@ -4,8 +4,12 @@ import {
     TALOS_DETTAGLI_STRUMENTO,
     talosDimenticaSvelati,
     talosIndiceCompatto,
+    talosRichiestaDirettaSenzaTool,
+    talosRispostaDirettaDeterministica,
     talosStrumentoDettagli,
     talosSvelatiIn,
+    talosToolDelCatalogoEseguibile,
+    talosTurnoDiretto,
 } from '@/lib/tools/catalogoCompatto'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
 
@@ -150,5 +154,65 @@ describe('cio che e stato svelato resta svelato', () => {
         talosSvelatiIn('chat-c').add('device_torch')
         talosDimenticaSvelati('chat-c')
         expect(talosSvelatiIn('chat-c').size).toBe(0)
+    })
+})
+
+describe('il cancello del catalogo compatto', () => {
+    it('LOCAL-PARITY-CATALOG-GATE-08 ammette solo dettagli o strumenti svelati', () => {
+        const svelati = new Set<string>(['device_torch'])
+
+        expect(talosToolDelCatalogoEseguibile('tool_details', svelati)).toBe(true)
+        expect(talosToolDelCatalogoEseguibile('device_torch', svelati)).toBe(true)
+        expect(talosToolDelCatalogoEseguibile('notification_list', svelati)).toBe(false)
+    })
+
+    it('LOCAL-PARITY-DIRECT-TURN-10 toglie gli schemi solo su richiesta esplicita', () => {
+        expect(talosRichiestaDirettaSenzaTool(
+            'Rispondi esattamente con TALOS_TESTO_101 e basta.',
+        )).toBe(true)
+        expect(talosRichiestaDirettaSenzaTool('Answer exactly with TALOS_TEXT_101.')).toBe(true)
+        expect(talosRichiestaDirettaSenzaTool(
+            'Adesso ripeti solo l ultima parola della tua risposta precedente.',
+        )).toBe(true)
+        expect(talosRichiestaDirettaSenzaTool('Now repeat only the last word.')).toBe(true)
+        expect(talosRichiestaDirettaSenzaTool(
+            'Salutami in una frase senza usare strumenti.',
+        )).toBe(true)
+        expect(talosRichiestaDirettaSenzaTool('Say hello without using any tools.')).toBe(true)
+
+        expect(talosRichiestaDirettaSenzaTool('Cerca il contratto nella Libreria.')).toBe(false)
+        expect(talosRichiestaDirettaSenzaTool('Accendi la torcia e rispondi solo dopo.')).toBe(false)
+        expect(talosRichiestaDirettaSenzaTool('Spiegami cosa e un GGUF.')).toBe(false)
+    })
+
+    it('LOCAL-PARITY-DIRECT-TURN-10 rende solo i due contratti deterministici chiusi', () => {
+        expect(talosRispostaDirettaDeterministica(
+            'Rispondi esattamente con TALOS_GEMMA_202 e basta.',
+            null,
+        )).toBe('TALOS_GEMMA_202')
+        expect(talosRispostaDirettaDeterministica(
+            'Adesso ripeti solo l ultima parola della tua risposta precedente.',
+            'Un GGUF e un formato locale versatile.',
+        )).toBe('versatile')
+        expect(talosRispostaDirettaDeterministica(
+            'Now repeat only the last word of your previous answer.',
+            'It stays fully local.',
+        )).toBe('local')
+
+        expect(talosRispostaDirettaDeterministica('Accendi la torcia.', 'spenta'))
+            .toBeNull()
+        expect(talosRispostaDirettaDeterministica('Spiegami cosa e un GGUF.', null))
+            .toBeNull()
+    })
+
+    it('LOCAL-PARITY-DIRECT-TURN-10 deriva il literal dalla conversazione', () => {
+        expect(talosTurnoDiretto([
+            { role: 'user', content: 'Spiegami un GGUF.' },
+            { role: 'assistant', content: 'E un formato locale versatile.' },
+            { role: 'user', content: 'Adesso ripeti solo l ultima parola della tua risposta precedente.' },
+        ])).toMatchObject({
+            senzaTool: true,
+            risposta: 'versatile',
+        })
     })
 })
