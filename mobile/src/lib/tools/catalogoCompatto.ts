@@ -178,12 +178,49 @@ export function talosTurnoDiretto(
  * il modello, e riscriverla qui creerebbe due verità sullo stesso strumento —
  * quella dell'indice e quella dello schema — che un giorno divergono.
  */
+/**
+ * ⛔⛔ LOCAL-CATALOGO-DISAMBIGUA-01 — perche non basta la prima frase.
+ *
+ * MISURATO sul Pad il 2026-08-19, Qwen3-1.7B: «fai una ricerca web sulle
+ * novita di Android 16» non ha chiamato NESSUNO strumento, e la risposta era
+ * inventata a memoria. L owner ha visto il caso gemello: chiede una ricerca
+ * web e parte la Deep Research, che costa minuti e credito vero.
+ *
+ * La causa stava qui. `research_start` e `web_search` promettono la stessa
+ * cosa nella loro PRIMA frase; la riga che li separa — «For a single fact or a
+ * quick check, use web_search instead» — e la TERZA, e veniva tagliata. Un
+ * modello che vede due nomi indistinguibili non sceglie: risponde a memoria.
+ *
+ * ⇒ Si tiene la prima frase, e in piu le frasi che DISAMBIGUANO:
+ *   - quelle che nominano un ALTRO strumento offerto in questo turno;
+ *   - quelle che dichiarano un COSTO o un limite (minuti, credito, secondi).
+ *
+ * Non e un allentamento del tetto: quasi tutti gli strumenti hanno una
+ * descrizione di una frase sola e restano identici. Si allungano soltanto i
+ * pochi che hanno un gemello con cui si possono confondere — cioe quelli che
+ * senza questa riga costano una scelta sbagliata.
+ */
+const SEGNALE_DI_COSTO = /\b(MINUTES?|minuti|credit|credito|seconds?|secondi|costs?|costa|slow|lento)\b/i
+
 export function talosIndiceCompatto(
     tools: ReadonlyArray<TalosToolDefinition<never>>,
 ): string {
+    const nomi = tools.map((tool) => tool.name)
     return tools.map((tool) => {
-        const primaFrase = tool.description.split(/(?<=\.)\s/)[0] ?? tool.description
-        return `${tool.name}: ${primaFrase.slice(0, 120)}`
+        const frasi = tool.description.split(/(?<=\.)\s+/)
+        const prima = frasi[0] ?? tool.description
+        /*
+         * Una frase entra se rimanda a un altro strumento OFFERTO in questo
+         * turno — un rimando a qualcosa che il modello non ha davanti sarebbe
+         * peggio del silenzio — oppure se dice quanto costa chiamarlo.
+         */
+        const utili = frasi.slice(1).filter((frase) => (
+            nomi.some((nome) => nome !== tool.name && frase.includes(nome))
+            || SEGNALE_DI_COSTO.test(frase)
+        ))
+        const testo = [prima, ...utili].join(' ')
+        // Il tetto resta, ma su una riga che ora puo portare la distinzione.
+        return `${tool.name}: ${testo.slice(0, 260)}`
     }).join('\n')
 }
 
