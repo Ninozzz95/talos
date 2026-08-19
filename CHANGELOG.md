@@ -6,6 +6,66 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.15
+
+The honesty release: three things TALOS used to say with confidence that were
+not true, plus the groundwork for the deep-research rework. Every number below
+was measured on the owner's OnePlus Pad running Android 16.
+
+### Fixed
+
+- **Location is precise, and when it cannot be, TALOS says so.** TALOS reported
+  Rome to an owner sitting in Catania, 500 km away. The phone knew better — its
+  own providers had the right position to 43 m — but TALOS held only approximate
+  location permission and settled for it silently, producing output identical to
+  a GPS fix. It now asks for precise location, and when that stays denied it
+  still reads the approximate one but declares it and names the switch to turn
+  on. Measured: ~2 km with the warning, 16 m without.
+- **Local models call their tools instead of inventing the answer.** Asked for
+  the phone's coordinates, Gemma 3 4B produced Milan, then "I am in a chat with
+  a user", then narrated "I am reading the phone's location" without reading
+  anything — three phrasings, no tool call. Four causes, each measured: the
+  tool-lookup result looked like an answer, a correct direct call was discarded
+  for skipping the lookup step, the protocol sat too far from where the model
+  reads last, and an emptied code fence stayed in the reply. Gemma now calls on
+  all three phrasings and returns the true coordinates on two; Qwen3-1.7B calls
+  and answers correctly.
+- **The answer comes back in the language of the interface.** A local model
+  handed an English tool result answered in English to an Italian question. The
+  reminder now also follows the tool data, where the model reads last, instead
+  of living only at the top of the prompt.
+- **PDFs attach again.** Attaching one failed every time with "TALOS could not
+  examine this file". pdf.js needs its worker and ours was never configured; in
+  Node it silently fell back, so the tests said nothing about the phone.
+- **A PDF opens inside TALOS instead of Android's share sheet.** "Open" in the
+  Library handed the file to the system share dialog — with the owner's own
+  contacts in the first row, one tap from sending it. It now opens in the
+  built-in viewer, and the whole page fits in either orientation instead of
+  running off the bottom.
+- **The pending-authorization notice is said once.** It appeared up to three
+  times in one reply and outlived the request it described, because it was
+  written into the message text as well as shown on its own card. Only the card
+  carries it now, and it moves from pending to settled on its own.
+
+### Added
+
+- **Independent sources are counted, not URLs.** Three sites carrying the same
+  press release are one piece of evidence, not three. Computed from the
+  registrable domain and the origins a source itself cites, with no extra
+  network request — and a source that cites several origins stays independent,
+  because penalising that would punish the best sources.
+- **Fidelity measures, each with its date.** Coverage, citation faithfulness,
+  claim groundedness and distinct proofs. A run nobody judged returns
+  "unverified" rather than a percentage, because a percentage reads as a
+  measurement and would be a measurement of nothing.
+- **Citations export as BibTeX and RIS**, for Zotero, Mendeley and EndNote. A
+  citation describes a page, so the query, the judging model and the run id
+  never leave with it.
+- **A contested claim is now its own outcome**, separate from partial. One
+  source saying yes and another saying no is not "nearly supported": it is the
+  world disagreeing, and both passages are kept so they can be shown side by
+  side.
+
 ## v0.1.14
 
 The local-model parity and tool-boundary release, verified on the owner's
