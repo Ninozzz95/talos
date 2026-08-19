@@ -947,6 +947,91 @@ describe('LOCAL-PARITY-TOOL-RESULT-02 round-trip del risultato locale', () => {
         expect(rendered?.[1]).toBeUndefined()
     })
 
+    /**
+     * ⛔⛔ LINGUA-DOPO-IL-TOOL-01 — il filo, non la foglia.
+     *
+     * MISURATO sul Pad il 2026-08-19, `gemma-3-4b-it-Q4_K_M`:
+     *
+     *   «Ciao, come stai?»                 → «Ciao! Sto bene…»           ITALIANO ✓
+     *   «Dimmi le coordinate del telefono» → «The phone's coordinates…»  INGLESE  ✗
+     *
+     * La riga sulla lingua c'è già, ma sta nel prompto di sistema — cioè PRIMA
+     * di tutto — mentre l'inglese del tool è l'ultima cosa che il modello legge.
+     * Il promemoria va anche dove guarda per ultimo.
+     *
+     * `linguaDopoIlTool.test.ts` prova la busta. Questo prova che il locale ci
+     * ARRIVA: dall'interfaccia, attraverso il contratto del provider e
+     * l'adattatore, fino ai turni che il motore riceve davvero. Senza questo,
+     * la busta saprebbe fare una cosa che nessuno le chiede.
+     */
+    it('LINGUA-DOPO-IL-TOOL-01 porta il locale fino ai turni che il motore riceve', async () => {
+        localEngine.talosLocalEngineTemplateCapabilities.mockResolvedValue({
+            supportsTools: false,
+            supportsToolCalls: false,
+            supportsSystemRole: true,
+        })
+        localEngine.talosLocalEngineStatus.mockResolvedValue({
+            available: true, backends: 'CPU', loadedPath: null, shape: null,
+        })
+        deviceCapacity.talosMeasureDevice.mockResolvedValue(null)
+        localEngine.talosLocalEnginePlanPrompt.mockResolvedValue(null)
+        localEngine.talosLocalEngineOpenWithFallback.mockResolvedValue({ contextTokens: 4096 })
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'gemma-prompt', promptTokens: 100, contextTokens: 4096,
+        })
+        localEngine.talosLocalEngineGenerate.mockResolvedValue({ text: 'Sono a Roma.', tokens: 4 })
+
+        const posizione = {
+            name: 'device_location',
+            title: 'Device location',
+            description: 'Return the device coordinates.',
+            action: 'read' as const,
+            input: z.object({}),
+            run: async () => ({ content: '' }),
+        }
+        const turns = [
+            { role: 'user', content: 'Dimmi le coordinate del telefono' },
+            {
+                role: 'assistant',
+                content: '',
+                toolCalls: [{ id: 'call_9', name: 'device_location', arguments: '{}' }],
+            },
+            {
+                role: 'tool',
+                content: 'Latitude 41.899925, longitude 12.478631 (accurate to about 18 m).',
+                toolCallId: 'call_9',
+                toolName: 'device_location',
+            },
+        ]
+
+        async function bustaCon(locale: string | null): Promise<string> {
+            localEngine.talosLocalEngineChatPlan.mockClear()
+            await localAdapter.complete({
+                ...richiestaLocale(),
+                model: { ...richiestaLocale().model, id: '/models/gemma.gguf', displayName: 'Gemma' },
+                turns,
+                tools: [posizione],
+                locale,
+            } as never, { apiKey: null, endpoint: null }, (() => {
+                throw new Error('local must not use transport')
+            }) as never)
+            const inviati = localEngine.talosLocalEngineChatPlan.mock.calls.at(-1)?.[0] as
+                Array<{ role: string, content?: string }> | undefined
+            return inviati?.at(-1)?.content ?? ''
+        }
+
+        const conLingua = await bustaCon('it')
+        expect(conLingua).toContain('Italian')
+        // ⛔ DOPO i dati: se finisse prima, l'inglese del tool sarebbe di nuovo
+        // l'ultima cosa letta e non avremmo spostato niente.
+        expect(conLingua.indexOf('Italian')).toBeGreaterThan(conLingua.indexOf('41.899925'))
+
+        // E al contrario: senza locale la busta resta quella di prima.
+        const senzaLingua = await bustaCon(null)
+        expect(senzaLingua).toContain('41.899925')
+        expect(senzaLingua).not.toContain('Italian')
+    })
+
     it('LOCAL-PARITY-SYSTEM-ROLE-07 non invia system a Gemma e conserva i bit nella cache', async () => {
         localEngine.talosLocalEngineTemplateCapabilities.mockClear()
         localEngine.talosLocalEngineTemplateCapabilities.mockResolvedValue({

@@ -14,7 +14,22 @@ import { createTalosDeviceTools } from '@/lib/tools/deviceTools'
  * ```
  *
  * Quelle coordinate sono **Roma**, in centro. La città è falsa, ed è detta con
- * la stessa sicurezza dei due numeri veri che la precedono.
+ * la stessa sicurezza dei due numeri che la precedono.
+ *
+ * ## ⛔⛔ CORRETTO il 2026-08-19 sera: nemmeno i NUMERI erano veri
+ *
+ * Owner, quella sera: «io mi trovo a **Catania** comunque». Il telefono lo
+ * confermava — `dumpsys location`, fused e network: 37,55 / 15,08.
+ *
+ * E c'è un indizio che chiude la questione senza doverla discutere:
+ * **41.899925 ha sei decimali**, mentre `posizione.ts` arrotonda a **quattro**
+ * (`PRECISIONE = 4`). Un numero che il nostro codice non può produrre non è
+ * uscito dal nostro codice: era inventato anche quello.
+ *
+ * ⇒ Avevo scritto «coordinate giuste» leggendole dalla RISPOSTA invece che dal
+ * tool. È lo stesso errore contro cui esiste questa lezione, fatto mentre la
+ * scrivevo. Il fixture qui sotto resta com'era — vale come caso di prova — ma
+ * non è più spacciato per una misura.
  *
  * ## ⛔ E non è un'allucinazione libera: gliel'avevamo ORDINATO noi
  *
