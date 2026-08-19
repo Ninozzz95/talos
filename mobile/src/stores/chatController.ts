@@ -4688,13 +4688,31 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 syncToolAuthorizations()
                 round.open?.finish()
                 trace?.finish('ok')
-                const pendingStatus = deps.translate('chat.toolAuthorizationPending', {
-                    count: next.requests.length,
-                })
+                /*
+                 * ⛔⛔ ATTESA-SCRITTA-TRE-VOLTE-01 — la stessa frase, moltiplicata.
+                 *
+                 * FOTOGRAFATO sul Pad il 2026-08-20, «Fai una ricerca web sulle
+                 * novità di Android 16»: due richieste di consenso, e nella bolla
+                 * «1 richiesta di autorizzazione per uno strumento è in attesa»
+                 * scritta TRE volte — due come testo e una come carta.
+                 *
+                 * ⛔ E resta lì per sempre: il testo è persistito, quindi la frase
+                 * sopravvive alla richiesta che descriveva. Nello stesso
+                 * screenshot, sotto una riga «è in attesa», c'era già «La richiesta
+                 * di autorizzazione è stata gestita».
+                 *
+                 * La carta in `TalosMobileMessageList.vue` esiste esattamente per
+                 * questo, e la sua nota lo dice da prima: «gli stati pendenti sono
+                 * elementi separati, MAI testo inline, e la carta passa da pending
+                 * a risolto senza toccare il messaggio». Legge il conto dai
+                 * metadati qui sotto, che restano.
+                 *
+                 * ⇒ Il testo non la porta più. Se il modello non aveva scritto
+                 * nulla la bolla resta senza prosa, ed è giusto: quello che c'è da
+                 * dire lo dice la carta, con dentro il comando per rispondere.
+                 */
                 return {
-                    text: [stripLibrarySaveMarkers(loop.text), pendingStatus]
-                        .filter(Boolean)
-                        .join('\n\n'),
+                    text: stripLibrarySaveMarkers(loop.text),
                     metadata: {
                         tool_authorization_pending_checkpoint_id: next.id,
                         tool_authorization_pending_count: next.requests.length,
@@ -4757,12 +4775,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 trace?.finish('ok')
                 const answerSources = webSourceArchive.current?.sources() ?? []
                 return {
-                    text: [
-                        stripLibrarySaveMarkers(finalText),
-                        deps.translate('chat.toolAuthorizationPending', {
-                            count: markerCheckpoint.requests.length,
-                        }),
-                    ].filter(Boolean).join('\n\n'),
+                    // ⛔ ATTESA-SCRITTA-TRE-VOLTE-01: la porta la carta, non il testo.
+                    text: stripLibrarySaveMarkers(finalText),
                     metadata: {
                         ...(liveLibrary.receipt
                             ? { library_context_receipt: liveLibrary.receipt }
