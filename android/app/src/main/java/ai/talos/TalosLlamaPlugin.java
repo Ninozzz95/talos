@@ -708,32 +708,45 @@ public class TalosLlamaPlugin extends Plugin {
         }
         JSArray tools = call.getArray("tools");
         final String toolsJson = tools == null || tools.length() == 0 ? null : tools.toString();
+        final String messagesJson = turns.toString();
         worker.execute(() -> {
-            String[] roles = new String[turns.length()];
-            String[] contents = new String[turns.length()];
-            try {
-                for (int index = 0; index < turns.length(); index += 1) {
-                    JSONObject turn = turns.getJSONObject(index);
-                    roles[index] = turn.optString("role", "user");
-                    contents[index] = turn.optString("content", "");
-                }
-            } catch (JSONException malformed) {
-                call.reject("TALOS_LLAMA_TURNS_INVALID");
-                return;
-            }
         // ⛔ Il ragionamento si CHIEDE. `enable_thinking` nasce acceso in
         // llama.cpp e non lo toccavamo: TALOS domandava a Qwen3 di ragionare
         // anche per «ciao», ignorando l'impostazione della persona. Il
         // predefinito qui è ACCESO — chi non manda il campo ha il
         // comportamento di prima, e nessun invio cambia senza dirlo.
         boolean pensa = !Boolean.FALSE.equals(call.getBoolean("thinking", Boolean.TRUE));
-            String json = TalosLlamaEngine.planPrompt(path, roles, contents, toolsJson, pensa);
+            String json = TalosLlamaEngine.planPrompt(path, messagesJson, toolsJson, pensa);
             if (json == null) {
                 call.reject("TALOS_LLAMA_PLAN_FAILED");
                 return;
             }
             JSObject result = new JSObject();
             result.put("plan", json);
+            call.resolve(result);
+        });
+    }
+
+    /**
+     * Espone solo i capability bit del Jinja incorporato nel GGUF. Il modello
+     * viene aperto vocab-only dal nativo: nessun tensore, prompt o template
+     * sorgente attraversa questo confine.
+     */
+    @PluginMethod
+    public void templateCapabilities(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null || path.isEmpty()) {
+            call.reject("TALOS_LLAMA_PATH_REQUIRED");
+            return;
+        }
+        worker.execute(() -> {
+            String capabilities = TalosLlamaEngine.templateCapabilities(path);
+            if (capabilities == null || capabilities.isEmpty()) {
+                call.reject("TALOS_LLAMA_TEMPLATE_CAPABILITIES_FAILED");
+                return;
+            }
+            JSObject result = new JSObject();
+            result.put("capabilities", capabilities);
             call.resolve(result);
         });
     }
@@ -821,18 +834,7 @@ public class TalosLlamaPlugin extends Plugin {
             call.reject("TALOS_LLAMA_TURNS_REQUIRED");
             return;
         }
-        String[] roles = new String[turns.length()];
-        String[] contents = new String[turns.length()];
-        try {
-            for (int index = 0; index < turns.length(); index += 1) {
-                JSONObject turn = turns.getJSONObject(index);
-                roles[index] = turn.optString("role", "user");
-                contents[index] = turn.optString("content", "");
-            }
-        } catch (JSONException malformed) {
-            call.reject("TALOS_LLAMA_TURNS_INVALID");
-            return;
-        }
+        final String messagesJson = turns.toString();
         /**
          * I tool, se ce ne sono, nella forma OpenAI che il registro produce gia'
          * per gli altri provider.
@@ -873,7 +875,7 @@ public class TalosLlamaPlugin extends Plugin {
                 call.reject("TALOS_LLAMA_NO_MODEL");
                 return;
             }
-            String prompt = attivo.chatPrompt(roles, contents, toolsJson, pensa);
+            String prompt = attivo.chatPrompt(messagesJson, toolsJson, pensa);
             if (prompt == null || prompt.isEmpty()) {
                 // Named, so the interface can say WHY instead of producing a worse
                 // answer that looks like the model's fault.

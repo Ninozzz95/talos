@@ -73,6 +73,101 @@ export function talosIsPlainToolDetailsLine(testo: string): boolean {
 }
 
 /**
+ * Gemma 3 4B, osservato in `melo.jpg`, ha emesso una chiamata come piccolo
+ * blocco pseudo-YAML invece del formato dichiarato dal template:
+ *
+ *     TOOL_CODE
+ *     tool: memory_search
+ *     args:
+ *     query: "..."
+ *
+ * La forma e' chiusa apposta. Non e' un parser YAML e non deve diventarlo:
+ * promuovere testo ambiguo ad azione sarebbe peggio che lasciare visibile una
+ * risposta malformata. Accettiamo soltanto chiavi identificatore e valori
+ * scalari su una riga; il normale schema Zod resta comunque il cancello a
+ * valle.
+ */
+const TOOL_CODE_HEADER = /^[ \t]*TOOL_CODE[ \t]*$/i
+const TOOL_CODE_NAME = /^[ \t]*tool[ \t]*:[ \t]*([A-Za-z0-9_]+)[ \t]*$/i
+const TOOL_CODE_ARGS = /^[ \t]*args[ \t]*:[ \t]*$/i
+const TOOL_CODE_ARG = /^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*:[ \t]*(.*?)[ \t]*$/
+
+/** Shared with the stream filter: only an exact line opens the protocol. */
+export function talosIsToolCodeHeaderLine(testo: string): boolean {
+    return TOOL_CODE_HEADER.test(testo)
+}
+
+function scalareToolCode(grezzo: string): string | number | boolean | null {
+    const valore = grezzo.trim()
+    if (valore === '') return ''
+    try {
+        const parsed: unknown = JSON.parse(valore)
+        if (parsed === null || ['string', 'number', 'boolean'].includes(typeof parsed)) {
+            return parsed as string | number | boolean | null
+        }
+    } catch { /* Il valore non quotato resta una stringa, mai codice. */ }
+    return valore
+}
+
+function recuperaBlocchiToolCode(
+    testo: string,
+    offerti: ReadonlySet<string>,
+): TalosChiamateNude {
+    const righe = testo.split('\n')
+    const calls: Array<{ name: string, arguments: string }> = []
+    const fuori: string[] = []
+
+    for (let indice = 0; indice < righe.length;) {
+        if (!talosIsToolCodeHeaderLine(righe[indice] ?? '')) {
+            fuori.push(righe[indice] ?? '')
+            indice += 1
+            continue
+        }
+
+        const nome = TOOL_CODE_NAME.exec(righe[indice + 1] ?? '')?.[1]
+        const haArgs = TOOL_CODE_ARGS.test(righe[indice + 2] ?? '')
+        if (!nome || !haArgs || !offerti.has(nome)) {
+            fuori.push(righe[indice] ?? '')
+            indice += 1
+            continue
+        }
+
+        const argomenti: Record<string, string | number | boolean | null> = {}
+        let cursore = indice + 3
+        let quanti = 0
+        while (cursore < righe.length) {
+            const riga = righe[cursore] ?? ''
+            if (riga.trim() === '') break
+            const coppia = TOOL_CODE_ARG.exec(riga)
+            if (!coppia) break
+            argomenti[coppia[1]!] = scalareToolCode(coppia[2] ?? '')
+            quanti += 1
+            cursore += 1
+        }
+
+        // `args:` senza neppure una coppia e' una forma incompleta: resta
+        // visibile e soprattutto non diventa una richiesta eseguibile.
+        if (quanti === 0) {
+            fuori.push(righe[indice] ?? '')
+            indice += 1
+            continue
+        }
+
+        calls.push({ name: nome, arguments: JSON.stringify(argomenti) })
+        indice = cursore
+        // Una riga vuota delimita il blocco ma appartiene alla prosa che segue.
+        if (indice < righe.length && (righe[indice] ?? '').trim() === '') {
+            fuori.push('')
+            indice += 1
+        }
+    }
+
+    return calls.length
+        ? { calls, text: fuori.join('\n').trim() }
+        : { calls: [], text: testo }
+}
+
+/**
  * ⭐⭐ LA CHIAMATA SCRITTA A PAROLE — quella che nessuno raccoglieva.
  *
  * ## Il difetto, riprodotto TRE volte sul Pad il 2026-08-09
@@ -119,8 +214,9 @@ export function talosRecuperaChiamateNude(
 ): TalosChiamateNude {
     if (!testo || offerti.size === 0) return { calls: [], text: testo }
 
-    const calls: Array<{ name: string, arguments: string }> = []
-    const testoSenzaRighe = testo.split('\n').map((riga) => {
+    const daToolCode = recuperaBlocchiToolCode(testo, offerti)
+    const calls: Array<{ name: string, arguments: string }> = [...daToolCode.calls]
+    const testoSenzaRighe = daToolCode.text.split('\n').map((riga) => {
         const nomi = nomiDaRigaToolDetails(riga)
         if (!nomi || !offerti.has('tool_details') || nomi.some((nome) => !offerti.has(nome))) {
             return riga
@@ -309,6 +405,13 @@ export function talosSenzaProtocolloDeiTool(testo: string): string {
         }
     }
     fuori = fuori.replace(/(^|\n)[ \t]*tool_details[ \t]*:[ \t]*[A-Za-z0-9_]+(?:[ \t]*,[ \t]*[A-Za-z0-9_]+)*[ \t]*(?=\n|$)/gi, '$1')
+    // Ultima rete: se il modello ha emesso TOOL_CODE quando nessun tool era
+    // offerto, non lo si puo' promuovere ma non lo si mostra come risposta.
+    // La forma resta stretta e termina al primo a-capo vuoto o fine testo.
+    fuori = fuori.replace(
+        /(^|\n)[ \t]*TOOL_CODE[ \t]*\r?\n[ \t]*tool[ \t]*:[^\r\n]*\r?\n[ \t]*args[ \t]*:[ \t]*(?:\r?\n(?:[ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*:[^\r\n]*(?:\r?\n|$))+)?/gi,
+        '$1',
+    )
     // ⛔ Le righe vuote lasciate dietro sono parte del difetto: una risposta che
     // comincia con tre a capo sembra rotta anche quando non lo è più.
     return fuori.replace(/\n{3,}/g, '\n\n').trim()

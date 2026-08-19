@@ -3618,6 +3618,17 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 ? await import('@/lib/tools/catalogoCompatto')
                 : null
             /*
+             * Qwen3-1.7B on the physical Pad interpreted the exact marker
+             * `TALOS_TESTO_101` as a function name even after the prompt said
+             * not to use tools for exact text. Qwen-Agent's contract is
+             * stronger and simpler: only assigned functions are callable.
+             * For an explicitly direct turn, assign none. This decision lasts
+             * one message; the session catalogue and revealed schemas survive.
+             */
+            const turnoDiretto = profile?.provider === 'local'
+                ? catalogo?.talosTurnoDiretto(acceptedTurns) ?? null
+                : null
+            /*
              * ⛔ Vive quanto la CONVERSAZIONE, non quanto l'invio: uno
              * strumento gia' svelato resta chiamabile al messaggio dopo. La
              * ragione, con la misura, sta in `catalogoCompatto.ts`.
@@ -3643,7 +3654,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * rende chiamabile ciò che il modello ha appena chiesto.
              */
             const strumentiEsposti = (): typeof offeredTools => (
-                dettagliStrumento
+                turnoDiretto?.senzaTool
+                    ? []
+                    : dettagliStrumento
                     ? [
                         dettagliStrumento as never,
                         ...offeredTools.filter((tool: { name: string }) => svelati.has(tool.name)),
@@ -3667,7 +3680,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * scritta accanto alla misura che l'ha corretta — non in mezzo a
              * duemila righe di controller, dove nessuno la rileggerebbe.
              */
-            const indiceNelPrompt = catalogo
+            const indiceNelPrompt = catalogo && !turnoDiretto?.senzaTool
                 ? catalogo.talosIstruzioneCatalogo(offeredTools as never)
                 : ''
 
@@ -3761,13 +3774,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * fila. Chiedere di parallelizzare cose che si passano il risultato
              * l'una all'altra farebbe partire la seconda con le mani vuote.
              */
-            const parallelInstruction = modelSupportsTools
+            const parallelInstruction = modelSupportsTools && !turnoDiretto?.senzaTool
                 ? '\nWhen a request needs several tools that do NOT depend on each other, '
                     + 'call them together in the same turn instead of one at a time: it is faster '
                     + 'for the user and cheaper. Around three at once is a good target. '
                     + 'Call them one after another only when a tool genuinely needs the result of '
                     + 'the previous one.'
                 : ''
+            const directAnswerInstruction = turnoDiretto?.istruzione ?? ''
             const tonePrompt = baseTonePrompt
                 + parallelInstruction
                 + (autosaveGenerated && modelSupportsTools && !documentToolOffered
@@ -3775,6 +3789,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     : '')
                 + exportInstruction
                 + noToolsInstruction
+                + directAnswerInstruction
             const completeOnce = buildChatCompletion(
                 () => ({
                     profile,
@@ -3893,6 +3908,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             }
             const { resumeTalosAgentLoop, runTalosAgentLoop } = await import('@/lib/tools/agentLoop')
             const { executeTalosTool, preflightTalosToolExecution } = await import('@/lib/tools/executor')
+            const { talosSenzaEnvelopeToolResult } = await import('@/lib/chat/toolResultEnvelope')
             // Both sides must be the permissions IN FORCE. The live side used to
             // read `state.tools` — the stored value — and since this takes the
             // more restrictive of the two, an inherited `deny` beat the `ask`
@@ -3954,6 +3970,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 tools: typeof offeredTools,
             ): Promise<ChatCompletionResult> => {
                 openRound()
+                if (turnoDiretto?.risposta != null) {
+                    return {
+                        text: turnoDiretto.risposta,
+                        finishReason: 'stop',
+                    }
+                }
                 /**
                  * Il marcatore del tono non si vede MAI, nemmeno per un istante.
                  *
@@ -3976,7 +3998,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     onChunk: (text: string) => {
                         round.open?.firstChunk()
                         grezzo += text
-                        const visibile = talosVisibleWhileStreaming(grezzo)
+                        const visibile = talosSenzaEnvelopeToolResult(
+                            talosVisibleWhileStreaming(grezzo),
+                            true,
+                        )
                         // Solo in avanti: l'interfaccia riceve aggiunte, non
                         // ritrattazioni, e cio' che e' trattenuto non e' mai
                         // stato mostrato.
@@ -4107,6 +4132,32 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      */
                     if (dettagliStrumento && call.name === dettagliStrumento.name) {
                         return { status: 'ready' as const }
+                    }
+                    /*
+                     * The compact index is not an execution grant. A small
+                     * local model can jump straight from a name in that index
+                     * to a call (Qwen did this for `memory_search` on a plain
+                     * text marker); letting it reach the full executable list
+                     * would make a tool run without its schema having been
+                     * requested. Keep the call in the transcript as a
+                     * no-effect terminal result so the provider contract stays
+                     * well-formed, but never open a permission or tool gate for
+                     * it. An explicit `tool_details` call reveals the name for
+                     * the following round.
+                     */
+                    if (
+                        profile?.provider === 'local'
+                        && catalogo
+                        && !catalogo.talosToolDelCatalogoEseguibile(call.name, svelati)
+                    ) {
+                        return {
+                            status: 'terminal' as const,
+                            outcome: {
+                                ok: false,
+                                senzaEffetto: true,
+                                content: `The tool "${call.name}" was not run because its schema was not requested. Answer the user directly; do not retry this tool unless the user asks for it.`,
+                            },
+                        }
                     }
                     const tool = strumentiEseguibili.find(
                         (entry: { name: string }) => entry.name === call.name,
@@ -4631,7 +4682,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 : completion.text
             // F3-T4: a final-line tone suggestion is stripped from the durable
             // reply and surfaced as a toast — the user decides, never auto-applied.
-            const { text, suggestion } = extractToneSuggestion(raw)
+            const { text, suggestion } = extractToneSuggestion(
+                talosSenzaEnvelopeToolResult(raw),
+            )
             if (suggestion && suggestion !== deps.settings.state.tone.preset) {
                 const preset = TALOS_TONE_PRESETS.find((candidate) => candidate.id === suggestion)
                 toasts.push({

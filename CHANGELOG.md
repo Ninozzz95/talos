@@ -6,6 +6,47 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.14
+
+The local-model parity and tool-boundary release, verified on the owner's
+OnePlus Pad running Android 16.
+
+### Fixed
+
+- **Qwen3-1.7B and Gemma 3 local chats now keep the same direct-turn contract
+  as API providers.** Exact replies, explicit no-tool requests and contextual
+  last-word follow-ups no longer trigger a spurious tool call, leak an internal
+  tool envelope or add a model-generated lead-in.
+- **Local tool transport is selected from the GGUF template capabilities.**
+  Native templates with tool-call support use the embedded contract; templates
+  without it use the AVM-owned prompt JSON protocol, including system-role
+  compatibility and untrusted tool-result boundaries.
+- **OpenRouter image generation remains fully executable.** The progressive
+  catalog gate is restricted to local models, so API providers still run
+  `generate_image`, persist the generated binary and report storage failures
+  correctly.
+
+### Changed
+
+- **Doctor and parity diagnostics now expose the measured local template
+  capabilities and selected tool transport**, making GGUF compatibility
+  inspectable instead of inferred from a model name.
+- **Local parity probes cover native and prompt-JSON paths**, with persistent
+  fingerprints, failure stages and regression fixtures for reloads, tool
+  results and system-role handling.
+- **The mobile harness keeps the initial JavaScript chunk within its budget** by
+  loading non-bootstrap tool-result sanitization and direct-turn policy only
+  when a chat send is already in progress.
+
+### Verification
+
+- Full Vitest suite: `5643 passed`, `10 skipped`.
+- Typecheck, web build, initial-chunk and parity gates: passed.
+- Android debug/native instrumentation on the owner's device: `OK (9 tests)`
+  with only fixture-dependent assumptions skipped.
+- Real Gemma and Qwen prompts, reload persistence, portrait layout and final
+  logcat were exercised on serial `2ea6573c`.
+
 ## v0.1.13
 
 The voice and local-model usability release, verified on the owner's OnePlus

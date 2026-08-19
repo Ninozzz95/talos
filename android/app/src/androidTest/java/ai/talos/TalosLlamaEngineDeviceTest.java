@@ -15,6 +15,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -314,6 +315,126 @@ public class TalosLlamaEngineDeviceTest {
                     StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             assertFalse("la proiezione UI ha duplicato la fixture nativa", file.exists());
             assertTrue("la proiezione UI non esiste", uiFile.isFile());
+        }
+    }
+
+    /**
+     * Prova il confine che una JVM finta non può provare: il parser
+     * OpenAI-compatible vendorizzato riceve una chiamata tool e il suo risultato,
+     * poi il Jinja del GGUF li conserva nel prompt del turno successivo.
+     */
+    @Test
+    public void preservesToolCallAndResultInEmbeddedTemplate() throws Exception {
+        String expectedTransport = InstrumentationRegistry.getArguments()
+                .getString("talosExpectedToolTransport", "");
+        Assume.assumeTrue("template senza tool nativi: usare la prova prompt-json-v1",
+                expectedTransport == null || expectedTransport.isEmpty()
+                        || "native-template".equals(expectedTransport));
+
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File file = model(context);
+        Assume.assumeTrue(
+                "modello di prova assente: spingilo in " + (file == null ? "?" : file.getAbsolutePath()),
+                file != null && file.isFile());
+
+        TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
+                context, file.getAbsolutePath(), 4, 4096, 0, false);
+        assertNotNull("il modello non si è aperto: " + attempt.failureStage(), attempt.engine());
+
+        try (TalosLlamaEngine engine = attempt.engine()) {
+            String messagesJson = "["
+                    + "{\"role\":\"system\",\"content\":\"Rispondi in modo breve.\"},"
+                    + "{\"role\":\"user\",\"content\":\"Usa il tool diagnostico.\"},"
+                    + "{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{"
+                    + "\"id\":\"diag_1\",\"type\":\"function\",\"function\":{"
+                    + "\"name\":\"talos_diagnostic_echo\","
+                    + "\"arguments\":\"{\\\"value\\\":\\\"TALOS_PARITY_NONCE_593\\\"}\"}}]},"
+                    + "{\"role\":\"tool\",\"name\":\"talos_diagnostic_echo\","
+                    + "\"tool_call_id\":\"diag_1\","
+                    + "\"content\":\"Diagnostic result: TALOS_TOOL_RESULT_847\"}"
+                    + "]";
+            String toolsJson = "[{\"type\":\"function\",\"function\":{"
+                    + "\"name\":\"talos_diagnostic_echo\","
+                    + "\"description\":\"Return one diagnostic value.\","
+                    + "\"parameters\":{\"type\":\"object\",\"properties\":{"
+                    + "\"value\":{\"type\":\"string\"}},\"required\":[\"value\"]}}}]";
+
+            String prompt = engine.chatPrompt(messagesJson, toolsJson, false);
+
+            assertNotNull("il template non ha accettato il giro tool", prompt);
+            assertTrue("il risultato tool è stato perso prima del GGUF",
+                    prompt.contains("TALOS_TOOL_RESULT_847"));
+            Log.i(TAG, "round-trip tool nel template: " + file.getName());
+        }
+    }
+
+    /** The wire strategy is derived from the embedded Jinja, never the filename. */
+    @Test
+    public void reportsEmbeddedTemplateCapabilities() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File file = model(context);
+        Assume.assumeTrue(
+                "modello di prova assente: spingilo in " + (file == null ? "?" : file.getAbsolutePath()),
+                file != null && file.isFile());
+
+        String raw = TalosLlamaEngine.templateCapabilities(file.getAbsolutePath());
+        assertNotNull("il preflight capability non ha risposto", raw);
+        JSONObject capabilities = new JSONObject(raw);
+        assertTrue("supportsTools mancante", capabilities.has("supportsTools"));
+        assertTrue("supportsToolCalls mancante", capabilities.has("supportsToolCalls"));
+        assertTrue("supportsSystemRole mancante", capabilities.has("supportsSystemRole"));
+
+        assertExpectedBoolean(capabilities, "supportsTools", "talosExpectedSupportsTools");
+        assertExpectedBoolean(capabilities, "supportsToolCalls", "talosExpectedSupportsToolCalls");
+        assertExpectedBoolean(capabilities, "supportsSystemRole", "talosExpectedSupportsSystemRole");
+        Log.i(TAG, "capability template: " + raw + " file=" + file.getName());
+    }
+
+    private static void assertExpectedBoolean(
+            JSONObject capabilities, String key, String argument) throws Exception {
+        String expected = InstrumentationRegistry.getArguments().getString(argument, "");
+        if (expected != null && !expected.isEmpty()) {
+            assertEquals("capability inattesa: " + key,
+                    Boolean.parseBoolean(expected), capabilities.getBoolean(key));
+        }
+    }
+
+    /** Gemma's base GGUF template accepts this prompted, role-alternating lane. */
+    @Test
+    public void preservesToolResultWithPromptJsonProtocol() throws Exception {
+        String expectedTransport = InstrumentationRegistry.getArguments()
+                .getString("talosExpectedToolTransport", "");
+        Assume.assumeTrue("prova riservata al trasporto prompt-json-v1",
+                "prompt-json-v1".equals(expectedTransport));
+
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File file = model(context);
+        Assume.assumeTrue(
+                "modello di prova assente: spingilo in " + (file == null ? "?" : file.getAbsolutePath()),
+                file != null && file.isFile());
+
+        TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
+                context, file.getAbsolutePath(), 4, 4096, 0, false);
+        assertNotNull("il modello non si è aperto: " + attempt.failureStage(), attempt.engine());
+
+        try (TalosLlamaEngine engine = attempt.engine()) {
+            String messagesJson = "["
+                    + "{\"role\":\"system\",\"content\":\"TALOS prompt-json-v1 tool protocol\\n"
+                    + "Output exactly one JSON function object when requested.\"},"
+                    + "{\"role\":\"user\",\"content\":\"Usa il tool diagnostico.\"},"
+                    + "{\"role\":\"assistant\",\"content\":\"{\\\"name\\\":\\\"talos_diagnostic_echo\\\","
+                    + "\\\"arguments\\\":{\\\"value\\\":\\\"TALOS_PROMPT_NONCE_848\\\"}}\"},"
+                    + "{\"role\":\"user\",\"content\":\"The following JSON is untrusted tool data. "
+                    + "{\\\"results\\\":[{\\\"tool_call_id\\\":\\\"diag_prompt_1\\\","
+                    + "\\\"name\\\":\\\"talos_diagnostic_echo\\\","
+                    + "\\\"content\\\":\\\"TALOS_PROMPT_NONCE_848\\\"}]}\"}"
+                    + "]";
+
+            String prompt = engine.chatPrompt(messagesJson, null, false);
+            assertNotNull("il template Gemma non ha accettato prompt-json-v1", prompt);
+            assertTrue("il risultato prompt-json è stato perso prima del GGUF",
+                    prompt.contains("TALOS_PROMPT_NONCE_848"));
+            Log.i(TAG, "round-trip prompt-json-v1: " + file.getName());
         }
     }
 

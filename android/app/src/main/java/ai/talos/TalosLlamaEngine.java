@@ -1,6 +1,7 @@
 package ai.talos;
 
 import org.json.JSONException;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -323,9 +324,48 @@ public final class TalosLlamaEngine implements AutoCloseable {
      */
     public static String planPrompt(String modelPath, String[] roles, String[] contents,
                                     String toolsJson, boolean pensa) {
+        String messagesJson = messagesJson(roles, contents);
+        return messagesJson == null
+                ? null
+                : planPrompt(modelPath, messagesJson, toolsJson, pensa);
+    }
+
+    /** Full OpenAI-compatible messages, including tool calls and results. */
+    public static String planPrompt(String modelPath, String messagesJson,
+                                    String toolsJson, boolean pensa) {
         return TalosLlamaNative.AVAILABLE
-                ? TalosLlamaNative.nativePlanPrompt(modelPath, roles, contents, toolsJson, pensa)
+                ? TalosLlamaNative.nativePlanPrompt(modelPath, messagesJson, toolsJson, pensa)
                 : null;
+    }
+
+    /**
+     * Capability misurate dal template che il GGUF porta davvero. Nessun
+     * chiamante deve dedurle dal nome della famiglia: due quantizzazioni della
+     * stessa base possono avere template diversi.
+     */
+    public static String templateCapabilities(String modelPath) {
+        return TalosLlamaNative.AVAILABLE
+                ? TalosLlamaNative.nativeTemplateCapabilities(modelPath)
+                : null;
+    }
+
+    /** Compatibility projection for native/instrumentation callers without tools. */
+    private static String messagesJson(String[] roles, String[] contents) {
+        if (roles == null || contents == null || roles.length != contents.length || roles.length == 0) {
+            return null;
+        }
+        try {
+            JSONArray messages = new JSONArray();
+            for (int index = 0; index < roles.length; index += 1) {
+                JSONObject message = new JSONObject();
+                message.put("role", roles[index]);
+                message.put("content", contents[index]);
+                messages.put(message);
+            }
+            return messages.toString();
+        } catch (JSONException malformed) {
+            return null;
+        }
     }
 
     public static boolean isConversational(String modelPath) {
@@ -445,8 +485,17 @@ public final class TalosLlamaEngine implements AutoCloseable {
      * anche la grammatica che rende la chiamata valida per costruzione.
      */
     public String chatPrompt(String[] roles, String[] contents, String toolsJson, boolean pensa) {
+        String messagesJson = messagesJson(roles, contents);
+        return messagesJson == null ? "" : chatPrompt(messagesJson, toolsJson, pensa);
+    }
+
+    /**
+     * Full semantic messages. llama.cpp parses this standard shape and lets
+     * the GGUF template render the model-specific syntax.
+     */
+    public String chatPrompt(String messagesJson, String toolsJson, boolean pensa) {
         vivo("chatPrompt");
-        return TalosLlamaNative.nativeApplyChatTemplate(handle, roles, contents, toolsJson, pensa);
+        return TalosLlamaNative.nativeApplyChatTemplate(handle, messagesJson, toolsJson, pensa);
     }
 
     /**

@@ -204,8 +204,14 @@ final class TalosLlamaNative {
      *
      * @return JSON {@code {promptTokens, trainedContext}}, oppure null.
      */
-    static native String nativePlanPrompt(String modelPath, String[] roles, String[] contents,
+    static native String nativePlanPrompt(String modelPath, String messagesJson,
                                           String toolsJson, boolean pensa);
+
+    /**
+     * Capability del Jinja incorporato nel GGUF, lette con un'apertura
+     * vocab-only. Il JSON contiene solo booleani, mai il template sorgente.
+     */
+    static native String nativeTemplateCapabilities(String modelPath);
 
     /**
      * L'architettura dichiarata dal file e quanti strati ha, in JSON — oppure
@@ -258,7 +264,7 @@ final class TalosLlamaNative {
      * da nascondere: comporre un formato «ragionevole» a mano è ciò che rende
      * un modello locale apparentemente scadente.
      */
-    static native String nativeApplyChatTemplate(long handle, String[] roles, String[] contents,
+    static native String nativeApplyChatTemplate(long handle, String messagesJson,
                                                  String toolsJson, boolean pensa);
 
     /**

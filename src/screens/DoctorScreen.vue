@@ -29,6 +29,7 @@ import {
 } from '@/lib/diagnostics/doctorSections'
 import { talosRememberView, talosRememberedView } from '@/lib/navigation/rememberedView'
 import { buildTalosDiagnosticsReport } from '@/lib/diagnostics/diagnosticsReport'
+import type { TalosLocalModelParityReport } from '@/lib/models/localModelParityDiagnostics'
 
 interface DoctorRow {
     id: string
@@ -80,6 +81,9 @@ const showPassing = ref(false)
 const copied = ref(false)
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 const copyError = ref<string | null>(null)
+const localParity = ref<TalosLocalModelParityReport | null>(null)
+const localParityRunning = ref(false)
+const localParityError = ref<string | null>(null)
 
 const verdict = computed(() => {
     if (rows.value.length === 0) return { ok: true, message: '' }
@@ -109,6 +113,40 @@ const etichettaPiega = computed(() => talosDoctorFoldLabel({
 }))
 const traces = computed(() => controller.traces())
 const buildId = computed(() => rows.value.find((row) => row.id === 'build')?.value ?? t('doctor.unknown'))
+const selectedLocalModel = computed(() => {
+    const model = controller.selectedProviderModel.value
+    return model?.provider === 'local' ? model : null
+})
+const localParityMessage = computed(() => {
+    const report = localParity.value
+    if (!report) return ''
+    const total = report.summary.passed + report.summary.failed + report.summary.skipped
+    const suffix = report.verdict === 'compatible'
+        ? 'Compatible'
+        : report.verdict === 'incompatible' ? 'Incompatible' : 'Incomplete'
+    return t(`doctor.localParity${suffix}`, { passed: report.summary.passed, total })
+})
+
+/** Five real generations can take minutes; this is never an automatic probe. */
+async function runLocalParity(): Promise<void> {
+    const model = selectedLocalModel.value
+    if (!model || localParityRunning.value) return
+    localParityRunning.value = true
+    localParity.value = null
+    localParityError.value = null
+    try {
+        const { runTalosLocalModelParityDiagnostics } = await import(
+            '@/services/localModelParityDiagnostics'
+        )
+        localParity.value = await runTalosLocalModelParityDiagnostics({ model })
+    } catch (failure) {
+        localParityError.value = failure instanceof Error && failure.message
+            ? failure.message.slice(0, 120)
+            : 'TALOS_LOCAL_PARITY_FAILED'
+    } finally {
+        localParityRunning.value = false
+    }
+}
 
 /**
  * Always the WHOLE report, never just the open tab.
@@ -200,6 +238,7 @@ async function copyReport(): Promise<void> {
         issues: issues.value,
         traces: traces.value,
         diagnosticsEnabled: settings.state.shell.debug_diagnostics === true,
+        localModelParity: localParity.value,
     })
     const payload = JSON.stringify(report, null, 2)
     // Android's clipboard has no size limit of its own, but it crosses Binder,
@@ -578,6 +617,83 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                         @click.stop
                     />
                 </div>
+
+                <!-- Five real model rounds, never an automatic startup tax. -->
+                <section
+                    v-if="selectedLocalModel"
+                    class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3"
+                    data-testid="talos-doctor-local-parity"
+                >
+                    <div class="flex min-w-0 items-start gap-3">
+                        <span class="min-w-0 flex-1">
+                            <span class="block text-sm font-semibold text-[var(--talos-text)]">
+                                {{ t('doctor.localParityTitle') }}
+                            </span>
+                            <span class="mt-0.5 block truncate text-2xs text-[var(--talos-muted)]">
+                                {{ selectedLocalModel.displayName }}
+                            </span>
+                        </span>
+                        <button
+                            type="button"
+                            data-testid="talos-doctor-local-parity-run"
+                            :disabled="localParityRunning"
+                            class="talos-pressable min-h-touch shrink-0 rounded-xl border border-[var(--talos-border)] px-3 text-xs font-semibold text-[var(--talos-text)] disabled:opacity-60"
+                            @click="runLocalParity"
+                        >
+                            {{ t(localParityRunning
+                                ? 'doctor.localParityRunning'
+                                : 'doctor.localParityRun') }}
+                        </button>
+                    </div>
+                    <p class="mt-2 text-2xs leading-4 text-[var(--talos-muted)]">
+                        {{ t('doctor.localParityBody') }}
+                    </p>
+
+                    <div
+                        v-if="localParity"
+                        data-testid="talos-doctor-local-parity-result"
+                        role="status"
+                        class="mt-3 border-t border-[var(--talos-border)] pt-2"
+                    >
+                        <p
+                            class="flex items-center gap-2 text-xs font-semibold"
+                            :class="localParity.verdict === 'compatible'
+                                ? 'text-[var(--talos-success)]'
+                                : localParity.verdict === 'incompatible'
+                                    ? 'text-[var(--talos-danger)]'
+                                    : 'text-[var(--talos-muted)]'"
+                        >
+                            <CircleCheck v-if="localParity.verdict === 'compatible'" class="size-4" aria-hidden="true" />
+                            <CircleX v-else class="size-4" aria-hidden="true" />
+                            {{ localParityMessage }}
+                        </p>
+                        <p
+                            data-testid="talos-doctor-local-parity-transport"
+                            class="mt-1 text-2xs text-[var(--talos-muted)]"
+                        >
+                            {{ t('doctor.localParityTransportLabel') }}:
+                            {{ t(`doctor.localParityTransport.${localParity.toolTransport}`) }}
+                        </p>
+                        <ul class="mt-2 grid gap-1 sm:grid-cols-2">
+                            <li
+                                v-for="entry in localParity.checks"
+                                :key="entry.id"
+                                class="flex min-w-0 items-center gap-1.5 rounded-lg bg-[var(--talos-active)] px-2 py-1.5 text-2xs"
+                                :class="entry.status === 'fail'
+                                    ? 'text-[var(--talos-danger)]'
+                                    : 'text-[var(--talos-muted)]'"
+                            >
+                                <CircleCheck v-if="entry.status === 'pass'" class="size-3.5 shrink-0 text-[var(--talos-success)]" aria-hidden="true" />
+                                <CircleX v-else class="size-3.5 shrink-0" aria-hidden="true" />
+                                <span class="min-w-0 truncate">{{ t(`doctor.localParityChecks.${entry.id}`) }}</span>
+                                <span class="ml-auto shrink-0 font-mono">{{ millis(entry.durationMs) }}</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <p v-if="localParityError" role="alert" class="mt-2 text-2xs text-[var(--talos-danger)]">
+                        {{ t('doctor.localParityError', { code: localParityError }) }}
+                    </p>
+                </section>
 
                 <!-- F5.1: recent device issues (fenced timeouts, swallowed native
                      errors) — the evidence channel for device-only failures. -->

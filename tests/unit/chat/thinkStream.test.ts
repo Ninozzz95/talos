@@ -103,6 +103,19 @@ describe('C45-RED-19N think splitter', () => {
         expect(esito.text).toContain('Risposta')
         expect(esito.text).toContain('Fine')
     })
+
+    /** Il protocollo di `melo.jpg` non deve lampeggiare mentre Gemma genera. */
+    it('LOCAL-PARITY-TOOL-STREAM-01 trattiene TOOL_CODE anche fra chunk arbitrari', () => {
+        const esito = attraverso([
+            "Okay, let's start.\n\nTOO",
+            'L_CODE\ntool: memory_',
+            'search\nargs:\nquery: "Gemma 3"',
+        ])
+
+        expect(esito.text).toBe("Okay, let's start.\n\n")
+        expect(esito.text).not.toMatch(/TOOL_CODE|memory_search|args:|query:/)
+        expect(esito.reasoning).toBe('')
+    })
 })
 
 /**
