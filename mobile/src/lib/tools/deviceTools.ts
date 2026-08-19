@@ -364,13 +364,44 @@ export function createTalosDeviceTools(
                  * benissimo per «ristoranti vicino» e va detto lo stesso, se no
                  * il modello non ha modo di sapere quando è il caso di rileggere.
                  */
+                /*
+                 * ⛔⛔ POSIZIONE-CITTA-INVENTATA-01 — qui c'era la riga che ha
+                 * fatto dire a TALOS «Milan» mentre il telefono era a Roma.
+                 *
+                 * MISURATO sul Pad il 2026-08-19, Qwen3-1.7B, «Dove mi trovo
+                 * adesso?»: coordinate giuste (41.899925, 12.478631 — Roma
+                 * centro) e sotto «Location: Milan, Italy». La città era falsa e
+                 * detta con la stessa sicurezza dei due numeri veri.
+                 *
+                 * E non era un'allucinazione libera: questo risultato ORDINAVA
+                 * «say the place name you derived», mentre la descrizione dello
+                 * stesso strumento dice l'opposto — «naming places from a city
+                 * the user is not in is worse than saying you do not know». Due
+                 * istruzioni contrarie dentro un solo tool, e ha vinto quella
+                 * più vicina alla risposta. Un modello da 1,7B non ha una tavola
+                 * di coordinate: gli abbiamo chiesto un nome e ci ha dato il
+                 * nome plausibile che sapeva.
+                 *
+                 * ⛔ E la cura NON è aggiungere il geocoding: il `Geocoder` di
+                 * Android fa richieste HTTP ai server di Google (e il metodo
+                 * sincrono è deprecato da API 33). Vorrebbe dire far uscire la
+                 * posizione della persona da uno strumento che oggi è `read` e
+                 * non chiede consenso di rete — una decisione di privacy, non
+                 * una rifinitura.
+                 *
+                 * ⇒ Il tool dice ciò che SA, e chi legge decide.
+                 */
                 return {
                     ok: true,
                     content: [
                         `Latitude ${dove.latitudine}, longitude ${dove.longitudine}`,
                         `(accurate to about ${dove.precisioneMetri} m, measured ${dove.etaSecondi} s ago).`,
-                        'Use these coordinates to work out the area, and say the place name you',
-                        'derived so the user can correct you if it is wrong.',
+                        'These coordinates are the whole answer: this device did not resolve',
+                        'them to any place name.',
+                        'DO NOT NAME a city, town or neighbourhood unless the user already told',
+                        'you where they are: a wrong place name said with confidence is worse',
+                        'than the coordinates alone.',
+                        'Give the coordinates, and offer to look the area up if they want the name.',
                     ].join(' '),
                 }
             },
