@@ -822,6 +822,7 @@ async function run(
         capabilities: template.capabilities,
         turns: conversationOf(input),
         tools: wireTools,
+        locale: input.locale,
     })
     const turns = projection.turns
     const tools = projection.templateTools

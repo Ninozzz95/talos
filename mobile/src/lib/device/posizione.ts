@@ -42,6 +42,15 @@ export interface TalosPosizione {
     readonly precisioneMetri?: number
     /** Quanti secondi fa è stata rilevata: una posizione vecchia va detta. */
     readonly etaSecondi?: number
+    /**
+     * ⛔⛔ Vero SOLO con `ACCESS_FINE_LOCATION` concesso.
+     *
+     * MISURATO sul Pad il 2026-08-19: la precisa era negata con `USER_FIXED`,
+     * restava l'approssimata, e TALOS rispondeva **Roma** a chi era a
+     * **Catania** — 500 km — senza che niente nel risultato lo lasciasse
+     * sospettare. Un fix approssimato è utile; spacciarlo per preciso no.
+     */
+    readonly precisa?: boolean
 }
 
 /**
@@ -138,15 +147,35 @@ export async function talosLeggiPosizione(
      * volte Android non mostra più nulla e risponde subito — e quella risposta
      * è `denied`, che è esattamente ciò che vogliamo saper distinguere.
      */
+    /**
+     * ⛔⛔ Owner 2026-08-19: «DEVI USARE POSIZIONE PRECISA».
+     *
+     * Qui c'era una riga sola —
+     * `stato.location === 'granted' || stato.coarseLocation === 'granted'` —
+     * e dentro c'era tutto il difetto: con l'approssimata concessa la precisa
+     * non veniva **mai** chiesta, e i due casi uscivano **identici**.
+     *
+     * ⇒ Adesso: la precisa si chiede quando manca; se resta negata si legge lo
+     * stesso — un dato approssimato batte il silenzio — ma il risultato lo
+     * DICHIARA, e chi legge decide. Su Android 12+ `location` è la precisa e
+     * `coarseLocation` l'approssimata: sono due permessi, non due nomi dello
+     * stesso.
+     */
+    let precisa = false
     try {
         const stato = await plugin.checkPermissions()
-        const concesso = stato.location === 'granted' || stato.coarseLocation === 'granted'
-        if (!concesso) {
+        precisa = stato.location === 'granted'
+        let approssimata = stato.coarseLocation === 'granted'
+        if (!precisa) {
+            // ⛔ Si chiede anche quando l'approssimata c'è già: è l'unico modo
+            // per passare da approssimata a precisa. Se la persona l'ha fissata
+            // su «approssimata», Android risponde subito e non mostra niente —
+            // e quella risposta immediata è un esito, non un guasto.
             const chiesto = await plugin.requestPermissions({ permissions: ['location', 'coarseLocation'] })
-            if (chiesto.location !== 'granted' && chiesto.coarseLocation !== 'granted') {
-                return { stato: 'negato' }
-            }
+            precisa = chiesto.location === 'granted'
+            approssimata = approssimata || chiesto.coarseLocation === 'granted'
         }
+        if (!precisa && !approssimata) return { stato: 'negato' }
     } catch (errore) {
         return { stato: classifica(errore) }
     }
@@ -163,6 +192,7 @@ export async function talosLeggiPosizione(
             longitudine: arrotonda(letta.coords.longitude),
             precisioneMetri: Math.round(letta.coords.accuracy),
             etaSecondi: Math.max(0, Math.round((adesso() - letta.timestamp) / 1000)),
+            precisa,
         }
     } catch (errore) {
         return { stato: classifica(errore) }

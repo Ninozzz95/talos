@@ -352,7 +352,7 @@ function localSystemPrompt(
  * `of()` ripete il codice quando non conosce la lingua («xx» → «xx»): un nome
  * che è ancora un codice non aiuta nessuno, e si tace.
  */
-function nomeDellaLingua(locale: string | null | undefined): string | null {
+export function nomeDellaLingua(locale: string | null | undefined): string | null {
     if (!locale) return null
     try {
         const nome = new Intl.DisplayNames(['en'], { type: 'language' }).of(locale.split('-')[0])

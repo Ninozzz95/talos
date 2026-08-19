@@ -28,6 +28,8 @@ export interface CompletionContext {
     effort: string
     thinking: boolean
     system?: string
+    /** La lingua scelta dalla persona nell'interfaccia. Vedi providerContracts. */
+    locale?: string | null
 }
 
 export function buildChatCompletion(
@@ -108,6 +110,7 @@ export function buildChatCompletion(
             system: context.system,
             effort: context.effort,
             thinking: context.thinking,
+            locale: context.locale,
             ...(compatibleTools?.length ? { tools: compatibleTools } : {}),
         }
         const credential = { apiKey: context.apiKey, endpoint: context.endpoint, timeoutMs: context.timeoutMs }

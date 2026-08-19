@@ -3811,6 +3811,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     system: (sendIdentity.surface === 'browse'
                         ? tonePrompt + TALOS_BROWSE_APPENDIX
                         : tonePrompt) + indiceNelPrompt + senzaMotoreDiRicerca,
+                    /*
+                     * ⛔ LO STESSO locale che nomina la lingua nel prompt di
+                     * sistema poco sopra. Lì è la prima cosa che il modello
+                     * legge; il motore locale lo usa anche per l'ultima, dopo
+                     * i dati inglesi del tool.
+                     */
+                    locale: localization.state.locale,
                 }),
                 deps.transport,
             )
