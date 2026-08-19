@@ -316,3 +316,56 @@ describe('il calendario che TALOS non sa leggere', () => {
         }
     })
 })
+
+/**
+ * ⛔⛔ LOCALE-LINGUA-PER-NOME-01 — Gemma ha risposto in inglese a una domanda
+ * italiana, e la riga giusta c'era ma non arrivava ai modelli locali.
+ *
+ * MISURATO sul Pad il 2026-08-19, `gemma-3-4b-it-Q4_K_M`:
+ *
+ *   «Ciao, come stai?»                              → risposta in ITALIANO ✓
+ *   «Leggi la posizione e dimmi le coordinate»       → «I have read the phone's
+ *                                                       location…» in INGLESE ✗
+ *
+ * La differenza è cosa aveva letto: il risultato del tool è in inglese, e il
+ * modello ha seguito la lingua del materiale. È lo stesso difetto già misurato
+ * il 15 agosto con `library_read` e un documento italiano — e curato, ma solo
+ * per i provider API, con `rigaDellaLingua()` che dice la lingua PER NOME e
+ * nomina l'eccezione («even when … tool output are in another language»).
+ *
+ * Ai modelli locali arrivava invece la versione che chiede di DEDURRE la
+ * lingua, «reply in the user's language» — cioè esattamente ciò che il commento
+ * sopra `rigaDellaLingua` dichiara insufficiente. Il tetto di 600 caratteri non
+ * è un ostacolo: la frase col nome è lunga quanto quella senza.
+ */
+describe('LOCALE-LINGUA-PER-NOME-01 anche il prompt locale dice la lingua per nome', () => {
+    const localeIdentity = { provider: 'local' as const, model: 'gemma-3-4b-it-Q4_K_M' }
+
+    it('nomina la lingua invece di farla dedurre', () => {
+        const prompt = buildTalosSystemPrompt('balanced', localeIdentity, 'it')
+        expect(prompt).toContain('Italian')
+        expect(prompt).not.toContain("the user's language")
+    })
+
+    it('nomina l\'eccezione che ha causato il difetto: l\'esito di un tool in un\'altra lingua', () => {
+        const prompt = buildTalosSystemPrompt('balanced', localeIdentity, 'it')
+        // L'intento, non la forma verbale: deve dire che la regola vale ANCHE
+        // quando il materiale letto è in un'altra lingua.
+        expect(prompt).toMatch(/even (if|when)/i)
+        expect(prompt).toMatch(/tool output/i)
+        expect(prompt).toMatch(/another language/i)
+    })
+
+    it('resta dentro il tetto misurato dei 600 caratteri', () => {
+        for (const locale of ['it', 'en', 'de', 'pt-BR']) {
+            const prompt = buildTalosSystemPrompt('balanced', localeIdentity, locale)
+            expect(prompt.length).toBeLessThan(600)
+        }
+    })
+
+    it('senza locale resta la riga di prima, non una frase monca', () => {
+        const prompt = buildTalosSystemPrompt('balanced', localeIdentity)
+        expect(prompt).toContain("Reply in the user's language")
+        expect(prompt.length).toBeLessThan(600)
+    })
+})
