@@ -267,6 +267,13 @@ export interface TalosToolset {
     setChain(sessionId: string | null, next: TalosToolChainState): void
 }
 
+/**
+ * Le due ricerche che mandano davvero qualcuno a leggere il web: senza motore
+ * configurato non hanno modo di riuscire, quindi non si offrono. Le altre
+ * `research_*` lavorano sui rapporti già sul dispositivo e restano.
+ */
+const AVVIANO_UNA_RICERCA: ReadonlySet<string> = new Set(['research_start', 'research_resume'])
+
 export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosToolset> {
     const now = deps.now ?? (() => new Date().toISOString())
     const libraryAccess = (): 'allow' | 'ask' | 'deny' => {
@@ -738,7 +745,35 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
                 ...modelTools,
                 ...calendarTools,
                 ...(web ? createTalosWebTools(web) : []),
-                ...(research ? createTalosResearchTools(research) : []),
+                /*
+                 * ⛔⛔ WEB-SENZA-MOTORE-01 — ciò che AVVIA una ricerca sparisce
+                 * insieme al motore, esattamente come `web_search`.
+                 *
+                 * MISURATO sul Pad il 2026-08-19: senza motore configurato il
+                 * ponte offriva 64 strumenti e `web_search` non c'era; appena
+                 * l'owner ha messo Tavily sono diventati 67, con `web_search` e
+                 * `web_read` in testa. Ma `research_start` era offerta in
+                 * entrambi i casi — e l'owner ha visto la conseguenza: «chiedo
+                 * una ricerca web e parte la Deep Research», che costa minuti e
+                 * credito vero.
+                 *
+                 * Non era una confusione del modello: gli avevamo lasciato un
+                 * solo strumento capace di cercare, e per giunta il più caro. E
+                 * senza motore la ricerca approfondita non può nemmeno riuscire
+                 * — il suo errore dedicato `TALOS_RESEARCH_NO_SEARCH_SOURCE`
+                 * esiste apposta. Offrire una capacità che non può funzionare è
+                 * la definizione di funzione finta.
+                 *
+                 * ⇒ Restano le operazioni LOCALI sui rapporti già fatti
+                 * (elenco, lettura, rinomina, pausa, annulla, elimina): quelle
+                 * funzionano lo stesso, e toglierle nasconderebbe ricerche che
+                 * la persona ha davvero.
+                 */
+                ...(research
+                    ? createTalosResearchTools(research).filter(
+                        (tool) => web !== null || !AVVIANO_UNA_RICERCA.has(tool.name),
+                    )
+                    : []),
                 ...(memoryWrite ? createTalosMemoryWriteTools(memoryWrite) : []),
                 ...(deps.device?.() ? createTalosDeviceTools(deps.device()!) : []),
                 /*
