@@ -99,6 +99,33 @@ public class TalosLlamaPlugin extends Plugin {
 
     @PluginMethod
     public void available(PluginCall call) {
+        /*
+         * ⛔⛔⛔ `open()` crea il motore sul worker single-thread, mentre questa
+         * entrypoint nasce dal bridge Capacitor e parte su `CapacitorPlugins`.
+         * Anche le letture apparentemente innocue (`modelShape`, cache,
+         * contesto e runtime) sono proprietà del contesto nativo posseduto dal
+         * worker. Sul Pad questo varco terminava con
+         * `TALOS_LLAMA_FUORI_DALL_ATTORE` prima del primo token locale.
+         *
+         * Il ritratto viene quindi costruito sullo stesso attore che possiede il
+         * motore. La risposta al bridge può arrivare da quel worker; è il
+         * contratto già usato dalle altre operazioni native del plugin.
+         */
+        worker.execute(() -> {
+            try {
+                availableOnActor(call);
+            } catch (Exception errore) {
+                call.reject(
+                    "TALOS_LLAMA_AVAILABLE_FAILED: " + String.valueOf(errore.getMessage()),
+                    "TALOS_LLAMA_AVAILABLE_FAILED",
+                    errore
+                );
+            }
+        });
+    }
+
+    /** Builds the availability snapshot on the executor that owns the engine. */
+    private void availableOnActor(PluginCall call) {
         JSObject result = new JSObject();
         result.put("available", TalosLlamaNative.AVAILABLE);
         // The registered ggml backends, verbatim. The interface may show them;

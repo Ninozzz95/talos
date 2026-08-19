@@ -120,6 +120,58 @@ public class TalosMotoreAttoreDeviceTest {
     }
 
     /**
+     * LLAMA-LOCAL-AVAILABLE-OFF-ACTOR-01 — anche lo snapshot diagnostico è
+     * actor-owned. Prima della correzione `TalosLlamaPlugin.available()` lo
+     * chiedeva dal thread Capacitor e il primo prompt locale faceva cadere il
+     * processo. Questo scenario conserva il contratto: tutte le misure che
+     * `available()` espone devono rifiutare un thread estraneo, quindi il plugin
+     * è obbligato a eseguirle sul worker che ha aperto il motore.
+     */
+    @Test
+    public void tutteLeMisureDiAvailableRestanoActorOwned() throws Exception {
+        TalosLlamaEngine engine = apri();
+        try {
+            AtomicInteger guardie = new AtomicInteger(0);
+            AtomicReference<Throwable> inatteso = new AtomicReference<>(null);
+            CountDownLatch finito = new CountDownLatch(1);
+            Thread estraneo = new Thread(() -> {
+                try {
+                    try { engine.modelShape(); fail("modelShape ha attraversato il thread estraneo"); }
+                    catch (IllegalStateException atteso) {
+                        assertTrue(atteso.getMessage().contains("TALOS_LLAMA_FUORI_DALL_ATTORE"));
+                        guardie.incrementAndGet();
+                    }
+                    try { engine.kvCacheType(); fail("kvCacheType ha attraversato il thread estraneo"); }
+                    catch (IllegalStateException atteso) {
+                        assertTrue(atteso.getMessage().contains("TALOS_LLAMA_FUORI_DALL_ATTORE"));
+                        guardie.incrementAndGet();
+                    }
+                    try { engine.contextTokens(); fail("contextTokens ha attraversato il thread estraneo"); }
+                    catch (IllegalStateException atteso) {
+                        assertTrue(atteso.getMessage().contains("TALOS_LLAMA_FUORI_DALL_ATTORE"));
+                        guardie.incrementAndGet();
+                    }
+                    try { engine.runtimeConfig(); fail("runtimeConfig ha attraversato il thread estraneo"); }
+                    catch (IllegalStateException atteso) {
+                        assertTrue(atteso.getMessage().contains("TALOS_LLAMA_FUORI_DALL_ATTORE"));
+                        guardie.incrementAndGet();
+                    }
+                } catch (Throwable altro) {
+                    inatteso.set(altro);
+                } finally {
+                    finito.countDown();
+                }
+            }, "capacitor-available-probe");
+            estraneo.start();
+            assertTrue("l'ispezione estranea non è terminata", finito.await(10, TimeUnit.SECONDS));
+            assertNull("la guardia ha fallito per un motivo diverso", inatteso.get());
+            assertEquals("una misura diagnostica non è più protetta dall'attore", 4, guardie.get());
+        } finally {
+            engine.close();
+        }
+    }
+
+    /**
      * ⛔⛔ E questo non aveva nemmeno bisogno di due thread.
      *
      * Il campo closed esisteva, ma lo leggeva solo close(). Dopo una chiusura

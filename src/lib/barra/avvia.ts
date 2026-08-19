@@ -96,6 +96,8 @@ export async function talosAvviaLaBarra(i18n: Plugin): Promise<boolean> {
          */
         chiamata: 1,
         daVoce: letto.daVoce,
+        bloccata: letto.bloccata,
+        bargeIn: letto.bargeIn,
         contesto: { nodi: letto.contesto.nodi, immagine: letto.contesto.immagine },
     })
 
@@ -119,6 +121,8 @@ export async function talosAvviaLaBarra(i18n: Plugin): Promise<boolean> {
              * prima volta.
              */
             modo.daVoce = aggiornato.daVoce
+            modo.bloccata = aggiornato.bloccata
+            modo.bargeIn = aggiornato.bargeIn
             /*
              * ⛔⛔ UNA CONSEGNA IN PIÙ NON È UNA CHIAMATA IN PIÙ.
              *

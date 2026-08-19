@@ -125,6 +125,10 @@ describe('⛔ il pallino e il pulsante flottante sono obliterati', () => {
         // di chiamare TALOS. Toglierlo per «finire il lavoro» romperebbe una
         // scorciatoia che l'owner non ha mai chiesto di togliere.
         expect(c('android/app/src/main/res/xml/talos_occhio.xml'))
-            .toMatch(/flagRequestAccessibilityButton/)
+            .not.toMatch(/flagRequestAccessibilityButton/)
+        const occhio = c('android/app/src/main/java/ai/talos/agent/TalosOcchio.kt')
+        expect(occhio).not.toMatch(/AccessibilityButtonController/)
+        expect(occhio).not.toMatch(/registerAccessibilityButtonCallback/)
+        expect(occhio).not.toMatch(/unregisterAccessibilityButtonCallback/)
     })
 })

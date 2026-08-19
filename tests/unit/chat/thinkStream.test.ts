@@ -93,6 +93,16 @@ describe('C45-RED-19N think splitter', () => {
             expect(fetta.text).not.toMatch(/<|>/)
         }
     })
+
+    it('non emette la riga tool_details nemmeno quando arriva spezzata', () => {
+        const esito = attraverso([
+            'Risposta\ntool_det',
+            'ails: library_list, notes_list, tasks_list\nFine',
+        ])
+        expect(esito.text).not.toContain('tool_details')
+        expect(esito.text).toContain('Risposta')
+        expect(esito.text).toContain('Fine')
+    })
 })
 
 /**
@@ -140,8 +150,14 @@ describe('il testo finale, non solo lo stream', () => {
             .toEqual({ text: 'Ciao', reasoning: 'ragiono' })
     })
 
+    it('toglie la riga tool_details dal testo finale', () => {
+        expect(talosSplitFinalThink(
+            'Risposta\ntool_details: library_list, notes_list, tasks_list\nFine',
+            null,
+        )).toEqual({ text: 'Risposta\nFine', reasoning: '' })
+    })
+
     it('regge testo e ragionamento assenti', () => {
         expect(talosSplitFinalThink(null, undefined)).toEqual({ text: '', reasoning: '' })
     })
 })
-
