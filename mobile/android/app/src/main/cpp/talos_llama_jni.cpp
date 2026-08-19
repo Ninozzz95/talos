@@ -970,6 +970,24 @@ Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlo
         // «questo modello non si formatta» è un'informazione, un prompt vuoto è
         // un mistero.
         TALOS_LOGE("template di chat non applicabile: %s", failure.what());
+        /*
+         * ⛔⛔ E LA SEQUENZA DEI RUOLI, che è l'unica cosa che serve per capire.
+         *
+         * MISURATO sul Pad il 2026-08-19 con Gemma 3: il template rifiuta con
+         * «Conversation roles must alternate user/assistant/…» e il messaggio
+         * dell'eccezione non dice QUALE sequenza gli è arrivata. Senza quella
+         * riga si tira a indovinare: due user di fila? un `tool` che il template
+         * non conosce? un `system` che sposta gli indici pari?
+         *
+         * Si stampano SOLO i ruoli — mai il contenuto: una conversazione in
+         * logcat sarebbe la cosa peggiore che questo file possa fare.
+         */
+        std::string ruoli;
+        for (const auto & messaggio : inputs.messages) {
+            if (!ruoli.empty()) ruoli += ">";
+            ruoli += messaggio.role;
+        }
+        TALOS_LOGE("ruoli ricevuti: %s", ruoli.c_str());
         session->chat_ready = false;
         return env->NewStringUTF("");
     }

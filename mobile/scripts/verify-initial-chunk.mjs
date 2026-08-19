@@ -337,7 +337,33 @@ import { resolve } from 'node:path'
  * trappola sotto la prossima riga — è la stessa critica scritta più in alto su
  * 600.000, e vale anche quando il tetto lo sto alzando io.
  */
-const DEFAULT_MAXIMUM_BYTES = 605_000
+/*
+ * ⛔ 606.000 dal 2026-08-19, e cosa ha comprato l'aumento.
+ *
+ * Tre difetti misurati sul Pad, tutti nel percorso che il pezzo d'avvio porta
+ * con sé:
+ *
+ *   1. `gemma-3-4b-it-Q4_K_M` non partiva affatto — `NO_CHAT_TEMPLATE`, perché
+ *      due turni dello stesso ruolo si toccavano e il template Jinja di Gemma
+ *      verifica l'alternanza. La fusione dei turni sta in `conversationOf`.
+ *   2. TALOS diceva «Milan» stando a Roma: il risultato di `device_location`
+ *      ordinava di derivare il nome del luogo, mentre la sua descrizione lo
+ *      vietava.
+ *   3. Gemma rispondeva in inglese a domande italiane appena un tool
+ *      restituiva testo inglese: il prompt locale chiedeva di DEDURRE la
+ *      lingua invece di nominarla.
+ *
+ * Prima di alzare il tetto ho tolto il grasso che avevo appena aggiunto: la
+ * funzione del nome della lingua era duplicata fra prompt API e prompt locale
+ * (-69 byte) e il ramo di ripiego non serviva, perché il locale arriva sempre
+ * (-98). Restavano 66 byte di cure vere.
+ *
+ * ⇒ Il tetto è un contenitore, non il valore: si alza di mille byte, come già
+ * fatto due volte prima, e non si azzoppa una cura per farci stare dentro.
+ * Mille e non sessantasei: quattro byte di margine sono una trappola sotto la
+ * prossima riga, ed è la stessa critica scritta qui sopra.
+ */
+const DEFAULT_MAXIMUM_BYTES = 606_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {
