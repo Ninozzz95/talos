@@ -3675,6 +3675,15 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 ? [...offeredTools, dettagliStrumento as never]
                 : offeredTools
             /*
+             * ⛔ I nomi VERI del catalogo — quelli già passati dai permessi e
+             * dagli interruttori. Servono in due punti: al cancello qui sotto e
+             * al recupero delle chiamate scritte a mano nell'adattatore locale,
+             * che senza di questi butterebbe una chiamata giusta.
+             */
+            const nomiDelCatalogo = new Set(
+                offeredTools.map((tool: { name: string }) => tool.name),
+            )
+            /*
              * ⛔ Il testo sta in `catalogoCompatto`, non qui: è la parte che ha
              * dovuto imparare a farsi obbedire da un modello piccolo, e va
              * scritta accanto alla misura che l'ha corretta — non in mezzo a
@@ -3818,6 +3827,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * i dati inglesi del tool.
                      */
                     locale: localization.state.locale,
+                    /*
+                     * ⛔ SALTO-DIRETTO-PUNITO-01: l'adattatore locale recupera le
+                     * chiamate che il modello scrive nel testo, e per farlo deve
+                     * sapere quali nomi sono VERI. Senza, una chiamata giusta a uno
+                     * strumento non ancora svelato resta testo, e finisce in chat.
+                     */
+                    executableToolNames: [...nomiDelCatalogo],
                 }),
                 deps.transport,
             )
@@ -4152,10 +4168,16 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * it. An explicit `tool_details` call reveals the name for
                      * the following round.
                      */
+                    /*
+                     * ⛔ SALTO-DIRETTO-PUNITO-01: il terzo argomento sono i nomi
+                     * VERI del catalogo. Chi c'è dentro è eseguibile — vedi la
+                     * misura accanto alla funzione — e chiamarlo lo svela, così al
+                     * giro dopo il modello ne vede anche la forma.
+                     */
                     if (
                         profile?.provider === 'local'
                         && catalogo
-                        && !catalogo.talosToolDelCatalogoEseguibile(call.name, svelati)
+                        && !catalogo.talosToolDelCatalogoEseguibile(call.name, svelati, nomiDelCatalogo)
                     ) {
                         return {
                             status: 'terminal' as const,
@@ -4166,6 +4188,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             },
                         }
                     }
+                    // Eseguirlo lo svela: la forma serve al giro successivo.
+                    if (nomiDelCatalogo.has(call.name)) svelati.add(call.name)
                     const tool = strumentiEseguibili.find(
                         (entry: { name: string }) => entry.name === call.name,
                     )

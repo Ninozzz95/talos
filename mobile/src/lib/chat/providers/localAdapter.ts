@@ -998,7 +998,19 @@ async function run(
      * ⛔ Solo se il parser non ha trovato NIENTE: quando il formato è stato
      * letto bene, un oggetto JSON nella prosa è prosa.
      */
-    const nomiOfferti = new Set((offered ?? []).map((tool) => tool.name))
+    /*
+     * ⛔ SALTO-DIRETTO-PUNITO-01 — gli ESPOSTI più gli ESEGUIBILI.
+     *
+     * MISURATO sul Pad il 2026-08-19: Gemma ha scritto
+     * `{"name":"device_location","arguments":{…}}` al primo giro, quando gli
+     * esposti erano il solo `tool_details`. Cercando il nome solo fra gli
+     * esposti la chiamata non veniva riconosciuta, e quel JSON finiva in chat
+     * come se fosse la risposta.
+     */
+    const nomiOfferti = new Set([
+        ...(offered ?? []).map((tool) => tool.name),
+        ...(input.executableToolNames ?? []),
+    ])
     let chiamateGrezze = generation.toolCalls
     let testoGrezzo = generation.text
     if (!chiamateGrezze?.length && nomiOfferti.size > 0) {
