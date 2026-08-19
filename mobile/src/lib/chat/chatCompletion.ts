@@ -30,6 +30,8 @@ export interface CompletionContext {
     system?: string
     /** La lingua scelta dalla persona nell'interfaccia. Vedi providerContracts. */
     locale?: string | null
+    /** Vedi providerContracts: i nomi eseguibili, non solo gli esposti. */
+    executableToolNames?: readonly string[]
 }
 
 export function buildChatCompletion(
@@ -111,6 +113,7 @@ export function buildChatCompletion(
             effort: context.effort,
             thinking: context.thinking,
             locale: context.locale,
+            executableToolNames: context.executableToolNames,
             ...(compatibleTools?.length ? { tools: compatibleTools } : {}),
         }
         const credential = { apiKey: context.apiKey, endpoint: context.endpoint, timeoutMs: context.timeoutMs }

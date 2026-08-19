@@ -102,11 +102,42 @@ export const TALOS_DETTAGLI_STRUMENTO = 'tool_details'
  * before that capability can cross the executor boundary. `tool_details` is the
  * one read-only exception because it is the operation that reveals schemas.
  */
+/**
+ * ⛔⛔⛔ SALTO-DIRETTO-PUNITO-01 — chiamava lo strumento GIUSTO, e lo buttavamo.
+ *
+ * MISURATO sul Pad il 2026-08-19, `gemma-3-4b-it-Q4_K_M`. In chat, come se
+ * fosse la risposta:
+ *
+ * ```
+ *   Ecco le coordinate del telefono:
+ *   {"name":"device_location","arguments":{…}}
+ * ```
+ *
+ * Nome vero, forma giusta, strumento esistente e già passato da
+ * `toolset.offer` — cioè dai permessi e dagli interruttori della persona.
+ * Rifiutato per un motivo solo: non era passato prima da `tool_details`.
+ *
+ * ⛔ Ma il catalogo a due passi è un RISPARMIO, non un cancello di sicurezza:
+ * esiste per non mettere 61 schemi da 38.386 byte nel prompt di un modello
+ * piccolo. Chi salta il primo passo e indovina il nome giusto sta facendo
+ * meglio di quanto il protocollo si aspetti.
+ *
+ * ⇒ Chi è NEL CATALOGO è eseguibile, e chiamarlo lo svela. Il cancello vero
+ * resta dov'era: i permessi a monte, la scheda di consenso, e lo schema dello
+ * strumento che convalida gli argomenti.
+ *
+ * ⛔ Ciò che il cancello proteggeva DAVVERO continua a non passare: un nome
+ * che non esiste — il marcatore di testo che Qwen scambiò per `memory_search`
+ * — non è nel catalogo, quindi resta rifiutato.
+ */
 export function talosToolDelCatalogoEseguibile(
     nome: string,
     svelati: ReadonlySet<string>,
+    nelCatalogo?: ReadonlySet<string>,
 ): boolean {
-    return nome === TALOS_DETTAGLI_STRUMENTO || svelati.has(nome)
+    return nome === TALOS_DETTAGLI_STRUMENTO
+        || svelati.has(nome)
+        || nelCatalogo?.has(nome) === true
 }
 
 /**
@@ -359,9 +390,38 @@ export function talosStrumentoDettagli(
             const avviso = mancanti.length
                 ? `\n\nThese do not exist: ${mancanti.join(', ')}.`
                 : ''
+            /*
+             * ⛔⛔⛔ SCHEMA-SCAMBIATO-PER-RISULTATO-01 — svelava, e poi INVENTAVA.
+             *
+             * MISURATO sul Pad il 2026-08-19, Qwen3-1.7B. Nel registro del motore
+             * gli strumenti esposti passano da 1 a 2 fra i due giri — cioè
+             * `tool_details` è stato chiamato DAVVERO e `device_location` era
+             * chiamabile. Al secondo giro il modello ha scritto «La posizione del
+             * telefono è: 41.8996° N, 12.4347° E» senza chiamarlo. Il Pad era a
+             * Catania, e quel numero ha sei decimali dove il codice ne fa quattro.
+             *
+             * ⇒ Il primo salto lo fa. È DOPO il primo salto che crede di aver
+             * finito: gli restituivamo `JSON.stringify([...schemi])` e basta — un
+             * blob col nome dello strumento, la sua descrizione e i suoi campi.
+             * Per un modello da 1,7 miliardi è indistinguibile da un esito: ha
+             * letto qualcosa di pertinente e ha risposto.
+             *
+             * ⛔ Le righe stanno in FONDO, dopo lo schema, per la stessa ragione
+             * della lingua in `localToolPromptProtocol.ts`: è l'ultima cosa che
+             * legge prima di decidere. Se stessero prima, l'ultima cosa letta
+             * tornerebbe a essere il blob che ha già scambiato per una risposta.
+             */
+            const nomi = trovati.map((tool) => tool.name)
+            const ORDINE = [
+                'These are SCHEMAS ONLY. Nothing has been executed and you have no results yet.',
+                `Your next message must be the call to ${nomi.join(', ')} — not an answer.`,
+                'Do not state any fact these tools would provide until you have called them:',
+                'a made-up value is worse than saying you do not know.',
+            ].join(' ')
             return {
                 ok: true,
-                content: JSON.stringify(await Promise.all(trovati.map(schemaDi))) + avviso,
+                content: JSON.stringify(await Promise.all(trovati.map(schemaDi)))
+                    + avviso + `\n\n${ORDINE}`,
             }
         },
     })

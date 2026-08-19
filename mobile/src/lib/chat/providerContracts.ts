@@ -62,6 +62,16 @@ export interface TalosMobileCompletionInput {
      * dei risultati, che è l'ultima cosa che il modello legge.
      */
     locale?: string | null
+    /**
+     * ⛔ SALTO-DIRETTO-PUNITO-01 — i nomi che il motore locale può eseguire,
+     * anche se non sono fra quelli ESPOSTI in questo giro.
+     *
+     * Il catalogo compatto mostra pochi strumenti per volta per non pagare
+     * 38.386 byte di schemi. Ma quando un modello indovina il nome giusto e lo
+     * scrive nel testo, il recupero deve riconoscerlo: cercarlo solo fra gli
+     * esposti lo farebbe finire in chat come prosa.
+     */
+    executableToolNames?: readonly string[]
 }
 
 export interface TalosMobileCompletionResult {
