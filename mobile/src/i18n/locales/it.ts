@@ -3019,6 +3019,23 @@ export const TALOS_IT_MESSAGES = {
             unchecked: 'non verificata',
             contested: 'contesa',
         },
+        registroTitolo: 'Come è stato costruito',
+        // ⛔ Il sommario dice il LAVORO, non l’attesa: l’attesa la persona
+        // l’ha vissuta, il lavoro no — ed è quello che dice se un 100% è
+        // stato pagato o solo dichiarato.
+        registroSommario: '{total} passi · {search} ricerche · {read} pagine lette · {verify} verifiche · {worked} di lavoro',
+        registroApri: 'Vedi tutti i passi',
+        registroChiudi: 'Nascondi i passi',
+        registroFalliti: '{failed} non riusciti',
+        registroInterrotti: '{interrupted} interrotti',
+        registroTentativi: '{attempts} tentativi',
+        registroInCorso: 'in corso',
+        registroTipo: {
+            search: 'ricerca',
+            read: 'lettura',
+            synthesise: 'sintesi',
+            verify: 'verifica',
+        },
         dissensoTitolo: 'Le fonti non concordano',
         dissensoAFavore: 'Dice di sì',
         dissensoContro: 'Dice di no',
