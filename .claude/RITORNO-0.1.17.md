@@ -1074,6 +1074,35 @@ mancato di poco è un cancello mancato, e il numero che conta è il secondo.
 che ho provato. ⛔ Con la produzione com'è oggi — FA accesa, microbatch 256 — il
 cancello è **FAILED** su entrambe le condizioni.
 
+#### ⛔⛔ E la manopola NON è dove l'avevo cercata — né il valore quello che credevo
+
+Trovato aprendo la Fase 7, e smentisce una mia riga sopra. `n_ubatch = 256` in
+`talos_apri_modello` è un **ripiego**, non il valore di produzione: il plugin
+riceve un `microBatch` esplicito, e chi glielo manda è TypeScript —
+`src/lib/models/engineTuning.ts`:
+
+```ts
+const microBatch = core >= 6 ? 512 : 256
+```
+
+Il Pad ha **8 core** ⇒ la produzione apre a **512**, non a 256.
+
+⛔ Due conseguenze, e nessuna comoda:
+
+1. **Tutta la matrice qui sopra parte dal valore sbagliato.** 256, 128 e 64 sono
+   stati misurati contro il ripiego del JNI, che la produzione non usa mai. Il
+   punto di partenza vero è 512, dove lo Stop nel prefill sarà **peggio** di
+   1.458 ms — misura in coda sul Pad mentre scrivo.
+2. **La cura non è in C++.** Sta in `engineTuning.ts`, ed è una riga di
+   TypeScript. Avevo scritto «una riga in `talos_apri_modello`»: sbagliato.
+
+⭐ Va detta anche una cosa a favore di chi l'ha scritta: il commento sopra quella
+riga **aveva già capito il compromesso** — «l'attesa massima dello Stop è un
+microbatch intero: raddoppiarlo raddoppia il tempo che passa fra il dito e il
+silenzio». Il ragionamento era giusto e non era mai stato **verificato su una
+GPU**. Adesso lo è, e il numero è più brutto di quanto la prosa lasciasse
+immaginare.
+
 #### Il prezzo, scritto accanto
 
 ⛔ Raccomandare una configurazione senza misurarne il costo sarebbe la stessa

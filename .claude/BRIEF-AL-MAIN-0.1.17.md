@@ -108,11 +108,16 @@ non una misura scarsa: **non esistono numeri Vulkan**.
    lungo, e le sette voci della suite golden **identiche**. Una riga in
    `talos_apri_modello`. ⛔ Vale per *questo* backend su *questa* GPU: upstream
    ha «migliorare la Flash Attention» fra i propri TODO.
-3. ⛔ **Il microbatch: 256 com'è, o più piccolo?** È la manopola che decide
-   quanto ci mette lo Stop a mordere, perché l'attesa massima è **un
-   microbatch**. Con FA spenta: 256 → Stop 1.430 ms · 128 → 275 ms · 64 →
-   102 ms, e il prefill scende in proporzione. ⛔ Il cancello G4 lo passa **solo
-   il 64**; il 128 lo manca per **14 millisecondi**.
+3. ⛔ **Il microbatch: quanto piccolo?** È la manopola che decide quanto ci
+   mette lo Stop a mordere, perché l'attesa massima è **un microbatch**. Con FA
+   spenta: 256 → Stop 1.430 ms · 128 → 275 ms · 64 → 102 ms, e il prefill scende
+   in proporzione. ⛔ Il cancello G4 lo passa **solo il 64**; il 128 lo manca per
+   **14 millisecondi**.
+   ⛔⛔ **E il punto di partenza vero è 512, non 256**: il 256 è il ripiego del
+   JNI, mentre la produzione manda un valore esplicito da
+   `src/lib/models/engineTuning.ts` — `core >= 6 ? 512 : 256`, e il Pad ha 8
+   core. ⇒ La cura è **una riga di TypeScript**, non di C++, e la misura a 512
+   è in coda.
 4. ⛔ **Lo Stop anticipato.** Difetto di **produzione** trovato per strada: uno
    Stop premuto nella finestra fra «la persona preme» e «la generazione entra»
    viene **inghiottito** — misurato, 64 token su 64 chiesti, `stopHonoured=false`.
