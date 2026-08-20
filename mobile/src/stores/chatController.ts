@@ -4733,13 +4733,26 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     attachments: completion.messageAttachments,
                 }
             }
-            // Il perché sta tutto in `rispostaVuota.ts`, accanto alla misura
-            // che l'ha reso necessario.
-            const raw = talosRispostaVuotaDopoStrumenti(completion.text, completion.executed.length)
-                ? deps.translate('chat.emptyAnswerAfterTools', {
-                    count: talosStrumentiPartiti(completion.executed),
-                })
-                : completion.text
+            /*
+             * ⭐⭐⭐ E se il modello ha nominato uno strumento che NON ESISTE.
+             *
+             * ⛔⛔ Misurato sul Pad il 2026-08-21 con Gemma 3 4B: alla parola
+             * "Ciao" la persona ha letto `{"name":"library_list"}` in chat, come
+             * se fosse la risposta. L'adattatore adesso lascia il testo vuoto e
+             * alza il segnale; ⇒ qui si dice cosa e' successo, in parole.
+             *
+             * ⛔ PRIMA della risposta vuota dopo gli strumenti: quella parla di
+             * strumenti ESEGUITI, questa di uno che non c'era. Sono due esiti
+             * diversi, e dirne uno per l'altro manderebbe la persona a cercare
+             * un guasto dove non c'e'.
+             */
+            const raw = completion.toolCallMissed
+                ? deps.translate('chat.toolCallMissed')
+                : talosRispostaVuotaDopoStrumenti(completion.text, completion.executed.length)
+                    ? deps.translate('chat.emptyAnswerAfterTools', {
+                        count: talosStrumentiPartiti(completion.executed),
+                    })
+                    : completion.text
             // F3-T4: a final-line tone suggestion is stripped from the durable
             // reply and surfaced as a toast — the user decides, never auto-applied.
             const { text, suggestion } = extractToneSuggestion(
