@@ -2334,6 +2334,13 @@ export const TALOS_EN_MESSAGES = {
         selectedOne: '1 chat selected',
         selected: '{count} selected',
         deleteSelected: 'Delete selected chats',
+        fascia: {
+            today: 'Today',
+            yesterday: 'Yesterday',
+            last7: 'Previous 7 days',
+            last30: 'Previous 30 days',
+            undated: 'Undated',
+        },
         holdForActions: 'Hold a chat for actions.',
         noMatches: 'No chats match your search.',
         noChats: 'No chats yet — start one above.',
