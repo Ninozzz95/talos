@@ -26,7 +26,7 @@ Il brief dell'owner è un programma a otto fasi.
 | **2** — targeting esplicito | ✅ chiusa, con offload provato sul dispositivo |
 | **3-4** — OpenCL | ✅ **C1 misurato**: PP/TG/TTFT, Stop (G4), Flash Attention off/auto/on, matrice del microbatch |
 | **5-6** — Vulkan | ⛔ **FAILED** su G2 · guasto NOTO a upstream (#8743, #12139) ma la loro soglia del batch **non regge** sull'830 |
-| **7** — integrazione | ❌ non cominciata |
+| **7** — integrazione | ⛔ **aperta, e la prima cosa trovata non è un disegno**: la GPU non è spedita, non è scelta, non è usata (sotto) |
 
 ⇒ La Definition of Done del brief **non è ancora raggiunta** — manca la Fase 7 —
 ma la corsia OpenCL adesso è **misurata fino in fondo**, cancelli compresi, e
@@ -69,7 +69,27 @@ prefill che si perde non è tutto perduto: la persona aspetta il **TTFT**, che s
 512 token peggiora di 593 ms una volta sola — ma su 2.048 peggiora di **2
 secondi**, e lì diventa un compromesso vero. Il dettaglio è nel ritorno.
 
-**4. Vulkan è ferma su un crash, non su una lentezza.** Costruisce, si registra,
+**4. ⛔⛔ La GPU non è spedita, non è scelta, non è usata.** Aperta la Fase 7,
+tre verifiche sul codice di oggi:
+
+- l'APK di **rilascio** porta `libggml-base` e **sette varianti CPU** — nessun
+  `libggml-opencl`, nessun `libggml-vulkan`;
+- `TalosLlamaPlugin` legge `gpuLayers` con **default 0**, e nessun chiamante in
+  `src/` passa quel campo;
+- `TalosBackendChoice.choose()` — la politica che «decide quale motore ha il
+  diritto di girare» — ha **un solo chiamante in tutto il repo: il suo test**.
+
+⇒ Il motore locale gira **solo su CPU**. È la stessa forma già in memoria: una
+funzione con i test e nessun chiamante. E riordina le priorità: le due decisioni
+sopra non sono urgenti per chi usa l'app **oggi**, sono il **prerequisito** del
+giorno in cui la GPU verrà spedita.
+
+**5. PP8192: sessanta secondi prima della prima parola.** Sulla GPU, contesto
+16.384: prefill 130-139 tok/s (contro 304 su 512), **TTFT 59-64 s**, e poi
+**3,2 tok/s** di decodifica. ⛔ Lo stato termico era già `moderate`: quanto sia
+lunghezza e quanto strozzamento **non l'ho separato**.
+
+**6. Vulkan è ferma su un crash, non su una lentezza.** Costruisce, si registra,
 sposta 29/29 strati — e muore al primo grafo di calcolo, **2 volte su 2**, anche
 con contesto 512. Il crash è dentro `vkGetDeviceFaultInfoEXT` **del driver
 Adreno**, cioè nella funzione che doveva spiegare il guasto. Un crash è FAILED,
@@ -80,9 +100,10 @@ non una misura scarsa: **non esistono numeri Vulkan**.
 ## Cosa aspetta una decisione dell'owner
 
 1. **Code review del ramo, poi il push.** Non lo faccio io.
-2. ⛔⛔ **La Flash Attention, spenta o accesa?** Oggi è **accesa** senza che
-   nessuno l'abbia scelto: il default di llama.cpp è `AUTO`, e su questo telefono
-   `AUTO` risolve in acceso. Spenta, su ogni asse misurato, va **meglio** —
+2. ⛔⛔ **La Flash Attention, spenta o accesa?** Il default di llama.cpp è
+   `AUTO`, e su questo telefono `AUTO` risolve in **acceso** — nessuno l'ha
+   scelta. ⛔ Non morde chi usa l'app oggi, perché la GPU non è spedita (vedi
+   l'ultimo punto); morde **il giorno in cui lo sarà**. Spenta, su ogni asse misurato, va **meglio** —
    da 4,7 a 6,6 secondi in meno sul primo messaggio, decodifica **doppia** dopo un prompt
    lungo, e le sette voci della suite golden **identiche**. Una riga in
    `talos_apri_modello`. ⛔ Vale per *questo* backend su *questa* GPU: upstream

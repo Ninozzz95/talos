@@ -1120,11 +1120,18 @@ Il brief chiede i tre casi separati — `off`, `auto`, `on` — perché la
 documentazione upstream dice che «la Flash Attention non migliora sempre» su
 OpenCL. Era una nota; adesso è un numero, e il numero è grosso.
 
-⛔ **Prima di tutto: oggi la produzione la usa.** `default` non vuol dire
-«spenta»: `llama_context_default_params()` mette `AUTO`, e su questo telefono
-`AUTO` **risolve in acceso** — le corse `default` di stamattina hanno esattamente
-i numeri di `on`. Quindi ciò che segue non è una manopola da laboratorio: è il
-regime in cui l'app gira oggi.
+⛔ **Prima di tutto una precisazione, e cambia la lettura di tutto il resto.**
+`default` non vuol dire «spenta»: `llama_context_default_params()` mette `AUTO`,
+e su questo telefono `AUTO` **risolve in acceso** — le corse `default` hanno
+riga per riga i numeri di `on`.
+
+⛔⛔ **Ma NON vuol dire che le persone stiano pagando questo conto oggi**, e
+prima l'avevo scritto come se lo pagassero. Verificato sull'APK di rilascio e
+sui chiamanti — vedi la sezione sulla Fase 7 qui sotto: la produzione **non
+spedisce nessun backend GPU**, `gpuLayers` vale 0 e nessuno lo passa. ⇒ Ciò che
+segue descrive il regime in cui l'app girerà **il giorno in cui la GPU verrà
+spedita**, non quello di adesso: la compilazione pigra dei kernel e la
+decodifica dimezzata sono fenomeni **di OpenCL**, e OpenCL nell'app non c'è.
 
 Cinque giri per configurazione più uno di riscaldamento, telefono **freddo a
 ogni blocco** (`Thermal Status: 0` verificato prima di ognuno):
@@ -1330,6 +1337,55 @@ alla fine.
 3. Il segnale giusto — le zone termiche del SoC in
    `/sys/class/thermal/thermal_zone*/temp`, che da `adb` dicevano **58 °C**
    mentre la batteria ne diceva 33.
+
+### ⛔⛔⛔ FASE 7 — LA GPU NON È SPEDITA, NON È SCELTA, NON È USATA
+
+Ho aperto la Fase 7 per disegnare l'integrazione, e la prima cosa che ho trovato
+non è un disegno: è che **non c'è niente da integrare, perché niente è
+collegato**. Tre verifiche, tutte sul codice di oggi:
+
+| domanda | risposta |
+|---|---|
+| L'APK di **rilascio** porta un backend GPU? | ⛔ **No.** Porta `libggml-base`, `libggml` e **sette varianti CPU**. Nessun `libggml-opencl`, nessun `libggml-vulkan`. |
+| Quanti strati va sulla GPU la produzione? | ⛔ **Zero.** `TalosLlamaPlugin` legge `call.getInt("gpuLayers", 0)`, e **nessun chiamante** in `src/` passa quel campo. |
+| Chi chiama `TalosBackendChoice.choose()`? | ⛔ **Nessuno.** L'unico chiamante in tutto il repo è il suo test. |
+
+⇒ **Oggi il motore locale di TALOS gira solo su CPU.** La politica che questo
+ramo ha discusso per pagine — quella che «decide quale motore ha il diritto di
+girare», come dice il javadoc di `TalosLlamaEngine` — **non governa niente**. È
+la stessa forma già in memoria: una funzione con i suoi test e nessun chiamante.
+
+⛔ **E questo riordina le priorità di quanto ho trovato oggi.** Le due decisioni
+di prodotto — Flash Attention e microbatch — non sono urgenti per chi usa l'app
+adesso: sono il **prerequisito** della spedizione della GPU. Vanno prese prima
+che il primo utente veda un backend GPU, non dopo.
+
+La Fase 7, in ordine, e ogni passo è inutile senza il precedente:
+
+1. **Spedire una libreria di backend GPU nella build di rilascio.** Oggi
+   `-PtalosResearchBackend` è l'unica strada, ed è di proposito. ⛔ Vulkan non è
+   candidabile (crasha) e per OpenCL c'è il vincolo dei modelli **densi**.
+2. **Collegare la politica** — esiste, è provata, e va corretta nella grandezza
+   che guarda (vedi sotto).
+3. **Passare `gpuLayers`** dal risultato della decisione, invece del suo zero.
+
+### ⛔ PP8192 — sessanta secondi prima della prima parola
+
+Contesto 16384, così 8192 rientra nel tetto prudente di metà contesto:
+
+| | prefill | TTFT | decodifica dopo |
+|---|---:|---:|---:|
+| PP512 | 304 tok/s | 1,68 s | 17,2 tok/s |
+| PP2048 | 255 tok/s | 8,0 s | 8,1 tok/s |
+| **PP8192** | **130-139 tok/s** | **59-64 s** | **3,2-3,4 tok/s** |
+
+⇒ Il tasso di prefill **cade con la lunghezza** — 304 → 255 → 134 — e su 8.192
+token la persona aspetta **un minuto** prima della prima parola, poi riceve
+tre token al secondo. ⛔ Questo **sulla GPU**: è il numero buono.
+
+⛔ Onestà: durante PP8192 lo stato termico era già `moderate`, quindi una parte
+della caduta è strozzamento e non lunghezza. Le due cause non le ho separate —
+servirebbe una corsa PP8192 da freddo e sola, ed è lavoro non fatto.
 
 ### 📋 La politica a un numero solo — la proposta, non applicata
 
