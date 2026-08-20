@@ -6,6 +6,31 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## Unreleased
+
+Committed after the v0.1.15 tag, so **not** in that APK.
+
+### Added
+
+- **The report says what its own percentage is worth.** The four benchmark
+  measures now sit under the standing figure, each with the plain line that
+  says what it means, and the score carries its date because cited pages die.
+  On a real run: 100% standing, and beneath it "7 distinct proofs from 10
+  sources" — the report's own source count was three higher than the evidence
+  it rests on.
+- **Contested claims reach the surface**: listed in the standing line, counted
+  as zero toward solidity like a contradiction, and a single one marks a run as
+  worth a second look.
+
+### Fixed
+
+- **The accessibility-service description is readable in any language.** It
+  existed only in Italian, in the fallback file, so a phone set to German or
+  Spanish showed an Italian sentence on the one screen that grants reading the
+  whole display. English is the fallback now, Italian sits in its own file, and
+  the Android lint gate — red since 19 August, including on the v0.1.14 push —
+  is green again.
+
 ## v0.1.15
 
 The honesty release: three things TALOS used to say with confidence that were
@@ -54,10 +79,11 @@ was measured on the owner's OnePlus Pad running Android 16.
   registrable domain and the origins a source itself cites, with no extra
   network request — and a source that cites several origins stays independent,
   because penalising that would punish the best sources.
-- **Fidelity measures, each with its date.** Coverage, citation faithfulness,
-  claim groundedness and distinct proofs. A run nobody judged returns
-  "unverified" rather than a percentage, because a percentage reads as a
-  measurement and would be a measurement of nothing.
+- **Fidelity measures are computed, each with its date** — coverage, citation
+  faithfulness, claim groundedness and distinct proofs. A run nobody judged
+  returns "unverified" rather than a percentage, because a percentage reads as
+  a measurement and would be a measurement of nothing. They reach the report
+  screen in the next version.
 - **Citations export as BibTeX and RIS**, for Zotero, Mendeley and EndNote. A
   citation describes a page, so the query, the judging model and the run id
   never leave with it.
