@@ -714,6 +714,76 @@ nessuno. Upstream lo fa girare sul telefono con
 deterministici, risposta identica fino al primo quasi-pareggio. Quello che
 **non** si può dire: che OpenCL sia corretto. Serve `test-backend-ops`.
 
+### ✅⛔ G3 — IL CANCELLO VERO, eseguito: `test-backend-ops` sul telefono
+
+Non più il confronto fra testi, che avevo già dichiarato inadatto: il cancello
+di upstream, a livello di **operatore**, con le sue tolleranze. Costruito con
+NDK + CMake (lo script `build-run-android.sh` non esiste a questo pin) e
+spinto in `/data/local/tmp` con i backend accanto.
+
+⛔ Due inciampi prima di vederlo girare, entrambi da registrare: il binario
+cercava `/odm/lib64/libomp.so` e non poteva mapparla («phdr mmap failed:
+Permission denied») — risolto mettendogli accanto la `libomp.so` dell'NDK.
+
+**Il verdetto grezzo:**
+
+```
+Testing 2 devices
+Backend 1/2: GPUOpenCL — QUALCOMM Adreno(TM) 830
+Backend 2/2: CPU — Skipping CPU backend   (è il riferimento)
+1/2 backends passed
+FAIL
+```
+
+**330 fallimenti su 12.463 casi**, e la loro distribuzione è tutto:
+
+| operatore | falliti | cos'è | tocca i nostri modelli? |
+|---|---:|---|---|
+| **MUL_MAT_ID** | **305** | il matmul del routing **Mixture-of-Experts** | ⛔ **no** — i nostri tre sono densi |
+| CONV_2D | 12 | convoluzione 2D | no — visione/audio, non il testo |
+| MUL | 6 | prodotto elemento per elemento | forme isolate |
+| NORM | 5 | LayerNorm, **una sola forma** `[33,5,4,3]`, err ~1,5e-3 contro 1e-7 | no — i nostri usano RMS_NORM |
+
+**E il dato che vale più di tutti — ciò che NON fallisce:**
+
+| operatore del percorso denso | casi | falliti |
+|---|---:|---:|
+| **FLASH_ATTN_EXT** | 5.145 (2.677 OK, 2.448 non supportati) | **0** |
+| MUL_MAT | 1.557 | **0** |
+| CPY | 581 | **0** |
+| ROPE | 466 | **0** |
+| SOFT_MAX | 212 | **0** |
+| GET_ROWS | 119 | **0** |
+| ADD | 99 | **0** |
+| CONT | 78 | **0** |
+| RMS_NORM | 51 | **0** |
+
+⇒ ⭐ **La correzione `60addddf` REGGE.** `FLASH_ATTN_EXT` non sbaglia un caso su
+2.677 eseguiti, su questa Adreno, con questo driver. Era l'ipotesi che teneva in
+piedi metà del brief — la race WAR nei kernel FA generici — ed è verificata sul
+dispositivo, non dedotta dal PR.
+
+⇒ **E l'intero percorso di inferenza densa è pulito.** Matmul, attenzione, rope,
+normalizzazione RMS, copie, softmax: zero fallimenti.
+
+### ⇒ Il verdetto G3, in due righe diverse
+
+| caso | verdetto |
+|---|---|
+| **modelli DENSI** (Llama 3.2, Qwen3 1.7B, Gemma 3 4B — i tre sul Pad) | **PASS** — nessun operatore del loro percorso fallisce |
+| **modelli Mixture-of-Experts** | ⛔ **REJECTED** — `MUL_MAT_ID` sbaglia in **305** casi, con errori fino a **0,43** contro una tolleranza di 5e-4 |
+
+⛔⛔ E questa seconda riga è un vincolo di **prodotto**, non di ricerca: se TALOS
+spedisse un giorno un modello MoE con OpenCL acceso, il backend lo
+**corromperebbe in silenzio** — che è esattamente il rischio R1. Chi accende
+OpenCL deve accenderlo **per architettura**, non per dispositivo.
+
+⛔ `NORM` fallisce a `1,5e-3` contro `1e-7`: non è arrotondamento, è un difetto
+vero, su una forma sola. Non tocca i nostri modelli (usano RMS_NORM, che passa),
+ma toccherebbe un'architettura con LayerNorm.
+
+📁 Log completo: `mobile/.tmp-research/testops-opencl.log`, 21.572 righe.
+
 ### ⛔⛔⛔ VULKAN — costruito, caricato, e **CRASHA**. Verdetto: FAILED (G2)
 
 Sbloccato scaricando quello che mancava, che l'owner ha autorizzato. Costruisce,
