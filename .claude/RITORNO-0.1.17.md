@@ -1694,10 +1694,40 @@ microbatch»**: a 192 un microbatch dura ~543 ms, ma lo Stop arriva a **~460** �
 cioè morde **dentro** un microbatch, non al suo confine. Qualunque sia la causa,
 è più fine di così.
 
-⇒ Lo strumento che la chiuderebbe c'è ed è di upstream: `GGML_OPENCL_OPFILTER`,
-che permette di escludere singole operazioni dal backend e vedere quale cambia il
-comportamento. Non l'ho usato: è un giro di indagine a sé, e la **legge
-operativa è già misurata** — che è ciò che serve per decidere.
+#### ⭐⭐⭐ E poi l'ho usato, `GGML_OPENCL_OPFILTER` — e il meccanismo È DIMOSTRATO
+
+`opfilter` è una regex delle operazioni che OpenCL **non deve reclamare**: quelle
+che combaciano finiscono sulla **CPU**, e il grafo acquista uno spezzone CPU.
+⇒ Se l'ipotesi è giusta — «l'abort scatta solo dove esiste uno spezzone CPU» —
+allora forzare **una sola operazione** deve far mordere lo Stop anche a
+microbatch 512, dove oggi non morde affatto.
+
+Prompt 2.048 token, microbatch **512**, Stop dopo 200 ms, `RMS_NORM` forzata
+sulla CPU:
+
+```
+opfilter regex = "RMS_NORM"          ← confermato applicato
+
+stop:  7   22   22 ms                ← senza filtro erano 1.443 ms
+prefill interrotto a 0/2048          ← senza filtro era 512/2048
+```
+
+⇒ ⭐ **Un fattore CENTO, a microbatch pieno.** L'ipotesi non è più un'ipotesi:
+**l'abort viene consultato solo dove il grafo passa dalla CPU.** Con tutti i 29
+strati su OpenCL non esiste nessun punto in cui guardare, e lo Stop può solo
+aspettare la fine del pezzo.
+
+⇒ E spiega **anche la soglia**: sotto 192 qualcosa fa ricadere lavoro sulla CPU e
+crea quei punti; sopra, il grafo è tutto GPU e non ce ne sono.
+
+⛔ ⇒ **E apre una TERZA strada**, che non avevo considerato: non toccare né la
+Flash Attention né il microbatch, ma **lasciare una singola operazione economica
+sulla CPU**. Costo da misurare — è in corso — ma se fosse piccolo darebbe uno
+Stop da **venti millisecondi a prefill pieno**, senza aspettare nessuna
+correzione a monte.
+
+⛔ La sonda vive in `wrap.sh` (solo-debug) e **va tolta**: manda un'operazione
+sulla CPU e quindi falsa ogni altra misura.
 
 ⭐ **E cambia la raccomandazione**, perché 192 è appena sotto il salto: dà lo
 Stop pronto al prezzo più basso possibile, invece dei 64 che avevo proposto.
