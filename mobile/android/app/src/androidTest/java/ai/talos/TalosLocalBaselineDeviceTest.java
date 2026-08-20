@@ -26,6 +26,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
+import ai.talos.research.TalosBackendInventory;
+import ai.talos.research.TalosBackendTarget;
+
 /**
  * ⛔ SOLO RICERCA — il PAVIMENTO C0: la CPU, misurata come si deve.
  *
@@ -215,13 +218,62 @@ public class TalosLocalBaselineDeviceTest {
         return testo.toString();
     }
 
+    /**
+     * Il bersaglio di QUESTA campagna.
+     *
+     * ⛔ Vuoto = `none`, cioè la CPU per DECISIONE: è il pavimento C0 e resta il
+     * predefinito. Con `talosBackend=OpenCL talosDevice=GPUOpenCL` la stessa
+     * matrice si misura su un acceleratore, e ogni riga porta scritto su cosa.
+     *
+     * ⛔⛔ E porta scritto anche COSA NON È. Una misura presa su una build
+     * OpenCL al pin `d2f83055` **non qualifica** quel backend: il brief chiede
+     * `60addddf`, la correzione della race WAR nei kernel Flash Attention, e
+     * questo pin non ce l'ha. Il campo `candidate` dice `C0-explore` proprio
+     * perché nessuno la scambi per C1 rileggendo il file fra sei mesi.
+     */
+    private static String backendRichiesto() {
+        String scelto = InstrumentationRegistry.getArguments().getString("talosBackend", "");
+        return scelto == null || scelto.isEmpty() ? "none" : scelto;
+    }
+
+    private static String deviceRichiesto() {
+        String scelto = InstrumentationRegistry.getArguments().getString("talosDevice", "");
+        return scelto == null ? "" : scelto;
+    }
+
+    /** Quanti strati spostare. ⛔ Su CPU deve restare 0. */
+    private static int stratiSuGpu() {
+        return "none".equals(backendRichiesto()) ? 0 : argomentoIntero("talosGpuLayers", -1);
+    }
+
     private static long apriCpu(File model, int contesto, int thread) {
-        // ⛔ `none`: la CPU per DECISIONE. Vedi la nota in testa alla classe.
+        /*
+         * ⛔ Prima si CHIEDE ALLA POLITICA, e non è cerimonia.
+         *
+         * MISURATO il 2026-08-20: una corsa etichettata `OpenCL/GPUOpenCL` è
+         * morta con `backend-target` e basta. Il codice era giusto: sul telefono
+         * c'era installata la build SENZA OpenCL, perché un `assembleDebug`
+         * nudo aveva sovrascritto lo stesso `app-debug.apk`. Il messaggio non
+         * distingueva «hai sbagliato nome» da «questa build non ha
+         * l'acceleratore compilato dentro», che sono due guasti in due posti
+         * diversi.
+         */
+        TalosBackendTarget.Resolution decisa = TalosBackendTarget.resolve(
+                TalosBackendInventory.parse(TalosLlamaNative.nativeBackendInventory()),
+                backendRichiesto(), deviceRichiesto());
+        assertTrue("il bersaglio chiesto non esiste su questa build: " + decisa.error
+                        + "\n   ⇒ ricostruisci con -PtalosResearchBackend=<backend>: un "
+                        + "`assembleDebug` nudo sovrascrive lo stesso app-debug.apk",
+                decisa.ok());
+
         long handle = TalosLlamaNative.nativeOpenTargeted(
-                model.getAbsolutePath(), thread, contesto, 0, true, thread, 0, "f16",
-                "none", "", "default");
-        assertNotEquals("apertura fallita: " + TalosLlamaNative.nativeLastOpenError(),
-                0L, handle);
+                model.getAbsolutePath(), thread, contesto, stratiSuGpu(), true, thread, 0, "f16",
+                backendRichiesto(), deviceRichiesto(), "default");
+        assertNotEquals("apertura fallita su `" + backendRichiesto() + "/" + deviceRichiesto()
+                        + "`: " + TalosLlamaNative.nativeLastOpenError(), 0L, handle);
+        Log.i(TAG, "aperto su " + backendRichiesto()
+                + (deviceRichiesto().isEmpty() ? "" : "/" + deviceRichiesto())
+                + " · strati su GPU " + stratiSuGpu());
         return handle;
     }
 
@@ -390,8 +442,13 @@ public class TalosLocalBaselineDeviceTest {
     private static JSONObject intestazione(File model, String configurazione,
                                            int thread, int contesto) throws Exception {
         JSONObject riga = new JSONObject();
-        riga.put("candidate", "C0");
-        riga.put("backendRequested", "none");
+        // ⛔ `C0` solo quando e' davvero il pavimento CPU. Su un
+        // acceleratore diventa `C0-explore`: NON e' il candidato C1 del brief,
+        // che richiede il pin con 60addddf.
+        riga.put("candidate", "none".equals(backendRichiesto()) ? "C0" : "C0-explore");
+        riga.put("backendRequested", backendRichiesto());
+        riga.put("deviceRequested", deviceRichiesto());
+        riga.put("gpuLayers", stratiSuGpu());
         riga.put("config", configurazione);
         riga.put("engineBuild", TalosLlamaNative.nativeEngineBuild());
         riga.put("backendsFlat", TalosLlamaNative.nativeBackends());
