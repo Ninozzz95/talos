@@ -17,4 +17,21 @@
 # strumentato viene semplicemente ignorato.
 LD_HWASAN=1
 export LD_HWASAN
+
+# ⛔⛔ SONDA TEMPORANEA — il filtro delle operazioni di ggml-opencl.
+#
+# `GGML_OPENCL_OPFILTER` e' una regex delle operazioni che OpenCL NON deve
+# reclamare: quelle che combaciano finiscono sulla CPU, e il grafo si spezza.
+# Serve a provare UNA cosa sola: se lo Stop su GPU morda soltanto dove esiste
+# uno spezzone CPU in cui la callback di abort viene consultata.
+#
+# ⛔ Sta qui perche' un'app Android non legge variabili d'ambiente da nessun
+# altro posto, e `wrap.sh` e' solo-debug. ⛔ VA TOLTO appena la misura e' presa:
+# manda un'operazione sulla CPU e quindi FALSA tutte le altre misure.
+# `RMS_NORM` compare due volte per strato, e' economica, e la sua uscita e'
+# piccola: se il meccanismo e' quello, bastera' lei a creare i confini in cui
+# l'abort viene consultato. Il confronto e' contro la stessa corsa senza filtro.
+GGML_OPENCL_OPFILTER=RMS_NORM
+export GGML_OPENCL_OPFILTER
+
 exec "$@"
