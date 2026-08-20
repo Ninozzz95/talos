@@ -1789,8 +1789,28 @@ contro **+97% su Llama**. Coerente con l'architettura — Gemma usa la finestra
 scorrevole, quindi la Flash Attention pesa meno — ma è la conferma che la
 grandezza del vantaggio **dipende dal modello**, mentre il segno no.
 
-⇒ Su due architetture su due, e sull'asse che la persona sente davvero (il primo
-messaggio), il candidato vince: **−4,5 s su Llama, −4,9 s su Gemma**.
+#### ⭐⭐⭐ E la terza: TRE architetture su TRE
+
+Rifatto anche su **Qwen3 1.7B**. Il quadro completo, ogni riga «oggi → candidato»:
+
+| | Llama 3.2 3B | Gemma 3 4B | Qwen3 1.7B |
+|---|---:|---:|---:|
+| prefill 512 | −5,2% | −0,4% | −8,2% |
+| prefill 2048 | −0,8% | ⭐ **+14,4%** | −3,4% |
+| **decodifica dopo 2048** | ⭐ **+97%** | **+18%** | ⭐ **+85%** |
+| decodifica (prompt corto) | +4% | −0,7% | −0,4% |
+| **primo messaggio** | **−4,5 s** | **−4,9 s** | **−4,1 s** |
+
+⇒ ⭐ **Il segno non cambia mai.** Su tre modelli e tre architetture diverse il
+candidato costa **fra lo 0 e l'8%** di prefill e restituisce, ogni volta:
+
+1. la decodifica sui prompt lunghi **da +18% a +97%**;
+2. il primo messaggio **quattro-cinque secondi prima**;
+3. lo Stop che passa da secondi a **mezzo secondo**.
+
+⛔ **Quello che cambia col modello è la GRANDEZZA, non la direzione** — e su
+Gemma il prefill lungo addirittura **migliora**. ⇒ Non è una taratura buona per
+un modello: è una configurazione migliore, e i tre casi lo dicono insieme.
 
 ### ⛔⛔ TROVATO PER STRADA — con GEMMA 3 l'assistente NON PUÒ chiamare attrezzi
 
