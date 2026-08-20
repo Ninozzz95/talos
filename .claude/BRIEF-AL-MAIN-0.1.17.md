@@ -133,11 +133,23 @@ non una misura scarsa: **non esistono numeri Vulkan**.
    è semplicemente una lunghezza di microbatch (192 → 460 ms, 160 → 370,
    128 → 290). 192 sta appena sotto il salto ⇒ **Stop pronto al prezzo minimo**.
 
-   ⛔⛔ **E c'è una terza via che toglie del tutto il compromesso**, trovata
-   cercando: lo Stop che non morde su GPU **non è una legge**, è una funzione
-   che `ggml-opencl` non ha e che **Metal ha già**. Vedi la sezione RICERCA nel
-   ritorno — sono ~30 righe in una dipendenza, a costo zero sulle prestazioni,
-   e a monte il feature request (#10509) è **chiuso come stale**.
+   ⛔⛔ **E il compromesso NON è una legge — dimostrato con un esperimento.**
+   Forzando **una sola operazione** sulla CPU, lo Stop è passato da 1.443 ms a
+   **7-22 ms** a microbatch pieno: l'abort viene consultato **solo dove il grafo
+   passa dalla CPU**, e con tutti gli strati su OpenCL non esiste nessun punto in
+   cui guardare. ⇒ È una funzione che `ggml-opencl` non ha e che **Metal ha
+   già**; a monte il feature request (#10509) è **chiuso come stale**.
+
+   Le tre strade, col prezzo:
+
+   | | Stop | prezzo |
+   |---|---:|---|
+   | **`off` + microbatch 192** | ~460 ms | **0-8% di prefill**, decodifica intatta |
+   | una operazione sulla CPU | ~20 ms | ⛔ **−33% di decodifica** — misurato, e per questo **scartata** |
+   | l'abort dentro `ggml-opencl` | **~ms** | **niente** — ~30 righe in una dipendenza |
+
+   ⇒ Il candidato è il migliore fra ciò che si può fare **oggi**; la cura a monte
+   è l'unica che dà lo Stop immediato **senza pagarlo**.
 4. ⛔ **Lo Stop anticipato.** Difetto di **produzione** trovato per strada: uno
    Stop premuto nella finestra fra «la persona preme» e «la generazione entra»
    viene **inghiottito** — misurato, 64 token su 64 chiesti, `stopHonoured=false`.
