@@ -11,6 +11,35 @@
 
 ---
 
+## ⛔⛔ AVVISO — le decisioni 1 e 2 RISULTANO GIÀ APPLICATE nel ramo
+
+Scritto il **2026-08-21 alle 00:05**, dopo aver consegnato questo documento.
+
+Nel commit `833f6687` sono comparse modifiche a **codice di produzione** che
+**io non ho scritto** in questa sessione, e che il mio `git add -A` ha raccolto
+sotto un messaggio che parlava d'altro:
+
+| file | cosa fa |
+|---|---|
+| `talos_llama_jni.cpp` (+85) | aggiunge `talos_bersaglio_e_opencl()` e, quando la modalità è `default`, **spegne la Flash Attention se il bersaglio è OpenCL** ⇒ **decisione 1** |
+| `src/lib/models/engineTuning.ts` | `const microBatch = 192` al posto di `core >= 6 ? 512 : 256` ⇒ **decisione 2** |
+| `src/services/localEngineDoctor.ts` (+45), `i18n/*` | lo espongono nel dottore |
+| `tests/unit/models/engineTuning.test.ts` | test aggiornati |
+
+⇒ **Le due decisioni di questo documento risultano già prese e implementate.**
+
+⛔ **Quello che posso dire e quello che non posso.** Il ramo con dentro quelle
+modifiche è **verde**: `npm run typecheck` passa, i 43 test dei due gruppi
+toccati passano, e la build nativa con OpenCL compila. ⛔ **Ma non le ho scritte
+io e non le ho riviste**: non so se siano complete, e nessuna corsa sul
+dispositivo è stata fatta **dopo** di esse.
+
+⇒ Il resto del documento resta valido come **motivazione** e come **prezzo
+misurato**; va letto sapendo che dove dice «proposta, non applicata» il codice
+dice il contrario.
+
+---
+
 ## 0. Il fatto che riordina tutto il resto
 
 ⛔ **Oggi il motore locale di TALOS gira SOLO SU CPU.** Verificato sul codice,
