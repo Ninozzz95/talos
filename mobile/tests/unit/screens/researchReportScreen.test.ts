@@ -252,6 +252,53 @@ describe('the report a person can actually check', () => {
     })
 
     /**
+     * ⛔⛔ Quanto VALE la percentuale, non solo quanto è alta.
+     *
+     * Un 100% su due affermazioni giudicate su dieci, con tre fonti che
+     * riprendono lo stesso comunicato, si legge identico a un 100% solido.
+     * Le quattro misure dei benchmark 2026 sono la differenza — copertura,
+     * fedeltà delle citazioni, ancoraggio, prove distinte — e nessuno dei
+     * cinque concorrenti le mostra alla persona: restano dove le legge chi
+     * costruisce, non chi decide in base al rapporto.
+     */
+    it('mostra le quattro misure di fedeltà, con la loro data', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const pannello = wrapper.get('[data-testid="talos-research-fedelta"]')
+        // Una giudicata su due.
+        expect(wrapper.get('[data-testid="talos-research-fedelta-copertura"]').text()).toContain('50%')
+        // Un passaggio ritrovato nella pagina su due affermazioni.
+        expect(wrapper.get('[data-testid="talos-research-fedelta-citazioni"]').text()).toContain('50%')
+        // Due domini diversi: due prove distinte.
+        expect(wrapper.get('[data-testid="talos-research-fedelta-indipendenti"]').text()).toContain('2')
+        expect(pannello.text()).toMatch(/2026-08-02/)
+    })
+
+    /**
+     * ⛔ Un punteggio su cui nessuno ha giudicato non è un punteggio basso:
+     * NON È un punteggio. Un 0% verrebbe letto come una misura, e sarebbe una
+     * misura di niente.
+     */
+    it('⛔ senza nessun giudizio dice «non verificata», non uno zero', async () => {
+        mockState.controller = controllerWith({
+            ...REPORT,
+            judge: null,
+            claims: REPORT.claims.map((claim) => ({
+                ...claim,
+                checks: { ...claim.checks, claimSupported: 'unchecked', judge: null, judgedAt: null },
+            })),
+        })
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        expect(wrapper.find('[data-testid="talos-research-fedelta-assente"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-research-fedelta-copertura"]').exists()).toBe(false)
+    })
+
+    /**
      * The tablet showed `local:&#x2F;storage&#x2F;emulated&#x2F;…`.
      *
      * vue-i18n escapes what it interpolates, so a name holding a path is

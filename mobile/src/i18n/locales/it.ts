@@ -2992,7 +2992,24 @@ export const TALOS_IT_MESSAGES = {
         openReport: 'Apri il rapporto',
         closeReport: 'Chiudi il rapporto',
         reportUnreadable: 'Il rapporto non si riesce a rileggere, quindi non si può mostrare come è stato verificato.',
-        standing: '{supported} su {total} sostenute · {partial} in parte · {unsupported} smentite · {unchecked} non verificate',
+        standing: '{supported} su {total} sostenute · {partial} in parte · {contested} contese · {unsupported} smentite · {unchecked} non verificate',
+        // ⛔ Le quattro misure che i benchmark 2026 usano per giudicare un
+        // agente di ricerca. Nessuno le mostra alla persona: qui sì.
+        fedeltaTitolo: 'Quanto vale questo rapporto',
+        fedeltaCopertura: 'Copertura',
+        fedeltaCoperturaSpiega: 'quante affermazioni qualcuno ha davvero giudicato',
+        fedeltaCitazioni: 'Fedeltà delle citazioni',
+        fedeltaCitazioniSpiega: 'quante volte il passaggio citato è stato ritrovato nella pagina',
+        fedeltaAncoraggio: 'Ancoraggio',
+        fedeltaAncoraggioSpiega: 'quanto le affermazioni giudicate reggono davvero',
+        fedeltaIndipendenti: 'Fonti indipendenti',
+        fedeltaIndipendentiSpiega: 'prove distinte, non indirizzi: tre siti che riprendono lo stesso comunicato contano uno',
+        // ⛔ Un punteggio senza data è una promessa che scade in silenzio: le
+        // pagine citate muoiono, ed è il motivo per cui FACT è considerato
+        // inaffidabile nei benchmark.
+        fedeltaMisurataIl: 'Misurato il {quando}. Le pagine cambiano: più passa, meno vale.',
+        fedeltaNonVerificata: 'Non verificata — nessun giudice ha guardato queste affermazioni, quindi non c’è un punteggio da dare.',
+        indipendentiSu: '{independent} prove distinte su {total} fonti',
         verifiedByLead: 'Verificate da un altro modello, mai da quello che ha scritto il rapporto:',
         notVerified: 'Verifica non eseguita: non c’era un giudice indipendente. Installa un modello locale, oppure configura un secondo provider.',
         support: {

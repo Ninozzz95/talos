@@ -41,6 +41,7 @@ import { useTalosResearchRun } from '@/composables/useTalosResearchRun'
 import { talosRememberView, talosRememberedView } from '@/lib/navigation/rememberedView'
 import { talosResearchSolidity, type TalosResearchStanding } from '@/lib/research/researchCard'
 import { talosResearchVerifiedStanding } from '@/lib/research/researchVerification'
+import { talosResearchFidelity } from '@/lib/research/researchFidelity'
 import { talosResearchRecheckStanding, type TalosResearchRecheck } from '@/lib/research/researchRecheck'
 import type { TalosResearchReportRecord } from '@/lib/research/researchReport'
 import type { TalosResearchProgress } from '@/services/researchRuntime'
@@ -110,6 +111,53 @@ const solidity = computed(() => {
     return value === null ? null : Math.round(value * 100)
 })
 
+/**
+ * ⛔⛔ Le quattro misure con cui i benchmark 2026 giudicano un agente di
+ * ricerca — copertura, fedeltà delle citazioni, ancoraggio, prove distinte.
+ *
+ * La percentuale grande qui sopra dice quanto REGGE. Non dice quanto vale
+ * la verifica che l'ha prodotta: un 100% su due affermazioni giudicate su
+ * dieci, con tre fonti che riprendono lo stesso comunicato, è un 100% che
+ * non vale niente — e oggi si legge identico a un 100% solido.
+ *
+ * ⛔ Nessuno dei cinque concorrenti mostra queste misure alla persona.
+ * Restano nei benchmark, cioè dove le legge chi costruisce, non chi decide
+ * in base al rapporto.
+ */
+const fidelity = computed(() => (report.value
+    ? talosResearchFidelity({
+        claims: report.value.claims.map((claim) => ({
+            claim: { text: claim.text, sourceIndex: claim.sourceIndex, quote: '', quotePresent: 'yes' as const },
+            passage: claim.passage,
+            checks: claim.checks,
+        })),
+        sources: (report.value.sources ?? []).map((source) => ({ url: source.url })),
+    })
+    : null))
+
+/**
+ * Le quattro voci, con la loro spiegazione accanto.
+ *
+ * ⛔ La spiegazione NON è decorazione: «copertura 50%» da solo non dice
+ * niente a chi non legge benchmark, e un numero che non si capisce viene
+ * saltato — cioè vale zero pur essendo lì.
+ */
+const misure = computed(() => {
+    const f = fidelity.value
+    if (!f) return []
+    return [
+        { chiave: 'copertura', nome: t('research.fedeltaCopertura'), valore: quota(f.coverage) ?? '—', spiega: t('research.fedeltaCoperturaSpiega') },
+        { chiave: 'citazioni', nome: t('research.fedeltaCitazioni'), valore: quota(f.citationFaithfulness) ?? '—', spiega: t('research.fedeltaCitazioniSpiega') },
+        { chiave: 'ancoraggio', nome: t('research.fedeltaAncoraggio'), valore: quota(f.claimGroundedness) ?? '—', spiega: t('research.fedeltaAncoraggioSpiega') },
+        { chiave: 'indipendenti', nome: t('research.fedeltaIndipendenti'), valore: t('research.indipendentiSu', { independent: f.independentSources, total: (report.value?.sources ?? []).length }), spiega: t('research.fedeltaIndipendentiSpiega') },
+    ]
+})
+
+/** Una quota in percentuale intera, o `null` se non c'è una quota. */
+function quota(valore: number | null | undefined): string | null {
+    return typeof valore === 'number' ? `${Math.round(valore * 100)}%` : null
+}
+
 /** Which model judged this run — from the record, never inferred from the claims. */
 const judge = computed(() => report.value?.judge ?? null)
 
@@ -166,7 +214,7 @@ const elapsed = computed(() => (current.value
     : null))
 
 const balance = computed(() => standing.value
-    ?? { total: 0, supported: 0, partial: 0, unsupported: 0, unchecked: 0 })
+    ?? { total: 0, supported: 0, partial: 0, unsupported: 0, unchecked: 0, contested: 0 })
 
 const failedSteps = computed(() => current.value?.steps.filter((step) => step.state === 'failed') ?? [])
 
@@ -479,6 +527,7 @@ function openSource(index: number): void {
                             supported: balance.supported,
                             total: balance.total,
                             partial: balance.partial,
+                            contested: balance.contested ?? 0,
                             unsupported: balance.unsupported,
                             unchecked: balance.unchecked,
                         }) }}
@@ -487,6 +536,37 @@ function openSource(index: number): void {
                         <template v-if="judge">{{ t('research.verifiedByLead') }} <span data-testid="talos-research-judge" class="break-all font-mono">{{ judge }}</span></template>
                         <template v-else>{{ t('research.notVerified') }}</template>
                     </p>
+
+                    <!--
+                        ⛔⛔ QUANTO VALE la percentuale qui sopra.
+
+                        Un 100% su due affermazioni giudicate su dieci, con tre
+                        fonti che riprendono lo stesso comunicato, si legge oggi
+                        identico a un 100% solido. Queste quattro misure sono la
+                        differenza, e nessuno dei cinque concorrenti le mostra.
+
+                        ⛔ Senza giudice non esce un numero basso: esce la frase.
+                        Un 40% verrebbe letto come una misura, e sarebbe una
+                        misura di niente.
+                    -->
+                    <div v-if="fidelity" data-testid="talos-research-fedelta" class="mt-3 border-t border-[var(--talos-border)] pt-3">
+                        <p class="text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.fedeltaTitolo') }}</p>
+                        <p v-if="!fidelity.verified" data-testid="talos-research-fedelta-assente" class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">
+                            {{ t('research.fedeltaNonVerificata') }}
+                        </p>
+                        <dl v-else class="mt-2 grid grid-cols-2 gap-x-4 gap-y-3">
+                            <div v-for="misura in misure" :key="misura.chiave" :data-testid="`talos-research-fedelta-${misura.chiave}`">
+                                <dt class="text-2xs leading-5 text-[var(--talos-muted)]">{{ misura.nome }}</dt>
+                                <dd class="text-base font-semibold tabular-nums text-[var(--talos-text)]">{{ misura.valore }}</dd>
+                                <dd class="text-2xs leading-4 text-[var(--talos-muted)]">{{ misura.spiega }}</dd>
+                            </div>
+                        </dl>
+                        <p
+                            v-if="fidelity.measuredAt"
+                            data-testid="talos-research-fedelta-data"
+                            class="mt-3 text-2xs leading-5 text-[var(--talos-muted)]"
+                        >{{ t('research.fedeltaMisurataIl', { quando: fidelity.measuredAt.slice(0, 10) }) }}</p>
+                    </div>
                 </section>
 
                 <div v-if="failedSteps.length" data-testid="talos-research-failed-steps" class="flex items-start gap-2 rounded-xl border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-xs leading-5 text-[var(--talos-danger)]">
