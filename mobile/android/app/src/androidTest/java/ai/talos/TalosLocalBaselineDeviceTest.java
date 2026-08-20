@@ -834,7 +834,22 @@ public class TalosLocalBaselineDeviceTest {
         long handle = apriCpu(model, contesto, thread);
         List<Long> latenze = new ArrayList<>();
         try {
-            String prompt = promptDa(handle, 512);
+            /*
+             * ⛔⛔ LA LUNGHEZZA DEL PROMPT E' UNA VARIABILE, non un dettaglio.
+             *
+             * Con 512 token e microbatch 512 il prefill e' UN SOLO grafo, quindi
+             * non esiste nessun confine in cui lo Stop possa mordere e la
+             * latenza e' per forza «tutto cio' che restava». Con 2.048 token i
+             * grafi diventano quattro, e la differenza fra le due ipotesi —
+             * «morde a ogni microbatch» contro «non morde mai» — e' un fattore
+             * quattro, cioe' visibile a occhio nudo.
+             *
+             * MISURATO il 2026-08-20: a microbatch 512 e 256 la latenza era
+             * l'intero prefill, a 128 e 64 crollava. Nessuna legge 1/N li
+             * spiega entrambi, e questa manopola serve a separarli invece che a
+             * raccontarli.
+             */
+            String prompt = promptDa(handle, argomentoIntero("talosStopPromptTokens", 512));
             for (int giro = 0; giro < giri; giro += 1) {
                 final long[] ritornoNs = new long[1];
                 final String[] esito = new String[1];
