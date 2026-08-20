@@ -220,6 +220,34 @@ davvero**, non dal segnale.
 dove l'header di llama.cpp avverte che la callback di abort «currently works
 only with CPU execution».
 
+**Prefill, primo token e decodifica** — 1 giro di riscaldamento scartato + 5
+misurati, mediana e MAD. ⛔ Ogni riga porta `reusedTokens: 0`.
+
+| configurazione | prompt tok/s | decode tok/s | TTFT | muro |
+|---|---:|---:|---:|---:|
+| **PP512** | 52,94 | 16,88 | 9.652 ms | 10.126 ms |
+| **PP2048** | 36,35 | 7,71 | 56.338 ms | 57.387 ms |
+| **TG256** | 39,09 | 15,59 | **793 ms** | 17.218 ms |
+
+⇒ Due cose che un numero solo avrebbe nascosto, ed è esattamente la Q3 del brief:
+
+1. **Il prefill non scala.** Da 512 a 2048 token il tasso cade da 52,9 a 36,4
+   tok/s — **−31%**. Quadruplicare il prompt costa 5,6 volte il tempo, non 4.
+2. **TTFT e decodifica sono grandezze diverse.** Con un prompt corto il primo
+   token arriva in 793 ms; con 2048 token di prompt ci mette **56 secondi**. Un
+   backend scelto sul solo `tokensPerSecond` di decodifica potrebbe vincere la
+   misura e far aspettare la persona un minuto.
+
+⛔ **PP8192 non misurato**: con contesto 8192 il tetto prudente è metà. Serve
+una corsa con contesto più largo.
+
+⛔ **Dispersione oltre il 10% su 4 configurazioni**, e la forma dice cosa
+succede: la MAD è minuscola (0,11-0,44) mentre il range è largo. È **un solo
+giro fuori riga**, e guardando i minimi è il **primo misurato** a essere il più
+veloce — 8.637 ms contro 10.126 di mediana su PP512. Il telefono è più rapido da
+freddo e rallenta appena si scalda, pur restando `thermal: none`. ⇒ Corsa a 9
+giri lanciata, come prescrive §9.4.
+
 ### ⛔⛔ UN DIFETTO DI PRODUZIONE, trovato per strada
 
 **Uno Stop chiesto un istante troppo presto viene INGHIOTTITO.**
@@ -279,6 +307,60 @@ Sono esattamente i campi che §14 pretende in ogni record di benchmark, con gli
 stessi nomi interni (`prefill_ms`, `primo_token_ms`, `token_riusati`). ⇒ **PP,
 TG e TTFT sono derivabili senza toccare il motore**, e `nativeGenerate` ha già
 `reusePrefix` per tenere fermo lo stato del prefisso fra due backend.
+
+---
+
+### La suite golden semantica (§8, S1-S7) — **7 verdi in 25,3 s**
+
+Dialetto rilevato dal modello, non assunto: **LLAMA3**.
+
+| caso | esito |
+|---|---|
+| S1 chat senza ragionamento | ✅ contenuto pieno, nessuna chiamata fantasma, 48 token di prompt |
+| S2 ragionamento | **non applicabile** — Llama 3.2 non dichiara un canale di ragionamento. Registrato `applicable:false`, non saltato |
+| S3 un attrezzo | ✅ arriva al template e la chiamata torna col nome `meteo` e gli argomenti `{"citta":"Catania"}` intatti |
+| S4 insieme grande | misura, sotto |
+| S5 prosa prima della chiamata | ✅ la chiamata sopravvive, la prosa resta contenuto |
+| S6 attrezzi malformati | ✅ motore vivo dopo tutti e cinque |
+| S7 testo parziale | misura, sotto |
+
+⛔⛔ **S4 — il numero che pesa davvero:**
+
+| attrezzi | JSON | prompt | **token** |
+|---:|---:|---:|---:|
+| 1 | 212 B | 969 car | 200 |
+| 8 | 1.689 B | 4.000 car | 865 |
+| 24 | 5.093 B | 10.956 car | 2.385 |
+| **46** | **9.779 B** | **20.526 car** | **4.475** |
+
+⇒ **Con 46 attrezzi il prompt costa 4.475 token prima che la persona abbia
+detto qualcosa** — più di quanto ne contenga un contesto da 4096, e al tasso di
+prefill misurato su questo telefono sono **circa 100 secondi** solo per
+descrivere gli attrezzi. Il template li supporta
+(`supportsTools:true, supportsToolCalls:true`): il costo non è il permesso, è la
+lunghezza. Si lega direttamente a
+[[il-difetto-e-che-non-li-chiamano]] e al prefisso congelato.
+
+⛔ **S6, un rilievo**: tutti e cinque i payload malformati hanno comunque reso un
+prompt (`rendered:true`). Il processo sopravvive — che è ciò che il brief
+chiede — ma attrezzi rotti vengono **ignorati in silenzio** invece che
+segnalati.
+
+⛔ **S7, e il confine di ciò che ho verificato**: su una risposta parziale il
+parser restituisce il JSON grezzo che cresce **come contenuto visibile**
+(`{`, `{"name":`, `{"name": "meteo`…). Per un modello di famiglia Llama la
+chiamata è JSON nudo, quindi non c'è un marcatore che la nasconda finché non è
+completa. **Se questo arrivi allo schermo dipende dal percorso di streaming
+dell'interfaccia, che NON ho verificato**: lo registro come misura del parser,
+non come difetto a schermo. Va guardato sul dispositivo con un modello Llama e
+un attrezzo offerto.
+
+⛔ **Cosa S4 non copre**, e lo dico invece di sottintenderlo: byte della
+grammatica, `grammar_lazy`, numero di inneschi e token preservati **non sono
+esposti da nessuna API**. Il taccuino porta già il numero che fa male — 46
+attrezzi → 55.871 byte di GBNF, rifiutati dal parser — ma quel dato oggi si
+ottiene solo dai log, non da una misura ripetibile. Serve una diagnostica
+nativa dedicata.
 
 ---
 
