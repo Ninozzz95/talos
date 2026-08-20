@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createTalosWebTools } from '@/lib/search/webTools'
+import {
+    talosWebFailureCode, createTalosWebTools } from '@/lib/search/webTools'
 import { TALOS_DEFAULT_TOOL_PERMISSIONS, executeTalosTool } from '@/lib/tools/executor'
 import { createTalosToolset } from '@/lib/tools/toolset'
 import { TALOS_DEFAULT_AGENT_TOOL_ENABLED } from '@/lib/tools/toolControls'
@@ -316,5 +317,35 @@ describe('web tools', () => {
         expect(result.ok).toBe(true)
         expect(result.content).toMatch(/no results/i)
         expect(rememberSearch).not.toHaveBeenCalled()
+    })
+})
+
+
+/**
+ * ⛔⛔ IL CODICE di un guasto del web, dal testo che arriva DAVVERO.
+ *
+ * La prima versione della cura cercava i codici TALOS_* dentro il messaggio, e
+ * sul Pad non ha mai scattato: sotto il nostro client c'è Android, e i suoi
+ * guasti arrivano nella sua lingua. Le righe qui sotto sono state MISURATE
+ * sul dispositivo, non immaginate.
+ */
+describe('classificare un guasto del web', () => {
+    it('⛔ il messaggio ANDROID misurato sul Pad diventa un codice', () => {
+        // Copiato dallo schermo, 2026-08-20, leggendo un dominio inesistente.
+        const vero = 'The page could not be read: Unable to resolve host "dominio-inesistente-77123.example": No address associated with hostname'
+        expect(talosWebFailureCode(new Error(vero))).toBe('TALOS_WEB_ADDRESS_NOT_FOUND')
+    })
+
+    it('i nostri rifiuti si riconoscono per nome, interi', () => {
+        expect(talosWebFailureCode(new Error('java.io.IOException: TALOS_WEB_REDIRECT_DOWNGRADE')))
+            .toBe('TALOS_WEB_REDIRECT_DOWNGRADE')
+    })
+
+    it('⛔ e AL CONTRARIO: un messaggio che non riconosciamo NON inventa un codice', () => {
+        // Un codice indovinato manda la persona a cercare la causa sbagliata,
+        // ed è peggio del silenzio.
+        expect(talosWebFailureCode(new Error('qualcosa di mai visto'))).toBeNull()
+        expect(talosWebFailureCode(null)).toBeNull()
+        expect(talosWebFailureCode(undefined)).toBeNull()
     })
 })

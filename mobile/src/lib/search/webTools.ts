@@ -36,6 +36,43 @@ function clip(text: string): string {
         : `${text.slice(0, MAX_CONTENT)}\n… truncated at ${MAX_CONTENT} characters.`
 }
 
+/**
+ * ⛔⛔ IL CODICE di un guasto del web, dal testo che arriva davvero.
+ *
+ * ## Perché non basta cercare i codici nostri
+ *
+ * `TalosSafeWebClient` rifiuta con nomi nostri — `TALOS_WEB_REDIRECT_
+ * DOWNGRADE` e compagnia — e quelli arrivano interi. Ma sotto c’è anche
+ * Android, e i suoi guasti arrivano nella SUA lingua.
+ *
+ * MISURATO sul Pad il 2026-08-20, leggendo un dominio inesistente:
+ *
+ *   The page could not be read: Unable to resolve host
+ *   "dominio-inesistente-77123.example": No address associated with hostname
+ *
+ * Nessun codice: messaggio di sistema, in inglese. Chi doveva dire
+ * qualcosa alla persona aveva in mano solo quello, e ha detto «non è
+ * riuscito» e basta.
+ *
+ * ⛔ Le righe qui sotto si aggiungono SOLO dopo aver visto il testo vero
+ * di un guasto vero. Indovinare la forma di un messaggio di sistema
+ * produce una regola che non scatta mai, e non se ne accorge nessuno —
+ * è già successo con la prima versione di questa cura.
+ */
+export function talosWebFailureCode(error: unknown): string | null {
+    const message = error instanceof Error ? error.message : String(error)
+    // I nostri viaggiano interi: si riconoscono per nome.
+    const nostro = /TALOS_WEB_[A-Z_]+/.exec(message)
+    if (nostro) return nostro[0]
+    // MISURATO: Android, dominio che non si risolve.
+    if (/Unable to resolve host|No address associated with hostname/i.test(message)) {
+        return 'TALOS_WEB_ADDRESS_NOT_FOUND'
+    }
+    // MISURATO: il timeout di rete di OkHttp, stesso ponte.
+    if (/timeout|timed out/i.test(message)) return 'TALOS_WEB_TIMEOUT'
+    return null
+}
+
 function offline(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error)
     return /TALOS_NETWORK_UNAVAILABLE|Failed to fetch|NetworkError|ENOTFOUND|ECONNREFUSED/i.test(message)
@@ -102,7 +139,7 @@ export function createTalosWebTools(sources: TalosWebToolSources): TalosToolDefi
                     }
                 }
                 const detail = error instanceof Error ? error.message : String(error)
-                return { ok: false, content: `The search failed: ${detail}` }
+                return { ok: false, content: `The search failed: ${detail}`, code: talosWebFailureCode(error) }
             }
 
             if (results.length === 0) {
@@ -181,10 +218,21 @@ export function createTalosWebTools(sources: TalosWebToolSources): TalosToolDefi
                 page = await sources.read(url)
             } catch (error) {
                 if (offline(error)) {
-                    return { ok: false, content: 'No network: that page could not be fetched from this device.' }
+                    return {
+                        ok: false,
+                        content: 'No network: that page could not be fetched from this device.',
+                        code: 'TALOS_WEB_OFFLINE',
+                    }
                 }
                 const detail = error instanceof Error ? error.message : String(error)
-                return { ok: false, content: `The page could not be read: ${detail}` }
+                // ⛔ Il testo resta identico per il MODELLO — sa già leggerlo, e
+                //   sul Pad ne ricava una frase giusta. Il codice viaggia a
+                //   parte, per chi deve parlare a una persona.
+                return {
+                    ok: false,
+                    content: `The page could not be read: ${detail}`,
+                    code: talosWebFailureCode(error),
+                }
             }
 
             if (!page) {

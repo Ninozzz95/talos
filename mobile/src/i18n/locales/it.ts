@@ -1183,6 +1183,32 @@ export const TALOS_IT_MESSAGES = {
          * ce le ha: una frase sicura su una cosa che non sappiamo.
          */
         failedNotice: 'Non è riuscito: {tool}.',
+        /*
+         * ⛔ IL MOTIVO, quando lo sappiamo.
+         *
+         * Il codice non si mostra: si mostra la sua frase. Dice cosa e'
+         * successo e, dove ha senso, cosa si può fare — e non manda
+         * nessuno a guardare da un'altra parte.
+         *
+         * ⛔ E dove TALOS ha RIFIUTATO, la frase lo dice come una scelta,
+         * non come un guasto: rifiutare una pagina che va in chiaro e'
+         * la cosa giusta, e chi legge deve saperlo.
+         */
+        perche: {
+            webRedirectDowngrade: 'Quella pagina rimandava a una connessione non protetta, e TALOS non l’ha seguita. Le altre fonti trovate restano valide.',
+            webNotPublic: 'Quell’indirizzo punta dentro la tua rete, non al web. TALOS non lo apre.',
+            webNotFound: 'Quell’indirizzo non risponde: il sito potrebbe non esistere più.',
+            webBlocked: 'Quell’indirizzo è fra quelli che TALOS non apre.',
+            webTooLarge: 'Quella pagina è troppo grande da scaricare intera.',
+            webTooManyRedirects: 'Quella pagina rimbalzava da un indirizzo all’altro senza fermarsi.',
+            webRedirectInvalid: 'Quella pagina rimandava a un indirizzo che non si legge.',
+            webBusy: 'C’era già una lettura in corso: riprova fra un momento.',
+            webNotAnImage: 'Quell’indirizzo non porta a un’immagine.',
+            webBytesUnsupported: 'Quel tipo di file non si scarica da qui.',
+            webSearchNotConfigured: 'Manca il motore di ricerca: si sceglie in Impostazioni, sotto «Motore di ricerca».',
+            webOffline: 'Il telefono non era in rete: quella pagina non si è potuta scaricare.',
+            webTimeout: 'Quel sito ci ha messo troppo a rispondere.',
+        },
         libraryList: 'Esplorazione della Libreria',
         librarySearch: 'Ricerca nella Libreria',
         libraryRead: 'Lettura di un documento',

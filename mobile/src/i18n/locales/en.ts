@@ -1123,6 +1123,23 @@ export const TALOS_EN_MESSAGES = {
         // What a PERSON is told when a tool fails. The reason itself is written
         // for the model — see avvisoDiTool.ts — and never reaches this screen.
         failedNotice: 'Did not work: {tool}.',
+        // The code stays hidden; its sentence is what shows. Where TALOS
+        // REFUSED, the sentence says so as a choice, not as a fault.
+        perche: {
+            webRedirectDowngrade: 'That page redirected to an unprotected connection, so TALOS did not follow it. The other sources it found still stand.',
+            webNotPublic: 'That address points inside your own network, not the web. TALOS does not open it.',
+            webNotFound: 'That address does not answer: the site may be gone.',
+            webBlocked: 'That address is one TALOS does not open.',
+            webTooLarge: 'That page is too large to download in full.',
+            webTooManyRedirects: 'That page kept bouncing from one address to another.',
+            webRedirectInvalid: 'That page redirected to an address that cannot be read.',
+            webBusy: 'A page read was already running: try again in a moment.',
+            webNotAnImage: 'That address does not lead to an image.',
+            webBytesUnsupported: 'That kind of file cannot be downloaded here.',
+            webSearchNotConfigured: 'No search engine is set: choose one in Settings, under “Search engine”.',
+            webOffline: 'The phone was offline: that page could not be fetched.',
+            webTimeout: 'That site took too long to answer.',
+        },
         libraryList: 'Browsing your Library',
         librarySearch: 'Searching your Library',
         libraryRead: 'Reading a document',
