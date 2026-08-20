@@ -194,6 +194,36 @@ for (const [chiave, insieme] of [...gruppi.entries()].sort()) {
                 driftPercent: primi > 0 ? arrotonda((ultimi - primi) * 100 / primi) : 0,
                 minutes: arrotonda((tassi[tassi.length - 1].elapsedMs ?? 0) / 60000),
             }
+            /*
+             * ⛔⛔ E NON basta «quando e' caduta», perche' su questo telefono
+             * non cade: OSCILLA.
+             *
+             * MISURATO il 2026-08-20, dieci minuti su OpenCL: la decodifica
+             * salta fra ~19,3 e ~13,6 tok/s NOVE volte, avanti e indietro. Un
+             * campione ogni dieci giri legge uno scalino che non c'e', e
+             * «prima caduta al minuto 1,59» e' vero e fuorviante insieme,
+             * perche' il sistema poi risale.
+             *
+             * ⇒ Si contano i salti e si descrivono i due livelli. Una media
+             * fra due stati stabili non e' un valore che il telefono abbia mai
+             * avuto.
+             */
+            const valori = tassi.map((r) => r.decodeTokensPerSecond)
+            let salti = 0
+            for (let i = 1; i < valori.length; i += 1) {
+                if (Math.abs(valori[i] - valori[i - 1]) / valori[i - 1] > 0.15) salti += 1
+            }
+            voce.sustained.transitions = salti
+            if (salti >= 2) {
+                const soglia = (Math.min(...valori) + Math.max(...valori)) / 2
+                const basso = valori.filter((v) => v < soglia)
+                const alto = valori.filter((v) => v >= soglia)
+                voce.sustained.bimodal = {
+                    high: arrotonda(mediana(alto)),
+                    low: arrotonda(mediana(basso)),
+                    lowSharePercent: arrotonda(basso.length * 100 / valori.length),
+                }
+            }
             const caduta = tassi.find((r) => r.decodeTokensPerSecond < primi * 0.9)
             if (caduta) voce.sustained.firstDropAtMinute = arrotonda((caduta.elapsedMs ?? 0) / 60000)
         }
@@ -256,7 +286,11 @@ for (const voce of riassunto) {
         const d = voce.sustained
         scrivi(`    tenuta su ${d.minutes} min — primo terzo ${d.firstThird} tok/s`
             + ` -> ultimo terzo ${d.lastThird} tok/s (${d.driftPercent > 0 ? '+' : ''}${d.driftPercent}%)`)
-        if (d.firstDropAtMinute !== undefined) {
+        if (d.bimodal) {
+            scrivi(`    ⛔ NON e' una discesa: OSCILLA fra ${d.bimodal.high} e ${d.bimodal.low} tok/s`
+                + ` — ${d.transitions} salti, ${d.bimodal.lowSharePercent}% del tempo nello stato basso.`)
+            scrivi('       ⇒ la media fra due stati stabili non è un valore che il telefono abbia mai avuto.')
+        } else if (d.firstDropAtMinute !== undefined) {
             scrivi(`    ⛔ prima caduta sotto il −10%: al minuto ${d.firstDropAtMinute}`)
         }
     }
