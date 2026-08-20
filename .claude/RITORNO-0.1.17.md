@@ -1035,23 +1035,81 @@ mostrava, perché il giro di riscaldamento viene buttato via per costruzione.
 ⛔ Non è la cache dei kernel (provato sopra: con cache calda restano 2.760 ms).
 Resta da capire cosa sia; è il primo aperto di questa area.
 
-#### Esito del cancello, dichiarato
+#### ✅ Esito del cancello: G4 SI PUÒ PASSARE, e servono DUE manopole
 
-| | oggi (ub 256) | con ub 128 |
-|---|---|---|
-| Stop in decodifica | ✅ p50 49 ms, max 53 ms | ✅ invariato |
-| Stop in prefill, a regime | ⛔ ~1.458 ms | ✅ ~258 ms |
-| Stop in prefill, primo giro | ⛔ 4.095 ms | ⛔ 6.032 ms |
+⛔ **I cancelli sono due, e il secondo è molto più stretto del primo.** G4 chiede
+che nessuna latenza superi **1.500 ms** *e* che il p95 non peggiori di oltre
+**250 ms** rispetto alla CPU. Il riferimento CPU, misurato con la stessa attesa
+di 200 ms, è **p95 36 ms** ⇒ il tetto vero è **286 ms**, non 1.500.
 
-⇒ **G4 resta FAILED**, e il motivo si è spostato: non più «lo Stop è lento», ma
-«il primo inferire di ogni processo costa 4-6 secondi». Il microbatch chiude la
-parte a regime; il giro 0 no.
+Sei configurazioni, tutte con lo Stop premuto dopo 200 ms, telefono freddo a
+ogni corsa:
 
-⛔⛔ **Non ho toccato la produzione**, e la cura non è mia da applicare: il
-microbatch predefinito vive in `talos_apri_modello` (`n_ubatch = 256`) e
-cambiarlo cambia la velocità di prefill per tutti. È una **decisione di
-prodotto** — 9% di prefill contro uno Stop cinque volte più pronto — e la
-propongo, non la applico.
+| flash-attn | microbatch | giro 0 | p50 | **p95** | ≤ 1.500 ms | **≤ 286 ms** |
+|---|---:|---:|---:|---:|:---:|:---:|
+| **on** (com'è oggi) | 256 | 4.095 | 1.460 | 4.095 | ⛔ | ⛔ |
+| on | 128 | 6.032 | 273 | 6.032 | ⛔ | ⛔ |
+| on | 64 | 4.039 | 93 | 4.039 | ⛔ | ⛔ |
+| **off** | 256 | 1.444 | 1.430 | 1.444 | ✅ | ⛔ |
+| **off** | 128 | 300 | 275 | 300 | ✅ | ⛔ **per 14 ms** |
+| **off** | **64** | **128** | **102** | **128** | ✅ | ✅ |
+
+⇒ Le due manopole curano **due guasti diversi**, e serve tutte e due:
+
+- **La Flash Attention spenta toglie il giro 0.** Con `off` la colonna «giro 0»
+  smette di esistere come categoria: 1.444, 1.431, 1.429, 1.430, 1.426 — cinque
+  giri **piatti**. È la prova finale che quei 4-6 secondi erano la compilazione
+  pigra dei kernel FA, e nient'altro.
+- **Il microbatch toglie l'attesa a regime**, perché l'attesa massima per
+  fermarsi è un microbatch.
+
+⛔ **E il 128 NON basta, per quattordici millisecondi.** Passa il tetto dei
+1.500 ms e manca quello vero: p95 300 contro 286. Non lo arrotondo: un cancello
+mancato di poco è un cancello mancato, e il numero che conta è il secondo.
+
+⇒ **G4 PASSA con `flash-attn off` + `microbatch 64`**, e con nient'altro fra ciò
+che ho provato. ⛔ Con la produzione com'è oggi — FA accesa, microbatch 256 — il
+cancello è **FAILED** su entrambe le condizioni.
+
+#### Il prezzo, scritto accanto
+
+⛔ Raccomandare una configurazione senza misurarne il costo sarebbe la stessa
+mezza misura che ho rimproverato altrove. Le tre configurazioni con la Flash
+Attention spenta, telefono freddo a ogni corsa:
+
+| flash-attn / microbatch | PP512 | PP2048 | decodifica (dopo 2048) | TTFT 512 | Stop p95 | G4 |
+|---|---:|---:|---:|---:|---:|:---:|
+| **on / 256** — com'è **oggi** | 307 tok/s | 256 tok/s | 8,1 tok/s | 1.663 ms | 4.095 ms | ⛔ |
+| off / 256 | **312** | **268** | **15,9** | **1.640** | 1.444 ms | ⛔ |
+| off / 128 | 284 | 247 | 15,9 | 1.805 | 300 ms | ⛔ (per 14 ms) |
+| **off / 64** | 227 | 204 | **15,9** | 2.256 | **128 ms** | ✅ |
+
+⇒ Rispetto a **oggi**, la configurazione che passa il cancello — `off / 64` —
+costa **prefill** e regala tutto il resto:
+
+| | oggi (`on / 256`) | `off / 64` | |
+|---|---:|---:|---|
+| prefill 512 | 307 tok/s | 227 | **−26%** |
+| prefill 2048 | 256 tok/s | 204 | **−20%** |
+| decodifica dopo 2048 token | 8,1 tok/s | **15,9** | **+96%** |
+| primo messaggio del processo | ~7.000 ms | **2.253** | **−4,7 s** |
+| Stop durante il prefill (p95) | 4.095 ms | **128** | **32×** |
+
+⛔ **E il prefill non è una perdita netta**, perché la persona non aspetta il
+prefill: aspetta il **TTFT**, e su 512 token quello passa da 1.663 a 2.256 ms —
+**+593 ms una volta**, contro 4,7 secondi risparmiati sul primo messaggio e una
+decodifica doppia per tutto il resto della conversazione. Su 2.048 token il
+conto si inverte: TTFT 8.006 → 10.043 ms, **+2 secondi**, ed è lì che la scelta
+diventa un compromesso vero invece che un guadagno secco.
+
+⇒ ⛔ **Per questo la decisione è dell'owner e non mia**: dipende da quanto lungo
+è il prompt tipico dell'assistente, che è una domanda di prodotto. Se il prompt
+di sistema è lungo, `off / 128` — che manca il cancello per 14 ms — potrebbe
+essere il compromesso migliore *nonostante* il cancello.
+
+⛔⛔ **Non ho toccato la produzione**, e nessuna delle due cure è mia da
+applicare: vivono entrambe in `talos_apri_modello`, e cambiano la velocità per
+tutti. Sono **decisioni di prodotto**, e le porto con il prezzo scritto accanto.
 
 ### ✅⛔⛔ OCL-4 — LA FLASH ATTENTION SU ADRENO 830: costa, e non rende
 
@@ -1152,6 +1210,30 @@ da `_ex`. ⇒ I `.clbin` restano 181 prima e dopo, e **ogni processo ripaga i 5,
 secondi**. È anche la ragione per cui, cancellando la cache e rimisurando, il
 primo Stop peggiorava (2.760 → 4.786 ms) ma **non spariva**: la cache copre
 tutto il resto, non questo.
+
+#### ✅ E le parole non cambiano — misurato, non assunto
+
+Una proposta «spegniamola, è più veloce» che non porta anche la prova semantica
+chiede di fidarsi di metà misura: la Flash Attention non è la stessa aritmetica
+scritta più in fretta, è un'altra strada con arrotondamenti diversi.
+
+Suite golden sul dispositivo, stesso modello, campionamento deterministico,
+`OpenCL/GPUOpenCL`, una corsa con `on` e una con `off`, telefono freddo a
+entrambe:
+
+```
+S1 IDENTICO   S2 IDENTICO   S3 IDENTICO   S4 IDENTICO
+S5 IDENTICO   S6 IDENTICO   S7 IDENTICO
+⇒ tutti e 7 identici
+```
+
+⛔ **Onestà su cosa prova e cosa no.** Tre di questi sette casi contengono testo
+generato davvero — S1 («Sto bene, grazie.»), S3 (la chiamata `meteo` con i suoi
+argomenti) e S5 (prosa più chiamata, con la chiamata che sopravvive alla prosa).
+Gli altri quattro descrivono il template e la grammatica, che la Flash Attention
+non tocca. ⇒ È una prova **stretta**: tre risposte identiche, non una
+dimostrazione di equivalenza su qualunque prompt. È però la stessa prova che
+abbiamo usato per qualificare il forward pin, e lì era il metro accettato.
 
 #### La proposta, che non applico
 
