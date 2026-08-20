@@ -38,6 +38,18 @@ const props = withDefaults(defineProps<{
      * smettono di essere due strade.
      */
     shellBack?: ((canGoBack: boolean) => 'handled' | 'history' | 'exit') | null
+    /**
+     * ⛔ Campanella e centro download, come nell'intestazione della chat.
+     *
+     * FOTOGRAFATO sul Pad il 2026-08-20: due campanelle sullo stesso schermo,
+     * con lo stesso pallino «1» — una nel pannello del tablet e una qui. Il
+     * pannello ce l'ha sempre, quindi sul tablet questa e' la seconda.
+     *
+     * ⛔ E vale SOLO per queste due: il foglio non ha le opzioni della chat, e
+     * non deve prenderle. Sono tre gruppi, non uno — contarli male si e' visto
+     * a schermo due volte nello stesso giorno.
+     */
+    hideAppActions?: boolean
     /** Il nome del posto dove si torna, per dirlo invece di farlo indovinare. */
     parentTitle?: string
 }>(), {
@@ -173,8 +185,10 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
                     <p class="talos-title truncate text-md font-semibold text-[var(--talos-text)]">{{ subView ? subView.title : title }}</p>
                     <p v-if="!subView && description" class="truncate text-2xs text-[var(--talos-muted)]">{{ description }}</p>
                 </div>
-                <TalosMobileNotificationBell />
-            <TalosMobileDownloadCenterTrigger />
+                <template v-if="!hideAppActions">
+                    <TalosMobileNotificationBell />
+                    <TalosMobileDownloadCenterTrigger />
+                </template>
                 <button
                     v-if="presentation === 'drawer'"
                     type="button"

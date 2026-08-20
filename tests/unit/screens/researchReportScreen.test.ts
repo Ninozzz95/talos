@@ -1,9 +1,21 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { TalosResearchRun, TalosResearchStep } from '@/lib/research/researchRun'
 import type { TalosResearchReportRecord } from '@/lib/research/researchReport'
+
+/**
+ * ⛔ I popup di questa pagina sono TELEPORTATI nel body, e un test che finisce
+ * col popup aperto — ce n'e' uno, apposta: prova che dopo un guasto si puo'
+ * riprovare senza ricominciare — lascia le sue righe nel documento. Il test
+ * successivo che cerca una riga per 'data-testid' trova QUELLA, cliccando un
+ * bottone agganciato a un controller che non e' il suo: zero chiamate, e
+ * nessun indizio sul perche'.
+ *
+ * ⇒ Il documento si sgombera fra un test e l'altro. Da soli passavano tutti.
+ */
+afterEach(() => { document.body.innerHTML = '' })
 
 const mockState = vi.hoisted(() => ({ controller: null as unknown }))
 vi.mock('@/stores/chatController', () => ({ useChatController: () => mockState.controller }))
@@ -19,6 +31,7 @@ const routerCalls = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }))
 vi.mock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => routerCalls }))
 
 import { __resetSettingsStoreForTests, useSettingsStore } from '@/stores/settings'
+import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
 import ResearchReportScreen from '@/screens/ResearchReportScreen.vue'
 import ResearchNewScreen from '@/screens/ResearchNewScreen.vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
@@ -153,6 +166,8 @@ function controllerWith(report: TalosResearchReportRecord | null, run: TalosRese
             followUp: vi.fn().mockResolvedValue('file-answer'),
             exportReport: vi.fn().mockResolvedValue({ ok: true }),
             exportReportPdf: vi.fn().mockResolvedValue({ ok: true }),
+            exportCitations: vi.fn().mockResolvedValue({ ok: true }),
+            recheckHistory: vi.fn().mockResolvedValue([]),
             openChat: vi.fn().mockResolvedValue(undefined),
         },
     }
@@ -249,6 +264,130 @@ describe('the report a person can actually check', () => {
         expect(wrapper.get('[data-testid="talos-research-standing"]').text()).toContain('1 unverified')
         expect(wrapper.get('[data-testid="talos-research-judge"]').text()).toBe('local:qwen3-3b')
         expect(wrapper.text()).toContain('never the one that wrote the report')
+    })
+
+    /**
+     * ⛔⛔ Quanto VALE la percentuale, non solo quanto è alta.
+     *
+     * Un 100% su due affermazioni giudicate su dieci, con tre fonti che
+     * riprendono lo stesso comunicato, si legge identico a un 100% solido.
+     * Le quattro misure dei benchmark 2026 sono la differenza — copertura,
+     * fedeltà delle citazioni, ancoraggio, prove distinte — e nessuno dei
+     * cinque concorrenti le mostra alla persona: restano dove le legge chi
+     * costruisce, non chi decide in base al rapporto.
+     */
+    /**
+     * ⛔⛔ REGISTRO-01 — «Come è stato costruito».
+     *
+     * Due rapporti col 100% possono avere dietro lavori incomparabili —
+     * quattro estratti guardati o dieci pagine lette — e senza il registro si
+     * leggono uguali. Il sommario dice quanto lavoro c'è dentro; i passi si
+     * aprono a richiesta, perché dieci righe sempre aperte sarebbero rumore su
+     * una pagina che deve far decidere.
+     */
+    /**
+     * ⛔ LA BARRA — la stessa cosa del conteggio, ma vista.
+     *
+     * «6 sostenute · 1 in parte · 1 contesa · 1 non verificata» va letto e
+     * sommato; la barra si guarda. Ma NON sostituisce le parole: il colore da
+     * solo non è un esito, e chi non distingue i colori resterebbe senza
+     * informazione. Vive col conteggio, e la sua etichetta dice le stesse cose.
+     */
+    it('disegna la barra, e la sua etichetta ripete le parole del conteggio', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const barra = wrapper.get('[data-testid="talos-research-barra"]')
+        expect(barra.attributes('role')).toBe('img')
+        expect(barra.attributes('aria-label')).toMatch(/supported/i)
+        // ⛔ Il conteggio a parole resta: la barra si aggiunge, non sostituisce.
+        expect(wrapper.find('[data-testid="talos-research-standing"]').exists()).toBe(true)
+    })
+
+    /**
+     * ⛔ Dire se una fonte è una PROVA o una ECO.
+     *
+     * Tre articoli che riprendono lo stesso comunicato non sono tre conferme, e
+     * finché non lo si scrive accanto alla fonte si leggono come tre.
+     */
+    it('dice per ogni fonte se è primaria o si appoggia ad altre', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        // Si tocca la linguetta, come farebbe una persona: reka-ui monta il
+        // pannello solo quando è scelto, e provarlo da fuori proverebbe altro.
+        // La scheda si sceglie dal componente delle linguette: reka-ui monta il
+        // pannello solo quando è selezionato, e un click sintetico non gli basta.
+        wrapper.findComponent(TalosThemedTabs).vm.$emit('update:model-value', 'sources')
+        await settle(wrapper)
+        const righe = wrapper.findAll('[data-testid="talos-research-indipendenza"]')
+        expect(righe.length).toBeGreaterThan(0)
+        expect(righe[0]!.text()).toMatch(/only page from its site|same site as|unica pagina|stesso sito/i)
+
+        // ⛔ La scheda scelta SOPRAVVIVE alla pagina — è memorizzata, ed è voluto.
+        // Lasciarla su «fonti» farebbe partire il test dopo dalla scheda sbagliata:
+        // un test che sporca lo stato fa fallire un vicino innocente.
+        wrapper.findComponent(TalosThemedTabs).vm.$emit('update:model-value', 'claims')
+        await settle(wrapper)
+    })
+
+    it('riassume il lavoro fatto, e i passi restano chiusi finché non li chiedi', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const sommario = wrapper.get('[data-testid="talos-research-registro-sommario"]')
+        expect(sommario.text()).toMatch(/steps/i)
+        expect(wrapper.find('[data-testid="talos-research-registro-passi"]').exists()).toBe(false)
+    })
+
+    it('⛔ e a richiesta si aprono, col tipo e la durata di ognuno', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        await wrapper.get('[data-testid="talos-research-registro-apri"]').trigger('click')
+        const passi = wrapper.get('[data-testid="talos-research-registro-passi"]')
+        expect(passi.findAll('li').length).toBeGreaterThan(0)
+    })
+
+    it('mostra le quattro misure di fedeltà, con la loro data', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const pannello = wrapper.get('[data-testid="talos-research-fedelta"]')
+        // Una giudicata su due.
+        expect(wrapper.get('[data-testid="talos-research-fedelta-copertura"]').text()).toContain('50%')
+        // Un passaggio ritrovato nella pagina su due affermazioni.
+        expect(wrapper.get('[data-testid="talos-research-fedelta-citazioni"]').text()).toContain('50%')
+        // Due domini diversi: due prove distinte.
+        expect(wrapper.get('[data-testid="talos-research-fedelta-indipendenti"]').text()).toContain('2')
+        expect(pannello.text()).toMatch(/2026-08-02/)
+    })
+
+    /**
+     * ⛔ Un punteggio su cui nessuno ha giudicato non è un punteggio basso:
+     * NON È un punteggio. Un 0% verrebbe letto come una misura, e sarebbe una
+     * misura di niente.
+     */
+    it('⛔ senza nessun giudizio dice «non verificata», non uno zero', async () => {
+        mockState.controller = controllerWith({
+            ...REPORT,
+            judge: null,
+            claims: REPORT.claims.map((claim) => ({
+                ...claim,
+                checks: { ...claim.checks, claimSupported: 'unchecked', judge: null, judgedAt: null },
+            })),
+        })
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        expect(wrapper.find('[data-testid="talos-research-fedelta-assente"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-research-fedelta-copertura"]').exists()).toBe(false)
     })
 
     /**
@@ -766,5 +905,276 @@ describe('il tetto locale, distribuito', () => {
         expect(talosResearchPlanFor('x', 'exhaustive', true)).toHaveLength(
             talosResearchPlanFor('x', 'exhaustive', false).length,
         )
+    })
+})
+
+
+/**
+ * SCHEDE-APERTE-01 — il dissenso e l’eccesso, sul rapporto e senza un tocco.
+ *
+ * Il mockup approvato dall’owner tiene aperte due schede: l’affermazione
+ * contesa coi due passaggi affiancati, e quella che dice piu’ di quanto la sua
+ * pagina sostenga. Erano gia’ costruite, ma dentro la pagina dell’affermazione
+ * — cioe’ raggiungibili solo da chi sapeva gia’ dov’erano.
+ */
+describe('le due schede che il rapporto tiene aperte', () => {
+    const CONTRO = {
+        url: 'https://contro.example/x',
+        title: 'La smentita',
+        passage: 'la giuria non ha mai assegnato quel primo posto',
+        span: { from: 10, to: 20 },
+    }
+
+    function conSchede(over) {
+        return {
+            ...REPORT,
+            claims: [
+                {
+                    text: 'Norris ha vinto il Gran Premio.',
+                    sourceIndex: 0,
+                    passage: 'Lando Norris ha vinto il Gran Premio',
+                    checks: {
+                        resolved: 'page', quotePresent: true, quoteSpan: { from: 6, to: 12 },
+                        claimSupported: 'contested',
+                        supportReason: 'due fonti dicono di si, una dice di no',
+                        judge: 'local:qwen3-3b', judgedAt: '2026-08-02T10:04:00.000Z',
+                        opposing: [CONTRO],
+                    },
+                },
+                {
+                    text: 'Il circuito ospita la gara dal 1986.',
+                    sourceIndex: 1,
+                    passage: 'il circuito ospita una gara di Formula 1',
+                    checks: {
+                        resolved: 'page', quotePresent: true, quoteSpan: { from: 3, to: 11 },
+                        claimSupported: 'partial',
+                        supportReason: 'la fonte non nomina nessun anno',
+                        judge: 'local:qwen3-3b', judgedAt: '2026-08-02T10:04:00.000Z',
+                    },
+                },
+            ],
+            ...over,
+        }
+    }
+
+    it('apre la contesa sul rapporto, coi due passaggi affiancati', async () => {
+        mockState.controller = controllerWith(conSchede({}))
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+
+        const scheda = wrapper.find('[data-testid="talos-research-contesa-aperta"]')
+        expect(scheda.exists()).toBe(true)
+        // I DUE lati, non solo quello che ci fa comodo.
+        expect(scheda.text()).toContain('Norris ha vinto il Gran Premio.')
+        expect(scheda.text()).toContain('la giuria non ha mai assegnato')
+        expect(scheda.text()).toContain('La smentita')
+        wrapper.unmount()
+    })
+
+    it('evidenzia il pezzo che il giudice ha riconosciuto, e solo quello', async () => {
+        mockState.controller = controllerWith(conSchede({}))
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+
+        const marcati = wrapper.findAll('[data-testid="talos-research-contesa-aperta"] mark')
+        expect(marcati.map((m) => m.text())).toEqual(['Norris', 'non ha mai'])
+        wrapper.unmount()
+    })
+
+    it('apre anche l’affermazione che eccede la sua fonte, col motivo', async () => {
+        mockState.controller = controllerWith(conSchede({}))
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+
+        const scheda = wrapper.find('[data-testid="talos-research-eccede"]')
+        expect(scheda.exists()).toBe(true)
+        expect(scheda.text()).toContain('la fonte non nomina nessun anno')
+        wrapper.unmount()
+    })
+
+    it('E AL CONTRARIO: un rapporto senza contese e senza eccessi non apre schede vuote', async () => {
+        // REPORT ha una sostenuta e una non verificata: nessuna delle due
+        // schede ha materia, e disegnarle vuote occuperebbe lo schermo per
+        // dire niente.
+        mockState.controller = controllerWith(REPORT)
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+
+        expect(wrapper.find('[data-testid="talos-research-contesa-aperta"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-research-eccede"]').exists()).toBe(false)
+        wrapper.unmount()
+    })
+
+    it('E una contesa SENZA i passaggi contrari non si apre', async () => {
+        const senzaContrari = conSchede({})
+        const claims = senzaContrari.claims.map((c, i) => (i === 0
+            ? { ...c, checks: { ...c.checks, opposing: [] } }
+            : c))
+        mockState.controller = controllerWith({ ...senzaContrari, claims })
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+
+        expect(wrapper.find('[data-testid="talos-research-contesa-aperta"]').exists()).toBe(false)
+        wrapper.unmount()
+    })
+})
+
+/**
+ * EXPORT-06 — le fonti in un formato che un gestore di bibliografie legge.
+ *
+ * Le funzioni esistevano da giorni, coi loro test, e nessuna porta le
+ * chiamava: codice vivo dietro un muro.
+ */
+describe('esportare le sole fonti', () => {
+    beforeEach(() => { mockState.controller = controllerWith(REPORT) })
+
+    it('offre BibTeX e RIS, e passa la data di LETTURA, non quella di oggi', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        // Due giri come openReport: il run arriva asincrono, e con uno solo
+        // exportAs esce subito perche non ha ancora il rapporto da esportare.
+        await settle(wrapper)
+        await settle(wrapper)
+
+        await wrapper.get('[data-testid="talos-research-export"]').trigger('click')
+        await settle(wrapper)
+        document.querySelector<HTMLElement>('[data-testid="talos-research-export-bibtex"]')!.click()
+        await settle(wrapper)
+
+        const controller = mockState.controller as ReturnType<typeof controllerWith>
+        const chiamate = controller.research.exportCitations.mock.calls
+        expect(chiamate).toHaveLength(1)
+        const [, formato, nome, letto] = chiamate[0]!
+        expect(formato).toBe('bibtex')
+        expect(nome.endsWith('.bib')).toBe(true)
+        // La data e RUN.startedAt: un export fatto fra un mese non deve dire
+        // che le pagine sono state lette fra un mese.
+        expect(letto).toBe(RUN.startedAt)
+        wrapper.unmount()
+    })
+
+    it('e il RIS esce col suo nome, non come PDF', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        // Due giri come openReport: il run arriva asincrono, e con uno solo
+        // exportAs esce subito perche non ha ancora il rapporto da esportare.
+        await settle(wrapper)
+        await settle(wrapper)
+
+        await wrapper.get('[data-testid="talos-research-export"]').trigger('click')
+        await settle(wrapper)
+        document.querySelector<HTMLElement>('[data-testid="talos-research-export-ris"]')!.click()
+        await settle(wrapper)
+
+        const controller = mockState.controller as ReturnType<typeof controllerWith>
+        expect(controller.research.exportReportPdf).not.toHaveBeenCalled()
+        const [, formato, nome] = controller.research.exportCitations.mock.calls[0]!
+        expect(formato).toBe('ris')
+        expect(nome.endsWith('.ris')).toBe(true)
+        wrapper.unmount()
+    })
+})
+
+
+/**
+ * TENUTA-NEL-TEMPO-01 — quanto vale OGGI un rapporto di ieri.
+ *
+ * Chi ha salvato un URL sa riferire soltanto che una richiesta e’ andata a
+ * buon fine, cosa che riesce anche a una pagina riscritta: nella letteratura
+ * fra i link ancora VIVI solo il 29,9% conteneva davvero il materiale citato.
+ * Noi il testo di allora ce l’abbiamo, e i ricontrolli sono gia’ in Libreria.
+ */
+describe('la tenuta nel tempo', () => {
+    const TAPPE = [
+        {
+            at: '2026-08-19T10:00:00.000Z', total: 2, intact: 2, changed: 0, unreachable: 0,
+            passagesStanding: 7, passagesLost: 0, tenuta: 1, primo: true, delta: null,
+        },
+        {
+            at: '2026-09-03T08:00:00.000Z', total: 2, intact: 1, changed: 1, unreachable: 0,
+            passagesStanding: 6, passagesLost: 1, tenuta: 6 / 7, primo: false, delta: 6 / 7 - 1,
+        },
+    ]
+
+    it('mette le tappe in fila e dice di quanto e’ scesa', async () => {
+        mockState.controller = controllerWith(REPORT)
+        const controller = mockState.controller as ReturnType<typeof controllerWith>
+        controller.research.recheckHistory = vi.fn().mockResolvedValue(TAPPE)
+
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const pannello = wrapper.find('[data-testid="talos-research-tenuta-nel-tempo"]')
+        expect(pannello.exists()).toBe(true)
+        expect(wrapper.findAll('[data-testid="talos-research-tappa"]')).toHaveLength(2)
+        // 6 su 7 = 86%, e il salto e’ 14 punti in meno.
+        expect(pannello.text()).toContain('86%')
+        expect(pannello.text()).toContain('14%')
+        wrapper.unmount()
+    })
+
+    it('E AL CONTRARIO: una tappa sola non e’ una storia, e non si disegna', async () => {
+        // Un punto disegnato come una linea suggerisce un andamento che
+        // nessuno ha misurato.
+        mockState.controller = controllerWith(REPORT)
+        const controller = mockState.controller as ReturnType<typeof controllerWith>
+        controller.research.recheckHistory = vi.fn().mockResolvedValue([TAPPE[0]])
+
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        expect(wrapper.find('[data-testid="talos-research-tenuta-nel-tempo"]').exists()).toBe(false)
+        wrapper.unmount()
+    })
+
+    it('⛔ due tappe nello STESSO giorno portano l’ora, se no sono la stessa riga', async () => {
+        // Visto sul Pad il 2026-08-20 facendo due ricontrolli di fila: due
+        // righe con «20 agosto 2026» e nient’altro a distinguerle.
+        mockState.controller = controllerWith(REPORT)
+        const controller = mockState.controller as ReturnType<typeof controllerWith>
+        controller.research.recheckHistory = vi.fn().mockResolvedValue([
+            { ...TAPPE[0], at: '2026-08-20T09:00:00.000Z' },
+            { ...TAPPE[1], at: '2026-08-20T11:30:00.000Z' },
+        ])
+
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const righe = wrapper.findAll('[data-testid="talos-research-tappa"]').map((r) => r.text())
+        expect(righe).toHaveLength(2)
+        // Le due etichette temporali sono DIVERSE fra loro.
+        expect(righe[0]).not.toBe(righe[1])
+        // E portano un orario, non solo un giorno.
+        for (const riga of righe) expect(riga).toMatch(/\d{1,2}[:.]\d{2}/)
+        wrapper.unmount()
+    })
+
+    it('e in giorni diversi basta il giorno, senza ora', async () => {
+        mockState.controller = controllerWith(REPORT)
+        const controller = mockState.controller as ReturnType<typeof controllerWith>
+        controller.research.recheckHistory = vi.fn().mockResolvedValue(TAPPE)
+
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const righe = wrapper.findAll('[data-testid="talos-research-tappa"]').map((r) => r.text())
+        expect(righe[0]).not.toMatch(/\d{1,2}[:.]\d{2}/)
+        wrapper.unmount()
+    })
+
+    it('E se la Libreria non risponde, il rapporto resta in piedi lo stesso', async () => {
+        mockState.controller = controllerWith(REPORT)
+        const controller = mockState.controller as ReturnType<typeof controllerWith>
+        controller.research.recheckHistory = vi.fn().mockRejectedValue(new Error('vault giu'))
+
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        expect(wrapper.find('[data-testid="talos-research-balance"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-research-tenuta-nel-tempo"]').exists()).toBe(false)
+        wrapper.unmount()
     })
 })

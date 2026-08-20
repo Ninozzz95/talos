@@ -6,6 +6,123 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.16
+
+The Deep Research rework, drawn from the approved mockup and measured on the
+owner’s OnePlus Pad.
+
+### The disagreement, in the open
+
+When sources contradict each other, the passage for and the passage against
+now sit side by side **on the report itself** — no tap, no hunting. Nobody
+reading a report at 86% has a reason to open that one row out of twelve, and
+that row is the one that matters.
+
+It could not happen before. The rule that marks a claim contested had tests
+and no caller: a run could never produce one, so neither the card nor the
+standing bar could ever show it. The GGUF report said in its own prose "the
+sources do not formally name a single maintainer" while the bar above it read
+7 of 7 supported, 0 contested — the disagreement lived in the summary and
+never in the data.
+
+Now the judge gets a second question: does this passage, from a **different**
+source, contradict the claim? One candidate per claim, chosen by word overlap
+and never by a model — a model picking what to judge is a second judgement
+paid for to move the first.
+
+Three things are refused before the judge is paid, each found on the device:
+
+- **An echo is not a disagreement.** Two sites carrying one sentence had the
+  judge saying "yes, it contradicts" about a sentence it had just approved.
+- **A frame is not a difference.** The next one had "says no" *containing*
+  "says yes" plus a paragraph of context. The comparison runs in the shorter
+  direction now.
+- **A table is not a passage.** An infobox scraped without spaces between
+  cells — "0x46Developed byGeorgi Gerganov and communityInitial releaseAugust
+  22, 2023" — was called a contradiction while the text actually *confirmed*
+  the date.
+
+### How a report holds over time
+
+Every re-check has been writing its document to the Library for weeks, in
+prose: readable and impossible to compare. It now carries a block that reads
+back exactly, and the report lines the checks up with the drop between them.
+
+Counted on the **quoted passages**, not on the pages. Reference decay has two
+halves — the address dies, or the page answers and no longer says what was
+cited — and among links that still resolve, published studies find only about
+30% still contain the cited material. A page that changed elsewhere took
+nothing away from this report. We can ask that question because we kept the
+text; everyone else kept a URL.
+
+### Fixed
+
+- **Reports were graded on verdicts the judge never gave.** Asked to answer
+  "SI | PARZIALE | NO — reason", the on-device judge copied the menu instead
+  of choosing from it, and the first word was taken as the verdict. Those
+  100% reports were inflated. The menu is gone from the question — three
+  words, one per line, with an example — and coverage on the next run went
+  from 25% to 100%, honestly this time.
+- **Six pages counted as ten.** Two branches of a plan can land on the same
+  page; the report listed it twice. The model saw it as [1] and [6], so two
+  claims "from different sources" could come from one; and "6 of 10
+  independent" had an inflated numerator *and* denominator. Same question on
+  the Pad, before and after: 10 sources / 6 of 10 → **7 sources / 7 of 7**.
+- **Two sources, one name.** Both rows read "GGUF", both "same site as another
+  source". The domain is on the row now, where the mockup had it.
+- **The raw protocol reached the screen**: "| PARZIALE |" printed as the
+  reason, under a verdict that said "contested".
+- **Two bells with the same badge** on tablet, and the badge was clipped in
+  landscape. The panel owns the hamburger, the bell and the downloads — not
+  the chat options, which is why they had gone missing from the tablet pane in
+  the first place.
+- **"1 contese".** Italian agrees its adjectives and that line carries five in
+  a row, so any value of 1 broke one. The counts are labelled now.
+- **The list card left the contested count out**, so a four-claim report read
+  "75% · 3 supported · 0 in part · 0 contradicted" — the missing one was the
+  one explaining the 75%.
+- **"Deep Research V3"** put an internal version number on screen.
+- **A failure that named nothing.** Asking for a search, granting the consent,
+  and then reading "Did not work: reading a web page" — with no reason, right
+  after a search that had in fact succeeded. The consent is not the cause: it
+  is the gate, and the tool can only run, and fail, once it opens. Underneath
+  was a page redirecting https → http, refused by the native client. TALOS did
+  the right thing and said nothing about it. Failures now carry a stable code
+  alongside the sentence, and the notice reads the code: **"That page
+  redirected to an unprotected connection, so TALOS did not follow it. The
+  other sources it found still stand."** Eleven refusals have a sentence now.
+- **A link in your own message was invisible.** Measured on the device: link
+  colour rgb(192, 139, 60), bubble background rgb(192, 139, 60) — identical,
+  contrast 1:1. The address was there, underlined, and unreadable. Every
+  address you type or paste.
+- **"2 richiesta di autorizzazione"** — Italian agreement, in the third place
+  it turned up today.
+
+### Added
+
+- **Sources export as BibTeX and RIS**, for Zotero, Mendeley, EndNote or a
+  LaTeX bibliography. Nothing about the research leaves in them — not the
+  question, not the judge, not the identifiers: a bibliography file ends up in
+  a shared folder, which is the least controlled place a personal detail can
+  land.
+- **The header line carries sources and tokens**, and tokens only when an
+  engine actually reported some.
+
+### Also, from before the tag
+
+- **The report says what its own percentage is worth.** The four benchmark
+  measures now sit under the standing figure, each with the plain line that
+  says what it means, and the score carries its date because cited pages die.
+- **Contested claims reach the surface**: listed in the standing line, counted
+  as zero toward solidity like a contradiction, and a single one marks a run as
+  worth a second look.
+- **The accessibility-service description is readable in any language.** It
+  existed only in Italian, in the fallback file, so a phone set to German or
+  Spanish showed an Italian sentence on the one screen that grants reading the
+  whole display. English is the fallback now, Italian sits in its own file, and
+  the Android lint gate — red since 19 August, including on the v0.1.14 push —
+  is green again.
+
 ## v0.1.15
 
 The honesty release: three things TALOS used to say with confidence that were
@@ -54,10 +171,11 @@ was measured on the owner's OnePlus Pad running Android 16.
   registrable domain and the origins a source itself cites, with no extra
   network request — and a source that cites several origins stays independent,
   because penalising that would punish the best sources.
-- **Fidelity measures, each with its date.** Coverage, citation faithfulness,
-  claim groundedness and distinct proofs. A run nobody judged returns
-  "unverified" rather than a percentage, because a percentage reads as a
-  measurement and would be a measurement of nothing.
+- **Fidelity measures are computed, each with its date** — coverage, citation
+  faithfulness, claim groundedness and distinct proofs. A run nobody judged
+  returns "unverified" rather than a percentage, because a percentage reads as
+  a measurement and would be a measurement of nothing. They reach the report
+  screen in the next version.
 - **Citations export as BibTeX and RIS**, for Zotero, Mendeley and EndNote. A
   citation describes a page, so the query, the judging model and the run id
   never leave with it.

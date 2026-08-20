@@ -28,6 +28,18 @@ const index = computed(() => Number.parseInt(String(route.params.index ?? ''), 1
 const { report, loading, missing } = useTalosResearchRun(() => runId.value)
 
 const claim = computed(() => report.value?.claims[index.value] ?? null)
+/**
+ * ⛔⛔ CONTESA-02 — la contesa si APRE, non si riassume in una parola.
+ *
+ * Il motore sapeva già che due fonti si contraddicono, con le contrarie e
+ * il loro passaggio. Questa scheda però mostrava solo il passaggio a
+ * favore: chi leggeva vedeva metà del disaccordo, e la metà che vedeva era
+ * quella che dava ragione al rapporto.
+ *
+ * ⛔ È il verso peggiore in cui sbagliare — nascondere la fonte contraria
+ * fa sembrare più solido proprio ciò che è più fragile.
+ */
+const opposing = computed(() => claim.value?.checks.opposing ?? [])
 const source = computed(() => (claim.value ? report.value?.sources[claim.value.sourceIndex] ?? null : null))
 
 /**
@@ -41,6 +53,9 @@ const tone = computed(() => {
     switch (claim.value?.checks.claimSupported) {
         case 'yes': return 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)]'
         case 'no': return 'border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)]'
+        // ⛔ La contesa NON prende il tono di «sostenuta»: sarebbe la stessa
+        // lusinga che il verdetto separato esiste per togliere.
+        case 'contested': return 'border-[var(--talos-border)] bg-[var(--talos-panel)]'
         default: return 'border-[var(--talos-border)] bg-[var(--talos-panel)]'
     }
 })
@@ -68,6 +83,44 @@ function openSource(): void {
                 <p data-testid="talos-research-verdict" class="rounded-xl border p-3 text-sm leading-5 text-[var(--talos-text)]" :class="tone">
                     {{ t(`research.support.${claim.checks.claimSupported}`) }}
                 </p>
+
+                <!--
+                    ⛔⛔ IL DISSENSO, APERTO — mockup approvato dall'owner,
+                    sezione «L'affermazione contesa, aperta».
+
+                    Due colonne affiancate, i due passaggi come stanno nelle
+                    rispettive pagine. Non si media e non si sceglie in
+                    silenzio la più comoda: è la pratica concorde sui
+                    conflitti fra fonti, ed è anche l'unica onesta — su un
+                    punto conteso la persona deve poter decidere, e per
+                    decidere deve vedere entrambe.
+                -->
+                <section
+                    v-if="opposing.length"
+                    data-testid="talos-research-dissenso"
+                    class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3"
+                >
+                    <p class="mb-1 text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">
+                        {{ t('research.dissensoTitolo') }}
+                    </p>
+                    <p class="mb-3 text-2xs leading-5 text-[var(--talos-muted)]">{{ t('research.dissensoSpiega') }}</p>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <div class="rounded-lg border border-[var(--talos-border)] p-3">
+                            <p class="mb-1 text-2xs font-medium text-[var(--talos-muted)]">{{ t('research.dissensoAFavore') }}</p>
+                            <p class="text-sm leading-6 text-[var(--talos-text)]">{{ claim.passage }}</p>
+                            <p v-if="source" class="mt-2 break-words text-2xs leading-4 text-[var(--talos-muted)]">{{ source.title || source.url }}</p>
+                        </div>
+                        <div
+                            v-for="(contro, i) in opposing"
+                            :key="`${contro.url}-${i}`"
+                            class="rounded-lg border border-[var(--talos-danger-border)] p-3"
+                        >
+                            <p class="mb-1 text-2xs font-medium text-[var(--talos-muted)]">{{ t('research.dissensoContro') }}</p>
+                            <p class="text-sm leading-6 text-[var(--talos-text)]">{{ contro.passage }}</p>
+                            <p class="mt-2 break-words text-2xs leading-4 text-[var(--talos-muted)]">{{ contro.title || contro.url }}</p>
+                        </div>
+                    </div>
+                </section>
 
                 <!-- The passage, kept at collection time. Nobody else can show
                      this, because nobody else stored it — which is also why a

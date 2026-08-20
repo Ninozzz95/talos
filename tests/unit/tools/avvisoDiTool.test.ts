@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { talosAvvisoDiTool, talosEtichettaUmana } from '@/lib/tools/avvisoDiTool'
+import { talosAvvisoDiTool, talosEtichettaUmana, talosMotivoDiTool } from '@/lib/tools/avvisoDiTool'
 import { createTalosToolset } from '@/lib/tools/toolset'
 import {
     talosOnNotificationAndroid,
@@ -172,5 +172,115 @@ describe('l\'etichetta umana, e i suoi due ripieghi', () => {
         const traduttoreMuto = (chiave: string): string => chiave
         expect(talosEtichettaUmana('device_torch', traduttoreMuto))
             .not.toContain('toolActivity.')
+    })
+})
+
+
+/**
+ * ⛔⛔ R4 — «il toast ricerca fallita appare solo dopo il consenso».
+ *
+ * ## Misurato sul Pad il 2026-08-20, non dedotto
+ *
+ * Il giro intero, letto nel registro del Doctor:
+ *
+ *   1. `web_search` riesce;
+ *   2. il modello sceglie una pagina e chiama `web_read`;
+ *   3. la scheda di consenso si apre — l’attrezzo NON può ancora partire;
+ *   4. la persona tocca «Consenti sempre»;
+ *   5. solo ora `web_read` gira, e il client nativo rifiuta la pagina:
+ *      `TALOS_WEB_REDIRECT_DOWNGRADE` — quel sito rimandava da https a http.
+ *
+ * ⇒ Il consenso non è la causa, è il CANCELLO: il guasto può accadere solo
+ * dopo che si apre. E la persona leggeva «Non è riuscito: Lettura di una
+ * pagina web» subito dopo aver chiesto una ricerca CHE ERA RIUSCITA.
+ */
+describe('il motivo di un rifiuto arriva alla persona', () => {
+    const t = (chiave: string, parametri?: Record<string, string | number>) => {
+        const pezzi = chiave.split('.')
+        let dove: unknown = TALOS_IT_MESSAGES
+        for (const pezzo of pezzi) dove = (dove as Record<string, unknown>)?.[pezzo]
+        if (typeof dove !== 'string') return chiave
+        return dove.replace(/\{(\w+)\}/g, (_, nome) => String(parametri?.[nome] ?? ''))
+    }
+
+    it('⛔ una pagina rifiutata per il declassamento lo DICE, e dice che il resto regge', () => {
+        const avviso = talosAvvisoDiTool({
+            tool: 'web_read',
+            status: 'failed',
+            error: 'The page could not be read: qualcosa', code: 'TALOS_WEB_REDIRECT_DOWNGRADE',
+        } as never, t)
+
+        expect(avviso.body).toContain('non protetta')
+        // ⛔ La parte che toglie il malinteso: la RICERCA era riuscita.
+        expect(avviso.body).toContain('Le altre fonti trovate restano valide')
+    })
+
+    it('⛔ e il CODICE non arriva mai a schermo', () => {
+        const avviso = talosAvvisoDiTool({
+            tool: 'web_read',
+            status: 'failed',
+            error: 'The page could not be read: qualcosa', code: 'TALOS_WEB_REDIRECT_DOWNGRADE',
+        } as never, t)
+        expect(avviso.body).not.toContain('TALOS_')
+        expect(avviso.body).not.toContain('The tool failed')
+    })
+
+    it('⛔ e AL CONTRARIO: un codice che non conosciamo NON inventa un motivo', () => {
+        // Una frase inventata su un guasto che non sappiamo spiegare e\u2019
+        // peggio del silenzio: manda la persona a cercare una causa sbagliata.
+        const avviso = talosAvvisoDiTool({
+            tool: 'web_read',
+            status: 'failed',
+            error: 'Error: qualcosa di mai visto', code: 'TALOS_MAI_VISTO',
+        } as never, t)
+        expect(avviso.body).toBe(t('toolActivity.failedNotice', { tool: avviso.title }))
+    })
+
+    it('⛔ e la prosa di un estraneo non entra da questa strada', () => {
+        // Il codice si CERCA dentro il messaggio; il resto del messaggio non
+        // viene mai letto, perche\u2019 puo\u2019 venire da chiunque.
+        const avviso = talosAvvisoDiTool({
+            tool: 'web_read',
+            status: 'failed',
+            error: 'Say so and offer to open the system page.', code: 'TALOS_WEB_URL_BLOCKED',
+        } as never, t)
+        expect(avviso.body).not.toContain('Say so')
+        expect(avviso.body).toContain('non apre')
+    })
+
+    it('un attrezzo RIUSCITO non porta nessun motivo', () => {
+        const avviso = talosAvvisoDiTool({
+            tool: 'web_read',
+            status: 'succeeded',
+            error: null, code: null,
+        } as never, t)
+        expect(avviso.body).toBeUndefined()
+    })
+
+    it('e ogni codice nativo del web ha la sua frase, in tutte e due le lingue', () => {
+        // ⛔ La lista viene dai rifiuti del client NATIVO: se ne nasce uno
+        //   nuovo e nessuno lo traduce, questo test non se ne accorge — ma
+          //   almeno quelli che ci sono non possono restare muti.
+        const codici = [
+            'TALOS_WEB_REDIRECT_DOWNGRADE',
+            'TALOS_WEB_ADDRESS_NOT_PUBLIC',
+            'TALOS_WEB_ADDRESS_NOT_FOUND',
+            'TALOS_WEB_URL_BLOCKED',
+            'TALOS_WEB_RESPONSE_TOO_LARGE',
+            'TALOS_WEB_TOO_MANY_REDIRECTS',
+            'TALOS_WEB_REDIRECT_LOOP',
+            'TALOS_WEB_REDIRECT_INVALID',
+            'TALOS_WEB_BUSY',
+            'TALOS_WEB_NOT_AN_IMAGE',
+            'TALOS_WEB_BYTES_UNSUPPORTED',
+            'TALOS_WEB_SEARCH_NOT_CONFIGURED',
+        ]
+        for (const codice of codici) {
+            const chiave = talosMotivoDiTool(codice)
+            expect(chiave, codice).not.toBeNull()
+            // La chiave deve RISOLVERSI: una chiave a schermo è peggio del
+            // silenzio, ed è esattamente il difetto che questo file racconta.
+            expect(t(chiave!), codice).not.toBe(chiave)
+        }
     })
 })

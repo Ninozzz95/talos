@@ -969,7 +969,12 @@ export const TALOS_IT_MESSAGES = {
         generatedFileSaveFailed: 'Non è stato possibile salvare “{name}” nella Libreria.',
         generatedFilesSavedAfterAuthorization: 'Salvati {count} file nella Libreria: {names}.',
         generatedFilesNotSavedAfterAuthorization: 'Nessun file generato è stato salvato ({count} ignorati).',
-        toolAuthorizationPending: '{count} richiesta di autorizzazione per uno strumento è in attesa. Puoi continuare a usare la chat.',
+        // ⛔ Due frasi, non una con un numero dentro: con due richieste la
+        //   riga diceva «2 richiesta di autorizzazione … è in attesa».
+        //   FOTOGRAFATO sul Pad il 2026-08-20, ed è lo stesso difetto di
+        //   «1 contese» chiuso poche ore prima, in un altro punto.
+        toolAuthorizationPendingOne: 'Una richiesta di autorizzazione per uno strumento è in attesa. Puoi continuare a usare la chat.',
+        toolAuthorizationPendingMany: '{count} richieste di autorizzazione per gli strumenti sono in attesa. Puoi continuare a usare la chat.',
         toolAuthorizationSettled: 'La richiesta di autorizzazione è stata gestita.',
         emptyAnswerAfterTools: 'Gli strumenti sono partiti ({count}), ma il modello non ha scritto nessuna risposta. Prova a chiedere di nuovo, o con un altro modello.',
         libraryAnswerGuardAbstention: 'Non sono riuscito a produrre una risposta affidabile che restasse sul tema corrente della conversazione. Riformula la domanda o indica la fonte da usare.',
@@ -1183,6 +1188,32 @@ export const TALOS_IT_MESSAGES = {
          * ce le ha: una frase sicura su una cosa che non sappiamo.
          */
         failedNotice: 'Non è riuscito: {tool}.',
+        /*
+         * ⛔ IL MOTIVO, quando lo sappiamo.
+         *
+         * Il codice non si mostra: si mostra la sua frase. Dice cosa e'
+         * successo e, dove ha senso, cosa si può fare — e non manda
+         * nessuno a guardare da un'altra parte.
+         *
+         * ⛔ E dove TALOS ha RIFIUTATO, la frase lo dice come una scelta,
+         * non come un guasto: rifiutare una pagina che va in chiaro e'
+         * la cosa giusta, e chi legge deve saperlo.
+         */
+        perche: {
+            webRedirectDowngrade: 'Quella pagina rimandava a una connessione non protetta, e TALOS non l’ha seguita. Le altre fonti trovate restano valide.',
+            webNotPublic: 'Quell’indirizzo punta dentro la tua rete, non al web. TALOS non lo apre.',
+            webNotFound: 'Quell’indirizzo non risponde: il sito potrebbe non esistere più.',
+            webBlocked: 'Quell’indirizzo è fra quelli che TALOS non apre.',
+            webTooLarge: 'Quella pagina è troppo grande da scaricare intera.',
+            webTooManyRedirects: 'Quella pagina rimbalzava da un indirizzo all’altro senza fermarsi.',
+            webRedirectInvalid: 'Quella pagina rimandava a un indirizzo che non si legge.',
+            webBusy: 'C’era già una lettura in corso: riprova fra un momento.',
+            webNotAnImage: 'Quell’indirizzo non porta a un’immagine.',
+            webBytesUnsupported: 'Quel tipo di file non si scarica da qui.',
+            webSearchNotConfigured: 'Manca il motore di ricerca: si sceglie in Impostazioni, sotto «Motore di ricerca».',
+            webOffline: 'Il telefono non era in rete: quella pagina non si è potuta scaricare.',
+            webTimeout: 'Quel sito ci ha messo troppo a rispondere.',
+        },
         libraryList: 'Esplorazione della Libreria',
         librarySearch: 'Ricerca nella Libreria',
         libraryRead: 'Lettura di un documento',
@@ -2398,6 +2429,16 @@ export const TALOS_IT_MESSAGES = {
         selectedOne: '1 chat selezionata',
         selected: '{count} selezionate',
         deleteSelected: 'Elimina chat selezionate',
+        // ⛔ Le fasce della barra laterale. La convenzione è quella di tutti i
+        // prodotti di chat, e vale la pena rispettarla: chi arriva da un altro
+        // le cerca dove le ha sempre trovate.
+        fascia: {
+            today: 'Oggi',
+            yesterday: 'Ieri',
+            last7: 'Precedenti 7 giorni',
+            last30: 'Precedenti 30 giorni',
+            undated: 'Senza data',
+        },
         holdForActions: 'Tieni premuta una chat per le azioni.',
         noMatches: 'Nessuna chat corrisponde alla ricerca.',
         noChats: 'Non ci sono ancora chat: avviane una qui sopra.',
@@ -2828,6 +2869,10 @@ export const TALOS_IT_MESSAGES = {
         pdfToneBriefWhy: 'Una pagina: la risposta, quello che regge e quello che non regge. Niente citazioni.',
         pdfToneDossier: 'Dossier delle prove',
         pdfToneDossierWhy: 'Affermazione, verdetto e fonte sulla stessa riga. Per chi deve controllare, non leggere.',
+        pdfBibtex: 'Solo le fonti — BibTeX',
+        pdfBibtexWhy: 'Per Zotero, Mendeley o una bibliografia LaTeX. Solo le pagine: della ricerca non esce niente.',
+        pdfRis: 'Solo le fonti — RIS',
+        pdfRisWhy: 'Per EndNote e per chi importa RIS. Le stesse pagine, nell’altro formato.',
         pdfMarkdown: 'Il testo grezzo (.md)',
         pdfMarkdownWhy: 'Il file come TALOS l’ha scritto, da aprire altrove.',
         pdfBuilding: 'Sto preparando il PDF…',
@@ -2929,7 +2974,7 @@ export const TALOS_IT_MESSAGES = {
         noMatches: 'Nessuna ricerca corrisponde.',
         needsAttention: 'Merita un secondo sguardo',
         cardRunning: '{done} di {total} · in corso',
-        cardStanding: '{supported} sostenute · {partial} in parte · {unsupported} smentite · {unchecked} non verificate',
+        cardStanding: 'sostenute: {supported} · in parte: {partial} · contese: {contested} · smentite: {unsupported} · non verificate: {unchecked}',
         loading: 'Sto aprendo…',
         missing: 'Questa ricerca non esiste più.',
         solidity: 'di tenuta',
@@ -2992,7 +3037,42 @@ export const TALOS_IT_MESSAGES = {
         openReport: 'Apri il rapporto',
         closeReport: 'Chiudi il rapporto',
         reportUnreadable: 'Il rapporto non si riesce a rileggere, quindi non si può mostrare come è stato verificato.',
-        standing: '{supported} su {total} sostenute · {partial} in parte · {unsupported} smentite · {unchecked} non verificate',
+        // ⛔ Conteggi ETICHETTATI, non «1 contese».
+        //
+        //   FOTOGRAFATO sul Pad il 2026-08-20, prima contesa vera: la riga
+        //   diceva «3 su 4 sostenute · 0 in parte · 1 contese · 0 smentite».
+        //   In italiano l'aggettivo si accorda, e qui ce ne sono cinque in una
+        //   riga sola: qualunque valore a 1 ne sbaglia uno. Non c'è un
+        //   meccanismo di plurali in questo file, e inventarne uno per una riga
+        //   sarebbe più fragile del difetto.
+        //
+        //   ⇒ Il numero segue l'etichetta invece di precederla: «contese: 1» è
+        //   giusto per ogni valore, zero compreso. L'inglese resta com'era,
+        //   perché lì l'aggettivo non si accorda.
+        standing: 'sostenute: {supported} su {total} · in parte: {partial} · contese: {contested} · smentite: {unsupported} · non verificate: {unchecked}',
+        // ⛔ Le quattro misure che i benchmark 2026 usano per giudicare un
+        // agente di ricerca. Nessuno le mostra alla persona: qui sì.
+        fedeltaTitolo: 'Quanto vale questo rapporto',
+        fedeltaCopertura: 'Copertura',
+        fedeltaCoperturaSpiega: 'quante affermazioni qualcuno ha davvero giudicato',
+        fedeltaCitazioni: 'Fedeltà delle citazioni',
+        fedeltaCitazioniSpiega: 'quante volte il passaggio citato è stato ritrovato nella pagina',
+        fedeltaAncoraggio: 'Ancoraggio',
+        fedeltaAncoraggioSpiega: 'quanto le affermazioni giudicate reggono davvero',
+        fedeltaIndipendenti: 'Fonti indipendenti',
+        // ⛔ CORTA. Avevo allungato la frase per compensare le parole tolte dal
+        //   valore, e sul telefono la cella occupava CINQUE righe contro le due
+        //   delle sue gemelle: la griglia si sbilanciava. «6/10» dice da solo
+        //   che è una parte di un totale.
+        fedeltaIndipendentiSpiega: 'prove distinte, non indirizzi: tre siti che riprendono lo stesso comunicato contano uno',
+        // ⛔ Un punteggio senza data è una promessa che scade in silenzio: le
+        // pagine citate muoiono, ed è il motivo per cui FACT è considerato
+        // inaffidabile nei benchmark.
+        fedeltaMisurataIl: 'Misurato il {quando}. Le pagine cambiano: più passa, meno vale.',
+        fedeltaNonVerificata: 'Non verificata — nessun giudice ha guardato queste affermazioni, quindi non c’è un punteggio da dare.',
+        indipendentiSu: '{independent} prove distinte su {total} fonti',
+        // La cifra grande, nella forma delle sue tre celle gemelle.
+        indipendentiFrazione: '{independent}/{total}',
         verifiedByLead: 'Verificate da un altro modello, mai da quello che ha scritto il rapporto:',
         notVerified: 'Verifica non eseguita: non c’era un giudice indipendente. Installa un modello locale, oppure configura un secondo provider.',
         support: {
@@ -3000,7 +3080,70 @@ export const TALOS_IT_MESSAGES = {
             partial: 'in parte',
             no: 'smentita',
             unchecked: 'non verificata',
+            contested: 'contesa',
         },
+        // ⛔ Si chiamano «catena…» e non «origine…» di proposito: un guardiano
+        // in fileOriginCard.test.ts vieta i segnaposto a OGNI chiave che inizia
+        // per origin, perché quelle stringhe passano da un percorso che non fa
+        // escaping. Queste sono un altro concetto e non devono cadere in quella
+        // rete — ma il guardiano ha ragione, e non si tocca.
+        //
+        // ⛔⛔ E dicono ESATTAMENTE quello che abbiamo misurato, non di più.
+        // La prima stesura diceva «si appoggia alla stessa origine»: è una
+        // frase che promette un'analisi delle citazioni, e oggi il
+        // raggruppamento lo facciamo per DOMINIO — il campo `cites` non lo
+        // raccoglie ancora nessuno. Due pagine dello stesso sito non sono
+        // due conferme, ed è già una cosa che vale dire; dire che una cita
+        // l'altra sarebbe inventarsi il perché.
+        catenaPrimaria: 'unica pagina del suo sito',
+        catenaRipresa: 'stesso sito di un\'altra fonte',
+        catenaRipreseMolte: 'stesso sito di altre {count} fonti',
+        barraLegenda: 'sostenute: {supported}, in parte: {partial}, contese: {contested}, smentite: {unsupported}, non verificate: {unchecked}',
+        registroTitolo: 'Come è stato costruito',
+        // ⛔ Il sommario dice il LAVORO, non l’attesa: l’attesa la persona
+        // l’ha vissuta, il lavoro no — ed è quello che dice se un 100% è
+        // stato pagato o solo dichiarato.
+        registroSommario: '{total} passi · {search} ricerche · {read} pagine lette · {verify} verifiche · {worked} di lavoro',
+        registroApri: 'Vedi tutti i passi',
+        registroChiudi: 'Nascondi i passi',
+        registroFalliti: '{failed} non riusciti',
+        registroInterrotti: '{interrupted} interrotti',
+        registroTentativi: '{attempts} tentativi',
+        registroInCorso: 'in corso',
+        registroTipo: {
+            search: 'ricerca',
+            read: 'lettura',
+            synthesise: 'sintesi',
+            verify: 'verifica',
+        },
+        // Le due schede che il rapporto tiene APERTE. Il nome dice cosa si
+        // vede, non il verdetto: «contesa» da sola si legge come una sfumatura
+        // di «parziale», che e' proprio cio' che non e'.
+        // ⛔ NON «tenuta»: quella parola è già la percentuale grande in cima,
+        //   che conta le AFFERMAZIONI sostenute. Qui si contano i PASSAGGI
+        //   ancora presenti nella pagina. Visto sul Pad il 2026-08-20: 75% di
+        //   tenuta in alto e 100% qui sotto, a cinque centimetri, due numeri
+        //   diversi con lo stesso nome.
+        tenutaNelTempo: 'I passaggi citati, nel tempo',
+        tenutaPrima: 'prima verifica — {standing} passaggi citati su {total} sono ancora lì',
+        // Conteggi, non plurali: «1 pagine cambiate» è la frase che questa
+        // forma esiste per evitare, e ogni conteggio può essere zero.
+        tenutaCambio: 'pagine cambiate: {changed} · non rispondono: {unreachable} · passaggi decaduti: {lost}',
+        tenutaSuiPassaggi: 'Contata sui passaggi citati, non sulle pagine: una pagina cambiata altrove non ha tolto niente a questo rapporto.',
+        metaFonti: '{count} fonti',
+        // La tilde e' la parte onesta: e' quello che i motori hanno
+        // dichiarato, e arrotondano. Un numero secco prometterebbe una
+        // contabilita' che non facciamo.
+        metaToken: '~{count} token',
+        contesaAperta: 'La contesa, aperta',
+        eccedeTitolo: 'Un’affermazione che eccede la sua fonte',
+        apriLaffermazione: 'Apri l’affermazione',
+        dissensoTitolo: 'Le fonti non concordano',
+        dissensoAFavore: 'Dice di sì',
+        dissensoContro: 'Dice di no',
+        // ⛔ Non si sceglie per la persona: si mostra il disaccordo e si dice
+        // che la decisione resta sua. Mediare sarebbe fingere un accordo.
+        dissensoSpiega: 'Su questo punto le fonti si contraddicono. TALOS non sceglie per te: qui sotto ci sono i due passaggi, come stanno nelle rispettive pagine.',
         quoteMissing: 'Il passaggio citato non è nel testo della fonte.',
         pageRead: 'pagina letta',
         onlySnippet: 'solo estratto dal motore di ricerca',
@@ -3008,7 +3151,11 @@ export const TALOS_IT_MESSAGES = {
         noDate: 'data non dichiarata',
     },
     stations: {
-        deepResearchTitle: 'Ricerca approfondita V3',
+        // ⛔ Senza «V3». Un numero di versione interno a schermo non dice
+        //   niente a chi legge: non c'è mai stata una V1 e una V2 che una
+        //   persona abbia visto, quindi il numero non distingue nulla — è solo
+        //   una parola in più nel titolo della stazione.
+        deepResearchTitle: 'Ricerca approfondita',
         settingsCenterTitle: 'Centro impostazioni',
         tasksEmpty: 'Nessuna attività.',
         newTask: 'Nuova attività',

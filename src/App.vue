@@ -46,7 +46,7 @@ import { applyTalosFontScale } from '@/lib/talosFontScale'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
-import { clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
+import { clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute } from '@/lib/tabletLayout'
 import { useLauncherIconController } from '@/services/launcherIcon'
 import { parseTalosSessionLibraryContextPolicy } from '@/lib/chat/libraryPolicy'
 const router = useRouter()
@@ -526,6 +526,7 @@ function commitTabletWidth(): void {
 watch(() => tabletLayout.isTablet.value, (isTablet) => {
     if (!isTablet) tabletDragWidth.value = null
 })
+
 // Picking / creating a chat in the panel while a station sheet is open must
 // land in the chat — same rule as sidebarNewChat.
 function onTabletActivated(): void {
@@ -746,6 +747,31 @@ const navItems = computed(() => TALOS_MOBILE_ROUTES.map((entry) => ({
 function pathFor(name: TalosMobileRouteName): string {
     return TALOS_MOBILE_ROUTES.find((entry) => entry.name === name)?.path ?? '/'
 }
+/**
+ * ⛔⛔ LISTA-DOPPIA-01 — la stessa lista, due volte, affiancata.
+ *
+ * FOTOGRAFATO dall'owner il 2026-08-20: barra laterale con l'elenco delle
+ * chat a sinistra, e a destra — dove va la conversazione — lo stesso elenco,
+ * con la sua intestazione e la sua freccia indietro.
+ *
+ * ⛔ Una guardia esisteva già, ma solo per il ripristino ad avvio freddo.
+ * Ci si arriva anche a caldo, e per due strade che capitano davvero: dal
+ * telefono si tocca «Tutte le chat» e poi si ruota, oppure si allarga la
+ * finestra in affiancata. Per questo la sorveglianza è su ENTRAMBI —
+ * il formato e la rotta — e non su uno dei due: cambiarne uno solo basta a
+ * produrre il difetto.
+ *
+ * `replace` e non `push`: non è una pagina che la persona ha chiesto, è una
+ * pagina che sul tablet non esiste. Lasciarla nella storia vorrebbe dire che
+ * il tasto indietro ci riporta dentro.
+ */
+watch(
+    () => [tabletLayout.isTablet.value, activeRoute.value] as const,
+    ([isTablet, rotta]) => {
+        if (talosTabletLeavesChatsRoute(isTablet, rotta)) void router.replace(pathFor('chat'))
+    },
+    { immediate: true },
+)
 
 async function navigate(name: TalosMobileRouteName, query: LocationQueryRaw = {}): Promise<void> {
     await router.push({ path: pathFor(name), query })
@@ -1207,6 +1233,7 @@ onBeforeUnmount(async () => {
                         :title="headerTitle"
                         :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
                         :hide-menu="tabletLayout.isTablet.value"
+                        :hide-app-actions="tabletLayout.isTablet.value"
                         @open-menu="sidebarOpen = true"
                         @new-chat="sidebarNewChat"
                 @temporary-chat="sidebarTemporaryChat"
@@ -1226,6 +1253,7 @@ onBeforeUnmount(async () => {
                         :active-title="headerTitle"
                         :busy="sessionBusy"
                         :hide-menu="tabletLayout.isTablet.value"
+                        :hide-app-actions="tabletLayout.isTablet.value"
                         @open-menu="sidebarOpen = true"
                         @new-chat="sidebarNewChat"
                 @temporary-chat="sidebarTemporaryChat"
@@ -1257,6 +1285,7 @@ onBeforeUnmount(async () => {
                 <TalosMobileToolSheet
                     v-if="isStation"
                     :title="sheetTitle"
+                    :hide-app-actions="tabletLayout.isTablet.value"
                     :presentation="settingsStore.state.chat_layout.mobile_window_presentation"
                     :parent-back="stationParent ? goToStationParent : null"
                     :shell-back="talosIndietro"

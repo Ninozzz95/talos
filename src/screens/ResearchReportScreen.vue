@@ -19,7 +19,7 @@
  * places where our evidence work is actually visible.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { talosResearchIsResting, talosResearchIsTerminal } from '@/lib/research/researchRun'
+import { talosResearchIsResting, talosResearchIsTerminal, talosResearchSpent } from '@/lib/research/researchRun'
 import { talosResearchReportRefOf } from '@/lib/research/researchCard'
 import {
     talosResearchDuration,
@@ -41,7 +41,19 @@ import { useTalosResearchRun } from '@/composables/useTalosResearchRun'
 import { talosRememberView, talosRememberedView } from '@/lib/navigation/rememberedView'
 import { talosResearchSolidity, type TalosResearchStanding } from '@/lib/research/researchCard'
 import { talosResearchVerifiedStanding } from '@/lib/research/researchVerification'
+import { talosResearchFidelity } from '@/lib/research/researchFidelity'
+import { talosResearchLedger } from '@/lib/research/researchLedger'
+import {
+    talosResearchIndependentSources,
+    talosResearchRegistrableHost,
+} from '@/lib/research/researchIndependence'
 import { talosResearchRecheckStanding, type TalosResearchRecheck } from '@/lib/research/researchRecheck'
+import type { TalosResearchRecheckPasso } from '@/lib/research/researchRecheckHistory'
+import {
+    talosResearchContestedCard,
+    talosResearchMarkedPassage,
+    talosResearchOverreachingCard,
+} from '@/lib/research/researchOpenCards'
 import type { TalosResearchReportRecord } from '@/lib/research/researchReport'
 import type { TalosResearchProgress } from '@/services/researchRuntime'
 
@@ -110,6 +122,58 @@ const solidity = computed(() => {
     return value === null ? null : Math.round(value * 100)
 })
 
+/**
+ * ⛔⛔ Le quattro misure con cui i benchmark 2026 giudicano un agente di
+ * ricerca — copertura, fedeltà delle citazioni, ancoraggio, prove distinte.
+ *
+ * La percentuale grande qui sopra dice quanto REGGE. Non dice quanto vale
+ * la verifica che l'ha prodotta: un 100% su due affermazioni giudicate su
+ * dieci, con tre fonti che riprendono lo stesso comunicato, è un 100% che
+ * non vale niente — e oggi si legge identico a un 100% solido.
+ *
+ * ⛔ Nessuno dei cinque concorrenti mostra queste misure alla persona.
+ * Restano nei benchmark, cioè dove le legge chi costruisce, non chi decide
+ * in base al rapporto.
+ */
+const fidelity = computed(() => (report.value
+    ? talosResearchFidelity({
+        claims: report.value.claims.map((claim) => ({
+            claim: { text: claim.text, sourceIndex: claim.sourceIndex, quote: '', quotePresent: 'yes' as const },
+            passage: claim.passage,
+            checks: claim.checks,
+        })),
+        sources: (report.value.sources ?? []).map((source) => ({ url: source.url })),
+    })
+    : null))
+
+/**
+ * Le quattro voci, con la loro spiegazione accanto.
+ *
+ * ⛔ La spiegazione NON è decorazione: «copertura 50%» da solo non dice
+ * niente a chi non legge benchmark, e un numero che non si capisce viene
+ * saltato — cioè vale zero pur essendo lì.
+ */
+const misure = computed(() => {
+    const f = fidelity.value
+    if (!f) return []
+    return [
+        { chiave: 'copertura', nome: t('research.fedeltaCopertura'), valore: quota(f.coverage) ?? '—', spiega: t('research.fedeltaCoperturaSpiega') },
+        { chiave: 'citazioni', nome: t('research.fedeltaCitazioni'), valore: quota(f.citationFaithfulness) ?? '—', spiega: t('research.fedeltaCitazioniSpiega') },
+        { chiave: 'ancoraggio', nome: t('research.fedeltaAncoraggio'), valore: quota(f.claimGroundedness) ?? '—', spiega: t('research.fedeltaAncoraggioSpiega') },
+        // ⛔ Una FRAZIONE, non una frase. Le altre tre celle dicono «100%» in
+        //   grande: questa diceva «5 prove distinte su 10 fonti» nello stesso
+        //   posto e nello stesso corpo, e su tablet orizzontale la differenza di
+        //   forma fra celle gemelle si vedeva a colpo d'occhio. Le parole non si
+        //   perdono: scendono nella spiegazione, che è il loro posto.
+        { chiave: 'indipendenti', nome: t('research.fedeltaIndipendenti'), valore: t('research.indipendentiFrazione', { independent: f.independentSources, total: (report.value?.sources ?? []).length }), spiega: t('research.fedeltaIndipendentiSpiega') },
+    ]
+})
+
+/** Una quota in percentuale intera, o `null` se non c'è una quota. */
+function quota(valore: number | null | undefined): string | null {
+    return typeof valore === 'number' ? `${Math.round(valore * 100)}%` : null
+}
+
 /** Which model judged this run — from the record, never inferred from the claims. */
 const judge = computed(() => report.value?.judge ?? null)
 
@@ -166,9 +230,87 @@ const elapsed = computed(() => (current.value
     : null))
 
 const balance = computed(() => standing.value
-    ?? { total: 0, supported: 0, partial: 0, unsupported: 0, unchecked: 0 })
+    ?? { total: 0, supported: 0, partial: 0, unsupported: 0, unchecked: 0, contested: 0 })
 
 const failedSteps = computed(() => current.value?.steps.filter((step) => step.state === 'failed') ?? [])
+
+/**
+ * ⛔⛔ REGISTRO-01 — «Come è stato costruito».
+ *
+ * Una ricerca dura minuti e costa crediti, e alla fine la persona vede un
+ * rapporto e una percentuale senza aver visto niente di quello che è
+ * successo in mezzo. Due rapporti col 100% possono avere dietro lavori
+ * incomparabili — quattro estratti o dieci pagine lette — e oggi si
+ * leggono uguali.
+ *
+ * ⛔ Sommario sempre, righe A RICHIESTA: è il pattern concorde per gli
+ * agenti che lavorano a lungo (sommario → dettaglio → dati grezzi, il
+ * registro completo a un clic). Dieci righe sempre aperte sarebbero
+ * rumore su una pagina che deve far decidere.
+ */
+/*
+ * ⛔ Le prove viaggiano col registro: senza, conterebbe tipi di passo che il
+ * runtime non emette mai e direbbe «0 pagine lette» su un rapporto costruito
+ * leggendo le pagine. È successo, sul Pad, il 2026-08-20.
+ */
+const registro = computed(() => talosResearchLedger(steps.value, {
+    sources: report.value?.sources ?? [],
+    claims: report.value?.claims ?? [],
+}))
+const registroAperto = ref(false)
+
+/**
+ * ⛔⛔ L'INDIPENDENZA, portata dove si decide.
+ *
+ * Il conteggio esisteva già nel pannello di testa — «7 prove distinte su
+ * 10 fonti» — ma lì è un totale, e nessuno decide su un totale: si decide
+ * sulla singola affermazione. «Sostenuta da 3 fonti» è una promessa
+ * numerica, e se quelle tre riprendono lo stesso comunicato è falsa.
+ *
+ * ⇒ Il numero va SULLA CARD, accanto al verdetto, e la catena va sulla
+ * fonte: chi la legge deve sapere se sta guardando una prova o una eco.
+ */
+const indipendenza = computed(() => talosResearchIndependentSources(
+    (report.value?.sources ?? []).map((source) => ({ url: source.url })),
+))
+
+/*
+ * ⛔⛔ QUI IL MOCKUP CHIEDE UNA COSA CHE I DATI NON SANNO DIRE.
+ *
+ * Il mockup approvato scrive sulla card «sostenuta dalla fonte · 2 fonti
+ * indipendenti». Il nostro modello però dà a ogni affermazione UNA sola
+ * fonte — `sourceIndex`, al singolare: una affermazione, una pagina, un
+ * passaggio. Il numero per affermazione sarebbe quindi sempre 1.
+ *
+ * Le due strade sbagliate erano entrambe a portata di mano: scrivere «1
+ * sola fonte» su ogni riga — vero ma sempre uguale, cioè rumore — oppure
+ * contare le fonti del GRUPPO e spacciarle per sostegni di quella
+ * affermazione, che sarebbe un numero più grande e **falso**: è
+ * esattamente la promessa numerica gonfiata contro cui esiste
+ * `researchIndependence`.
+ *
+ * ⇒ Sulla card dell'affermazione non si scrive niente. L'indipendenza
+ * resta dove i dati la reggono davvero: il totale in cima e la catena
+ * sulla fonte. Quando una affermazione potrà portare più fonti, il numero
+ * tornerà qui — con dietro qualcosa da contare.
+ */
+
+/**
+ * Cosa dire di QUESTA fonte, in una riga.
+ *
+ * ⛔ Il singolare e il plurale sono due frasi, non una con un numero: la
+ * prima versione ha scritto sul Pad «altre 1 fonti», che è il modo più
+ * veloce di far sembrare automatico un testo che deve essere letto.
+ */
+function catenaDi(url: string): string {
+    const gruppo = indipendenza.value.groups.find((g) => g.sources.includes(url))
+    const altre = gruppo ? gruppo.sources.length - 1 : 0
+    if (altre <= 0) return t('research.catenaPrimaria')
+    if (altre === 1) return t('research.catenaRipresa')
+    return t('research.catenaRipreseMolte', { count: altre })
+}
+/** Il lavoro in parole, con la stessa funzione che scrive le altre durate. */
+const durataLavoro = computed(() => talosResearchDuration(registro.value.summary.workedSeconds))
 
 /**
  * The record, in names instead of identifiers.
@@ -231,6 +373,118 @@ const failureReasons = computed(() => [...new Set(failedSteps.value
     .filter((code): code is string => typeof code === 'string' && code.length > 0))]
     .map(reason))
 
+/**
+ * ⛔⛔ SCHEDE-APERTE-01 — il dissenso e l'eccesso, SENZA un tocco.
+ *
+ * Il mockup approvato dall'owner tiene aperte due schede sul rapporto:
+ * l'affermazione contesa col passaggio a favore e quello contro affiancati,
+ * e quella che dice più di quanto la sua pagina sostenga.
+ *
+ * ⛔ Erano già costruite — `ResearchClaimScreen` le disegna entrambe — ma
+ * dietro un tocco, e chi legge un rapporto all'86% non ha nessun motivo di
+ * aprire proprio quella riga fra dodici. La cosa che ci distingue era
+ * raggiungibile solo da chi sapeva già dov'era.
+ *
+ * Una ciascuna, non tutte: l'elenco intero resta nella scheda
+ * «Affermazioni», e queste due sono l'esempio leggibile che porta lì.
+ */
+/**
+ * La riga sotto il titolo, come la disegna il mockup: quanto e’ durata,
+ * quante sezioni, quante fonti, quanti token.
+ *
+ * ⛔ Le fonti e i token si mostrano SOLO se ci sono davvero. `spend` porta
+ * «solo cio’ che e’ stato osservato», e un motore che non dichiara i token
+ * lascia zero: scrivere «~0 token» sotto un rapporto vero e’ peggio che non
+ * scrivere niente, perche’ si legge come una misura invece che come
+ * un’assenza di misura.
+ */
+const fonti = computed(() => report.value?.sources.length ?? 0)
+const token = computed(() => (current.value ? talosResearchSpent(current.value).tokens : 0))
+const numero = (quanti: number) => new Intl.NumberFormat(locale.value).format(quanti)
+
+/**
+ * Il dominio della fonte, quando si riesce a leggerlo.
+ *
+ * ⛔ FOTOGRAFATO sul Pad il 2026-08-20: due righe nell’elenco delle fonti,
+ * tutte e due «GGUF», tutte e due «stesso sito di un’altra fonte». Sono due
+ * pagine diverse, e a colpo d’occhio erano la stessa riga scritta due volte.
+ * Il titolo lo decide la pagina, e le pagine si chiamano come gli pare: il
+ * dominio è l’unica cosa che distingue sempre.
+ */
+const dominio = (url: string): string | null => talosResearchRegistrableHost(url)
+
+const contesa = computed(() => talosResearchContestedCard(report.value?.claims))
+const eccede = computed(() => talosResearchOverreachingCard(report.value?.claims))
+
+/** Il passaggio spezzato in tre, per evidenziare il pezzo che il giudice ha riconosciuto. */
+function evidenzia(passage: string | null | undefined, span: { from: number, to: number } | null | undefined) {
+    return talosResearchMarkedPassage(passage, span ?? null)
+}
+
+/**
+ * ⛔⛔ TENUTA-NEL-TEMPO-01 — quanto vale OGGI un rapporto di ieri.
+ *
+ * Il decadimento delle citazioni web ha due assi: l’indirizzo che muore e la
+ * pagina che risponde ancora senza dire più ciò che era citato. Nella
+ * letteratura la seconda si misura a mano, e fra i link ancora VIVI solo il
+ * 29,9% conteneva davvero il materiale citato. Chi ha salvato un URL sa
+ * riferire soltanto che una richiesta è andata a buon fine — cosa che riesce
+ * anche a una pagina riscritta.
+ *
+ * Noi il testo di allora ce l’abbiamo, e ogni ricontrollo lo ha già scritto
+ * in Libreria. Mancava solo di rileggerli in fila.
+ */
+const storia = ref<readonly TalosResearchRecheckPasso[]>([])
+
+async function caricaStoria(): Promise<void> {
+    if (!runId.value) return
+    // ⛔ Un guasto qui non deve portarsi via il rapporto: la storia è un di
+    //   più, il rapporto è la pagina.
+    //
+    // ⛔ try/catch e NON `.catch()`: se il metodo non c'è la chiamata esplode
+    //   PRIMA che esista una promessa a cui attaccarlo, e l'errore esce dal
+    //   watcher come non gestito — 31 in una suite che restava verde.
+    try {
+        storia.value = await controller.research.recheckHistory(runId.value)
+    } catch {
+        storia.value = []
+    }
+}
+
+// La storia si legge quando il rapporto c'e': prima non c'e' niente da
+// mettere in fila, e un giro sulla Libreria a vuoto costa e non dice nulla.
+watch(report, (presente) => { if (presente) void caricaStoria() }, { immediate: true })
+
+/**
+ * Quando è stata fatta una tappa, scritto corto.
+ *
+ * ⛔ Due cure a un difetto solo, visto sul Pad il 2026-08-20 facendo due
+ * ricontrolli di fila:
+ *
+ *   · «20 agosto 2026» andava a capo dentro la sua colonna, e la riga si
+ *     spezzava in due. Il mese corto ci sta.
+ *   · Le due tappe portavano la STESSA data e non si distinguevano. Se
+ *     due cadono nello stesso giorno, l’ora entra su TUTTE: un elenco in
+ *     cui alcune righe hanno l’ora e altre no si legge come un errore.
+ */
+const stessoGiorno = computed(() => {
+    const giorni = storia.value.map((passo) => passo.at.slice(0, 10))
+    return new Set(giorni).size !== giorni.length
+})
+
+function quandoTappa(iso: string): string {
+    const quando = new Date(iso)
+    if (Number.isNaN(quando.getTime())) return iso
+    const giorno = new Intl.DateTimeFormat(locale.value, { day: 'numeric', month: 'short' }).format(quando)
+    if (!stessoGiorno.value) return giorno
+    const ora = new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit' }).format(quando)
+    return `${giorno} ${ora}`
+}
+
+const percento = (quota: number | null): string => (quota === null
+    ? '—'
+    : `${Math.round(quota * 100)}%`)
+
 const rechecking = ref(false)
 /**
  * R-5, kept through the restructure: the research was paid for once, so asking
@@ -288,6 +542,9 @@ async function runRecheck(): Promise<void> {
     recheck.value = null
     try {
         recheck.value = await controller.research.recheck(runId.value)
+        // Il ricontrollo appena fatto è una tappa nuova: la storia va riletta,
+        // se no la riga in fondo resta a ieri sotto un numero di oggi.
+        await caricaStoria()
     } catch (failure) {
         error.value = failure instanceof Error ? failure.message : String(failure)
     } finally {
@@ -337,7 +594,15 @@ const EXPORT_CHOICES = [
     { id: 'brief', label: 'research.pdfToneBrief', why: 'research.pdfToneBriefWhy' },
     { id: 'dossier', label: 'research.pdfToneDossier', why: 'research.pdfToneDossierWhy' },
     { id: 'md', label: 'research.pdfMarkdown', why: 'research.pdfMarkdownWhy' },
+    // ⛔ EXPORT-06 — le fonti sole, per chi le mette in una bibliografia.
+    //   Ultime perche' non producono il rapporto: producono le CITAZIONI, ed
+    //   e' un'altra domanda.
+    { id: 'bibtex', label: 'research.pdfBibtex', why: 'research.pdfBibtexWhy' },
+    { id: 'ris', label: 'research.pdfRis', why: 'research.pdfRisWhy' },
 ] as const
+
+/** Chi esce come sole fonti, e con quale estensione. */
+const SOLO_FONTI: Record<string, string> = { bibtex: 'bib', ris: 'ris' }
 
 async function reportFileId(): Promise<string | null> {
     return current.value
@@ -358,7 +623,14 @@ async function exportAs(choice: string): Promise<void> {
     exportBusy.value = choice
     error.value = null
     try {
-        if (choice === 'md') await controller.research.exportReport(fileId, exportName('md'))
+        const estensione = SOLO_FONTI[choice]
+        if (estensione) {
+            // ⛔ La data di lettura è quella dell'esecuzione, non di adesso: un
+            //   export fatto fra un mese non deve dire che le pagine sono state
+            //   lette fra un mese.
+            const letto = current.value?.startedAt ?? new Date().toISOString()
+            await controller.research.exportCitations(fileId, choice as 'bibtex' | 'ris', exportName(estensione), letto)
+        } else if (choice === 'md') await controller.research.exportReport(fileId, exportName('md'))
         else await controller.research.exportReportPdf(fileId, choice, exportName('pdf'))
         exported.value = true
         exportOpen.value = false
@@ -449,6 +721,10 @@ function openSource(index: number): void {
                              read «1 min 14 s  ·2 di 2 sezioni» on the tablet. -->
                         <span v-if="elapsed && outline.length" aria-hidden="true">·</span>
                         <span v-if="outline.length">{{ t('research.sectionsDone', { done: sectionsDone, total: outline.length }) }}</span>
+                        <span v-if="fonti" aria-hidden="true">·</span>
+                        <span v-if="fonti" data-testid="talos-research-meta-fonti">{{ t('research.metaFonti', { count: fonti }) }}</span>
+                        <span v-if="token" aria-hidden="true">·</span>
+                        <span v-if="token" data-testid="talos-research-meta-token">{{ t('research.metaToken', { count: numero(token) }) }}</span>
                     </p>
 
                     <!-- One control, and only the one that applies. While it is
@@ -474,11 +750,40 @@ function openSource(index: number): void {
                         <span class="text-3xl font-semibold tabular-nums text-[var(--talos-text)]">{{ solidity === null ? '—' : `${solidity}%` }}</span>
                         <span class="text-xs text-[var(--talos-muted)]">{{ t('research.solidity') }}</span>
                     </p>
+                    <!--
+                        ⛔ LA BARRA — la stessa cosa del conteggio, ma vista.
+
+                        «6 sostenute · 1 in parte · 1 contesa · 1 non verificata» va
+                        letto e sommato; la barra si guarda. ⛔ Ma non sostituisce le
+                        parole: il colore da solo non è un esito — chi non distingue
+                        i colori resterebbe senza informazione. Vive col conteggio,
+                        e la sua etichetta dice le stesse parole.
+                    -->
+                    <div
+                        v-if="balance.total"
+                        data-testid="talos-research-barra"
+                        class="mt-3 flex h-1.5 gap-px overflow-hidden rounded-full bg-[var(--talos-panel-soft)]"
+                        role="img"
+                        :aria-label="t('research.barraLegenda', {
+                            supported: balance.supported,
+                            partial: balance.partial,
+                            contested: balance.contested ?? 0,
+                            unsupported: balance.unsupported,
+                            unchecked: balance.unchecked,
+                        })"
+                    >
+                        <i v-if="balance.supported" class="block h-full bg-[var(--talos-accent)]" :style="{ flex: balance.supported }" />
+                        <i v-if="balance.partial" class="block h-full bg-[var(--talos-accent-soft)]" :style="{ flex: balance.partial }" />
+                        <i v-if="balance.contested" class="block h-full bg-[var(--talos-warning-border)]" :style="{ flex: balance.contested }" />
+                        <i v-if="balance.unsupported" class="block h-full bg-[var(--talos-danger-border)]" :style="{ flex: balance.unsupported }" />
+                        <i v-if="balance.unchecked" class="block h-full bg-[var(--talos-border-strong)]" :style="{ flex: balance.unchecked }" />
+                    </div>
                     <p data-testid="talos-research-standing" class="mt-2 text-2xs leading-5 tabular-nums text-[var(--talos-muted)]">
                         {{ t('research.standing', {
                             supported: balance.supported,
                             total: balance.total,
                             partial: balance.partial,
+                            contested: balance.contested ?? 0,
                             unsupported: balance.unsupported,
                             unchecked: balance.unchecked,
                         }) }}
@@ -487,6 +792,117 @@ function openSource(index: number): void {
                         <template v-if="judge">{{ t('research.verifiedByLead') }} <span data-testid="talos-research-judge" class="break-all font-mono">{{ judge }}</span></template>
                         <template v-else>{{ t('research.notVerified') }}</template>
                     </p>
+
+                    <!--
+                        ⭐⭐ LA TENUTA NEL TEMPO — quanto vale oggi un rapporto di ieri.
+
+                        Compare solo quando esiste piu’ di un ricontrollo: una tappa
+                        sola non e’ una storia, e disegnarla come tale suggerirebbe
+                        un andamento dove c’e’ un punto.
+                    -->
+                    <div
+                        v-if="storia.length > 1"
+                        data-testid="talos-research-tenuta-nel-tempo"
+                        class="mt-3 border-t border-[var(--talos-border)] pt-3"
+                    >
+                        <p class="text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.tenutaNelTempo') }}</p>
+                        <div
+                            v-for="passo in storia"
+                            :key="passo.at"
+                            data-testid="talos-research-tappa"
+                            class="mt-2 flex items-baseline gap-2"
+                        >
+                            <span class="w-24 shrink-0 font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ quandoTappa(passo.at) }}</span>
+                            <span class="min-w-0 flex-1 text-2xs leading-5 text-[var(--talos-muted)]">
+                                {{ passo.primo
+                                    ? t('research.tenutaPrima', { standing: passo.passagesStanding, total: passo.passagesStanding + passo.passagesLost })
+                                    : t('research.tenutaCambio', { changed: passo.changed, unreachable: passo.unreachable, lost: passo.passagesLost }) }}
+                            </span>
+                            <span class="shrink-0 font-mono text-2xs tabular-nums text-[var(--talos-text)]">{{ percento(passo.tenuta) }}</span>
+                            <span
+                                v-if="passo.delta !== null && Math.round(passo.delta * 100) !== 0"
+                                class="w-10 shrink-0 text-right font-mono text-2xs tabular-nums text-[var(--talos-muted)]"
+                            >{{ passo.delta > 0 ? '+' : '−' }}{{ Math.abs(Math.round(passo.delta * 100)) }}%</span>
+                        </div>
+                        <p class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">{{ t('research.tenutaSuiPassaggi') }}</p>
+                    </div>
+
+                    <!--
+                        ⛔⛔ QUANTO VALE la percentuale qui sopra.
+
+                        Un 100% su due affermazioni giudicate su dieci, con tre
+                        fonti che riprendono lo stesso comunicato, si legge oggi
+                        identico a un 100% solido. Queste quattro misure sono la
+                        differenza, e nessuno dei cinque concorrenti le mostra.
+
+                        ⛔ Senza giudice non esce un numero basso: esce la frase.
+                        Un 40% verrebbe letto come una misura, e sarebbe una
+                        misura di niente.
+                    -->
+                    <div v-if="fidelity" data-testid="talos-research-fedelta" class="mt-3 border-t border-[var(--talos-border)] pt-3">
+                        <p class="text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.fedeltaTitolo') }}</p>
+                        <p v-if="!fidelity.verified" data-testid="talos-research-fedelta-assente" class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">
+                            {{ t('research.fedeltaNonVerificata') }}
+                        </p>
+                        <dl v-else class="mt-2 grid grid-cols-2 gap-x-4 gap-y-3">
+                            <div v-for="misura in misure" :key="misura.chiave" :data-testid="`talos-research-fedelta-${misura.chiave}`">
+                                <dt class="text-2xs leading-5 text-[var(--talos-muted)]">{{ misura.nome }}</dt>
+                                <dd class="text-base font-semibold tabular-nums text-[var(--talos-text)]">{{ misura.valore }}</dd>
+                                <dd class="text-2xs leading-4 text-[var(--talos-muted)]">{{ misura.spiega }}</dd>
+                            </div>
+                        </dl>
+                        <p
+                            v-if="fidelity.measuredAt"
+                            data-testid="talos-research-fedelta-data"
+                            class="mt-3 text-2xs leading-5 text-[var(--talos-muted)]"
+                        >{{ t('research.fedeltaMisurataIl', { quando: fidelity.measuredAt.slice(0, 10) }) }}</p>
+                    </div>
+                </section>
+
+                <!--
+                    ⛔ Il registro: sommario sempre, passi a richiesta.
+                    Vedi la nota accanto a `registro` per il perché.
+                -->
+                <section v-if="registro.summary.total" data-testid="talos-research-registro" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4">
+                    <p class="text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.registroTitolo') }}</p>
+                    <p data-testid="talos-research-registro-sommario" class="mt-1 text-2xs leading-5 tabular-nums text-[var(--talos-muted)]">
+                        {{ t('research.registroSommario', {
+                            total: registro.summary.total,
+                            search: registro.summary.search,
+                            read: registro.summary.read,
+                            verify: registro.summary.verify,
+                            worked: durataLavoro,
+                        }) }}
+                        <template v-if="registro.summary.failed">
+                            · {{ t('research.registroFalliti', { failed: registro.summary.failed }) }}
+                        </template>
+                        <template v-if="registro.summary.interrupted">
+                            · {{ t('research.registroInterrotti', { interrupted: registro.summary.interrupted }) }}
+                        </template>
+                    </p>
+                    <button
+                        type="button"
+                        data-testid="talos-research-registro-apri"
+                        class="talos-pressable mt-2 min-h-touch text-2xs text-[var(--talos-accent)]"
+                        :aria-expanded="registroAperto"
+                        @click="registroAperto = !registroAperto"
+                    >{{ registroAperto ? t('research.registroChiudi') : t('research.registroApri') }}</button>
+                    <ol v-if="registroAperto" data-testid="talos-research-registro-passi" class="mt-2 space-y-1">
+                        <li
+                            v-for="passo in registro.entries"
+                            :key="passo.id"
+                            class="flex items-baseline justify-between gap-3 border-t border-[var(--talos-border)] pt-1 text-2xs leading-5"
+                        >
+                            <span class="min-w-0 flex-1 text-[var(--talos-text)]">
+                                {{ t(`research.registroTipo.${passo.kind}`) }}
+                                <span v-if="passo.attempts > 1" class="text-[var(--talos-muted)]">· {{ t('research.registroTentativi', { attempts: passo.attempts }) }}</span>
+                                <span v-if="passo.error" class="block break-words text-[var(--talos-danger)]">{{ passo.error }}</span>
+                            </span>
+                            <span class="shrink-0 tabular-nums text-[var(--talos-muted)]">
+                                {{ passo.duration ?? t('research.registroInCorso') }}
+                            </span>
+                        </li>
+                    </ol>
                 </section>
 
                 <div v-if="failedSteps.length" data-testid="talos-research-failed-steps" class="flex items-start gap-2 rounded-xl border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-xs leading-5 text-[var(--talos-danger)]">
@@ -562,7 +978,9 @@ function openSource(index: number): void {
                             >
                                 <span class="min-w-0 flex-1">
                                     <span class="block text-sm leading-5 text-[var(--talos-text)]">{{ claim.text }}</span>
-                                    <span class="mt-1 block text-2xs text-[var(--talos-muted)]">{{ t(`research.support.${claim.checks.claimSupported}`) }}</span>
+                                    <span class="mt-1 block text-2xs text-[var(--talos-muted)]">
+                                        {{ t(`research.support.${claim.checks.claimSupported}`) }}
+                                    </span>
                                 </span>
                                 <ChevronRight class="mt-0.5 size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                             </button>
@@ -583,12 +1001,104 @@ function openSource(index: number): void {
                                     <span class="mt-1 block text-2xs text-[var(--talos-muted)]">
                                         {{ source.publishedAt ? talosPublishedOn(source.publishedAt, locale) : t('research.noDate') }} ·
                                         {{ source.obtained === 'snippet' ? t('research.onlySnippet') : t('research.pageRead') }}
+                                        <template v-if="dominio(source.url)"> · <span class="font-mono">{{ dominio(source.url) }}</span></template>
+                                    </span>
+                                    <!--
+                                        ⛔ Dire se questa fonte è una PROVA o una ECO.
+                                        Tre articoli che riprendono lo stesso comunicato
+                                        non sono tre conferme, e finché non lo si scrive
+                                        si leggono come tre.
+                                    -->
+                                    <span data-testid="talos-research-indipendenza" class="mt-0.5 block text-2xs leading-4 text-[var(--talos-muted)]">
+                                        {{ catenaDi(source.url) }}
                                     </span>
                                 </span>
                                 <ChevronRight class="mt-0.5 size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                             </button>
                         </TabsContent>
                     </TalosThemedTabs>
+
+                    <!--
+                        LE DUE SCHEDE APERTE - il dissenso e l’eccesso, senza un tocco.
+
+                        Nessun concorrente mostra il disaccordo fra le sue fonti: chi
+                        ne trova uno sceglie in silenzio la versione piu’ comoda.
+                        Tenerlo aperto e’ la ragione per cui il rapporto vale, e
+                        finche’ stava dietro un tocco lo vedeva solo chi sapeva gia’
+                        dov’era.
+                    -->
+                    <section
+                        v-if="contesa"
+                        data-testid="talos-research-contesa-aperta"
+                        class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4"
+                    >
+                        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.contesaAperta') }}</p>
+                        <p class="mt-2 text-sm font-medium leading-6 text-[var(--talos-text)]">{{ contesa.claim.text }}</p>
+                        <p class="mt-1 text-2xs font-medium text-[var(--talos-text)]">{{ t('research.support.contested') }}</p>
+                        <p v-if="contesa.claim.checks.supportReason" class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">{{ contesa.claim.checks.supportReason }}</p>
+                        <p class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">{{ t('research.dissensoSpiega') }}</p>
+
+                        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                            <div class="rounded-lg border border-[var(--talos-border)] p-3">
+                                <p class="mb-1 text-2xs font-medium text-[var(--talos-muted)]">{{ t('research.dissensoAFavore') }}</p>
+                                <p class="text-sm leading-6 text-[var(--talos-text)]">
+                                    <template v-for="(pezzo, dove) in [evidenzia(contesa.claim.passage, contesa.claim.checks.quoteSpan)]" :key="dove">
+                                        {{ pezzo.before }}<mark v-if="pezzo.quote" class="rounded bg-[var(--talos-accent-soft)] px-0.5 text-[var(--talos-text)]">{{ pezzo.quote }}</mark>{{ pezzo.after }}
+                                    </template>
+                                </p>
+                                <p class="mt-2 break-words text-2xs leading-5 text-[var(--talos-muted)]">
+                                    {{ report.sources[contesa.claim.sourceIndex]?.title || report.sources[contesa.claim.sourceIndex]?.url }}
+                                </p>
+                            </div>
+                            <div
+                                v-for="(contro, i) in (contesa.claim.checks.opposing ?? [])"
+                                :key="contro.url + i"
+                                class="rounded-lg border border-[var(--talos-danger-border)] p-3"
+                            >
+                                <p class="mb-1 text-2xs font-medium text-[var(--talos-muted)]">{{ t('research.dissensoContro') }}</p>
+                                <p class="text-sm leading-6 text-[var(--talos-text)]">
+                                    <template v-for="(pezzo, dove) in [evidenzia(contro.passage, contro.span)]" :key="dove">
+                                        {{ pezzo.before }}<mark v-if="pezzo.quote" class="rounded bg-[var(--talos-accent-soft)] px-0.5 text-[var(--talos-text)]">{{ pezzo.quote }}</mark>{{ pezzo.after }}
+                                    </template>
+                                </p>
+                                <p class="mt-2 break-words text-2xs leading-5 text-[var(--talos-muted)]">{{ contro.title || contro.url }}</p>
+                            </div>
+                        </div>
+
+                        <Button variant="ghost" class="mt-2" data-testid="talos-research-contesa-apri" @click="openClaim(contesa.index)">
+                            {{ t('research.apriLaffermazione') }}
+                            <ChevronRight class="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                    </section>
+
+                    <!--
+                        L’affermazione che dice PIU’ di quanto la sua pagina sostenga.
+                        Non e’ un errore di fatto e non e’ una bugia: e’ il caso in cui
+                        il testo regge meta’ della frase, ed e’ il difetto piu’ comune
+                        di ogni rapporto scritto da un modello.
+                    -->
+                    <section
+                        v-if="eccede"
+                        data-testid="talos-research-eccede"
+                        class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4"
+                    >
+                        <p class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.eccedeTitolo') }}</p>
+                        <p class="mt-2 text-sm font-medium leading-6 text-[var(--talos-text)]">{{ eccede.claim.text }}</p>
+                        <p class="mt-1 text-2xs font-medium text-[var(--talos-muted)]">{{ t('research.support.partial') }}</p>
+                        <p class="mt-2 text-2xs leading-5 text-[var(--talos-muted)]">{{ eccede.claim.checks.supportReason }}</p>
+                        <p class="mt-3 rounded-lg border border-[var(--talos-border)] p-3 text-sm leading-6 text-[var(--talos-text)]">
+                            <template v-for="(pezzo, dove) in [evidenzia(eccede.claim.passage, eccede.claim.checks.quoteSpan)]" :key="dove">
+                                {{ pezzo.before }}<mark v-if="pezzo.quote" class="rounded bg-[var(--talos-accent-soft)] px-0.5 text-[var(--talos-text)]">{{ pezzo.quote }}</mark>{{ pezzo.after }}
+                            </template>
+                        </p>
+                        <p class="mt-2 break-words text-2xs leading-5 text-[var(--talos-muted)]">
+                            {{ report.sources[eccede.claim.sourceIndex]?.title || report.sources[eccede.claim.sourceIndex]?.url }}
+                        </p>
+                        <Button variant="ghost" class="mt-2" data-testid="talos-research-eccede-apri" @click="openClaim(eccede.index)">
+                            {{ t('research.apriLaffermazione') }}
+                            <ChevronRight class="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                    </section>
 
                     <div class="flex flex-wrap gap-2">
                         <Button data-testid="talos-research-recheck" variant="outline" :disabled="rechecking" @click="runRecheck()">

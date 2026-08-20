@@ -242,3 +242,160 @@ describe('what the reader is told up front', () => {
         })
     })
 })
+
+
+/**
+ * ⛔⛔ CONTESA-02 — il disaccordo entra nei DATI, non solo nella prosa.
+ *
+ * MISURATO sul Pad il 2026-08-20: il rapporto su GGUF scriveva «le fonti… non
+ * specificano però formalmente un maintainer unico» e la barra sopra diceva
+ * 7 su 7 sostenute, 0 contese. `talosResearchContestedVerdict` esisteva coi
+ * suoi test, e non lo chiamava nessuno.
+ */
+describe('la contesa, dal giudice fino al verdetto', () => {
+    const SMENTITA: TalosResearchSource = {
+        url: 'https://smentita.example/x',
+        title: 'La rettifica',
+        publishedAt: null,
+        text: 'La giuria non ha mai assegnato il Gran Premio a Norris: la vittoria è stata di Verstappen.',
+        obtained: 'page',
+    }
+
+    it('una sostenuta che qualcun altro nega diventa CONTESA, col passaggio', async () => {
+        const chieste: string[] = []
+        const verified = await talosResearchVerify({
+            judge: LOCAL,
+            at: () => '2026-08-02T10:00:00.000Z',
+            ask: async () => 'SI — il passaggio lo dice apertamente.',
+            askOpposing: async (_claim, passage) => {
+                chieste.push(passage)
+                return 'SI — la fonte dice esattamente il contrario.'
+            },
+        }, [claim()], [PAGE, SMENTITA])
+
+        expect(verified[0]!.checks.claimSupported).toBe('contested')
+        expect(verified[0]!.checks.opposing).toHaveLength(1)
+        expect(verified[0]!.checks.opposing![0]!.url).toBe('https://smentita.example/x')
+        // ⛔ Il passaggio mandato al giudice viene dalla fonte, non dal modello.
+        expect(SMENTITA.text).toContain(chieste[0]!)
+    })
+
+    it('⛔ e AL CONTRARIO: se il giudice dice NO, il verdetto resta quello di prima', async () => {
+        const verified = await talosResearchVerify({
+            judge: LOCAL,
+            at: () => '2026-08-02T10:00:00.000Z',
+            ask: async () => 'SI — il passaggio lo dice apertamente.',
+            askOpposing: async () => 'NO — parla di un altro anno.',
+        }, [claim()], [PAGE, SMENTITA])
+
+        expect(verified[0]!.checks.claimSupported).toBe('yes')
+        // ⛔ E `opposing` non c'è: «guardato e niente» non deve scriversi come
+        //   un elenco vuoto, che si legge uguale a «guardato».
+        expect(verified[0]!.checks.opposing).toBeUndefined()
+    })
+
+    it('⛔ e senza la seconda domanda NIENTE cambia: la porta chiusa non altera i dati', async () => {
+        const verified = await talosResearchVerify({
+            judge: LOCAL,
+            at: () => '2026-08-02T10:00:00.000Z',
+            ask: async () => 'SI — il passaggio lo dice apertamente.',
+        }, [claim()], [PAGE, SMENTITA])
+
+        expect(verified[0]!.checks.claimSupported).toBe('yes')
+        expect(verified[0]!.checks.opposing).toBeUndefined()
+    })
+
+    it('⛔ e una SMENTITA non si contesta: sarebbe la stessa cosa detta due volte', async () => {
+        let chiesto = false
+        const verified = await talosResearchVerify({
+            judge: LOCAL,
+            at: () => '2026-08-02T10:00:00.000Z',
+            ask: async () => 'NO — il passaggio non lo sostiene.',
+            askOpposing: async () => { chiesto = true; return 'SI' },
+        }, [claim()], [PAGE, SMENTITA])
+
+        expect(verified[0]!.checks.claimSupported).toBe('no')
+        // E non si paga per chiederlo: su un «no» la contesa non esiste.
+        expect(chiesto).toBe(false)
+    })
+
+    it('⛔ e un giudice che cade sulla seconda domanda non porta via il rapporto', async () => {
+        const verified = await talosResearchVerify({
+            judge: LOCAL,
+            at: () => '2026-08-02T10:00:00.000Z',
+            ask: async () => 'SI — il passaggio lo dice apertamente.',
+            askOpposing: async () => { throw new Error('il giudice non ha risposto') },
+        }, [claim()], [PAGE, SMENTITA])
+
+        expect(verified[0]!.checks.claimSupported).toBe('yes')
+        expect(verified[0]!.checks.judge).toBe('local:qwen3-3b')
+    })
+})
+
+
+/**
+ * ⛔⛔ MENU-RICOPIATO-01 — «Sì | PARZIALE | motivo» non è una scelta.
+ *
+ * MISURATO sul Pad il 2026-08-20. A schermo si leggeva «contesa» sopra e
+ * «| PARZIALE |» sotto: due parole diverse per lo stesso stato, il formato
+ * grezzo del protocollo dato in pasto a una persona, e il verdetto era il più
+ * generoso dei due che il modello aveva scritto.
+ */
+describe('quando il giudice ricopia il menu invece di scegliere', () => {
+    it('⛔ due voci del formato in una riga = nessun verdetto', () => {
+        const letto = talosResearchParseVerdict('Sì | PARZIALE | Il passaggio indica che è il creatore.')
+        expect(letto.support).toBe('unchecked')
+        // ⛔ E nessun motivo: un motivo salvato da una riga illeggibile
+        //   sarebbe la metà comprensibile di una risposta che non lo era.
+        expect(letto.reason).toBe('')
+    })
+
+    it('e il menu intero ricopiato nemmeno', () => {
+        expect(talosResearchParseVerdict('SI | PARZIALE | NO — motivo, massimo quindici parole').support).toBe('unchecked')
+    })
+
+    it('⛔ e AL CONTRARIO: una barra sola è punteggiatura, non un secondo verdetto', () => {
+        const letto = talosResearchParseVerdict('SI | il passaggio lo dice apertamente')
+        expect(letto.support).toBe('yes')
+        // La barra non entra nel motivo: è un separatore, come il trattino.
+        expect(letto.reason).toBe('il passaggio lo dice apertamente')
+    })
+
+    it('e un verdetto con le barre davanti resta leggibile', () => {
+        const letto = talosResearchParseVerdict('| PARZIALE | riguarda l’argomento ma non la misura')
+        expect(letto.support).toBe('partial')
+        expect(letto.reason).toBe('riguarda l’argomento ma non la misura')
+    })
+
+    it('la riga normale non cambia di una virgola', () => {
+        const letto = talosResearchParseVerdict('NO — la fonte non ne parla')
+        expect(letto.support).toBe('no')
+        expect(letto.reason).toBe('la fonte non ne parla')
+    })
+})
+
+
+/**
+ * ⛔⛔ MENU-NEL-PROMPT-01 — il formato con le barre lo faceva RICOPIARE.
+ *
+ * MISURATO sul Pad il 2026-08-20 con gemma-3-4b come giudice: le risposte
+ * arrivavano come «Sì | PARZIALE | Il passaggio indica che…». Il parser
+ * prendeva la prima parola, e quei rapporti uscivano al 100%: erano verdetti
+ * che il giudice non aveva mai dato. La cura sta a monte — nella domanda.
+ */
+describe('la domanda al giudice non contiene un menu da ricopiare', () => {
+    it('⛔ le tre parole NON sono su una riga separate da barre', () => {
+        const prompt = talosResearchJudgePrompt('afferma X', 'passaggio Y')
+        expect(prompt).not.toContain('SI | PARZIALE | NO')
+    })
+
+    it('le tre restano offerte, una per riga, con un esempio', () => {
+        const prompt = talosResearchJudgePrompt('afferma X', 'passaggio Y')
+        for (const parola of ['SI', 'PARZIALE', 'NO']) {
+            expect(prompt.split(String.fromCharCode(10))).toContain(parola)
+        }
+        // ⛔ L'esempio è la parte che sostituisce il menu: senza, «comincia con
+        //   una di queste tre parole» resta un'istruzione senza forma.
+        expect(prompt).toContain('Esempio di risposta:')
+    })
+})
