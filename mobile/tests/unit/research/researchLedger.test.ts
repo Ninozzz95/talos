@@ -54,18 +54,49 @@ function passo(over: Partial<{
 }
 
 describe('REGISTRO-01 il sommario', () => {
-    it('conta i passi per tipo, che è ciò che distingue due ricerche', () => {
-        const registro = talosResearchLedger([
-            passo({ kind: 'search' }),
-            passo({ id: 's2', kind: 'read' }),
-            passo({ id: 's3', kind: 'read' }),
-            passo({ id: 's4', kind: 'verify' }),
-        ] as never)
+    /**
+     * ⛔⛔ LE PROVE, non i tipi di passo — e questo test è nato da un errore MIO.
+     *
+     * La prima versione contava `kind === 'read'` e `kind === 'verify'`, e sul
+     * Pad il 2026-08-20 ha scritto «3 passi · 2 ricerche · **0 pagine lette · 0
+     * verifiche**» sotto un rapporto al 100% verificato da un giudice.
+     *
+     * MISURATO subito dopo in `researchRuntime.ts`: il runtime emette **solo**
+     * `search` e `synthesise`. `read` e `verify` non vengono creati mai — non
+     * perché il lavoro non si faccia, ma perché avviene DENTRO quei due passi.
+     *
+     * ⇒ Il registro conta le prove che esistono: le fonti aperte per davvero e
+     * le affermazioni che un giudice ha guardato.
+     */
+    it('conta le ricerche dai passi, e le letture dalle FONTI', () => {
+        const registro = talosResearchLedger(
+            [
+                passo({ kind: 'search' }),
+                passo({ id: 's2', kind: 'synthesise' }),
+            ] as never,
+            {
+                sources: [{ obtained: 'page' }, { obtained: 'page' }, { obtained: 'snippet' }],
+                claims: [{ checks: { judge: 'local:qwen3' } }, { checks: { judge: null } }],
+            },
+        )
 
         expect(registro.summary.search).toBe(1)
+        expect(registro.summary.synthesise).toBe(1)
+        // Due pagine aperte davvero; il terzo è un estratto e non conta.
         expect(registro.summary.read).toBe(2)
+        // Una affermazione guardata da un giudice, una no.
         expect(registro.summary.verify).toBe(1)
-        expect(registro.summary.synthesise).toBe(0)
+    })
+
+    it('⛔ e senza prove non inventa: zero, non il numero dei passi', () => {
+        const registro = talosResearchLedger([
+            passo({ kind: 'search' }),
+            passo({ id: 's2', kind: 'search' }),
+        ] as never)
+
+        expect(registro.summary.read).toBe(0)
+        expect(registro.summary.verify).toBe(0)
+        expect(registro.summary.search).toBe(2)
     })
 
     it('⛔ i passi FALLITI si contano a parte: un lavoro incompleto va detto', () => {
