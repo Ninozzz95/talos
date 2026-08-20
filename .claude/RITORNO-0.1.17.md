@@ -1423,11 +1423,43 @@ sezione sulla politica dice: il motivo per accendere la GPU è il **prefill**, n
 la generazione, e una politica che decide sulla decodifica sceglierebbe su una
 differenza del 4% che dopo dieci minuti non c'è più.
 
+#### ✅ E non è nemmeno la Flash Attention — ma lo stato lento è quello FREDDO
+
+Terza corsa da dieci minuti, OpenCL con `flash-attn off`, telefono freddo alla
+partenza:
+
+| | salti | livelli | % nello stato basso | deriva | media 10 min |
+|---|---:|---|---:|---:|---:|
+| **CPU** | **0** su 67 | — | — | −1,68% | 15,59 tok/s |
+| OpenCL, FA **on** | 9 su 70 | 19,31 / 13,57 | 55,7% | −16,72% | 16,13 |
+| OpenCL, FA **off** | **11** su 74 | 19,12 / 14,10 | 47,3% | −6,14% | **16,72** |
+
+⇒ **Spegnere la Flash Attention non toglie l'oscillazione**: undici salti invece
+di nove. La migliora — meno tempo in basso, livello basso più alto, deriva un
+terzo — ma il fenomeno resta. ⛔ Ipotesi chiusa: **è il percorso OpenCL**, non la
+FA e non il governor del SoC.
+
+⛔⛔ **E il termometro dice il contrario di quello che uno si aspetta:**
+
+```
+SoC nello stato VELOCE   84,1 °C
+SoC nello stato LENTO    65,6 °C
+```
+
+Lo stato lento è quello **freddo**. Non è «rallenta perché è caldo»: è un anello
+di regolazione che **corre finché scalda e poi si ferma a raffreddare**, e la
+temperatura misurata è la *conseguenza* della velocità, non la sua causa —
+almeno alla granularità con cui la campiono.
+
+⛔ Onestà sul metodo: campione ogni 5 secondi, e il valore è il **massimo fra
+tutte le zone termiche**, che possono non essere la zona della GPU. Il segno
+della correlazione è netto (19 gradi), la sua interpretazione no.
+
 ⛔ **Cosa NON ho ancora misurato**, e serve prima di concludere:
 
 1. ~~La stessa corsa sulla CPU~~ — ✅ **fatta**, ed è la sezione qui sopra.
-2. La stessa corsa con `flash-attn off`: la FA accesa raddoppia il lavoro sulla
-   KV, e potrebbe essere ciò che porta il chip sulla soglia. **In corso.**
+2. ~~La stessa corsa con `flash-attn off`~~ — ✅ **fatta**, ed è la sezione qui
+   sopra: non è la FA.
 3. ~~Il segnale giusto~~ — ✅ le zone termiche del SoC si campionano dall'host e
    l'analizzatore le legge con `--zone`.
    ⛔ **Ma la G5 su GPU in configurazione di produzione NON ha campioni**: è
