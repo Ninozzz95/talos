@@ -151,6 +151,8 @@ public class TalosSemanticGoldenDeviceTest {
         riga.put("backendRequested", backendRichiesto());
         riga.put("deviceRequested", deviceRichiesto());
         riga.put("flashAttn", modalitaFa());
+        riga.put("gpuLayers", argomentoIntero("talosGpuLayers", 0));
+        riga.put("microBatch", argomentoIntero("talosMicroBatch", 0));
         riga.put("atMs", System.currentTimeMillis());
         try (FileOutputStream out = new FileOutputStream(new File(directory, "golden.jsonl"), true)) {
             out.write((riga.toString() + "\n").getBytes(StandardCharsets.UTF_8));
@@ -173,6 +175,16 @@ public class TalosSemanticGoldenDeviceTest {
      * ⛔ E il BERSAGLIO, per la stessa ragione: una golden presa su CPU e una
      * presa su GPU sono due misure, e il file non le distingueva.
      */
+    private static int argomentoIntero(String nome, int predefinito) {
+        String raw = InstrumentationRegistry.getArguments().getString(nome, "");
+        if (raw == null || raw.isEmpty()) return predefinito;
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException storto) {
+            return predefinito;
+        }
+    }
+
     private static String backendRichiesto() {
         String scelto = InstrumentationRegistry.getArguments().getString("talosBackend", "");
         return scelto == null || scelto.isEmpty() ? "none" : scelto;
@@ -190,8 +202,27 @@ public class TalosSemanticGoldenDeviceTest {
 
     private static long apri(File model) {
         TalosLlamaNative.ensureReady(context());
+        /*
+         * ⛔⛔ `gpuLayers` ERA FISSO A ZERO, e rendeva la prova semantica FALSA
+         * proprio nel caso in cui serviva.
+         *
+         * MISURATO il 2026-08-20: con `talosBackend=OpenCL` questa suite
+         * dichiarava il bersaglio GPU e poi apriva con **zero strati
+         * spostati**, cioe' calcolava tutto sulla CPU. Il confronto «Flash
+         * Attention accesa contro spenta, 7 casi su 7 identici» che avevo usato
+         * per raccomandare `off` sui bersagli OpenCL descriveva quindi i kernel
+         * della CPU, non quelli di OpenCL.
+         *
+         * ⇒ Un bersaglio dichiarato e non usato e' peggio di un bersaglio
+         * mancante: il file lo registra, e la riga sembra una prova.
+         *
+         * Il predefinito resta 0 — la golden nasce come pavimento CPU — ma
+         * adesso si puo' chiedere, e chi confronta due backend DEVE chiederlo.
+         */
         long handle = TalosLlamaNative.nativeOpenTargeted(
-                model.getAbsolutePath(), 4, 4096, 0, true, 4, 0, "f16",
+                model.getAbsolutePath(), 4, 4096,
+                argomentoIntero("talosGpuLayers", 0), true, 4,
+                argomentoIntero("talosMicroBatch", 0), "f16",
                 backendRichiesto(), deviceRichiesto(), modalitaFa());
         assertNotEquals("apertura fallita su `" + backendRichiesto() + "`: "
                         + TalosLlamaNative.nativeLastOpenError()

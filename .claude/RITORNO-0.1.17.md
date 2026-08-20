@@ -1290,6 +1290,16 @@ S5 IDENTICO   S6 IDENTICO   S7 IDENTICO
 ⇒ tutti e 7 identici
 ```
 
+⛔⛔ **E c'è di peggio, trovato rileggendo il test il 20/8 a sera: quella corsa
+NON usava la GPU.** `TalosSemanticGoldenDeviceTest` apriva con `gpuLayers = 0`
+scritto a mano, quindi dichiarava il bersaglio `OpenCL/GPUOpenCL` e poi calcolava
+**tutto sulla CPU**. ⇒ Il confronto qui sopra descrive i kernel della **CPU**,
+non quelli di OpenCL, ed è la prova sbagliata per la raccomandazione che ne ho
+tratto. ⛔ Un bersaglio dichiarato e non usato è peggio di uno mancante: il file
+lo registra e la riga sembra una prova. Corretto (`talosGpuLayers`,
+`talosMicroBatch`, entrambi scritti in ogni riga) e **rifatto sul serio**: vedi
+la sezione qui sotto.
+
 ⛔ **Onestà su cosa prova e cosa no.** Tre di questi sette casi contengono testo
 generato davvero — S1 («Sto bene, grazie.»), S3 (la chiamata `meteo` con i suoi
 argomenti) e S5 (prosa più chiamata, con la chiamata che sopravvive alla prosa).
