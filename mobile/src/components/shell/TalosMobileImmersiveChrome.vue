@@ -25,8 +25,31 @@ defineProps<{
     canGoIncognito: boolean
     activeTitle: string
     busy: boolean
-    /** F6 — tablet split view: the panel owns the hamburger, hide ours. */
+    /**
+     * ⛔⛔ F6 — il pannello possiede l'HAMBURGER, non le azioni.
+     *
+     * MISURATO sul Pad il 2026-08-20, tablet con una conversazione aperta: il
+     * riquadro destro non aveva **niente**. Non il titolo, non la campanella,
+     * non il centro download, non le opzioni della chat — rinomina, elimina,
+     * esporta, media, incognito. Sul telefono ci sono tutte.
+     *
+     * La causa era un flag solo per due decisioni diverse. La nota accanto
+     * diceva «il pannello possiede quelle azioni»: vero per l'hamburger, che
+     * il pannello ha davvero, e **falso** per il resto — nel pannello non
+     * c'è nessuna di quelle voci, quindi sul tablet erano semplicemente
+     * irraggiungibili.
+     *
+     * ⇒ Due proprietà, perché sono due domande: `hideMenu` toglie
+     * l'hamburger (giusto sul tablet), `hideActions` toglie il resto — e
+     * nessuno lo chiede, perché nessun'altra superficie lo offre.
+     */
     hideMenu?: boolean
+    /**
+     * Toglie campanella, download e opzioni chat. ⛔ Oggi non lo passa
+     * nessuno: esiste perché la decisione sia DICHIARATA invece che
+     * presa di straforo da `hideMenu`, come è successo.
+     */
+    hideActions?: boolean
     /** False before a chat exists; the media entry then opens nothing. */
     canOpenMedia?: boolean
     /** What the active chat would take from the Library, for the delete dialog. */
@@ -91,7 +114,7 @@ const emit = defineEmits<{
             </Button>
             <span v-else aria-hidden="true" />
 
-            <div v-if="!hideMenu" class="pointer-events-auto flex shrink-0 items-center">
+            <div v-if="!hideActions" class="pointer-events-auto flex shrink-0 items-center">
                 <TalosMobileNotificationBell />
             <TalosMobileDownloadCenterTrigger />
                 <TalosMobileChatOptionsMenu
