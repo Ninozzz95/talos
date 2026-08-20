@@ -69,6 +69,9 @@ export function talosResearchSupportLabel(checks: TalosResearchChecks): string {
         case 'yes': return 'sostenuta dalla fonte'
         case 'partial': return 'sostenuta solo in parte'
         case 'no': return 'NON sostenuta dalla fonte'
+        // ⛔ CONTESA-01: la parola dice anche PERCHÉ, se no «contesa» da sola
+        // si legge come una sfumatura di «parziale», che è ciò che non è.
+        case 'contested': return 'contesa — le fonti non concordano'
         default: return 'non verificata'
     }
 }

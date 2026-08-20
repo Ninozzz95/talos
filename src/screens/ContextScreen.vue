@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
 import { useTalosI18n } from '@/i18n'
 import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
@@ -241,6 +241,22 @@ onBeforeUnmount(closeLightbox)
 const lightboxFile = ref<TalosLocalVaultFile | null>(null)
 const lightboxUrl = ref<string | null>(null)
 const docView = ref<TalosLocalVaultFile | null>(null)
+/**
+ * ⛔⛔⛔ PDF-APRE-IL-FOGLIO-DI-CONDIVISIONE-01 — «Apri» CONDIVIDEVA.
+ *
+ * FOTOGRAFATO sul Pad il 2026-08-20: Libreria → un PDF → «Apri», e si apriva
+ * il foglio di condivisione di Android, coi contatti veri della persona in
+ * prima fila. Il file a un tocco dall'uscire dal telefono.
+ *
+ * `TalosMobilePdfViewer` esiste da sempre e la sua intestazione lo dice:
+ * «qualunque superficie mostri un PDF monta questo». La Libreria non lo
+ * montava. ⛔ Pigro come tutto il resto: chi non apre mai un PDF non ne paga
+ * un byte nel grafo d'avvio, che ha un tetto misurato.
+ */
+const pdfView = ref<TalosLocalVaultFile | null>(null)
+const VisualizzatorePdf = defineAsyncComponent(
+    () => import('@/components/talos/library/TalosMobilePdfViewer.vue'),
+)
 // Perf review 2026-07-25: the list now holds bounded previews, so the viewer
 // hydrates the full extracted text on open.
 const docText = ref<string | null>(null)
@@ -272,6 +288,12 @@ async function openFile(file: TalosLocalVaultFile): Promise<void> {
         }
         return
     }
+    // ⛔ Prima dell'immagine e prima del testo: un PDF non è né l'una né
+    // l'altro, e il visore di testo mostrerebbe l'estratto invece delle pagine.
+    if (file.media_type === 'application/pdf') {
+        pdfView.value = file
+        return
+    }
     if (isImage(file)) {
         lightboxFile.value = file
         lightboxUrl.value = thumbs.value[file.id] ?? await attachments.previewUrl(file.id)
@@ -287,9 +309,11 @@ async function openFile(file: TalosLocalVaultFile): Promise<void> {
 // of closing the preview.
 useTalosOverlayBack(() => {
     if (menuOpen.value) { menuOpen.value = false; return }
+    if (pdfView.value) { pdfView.value = null; return }
     if (docView.value) { docView.value = null; return }
     if (lightboxUrl.value) closeLightbox()
-}, () => menuOpen.value || lightboxUrl.value !== null || docView.value !== null)
+}, () => menuOpen.value || lightboxUrl.value !== null || docView.value !== null
+    || pdfView.value !== null)
 
 function closeLightbox(): void {
     if (lightboxUrl.value && !Object.values(thumbs.value).includes(lightboxUrl.value)) URL.revokeObjectURL(lightboxUrl.value)
@@ -1013,6 +1037,18 @@ onMounted(async () => {
 
     <!-- Document text viewer -->
     <Teleport to="body">
+        <!--
+            ⛔ Il visore dei PDF: lo stesso che monta la scheda azione, mai un
+            secondo. «I due component devono essere esattamente identici con gli
+            stessi controlli» — owner, almeno due volte.
+        -->
+        <VisualizzatorePdf
+            v-if="pdfView"
+            :percorso="pdfView.private_uri"
+            :nome="pdfView.display_name"
+            @chiudi="pdfView = null"
+        />
+
         <div v-if="docView" data-testid="talos-library-doc" role="dialog" aria-modal="true" :aria-label="docView.display_name" tabindex="-1" class="fixed inset-0 z-[95] flex flex-col bg-[var(--talos-window-bg,var(--talos-background))] pt-[max(1rem,env(safe-area-inset-top))] text-[var(--talos-text)] outline-none" @keydown.escape="docView = null">
             <header class="flex items-center gap-1 border-b border-[var(--talos-border)] px-3 pb-2">
                 <FileText class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />

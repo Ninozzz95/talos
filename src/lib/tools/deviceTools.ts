@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { TalosPosizione } from '@/lib/device/posizione'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
 import {
     TALOS_SCHERMATE_DI_SISTEMA,
@@ -54,13 +55,15 @@ export interface TalosDeviceToolSources {
      * ⭐ DOVE SEI — vedi `src/lib/device/posizione.ts` per il difetto che l'ha
      * resa necessaria: senza, il modello inventava città.
      */
-    location(): Promise<{
-        stato: string
-        latitudine?: number
-        longitudine?: number
-        precisioneMetri?: number
-        etaSecondi?: number
-    }>
+    /*
+     * ⛔ Il TIPO VERO, non una copia scritta a mano.
+     *
+     * Qui c'era la forma ricopiata a mano, e il 2026-08-19 ha fatto quello che
+     * fanno sempre le copie: `precisa` è stato aggiunto in `posizione.ts` e in
+     * questo strumento non esisteva. Una copia non si aggiorna da sola, e il
+     * campo che manca non dà errore finché qualcuno non prova a leggerlo.
+     */
+    location(): Promise<TalosPosizione>
     wallpaper(imageBase64: string, where: string): Promise<Esito & { appliedTo: string }>
     keepAwake(on: boolean): Promise<Esito & { on: boolean }>
     /**
@@ -364,13 +367,86 @@ export function createTalosDeviceTools(
                  * benissimo per «ristoranti vicino» e va detto lo stesso, se no
                  * il modello non ha modo di sapere quando è il caso di rileggere.
                  */
+                /*
+                 * ⛔⛔ POSIZIONE-CITTA-INVENTATA-01 — qui c'era la riga che ha
+                 * fatto dire a TALOS «Milan» su coordinate che non erano le sue.
+                 * ⛔⛔ CORRETTO il 2026-08-19 sera: quelle coordinate NON erano vere.
+                 *
+                 * La nota qui sotto le dava per «giuste — Roma centro». Il Pad era
+                 * a **CATANIA** (`dumpsys location`: 37,55 / 15,08), e c'è un
+                 * indizio che chiude la questione senza discutere: 41.899925 ha
+                 * **sei decimali**, e questo modulo arrotonda a **quattro**
+                 * (`PRECISIONE` in `posizione.ts`). Un numero che il codice non
+                 * può produrre non è uscito dal codice.
+                 *
+                 * ⇒ Le coordinate se le era inventate il modello, esattamente come
+                 * la città. Avevo registrato come «esito del tool» il testo della
+                 * risposta — che è il difetto contro cui esiste questa lezione.
+                 *
+                 *
+                 * MISURATO sul Pad il 2026-08-19, Qwen3-1.7B, «Dove mi trovo
+                 * adesso?»: coordinate giuste (41.899925, 12.478631 — Roma
+                 * centro) e sotto «Location: Milan, Italy». La città era falsa e
+                 * detta con la stessa sicurezza dei due numeri veri.
+                 *
+                 * E non era un'allucinazione libera: questo risultato ORDINAVA
+                 * «say the place name you derived», mentre la descrizione dello
+                 * stesso strumento dice l'opposto — «naming places from a city
+                 * the user is not in is worse than saying you do not know». Due
+                 * istruzioni contrarie dentro un solo tool, e ha vinto quella
+                 * più vicina alla risposta. Un modello da 1,7B non ha una tavola
+                 * di coordinate: gli abbiamo chiesto un nome e ci ha dato il
+                 * nome plausibile che sapeva.
+                 *
+                 * ⛔ E la cura NON è aggiungere il geocoding: il `Geocoder` di
+                 * Android fa richieste HTTP ai server di Google (e il metodo
+                 * sincrono è deprecato da API 33). Vorrebbe dire far uscire la
+                 * posizione della persona da uno strumento che oggi è `read` e
+                 * non chiede consenso di rete — una decisione di privacy, non
+                 * una rifinitura.
+                 *
+                 * ⇒ Il tool dice ciò che SA, e chi legge decide.
+                 */
+                /*
+                 * ⛔⛔⛔ POSIZIONE-APPROSSIMATA-01 — «Roma» a chi era a CATANIA.
+                 *
+                 * MISURATO sul Pad il 2026-08-19, mentre l'owner diceva «io mi
+                 * trovo a Catania comunque»:
+                 *
+                 *   ACCESS_FINE_LOCATION:   granted=false  USER_FIXED
+                 *   ACCESS_COARSE_LOCATION: granted=true
+                 *   dumpsys location → fused e network: 37,55 / 15,08 (Catania)
+                 *
+                 * Il permesso PRECISO era negato e fissato, quindi restava
+                 * l'approssimata — e il risultato usciva **identico** a quello
+                 * di un fix GPS. Stessa frase, stessa sicurezza, nessun modo per
+                 * la persona di sapere che il numero valeva meno.
+                 *
+                 * ⇒ Owner: «DEVI USARE POSIZIONE PRECISA». Si chiede (in
+                 * `posizione.ts`), e quando non c'è **si dice**, col rimedio
+                 * accanto: un avviso senza rimedio è solo un rimprovero.
+                 */
+                const APPROSSIMATA = dove.precisa === false
+                    ? [
+                        'WARNING: this is an APPROXIMATE fix, not a precise one:',
+                        'the user granted TALOS approximate location only, so the point',
+                        'can be kilometres away and may name the wrong town entirely.',
+                        'Say plainly that the position is approximate, and that they can',
+                        'turn on precise location for TALOS in the Android app permissions.',
+                    ]
+                    : []
                 return {
                     ok: true,
                     content: [
                         `Latitude ${dove.latitudine}, longitude ${dove.longitudine}`,
                         `(accurate to about ${dove.precisioneMetri} m, measured ${dove.etaSecondi} s ago).`,
-                        'Use these coordinates to work out the area, and say the place name you',
-                        'derived so the user can correct you if it is wrong.',
+                        ...APPROSSIMATA,
+                        'These coordinates are the whole answer: this device did not resolve',
+                        'them to any place name.',
+                        'DO NOT NAME a city, town or neighbourhood unless the user already told',
+                        'you where they are: a wrong place name said with confidence is worse',
+                        'than the coordinates alone.',
+                        'Give the coordinates, and offer to look the area up if they want the name.',
                     ].join(' '),
                 }
             },

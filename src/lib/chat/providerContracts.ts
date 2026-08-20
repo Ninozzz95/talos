@@ -52,6 +52,26 @@ export interface TalosMobileCompletionInput {
      * once and every family sees the same schema.
      */
     tools?: readonly TalosToolDefinition<never>[]
+    /**
+     * ⛔ LINGUA-DOPO-IL-TOOL-01 — la lingua della persona, non una preferenza.
+     *
+     * Sta nel CONTRATTO e non nell'adattatore per la stessa ragione di
+     * `providerBlocks`: un valore che non è dichiarato qui muore in silenzio al
+     * ponte successivo e il typecheck non se ne accorge. Chi non ne ha bisogno
+     * lo ignora; il motore locale ci mette il promemoria in fondo alla busta
+     * dei risultati, che è l'ultima cosa che il modello legge.
+     */
+    locale?: string | null
+    /**
+     * ⛔ SALTO-DIRETTO-PUNITO-01 — i nomi che il motore locale può eseguire,
+     * anche se non sono fra quelli ESPOSTI in questo giro.
+     *
+     * Il catalogo compatto mostra pochi strumenti per volta per non pagare
+     * 38.386 byte di schemi. Ma quando un modello indovina il nome giusto e lo
+     * scrive nel testo, il recupero deve riconoscerlo: cercarlo solo fra gli
+     * esposti lo farebbe finire in chat come prosa.
+     */
+    executableToolNames?: readonly string[]
 }
 
 export interface TalosMobileCompletionResult {

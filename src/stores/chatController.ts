@@ -3675,6 +3675,15 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 ? [...offeredTools, dettagliStrumento as never]
                 : offeredTools
             /*
+             * ⛔ I nomi VERI del catalogo — quelli già passati dai permessi e
+             * dagli interruttori. Servono in due punti: al cancello qui sotto e
+             * al recupero delle chiamate scritte a mano nell'adattatore locale,
+             * che senza di questi butterebbe una chiamata giusta.
+             */
+            const nomiDelCatalogo = new Set(
+                offeredTools.map((tool: { name: string }) => tool.name),
+            )
+            /*
              * ⛔ Il testo sta in `catalogoCompatto`, non qui: è la parte che ha
              * dovuto imparare a farsi obbedire da un modello piccolo, e va
              * scritta accanto alla misura che l'ha corretta — non in mezzo a
@@ -3811,6 +3820,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     system: (sendIdentity.surface === 'browse'
                         ? tonePrompt + TALOS_BROWSE_APPENDIX
                         : tonePrompt) + indiceNelPrompt + senzaMotoreDiRicerca,
+                    /*
+                     * ⛔ LO STESSO locale che nomina la lingua nel prompt di
+                     * sistema poco sopra. Lì è la prima cosa che il modello
+                     * legge; il motore locale lo usa anche per l'ultima, dopo
+                     * i dati inglesi del tool.
+                     */
+                    locale: localization.state.locale,
+                    /*
+                     * ⛔ SALTO-DIRETTO-PUNITO-01: l'adattatore locale recupera le
+                     * chiamate che il modello scrive nel testo, e per farlo deve
+                     * sapere quali nomi sono VERI. Senza, una chiamata giusta a uno
+                     * strumento non ancora svelato resta testo, e finisce in chat.
+                     */
+                    executableToolNames: [...nomiDelCatalogo],
                 }),
                 deps.transport,
             )
@@ -4145,10 +4168,16 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * it. An explicit `tool_details` call reveals the name for
                      * the following round.
                      */
+                    /*
+                     * ⛔ SALTO-DIRETTO-PUNITO-01: il terzo argomento sono i nomi
+                     * VERI del catalogo. Chi c'è dentro è eseguibile — vedi la
+                     * misura accanto alla funzione — e chiamarlo lo svela, così al
+                     * giro dopo il modello ne vede anche la forma.
+                     */
                     if (
                         profile?.provider === 'local'
                         && catalogo
-                        && !catalogo.talosToolDelCatalogoEseguibile(call.name, svelati)
+                        && !catalogo.talosToolDelCatalogoEseguibile(call.name, svelati, nomiDelCatalogo)
                     ) {
                         return {
                             status: 'terminal' as const,
@@ -4159,6 +4188,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             },
                         }
                     }
+                    // Eseguirlo lo svela: la forma serve al giro successivo.
+                    if (nomiDelCatalogo.has(call.name)) svelati.add(call.name)
                     const tool = strumentiEseguibili.find(
                         (entry: { name: string }) => entry.name === call.name,
                     )
@@ -4657,13 +4688,31 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 syncToolAuthorizations()
                 round.open?.finish()
                 trace?.finish('ok')
-                const pendingStatus = deps.translate('chat.toolAuthorizationPending', {
-                    count: next.requests.length,
-                })
+                /*
+                 * ⛔⛔ ATTESA-SCRITTA-TRE-VOLTE-01 — la stessa frase, moltiplicata.
+                 *
+                 * FOTOGRAFATO sul Pad il 2026-08-20, «Fai una ricerca web sulle
+                 * novità di Android 16»: due richieste di consenso, e nella bolla
+                 * «1 richiesta di autorizzazione per uno strumento è in attesa»
+                 * scritta TRE volte — due come testo e una come carta.
+                 *
+                 * ⛔ E resta lì per sempre: il testo è persistito, quindi la frase
+                 * sopravvive alla richiesta che descriveva. Nello stesso
+                 * screenshot, sotto una riga «è in attesa», c'era già «La richiesta
+                 * di autorizzazione è stata gestita».
+                 *
+                 * La carta in `TalosMobileMessageList.vue` esiste esattamente per
+                 * questo, e la sua nota lo dice da prima: «gli stati pendenti sono
+                 * elementi separati, MAI testo inline, e la carta passa da pending
+                 * a risolto senza toccare il messaggio». Legge il conto dai
+                 * metadati qui sotto, che restano.
+                 *
+                 * ⇒ Il testo non la porta più. Se il modello non aveva scritto
+                 * nulla la bolla resta senza prosa, ed è giusto: quello che c'è da
+                 * dire lo dice la carta, con dentro il comando per rispondere.
+                 */
                 return {
-                    text: [stripLibrarySaveMarkers(loop.text), pendingStatus]
-                        .filter(Boolean)
-                        .join('\n\n'),
+                    text: stripLibrarySaveMarkers(loop.text),
                     metadata: {
                         tool_authorization_pending_checkpoint_id: next.id,
                         tool_authorization_pending_count: next.requests.length,
@@ -4726,12 +4775,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 trace?.finish('ok')
                 const answerSources = webSourceArchive.current?.sources() ?? []
                 return {
-                    text: [
-                        stripLibrarySaveMarkers(finalText),
-                        deps.translate('chat.toolAuthorizationPending', {
-                            count: markerCheckpoint.requests.length,
-                        }),
-                    ].filter(Boolean).join('\n\n'),
+                    // ⛔ ATTESA-SCRITTA-TRE-VOLTE-01: la porta la carta, non il testo.
+                    text: stripLibrarySaveMarkers(finalText),
                     metadata: {
                         ...(liveLibrary.receipt
                             ? { library_context_receipt: liveLibrary.receipt }
