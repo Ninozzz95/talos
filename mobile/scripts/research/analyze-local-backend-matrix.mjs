@@ -165,9 +165,39 @@ for (const [chiave, insieme] of [...gruppi.entries()].sort()) {
 
     const termici = new Set(insieme.map((r) => r?.deviceAfter?.thermal).filter(Boolean))
     if (termici.size > 0) voce.thermal = [...termici]
-    // Uno stato termico che cambia dentro un insieme vuol dire due telefoni
-    // diversi nello stesso confronto.
-    if (termici.size > 1) voce.thermalDrift = true
+    /*
+     * Uno stato termico che cambia dentro un insieme vuol dire due telefoni
+     * diversi nello stesso confronto.
+     *
+     * ⛔ TRANNE per G5, dove la deriva termica NON e' il guasto: e' la misura.
+     * Segnalarla li' come contaminazione insegnerebbe a ignorare l'avviso
+     * proprio nel posto in cui e' il risultato — e un avviso che si impara a
+     * ignorare non protegge piu' niente altrove.
+     */
+    voce.sostenuto = String(insieme[0]?.config ?? '').startsWith('G5-')
+    if (termici.size > 1 && !voce.sostenuto) voce.thermalDrift = true
+
+    // Per una corsa sostenuta la domanda e' un'altra: QUANTO e' scesa, e da
+    // quando. Il primo terzo contro l'ultimo, mai due giri singoli agli estremi.
+    if (voce.sostenuto) {
+        const tassi = insieme
+            .filter((r) => !r.warmup && typeof r.decodeTokensPerSecond === 'number')
+            .sort((a, b) => (a.elapsedMs ?? 0) - (b.elapsedMs ?? 0))
+        if (tassi.length >= 3) {
+            const terzo = Math.floor(tassi.length / 3)
+            const mediaDi = (righe) => righe.reduce((t, r) => t + r.decodeTokensPerSecond, 0) / righe.length
+            const primi = mediaDi(tassi.slice(0, terzo))
+            const ultimi = mediaDi(tassi.slice(-terzo))
+            voce.sustained = {
+                firstThird: arrotonda(primi),
+                lastThird: arrotonda(ultimi),
+                driftPercent: primi > 0 ? arrotonda((ultimi - primi) * 100 / primi) : 0,
+                minutes: arrotonda((tassi[tassi.length - 1].elapsedMs ?? 0) / 60000),
+            }
+            const caduta = tassi.find((r) => r.decodeTokensPerSecond < primi * 0.9)
+            if (caduta) voce.sustained.firstDropAtMinute = arrotonda((caduta.elapsedMs ?? 0) / 60000)
+        }
+    }
 
     for (const [campo, etichetta] of CAMPI) {
         const valori = insieme.map((r) => r[campo]).filter((v) => typeof v === 'number')
@@ -221,6 +251,14 @@ for (const voce of riassunto) {
     if (voce.warning) scrivi(`    ⛔ ${voce.warning}`)
     if (voce.thermalDrift) {
         scrivi('    ⛔ lo stato termico è CAMBIATO dentro l\'insieme: due telefoni diversi')
+    }
+    if (voce.sustained) {
+        const d = voce.sustained
+        scrivi(`    tenuta su ${d.minutes} min — primo terzo ${d.firstThird} tok/s`
+            + ` -> ultimo terzo ${d.lastThird} tok/s (${d.driftPercent > 0 ? '+' : ''}${d.driftPercent}%)`)
+        if (d.firstDropAtMinute !== undefined) {
+            scrivi(`    ⛔ prima caduta sotto il −10%: al minuto ${d.firstDropAtMinute}`)
+        }
     }
     if (voce.mixedEngineBuilds) {
         scrivi(`    ⛔ MOTORI DIVERSI nello stesso insieme: ${voce.mixedEngineBuilds.join(', ')}`)
