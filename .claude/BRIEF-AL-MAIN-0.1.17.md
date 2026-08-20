@@ -54,19 +54,29 @@ giorno in cui la GPU verrà spedita.
 **2. Il forward pin vale il lavoro.** OpenCL contro il pavimento CPU, stesso
 modello, stesso telefono, prefisso freddo:
 
+⛔ Misurato con **microbatch 512 da entrambe le parti**, che è ciò che l'app
+manda davvero — le versioni precedenti di questa tabella usavano 256, cioè un
+ripiego che la produzione non usa mai.
+
 | | CPU | OpenCL | |
 |---|---:|---:|---:|
-| prefill 512 | 43,8 tok/s | **303,4** | **6,9×** |
-| prefill 2048 | 36,8 tok/s | **246,0** | **6,7×** |
-| decodifica | 14,7 tok/s | 19,3 | 1,31× |
-| **TTFT su 2048 token** | **55,7 s** | **8,3 s** | |
+| prefill 512 | 48,6 tok/s | **314,3** | **6,46×** |
+| prefill 2048 | 40,5 tok/s | **259,6** | **6,41×** |
+| **TTFT su 2048 token** | **50,5 s** | **7,9 s** | **6,41×** |
+| decodifica (prompt corto) | 15,2 tok/s | 18,8 | 1,24× |
+| **decodifica dopo 2048 token** | **8,51 tok/s** | **8,07** | ⛔ **0,95×** |
 
-**3. La politica attuale sbaglierebbe.** `TalosBackendChoice` decide con **un
-numero solo**, la velocità di *generazione*. Con quel metro questa GPU vale
-1,10-1,31× e la soglia è **1,25×**: su un prompt lungo **rifiuterebbe** un
-backend che taglia l'attesa da 55,7 a 8,3 secondi. Il guadagno è tutto nel
-prefill, che è quello che la persona aspetta. ⛔ Il brief vieta di toccare la
-politica prima di avere PP/TG/TTFT separati: **adesso ci sono**.
+**3. ⛔⛔ La politica attuale RIFIUTEREBBE questa GPU.** `TalosBackendChoice`
+decide con **un numero solo**, la velocità di *generazione*. Nella
+configurazione che la produzione manda davvero quel numero vale **1,24×**, e la
+soglia è **1,25×**: rifiutato **per un centesimo**, su un dispositivo che porta
+l'attesa di un prompt lungo da **50,5 a 7,9 secondi**.
+
+⛔ E c'è di peggio: sulla decodifica **dopo** un prompt lungo la GPU è **più
+lenta della CPU** — 8,07 contro 8,51 tok/s. ⇒ Non è una soglia da ritoccare, è
+la **grandezza sbagliata**: il guadagno sta tutto nel prefill, che è quello che
+la persona aspetta davvero. Il brief vietava di toccare la politica prima di
+avere PP/TG/TTFT separati: **adesso ci sono**.
 
 **4. Due manopole che nessuno aveva mai provato valgono più del backend.**
 Stessa GPU, stesso pin, solo `flash-attn` e `microbatch` diversi:

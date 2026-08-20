@@ -1124,7 +1124,7 @@ Attention spenta, telefono freddo a ogni corsa:
 | flash-attn / microbatch | PP512 | PP2048 | decodifica (dopo 2048) | TTFT 512 | Stop p95 | G4 |
 |---|---:|---:|---:|---:|---:|:---:|
 | on / 256 — ⛔ **NON è «oggi»**, è il ripiego del JNI | 307 tok/s | 256 tok/s | 8,1 tok/s | 1.663 ms | 4.095 ms | ⛔ |
-| **on / 512** — com'è **davvero oggi** | *in coda* | *in coda* | *in coda* | *in coda* | **5.926 ms** | ⛔ |
+| **on / 512** — com'è **davvero oggi** | **314** | **260** | **8,07** | **1.628** | **5.926 ms** | ⛔ |
 | off / 256 | **312** | **268** | **15,9** | **1.640** | 1.444 ms | ⛔ |
 | off / 128 | 284 | 247 | 15,9 | 1.805 | 300 ms | ⛔ (per 14 ms) |
 | **off / 64** | 227 | 204 | **15,9** | 2.256 | **128 ms** | ✅ |
@@ -1132,17 +1132,13 @@ Attention spenta, telefono freddo a ogni corsa:
 ⇒ Rispetto a **oggi**, la configurazione che passa il cancello — `off / 64` —
 costa **prefill** e regala tutto il resto:
 
-⛔ La colonna «oggi» qui sotto è ancora quella a **256**, cioè il ripiego: le
-righe a 512 sono in misura. Il verso della differenza non cambia — a 512 il
-prefill è più veloce e lo Stop più lento — ma i numeri esatti sì.
-
-| | «oggi» a 256 ⛔ da rifare a 512 | `off / 64` | |
+| | **oggi** (`on / 512`) | `off / 64` | |
 |---|---:|---:|---|
-| prefill 512 | 307 tok/s | 227 | **−26%** |
-| prefill 2048 | 256 tok/s | 204 | **−20%** |
-| decodifica dopo 2048 token | 8,1 tok/s | **15,9** | **+96%** |
-| primo messaggio del processo | 6.314-8.230 ms | **1.646-2.253** | **−4,7 … −6,6 s** |
-| Stop durante il prefill (p95) | 4.095 ms | **128** | **32×** |
+| prefill 512 | 314 tok/s | 227 | **−28%** |
+| prefill 2048 | 260 tok/s | 204 | **−22%** |
+| decodifica dopo 2048 token | 8,07 tok/s | **15,9** | **+97%** |
+| primo messaggio del processo | 6.233 ms | **1.646-2.253** | **−4,0 … −4,6 s** |
+| Stop durante il prefill (p95) | **5.926 ms** | **128** | **46×** |
 
 ⛔ **E il prefill non è una perdita netta**, perché la persona non aspetta il
 prefill: aspetta il **TTFT**, e su 512 token quello passa da 1.663 a 2.256 ms —
