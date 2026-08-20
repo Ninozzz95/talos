@@ -1524,9 +1524,25 @@ Contesto 16384, così 8192 rientra nel tetto prudente di metà contesto:
 token la persona aspetta **un minuto** prima della prima parola, poi riceve
 tre token al secondo. ⛔ Questo **sulla GPU**: è il numero buono.
 
-⛔ Onestà: durante PP8192 lo stato termico era già `moderate`, quindi una parte
-della caduta è strozzamento e non lunghezza. Le due cause non le ho separate —
-servirebbe una corsa PP8192 da freddo e sola, ed è lavoro non fatto.
+#### ✅ E le due cause SONO state separate
+
+La corsa qui sopra arrivava a 8.192 token dopo aver già macinato 512 e 2.048,
+cioè col telefono a `moderate`. Rifatta con **quel bersaglio solo, da freddo**
+(la manopola `talosPrefillTargets` esiste per questo):
+
+| | prefill | TTFT |
+|---|---:|---:|
+| PP8192 dopo 512 e 2048 (telefono caldo) | 130-139 tok/s | 59-64 s |
+| **PP8192 da solo e da freddo** | **155,6 tok/s** | **52,6 s** |
+
+⇒ Lo strozzamento valeva **circa il 14%**; il resto è **lunghezza**. Il prefill
+cala da solo al crescere del prompt — **314 → 260 → 156 tok/s** su 512, 2.048 e
+8.192 token, tutti da freddo — ed è la forma attesa di un'attenzione quadratica,
+non un difetto.
+
+⛔ **E il numero che conta resta brutto**: su un prompt da 8.192 token la persona
+aspetta **52,6 secondi** prima della prima parola **anche partendo da telefono
+freddo**. Non era colpa del calore.
 
 ### ⭐⛔ IL CONFRONTO VERO — entrambi i lati al microbatch di PRODUZIONE
 
