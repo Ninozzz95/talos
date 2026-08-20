@@ -1,4 +1,5 @@
 import { talosResearchRecheckStanding, type TalosResearchRecheck } from '@/lib/research/researchRecheck'
+import { talosResearchRecheckBlock } from '@/lib/research/researchRecheckHistory'
 
 /**
  * The re-check, written down so it does not have to be paid for twice.
@@ -10,8 +11,13 @@ import { talosResearchRecheckStanding, type TalosResearchRecheck } from '@/lib/r
  * The plainest sentence in the file is the one about unreachable sources: the
  * page is gone AND the text is still here. That is the sentence no competitor
  * can write, and it is worth spending a line on.
+ *
+ * ⛔ E porta in coda un blocco che si RILEGGE esatto: la prosa qui sopra è
+ * per una persona, e ricavarne i numeri ripassando l’italiano stampato è il
+ * modo in cui una misura diventa un’invenzione. Senza, «quanto vale oggi un
+ * rapporto di ieri» resta una domanda a cui il file non sa rispondere.
  */
-export function talosResearchRecheckDocument(question: string, recheck: TalosResearchRecheck): string {
+export function talosResearchRecheckDocument(question: string, recheck: TalosResearchRecheck, runId: string): string {
     const standing = talosResearchRecheckStanding(recheck)
 
     return [
@@ -44,5 +50,8 @@ export function talosResearchRecheckDocument(question: string, recheck: TalosRes
                     : ''
             return [`- ${source.title} — ${source.url}`, `  ${head}`, quotes].filter(Boolean).join('\n')
         }),
+        // Il `filter` qui sotto toglie le righe vuote: la riga bianca prima del
+        // blocco va dentro la stringa, se no prosa e recinto si toccano.
+        '\n' + talosResearchRecheckBlock(runId, recheck),
     ].filter((line) => line !== '').join('\n')
 }

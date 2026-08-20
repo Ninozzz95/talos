@@ -2838,6 +2838,10 @@ export const TALOS_IT_MESSAGES = {
         pdfToneBriefWhy: 'Una pagina: la risposta, quello che regge e quello che non regge. Niente citazioni.',
         pdfToneDossier: 'Dossier delle prove',
         pdfToneDossierWhy: 'Affermazione, verdetto e fonte sulla stessa riga. Per chi deve controllare, non leggere.',
+        pdfBibtex: 'Solo le fonti — BibTeX',
+        pdfBibtexWhy: 'Per Zotero, Mendeley o una bibliografia LaTeX. Solo le pagine: della ricerca non esce niente.',
+        pdfRis: 'Solo le fonti — RIS',
+        pdfRisWhy: 'Per EndNote e per chi importa RIS. Le stesse pagine, nell’altro formato.',
         pdfMarkdown: 'Il testo grezzo (.md)',
         pdfMarkdownWhy: 'Il file come TALOS l’ha scritto, da aprire altrove.',
         pdfBuilding: 'Sto preparando il PDF…',
@@ -3063,6 +3067,23 @@ export const TALOS_IT_MESSAGES = {
             synthesise: 'sintesi',
             verify: 'verifica',
         },
+        // Le due schede che il rapporto tiene APERTE. Il nome dice cosa si
+        // vede, non il verdetto: «contesa» da sola si legge come una sfumatura
+        // di «parziale», che e' proprio cio' che non e'.
+        tenutaNelTempo: 'Tenuta nel tempo',
+        tenutaPrima: 'prima verifica — {standing} passaggi citati su {total} sono ancora lì',
+        // Conteggi, non plurali: «1 pagine cambiate» è la frase che questa
+        // forma esiste per evitare, e ogni conteggio può essere zero.
+        tenutaCambio: 'pagine cambiate: {changed} · non rispondono: {unreachable} · passaggi decaduti: {lost}',
+        tenutaSuiPassaggi: 'Contata sui passaggi citati, non sulle pagine: una pagina cambiata altrove non ha tolto niente a questo rapporto.',
+        metaFonti: '{count} fonti',
+        // La tilde e' la parte onesta: e' quello che i motori hanno
+        // dichiarato, e arrotondano. Un numero secco prometterebbe una
+        // contabilita' che non facciamo.
+        metaToken: '~{count} token',
+        contesaAperta: 'La contesa, aperta',
+        eccedeTitolo: 'Un’affermazione che eccede la sua fonte',
+        apriLaffermazione: 'Apri l’affermazione',
         dissensoTitolo: 'Le fonti non concordano',
         dissensoAFavore: 'Dice di sì',
         dissensoContro: 'Dice di no',
