@@ -1765,6 +1765,33 @@ S5 IDENTICO   S6 IDENTICO   S7 IDENTICO
 di OpenCL invece di quelli della CPU. ⛔ Resta stretta come prima — tre dei sette
 casi contengono testo generato — ma adesso è la prova **giusta**.
 
+#### ✅ E su una SECONDA ARCHITETTURA il candidato regge — anzi, guadagna
+
+Tutte le misure fin qui sono su un modello solo, e su questo backend
+l'architettura conta davvero (i MoE vengono rifiutati). ⇒ Rifatto il confronto su
+**Gemma 3 4B**, che usa attenzione a finestra scorrevole — cioè il caso in cui la
+Flash Attention si comporta in modo suo:
+
+| | oggi (`on`/512) | candidato (`off`/192) | |
+|---|---:|---:|---|
+| prefill 512 | 256,8 tok/s | 255,9 | −0,4% |
+| **prefill 2048** | 208,6 tok/s | **238,6** | ⭐ **+14,4%** |
+| decodifica dopo 2048 | 10,8 tok/s | **12,7** | **+18%** |
+| decodifica (prompt corto) | 14,4 tok/s | 14,3 | −0,7% |
+| **primo messaggio del processo** | 6.862 ms | **2.006** | **−4,9 s** |
+
+⇒ ⭐ **Su Gemma il candidato non costa niente: guadagna su ogni asse**, e sul
+prefill lungo di **oltre il 14%**. Il −5% visto su Llama **non è una legge del
+candidato**: è una proprietà di quel modello.
+
+⛔ E una differenza da dire: il guadagno sulla decodifica è **+18% su Gemma**
+contro **+97% su Llama**. Coerente con l'architettura — Gemma usa la finestra
+scorrevole, quindi la Flash Attention pesa meno — ma è la conferma che la
+grandezza del vantaggio **dipende dal modello**, mentre il segno no.
+
+⇒ Su due architetture su due, e sull'asse che la persona sente davvero (il primo
+messaggio), il candidato vince: **−4,5 s su Llama, −4,9 s su Gemma**.
+
 ### 📋 La politica a un numero solo — la proposta, non applicata
 
 `TalosBackendChoice.choose()` decide con **un numero**: `tokensPerSecond`. Il
