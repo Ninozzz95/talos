@@ -60,7 +60,7 @@ Stessa GPU, stesso pin, solo `flash-attn` e `microbatch` diversi:
 |---|---:|---:|---|
 | prefill 512 | 307 tok/s | 227 | −26% |
 | decodifica dopo 2.048 token | 8,1 tok/s | **15,9** | **+96%** |
-| primo messaggio del processo | ~7.000 ms | **2.253** | **−4,7 s** |
+| primo messaggio del processo | 6.314-8.230 ms | **1.646-2.253** | **−4,7 … −6,6 s** |
 | Stop durante il prefill (p95) | 4.095 ms | **128** | **32×** |
 | cancello G4 | ⛔ FAILED | ✅ **PASSED** | |
 
@@ -83,7 +83,7 @@ non una misura scarsa: **non esistono numeri Vulkan**.
 2. ⛔⛔ **La Flash Attention, spenta o accesa?** Oggi è **accesa** senza che
    nessuno l'abbia scelto: il default di llama.cpp è `AUTO`, e su questo telefono
    `AUTO` risolve in acceso. Spenta, su ogni asse misurato, va **meglio** —
-   6,5 secondi in meno sul primo messaggio, decodifica **doppia** dopo un prompt
+   da 4,7 a 6,6 secondi in meno sul primo messaggio, decodifica **doppia** dopo un prompt
    lungo, e le sette voci della suite golden **identiche**. Una riga in
    `talos_apri_modello`. ⛔ Vale per *questo* backend su *questa* GPU: upstream
    ha «migliorare la Flash Attention» fra i propri TODO.

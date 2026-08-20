@@ -1029,7 +1029,8 @@ PP512  giro di riscaldamento   pp  80,7 tok/s   TTFT 6.343 ms
 PP512  giri 0-4                pp 307   tok/s   TTFT 1.662 ms
 ```
 
-⇒ **+4,7 secondi una volta per processo**, che la persona paga sul primo
+⇒ **da +4,7 a +6,6 secondi una volta per processo** — l'intervallo di tre
+misure, non un numero solo — che la persona paga sul primo
 messaggio dopo aver aperto un modello — e che nessuna delle nostre tabelle
 mostrava, perché il giro di riscaldamento viene buttato via per costruzione.
 ⛔ Non è la cache dei kernel (provato sopra: con cache calda restano 2.760 ms).
@@ -1092,12 +1093,12 @@ costa **prefill** e regala tutto il resto:
 | prefill 512 | 307 tok/s | 227 | **−26%** |
 | prefill 2048 | 256 tok/s | 204 | **−20%** |
 | decodifica dopo 2048 token | 8,1 tok/s | **15,9** | **+96%** |
-| primo messaggio del processo | ~7.000 ms | **2.253** | **−4,7 s** |
+| primo messaggio del processo | 6.314-8.230 ms | **1.646-2.253** | **−4,7 … −6,6 s** |
 | Stop durante il prefill (p95) | 4.095 ms | **128** | **32×** |
 
 ⛔ **E il prefill non è una perdita netta**, perché la persona non aspetta il
 prefill: aspetta il **TTFT**, e su 512 token quello passa da 1.663 a 2.256 ms —
-**+593 ms una volta**, contro 4,7 secondi risparmiati sul primo messaggio e una
+**+593 ms una volta**, contro 4,7-6,6 secondi risparmiati sul primo messaggio e una
 decodifica doppia per tutto il resto della conversazione. Su 2.048 token il
 conto si inverte: TTFT 8.006 → 10.043 ms, **+2 secondi**, ed è lì che la scelta
 diventa un compromesso vero invece che un guadagno secco.
@@ -1138,7 +1139,9 @@ ogni blocco** (`Thermal Status: 0` verificato prima di ognuno):
 ⇒ **`auto` e `on` sono la stessa cosa** su questo dispositivo, riga per riga. E
 `off` vince su **ogni** metrica misurata:
 
-1. **−6,5 secondi sul primo messaggio** dopo aver aperto un modello. Con `off`
+1. **Da 4,7 a 6,6 secondi in meno sul primo messaggio** dopo aver aperto un
+   modello — misurato tre volte con FA accesa (6.314, 8.031, 8.230 ms) contro
+   1.646 con FA spenta, ed è un **intervallo**, non un valore. Con `off`
    la riga `lazy-compiling flash_attn prepass` non compare affatto, e il giro di
    riscaldamento smette di essere un'anomalia: 1.646 ms contro 1.635 a regime.
 2. **La decodifica dopo un prompt lungo RADDOPPIA** — 15,9 contro 8,1 tok/s. E
@@ -1386,7 +1389,7 @@ forma che proporrei, con i numeri che la giustificano.
 
 1. ⛔⛔ **La Flash Attention spenta sui bersagli OpenCL.** Non è più una domanda
    aperta, è una **proposta con la misura sotto**: su questo dispositivo `off`
-   vince su ogni asse — 6,5 secondi in meno sul primo messaggio, decodifica
+   vince su ogni asse — da 4,7 a 6,6 secondi in meno sul primo messaggio, decodifica
    **doppia** dopo un prompt lungo, prefill leggermente migliore. E oggi la
    produzione gira **accesa**, perché il default di llama.cpp è `AUTO` e qui
    `AUTO` risolve in acceso. ⛔ Tocca `talos_apri_modello`: decisione
