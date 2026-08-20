@@ -43,7 +43,10 @@ import { talosResearchSolidity, type TalosResearchStanding } from '@/lib/researc
 import { talosResearchVerifiedStanding } from '@/lib/research/researchVerification'
 import { talosResearchFidelity } from '@/lib/research/researchFidelity'
 import { talosResearchLedger } from '@/lib/research/researchLedger'
-import { talosResearchIndependentSources } from '@/lib/research/researchIndependence'
+import {
+    talosResearchIndependentSources,
+    talosResearchRegistrableHost,
+} from '@/lib/research/researchIndependence'
 import { talosResearchRecheckStanding, type TalosResearchRecheck } from '@/lib/research/researchRecheck'
 import type { TalosResearchRecheckPasso } from '@/lib/research/researchRecheckHistory'
 import {
@@ -398,6 +401,17 @@ const failureReasons = computed(() => [...new Set(failedSteps.value
 const fonti = computed(() => report.value?.sources.length ?? 0)
 const token = computed(() => (current.value ? talosResearchSpent(current.value).tokens : 0))
 const numero = (quanti: number) => new Intl.NumberFormat(locale.value).format(quanti)
+
+/**
+ * Il dominio della fonte, quando si riesce a leggerlo.
+ *
+ * ⛔ FOTOGRAFATO sul Pad il 2026-08-20: due righe nell’elenco delle fonti,
+ * tutte e due «GGUF», tutte e due «stesso sito di un’altra fonte». Sono due
+ * pagine diverse, e a colpo d’occhio erano la stessa riga scritta due volte.
+ * Il titolo lo decide la pagina, e le pagine si chiamano come gli pare: il
+ * dominio è l’unica cosa che distingue sempre.
+ */
+const dominio = (url: string): string | null => talosResearchRegistrableHost(url)
 
 const contesa = computed(() => talosResearchContestedCard(report.value?.claims))
 const eccede = computed(() => talosResearchOverreachingCard(report.value?.claims))
@@ -961,6 +975,7 @@ function openSource(index: number): void {
                                     <span class="mt-1 block text-2xs text-[var(--talos-muted)]">
                                         {{ source.publishedAt ? talosPublishedOn(source.publishedAt, locale) : t('research.noDate') }} ·
                                         {{ source.obtained === 'snippet' ? t('research.onlySnippet') : t('research.pageRead') }}
+                                        <template v-if="dominio(source.url)"> · <span class="font-mono">{{ dominio(source.url) }}</span></template>
                                     </span>
                                     <!--
                                         ⛔ Dire se questa fonte è una PROVA o una ECO.

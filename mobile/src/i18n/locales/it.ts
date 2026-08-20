@@ -3029,7 +3029,11 @@ export const TALOS_IT_MESSAGES = {
         fedeltaAncoraggio: 'Ancoraggio',
         fedeltaAncoraggioSpiega: 'quanto le affermazioni giudicate reggono davvero',
         fedeltaIndipendenti: 'Fonti indipendenti',
-        fedeltaIndipendentiSpiega: 'prove distinte, non indirizzi: tre siti che riprendono lo stesso comunicato contano uno. La cifra dice quante ne restano sul totale delle fonti raccolte.',
+        // ⛔ CORTA. Avevo allungato la frase per compensare le parole tolte dal
+        //   valore, e sul telefono la cella occupava CINQUE righe contro le due
+        //   delle sue gemelle: la griglia si sbilanciava. «6/10» dice da solo
+        //   che è una parte di un totale.
+        fedeltaIndipendentiSpiega: 'prove distinte, non indirizzi: tre siti che riprendono lo stesso comunicato contano uno',
         // ⛔ Un punteggio senza data è una promessa che scade in silenzio: le
         // pagine citate muoiono, ed è il motivo per cui FACT è considerato
         // inaffidabile nei benchmark.

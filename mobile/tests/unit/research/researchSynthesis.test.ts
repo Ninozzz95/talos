@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+    talosResearchDistinctSources,
     talosResearchParseSynthesis,
     talosResearchReportStanding,
     talosResearchSynthesisPrompt,
@@ -136,5 +137,82 @@ describe('the template handed back instead of an answer', () => {
 
         expect(report.claims).toHaveLength(1)
         expect(report.claims[0]!.text).toBe('Il monte è alto 4808 metri')
+    })
+})
+
+
+/**
+ * ⛔⛔ DOPPIONI-01 — la stessa pagina, contata una volta per linea d’indagine.
+ *
+ * FOTOGRAFATO sul Pad il 2026-08-20: il rapporto diceva «10 fonti» e l’elenco
+ * portava wikipedia.org due volte, ultralytics.com due volte, ibm.com due
+ * volte, huggingface.co due volte. Sei pagine contate dieci — e la misura
+ * dell’indipendenza, che esiste per non gonfiare i numeri, era la prima
+ * gonfiata.
+ */
+describe('la stessa pagina non si conta due volte', () => {
+    const pagina = (url: string, text: string, title = 'T') => ({
+        url, title, publishedAt: null, text, obtained: 'page' as const,
+    })
+    const linea = (...sources: ReturnType<typeof pagina>[]) => ({
+        query: 'q', sources, characters: 0, truncated: false,
+    } as never)
+
+    it('due linee che trovano la stessa pagina la portano UNA volta', () => {
+        const uscita = talosResearchDistinctSources([
+            linea(pagina('https://a.example/x', 'testo'), pagina('https://b.example/y', 'altro')),
+            linea(pagina('https://a.example/x', 'testo')),
+        ])
+        expect(uscita.map((f) => f.url)).toEqual(['https://a.example/x', 'https://b.example/y'])
+    })
+
+    it('⛔ e si tiene la copia col TESTO PIÙ LUNGO, non la prima', () => {
+        // Due rami possono aver letto la stessa pagina con fortuna diversa,
+        // e la copia più povera toglierebbe passaggi che l’altra aveva.
+        const uscita = talosResearchDistinctSources([
+            linea(pagina('https://a.example/x', 'corto')),
+            linea(pagina('https://a.example/x', 'un testo molto piu lungo e completo')),
+        ])
+        expect(uscita).toHaveLength(1)
+        expect(uscita[0]!.text).toBe('un testo molto piu lungo e completo')
+    })
+
+    it('il frammento e la barra finale non fanno due pagine', () => {
+        const uscita = talosResearchDistinctSources([
+            linea(
+                pagina('https://a.example/x', 't'),
+                pagina('https://a.example/x/', 't'),
+                pagina('https://a.example/x#dove', 't'),
+            ),
+        ])
+        expect(uscita).toHaveLength(1)
+    })
+
+    it('⛔ e AL CONTRARIO: la QUERY resta, perché distingue due articoli', () => {
+        // Su moltissimi siti ?id=12 e ?id=13 sono due pagine diverse:
+        // toglierla fonderebbe fonti che non c’entrano niente.
+        const uscita = talosResearchDistinctSources([
+            linea(pagina('https://a.example/p?id=12', 't'), pagina('https://a.example/p?id=13', 't')),
+        ])
+        expect(uscita).toHaveLength(2)
+    })
+
+    it('un indirizzo illeggibile resta sé stesso', () => {
+        const uscita = talosResearchDistinctSources([
+            linea(pagina('non-un-indirizzo', 't'), pagina('nemmeno-questo', 't')),
+        ])
+        expect(uscita).toHaveLength(2)
+    })
+
+    it('e la numerazione che vede il modello non salta', () => {
+        // Il catalogo numera da 1 in avanti sulla lista deduplicata: un [6]
+        // che punta alla stessa pagina di [1] è il modo esatto in cui due
+        // affermazioni «da fonti diverse» vengono dalla stessa.
+        const { prompt } = talosResearchSynthesisPrompt('q', [
+            linea(pagina('https://a.example/x', 'testo', 'Uno')),
+            linea(pagina('https://a.example/x', 'testo', 'Uno')),
+        ] as never)
+        expect(prompt).toContain('[1] Uno')
+        expect(prompt).not.toContain('[2]')
     })
 })
