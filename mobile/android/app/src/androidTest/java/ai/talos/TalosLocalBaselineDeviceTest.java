@@ -1,0 +1,656 @@
+package ai.talos;
+
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import android.content.Context;
+import android.os.BatteryManager;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.util.Log;
+
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
+
+import org.json.JSONObject;
+import org.junit.Assume;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * ⛔ SOLO RICERCA — il PAVIMENTO C0: la CPU, misurata come si deve.
+ *
+ * È il riferimento contro cui ogni acceleratore andrà confrontato, e per questo
+ * conta più di qualunque numero che verrà dopo: un pavimento misurato male
+ * rende falsa ogni conclusione costruita sopra.
+ *
+ * ⛔⛔ TRE COSE CHE QUESTO TEST FA, E CHE UN BENCHMARK INGENUO NON FA.
+ *
+ * <ol>
+ *   <li><b>Apre con {@code none}, non con «niente».</b> La CPU è una decisione
+ *       esplicita — lista dei dispositivi col solo terminatore — non l'assenza
+ *       di una scelta. Il giorno in cui un acceleratore sarà presente, «nessuna
+ *       richiesta» e «CPU» smetteranno di coincidere, e il riferimento dovrà
+ *       essere questo.</li>
+ *   <li><b>Separa prefill, primo token e decodifica.</b> Un solo
+ *       {@code tokensPerSecond} non basta a scegliere un backend: un motore che
+ *       vince la decodifica e perde il primo token è più lento per la persona
+ *       che aspetta, e con un numero solo la differenza è invisibile.</li>
+ *   <li><b>Spegne il riuso del prefisso.</b> Due giri con stati di prefisso
+ *       diversi non sono confrontabili, e confrontarli attribuisce a un backend
+ *       il merito di una cache. Ogni riga registra {@code reusedTokens} proprio
+ *       perché si possa verificare che sia zero.</li>
+ * </ol>
+ *
+ * ⛔ Le righe grezze si conservano tutte: mai solo una mediana. Una mediana
+ * senza i giri che l'hanno prodotta non si può rileggere, e su un telefono la
+ * dispersione È il dato.
+ *
+ * ⛔⛔ NON con {@code ./gradlew connectedDebugAndroidTest}: quel task
+ * disinstalla l'app alla fine e si porta via i modelli e queste misure. Si
+ * lancia con {@code node scripts/research/run-device-tests.mjs}.
+ */
+@RunWith(AndroidJUnit4.class)
+public class TalosLocalBaselineDeviceTest {
+
+    private static final String TAG = "TalosLocalBaseline";
+    private static final String ARTIFACT_DIR = "research/local-backend";
+
+    /** ⛔ Il brief ne chiede 5 come minimo, più uno di riscaldamento scartato. */
+    private static final int GIRI_PREDEFINITI = 5;
+
+    private static Context context() {
+        return InstrumentationRegistry.getInstrumentation().getTargetContext();
+    }
+
+    private static int argomentoIntero(String nome, int predefinito) {
+        String raw = InstrumentationRegistry.getArguments().getString(nome, "");
+        if (raw == null || raw.isEmpty()) return predefinito;
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException storto) {
+            return predefinito;
+        }
+    }
+
+    // ————————————————— la fixture —————————————————
+
+    private static final List<String> ostacoli = new ArrayList<>();
+
+    private static void raccogli(File directory, List<File> into) {
+        try (java.nio.file.DirectoryStream<java.nio.file.Path> stream =
+                     java.nio.file.Files.newDirectoryStream(directory.toPath())) {
+            for (java.nio.file.Path entry : stream) {
+                File file = entry.toFile();
+                if (file.isDirectory()) raccogli(file, into);
+                else if (file.getName().endsWith(".gguf")) into.add(file);
+            }
+        } catch (java.nio.file.NoSuchFileException assente) {
+            // Vuoto è un esito, non un guasto.
+        } catch (Exception impedito) {
+            ostacoli.add(directory.getAbsolutePath() + " → " + impedito);
+        }
+    }
+
+    private static File fixture() {
+        ostacoli.clear();
+        String indicato = InstrumentationRegistry.getArguments().getString("talosModelPath", "");
+        File model;
+        if (indicato != null && !indicato.isEmpty()) {
+            model = new File(indicato);
+        } else {
+            File root = context().getExternalFilesDir(null);
+            List<File> trovati = new ArrayList<>();
+            if (root != null) raccogli(new File(root, "models"), trovati);
+            model = trovati.isEmpty() ? null : trovati.get(0);
+        }
+        for (String ostacolo : ostacoli) Log.w(TAG, "non leggibile: " + ostacolo);
+        Assume.assumeTrue(
+                ostacoli.isEmpty()
+                        ? "nessun GGUF leggibile sotto files/models"
+                        : "files/models non è leggibile dall'app: " + ostacoli,
+                model != null && model.isFile());
+        return model;
+    }
+
+    // ————————————————— lo stato del dispositivo —————————————————
+
+    /**
+     * ⛔ Lo stato PRIMA e DOPO, non solo prima.
+     *
+     * Una corsa che parte fredda e finisce a `severe` ha misurato due telefoni
+     * diversi, e la media dei due non descrive nessuno dei due.
+     */
+    private static JSONObject statoDispositivo() throws Exception {
+        Context context = context();
+        JSONObject stato = new JSONObject();
+        stato.put("thermal", TalosThermal.read(context) == null ? JSONObject.NULL
+                : TalosThermal.read(context));
+
+        Intent battery = context.registerReceiver(
+                null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if (battery != null) {
+            int livello = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            int scala = battery.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+            stato.put("batteryPercent", livello >= 0 && scala > 0 ? (livello * 100 / scala) : -1);
+            int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+            stato.put("charging", status(status));
+        }
+        Runtime runtime = Runtime.getRuntime();
+        stato.put("javaHeapUsedBytes", runtime.totalMemory() - runtime.freeMemory());
+        return stato;
+    }
+
+    private static boolean status(int stato) {
+        return stato == BatteryManager.BATTERY_STATUS_CHARGING
+                || stato == BatteryManager.BATTERY_STATUS_FULL;
+    }
+
+    // ————————————————— gli artifact —————————————————
+
+    private static File artifact(String name) throws Exception {
+        File root = context().getExternalFilesDir(null);
+        assertNotNull("external files dir assente", root);
+        File directory = new File(root, ARTIFACT_DIR);
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw new IllegalStateException("cartella artifact non creata: " + directory);
+        }
+        return new File(directory, name);
+    }
+
+    /** Una riga per giro, in coda. ⛔ Mai una mediana al posto dei giri. */
+    private static void registra(JSONObject riga) throws Exception {
+        File file = artifact("runs.jsonl");
+        try (FileOutputStream out = new FileOutputStream(file, true)) {
+            out.write((riga.toString() + "\n").getBytes(StandardCharsets.UTF_8));
+        }
+        Log.i(TAG, riga.toString());
+    }
+
+    // ————————————————— i prompt calibrati —————————————————
+
+    /**
+     * Un prompt che vale davvero N token su QUESTO tokenizzatore.
+     *
+     * ⛔ Non si stima a parole: si chiede al modello, si aggiunge, si richiede.
+     * «PP512» con 380 token dentro è un'etichetta che mente, e mentirebbe in
+     * modo diverso su ogni modello — cioè renderebbe incomparabili proprio i
+     * confronti per cui esiste.
+     */
+    private static String promptDa(long handle, int token) {
+        String[] parole = {
+            "il", "telefono", "misura", "sé", "stesso", "mentre", "genera", "token",
+            "e", "la", "differenza", "fra", "prefill", "decodifica", "conta", "molto",
+            "perché", "chi", "aspetta", "guarda", "il", "primo", "carattere", "apparire",
+        };
+        StringBuilder testo = new StringBuilder();
+        int indice = 0;
+        int conteggio = 0;
+        // Si cresce a blocchi e si verifica: chiedere il conteggio a ogni parola
+        // costerebbe più della misura che stiamo preparando.
+        while (conteggio < token) {
+            for (int i = 0; i < 32; i += 1) {
+                testo.append(parole[indice % parole.length]).append(' ');
+                indice += 1;
+            }
+            conteggio = TalosLlamaNative.nativePromptTokens(handle, testo.toString());
+            if (conteggio < 0) return testo.toString();
+        }
+        // Si taglia all'indietro fino a non superare il bersaglio.
+        while (conteggio > token && testo.length() > 2) {
+            int spazio = testo.lastIndexOf(" ", testo.length() - 2);
+            if (spazio <= 0) break;
+            testo.setLength(spazio + 1);
+            conteggio = TalosLlamaNative.nativePromptTokens(handle, testo.toString());
+        }
+        return testo.toString();
+    }
+
+    private static long apriCpu(File model, int contesto, int thread) {
+        // ⛔ `none`: la CPU per DECISIONE. Vedi la nota in testa alla classe.
+        long handle = TalosLlamaNative.nativeOpenTargeted(
+                model.getAbsolutePath(), thread, contesto, 0, true, thread, 0, "f16",
+                "none", "", "default");
+        assertNotEquals("apertura fallita: " + TalosLlamaNative.nativeLastOpenError(),
+                0L, handle);
+        return handle;
+    }
+
+    private static void pronta() {
+        assertTrue("libtalos_llama.so non è nell'APK", TalosLlamaNative.AVAILABLE);
+        TalosLlamaNative.ensureReady(context());
+    }
+
+    // ————————————————— L0 / L1: il carico —————————————————
+
+    /**
+     * Quanto costa APRIRE, la prima volta e la seconda.
+     *
+     * ⛔ Non è un dettaglio di contorno: è la misura che ha già spiegato un
+     * primo messaggio da 111 secondi, quando il modello veniva aperto due volte
+     * senza che nessuno lo sapesse.
+     */
+    @Test
+    public void c0Carico() throws Exception {
+        pronta();
+        File model = fixture();
+        int thread = argomentoIntero("talosThreads", 4);
+
+        JSONObject prima = statoDispositivo();
+        for (int giro = 0; giro < 2; giro += 1) {
+            long inizio = System.nanoTime();
+            long handle = apriCpu(model, 4096, thread);
+            long apertoMs = (System.nanoTime() - inizio) / 1_000_000L;
+
+            JSONObject riga = intestazione(model, "load", thread, 4096);
+            riga.put("phase", giro == 0 ? "L0" : "L1");
+            riga.put("openMs", apertoMs);
+            riga.put("opensSinceStart", TalosLlamaNative.nativeOpensSinceStart());
+            riga.put("contextTokensEffective", TalosLlamaNative.nativeContextTokens(handle));
+            riga.put("kvEffective", TalosLlamaNative.nativeKvCacheType(handle));
+            riga.put("deviceBefore", prima);
+            riga.put("deviceAfter", statoDispositivo());
+            registra(riga);
+
+            TalosLlamaNative.nativeClose(handle);
+            assertTrue("apertura sospetta: " + apertoMs + " ms", apertoMs > 0);
+        }
+    }
+
+    // ————————————————— PP / TG / TTFT —————————————————
+
+    /**
+     * Il prefill e la decodifica, separati — che è il punto.
+     *
+     * ⛔ Un giro di riscaldamento scartato e poi i giri veri. Il primo giro di
+     * un processo paga cose che non si ripetono, e mescolarlo agli altri
+     * sposta la mediana senza che si veda da dove.
+     */
+    @Test
+    public void c0PrefillEDecodifica() throws Exception {
+        pronta();
+        File model = fixture();
+        int thread = argomentoIntero("talosThreads", 4);
+        int giri = argomentoIntero("talosRuns", GIRI_PREDEFINITI);
+        int contesto = argomentoIntero("talosContext", 8192);
+        int[] bersagli = bersagliDiPrefill(contesto);
+
+        long handle = apriCpu(model, contesto, thread);
+        try {
+            for (int token : bersagli) {
+                String prompt = promptDa(handle, token);
+                int veri = TalosLlamaNative.nativePromptTokens(handle, prompt);
+                Log.i(TAG, "PP" + token + ": prompt da " + veri + " token");
+
+                // ⛔ Il riscaldamento si esegue e si BUTTA, e si dice che è
+                // stato buttato: un giro scartato in silenzio è un giro che
+                // qualcuno riscoprirà come discrepanza.
+                misura(handle, model, prompt, veri, 8, thread, contesto, "PP" + token, -1);
+
+                for (int giro = 0; giro < giri; giro += 1) {
+                    misura(handle, model, prompt, veri, 8, thread, contesto,
+                            "PP" + token, giro);
+                }
+            }
+
+            // TG256: prompt corto, generazione lunga. Qui si misura la
+            // decodifica, e il prefill deve pesare il meno possibile.
+            String breve = promptDa(handle, 32);
+            int veriBrevi = TalosLlamaNative.nativePromptTokens(handle, breve);
+            misura(handle, model, breve, veriBrevi, 256, thread, contesto, "TG256", -1);
+            for (int giro = 0; giro < giri; giro += 1) {
+                misura(handle, model, breve, veriBrevi, 256, thread, contesto, "TG256", giro);
+            }
+        } finally {
+            TalosLlamaNative.nativeClose(handle);
+        }
+    }
+
+    /**
+     * I bersagli di prefill che il contesto regge davvero.
+     *
+     * ⛔ Chiedere PP8192 dentro un contesto da 8192 non misura il prefill: lo
+     * fa fallire, o peggio lo fa riuscire troncando in silenzio. Si sceglie in
+     * base a ciò che c'è, e si dichiara.
+     */
+    private static int[] bersagliDiPrefill(int contesto) {
+        List<Integer> scelti = new ArrayList<>();
+        for (int candidato : new int[] { 512, 2048, 8192 }) {
+            // Metà del contesto è il tetto prudente: sopra, la generazione che
+            // segue non avrebbe dove stare.
+            if (candidato <= contesto / 2) scelti.add(candidato);
+        }
+        if (scelti.isEmpty()) scelti.add(Math.max(64, contesto / 4));
+        int[] out = new int[scelti.size()];
+        for (int i = 0; i < out.length; i += 1) out[i] = scelti.get(i);
+        Log.i(TAG, "bersagli di prefill per contesto " + contesto + ": " + scelti);
+        return out;
+    }
+
+    private void misura(long handle, File model, String prompt, int promptTokens,
+                        int maxTokens, int thread, int contesto,
+                        String configurazione, int giro) throws Exception {
+        JSONObject prima = statoDispositivo();
+        long inizio = System.nanoTime();
+        // ⛔ `stopAtEndOfGeneration=false`: fermarsi quando il modello ha finito
+        // misurerebbe quanto è loquace, non quanto è veloce il telefono.
+        // ⛔ `reusePrefix=false`: due giri con stati diversi non si confrontano.
+        String testo = TalosLlamaNative.nativeGenerate(handle, prompt, maxTokens, false, false);
+        long muroMs = (System.nanoTime() - inizio) / 1_000_000L;
+
+        JSONObject riga = intestazione(model, configurazione, thread, contesto);
+        riga.put("run", giro);
+        riga.put("warmup", giro < 0);
+        riga.put("wallMs", muroMs);
+        riga.put("promptTokensRequested", promptTokens);
+        riga.put("maxTokens", maxTokens);
+        riga.put("produced", TalosLlamaNative.nativeTokensProduced(handle));
+        riga.put("emptyText", testo == null || testo.isEmpty());
+        riga.put("deviceBefore", prima);
+        riga.put("deviceAfter", statoDispositivo());
+
+        String tempi = TalosLlamaNative.nativeLastTimings(handle);
+        if (tempi != null && !tempi.isEmpty()) {
+            JSONObject dettaglio = new JSONObject(tempi);
+            riga.put("timings", dettaglio);
+            // I due tassi che il brief vuole separati, calcolati qui una volta
+            // sola così che nessuno li ricavi in modo diverso più tardi.
+            long prefill = dettaglio.optLong("prefillMs", 0);
+            long primo = dettaglio.optLong("firstTokenMs", 0);
+            long totale = dettaglio.optLong("totalMs", 0);
+            int nuovi = dettaglio.optInt("newTokens", 0);
+            int prodotti = dettaglio.optInt("producedTokens", 0);
+            if (prefill > 0 && nuovi > 0) {
+                riga.put("promptTokensPerSecond", round(nuovi * 1000.0 / prefill));
+            }
+            if (totale > primo && prodotti > 0) {
+                riga.put("decodeTokensPerSecond", round(prodotti * 1000.0 / (totale - primo)));
+            }
+            riga.put("ttftMs", primo);
+            // ⛔ La prova che il prefisso non ha aiutato. Se un giorno non fosse
+            // zero, ogni confronto costruito su queste righe sarebbe falso.
+            riga.put("reusedTokens", dettaglio.optInt("reusedTokens", -1));
+        }
+        registra(riga);
+    }
+
+    private static double round(double valore) {
+        return Math.round(valore * 100.0) / 100.0;
+    }
+
+    private static JSONObject intestazione(File model, String configurazione,
+                                           int thread, int contesto) throws Exception {
+        JSONObject riga = new JSONObject();
+        riga.put("candidate", "C0");
+        riga.put("backendRequested", "none");
+        riga.put("config", configurazione);
+        riga.put("engineBuild", TalosLlamaNative.nativeEngineBuild());
+        riga.put("backendsFlat", TalosLlamaNative.nativeBackends());
+        riga.put("modelPath", model.getAbsolutePath());
+        riga.put("modelBytes", model.length());
+        riga.put("threads", thread);
+        riga.put("contextTokensRequested", contesto);
+        riga.put("kvRequested", "f16");
+        riga.put("prefixState", "cold");
+        riga.put("atMs", System.currentTimeMillis());
+        return riga;
+    }
+
+    // ————————————————— Stop —————————————————
+
+    /**
+     * ⛔⛔ STOP È P0, e questo test esiste perché la sonda che c'era misurava
+     * la cosa sbagliata.
+     *
+     * La sonda `cancel` della diagnostica parity misurava il <b>segnale</b> di
+     * abort — circa 0 ms — non lo spegnimento del motore: un motore che
+     * ignorasse lo stop passava lo stesso. Qui si misura da quando si chiede a
+     * quando {@code nativeGenerate} <b>ritorna davvero</b>, che è l'unico
+     * momento in cui il lavoro è finito.
+     *
+     * ⛔ E si misura ADESSO, sulla CPU, perché l'header di llama.cpp dichiara
+     * che la callback di abort «currently works only with CPU execution». Senza
+     * questo pavimento, il giorno in cui Stop non funzionerà sotto GPU non
+     * sapremo di quanto è peggiorato.
+     */
+    @Test
+    public void c0StopDuranteIlPrefill() throws Exception {
+        misuraStop("STOP-prefill", false);
+    }
+
+    /**
+     * ⛔⛔ LO STOP CHIESTO UN ISTANTE TROPPO PRESTO — viene INGHIOTTITO.
+     *
+     * Trovato il 2026-08-20 mentre un'altra misura sbagliava, e vale più di
+     * quella misura. {@code nativeGenerate} azzera {@code cancelled} al proprio
+     * ingresso, con una ragione buona: un flag rimasto acceso dalla corsa
+     * precedente fermerebbe subito quella nuova. Ma la conseguenza è che uno
+     * Stop chiesto nella finestra fra «l'utente preme» e «la generazione
+     * entra» sparisce senza lasciare traccia — nessun errore, nessun log, e la
+     * risposta continua ad arrivare come se nessuno avesse premuto.
+     *
+     * ⛔ Non è teoria da laboratorio: è esattamente ciò che fa una persona che
+     * si accorge di aver mandato il messaggio sbagliato e preme Stop subito.
+     *
+     * Questo test **non** pretende che il motore si fermi: documenta con un
+     * numero cosa succede oggi, perché la cura tocca il comportamento di
+     * produzione e non è una decisione che prendo io. Vedi il ritorno.
+     */
+    @Test
+    public void c0StopChiestoPrimaCheLaGenerazioneEntri() throws Exception {
+        pronta();
+        File model = fixture();
+        int thread = argomentoIntero("talosThreads", 4);
+        int contesto = argomentoIntero("talosContext", 8192);
+
+        long handle = apriCpu(model, contesto, thread);
+        try {
+            String prompt = promptDa(handle, 128);
+            final long[] ritornoNs = new long[1];
+            final int[] prodotti = new int[1];
+
+            Thread motore = new Thread(() -> {
+                TalosLlamaNative.nativeGenerate(handle, prompt, 64, false, false);
+                prodotti[0] = TalosLlamaNative.nativeTokensProduced(handle);
+                ritornoNs[0] = System.nanoTime();
+            });
+
+            long chiestoNs = System.nanoTime();
+            motore.start();
+            // Nessuna attesa: si chiede lo Stop nella finestra esatta.
+            TalosLlamaNative.nativeCancel(handle);
+
+            motore.join(180_000);
+            assertTrue("il motore non è tornato entro 180 s", !motore.isAlive());
+            long latenzaMs = (ritornoNs[0] - chiestoNs) / 1_000_000L;
+
+            JSONObject riga = intestazione(model, "STOP-early", thread, contesto);
+            riga.put("run", 0);
+            riga.put("stopLatencyMs", latenzaMs);
+            riga.put("tokensProduced", prodotti[0]);
+            riga.put("maxTokens", 64);
+            // ⛔ Il fatto, detto come numero e non come giudizio: se i token
+            // prodotti sono il tetto chiesto, lo Stop non ha fermato niente.
+            riga.put("stopHonoured", prodotti[0] < 64);
+            riga.put("deviceAfter", statoDispositivo());
+            registra(riga);
+
+            Log.i(TAG, "Stop anticipato: " + latenzaMs + " ms, token prodotti "
+                    + prodotti[0] + "/64, onorato=" + (prodotti[0] < 64));
+        } finally {
+            TalosLlamaNative.nativeClose(handle);
+        }
+    }
+
+    /**
+     * Stop mentre il modello sta già producendo.
+     *
+     * ⛔ Sono due misure diverse e il brief le vuole separate, perché
+     * `llama_decode` viene interrogata in due regimi diversi: un lancio di
+     * prefill lungo e una raffica di passi brevi. MISURATO il 2026-08-20: con
+     * un prompt da 512 token, dopo 1,5 s il motore è ancora in prefill e i
+     * token prodotti sono ZERO — una singola misura «a 1,5 s» avrebbe
+     * raccontato il prefill credendo di raccontare la decodifica.
+     */
+    @Test
+    public void c0StopDuranteLaDecodifica() throws Exception {
+        misuraStop("STOP-decode", true);
+    }
+
+    /**
+     * ⛔⛔ STOP È P0, e questa misura esiste perché quella che c'era misurava
+     * la cosa sbagliata.
+     *
+     * La sonda `cancel` della diagnostica parity misurava il <b>segnale</b> di
+     * abort — circa 0 ms — non lo spegnimento del motore: un motore che
+     * ignorasse lo stop passava lo stesso. Qui si misura da quando si chiede a
+     * quando {@code nativeGenerate} <b>ritorna davvero</b>, che è l'unico
+     * momento in cui il lavoro è finito.
+     *
+     * ⛔ E si misura ADESSO, sulla CPU, perché l'header di llama.cpp dichiara
+     * che la callback di abort «currently works only with CPU execution». Senza
+     * questo pavimento, il giorno in cui Stop non funzionerà sotto GPU non
+     * sapremo di quanto è peggiorato.
+     *
+     * @param aspettaIlPrimoToken se vero si attende che la decodifica sia
+     *     davvero cominciata prima di chiedere lo stop.
+     */
+    private void misuraStop(String configurazione, boolean aspettaIlPrimoToken) throws Exception {
+        pronta();
+        File model = fixture();
+        int thread = argomentoIntero("talosThreads", 4);
+        int giri = argomentoIntero("talosStopRuns", GIRI_PREDEFINITI);
+        int contesto = argomentoIntero("talosContext", 8192);
+        int attesaMs = argomentoIntero("talosStopAfterMs", 1500);
+
+        long handle = apriCpu(model, contesto, thread);
+        List<Long> latenze = new ArrayList<>();
+        try {
+            String prompt = promptDa(handle, 512);
+            for (int giro = 0; giro < giri; giro += 1) {
+                final long[] ritornoNs = new long[1];
+                final String[] esito = new String[1];
+                Thread motore = new Thread(() -> {
+                    esito[0] = TalosLlamaNative.nativeGenerate(handle, prompt, 4096, false, false);
+                    ritornoNs[0] = System.nanoTime();
+                });
+                motore.start();
+
+                long attesaEffettivaMs;
+                if (aspettaIlPrimoToken) {
+                    /*
+                     * ⛔⛔ DUE ATTESE, non una — e la prima è quella che mancava.
+                     *
+                     * MISURATO il 2026-08-20: con una sola attesa («aspetta che
+                     * i token siano più di zero») il giro 1 leggeva il contatore
+                     * RIMASTO DAL GIRO 0. `nativeGenerate` azzera `produced` al
+                     * proprio ingresso, quindi fra `start()` del thread e
+                     * quell'azzeramento il contatore vale ancora 1: l'attesa
+                     * usciva subito, lo Stop partiva PRIMA che la generazione
+                     * cominciasse, e `nativeGenerate` — che azzera anche
+                     * `cancelled` — se lo mangiava. La corsa proseguiva fino a
+                     * 4096 token: 568 secondi, e un test che sembrava un motore
+                     * che ignora lo Stop.
+                     *
+                     * ⇒ Prima si aspetta che il contatore sia stato AZZERATO
+                     * (la generazione è entrata), poi che risalga sopra zero (la
+                     * decodifica è cominciata davvero).
+                     */
+                    long inizio = System.nanoTime();
+                    while (TalosLlamaNative.nativeTokensProduced(handle) != 0
+                            && motore.isAlive()
+                            && (System.nanoTime() - inizio) / 1_000_000L < 10_000L) {
+                        Thread.sleep(5);
+                    }
+                    /*
+                     * ⛔ E si aspettano N token, non UNO. Fermarsi al primo
+                     * misura lo Stop sul CONFINE fra prefill e decodifica, che
+                     * è un terzo regime e non quello che l'etichetta promette.
+                     * MISURATO: col solo primo token la latenza usciva 0 ms
+                     * cinque volte su cinque — un numero vero per una domanda
+                     * che nessuno aveva fatto.
+                     */
+                    int bersaglio = argomentoIntero("talosStopAfterTokens", 16);
+                    while (TalosLlamaNative.nativeTokensProduced(handle) < bersaglio
+                            && motore.isAlive()
+                            && (System.nanoTime() - inizio) / 1_000_000L < 180_000L) {
+                        Thread.sleep(20);
+                    }
+                    attesaEffettivaMs = (System.nanoTime() - inizio) / 1_000_000L;
+                } else {
+                    Thread.sleep(attesaMs);
+                    attesaEffettivaMs = attesaMs;
+                }
+
+                int primaDelloStop = TalosLlamaNative.nativeTokensProduced(handle);
+                long chiestoNs = System.nanoTime();
+                TalosLlamaNative.nativeCancel(handle);
+
+                motore.join(30_000);
+                assertTrue("il motore non è tornato entro 30 s dallo Stop", !motore.isAlive());
+
+                long latenzaMs = (ritornoNs[0] - chiestoNs) / 1_000_000L;
+                latenze.add(latenzaMs);
+
+                JSONObject riga = intestazione(model, configurazione, thread, contesto);
+                riga.put("run", giro);
+                riga.put("waitedMs", attesaEffettivaMs);
+                riga.put("stopLatencyMs", latenzaMs);
+                riga.put("tokensBeforeStop", primaDelloStop);
+                riga.put("tokensAfterStop", TalosLlamaNative.nativeTokensProduced(handle));
+                riga.put("producedText", esito[0] != null && !esito[0].isEmpty());
+                riga.put("deviceAfter", statoDispositivo());
+                registra(riga);
+
+                // ⛔ Il verso contrario, e cambia con la fase: durante il
+                // prefill i token DEVONO essere zero, altrimenti si stava già
+                // decodificando; durante la decodifica devono essere più di
+                // zero, altrimenti si è misurato il prefill.
+                if (aspettaIlPrimoToken) {
+                    assertTrue("nessun token prima dello Stop: era ancora prefill, non decodifica",
+                            primaDelloStop > 0);
+                } else {
+                    assertTrue("token già prodotti dopo " + attesaEffettivaMs
+                                    + " ms: il prefill era finito, questa non è la misura chiesta",
+                            primaDelloStop == 0);
+                }
+            }
+        } finally {
+            TalosLlamaNative.nativeClose(handle);
+        }
+
+        long[] ordinate = new long[latenze.size()];
+        for (int i = 0; i < ordinate.length; i += 1) ordinate[i] = latenze.get(i);
+        Arrays.sort(ordinate);
+        JSONObject riassunto = intestazione(model, configurazione + "-summary", thread, contesto);
+        riassunto.put("runs", ordinate.length);
+        riassunto.put("p50Ms", percentile(ordinate, 50));
+        riassunto.put("p95Ms", percentile(ordinate, 95));
+        riassunto.put("maxMs", ordinate[ordinate.length - 1]);
+        riassunto.put("minMs", ordinate[0]);
+        registra(riassunto);
+
+        Log.i(TAG, String.format(Locale.ROOT, "%s — p50 %d ms · p95 %d ms · max %d ms",
+                configurazione, percentile(ordinate, 50), percentile(ordinate, 95),
+                ordinate[ordinate.length - 1]));
+    }
+
+    /**
+     * ⛔ Il percentile «nearest-rank», dichiarato: con cinque giri qualunque
+     * interpolazione inventerebbe un valore che nessun giro ha prodotto.
+     */
+    private static long percentile(long[] ordinate, int percento) {
+        if (ordinate.length == 0) return -1;
+        int rango = (int) Math.ceil(percento / 100.0 * ordinate.length);
+        return ordinate[Math.min(Math.max(rango - 1, 0), ordinate.length - 1)];
+    }
+}
