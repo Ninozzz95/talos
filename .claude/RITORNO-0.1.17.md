@@ -418,6 +418,64 @@ marca il ragionamento in un altro modo. Il motore lo dichiara.
 
 ---
 
+### Le build di ricerca (§5.2) — la manopola c'è, e dice cosa manca
+
+`-PtalosResearchBackend=cpu|opencl|vulkan`, commit `8d5368bd`. Senza la
+proprietà **non cambia una virgola**: verificato che `assembleDebug` nudo resta
+identico.
+
+Provata nei due versi: `cpu` compila e si dichiara; `hexagon` viene rifiutata
+elencando le tre valide; `opencl` senza la sua cartella si ferma dicendo quale.
+
+**Cosa c'è già su questa macchina, misurato:**
+
+| pezzo | esito |
+|---|---|
+| header Vulkan + `libvulkan.so` **1.3.275** | ✅ nell'NDK |
+| `glslc` | ✅ `ndk/shader-tools/windows-x86_64/glslc.exe` — ⛔ `find_package(Vulkan COMPONENTS glslc)` **non ci guarda**, va indicato a mano |
+| header OpenCL | ❌ `sysroot/usr/include/CL/` non esiste |
+| `SPIRV-Headers` | ❌ assenti |
+| compilatore C++ **host** | ❌ `cl`, `gcc`, `clang`, `g++` tutti assenti dal PATH; la cartella di Visual Studio 18 è **vuota**; `vswhere` non c'è |
+
+### ⛔ C2 (Vulkan) — **BLOCKED**, e non dal progetto
+
+Due prerequisiti di questa macchina, e la manopola li nomina entrambi in un
+colpo solo invece di farli scoprire uno per compilazione:
+
+1. **SPIRV-Headers** — soli header, download piccolo.
+2. **Un compilatore C++ per questo computer** — ed è quello che pesa.
+   `vulkan-shaders-gen` gira **qui** e genera gli shader; `ggml-vulkan` viene
+   compilato **per il telefono**. Upstream cerca l'host con
+   `find_program(NAMES cl gcc clang)` e si ferma con «Host compiler not found»
+   (`ggml/src/ggml-vulkan/CMakeLists.txt:157-158`).
+
+⇒ **Serve una decisione tua**: installare gli strumenti di compilazione C++
+(MSVC Build Tools, alcuni GB di disco) è l'unica strada per la corsia Vulkan su
+questa macchina. Non lo faccio senza il tuo sì.
+
+⛔ E ricordo che la corsia Vulkan ha comunque un secondo ostacolo, già
+registrato sopra: il percorso `dc72703` è **coopmat1**, escluso sui device
+coopmat2 — e su Adreno va verificato che esista prima di spenderci tempo.
+
+### C1 (OpenCL) — non è bloccata dallo stesso muro
+
+⛔ **Non richiede un compilatore host**: OpenCL si compila solo per il telefono.
+I due pezzi che mancavano si sono trovati senza chiedere niente a nessuno:
+
+- gli header Khronos (`OpenCL-Headers`, `15b536b`), soli file;
+- `libOpenCL.so` **presa dal telefono** (`/vendor/lib64/`, 87.504 B, 236 simboli
+  dinamici) — cioè esattamente la libreria che l'app userà a runtime, invece di
+  un ICD loader costruito a parte.
+
+⛔⛔ **Ma attenzione a cosa NON è.** Una build OpenCL sul nostro pin
+`d2f83055` **non è il candidato C1 del brief**: C1 richiede
+`llama.cpp >= 60addddf`, la correzione della race WAR nei kernel Flash
+Attention, e il nostro pin non ce l'ha. ⇒ Qualunque misura di **Flash Attention
+su OpenCL** presa qui sarebbe vietata dal brief e non va usata. Quello che una
+build così può dare, legittimamente, è **l'uscita della Fase 2**: la prova che
+il targeting esplicito seleziona davvero un dispositivo GPU e che l'offload
+avviene.
+
 ## Divergenze dal brief, dichiarate
 
 1. **`devices` è già nella baseline** (§1.3 lo dava per «newer upstream»). Non
