@@ -35,9 +35,52 @@ const MOBILE = resolve(QUI, '..', '..')
 
 const argomenti = process.argv.slice(2)
 const comeJson = argomenti.includes('--json')
-const percorso = resolve(
-    MOBILE,
-    argomenti.find((a) => !a.startsWith('--')) ?? '.tmp-research/local-backend/runs.jsonl')
+
+/*
+ * ⛔⛔ `--zone <file>` — LA TEMPERATURA CHE L'APP NON PUO' LEGGERE.
+ *
+ * MISURATO il 2026-08-20 in dieci minuti di carico: la velocita' oscillava fra
+ * 19,3 e 13,6 tok/s e i due segnali che l'app registra non se ne accorgevano —
+ * `thermal` era «moderate» dal secondo 46 e la batteria stava ferma a 33,6 C.
+ * Le zone termiche del SoC, nello stesso momento, dicevano **88 C**.
+ *
+ * Sysfs e' negato a un'applicazione da SELinux ⇒ si campiona dall'HOST, con
+ * `adb`, in un file di tre colonne — `epoch  millesimi_di_grado  thermal` — e
+ * si correla qui per tempo. Il segnale sbagliato non si aggiusta: si sostituisce.
+ */
+const indiceZone = argomenti.indexOf('--zone')
+const fileZone = indiceZone >= 0 ? argomenti[indiceZone + 1] : null
+const posizionali = argomenti.filter((a, i) => !a.startsWith('--') && argomenti[i - 1] !== '--zone')
+const percorso = resolve(MOBILE, posizionali[0] ?? '.tmp-research/local-backend/runs.jsonl')
+
+/** I campioni dell'host: epoch in secondi → gradi. */
+const zone = []
+if (fileZone) {
+    const dove = resolve(MOBILE, fileZone)
+    if (!existsSync(dove)) {
+        process.stderr.write(`⛔ --zone indicato ma il file non c'e': ${dove}\n`)
+        process.exit(1)
+    }
+    for (const riga of readFileSync(dove, 'utf8').split('\n')) {
+        const [t, milli] = riga.trim().split(/\s+/)
+        const secondi = Number(t), gradi = Number(milli) / 1000
+        if (Number.isFinite(secondi) && Number.isFinite(gradi)) zone.push({ secondi, gradi })
+    }
+    zone.sort((a, b) => a.secondi - b.secondi)
+}
+
+/** Il campione piu' vicino nel tempo, e quanto era lontano. */
+const zonaVicina = (atMs) => {
+    if (zone.length === 0 || !Number.isFinite(atMs)) return null
+    const secondi = atMs / 1000
+    let migliore = zone[0]
+    for (const c of zone) {
+        if (Math.abs(c.secondi - secondi) < Math.abs(migliore.secondi - secondi)) migliore = c
+    }
+    // ⛔ Oltre mezzo minuto non e' piu' «lo stesso istante»: meglio niente che
+    // una temperatura presa da un'altra corsa.
+    return Math.abs(migliore.secondi - secondi) <= 30 ? migliore.gradi : null
+}
 
 if (!existsSync(percorso)) {
     process.stderr.write(
@@ -224,6 +267,23 @@ for (const [chiave, insieme] of [...gruppi.entries()].sort()) {
                     lowSharePercent: arrotonda(basso.length * 100 / valori.length),
                 }
             }
+            /*
+             * ⛔ E se ci sono i campioni dell'host, si dice a QUALE temperatura
+             * sta ciascuno dei due livelli. E' l'unico modo per rispondere alla
+             * domanda che conta — «e' il calore o e' altro?» — invece di
+             * dedurla da uno stato che satura in quarantasei secondi.
+             */
+            if (zone.length > 0 && voce.sustained.bimodal) {
+                const soglia = (Math.min(...valori) + Math.max(...valori)) / 2
+                const gradiDi = (filtro) => {
+                    const g = tassi.filter(filtro).map((r) => zonaVicina(r.atMs)).filter((v) => v !== null)
+                    return g.length ? arrotonda(mediana(g)) : null
+                }
+                voce.sustained.socCelsius = {
+                    high: gradiDi((r) => r.decodeTokensPerSecond >= soglia),
+                    low: gradiDi((r) => r.decodeTokensPerSecond < soglia),
+                }
+            }
             const caduta = tassi.find((r) => r.decodeTokensPerSecond < primi * 0.9)
             if (caduta) voce.sustained.firstDropAtMinute = arrotonda((caduta.elapsedMs ?? 0) / 60000)
         }
@@ -290,6 +350,11 @@ for (const voce of riassunto) {
             scrivi(`    ⛔ NON e' una discesa: OSCILLA fra ${d.bimodal.high} e ${d.bimodal.low} tok/s`
                 + ` — ${d.transitions} salti, ${d.bimodal.lowSharePercent}% del tempo nello stato basso.`)
             scrivi('       ⇒ la media fra due stati stabili non è un valore che il telefono abbia mai avuto.')
+            const g = d.socCelsius
+            if (g && g.high !== null && g.low !== null) {
+                scrivi(`       SoC: ${g.high} °C nello stato alto · ${g.low} °C nel basso`
+                    + `  (la batteria, nello stesso momento, non si muove)`)
+            }
         } else if (d.firstDropAtMinute !== undefined) {
             scrivi(`    ⛔ prima caduta sotto il −10%: al minuto ${d.firstDropAtMinute}`)
         }
