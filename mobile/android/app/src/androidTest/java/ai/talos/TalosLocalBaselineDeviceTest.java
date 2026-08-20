@@ -454,6 +454,25 @@ public class TalosLocalBaselineDeviceTest {
      */
     @Test
     public void c0TenutaNelTempo() throws Exception {
+        /*
+         * ⛔⛔ IL CANCELLO STA QUI, non nel commento sopra.
+         *
+         * Il javadoc diceva «si chiede per nome» e niente lo imponeva: chi
+         * lancia l'intera classe — che e' esattamente cio' che il README
+         * suggerisce — si sarebbe ritrovato dieci minuti di carico continuo e
+         * un telefono caldo che non aveva chiesto. Una regola dichiarata e non
+         * applicata e' una regola che non c'e'.
+         *
+         * ⇒ Senza `talosSustainedMinutes` esplicito il test si SALTA, e il
+         * runner conta e nomina i salti: non passa per verde.
+         */
+        String chiesto = InstrumentationRegistry.getArguments()
+                .getString("talosSustainedMinutes", "");
+        Assume.assumeTrue(
+                "G5 non parte da sola: dura minuti e scalda il telefono di qualcuno."
+                        + "  Chiedila per nome, con  talosSustainedMinutes=10",
+                chiesto != null && !chiesto.isEmpty());
+
         pronta();
         File model = fixture();
         int thread = argomentoIntero("talosThreads", 4);
