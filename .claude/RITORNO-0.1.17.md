@@ -1250,6 +1250,44 @@ i propri TODO e «non migliora sempre le prestazioni» fra i propri difetti noti
 altro dispositivo si rimisura — la manopola `talosFlashAttn` adesso c'è, e il
 valore scelto finisce **scritto in ogni riga** di `runs.jsonl` e `golden.jsonl`.
 
+### 📋 La politica a un numero solo — la proposta, non applicata
+
+`TalosBackendChoice.choose()` decide con **un numero**: `tokensPerSecond`. Il
+brief vietava di toccarla prima di avere PP/TG/TTFT separati. Adesso ci sono, e
+il verdetto è che con quel metro **sbaglierebbe**.
+
+| | CPU | OpenCL | rapporto |
+|---|---:|---:|---:|
+| prefill 512 | 43,8 tok/s | 303,4 | **6,9×** |
+| prefill 2048 | 36,8 tok/s | 246,0 | **6,7×** |
+| **decodifica** | 14,7 tok/s | 19,3 | **1,31×** |
+| TTFT su 2048 token | **55,7 s** | **8,3 s** | |
+
+⛔ La soglia è **1,25×** e il numero che la politica guarda è **1,31×**. Passa —
+ma di sei centesimi, e su un altro esemplare dello stesso telefono
+**rifiuterebbe** un backend che porta l'attesa da 55,7 a 8,3 secondi. Non è una
+soglia mal tarata: è la **grandezza sbagliata**. La persona non aspetta la
+decodifica, aspetta il **primo token**.
+
+⇒ Tre cose da mettere nella politica, in ordine di quanto costa sbagliarle:
+
+1. **Decidere sul TTFT di un prompt rappresentativo**, non sulla decodifica. È
+   l'unico numero che corrisponde a ciò che la persona vive, e su questo
+   dispositivo cambia il verdetto da «forse» a «ovviamente sì».
+2. ⛔ **Escludere le architetture MoE su OpenCL.** Non è una preferenza: `MUL_MAT_ID`
+   fallisce **305 volte** in `test-backend-ops` mentre tutto il percorso denso è
+   pulito. ⇒ Il permesso si dà **per architettura**, non per dispositivo —
+   modelli densi sì, MoE no.
+3. **Registrare la CONFIGURAZIONE insieme all'esito.** Una `Evidence` raccolta
+   con la Flash Attention accesa non descrive lo stesso backend di una raccolta
+   con la Flash Attention spenta: fra le due la decodifica dopo un prompt lungo
+   cambia del **96%**. Oggi `Evidence` porta backend, driver, esito e un numero;
+   servono anche `flashAttn` e `microBatch`, altrimenti l'evidenza sopravvive a
+   una decisione che l'ha invalidata.
+
+⛔ **Non l'ho scritta**: `TalosBackendChoice` è codice di produzione. Questa è la
+forma che proporrei, con i numeri che la giustificano.
+
 ## Divergenze dal brief, dichiarate
 
 1. **`devices` è già nella baseline** (§1.3 lo dava per «newer upstream»). Non
