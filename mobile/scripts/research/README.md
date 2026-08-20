@@ -147,7 +147,25 @@ node scripts/research/run-device-tests.mjs     'ai.talos.TalosLocalBaselineDevic
 ```bash
 node scripts/research/analyze-local-backend-matrix.mjs
 node scripts/research/analyze-local-backend-matrix.mjs --json
+node scripts/research/analyze-local-backend-matrix.mjs runs.jsonl --zone zones.txt
 ```
+
+⛔ **`--zone` exists because the two thermal signals the app can read are both
+useless during a long run.** Measured over ten minutes: decode oscillated
+between 19.3 and 13.6 tok/s while `thermal` said "moderate" from second 46
+onwards and battery temperature never left 33.6 C. The SoC zones, at the same
+moment, read 88 C. sysfs is denied to an application by SELinux, so sample it
+from the host alongside the run:
+
+```bash
+while true; do
+  echo "$(date +%s) $(adb shell 'cat /sys/class/thermal/thermal_zone*/temp | sort -n | tail -1')"
+  sleep 5
+done >> zones.txt
+```
+
+Samples further than thirty seconds from a run are refused rather than attached
+to it.
 
 Median and MAD rather than mean and standard deviation: on a phone the noise is
 rare and large — another app, the thermal governor, a core migration — which is
