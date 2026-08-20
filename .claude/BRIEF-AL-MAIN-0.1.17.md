@@ -36,7 +36,22 @@ quello che resta sono **due decisioni di prodotto** che non prendo io.
 
 ## I numeri che contano
 
-**1. Il forward pin vale il lavoro.** OpenCL contro il pavimento CPU, stesso
+**1. ⛔⛔ La GPU non è spedita, non è scelta, non è usata.** Aperta la Fase 7,
+tre verifiche sul codice di oggi:
+
+- l'APK di **rilascio** porta `libggml-base` e **sette varianti CPU** — nessun
+  `libggml-opencl`, nessun `libggml-vulkan`;
+- `TalosLlamaPlugin` legge `gpuLayers` con **default 0**, e nessun chiamante in
+  `src/` passa quel campo;
+- `TalosBackendChoice.choose()` — la politica che «decide quale motore ha il
+  diritto di girare» — ha **un solo chiamante in tutto il repo: il suo test**.
+
+⇒ Il motore locale gira **solo su CPU**. È la stessa forma già in memoria: una
+funzione con i test e nessun chiamante. E riordina le priorità: le due decisioni
+sopra non sono urgenti per chi usa l'app **oggi**, sono il **prerequisito** del
+giorno in cui la GPU verrà spedita.
+
+**2. Il forward pin vale il lavoro.** OpenCL contro il pavimento CPU, stesso
 modello, stesso telefono, prefisso freddo:
 
 | | CPU | OpenCL | |
@@ -46,14 +61,14 @@ modello, stesso telefono, prefisso freddo:
 | decodifica | 14,7 tok/s | 19,3 | 1,31× |
 | **TTFT su 2048 token** | **55,7 s** | **8,3 s** | |
 
-**2. La politica attuale sbaglierebbe.** `TalosBackendChoice` decide con **un
+**3. La politica attuale sbaglierebbe.** `TalosBackendChoice` decide con **un
 numero solo**, la velocità di *generazione*. Con quel metro questa GPU vale
 1,10-1,31× e la soglia è **1,25×**: su un prompt lungo **rifiuterebbe** un
 backend che taglia l'attesa da 55,7 a 8,3 secondi. Il guadagno è tutto nel
 prefill, che è quello che la persona aspetta. ⛔ Il brief vieta di toccare la
 politica prima di avere PP/TG/TTFT separati: **adesso ci sono**.
 
-**3. Due manopole che nessuno aveva mai provato valgono più del backend.**
+**4. Due manopole che nessuno aveva mai provato valgono più del backend.**
 Stessa GPU, stesso pin, solo `flash-attn` e `microbatch` diversi:
 
 | | oggi (`on / 256`) | `off / 64` | |
@@ -68,21 +83,6 @@ Le sette voci della suite golden restano **identiche** fra `on` e `off`. ⛔ E i
 prefill che si perde non è tutto perduto: la persona aspetta il **TTFT**, che su
 512 token peggiora di 593 ms una volta sola — ma su 2.048 peggiora di **2
 secondi**, e lì diventa un compromesso vero. Il dettaglio è nel ritorno.
-
-**4. ⛔⛔ La GPU non è spedita, non è scelta, non è usata.** Aperta la Fase 7,
-tre verifiche sul codice di oggi:
-
-- l'APK di **rilascio** porta `libggml-base` e **sette varianti CPU** — nessun
-  `libggml-opencl`, nessun `libggml-vulkan`;
-- `TalosLlamaPlugin` legge `gpuLayers` con **default 0**, e nessun chiamante in
-  `src/` passa quel campo;
-- `TalosBackendChoice.choose()` — la politica che «decide quale motore ha il
-  diritto di girare» — ha **un solo chiamante in tutto il repo: il suo test**.
-
-⇒ Il motore locale gira **solo su CPU**. È la stessa forma già in memoria: una
-funzione con i test e nessun chiamante. E riordina le priorità: le due decisioni
-sopra non sono urgenti per chi usa l'app **oggi**, sono il **prerequisito** del
-giorno in cui la GPU verrà spedita.
 
 **5. PP8192: sessanta secondi prima della prima parola.** Sulla GPU, contesto
 16.384: prefill 130-139 tok/s (contro 304 su 512), **TTFT 59-64 s**, e poi
