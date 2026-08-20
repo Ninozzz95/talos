@@ -713,21 +713,25 @@ il carico dinamico dei simboli**: due decisioni di prodotto, non di build.
 
 ## Aperti — cosa manca, in ordine
 
-1. 🔑 **Il ripristino del backup** — richiede la password dell'owner. Unica cosa
-   che aspetta lui.
-2. ⛔ **La cura dello Stop anticipato** — proposta sopra, non applicata perché
-   tocca la produzione.
-3. **Fase 1: il forward pin** — non cominciata. La suite golden è lo strumento
-   con cui si qualificherà.
-4. **S4 completo** — serve una diagnostica nativa della grammatica.
-5. **PP8192** — non misurato: con contesto 8192 il tetto prudente è metà, quindi
-   restano 512 e 2048. Serve una corsa con contesto più largo.
-6. **Fasi 3-6 (OpenCL, Vulkan)** — non cominciate. Servono le build con
-   `GGML_OPENCL=ON` / `GGML_VULKAN=ON` e la toolchain relativa.
-7. **I modelli sul Pad**: uno su quattro autorizzati. Gemma e Qwen3 vanno
-   riscaricati se si vogliono riprodurre le misure precedenti.
-
----
+1. ⛔⛔ **Vulkan: capire il crash.** È il primo, perché blocca una corsia intera.
+   La strada indicata dal brief è il forward pin (C2 vuole comunque `98d1e92` +
+   `dc72703`): uno di quei mesi di correzioni potrebbe averlo già chiuso. ⛔ Ma
+   `dc72703` è NOT RELEVANT su questo telefono, quindi la ragione per pinnare
+   adesso è la **stabilità**, non la prestazione.
+2. ⛔ **La cura dello Stop anticipato** — proposta, non applicata: tocca la
+   produzione.
+3. **Fase 1: il forward pin.** La suite golden è lo strumento con cui si
+   qualificherà, ed è pronta.
+4. **OpenCL come C1 vero**, cioè col pin che contiene `60addddf`. Solo allora si
+   possono misurare Flash Attention e la race, e solo allora i numeri di oggi
+   diventano una qualificazione invece di un segnale.
+5. **PP8192** — serve una corsa con contesto più largo.
+6. **La tenuta nel tempo** — nessun test da 10 minuti, nessuna deriva termica
+   sotto carico prolungato. Le corse di oggi sono brevi e `thermal` è restato
+   `none`.
+7. **`minSdk` contro Vulkan 1.1** — decisione di prodotto, vedi sopra.
+8. **La politica a un numero solo** — i dati per rifarla ci sono. ⛔ Il brief
+   dice di non toccarla prima di avere PP/TG/TTFT separati: adesso ci sono.
 
 ## Aperti non miei, incontrati per strada
 
@@ -776,8 +780,35 @@ dell'owner, e la regola del repo è che quel materiale non entra.
 
 ---
 
-## Cosa serve dall'owner per il push
+## Cosa serve dall'owner
 
-1. Una code review di questo ramo.
-2. La decisione sulla cura dello Stop anticipato (§ difetto di produzione).
-3. Il `git push`, che non faccio io.
+1. Una **code review** di questo ramo, e poi il `git push`, che non faccio io.
+2. La **decisione sulla cura dello Stop anticipato**.
+3. ⛔ **Le chiavi dei provider.** Il backup non è ripristinabile — la password
+   non è recuperabile — quindi l'app è ripartita **da zero**, come da tua
+   indicazione. Per la 0.1.17 non servono: la ricerca sul motore locale gira
+   tutta su GGUF, e i tre modelli sono sul Pad. Servono per la **parity coi
+   modelli a chiave**. L'accesso OpenRouter è **PKCE col browser di sistema**:
+   le credenziali le digiti tu, non passano da me. Posso aprire l'app sulla
+   schermata giusta quando vuoi.
+
+## Lo stato in cui lascio il Pad
+
+- App **installata da zero** (nessun ripristino), build **senza acceleratori** —
+  verificato: zero librerie OpenCL/Vulkan nell'APK.
+- **Tre modelli**, tutti con impronta verificata fra computer e telefono:
+
+| modello | byte | SHA-256 (inizio) |
+|---|---:|---|
+| `Llama-3.2-3B-Instruct-Q4_K_M` | 2.019.377.696 | `6c1a2b4116103267` |
+| `Qwen3-1.7B-Q4_K_M` | 1.282.439.264 | `d2387ca2dbfee2ff` |
+| `gemma-3-4b-it-Q4_K_M` | 2.489.757.856 | `882e8d2db44dc554` |
+
+Tutti da `ggml-org`, cioè l'organizzazione di llama.cpp stessa. ⛔ Il quarto
+posto che avevi concesso è **libero**: Qwen3 e Gemma aprono due dialetti che
+Llama non ha (ChatML con ragionamento, e Gemma), quindi la suite golden ha
+adesso di che lavorare — S2 su Llama era «non applicabile».
+
+- Toolchain scaricata in `C:\Users\Antonino\toolchains\` (~300 MB): gcc/g++,
+  SPIRV-Headers, Vulkan-Headers. Serve solo per ricostruire Vulkan; si può
+  cancellare senza toccare il repo.
