@@ -96,6 +96,14 @@ node scripts/research/run-device-tests.mjs ai.talos.TalosBackendTargetingDeviceT
 # the grammar of the protocol — ⛔ BEFORE the benchmarks, not after
 node scripts/research/run-device-tests.mjs ai.talos.TalosSemanticGoldenDeviceTest
 
+# ⛔⛔ Comparing two backends with the golden suite? Then you MUST pass
+# talosGpuLayers. It defaults to 0, because the suite began as the CPU floor —
+# so naming a GPU target without it declares the target and computes on the CPU.
+# Measured on 2026-08-20: a whole Flash Attention equivalence result was built on
+# exactly that mistake. A declared target that is not used is worse than a
+# missing one, because the file records it and the row reads like proof.
+node scripts/research/run-device-tests.mjs ai.talos.TalosSemanticGoldenDeviceTest     --fresh talosBackend=OpenCL talosDevice=GPUOpenCL talosGpuLayers=-1 talosFlashAttn=off
+
 # the C0 floor: load, PP/TG/TTFT, Stop in both phases
 node scripts/research/run-device-tests.mjs ai.talos.TalosLocalBaselineDeviceTest \
     --fresh talosRuns=9 talosStopRuns=9
