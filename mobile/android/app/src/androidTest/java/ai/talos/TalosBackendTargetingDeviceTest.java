@@ -257,6 +257,62 @@ public class TalosBackendTargetingDeviceTest {
         }
     }
 
+    /**
+     * ⛔⛔ L'USCITA DELLA FASE 2: il bersaglio chiesto è quello che ESEGUE.
+     *
+     * Tutto il resto di questa classe prova che una richiesta viene accettata o
+     * rifiutata. Questo prova la cosa che conta davvero: che quando si nomina un
+     * acceleratore, i pesi ci finiscono sopra.
+     *
+     * ⛔ È il rischio R3 del brief — «a `.so` can load while all useful ops
+     * still execute on CPU». Un backend registrato non è un backend usato, e la
+     * differenza non si vede da nessun numero di velocità: si vede solo dai log
+     * di allocazione del motore, che dicono quanti byte sono finiti su quale
+     * buffer.
+     *
+     * Si SALTA, dicendolo, su una build senza acceleratori: è il caso normale
+     * della build che si spedisce, non un guasto.
+     */
+    @Test
+    public void ilBersaglioChiestoEsegueDavvero() {
+        pronta();
+        File model = fixture();
+
+        TalosBackendInventory inventario =
+                TalosBackendInventory.parse(TalosLlamaNative.nativeBackendInventory());
+        List<TalosBackendInventory.Device> bersagli = inventario.offloadDevices();
+        Assume.assumeFalse(
+                "questa build non espone acceleratori: è il caso della build che si spedisce",
+                bersagli.isEmpty());
+
+        TalosBackendInventory.Device bersaglio = bersagli.get(0);
+        Log.i(TAG, "apro su " + bersaglio.registry + "/" + bersaglio.name
+                + " — " + bersaglio.description
+                + " (liberi " + bersaglio.memoryFree + " di " + bersaglio.memoryTotal + ")");
+
+        // ⛔ `gpuLayers = -1`: TUTTI gli strati che il backend regge. Con 0 la
+        // lista dei dispositivi verrebbe rispettata e NIENTE verrebbe spostato —
+        // una corsa che sembra un offload e non lo è.
+        long handle = TalosLlamaNative.nativeOpenTargeted(
+                model.getAbsolutePath(), THREAD, CONTESTO, -1, true, THREAD, 0, "f16",
+                bersaglio.registry, bersaglio.name, "default");
+
+        assertNotEquals("apertura sul bersaglio fallita: "
+                        + TalosLlamaNative.nativeLastOpenError(), 0L, handle);
+        try {
+            // Che si apra non basta: si genera, perché un contesto creato e mai
+            // usato non prova che gli operatori girino dove crediamo.
+            String testo = TalosLlamaNative.nativeGenerate(handle, "Ciao", 8, false, false);
+            Log.i(TAG, "generato su " + bersaglio.name + ": "
+                    + (testo == null ? "(nullo)" : "«" + testo.trim() + "»")
+                    + " · token " + TalosLlamaNative.nativeTokensProduced(handle));
+            assertTrue("nessun token prodotto sul bersaglio",
+                    TalosLlamaNative.nativeTokensProduced(handle) > 0);
+        } finally {
+            TalosLlamaNative.nativeClose(handle);
+        }
+    }
+
     // ————————————————— il verso che DEVE fallire —————————————————
 
     /**

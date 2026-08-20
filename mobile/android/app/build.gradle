@@ -501,6 +501,41 @@ android {
             // che fa girare l'app anche sui telefoni vecchi che minSdk 26
             // ammette.
             useLegacyPackaging = true
+
+            /*
+             * ⛔⛔ LA `libOpenCL.so` DEL TELEFONO NON SI SPEDISCE — e non è una
+             * questione di licenza soltanto: non funzionerebbe.
+             *
+             * MISURATO il 2026-08-20 sul Pad, ed è costato un giro intero.
+             * Compilando con `-PtalosResearchBackend=opencl`, CMake copia nella
+             * cartella di uscita la libreria contro cui ha linkato, e AGP la
+             * impacchetta. Sul telefono l'esito era:
+             *
+             *   libggml-opencl.so  3.198.104 B  presente nella cartella nativa
+             *   backend registrati: 1                        ← solo la CPU
+             *
+             * Cioè: la libreria c'era e non si apriva, senza un errore che lo
+             * dicesse. La causa sta nelle sue dipendenze —
+             *
+             *   libOpenCL.so (vendor) NEEDED → liblog, libcutils, libc++, ...
+             *
+             * — e `libcutils.so` e `libc++.so` un'applicazione NON può
+             * caricarle: vivono nello spazio dei nomi del vendor. La copia
+             * dentro l'app OSCURA quella di sistema, fallisce l'apertura, e con
+             * lei fallisce silenziosamente `libggml-opencl.so`.
+             *
+             * ⇒ Non serve spedirla. Questo Android dichiara `libOpenCL.so` fra
+             * le VENDOR PUBLIC LIBRARIES — letto in logcat:
+             *
+             *   InitVendorPublicLibraries: … libfastcvopt.so:libOpenCL.so:…
+             *
+             * quindi l'app può caricare quella di sistema, che risolve le
+             * proprie dipendenze dove esse vivono. Si linka contro una copia in
+             * fase di build, e a runtime si usa la sua.
+             *
+             * ⛔ Vale solo per la build di ricerca, che è l'unica che la porta.
+             */
+            excludes += '**/libOpenCL.so'
         }
     }
 }

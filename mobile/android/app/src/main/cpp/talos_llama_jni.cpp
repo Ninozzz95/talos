@@ -21,6 +21,10 @@
 #include <cstdio>
 #include <atomic>
 #include <cstring>
+// Per la sonda di caricamento dei backend: elenca la cartella nativa e prova
+// ad aprire ogni libreria di ggml, dicendo quale rifiuta e perche.
+#include <dirent.h>
+#include <cerrno>
 #include <map>
 #include <mutex>
 #include <string>
@@ -697,6 +701,87 @@ static const char * talos_device_type_name(enum ggml_backend_dev_type type) {
     // compilatore lo segnala qui invece di lasciarlo scivolare in «unknown»
     // dentro un artifact di misura.
     return "unknown";
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — PERCHÉ un backend non si è caricato.
+ *
+ * MISURATO il 2026-08-20, e questa sonda esiste per un fallimento che non
+ * diceva niente. Con `libggml-opencl.so` da 3.198.104 byte presente nella
+ * cartella nativa del telefono, il registro conteneva **un solo** backend:
+ *
+ *     load_backend: loaded CPU backend from …/libggml-cpu-android_armv8.6_1.so
+ *     backend registrati: 1
+ *
+ * Nessun errore, nessuna riga, nessuna traccia. La causa è nella sorgente che
+ * spediamo: `ggml_backend_load_all_from_path` sceglie
+ *
+ *     #ifdef NDEBUG
+ *         bool silent = true;
+ *
+ * e la nostra build è `Release`, quindi NDEBUG è definito e **ogni fallimento
+ * di caricamento è muto per costruzione**.
+ *
+ * ⇒ `ggml_backend_load()` è la stessa strada con `silent = false`: prova ad
+ * aprire una libreria per percorso e, se fallisce, stampa `dl_error()`. Qui si
+ * prova ogni `libggml-*.so` della cartella e si dice, per ognuna, se è entrata
+ * e con quale errore no.
+ *
+ * ⛔ Non è un doppione dell'inventario: l'inventario dice CHI c'è, questa dice
+ * **perché qualcuno manca**. Sono le due metà della stessa domanda, e finora ne
+ * avevamo una sola.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeProbeBackendLoad(JNIEnv * env, jclass, jstring libraryDir) {
+    const std::string cartella = jstring_to_utf8(env, libraryDir);
+    nlohmann::ordered_json out;
+    out["directory"] = cartella;
+
+    nlohmann::ordered_json tentativi = nlohmann::ordered_json::array();
+    if (cartella.empty()) {
+        out["attempts"] = tentativi;
+        out["error"] = "cartella delle librerie native non indicata";
+        return env->NewStringUTF(out.dump().c_str());
+    }
+
+    const size_t prima = ggml_backend_reg_count();
+    DIR * apertura = opendir(cartella.c_str());
+    if (apertura == nullptr) {
+        out["attempts"] = tentativi;
+        out["error"] = std::string("cartella non elencabile: ") + strerror(errno);
+        return env->NewStringUTF(out.dump().c_str());
+    }
+
+    while (struct dirent * voce = readdir(apertura)) {
+        const std::string nome = voce->d_name;
+        // Solo i backend dinamici di ggml: aprire a caso ogni `.so` dell'app
+        // caricherebbe librerie che non c'entrano, con effetti che nessuno ha
+        // chiesto.
+        if (nome.rfind("libggml-", 0) != 0) continue;
+        if (nome.size() < 4 || nome.compare(nome.size() - 3, 3, ".so") != 0) continue;
+
+        const std::string percorso = cartella + "/" + nome;
+        nlohmann::ordered_json tentativo;
+        tentativo["library"] = nome;
+        // ⛔ L'errore lo stampa ggml su logcat con `dl_error()`. Qui si registra
+        // l'ESITO; il motivo si legge accanto, nella stessa corsa.
+        ggml_backend_reg_t reg = ggml_backend_load(percorso.c_str());
+        tentativo["loaded"] = reg != nullptr;
+        if (reg != nullptr) {
+            const char * nome_reg = ggml_backend_reg_name(reg);
+            tentativo["registry"] = nome_reg == nullptr ? "" : nome_reg;
+            tentativo["deviceCount"] = (uint64_t) ggml_backend_reg_dev_count(reg);
+        }
+        TALOS_LOGI("sonda di caricamento: %s → %s", nome.c_str(),
+                   reg != nullptr ? "caricata" : "RIFIUTATA (motivo sopra, da ggml)");
+        tentativi.push_back(tentativo);
+    }
+    closedir(apertura);
+
+    out["attempts"] = tentativi;
+    out["registriesBefore"] = (uint64_t) prima;
+    out["registriesAfter"] = (uint64_t) ggml_backend_reg_count();
+    return env->NewStringUTF(out.dump().c_str());
 }
 
 JNIEXPORT jstring JNICALL

@@ -88,5 +88,36 @@
             android:authorities="${applicationId}.agentprobe"
             android:process=":agent"
             android:exported="true" />
+
+        <!--
+            ⛔⛔ SOLO RICERCA — la libreria OpenCL del produttore va CHIESTA.
+
+            MISURATO il 2026-08-20 sul Pad, e senza questa riga il fallimento non
+            diceva niente di utile:
+
+              dlopen failed: library "libOpenCL.so" not found:
+                needed by …/libggml-opencl.so in namespace clns-9
+
+            eppure il sistema la dichiara pubblica — letto in logcat:
+            «InitVendorPublicLibraries: … libfastcvopt.so:libOpenCL.so:…».
+
+            Le due cose non si contraddicono: da Android 12 (API 31) una
+            libreria nativa del produttore NON è accessibile a un'applicazione
+            per il solo fatto di essere pubblica. Va nominata qui. TALOS ha
+            targetSdk 36, quindi la regola ci riguarda in pieno.
+
+            ⛔ `required="false"`: un telefono senza quella libreria deve poter
+            installare l'app lo stesso. Con `true` l'installazione verrebbe
+            rifiutata su ogni dispositivo che non ce l'ha — cioè si romperebbe
+            l'app per tutti pur di far funzionare una prova.
+
+            ⛔ E sta nel source set `debug`, non in `main`: la build che si
+            spedisce non porta `libggml-opencl.so`, quindi non ha nulla da
+            chiedere, e la ricerca non deve lasciare tracce nel manifest
+            pubblicato.
+        -->
+        <uses-native-library
+            android:name="libOpenCL.so"
+            android:required="false" />
     </application>
 </manifest>
