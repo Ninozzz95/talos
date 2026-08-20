@@ -246,6 +246,32 @@ public class TalosLocalBaselineDeviceTest {
         return "none".equals(backendRichiesto()) ? 0 : argomentoIntero("talosGpuLayers", -1);
     }
 
+    /**
+     * Il microbatch — il batch FISICO, quanti token entrano in un lancio.
+     *
+     * ⛔⛔ NON è una manopola di comodo: su Adreno è la variabile che decide se
+     * il backend Vulkan sopravvive.
+     *
+     * MISURATO il 2026-08-20 sul Pad: con microbatch 256 il processo muore al
+     * primo grafo di calcolo — `vk::Queue::submit` perde il device e il driver
+     * Adreno segmenta dentro `vkGetDeviceFaultInfoEXT`. E non è una nostra
+     * stranezza: upstream ha DUE issue aperti che descrivono lo stesso guasto
+     * sulla stessa famiglia di GPU —
+     *
+     *   #8743  Adreno 750 (OnePlus): batch >= 33 → vk::DeviceLostError
+     *   #12139 Adreno 732:            batch  > 32 → idem
+     *
+     * — entrambi «open», «unconfirmed», senza causa e senza cura. Il segnalatore
+     * di #8743 aggiunge la cosa che rende l'ipotesi verificabile: «I also tried
+     * submitting the operator one by one … and it succeeded».
+     *
+     * ⇒ 0 lascia decidere al motore, come in produzione. Un valore esplicito
+     * serve a trovare la soglia di QUESTA GPU, che nessuno dei due issue ha.
+     */
+    private static int microBatch() {
+        return argomentoIntero("talosMicroBatch", 0);
+    }
+
     private static long apriCpu(File model, int contesto, int thread) {
         /*
          * ⛔ Prima si CHIEDE ALLA POLITICA, e non è cerimonia.
@@ -267,13 +293,14 @@ public class TalosLocalBaselineDeviceTest {
                 decisa.ok());
 
         long handle = TalosLlamaNative.nativeOpenTargeted(
-                model.getAbsolutePath(), thread, contesto, stratiSuGpu(), true, thread, 0, "f16",
+                model.getAbsolutePath(), thread, contesto, stratiSuGpu(), true, thread, microBatch(), "f16",
                 backendRichiesto(), deviceRichiesto(), "default");
         assertNotEquals("apertura fallita su `" + backendRichiesto() + "/" + deviceRichiesto()
                         + "`: " + TalosLlamaNative.nativeLastOpenError(), 0L, handle);
         Log.i(TAG, "aperto su " + backendRichiesto()
                 + (deviceRichiesto().isEmpty() ? "" : "/" + deviceRichiesto())
-                + " · strati su GPU " + stratiSuGpu());
+                + " · strati su GPU " + stratiSuGpu()
+                + " · microbatch " + (microBatch() == 0 ? "(predefinito)" : microBatch()));
         return handle;
     }
 
@@ -449,6 +476,7 @@ public class TalosLocalBaselineDeviceTest {
         riga.put("backendRequested", backendRichiesto());
         riga.put("deviceRequested", deviceRichiesto());
         riga.put("gpuLayers", stratiSuGpu());
+        riga.put("microBatch", microBatch());
         riga.put("config", configurazione);
         riga.put("engineBuild", TalosLlamaNative.nativeEngineBuild());
         riga.put("backendsFlat", TalosLlamaNative.nativeBackends());
