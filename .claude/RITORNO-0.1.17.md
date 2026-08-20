@@ -1532,6 +1532,38 @@ tre token al secondo. ⛔ Questo **sulla GPU**: è il numero buono.
 della caduta è strozzamento e non lunghezza. Le due cause non le ho separate —
 servirebbe una corsa PP8192 da freddo e sola, ed è lavoro non fatto.
 
+### ⭐⛔ IL CONFRONTO VERO — entrambi i lati al microbatch di PRODUZIONE
+
+Tutte le tabelle precedenti confrontano un CPU a 256 con un OpenCL a 256, e
+nessuno dei due è ciò che l'app manda. Rifatto con **512 da entrambe le parti**,
+telefono freddo, mediane su cinque giri più uno di riscaldamento scartato:
+
+| | CPU | OpenCL | rapporto |
+|---|---:|---:|---:|
+| prefill 512 | 48,63 tok/s | **314,27** | **6,46×** |
+| prefill 2048 | 40,53 tok/s | **259,63** | **6,41×** |
+| TTFT su 512 token | 10.508 ms | **1.628** | **6,45×** |
+| **TTFT su 2048 token** | **50.536 ms** | **7.890** | **6,41×** |
+| decodifica (prompt da 31 token) | 15,17 tok/s | 18,81 | **1,24×** |
+| **decodifica dopo 2048 token** | **8,51 tok/s** | **8,07** | ⛔ **0,95×** |
+
+⇒ Il prefill è **sei volte e mezzo**, costante fra 512 e 2.048 token, e la
+persona che manda un prompt lungo aspetta **8 secondi invece di 50**.
+
+⛔⛔ **E le ultime due righe demoliscono la politica meglio di qualunque
+argomento.**
+
+1. Sulla decodifica dopo un prompt lungo la GPU è **più lenta della CPU** —
+   8,07 contro 8,51. Non «meno veloce del previsto»: **peggio**.
+2. Sulla decodifica corta il rapporto è **1,24×**, e la soglia di
+   `TalosBackendChoice` è **1,25×**.
+
+⇒ Con il metro che la politica usa oggi, e nella configurazione che la
+produzione manda davvero, **OpenCL verrebbe RIFIUTATO** — per un centesimo — su
+un dispositivo dove taglia l'attesa da cinquanta secondi a otto. ⛔ Non è una
+soglia da ritoccare: è la **grandezza sbagliata**, e adesso il rifiuto non è
+un'ipotesi ma il risultato che quei numeri producono.
+
 ### 📋 La politica a un numero solo — la proposta, non applicata
 
 `TalosBackendChoice.choose()` decide con **un numero**: `tokensPerSecond`. Il
