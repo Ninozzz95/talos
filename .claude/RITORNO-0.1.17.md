@@ -220,33 +220,54 @@ davvero**, non dal segnale.
 dove l'header di llama.cpp avverte che la callback di abort «currently works
 only with CPU execution».
 
-**Prefill, primo token e decodifica** — 1 giro di riscaldamento scartato + 5
-misurati, mediana e MAD. ⛔ Ogni riga porta `reusedTokens: 0`.
+**Prefill, primo token e decodifica** — campagna pulita (`--fresh`), 1 giro di
+riscaldamento scartato + **9 misurati**, mediana e MAD. ⛔ Ogni riga porta
+`reusedTokens: 0`, termico stabile a `none`.
 
-| configurazione | prompt tok/s | decode tok/s | TTFT | muro |
+| configurazione | prompt tok/s | decode tok/s | TTFT | muro | dispersione |
+|---|---:|---:|---:|---:|---:|
+| **PP512** | 43,82 ±0,6 | 13,36 | 11.661 ms | 12.260 ms | ±6,2% |
+| **PP2048** | 36,78 ±0,15 | 7,71 | 55.682 ms | 56.694 ms | ±4,8% |
+| **TG256** | 39,14 ±0,53 | **14,68** ±0,03 | **793 ms** | 18.225 ms | ±1,8% |
+
+⛔ **Perché 9 giri e non 5, e cosa è cambiato.** La corsa a 5 dava PP512 a 52,94
+tok/s. A 9 giri la mediana scende a **43,82** — il 17% in meno. La MAD era
+minuscola già a 5 giri (0,18) mentre il range era largo: **un solo giro fuori
+riga**, il primo misurato, il più veloce. Il telefono è più rapido da freddo e
+rallenta appena si scalda, pur restando `thermal: none`. ⇒ I numeri a 5 giri
+erano ottimistici; questi sono quelli da usare. È esattamente il motivo per cui
+§9.4 prescrive nove giri.
+
+⇒ Due cose che un numero solo avrebbe nascosto, ed è la Q3 del brief:
+
+1. **Il prefill non scala.** Da 512 a 2048 token il tasso scende da 43,8 a 36,8
+   tok/s. Ma il dato più duro è il TTFT: **da 11,7 a 55,7 secondi**.
+2. **TTFT e decodifica sono grandezze diverse.** Con prompt corto il primo token
+   arriva in **793 ms**; con 2048 token ci mette **55 secondi**. Un backend
+   scelto sul solo `tokensPerSecond` di decodifica potrebbe vincere la misura e
+   far aspettare la persona quasi un minuto. ⇒ La `Evidence` a un solo numero di
+   `TalosBackendChoice` **non basta**, e ora c'è il dato che lo dice.
+3. E la decodifica **dipende da quanto prefill l'ha preceduta**: 14,68 tok/s
+   dopo un prompt corto, 13,36 dopo 512 token, 7,71 dopo 2048. La KV che cresce
+   si paga a ogni token.
+
+**Carico** — L0 3.249 ms · L1 2.949 ms.
+
+**Stop** — dalla richiesta al ritorno vero di `nativeGenerate`, 9 giri:
+
+| fase | p50 | p95 | max | dispersione |
 |---|---:|---:|---:|---:|
-| **PP512** | 52,94 | 16,88 | 9.652 ms | 10.126 ms |
-| **PP2048** | 36,35 | 7,71 | 56.338 ms | 57.387 ms |
-| **TG256** | 39,09 | 15,59 | **793 ms** | 17.218 ms |
+| durante il **prefill** | 5 ms | — | 21 ms | ⚠ ±380% [2 … 21] |
+| durante la **decodifica** (a 16 token) | **0 ms** | 0 ms | 0 ms | ±0% |
 
-⇒ Due cose che un numero solo avrebbe nascosto, ed è esattamente la Q3 del brief:
+⛔ La dispersione dello Stop in prefill resta larga **anche con nove giri**: non
+è un difetto da correggere con altri giri, è una proprietà della misura — lo
+stop cade fra due chunk di prefill, e quanto manca al prossimo dipende da dove
+si è. Si riporta così, non si liscia.
 
-1. **Il prefill non scala.** Da 512 a 2048 token il tasso cade da 52,9 a 36,4
-   tok/s — **−31%**. Quadruplicare il prompt costa 5,6 volte il tempo, non 4.
-2. **TTFT e decodifica sono grandezze diverse.** Con un prompt corto il primo
-   token arriva in 793 ms; con 2048 token di prompt ci mette **56 secondi**. Un
-   backend scelto sul solo `tokensPerSecond` di decodifica potrebbe vincere la
-   misura e far aspettare la persona un minuto.
-
-⛔ **PP8192 non misurato**: con contesto 8192 il tetto prudente è metà. Serve
-una corsa con contesto più largo.
-
-⛔ **Dispersione oltre il 10% su 4 configurazioni**, e la forma dice cosa
-succede: la MAD è minuscola (0,11-0,44) mentre il range è largo. È **un solo
-giro fuori riga**, e guardando i minimi è il **primo misurato** a essere il più
-veloce — 8.637 ms contro 10.126 di mediana su PP512. Il telefono è più rapido da
-freddo e rallenta appena si scalda, pur restando `thermal: none`. ⇒ Corsa a 9
-giri lanciata, come prescrive §9.4.
+⇒ Su CPU lo Stop è **immediato**. È il pavimento contro cui misurare la GPU,
+dove l'header di llama.cpp avverte che la callback di abort «currently works
+only with CPU execution».
 
 ### ⛔⛔ UN DIFETTO DI PRODUZIONE, trovato per strada
 
@@ -355,12 +376,45 @@ dell'interfaccia, che NON ho verificato**: lo registro come misura del parser,
 non come difetto a schermo. Va guardato sul dispositivo con un modello Llama e
 un attrezzo offerto.
 
-⛔ **Cosa S4 non copre**, e lo dico invece di sottintenderlo: byte della
-grammatica, `grammar_lazy`, numero di inneschi e token preservati **non sono
-esposti da nessuna API**. Il taccuino porta già il numero che fa male — 46
-attrezzi → 55.871 byte di GBNF, rifiutati dal parser — ma quel dato oggi si
-ottiene solo dai log, non da una misura ripetibile. Serve una diagnostica
-nativa dedicata.
+### ⛔⛔ La grammatica: era VUOTA, ed è la risposta giusta
+
+S4 chiedeva byte della GBNF, `grammar_lazy`, inneschi e token preservati.
+Nessuna API li esponeva: vivevano solo in logcat. `nativeGrammarDiagnostics` li
+rende una risposta ripetibile, e **`compiles` è PROVATO** — costruisce un
+campionatore di prova e lo libera, perché `common_sampler_init` non segnala una
+GBNF incompilabile con `nullptr`: lancia.
+
+La prima lettura sembrava grave — GBNF **vuota** a 1, 8, 24 e 46 attrezzi,
+quindi nessun vincolo. **Non è un difetto**, e il campo che lo dice è quello che
+alla diagnostica mancava:
+
+| attrezzi | prompt token | GBNF | formato | parser byte | pensiero | compila |
+|---:|---:|---:|---|---:|---|---|
+| 1 | 200 | 0 | `peg-native` | 8.164 | false | ✅ |
+| 8 | 865 | 0 | `peg-native` | 28.919 | false | ✅ |
+| 24 | 2.385 | 0 | `peg-native` | 78.913 | false | ✅ |
+| **46** | **4.475** | 0 | `peg-native` | **150.864** | false | ✅ |
+
+⇒ **A questo pin il vincolo lo fa un parser PEG, non una GBNF per famiglia.**
+«Grammatica vuota» si legge solo ACCANTO al formato scelto: con un formato PEG è
+la risposta giusta; con un formato che la grammatica ce l'ha, sarebbe un
+difetto.
+
+⛔⛔ **E questo DATA il numero del taccuino.** I 55.871 byte di GBNF rifiutati
+dal parser (8 agosto) appartengono al percorso vecchio, non al motore che
+spediamo oggi. Anche la nota «grammatica pigra, 1 solo innesco / Grammar still
+awaiting trigger» va riletta con questo in mano: su `peg-native` non ci sono né
+inneschi né pigrizia. ⇒ Chi riapre
+[[il-difetto-e-che-non-li-chiamano]] deve rimisurare, non ripartire da quei
+numeri.
+
+⛔ Il parser PEG si **misura**, non si copia: con 46 attrezzi è un albero JSON da
+**150.864 byte**. Metterlo in un artifact lo renderebbe illeggibile proprio dove
+serve leggerlo.
+
+⛔ `supportsThinking` ha sostituito un'euristica mia: S2 indovinava cercando
+`<think>` nel prompt reso, e avrebbe risposto «no» a qualunque famiglia che
+marca il ragionamento in un altro modo. Il motore lo dichiara.
 
 ---
 
