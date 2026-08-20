@@ -103,8 +103,24 @@ for (const riga of giri) {
     // metterle nello stesso insieme produce una dispersione che descrive la
     // differenza fra le due invece del rumore dentro ciascuna.
     const fase = riga.phase ? `/${riga.phase}` : ''
+    /*
+     * ⛔⛔ E ci entrano anche MICROBATCH e FLASH ATTENTION, per la stessa
+     * ragione — con una prova, non con un'intuizione.
+     *
+     * MISURATO il 2026-08-20 sul Pad: a parita' di tutto il resto, il
+     * microbatch sposta il prefill da 307 a 225 tok/s, e la Flash Attention
+     * sposta la decodifica dopo un prompt lungo da 8,1 a 15,9 tok/s. Due
+     * campagne cosi' nello stesso file darebbero una dispersione del 90% che
+     * non descrive nessuna delle due: descrive la manopola.
+     *
+     * ⛔ Compaiono nella chiave SOLO quando non sono il predefinito, cosi' le
+     * righe di sempre restano leggibili e la distinzione appare esattamente
+     * quando serve.
+     */
+    const ub = riga.microBatch ? `/ub${riga.microBatch}` : ''
+    const fa = riga.flashAttn && riga.flashAttn !== 'default' ? `/fa-${riga.flashAttn}` : ''
     const chiave = `${riga.candidate ?? '?'}/${riga.backendRequested ?? '?'}/`
-        + `${riga.config ?? '?'}${fase}`
+        + `${riga.config ?? '?'}${fase}${ub}${fa}`
     if (!gruppi.has(chiave)) gruppi.set(chiave, [])
     gruppi.get(chiave).push(riga)
 }
