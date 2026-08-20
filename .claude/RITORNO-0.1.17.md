@@ -1364,7 +1364,7 @@ alla fine.
 #### ✅ La stessa corsa sulla CPU: NON è il governor, ed è il backend
 
 Dieci minuti identici, stesso modello, stesso prompt, telefono freddo alla
-partenza, **stessa temperatura di picco del SoC — 88 °C**:
+partenza:
 
 | | **CPU** | **OpenCL** |
 |---|---:|---:|
@@ -1429,8 +1429,14 @@ differenza del 4% che dopo dieci minuti non c'è più.
 2. La stessa corsa con `flash-attn off`: la FA accesa raddoppia il lavoro sulla
    KV, e potrebbe essere ciò che porta il chip sulla soglia. **In corso.**
 3. ~~Il segnale giusto~~ — ✅ le zone termiche del SoC si campionano dall'host e
-   l'analizzatore le legge con `--zone`. Il picco è **88 °C** su entrambi i
-   backend, mentre la batteria dice 33-34.
+   l'analizzatore le legge con `--zone`.
+   ⛔ **Ma la G5 su GPU in configurazione di produzione NON ha campioni**: è
+   girata prima che la sonda esistesse. Gli **88 °C** misurati sono della corsa
+   **CPU**; il lato OpenCL ha un numero solo dalla corsa con FA spenta. ⇒ Il
+   confronto termico fra i due backend, come lo volevo, **non ce l'ho**: si
+   rifà la G5 di produzione con `--zone` accanto. Nel frattempo il confronto che
+   regge è quello sulla **forma** — 0 salti contro 9 — che non dipende dal
+   termometro.
 
 ### ⛔⛔⛔ FASE 7 — LA GPU NON È SPEDITA, NON È SCELTA, NON È USATA
 
