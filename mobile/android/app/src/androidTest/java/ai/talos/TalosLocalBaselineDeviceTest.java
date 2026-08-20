@@ -236,6 +236,27 @@ public class TalosLocalBaselineDeviceTest {
         return scelto == null || scelto.isEmpty() ? "none" : scelto;
     }
 
+    /**
+     * ⛔⛔ FLASH ATTENTION — e su questa GPU non è una manopola qualsiasi.
+     *
+     * MISURATO il 2026-08-20 sul Pad: al PRIMO grafo di ogni processo ggml-opencl
+     * compila i kernel di Flash Attention uno per uno, e lo dice —
+     * `ggml_opencl: lazy-compiling flash_attn prepass for DK=128 DV=128`. La
+     * finestra fra quella riga e il primo prompt è **5.845 ms**, sette
+     * compilazioni, e quattro dei kernel prodotti vengono poi SCARTATI perché
+     * l'Adreno 830 dichiara `per-kernel max 128 < required 192`.
+     *
+     * ⛔ E quei programmi NON finiscono nella cache su disco: i `.clbin`
+     * restano 181 prima e dopo. ⇒ Ogni processo ripaga i 5,8 secondi, e per
+     * questo la cache calda non toglieva l'anomalia del primo giro.
+     *
+     * Valori: `default` · `off` · `auto` · `on`.
+     */
+    private static String modalitaFa() {
+        String scelto = InstrumentationRegistry.getArguments().getString("talosFlashAttn", "");
+        return scelto == null || scelto.isEmpty() ? "default" : scelto;
+    }
+
     private static String deviceRichiesto() {
         String scelto = InstrumentationRegistry.getArguments().getString("talosDevice", "");
         return scelto == null ? "" : scelto;
@@ -294,13 +315,14 @@ public class TalosLocalBaselineDeviceTest {
 
         long handle = TalosLlamaNative.nativeOpenTargeted(
                 model.getAbsolutePath(), thread, contesto, stratiSuGpu(), true, thread, microBatch(), "f16",
-                backendRichiesto(), deviceRichiesto(), "default");
+                backendRichiesto(), deviceRichiesto(), modalitaFa());
         assertNotEquals("apertura fallita su `" + backendRichiesto() + "/" + deviceRichiesto()
                         + "`: " + TalosLlamaNative.nativeLastOpenError(), 0L, handle);
         Log.i(TAG, "aperto su " + backendRichiesto()
                 + (deviceRichiesto().isEmpty() ? "" : "/" + deviceRichiesto())
                 + " · strati su GPU " + stratiSuGpu()
-                + " · microbatch " + (microBatch() == 0 ? "(predefinito)" : microBatch()));
+                + " · microbatch " + (microBatch() == 0 ? "(predefinito)" : microBatch())
+                + " · flash-attn " + modalitaFa());
         return handle;
     }
 
@@ -477,6 +499,7 @@ public class TalosLocalBaselineDeviceTest {
         riga.put("deviceRequested", deviceRichiesto());
         riga.put("gpuLayers", stratiSuGpu());
         riga.put("microBatch", microBatch());
+        riga.put("flashAttn", modalitaFa());
         riga.put("config", configurazione);
         riga.put("engineBuild", TalosLlamaNative.nativeEngineBuild());
         riga.put("backendsFlat", TalosLlamaNative.nativeBackends());
