@@ -59,7 +59,32 @@ mobile/docs/superpowers/
 docs/superpowers/
 
 # Come lavoriamo: taccuini, competenze degli agenti, istruzioni di collaudo.
-.claude/
+#
+# ⛔⛔ `.claude/` NON si ignora più — e la ragione è costata una mattina.
+#
+# Il 2026-08-20 `.claude/settings.json` è stato SOVRASCRITTO da una scrittura
+# che sostituiva invece di fondere. Dentro c'erano gli OTTO hook che tengono in
+# piedi le regole d'oro: mai spingere, mai cancellare lavoro, la ricerca prima
+# del codice, non fermarsi con una promessa, non chiudere senza aver provato.
+#
+# Non se n'è accorto nessuno per ore: la configurazione sta in memoria, quindi
+# gli hook continuavano a sparare nella sessione aperta. Sarebbero spariti alla
+# prima sessione nuova, in silenzio. Il file è tornato solo perché la cronologia
+# interna di Claude Code ne aveva per caso una copia — cioè per fortuna.
+#
+# ⇒ Fuori dall'indice, un file non ha storia: `git status` non lo segnala,
+# `git show` non lo recupera, e un danno non si vede. Le guardie che ci
+# impediscono di sbagliare devono essere versionate almeno quanto il codice che
+# proteggono.
+#
+# ⛔ E non finisce nel repo pubblico: la copia pubblicata si costruisce da
+# `mobile/`, che diventa la radice — `scripts/prepara-la-pubblicazione.ps1`
+# cerca «SOLO dentro mobile/, l'unica cartella che viene pubblicata». Una
+# cartella alla radice non ha nessuna strada per arrivarci.
+#
+# Resta fuori solo il file delle preferenze PERSONALI, che è per definizione
+# di chi sta alla tastiera e non della squadra.
+.claude/settings.local.json
 .agents/
 .codex/
 AGENTS.md
