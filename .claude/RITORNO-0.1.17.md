@@ -1087,7 +1087,7 @@ const microBatch = core >= 6 ? 512 : 256
 
 Il Pad ha **8 core** ⇒ la produzione apre a **512**, non a 256.
 
-⛔ Due conseguenze, e nessuna comoda:
+⛔ **Tre** conseguenze, e nessuna comoda:
 
 1. **Tutta la matrice qui sopra parte dal valore sbagliato.** 256, 128 e 64 sono
    stati misurati contro il ripiego del JNI, che la produzione non usa mai. Il
@@ -1095,6 +1095,10 @@ Il Pad ha **8 core** ⇒ la produzione apre a **512**, non a 256.
    1.458 ms — misura in coda sul Pad mentre scrivo.
 2. **La cura non è in C++.** Sta in `engineTuning.ts`, ed è una riga di
    TypeScript. Avevo scritto «una riga in `talos_apri_modello`»: sbagliato.
+3. ⛔ **E nemmeno il pavimento CPU è quello di produzione.** Tutte le misure C0
+   di questo ramo sono state prese con `talosMicroBatch=0`, cioè lo stesso
+   ripiego da 256. La CPU di produzione, con 8 core, apre a **512** come la
+   GPU. ⇒ Anche il termine di paragone va rimisurato, ed è in coda.
 
 ⭐ Va detta anche una cosa a favore di chi l'ha scritta: il commento sopra quella
 riga **aveva già capito il compromesso** — «l'attesa massima dello Stop è un
