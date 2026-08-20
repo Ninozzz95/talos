@@ -1050,7 +1050,8 @@ ogni corsa:
 
 | flash-attn | microbatch | giro 0 | p50 | **p95** | ≤ 1.500 ms | **≤ 286 ms** |
 |---|---:|---:|---:|---:|:---:|:---:|
-| **on** (com'è oggi) | 256 | 4.095 | 1.460 | 4.095 | ⛔ | ⛔ |
+| **on** | **512 — com'è DAVVERO oggi** | **5.926** | **1.412** | **5.926** | ⛔ | ⛔ |
+| on | 256 (il ripiego del JNI) | 4.095 | 1.460 | 4.095 | ⛔ | ⛔ |
 | on | 128 | 6.032 | 273 | 6.032 | ⛔ | ⛔ |
 | on | 64 | 4.039 | 93 | 4.039 | ⛔ | ⛔ |
 | **off** | 256 | 1.444 | 1.430 | 1.444 | ✅ | ⛔ |
@@ -1070,9 +1071,16 @@ ogni corsa:
 1.500 ms e manca quello vero: p95 300 contro 286. Non lo arrotondo: un cancello
 mancato di poco è un cancello mancato, e il numero che conta è il secondo.
 
+⛔ **Nota sul 512, che è il valore vero:** a regime dà **1.412 ms**, cioè
+praticamente quanto il 256 (1.458). Non è una sorpresa una volta capito che
+l'abort **non morde nemmeno ai confini di microbatch** su questo backend: in
+entrambi i casi si aspetta il prefill intero. La differenza fra 512 e 256 la
+fanno il **giro 0** (5.926 contro 4.095) e il prefill, non lo Stop a regime.
+
 ⇒ **G4 PASSA con `flash-attn off` + `microbatch 64`**, e con nient'altro fra ciò
-che ho provato. ⛔ Con la produzione com'è oggi — FA accesa, microbatch 256 — il
-cancello è **FAILED** su entrambe le condizioni.
+che ho provato. ⛔ Con la produzione com'è davvero — FA accesa, microbatch **512** — il cancello
+è **FAILED** su entrambe le condizioni, e il p95 è **5.926 ms**: venti volte il
+tetto.
 
 #### ⛔⛔ E la manopola NON è dove l'avevo cercata — né il valore quello che credevo
 
