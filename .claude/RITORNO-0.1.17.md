@@ -550,6 +550,51 @@ non porta `libggml-opencl.so`, quindi non ha niente da chiedere.
 ⇒ Verificato che la produzione è intatta: `assembleDebug` nudo impacchetta
 **zero** librerie OpenCL.
 
+### ✅ FASE 1 — IL FORWARD PIN: uscita RAGGIUNTA
+
+Candidato **`dc72703`**, quello che il brief stesso indicava. Verificato con
+git — non con una tabella — che contiene tutto ciò che serve:
+
+```
+60addddf (race FA OpenCL)   È dentro dc72703   ✓
+98d1e92  (transpose Vulkan) È dentro dc72703   ✓
+d2f83055 (il nostro pin)    È dentro dc72703   ✓   ⇒ avanzamento pulito
+```
+
+**163 commit**, dal 10 al 19 agosto. `engineBuild`: `b137-d2f8305` →
+**`b419-dc72703`**.
+
+**Domanda 1 — compila?** ✅ **Zero rotture di API.** `llama-common`, Jinja,
+campionamento e parser attraversano 163 commit senza una riga da cambiare in
+`talos_llama_jni.cpp`. Era il rischio R2 del brief («a pin that accelerates
+kernels may alter tool formatting/parsing»): non si è materializzato.
+
+**Domanda 2 — la semantica tiene?** ✅ La suite golden è **verde, e identica**.
+Non «passa»: **non si muove**.
+
+| caso | vecchio pin → nuovo |
+|---|---|
+| S1 chat senza ragionamento | IDENTICO |
+| S2 ragionamento | IDENTICO (`applicable:false`, Llama non ce l'ha) |
+| S3 un attrezzo | IDENTICO — nome e argomenti sopravvivono |
+| S5 prosa prima della chiamata | IDENTICO |
+| S6 attrezzi malformati | IDENTICO — motore vivo |
+| S4 token di prompt | **200 / 865 / 2.385 / 4.475** — identici |
+| S4 formato e grammatica | `peg-native`, GBNF 0, parser 8.164 / 28.919 / 78.913 / **150.864** — identici |
+
+⇒ **Il forward pin è semanticamente sicuro.** È la condizione che il brief pone
+prima di qualunque numero di velocità, ed è soddisfatta.
+
+⛔ Una nota di onestà sul confronto: il file golden del vecchio pin è stato
+catturato **prima** che aggiungessi la diagnostica della grammatica, quindi quei
+campi lì risultano assenti. Non è deriva: è strumentazione che allora non
+c'era. I valori del vecchio pin usati per il confronto sono quelli misurati
+separatamente e registrati sopra in questo stesso documento.
+
+**Cancelli su questo pin:** typecheck verde · vitest **5.858** · JVM **303**
+letti dagli XML con `--rerun-tasks` (non dal «SUCCESSFUL») · lint verde ·
+build nativa verde.
+
 ### ⛔⛔⛔ LA MISURA CHE RIBALTA UNA DECISIONE
 
 Stessa matrice, stesso modello, stesso telefono, prefisso freddo, termico
@@ -650,6 +695,46 @@ degli altri silenzi di oggi, un piano più in basso.
 (stabilità nativa).** Non «lento»: il brief è esplicito — un crash è FAILED, non
 una misura scarsa. Nessun numero di prestazioni Vulkan esiste, e nessuno può
 esistere finché questo non si chiude.
+
+### ⛔ Il crash Vulkan è NOTO A UPSTREAM — e la loro ipotesi qui NON regge
+
+Cercato prima di ipotizzare, come impone la regola nuova. Upstream ha **due
+issue aperti** che descrivono lo stesso guasto sulla stessa famiglia di GPU:
+
+| issue | dispositivo | soglia | esito |
+|---|---|---|---|
+| [#8743](https://github.com/ggml-org/llama.cpp/issues/8743) | Adreno **750**, su un **OnePlus** | batch ≥ 33 | `vk::DeviceLostError` |
+| [#12139](https://github.com/ggml-org/llama.cpp/issues/12139) | Adreno **732** | batch > 32 | idem |
+
+Entrambi **open**, **unconfirmed**, **stale**: nessuna causa, nessuna cura,
+nessun commit collegato. E il segnalatore di #8743 lascia la frase che rende
+l'ipotesi verificabile: «I also tried submitting the operator one by one … and
+it succeeded».
+
+⇒ Ipotesi: la soglia è il **batch**, e con un microbatch piccolo Vulkan regge.
+Provata sull'830, con calcolo vero (non solo apertura):
+
+| microbatch | esito |
+|---:|---|
+| 256 | ⛔ CRASH |
+| **32** | ⛔ **CRASH** |
+
+⛔ **L'ipotesi è SMENTITA su questo dispositivo.** A 32 — sotto la soglia che
+fa passare le altre due Adreno — l'830 muore lo stesso. ⇒ Il nostro guasto è
+**più grave** di quello descritto negli issue, non lo stesso con un numero
+diverso: qui non esiste un microbatch che lo eviti.
+
+⛔ Nota per chi riprende: la prima sonda che ho usato (`c0Carico`) passava a
+**tutti** i valori, perché apre e chiude il modello **senza calcolare**. Il
+crash sta nel grafo di calcolo. Una sonda che non calcola avrebbe dichiarato
+Vulkan sana.
+
+⛔⛔ Quello che NON ho provato, e perché: il `n_batch` — il batch **logico** —
+è fisso a 512 dentro `talos_apri_modello`, e cambiarlo tocca il percorso di
+produzione. Gli issue upstream parlano del `-b` di `llama-bench`, che è
+proprio `n_batch`. ⇒ Resta l'ultima variabile non esplorata, e richiede una
+manopola di ricerca in più. **Non l'ho aggiunta**: il brief di ripresa dice che
+Vulkan resta parcheggiata e che la priorità è la Fase 1.
 
 ### ⛔ VK-3 — **NOT RELEVANT**, e ora è un fatto
 
