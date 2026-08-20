@@ -124,6 +124,20 @@ export interface TalosToolAuditRow {
     /** Kept for the record, not shown to the model. */
     evidence?: Record<string, unknown>
     error?: string
+    /**
+     * ⛔⛔ IL CODICE del fallimento, che prima si perdeva qui.
+     *
+     * `TalosToolResult.code` esiste da sempre e dice di sé: «un codice
+     * stabile per il PERCHÉ — i codici viaggiano, le frasi si
+     * riscrivono». La riga di audit teneva solo `error`, cioè la FRASE,
+     * e il codice moriva qui.
+     *
+     * MISURATO sul Pad il 2026-08-20: l'avviso di un `web_read` fallito
+     * riceveva «The page could not be read: Unable to resolve host …»
+     * — messaggio di sistema Android, in inglese, senza nessun codice —
+     * e non poteva dire alla persona nient’altro che «non è riuscito».
+     */
+    code?: string | null
 }
 
 export interface TalosToolExecutionDeps {
@@ -752,7 +766,11 @@ export async function executeTalosTool(
             ...(verdetto.esito === 'retta' ? { verified: true } : {}),
             input,
             evidence: result.evidence,
-            ...(result.ok ? {} : { error: result.content }),
+            // ⛔ Il codice viaggia INSIEME alla frase: la frase è per il
+            //   modello, il codice è per chi deve decidere cosa dire a una
+            //   persona. Tenere solo la frase costringeva a leggerla, ed è
+            //   testo di sistema in un’altra lingua.
+            ...(result.ok ? {} : { error: result.content, code: result.code ?? null }),
         })
         return wrapped
     } catch (error) {
