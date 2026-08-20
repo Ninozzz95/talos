@@ -148,6 +148,9 @@ public class TalosSemanticGoldenDeviceTest {
         }
         riga.put("case", caso);
         riga.put("engineBuild", TalosLlamaNative.nativeEngineBuild());
+        riga.put("backendRequested", backendRichiesto());
+        riga.put("deviceRequested", deviceRichiesto());
+        riga.put("flashAttn", modalitaFa());
         riga.put("atMs", System.currentTimeMillis());
         try (FileOutputStream out = new FileOutputStream(new File(directory, "golden.jsonl"), true)) {
             out.write((riga.toString() + "\n").getBytes(StandardCharsets.UTF_8));
@@ -155,11 +158,48 @@ public class TalosSemanticGoldenDeviceTest {
         Log.i(TAG, caso + ": " + riga);
     }
 
+    /**
+     * ⛔⛔ LA FLASH ATTENTION CAMBIA I NUMERI, e quindi puo' cambiare le PAROLE.
+     *
+     * Non e' la stessa aritmetica scritta in modo piu' veloce: e' un'altra
+     * strada per lo stesso risultato, con arrotondamenti diversi. Una proposta
+     * «spegniamola, e' piu' veloce» che non porta anche la prova semantica
+     * chiede all'owner di fidarsi di meta' misura.
+     *
+     * ⛔ Il default resta `default`: qui si misura una variante, non si cambia
+     * il pavimento con cui si confrontano le corse di sempre.
+     */
+    /**
+     * ⛔ E il BERSAGLIO, per la stessa ragione: una golden presa su CPU e una
+     * presa su GPU sono due misure, e il file non le distingueva.
+     */
+    private static String backendRichiesto() {
+        String scelto = InstrumentationRegistry.getArguments().getString("talosBackend", "");
+        return scelto == null || scelto.isEmpty() ? "none" : scelto;
+    }
+
+    private static String deviceRichiesto() {
+        String scelto = InstrumentationRegistry.getArguments().getString("talosDevice", "");
+        return scelto == null ? "" : scelto;
+    }
+
+    private static String modalitaFa() {
+        String scelto = InstrumentationRegistry.getArguments().getString("talosFlashAttn", "");
+        return scelto == null || scelto.isEmpty() ? "default" : scelto;
+    }
+
     private static long apri(File model) {
         TalosLlamaNative.ensureReady(context());
         long handle = TalosLlamaNative.nativeOpenTargeted(
-                model.getAbsolutePath(), 4, 4096, 0, true, 4, 0, "f16", "none", "", "default");
-        assertNotEquals("apertura fallita: " + TalosLlamaNative.nativeLastOpenError(), 0L, handle);
+                model.getAbsolutePath(), 4, 4096, 0, true, 4, 0, "f16",
+                backendRichiesto(), deviceRichiesto(), modalitaFa());
+        assertNotEquals("apertura fallita su `" + backendRichiesto() + "`: "
+                        + TalosLlamaNative.nativeLastOpenError()
+                        + "\n   ⇒ `backend-target` NON vuol dire «nome sbagliato»:"
+                        + " vuol dire anche «questa build non ha quell'acceleratore"
+                        + " compilato dentro». Un `assembleDebug` nudo sovrascrive"
+                        + " lo stesso app-debug.apk.",
+                0L, handle);
         return handle;
     }
 
