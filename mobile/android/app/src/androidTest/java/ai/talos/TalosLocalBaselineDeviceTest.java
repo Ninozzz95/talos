@@ -581,6 +581,40 @@ public class TalosLocalBaselineDeviceTest {
      * base a ciò che c'è, e si dichiara.
      */
     private static int[] bersagliDiPrefill(int contesto) {
+        /*
+         * ⛔⛔ E si possono CHIEDERE, invece di derivarli.
+         *
+         * MISURATO il 2026-08-20: la corsa PP8192 arriva al suo bersaglio dopo
+         * aver gia' macinato 512 e 2048, cioe' con il telefono a
+         * `Thermal Status: moderate`. ⇒ Il numero che ne esce mescola DUE cause
+         * — la lunghezza del prompt e lo strozzamento termico — e separarle non
+         * si puo' a posteriori: si rifa' la corsa con quel bersaglio SOLO, da
+         * freddo.
+         *
+         * `talosPrefillTargets=8192` oppure `512,2048`. ⛔ Un bersaglio che il
+         * contesto non regge viene SCARTATO e detto, non troncato in silenzio.
+         */
+        String chiesti = InstrumentationRegistry.getArguments().getString("talosPrefillTargets", "");
+        if (chiesti != null && !chiesti.isEmpty()) {
+            List<Integer> voluti = new ArrayList<>();
+            for (String pezzo : chiesti.split(",")) {
+                try {
+                    int n = Integer.parseInt(pezzo.trim());
+                    if (n <= contesto / 2) voluti.add(n);
+                    else Log.w(TAG, "bersaglio " + n + " scartato: oltre meta' del contesto " + contesto);
+                } catch (NumberFormatException storto) {
+                    Log.w(TAG, "bersaglio non numerico, ignorato: " + pezzo);
+                }
+            }
+            assertTrue("nessuno dei bersagli chiesti (" + chiesti + ") sta in un contesto da "
+                            + contesto + ": meta' del contesto e' il tetto prudente",
+                    !voluti.isEmpty());
+            int[] fuori = new int[voluti.size()];
+            for (int i = 0; i < fuori.length; i += 1) fuori[i] = voluti.get(i);
+            Log.i(TAG, "bersagli di prefill CHIESTI: " + voluti);
+            return fuori;
+        }
+
         List<Integer> scelti = new ArrayList<>();
         for (int candidato : new int[] { 512, 2048, 8192 }) {
             // Metà del contesto è il tetto prudente: sopra, la generazione che
