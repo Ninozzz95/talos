@@ -485,7 +485,36 @@ public class TalosSemanticGoldenDeviceTest {
                     attrezzi.toString(), false);
 
             assertNotNull(prompt);
-            assertTrue("l'attrezzo non è arrivato al template: il modello non sa che esiste",
+
+            /*
+             * ⛔⛔ «IL MODELLO NON SUPPORTA GLI ATTREZZI» NON E' UN GUASTO
+             * NOSTRO, ed erano la stessa riga rossa.
+             *
+             * MISURATO il 2026-08-20 su Gemma 3 4B: l'attrezzo non arriva al
+             * template, e questo test falliva come se l'impianto fosse rotto.
+             * ⛔ Verificato: il chat template di Gemma 3 **non contiene affatto
+             * le strutture per gli attrezzi** — e' una proprieta' del modello,
+             * documentata a monte, non un difetto di TALOS.
+             *
+             * ⇒ Un modello senza attrezzi si SALTA e si NOMINA. Confonderlo con
+             * una catena rotta ha due prezzi opposti: nasconde i guasti veri
+             * dentro il rumore, e fa sembrare colpa nostra un limite del
+             * modello.
+             *
+             * ⭐ E resta un fatto di PRODOTTO che conta: con un modello cosi'
+             * l'assistente non puo' chiamare niente. Non e' «chiama male»: non
+             * gli viene proprio offerto.
+             */
+            String capacita = TalosLlamaNative.nativeTemplateCapabilities(model.getAbsolutePath());
+            boolean sostiene = capacita != null && capacita.contains("\"supportsTools\":true");
+            Assume.assumeTrue(
+                    "questo modello non dichiara il supporto agli attrezzi: il suo template"
+                            + " non li rende, quindi l'assistente non puo' chiamarli."
+                            + "  capacita = " + capacita,
+                    sostiene);
+
+            assertTrue("l'attrezzo non è arrivato al template benché il modello dichiari"
+                            + " di supportarli: qui il guasto è NOSTRO",
                     prompt.contains("meteo"));
 
             Dialetto quale = dialetto(handle);
