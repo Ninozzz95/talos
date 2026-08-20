@@ -912,6 +912,147 @@ legata a quei simboli **non si carica su Android 8 e 8.1**. Per la ricerca va
 bene (il Pad è Android 16), ma una promozione richiederebbe **o alzare minSdk, o
 il carico dinamico dei simboli**: due decisioni di prodotto, non di build.
 
+### ⛔⛔ G4 — LO STOP SOTTO GPU: due guasti diversi, e uno ha già la leva
+
+Il cancello G4 chiede due cose insieme: che il p95 dello Stop non peggiori di
+oltre 250 ms rispetto alla CPU, e che **nessuna** latenza superi 1.500 ms.
+Misurato su OpenCL, prefill:
+
+```
+STOP-prefill (OpenCL, ub 256):  2753  928  166  155  158   → p50 166  max 2753
+STOP-prefill (OpenCL, ub 256):  3181  935  163  154  157   → p50 163  max 3181
+STOP-decode  (OpenCL, ub 256):    49   53   39   51   39   → p50  49  max   53
+CPU di riferimento:             prefill p50 5 max 21 · decodifica p50 0 max 0
+```
+
+⇒ **la decodifica passa, il prefill no.** Ma il *perché* non era quello che
+avevo scritto, e le due ipotesi sbagliate sono servite a trovarne una giusta.
+
+#### ⛔ La prima ipotesi era falsa: la cache dei kernel era GIÀ accesa
+
+Avevo scritto che dentro TALOS la cache dei kernel OpenCL è disabilitata in
+silenzio, perché `default_cache_dir()` torna vuoto quando `TMPDIR` non c'è — il
+caso che il commento di upstream nomina («Android app contexts with TMPDIR
+unset»). La prova che avevo era `TMPDIR=` vuoto sotto `run-as ai.talos`.
+
+⛔ **Quell'ambiente non è quello del processo dell'app.** La prova vera stava già
+sul telefono:
+
+```
+/data/data/ai.talos/cache/llama.cpp/cl-cache   181 file .clbin, 4,3 MB, ore 18:38
+le corse Stop con l'anomalia da 3.181 ms                            ore 19:47 e 19:49
+```
+
+La cache era piena **un'ora prima** delle misure che pretendevo di spiegare con
+la sua assenza. Cancellandola e rimisurando, il verso contrario lo conferma:
+
+| cache | primo Stop | durata del test | `.clbin` dopo |
+|---|---:|---:|---:|
+| calda (181 file) | 2.760 ms | 20 s | 181 |
+| **cancellata** | **4.786 ms** | **52 s** | **181, riscritti** |
+
+⇒ La cache funziona, si scrive e vale 32 secondi di avvio. **E non toglie
+l'anomalia.** Ipotesi chiusa: non è la compilazione dei kernel.
+
+⛔ Un dettaglio che resta: la riga `ggml_opencl: kernel cache enabled at '…'` —
+che è `GGML_LOG_INFO` — **non arriva in logcat**, mentre le altre righe
+`ggml_opencl:` ci arrivano. Il comportamento prova che la cache è accesa; il log
+no. Piccolo, ma è esattamente il tipo di silenzio che mi ha fatto sbagliare.
+
+#### ⛔ La seconda ipotesi era falsa: non c'è riuso del prefisso
+
+Il sospetto successivo era che i giri 1-4 riusassero la KV del giro precedente,
+e che quindi solo il giro 0 misurasse davvero un prefill. Il test registra
+`tokensBeforeStop`, e vale **0 in tutti e cinque i giri** — con un'asserzione che
+lo pretende. Erano tutti prefill davvero. Ipotesi chiusa.
+
+#### ✅ Quello che succede davvero: lo Stop NON interrompe, si aspetta il grafo
+
+Basta cambiare **quando** si preme. Stesso modello, stesso telefono, freddo:
+
+| quando si preme Stop | latenza a regime | somma |
+|---:|---:|---:|
+| dopo 1.500 ms | 155 ms | **1.655 ms** |
+| dopo **200 ms** | **1.458 ms** | **1.658 ms** |
+
+**Tre millisecondi di differenza su due esperimenti opposti.** La latenza non è
+una proprietà dello Stop: è il tempo che *mancava* alla fine del prefill.
+`nativeGenerate` torna sempre a ~1.657 ms dall'inizio, qualunque sia il momento
+in cui si preme. Il «p50 155 ms» del cancello non misurava la prontezza: era il
+residuo di un prefill da 1,7 s in cui avevamo aspettato 1,5 s.
+
+E il verso contrario lo separa dalla CPU in modo netto — stesso test, stessa
+attesa di 200 ms:
+
+```
+CPU      36   1   0   1   7  ms     ← la callback di abort morde
+OpenCL 4095 605 1460 1460 1455 ms   ← si aspetta la fine del grafo
+```
+
+⇒ Non è una lentezza: sotto GPU **lo Stop non è onorato dentro il prefill**.
+Combacia con la nota nell'header di llama.cpp, che dice che la callback di abort
+«currently works only with CPU execution» — e adesso è un numero, non una nota.
+
+#### ✅ La leva c'è già, ed è il MICROBATCH
+
+L'attesa massima per fermarsi è **un microbatch**: è scritto nel commento di
+`talos_apri_modello` come intenzione di progetto, e finora non era mai stata
+misurata sotto GPU. Il valore predefinito è 256. Provato a 128 e a 64, sempre
+premendo Stop dopo 200 ms:
+
+| microbatch | Stop a regime | PP512 | PP2048 | TG | TTFT 512 | TTFT 2048 |
+|---:|---:|---:|---:|---:|---:|---:|
+| **256** (oggi) | **~1.458 ms** | 307 tok/s | 256 tok/s | 18,9 | 1.665 ms | 8.006 ms |
+| **128** | **~258 ms** | 280 (−9%) | 238 (−7%) | ~19 | 1.828 ms | 8.608 ms |
+| **64** | **~90 ms** | 225 (−27%) | 197 (−23%) | 19,0 | 2.268 ms | 10.374 ms |
+
+⇒ **Il ginocchio è 128.** Nove per cento di prefill comprano uno Stop **5,6
+volte** più pronto; scendere a 64 costa altri tre volte tanto in prefill per un
+fattore 2,9. **La decodifica non si tocca**: il microbatch riguarda solo il
+prefill, e TG resta ~19 tok/s in tutte e tre le configurazioni.
+
+⛔ **Onestà sulla riga TG a 128**: due giri su cinque hanno dato 13,4 e 15,8
+tok/s, e `Thermal Status` è salito a **2** proprio durante quel blocco. I PP
+della stessa corsa sono strettissimi (280,0-280,3 e 237,8-238,2), quindi il
+guasto è nella coda della corsa, non nella configurazione — ma quella riga **va
+rifatta a freddo** prima che qualcuno ci si appoggi.
+
+#### ⛔ E resta il giro 0, che non è dello Stop: è del PROCESSO
+
+Il primo giro resta fuori scala in **ogni** configurazione — 4.095 ms a 256,
+6.032 a 128, 4.039 a 64 — e né la cache né il microbatch lo spostano. Non è un
+guasto dello Stop: è il **primo inferire di ogni processo**, e la misura di
+velocità lo mostrava già, scartandolo come riscaldamento:
+
+```
+PP512  giro di riscaldamento   pp  80,7 tok/s   TTFT 6.343 ms
+PP512  giri 0-4                pp 307   tok/s   TTFT 1.662 ms
+```
+
+⇒ **+4,7 secondi una volta per processo**, che la persona paga sul primo
+messaggio dopo aver aperto un modello — e che nessuna delle nostre tabelle
+mostrava, perché il giro di riscaldamento viene buttato via per costruzione.
+⛔ Non è la cache dei kernel (provato sopra: con cache calda restano 2.760 ms).
+Resta da capire cosa sia; è il primo aperto di questa area.
+
+#### Esito del cancello, dichiarato
+
+| | oggi (ub 256) | con ub 128 |
+|---|---|---|
+| Stop in decodifica | ✅ p50 49 ms, max 53 ms | ✅ invariato |
+| Stop in prefill, a regime | ⛔ ~1.458 ms | ✅ ~258 ms |
+| Stop in prefill, primo giro | ⛔ 4.095 ms | ⛔ 6.032 ms |
+
+⇒ **G4 resta FAILED**, e il motivo si è spostato: non più «lo Stop è lento», ma
+«il primo inferire di ogni processo costa 4-6 secondi». Il microbatch chiude la
+parte a regime; il giro 0 no.
+
+⛔⛔ **Non ho toccato la produzione**, e la cura non è mia da applicare: il
+microbatch predefinito vive in `talos_apri_modello` (`n_ubatch = 256`) e
+cambiarlo cambia la velocità di prefill per tutti. È una **decisione di
+prodotto** — 9% di prefill contro uno Stop cinque volte più pronto — e la
+propongo, non la applico.
+
 ## Divergenze dal brief, dichiarate
 
 1. **`devices` è già nella baseline** (§1.3 lo dava per «newer upstream»). Non
@@ -941,25 +1082,34 @@ il carico dinamico dei simboli**: due decisioni di prodotto, non di build.
 
 ## Aperti — cosa manca, in ordine
 
-1. ⛔⛔ **Vulkan: capire il crash.** È il primo, perché blocca una corsia intera.
-   La strada indicata dal brief è il forward pin (C2 vuole comunque `98d1e92` +
-   `dc72703`): uno di quei mesi di correzioni potrebbe averlo già chiuso. ⛔ Ma
-   `dc72703` è NOT RELEVANT su questo telefono, quindi la ragione per pinnare
-   adesso è la **stabilità**, non la prestazione.
-2. ⛔ **La cura dello Stop anticipato** — proposta, non applicata: tocca la
+1. ⛔⛔ **+4,7 s sul primo inferire di OGNI processo.** Trovato il 20/8 dentro
+   G4, e resta senza spiegazione: non è la cache dei kernel (provato con la
+   cache calda), non è il microbatch (provato a 256, 128 e 64). È il costo che
+   la persona paga sul **primo messaggio dopo aver aperto un modello**, ed era
+   invisibile perché il giro di riscaldamento viene scartato per costruzione.
+   È il primo, perché è l'unico numero di G4 ancora sopra il cancello.
+2. ⛔ **Il microbatch predefinito: 256 → 128.** Misurato, non applicato: −9% di
+   prefill per uno Stop **5,6 volte** più pronto. Tocca `talos_apri_modello`,
+   quindi è una decisione dell'owner. ⛔ La riga TG a 128 va **rifatta a freddo**
+   (`Thermal Status` era salito a 2).
+3. ⛔ **La cura dello Stop anticipato** — proposta, non applicata: tocca la
    produzione.
-3. **Fase 1: il forward pin.** La suite golden è lo strumento con cui si
-   qualificherà, ed è pronta.
-4. **OpenCL come C1 vero**, cioè col pin che contiene `60addddf`. Solo allora si
-   possono misurare Flash Attention e la race, e solo allora i numeri di oggi
-   diventano una qualificazione invece di un segnale.
-5. **PP8192** — serve una corsa con contesto più largo.
+4. ⛔⛔ **Vulkan: capire il crash.** Blocca una corsia intera. ⛔ Il forward pin
+   è stato fatto e **non l'ha chiusa**; `dc72703` è NOT RELEVANT su questo
+   telefono (`matrix cores: none`), quindi la ragione per Vulkan resta la
+   copertura dei dispositivi, non la prestazione. ⛔ Ultima variabile mai
+   provata: `n_batch` — il batch **logico**, fisso a 512.
+5. **Flash Attention off/auto/on su OpenCL** — adesso è lecito, perché il pin
+   contiene `60addddf`. Non ancora fatto.
 6. **La tenuta nel tempo** — nessun test da 10 minuti, nessuna deriva termica
-   sotto carico prolungato. Le corse di oggi sono brevi e `thermal` è restato
-   `none`.
-7. **`minSdk` contro Vulkan 1.1** — decisione di prodotto, vedi sopra.
-8. **La politica a un numero solo** — i dati per rifarla ci sono. ⛔ Il brief
+   sotto carico prolungato. Le corse di oggi sono brevi, e il 20/8 il telefono è
+   arrivato a `Thermal Status: 2` **dopo** ~25 minuti di campagna: la deriva
+   esiste e non è ancora misurata.
+7. **PP8192** — serve una corsa con contesto più largo.
+8. **`minSdk` contro Vulkan 1.1** — decisione di prodotto, vedi sopra.
+9. **La politica a un numero solo** — i dati per rifarla ci sono. ⛔ Il brief
    dice di non toccarla prima di avere PP/TG/TTFT separati: adesso ci sono.
+10. ⛔ **Fase 7, l'integrazione in produzione** — non cominciata.
 
 ## Aperti non miei, incontrati per strada
 
@@ -1001,6 +1151,16 @@ mobile/.tmp-research/local-backend/
     runs.jsonl                 una riga per giro — ⛔ mai solo mediane
     golden.jsonl               le righe della suite semantica
 mobile/.tmp-research/backup/   i due .talosbak esaminati
+
+le campagne G4 del 20/8, una per file, gia' separate:
+    runs-C1-stop-SENZA-cache.jsonl   ub 256, attesa 1500 ms (le due corse originali)
+    runs-stop-cacheCALDA.jsonl       ub 256, attesa 1500 ms, cache 181 .clbin
+    runs-stop-ocl-attesa200.jsonl    ub 256, attesa  200 ms  ← la prova che lo Stop non morde
+    runs-stop-cpu-attesa200.jsonl    CPU,    attesa  200 ms  ← il verso contrario
+    runs-stop-ocl-ub128.jsonl        ub 128, attesa  200 ms
+    runs-stop-ocl-ub64.jsonl         ub  64, attesa  200 ms
+    runs-pp-ocl-ub128.jsonl          PP/TG a ub 128  ⛔ coda con Thermal Status 2
+    runs-pp-ocl-ub64.jsonl           PP/TG a ub  64
 ```
 
 ⛔ Sono **fuori dall'indice di git** di proposito: descrivono il dispositivo
@@ -1012,7 +1172,12 @@ dell'owner, e la regola del repo è che quel materiale non entra.
 
 1. Una **code review** di questo ramo, e poi il `git push`, che non faccio io.
 2. La **decisione sulla cura dello Stop anticipato**.
-3. ⛔ **Le chiavi dei provider.** Il backup non è ripristinabile — la password
+3. ⛔ **Il microbatch predefinito: 256 o 128?** Misurato il 20/8 sul Pad:
+   128 costa **9% di prefill** (307 → 280 tok/s su 512 token) e rende lo Stop
+   **5,6 volte** più pronto (~1.458 → ~258 ms). La decodifica non cambia. È una
+   riga sola in `talos_apri_modello`, ma cambia la velocità per tutti: la
+   propongo, non la applico.
+4. ⛔ **Le chiavi dei provider.** Il backup non è ripristinabile — la password
    non è recuperabile — quindi l'app è ripartita **da zero**, come da tua
    indicazione. Per la 0.1.17 non servono: la ricerca sul motore locale gira
    tutta su GGUF, e i tre modelli sono sul Pad. Servono per la **parity coi
