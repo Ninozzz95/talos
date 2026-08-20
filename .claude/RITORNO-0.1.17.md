@@ -1373,9 +1373,25 @@ partenza, **stessa temperatura di picco del SoC — 88 °C**:
 | deriva primo terzo → ultimo | **−1,68%** | −16,72% |
 | TTFT mediano | 736 ms | 268 ms |
 
-⇒ ⛔ **Non è il governor del SoC.** Alla stessa temperatura la CPU resta piatta e
-OpenCL salta avanti e indietro nove volte. Qualunque cosa sia, sta nel percorso
-GPU — driver, clock della GPU, o la gestione dei buffer.
+⛔ **«Piatta» va detto con precisione**, perché la CPU non parte piatta: si
+assesta, e poi non si muove più.
+
+```
+giro 1   14s  19,12        giro 15  139s  15,53
+giro 2   22s  17,04        giro 30  274s  15,51
+giro 3   31s  15,65        giro 45  409s  15,61
+giro 4   40s  15,66        giro 60  543s  15,42
+giro 5   49s  15,49        giro 66  597s  15,38
+```
+
+⇒ Tutto il calo — **−19%** — sta nei **primi trenta secondi**; i nove minuti e
+mezzo successivi stanno dentro **15,17-15,66**. È una discesa a un gradino e poi
+un piano, non un'oscillazione.
+
+⇒ ⛔ **Non è il governor del SoC.** Alla stessa temperatura la CPU si assesta e
+resta ferma, OpenCL salta avanti e indietro **nove volte** per tutti e dieci i
+minuti. Qualunque cosa sia, sta nel percorso GPU — driver, clock della GPU, o la
+gestione dei buffer.
 
 ⛔⛔ **E c'è un secondo numero, più importante del primo.** Sulla media dei dieci
 minuti:
