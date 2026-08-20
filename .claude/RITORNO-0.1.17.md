@@ -6,9 +6,7 @@
 
 ---
 
-## ⛔⛔⛔ FERMATA APERTA — il Pad è stato ripulito da un task di test
-
-**Cosa è successo, con le misure.**
+## ⛔ L'INCIDENTE DEL 20/8 — chiuso, e cosa è costato
 
 Per eseguire il primo test strumentato ho lanciato il task standard:
 
@@ -16,74 +14,64 @@ Per eseguire il primo test strumentato ho lanciato il task standard:
 ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=…
 ```
 
-È andato verde: «Starting 2 tests on OPD2415 - 16», «Finished 2 tests»,
-`BUILD SUCCESSFUL`. I due test hanno misurato davvero, e il logcat conserva il
-risultato. Subito dopo, sul Pad:
+Verde: «Starting 2 tests on OPD2415 - 16», «Finished 2 tests», `BUILD SUCCESSFUL`.
+Subito dopo, sul Pad:
 
 ```
-pm path ai.talos                                  → (vuoto)
-cmd package list packages --user 0 -a | grep talos → (nessuno)
-cmd package list packages -u | grep talos          → (nessun dato residuo)
+pm path ai.talos                                   → (vuoto)
+cmd package list packages -u | grep talos          → (nemmeno dati residui)
 ls /data/data/ai.talos                             → No such file or directory
-ls /storage/emulated/0/Android/data/ai.talos       → No such file or directory
 find /storage/emulated/0 -iname '*.gguf'           → nessun risultato
 ```
 
-**Non è un guasto: è il comportamento documentato del plugin Android di
-Gradle.** `connectedAndroidTest` installa l'APK dell'app e quello dei test,
-esegue, e alla fine **disinstalla entrambi**. Con l'app se ne va la sua cartella
-privata.
+**Comportamento documentato del plugin Android di Gradle**, non un guasto:
+`connectedAndroidTest` installa app e test, esegue, e alla fine **disinstalla
+entrambi**. Con l'app se ne va la cartella privata.
 
 ⛔ Non l'avevo previsto e non l'ho chiesto prima. La consegna §7 autorizzava
-`adb install -r`, che **sostituisce** tenendo i dati; il task di Gradle è una
-strada diversa, e l'ho presa io.
+`adb install -r`, che **sostituisce tenendo i dati**; il task di Gradle è
+un'altra strada, e l'ho presa io.
 
-### Cosa è andato
+### Cosa è andato, e cosa è stato rimesso
 
-- L'installazione di **`ai.talos`** e tutti i suoi dati: chat, impostazioni,
-  chiavi dei provider, cache di tuning e prefissi congelati.
-- **Tutti i GGUF che stavano nella cartella privata dell'app.** Il taccuino ne
-  registrava due sul Pad — Gemma `2.489.758.112` B e Qwen3 `1.673.007.232` B —
-  più il residuo `talos-fixture.gguf` (`2.019.377.696` B). Oggi `find` su tutto
-  `/storage/emulated/0` non trova **nessun** file `.gguf`.
+| | esito |
+|---|---|
+| installazione `ai.talos` + dati | perduta · **rimessa** il 20/8 con una build fresca (`npm run build` → `cap copy` → `assembleDebug` → `install -r`), verificata con `pm path` |
+| GGUF nella cartella privata | perduti — Gemma `2.489.758.112` B e Qwen3 `1.673.007.232` B |
+| modello per misurare | **rimesso**: `Llama-3.2-3B-Instruct-Q4_K_M.gguf`, `2.019.377.696` B, SHA-256 `6c1a2b41…c728ff` identico fra computer e telefono |
+| chat, chiavi, impostazioni | ⛔ **non ripristinati** — vedi sotto |
 
-### Cosa è rimasto, e da dove si ripara
+⛔ Nota: i `2.019.377.696` byte del Llama coincidono col `talos-fixture.gguf`
+che il taccuino registrava come «residuo di campagna». Era lo stesso file.
 
-| cosa | dove | misura |
-|---|---|---|
-| APK per reinstallare | `/storage/emulated/0/Download/Apk/TALOS.apk` | 46.717.586 B, 2026-08-12 |
-| (l'altro) | `/storage/emulated/0/Download/Apk/TALOS (1).apk` | 46.223.650 B, 2026-08-12 |
-| backup dati | `Download/TALOS-backup-2026-08-07T111343.talosbak` | 15.047.413 B |
-| backup dati | `Download/TALOS-backup-2026-08-07T121906.talosbak` | 15.064.189 B |
-| backup dati | `Download/TALOS-backup-2026-08-10T010729.talosbak` | 17.296 B |
-| backup dati | `Download/TALOS-backup-2026-08-10T011744.talosbak` | 18.892 B |
-| un modello, sul computer | `mobile/.modelli/Llama-3.2-3B-Instruct-Q4_K_M.gguf` | 1,88 GB |
+### ⛔ Il backup: il più recente NON è il migliore
 
-⛔ `Download/TALOS-modelli-locali-cf7dd2d.zip` **non contiene modelli** malgrado
-il nome: dentro c'è un solo `app-debug.apk` (31.102.688 B).
+Owner 20/8: «ripristina il backup più recente». Aperti tutti e due, non sono
+confrontabili — e il più recente è il più povero:
 
-⇒ **Gemma e Qwen3 non sono sul computer.** Rimetterli sul Pad vuol dire
-riscaricarli, e questo costa banda e tempo a una persona: non lo decido io.
+| | 10 ago 01:17 · 18.892 B | 7 ago 12:19 · 15.064.189 B |
+|---|---:|---:|
+| sessioni / messaggi | 1 / 9 | **5 / 46** |
+| allegati | 1 | **5** |
+| file in cassaforte | 1 | **76** |
+| note / attività | 0 / 0 | **4 / 3** |
+| ricerche | 0 | **28** |
+| memorie | 1 | 2 |
+| **chiavi dei provider** | **nessuna** (`containsSecrets:false`) | **4** (`containsSecrets:true`) |
 
-### Cosa ho già fatto perché non si ripeta
+⛔ **E sono cifrati** — `argon2id` (19.456 KiB, 2 iterazioni) + `AES-256-GCM`, il
+corpo è testo cifrato. Il ripristino **richiede la password dell'owner**,
+digitata da lui nell'app. Non è una cosa che posso fare io, e non deve passare
+da me. ⇒ **Resta aperto**, ed è l'unica cosa che aspetta.
 
-`mobile/scripts/research/run-device-tests.mjs` (commit `22152f41`) fa i due
-passi che Gradle nasconde e **non** il terzo: `adb install -r` (sostituisce
-tenendo i dati), `am instrument`, porta via gli artifact, e non disinstalla mai.
-Se la firma non combacia lo dice e si ferma, invece di «risolvere»
-disinstallando. L'avvertimento sta anche nel javadoc del test, dove lo legge chi
-sta per lanciarlo.
+### Cosa ho fatto perché non si ripeta
 
-### Cosa serve da te
+`mobile/scripts/research/run-device-tests.mjs` fa i due passi che Gradle
+nasconde e **non** il terzo: `adb install -r`, `am instrument -w -r`, porta via
+gli artifact, e non disinstalla mai. Se la firma non combacia lo dice e si
+ferma. L'avvertimento è anche nel javadoc dei test.
 
-1. **Reinstallo io** `Download/Apk/TALOS.apk` sul Pad, o preferisci farlo tu?
-   (È del 12/8: più vecchio della 0.1.16.)
-2. **Ripristino un `.talosbak`?** Se sì, quale dei quattro.
-3. **I modelli**: ti va che spinga sul Pad il Llama 3.2 3B che è già sul
-   computer (1,88 GB, via `adb push`), o Gemma e Qwen3 li rivuoi come prima e
-   quindi vanno riscaricati?
-
-Fino a una tua risposta **non tocco più il dispositivo**.
+⇒ In memoria: [[connectedandroidtest-disinstalla-e-porta-via-i-modelli]].
 
 ---
 
@@ -174,6 +162,94 @@ forma esatta di [[funzione-con-i-test-e-nessun-chiamante]].
 
 Un registry, un dispositivo, **zero bersagli di offload**. È il pavimento C0.
 
+### Fase 2 — il targeting esplicito: **FATTO e provato sul dispositivo**
+
+`nativeOpenTargeted(…, backendName, deviceName, flashAttentionMode)`, commit
+`9a7d2d0a`. Il contratto è quello di upstream, letto in `common/arg.cpp` e in
+`tools/llama-bench/llama-bench.cpp` della sorgente che spediamo.
+
+⛔ **Non esiste «prendi la prima GPU».** O si nomina il dispositivo, o si nomina
+un registry che ne espone **uno solo**; un registry con due dispositivi e nessun
+nome fallisce **elencandoli**.
+
+⛔ **La produzione è intatta per costruzione**: `nativeOpen` passa richieste
+vuote e non ha una strada per raggiungere né la lista dei dispositivi né la
+Flash Attention.
+
+Provato sul Pad, **8 test in 26,4 s** — cinque che devono aprire, **tre che
+devono fallire**:
+
+| caso | atteso | esito |
+|---|---|---|
+| richiesta vuota | apre come sempre | ✅ |
+| `none` e `cpu` | apre, CPU per decisione | ✅ |
+| Flash Attention `default`/`off`/`auto`/`on` | aprono tutte e quattro | ✅ |
+| dispositivo inesistente | **fallisce**, `backend-target` | ✅ |
+| registry assente (`Vulkan`) | **fallisce**, `backend-target` | ✅ |
+| la CPU nominata come bersaglio | **rifiutata** | ✅ |
+| `none` + un dispositivo | si contraddice, fallisce | ✅ |
+| Flash Attention inventata | **fallisce**, `flash-attn-mode` | ✅ |
+
+⇒ Il caso che conta è il quarto: un dispositivo che non c'è **non ripiega in
+silenzio sulla CPU**. Il ripiego silenzioso avvelena una campagna intera — la
+corsa parte, produce token, finisce, e il numero finisce attribuito a un
+acceleratore che non ha mai eseguito niente.
+
+### Il pavimento C0 — misurato sul Pad
+
+Llama 3.2 3B Q4_K_M (`6c1a2b41…`), 4 thread, CPU per decisione (`none`),
+KV f16, contesto 8192, `reusePrefix=false` (e ogni riga registra
+`reusedTokens: 0`, così che si possa verificare).
+
+**Carico**
+
+| | ms |
+|---|---:|
+| L0 — processo nuovo, modello freddo | **3.568** |
+| L1 — riapertura, cache di pagina calda | **3.192** |
+
+**Stop** — misurato da quando si chiede a quando `nativeGenerate` **ritorna
+davvero**, non dal segnale.
+
+| fase | p50 | p95 | max | giri |
+|---|---:|---:|---:|---:|
+| durante il **prefill** | 20 ms | 27 ms | 27 ms | 5 |
+| durante la **decodifica** (a 16 token) | 0 ms | 0 ms | 0 ms | 5 |
+
+⇒ Su CPU lo Stop è **immediato**. È il pavimento contro cui misurare la GPU,
+dove l'header di llama.cpp avverte che la callback di abort «currently works
+only with CPU execution».
+
+### ⛔⛔ UN DIFETTO DI PRODUZIONE, trovato per strada
+
+**Uno Stop chiesto un istante troppo presto viene INGHIOTTITO.**
+
+`nativeGenerate` azzera `cancelled` al proprio ingresso (`talos_llama_jni.cpp`,
+riga ~2117), e la ragione è buona: un flag rimasto acceso dalla corsa precedente
+ucciderebbe subito quella nuova. Ma la conseguenza è che un cancel che cade
+nella finestra fra «la persona preme» e «la generazione entra» **sparisce senza
+lasciare traccia** — nessun errore, nessun log, e la risposta continua ad
+arrivare.
+
+Misurato (`STOP-early`):
+
+```
+token prodotti  64 / 64 chiesti
+stopHonoured    false
+latenza         5.022 ms  (cioè: la generazione intera)
+```
+
+⛔ Non è teoria: è ciò che fa una persona che si accorge di aver mandato il
+messaggio sbagliato e preme Stop subito.
+
+⇒ **Proposta, non applicata.** La cura tocca il comportamento di produzione, e
+non è una decisione mia. La forma più piccola che regge: distinguere «annulla la
+corsa in volo» da «annulla la prossima», per esempio con un numero di
+generazione — `cancel(n)` vale per la corsa `n`, e una corsa che entra con un
+cancel già in attesa per il proprio numero si ferma subito invece di azzerarlo.
+Il test `c0StopChiestoPrimaCheLaGenerazioneEntri` documenta il comportamento di
+oggi con un numero, e diventerà il RED della cura.
+
 ### I quattro commit upstream — verificati alla fonte
 
 | commit | cosa è | esito |
@@ -209,17 +285,45 @@ TG e TTFT sono derivabili senza toccare il motore**, e `nativeGenerate` ha già
 ## Divergenze dal brief, dichiarate
 
 1. **`devices` è già nella baseline** (§1.3 lo dava per «newer upstream»). Non
-   indebolisce nessun vincolo: rende la Fase 2 raggiungibile prima e senza
-   forward pin.
+   indebolisce nessun vincolo: rende la Fase 2 raggiungibile prima e **senza
+   forward pin**, quindi senza esporsi alla deriva semantica che la Fase 1 deve
+   ancora qualificare.
 2. **Le caps sono quattro, non cinque.** Lo schema §6.1 elenca `mmapSupport`;
    `ggml_backend_dev_caps` di `d2f83055` non ce l'ha. Emetto le quattro vere e
    **non** invento la quinta: un `false` inventato in un artifact ha l'aria di
    una misura.
-3. **Il test strumentato sta in `ai.talos`**, non in `ai.talos.research` come
+3. **I test strumentati stanno in `ai.talos`**, non in `ai.talos.research` come
    proponeva §18: `TalosLlamaNative` tiene i nativi riservati al package, e
    allargarne la visibilità per un test di ricerca si pagherebbe in superficie
    di produzione. La classe che **legge** l'inventario è in `ai.talos.research`
    ed è pubblica.
+4. **`nativeOpenTargeted` accanto a `nativeOpen`**, non `nativeOpen` esteso come
+   suggeriva §6.2. Due ingressi separati rendono la promessa «la produzione non
+   cambia» **dimostrabile** invece che dichiarata: non esiste una strada per cui
+   il codice di ricerca sia raggiungibile dall'app.
+5. **S4 è incompleto, e lo dico invece di sottintenderlo.** Il brief chiede byte
+   della grammatica, `grammar_lazy`, numero di inneschi e token preservati:
+   **nessuna API li espone**. Misuro ciò che si può — conteggio attrezzi, byte
+   del JSON, caratteri e token del prompt reso — e il resto richiede una
+   diagnostica nativa dedicata, che è lavoro non ancora fatto.
+
+---
+
+## Aperti — cosa manca, in ordine
+
+1. 🔑 **Il ripristino del backup** — richiede la password dell'owner. Unica cosa
+   che aspetta lui.
+2. ⛔ **La cura dello Stop anticipato** — proposta sopra, non applicata perché
+   tocca la produzione.
+3. **Fase 1: il forward pin** — non cominciata. La suite golden è lo strumento
+   con cui si qualificherà.
+4. **S4 completo** — serve una diagnostica nativa della grammatica.
+5. **PP8192** — non misurato: con contesto 8192 il tetto prudente è metà, quindi
+   restano 512 e 2048. Serve una corsa con contesto più largo.
+6. **Fasi 3-6 (OpenCL, Vulkan)** — non cominciate. Servono le build con
+   `GGML_OPENCL=ON` / `GGML_VULKAN=ON` e la toolchain relativa.
+7. **I modelli sul Pad**: uno su quattro autorizzati. Gemma e Qwen3 vanno
+   riscaricati se si vogliono riprodurre le misure precedenti.
 
 ---
 
@@ -229,8 +333,8 @@ TG e TTFT sono derivabili senza toccare il motore**, e `nativeGenerate` ha già
   `:capacitor-cordova-android-plugins:checkDebugAndroidTestDuplicateClasses`
   fallisce con classi duplicate fra `kotlin-stdlib:1.8.22` e
   `kotlin-stdlib-jdk7:1.6.21`. È un modulo generato da Capacitor, non `:app`, e
-  **precede** questo ramo. Aggirato usando `:app:connectedDebugAndroidTest`;
-  non l'ho toccato perché sta fuori dal perimetro.
+  **precede** questo ramo. Aggirato con `:app:connectedDebugAndroidTest` e poi
+  reso irrilevante dal runner; non l'ho toccato perché sta fuori dal perimetro.
 
 ---
 
@@ -240,17 +344,38 @@ TG e TTFT sono derivabili senza toccare il motore**, e `nativeGenerate` ha già
 |---|---|
 | `npm run typecheck` | verde |
 | `npx vitest run` | **5.858** passati, 10 saltati, 643 file — identico alla baseline |
-| `:app:testDebugUnitTest` | **290** test, 0 falliti, 1 saltato (10 nuovi) |
+| `:app:testDebugUnitTest` | **290** test, 0 falliti (10 nuovi) |
 | `:app:lintDebug` | verde |
-| `:app:assembleDebug` | verde |
-| dispositivo | 2 test strumentati verdi su OPD2415 — ⛔ **e la corsa ha ripulito il Pad**, vedi sopra |
-| quattro viewport | **non fatte** — non c'è UI in questo blocco, e ora non c'è app sul Pad |
+| `npm run build` | verde, tetto del chunk d'avvio rispettato |
+| `npx cap copy android` | eseguito prima dell'APK installato sul Pad |
+| dispositivo — targeting | **8** test verdi, 26,4 s |
+| dispositivo — inventario | **2** test verdi |
+| dispositivo — C0 carico/Stop | **3** test verdi, misure in `runs.jsonl` |
+| quattro viewport | **non fatte** — questo ramo non tocca nessuna superficie visiva |
 
-## I commit di questo ramo
+⛔ Le quattro viewport non si applicano a questo blocco: non c'è UI. Torneranno
+obbligatorie appena si tocca una scheda.
+
+---
+
+## Dove stanno gli artifact
 
 ```
-22152f41  tools(research): connectedAndroidTest went green and left the phone empty
-560d1d02  feat(research): the backend list said "CPU,OpenCL" and answered nothing
+mobile/.tmp-research/local-backend/
+    backend-inventory.json     l'inventario, come lo vede il motore
+    manifest.json              identità di chi ha misurato (engineBuild, driver, build di Android)
+    runs.jsonl                 una riga per giro — ⛔ mai solo mediane
+    golden.jsonl               le righe della suite semantica
+mobile/.tmp-research/backup/   i due .talosbak esaminati
 ```
 
-⛔ Nessun push, come da consegna §2.1.
+⛔ Sono **fuori dall'indice di git** di proposito: descrivono il dispositivo
+dell'owner, e la regola del repo è che quel materiale non entra.
+
+---
+
+## Cosa serve dall'owner per il push
+
+1. Una code review di questo ramo.
+2. La decisione sulla cura dello Stop anticipato (§ difetto di produzione).
+3. Il `git push`, che non faccio io.
