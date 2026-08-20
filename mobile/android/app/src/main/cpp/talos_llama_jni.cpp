@@ -655,6 +655,107 @@ Java_ai_talos_TalosLlamaNative_nativeBackends(JNIEnv * env, jclass) {
 }
 
 /**
+ * ⛔ L'INVENTARIO STRUTTURATO — perché l'elenco qui sopra non basta a decidere.
+ *
+ * `nativeBackends()` restituisce «CPU,OpenCL» e sembra una risposta. Non lo è:
+ * dice che un registry si è REGISTRATO, non che esponga un dispositivo, non
+ * QUALE, e non che quel dispositivo possa reggere un offload. Con due
+ * acceleratori caricati insieme, scegliere «la GPU» a partire da questa stringa
+ * significa lasciare decidere all'ORDINE con cui le librerie si sono caricate.
+ *
+ * Qui si chiede al motore, dispositivo per dispositivo, con
+ * `ggml_backend_dev_get_props` — che è l'unica fonte che conosce nome canonico,
+ * tipo, memoria e capacità. Il nome canonico è ciò che
+ * `ggml_backend_dev_by_name` rimette in `llama_model_params.devices`: senza di
+ * lui il targeting esplicito non esiste.
+ *
+ * ⛔ Le capacità sono QUATTRO, non cinque. La struttura
+ * `ggml_backend_dev_caps` di questa build espone `async`, `host_buffer`,
+ * `buffer_from_host_ptr` ed `events`. Un campo «mmap» non esiste, e inventarlo
+ * qui vorrebbe dire scrivere un `false` che sembra una misura: chi legge
+ * l'artifact non saprebbe distinguere «non supportato» da «mai chiesto».
+ *
+ * Diagnostico e basta: non apre niente, non alloca niente sul dispositivo, e
+ * non cambia il comportamento di un'apertura. Si può chiamare prima di sapere
+ * se un modello esiste.
+ */
+// ⛔ `enum` NON è decorazione. In `ggml-backend.h` convivono l'enum
+// `ggml_backend_dev_type` e una FUNZIONE che si chiama identica
+// (`ggml_backend_dev_type(ggml_backend_dev_t)`), e in C++ il nome della
+// funzione nasconde il tag del tipo: senza `enum` il compilatore legge il
+// parametro come un nome di funzione e rifiuta. È il motivo per cui upstream
+// scrive `enum ggml_backend_dev_type` ovunque, anche in C++.
+static const char * talos_device_type_name(enum ggml_backend_dev_type type) {
+    switch (type) {
+        case GGML_BACKEND_DEVICE_TYPE_CPU:   return "CPU";
+        case GGML_BACKEND_DEVICE_TYPE_GPU:   return "GPU";
+        case GGML_BACKEND_DEVICE_TYPE_IGPU:  return "IGPU";
+        case GGML_BACKEND_DEVICE_TYPE_ACCEL: return "ACCEL";
+        case GGML_BACKEND_DEVICE_TYPE_META:  return "META";
+    }
+    // Nessun `default:` sopra, apposta: se upstream aggiunge un tipo, il
+    // compilatore lo segnala qui invece di lasciarlo scivolare in «unknown»
+    // dentro un artifact di misura.
+    return "unknown";
+}
+
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeBackendInventory(JNIEnv * env, jclass) {
+    nlohmann::ordered_json out;
+    nlohmann::ordered_json registries = nlohmann::ordered_json::array();
+
+    for (size_t reg_index = 0; reg_index < ggml_backend_reg_count(); reg_index += 1) {
+        ggml_backend_reg_t reg = ggml_backend_reg_get(reg_index);
+        if (reg == nullptr) continue;
+
+        nlohmann::ordered_json entry;
+        const char * reg_name = ggml_backend_reg_name(reg);
+        entry["name"] = reg_name == nullptr ? "" : reg_name;
+
+        nlohmann::ordered_json devices = nlohmann::ordered_json::array();
+        for (size_t dev_index = 0; dev_index < ggml_backend_reg_dev_count(reg); dev_index += 1) {
+            ggml_backend_dev_t device = ggml_backend_reg_dev_get(reg, dev_index);
+            if (device == nullptr) continue;
+
+            // Azzerata a mano: `get_props` riempie i campi che conosce, e un
+            // campo lasciato indietro da una build futura leggerebbe memoria
+            // dello stack. Un numero casuale in un artifact di misura è peggio
+            // di un campo assente, perché ha l'aria di un dato.
+            ggml_backend_dev_props props {};
+            ggml_backend_dev_get_props(device, &props);
+
+            nlohmann::ordered_json described;
+            described["name"] = props.name == nullptr ? "" : props.name;
+            described["description"] = props.description == nullptr ? "" : props.description;
+            described["type"] = talos_device_type_name(props.type);
+            // `device_id` è NULL quando il backend non ne ha uno — su Android è
+            // il caso normale, e `null` lo dice meglio di una stringa vuota.
+            if (props.device_id == nullptr) {
+                described["deviceId"] = nullptr;
+            } else {
+                described["deviceId"] = props.device_id;
+            }
+            described["memoryFree"] = (uint64_t) props.memory_free;
+            described["memoryTotal"] = (uint64_t) props.memory_total;
+
+            nlohmann::ordered_json caps;
+            caps["async"] = props.caps.async;
+            caps["hostBuffer"] = props.caps.host_buffer;
+            caps["bufferFromHostPtr"] = props.caps.buffer_from_host_ptr;
+            caps["events"] = props.caps.events;
+            described["caps"] = caps;
+
+            devices.push_back(described);
+        }
+        entry["devices"] = devices;
+        registries.push_back(entry);
+    }
+
+    out["registries"] = registries;
+    return env->NewStringUTF(out.dump().c_str());
+}
+
+/**
  * Apre un modello. Restituisce 0 in caso di fallimento — mai un handle a metà:
  * un oggetto costruito per metà è la forma in cui i guasti sopravvivono al
  * punto in cui sono nati.

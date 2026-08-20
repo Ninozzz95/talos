@@ -58,6 +58,24 @@ final class TalosLlamaNative {
     static native String nativeBackends();
 
     /**
+     * L'inventario dei backend e dei loro DISPOSITIVI, in JSON.
+     *
+     * ⛔ Non è una versione più bella di {@link #nativeBackends()}: risponde a
+     * un'altra domanda. Quella dice quali registry si sono registrati; questa
+     * dice quali dispositivi ciascuno espone, con il NOME CANONICO che serve a
+     * chiederne uno per nome — e senza il nome canonico, «usa la GPU» lo decide
+     * l'ordine di caricamento delle librerie, non noi.
+     *
+     * Forma: {@code {"registries":[{"name":"...","devices":[{"name":"...",
+     * "description":"...","type":"CPU|GPU|IGPU|ACCEL|META","deviceId":null,
+     * "memoryFree":0,"memoryTotal":0,"caps":{...}}]}]}}
+     *
+     * Diagnostico: non apre niente e non alloca niente. Si può chiamare prima
+     * che un modello esista.
+     */
+    static native String nativeBackendInventory();
+
+    /**
      * La build di llama.cpp, tipo {@code "b10218-<commit>"}.
      *
      * ⛔ Serve all'impronta dei prefissi congelati: cio' che invalida uno stato
