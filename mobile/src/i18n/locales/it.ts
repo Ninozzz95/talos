@@ -3017,7 +3017,14 @@ export const TALOS_IT_MESSAGES = {
             partial: 'in parte',
             no: 'smentita',
             unchecked: 'non verificata',
+            contested: 'contesa',
         },
+        dissensoTitolo: 'Le fonti non concordano',
+        dissensoAFavore: 'Dice di sì',
+        dissensoContro: 'Dice di no',
+        // ⛔ Non si sceglie per la persona: si mostra il disaccordo e si dice
+        // che la decisione resta sua. Mediare sarebbe fingere un accordo.
+        dissensoSpiega: 'Su questo punto le fonti si contraddicono. TALOS non sceglie per te: qui sotto ci sono i due passaggi, come stanno nelle rispettive pagine.',
         quoteMissing: 'Il passaggio citato non è nel testo della fonte.',
         pageRead: 'pagina letta',
         onlySnippet: 'solo estratto dal motore di ricerca',
