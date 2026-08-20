@@ -61,11 +61,79 @@ const PROMPT_CHARS_PER_SOURCE = 4_000
  * model that knows the quotation is checked stops inventing quotations — and
  * because it is true, which is the better reason.
  */
+/**
+ * ⛔⛔ DOPPIONI-01 — la stessa pagina, contata una volta per linea d’indagine.
+ *
+ * FOTOGRAFATO sul Pad il 2026-08-20. Il rapporto diceva «10 fonti», e
+ * l’elenco portava `wikipedia.org` due volte, `ultralytics.com` due volte,
+ * `ibm.com` due volte, `huggingface.co` due volte: stesso titolo, stessa
+ * data, stesso indirizzo. Sei pagine distinte contate dieci.
+ *
+ * Due rami del piano cercano cose diverse e trovano la stessa pagina — è
+ * normale e va bene. Quello che non va bene è metterla due volte in fila.
+ *
+ * ## Cosa sporcava, oltre al conteggio
+ *
+ *   · Il modello la vedeva come `[1]` e `[6]`: due numeri per una pagina,
+ *     e due affermazioni «da fonti diverse» che vengono dalla stessa.
+ *   · «6 su 10 indipendenti» aveva numeratore e denominatore entrambi
+ *     gonfiati, cioè la misura che esiste per non gonfiare i numeri era la
+ *     prima a essere gonfiata.
+ *   · Il testo della pagina finiva nel prompt due volte, pagato due volte.
+ *
+ * ⛔ Si tiene la copia col TESTO PIÙ LUNGO, non la prima: due rami possono
+ * aver letto la stessa pagina con fortuna diversa, e la più povera
+ * toglierebbe passaggi che l’altra aveva.
+ */
+export function talosResearchDistinctSources(
+    collections: readonly TalosResearchCollection[],
+): readonly TalosResearchSource[] {
+    const migliori = new Map<string, TalosResearchSource>()
+    const ordine: string[] = []
+
+    for (const collection of collections) {
+        for (const source of collection.sources) {
+            const chiave = chiaveDi(source.url)
+            const gia = migliori.get(chiave)
+            if (!gia) {
+                migliori.set(chiave, source)
+                ordine.push(chiave)
+                continue
+            }
+            if (source.text.length > gia.text.length) migliori.set(chiave, source)
+        }
+    }
+
+    return ordine.map((chiave) => migliori.get(chiave)!)
+}
+
+/**
+ * L’indirizzo ridotto a ciò che identifica la PAGINA.
+ *
+ * ⛔ Il frammento non identifica niente — `#section` è un punto della
+ * stessa pagina — e la barra finale nemmeno. La query invece resta: su
+ * moltissimi siti `?id=12` e `?id=13` sono due articoli diversi, e
+ * toglierla fonderebbe pagine che non c’entrano.
+ *
+ * Un indirizzo illeggibile resta sé stesso: meglio un doppione che una
+ * fusione sbagliata.
+ */
+function chiaveDi(url: string): string {
+    try {
+        const letto = new URL(url)
+        letto.hash = ''
+        const testo = letto.toString()
+        return testo.endsWith('/') ? testo.slice(0, -1) : testo
+    } catch {
+        return url
+    }
+}
+
 export function talosResearchSynthesisPrompt(
     question: string,
     collections: readonly TalosResearchCollection[],
 ): { prompt: string, sources: readonly TalosResearchSource[] } {
-    const sources = collections.flatMap((collection) => collection.sources)
+    const sources = talosResearchDistinctSources(collections)
     const catalogue = sources.map((source, index) => [
         `[${index + 1}] ${source.title}`,
         source.url,
