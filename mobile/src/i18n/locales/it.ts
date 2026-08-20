@@ -969,7 +969,12 @@ export const TALOS_IT_MESSAGES = {
         generatedFileSaveFailed: 'Non è stato possibile salvare “{name}” nella Libreria.',
         generatedFilesSavedAfterAuthorization: 'Salvati {count} file nella Libreria: {names}.',
         generatedFilesNotSavedAfterAuthorization: 'Nessun file generato è stato salvato ({count} ignorati).',
-        toolAuthorizationPending: '{count} richiesta di autorizzazione per uno strumento è in attesa. Puoi continuare a usare la chat.',
+        // ⛔ Due frasi, non una con un numero dentro: con due richieste la
+        //   riga diceva «2 richiesta di autorizzazione … è in attesa».
+        //   FOTOGRAFATO sul Pad il 2026-08-20, ed è lo stesso difetto di
+        //   «1 contese» chiuso poche ore prima, in un altro punto.
+        toolAuthorizationPendingOne: 'Una richiesta di autorizzazione per uno strumento è in attesa. Puoi continuare a usare la chat.',
+        toolAuthorizationPendingMany: '{count} richieste di autorizzazione per gli strumenti sono in attesa. Puoi continuare a usare la chat.',
         toolAuthorizationSettled: 'La richiesta di autorizzazione è stata gestita.',
         emptyAnswerAfterTools: 'Gli strumenti sono partiti ({count}), ma il modello non ha scritto nessuna risposta. Prova a chiedere di nuovo, o con un altro modello.',
         libraryAnswerGuardAbstention: 'Non sono riuscito a produrre una risposta affidabile che restasse sul tema corrente della conversazione. Riformula la domanda o indica la fonte da usare.',

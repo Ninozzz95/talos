@@ -219,10 +219,23 @@ describe('⭐⭐⭐ l attesa non mangia la risposta', () => {
      * quando un'attesa c'e', e «0 richieste» sarebbe una frase falsa dentro il
      * riquadro che quella richiesta rappresenta.
      */
+    /*
+     * ⛔ AGGIORNATO il 2026-08-20, e la premessa era diventata falsa.
+     *
+     * Prima si cercava il carattere «1» nel testo: era un SOSTITUTO di «il
+     * ripiego è uno», e funzionava perché il numero veniva interpolato dentro
+     * una frase sola. Quella frase diceva «2 richiesta … è in attesa» appena il
+     * conto passava a due, quindi è diventata due — e la singolare non porta
+     * più nessuna cifra, perché dice «Una».
+     *
+     * ⇒ Si asserisce l'ESITO: con il metadato assente si sceglie la frase
+     * singolare, che è precisamente «uno e non zero».
+     */
     it('⛔ e senza il numero non dice ZERO', () => {
         const chip = conAttesa({ tool_authorization_pending_checkpoint_id: CHECKPOINT })
             .get('[data-testid="talos-authorization-pending-open"]')
-        expect(chip.text()).toContain('1')
+        expect(chip.text()).toContain('toolAuthorizationPendingOne')
+        expect(chip.text()).not.toContain('toolAuthorizationPendingMany')
         expect(chip.text()).not.toContain(':0')
     })
 })
