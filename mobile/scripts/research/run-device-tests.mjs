@@ -103,7 +103,20 @@ function esigi(condizione, messaggio) {
     }
 }
 
-const classe = process.argv[2] ?? ''
+/*
+ * ⛔ `--fresh` — perche' `runs.jsonl` vive sul TELEFONO e si accumula.
+ *
+ * Ogni corsa scrive in coda al file dell'app. Due campagne a ore diverse
+ * finiscono nello stesso insieme, e la dispersione che ne esce non descrive
+ * nessuna delle due: descrive la differenza fra loro. MISURATO il 2026-08-20,
+ * dove un insieme «STOP-decode» conteneva 12 giri di tre esperimenti diversi.
+ *
+ * ⛔ NON e' il predefinito. Cancellare misure e' un'azione distruttiva, e una
+ * corsa che le butta senza che nessuno l'abbia chiesto e' peggio di un file
+ * disordinato: il disordine si vede, le misure perdute no.
+ */
+const fresco = process.argv.includes('--fresh')
+const classe = (process.argv[2] ?? '').startsWith('--') ? '' : (process.argv[2] ?? '')
 
 esigi(existsSync(APK_APP),
     `APK dell'app assente: ${APK_APP}\n`
@@ -160,12 +173,22 @@ const argomenti = ['shell', 'am', 'instrument', '-w', '-r']
 if (classe) argomenti.push('-e', 'class', classe)
 // Gli argomenti instrumentation in coda: `chiave=valore`, uno per coppia.
 // Servono a dire al test su quale modello misurare senza ricompilarlo.
-for (const coppia of process.argv.slice(3)) {
+for (const coppia of process.argv.slice(3).filter((a) => !a.startsWith('--'))) {
     const taglio = coppia.indexOf('=')
     esigi(taglio > 0, `argomento non nella forma chiave=valore: ${coppia}`)
     argomenti.push('-e', coppia.slice(0, taglio), coppia.slice(taglio + 1))
 }
 argomenti.push(`${PACCHETTO_TEST}/${RUNNER}`)
+
+if (fresco) {
+    annuncia(`azzero       ${ARTIFACT_SU_DISPOSITIVO}`)
+    try {
+        adb('shell', `rm -rf '${ARTIFACT_SU_DISPOSITIVO}'`)
+    } catch (problema) {
+        process.stderr.write(`   (niente da azzerare: ${String(problema.stderr ?? '').trim()})
+`)
+    }
+}
 
 annuncia(`eseguo       ${classe || '(tutti i test strumentati)'}`)
 let uscita = ''
