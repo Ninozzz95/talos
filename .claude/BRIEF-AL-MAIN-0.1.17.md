@@ -21,14 +21,15 @@ Il brief dell'owner è un programma a otto fasi.
 | fase | esito |
 |---|---|
 | **0** — riprodurre C0 | ✅ pavimento CPU, suite golden, Stop, inventario, pipeline degli artifact |
-| **1** — forward pin | ❌ non cominciata |
+| **1** — forward pin | ✅ **`dc72703`, 163 commit, zero rotture di API, golden IDENTICA** |
 | **2** — targeting esplicito | ✅ chiusa, con offload provato sul dispositivo |
-| **3-4** — OpenCL | ⚠️ costruito e misurato, ma **non è C1**: manca `60addddf` |
-| **5-6** — Vulkan | ⛔ **FAILED** sul cancello G2 |
+| **3-4** — OpenCL | 🔄 ora è **C1 vero** (il pin contiene `60addddf`): costruito, offload provato, misure in corso |
+| **5-6** — Vulkan | ⛔ **FAILED** su G2 · guasto NOTO a upstream (#8743, #12139) ma la loro soglia del batch **non regge** sull'830 |
 | **7** — integrazione | ❌ non cominciata |
 
-⇒ La Definition of Done del brief **non è raggiunta**. Quello che c'è è il
-verdetto intermedio che serviva per decidere se andare avanti.
+⇒ La Definition of Done del brief **non è ancora raggiunta**, ma il collo di
+bottiglia è caduto: il forward pin è **semanticamente sicuro**, e con lui C1 —
+OpenCL con la correzione della race — è diventato raggiungibile.
 
 ---
 
@@ -84,18 +85,17 @@ non una misura scarsa: **non esistono numeri Vulkan**.
 
 In quest'ordine, e la ragione è che ogni passo sblocca il successivo:
 
-1. **Fase 1, il forward pin.** È il collo di bottiglia di tutto: sblocca C1
-   (OpenCL vero, con `60addddf`) e potrebbe chiudere il crash Vulkan. La **suite
-   golden è già pronta** ed è lo strumento con cui si qualifica: se il pin nuovo
-   rompe Jinja, i tool o la separazione del ragionamento, lo dice prima che
-   qualunque numero di velocità significhi qualcosa.
-2. **OpenCL come C1 vero.** Solo allora Flash Attention e la race si possono
-   misurare, e i numeri di oggi diventano una qualificazione invece di un
-   segnale.
-3. **La tenuta nel tempo.** Nessun test da 10 minuti, nessuna deriva termica
+1. ~~Fase 1, il forward pin~~ — ✅ **fatta**: `dc72703`, zero rotture di API,
+   golden identica.
+2. **OpenCL come C1 vero** — 🔄 in corso. La build c'è, l'offload è provato, e le
+   prime misure sono state **scartate per deriva termica**: C0 era freddo e C1
+   caldo, quindi il confronto non valeva. Si rifà da freddo.
+3. **Flash Attention off/auto/on su OpenCL** — adesso è LECITO, perché il pin
+   contiene `60addddf`. Non ancora fatto.
+4. **La tenuta nel tempo.** Nessun test da 10 minuti, nessuna deriva termica
    sotto carico prolungato: le corse di oggi sono brevi.
-4. **PP8192** — serve una corsa con contesto più largo.
-5. **La politica a un numero solo** — i dati per rifarla ci sono.
+5. **PP8192** — serve una corsa con contesto più largo.
+6. **La politica a un numero solo** — i dati per rifarla ci sono.
 
 ⛔ **Non ripartire da questi due numeri del taccuino**, che oggi sono datati: la
 GBNF da 55.871 byte e la «grammatica pigra con un innesco solo». A questo pin il
@@ -135,7 +135,7 @@ tutte in memoria.
 ## Dove stanno le cose
 
 ```
-lane/motore-gpu                          21 commit, nessun push
+lane/motore-gpu                          21 commit, spinto su origin (privato)
 .claude/RITORNO-0.1.17.md                il dettaglio, con tutte le misure
 mobile/scripts/research/README.md        come si riproduce, dall'inizio
 mobile/.tmp-research/                    artifact grezzi (fuori da git di proposito)
