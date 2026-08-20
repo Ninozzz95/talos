@@ -1656,7 +1656,10 @@ forma che proporrei, con i numeri che la giustificano.
    backend), la stessa con `flash-attn off`, e il segnale giusto — le zone
    termiche del SoC, che da `adb` dicono **58 °C** mentre la batteria ne dice
    33. ⛔ Le prime due sono in coda sul Pad mentre scrivo.
-7. **PP8192** — serve una corsa con contesto più largo.
+7. ~~PP8192~~ — ✅ **fatta** a contesto 16.384: TTFT **59-64 s** e decodifica
+   **3,2 tok/s**. ⛔ Lo stato termico era già `moderate`: lunghezza e
+   strozzamento **non li ho separati**, e serve una corsa PP8192 sola e da
+   freddo.
 8. **`minSdk` contro Vulkan 1.1** — decisione di prodotto, vedi sopra.
 9. **La politica a un numero solo** — i dati per rifarla ci sono. ⛔ Il brief
    dice di non toccarla prima di avere PP/TG/TTFT separati: adesso ci sono.
@@ -1735,6 +1738,13 @@ G4 chiuso e G5:
     runs-g5-produzione.jsonl         10 minuti, configurazione di produzione
     runs-pp8192.jsonl                PP8192, contesto 16384
     g5-*-zone.txt                    le zone termiche del SoC, campionate dall'host
+
+al microbatch 512, cioe' quello di PRODUZIONE:
+    runs-stop-ocl-ub512.jsonl        Stop — il pavimento vero di G4, p95 5.926 ms
+    runs-cpu-ub512.jsonl             pavimento CPU
+    runs-pp-ocl-ub512.jsonl          PP/TG OpenCL — insieme fanno il confronto vero
+    runs-g5-cpu.jsonl                G5 su CPU, 0 salti su 67
+    runs-g5-ocl-faoff.jsonl          G5 con FA spenta, 11 salti su 74
 ```
 
 ⛔ Sono **fuori dall'indice di git** di proposito: descrivono il dispositivo
