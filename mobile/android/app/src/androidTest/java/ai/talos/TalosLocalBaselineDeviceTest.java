@@ -148,6 +148,17 @@ public class TalosLocalBaselineDeviceTest {
             int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
             stato.put("charging", status(status));
         }
+        if (battery != null) {
+            /*
+             * ⛔ `thermal` ha TRE gradini — none/light/moderate — e una corsa
+             * lunga li attraversa tutti restando dentro lo stesso gradino per
+             * minuti. La temperatura della batteria e' il segnale CONTINUO, ed
+             * e' quella che dice QUANDO la deriva e' cominciata invece che
+             * soltanto che e' cominciata.
+             */
+            int decimi = battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Integer.MIN_VALUE);
+            if (decimi != Integer.MIN_VALUE) stato.put("batteryTemperatureC", decimi / 10.0);
+        }
         Runtime runtime = Runtime.getRuntime();
         stato.put("javaHeapUsedBytes", runtime.totalMemory() - runtime.freeMemory());
         return stato;
@@ -414,6 +425,133 @@ public class TalosLocalBaselineDeviceTest {
         } finally {
             TalosLlamaNative.nativeClose(handle);
         }
+    }
+
+    /**
+     * ⛔⛔ G5 — LA TENUTA NEL TEMPO, che nessuna corsa di oggi misurava.
+     *
+     * Tutte le altre misure di questo file durano fra i 15 secondi e i tre
+     * minuti, e ognuna parte da un telefono freddo perche' altrimenti non si
+     * confronta con niente. ⇒ Descrivono un telefono che NON esiste: quello di
+     * una persona che fa una domanda sola e poi mette via il telefono.
+     *
+     * MISURATO il 2026-08-20, e per questo il test esiste: dentro UNA campagna
+     * da tre blocchi il Pad e' passato da `Thermal Status: 0` a **2**, e i
+     * numeri sono scesi del 25% a meta' blocco. La deriva non e' un'ipotesi da
+     * manuale, e' successa mentre misuravo altro.
+     *
+     * Qui si tiene il motore acceso per N minuti e si registra un giro dopo
+     * l'altro: prompt corto e generazione lunga, cioe' il regime in cui il
+     * lavoro e' tutto decodifica e la GPU non riposa mai.
+     *
+     * ⛔ L'unica asserzione e' che il motore NON SI ROMPA: ogni giro deve
+     * produrre token e testo. La deriva non ha una soglia inventata da me — si
+     * registra, e il numero lo giudica chi decide. Un test che asserisce una
+     * soglia che nessuno ha scelto trasforma un'opinione in un cancello.
+     *
+     * ⛔ NON e' nella corsa predefinita: dura dieci minuti e scalda il telefono
+     * di qualcun altro. Si chiede per nome.
+     */
+    @Test
+    public void c0TenutaNelTempo() throws Exception {
+        pronta();
+        File model = fixture();
+        int thread = argomentoIntero("talosThreads", 4);
+        int contesto = argomentoIntero("talosContext", 8192);
+        int minuti = argomentoIntero("talosSustainedMinutes", 10);
+        int tokenPerGiro = argomentoIntero("talosSustainedTokens", 128);
+
+        long handle = apriCpu(model, contesto, thread);
+        List<Double> tassi = new ArrayList<>();
+        try {
+            String breve = promptDa(handle, 32);
+            int veriBrevi = TalosLlamaNative.nativePromptTokens(handle, breve);
+            Log.i(TAG, "G5: " + minuti + " minuti, " + tokenPerGiro
+                    + " token per giro, prompt da " + veriBrevi + " token");
+
+            final long partenza = System.nanoTime();
+            final long durataNs = minuti * 60L * 1_000_000_000L;
+            int giro = 0;
+            while (System.nanoTime() - partenza < durataNs) {
+                JSONObject prima = statoDispositivo();
+                long inizio = System.nanoTime();
+                String testo = TalosLlamaNative.nativeGenerate(
+                        handle, breve, tokenPerGiro, false, false);
+                long muroMs = (System.nanoTime() - inizio) / 1_000_000L;
+                int prodotti = TalosLlamaNative.nativeTokensProduced(handle);
+
+                // ⛔ Il verso contrario: un motore che si spegne sotto carico
+                // restituirebbe vuoto, e un test che guarda solo la velocita'
+                // lo leggerebbe come «velocissimo».
+                assertTrue("giro " + giro + ": nessun token prodotto sotto carico prolungato",
+                        prodotti > 0);
+                assertTrue("giro " + giro + ": testo vuoto sotto carico prolungato",
+                        testo != null && !testo.isEmpty());
+
+                JSONObject riga = intestazione(model, "G5-tenuta", thread, contesto);
+                riga.put("run", giro);
+                riga.put("warmup", giro == 0);
+                riga.put("elapsedMs", (System.nanoTime() - partenza) / 1_000_000L);
+                riga.put("wallMs", muroMs);
+                riga.put("promptTokensRequested", veriBrevi);
+                riga.put("maxTokens", tokenPerGiro);
+                riga.put("produced", prodotti);
+                riga.put("emptyText", false);
+                riga.put("deviceBefore", prima);
+                riga.put("deviceAfter", statoDispositivo());
+
+                String tempi = TalosLlamaNative.nativeLastTimings(handle);
+                if (tempi != null && !tempi.isEmpty()) {
+                    JSONObject dettaglio = new JSONObject(tempi);
+                    riga.put("timings", dettaglio);
+                    long primo = dettaglio.optLong("firstTokenMs", 0);
+                    long totale = dettaglio.optLong("totalMs", 0);
+                    int usciti = dettaglio.optInt("producedTokens", 0);
+                    if (totale > primo && usciti > 0) {
+                        double tasso = round(usciti * 1000.0 / (totale - primo));
+                        riga.put("decodeTokensPerSecond", tasso);
+                        // ⛔ Il giro 0 non entra nella deriva: e' il
+                        // riscaldamento, e su OpenCL con la Flash Attention
+                        // accesa vale da solo quattro secondi.
+                        if (giro > 0) tassi.add(tasso);
+                    }
+                    riga.put("ttftMs", primo);
+                    riga.put("reusedTokens", dettaglio.optInt("reusedTokens", -1));
+                }
+                registra(riga);
+                giro += 1;
+            }
+
+            assertTrue("nessun giro completato in " + minuti + " minuti", giro > 1);
+
+            /*
+             * ⛔ Il riassunto confronta il PRIMO terzo col TERZO terzo, non il
+             * primo giro con l'ultimo: due giri singoli agli estremi misurano
+             * il rumore quanto la deriva.
+             */
+            JSONObject riassunto = intestazione(model, "G5-tenuta-summary", thread, contesto);
+            riassunto.put("runs", tassi.size());
+            riassunto.put("minutesRequested", minuti);
+            if (tassi.size() >= 3) {
+                int terzo = tassi.size() / 3;
+                double primi = media(tassi.subList(0, terzo));
+                double ultimi = media(tassi.subList(tassi.size() - terzo, tassi.size()));
+                riassunto.put("firstThirdTokensPerSecond", round(primi));
+                riassunto.put("lastThirdTokensPerSecond", round(ultimi));
+                riassunto.put("driftPercent", primi > 0 ? round((ultimi - primi) * 100.0 / primi) : 0);
+            }
+            riassunto.put("deviceAfter", statoDispositivo());
+            registra(riassunto);
+            Log.i(TAG, "G5: " + tassi.size() + " giri misurati in " + minuti + " minuti");
+        } finally {
+            TalosLlamaNative.nativeClose(handle);
+        }
+    }
+
+    private static double media(List<Double> valori) {
+        double somma = 0;
+        for (double v : valori) somma += v;
+        return valori.isEmpty() ? 0 : somma / valori.size();
     }
 
     /**
