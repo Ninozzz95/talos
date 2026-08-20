@@ -147,6 +147,23 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
 .talos-message-content li + li { margin-top: 0.25rem; }
 .talos-message-content blockquote { border-left: 3px solid var(--talos-border-strong); padding-left: 0.8rem; color: var(--talos-muted); }
 .talos-message-content a { color: var(--talos-accent); text-decoration: underline; text-underline-offset: 3px; }
+/*
+ * ⛔⛔ UN LINK NELLA BOLLA DELLA PERSONA ERA INVISIBILE.
+ *
+ * MISURATO sul Pad il 2026-08-20, con il colore calcolato letto dalla pagina:
+ *
+ *   colore del link  rgb(192, 139, 60)
+ *   sfondo della bolla  rgb(192, 139, 60)
+ *
+ * Identici. Contrasto 1:1. Il testo c'era nel DOM — un <a> regolare, con la
+ * sua sottolineatura — e a schermo si leggeva «Leggi questa pagina:» e poi
+ * niente. Vale per OGNI indirizzo che una persona scrive o incolla.
+ *
+ * ⇒ Dentro la bolla il link prende il colore del testo della bolla: la
+ * sottolineatura basta a dire che e' un link, e il colore dell'accento su
+ * uno sfondo d'accento non e' un colore.
+ */
+[data-message-kind="user"] .talos-message-content a { color: currentColor; }
 .talos-message-content a:focus-visible { border-radius: 3px; outline: 2px solid var(--talos-ring); outline-offset: 2px; }
 .talos-message-content :not(pre) > code { border: 1px solid var(--talos-border); border-radius: 4px; background: var(--talos-panel); padding: 0.08rem 0.3rem; font-size: 0.84em; }
 .talos-message-content .talos-code-block { min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--talos-code-border); border-radius: 6px; background: var(--talos-code-bg); color: var(--talos-code-text); }

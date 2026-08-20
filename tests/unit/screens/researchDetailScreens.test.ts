@@ -109,6 +109,72 @@ beforeEach(() => {
     mockState.controller = controllerWith(REPORT)
 })
 
+/**
+ * ⛔⛔ CONTESA-02 — la contesa si APRE, non si riassume in una parola.
+ *
+ * Il motore sa già che due fonti si contraddicono — `contested`, con le
+ * contrarie e il loro passaggio. La scheda però mostrava solo il passaggio a
+ * favore: chi leggeva vedeva metà del disaccordo, e la metà che vedeva era
+ * quella che dava ragione al rapporto.
+ *
+ * ⛔ È il verso peggiore in cui sbagliare: nascondere la fonte contraria fa
+ * sembrare più solido proprio ciò che è più fragile.
+ */
+const CONTRARIA = {
+    url: 'https://contraria.example/studio',
+    title: 'Lo studio che dice il contrario',
+    passage: 'Il campione non mostra alcun effetto misurabile.',
+    span: { from: 0, to: 47 },
+}
+
+const REPORT_CONTESO: TalosResearchReportRecord = {
+    ...REPORT,
+    claims: [{
+        ...REPORT.claims[0]!,
+        passage: 'Il metodo ha mostrato un effetto chiaro.',
+        checks: {
+            ...REPORT.claims[0]!.checks,
+            claimSupported: 'contested',
+            opposing: [CONTRARIA],
+        },
+    }],
+}
+
+describe('CONTESA-02 la scheda apre il disaccordo', () => {
+    it('⛔ mostra il passaggio della fonte CONTRARIA, non solo quello a favore', async () => {
+        mockState.controller = controllerWith(REPORT_CONTESO)
+        const wrapper = await open(ResearchClaimScreen, { id: 'run-1', index: '0' })
+
+        const dissenso = wrapper.get('[data-testid="talos-research-dissenso"]')
+        expect(dissenso.text()).toContain('Il campione non mostra alcun effetto misurabile.')
+        expect(dissenso.text()).toContain('Lo studio che dice il contrario')
+    })
+
+    it('⛔ e NON perde quello a favore: il punto è vederli INSIEME', async () => {
+        mockState.controller = controllerWith(REPORT_CONTESO)
+        const wrapper = await open(ResearchClaimScreen, { id: 'run-1', index: '0' })
+
+        const dissenso = wrapper.get('[data-testid="talos-research-dissenso"]')
+        expect(dissenso.text()).toContain('Il metodo ha mostrato un effetto chiaro.')
+        expect(dissenso.text()).toContain('Il campione non mostra alcun effetto misurabile.')
+    })
+
+    it('dice che la decisione resta della persona, invece di mediare', async () => {
+        mockState.controller = controllerWith(REPORT_CONTESO)
+        const wrapper = await open(ResearchClaimScreen, { id: 'run-1', index: '0' })
+
+        expect(wrapper.get('[data-testid="talos-research-dissenso"]').text())
+            .toMatch(/does not choose for you|non sceglie per te/i)
+    })
+
+    it('⛔ e al contrario: senza fonti contrarie il riquadro non compare', async () => {
+        mockState.controller = controllerWith(REPORT)
+        const wrapper = await open(ResearchClaimScreen, { id: 'run-1', index: '0' })
+
+        expect(wrapper.find('[data-testid="talos-research-dissenso"]').exists()).toBe(false)
+    })
+})
+
 describe('the claim page', () => {
     it('shows the passage that was kept, not a link to go and look for it', async () => {
         // This is the whole L3 argument: the words the source actually contained

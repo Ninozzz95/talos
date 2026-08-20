@@ -665,9 +665,18 @@ function when(iso: string): string {
                              a bare "%" — seen on the device. -->
                         <span v-else-if="card.standing && card.standing.total > 0" data-testid="talos-research-card-standing" class="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-2xs tabular-nums text-[var(--talos-muted)]">
                             <span class="text-[var(--talos-text)]">{{ solidityPercent(card.standing) }}%</span>
+                            <!--
+                                ⛔ La CONTESA si conta anche qui. Vista sul Pad il
+                                2026-08-20: la scheda diceva «75% · 3 sostenute · 0 in
+                                parte · 0 smentite · 0 non verificate» su una ricerca di
+                                QUATTRO affermazioni. I conti non tornavano a colpo
+                                d'occhio, e l'unica che mancava era proprio quella che
+                                spiegava il 75%.
+                            -->
                             <span>{{ t('research.cardStanding', {
                                 supported: card.standing.supported,
                                 partial: card.standing.partial,
+                                contested: card.standing.contested ?? 0,
                                 unsupported: card.standing.unsupported,
                                 unchecked: card.standing.unchecked,
                             }) }}</span>

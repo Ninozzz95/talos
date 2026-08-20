@@ -363,7 +363,44 @@ import { resolve } from 'node:path'
  * Mille e non sessantasei: quattro byte di margine sono una trappola sotto la
  * prossima riga, ed è la stessa critica scritta qui sopra.
  */
-const DEFAULT_MAXIMUM_BYTES = 606_000
+/*
+ * ⛔ 609.000 dal 2026-08-20, e cosa ha comprato l’aumento.
+ *
+ * La sezione Ricerca approfondita disegnata come il mockup approvato.
+ * Quattro cose, e le prime due nessun concorrente le mostra:
+ *
+ *   1. LA CONTESA, APERTA sul rapporto. Il passaggio a favore e quello
+ *      contro, affiancati, senza toccare niente. Chi legge un rapporto
+ *      all’86% non ha nessun motivo di aprire proprio quella riga fra
+ *      dodici — e lì stava.
+ *   2. ⛔ E la contesa non poteva ESISTERE. Misurato sul Pad: il rapporto su
+ *      GGUF scriveva in chiaro «le fonti… non specificano però formalmente
+ *      un maintainer unico», e la barra sopra diceva 7 su 7 sostenute, 0
+ *      contese. La regola del verdetto conteso esisteva coi suoi test e non
+ *      la chiamava nessuno: il disaccordo poteva stare nella prosa e mai
+ *      nei dati. Adesso il giudice riceve una seconda domanda — «questo
+ *      passaggio di un’ALTRA fonte contraddice l’affermazione?» — su una
+ *      sola candidata, scelta per sovrapposizione di parole e non da un
+ *      modello.
+ *   3. LA TENUTA NEL TEMPO. I ricontrolli scrivevano da sempre il loro
+ *      documento in Libreria, in prosa: leggibile e inconfrontabile. Adesso
+ *      portano in coda un blocco che si rilegge esatto, e la pagina mette le
+ *      tappe in fila col salto fra l’una e l’altra.
+ *   4. Le fonti in BibTeX e RIS. Le funzioni c’erano da giorni, coi loro
+ *      test, e nessuna porta le chiamava: codice vivo dietro un muro.
+ *
+ * Del pezzo d’avvio pesano solo i metodi nuovi del controller — le schermate
+ * della ricerca sono già a caricamento pigro, e le funzioni pure entrano nei
+ * loro chunk. Prima di alzare ho tolto il grasso appena messo:
+ * `recheckHistory` importava lo STESSO modulo due volte (-126 byte).
+ *
+ * ⇒ 609.000 e non 608.000: misurato dopo, il pezzo sta a 607.487, e a
+ * 608.000 resterebbero 513 byte. Cinquecento byte non sono un budget, sono
+ * la trappola sotto la prossima riga contro cui è scritta la nota qui sopra,
+ * e vale anche quando il tetto lo sto alzando io. Il tetto è un contenitore:
+ * non si azzoppa una funzione per farcela stare dentro.
+ */
+const DEFAULT_MAXIMUM_BYTES = 609_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {

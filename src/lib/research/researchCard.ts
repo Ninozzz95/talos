@@ -29,6 +29,15 @@ export interface TalosResearchStanding {
     readonly partial: number
     readonly unsupported: number
     readonly unchecked: number
+    /**
+     * ⛔ CONTESA-01 — le affermazioni su cui le fonti non concordano.
+     *
+     * Opzionale, e non per pigrizia: i rapporti scritti prima del
+     * 2026-08-20 non hanno questo conto, e leggerlo come zero su un
+     * rapporto vecchio direbbe «nessun disaccordo» dove la verità è
+     * «non guardato». Chi lo mostra usa `?? 0` sapendo cosa sta facendo.
+     */
+    readonly contested?: number
 }
 
 export interface TalosResearchCard {
@@ -116,6 +125,13 @@ export function talosResearchCardOf(
  * verification exists to prevent. Unchecked counts as zero for the same reason:
  * "we could not check" is not a pass.
  */
+/*
+ * ⛔ Una CONTESA vale zero, come una smentita, e la ragione è la stessa
+ * che regge tutta questa funzione: se le fonti si contraddicono, quella
+ * affermazione non è una prova. Contarla anche solo per metà rifarebbe
+ * esattamente il difetto che la verifica esiste per impedire — un rapporto
+ * che sembra più solido di quanto sia.
+ */
 export function talosResearchSolidity(standing: TalosResearchStanding | null): number | null {
     if (!standing || standing.total === 0) return null
     return (standing.supported + (standing.partial * 0.5)) / standing.total
@@ -132,6 +148,10 @@ export function talosResearchNeedsAttention(card: TalosResearchCard): boolean {
     if (card.failedSteps > 0) return true
     if (!card.standing) return false
     if (card.standing.unsupported > 0) return true
+    // ⛔ Anche UNA contesa merita un secondo sguardo: vuol dire che su quel
+    // punto il mondo non concorda, ed è precisamente il caso in cui una
+    // persona vuole leggere le fonti invece di fidarsi del riassunto.
+    if ((card.standing.contested ?? 0) > 0) return true
     const solidity = talosResearchSolidity(card.standing)
     return solidity !== null && solidity < 2 / 3
 }

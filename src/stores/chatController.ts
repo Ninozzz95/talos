@@ -983,6 +983,17 @@ export interface ChatController {
         exportReport(fileId: string, displayName: string): Promise<unknown>
         /** Lo stesso rapporto come PDF, nel tono scelto: `report`, `brief` o `dossier`. */
         exportReportPdf(fileId: string, tone: string, displayName: string): Promise<unknown>
+        /**
+         * Le sole FONTI, nel formato che legge un gestore di bibliografie.
+         *
+         * `accessedAt` lo passa il chiamante perche' la data di lettura e'
+         * dell'esecuzione, non di adesso: un export fatto fra un mese non
+         * deve dire che le pagine sono state lette fra un mese.
+         */
+        exportCitations(fileId: string, format: 'bibtex' | 'ris', displayName: string, accessedAt: string): Promise<unknown>
+        /** I ricontrolli gia’ fatti su questa ricerca, in ordine di tempo. */
+        recheckHistory(runId: string): Promise<readonly import(
+            '@/lib/research/researchRecheckHistory').TalosResearchRecheckPasso[]>
         /** Stop, keep everything, come back later. Resumable — never `cancel`. */
         pause(runId: string): Promise<import('@/lib/research/researchRun').TalosResearchRun>
         /** Stop for good. What was collected stays readable; nothing more is bought. */
@@ -5983,11 +5994,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             { talosResearchParseSynthesis },
             { talosResearchJudgePrompt, talosResearchPickJudge, talosResearchVerify },
             { talosResearchReportDocument },
+            { talosResearchOpposingPrompt },
         ] = await Promise.all([
             import('@/lib/chat/providerRegistry'),
             import('@/lib/research/researchSynthesis'),
             import('@/lib/research/researchVerification'),
             import('@/lib/research/researchReport'),
+            import('@/lib/research/researchOpposing'),
         ])
 
         /*
@@ -6090,6 +6103,37 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 const verdict = await providerAdapterFor(chosen.provider).complete({
                     model: chosen.providerModel,
                     turns: [{ role: 'user', content: talosResearchJudgePrompt(claimText, passage) }],
+                    system: 'Rispondi con una riga sola, nel formato richiesto.',
+                    effort: 'off',
+                    thinking: false,
+                }, judgeCredentials, deps.transport)
+                judgeTokens += Number(verdict.usage?.completion_tokens ?? 0)
+                return verdict.text
+            },
+
+            /**
+             * ⛔ CONTESA-02 — la seconda domanda: qualcun altro dice il contrario?
+             *
+             * MISURATO sul Pad il 2026-08-20: il rapporto su GGUF scriveva in
+             * chiaro «le fonti… non specificano però formalmente un maintainer
+             * unico», e la barra sopra diceva 7 su 7 sostenute, 0 contese. La
+             * regola della contesa esisteva coi suoi test e non la chiamava
+             * nessuno: il disaccordo poteva stare nella prosa, mai nei dati.
+             *
+             * ⛔ Lo STESSO giudice, non un terzo: chi ha detto che il passaggio
+             * sostiene l’affermazione è la persona giusta a cui mostrare quello
+             * che la nega. Un giudice diverso porterebbe un secondo metro, e il
+             * disaccordo fra i due si leggerebbe come disaccordo fra le fonti.
+             */
+            askOpposing: async (claimText, passage) => {
+                if (!chosen) throw new Error('TALOS_RESEARCH_NO_JUDGE')
+                judgeCredentials ??= {
+                    apiKey: await deps.getKey(chosen.provider),
+                    endpoint: await deps.getEndpoint(chosen.provider),
+                }
+                const verdict = await providerAdapterFor(chosen.provider).complete({
+                    model: chosen.providerModel,
+                    turns: [{ role: 'user', content: talosResearchOpposingPrompt(claimText, passage) }],
                     system: 'Rispondi con una riga sola, nel formato richiesto.',
                     effort: 'off',
                     thinking: false,
@@ -6573,7 +6617,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     await vaultService.createGenerated({
                         name: `${run.question} — ricontrollo.md`,
                         mediaType: 'text/markdown',
-                        text: talosResearchRecheckDocument(run.question, recheck),
+                        text: talosResearchRecheckDocument(run.question, recheck, run.id),
                         kind: 'document',
                     }, {
                         sessionId: chat.activeSession.value?.id ?? null,
@@ -6660,6 +6704,78 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     mediaType: 'application/pdf',
                     bytes: document.bytes,
                 })
+            },
+
+            /**
+             * ⛔ EXPORT-06 — le fonti per Zotero, Mendeley, EndNote.
+             *
+             * Da qui NON esce niente della ricerca: non la domanda, non il
+             * modello che ha giudicato, non gli identificativi. Un file di
+             * bibliografia finisce in una cartella condivisa o in un allegato,
+             * ed e' il posto meno controllato in cui un dato personale possa
+             * arrivare. La forma in ingresso di `talosResearchBibtex` dichiara
+             * quattro campi e basta, e qui gliene passiamo quattro.
+             *
+             * ⛔ E le fonti MAI RAGGIUNTE non escono. Una voce di bibliografia
+             * dice «questa pagina sostiene qualcosa»: una che non abbiamo
+             * nemmeno aperto non sostiene niente, e citarla e' il modo piu'
+             * rapido di sporcare un lavoro serio.
+             */
+            async exportCitations(fileId: string, format: 'bibtex' | 'ris', displayName: string, accessedAt: string) {
+                const [record, citazioni, { saveTalosVaultFileToDevice }] = await Promise.all([
+                    this.report(fileId),
+                    import('@/lib/research/researchCitationExport'),
+                    import('@/services/saveVaultFileToDevice'),
+                ])
+                if (!record) throw new Error('TALOS_RESEARCH_NO_REPORT')
+
+                const fonti = record.sources
+                    .filter((source) => source.obtained === 'page' || source.obtained === 'snippet')
+                    .map((source) => ({
+                        url: source.url,
+                        title: source.title,
+                        publishedAt: source.publishedAt,
+                        accessedAt,
+                    }))
+                if (fonti.length === 0) throw new Error('TALOS_RESEARCH_NO_CITATIONS')
+
+                const testo = format === 'bibtex'
+                    ? citazioni.talosResearchBibtex(fonti)
+                    : citazioni.talosResearchRis(fonti)
+                return saveTalosVaultFileToDevice({
+                    displayName,
+                    // ⛔ I due tipi ufficiali: `text/plain` farebbe aprire il file
+                    //   in un editor invece di offrirlo al gestore che lo importa.
+                    mediaType: format === 'bibtex' ? 'application/x-bibtex' : 'application/x-research-info-systems',
+                    bytes: new TextEncoder().encode(testo),
+                })
+            },
+
+            /**
+             * ⛔ TENUTA-NEL-TEMPO-01 — i ricontrolli gia’ fatti, rimessi in fila.
+             *
+             * I documenti stanno in Libreria da sempre; da oggi portano in coda
+             * un blocco che si rilegge esatto. Il filtro e’ in due passi: prima
+             * il NOME, che costa niente, poi il `runId` dentro il blocco — il
+             * nome e’ la domanda, e due ricerche possono farsi la stessa
+             * domanda.
+             *
+             * ⛔ Un documento vecchio, senza blocco, non entra: non e’ una
+             * tappa a zero, e’ una tappa che non sappiamo misurare.
+             */
+            async recheckHistory(runId: string) {
+                const { talosResearchParseRecheckBlock, talosResearchRecheckStoria } = await import(
+                    '@/lib/research/researchRecheckHistory')
+                const files = await deps.chatRepository.listVaultFiles().catch(() => [])
+                const tappe = []
+                for (const file of files) {
+                    if (!file.display_name?.endsWith('ricontrollo.md')) continue
+                    const testo = file.extracted_text
+                        ?? (await deps.chatRepository.getVaultFile(file.id).catch(() => null))?.extracted_text
+                    const letta = talosResearchParseRecheckBlock(testo)
+                    if (letta && letta.runId === runId) tappe.push(letta)
+                }
+                return talosResearchRecheckStoria(tappe)
             },
 
             async report(fileId: string) {

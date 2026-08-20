@@ -25,8 +25,37 @@ defineProps<{
     canGoIncognito: boolean
     activeTitle: string
     busy: boolean
-    /** F6 — tablet split view: the panel owns the hamburger, hide ours. */
+    /**
+     * ⛔⛔ F6 — sul tablet il pannello ha l’HAMBURGER, la CAMPANELLA e i
+     * DOWNLOAD. Non ha le opzioni della chat.
+     *
+     * Sono TRE gruppi e non due, e ogni volta che li ho contati male si è
+     * visto a schermo:
+     *
+     *   · Un flag solo per tutti e tre (fino al 2026-08-20 mattina): sul
+     *     tablet il riquadro destro non aveva niente — né rinomina, né
+     *     elimina, né esporta, né media, né incognito. Nel pannello quelle
+     *     voci non ci sono, quindi erano IRRAGGIUNGIBILI.
+     *   · Due flag (`hideMenu` + `hideActions`): il riquadro riprendeva
+     *     tutto, campanella compresa — e il pannello ce l’ha già.
+     *     FOTOGRAFATO lo stesso giorno: due campanelle sullo stesso schermo,
+     *     con lo stesso pallino «1».
+     *
+     * ⇒ Tre proprietà, perché sono tre domande. Ognuna dice esattamente chi
+     * possiede quel gruppo altrove, e nessuna si porta dietro le altre.
+     */
     hideMenu?: boolean
+    /**
+     * Campanella e centro download. Il pannello del tablet li ha entrambi:
+     * lasciarli anche qui vuol dire due campanelle e due pallini per la
+     * stessa notifica.
+     */
+    hideAppActions?: boolean
+    /**
+     * Le opzioni della chat — rinomina, elimina, esporta, media, incognito.
+     * ⛔ Sul tablet NON si tolgono: nessun’altra superficie le offre.
+     */
+    hideChatOptions?: boolean
     /** False before a chat exists; the media entry then opens nothing. */
     canOpenMedia?: boolean
     /** What the active chat would take from the Library, for the delete dialog. */
@@ -91,10 +120,18 @@ const emit = defineEmits<{
             </Button>
             <span v-else aria-hidden="true" />
 
-            <div v-if="!hideMenu" class="pointer-events-auto flex shrink-0 items-center">
-                <TalosMobileNotificationBell />
-            <TalosMobileDownloadCenterTrigger />
+            <!--
+                DUE gruppi, non uno: campanella e download il pannello del tablet
+                ce li ha, le opzioni della chat no. Vedi la nota accanto alle
+                proprieta.
+            -->
+            <div class="pointer-events-auto flex shrink-0 items-center">
+                <template v-if="!hideAppActions">
+                    <TalosMobileNotificationBell />
+                    <TalosMobileDownloadCenterTrigger />
+                </template>
                 <TalosMobileChatOptionsMenu
+                    v-if="!hideChatOptions"
                     :incognito="incognito"
                     :can-go-incognito="canGoIncognito"
                     :cleanup-plan="cleanupPlan"
@@ -110,8 +147,8 @@ const emit = defineEmits<{
                     @export="emit('export')"
                     @media="emit('media')"
                 />
+                <span v-if="hideAppActions && hideChatOptions" aria-hidden="true" />
                 </div>
-                <span v-else aria-hidden="true" />
             </div>
         </div>
     </div>

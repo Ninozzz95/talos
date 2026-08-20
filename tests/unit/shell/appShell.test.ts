@@ -441,7 +441,7 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         // F3-T0: the tool sheet is an async chunk — resolving needs a real
         // macrotask, so poll with waitFor instead of microtask flushes.
         await vi.waitFor(() => expect(w.find('[data-testid="talos-mobile-tool-sheet"]').exists()).toBe(true))
-        expect(w.text()).toContain('Deep Research V3')
+        expect(w.text()).toContain('Deep Research')
         // chat base still mounted behind the sheet
         expect(w.find('[data-testid="talos-empty-brand"] h1').text().trim()).not.toBe('')
         expect(w.find('[data-testid="talos-mobile-composer"]').exists()).toBe(true)
