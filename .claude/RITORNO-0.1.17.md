@@ -1250,6 +1250,73 @@ i propri TODO e «non migliora sempre le prestazioni» fra i propri difetti noti
 altro dispositivo si rimisura — la manopola `talosFlashAttn` adesso c'è, e il
 valore scelto finisce **scritto in ogni riga** di `runs.jsonl` e `golden.jsonl`.
 
+### ⛔⛔ G5 — DIECI MINUTI: non cala, OSCILLA. E i nostri strumenti non lo vedono
+
+Il brief chiede la tenuta nel tempo, e non era mai stata misurata: ogni altra
+corsa di questo ramo dura fra i quindici secondi e i tre minuti e parte da un
+telefono freddo. ⇒ Descrivevano un telefono che non esiste, quello di chi fa una
+domanda sola.
+
+Dieci minuti di carico continuo, **configurazione di produzione com'è oggi**
+(Flash Attention `default` = accesa, microbatch 256), OpenCL, prompt corto e
+generazione lunga — 71 giri:
+
+```
+giro   0    11s   tg 19,5   TTFT 4.786 ms   ← la compilazione pigra della FA
+giro  10    80s   tg 19,4   TTFT   208
+giro  20   162s   tg 19,2   TTFT   209
+giro  30   251s   tg 19,3   TTFT   211
+giro  40   337s   tg 13,5   TTFT   270
+giro  50   421s   tg 13,5   TTFT   279
+giro  60   519s   tg 13,5   TTFT   273
+giro  70   601s   tg 13,6   TTFT   275
+```
+
+⛔ **Questa tabella mente, ed è la mia.** Un campione ogni dieci giri disegna uno
+scalino netto a metà corsa. La serie intera dice un'altra cosa:
+
+```
+giro 12 (1,6 min)  19,35 → 14,88        giro 43 (6,0 min)  14,58 → 19,38
+giro 17 (2,3 min)  13,90 → 19,30        giro 47 (6,5 min)  19,16 → 13,96
+giro 23 (3,1 min)  17,31 → 13,58        giro 62 (8,9 min)  13,56 → 19,23
+giro 30 (4,2 min)  13,75 → 19,34        giro 67 (9,5 min)  19,31 → 14,08
+giro 35 (4,8 min)  19,45 → 13,70
+```
+
+⇒ **Non è una discesa: è un'oscillazione fra due livelli stabili** — 19,3 e
+13,6 tok/s, rapporto **1,42×** — con **nove transizioni** in dieci minuti e il
+**55,7% del tempo** nello stato basso. La forma è quella di un gradino di
+frequenza, non di una rampa termica.
+
+⛔⛔ **E nessuno dei due strumenti che registro lo vede.**
+
+| strumento | cosa dice per tutti i dieci minuti |
+|---|---|
+| `thermal` (PowerManager) | `moderate` **dal secondo 46**, e non cambia più |
+| temperatura della batteria | **33,6-33,7 °C, piatta** |
+
+Il primo satura subito e resta lì; il secondo non si muove di un decimo di grado
+mentre la velocità cambia del 42%. ⛔ **La temperatura della batteria l'ho
+aggiunta io oggi**, scrivendo che sarebbe stata «il segnale continuo che dice
+QUANDO la deriva è cominciata». Non lo è: la batteria non è il SoC, e qui non
+partecipa. Lo dico invece di lasciarlo scoprire a qualcun altro.
+
+⇒ **Cosa vede la persona**: dopo circa un minuto e mezzo di uso continuo
+l'assistente comincia ad alternare fra due velocità, e passa più della metà del
+tempo a **due terzi** della velocità che ha visto all'inizio. Non c'è nessun
+avviso, e la nostra diagnostica lo descriverebbe come «moderate» dall'inizio
+alla fine.
+
+⛔ **Cosa NON ho misurato**, e serve prima di concludere:
+
+1. La stessa corsa **sulla CPU**: se oscilla anche lì, è il governor del SoC e
+   non il backend. Se non oscilla, è la GPU.
+2. La stessa corsa con `flash-attn off`: la FA accesa raddoppia il lavoro sulla
+   KV, e potrebbe essere ciò che porta il chip sulla soglia.
+3. Il segnale giusto — le zone termiche del SoC in
+   `/sys/class/thermal/thermal_zone*/temp`, che da `adb` dicevano **58 °C**
+   mentre la batteria ne diceva 33.
+
 ### 📋 La politica a un numero solo — la proposta, non applicata
 
 `TalosBackendChoice.choose()` decide con **un numero**: `tokensPerSecond`. Il
