@@ -708,11 +708,13 @@ ed è quello di upstream: `tests/test-backend-ops.cpp` confronta con un errore
 quadratico medio normalizzato, tolleranza `1e-7` — «to allow for accumulated
 floating-point rounding differences across backends». Bit a bit non lo pretende
 nessuno. Upstream lo fa girare sul telefono con
-`./scripts/build-run-android.sh run_testops`, ed è **lavoro non ancora fatto**.
+`./scripts/build-run-android.sh run_testops`. ⇒ **Ed è stato fatto: la sezione
+qui sotto è il suo esito.**
 
-⇒ Quello che si può dire oggi: nessuna corruzione grossolana, entrambi i lati
-deterministici, risposta identica fino al primo quasi-pareggio. Quello che
-**non** si può dire: che OpenCL sia corretto. Serve `test-backend-ops`.
+⇒ Quello che si poteva dire prima di eseguirlo: nessuna corruzione grossolana,
+entrambi i lati deterministici, risposta identica fino al primo quasi-pareggio.
+Quello che **non** si poteva dire — che OpenCL sia corretto — lo risponde
+`test-backend-ops`, e la risposta è **divisa**.
 
 ### ✅⛔ G3 — IL CANCELLO VERO, eseguito: `test-backend-ops` sul telefono
 
