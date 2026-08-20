@@ -455,6 +455,32 @@ async function caricaStoria(): Promise<void> {
 // mettere in fila, e un giro sulla Libreria a vuoto costa e non dice nulla.
 watch(report, (presente) => { if (presente) void caricaStoria() }, { immediate: true })
 
+/**
+ * Quando è stata fatta una tappa, scritto corto.
+ *
+ * ⛔ Due cure a un difetto solo, visto sul Pad il 2026-08-20 facendo due
+ * ricontrolli di fila:
+ *
+ *   · «20 agosto 2026» andava a capo dentro la sua colonna, e la riga si
+ *     spezzava in due. Il mese corto ci sta.
+ *   · Le due tappe portavano la STESSA data e non si distinguevano. Se
+ *     due cadono nello stesso giorno, l’ora entra su TUTTE: un elenco in
+ *     cui alcune righe hanno l’ora e altre no si legge come un errore.
+ */
+const stessoGiorno = computed(() => {
+    const giorni = storia.value.map((passo) => passo.at.slice(0, 10))
+    return new Set(giorni).size !== giorni.length
+})
+
+function quandoTappa(iso: string): string {
+    const quando = new Date(iso)
+    if (Number.isNaN(quando.getTime())) return iso
+    const giorno = new Intl.DateTimeFormat(locale.value, { day: 'numeric', month: 'short' }).format(quando)
+    if (!stessoGiorno.value) return giorno
+    const ora = new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit' }).format(quando)
+    return `${giorno} ${ora}`
+}
+
 const percento = (quota: number | null): string => (quota === null
     ? '—'
     : `${Math.round(quota * 100)}%`)
@@ -786,7 +812,7 @@ function openSource(index: number): void {
                             data-testid="talos-research-tappa"
                             class="mt-2 flex items-baseline gap-2"
                         >
-                            <span class="w-16 shrink-0 font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ talosPublishedOn(passo.at, locale) }}</span>
+                            <span class="w-24 shrink-0 font-mono text-2xs tabular-nums text-[var(--talos-muted)]">{{ quandoTappa(passo.at) }}</span>
                             <span class="min-w-0 flex-1 text-2xs leading-5 text-[var(--talos-muted)]">
                                 {{ passo.primo
                                     ? t('research.tenutaPrima', { standing: passo.passagesStanding, total: passo.passagesStanding + passo.passagesLost })

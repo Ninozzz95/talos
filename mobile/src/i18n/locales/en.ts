@@ -2977,7 +2977,7 @@ export const TALOS_EN_MESSAGES = {
         },
         // The two cards the report keeps OPEN. Named for what they show, not
         // for the verdict: "contested" alone reads as a shade of "partial".
-        tenutaNelTempo: 'How it holds over time',
+        tenutaNelTempo: 'The quoted passages, over time',
         tenutaPrima: 'first check — {standing} of {total} quoted passages still there',
         // Counts, not plurals: «1 pages changed» is the sentence this shape
         // exists to avoid, and every count can legitimately be zero.

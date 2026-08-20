@@ -3088,7 +3088,12 @@ export const TALOS_IT_MESSAGES = {
         // Le due schede che il rapporto tiene APERTE. Il nome dice cosa si
         // vede, non il verdetto: «contesa» da sola si legge come una sfumatura
         // di «parziale», che e' proprio cio' che non e'.
-        tenutaNelTempo: 'Tenuta nel tempo',
+        // ⛔ NON «tenuta»: quella parola è già la percentuale grande in cima,
+        //   che conta le AFFERMAZIONI sostenute. Qui si contano i PASSAGGI
+        //   ancora presenti nella pagina. Visto sul Pad il 2026-08-20: 75% di
+        //   tenuta in alto e 100% qui sotto, a cinque centimetri, due numeri
+        //   diversi con lo stesso nome.
+        tenutaNelTempo: 'I passaggi citati, nel tempo',
         tenutaPrima: 'prima verifica — {standing} passaggi citati su {total} sono ancora lì',
         // Conteggi, non plurali: «1 pagine cambiate» è la frase che questa
         // forma esiste per evitare, e ogni conteggio può essere zero.

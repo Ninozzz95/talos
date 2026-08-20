@@ -1127,6 +1127,43 @@ describe('la tenuta nel tempo', () => {
         wrapper.unmount()
     })
 
+    it('⛔ due tappe nello STESSO giorno portano l’ora, se no sono la stessa riga', async () => {
+        // Visto sul Pad il 2026-08-20 facendo due ricontrolli di fila: due
+        // righe con «20 agosto 2026» e nient’altro a distinguerle.
+        mockState.controller = controllerWith(REPORT)
+        const controller = mockState.controller as ReturnType<typeof controllerWith>
+        controller.research.recheckHistory = vi.fn().mockResolvedValue([
+            { ...TAPPE[0], at: '2026-08-20T09:00:00.000Z' },
+            { ...TAPPE[1], at: '2026-08-20T11:30:00.000Z' },
+        ])
+
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const righe = wrapper.findAll('[data-testid="talos-research-tappa"]').map((r) => r.text())
+        expect(righe).toHaveLength(2)
+        // Le due etichette temporali sono DIVERSE fra loro.
+        expect(righe[0]).not.toBe(righe[1])
+        // E portano un orario, non solo un giorno.
+        for (const riga of righe) expect(riga).toMatch(/\d{1,2}[:.]\d{2}/)
+        wrapper.unmount()
+    })
+
+    it('e in giorni diversi basta il giorno, senza ora', async () => {
+        mockState.controller = controllerWith(REPORT)
+        const controller = mockState.controller as ReturnType<typeof controllerWith>
+        controller.research.recheckHistory = vi.fn().mockResolvedValue(TAPPE)
+
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const righe = wrapper.findAll('[data-testid="talos-research-tappa"]').map((r) => r.text())
+        expect(righe[0]).not.toMatch(/\d{1,2}[:.]\d{2}/)
+        wrapper.unmount()
+    })
+
     it('E se la Libreria non risponde, il rapporto resta in piedi lo stesso', async () => {
         mockState.controller = controllerWith(REPORT)
         const controller = mockState.controller as ReturnType<typeof controllerWith>
