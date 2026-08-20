@@ -641,6 +641,79 @@ vedere questa differenza: è la ragione per cui §Q3 chiede di misurarli separat
   termica misurata sotto carico prolungato. `thermal` è restato `none`, ma le
   corse sono brevi.
 
+### ⛔⛔ C1 — OpenCL SUL PIN NUOVO: il pavimento si è alzato, e il verdetto si affila
+
+Stesso APK, cambia solo il bersaglio: è il modo più stretto di isolare il
+backend. Entrambi gli insiemi coprono lo **stesso arco termico** (`none`→
+`light`) — la prima coppia di corse è stata **scartata** perché C0 era freddo e
+C1 caldo, e il mio stesso analizzatore l'ha segnalata.
+
+| | C0 pp/s | C1 pp/s | | C0 tg/s | C1 tg/s | | C0 TTFT | C1 TTFT | |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **PP512** | 60,26 | **302,90** | **5,03×** | 17,51 | 16,95 | **0,97×** | 8.480 ms | **1.693 ms** | 5,01× |
+| **PP2048** | 46,05 | **253,94** | **5,51×** | 9,58 | 8,01 | **0,84×** | 44.473 ms | **8.070 ms** | 5,51× |
+| **TG256** | 42,35 | 146,23 | 3,45× | 15,70 | 19,07 | 1,21× | 732 ms | **214 ms** | 3,42× |
+
+**1. Il forward pin ha reso la CPU molto più veloce.** Confronto pulito, ⛔
+entrambi freddi e `thermal: none`:
+
+| | vecchio pin | nuovo pin | |
+|---|---:|---:|---:|
+| prefill 512 | 43,82 | **60,43** | **+38%** |
+| prefill 2048 | 36,78 | **47,79** | **+30%** |
+| decodifica TG256 | 14,68 | **18,60** | **+27%** |
+
+⇒ **163 commit di upstream valgono un terzo di velocità sulla CPU, gratis**, con
+zero deriva semantica. Il pin si giustifica da solo, anche senza GPU.
+
+**2. E proprio per questo il verdetto sulla GPU si affila.** Il vantaggio in
+decodifica è **evaporato**: dove prima era 1,10-1,31× ora è **0,84-1,21×** —
+sotto la CPU su due configurazioni su tre. Ma il prefill resta **5,0-5,5×**, e
+il TTFT su 2048 token scende da **44,5 a 8,1 secondi**.
+
+⇒ Con la politica attuale — un numero solo, la velocità di generazione —
+OpenCL vale **0,84-1,21×** contro una soglia di **1,25×**: verrebbe
+**rifiutato in ogni configurazione**. Prima era una decisione discutibile; ora è
+una decisione sbagliata in tutti i casi provati.
+
+### ⛔⛔ G3 — la correttezza: il mio primo criterio era SBAGLIATO
+
+Il gate G3 è il rischio R1, il più alto del programma: la corruzione
+silenziosa. Ho scritto il test che confronta il testo INTERO — non i 48
+caratteri della sonda che c'era — e al primo giro ha dato rosso: «diverge al
+carattere 15 su 427».
+
+Guardando i testi, il rosso era **mio**:
+
+```
+prefisso comune   " 1, 2, 3, 5, 7\n"          ← la risposta, IDENTICA
+CPU               "Il numero uno non e'…"
+GPU               "Questi cinque numeri sono tutti primi, ma…"
+```
+
+Entrambi **deterministici** — 3 giri, una sola uscita distinta per lato — ed
+entrambi coerenti. La divergenza cade sul **primo token della prosa**, cioè nel
+primo punto in cui due continuazioni sono quasi a pari probabilità: lì una
+differenza minima nell'ordine di accumulo ribalta l'argmax, e da lì i testi non
+si riavvicinano più.
+
+⇒ **Il carattere in cui divergono dice dov'era il primo quasi-pareggio, non
+quanto è corrotto un backend.** Con campionamento greedy il testo è un
+amplificatore di qualunque differenza numerica: serve a vedere una corruzione
+grossolana, non a dimostrarne l'assenza. La soglia che avevo messo è stata
+tolta, con la spiegazione accanto.
+
+⛔ **E il verdetto G3 resta APERTO.** Il cancello vero è a livello di operatore
+ed è quello di upstream: `tests/test-backend-ops.cpp` confronta con un errore
+quadratico medio normalizzato, tolleranza `1e-7` — «to allow for accumulated
+floating-point rounding differences across backends». Bit a bit non lo pretende
+nessuno. Upstream lo fa girare sul telefono con
+`./scripts/build-run-android.sh run_testops`, ed è **lavoro non ancora fatto**.
+
+⇒ Quello che si può dire oggi: nessuna corruzione grossolana, entrambi i lati
+deterministici, risposta identica fino al primo quasi-pareggio. Quello che
+**non** si può dire: che OpenCL sia corretto. Serve `test-backend-ops`.
+
 ### ⛔⛔⛔ VULKAN — costruito, caricato, e **CRASHA**. Verdetto: FAILED (G2)
 
 Sbloccato scaricando quello che mancava, che l'owner ha autorizzato. Costruisce,
