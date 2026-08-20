@@ -1746,6 +1746,25 @@ la **cura vera** (l'abort dentro `ggml-opencl`) porterebbe a millisecondi senza
 pagare niente. ⇒ Scegliere il 64 per far passare un cancello, sacrificando il
 28% del prefill, sarebbe ottimizzare il numero invece della persona.
 
+#### ✅ E la prova semantica, RIFATTA con la GPU davvero in uso
+
+Corretto il difetto (`gpuLayers` era fisso a 0), la golden è stata rifatta sul
+confronto che conta davvero — **la produzione di oggi contro il candidato
+esatto** — con **tutti e 29 gli strati sulla GPU**:
+
+```
+strati su GPU: -1 · microbatch 0   · flash-attn on    ← com'è oggi
+strati su GPU: -1 · microbatch 192 · flash-attn off   ← il candidato
+
+S1 IDENTICO   S2 IDENTICO   S3 IDENTICO   S4 IDENTICO
+S5 IDENTICO   S6 IDENTICO   S7 IDENTICO
+⇒ tutti identici, CON la GPU davvero in uso
+```
+
+⇒ Il candidato **non cambia una parola**, e stavolta la prova riguarda i kernel
+di OpenCL invece di quelli della CPU. ⛔ Resta stretta come prima — tre dei sette
+casi contengono testo generato — ma adesso è la prova **giusta**.
+
 ### 📋 La politica a un numero solo — la proposta, non applicata
 
 `TalosBackendChoice.choose()` decide con **un numero**: `tokensPerSecond`. Il

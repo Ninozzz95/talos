@@ -89,7 +89,7 @@ Stessa GPU, stesso pin, solo `flash-attn` e `microbatch` diversi:
 | Stop durante il prefill (p95) | 4.095 ms | **128** | **32×** |
 | cancello G4 | ⛔ FAILED | ✅ **PASSED** | |
 
-Le sette voci della suite golden restano **identiche** fra `on` e `off`. ⛔ E il
+Le sette voci della suite golden restano **identiche** fra la produzione di oggi e il candidato, con **tutti gli strati davvero sulla GPU** (la prima volta che l'avevo detto, la suite girava sulla CPU: difetto mio, corretto). ⛔ E il
 prefill che si perde non è tutto perduto: la persona aspetta il **TTFT**, che su
 512 token peggiora di 593 ms una volta sola — ma su 2.048 peggiora di **2
 secondi**, e lì diventa un compromesso vero. Il dettaglio è nel ritorno.
