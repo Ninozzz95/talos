@@ -42,6 +42,7 @@ import { talosRememberView, talosRememberedView } from '@/lib/navigation/remembe
 import { talosResearchSolidity, type TalosResearchStanding } from '@/lib/research/researchCard'
 import { talosResearchVerifiedStanding } from '@/lib/research/researchVerification'
 import { talosResearchFidelity } from '@/lib/research/researchFidelity'
+import { talosResearchLedger } from '@/lib/research/researchLedger'
 import { talosResearchRecheckStanding, type TalosResearchRecheck } from '@/lib/research/researchRecheck'
 import type { TalosResearchReportRecord } from '@/lib/research/researchReport'
 import type { TalosResearchProgress } from '@/services/researchRuntime'
@@ -217,6 +218,25 @@ const balance = computed(() => standing.value
     ?? { total: 0, supported: 0, partial: 0, unsupported: 0, unchecked: 0, contested: 0 })
 
 const failedSteps = computed(() => current.value?.steps.filter((step) => step.state === 'failed') ?? [])
+
+/**
+ * ⛔⛔ REGISTRO-01 — «Come è stato costruito».
+ *
+ * Una ricerca dura minuti e costa crediti, e alla fine la persona vede un
+ * rapporto e una percentuale senza aver visto niente di quello che è
+ * successo in mezzo. Due rapporti col 100% possono avere dietro lavori
+ * incomparabili — quattro estratti o dieci pagine lette — e oggi si
+ * leggono uguali.
+ *
+ * ⛔ Sommario sempre, righe A RICHIESTA: è il pattern concorde per gli
+ * agenti che lavorano a lungo (sommario → dettaglio → dati grezzi, il
+ * registro completo a un clic). Dieci righe sempre aperte sarebbero
+ * rumore su una pagina che deve far decidere.
+ */
+const registro = computed(() => talosResearchLedger(steps.value))
+const registroAperto = ref(false)
+/** Il lavoro in parole, con la stessa funzione che scrive le altre durate. */
+const durataLavoro = computed(() => talosResearchDuration(registro.value.summary.workedSeconds))
 
 /**
  * The record, in names instead of identifiers.
@@ -567,6 +587,52 @@ function openSource(index: number): void {
                             class="mt-3 text-2xs leading-5 text-[var(--talos-muted)]"
                         >{{ t('research.fedeltaMisurataIl', { quando: fidelity.measuredAt.slice(0, 10) }) }}</p>
                     </div>
+                </section>
+
+                <!--
+                    ⛔ Il registro: sommario sempre, passi a richiesta.
+                    Vedi la nota accanto a `registro` per il perché.
+                -->
+                <section v-if="registro.summary.total" data-testid="talos-research-registro" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-4">
+                    <p class="text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">{{ t('research.registroTitolo') }}</p>
+                    <p data-testid="talos-research-registro-sommario" class="mt-1 text-2xs leading-5 tabular-nums text-[var(--talos-muted)]">
+                        {{ t('research.registroSommario', {
+                            total: registro.summary.total,
+                            search: registro.summary.search,
+                            read: registro.summary.read,
+                            verify: registro.summary.verify,
+                            worked: durataLavoro,
+                        }) }}
+                        <template v-if="registro.summary.failed">
+                            · {{ t('research.registroFalliti', { failed: registro.summary.failed }) }}
+                        </template>
+                        <template v-if="registro.summary.interrupted">
+                            · {{ t('research.registroInterrotti', { interrupted: registro.summary.interrupted }) }}
+                        </template>
+                    </p>
+                    <button
+                        type="button"
+                        data-testid="talos-research-registro-apri"
+                        class="talos-pressable mt-2 min-h-touch text-2xs text-[var(--talos-accent)]"
+                        :aria-expanded="registroAperto"
+                        @click="registroAperto = !registroAperto"
+                    >{{ registroAperto ? t('research.registroChiudi') : t('research.registroApri') }}</button>
+                    <ol v-if="registroAperto" data-testid="talos-research-registro-passi" class="mt-2 space-y-1">
+                        <li
+                            v-for="passo in registro.entries"
+                            :key="passo.id"
+                            class="flex items-baseline justify-between gap-3 border-t border-[var(--talos-border)] pt-1 text-2xs leading-5"
+                        >
+                            <span class="min-w-0 flex-1 text-[var(--talos-text)]">
+                                {{ t(`research.registroTipo.${passo.kind}`) }}
+                                <span v-if="passo.attempts > 1" class="text-[var(--talos-muted)]">· {{ t('research.registroTentativi', { attempts: passo.attempts }) }}</span>
+                                <span v-if="passo.error" class="block break-words text-[var(--talos-danger)]">{{ passo.error }}</span>
+                            </span>
+                            <span class="shrink-0 tabular-nums text-[var(--talos-muted)]">
+                                {{ passo.duration ?? t('research.registroInCorso') }}
+                            </span>
+                        </li>
+                    </ol>
                 </section>
 
                 <div v-if="failedSteps.length" data-testid="talos-research-failed-steps" class="flex items-start gap-2 rounded-xl border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-xs leading-5 text-[var(--talos-danger)]">

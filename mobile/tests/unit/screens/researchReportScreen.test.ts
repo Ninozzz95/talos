@@ -261,6 +261,35 @@ describe('the report a person can actually check', () => {
      * cinque concorrenti le mostra alla persona: restano dove le legge chi
      * costruisce, non chi decide in base al rapporto.
      */
+    /**
+     * ⛔⛔ REGISTRO-01 — «Come è stato costruito».
+     *
+     * Due rapporti col 100% possono avere dietro lavori incomparabili —
+     * quattro estratti guardati o dieci pagine lette — e senza il registro si
+     * leggono uguali. Il sommario dice quanto lavoro c'è dentro; i passi si
+     * aprono a richiesta, perché dieci righe sempre aperte sarebbero rumore su
+     * una pagina che deve far decidere.
+     */
+    it('riassume il lavoro fatto, e i passi restano chiusi finché non li chiedi', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const sommario = wrapper.get('[data-testid="talos-research-registro-sommario"]')
+        expect(sommario.text()).toMatch(/steps/i)
+        expect(wrapper.find('[data-testid="talos-research-registro-passi"]').exists()).toBe(false)
+    })
+
+    it('⛔ e a richiesta si aprono, col tipo e la durata di ognuno', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        await wrapper.get('[data-testid="talos-research-registro-apri"]').trigger('click')
+        const passi = wrapper.get('[data-testid="talos-research-registro-passi"]')
+        expect(passi.findAll('li').length).toBeGreaterThan(0)
+    })
+
     it('mostra le quattro misure di fedeltà, con la loro data', async () => {
         const wrapper = mount(ResearchReportScreen)
         await settle(wrapper)
