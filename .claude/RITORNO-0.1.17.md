@@ -1337,6 +1337,10 @@ valore scelto finisce **scritto in ogni riga** di `runs.jsonl` e `golden.jsonl`.
 | dispositivo — targeting | **8** test verdi, 26,4 s |
 | dispositivo — inventario | **2** test verdi |
 | dispositivo — C0 carico/Stop | **3** test verdi, misure in `runs.jsonl` |
+| dispositivo — G4, sei configurazioni | tutte verdi · ⛔ il cancello lo passa **una sola** |
+| dispositivo — OCL-4, `off`/`auto`/`on` ×2 ordini | tutte verdi, e il controllo regge |
+| dispositivo — golden `on` contro `off` | **7 su 7 identici** |
+| dispositivo — G5, dieci minuti | scritto ed eseguito, vedi sotto |
 | quattro viewport | **non fatte** — questo ramo non tocca nessuna superficie visiva |
 
 ⛔ Le quattro viewport non si applicano a questo blocco: non c'è UI. Torneranno

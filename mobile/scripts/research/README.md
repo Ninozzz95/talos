@@ -37,6 +37,23 @@ cd android
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
 ```
 
+To build **with an accelerator** — research only, and never the shipped build:
+
+```bash
+./gradlew :app:assembleDebug :app:assembleDebugAndroidTest     -PtalosResearchBackend=opencl -PtalosOpenclRoot=<dir with include/CL and lib/libOpenCL.so>
+```
+
+⛔ **A bare `assembleDebug` overwrites the same `app-debug.apk`.** A run labelled
+OpenCL can therefore execute on a build that has no OpenCL in it, and the
+failure looks like a wrong device name rather than a wrong APK. When a target
+"does not exist", rebuild before doubting the name.
+
+⛔ The OpenCL headers and ICD are **not in the NDK** (`sysroot/usr/include/CL`
+does not exist), and the vendor `libOpenCL.so` is deliberately excluded from the
+package: this Android lists it among the vendor public libraries, so the app
+loads the system one, whose dependencies resolve where they live. A copy shipped
+inside the app shadows it and fails to open — silently.
+
 ## 2. Put a model on the phone
 
 ⛔ **Order matters here, and it is not symmetric.** A directory created by adb
@@ -101,6 +118,29 @@ describes neither of them.
 | `talosStopAfterMs` | 1500 | how long to wait before Stop during prefill |
 | `talosStopAfterTokens` | 16 | how many tokens before Stop during decode |
 | `talosModelPath` | — | the exact GGUF, instead of the first one found |
+| `talosBackend` | `none` | registry to offload to, e.g. `OpenCL`. `none` is the CPU floor |
+| `talosDevice` | — | exact device name inside that registry, e.g. `GPUOpenCL` |
+| `talosGpuLayers` | `-1` | layers to move (−1 = all). Forced to 0 on the CPU floor |
+| `talosMicroBatch` | 0 (=256) | physical batch. ⛔ **This is the Stop knob**: the worst case to stop is one microbatch |
+| `talosFlashAttn` | `default` | `off` / `auto` / `on`. ⛔ `default` is not off — llama.cpp's default is `AUTO` |
+| `talosSustainedMinutes` | 10 | length of the G5 sustained run |
+| `talosSustainedTokens` | 128 | tokens generated per G5 cycle |
+
+⛔ **Every one of these is written into each row** of `runs.jsonl` and
+`golden.jsonl`, and echoed by the runner before it starts. That is not
+decoration: a run labelled `OpenCL` once turned out to be a build without
+OpenCL in it, and a campaign measured at one microbatch was indistinguishable
+from another until the value was recovered from the CMake cache.
+
+### The two runs that are not in the default sweep
+
+```bash
+# G5 — ten minutes of sustained load. ⛔ It heats someone's phone: ask for it by name.
+node scripts/research/run-device-tests.mjs     'ai.talos.TalosLocalBaselineDeviceTest#c0TenutaNelTempo'     --fresh talosBackend=OpenCL talosDevice=GPUOpenCL talosSustainedMinutes=10
+
+# PP8192 — needs a wider context, because the prudent prefill ceiling is half of it
+node scripts/research/run-device-tests.mjs     'ai.talos.TalosLocalBaselineDeviceTest#c0PrefillEDecodifica'     --fresh talosBackend=OpenCL talosDevice=GPUOpenCL talosContext=16384
+```
 
 ## 4. Read
 
@@ -144,11 +184,16 @@ rule is not worked around.
 
 Stated rather than implied:
 
-- **PP8192** — with a 8192-token context the prudent ceiling is half of it. A
-  run with a wider context is needed.
-- **OpenCL and Vulkan** — no build enables them yet. That needs
-  `GGML_OPENCL=ON` / `GGML_VULKAN=ON` and their toolchains, one backend at a
-  time.
+- **Vulkan** — it builds and registers and offloads all 29 layers, and then
+  **crashes at the first compute graph**, twice out of twice, inside the Adreno
+  driver's own `vkGetDeviceFaultInfoEXT`. A crash is FAILED, not a poor
+  measurement: there are no Vulkan numbers. ⛔ The one variable never tried is
+  `n_batch`, the *logical* batch, fixed at 512 in production code.
+- **Anything but this one device.** Every conclusion about Flash Attention and
+  the microbatch was measured on an Adreno 830 with one driver. Upstream lists
+  "flash attention does not always improve performance" among the OpenCL known
+  issues and "improve flash attention" among its TODOs — which is precisely why
+  the knob exists and why the answer is re-measured elsewhere, not inherited.
 - **The UI streaming path** — the golden suite measures the parser, not the
   screen. On a partial reply in the Llama dialect the parser returns the raw
   JSON as content: **whether that reaches the screen has not been verified.**
