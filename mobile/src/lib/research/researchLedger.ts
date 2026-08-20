@@ -45,8 +45,10 @@ export interface TalosResearchLedgerEntry {
 export interface TalosResearchLedgerSummary {
     readonly total: number
     readonly search: number
+    /** ⛔ Pagine APERTE davvero, contate dalle fonti — non passi `read`. */
     readonly read: number
     readonly synthesise: number
+    /** ⛔ Affermazioni che un giudice ha guardato, contate dai verdetti. */
     readonly verify: number
     /** ⛔ A parte dagli altri: un lavoro incompleto va detto, non sommato. */
     readonly failed: number
@@ -66,6 +68,35 @@ export interface TalosResearchLedger {
     readonly entries: readonly TalosResearchLedgerEntry[]
 }
 
+/**
+ * ⛔⛔ LE PROVE, non i tipi di passo — e questa riga è nata da un errore MIO.
+ *
+ * La prima versione contava `kind === 'read'` e `kind === 'verify'`, e sul
+ * Pad il 2026-08-20 ha scritto «3 passi · 2 ricerche · **0 pagine lette · 0
+ * verifiche**» sotto un rapporto al 100% verificato da un giudice.
+ *
+ * MISURATO subito dopo, in `researchRuntime.ts`: il runtime emette **solo**
+ * `search` e `synthesise`. `read` e `verify` non vengono creati mai — non
+ * perché il lavoro non si faccia, ma perché avviene DENTRO quei due passi.
+ * Il collettore apre le pagine (`obtained: 'page'`) e il giudice verifica
+ * (`judge`, `judgedAt`): sono lì, con nome e ora.
+ *
+ * ⇒ Contare i tipi di passo faceva dire al registro una cosa falsa sul
+ * lavoro — esattamente nel verso che questa sezione esiste per impedire, e
+ * alla sua prima corsa vera. Si contano le **prove**: quante fonti sono
+ * state aperte per davvero, quante affermazioni un giudice ha guardato.
+ *
+ * ⛔ Resta un buco vero, ma è un altro: le durate della lettura e della
+ * verifica nessuno le registra, perché non hanno un passo loro. Il registro
+ * dice quante, non quanto — e non finge di sapere il resto.
+ */
+export interface TalosResearchLedgerEvidence {
+    /** Le fonti raccolte: `obtained` dice se la pagina è stata APERTA. */
+    readonly sources?: readonly { readonly obtained?: 'page' | 'snippet' }[]
+    /** Le affermazioni: `judge` non nullo vuol dire che qualcuno ha guardato. */
+    readonly claims?: readonly { readonly checks?: { readonly judge?: string | null } }[]
+}
+
 /** I secondi fra due istanti, o `null` se manca un capo. */
 function secondi(from: string | null, to: string | null): number | null {
     if (!from || !to) return null
@@ -78,6 +109,7 @@ function secondi(from: string | null, to: string | null): number | null {
 
 export function talosResearchLedger(
     steps: readonly TalosResearchStep[],
+    evidence: TalosResearchLedgerEvidence = {},
 ): TalosResearchLedger {
     /*
      * ⛔ In ordine di ACCADIMENTO, non di identificativo.
@@ -111,9 +143,13 @@ export function talosResearchLedger(
         summary: {
             total: steps.length,
             search: quanti((step) => step.kind === 'search'),
-            read: quanti((step) => step.kind === 'read'),
+            // ⛔ Dalle PROVE, non dai tipi di passo. Vedi la nota sopra:
+            // il runtime non emette mai `read` né `verify`, e contarli
+            // faceva dire al registro «0 pagine lette» su un rapporto
+            // costruito leggendo le pagine.
+            read: (evidence.sources ?? []).filter((s) => s.obtained === 'page').length,
             synthesise: quanti((step) => step.kind === 'synthesise'),
-            verify: quanti((step) => step.kind === 'verify'),
+            verify: (evidence.claims ?? []).filter((c) => Boolean(c.checks?.judge)).length,
             failed: quanti((step) => step.state === 'failed'),
             interrupted: quanti((step) => step.state === 'interrupted'),
             workedSeconds: steps.reduce(

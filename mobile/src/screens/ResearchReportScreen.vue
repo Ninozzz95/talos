@@ -233,7 +233,15 @@ const failedSteps = computed(() => current.value?.steps.filter((step) => step.st
  * registro completo a un clic). Dieci righe sempre aperte sarebbero
  * rumore su una pagina che deve far decidere.
  */
-const registro = computed(() => talosResearchLedger(steps.value))
+/*
+ * ⛔ Le prove viaggiano col registro: senza, conterebbe tipi di passo che il
+ * runtime non emette mai e direbbe «0 pagine lette» su un rapporto costruito
+ * leggendo le pagine. È successo, sul Pad, il 2026-08-20.
+ */
+const registro = computed(() => talosResearchLedger(steps.value, {
+    sources: report.value?.sources ?? [],
+    claims: report.value?.claims ?? [],
+}))
 const registroAperto = ref(false)
 /** Il lavoro in parole, con la stessa funzione che scrive le altre durate. */
 const durataLavoro = computed(() => talosResearchDuration(registro.value.summary.workedSeconds))
