@@ -180,6 +180,21 @@ for (const coppia of process.argv.slice(3).filter((a) => !a.startsWith('--'))) {
 }
 argomenti.push(`${PACCHETTO_TEST}/${RUNNER}`)
 
+/*
+ * ⛔ E si SCRIVONO, gli argomenti — perche' un log senza di essi non dice piu'
+ * su cosa e' stata presa la misura.
+ *
+ * MISURATO il 2026-08-20, a mie spese: per sapere con quale microbatch era
+ * stata presa una campagna di tre ore prima ho dovuto risalire al CMakeCache e
+ * ai campi dentro `runs.jsonl`, perche' il log della corsa non li nominava.
+ * `runs.jsonl` porta gia' l'etichetta di ogni riga; questo serve al log, che e'
+ * la prima cosa che si riapre.
+ */
+const argomentiPassati = process.argv.slice(3).filter((a) => !a.startsWith('--'))
+annuncia(`argomenti    ${argomentiPassati.length
+    ? argomentiPassati.join(' ')
+    : '(nessuno — tutti i predefiniti del test)'}`)
+
 if (fresco) {
     annuncia(`azzero       ${ARTIFACT_SU_DISPOSITIVO}`)
     try {
