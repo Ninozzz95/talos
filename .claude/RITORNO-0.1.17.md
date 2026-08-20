@@ -1698,6 +1698,31 @@ sono **sedici** chiamate da 512, e oggi lo Stop può essere onorato solo dentro
 una di esse. Un controllo fra i pezzi costa **zero** e limita l'attesa a un pezzo
 solo.
 
+### ⭐⭐ IL CANDIDATO — e non è più un compromesso
+
+La ricerca ha spostato la raccomandazione da `off / 64` a **`off / 192`**, e il
+prezzo cambia di natura. Misurato, telefono freddo, mediane su cinque giri:
+
+| | **oggi** (`on / 512`) | **`off / 192`** | |
+|---|---:|---:|---|
+| prefill 512 | 314,3 tok/s | 298,1 | **−5,2%** |
+| prefill 2048 | 259,6 tok/s | 257,6 | **−0,8%** |
+| **decodifica dopo 2048 token** | 8,07 tok/s | **15,9** | **+97%** |
+| decodifica (prompt corto) | 18,8 tok/s | 19,6 | **+4%** |
+| **primo messaggio del processo** | 6.233 ms | **1.707** | **−4,5 s** |
+| **Stop nel prefill** | **5.926 ms** | **~460** | **13×** |
+
+⇒ ⭐ **Non è più «velocità contro reattività».** Il prezzo è il **5%** del
+prefill su un prompt corto e **meno dell'1%** su uno lungo; in cambio la
+decodifica sui prompt lunghi **raddoppia**, il primo messaggio arriva **4,5
+secondi prima**, e lo Stop passa da sei secondi a mezzo.
+
+⛔ Cosa NON risolve: G4 chiede p95 ≤ 286 ms e qui siamo a ~460. Il cancello lo
+passa solo il 64 — ma adesso è chiaro che il cancello sta misurando una cosa che
+la **cura vera** (l'abort dentro `ggml-opencl`) porterebbe a millisecondi senza
+pagare niente. ⇒ Scegliere il 64 per far passare un cancello, sacrificando il
+28% del prefill, sarebbe ottimizzare il numero invece della persona.
+
 ### 📋 La politica a un numero solo — la proposta, non applicata
 
 `TalosBackendChoice.choose()` decide con **un numero**: `tokensPerSecond`. Il
