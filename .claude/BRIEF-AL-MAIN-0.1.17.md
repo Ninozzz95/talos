@@ -126,8 +126,18 @@ non una misura scarsa: **non esistono numeri Vulkan**.
    ⛔⛔ **E il punto di partenza vero è 512, non 256**: il 256 è il ripiego del
    JNI, mentre la produzione manda un valore esplicito da
    `src/lib/models/engineTuning.ts` — `core >= 6 ? 512 : 256`, e il Pad ha 8
-   core. ⇒ La cura è **una riga di TypeScript**, non di C++, e la misura a 512
-   è in coda.
+   core. ⇒ La cura è **una riga di TypeScript**, non di C++.
+
+   ⭐ **E il valore da mettere non è 64: è 192.** C'è un salto netto fra 256 e
+   192 — sopra, lo Stop non morde affatto dentro la chiamata; sotto, la latenza
+   è semplicemente una lunghezza di microbatch (192 → 460 ms, 160 → 370,
+   128 → 290). 192 sta appena sotto il salto ⇒ **Stop pronto al prezzo minimo**.
+
+   ⛔⛔ **E c'è una terza via che toglie del tutto il compromesso**, trovata
+   cercando: lo Stop che non morde su GPU **non è una legge**, è una funzione
+   che `ggml-opencl` non ha e che **Metal ha già**. Vedi la sezione RICERCA nel
+   ritorno — sono ~30 righe in una dipendenza, a costo zero sulle prestazioni,
+   e a monte il feature request (#10509) è **chiuso come stale**.
 4. ⛔ **Lo Stop anticipato.** Difetto di **produzione** trovato per strada: uno
    Stop premuto nella finestra fra «la persona preme» e «la generazione entra»
    viene **inghiottito** — misurato, 64 token su 64 chiesti, `stopHonoured=false`.
