@@ -226,8 +226,31 @@ android {
                             mancanti << "glslc — atteso in ${glslc}, di norma arriva con l'NDK"
                         }
                         if (!project.hasProperty('talosSpirvHeaders')) {
-                            mancanti << "SPIRV-Headers — `-PtalosSpirvHeaders=<cartella>`; " +
-                                    "sono soli header, da github.com/KhronosGroup/SPIRV-Headers"
+                            mancanti << "SPIRV-Headers — `-PtalosSpirvHeaders=<cartella con " +
+                                    "SPIRV-HeadersConfig.cmake>`. ⛔ Il clone non basta: " +
+                                    "quel file nasce dall'installazione " +
+                                    "(`cmake --install`), e `find_package` cerca lui"
+                        }
+                        /*
+                         * ⛔ `vulkan.hpp` NON è nell'NDK, e `vulkan.h` sì.
+                         *
+                         * MISURATO il 2026-08-20: con SPIRV-Headers e il
+                         * compilatore host a posto, la compilazione arrivava
+                         * fino a
+                         *
+                         *   ggml-vulkan.cpp:22:10: fatal error:
+                         *     'vulkan/vulkan.hpp' file not found
+                         *
+                         * L'NDK porta l'intestazione C e la `libvulkan.so`, ma i
+                         * binding C++ di Khronos stanno in un repository a
+                         * parte. ⛔ La versione va fatta combaciare con quella
+                         * del loader — qui 1.3.275, come dice `find_package`.
+                         */
+                        if (!project.hasProperty('talosVulkanHeaders')) {
+                            mancanti << "Vulkan-Hpp — `-PtalosVulkanHeaders=<cartella include>` " +
+                                    "da github.com/KhronosGroup/Vulkan-Headers, al tag che " +
+                                    "combacia col loader dell'NDK. L'NDK porta `vulkan.h`, " +
+                                    "non `vulkan.hpp`"
                         }
                         /*
                          * ⛔ IL COMPILATORE È DUE, e confonderli è un errore di
@@ -264,7 +287,46 @@ android {
                                 "-DVulkan_GLSLC_EXECUTABLE=${glslc.absolutePath.replace('\\', '/')}".toString(),
                                 "-DSPIRV-Headers_DIR=" +
                                         project.property('talosSpirvHeaders').toString()
-                                                .replace('\\', '/')
+                                                .replace('\\', '/'),
+                                // ⛔ Solo gli header: la `libvulkan.so` resta
+                                // quella dell'NDK, che è la stessa che il
+                                // telefono ha. Sostituire anche quella
+                                // significherebbe linkare contro una libreria
+                                // che sul dispositivo non c'è.
+                                "-DVulkan_INCLUDE_DIR=" +
+                                        project.property('talosVulkanHeaders').toString()
+                                                .replace('\\', '/'),
+                                /*
+                                 * ⛔⛔ LO STUB DELL'API 28, NON QUELLO DI minSdk.
+                                 *
+                                 * MISURATO il 2026-08-20: con lo stub del
+                                 * livello 26 — che è il nostro minSdk — il
+                                 * collegamento moriva con
+                                 *
+                                 *   ld.lld: error: undefined symbol:
+                                 *     vkGetPhysicalDeviceFeatures2
+                                 *
+                                 * `vkGetPhysicalDeviceFeatures2` è Vulkan 1.1, e
+                                 * l'NDK lo espone a partire dall'API 28.
+                                 * Verificato livello per livello con
+                                 * `llvm-readelf --dyn-syms`: 26 → no, 27 → no,
+                                 * 28 → sì.
+                                 *
+                                 * ⛔ E QUESTO È IL MOTIVO PER CUI LA CORSIA
+                                 * VULKAN NON SI PUÒ PROMUOVERE COSÌ COM'È: una
+                                 * `libggml-vulkan.so` legata a quei simboli non
+                                 * si carica su Android 8 e 8.1, che il nostro
+                                 * `minSdk 26` ammette. Per la ricerca va bene —
+                                 * il Pad è Android 16 — ma una promozione
+                                 * richiederebbe o alzare minSdk, o il carico
+                                 * dinamico dei simboli, e sono due decisioni di
+                                 * prodotto, non di build.
+                                 */
+                                "-DVulkan_LIBRARY=" + new File(ndkHome,
+                                        "toolchains/llvm/prebuilt/" +
+                                        (finestre ? "windows-x86_64" : "linux-x86_64") +
+                                        "/sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so")
+                                        .absolutePath.replace('\\', '/')
                         if (project.hasProperty('talosVulkanHostToolchain')) {
                             arguments "-DGGML_VULKAN_SHADERS_GEN_TOOLCHAIN=" +
                                     project.property('talosVulkanHostToolchain').toString()

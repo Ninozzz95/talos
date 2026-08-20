@@ -596,6 +596,94 @@ vedere questa differenza: è la ragione per cui §Q3 chiede di misurarli separat
   termica misurata sotto carico prolungato. `thermal` è restato `none`, ma le
   corse sono brevi.
 
+### ⛔⛔⛔ VULKAN — costruito, caricato, e **CRASHA**. Verdetto: FAILED (G2)
+
+Sbloccato scaricando quello che mancava, che l'owner ha autorizzato. Costruisce,
+si registra, fa offload — e poi muore.
+
+**Si registra, e dichiara cose diverse da OpenCL:**
+
+```json
+{"name":"Vulkan","devices":[{"name":"Vulkan0","description":"Adreno (TM) 830",
+  "type":"IGPU","memoryFree":16293498880,"memoryTotal":16293498880,
+  "caps":{"async":true,"hostBuffer":true,"bufferFromHostPtr":false,"events":true}}]}
+```
+
+| | OpenCL | Vulkan |
+|---|---|---|
+| tipo | `GPU` | `IGPU` |
+| memoria dichiarata | 5.999.267.840 | 16.293.498.880 (unificata) |
+| `async` / `events` | false / false | **true / true** |
+
+**E fa offload davvero:**
+
+```
+llama_prepare_model_devices: using device Vulkan0 (Adreno (TM) 830) - 15538 MiB free
+load_tensors: offloaded 29/29 layers to GPU
+load_tensors:      Vulkan0 model buffer size =  1918.35 MiB
+llama_kv_cache:    Vulkan0 KV buffer size =   896.00 MiB
+sched_reserve: graph nodes = 874 · graph splits = 2
+```
+
+**Poi, al primo grafo di calcolo vero, muore:**
+
+```
+PP512: prompt da 511 token
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0
+  #00 /vendor/lib64/hw/vulkan.adreno.so
+        qglinternal::vkGetDeviceFaultInfoEXT(...)+400
+  #03 libggml-vulkan.so  vk_queue_handle_synchronized::submit(...)+2284
+  #07 libggml-base.so    ggml_backend_sched_graph_compute_async+996
+  #08 libllama.so        llama_context::graph_compute+156
+```
+
+⛔ **Riprodotto 2 volte su 2**, anche con contesto 512 e generazione da 8 token:
+non è una questione di dimensione.
+
+⛔⛔ **E il crash è a DUE strati, che è la parte peggiore.** Un submit alla coda
+va storto; ggml chiede al driver i dettagli con `vkGetDeviceFaultInfoEXT`; e **è
+il driver Adreno a segmentare dentro la propria funzione di diagnosi**. ⇒ La
+causa prima resta nascosta dallo strumento che doveva rivelarla. Stessa famiglia
+degli altri silenzi di oggi, un piano più in basso.
+
+⇒ **Verdetto per la corsia Vulkan al pin `d2f83055`: FAILED sul cancello G2
+(stabilità nativa).** Non «lento»: il brief è esplicito — un crash è FAILED, non
+una misura scarsa. Nessun numero di prestazioni Vulkan esiste, e nessuno può
+esistere finché questo non si chiude.
+
+### ⛔ VK-3 — **NOT RELEVANT**, e ora è un fatto
+
+```
+ggml_vulkan: 0 = Adreno (TM) 830 (Qualcomm Adreno Vulkan Driver)
+  | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64
+  | shared memory: 32768 | int dot: 0 | matrix cores: none
+```
+
+**`matrix cores: none`.** Il percorso di `dc72703` — il dequant Q8_0 della KV —
+è **coopmat1** ed è escluso sui device senza cooperative matrix. ⇒ Su questo
+telefono quel commit è **NOT RELEVANT**, e con lui cade metà della motivazione
+per la corsia Vulkan che il brief costruiva. Era il sospetto di stamattina,
+letto dal PR; adesso è misurato sul dispositivo.
+
+### I prerequisiti Vulkan, risolti — e uno resta un vincolo di PRODOTTO
+
+Nessun MSVC da diversi GB: è bastata una toolchain portatile.
+
+| pezzo | dove | nota |
+|---|---|---|
+| gcc/g++ 16.2.0 | `toolchains/mingw64` | winlibs, zip da 261 MB — non un installatore |
+| SPIRV-Headers | `toolchains/spirv-install` | ⛔ il clone NON basta: `find_package` cerca `SPIRV-HeadersConfig.cmake`, che nasce da `cmake --install` |
+| Vulkan-Hpp v1.3.275 | `toolchains/Vulkan-Headers` | ⛔ l'NDK porta `vulkan.h`, **non** `vulkan.hpp` |
+| radice unica | `toolchains/vulkan-include` | ⛔ ggml include `spirv/unified1/spirv.hpp` **senza linkare il target SPIRV**: dà per scontato che i due set stiano nella stessa radice, come in un Vulkan SDK |
+
+⛔⛔ **E il vincolo che non è di build ma di PRODOTTO.** Il collegamento falliva
+con `undefined symbol: vkGetPhysicalDeviceFeatures2`. È Vulkan 1.1, e l'NDK lo
+espone **dall'API 28** — verificato livello per livello con `llvm-readelf`:
+26 no, 27 no, 28 sì. Il nostro `minSdk` è **26**. ⇒ Una `libggml-vulkan.so`
+legata a quei simboli **non si carica su Android 8 e 8.1**. Per la ricerca va
+bene (il Pad è Android 16), ma una promozione richiederebbe **o alzare minSdk, o
+il carico dinamico dei simboli**: due decisioni di prodotto, non di build.
+
 ## Divergenze dal brief, dichiarate
 
 1. **`devices` è già nella baseline** (§1.3 lo dava per «newer upstream»). Non
