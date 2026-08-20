@@ -1393,6 +1393,22 @@ resta ferma, OpenCL salta avanti e indietro **nove volte** per tutti e dieci i
 minuti. Qualunque cosa sia, sta nel percorso GPU — driver, clock della GPU, o la
 gestione dei buffer.
 
+⛔ **E più in là di così non arrivo da qui, per un motivo che vale scrivere.**
+La cosa da guardare sarebbe la frequenza della GPU, e su Adreno vive in
+`/sys/class/kgsl/kgsl-3d0/`. Provato:
+
+```
+ls /sys/class/kgsl/            → Permission denied     (anche da `adb shell`, non solo dall'app)
+ls /sys/class/devfreq/         → Permission denied
+dumpsys gpu                    → memoria per processo, nessuna frequenza
+cat .../cpu7/cpufreq/scaling_cur_freq → 1017600        (la CPU invece si legge)
+```
+
+⇒ Il clock della GPU **non è osservabile senza root** su questo dispositivo,
+mentre quello della CPU lo è. ⛔ Chi riprende non ci riprovi: la strada è
+`simpleperf`, una traccia `perfetto` con la sorgente GPU, o un dispositivo con
+root.
+
 ⛔⛔ **E c'è un secondo numero, più importante del primo.** Sulla media dei dieci
 minuti:
 
