@@ -8,7 +8,7 @@
 
 ## In una riga
 
-Ramo **`lane/motore-gpu`**, **29 commit**, albero pulito, **nessun push, nessun
+Ramo **`lane/motore-gpu`**, **44 commit**, albero pulito, **nessun push, nessun
 tag** (il push fatto è **tuo**, non mio). Nessuna release. La **0.1.18 non è
 stata toccata**: la consegna impone che le due siano sequenziali, e il Pad è uno
 solo.
@@ -195,7 +195,7 @@ tutte in memoria.
 ## Dove stanno le cose
 
 ```
-lane/motore-gpu                          29 commit, spinto su origin (privato) — il push e' TUO
+lane/motore-gpu                          44 commit, spinto su origin (privato) — il push e' TUO
 .claude/RITORNO-0.1.17.md                il dettaglio, con tutte le misure
 mobile/scripts/research/README.md        come si riproduce, dall'inizio
 mobile/.tmp-research/                    artifact grezzi (fuori da git di proposito)
