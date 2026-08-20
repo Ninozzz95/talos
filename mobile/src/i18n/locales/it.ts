@@ -977,6 +977,7 @@ export const TALOS_IT_MESSAGES = {
         toolAuthorizationPendingMany: '{count} richieste di autorizzazione per gli strumenti sono in attesa. Puoi continuare a usare la chat.',
         toolAuthorizationSettled: 'La richiesta di autorizzazione è stata gestita.',
         emptyAnswerAfterTools: 'Gli strumenti sono partiti ({count}), ma il modello non ha scritto nessuna risposta. Prova a chiedere di nuovo, o con un altro modello.',
+        toolCallMissed: 'Il modello ha chiesto uno strumento che qui non esiste, quindi non è stato fatto niente. Questo modello potrebbe non saper chiamare gli strumenti: la Diagnostica dice quali ci riescono.',
         libraryAnswerGuardAbstention: 'Non sono riuscito a produrre una risposta affidabile che restasse sul tema corrente della conversazione. Riformula la domanda o indica la fonte da usare.',
         composerPreferencesSaveFailed: 'TALOS non ha potuto salvare le preferenze del compositore. {detail}',
         selectModelBeforeSending: 'Seleziona un modello prima di inviare.',
