@@ -6,10 +6,10 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
-## Unreleased — v0.1.16
+## v0.1.16
 
 The Deep Research rework, drawn from the approved mockup and measured on the
-owner’s OnePlus Pad. Committed after the v0.1.15 tag, so **not** in that APK.
+owner’s OnePlus Pad.
 
 ### The disagreement, in the open
 
@@ -82,6 +82,21 @@ text; everyone else kept a URL.
   "75% · 3 supported · 0 in part · 0 contradicted" — the missing one was the
   one explaining the 75%.
 - **"Deep Research V3"** put an internal version number on screen.
+- **A failure that named nothing.** Asking for a search, granting the consent,
+  and then reading "Did not work: reading a web page" — with no reason, right
+  after a search that had in fact succeeded. The consent is not the cause: it
+  is the gate, and the tool can only run, and fail, once it opens. Underneath
+  was a page redirecting https → http, refused by the native client. TALOS did
+  the right thing and said nothing about it. Failures now carry a stable code
+  alongside the sentence, and the notice reads the code: **"That page
+  redirected to an unprotected connection, so TALOS did not follow it. The
+  other sources it found still stand."** Eleven refusals have a sentence now.
+- **A link in your own message was invisible.** Measured on the device: link
+  colour rgb(192, 139, 60), bubble background rgb(192, 139, 60) — identical,
+  contrast 1:1. The address was there, underlined, and unreadable. Every
+  address you type or paste.
+- **"2 richiesta di autorizzazione"** — Italian agreement, in the third place
+  it turned up today.
 
 ### Added
 
