@@ -2816,6 +2816,7 @@ export const TALOS_IT_MESSAGES = {
         engineReuse: 'Prefisso riusato',
         engineCpu: 'CPU',
         engineInstalled: 'Modelli sul dispositivo',
+        engineTools: 'Strumenti dell’assistente con questo modello',
         nativePlatform: 'nativa ({platform})',
         webPreview: 'anteprima web',
         storageNative: 'SQLCipher nativo',

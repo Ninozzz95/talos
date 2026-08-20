@@ -2101,7 +2101,25 @@ al microbatch 512, cioe' quello di PRODUZIONE:
     runs-pp-ocl-ub512.jsonl          PP/TG OpenCL — insieme fanno il confronto vero
     runs-g5-cpu.jsonl                G5 su CPU, 0 salti su 67
     runs-g5-ocl-faoff.jsonl          G5 con FA spenta, 11 salti su 74
+
+il CANDIDATO, e le prove che lo reggono:
+    runs-pp-ocl-ub192-faoff.jsonl    il candidato su Llama — PP/TG
+    runs-gemma-oggi.jsonl            la seconda architettura, i due lati
+    runs-gemma-candidato.jsonl
+    runs-qwen-oggi.jsonl             la terza architettura, i due lati
+    runs-qwen-candidato.jsonl
+    golden3-gemma-oggi.jsonl         equivalenza semantica, Gemma
+    golden3-gemma-candidato.jsonl
+    golden3-qwen-oggi.jsonl          equivalenza semantica, Qwen3
+    golden3-qwen-candidato.jsonl
+    runs-opfilter-costo.jsonl        il prezzo di una operazione sulla CPU
+    runs-stop-lungo.jsonl            Stop su prompt da 2.048 token
+    runs-g4-*.jsonl                  la matrice del microbatch, Stop
 ```
+
+⛔ In tutto **51 file di misura**. Ogni riga porta scritto backend, dispositivo,
+strati su GPU, microbatch, flash-attn, modello e build del motore: una riga
+presa da sola dice su cosa è stata misurata, senza dover risalire allo script.
 
 ⛔ Sono **fuori dall'indice di git** di proposito: descrivono il dispositivo
 dell'owner, e la regola del repo è che quel materiale non entra.

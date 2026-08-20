@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 
 #include <algorithm>
+#include <cctype>   // std::tolower, per il confronto dei nomi di backend
 #include <chrono>
 #include <cstdio>
 #include <atomic>
@@ -996,6 +997,48 @@ static bool talos_modalita_fa(const std::string & richiesta,
  * dei dispositivi né la Flash Attention. Il comportamento di produzione non
  * cambia perché non esiste una strada in cui possa cambiare.
  */
+/**
+ * ⭐⭐⭐ IL LAVORO FINIRA' SU OPENCL? - e la domanda si fa ai backend REGISTRATI.
+ *
+ * Serve per spegnere la Flash Attention **solo** li'. ⛔ La richiesta esplicita
+ * di bersaglio (`backendRichiesto`) esiste solo nella build di ricerca: in
+ * produzione e' vuota, e allora e' llama.cpp a scegliere. ⇒ La domanda va
+ * fatta a chi la risposta ce l'ha davvero, cioe' al registro dei backend.
+ *
+ * ⛔ Due condizioni, ed entrambe servono:
+ *   1. si sta offloadando (`gpuLayers > 0`) - senza, il lavoro resta su CPU
+ *      e questa manopola non c'entra;
+ *   2. fra i dispositivi registrati c'e' un acceleratore di nome OpenCL.
+ *
+ * ⛔⛔ E NON si generalizza oltre. `docs/backend/OPENCL.md` di upstream
+ * elenca *"Flash attention does not always improve performance"* fra i difetti
+ * noti e *"Improve flash attention"* fra i TODO: e' una proprieta' di QUESTO
+ * backend su QUESTA GPU **oggi**. Su Vulkan o CUDA si rimisura, e la manopola
+ * `talosFlashAttn` esiste apposta per farlo.
+ */
+static bool talos_bersaglio_e_opencl(int gpuLayers, const std::string & backendRichiesto) {
+    if (gpuLayers <= 0) return false;
+    /* Una richiesta esplicita vince: e' il caso della build di ricerca. */
+    if (!backendRichiesto.empty()) {
+        std::string b = backendRichiesto;
+        std::transform(b.begin(), b.end(), b.begin(),
+                       [](unsigned char c) { return (char) std::tolower(c); });
+        return b.find("opencl") != std::string::npos;
+    }
+    for (size_t i = 0; i < ggml_backend_dev_count(); i += 1) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        if (dev == nullptr) continue;
+        if (ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_GPU) continue;
+        const char * nome = ggml_backend_dev_name(dev);
+        if (nome == nullptr) continue;
+        std::string n = nome;
+        std::transform(n.begin(), n.end(), n.begin(),
+                       [](unsigned char c) { return (char) std::tolower(c); });
+        if (n.find("opencl") != std::string::npos) return true;
+    }
+    return false;
+}
+
 static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
                                 jint threads, jint contextTokens, jint gpuLayers,
                                 jboolean deterministic, jint threadsBatch,
@@ -1157,6 +1200,48 @@ static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
             ctx_params.flash_attn_type = modalita;
             TALOS_LOGI("Flash Attention richiesta: %s (%s)", faRichiesta.c_str(),
                        llama_flash_attn_type_name(modalita));
+        }
+    }
+
+    /**
+     * ⭐⭐⭐ FLASH ATTENTION SPENTA SUI BERSAGLI OPENCL - e non e' un compromesso.
+     *
+     * ⛔ Nessuno l'aveva mai scelta: `llama_context_default_params()` mette
+     * `AUTO`, e su Adreno 830 `AUTO` risolve in **acceso**. Era il default della
+     * libreria, non una nostra decisione.
+     *
+     * Misurato il 2026-08-20, cinque giri per configurazione, telefono freddo a
+     * ogni blocco, su **tre** architetture (Llama 3.2 3B, Gemma 3 4B, Qwen3 1.7B):
+     *
+     * ```
+     *                                    off        auto/on
+     *   primo inferire del processo   1.646 ms     8.230 ms
+     *   prefill 512                     312 t/s        307
+     *   decodifica dopo 2048 token     15,9 t/s        8,1     <- due volte
+     * ```
+     *
+     * ⛔ Il costo **cresce con la lunghezza della KV**: su un prompt corto le
+     * due configurazioni sono indistinguibili, su 2.048 token la differenza e'
+     * doppia. Ed e' il caso d'uso vero, non quello di laboratorio.
+     *
+     * I cinque secondi del primo messaggio li spiega il motore da se': sette
+     * compilazioni pigre di kernel `flash_attn`, di cui **quattro buttate
+     * subito** perche' la GPU non le regge - e **nessuna** finisce nella cache
+     * su disco, perche' tutti e quattordici i punti di compilazione passano da
+     * `build_program_from_source_ex`, che la cache non la consulta e non la
+     * salva. ⇒ Ogni processo ripaga quei 5,8 secondi.
+     *
+     * ⭐ E le parole non cambiano: suite golden sul dispositivo, tre modelli,
+     * **20 casi su 20 identici** alla produzione di oggi.
+     *
+     * ⛔ Sta DOPO la richiesta esplicita di proposito: chi misura deve poter
+     * chiedere `on` e ottenerlo, o la qualificazione di un backend nuovo
+     * diventerebbe impossibile.
+     */
+    if (faRichiesta.empty() || faRichiesta == "default") {
+        if (talos_bersaglio_e_opencl((int) gpuLayers, backendRichiesto)) {
+            ctx_params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED;
+            TALOS_LOGI("Flash Attention spenta: bersaglio OpenCL");
         }
     }
 
