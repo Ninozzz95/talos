@@ -1209,6 +1209,145 @@ Java_ai_talos_TalosLlamaNative_nativeOpenTargeted(JNIEnv * env, jclass, jstring 
                               jstring_to_utf8(env, flashAttentionMode));
 }
 
+/**
+ * ⛔ SOLO RICERCA — la GRAMMATICA, misurata invece che raccontata dai log.
+ *
+ * ⛔⛔ IL BUCO CHE CHIUDE. Il taccuino porta il numero che fa male — 46 attrezzi
+ * producevano **55.871 byte** di GBNF e il parser li rifiutava con «number of
+ * rules that are going to be repeated multiplied by the new repetition exceeds
+ * sane defaults» — e porta anche il difetto rimasto aperto dall'8 agosto:
+ * «Grammar still awaiting trigger» per tutta la generazione, cioè una
+ * grammatica **pigra con un innesco solo** che non si accende mai.
+ *
+ * Ma quei due fatti stavano solo in logcat. Un numero che si può leggere solo
+ * mentre succede non è una misura: non si mette in un artifact, non si confronta
+ * con quello di ieri, e non diventa il rosso di una cura.
+ *
+ * Qui gli stessi fatti diventano una risposta ripetibile:
+ *
+ *  - quanto pesa la GBNF, in byte;
+ *  - se è pigra, e con **quali** inneschi — tipo e parola, uno per uno, perché
+ *    «pigra» da sola non dice se quella parola il modello la produce;
+ *  - quanti token protetti sono davvero atomici: uno che il vocabolario rende
+ *    con due token non è protetto a metà, non lo è affatto;
+ *  - e soprattutto **se compila**, provandolo davvero.
+ *
+ * ⛔ La compilazione si PROVA, non si indovina. `common_sampler_init` non
+ * segnala una GBNF non compilabile con `nullptr`: lancia. Il campionatore di
+ * prova viene liberato subito e la sessione non viene toccata — questa domanda
+ * non deve cambiare la risposta.
+ *
+ * @return {@code null} se nessun template è stato ancora applicato: la
+ *     grammatica nasce lì, e prima non esiste una domanda da fare.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeGrammarDiagnostics(JNIEnv * env, jclass, jlong handle) {
+    std::lock_guard<std::mutex> serratura(g_motore);
+    talos_session * session = as_session(handle);
+    if (session == nullptr || !session->chat_ready) return nullptr;
+
+    nlohmann::ordered_json out;
+
+    /**
+     * ⛔⛔ IL FORMATO PRIMA DELLA GRAMMATICA, e non è un dettaglio d'ordine.
+     *
+     * MISURATO il 2026-08-20: con Llama 3.2 la GBNF esce **vuota** per 1, 8, 24
+     * e 46 attrezzi. Da sola quella riga sembra un guasto — «nessun vincolo,
+     * quindi il modello può inventare» — e manderebbe a cercare una cura dove
+     * non serve.
+     *
+     * Il pin che spediamo non usa più una GBNF per famiglia: i formati sono
+     * `PEG_*`, e il vincolo lo fa un parser, non una grammatica. Quindi «GBNF
+     * vuota» va letta **insieme** al formato scelto: con un formato PEG è la
+     * risposta giusta; con un formato che la grammatica ce l'ha, è un difetto.
+     *
+     * ⇒ Senza questo campo il numero accanto non è interpretabile, e un numero
+     * non interpretabile in un artifact è peggio di un campo assente.
+     */
+    const char * nome_formato = common_chat_format_name(session->chat.format);
+    out["format"] = (int) session->chat.format;
+    out["formatName"] = nome_formato == nullptr ? "" : nome_formato;
+    out["supportsThinking"] = session->chat.supports_thinking;
+    out["thinkingStartTag"] = session->chat.thinking_start_tag;
+
+    /**
+     * ⛔ Del parser PEG si misura la TAGLIA, non si copia l'albero.
+     *
+     * Con 46 attrezzi `parser` è un albero JSON da oltre cento kilobyte. Metterlo
+     * in un artifact renderebbe il file illeggibile e, peggio, illeggibile
+     * proprio dove serve leggerlo: nessuno diffa centomila caratteri per
+     * accorgersi che un formato è cambiato.
+     *
+     * ⇒ Byte e nome del formato bastano a vedere una deriva; l'albero, se
+     * servirà, si ricava rifacendo la stessa chiamata.
+     */
+    out["parserBytes"] = (uint64_t) session->chat.parser.size();
+    out["parserHead"] = session->chat.parser.substr(0, 120);
+
+    const std::string & gbnf = session->chat.grammar;
+    out["grammarBytes"] = (uint64_t) gbnf.size();
+    out["grammarEmpty"] = gbnf.empty();
+    out["grammarLazy"] = session->chat.grammar_lazy;
+
+    nlohmann::ordered_json inneschi = nlohmann::ordered_json::array();
+    for (const common_grammar_trigger & innesco : session->chat.grammar_triggers) {
+        nlohmann::ordered_json uno;
+        uno["type"] = (int) innesco.type;
+        uno["value"] = innesco.value;
+        inneschi.push_back(uno);
+    }
+    out["triggers"] = inneschi;
+    out["triggerCount"] = (uint64_t) session->chat.grammar_triggers.size();
+
+    // I token protetti si contano DUE volte: quanti ne chiede il template, e
+    // quanti il vocabolario di questo modello rende con un token solo. La
+    // differenza fra i due numeri è quella che sparisce in silenzio.
+    size_t atomici = 0;
+    nlohmann::ordered_json scartati = nlohmann::ordered_json::array();
+    for (const std::string & piece : session->chat.preserved_tokens) {
+        const std::vector<llama_token> ids =
+                common_tokenize(session->vocab, piece, /*add_special*/ false,
+                                /*parse_special*/ true);
+        if (ids.size() == 1) atomici += 1;
+        else scartati.push_back(piece);
+    }
+    out["preservedTokensRequested"] = (uint64_t) session->chat.preserved_tokens.size();
+    out["preservedTokensAtomic"] = (uint64_t) atomici;
+    out["preservedTokensDropped"] = scartati;
+
+    // ⛔ La prova, non la previsione.
+    if (gbnf.empty()) {
+        out["compiles"] = true;
+        out["compileError"] = nullptr;
+    } else {
+        common_params_sampling prova = session->sampling;
+        prova.grammar = common_grammar(COMMON_GRAMMAR_TYPE_TOOL_CALLS, gbnf);
+        prova.grammar_lazy = session->chat.grammar_lazy;
+        prova.grammar_triggers = session->chat.grammar_triggers;
+        prova.preserved_tokens.clear();
+        for (const std::string & piece : session->chat.preserved_tokens) {
+            const std::vector<llama_token> ids =
+                    common_tokenize(session->vocab, piece, false, true);
+            if (ids.size() == 1) prova.preserved_tokens.insert(ids[0]);
+        }
+        common_sampler * campione = nullptr;
+        try {
+            campione = common_sampler_init(session->model, prova);
+            out["compiles"] = campione != nullptr;
+            out["compileError"] = nullptr;
+        } catch (const std::exception & guasto) {
+            out["compiles"] = false;
+            out["compileError"] = guasto.what();
+        }
+        if (campione != nullptr) common_sampler_free(campione);
+    }
+
+    // I primi byte: bastano a riconoscere una grammatica vuota, troncata o di
+    // un'altra forma, senza portarsi dietro 55 KB in un artifact.
+    out["grammarHead"] = gbnf.substr(0, 200);
+    return env->NewStringUTF(out.dump().c_str());
+}
+
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeLastOpenError(JNIEnv * env, jclass) {
     const char * stage = talos_last_open_error.empty()

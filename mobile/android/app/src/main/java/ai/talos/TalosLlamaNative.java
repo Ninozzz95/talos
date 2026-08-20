@@ -154,6 +154,31 @@ final class TalosLlamaNative {
     static native String nativeKvCacheType(long handle);
 
     /**
+     * ⛔ SOLO RICERCA — la grammatica dell'ultimo template applicato, in JSON.
+     *
+     * ⛔⛔ Perché esiste: i due difetti aperti della grammatica vivevano solo
+     * in logcat. La GBNF da 55.871 byte rifiutata dal parser, e la grammatica
+     * **pigra con un innesco solo** che non si accende mai — «Grammar still
+     * awaiting trigger» per tutta la generazione. Un numero leggibile solo
+     * mentre succede non è una misura: non entra in un artifact, non si
+     * confronta con quello di ieri, e non può diventare il rosso di una cura.
+     *
+     * Forma: {@code {"grammarBytes":0,"grammarEmpty":true,"grammarLazy":false,
+     * "triggers":[{"type":0,"value":"…"}],"triggerCount":0,
+     * "preservedTokensRequested":0,"preservedTokensAtomic":0,
+     * "preservedTokensDropped":[],"compiles":true,"compileError":null,
+     * "grammarHead":"…"}}
+     *
+     * ⛔ {@code compiles} è PROVATO, non previsto: costruisce un campionatore di
+     * prova e lo libera subito. La sessione non viene toccata — una domanda che
+     * cambia la risposta non è una diagnosi.
+     *
+     * @return {@code null} se nessun template è ancora stato applicato: la
+     *     grammatica nasce lì, e prima non c'è una domanda da fare.
+     */
+    static native String nativeGrammarDiagnostics(long handle);
+
+    /**
      * Quante volte un modello e' stato aperto da quando il processo e' partito.
      *
      * Diagnostico: un invio che ne conta due sta ricaricando gigabyte di pesi
