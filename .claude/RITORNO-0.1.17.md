@@ -1792,6 +1792,37 @@ grandezza del vantaggio **dipende dal modello**, mentre il segno no.
 ⇒ Su due architetture su due, e sull'asse che la persona sente davvero (il primo
 messaggio), il candidato vince: **−4,5 s su Llama, −4,9 s su Gemma**.
 
+### ⛔⛔ TROVATO PER STRADA — con GEMMA 3 l'assistente NON PUÒ chiamare attrezzi
+
+Puntando la suite golden su `gemma-3-4b-it-Q4_K_M` per verificare l'equivalenza
+semantica del candidato, il caso S3 è caduto:
+
+> «l'attrezzo non è arrivato al template: il modello non sa che esiste»
+
+⛔ **E non è un guasto nostro: lo dichiara il modello.**
+`nativeTemplateCapabilities` risponde
+
+```json
+{"supportsTools":false,"supportsToolCalls":false,"supportsSystemRole":true}
+```
+
+⇒ Combacia con la documentazione a monte: il chat template di Gemma 3 **non
+contiene affatto le strutture per gli attrezzi**. Per farlo chiamare qualcosa
+bisognerebbe costruire il formato a mano nel prompt.
+
+⭐ **Fatto di prodotto, e pesa più di qualunque numero di velocità:** se la
+persona sceglie Gemma 3, **l'assistente diventa solo chat**. Non è il difetto già
+noto «gli attrezzi ce l'hanno e non li chiamano»: qui non gli vengono nemmeno
+**offerti**, e nessuna scheda lo dice.
+
+⛔ E il dialetto rilevato è `SCONOSCIUTO`: la nostra rilevazione conosce CHATML e
+LLAMA3, non Gemma.
+
+**Corretto anche il test**, perché segnalava le due cose con la stessa riga
+rossa: un modello che non dichiara `supportsTools` adesso si **salta e si
+nomina**; se lo dichiara e l'attrezzo non arriva lo stesso, l'asserzione resta e
+dice che **il guasto è nostro**.
+
 ### 📋 La politica a un numero solo — la proposta, non applicata
 
 `TalosBackendChoice.choose()` decide con **un numero**: `tokensPerSecond`. Il
