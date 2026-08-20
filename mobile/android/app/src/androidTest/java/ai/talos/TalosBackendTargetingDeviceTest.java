@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import ai.talos.research.TalosBackendInventory;
+import ai.talos.research.TalosBackendTarget;
 
 /**
  * ⛔ SOLO RICERCA — il bersaglio dell'offload si NOMINA, e chi sbaglia nome lo sa.
@@ -203,6 +204,56 @@ public class TalosBackendTargetingDeviceTest {
                     0L, handle);
             Log.i(TAG, "Flash Attention `" + modalita + "`: aperta");
             TalosLlamaNative.nativeClose(handle);
+        }
+    }
+
+    /**
+     * ⛔⛔ LA POLITICA IN JAVA E IL MOTORE DEVONO DIRE LA STESSA COSA.
+     *
+     * {@link TalosBackendTarget} decide in Java — dove si può provare senza un
+     * telefono — e il nativo tiene la propria guardia difensiva. Due regole
+     * scritte due volte sono due regole che divergono: questo test le mette una
+     * di fronte all'altra sull'inventario VERO di questo dispositivo, che è
+     * l'unico posto in cui la divergenza si vede.
+     *
+     * ⛔ Ed è anche ciò che impedisce alla politica di diventare l'ennesima
+     * funzione con i suoi test e nessun chiamante.
+     */
+    @Test
+    public void laPoliticaJavaEIlMotoreConcordano() {
+        pronta();
+        File model = fixture();
+
+        TalosBackendInventory inventario =
+                TalosBackendInventory.parse(TalosLlamaNative.nativeBackendInventory());
+
+        // Le richieste si fanno passare PRIMA dalla politica; quello che la
+        // politica accetta deve aprire, e quello che rifiuta non deve.
+        String[][] richieste = {
+            { "", "" },
+            { "none", "" },
+            { "cpu", "" },
+            { "", "QuestoDispositivoNonEsiste" },
+            { "Vulkan", "" },
+            { "none", "QualsiasiCosa" },
+        };
+
+        for (String[] richiesta : richieste) {
+            TalosBackendTarget.Resolution decisa =
+                    TalosBackendTarget.resolve(inventario, richiesta[0], richiesta[1]);
+
+            long handle = apri(model, richiesta[0], richiesta[1], "");
+            boolean motoreHaAperto = handle != 0L;
+            if (motoreHaAperto) TalosLlamaNative.nativeClose(handle);
+
+            assertEquals("politica e motore in disaccordo su ["
+                            + richiesta[0] + "/" + richiesta[1] + "] — politica: " + decisa
+                            + " · motore: " + (motoreHaAperto ? "aperto"
+                                    : TalosLlamaNative.nativeLastOpenError()),
+                    decisa.ok(), motoreHaAperto);
+
+            Log.i(TAG, "[" + richiesta[0] + "/" + richiesta[1] + "] → " + decisa
+                    + " · motore " + (motoreHaAperto ? "apre" : "rifiuta"));
         }
     }
 
