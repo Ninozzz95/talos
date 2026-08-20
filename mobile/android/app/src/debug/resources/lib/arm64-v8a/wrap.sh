@@ -15,23 +15,14 @@
 # ⛔ E vale SOLO con la variante compilata col sanitizer (`-PtalosHwasan`).
 # Senza, questo file c'e e non fa danno: LD_HWASAN su un binario non
 # strumentato viene semplicemente ignorato.
+#
+# ⭐ E' anche l'UNICO posto da cui si possono dare variabili d'ambiente a
+# un'applicazione Android. Il 20/8 e' servito per una sonda temporanea —
+# `GGML_OPENCL_OPFILTER=RMS_NORM`, che manda un'operazione sulla CPU — e ha
+# dimostrato che l'abort su GPU scatta SOLO dove esiste uno spezzone CPU: lo
+# Stop e' passato da 1.443 ms a 7-22 ms. ⛔ La sonda e' stata TOLTA subito dopo
+# la misura, perche' costava un terzo della decodifica e avrebbe falsato ogni
+# corsa successiva. Chi la rimette, la tolga.
 LD_HWASAN=1
 export LD_HWASAN
-
-# ⛔⛔ SONDA TEMPORANEA — il filtro delle operazioni di ggml-opencl.
-#
-# `GGML_OPENCL_OPFILTER` e' una regex delle operazioni che OpenCL NON deve
-# reclamare: quelle che combaciano finiscono sulla CPU, e il grafo si spezza.
-# Serve a provare UNA cosa sola: se lo Stop su GPU morda soltanto dove esiste
-# uno spezzone CPU in cui la callback di abort viene consultata.
-#
-# ⛔ Sta qui perche' un'app Android non legge variabili d'ambiente da nessun
-# altro posto, e `wrap.sh` e' solo-debug. ⛔ VA TOLTO appena la misura e' presa:
-# manda un'operazione sulla CPU e quindi FALSA tutte le altre misure.
-# `RMS_NORM` compare due volte per strato, e' economica, e la sua uscita e'
-# piccola: se il meccanismo e' quello, bastera' lei a creare i confini in cui
-# l'abort viene consultato. Il confronto e' contro la stessa corsa senza filtro.
-GGML_OPENCL_OPFILTER=RMS_NORM
-export GGML_OPENCL_OPFILTER
-
 exec "$@"
