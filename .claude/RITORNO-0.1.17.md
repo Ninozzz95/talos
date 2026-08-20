@@ -1812,6 +1812,22 @@ candidato costa **fra lo 0 e l'8%** di prefill e restituisce, ogni volta:
 Gemma il prefill lungo addirittura **migliora**. ⇒ Non è una taratura buona per
 un modello: è una configurazione migliore, e i tre casi lo dicono insieme.
 
+#### ✅ E le parole non cambiano su NESSUNO dei tre
+
+Suite golden, GPU davvero in uso (29 strati), oggi contro il candidato:
+
+| modello | esito |
+|---|---|
+| Llama 3.2 3B | **7 su 7 identici** |
+| Gemma 3 4B | **6 su 6 identici** — S3 saltato: il modello non ha attrezzi |
+| Qwen3 1.7B | **7 su 7 identici**, **incluso** il caso dell'attrezzo |
+
+⇒ Il candidato non cambia una parola su tre architetture, e dove il percorso
+degli attrezzi esiste (Llama e Qwen3) resta identico anche quello. ⛔ Resta una
+prova **stretta** — poche risposte per modello, non un'equivalenza universale —
+ma è la stessa con cui abbiamo qualificato il forward pin, applicata tre volte
+invece di una.
+
 ### ⛔⛔ TROVATO PER STRADA — con GEMMA 3 l'assistente NON PUÒ chiamare attrezzi
 
 Puntando la suite golden su `gemma-3-4b-it-Q4_K_M` per verificare l'equivalenza
