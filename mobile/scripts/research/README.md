@@ -123,6 +123,7 @@ describes neither of them.
 | `talosGpuLayers` | `-1` | layers to move (−1 = all). Forced to 0 on the CPU floor |
 | `talosMicroBatch` | 0 (=256) | physical batch. ⛔ **This is the Stop knob**: the worst case to stop is one microbatch |
 | `talosFlashAttn` | `default` | `off` / `auto` / `on`. ⛔ `default` is not off — llama.cpp's default is `AUTO` |
+| `talosPrefillTargets` | derived | prefill lengths to measure, e.g. `8192` or `512,2048`. ⛔ **Not cosmetic**: derived targets run in order, so PP8192 arrives with the phone already throttling and its number mixes length with heat |
 | `talosSustainedMinutes` | 10 | length of the G5 sustained run |
 | `talosSustainedTokens` | 128 | tokens generated per G5 cycle |
 
@@ -136,10 +137,15 @@ from another until the value was recovered from the CMake cache.
 
 ```bash
 # G5 — ten minutes of sustained load. ⛔ It heats someone's phone: ask for it by name.
-node scripts/research/run-device-tests.mjs     'ai.talos.TalosLocalBaselineDeviceTest#c0TenutaNelTempo'     --fresh talosBackend=OpenCL talosDevice=GPUOpenCL talosSustainedMinutes=10
+node scripts/research/run-device-tests.mjs \
+    'ai.talos.TalosLocalBaselineDeviceTest#c0TenutaNelTempo' \
+    --fresh talosBackend=OpenCL talosDevice=GPUOpenCL talosSustainedMinutes=10
 
-# PP8192 — needs a wider context, because the prudent prefill ceiling is half of it
-node scripts/research/run-device-tests.mjs     'ai.talos.TalosLocalBaselineDeviceTest#c0PrefillEDecodifica'     --fresh talosBackend=OpenCL talosDevice=GPUOpenCL talosContext=16384
+# PP8192 — needs a wider context, because the prudent ceiling is half of it. ⛔ And
+# ALONE, or the number describes the heat as much as the length.
+node scripts/research/run-device-tests.mjs \
+    'ai.talos.TalosLocalBaselineDeviceTest#c0PrefillEDecodifica' \
+    --fresh talosBackend=OpenCL talosDevice=GPUOpenCL talosContext=16384 talosPrefillTargets=8192
 ```
 
 ## 4. Read
