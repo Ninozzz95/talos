@@ -1053,6 +1053,121 @@ cambiarlo cambia la velocità di prefill per tutti. È una **decisione di
 prodotto** — 9% di prefill contro uno Stop cinque volte più pronto — e la
 propongo, non la applico.
 
+### ✅⛔⛔ OCL-4 — LA FLASH ATTENTION SU ADRENO 830: costa, e non rende
+
+Il brief chiede i tre casi separati — `off`, `auto`, `on` — perché la
+documentazione upstream dice che «la Flash Attention non migliora sempre» su
+OpenCL. Era una nota; adesso è un numero, e il numero è grosso.
+
+⛔ **Prima di tutto: oggi la produzione la usa.** `default` non vuol dire
+«spenta»: `llama_context_default_params()` mette `AUTO`, e su questo telefono
+`AUTO` **risolve in acceso** — le corse `default` di stamattina hanno esattamente
+i numeri di `on`. Quindi ciò che segue non è una manopola da laboratorio: è il
+regime in cui l'app gira oggi.
+
+Cinque giri per configurazione più uno di riscaldamento, telefono **freddo a
+ogni blocco** (`Thermal Status: 0` verificato prima di ognuno):
+
+| | **FA off** | FA auto | FA on |
+|---|---:|---:|---:|
+| primo inferire del processo (TTFT) | **1.646 ms** | 8.230 ms | 8.031 ms |
+| PP512 — prefill | **312 tok/s** | 307 | 307 |
+| PP512 — decodifica | **18,4 tok/s** | 16,8 | 16,8 |
+| PP2048 — prefill | **268 tok/s** | 256 | 256 |
+| **PP2048 — decodifica** | **15,9 tok/s** | **8,1** | **8,1** |
+| TG256 (prompt da 31 token) — decodifica | 19,5 | 19,3 | 19,2 |
+
+⇒ **`auto` e `on` sono la stessa cosa** su questo dispositivo, riga per riga. E
+`off` vince su **ogni** metrica misurata:
+
+1. **−6,5 secondi sul primo messaggio** dopo aver aperto un modello. Con `off`
+   la riga `lazy-compiling flash_attn prepass` non compare affatto, e il giro di
+   riscaldamento smette di essere un'anomalia: 1.646 ms contro 1.635 a regime.
+2. **La decodifica dopo un prompt lungo RADDOPPIA** — 15,9 contro 8,1 tok/s. E
+   il costo **cresce con la lunghezza della KV**: su un prompt da 31 token le
+   due configurazioni sono indistinguibili (19,5 contro 19,2), su 2.048 token la
+   differenza è due volte.
+3. Il prefill migliora anche lui, di poco ma in modo netto: +1,6% su 512 token,
+   **+4,7% su 2.048**.
+
+#### ⛔ Il verso contrario, perché l'ordine era un sospetto legittimo
+
+La prima campagna aveva girato `off` → `auto` → `on`, e `off` era stato il
+blocco **più freddo di tutti**: `Thermal Status` arriva a 2 in ogni blocco. Un
+vantaggio del 100% sulla decodifica poteva essere semplicemente il primo che
+corre.
+
+⇒ Rifatta invertendo l'ordine — `on` **per primo e da freddo**, raffreddamento
+completo fino a `Thermal Status: 0` fra i due blocchi, **stessa APK** per
+entrambi. `on` riproduce sé stesso: riscaldamento TTFT **6.314 ms**, PP512 a
+regime 306-308 tok/s, PP2048 255,5-256,5 e decodifica **8,1-8,3 tok/s**.
+
+E `off`, che stavolta è il blocco **svantaggiato**, vince lo stesso:
+
+```
+off (secondo, in salita termica)   PP2048  267,6  265,7  262,8 | 222,1  198,8  198,9 tok/s
+                                   decodif. 15,9   15,5   15,7 |  11,3   11,3   11,0 tok/s
+on  (primo, da freddo)             PP2048  256,5  255,8  255,7 | 232,5  193,2       tok/s
+                                   decodif.  8,2    8,2    8,3 |   7,6    7,5       tok/s
+```
+
+⛔ Da leggere fino in fondo: dopo la barra il telefono sta **strozzando** in
+entrambi i blocchi. E anche strozzata, la decodifica di `off` — 11,0-11,3 tok/s —
+resta sopra quella di `on` **da freddo**, 8,1-8,3. ⇒ Non era l'ordine, e non era
+il calore.
+
+#### ⛔ Perché il primo inferire costa: la compilazione PIGRA, e la cache che non la copre
+
+Il logcat lo dice con le parole di upstream. Fra la prima riga di compilazione e
+il primo prompt passano **5.845 ms**, in sette compilazioni:
+
+```
+ggml_opencl: lazy-compiling flash_attn prepass for DK=128 DV=128
+ggml_opencl: compiling fa prepass f16
+ggml_opencl: compiling fa f32_f16
+ggml_opencl: compiling fa f32_f16 MQ_GQA=8
+ggml_opencl: compiling fa f32_f16 c8 NSG2
+ggml_opencl: compiling fa f32_f16 c8 g8 NSG2
+ggml_opencl: compiling fa f32_f16 split
+```
+
+⛔ E **quattro dei kernel prodotti vengono buttati subito dopo**, perché la GPU
+non li regge:
+
+```
+flash_attn_f32_f16_q1_vec_mq (g8) DK=128 DV=128
+    per-kernel max 128 < required 192; skipping registration
+```
+
+⛔⛔ **E nessuno di quei programmi finisce nella cache su disco.** Non è un caso
+a runtime, è **strutturale** — si legge nella sorgente del pin:
+
+| funzione | consulta la cache | salva nella cache |
+|---|---|---|
+| `build_program_from_source` | ✅ `cl_program_cache_try_load` | ✅ `cl_program_cache_try_save` |
+| `build_program_from_source_ex` | ❌ | ❌ |
+
+e **tutti e quattordici** i punti di compilazione della Flash Attention passano
+da `_ex`. ⇒ I `.clbin` restano 181 prima e dopo, e **ogni processo ripaga i 5,8
+secondi**. È anche la ragione per cui, cancellando la cache e rimisurando, il
+primo Stop peggiorava (2.760 → 4.786 ms) ma **non spariva**: la cache copre
+tutto il resto, non questo.
+
+#### La proposta, che non applico
+
+⛔ **Flash Attention `off` per i bersagli OpenCL su Adreno.** È una riga in
+`talos_apri_modello`, tocca la produzione, ed è una **decisione dell'owner**.
+Quello che porto è la misura: su questo dispositivo `off` vince su ogni asse,
+e il guadagno più grosso — il raddoppio della decodifica su prompt lunghi — è
+esattamente il caso d'uso dell'assistente, che lavora con un prompt di sistema
+lungo.
+
+⛔ **E non la generalizzo.** Upstream elenca «migliorare la Flash Attention» fra
+i propri TODO e «non migliora sempre le prestazioni» fra i propri difetti noti:
+è una proprietà di *questo* backend su *questa* GPU oggi, non una legge. Su un
+altro dispositivo si rimisura — la manopola `talosFlashAttn` adesso c'è, e il
+valore scelto finisce **scritto in ogni riga** di `runs.jsonl` e `golden.jsonl`.
+
 ## Divergenze dal brief, dichiarate
 
 1. **`devices` è già nella baseline** (§1.3 lo dava per «newer upstream»). Non
@@ -1082,12 +1197,13 @@ propongo, non la applico.
 
 ## Aperti — cosa manca, in ordine
 
-1. ⛔⛔ **+4,7 s sul primo inferire di OGNI processo.** Trovato il 20/8 dentro
-   G4, e resta senza spiegazione: non è la cache dei kernel (provato con la
-   cache calda), non è il microbatch (provato a 256, 128 e 64). È il costo che
-   la persona paga sul **primo messaggio dopo aver aperto un modello**, ed era
-   invisibile perché il giro di riscaldamento viene scartato per costruzione.
-   È il primo, perché è l'unico numero di G4 ancora sopra il cancello.
+1. ⛔⛔ **La Flash Attention spenta sui bersagli OpenCL.** Non è più una domanda
+   aperta, è una **proposta con la misura sotto**: su questo dispositivo `off`
+   vince su ogni asse — 6,5 secondi in meno sul primo messaggio, decodifica
+   **doppia** dopo un prompt lungo, prefill leggermente migliore. E oggi la
+   produzione gira **accesa**, perché il default di llama.cpp è `AUTO` e qui
+   `AUTO` risolve in acceso. ⛔ Tocca `talos_apri_modello`: decisione
+   dell'owner. Vedi OCL-4.
 2. ⛔ **Il microbatch predefinito: 256 → 128.** Misurato, non applicato: −9% di
    prefill per uno Stop **5,6 volte** più pronto. Tocca `talos_apri_modello`,
    quindi è una decisione dell'owner. ⛔ La riga TG a 128 va **rifatta a freddo**
@@ -1099,8 +1215,12 @@ propongo, non la applico.
    telefono (`matrix cores: none`), quindi la ragione per Vulkan resta la
    copertura dei dispositivi, non la prestazione. ⛔ Ultima variabile mai
    provata: `n_batch` — il batch **logico**, fisso a 512.
-5. **Flash Attention off/auto/on su OpenCL** — adesso è lecito, perché il pin
-   contiene `60addddf`. Non ancora fatto.
+5. ~~Flash Attention off/auto/on su OpenCL~~ — ✅ **fatta** (OCL-4), con il
+   verso contrario sull'ordine dei blocchi. ⛔ Quello che resta è **a monte**:
+   i programmi della Flash Attention non passano dalla cache su disco perché
+   sono costruiti con `build_program_from_source_ex`, che non la consulta e non
+   la riempie. È un difetto di **upstream**, non nostro, e vale 5,8 secondi per
+   processo a chiunque tenga la FA accesa su OpenCL.
 6. **La tenuta nel tempo** — nessun test da 10 minuti, nessuna deriva termica
    sotto carico prolungato. Le corse di oggi sono brevi, e il 20/8 il telefono è
    arrivato a `Thermal Status: 2` **dopo** ~25 minuti di campagna: la deriva
@@ -1161,6 +1281,14 @@ le campagne G4 del 20/8, una per file, gia' separate:
     runs-stop-ocl-ub64.jsonl         ub  64, attesa  200 ms
     runs-pp-ocl-ub128.jsonl          PP/TG a ub 128  ⛔ coda con Thermal Status 2
     runs-pp-ocl-ub64.jsonl           PP/TG a ub  64
+
+le campagne OCL-4 (Flash Attention), ogni riga porta il proprio `flashAttn`:
+    runs-pp-ocl-fa-off.jsonl         ordine diretto: off, poi auto, poi on
+    runs-pp-ocl-fa-auto.jsonl
+    runs-pp-ocl-fa-on.jsonl
+    runs-inv-fa-on.jsonl             ordine INVERTITO: on per primo e da freddo
+    runs-inv-fa-off.jsonl            ⛔ il controllo — off qui e' il blocco svantaggiato
+    primo-inferire-logcat.txt        il logcat con le sette righe di compilazione FA
 ```
 
 ⛔ Sono **fuori dall'indice di git** di proposito: descrivono il dispositivo
