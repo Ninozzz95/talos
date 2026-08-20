@@ -1123,7 +1123,8 @@ Attention spenta, telefono freddo a ogni corsa:
 
 | flash-attn / microbatch | PP512 | PP2048 | decodifica (dopo 2048) | TTFT 512 | Stop p95 | G4 |
 |---|---:|---:|---:|---:|---:|:---:|
-| **on / 256** — com'è **oggi** | 307 tok/s | 256 tok/s | 8,1 tok/s | 1.663 ms | 4.095 ms | ⛔ |
+| on / 256 — ⛔ **NON è «oggi»**, è il ripiego del JNI | 307 tok/s | 256 tok/s | 8,1 tok/s | 1.663 ms | 4.095 ms | ⛔ |
+| **on / 512** — com'è **davvero oggi** | *in coda* | *in coda* | *in coda* | *in coda* | **5.926 ms** | ⛔ |
 | off / 256 | **312** | **268** | **15,9** | **1.640** | 1.444 ms | ⛔ |
 | off / 128 | 284 | 247 | 15,9 | 1.805 | 300 ms | ⛔ (per 14 ms) |
 | **off / 64** | 227 | 204 | **15,9** | 2.256 | **128 ms** | ✅ |
@@ -1131,7 +1132,11 @@ Attention spenta, telefono freddo a ogni corsa:
 ⇒ Rispetto a **oggi**, la configurazione che passa il cancello — `off / 64` —
 costa **prefill** e regala tutto il resto:
 
-| | oggi (`on / 256`) | `off / 64` | |
+⛔ La colonna «oggi» qui sotto è ancora quella a **256**, cioè il ripiego: le
+righe a 512 sono in misura. Il verso della differenza non cambia — a 512 il
+prefill è più veloce e lo Stop più lento — ma i numeri esatti sì.
+
+| | «oggi» a 256 ⛔ da rifare a 512 | `off / 64` | |
 |---|---:|---:|---|
 | prefill 512 | 307 tok/s | 227 | **−26%** |
 | prefill 2048 | 256 tok/s | 204 | **−20%** |
