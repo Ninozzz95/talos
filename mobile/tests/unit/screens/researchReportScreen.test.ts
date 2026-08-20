@@ -19,6 +19,7 @@ const routerCalls = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }))
 vi.mock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => routerCalls }))
 
 import { __resetSettingsStoreForTests, useSettingsStore } from '@/stores/settings'
+import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
 import ResearchReportScreen from '@/screens/ResearchReportScreen.vue'
 import ResearchNewScreen from '@/screens/ResearchNewScreen.vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
@@ -270,6 +271,54 @@ describe('the report a person can actually check', () => {
      * aprono a richiesta, perché dieci righe sempre aperte sarebbero rumore su
      * una pagina che deve far decidere.
      */
+    /**
+     * ⛔ LA BARRA — la stessa cosa del conteggio, ma vista.
+     *
+     * «6 sostenute · 1 in parte · 1 contesa · 1 non verificata» va letto e
+     * sommato; la barra si guarda. Ma NON sostituisce le parole: il colore da
+     * solo non è un esito, e chi non distingue i colori resterebbe senza
+     * informazione. Vive col conteggio, e la sua etichetta dice le stesse cose.
+     */
+    it('disegna la barra, e la sua etichetta ripete le parole del conteggio', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const barra = wrapper.get('[data-testid="talos-research-barra"]')
+        expect(barra.attributes('role')).toBe('img')
+        expect(barra.attributes('aria-label')).toMatch(/supported/i)
+        // ⛔ Il conteggio a parole resta: la barra si aggiunge, non sostituisce.
+        expect(wrapper.find('[data-testid="talos-research-standing"]').exists()).toBe(true)
+    })
+
+    /**
+     * ⛔ Dire se una fonte è una PROVA o una ECO.
+     *
+     * Tre articoli che riprendono lo stesso comunicato non sono tre conferme, e
+     * finché non lo si scrive accanto alla fonte si leggono come tre.
+     */
+    it('dice per ogni fonte se è primaria o si appoggia ad altre', async () => {
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        // Si tocca la linguetta, come farebbe una persona: reka-ui monta il
+        // pannello solo quando è scelto, e provarlo da fuori proverebbe altro.
+        // La scheda si sceglie dal componente delle linguette: reka-ui monta il
+        // pannello solo quando è selezionato, e un click sintetico non gli basta.
+        wrapper.findComponent(TalosThemedTabs).vm.$emit('update:model-value', 'sources')
+        await settle(wrapper)
+        const righe = wrapper.findAll('[data-testid="talos-research-indipendenza"]')
+        expect(righe.length).toBeGreaterThan(0)
+        expect(righe[0]!.text()).toMatch(/only page from its site|same site as|unica pagina|stesso sito/i)
+
+        // ⛔ La scheda scelta SOPRAVVIVE alla pagina — è memorizzata, ed è voluto.
+        // Lasciarla su «fonti» farebbe partire il test dopo dalla scheda sbagliata:
+        // un test che sporca lo stato fa fallire un vicino innocente.
+        wrapper.findComponent(TalosThemedTabs).vm.$emit('update:model-value', 'claims')
+        await settle(wrapper)
+    })
+
     it('riassume il lavoro fatto, e i passi restano chiusi finché non li chiedi', async () => {
         const wrapper = mount(ResearchReportScreen)
         await settle(wrapper)

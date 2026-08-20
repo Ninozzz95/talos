@@ -3019,6 +3019,23 @@ export const TALOS_IT_MESSAGES = {
             unchecked: 'non verificata',
             contested: 'contesa',
         },
+        // ⛔ Si chiamano «catena…» e non «origine…» di proposito: un guardiano
+        // in fileOriginCard.test.ts vieta i segnaposto a OGNI chiave che inizia
+        // per origin, perché quelle stringhe passano da un percorso che non fa
+        // escaping. Queste sono un altro concetto e non devono cadere in quella
+        // rete — ma il guardiano ha ragione, e non si tocca.
+        //
+        // ⛔⛔ E dicono ESATTAMENTE quello che abbiamo misurato, non di più.
+        // La prima stesura diceva «si appoggia alla stessa origine»: è una
+        // frase che promette un'analisi delle citazioni, e oggi il
+        // raggruppamento lo facciamo per DOMINIO — il campo `cites` non lo
+        // raccoglie ancora nessuno. Due pagine dello stesso sito non sono
+        // due conferme, ed è già una cosa che vale dire; dire che una cita
+        // l'altra sarebbe inventarsi il perché.
+        catenaPrimaria: 'unica pagina del suo sito',
+        catenaRipresa: 'stesso sito di un\'altra fonte',
+        catenaRipreseMolte: 'stesso sito di altre {count} fonti',
+        barraLegenda: '{supported} sostenute, {partial} in parte, {contested} contese, {unsupported} smentite, {unchecked} non verificate',
         registroTitolo: 'Come è stato costruito',
         // ⛔ Il sommario dice il LAVORO, non l’attesa: l’attesa la persona
         // l’ha vissuta, il lavoro no — ed è quello che dice se un 100% è

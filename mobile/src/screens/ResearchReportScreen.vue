@@ -43,6 +43,7 @@ import { talosResearchSolidity, type TalosResearchStanding } from '@/lib/researc
 import { talosResearchVerifiedStanding } from '@/lib/research/researchVerification'
 import { talosResearchFidelity } from '@/lib/research/researchFidelity'
 import { talosResearchLedger } from '@/lib/research/researchLedger'
+import { talosResearchIndependentSources } from '@/lib/research/researchIndependence'
 import { talosResearchRecheckStanding, type TalosResearchRecheck } from '@/lib/research/researchRecheck'
 import type { TalosResearchReportRecord } from '@/lib/research/researchReport'
 import type { TalosResearchProgress } from '@/services/researchRuntime'
@@ -243,6 +244,57 @@ const registro = computed(() => talosResearchLedger(steps.value, {
     claims: report.value?.claims ?? [],
 }))
 const registroAperto = ref(false)
+
+/**
+ * ⛔⛔ L'INDIPENDENZA, portata dove si decide.
+ *
+ * Il conteggio esisteva già nel pannello di testa — «7 prove distinte su
+ * 10 fonti» — ma lì è un totale, e nessuno decide su un totale: si decide
+ * sulla singola affermazione. «Sostenuta da 3 fonti» è una promessa
+ * numerica, e se quelle tre riprendono lo stesso comunicato è falsa.
+ *
+ * ⇒ Il numero va SULLA CARD, accanto al verdetto, e la catena va sulla
+ * fonte: chi la legge deve sapere se sta guardando una prova o una eco.
+ */
+const indipendenza = computed(() => talosResearchIndependentSources(
+    (report.value?.sources ?? []).map((source) => ({ url: source.url })),
+))
+
+/*
+ * ⛔⛔ QUI IL MOCKUP CHIEDE UNA COSA CHE I DATI NON SANNO DIRE.
+ *
+ * Il mockup approvato scrive sulla card «sostenuta dalla fonte · 2 fonti
+ * indipendenti». Il nostro modello però dà a ogni affermazione UNA sola
+ * fonte — `sourceIndex`, al singolare: una affermazione, una pagina, un
+ * passaggio. Il numero per affermazione sarebbe quindi sempre 1.
+ *
+ * Le due strade sbagliate erano entrambe a portata di mano: scrivere «1
+ * sola fonte» su ogni riga — vero ma sempre uguale, cioè rumore — oppure
+ * contare le fonti del GRUPPO e spacciarle per sostegni di quella
+ * affermazione, che sarebbe un numero più grande e **falso**: è
+ * esattamente la promessa numerica gonfiata contro cui esiste
+ * `researchIndependence`.
+ *
+ * ⇒ Sulla card dell'affermazione non si scrive niente. L'indipendenza
+ * resta dove i dati la reggono davvero: il totale in cima e la catena
+ * sulla fonte. Quando una affermazione potrà portare più fonti, il numero
+ * tornerà qui — con dietro qualcosa da contare.
+ */
+
+/**
+ * Cosa dire di QUESTA fonte, in una riga.
+ *
+ * ⛔ Il singolare e il plurale sono due frasi, non una con un numero: la
+ * prima versione ha scritto sul Pad «altre 1 fonti», che è il modo più
+ * veloce di far sembrare automatico un testo che deve essere letto.
+ */
+function catenaDi(url: string): string {
+    const gruppo = indipendenza.value.groups.find((g) => g.sources.includes(url))
+    const altre = gruppo ? gruppo.sources.length - 1 : 0
+    if (altre <= 0) return t('research.catenaPrimaria')
+    if (altre === 1) return t('research.catenaRipresa')
+    return t('research.catenaRipreseMolte', { count: altre })
+}
 /** Il lavoro in parole, con la stessa funzione che scrive le altre durate. */
 const durataLavoro = computed(() => talosResearchDuration(registro.value.summary.workedSeconds))
 
@@ -550,6 +602,34 @@ function openSource(index: number): void {
                         <span class="text-3xl font-semibold tabular-nums text-[var(--talos-text)]">{{ solidity === null ? '—' : `${solidity}%` }}</span>
                         <span class="text-xs text-[var(--talos-muted)]">{{ t('research.solidity') }}</span>
                     </p>
+                    <!--
+                        ⛔ LA BARRA — la stessa cosa del conteggio, ma vista.
+
+                        «6 sostenute · 1 in parte · 1 contesa · 1 non verificata» va
+                        letto e sommato; la barra si guarda. ⛔ Ma non sostituisce le
+                        parole: il colore da solo non è un esito — chi non distingue
+                        i colori resterebbe senza informazione. Vive col conteggio,
+                        e la sua etichetta dice le stesse parole.
+                    -->
+                    <div
+                        v-if="balance.total"
+                        data-testid="talos-research-barra"
+                        class="mt-3 flex h-1.5 gap-px overflow-hidden rounded-full bg-[var(--talos-panel-soft)]"
+                        role="img"
+                        :aria-label="t('research.barraLegenda', {
+                            supported: balance.supported,
+                            partial: balance.partial,
+                            contested: balance.contested ?? 0,
+                            unsupported: balance.unsupported,
+                            unchecked: balance.unchecked,
+                        })"
+                    >
+                        <i v-if="balance.supported" class="block h-full bg-[var(--talos-accent)]" :style="{ flex: balance.supported }" />
+                        <i v-if="balance.partial" class="block h-full bg-[var(--talos-accent-soft)]" :style="{ flex: balance.partial }" />
+                        <i v-if="balance.contested" class="block h-full bg-[var(--talos-warning-border)]" :style="{ flex: balance.contested }" />
+                        <i v-if="balance.unsupported" class="block h-full bg-[var(--talos-danger-border)]" :style="{ flex: balance.unsupported }" />
+                        <i v-if="balance.unchecked" class="block h-full bg-[var(--talos-border-strong)]" :style="{ flex: balance.unchecked }" />
+                    </div>
                     <p data-testid="talos-research-standing" class="mt-2 text-2xs leading-5 tabular-nums text-[var(--talos-muted)]">
                         {{ t('research.standing', {
                             supported: balance.supported,
@@ -716,7 +796,9 @@ function openSource(index: number): void {
                             >
                                 <span class="min-w-0 flex-1">
                                     <span class="block text-sm leading-5 text-[var(--talos-text)]">{{ claim.text }}</span>
-                                    <span class="mt-1 block text-2xs text-[var(--talos-muted)]">{{ t(`research.support.${claim.checks.claimSupported}`) }}</span>
+                                    <span class="mt-1 block text-2xs text-[var(--talos-muted)]">
+                                        {{ t(`research.support.${claim.checks.claimSupported}`) }}
+                                    </span>
                                 </span>
                                 <ChevronRight class="mt-0.5 size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                             </button>
@@ -737,6 +819,15 @@ function openSource(index: number): void {
                                     <span class="mt-1 block text-2xs text-[var(--talos-muted)]">
                                         {{ source.publishedAt ? talosPublishedOn(source.publishedAt, locale) : t('research.noDate') }} ·
                                         {{ source.obtained === 'snippet' ? t('research.onlySnippet') : t('research.pageRead') }}
+                                    </span>
+                                    <!--
+                                        ⛔ Dire se questa fonte è una PROVA o una ECO.
+                                        Tre articoli che riprendono lo stesso comunicato
+                                        non sono tre conferme, e finché non lo si scrive
+                                        si leggono come tre.
+                                    -->
+                                    <span data-testid="talos-research-indipendenza" class="mt-0.5 block text-2xs leading-4 text-[var(--talos-muted)]">
+                                        {{ catenaDi(source.url) }}
                                     </span>
                                 </span>
                                 <ChevronRight class="mt-0.5 size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
