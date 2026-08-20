@@ -1651,14 +1651,33 @@ Il motore registra dove si ferma. Prompt da 2.048 token, Stop premuto dopo
 | 256 | 1.446 ms | `prefill interrotto a 512/2048` |
 | **128** | **290 ms** | `prefill interrotto a **0**/2048` |
 
-⇒ **Sopra 128 l'abort non morde dentro la chiamata**: il pezzo da 512 token
-finisce comunque, e solo dopo si esce. Sotto, morde a metà e **non tiene niente**.
-La soglia sta fra 256 e 128.
+⇒ Sopra la soglia l'abort **non morde dentro la chiamata**: il pezzo da 512
+token finisce comunque, e solo dopo si esce. Sotto, morde a metà e **non tiene
+niente**.
 
-⛔ **Perché ci sia una soglia lì, non lo so, e non lo invento.** Ho verificato che
-i parametri arrivano davvero al motore (`n_batch = 512`, `n_ubatch = 128` nel suo
-stesso log), quindi non è una manopola ignorata. La legge operativa però è
-misurata e basta a decidere: **per uno Stop pronto serve `n_ubatch ≤ 128`**.
+⛔ **E la soglia NON è a 128: è fra 256 e 192.** Cercata, non dedotta:
+
+| microbatch | latenza | si ferma a |
+|---:|---:|---|
+| 256 | 1.446 ms | 512/2048 |
+| **192** | **~460 ms** | **0**/2048 |
+| 160 | ~370 ms | 0/2048 |
+| 144 | ~324 ms | 0/2048 |
+| 128 | ~290 ms | 0/2048 |
+
+⇒ Sotto la soglia la latenza è **una lunghezza di microbatch**, e la curva è
+lineare: 192 → 460, 160 → 370, 144 → 324, 128 → 290. **Cade tutto fra 256 e
+192**, e quel salto vale un fattore tre.
+
+⛔ **Perché la soglia stia lì non lo so.** Ho escluso che sia una manopola
+ignorata — il motore dichiara `n_batch = 512`, `n_ubatch = 128` nel proprio log —
+e ho escluso il ripiego su CPU: le soglie di dimensione dentro `ggml-opencl`
+(`use_adreno_kernels`, 512/128) **scelgono kernel diversi**, non spostano lavoro.
+Resta una spiegazione da trovare; la legge operativa però è misurata, ed è quella
+che serve per decidere.
+
+⭐ **E cambia la raccomandazione**, perché 192 è appena sotto il salto: dà lo
+Stop pronto al prezzo più basso possibile, invece dei 64 che avevo proposto.
 
 #### ⇒ Cosa cambia per la decisione
 
