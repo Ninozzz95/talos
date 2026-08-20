@@ -1576,6 +1576,109 @@ un dispositivo dove taglia l'attesa da cinquanta secondi a otto. ⛔ Non è una
 soglia da ritoccare: è la **grandezza sbagliata**, e adesso il rifiuto non è
 un'ipotesi ma il risultato che quei numeri producono.
 
+### 🔬⭐ RICERCA — il compromesso dello Stop NON è una legge: è una funzione mancante
+
+Il 20/8 ho presentato all'owner una scelta fra «Stop pronto» e «prefill veloce»,
+come se fosse un compromesso inevitabile. **Non lo è.** Sei fatti verificati, in
+ordine di quanto cambiano la risposta.
+
+#### 1. La callback di abort la implementano DUE backend su tutti
+
+```
+ggml/src/ggml-cpu/ggml-cpu.c          ✅ controllata dentro il ciclo dei thread
+ggml/src/ggml-metal/ggml-metal-context.m  ✅ controllata fra i command buffer
+ggml-opencl · ggml-vulkan · ggml-cuda     ❌ nessuna
+```
+
+⇒ La nota nell'header di llama.cpp — «works only with CPU execution» — descrive
+lo stato di fatto, non un limite di principio.
+
+#### 2. Metal dimostra che su GPU si PUÒ, e come
+
+Metal non annulla il lavoro già in volo: **smette di consegnarne altro**. Spezza
+il grafo in `n_cb` command buffer, aspetta il completamento di uno
+(`waitUntilCompleted`), e **prima di consegnare il successivo** controlla la
+callback: se lo Stop è stato chiesto, non lo consegna e torna
+`GGML_STATUS_ABORTED`. Il costo a regime è **zero**: non cambia la quantità di
+lavoro, solo il momento della consegna.
+
+#### 3. L'impianto di llama.cpp è GIÀ generico — manca solo l'esportazione
+
+`llama-context.cpp:1145` gira su **ogni** backend registrato e gli chiede il
+simbolo `"ggml_backend_set_abort_callback"`; se il backend lo espone, la
+callback gli viene consegnata. Ma:
+
+| backend | espone il simbolo? |
+|---|---|
+| CPU | ✅ `ggml-cpu.cpp:663` |
+| **Metal** | ❌ **ha la funzione e NON la esporta** ⇒ da llama.cpp non la riceve mai |
+| **OpenCL** | ❌ `get_proc_address = NULL`: non espone **niente** |
+
+⇒ Per OpenCL la cura è piccola e localizzata: due campi nel contesto, un setter,
+l'esportazione del simbolo, e il controllo dentro il ciclo dei nodi di
+`ggml_backend_opencl_graph_compute` (che è già un `for` su `cgraph->n_nodes`).
+**Nessuna modifica a llama.cpp, nessuna a TALOS.**
+
+#### 4. Il contratto per un decode abortito è documentato — e noi lo rispettiamo già
+
+`include/llama.h`:
+
+> `2 - aborted (processed ubatches will remain in the context's memory)`
+> «To handle this correctly, query the memory state using
+> `llama_memory_seq_pos_min()` and `llama_memory_seq_pos_max()`»
+
+Non è corruzione: è uno stato previsto con un recupero documentato. ⭐ E il
+nostro JNI **lo gestisce già** — riporta la KV esattamente a `session->cached` e,
+se il taglio fallisce, azzera. Il commento che c'è lo dice meglio di me: «perdere
+il prefisso costa secondi, tenerne uno falso costa la risposta».
+
+#### 5. A monte è un buco NOTO e non colmato
+
+`ggml-org/llama.cpp#10509` — *«Feature Request: Ability to cancel during prompt
+processing (llama_decode)»* — chiede esattamente questo, propone una callback, ed
+è stato **chiuso come stale** senza implementazione. ⛔ Cercate anche PR che
+implementino l'abort per Vulkan o CUDA: **non risultano**. Il terreno è libero, e
+la nostra non sarebbe una stranezza locale.
+
+#### 6. ⛔ E la granularità vera l'ho MISURATA, perché i miei numeri non tornavano
+
+Il motore registra dove si ferma. Prompt da 2.048 token, Stop premuto dopo
+200 ms, Flash Attention spenta:
+
+| microbatch | latenza | il motore dice |
+|---:|---:|---|
+| 512 | 1.443 ms | `prefill interrotto a 512/2048` |
+| 256 | 1.446 ms | `prefill interrotto a 512/2048` |
+| **128** | **290 ms** | `prefill interrotto a **0**/2048` |
+
+⇒ **Sopra 128 l'abort non morde dentro la chiamata**: il pezzo da 512 token
+finisce comunque, e solo dopo si esce. Sotto, morde a metà e **non tiene niente**.
+La soglia sta fra 256 e 128.
+
+⛔ **Perché ci sia una soglia lì, non lo so, e non lo invento.** Ho verificato che
+i parametri arrivano davvero al motore (`n_batch = 512`, `n_ubatch = 128` nel suo
+stesso log), quindi non è una manopola ignorata. La legge operativa però è
+misurata e basta a decidere: **per uno Stop pronto serve `n_ubatch ≤ 128`**.
+
+#### ⇒ Cosa cambia per la decisione
+
+| | oggi | microbatch 64 | con la cura a monte |
+|---|---|---|---|
+| Stop nel prefill | fino a **5,9 s** | ~130 ms | **millisecondi** |
+| prefill | pieno | **−28%** | **pieno** |
+| chi tocca il codice | — | una riga in `engineTuning.ts` | ~30 righe in `ggml-opencl` |
+
+⇒ Il microbatch è la cura **che possiamo fare oggi**, e costa il 28% del prefill.
+La cura vera costa **zero** in prestazioni, ma vive in una dipendenza: o la
+portiamo noi a monte, o la teniamo come patch locale sul nostro pin.
+
+⛔ **Una cosa NOSTRA da correggere comunque**, e non dipende da nessuno: nel
+ciclo di prefill del JNI **non controlliamo `cancelled` fra un pezzo e il
+successivo** — lo fa solo il ciclo di generazione. Su un prompt da 8.192 token
+sono **sedici** chiamate da 512, e oggi lo Stop può essere onorato solo dentro
+una di esse. Un controllo fra i pezzi costa **zero** e limita l'attesa a un pezzo
+solo.
+
 ### 📋 La politica a un numero solo — la proposta, non applicata
 
 `TalosBackendChoice.choose()` decide con **un numero**: `tokensPerSecond`. Il
