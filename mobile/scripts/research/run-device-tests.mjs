@@ -1,0 +1,196 @@
+/**
+ * I test strumentati SENZA disinstallare l'app — e senza perdere le prove.
+ *
+ * ⛔⛔ IL DIFETTO CHE QUESTO SCRIPT CHIUDE, e che è costato caro.
+ *
+ * MISURATO il 2026-08-20 sul Pad. `./gradlew connectedDebugAndroidTest` è
+ * andato verde — «Starting 2 tests on OPD2415», «Finished 2 tests» — e subito
+ * dopo sul telefono non c'era più niente:
+ *
+ *     pm path ai.talos                 → vuoto
+ *     ls /data/data/ai.talos           → No such file or directory
+ *     find /storage/emulated/0 *.gguf  → nessun risultato
+ *
+ * Non è un guasto: è il comportamento documentato del plugin Android di
+ * Gradle. `connectedAndroidTest` **installa** l'APK dell'app e quello dei test,
+ * esegue, e alla fine **li disinstalla entrambi**. Con l'app se ne va la sua
+ * cartella privata — cioè i dati, le chiavi e i GGUF che ci stavano dentro.
+ *
+ * ⇒ Due conseguenze, e nessuna delle due è opzionale:
+ *
+ *  1. **Un artifact scritto in `getExternalFilesDir()` non sopravvive alla
+ *     corsa che lo produce.** Il test passa, il file viene scritto davvero, e
+ *     poi sparisce con la disinstallazione. È la forma peggiore di prova
+ *     perduta: quella che lascia un verde alle spalle.
+ *  2. **Il telefono di una persona non è un emulatore.** Sul Pad c'era l'app
+ *     di produzione con i suoi dati e i suoi modelli, e un task di test l'ha
+ *     rimossa senza che nessuno l'avesse chiesto.
+ *
+ * Qui si fa la stessa cosa a mano, con i due passi che Gradle nasconde e senza
+ * il terzo: si installa, si esegue con `am instrument`, si portano via gli
+ * artifact, e **non si disinstalla mai niente**.
+ *
+ * ## Uso
+ *
+ *     node scripts/research/run-device-tests.mjs ai.talos.TalosBackendQualificationDeviceTest
+ *     node scripts/research/run-device-tests.mjs            # tutti i test strumentati
+ *
+ * Variabili: `TALOS_ADB`, `TALOS_PACKAGE` (default `ai.talos`),
+ * `TALOS_ARTIFACT_DIR` (default `.tmp-research/local-backend`).
+ *
+ * ⛔ Gli APK devono già esistere. Li costruisce Gradle, e costruirli NON
+ * installa niente:
+ *
+ *     ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+ */
+
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const QUI = dirname(fileURLToPath(import.meta.url))
+const MOBILE = resolve(QUI, '..', '..')
+
+/**
+ * ⛔ Il percorso di `adb` non si scrive: si trova. Stessa regola, stessa
+ * scaletta di `scripts/device.mjs` — una riga con l'SDK di chi ha scritto lo
+ * script funziona su un computer solo al mondo.
+ */
+function trovaAdb() {
+    if (process.env.TALOS_ADB) return process.env.TALOS_ADB
+    const casa = process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT
+    const eseguibile = process.platform === 'win32' ? 'adb.exe' : 'adb'
+    const candidati = []
+    if (casa) candidati.push(`${casa}/platform-tools/${eseguibile}`)
+    const utente = process.env.LOCALAPPDATA ?? process.env.HOME ?? ''
+    if (utente) {
+        candidati.push(`${utente}/Android/Sdk/platform-tools/${eseguibile}`)
+        candidati.push(`${utente}/Library/Android/sdk/platform-tools/${eseguibile}`)
+    }
+    for (const c of candidati) if (existsSync(c)) return c
+    return eseguibile
+}
+
+const ADB = trovaAdb()
+const PACCHETTO = process.env.TALOS_PACKAGE ?? 'ai.talos'
+const PACCHETTO_TEST = `${PACCHETTO}.test`
+const RUNNER = 'androidx.test.runner.AndroidJUnitRunner'
+
+const APK_APP = resolve(MOBILE, 'android/app/build/outputs/apk/debug/app-debug.apk')
+const APK_TEST = resolve(
+    MOBILE, 'android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk')
+
+/** Dove il test scrive sul telefono. Deve combaciare col test. */
+const ARTIFACT_SU_DISPOSITIVO =
+    `/storage/emulated/0/Android/data/${PACCHETTO}/files/research/local-backend`
+
+const ARTIFACT_HOST = resolve(
+    MOBILE, process.env.TALOS_ARTIFACT_DIR ?? '.tmp-research/local-backend')
+
+function adb(...args) {
+    return execFileSync(ADB, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+}
+
+function annuncia(testo) {
+    process.stdout.write(`${testo}\n`)
+}
+
+function esigi(condizione, messaggio) {
+    if (!condizione) {
+        process.stderr.write(`⛔ ${messaggio}\n`)
+        process.exit(1)
+    }
+}
+
+const classe = process.argv[2] ?? ''
+
+esigi(existsSync(APK_APP),
+    `APK dell'app assente: ${APK_APP}\n`
+    + '   Costruiscilo con:  ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest')
+esigi(existsSync(APK_TEST),
+    `APK dei test assente: ${APK_TEST}\n`
+    + '   Costruiscilo con:  ./gradlew :app:assembleDebugAndroidTest')
+
+const collegati = adb('devices').split('\n').filter((riga) => /\tdevice$/.test(riga.trim()))
+esigi(collegati.length > 0, 'nessun dispositivo collegato — `adb devices` non ne elenca nessuno')
+
+annuncia(`dispositivo   ${collegati[0].split('\t')[0]}`)
+annuncia(`pacchetto     ${PACCHETTO}`)
+
+/**
+ * ⛔ `-r`, non una disinstallazione preventiva.
+ *
+ * `-r` sostituisce l'app TENENDO i suoi dati. Disinstallare prima sarebbe più
+ * semplice e cancellerebbe esattamente ciò che questo script esiste per non
+ * cancellare.
+ *
+ * ⛔ Se la firma non combacia — un debug sopra un rilascio — l'installazione
+ * fallisce con INSTALL_FAILED_UPDATE_INCOMPATIBLE. È l'esito GIUSTO: la cura
+ * non è disinstallare di nascosto, è che qualcuno decida.
+ */
+function installa(apk, etichetta) {
+    annuncia(`installo     ${etichetta}`)
+    try {
+        const esito = adb('install', '-r', apk)
+        if (!/Success/.test(esito)) {
+            process.stderr.write(`⛔ installazione non riuscita: ${esito.trim()}\n`)
+            process.exit(1)
+        }
+    } catch (problema) {
+        const testo = String(problema.stdout ?? '') + String(problema.stderr ?? '')
+        process.stderr.write(`⛔ installazione non riuscita: ${testo.trim()}\n`)
+        if (/UPDATE_INCOMPATIBLE|签名|signatures/i.test(testo)) {
+            process.stderr.write(
+                '   La firma non combacia con l\'app già installata.\n'
+                + '   ⛔ NON disinstallare per aggirare: con l\'app se ne vanno i suoi dati\n'
+                + '      e i suoi modelli. Chiedi prima.\n')
+        }
+        process.exit(1)
+    }
+}
+
+installa(APK_APP, 'app-debug.apk')
+installa(APK_TEST, 'app-debug-androidTest.apk')
+
+const argomenti = ['shell', 'am', 'instrument', '-w']
+if (classe) argomenti.push('-e', 'class', classe)
+argomenti.push(`${PACCHETTO_TEST}/${RUNNER}`)
+
+annuncia(`eseguo       ${classe || '(tutti i test strumentati)'}`)
+let uscita = ''
+try {
+    uscita = adb(...argomenti)
+} catch (problema) {
+    uscita = String(problema.stdout ?? '') + String(problema.stderr ?? '')
+}
+process.stdout.write(uscita)
+
+/**
+ * ⛔ Gli artifact si portano via SUBITO, e comunque vada.
+ *
+ * Anche se i test sono rossi: un test rosso che ha lasciato un inventario è
+ * più utile di uno verde che non ha lasciato niente, e la cartella su cui
+ * poggiano vive quanto l'installazione dell'app.
+ */
+mkdirSync(ARTIFACT_HOST, { recursive: true })
+annuncia(`artifact →   ${ARTIFACT_HOST}`)
+try {
+    // Il punto finale dice ad adb «il CONTENUTO della cartella», non la
+    // cartella dentro la cartella.
+    process.stdout.write(adb('pull', `${ARTIFACT_SU_DISPOSITIVO}/.`, ARTIFACT_HOST))
+} catch (problema) {
+    process.stderr.write(
+        `   (nessun artifact da portare via: ${String(problema.stderr ?? '').trim()})\n`)
+}
+
+// ⛔ E qui NON si disinstalla. È l'unica riga che conta di questo script, ed è
+// quella che non c'è.
+
+const passati = /OK \((\d+) test/.exec(uscita)
+const falliti = /FAILURES!!!|Failures: (\d+)/.test(uscita)
+if (falliti || !passati) {
+    process.stderr.write('⛔ i test strumentati non sono verdi — vedi sopra\n')
+    process.exit(1)
+}
+annuncia(`verdi        ${passati[1]} test`)
