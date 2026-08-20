@@ -45,7 +45,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -221,6 +221,26 @@ process.stdout.write(uscita)
  * più utile di uno verde che non ha lasciato niente, e la cartella su cui
  * poggiano vive quanto l'installazione dell'app.
  */
+/*
+ * ⛔⛔ CON `--fresh` SI AZZERA ANCHE LA COPIA SU QUESTO COMPUTER, e la ragione
+ * e' un guasto vero, non simmetria.
+ *
+ * MISURATO il 2026-08-20, due volte. Una corsa fallisce — percorso storto,
+ * bersaglio assente, qualunque cosa — il runner lo dice e esce con codice 1,
+ * ma sul disco resta il `runs.jsonl` della campagna PRECEDENTE. Uno script di
+ * campagna che legge quel file subito dopo stampa numeri plausibili che non
+ * appartengono a niente: la prima volta e' costata una tabella in cui Vulkan
+ * risultava identico a OpenCL fino al secondo decimale.
+ *
+ * ⇒ Azzerare qui rende il guasto RUMOROSO: dopo una corsa fallita non c'e'
+ * niente da leggere, e chi prova a leggerlo prende un errore invece di una
+ * bugia. ⛔ Solo con `--fresh`, che gia' significa «parto pulito»: senza, le
+ * misure non si toccano.
+ */
+if (fresco && existsSync(ARTIFACT_HOST)) {
+    annuncia(`azzero       ${ARTIFACT_HOST}`)
+    rmSync(ARTIFACT_HOST, { recursive: true, force: true })
+}
 mkdirSync(ARTIFACT_HOST, { recursive: true })
 annuncia(`artifact →   ${ARTIFACT_HOST}`)
 try {
