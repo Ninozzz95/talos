@@ -26,30 +26,36 @@ defineProps<{
     activeTitle: string
     busy: boolean
     /**
-     * ⛔⛔ F6 — il pannello possiede l'HAMBURGER, non le azioni.
+     * ⛔⛔ F6 — sul tablet il pannello ha l’HAMBURGER, la CAMPANELLA e i
+     * DOWNLOAD. Non ha le opzioni della chat.
      *
-     * MISURATO sul Pad il 2026-08-20, tablet con una conversazione aperta: il
-     * riquadro destro non aveva **niente**. Non il titolo, non la campanella,
-     * non il centro download, non le opzioni della chat — rinomina, elimina,
-     * esporta, media, incognito. Sul telefono ci sono tutte.
+     * Sono TRE gruppi e non due, e ogni volta che li ho contati male si è
+     * visto a schermo:
      *
-     * La causa era un flag solo per due decisioni diverse. La nota accanto
-     * diceva «il pannello possiede quelle azioni»: vero per l'hamburger, che
-     * il pannello ha davvero, e **falso** per il resto — nel pannello non
-     * c'è nessuna di quelle voci, quindi sul tablet erano semplicemente
-     * irraggiungibili.
+     *   · Un flag solo per tutti e tre (fino al 2026-08-20 mattina): sul
+     *     tablet il riquadro destro non aveva niente — né rinomina, né
+     *     elimina, né esporta, né media, né incognito. Nel pannello quelle
+     *     voci non ci sono, quindi erano IRRAGGIUNGIBILI.
+     *   · Due flag (`hideMenu` + `hideActions`): il riquadro riprendeva
+     *     tutto, campanella compresa — e il pannello ce l’ha già.
+     *     FOTOGRAFATO lo stesso giorno: due campanelle sullo stesso schermo,
+     *     con lo stesso pallino «1».
      *
-     * ⇒ Due proprietà, perché sono due domande: `hideMenu` toglie
-     * l'hamburger (giusto sul tablet), `hideActions` toglie il resto — e
-     * nessuno lo chiede, perché nessun'altra superficie lo offre.
+     * ⇒ Tre proprietà, perché sono tre domande. Ognuna dice esattamente chi
+     * possiede quel gruppo altrove, e nessuna si porta dietro le altre.
      */
     hideMenu?: boolean
     /**
-     * Toglie campanella, download e opzioni chat. ⛔ Oggi non lo passa
-     * nessuno: esiste perché la decisione sia DICHIARATA invece che
-     * presa di straforo da `hideMenu`, come è successo.
+     * Campanella e centro download. Il pannello del tablet li ha entrambi:
+     * lasciarli anche qui vuol dire due campanelle e due pallini per la
+     * stessa notifica.
      */
-    hideActions?: boolean
+    hideAppActions?: boolean
+    /**
+     * Le opzioni della chat — rinomina, elimina, esporta, media, incognito.
+     * ⛔ Sul tablet NON si tolgono: nessun’altra superficie le offre.
+     */
+    hideChatOptions?: boolean
     /** False before a chat exists; the media entry then opens nothing. */
     canOpenMedia?: boolean
     /** What the active chat would take from the Library, for the delete dialog. */
@@ -114,10 +120,18 @@ const emit = defineEmits<{
             </Button>
             <span v-else aria-hidden="true" />
 
-            <div v-if="!hideActions" class="pointer-events-auto flex shrink-0 items-center">
-                <TalosMobileNotificationBell />
-            <TalosMobileDownloadCenterTrigger />
+            <!--
+                DUE gruppi, non uno: campanella e download il pannello del tablet
+                ce li ha, le opzioni della chat no. Vedi la nota accanto alle
+                proprieta.
+            -->
+            <div class="pointer-events-auto flex shrink-0 items-center">
+                <template v-if="!hideAppActions">
+                    <TalosMobileNotificationBell />
+                    <TalosMobileDownloadCenterTrigger />
+                </template>
                 <TalosMobileChatOptionsMenu
+                    v-if="!hideChatOptions"
                     :incognito="incognito"
                     :can-go-incognito="canGoIncognito"
                     :cleanup-plan="cleanupPlan"
@@ -133,8 +147,8 @@ const emit = defineEmits<{
                     @export="emit('export')"
                     @media="emit('media')"
                 />
+                <span v-if="hideAppActions && hideChatOptions" aria-hidden="true" />
                 </div>
-                <span v-else aria-hidden="true" />
             </div>
         </div>
     </div>

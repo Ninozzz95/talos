@@ -71,15 +71,30 @@ watch(open, (adesso, prima) => {
                 :aria-label="t('notifications.open', { count: unread })"
                 class="talos-pressable pointer-events-auto relative inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-[var(--talos-radius-control)] text-[var(--talos-muted)] hover:bg-[var(--talos-active)] hover:text-[var(--talos-text)]"
             >
-                <Bell class="size-[var(--talos-icon-size)]" aria-hidden="true" />
-                <!-- Il numero solo se c'è qualcosa da vedere: un pallino sempre
-                     acceso smette di significare «guardami». -->
-                <span
-                    v-if="unread > 0"
-                    data-testid="talos-notification-unread"
-                    class="absolute right-0 top-0 grid min-h-[var(--talos-space-section)] min-w-[var(--talos-space-section)] place-items-center rounded-full bg-[var(--talos-accent)] px-[calc(var(--talos-space-inline)/2)] font-mono text-3xs font-semibold text-[var(--talos-accent-contrast)]"
-                    aria-hidden="true"
-                >{{ unread }}</span>
+                <!--
+                    ⛔ Il pallino sta sull'ICONA, non sull'angolo del bersaglio.
+
+                    FOTOGRAFATO sul Pad il 2026-08-20, telefono in orizzontale: il
+                    cerchio arancione era tagliato di netto in alto. Era ancorato
+                    all'angolo del bersaglio tattile — 48 px attorno a un'icona di
+                    venti — e quell'angolo arriva al bordo dell'intestazione, che
+                    ritaglia.
+
+                    ⛔ E l'avevo escluso ragionando sul CSS: top-0 è dentro il
+                    pulsante, quindi «non può essere ritagliato». Lo schermo diceva
+                    il contrario, e lo schermo vince.
+                -->
+                <span class="relative grid place-items-center">
+                    <Bell class="size-[var(--talos-icon-size)]" aria-hidden="true" />
+                    <!-- Il numero solo se c'è qualcosa da vedere: un pallino sempre
+                         acceso smette di significare «guardami». -->
+                    <span
+                        v-if="unread > 0"
+                        data-testid="talos-notification-unread"
+                        class="absolute -right-2 -top-2 grid min-h-[var(--talos-space-section)] min-w-[var(--talos-space-section)] place-items-center rounded-full bg-[var(--talos-accent)] px-[calc(var(--talos-space-inline)/2)] font-mono text-3xs font-semibold text-[var(--talos-accent-contrast)]"
+                        aria-hidden="true"
+                    >{{ unread }}</span>
+                </span>
             </button>
         </PopoverTrigger>
 

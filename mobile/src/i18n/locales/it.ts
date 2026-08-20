@@ -2943,7 +2943,7 @@ export const TALOS_IT_MESSAGES = {
         noMatches: 'Nessuna ricerca corrisponde.',
         needsAttention: 'Merita un secondo sguardo',
         cardRunning: '{done} di {total} · in corso',
-        cardStanding: '{supported} sostenute · {partial} in parte · {unsupported} smentite · {unchecked} non verificate',
+        cardStanding: 'sostenute: {supported} · in parte: {partial} · contese: {contested} · smentite: {unsupported} · non verificate: {unchecked}',
         loading: 'Sto aprendo…',
         missing: 'Questa ricerca non esiste più.',
         solidity: 'di tenuta',
@@ -3006,7 +3006,19 @@ export const TALOS_IT_MESSAGES = {
         openReport: 'Apri il rapporto',
         closeReport: 'Chiudi il rapporto',
         reportUnreadable: 'Il rapporto non si riesce a rileggere, quindi non si può mostrare come è stato verificato.',
-        standing: '{supported} su {total} sostenute · {partial} in parte · {contested} contese · {unsupported} smentite · {unchecked} non verificate',
+        // ⛔ Conteggi ETICHETTATI, non «1 contese».
+        //
+        //   FOTOGRAFATO sul Pad il 2026-08-20, prima contesa vera: la riga
+        //   diceva «3 su 4 sostenute · 0 in parte · 1 contese · 0 smentite».
+        //   In italiano l'aggettivo si accorda, e qui ce ne sono cinque in una
+        //   riga sola: qualunque valore a 1 ne sbaglia uno. Non c'è un
+        //   meccanismo di plurali in questo file, e inventarne uno per una riga
+        //   sarebbe più fragile del difetto.
+        //
+        //   ⇒ Il numero segue l'etichetta invece di precederla: «contese: 1» è
+        //   giusto per ogni valore, zero compreso. L'inglese resta com'era,
+        //   perché lì l'aggettivo non si accorda.
+        standing: 'sostenute: {supported} su {total} · in parte: {partial} · contese: {contested} · smentite: {unsupported} · non verificate: {unchecked}',
         // ⛔ Le quattro misure che i benchmark 2026 usano per giudicare un
         // agente di ricerca. Nessuno le mostra alla persona: qui sì.
         fedeltaTitolo: 'Quanto vale questo rapporto',
@@ -3017,13 +3029,15 @@ export const TALOS_IT_MESSAGES = {
         fedeltaAncoraggio: 'Ancoraggio',
         fedeltaAncoraggioSpiega: 'quanto le affermazioni giudicate reggono davvero',
         fedeltaIndipendenti: 'Fonti indipendenti',
-        fedeltaIndipendentiSpiega: 'prove distinte, non indirizzi: tre siti che riprendono lo stesso comunicato contano uno',
+        fedeltaIndipendentiSpiega: 'prove distinte, non indirizzi: tre siti che riprendono lo stesso comunicato contano uno. La cifra dice quante ne restano sul totale delle fonti raccolte.',
         // ⛔ Un punteggio senza data è una promessa che scade in silenzio: le
         // pagine citate muoiono, ed è il motivo per cui FACT è considerato
         // inaffidabile nei benchmark.
         fedeltaMisurataIl: 'Misurato il {quando}. Le pagine cambiano: più passa, meno vale.',
         fedeltaNonVerificata: 'Non verificata — nessun giudice ha guardato queste affermazioni, quindi non c’è un punteggio da dare.',
         indipendentiSu: '{independent} prove distinte su {total} fonti',
+        // La cifra grande, nella forma delle sue tre celle gemelle.
+        indipendentiFrazione: '{independent}/{total}',
         verifiedByLead: 'Verificate da un altro modello, mai da quello che ha scritto il rapporto:',
         notVerified: 'Verifica non eseguita: non c’era un giudice indipendente. Installa un modello locale, oppure configura un secondo provider.',
         support: {
@@ -3049,7 +3063,7 @@ export const TALOS_IT_MESSAGES = {
         catenaPrimaria: 'unica pagina del suo sito',
         catenaRipresa: 'stesso sito di un\'altra fonte',
         catenaRipreseMolte: 'stesso sito di altre {count} fonti',
-        barraLegenda: '{supported} sostenute, {partial} in parte, {contested} contese, {unsupported} smentite, {unchecked} non verificate',
+        barraLegenda: 'sostenute: {supported}, in parte: {partial}, contese: {contested}, smentite: {unsupported}, non verificate: {unchecked}',
         registroTitolo: 'Come è stato costruito',
         // ⛔ Il sommario dice il LAVORO, non l’attesa: l’attesa la persona
         // l’ha vissuta, il lavoro no — ed è quello che dice se un 100% è
@@ -3097,7 +3111,11 @@ export const TALOS_IT_MESSAGES = {
         noDate: 'data non dichiarata',
     },
     stations: {
-        deepResearchTitle: 'Ricerca approfondita V3',
+        // ⛔ Senza «V3». Un numero di versione interno a schermo non dice
+        //   niente a chi legge: non c'è mai stata una V1 e una V2 che una
+        //   persona abbia visto, quindi il numero non distingue nulla — è solo
+        //   una parola in più nel titolo della stazione.
+        deepResearchTitle: 'Ricerca approfondita',
         settingsCenterTitle: 'Centro impostazioni',
         tasksEmpty: 'Nessuna attività.',
         newTask: 'Nuova attività',

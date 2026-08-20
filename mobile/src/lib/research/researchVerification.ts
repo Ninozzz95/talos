@@ -1,5 +1,9 @@
 import type { TalosResearchSource } from '@/lib/research/researchCollector'
 import type { TalosResearchClaim } from '@/lib/research/researchSynthesis'
+import {
+    talosResearchOpposingCandidate,
+    talosResearchParseOpposingVerdict,
+} from '@/lib/research/researchOpposing'
 
 /**
  * The three levels, and the refusal that holds them up.
@@ -120,6 +124,17 @@ export interface TalosResearchVerifyDeps {
      * answer towards "yes, that fits".
      */
     readonly ask: (claim: string, passage: string) => Promise<string>
+    /**
+     * ⛔ CONTESA-02 — chiede allo stesso giudice se un passaggio di
+     * un’ALTRA fonte contraddice l’affermazione.
+     *
+     * Opzionale, e assente vuol dire «non guardato»: senza, il verdetto
+     * resta quello di prima e `opposing` non c’è. È la stessa distinzione
+     * che il campo `opposing` porta nella scheda — «non guardato» non è
+     * «non ce ne sono», e le due cose si leggono uguali solo se non
+     * importa sbagliare.
+     */
+    readonly askOpposing?: (claim: string, passage: string) => Promise<string>
     readonly at: () => string
 }
 
@@ -255,8 +270,23 @@ export function talosResearchJudgePrompt(claim: string, passage: string): string
         'Il passaggio, DA SOLO, sostiene l’affermazione?',
         'Non usare altro: né quello che sai, né quello che ti sembra probabile.',
         '',
-        'Rispondi con una riga sola, in questo formato:',
-        'SI | PARZIALE | NO — motivo, massimo quindici parole',
+        // ⛔⛔ IL MENU CON LE BARRE lo faceva RICOPIARE.
+        //
+        //   MISURATO sul Pad il 2026-08-20 con gemma-3-4b come giudice: la
+        //   risposta arrivava come «Sì | PARZIALE | Il passaggio indica che…»,
+        //   cioè due voci del menu invece di una. Il parser prendeva la prima
+        //   e quei rapporti risultavano al 100%: erano verdetti che il giudice
+        //   non aveva dato.
+        //
+        //   ⇒ Le tre parole si elencano una per riga, senza barre, e si mostra
+        //   com’è fatta una risposta buona. Non c’è più niente da ricopiare.
+        'Rispondi con UNA riga sola. Comincia con UNA di queste tre parole:',
+        'SI',
+        'PARZIALE',
+        'NO',
+        'Poi un trattino e il motivo, massimo quindici parole.',
+        '',
+        'Esempio di risposta: SI — il passaggio lo dice testualmente.',
         '',
         'PARZIALE significa: il passaggio riguarda l’argomento ma non sostiene',
         'tutta l’affermazione (per esempio ne sostiene il fatto ma non la misura).',
@@ -267,7 +297,14 @@ export function talosResearchJudgePrompt(claim: string, passage: string): string
  * `\b` is no use here: Italian verdicts end in accented letters, which JavaScript
  * does not count as word characters, so "Sì" would fail a word-boundary test.
  */
-const VERDICT = /^\s*(s[iì]|parziale|no)(?![\p{L}\p{N}])/iu
+/**
+ * ⛔ Le barre in testa si saltano: un modello che risponde «| PARZIALE |
+ * motivo» ha dato il verdetto, con addosso la punteggiatura del menu.
+ */
+const VERDICT = /^[\s|]*(s[iì]|parziale|no)(?![\p{L}\p{N}])/iu
+
+/** Un pezzo che è SOLO una parola di verdetto, senza niente attorno. */
+const SOLO_VERDETTO = /^\s*(s[iì]|parziale|no)\s*$/iu
 
 /**
  * Reads the verdict, or admits there wasn't one.
@@ -281,10 +318,31 @@ export function talosResearchParseVerdict(answer: string): { support: TalosResea
         const match = VERDICT.exec(line)
         if (!match) continue
 
+        /**
+         * ⛔⛔ IL MENU RICOPIATO non è una scelta.
+         *
+         * MISURATO sul Pad il 2026-08-20: il giudice ha risposto «Sì |
+         * PARZIALE | Il passaggio indica che…», cioè ha ricopiato due voci
+         * del formato invece di sceglierne una. Il parser prendeva la prima
+         * e attaccava il resto — barre comprese — come «motivo»: a schermo
+         * si leggeva «contesa» sopra e «| PARZIALE |» sotto, due parole
+         * diverse per lo stesso stato, e il verdetto era il più generoso
+         * dei due.
+         *
+         * ⇒ Due voci del menu in una riga = nessun verdetto. Sceglierne una
+         * al posto suo sarebbe inventare la parte che non ha detto.
+         */
+        const pezzi = line.split('|').map((pezzo) => pezzo.trim())
+        if (pezzi.filter((pezzo) => SOLO_VERDETTO.test(pezzo)).length >= 2) {
+            return { support: 'unchecked', reason: '' }
+        }
+
         const word = match[1]!.toLowerCase()
         return {
             support: word === 'parziale' ? 'partial' : word === 'no' ? 'no' : 'yes',
-            reason: line.slice(match[0].length).replace(/^[\s—–\-:,.]+/, '').trim(),
+            // La barra sta fra i separatori: «SI | motivo» è la stessa cosa
+            // di «SI — motivo», e la barra non è parte del motivo.
+            reason: line.slice(match[0].length).replace(/^[\s|—–\-:,.]+/, '').trim(),
         }
     }
     return { support: 'unchecked', reason: '' }
@@ -311,6 +369,48 @@ const NO_JUDGE = 'nessun giudice indipendente disponibile: l’autore non può v
  * citation is already broken, and paying to have it discussed would only produce
  * a second opinion about a fabrication.
  */
+/**
+ * Cerca chi dice il contrario, e chiede al giudice se lo dice davvero.
+ *
+ * ⛔ UNA sola candidata per affermazione: è una chiamata al giudice in più,
+ * e sul motore del telefono le chiamate sono in fila. Cercarne tre
+ * raddoppierebbe il tempo di un rapporto per trovare, quasi sempre, la
+ * stessa cosa.
+ *
+ * ⛔ E un guasto qui NON porta via l’affermazione: torna vuoto, il verdetto
+ * resta quello del primo giro. Una contesa che non si è potuta cercare non
+ * è una contesa che non c’è, ma è comunque meglio di un rapporto perso.
+ */
+async function contrarie(
+    deps: TalosResearchVerifyDeps,
+    claim: TalosResearchClaim,
+    sources: readonly TalosResearchSource[],
+    support: TalosResearchSupport,
+    /** Quello che il giudice ha appena approvato: chi lo ripete non lo nega. */
+    passage: string,
+): Promise<readonly TalosResearchOpposing[]> {
+    // La contesa è disaccordo: senza un accordo prima non c’è niente con cui
+    // essere in disaccordo, e chiedere costerebbe per nulla.
+    if (!deps.askOpposing) return []
+    if (support !== 'yes' && support !== 'partial') return []
+
+    const candidata = talosResearchOpposingCandidate(claim.text, claim.sourceIndex - 1, sources, passage)
+    if (!candidata) return []
+
+    try {
+        const risposta = await deps.askOpposing(claim.text, candidata.passage)
+        if (!talosResearchParseOpposingVerdict(risposta)) return []
+        return [{
+            url: candidata.url,
+            title: candidata.title,
+            passage: candidata.passage,
+            span: candidata.span,
+        }]
+    } catch {
+        return []
+    }
+}
+
 export async function talosResearchVerify(
     deps: TalosResearchVerifyDeps,
     claims: readonly TalosResearchClaim[],
@@ -358,15 +458,20 @@ export async function talosResearchVerify(
             // cannot get a doctored quotation past the check that reads it.
             const verdict = talosResearchParseVerdict(await deps.ask(claim.text, passage))
             const judged = verdict.support !== 'unchecked'
+            const opposing = judged ? await contrarie(deps, claim, sources, verdict.support, passage) : []
             verified.push({
                 claim,
                 passage,
                 checks: {
                     ...base,
-                    claimSupported: verdict.support,
+                    // ⛔ La contesa NON sostituisce il verdetto a mano: la regola
+                    //   («era un sì o un in parte, e qualcuno dice di no») sta in
+                    //   un posto solo, con i suoi test.
+                    claimSupported: talosResearchContestedVerdict(verdict.support, opposing),
                     supportReason: judged ? verdict.reason : 'il giudice non ha dato un verdetto leggibile',
                     judge: judged ? deps.judge.id : null,
                     judgedAt: judged ? deps.at() : null,
+                    ...(opposing.length ? { opposing } : {}),
                 },
             })
         } catch (failure) {

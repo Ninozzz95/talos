@@ -5994,11 +5994,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             { talosResearchParseSynthesis },
             { talosResearchJudgePrompt, talosResearchPickJudge, talosResearchVerify },
             { talosResearchReportDocument },
+            { talosResearchOpposingPrompt },
         ] = await Promise.all([
             import('@/lib/chat/providerRegistry'),
             import('@/lib/research/researchSynthesis'),
             import('@/lib/research/researchVerification'),
             import('@/lib/research/researchReport'),
+            import('@/lib/research/researchOpposing'),
         ])
 
         /*
@@ -6101,6 +6103,37 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 const verdict = await providerAdapterFor(chosen.provider).complete({
                     model: chosen.providerModel,
                     turns: [{ role: 'user', content: talosResearchJudgePrompt(claimText, passage) }],
+                    system: 'Rispondi con una riga sola, nel formato richiesto.',
+                    effort: 'off',
+                    thinking: false,
+                }, judgeCredentials, deps.transport)
+                judgeTokens += Number(verdict.usage?.completion_tokens ?? 0)
+                return verdict.text
+            },
+
+            /**
+             * ⛔ CONTESA-02 — la seconda domanda: qualcun altro dice il contrario?
+             *
+             * MISURATO sul Pad il 2026-08-20: il rapporto su GGUF scriveva in
+             * chiaro «le fonti… non specificano però formalmente un maintainer
+             * unico», e la barra sopra diceva 7 su 7 sostenute, 0 contese. La
+             * regola della contesa esisteva coi suoi test e non la chiamava
+             * nessuno: il disaccordo poteva stare nella prosa, mai nei dati.
+             *
+             * ⛔ Lo STESSO giudice, non un terzo: chi ha detto che il passaggio
+             * sostiene l’affermazione è la persona giusta a cui mostrare quello
+             * che la nega. Un giudice diverso porterebbe un secondo metro, e il
+             * disaccordo fra i due si leggerebbe come disaccordo fra le fonti.
+             */
+            askOpposing: async (claimText, passage) => {
+                if (!chosen) throw new Error('TALOS_RESEARCH_NO_JUDGE')
+                judgeCredentials ??= {
+                    apiKey: await deps.getKey(chosen.provider),
+                    endpoint: await deps.getEndpoint(chosen.provider),
+                }
+                const verdict = await providerAdapterFor(chosen.provider).complete({
+                    model: chosen.providerModel,
+                    turns: [{ role: 'user', content: talosResearchOpposingPrompt(claimText, passage) }],
                     system: 'Rispondi con una riga sola, nel formato richiesto.',
                     effort: 'off',
                     thinking: false,

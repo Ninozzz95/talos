@@ -50,20 +50,23 @@ describe('TalosMobileHeader (F1-T3)', () => {
     })
 
     /**
-     * ⛔⛔ CORRETTO il 2026-08-20: la premessa di questo test era FALSA.
+     * ⛔⛔ TRE gruppi, non due — e sbagliare il conto si è visto a schermo
+     * due volte nello stesso giorno.
      *
-     * Diceva «hides the options menu on tablet (the panel owns those
-     * actions)». Misurato sul Pad, tablet con una conversazione aperta: il
-     * riquadro destro non aveva niente — né titolo, né campanella, né centro
-     * download, né rinomina/elimina/esporta/media/incognito. E il pannello
-     * quelle voci **non le ha**: possiede l'hamburger e «Nuova chat», nulla
-     * più. Erano semplicemente irraggiungibili sul tablet.
+     * Mattina: un flag solo per tutti e tre. Sul tablet il riquadro destro
+     * non aveva niente — né campanella, né download, né rinomina, elimina,
+     * esporta, media, incognito. Nel pannello quelle ultime voci NON ci sono,
+     * quindi erano irraggiungibili.
      *
-     * ⇒ Le due domande adesso sono due proprietà. Questo test prova che
-     * togliere l'hamburger **non** porta via anche le azioni — che è
-     * esattamente ciò che succedeva.
+     * Pomeriggio, dopo la cura: due campanelle sullo stesso schermo, con lo
+     * stesso pallino «1» — una nel pannello e una nel riquadro. Il pannello
+     * la campanella ce l’aveva sempre avuta; la nota che diceva di no era
+     * scritta senza guardare.
+     *
+     * ⇒ Tre domande, tre proprietà. Qui si prova che nessuna si porta dietro
+     * le altre, ed è il solo modo in cui il conto resta giusto.
      */
-    it('⛔ togliere l\'hamburger NON porta via le azioni della chat', async () => {
+    it('⛔ togliere l\'hamburger non porta via NESSUNA delle azioni', async () => {
         const wrapper = mountHeader({ hideMenu: true })
         await flushPromises()
 
@@ -72,11 +75,22 @@ describe('TalosMobileHeader (F1-T3)', () => {
         wrapper.unmount()
     })
 
-    it('e chi le vuole togliere davvero lo dichiara', async () => {
-        const wrapper = mountHeader({ hideMenu: true, hideActions: true })
+    it('⛔ e togliere campanella e download non porta via le OPZIONI CHAT', async () => {
+        // È il caso del tablet: il pannello ha le prime due e non le terze.
+        const wrapper = mountHeader({ hideMenu: true, hideAppActions: true })
+        await flushPromises()
+
+        expect(wrapper.find('[aria-label="Chat options"]').exists()).toBe(true)
+        wrapper.unmount()
+    })
+
+    it('e chi vuole togliere le opzioni chat lo dichiara a parte', async () => {
+        const wrapper = mountHeader({ hideChatOptions: true })
         await flushPromises()
 
         expect(wrapper.find('[aria-label="Chat options"]').exists()).toBe(false)
+        // E l’hamburger resta: è la terza domanda, e nessuno l’ha fatta.
+        expect(wrapper.find('[aria-label="Open menu"]').exists()).toBe(true)
         wrapper.unmount()
     })
 })
