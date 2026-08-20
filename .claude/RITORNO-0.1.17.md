@@ -1583,7 +1583,7 @@ forma che proporrei, con i numeri che la giustificano.
 | cancello | esito |
 |---|---|
 | `npm run typecheck` | verde |
-| `npx vitest run` | **5.858** passati, 10 saltati, 643 file — identico alla baseline |
+| `npx vitest run` | **5.858** passati, 10 saltati, 643 file — identico alla baseline, **rilanciato dopo ogni tocco al Java** |
 | `:app:testDebugUnitTest` | **290** test, 0 falliti (10 nuovi) |
 | `:app:lintDebug` | verde |
 | `npm run build` | verde, tetto del chunk d'avvio rispettato |
@@ -1594,7 +1594,8 @@ forma che proporrei, con i numeri che la giustificano.
 | dispositivo — G4, sei configurazioni | tutte verdi · ⛔ il cancello lo passa **una sola** |
 | dispositivo — OCL-4, `off`/`auto`/`on` ×2 ordini | tutte verdi, e il controllo regge |
 | dispositivo — golden `on` contro `off` | **7 su 7 identici** |
-| dispositivo — G5, dieci minuti | scritto ed eseguito, vedi sotto |
+| dispositivo — G5, dieci minuti ×2 | **GPU e CPU**, 70 e 67 giri, ed è il confronto che risponde |
+| dispositivo — PP8192 | eseguito a contesto 16.384 |
 | quattro viewport | **non fatte** — questo ramo non tocca nessuna superficie visiva |
 
 ⛔ Le quattro viewport non si applicano a questo blocco: non c'è UI. Torneranno
