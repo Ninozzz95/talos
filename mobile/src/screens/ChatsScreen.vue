@@ -583,6 +583,25 @@ function act(
                          seleziona, come nella Ricerca. Sta fuori dal
                          bottone che apre la chat, perche' due aree di
                          tocco annidate se ne mangiano una. -->
+                    <!--
+                        ⛔⛔ IL TITOLO PASSAVA SOTTO I PUNTINI.
+
+                        Owner, 2026-08-20: «in landscape il titolo delle chat nella
+                        sidebar deve troncarsi prima dei puntini». Fotografato anche
+                        sul tablet: «Fai una ricerca web sulle novita di Android 16»
+                        finiva dritto dentro il ⋮.
+
+                        Il menu è posizionato in ASSOLUTO — esce dal flusso — e il
+                        titolo tronca sulla larghezza piena della riga, che quindi
+                        comprende lo spazio occupato dal pulsante. `truncate` fa il
+                        suo lavoro: taglia dove gli è stato detto, e gli era stato
+                        detto troppo tardi.
+
+                        ⇒ `pr-13` sul bottone che apre: 3rem del pulsante più il
+                        `right-1` che lo stacca dal bordo. Non è un numero a occhio,
+                        è la somma di due misure che stanno qui accanto — se il
+                        pulsante cambia taglia, va cambiata anche questa.
+                    -->
                     <div v-if="!bulk.active.value" class="absolute right-1 top-1 z-10">
                         <TalosRowActions
                             :test-id="`talos-chats-menu-${session.id}`"
@@ -594,7 +613,7 @@ function act(
                     <button
                         type="button"
                         data-testid="talos-chats-open"
-                        class="talos-pressable flex min-h-13 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left"
+                        class="talos-pressable flex min-h-13 w-full min-w-0 items-center gap-2 rounded-lg px-2 pr-13 text-left"
                         :aria-pressed="bulk.active.value ? bulk.isSelected(session.id) : undefined"
                         @click="tapSession(session.id)"
                     >
@@ -656,7 +675,7 @@ function act(
                         <button
                             type="button"
                             data-testid="talos-chats-archived-open"
-                            class="talos-pressable flex min-h-13 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left"
+                            class="talos-pressable flex min-h-13 w-full min-w-0 items-center gap-2 rounded-lg px-2 pr-13 text-left"
                             :aria-pressed="bulk.active.value ? bulk.isSelected(session.id) : undefined"
                             @click="tapSession(session.id)"
                         >
@@ -676,9 +695,21 @@ function act(
         <!-- Owner 2026-07-24 (Claude-style): floating New chat FAB, bottom-right
              thumb zone, on the full page only (the tablet panel keeps its
              inline New button). -->
+            <!--
+                ⛔ In ORIZZONTALE questa barra costa il 16% dello schermo.
+
+                MISURATO sul Pad il 2026-08-20 a risoluzione telefono, girato:
+                sfumatura 24 px + pulsante 48 px + padding basso fanno ~170 px su
+                1080, e la riga che ci finisce sotto diventa illeggibile proprio
+                dove di righe ne stanno due e mezzo.
+
+                Il pulsante resta — è il comando principale di questa schermata —
+                ma la sfumatura e i margini si stringono dove lo spazio verticale
+                è quello che manca.
+            -->
         <div
             v-if="!props.embedded"
-            class="sticky bottom-0 z-20 mt-auto flex justify-end bg-gradient-to-t from-[var(--talos-background)] via-[var(--talos-background)]/85 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-6"
+            class="sticky bottom-0 z-20 mt-auto flex justify-end bg-gradient-to-t from-[var(--talos-background)] via-[var(--talos-background)]/85 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-6 landscape:pb-2 landscape:pt-3"
         >
             <TalosMobileNewChatFab @click="newChat" />
         </div>

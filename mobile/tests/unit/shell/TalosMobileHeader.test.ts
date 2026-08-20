@@ -49,9 +49,33 @@ describe('TalosMobileHeader (F1-T3)', () => {
         wrapper.unmount()
     })
 
-    it('hides the options menu on tablet (the panel owns those actions)', async () => {
+    /**
+     * ⛔⛔ CORRETTO il 2026-08-20: la premessa di questo test era FALSA.
+     *
+     * Diceva «hides the options menu on tablet (the panel owns those
+     * actions)». Misurato sul Pad, tablet con una conversazione aperta: il
+     * riquadro destro non aveva niente — né titolo, né campanella, né centro
+     * download, né rinomina/elimina/esporta/media/incognito. E il pannello
+     * quelle voci **non le ha**: possiede l'hamburger e «Nuova chat», nulla
+     * più. Erano semplicemente irraggiungibili sul tablet.
+     *
+     * ⇒ Le due domande adesso sono due proprietà. Questo test prova che
+     * togliere l'hamburger **non** porta via anche le azioni — che è
+     * esattamente ciò che succedeva.
+     */
+    it('⛔ togliere l\'hamburger NON porta via le azioni della chat', async () => {
         const wrapper = mountHeader({ hideMenu: true })
         await flushPromises()
+
+        expect(wrapper.find('[aria-label="Open menu"]').exists()).toBe(false)
+        expect(wrapper.find('[aria-label="Chat options"]').exists()).toBe(true)
+        wrapper.unmount()
+    })
+
+    it('e chi le vuole togliere davvero lo dichiara', async () => {
+        const wrapper = mountHeader({ hideMenu: true, hideActions: true })
+        await flushPromises()
+
         expect(wrapper.find('[aria-label="Chat options"]').exists()).toBe(false)
         wrapper.unmount()
     })
