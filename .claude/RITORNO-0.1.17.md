@@ -1361,15 +1361,44 @@ tempo a **due terzi** della velocità che ha visto all'inizio. Non c'è nessun
 avviso, e la nostra diagnostica lo descriverebbe come «moderate» dall'inizio
 alla fine.
 
-⛔ **Cosa NON ho misurato**, e serve prima di concludere:
+#### ✅ La stessa corsa sulla CPU: NON è il governor, ed è il backend
 
-1. La stessa corsa **sulla CPU**: se oscilla anche lì, è il governor del SoC e
-   non il backend. Se non oscilla, è la GPU.
+Dieci minuti identici, stesso modello, stesso prompt, telefono freddo alla
+partenza, **stessa temperatura di picco del SoC — 88 °C**:
+
+| | **CPU** | **OpenCL** |
+|---|---:|---:|
+| salti oltre il 15% | **0 su 67 giri** | **9 su 70 giri** |
+| decodifica | 15,52 tok/s, [15,17 … 19,12] | oscilla, [13,45 … 19,48] |
+| deriva primo terzo → ultimo | **−1,68%** | −16,72% |
+| TTFT mediano | 736 ms | 268 ms |
+
+⇒ ⛔ **Non è il governor del SoC.** Alla stessa temperatura la CPU resta piatta e
+OpenCL salta avanti e indietro nove volte. Qualunque cosa sia, sta nel percorso
+GPU — driver, clock della GPU, o la gestione dei buffer.
+
+⛔⛔ **E c'è un secondo numero, più importante del primo.** Sulla media dei dieci
+minuti:
+
+```
+OpenCL   16,13 tok/s      CPU   15,52 tok/s      ⇒  +3,9%
+```
+
+Il vantaggio della GPU sulla **decodifica** — 1,31× su una corsa breve e da
+freddo — **sparisce sotto carico prolungato**. Resta il vantaggio sul TTFT
+(268 ms contro 736), che è reale e grande. ⇒ Conferma dall'altro lato ciò che la
+sezione sulla politica dice: il motivo per accendere la GPU è il **prefill**, non
+la generazione, e una politica che decide sulla decodifica sceglierebbe su una
+differenza del 4% che dopo dieci minuti non c'è più.
+
+⛔ **Cosa NON ho ancora misurato**, e serve prima di concludere:
+
+1. ~~La stessa corsa sulla CPU~~ — ✅ **fatta**, ed è la sezione qui sopra.
 2. La stessa corsa con `flash-attn off`: la FA accesa raddoppia il lavoro sulla
-   KV, e potrebbe essere ciò che porta il chip sulla soglia.
-3. Il segnale giusto — le zone termiche del SoC in
-   `/sys/class/thermal/thermal_zone*/temp`, che da `adb` dicevano **58 °C**
-   mentre la batteria ne diceva 33.
+   KV, e potrebbe essere ciò che porta il chip sulla soglia. **In corso.**
+3. ~~Il segnale giusto~~ — ✅ le zone termiche del SoC si campionano dall'host e
+   l'analizzatore le legge con `--zone`. Il picco è **88 °C** su entrambi i
+   backend, mentre la batteria dice 33-34.
 
 ### ⛔⛔⛔ FASE 7 — LA GPU NON È SPEDITA, NON È SCELTA, NON È USATA
 
