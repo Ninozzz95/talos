@@ -1408,10 +1408,11 @@ forma che proporrei, con i numeri che la giustificano.
    sono costruiti con `build_program_from_source_ex`, che non la consulta e non
    la riempie. È un difetto di **upstream**, non nostro, e vale 5,8 secondi per
    processo a chiunque tenga la FA accesa su OpenCL.
-6. **La tenuta nel tempo** — nessun test da 10 minuti, nessuna deriva termica
-   sotto carico prolungato. Le corse di oggi sono brevi, e il 20/8 il telefono è
-   arrivato a `Thermal Status: 2` **dopo** ~25 minuti di campagna: la deriva
-   esiste e non è ancora misurata.
+6. ~~La tenuta nel tempo~~ — ✅ **fatta** (G5), e ha aperto tre domande nuove:
+   la stessa corsa **sulla CPU** (se oscilla anche lì è il governor, non il
+   backend), la stessa con `flash-attn off`, e il segnale giusto — le zone
+   termiche del SoC, che da `adb` dicono **58 °C** mentre la batteria ne dice
+   33. ⛔ Le prime due sono in coda sul Pad mentre scrivo.
 7. **PP8192** — serve una corsa con contesto più largo.
 8. **`minSdk` contro Vulkan 1.1** — decisione di prodotto, vedi sopra.
 9. **La politica a un numero solo** — i dati per rifarla ci sono. ⛔ Il brief
@@ -1480,6 +1481,16 @@ le campagne OCL-4 (Flash Attention), ogni riga porta il proprio `flashAttn`:
     runs-inv-fa-on.jsonl             ordine INVERTITO: on per primo e da freddo
     runs-inv-fa-off.jsonl            ⛔ il controllo — off qui e' il blocco svantaggiato
     primo-inferire-logcat.txt        il logcat con le sette righe di compilazione FA
+
+G4 chiuso e G5:
+    runs-g4-faoff-ub256.jsonl        Stop con FA spenta, microbatch 256
+    runs-g4-faoff-ub128.jsonl        idem, 128 — manca il cancello per 14 ms
+    runs-g4-faoff-ub64.jsonl         idem,  64 — l'unica che lo passa
+    runs-pp-faoff-ub128.jsonl        il PREZZO di quelle due configurazioni
+    runs-pp-faoff-ub64.jsonl
+    runs-g5-produzione.jsonl         10 minuti, configurazione di produzione
+    runs-pp8192.jsonl                PP8192, contesto 16384
+    g5-*-zone.txt                    le zone termiche del SoC, campionate dall'host
 ```
 
 ⛔ Sono **fuori dall'indice di git** di proposito: descrivono il dispositivo
