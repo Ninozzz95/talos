@@ -1669,12 +1669,25 @@ niente**.
 lineare: 192 → 460, 160 → 370, 144 → 324, 128 → 290. **Cade tutto fra 256 e
 192**, e quel salto vale un fattore tre.
 
-⛔ **Perché la soglia stia lì non lo so.** Ho escluso che sia una manopola
-ignorata — il motore dichiara `n_batch = 512`, `n_ubatch = 128` nel proprio log —
-e ho escluso il ripiego su CPU: le soglie di dimensione dentro `ggml-opencl`
-(`use_adreno_kernels`, 512/128) **scelgono kernel diversi**, non spostano lavoro.
-Resta una spiegazione da trovare; la legge operativa però è misurata, ed è quella
-che serve per decidere.
+⛔ **Perché la soglia stia lì non lo so — ma so cosa NON è.** Quattro
+spiegazioni plausibili, tutte verificate e tutte cadute:
+
+| ipotesi | come è caduta |
+|---|---|
+| la manopola viene ignorata | ⛔ no: il motore stampa `n_batch = 512`, `n_ubatch = 128` |
+| viene arrotondata a una potenza | ⛔ no: `llama-context.cpp:247` fa solo `min(n_batch, n_ubatch)` |
+| sotto soglia il lavoro ripiega sulla CPU | ⛔ no: le soglie di `use_adreno_kernels` **scelgono kernel**, non spostano lavoro |
+| lo scheduler accoda più grafi insieme | ⛔ no: il pipelining vuole `pipeline_parallel`, e con un dispositivo solo non c'è |
+
+⛔ **E un dettaglio che smentisce anche la spiegazione «ai confini di
+microbatch»**: a 192 un microbatch dura ~543 ms, ma lo Stop arriva a **~460** —
+cioè morde **dentro** un microbatch, non al suo confine. Qualunque sia la causa,
+è più fine di così.
+
+⇒ Lo strumento che la chiuderebbe c'è ed è di upstream: `GGML_OPENCL_OPFILTER`,
+che permette di escludere singole operazioni dal backend e vedere quale cambia il
+comportamento. Non l'ho usato: è un giro di indagine a sé, e la **legge
+operativa è già misurata** — che è ciò che serve per decidere.
 
 ⭐ **E cambia la raccomandazione**, perché 192 è appena sotto il salto: dà lo
 Stop pronto al prezzo più basso possibile, invece dei 64 che avevo proposto.
