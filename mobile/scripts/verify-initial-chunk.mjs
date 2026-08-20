@@ -363,7 +363,38 @@ import { resolve } from 'node:path'
  * Mille e non sessantasei: quattro byte di margine sono una trappola sotto la
  * prossima riga, ed è la stessa critica scritta qui sopra.
  */
-const DEFAULT_MAXIMUM_BYTES = 606_000
+/*
+ * ⛔ 608.000 dal 2026-08-20, e cosa ha comprato l’aumento.
+ *
+ * La sezione Ricerca approfondita disegnata come il mockup approvato. Tre
+ * pezzi, e due sono cose che nessun concorrente mostra:
+ *
+ *   1. LA CONTESA, APERTA sul rapporto. Il passaggio a favore e quello
+ *      contro, affiancati, senza toccare niente. Il dissenso era già
+ *      calcolato e già disegnato — dentro la pagina della singola
+ *      affermazione, cioè visibile solo a chi sapeva già dov’era. Chi legge
+ *      un rapporto all’86% non ha nessun motivo di aprire proprio quella
+ *      riga fra dodici.
+ *   2. LA TENUTA NEL TEMPO. I ricontrolli scrivevano da sempre il loro
+ *      documento in Libreria, in prosa: leggibile e inconfrontabile.
+ *      Adesso portano in coda un blocco che si rilegge esatto, e la pagina
+ *      mette le tappe in fila col salto fra l’una e l’altra. Nella
+ *      letteratura sul decadimento delle citazioni quel confronto si fa a
+ *      mano, perché tutti hanno salvato un URL e noi il testo.
+ *   3. Le fonti in BibTeX e RIS. Le funzioni c’erano da giorni, coi loro
+ *      test, e nessuna porta le chiamava: codice vivo dietro un muro.
+ *
+ * Del pezzo d’avvio pesano solo i due metodi nuovi del controller — le
+ * schermate della ricerca sono già a caricamento pigro, e le funzioni pure
+ * entrano nei loro chunk. Prima di alzare ho tolto il grasso appena messo:
+ * `recheckHistory` importava lo STESSO modulo due volte (-126 byte).
+ *
+ * ⇒ 608.000 e non 607.000: a 607.000 resterebbero 144 byte, che non è un
+ * budget — è la trappola sotto la prossima riga contro cui è scritta la nota
+ * qui sopra, e vale anche quando il tetto lo sto alzando io. Il tetto è un
+ * contenitore: non si azzoppa una funzione per farcela stare dentro.
+ */
+const DEFAULT_MAXIMUM_BYTES = 608_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {
