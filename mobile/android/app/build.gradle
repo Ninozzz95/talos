@@ -124,6 +124,159 @@ android {
                         '-DGGML_CPU_ALL_VARIANTS=ON',
                         '-DGGML_LLAMAFILE=OFF'
                 /*
+                 * ⛔⛔ SOLO RICERCA: `-PtalosResearchBackend=cpu|opencl|vulkan`.
+                 *
+                 * Senza la proprietà non cambia una virgola: la build che
+                 * spediamo resta quella qui sopra. Questa manopola serve a
+                 * QUALIFICARE un acceleratore, e la qualificazione è il lavoro
+                 * in cui «la GPU» non è ancora una risposta.
+                 *
+                 * ⛔ UN BACKEND ALLA VOLTA, e non è pigrizia. Con due
+                 * acceleratori compilati insieme il registro ne elenca due e
+                 * l'ordine di caricamento delle librerie sceglierebbe per noi;
+                 * separarli dà fallimenti isolabili, un artefatto nativo più
+                 * piccolo e un inventario dei dispositivi deterministico. Si
+                 * combinano soltanto DOPO che il targeting esplicito funziona.
+                 *
+                 * ⛔ E i prerequisiti si dicono per NOME. Un `FATAL_ERROR` di
+                 * CMake su un compilatore host mancante manda a cercare il
+                 * guasto dentro llama.cpp, che è il posto sbagliato: manca un
+                 * pezzo di questa macchina, non del progetto.
+                 */
+                if (project.hasProperty('talosResearchBackend')) {
+                    def scelto = project.property('talosResearchBackend').toString().toLowerCase()
+                    def ndkHome = android.ndkDirectory
+                    if (scelto == 'cpu') {
+                        // Esplicito: è già il predefinito, ma dirlo rende
+                        // l'artifact della corsa CPU indistinguibile a occhio da
+                        // quello di un acceleratore spento a mano.
+                        arguments '-DGGML_OPENCL=OFF', '-DGGML_VULKAN=OFF'
+                    } else if (scelto == 'opencl') {
+                        /*
+                         * ⛔ Header OpenCL e ICD loader NON stanno nell'NDK.
+                         * MISURATO il 2026-08-20: `sysroot/usr/include/CL/` non
+                         * esiste. Si passano dall'esterno con
+                         * `-PtalosOpenclRoot=<cartella con CL/ e libOpenCL.so>`.
+                         *
+                         * ⛔ `GGML_OPENCL_PROFILING` resta SPENTA: upstream dice
+                         * che aumenta il costo sulla CPU, e una misura di
+                         * prestazioni presa con la sonda accesa non è quella
+                         * misura.
+                         *
+                         * ⛔ `GGML_OPENCL_USE_ADRENO_BIN_KERNELS` resta SPENTA:
+                         * il pacchetto binario upstream mira alle Adreno X2, e
+                         * questo telefono ha una 830.
+                         */
+                        if (!project.hasProperty('talosOpenclRoot')) {
+                            throw new GradleException(
+                                    "⛔ `-PtalosResearchBackend=opencl` richiede anche " +
+                                    "`-PtalosOpenclRoot=<cartella>`.\n" +
+                                    "   Dentro servono `CL/` (header Khronos) e " +
+                                    "`libOpenCL.so` per arm64.\n" +
+                                    "   L'NDK non li porta: verificato che " +
+                                    "`sysroot/usr/include/CL/` non esiste.")
+                        }
+                        def openclRoot = project.property('talosOpenclRoot').toString()
+                        arguments '-DGGML_OPENCL=ON',
+                                '-DGGML_VULKAN=OFF',
+                                '-DGGML_OPENCL_EMBED_KERNELS=ON',
+                                '-DGGML_OPENCL_USE_ADRENO_KERNELS=ON',
+                                '-DGGML_OPENCL_TARGET_VERSION=300',
+                                "-DOpenCL_INCLUDE_DIR=${openclRoot}/include".toString(),
+                                "-DOpenCL_LIBRARY=${openclRoot}/lib/libOpenCL.so".toString()
+                    } else if (scelto == 'vulkan') {
+                        /*
+                         * ⛔⛔ IL COMPILATORE È DUE, e confonderli è un errore di
+                         * sistema di build, non un guasto di Vulkan a runtime.
+                         *
+                         * `vulkan-shaders-gen` gira su QUESTO computer e genera
+                         * gli shader; `ggml-vulkan` viene compilato per il
+                         * telefono. Il CMake di upstream cerca il compilatore
+                         * host con `find_program(NAMES cl gcc clang)` e, se non
+                         * lo trova, si ferma con «Host compiler not found».
+                         *
+                         * MISURATO il 2026-08-20 su questa macchina: cl, gcc,
+                         * clang e g++ sono TUTTI assenti, e la cartella di
+                         * Visual Studio 18 è vuota. ⇒ La corsia Vulkan è
+                         * bloccata da un prerequisito della macchina, non dal
+                         * progetto — e il messaggio lo deve dire.
+                         *
+                         * ⛔ `glslc` invece c'è, dentro l'NDK, e va indicato: il
+                         * `find_package(Vulkan COMPONENTS glslc REQUIRED)` di
+                         * upstream non guarda in `shader-tools/`.
+                         */
+                        def finestre = org.gradle.internal.os.OperatingSystem.current().isWindows()
+                        def glslc = new File(ndkHome,
+                                "shader-tools/${finestre ? 'windows-x86_64/glslc.exe'
+                                        : 'linux-x86_64/glslc'}")
+
+                        /*
+                         * ⛔⛔ I PREREQUISITI SI CONTANO TUTTI IN UNA VOLTA.
+                         *
+                         * MISURATO il 2026-08-20: senza questo blocco la corsa
+                         * moriva su SPIRV-Headers dentro venti righe di CMake,
+                         * e il compilatore host — che manca ANCHE lui — si
+                         * sarebbe scoperto solo al giro dopo. Scoprire un
+                         * prerequisito per volta costa una compilazione a testa,
+                         * e ognuna finisce con un errore che parla di un'altra
+                         * cosa.
+                         */
+                        def mancanti = []
+                        if (!glslc.exists()) {
+                            mancanti << "glslc — atteso in ${glslc}, di norma arriva con l'NDK"
+                        }
+                        if (!project.hasProperty('talosSpirvHeaders')) {
+                            mancanti << "SPIRV-Headers — `-PtalosSpirvHeaders=<cartella>`; " +
+                                    "sono soli header, da github.com/KhronosGroup/SPIRV-Headers"
+                        }
+                        /*
+                         * ⛔ IL COMPILATORE È DUE, e confonderli è un errore di
+                         * sistema di build, non un guasto di Vulkan a runtime.
+                         *
+                         * `vulkan-shaders-gen` gira su QUESTO computer e genera
+                         * gli shader; `ggml-vulkan` viene compilato per il
+                         * telefono. Upstream cerca l'host con
+                         * `find_program(NAMES cl gcc clang)` e si ferma con
+                         * «Host compiler not found».
+                         */
+                        if (!project.hasProperty('talosVulkanHostToolchain')) {
+                            def trovato = ['cl', 'gcc', 'clang', 'g++', 'clang++'].find { nome ->
+                                System.getenv('PATH')?.split(File.pathSeparator)?.any { cartella ->
+                                    new File(cartella, finestre ? "${nome}.exe" : nome).exists()
+                                }
+                            }
+                            if (trovato == null) {
+                                mancanti << "un compilatore C++ per QUESTA macchina (cl, gcc o " +
+                                        "clang sul PATH) — serve a costruire `vulkan-shaders-gen`, " +
+                                        "che gira qui e non sul telefono. In alternativa " +
+                                        "`-PtalosVulkanHostToolchain=<file toolchain CMake>`"
+                            }
+                        }
+                        if (!mancanti.isEmpty()) {
+                            throw new GradleException(
+                                    "⛔ La corsia Vulkan è BLOCCATA da prerequisiti di questa " +
+                                    "macchina, non dal progetto.\n   Mancano:\n" +
+                                    mancanti.collect { "     · ${it}" }.join('\n'))
+                        }
+
+                        arguments '-DGGML_VULKAN=ON',
+                                '-DGGML_OPENCL=OFF',
+                                "-DVulkan_GLSLC_EXECUTABLE=${glslc.absolutePath.replace('\\', '/')}".toString(),
+                                "-DSPIRV-Headers_DIR=" +
+                                        project.property('talosSpirvHeaders').toString()
+                                                .replace('\\', '/')
+                        if (project.hasProperty('talosVulkanHostToolchain')) {
+                            arguments "-DGGML_VULKAN_SHADERS_GEN_TOOLCHAIN=" +
+                                    project.property('talosVulkanHostToolchain').toString()
+                        }
+                    } else {
+                        throw new GradleException(
+                                "⛔ `-PtalosResearchBackend=${scelto}` non è una scelta valida.\n" +
+                                "   Le tre sono: cpu, opencl, vulkan — una alla volta.")
+                    }
+                    println "⛔ BUILD DI RICERCA: backend `${scelto}`. Non è la build che si spedisce."
+                }
+                /*
                  * ⛔⛔⛔ HWASAN, SOLO A RICHIESTA: `-PtalosHwasan`.
                  *
                  * I test in Java provano che nessuno PUÒ arrivare al codice
