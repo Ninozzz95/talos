@@ -1720,11 +1720,35 @@ aspettare la fine del pezzo.
 ⇒ E spiega **anche la soglia**: sotto 192 qualcosa fa ricadere lavoro sulla CPU e
 crea quei punti; sopra, il grafo è tutto GPU e non ce ne sono.
 
-⛔ ⇒ **E apre una TERZA strada**, che non avevo considerato: non toccare né la
-Flash Attention né il microbatch, ma **lasciare una singola operazione economica
-sulla CPU**. Costo da misurare — è in corso — ma se fosse piccolo darebbe uno
-Stop da **venti millisecondi a prefill pieno**, senza aspettare nessuna
-correzione a monte.
+#### ⛔ E la terza strada che ne nasceva: MISURATA, e CADE
+
+L'idea era: non toccare né la Flash Attention né il microbatch, e lasciare una
+sola operazione economica sulla CPU per creare il punto in cui l'abort viene
+consultato. Misurata, contro `off`/256 che è il riferimento più vicino:
+
+| | tutto su GPU | `RMS_NORM` sulla CPU | |
+|---|---:|---:|---|
+| prefill 512 | 312 tok/s | 279,5 | −10% |
+| prefill 2048 | 268 tok/s | 236,0 | −12% |
+| decodifica dopo 2048 | 15,9 tok/s | 11,2 | −30% |
+| **decodifica (prompt corto)** | **19,5 tok/s** | **13,0** | ⛔ **−33%** |
+| Stop | ~1.430 ms | ⭐ **7-22 ms** | 100× |
+
+⇒ ⛔ **Lo Stop diventa perfetto e la decodifica perde un terzo.** `RMS_NORM` gira
+**due volte per strato**, e in decodifica ogni singolo token paga un viaggio
+GPU→CPU→GPU. ⇒ La terza strada **non è un'opzione di prodotto**: è la prova del
+meccanismo, e va tenuta per quello.
+
+⭐ **E chiarisce perché la cura a monte vale la pena.** Le tre strade in fila:
+
+| | Stop | prezzo |
+|---|---:|---|
+| `off` + microbatch 192 | ~460 ms | **0-8% di prefill**, decodifica intatta |
+| una operazione sulla CPU | **~20 ms** | ⛔ **−33% di decodifica** |
+| l'abort dentro `ggml-opencl` | **~ms** | **niente** |
+
+⇒ Il candidato resta il migliore fra ciò che possiamo fare **oggi**; la cura a
+monte resta l'unica che dà lo Stop immediato **senza pagarlo**.
 
 ⛔ La sonda vive in `wrap.sh` (solo-debug) e **va tolta**: manda un'operazione
 sulla CPU e quindi falsa ogni altra misura.
