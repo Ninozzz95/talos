@@ -84,7 +84,34 @@ function extractUtf8(bytes: Uint8Array): string {
 }
 
 async function extractPdf(bytes: Uint8Array): Promise<{ text: string; pages: number }> {
-    const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    /*
+     * ⛔⛔ PDF-NON-SI-ALLEGA-01 — «TALOS non ha potuto esaminare questo file.»
+     *
+     * FOTOGRAFATO sul Pad il 2026-08-20, allegando un PDF da 20,5 kB — un
+     * rapporto scritto da TALOS stesso il giorno prima. Sul telefono falliva
+     * sempre; **negli stessi test in Node passava**, e quella differenza è
+     * tutta la diagnosi.
+     *
+     * pdf.js ha bisogno del suo worker. In Node, quando `workerSrc` è vuoto,
+     * ripiega su un finto worker che gira nello stesso thread — quindi i test
+     * verdi non dicevano niente sul telefono. Nel browser quel ripiego non
+     * c'è: la documentazione è esplicita — «The `workerSrc` option should
+     * always be set, in order to prevent any issues» — e da noi non era
+     * impostato affatto.
+     *
+     * ⇒ Si lega al file VERO. `new URL(…, import.meta.url)` è la forma che
+     * Vite riconosce: emette `pdf.worker.mjs` fra le risorse e riscrive
+     * l'indirizzo, così vale anche dentro l'APK, dove non c'è nessun CDN da
+     * cui scaricarlo — e non deve esserci.
+     */
+    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+            'pdfjs-dist/legacy/build/pdf.worker.mjs',
+            import.meta.url,
+        ).href
+    }
+    const { getDocument } = pdfjs
     const loadingTask = getDocument({
         data: Uint8Array.from(bytes),
         disableFontFace: true,

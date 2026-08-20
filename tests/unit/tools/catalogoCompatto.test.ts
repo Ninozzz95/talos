@@ -216,3 +216,52 @@ describe('il cancello del catalogo compatto', () => {
         })
     })
 })
+
+/**
+ * ⛔⛔ LOCAL-CATALOGO-DISAMBIGUA-01 — l'indice tagliava via la riga che
+ * DISTINGUE due strumenti simili, e il modello locale sceglieva a caso.
+ *
+ * MISURATO sul Pad il 2026-08-19, Qwen3-1.7B, «fai una ricerca web sulle
+ * novità di Android 16»: nessun tool chiamato, novità inventate a memoria.
+ * L'owner ha visto il caso gemello: chiede una ricerca web e parte la Deep
+ * Research, che costa minuti e credito vero.
+ *
+ * La causa è nella forma dell'indice, non nel modello: `talosIndiceCompatto`
+ * teneva SOLO la prima frase della descrizione, e in `research_start` la frase
+ * che lo separa da `web_search` — «For a single fact or a quick check, use
+ * web_search instead» — è la TERZA. Un modello che non la vede non ha modo di
+ * scegliere: gli restano due nomi che promettono la stessa cosa.
+ */
+describe('LOCAL-CATALOGO-DISAMBIGUA-01 la riga che distingue non si taglia', () => {
+    const ricercaProfonda = defineTalosTool<{ question: string }>({
+        name: 'research_start',
+        title: 'Start a deep research',
+        description: [
+            'Start a deep research: TALOS plans several lines of enquiry, searches, reads the sources and writes a report with verified claims.',
+            'It takes MINUTES and spends real search credit.',
+            'For a single fact or a quick check, use web_search instead: it answers in seconds and costs almost nothing.',
+        ].join(' '),
+        action: 'write',
+        input: z.object({ question: z.string() }),
+        run: async () => ({ ok: true, content: '' }),
+    }) as TalosToolDefinition<never>
+
+    it('conserva il rimando allo strumento alternativo', () => {
+        const indice = talosIndiceCompatto([ricercaProfonda])
+
+        expect(indice).toContain('research_start')
+        // Senza questa riga il modello non puo' distinguere i due strumenti.
+        expect(indice).toContain('web_search')
+    })
+
+    it('conserva l\'avviso di costo, che decide se vale la pena chiamarlo', () => {
+        const indice = talosIndiceCompatto([ricercaProfonda])
+        expect(indice).toMatch(/MINUTES|credit/)
+    })
+
+    it('non allunga l\'indice degli strumenti che non hanno nulla da distinguere', () => {
+        // `notification_list` ha una descrizione di una frase: resta com'era.
+        const indice = talosIndiceCompatto([notifiche])
+        expect(indice).toBe('notification_list: List the notifications currently on the phone.')
+    })
+})

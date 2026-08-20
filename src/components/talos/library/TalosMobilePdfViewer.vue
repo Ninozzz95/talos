@@ -125,12 +125,27 @@ const vaiA = (quale: number): void => {
             </button>
         </header>
 
-        <div class="flex min-h-0 flex-1 items-center justify-center overflow-auto px-3">
+        <div class="flex min-h-0 flex-1 items-center justify-center overflow-auto px-3 py-2">
+            <!--
+                ⛔⛔ PAGINA-CHE-NON-CI-STA-01 — c'era solo `max-w-full`.
+
+                Una pagina è alta più che larga, e un vincolo sulla sola
+                LARGHEZZA non la fa entrare: su un tablet in orizzontale la
+                pagina esce sotto e si legge scorrendo, che per la PRIMA
+                occhiata a un documento è la cosa sbagliata — un PDF si apre
+                per vedere che cos'è, non per leggerne il quinto di sopra.
+
+                ⇒ `max-h-full` accanto a `max-w-full`, e `object-contain` che
+                decide quale dei due morde: la pagina intera entra sempre,
+                nelle sue proporzioni, in verticale e in orizzontale. Restano
+                `w-auto h-auto` perché una pagina piccola non venga gonfiata
+                oltre i pixel che ha davvero.
+            -->
             <img
                 v-if="immagine"
                 :src="immagine"
                 :alt="props.nome"
-                class="max-w-full"
+                class="h-auto max-h-full w-auto max-w-full object-contain"
                 data-testid="talos-pdf-viewer-pagina"
             >
             <!--

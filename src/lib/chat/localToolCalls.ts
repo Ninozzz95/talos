@@ -250,13 +250,32 @@ export function talosRecuperaChiamateNude(
 
     if (!calls.length) return { calls: [], text: testo }
     /*
+     * ⛔⛔ RECINTO-VUOTO-01 — tolto l'oggetto, il RIQUADRO resta.
+     *
+     * FOTOGRAFATO sul Pad il 2026-08-20, `gemma-3-4b-it-Q4_K_M`: la risposta
+     * era giusta — coordinate vere di Catania — ma sopra c'erano due riquadri
+     * di codice VUOTI, col titolo «JSON» e il pulsante «Copia» e niente dentro.
+     *
+     * Gemma scrive la chiamata dentro un recinto markdown. Qui sopra si toglie
+     * l'oggetto, che è giusto; ma i due delimitatori non sono l'oggetto, e il
+     * renderer fa il suo mestiere disegnando un blocco attorno al nulla.
+     *
+     * ⇒ Un recinto rimasto vuoto non è testo della persona: è l'impalcatura
+     * della chiamata che abbiamo appena preso, e se ne va con lei. ⛔ Solo se
+     * è VUOTO: un blocco con dentro qualcosa è contenuto vero e non si tocca.
+     */
+    const senzaRecintiVuoti = resto.replace(
+        /^[ \t]*```[^\n`]*[ \t]*\n(?:[ \t]*\n)*[ \t]*```[ \t]*$/gm,
+        '',
+    )
+    /*
      * ⛔ LA RAFFICA SI RIDUCE QUI, prima che diventi lavoro.
      *
      * Owner 2026-08-11, `Llama-3.2-3B` su un semplice «Ciao»: quattro
      * `tool_details` di fila, 14 secondi. Un modello che chiede quattro volte
      * lo stesso strumento non sta facendo quattro cose: sta ricominciando.
      */
-    return { calls: talosSenzaRaffica(calls), text: resto.trim() }
+    return { calls: talosSenzaRaffica(calls), text: senzaRecintiVuoti.trim() }
 }
 
 /**

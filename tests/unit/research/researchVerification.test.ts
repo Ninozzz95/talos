@@ -234,6 +234,11 @@ describe('what the reader is told up front', () => {
             partial: 1,
             unsupported: 0,
             unchecked: 1,
+            // ⛔ CONTESA-01, aggiunto il 2026-08-20: qui è zero perché nessuna
+            // fonte contraria è stata raccolta in questa verifica. Il campo sta
+            // nel conto anche quando è zero — un esito che compare solo quando
+            // succede si legge come un errore la prima volta che appare.
+            contested: 0,
         })
     })
 })

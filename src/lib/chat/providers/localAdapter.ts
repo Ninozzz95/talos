@@ -180,7 +180,55 @@ export function conversationOf(input: TalosMobileCompletionInput): TalosLocalCha
             ...(toolCalls?.length ? { tool_calls: toolCalls } : {}),
         })
     }
-    return turns
+    return alternati(turns)
+}
+
+/**
+ * ⛔⛔ GEMMA-RUOLI-ALTERNATI-01 — due turni dello stesso ruolo, e il modello
+ * non parte affatto.
+ *
+ * MISURATO sul Pad il 2026-08-19 con `gemma-3-4b-it-Q4_K_M`: al posto della
+ * risposta, `CHAT_EXECUTION_FAILED · TALOS_LLAMA_NO_CHAT_TEMPLATE`, e nel
+ * registro del motore la ragione vera —
+ *
+ *     Jinja Exception: Conversation roles must alternate user/assistant/...
+ *
+ * I template della famiglia Gemma (come Mixtral e Devstral) VERIFICANO
+ * l'alternanza e sollevano un'eccezione se due turni dello stesso ruolo si
+ * toccano. Basta un reinvio, una risposta annullata o due domande di fila
+ * perché accada — e allora il modello smette di funzionare del tutto, con un
+ * codice tecnico al posto della risposta.
+ *
+ * La raccomandazione upstream è una sola: **fondere i messaggi dal lato del
+ * client**. Si fa qui, dove la conversazione ha ancora la sua semantica.
+ *
+ * ⛔ I turni `tool` restano intatti: i template che pretendono l'alternanza
+ * fanno eccezione esplicita per chiamate e risultati, e un `tool_call_id` è
+ * un'identità che non si può sommare. Per lo stesso motivo un assistente che
+ * porta `tool_calls` non assorbe il testo del turno successivo.
+ */
+function alternati(messaggi: TalosLocalChatMessage[]): TalosLocalChatMessage[] {
+    const uniti: TalosLocalChatMessage[] = []
+    for (const messaggio of messaggi) {
+        const ultimo = uniti[uniti.length - 1]
+        const fondibile = ultimo !== undefined
+            && ultimo.role === messaggio.role
+            && (messaggio.role === 'user' || messaggio.role === 'assistant')
+            && !ultimo.tool_calls && !messaggio.tool_calls
+        if (!fondibile) {
+            uniti.push(messaggio)
+            continue
+        }
+        // Una riga vuota fra i due: erano turni distinti, e chi legge deve
+        // poterlo vedere ancora.
+        uniti[uniti.length - 1] = {
+            ...ultimo,
+            content: [ultimo.content ?? '', messaggio.content ?? '']
+                .filter((pezzo) => pezzo !== '')
+                .join('\n\n'),
+        }
+    }
+    return uniti
 }
 
 /** Stable machine codes and localized actions for every native open stage. */
@@ -774,6 +822,7 @@ async function run(
         capabilities: template.capabilities,
         turns: conversationOf(input),
         tools: wireTools,
+        locale: input.locale,
     })
     const turns = projection.turns
     const tools = projection.templateTools
@@ -949,7 +998,19 @@ async function run(
      * ⛔ Solo se il parser non ha trovato NIENTE: quando il formato è stato
      * letto bene, un oggetto JSON nella prosa è prosa.
      */
-    const nomiOfferti = new Set((offered ?? []).map((tool) => tool.name))
+    /*
+     * ⛔ SALTO-DIRETTO-PUNITO-01 — gli ESPOSTI più gli ESEGUIBILI.
+     *
+     * MISURATO sul Pad il 2026-08-19: Gemma ha scritto
+     * `{"name":"device_location","arguments":{…}}` al primo giro, quando gli
+     * esposti erano il solo `tool_details`. Cercando il nome solo fra gli
+     * esposti la chiamata non veniva riconosciuta, e quel JSON finiva in chat
+     * come se fosse la risposta.
+     */
+    const nomiOfferti = new Set([
+        ...(offered ?? []).map((tool) => tool.name),
+        ...(input.executableToolNames ?? []),
+    ])
     let chiamateGrezze = generation.toolCalls
     let testoGrezzo = generation.text
     if (!chiamateGrezze?.length && nomiOfferti.size > 0) {
