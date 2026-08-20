@@ -2871,7 +2871,7 @@ export const TALOS_EN_MESSAGES = {
         noMatches: 'No research matches.',
         needsAttention: 'Worth a second look',
         cardRunning: '{done} of {total} · running',
-        cardStanding: '{supported} supported · {partial} partial · {unsupported} contradicted · {unchecked} unchecked',
+        cardStanding: '{supported} supported · {partial} partial · {contested} contested · {unsupported} contradicted · {unchecked} unchecked',
         loading: 'Opening…',
         missing: 'This research no longer exists.',
         solidity: 'holds up',
@@ -2947,6 +2947,7 @@ export const TALOS_EN_MESSAGES = {
         fedeltaMisurataIl: 'Measured on {quando}. Pages change: the longer it sits, the less it says.',
         fedeltaNonVerificata: 'Unverified — no judge looked at these claims, so there is no score to give.',
         indipendentiSu: '{independent} distinct proofs from {total} sources',
+        indipendentiFrazione: '{independent}/{total}',
         verifiedByLead: 'Verified by a different model, never the one that wrote the report:',
         notVerified: 'Not verified: there was no independent judge. Install a local model, or set up a second provider.',
         support: {
@@ -3000,7 +3001,7 @@ export const TALOS_EN_MESSAGES = {
         noDate: 'no date stated',
     },
     stations: {
-        deepResearchTitle: 'Deep Research V3',
+        deepResearchTitle: 'Deep Research',
         settingsCenterTitle: 'Settings Center',
         tasksEmpty: 'No tasks yet.',
         newTask: 'New task',

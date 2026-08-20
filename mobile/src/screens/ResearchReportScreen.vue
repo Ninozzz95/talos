@@ -157,7 +157,12 @@ const misure = computed(() => {
         { chiave: 'copertura', nome: t('research.fedeltaCopertura'), valore: quota(f.coverage) ?? '—', spiega: t('research.fedeltaCoperturaSpiega') },
         { chiave: 'citazioni', nome: t('research.fedeltaCitazioni'), valore: quota(f.citationFaithfulness) ?? '—', spiega: t('research.fedeltaCitazioniSpiega') },
         { chiave: 'ancoraggio', nome: t('research.fedeltaAncoraggio'), valore: quota(f.claimGroundedness) ?? '—', spiega: t('research.fedeltaAncoraggioSpiega') },
-        { chiave: 'indipendenti', nome: t('research.fedeltaIndipendenti'), valore: t('research.indipendentiSu', { independent: f.independentSources, total: (report.value?.sources ?? []).length }), spiega: t('research.fedeltaIndipendentiSpiega') },
+        // ⛔ Una FRAZIONE, non una frase. Le altre tre celle dicono «100%» in
+        //   grande: questa diceva «5 prove distinte su 10 fonti» nello stesso
+        //   posto e nello stesso corpo, e su tablet orizzontale la differenza di
+        //   forma fra celle gemelle si vedeva a colpo d'occhio. Le parole non si
+        //   perdono: scendono nella spiegazione, che è il loro posto.
+        { chiave: 'indipendenti', nome: t('research.fedeltaIndipendenti'), valore: t('research.indipendentiFrazione', { independent: f.independentSources, total: (report.value?.sources ?? []).length }), spiega: t('research.fedeltaIndipendentiSpiega') },
     ]
 })
 

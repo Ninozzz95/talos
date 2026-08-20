@@ -1233,6 +1233,7 @@ onBeforeUnmount(async () => {
                         :title="headerTitle"
                         :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
                         :hide-menu="tabletLayout.isTablet.value"
+                        :hide-app-actions="tabletLayout.isTablet.value"
                         @open-menu="sidebarOpen = true"
                         @new-chat="sidebarNewChat"
                 @temporary-chat="sidebarTemporaryChat"
@@ -1252,6 +1253,7 @@ onBeforeUnmount(async () => {
                         :active-title="headerTitle"
                         :busy="sessionBusy"
                         :hide-menu="tabletLayout.isTablet.value"
+                        :hide-app-actions="tabletLayout.isTablet.value"
                         @open-menu="sidebarOpen = true"
                         @new-chat="sidebarNewChat"
                 @temporary-chat="sidebarTemporaryChat"
@@ -1283,6 +1285,7 @@ onBeforeUnmount(async () => {
                 <TalosMobileToolSheet
                     v-if="isStation"
                     :title="sheetTitle"
+                    :hide-app-actions="tabletLayout.isTablet.value"
                     :presentation="settingsStore.state.chat_layout.mobile_window_presentation"
                     :parent-back="stationParent ? goToStationParent : null"
                     :shell-back="talosIndietro"
