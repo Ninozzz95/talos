@@ -234,8 +234,29 @@ if (sporche.length > 0) {
     scrivi(`  ⛔ ${sporche.length} configurazioni sono da rifare: `
         + 'prefisso riusato o deriva termica.')
 }
+/*
+ * ⛔ La riga finale non deve dire piu' di quanto sia vero.
+ *
+ * Diceva «dispersione sotto il 10%» anche quando una configurazione ne aveva il
+ * 380% — semplicemente perche' aveva gia' i nove giri e non c'era altro
+ * rimedio da proporre. «Niente da rifare» e «tutto stretto» sono due frasi
+ * diverse, e la seconda, detta al posto della prima, e' il modo in cui un
+ * riassunto rassicura su una cosa che non ha guardato.
+ */
+const larghe = riassunto.filter((v) => Object.values(v.metrics).some((m) => m.spread > 10))
 if (daRifare.length === 0 && sporche.length === 0) {
-    scrivi('  ✓ Nessuna configurazione da rifare: dispersione sotto il 10%, '
-        + 'prefisso freddo, termico stabile.')
+    scrivi('  ✓ Niente da rifare: prefisso freddo, termico stabile, '
+        + 'e ogni configurazione ha i giri che le servono.')
+    if (larghe.length > 0) {
+        scrivi(`  ⚠ ${larghe.length} configurazioni restano LARGHE oltre il 10% pur avendo`)
+        scrivi('    i nove giri. Non è un errore da correggere con altri giri: è una')
+        scrivi('    proprietà della misura, e va riportata come tale.')
+        for (const v of larghe) {
+            const peggiore = Object.values(v.metrics)
+                .sort((a, b) => b.spread - a.spread)[0]
+            scrivi(`      ${v.key}  ${peggiore.label} ±${peggiore.spread}% `
+                + `[${peggiore.min} … ${peggiore.max}]`)
+        }
+    }
 }
 scrivi('')

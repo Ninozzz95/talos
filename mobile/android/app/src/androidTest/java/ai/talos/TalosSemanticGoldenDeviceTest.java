@@ -218,11 +218,23 @@ public class TalosSemanticGoldenDeviceTest {
         return Dialetto.SCONOSCIUTO;
     }
 
-    /** Vero se il template dichiara un canale di ragionamento separato. */
+    /**
+     * Vero se il template dichiara un canale di ragionamento separato.
+     *
+     * ⛔ CHIESTO AL MOTORE, non indovinato dal testo. Qui prima si cercava
+     * `&lt;think&gt;` dentro il prompt reso: un'euristica che funziona finché
+     * una famiglia non usa un marcatore diverso, e allora risponde «no» a un
+     * modello che il ragionamento ce l'ha. `common_chat_params` porta
+     * `supports_thinking`, che è la risposta di chi lo sa.
+     */
     private static boolean haRagionamento(long handle) throws Exception {
-        String reso = TalosLlamaNative.nativeApplyChatTemplate(
+        // Il template va applicato prima: la risposta nasce lì, e prima non
+        // esiste una domanda da fare.
+        TalosLlamaNative.nativeApplyChatTemplate(
                 handle, messaggi("Sei TALOS.", "Pensa e rispondi."), "", true);
-        return reso != null && (reso.contains("<think>") || reso.contains("<|channel|>"));
+        String diagnostica = TalosLlamaNative.nativeGrammarDiagnostics(handle);
+        if (diagnostica == null || diagnostica.isEmpty()) return false;
+        return new JSONObject(diagnostica).optBoolean("supportsThinking", false);
     }
 
     /** Una chiamata all'attrezzo `meteo`, scritta nel dialetto del modello. */
@@ -480,19 +492,41 @@ public class TalosSemanticGoldenDeviceTest {
                 misura.put("promptChars", prompt == null ? -1 : prompt.length());
                 misura.put("promptTokens", token);
                 misura.put("rendered", prompt != null && !prompt.isEmpty());
+
+                /*
+                 * ⛔⛔ LA GRAMMATICA, che fino a oggi stava solo in logcat.
+                 *
+                 * È la metà del costo che il conteggio dei token non vede, ed è
+                 * quella dove vivono i due difetti aperti: la GBNF da 55.871
+                 * byte rifiutata dal parser, e la grammatica pigra con un
+                 * innesco solo che non si accende mai. Qui diventano una riga
+                 * dell'artifact, cioè una cosa che si può confrontare con
+                 * quella di ieri.
+                 */
+                String grammatica = TalosLlamaNative.nativeGrammarDiagnostics(handle);
+                if (grammatica != null && !grammatica.isEmpty()) {
+                    JSONObject dettaglio = new JSONObject(grammatica);
+                    misura.put("grammar", dettaglio);
+                    Log.i(TAG, "S4 " + quanti + " attrezzi → " + token + " token · GBNF "
+                            + dettaglio.optLong("grammarBytes", -1) + " byte · pigra="
+                            + dettaglio.optBoolean("grammarLazy", false) + " · inneschi="
+                            + dettaglio.optInt("triggerCount", -1) + " · compila="
+                            + dettaglio.optBoolean("compiles", false));
+                } else {
+                    misura.put("grammar", JSONObject.NULL);
+                    Log.i(TAG, "S4 " + quanti + " attrezzi → " + token
+                            + " token · nessuna diagnostica di grammatica");
+                }
                 misure.put(misura);
-                Log.i(TAG, "S4 " + quanti + " attrezzi → " + token + " token di prompt");
             }
 
             JSONObject riga = new JSONObject();
             riga.put("dialect", quale.name());
             riga.put("templateCapabilities", capacita == null ? JSONObject.NULL : capacita);
             riga.put("measurements", misure);
-            riga.put("grammarBytes", JSONObject.NULL);
-            riga.put("grammarLazy", JSONObject.NULL);
-            riga.put("grammarTriggers", JSONObject.NULL);
-            riga.put("preservedTokens", JSONObject.NULL);
-            riga.put("note", "grammatica non esposta da alcuna API: serve una diagnostica nativa");
+            // ⛔ Non più un `JSONObject.NULL` con una nota che si scusa: byte
+            // della GBNF, pigrizia, inneschi e token protetti stanno dentro
+            // ogni voce di `measurements`, e `compiles` è PROVATO.
             registra("S4", riga);
         } finally {
             TalosLlamaNative.nativeClose(handle);
