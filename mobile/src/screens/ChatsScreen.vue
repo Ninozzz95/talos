@@ -25,6 +25,7 @@ import { useChatController } from '@/stores/chatController'
 import { talosDaIntitolare } from '@/stores/chat'
 import { archivedChatSessions, orderChatSessions } from '@/lib/chatListGestures'
 import { talosRelativeTime } from '@/lib/relativeTime'
+import { talosChatDateBuckets } from '@/lib/chat/chatDateBuckets'
 import { talosLightImpact } from '@/services/haptics'
 import { TALOS_DANGER_ACTION_CLASS } from '@/lib/dangerAction'
 
@@ -36,7 +37,7 @@ const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: fa
 const emit = defineEmits<{ activated: [] }>()
 
 const router = useRouter()
-const { t } = useTalosI18n()
+const { t, locale } = useTalosI18n()
 const controller = useChatController()
 
 const query = ref('')
@@ -72,6 +73,65 @@ function sessionTitle(session: { title: string }): string {
 }
 function updatedAt(value: string): string {
     return talosRelativeTime(value, new Date(), relativeTimeLabels.value)
+}
+
+/**
+ * ⛔⛔ SIDEBAR-PIATTA-01 — venti righe uguali, tutte «1 h fa».
+ *
+ * MISURATO il 2026-08-20, provando i modelli locali: venti chat di prova, e
+ * la barra laterale è diventata un muro — «Dimmi le coordinate del telefono»
+ * dodici volte, e sotto ognuna lo stesso «1 h fa». Il tempo relativo, a
+ * quella distanza, non distingue niente: non c'era un appiglio per scorrere.
+ *
+ * Le fasce arrivano da `chatDateBuckets`, che è puro e prova i confini della
+ * mezzanotte — l'unico punto in cui questo codice può sbagliare, e quello
+ * che si nota solo di notte.
+ */
+const fasce = computed(() => talosChatDateBuckets(
+    filtered.value,
+    (session) => session.updated_at,
+    new Date(),
+))
+
+/**
+ * Il titolo di una fascia.
+ *
+ * ⛔ I mesi NON hanno una parola scritta a mano: li nomina la lingua del
+ * dispositivo. Dodici nomi in tabella sarebbero dodici traduzioni da tenere
+ * allineate, e sbaglierebbero in ogni lingua che non abbiamo previsto.
+ */
+/**
+ * ⛔⛔ Dentro una fascia, il tempo RELATIVO non distingue più niente.
+ *
+ * FOTOGRAFATO sul Pad il 2026-08-20 alle 08:08, subito dopo aver messo le
+ * fasce: sotto OGGI c'erano righe «8 h fa» e sotto IERI **altre righe
+ * «8 h fa»**. Non è un errore del raggruppamento — a quell'ora otto ore
+ * fa cade davvero a cavallo della mezzanotte — ma per chi legge sono due
+ * etichette identiche in due posti diversi, che è peggio di prima.
+ *
+ * ⇒ Il gruppo dice già il GIORNO. La riga deve dire l'ORA: «00:12» e
+ * «23:47» si distinguono, «8 h fa» e «8 h fa» no. Nelle fasce più vecchie,
+ * dove il titolo è un mese o «precedenti 30 giorni», serve la data intera.
+ */
+function quandoInFascia(bucket: string, iso: string | null | undefined): string {
+    if (!iso) return ''
+    const data = new Date(iso)
+    if (Number.isNaN(data.getTime())) return updatedAt(iso)
+    const soloOra = bucket === 'today' || bucket === 'yesterday'
+    return new Intl.DateTimeFormat(locale.value, soloOra
+        ? { hour: '2-digit', minute: '2-digit' }
+        : { day: 'numeric', month: 'short' }).format(data)
+}
+
+function titoloFascia(gruppo: { bucket: string, monthKey: string | null }): string {
+    if (!gruppo.monthKey) return t(`chats.fascia.${gruppo.bucket}`)
+    const [anno, mese] = gruppo.monthKey.split('-')
+    const data = new Date(Number(anno), Number(mese) - 1, 1)
+    const scritto = new Intl.DateTimeFormat(locale.value, {
+        month: 'long',
+        ...(data.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }),
+    }).format(data)
+    return scritto.charAt(0).toUpperCase() + scritto.slice(1)
 }
 function cleanupDescription(plan: TalosSessionCleanupPlan): string {
     const parts: string[] = []
@@ -484,9 +544,28 @@ function act(
         </p>
 
         <div v-else class="mt-1 flex-1 overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <!--
+                ⛔ Un titolo di fascia NON è cliccabile e non è un pulsante: è
+                un'insegna. `role="presentation"` tiene la lista una lista sola
+                per chi la legge con lo schermo, invece di spezzarla in cinque
+                liste che sembrano cinque schermi.
+            -->
             <ul class="px-2">
+                <template v-for="gruppo in fasce" :key="gruppo.monthKey ?? gruppo.bucket">
+                    <!--
+                        ⛔ In ORIZZONTALE la banda costa il doppio: a 1080 px di
+                        altezza intestazione, ricerca e suggerimento ne prendono già
+                        450, e ci stanno due righe e mezzo. FOTOGRAFATO sul Pad il
+                        2026-08-20 a risoluzione telefono, girato. Il titolo resta —
+                        senza, si torna al muro — ma respira di meno.
+                    -->
                 <li
-                    v-for="session in filtered"
+                    role="presentation"
+                    data-testid="talos-chats-fascia"
+                    class="px-2 pb-1 pt-3 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)] landscape:pb-0.5 landscape:pt-1.5"
+                >{{ titoloFascia(gruppo) }}</li>
+                <li
+                    v-for="session in gruppo.items"
                     :key="session.id"
                     data-testid="talos-chats-row"
                     :data-active="controller.chat.activeSession.value?.id === session.id ? 'true' : 'false'"
@@ -524,10 +603,16 @@ function act(
                         </span>
                         <span class="flex min-w-0 flex-1 flex-col items-start">
                         <span class="w-full truncate text-sm text-[var(--talos-text)]">{{ sessionTitle(session) }}</span>
-                        <span v-if="session.updated_at" class="text-2xs text-[var(--talos-muted)]">{{ updatedAt(session.updated_at) }}</span>
+                        <!--
+                            ⛔ L'ORA, non «8 h fa»: la fascia dice già il giorno, e
+                            due righe «8 h fa» in due fasce diverse si leggono
+                            uguali. Vedi la nota accanto a `quandoInFascia`.
+                        -->
+                        <span v-if="session.updated_at" class="text-2xs tabular-nums text-[var(--talos-muted)]">{{ quandoInFascia(gruppo.bucket, session.updated_at) }}</span>
                         </span>
                     </button>
                 </li>
+                </template>
             </ul>
 
             <!-- Archived chats: same hold gesture, quiet collapsible section -->

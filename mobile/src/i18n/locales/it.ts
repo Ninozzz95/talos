@@ -2398,6 +2398,16 @@ export const TALOS_IT_MESSAGES = {
         selectedOne: '1 chat selezionata',
         selected: '{count} selezionate',
         deleteSelected: 'Elimina chat selezionate',
+        // ⛔ Le fasce della barra laterale. La convenzione è quella di tutti i
+        // prodotti di chat, e vale la pena rispettarla: chi arriva da un altro
+        // le cerca dove le ha sempre trovate.
+        fascia: {
+            today: 'Oggi',
+            yesterday: 'Ieri',
+            last7: 'Precedenti 7 giorni',
+            last30: 'Precedenti 30 giorni',
+            undated: 'Senza data',
+        },
         holdForActions: 'Tieni premuta una chat per le azioni.',
         noMatches: 'Nessuna chat corrisponde alla ricerca.',
         noChats: 'Non ci sono ancora chat: avviane una qui sopra.',
