@@ -472,9 +472,129 @@ I due pezzi che mancavano si sono trovati senza chiedere niente a nessuno:
 `llama.cpp >= 60addddf`, la correzione della race WAR nei kernel Flash
 Attention, e il nostro pin non ce l'ha. ⇒ Qualunque misura di **Flash Attention
 su OpenCL** presa qui sarebbe vietata dal brief e non va usata. Quello che una
-build così può dare, legittimamente, è **l'uscita della Fase 2**: la prova che
-il targeting esplicito seleziona davvero un dispositivo GPU e che l'offload
-avviene.
+build così può dare, legittimamente, è **l'uscita della Fase 2**.
+
+### ⛔⛔ FASE 2 — CHIUSA, con la prova del motore stesso
+
+Non «il backend si è registrato». I log di allocazione di llama.cpp:
+
+```
+llama_prepare_model_devices: using device GPUOpenCL (QUALCOMM Adreno(TM) 830) - 4697 MiB free
+load_tensors: offloading output layer to GPU
+load_tensors: offloading 27 repeating layers to GPU
+load_tensors: offloaded 29/29 layers to GPU
+load_tensors:   CPU_Mapped model buffer size =   308.23 MiB
+load_tensors:       OpenCL model buffer size =  1918.45 MiB
+llama_kv_cache:     OpenCL KV buffer size =    56.00 MiB
+sched_reserve:     OpenCL compute buffer size =   128.25 MiB
+ggml_opencl: device FP16 support: true
+```
+
+E ha **generato davvero**: 8 token, «! Welcome to my little corner of the».
+⇒ **Rischio R3 chiuso** per questa corsia: un `.so` che si carica non è un
+backend che esegue, e la differenza non si vede in nessun numero di velocità —
+si vede solo qui.
+
+L'inventario, ora:
+
+```json
+{"registries":[
+  {"name":"OpenCL","devices":[{"name":"GPUOpenCL",
+    "description":"QUALCOMM Adreno(TM) 830","type":"GPU","deviceId":null,
+    "memoryFree":4925526016,"memoryTotal":5999267840, …}]},
+  {"name":"CPU","devices":[{"name":"CPU", …}]}]}
+```
+
+### ⛔⛔⛔ I TRE SILENZI che sono costati il pomeriggio
+
+Nessuno dei tre dava un errore. Meritano di stare scritti perché sono la stessa
+famiglia di difetto: **una cosa che fallisce senza dirlo.**
+
+**1. La `libOpenCL.so` del vendor, spedita dentro l'APK.** CMake la copia nella
+cartella di uscita e AGP la impacchetta. Sul telefono oscura quella di sistema e
+non si apre, perché dipende da `libcutils.so` e `libc++.so` — che vivono nello
+spazio dei nomi del vendor e un'app **non può** raggiungere. ⇒ Esclusa dal
+pacchetto.
+
+**2. `ggml_backend_load_all_from_path` TACE, per costruzione.**
+
+```c
+#ifdef NDEBUG
+    bool silent = true;
+```
+
+e la nostra build è `Release`. Con `libggml-opencl.so` da **3.198.104 byte**
+presente nella cartella nativa, il registro conteneva **un solo** backend e
+nessuna riga diceva perché. ⇒ Aggiunta `nativeProbeBackendLoad`, che ripercorre
+la stessa cartella con `ggml_backend_load()` — la stessa strada con
+`silent = false`. Il motivo è comparso subito:
+
+```
+dlopen failed: library "libOpenCL.so" not found:
+  needed by …/libggml-opencl.so in namespace clns-9
+```
+
+**3. Da Android 12 una libreria del produttore va DICHIARATA.** Il sistema la
+elenca pubblica (`InitVendorPublicLibraries: … libOpenCL.so …`) e non basta:
+con `targetSdk 36` serve
+
+```xml
+<uses-native-library android:name="libOpenCL.so" android:required="false" />
+```
+
+⛔ `required="false"`: con `true` l'installazione verrebbe **rifiutata** su ogni
+telefono che non ha quella libreria — cioè si romperebbe l'app per tutti pur di
+far funzionare una prova. E sta nel source set `debug`: la build che si spedisce
+non porta `libggml-opencl.so`, quindi non ha niente da chiedere.
+
+⇒ Verificato che la produzione è intatta: `assembleDebug` nudo impacchetta
+**zero** librerie OpenCL.
+
+### ⛔⛔⛔ LA MISURA CHE RIBALTA UNA DECISIONE
+
+Stessa matrice, stesso modello, stesso telefono, prefisso freddo, termico
+stabile. CPU su 9 giri, GPU su 5.
+
+| | CPU pp/s | **GPU pp/s** | | CPU tg/s | **GPU tg/s** | | CPU TTFT | **GPU TTFT** |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| **PP512** | 43,82 | **303,44** | **6,92×** | 13,36 | 17,43 | 1,30× | 11.661 ms | **1.684 ms** |
+| **PP2048** | 36,78 | **245,95** | **6,69×** | 7,71 | 8,50 | **1,10×** | 55.682 ms | **8.329 ms** |
+| **TG256** | 39,14 | 151,22 | 3,86× | 14,68 | 19,28 | 1,31× | 793 ms | **206 ms** |
+
+⛔ La dispersione sulla GPU è **strettissima**: ±0,4-1% contro il ±5-7% della
+CPU. MAD di 0,15 su 245,95. Non è rumore: è una macchina diversa.
+
+**E qui sta il punto che vale l'intera Q3 del brief.**
+
+`TalosBackendChoice.Evidence` porta **un numero solo**, `tokensPerSecond`, e il
+banco che lo produce è centrato sulla generazione. Con quel metro questo
+acceleratore vale **1,10×-1,31×**. La soglia di promozione è **1,25×**.
+
+⇒ **Su PP2048 la politica attuale RIFIUTEREBBE questo backend** — un backend che
+taglia l'attesa della persona da **55,7 secondi a 8,3**. Non «insufficiente»:
+**sbagliata nel verso peggiore**, perché scarterebbe esattamente il caso in cui
+serve di più.
+
+Il prefill è dove sta il guadagno (**6,7-6,9×**), la decodifica quasi non si
+muove (**1,1-1,3×**), e la persona aspetta il prefill. Un solo numero non può
+vedere questa differenza: è la ragione per cui §Q3 chiede di misurarli separati
+**prima** di toccare la politica.
+
+⛔⛔ **COSA QUESTA MISURA NON È, e va letto ogni volta che si rilegge la tabella:**
+
+- **Non è C1.** Pin `d2f83055`, senza `60addddf`. `candidate` nelle righe dice
+  `C0-explore` apposta.
+- **Non qualifica la Flash Attention.** Presa con `flashAttentionMode=default` e
+  KV `f16`; il brief **vieta** una qualificazione FA su OpenCL senza quella
+  correzione, e nessun numero qui la riguarda.
+- **Non è una promozione.** È il segnale che dice se vale la pena spendere il
+  lavoro del forward pin. La risposta è **sì**, e adesso è un numero e non
+  un'opinione.
+- **Cinque giri, non nove.** Basta con dispersione sotto l'1%, e va rifatta a
+  nove quando diventerà una qualificazione vera.
+- **Non c'è la tenuta nel tempo.** Nessun test da 10 minuti, nessuna deriva
+  termica misurata sotto carico prolungato. `thermal` è restato `none`, ma le
+  corse sono brevi.
 
 ## Divergenze dal brief, dichiarate
 
