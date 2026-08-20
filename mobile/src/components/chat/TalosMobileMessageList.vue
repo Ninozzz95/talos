@@ -554,7 +554,31 @@ function messageStateLabel(state: string): string {
                                 @click="emit('reviewAuthorization')"
                             >
                                 <ShieldQuestion class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                                <span class="min-w-0 flex-1">{{ $t('chat.toolAuthorizationPending', { count: quanteInAttesa(message) }) }}</span>
+                                <!--
+                                    ⛔ Due frasi, non una col numero dentro: con due
+                                    richieste la riga diceva «2 richiesta di
+                                    autorizzazione … è in attesa». In italiano nome
+                                    e verbo si accordano, e un {count} davanti a una
+                                    frase singolare sbaglia sempre tranne che a uno.
+                                    È lo stesso difetto di «1 contese», chiuso poche
+                                    ore prima in un altro punto.
+
+                                    Due chiavi e non il pipe di vue-i18n: quello
+                                    vuole `$tc`, che qui non si usa da nessuna parte
+                                    — ed è la forma già scelta per
+                                    `doctor.callCountOne`/`callCountMany`.
+
+                                    ⛔ Il binario singolare/plurale è GIUSTO per le
+                                    due lingue che spediamo: in CLDR italiano e
+                                    inglese hanno due categorie, `one` e `other`.
+                                    Si romperebbe su arabo (sei) o russo (tre): chi
+                                    aggiunge una di quelle lingue deve passare a
+                                    `Intl.PluralRules`, non aggiungere una terza
+                                    chiave qui.
+                                -->
+                                <span class="min-w-0 flex-1">{{ quanteInAttesa(message) === 1
+                                    ? $t('chat.toolAuthorizationPendingOne')
+                                    : $t('chat.toolAuthorizationPendingMany', { count: quanteInAttesa(message) }) }}</span>
                                 <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                             </button>
                             <p
