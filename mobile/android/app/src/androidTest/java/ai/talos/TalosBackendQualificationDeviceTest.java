@@ -133,7 +133,22 @@ public class TalosBackendQualificationDeviceTest {
             Log.i(TAG, "bersaglio di offload disponibile: " + device.registry + "/" + device.name);
         }
 
+        /*
+         * ⛔⛔ E SE MANCA QUALCUNO, PERCHÉ.
+         *
+         * MISURATO il 2026-08-20: con `libggml-opencl.so` da 3.198.104 byte
+         * nella cartella nativa, il registro ne conteneva **uno solo** e
+         * nessuna riga diceva il motivo. `ggml_backend_load_all_from_path`
+         * tace per costruzione nelle build Release (`silent = true` sotto
+         * NDEBUG). ⇒ L'inventario da solo direbbe «non c'è», che è la frase
+         * sbagliata: c'era, e non si apriva.
+         */
+        String sonda = TalosLlamaNative.nativeProbeBackendLoad(
+                context().getApplicationInfo().nativeLibraryDir);
+        Log.i(TAG, "sonda di caricamento: " + sonda);
+
         write(artifact("backend-inventory.json"), raw);
+        write(artifact("backend-load-probe.json"), sonda == null ? "{}" : sonda);
         write(artifact("manifest.json"), manifest(inventory).toString(2));
     }
 

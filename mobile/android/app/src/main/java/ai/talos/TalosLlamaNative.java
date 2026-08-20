@@ -76,6 +76,25 @@ final class TalosLlamaNative {
     static native String nativeBackendInventory();
 
     /**
+     * ⛔ SOLO RICERCA — PERCHE' un backend manca dall'inventario.
+     *
+     * MISURATO il 2026-08-20: con {@code libggml-opencl.so} da 3.198.104 byte
+     * presente nella cartella nativa, il registro ne conteneva **uno solo**, e
+     * nessuna riga diceva perche'. La causa sta nella sorgente che spediamo:
+     * {@code ggml_backend_load_all_from_path} usa {@code silent = true} quando
+     * {@code NDEBUG} e' definito — e la nostra build e' Release. ⇒ Ogni
+     * fallimento di caricamento e' muto per costruzione.
+     *
+     * Questa sonda ripercorre la stessa cartella con la strada NON muta e dice,
+     * libreria per libreria, se e' entrata. Il motivo lo stampa ggml accanto,
+     * su logcat.
+     *
+     * ⛔ Non e' un doppione di {@link #nativeBackendInventory()}: quello dice
+     * CHI c'e', questa perche' qualcuno MANCA.
+     */
+    static native String nativeProbeBackendLoad(String libraryDir);
+
+    /**
      * La build di llama.cpp, tipo {@code "b10218-<commit>"}.
      *
      * ⛔ Serve all'impronta dei prefissi congelati: cio' che invalida uno stato
