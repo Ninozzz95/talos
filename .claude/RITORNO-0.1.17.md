@@ -1138,8 +1138,17 @@ ogni blocco** (`Thermal Status: 0` verificato prima di ognuno):
 | **PP2048 — decodifica** | **15,9 tok/s** | **8,1** | **8,1** |
 | TG256 (prompt da 31 token) — decodifica | 19,5 | 19,3 | 19,2 |
 
-⇒ **`auto` e `on` sono la stessa cosa** su questo dispositivo, riga per riga. E
-`off` vince su **ogni** metrica misurata:
+⇒ **`auto` e `on` sono la stessa cosa** su questo dispositivo — e non è una
+lettura a occhio della tabella: confrontate mediana per mediana, le due
+configurazioni distano **0,07-2,4%**, cioè rumore.
+
+```
+PP512    pp  307,28 vs 306,72  (−0,18%)   ttft 1.665 vs 1.667   (+0,12%)
+PP2048   pp  193,50 vs 193,37  (−0,07%)   ttft 10.585 vs 10.593 (+0,08%)
+TG256    pp  149,04 vs 146,23  (−1,89%)   ttft 209 vs 214       (+2,39%)
+```
+
+E `off` vince su **ogni** metrica misurata:
 
 1. **Da 4,7 a 6,6 secondi in meno sul primo messaggio** dopo aver aperto un
    modello — misurato tre volte con FA accesa (6.314, 8.031, 8.230 ms) contro
