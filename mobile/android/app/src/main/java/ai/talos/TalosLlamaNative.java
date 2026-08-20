@@ -115,6 +115,41 @@ final class TalosLlamaNative {
                                   boolean deterministic, int threadsBatch, int microBatch,
                                   String kvType);
 
+    /**
+     * ⛔ SOLO RICERCA — l'apertura che dice DOVE, non solo quanto.
+     *
+     * {@code gpuLayers} dice quanti strati spostare, non su quale acceleratore.
+     * Con OpenCL e Vulkan caricati insieme «la GPU» sarebbe quella che il
+     * registry elenca per prima, cioè quella scelta dall'ordine di caricamento
+     * delle librerie: un benchmark nato così misura un backend che nessuno ha
+     * scelto.
+     *
+     * ⛔ Non esiste «prendi la prima GPU». O si nomina il dispositivo, o si
+     * nomina un registry che ne espone **uno solo**; un registry con due
+     * dispositivi e nessun nome fallisce ELENCANDOLI.
+     *
+     * ⛔ Non la chiama la produzione, e non deve: {@link #nativeOpen} resta la
+     * strada dell'app e passa richieste vuote.
+     *
+     * @param backendName vuoto = come oggi · {@code "none"}/{@code "cpu"} =
+     *     nessun offload, detto esplicitamente · altrimenti il nome di un
+     *     registry, per esempio {@code "OpenCL"}. I nomi li elenca
+     *     {@link #nativeBackendInventory()}.
+     * @param deviceName il nome canonico ESATTO del dispositivo, oppure vuoto.
+     * @param flashAttentionMode {@code "default"}, {@code "off"},
+     *     {@code "auto"} oppure {@code "on"}. ⛔ Una richiesta esplicita vince
+     *     sulla {@code AUTO} che la cache q8_0 imposterebbe: è l'unico modo di
+     *     misurare i tre casi separati, e upstream dice a chiare lettere che la
+     *     Flash Attention non migliora sempre OpenCL.
+     * @return l'handle, o 0. In caso di 0, {@link #nativeLastOpenError()} vale
+     *     {@code "backend-target"} se il bersaglio non si è risolto e
+     *     {@code "flash-attn-mode"} se la parola non era una delle quattro.
+     */
+    static native long nativeOpenTargeted(String modelPath, int threads, int contextTokens,
+                                          int gpuLayers, boolean deterministic, int threadsBatch,
+                                          int microBatch, String kvType, String backendName,
+                                          String deviceName, String flashAttentionMode);
+
     /** La cache creata DAVVERO: {@code "q8_0"} oppure {@code "f16"}. */
     static native String nativeKvCacheType(long handle);
 

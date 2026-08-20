@@ -756,15 +756,168 @@ Java_ai_talos_TalosLlamaNative_nativeBackendInventory(JNIEnv * env, jclass) {
 }
 
 /**
+ * ⛔⛔ SOLO RICERCA — il bersaglio dell'offload, DETTO e non dedotto.
+ *
+ * `n_gpu_layers` dice QUANTI strati spostare, non DOVE. Finché c'è un solo
+ * acceleratore la domanda non si pone; con OpenCL e Vulkan caricati insieme
+ * «la GPU» diventa quella che il registry elenca per prima, cioè quella che
+ * l'ordine di caricamento delle librerie ha deciso al posto nostro. Un
+ * benchmark che nasce così misura un backend che nessuno ha scelto.
+ *
+ * `llama_model_params.devices` è una lista NULL-terminata, ed è il contratto —
+ * letto in `tools/llama-bench/llama-bench.cpp` e `common/arg.cpp` di upstream,
+ * non dedotto:
+ *
+ *  - lista assente (`nullptr`)  → il motore sceglie da solo («auto»). È il
+ *                                 comportamento di produzione, e resta intatto.
+ *  - lista col solo `nullptr`   → **nessun offload**, esplicitamente. Non è la
+ *                                 stessa cosa della precedente: qui la CPU è
+ *                                 una decisione, non un ripiego.
+ *  - lista di dispositivi       → esattamente quelli, in quest'ordine.
+ *
+ * ⛔ QUI NON SI INDOVINA. Non esiste «prendi la prima GPU»: si nomina un
+ * dispositivo, oppure si nomina un registry che ne espone **uno solo** — e
+ * allora non c'è nessuna scelta da fare. Un registry con due dispositivi e
+ * nessun nome è un errore parlante che li ELENCA, non una scelta silenziosa.
+ *
+ * ⛔ E la CPU non entra mai nella lista. Non è una nostra convenzione: upstream
+ * rifiuta con «invalid device» qualunque nome che risolva a un dispositivo di
+ * tipo CPU, sia in `arg.cpp` sia in `llama-bench`. La CPU resta comunque allo
+ * scheduler come ripiego per le operazioni che l'acceleratore non regge.
+ *
+ * @param dispositivi il vettore che ospiterà la lista. ⛔ Deve sopravvivere a
+ *     `llama_model_load_from_file`: il motore riceve `data()`, non una copia.
+ * @return vero se il bersaglio è stato risolto; falso con `errore` compilato.
+ */
+static bool talos_risolvi_bersaglio(const std::string & backend,
+                                    const std::string & dispositivo,
+                                    std::vector<ggml_backend_dev_t> & dispositivi,
+                                    std::string & errore,
+                                    std::string & scelto) {
+    dispositivi.clear();
+    scelto.clear();
+
+    // Nessuna richiesta: il motore decide come ha sempre fatto.
+    if (backend.empty() && dispositivo.empty()) {
+        scelto = "auto";
+        return true;
+    }
+
+    // «none» e «cpu» dicono la stessa cosa — non spostare niente — e la dicono
+    // ad alta voce. Il solo `nullptr` è la forma che llama.cpp riconosce.
+    if (backend == "none" || backend == "cpu") {
+        if (!dispositivo.empty()) {
+            errore = "backend `" + backend + "` non accetta un dispositivo (`" + dispositivo + "`)";
+            return false;
+        }
+        dispositivi.push_back(nullptr);
+        scelto = "none";
+        return true;
+    }
+
+    if (!dispositivo.empty()) {
+        ggml_backend_dev_t trovato = ggml_backend_dev_by_name(dispositivo.c_str());
+        if (trovato == nullptr) {
+            errore = "nessun dispositivo si chiama `" + dispositivo + "`";
+            return false;
+        }
+        if (ggml_backend_dev_type(trovato) == GGML_BACKEND_DEVICE_TYPE_CPU) {
+            errore = "`" + dispositivo + "` è una CPU: non è un bersaglio di offload";
+            return false;
+        }
+        if (!backend.empty()) {
+            ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(trovato);
+            const char * nome = reg == nullptr ? nullptr : ggml_backend_reg_name(reg);
+            // Un dispositivo giusto sotto il registry sbagliato è il modo in cui
+            // una corsa etichettata «vulkan» finisce per misurare OpenCL.
+            if (nome == nullptr || backend != nome) {
+                errore = std::string("`") + dispositivo + "` sta sotto il registry `"
+                         + (nome == nullptr ? "?" : nome) + "`, non sotto `" + backend + "`";
+                return false;
+            }
+        }
+        dispositivi.push_back(trovato);
+        dispositivi.push_back(nullptr);
+        scelto = dispositivo;
+        return true;
+    }
+
+    // Solo il registry: si accetta unicamente se il dubbio non esiste.
+    std::vector<ggml_backend_dev_t> candidati;
+    std::string elenco;
+    for (size_t index = 0; index < ggml_backend_reg_count(); index += 1) {
+        ggml_backend_reg_t reg = ggml_backend_reg_get(index);
+        if (reg == nullptr) continue;
+        const char * nome = ggml_backend_reg_name(reg);
+        if (nome == nullptr || backend != nome) continue;
+        for (size_t d = 0; d < ggml_backend_reg_dev_count(reg); d += 1) {
+            ggml_backend_dev_t device = ggml_backend_reg_dev_get(reg, d);
+            if (device == nullptr) continue;
+            if (ggml_backend_dev_type(device) == GGML_BACKEND_DEVICE_TYPE_CPU) continue;
+            candidati.push_back(device);
+            if (!elenco.empty()) elenco += ", ";
+            elenco += ggml_backend_dev_name(device);
+        }
+    }
+    if (candidati.empty()) {
+        errore = "il registry `" + backend + "` non espone dispositivi su cui fare offload";
+        return false;
+    }
+    if (candidati.size() > 1) {
+        // ⛔ Il punto di tutta questa funzione. Scegliere qui sarebbe comodo, e
+        // sarebbe la lotteria che si voleva togliere di mezzo.
+        errore = "il registry `" + backend + "` espone " + std::to_string(candidati.size())
+                 + " dispositivi (" + elenco + "): dinne uno";
+        return false;
+    }
+    dispositivi.push_back(candidati[0]);
+    dispositivi.push_back(nullptr);
+    scelto = ggml_backend_dev_name(candidati[0]);
+    return true;
+}
+
+/**
+ * ⛔ SOLO RICERCA — la Flash Attention chiesta esplicitamente.
+ *
+ * In produzione la decide `AUTO` quando la cache leggera lo richiede, e va
+ * bene: la libreria sa cosa il backend regge. Ma per QUALIFICARE un backend
+ * servono i tre casi separati, perché la documentazione upstream dice
+ * esplicitamente che la Flash Attention non migliora sempre OpenCL — e
+ * «sempre» è una cosa che si misura, non si assume.
+ *
+ * @return falso se la parola non è una delle quattro.
+ */
+static bool talos_modalita_fa(const std::string & richiesta,
+                              llama_flash_attn_type & modalita,
+                              bool & imposta) {
+    imposta = false;
+    if (richiesta.empty() || richiesta == "default") return true;
+    imposta = true;
+    if (richiesta == "off")  { modalita = LLAMA_FLASH_ATTN_TYPE_DISABLED; return true; }
+    if (richiesta == "auto") { modalita = LLAMA_FLASH_ATTN_TYPE_AUTO;     return true; }
+    if (richiesta == "on")   { modalita = LLAMA_FLASH_ATTN_TYPE_ENABLED;  return true; }
+    imposta = false;
+    return false;
+}
+
+/**
  * Apre un modello. Restituisce 0 in caso di fallimento — mai un handle a metà:
  * un oggetto costruito per metà è la forma in cui i guasti sopravvivono al
  * punto in cui sono nati.
+ *
+ * ⛔ I tre ultimi parametri sono **solo ricerca**, e i due ingressi JNI qui
+ * sotto li separano: `nativeOpen` passa richieste vuote, che significano «come
+ * si è sempre fatto» e attraversano questa funzione senza toccare né la lista
+ * dei dispositivi né la Flash Attention. Il comportamento di produzione non
+ * cambia perché non esiste una strada in cui possa cambiare.
  */
-JNIEXPORT jlong JNICALL
-Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPath,
-                                          jint threads, jint contextTokens, jint gpuLayers,
-                                          jboolean deterministic, jint threadsBatch,
-                                          jint microBatch, jstring kvType) {
+static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
+                                jint threads, jint contextTokens, jint gpuLayers,
+                                jboolean deterministic, jint threadsBatch,
+                                jint microBatch, jstring kvType,
+                                const std::string & backendRichiesto,
+                                const std::string & deviceRichiesto,
+                                const std::string & faRichiesta) {
     talos_last_open_error.clear();
     const std::string path = jstring_to_utf8(env, modelPath);
     if (path.empty()) {
@@ -775,6 +928,30 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
 
     llama_model_params model_params = llama_model_default_params();
     model_params.n_gpu_layers = gpuLayers;
+
+    /**
+     * ⛔ IL VETTORE VIVE FINO AL CARICAMENTO, e non un'istruzione di meno.
+     *
+     * `model_params.devices` riceve `data()`, non una copia: se il vettore
+     * morisse prima di `llama_model_load_from_file` il motore leggerebbe
+     * memoria liberata. Sta qui, nello stesso ambito della chiamata, per lo
+     * stesso motivo per cui upstream lo tiene nell'ambito del suo ciclo.
+     */
+    std::vector<ggml_backend_dev_t> dispositivi;
+    std::string bersaglioScelto;
+    {
+        std::string errore;
+        if (!talos_risolvi_bersaglio(backendRichiesto, deviceRichiesto,
+                                     dispositivi, errore, bersaglioScelto)) {
+            talos_last_open_error = "backend-target";
+            TALOS_LOGE("bersaglio non risolto: %s", errore.c_str());
+            return 0;
+        }
+        if (!dispositivi.empty()) {
+            model_params.devices = dispositivi.data();
+            TALOS_LOGI("bersaglio di offload richiesto: %s", bersaglioScelto.c_str());
+        }
+    }
 
     llama_model * model = llama_model_load_from_file(path.c_str(), model_params);
     if (model == nullptr) {
@@ -874,6 +1051,30 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
         ctx_params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
     }
 
+    /**
+     * ⛔ SOLO RICERCA, e viene DOPO la cache leggera di proposito.
+     *
+     * Una richiesta esplicita vince sulla `AUTO` che il ramo `q8_0` imposta:
+     * è l'unico modo di misurare i tre casi separatamente, che è ciò che serve
+     * per qualificare un backend. Senza richiesta questo blocco non fa niente,
+     * e la produzione passa di qui senza accorgersene.
+     */
+    if (!faRichiesta.empty() && faRichiesta != "default") {
+        llama_flash_attn_type modalita = LLAMA_FLASH_ATTN_TYPE_AUTO;
+        bool imposta = false;
+        if (!talos_modalita_fa(faRichiesta, modalita, imposta)) {
+            talos_last_open_error = "flash-attn-mode";
+            TALOS_LOGE("modalita' Flash Attention sconosciuta: %s", faRichiesta.c_str());
+            llama_model_free(model);
+            return 0;
+        }
+        if (imposta) {
+            ctx_params.flash_attn_type = modalita;
+            TALOS_LOGI("Flash Attention richiesta: %s (%s)", faRichiesta.c_str(),
+                       llama_flash_attn_type_name(modalita));
+        }
+    }
+
     llama_context * ctx = llama_init_from_model(model, ctx_params);
     if (ctx == nullptr && vuoleLeggera) {
         // Il collaudo ha risposto no. Non è un guasto: è il modo in cui si
@@ -962,6 +1163,50 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
                path.c_str(), llama_n_ctx(ctx), ctx_params.n_threads,
                ctx_params.n_threads_batch, llama_n_ubatch(ctx));
     return reinterpret_cast<jlong>(session);
+}
+
+/**
+ * L'apertura di PRODUZIONE. Passa tre richieste vuote, e vuoto qui significa
+ * «come si è sempre fatto»: nessuna lista di dispositivi, nessuna Flash
+ * Attention imposta. ⛔ Non è una convenzione da ricordare — è l'unico modo in
+ * cui questa funzione può chiamare quella sotto, quindi non esiste una strada
+ * per cui la ricerca cambi il comportamento di chi usa l'app.
+ */
+JNIEXPORT jlong JNICALL
+Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPath,
+                                          jint threads, jint contextTokens, jint gpuLayers,
+                                          jboolean deterministic, jint threadsBatch,
+                                          jint microBatch, jstring kvType) {
+    return talos_apri_modello(env, modelPath, threads, contextTokens, gpuLayers,
+                              deterministic, threadsBatch, microBatch, kvType,
+                              std::string(), std::string(), std::string());
+}
+
+/**
+ * ⛔ SOLO RICERCA — l'apertura che dice DOVE, non solo quanto.
+ *
+ * Stessa apertura di sopra, con tre parole in più: quale registry, quale
+ * dispositivo, quale Flash Attention. Serve a qualificare un backend, e la
+ * qualificazione è esattamente il lavoro in cui «la GPU» non è una risposta.
+ *
+ * @param backendName  vuoto = come oggi · `none`/`cpu` = nessun offload,
+ *     esplicitamente · altrimenti il nome di un registry, es. `OpenCL`.
+ * @param deviceName   vuoto = accettato solo se il registry espone UN solo
+ *     dispositivo · altrimenti il nome canonico esatto.
+ * @param flashAttentionMode `default` · `off` · `auto` · `on`.
+ */
+JNIEXPORT jlong JNICALL
+Java_ai_talos_TalosLlamaNative_nativeOpenTargeted(JNIEnv * env, jclass, jstring modelPath,
+                                                  jint threads, jint contextTokens, jint gpuLayers,
+                                                  jboolean deterministic, jint threadsBatch,
+                                                  jint microBatch, jstring kvType,
+                                                  jstring backendName, jstring deviceName,
+                                                  jstring flashAttentionMode) {
+    return talos_apri_modello(env, modelPath, threads, contextTokens, gpuLayers,
+                              deterministic, threadsBatch, microBatch, kvType,
+                              jstring_to_utf8(env, backendName),
+                              jstring_to_utf8(env, deviceName),
+                              jstring_to_utf8(env, flashAttentionMode));
 }
 
 JNIEXPORT jstring JNICALL

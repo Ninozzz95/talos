@@ -153,8 +153,18 @@ function installa(apk, etichetta) {
 installa(APK_APP, 'app-debug.apk')
 installa(APK_TEST, 'app-debug-androidTest.apk')
 
-const argomenti = ['shell', 'am', 'instrument', '-w']
+// ⛔ `-r` non è verbosità: senza, i test SALTATI non si distinguono dai
+// passati. È il codice `-4` per riga di stato a dirlo, e senza `-r` quelle
+// righe non escono affatto.
+const argomenti = ['shell', 'am', 'instrument', '-w', '-r']
 if (classe) argomenti.push('-e', 'class', classe)
+// Gli argomenti instrumentation in coda: `chiave=valore`, uno per coppia.
+// Servono a dire al test su quale modello misurare senza ricompilarlo.
+for (const coppia of process.argv.slice(3)) {
+    const taglio = coppia.indexOf('=')
+    esigi(taglio > 0, `argomento non nella forma chiave=valore: ${coppia}`)
+    argomenti.push('-e', coppia.slice(0, taglio), coppia.slice(taglio + 1))
+}
 argomenti.push(`${PACCHETTO_TEST}/${RUNNER}`)
 
 annuncia(`eseguo       ${classe || '(tutti i test strumentati)'}`)
@@ -187,10 +197,32 @@ try {
 // ⛔ E qui NON si disinstalla. È l'unica riga che conta di questo script, ed è
 // quella che non c'è.
 
+/**
+ * ⛔⛔ UN TEST SALTATO NON È UN TEST VERDE.
+ *
+ * MISURATO il 2026-08-20, e questo script ci è cascato per primo: otto test
+ * hanno riportato «OK (8 tests)» in **0,037 secondi** — otto aperture di un
+ * modello da 1,9 GB. Erano tutti saltati da un `Assume` perché la fixture non
+ * si vedeva, e il runner testuale di JUnit conta un `assumption failure` come
+ * OK. Lo script diceva «verdi 8 test» e non era vero niente.
+ *
+ * ⇒ I saltati si contano, si nominano, e **non** si spacciano per verdi.
+ * `am instrument -r` li marca con `INSTRUMENTATION_STATUS_CODE: -4`.
+ */
+const saltati = (uscita.match(/INSTRUMENTATION_STATUS_CODE: -4/g) ?? []).length
 const passati = /OK \((\d+) test/.exec(uscita)
 const falliti = /FAILURES!!!|Failures: (\d+)/.test(uscita)
 if (falliti || !passati) {
     process.stderr.write('⛔ i test strumentati non sono verdi — vedi sopra\n')
     process.exit(1)
 }
-annuncia(`verdi        ${passati[1]} test`)
+const totale = Number(passati[1])
+if (saltati > 0) {
+    const motivi = [...uscita.matchAll(/AssumptionViolatedException: (.+)/g)]
+        .map((m) => m[1].trim())
+    process.stderr.write(
+        `⛔ ${saltati} test su ${totale} SALTATI — non è un verde:\n`
+        + motivi.map((m) => `   · ${m}\n`).join(''))
+    process.exit(1)
+}
+annuncia(`verdi        ${totale} test`)
