@@ -390,6 +390,80 @@ costo di riapplicarla a ogni aggiornamento del motore. ⇒ La scelta fra le due 
 
 ---
 
+## ✅ ESEGUITA — 2026-08-21, sessione principale
+
+> Fatta come **patch locale sul pin**, non proposta a monte (quello resta
+> all'owner: aprire una PR su `ggml-org/llama.cpp` è una comunicazione esterna,
+> non mia da avviare). File:
+> [`mobile/third_party/patches/0001-opencl-abort-callback.patch`](../mobile/third_party/patches/0001-opencl-abort-callback.patch)
+> (50 righe, due file: `ggml-opencl.h` + `ggml-opencl.cpp`), applicata sul
+> submodule (non committabile lì: `origin` è l'upstream vero, un commit locale
+> sarebbe irraggiungibile a un clone fresco). Round-trip provato: patch
+> applicata su un `dc72703` pulito riproduce lo stesso diff, byte per byte.
+
+**⛔ La specifica di questo documento era INCOMPLETA, e l'ho scoperto
+misurando, non leggendo.** Il testo sopra dice «il controllo dentro il `for`
+che `ggml_backend_opencl_graph_compute` ha già» — un controllo di sola lettura
+fra i nodi. Implementato così: **zero effetto**. Stop restava a 1425-1440 ms,
+indistinguibile da prima. Causa: i kernel OpenCL si accodano in modo
+**asincrono** e l'unica attesa vera è `ggml_backend_opencl_synchronize`, chiamata
+**una sola volta dopo l'intero grafo** — un flag letto fra gli accodamenti non
+ha niente da interrompere, perché il thread CPU li accoda tutti in pochi
+millisecondi e si addormenta nell'attesa finale prima che il cancel arrivi.
+
+⇒ **Serve un drain periodico**, non un controllo passivo: ogni tot nodi si
+chiama `clFinish` sulla coda (stesso idioma già usato nel file, righe 15126 e
+15182) e SOLO DOPO si guarda la callback. Prima versione (stride fisso 16):
+Stop crolla a **29 ms** — ma la decodifica (che genera con LO STESSO grafo,
+un token alla volta) perde **quasi metà della sua velocità** (16,4 → 7,7
+tok/s), perché il drain paga anche quando in coda non c'è niente da aspettare.
+
+Un tentativo di stride **adattivo** (raddoppia se il drain è veloce, torna a
+16 se è lento) non bastava: lo stato si resettava a ogni chiamata di
+`graph_compute` (una per token in decodifica) e non aveva mai il tempo di
+salire abbastanza prima di ripartire da capo — misurato, non solo sospettato,
+con un log temporaneo che stampava lo stride a ogni chiamata. Persistendo lo
+stato nel contesto il sintomo non cambiava lo stesso: sia in prefill sia in
+decodifica il grafo ha **lo stesso numero di nodi** (misurato: 1013 sempre),
+quindi il conteggio dei nodi non distingue le due cose — lo stride, per
+quanto alto, tocca comunque il tetto ogni ~500 nodi in ENTRAMBI i casi.
+
+**⭐ Il segnale giusto era già nel grafo, non nel tempo.** Il primo nodo
+(`RMS_NORM`) porta `ne[1]` = quanti token sta processando: **1** ad ogni
+singolo passo di decodifica, **512/511/31** ad ogni pezzo di prefill —
+misurato via log, non assunto. ⇒ Il controllo periodico si accende **solo**
+quando `cgraph->nodes[0]->ne[1] > 1`: un grafo a un token non lo paga per
+niente, un grafo multi-token lo paga con lo stride fisso 16.
+
+### Il prezzo, misurato — Llama 3.2 3B, microbatch **512** (produzione, non 192)
+
+| | senza controllo | **con la cura finale** | costo |
+|---|---:|---:|---:|
+| **Stop nel prefill** (9 giri) | 1425-1440 ms | **p50 32 · p95 36 · max 36 ms** | **≈40× più veloce** |
+| decodifica dopo 2048 token | 16,43 tok/s | **16,43 tok/s** | **zero** |
+| decodifica (prompt corto) | 19,49 tok/s | **19,59 tok/s** | **zero** |
+| prefill 512 | 311,78 tok/s | 290,67 tok/s | −6,8% |
+| prefill 2048 | 265,42 tok/s | 249,48 tok/s | −6,0% |
+
+⇒ Il p95 dello Stop (36 ms) **combacia** con quello del floor CPU citato in
+§1 della decisione 2 (36 ms): OpenCL ora è indistinguibile dalla CPU su
+questo asse. **Il gate G4 passa al microbatch PIENO di produzione (512)** —
+non serve scendere a 192 (decisione 2) né a 64 solo per lo Stop. Il costo sul
+prefill (~6-7%) è nello stesso ordine di quello che la decisione 2 aveva già
+accettato per un guadagno diverso; la decodifica, il caso più frequente, non
+paga niente.
+
+**Verificato anche il verso positivo del gate**: golden suite (7/7, GPU
+davvero in uso, 29/29 strati) rilanciata su questa build finale — nessuna
+parola cambiata dalla cura.
+
+⛔ **Non ancora fatto**: rimisurare la matrice C0 completa in questa
+configurazione (§9 del documento lo chiede), lo stress OpenCL a due sessioni
+concorrenti, e la proposta a monte (PR su `ggml-org/llama.cpp`) resta
+dell'owner.
+
+---
+
 ## 4. DECISIONE — il push
 
 Ramo `lane/motore-gpu`, **81 commit**, albero pulito. **Non l'ho spinto e non lo
