@@ -239,11 +239,43 @@ senza sapere che li rimetterai.
 | 1 | **Il sondaggio della 0.1.17** | ✅ **PRESA** — modale alla prima scelta di un modello locale (sì/no + «non mostrare più») **e** comando nelle impostazioni. Vedi §1-bis |
 | 2 | **Fin dove arriva la 0.1.18** | ✅ **PRESA** — **fasi 0-4**. Il cancello d'uscita della fase 4 è il punto di spedizione |
 
-⛔ **Restano aperte:**
+| 3 | **Il dispositivo di riferimento** | ✅ **PRESA** — il **OnePlus Pad 3**, vedi sotto |
 
-3. **Il dispositivo di riferimento** su cui valgono i numeri del §38.2. Finché
-   non è nominato, «TTFA < 500 ms sul dispositivo di riferimento» non è un
-   cancello: è una frase. ⇒ Chiedilo **prima** della fase 2, non dopo.
+### ✅ Il dispositivo di riferimento è il **OnePlus Pad 3**
+
+Owner, 2026-08-21: *«il Pad è SEMPRE collegato, usa quello sempre d'ora in poi;
+se hai bisogno del OnePlus 13 se ne parla fra 2 o 3 ore»*.
+
+```
+OnePlus Pad 3   ·   OPD2415   ·   seriale 2ea6573c
+Adreno 830      ·   Android 16
+```
+
+⇒ I numeri del §38.2 — **TTFA a caldo < 500 ms**, RTF < 1,0, cancel p95 < 150 ms,
+zero underrun in dieci minuti — valgono **su questo**. Adesso sono cancelli, non
+frasi.
+
+⛔ **E il Pad porta due cose che vanno tenute a mente per la voce:**
+
+1. **Non ha il motore della vibrazione.** `no-vibrator` è un esito vero, non un
+   guasto — se una schermata di arruolamento prevede un ritorno tattile, qui non
+   c'è.
+2. ⛔⛔ **Sotto carico non cala: OSCILLA.** Misurato due volte, l'ultima il 21/8
+   sulla configurazione finale: **19,84 ↔ 14,17 tok/s, 10 salti in 10,13 minuti,
+   34,6% del tempo nella banda bassa**. Né `thermal` né la batteria lo vedono: il
+   segnale sono le **otto zone `gpuss-*`**, e si campiona **dall'host**.
+   ⇒ Lo strumento c'è già: `.claude/strumenti/termica.mjs`. **Fallo girare
+   accanto a ogni misura di TTFA e RTF, e etichetta ogni numero con la sua banda
+   termica.** Una media presa a cavallo di un salto non è una misura: è due
+   misure sommate.
+
+⛔ Il **OnePlus 13** esiste ed è l'altro dispositivo, ma **non è di turno**: si
+chiede all'owner con qualche ora di anticipo.
+
+---
+
+⛔ **Resta aperta una cosa sola:**
+
 4. **Il push**, ogni volta, nella forma `git -C <percorso> push`.
 
 ---
