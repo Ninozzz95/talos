@@ -574,16 +574,83 @@ turno; non richiude quell'aperto.
 
 ---
 
-## 11. Prossimo passo
+## 12. Fase 4 — UI/router (in corso)
 
-Fase 2 chiusa per intero (nucleo, cablaggio, qualità audio — zero underrun
-reali). **Fase 3 chiusa per intero**: cattura, cancello di qualità, codifica
-del riferimento, profilo cifrato con storage, e l'orchestrazione che li lega
-in un arruolamento vero — cancello di uscita del blueprint provato sul
-dispositivo (riavvio a freddo, zero file grezzi su disco). Prima del Blocco
-4, un mockup esaustivo dell'interfaccia (owner 21/8, vedi la memoria
-`blocco4-mockup-ui-voce-personale`) — l'orchestrazione di oggi è pensata
-apposta come la porta che quel mockup chiamerà (`captureOnePhrase` per
-frase guidata, `buildProfile` per l'anteprima, `commit` solo dopo il sì).
-Poi, come sempre: cancelli, prova sul dispositivo, commit, e si chiede il
-push solo alla fine.
+Mockup esaustivo consegnato e approvato (owner 21/8, artefatto pubblicato,
+vedi `blocco4-mockup-ui-voce-personale` in memoria) — ricerca sui
+competitor (ElevenLabs, Apple Personal Voice, Resemble AI) inclusa, agganciato
+ai token reali del motore tema (`talosThemeModeVariantStyle`, preset
+**calm** — non telemetry, correzione owner). Ora l'implementazione vera,
+a blocchi.
+
+### 12.1 Blocco 1 — contratti e schema impostazioni additivo
+
+`personalVoiceContracts.ts` (blueprint §40): `TalosSpeechEngine`,
+`TalosPersonalVoiceProfileSummary`, `TalosPersonalVoiceStatus`,
+`TalosPersonalSpeakRequest` — nessun PCM/tensore attraversa mai il ponte
+Capacitor, stessa regola già del nativo. `TalosMobileVoicePreferences`
+guadagna `engine`/`personal_profile_id`/`personal_rate`/`personal_pitch`,
+additivo — un JSON vecchio senza questi campi analizza identico a oggi.
+`personal_rate`/`personal_pitch` sono **separati** da `rate`/`pitch`
+apposta: quei due sono tarati a orecchio contro la voce di sistema
+(`1.2`/`1`, owner 10/8) e distorcerebbero una voce neurale appena
+arruolata. **4 test nuovi** in `settingsStore.test.ts`, coprono per intero
+la lista di §37.1 "Settings". Tipecheck pulito, 5904/5904 vitest.
+
+### 12.2 Blocco 2 — plugin nativo e `TalosVoiceHost` esteso
+
+`TalosNeuralVoicePlugin.kt` (blueprint §41, cresciuto al set di metodi
+vero): `status`/`profiles`/`renameProfile`/`deleteProfile`/`speak`/`stop`
+per la riproduzione, più `startEnrollmentSession`/`captureEnrollmentPhrase`
+(cancellabile, un microfono richiesto correttamente via
+`requestPermissionForAlias`, stesso schema di `TalosParolaPlugin`)/
+`buildEnrollmentProfile`/`previewEnrollmentProfile`/
+`commitEnrollmentProfile`/`discardEnrollmentSession` per l'arruolamento —
+registrato in `MainActivity.java` accanto a `TalosLlamaPlugin`. Le frasi
+catturate durante l'arruolamento vivono **in memoria nativa**, indicizzate
+per slot (`enrollmentSlots`), mai su disco — stessa scelta già presa in
+`TalosVoiceEnrollment`.
+
+`TalosVoiceHost` guadagna `TalosVoiceHost.get(context)` (singleton di
+processo, §41's `TalosVoiceHost.get(context.applicationContext)`) e
+`submitSpeakStreamingWithReference`/`speakStreamingWithReferenceBlocking` —
+lo stesso percorso di streaming di Fase 2, ma con i codici audio di un
+profilo arruolato al posto di una voce incorporata per nome. Refattorizzato
+estraendo `driveStreamingSynthesis` (decodifica/backpressure/conteggio
+underrun) da `runSpeakStreaming`, così il percorso nuovo corre sullo
+**stesso** codice già misurato a zero underrun, non una copia che potrebbe
+divergere.
+
+⭐ **Provato sul dispositivo reale**: `TalosVoiceHostReferenceStreamingInstrumentedTest`
+— sintesi in streaming con riferimento, zero underrun, cancel-a-metà lascia
+l'host utilizzabile, singleton `get()` conferma la stessa istanza. Un
+fallimento isolato (2 underrun hardware invece di 0) rieseguito **da solo**:
+verde — stessa firma già nota "sotto carico non cala, oscilla"
+(`sotto-carico-non-cala-oscilla`, memoria), non una regressione. Riprovato
+anche `TalosVoiceHostStreamingInstrumentedTest` (il percorso builtin
+originale): **2/2 verde**, il refactor non l'ha toccato.
+
+### 12.3 Cosa resta aperto in Fase 4
+
+- Router TS (`personalVoiceRouter.ts`, blueprint §37.1 "Router") — non
+  scritto.
+- L'interfaccia vera in `TalosMobileVoiceSettings.vue` — il mockup approvato
+  non è ancora diventato componenti Vue.
+- `useTalosSpeech.ts` non instrada ancora verso il motore personale — il
+  cancello di uscita di Fase 4 ("ogni interazione vocale attuale funziona
+  ancora con `engine: 'system'`") non è stato ancora verificato perché
+  non c'è ancora nulla da rompere.
+- Localizzazione (stringhe it/en per la UI nuova) — non toccata.
+- §37.5 (smoke R8 in release, "metodi Capacitor visibili") — non fatto:
+  nessun plugin Capacitor in questo codebase ha oggi un test a livello di
+  bridge; questo nuovo segue lo stesso standard, non uno più basso.
+
+---
+
+## 13. Prossimo passo
+
+Fase 2 e Fase 3 chiuse per intero (vedi sopra). Fase 4 a due blocchi su
+almeno quattro: contratti/schema e plugin/host fatti e provati sul
+dispositivo; restano il router, la UI vera, e il collegamento a
+`useTalosSpeech.ts`. Poi, come sempre: cancelli, prova sul dispositivo,
+commit, e si chiede il push solo alla fine.

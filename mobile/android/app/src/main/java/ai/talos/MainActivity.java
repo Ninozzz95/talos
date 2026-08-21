@@ -99,6 +99,12 @@ public class MainActivity extends BridgeActivity {
         // compiled into the APK, proven by an instrumented test, and unable to
         // answer a single message.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(TalosLlamaPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
+        // La voce personale (0.1.18, Fase 4): stessa storia di TalosLlamaPlugin
+        // sopra - il motore ONNX di ai.talos.voice vive dentro l'APK dalla
+        // Fase 1, ma senza questa riga JavaScript non può raggiungerlo.
+        // Registrare la classe è economico: TalosVoiceHost/TalosVoiceEnrollment
+        // aprono le sessioni ONNX pigramente, al primo uso vero, non qui.
+        { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.voice.TalosNeuralVoicePlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // Accedere a un provider senza incollare una chiave. Il browser di
         // sistema fa l'accesso e rientra su 127.0.0.1: mettersi in ascolto su
         // una porta è l'unica parte che JavaScript non può fare.
