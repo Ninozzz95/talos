@@ -158,6 +158,24 @@ struct talos_session {
         int       token_nuovi       = 0;
         int       token_prodotti    = 0;
         bool      contesto_riusato  = false;
+        /*
+         * ⭐⭐⭐ Il motore ha RIFIUTATO il taglio parziale della KV.
+         *
+         * ⛔⛔ Senza questo, zero token riusati e' indistinguibile fra due casi
+         * opposti: il prefisso e' cambiato (difetto nostro, curabile) oppure la
+         * memoria di questo modello non SA fare tagli parziali (architettura,
+         * non curabile).
+         *
+         * `llama_memory_seq_rm` puo' fallire per costruzione, e l'API lo
+         * dichiara. ⇒ Le architetture con KV condivisa fra gli ultimi strati -
+         * la famiglia Gemma - sono proprio quel caso: `ggml-org/llama.cpp#21468`
+         * documenta che il riuso della cache **non e' supportato** li', anche
+         * con flash attention e SWA piena.
+         *
+         * ⛔ Un allarme che accusa una cosa inevitabile viene spento al terzo
+         * squillo, e con lui se ne va anche quello vero.
+         */
+        bool      taglio_rifiutato  = false;
     };
     std::mutex       tempi_lock;
     talos_cronometro tempi;
@@ -2534,6 +2552,7 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         if (riusati < session->cached.size()
             && !llama_memory_seq_rm(memoria, 0, (llama_pos) riusati, -1)) {
             TALOS_LOGI("taglio parziale rifiutato: si riparte da zero");
+            session->tempi.taglio_rifiutato = true;
             llama_memory_clear(memoria, true);
             riusati = 0;
         }
@@ -2587,8 +2606,23 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         return nullptr;
     }
     const long long tempo_prefill = talos_da(avvio);
-    TALOS_LOGI("prompt: %d token, %zu riusati, %zu nuovi (pezzi da %d, contesto %d)",
-               wanted, riusati, (size_t) wanted - riusati, slice, budget);
+    /*
+     * ⭐⭐⭐ DUE numeri, e prima ne diceva UNO SOLO - quello sbagliato.
+     *
+     * ⛔⛔ Questa riga stampava `slice`, cioe `llama_n_batch`, chiamandolo
+     * "pezzi". Ma `n_batch` e il batch LOGICO ed e fisso a 512: la cosa che
+     * governa l'attesa dello Stop e `n_ubatch`, il microbatch FISICO.
+     *
+     * ⇒ Il 2026-08-21 ho portato il microbatch a 192 e ho letto questo log
+     * per verificarlo: diceva "pezzi da 512", e ho concluso che la modifica
+     * non fosse arrivata. Era arrivata; era il log a guardare altrove.
+     *
+     * ⛔ Un numero mostrato al posto di un altro non e un dettaglio di
+     * formattazione: e una misura che manda a cercare un difetto che non c'e.
+     */
+    TALOS_LOGI("prompt: %d token, %zu riusati, %zu nuovi (batch %d, microbatch %d, contesto %d)",
+               wanted, riusati, (size_t) wanted - riusati,
+               slice, (int) llama_n_ubatch(session->ctx), budget);
 
     std::string answer;
     char piece[256];
@@ -2815,11 +2849,12 @@ Java_ai_talos_TalosLlamaNative_nativeLastTimings(JNIEnv * env, jclass, jlong han
              "{\"tokenizeMs\":%lld,\"prefixMs\":%lld,\"prefillMs\":%lld,"
              "\"firstTokenMs\":%lld,\"totalMs\":%lld,\"promptTokens\":%d,"
              "\"reusedTokens\":%d,\"newTokens\":%d,\"producedTokens\":%d,"
-             "\"reusedContext\":%s}",
+             "\"reusedContext\":%s,\"partialTrimRefused\":%s}",
              tempi.tokenizzazione_ms, tempi.prefisso_ms, tempi.prefill_ms,
              tempi.primo_token_ms, tempi.totale_ms, tempi.token_prompt,
              tempi.token_riusati, tempi.token_nuovi, tempi.token_prodotti,
-             tempi.contesto_riusato ? "true" : "false");
+             tempi.contesto_riusato ? "true" : "false",
+             tempi.taglio_rifiutato ? "true" : "false");
     return env->NewStringUTF(json);
 }
 

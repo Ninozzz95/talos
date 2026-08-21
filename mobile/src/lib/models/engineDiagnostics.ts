@@ -98,6 +98,8 @@ export interface TalosEngineFacts {
         newTokens: number
         producedTokens: number
         reusedContext: boolean
+        /** ⛔ Il motore non SAPEVA tagliare la KV: vedi `localEngine`. */
+        partialTrimRefused?: boolean
     } | null
     cpuCores: number | null
     cpuCapacities: readonly number[]
@@ -301,15 +303,31 @@ export function talosEngineDiagnosticRows(facts: TalosEngineFacts): TalosEngineD
         rows.push({
             id: 'engine-reuse',
             labelKey: 'doctor.engineReuse',
-            value: `${t.reusedTokens} / ${t.promptTokens} riusati`
-                + ` · ${t.newTokens} nuovi · ${t.producedTokens} prodotti`,
-            /*
-             * ⛔ Zero riusati su un prompt lungo È il difetto: vuol dire che si
-             * sta ripagando il prefill di tutta la conversazione. Sul primo
-             * turno è normale — non c'era niente da riusare — e per questo la
-             * soglia guarda quanti token nuovi ci sono, non solo il riuso.
+            value: t.partialTrimRefused === true
+                ? `0 / ${t.promptTokens} — questo modello non sa riusare la cache`
+                : `${t.reusedTokens} / ${t.promptTokens} riusati`
+                    + ` · ${t.newTokens} nuovi · ${t.producedTokens} prodotti`,
+            /**
+             * ⛔ Zero riusati su un prompt lungo E' il difetto: vuol dire che si sta
+             * ripagando il prefill di tutta la conversazione. Sul primo turno e'
+             * normale - non c'era niente da riusare - e per questo la soglia
+             * guarda quanti token nuovi ci sono, non solo il riuso.
+             *
+             * ⭐⭐⭐ MA prima di accusare si chiede al motore SE POTEVA.
+             *
+             * ⛔⛔ `partialTrimRefused` dice che `llama_memory_seq_rm` ha rifiutato
+             * il taglio parziale. Succede per costruzione sulle architetture con
+             * KV condivisa fra gli ultimi strati - la famiglia Gemma -, e
+             * `ggml-org/llama.cpp#21468` documenta che li' il riuso **non e'
+             * supportato**, nemmeno con flash attention e SWA piena.
+             *
+             * ⇒ Accusare quel caso vorrebbe dire tenere una riga rossa che nessuno
+             * puo' far diventare verde. Un allarme cosi' viene spento al terzo
+             * squillo, e con lui se ne va anche quello vero. ⛔ La riga resta e
+             * dice **perche'**: e' un fatto sul modello, non una colpa.
              */
-            ok: !t.reusedContext || t.reusedTokens > 0 || t.newTokens < 1_000,
+            ok: t.partialTrimRefused === true
+                || !t.reusedContext || t.reusedTokens > 0 || t.newTokens < 1_000,
         })
     }
 
