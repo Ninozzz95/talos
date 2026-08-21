@@ -37,6 +37,41 @@ La GPU è spedita, la politica è collegata, e non si accenderà mai da sola.
 
 ---
 
+---
+
+## 1-bis. ⭐ IL PRIMO LAVORO — e non è la voce: è l'ultimo pezzo della 0.1.17
+
+**Deciso dall'owner il 2026-08-21.** Il sondaggio che riempie
+`TalosBackendEvidenceStore` si accende in **due modi, tutti e due**:
+
+| via | quando | forma |
+|---|---|---|
+| **automatica** | la **PRIMA volta** che una persona sceglie un modello **locale** | una **modale** che chiede il permesso: *sì / no*, più **«non mostrare più»** |
+| **manuale** | sempre | un comando nelle **impostazioni**, per chi ha detto no o ha cambiato idea |
+
+⛔ **Quello che la modale NON deve fare:**
+
+- **Non parte da sola.** Chiedere è il punto: il sondaggio consuma batteria e
+  fa scaldare il telefono, e nessuno lo ha chiesto.
+- **«Non mostrare più» è per sempre**, e non è un «no» mascherato: la persona
+  può ancora accendere il sondaggio dalle impostazioni, e la scheda deve dirlo.
+  ⛔ Vedi `spegnere-non-e-dimenticare`: «disattiva» una volta **cancellava la
+  chiave**, e la differenza fra spegnere e dimenticare è costata una sessione.
+- **Non blocca la chat.** Se la persona dice sì, il sondaggio non deve tenerla
+  ferma: il primo messaggio parte come sempre.
+- **Il rifiuto è un esito, non un errore.** «No» va ricordato, e la scheda della
+  capacità deve mostrare **stato e comando** — non la parola «fatto».
+
+⇒ Finché questo non esiste, la GPU spedita dalla 0.1.17 **non si accende su
+nessun telefono**. È l'ultimo pezzo della release precedente, e va prima della
+voce.
+
+⛔ E qui vale in pieno la trappola del §8: non basta che il sondaggio sia
+scritto. Deve essere **chiamato**, e serve il test che fallisce se qualcuno lo
+scollega.
+
+---
+
 ## 2. Cosa apri PRIMA di toccare una riga
 
 ⛔ **Non riprogettare a memoria.** Il blueprint è dell'owner, 103.428 byte,
@@ -107,7 +142,7 @@ eccoli interi.
 Il blueprint elenca **undici fasi (0-10)**. ⛔ Non sono una release: sono un
 programma. Ecco dove finisce la **0.1.18**, e perché.
 
-### ⭐ La 0.1.18 sono le fasi 0-4. Le altre sono seguito.
+### ✅ La 0.1.18 sono le fasi 0-4 — DECISO dall'owner il 2026-08-21.
 
 | fase | cosa consegna | cancello d'uscita |
 |---|---|---|
@@ -197,15 +232,18 @@ senza sapere che li rimetterai.
 
 ---
 
-## 6. LE DECISIONI CHE RESTANO ALL'OWNER
+## 6. LE DECISIONI — prese il 2026-08-21, e quelle che restano
 
-1. ⛔⛔ **Il sondaggio della 0.1.17.** Chi e quando fa girare una generazione
-   vera contro un backend candidato per riempire `TalosBackendEvidenceStore`.
-   Costa batteria e tempo reale, e non deve interrompere una chat in corso.
-   **Finché non si decide, la GPU spedita non si accende mai.**
-2. **Fin dove arriva la 0.1.18.** La proposta qui è **fasi 0-4**. Se serve prima
-   la 5 (installazione del modello) l'ordine cambia.
-3. **Il dispositivo di riferimento** su cui valgono i numeri del §38.2.
+| | decisione | esito |
+|---|---|---|
+| 1 | **Il sondaggio della 0.1.17** | ✅ **PRESA** — modale alla prima scelta di un modello locale (sì/no + «non mostrare più») **e** comando nelle impostazioni. Vedi §1-bis |
+| 2 | **Fin dove arriva la 0.1.18** | ✅ **PRESA** — **fasi 0-4**. Il cancello d'uscita della fase 4 è il punto di spedizione |
+
+⛔ **Restano aperte:**
+
+3. **Il dispositivo di riferimento** su cui valgono i numeri del §38.2. Finché
+   non è nominato, «TTFA < 500 ms sul dispositivo di riferimento» non è un
+   cancello: è una frase. ⇒ Chiedilo **prima** della fase 2, non dopo.
 4. **Il push**, ogni volta, nella forma `git -C <percorso> push`.
 
 ---
