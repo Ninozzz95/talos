@@ -80,6 +80,10 @@ vi.mock('@/stores/chatController', () => ({
         toolAuthorizationPromptVisible: ref(false),
         dismissToolAuthorization: vi.fn(),
         decideToolAuthorization: vi.fn(),
+        // §1-bis: la barra la legge sempre, per sapere se mostrare la
+        // modale del sondaggio GPU — null qui vuol dire «niente da chiedere».
+        pendingLocalEngineProbeConsent: ref(null),
+        decideLocalEngineProbeConsent: vi.fn(),
         attachments: {
             items: allegatiFinti,
             bindings: ref([]),

@@ -561,10 +561,10 @@ export const TALOS_EN_MESSAGES = {
             },
             runNow: 'Run it now',
             running: 'Running…',
-            resultRan: {
-                cpu: 'Done. CPU: {outcome}.',
-                cpuAndGpu: 'Done. CPU: {cpuOutcome}, GPU: {gpuOutcome}.',
-            },
+            noModel: 'Download a local model first — there is nothing to check yet.',
+            /** `{backend}` is already the human word ('CPU' or 'GPU'), decided by `talosBackendLabel`. */
+            resultRan: 'Done. This phone answers local models fastest on the {backend}.',
+            resultInconclusive: 'That run was not steady enough to trust — you can try again.',
             resultNotRun: {
                 hot: 'Skipped — the phone is too warm right now. Try again once it has cooled down.',
                 alreadyProven: 'Nothing to check — already measured on this phone.',

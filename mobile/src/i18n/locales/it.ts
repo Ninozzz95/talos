@@ -557,10 +557,9 @@ export const TALOS_IT_MESSAGES = {
             },
             runNow: 'Fallo girare ora',
             running: 'In corso…',
-            resultRan: {
-                cpu: 'Fatto. CPU: {outcome}.',
-                cpuAndGpu: 'Fatto. CPU: {cpuOutcome}, GPU: {gpuOutcome}.',
-            },
+            noModel: 'Scarica prima un modello locale — non c\'è ancora niente da verificare.',
+            resultRan: 'Fatto. Questo telefono risponde ai modelli locali più veloce sulla {backend}.',
+            resultInconclusive: 'Quella corsa non è stata abbastanza stabile per fidarsene — puoi riprovare.',
             resultNotRun: {
                 hot: 'Saltato — il telefono è troppo caldo adesso. Riprova quando si è raffreddato.',
                 alreadyProven: 'Niente da verificare — già misurato su questo telefono.',
