@@ -46,10 +46,20 @@ internal class TalosMossRuntime private constructor(
     private val decodeSession: OrtSession,
     private val localFixedFrameSession: OrtSession,
     private val codecDecodeSession: OrtSession,
+    private val codecDecodeStepSession: OrtSession,
     private val manifest: TalosMossManifest,
     private val ttsMeta: TalosMossTtsMeta,
+    private val codecMeta: TalosMossCodecMeta,
     val sampleRate: Int,
 ) : Closeable {
+
+    /**
+     * A fresh incremental codec decoder for one utterance (Fase 2 streaming
+     * playback). The caller owns it: reset it between utterances that reuse
+     * this runtime, close it when done. Independent of [decodeAudioTokens] -
+     * both read the same `audio_codes`, through different graphs.
+     */
+    fun openCodecStream(): TalosMossCodecStream = TalosMossCodecStream(env, codecDecodeStepSession, codecMeta)
 
     fun synthesizePcm16ToFile(
         textTokenIds: IntArray,
@@ -59,19 +69,8 @@ internal class TalosMossRuntime private constructor(
         seed: Long = System.nanoTime(),
         isCancelled: () -> Boolean = { false },
     ): TalosMossSynthesisResult {
-        require(textTokenIds.isNotEmpty()) { "textTokenIds must not be empty" }
         val startedAt = System.currentTimeMillis()
-        val inputRows = buildInputRows(textTokenIds, voice)
-        val generation = TalosMossGeneration(random = java.util.Random(seed), nVq = manifest.ttsConfig.nVq)
-        val audioTokens: List<IntArray>
-        val cancelled: Boolean
-        try {
-            runPrefill(inputRows, generation)
-            cancelled = runDecode(generation, maxFrames, isCancelled)
-            audioTokens = generation.audioTokens
-        } finally {
-            generation.close()
-        }
+        val (audioTokens, cancelled) = generateAudioTokens(textTokenIds, voice, maxFrames, seed, isCancelled)
         val pcm = if (audioTokens.isEmpty()) FloatArray(0) else decodeAudioTokens(audioTokens)
         writePcm16MonoWav(pcm, sampleRate, outputFile)
         return TalosMossSynthesisResult(
@@ -84,7 +83,37 @@ internal class TalosMossRuntime private constructor(
         )
     }
 
+    /**
+     * The TTS half only - prefill through autoregressive decode, no codec
+     * involved. [TalosMossCodecStream] (Fase 2) and [decodeAudioTokens]
+     * (Fase 1, whole-utterance) are two different ways to turn the same
+     * token frames into audio; this is where both start. `onFrame` fires
+     * once per generated frame, in order, before the next one starts -
+     * mirrors upstream `ort_cpu_runtime.py`'s own `on_frame` hook, which is
+     * how streaming playback there feeds its codec ring buffer.
+     */
+    fun generateAudioTokens(
+        textTokenIds: IntArray,
+        voice: String,
+        maxFrames: Int = manifest.generationDefaults.maxNewFrames,
+        seed: Long = System.nanoTime(),
+        isCancelled: () -> Boolean = { false },
+        onFrame: (IntArray) -> Unit = {},
+    ): Pair<List<IntArray>, Boolean> {
+        require(textTokenIds.isNotEmpty()) { "textTokenIds must not be empty" }
+        val inputRows = buildInputRows(textTokenIds, voice)
+        val generation = TalosMossGeneration(random = java.util.Random(seed), nVq = manifest.ttsConfig.nVq)
+        try {
+            runPrefill(inputRows, generation)
+            val cancelled = runDecode(generation, maxFrames, isCancelled, onFrame)
+            return Pair(generation.audioTokens, cancelled)
+        } finally {
+            generation.close()
+        }
+    }
+
     override fun close() {
+        codecDecodeStepSession.close()
         codecDecodeSession.close()
         localFixedFrameSession.close()
         decodeSession.close()
@@ -155,7 +184,12 @@ internal class TalosMossRuntime private constructor(
     }
 
     /** Returns true if this generation was cancelled before reaching `should_continue == false` or `maxFrames`. */
-    private fun runDecode(generation: TalosMossGeneration, maxFrames: Int, isCancelled: () -> Boolean): Boolean {
+    private fun runDecode(
+        generation: TalosMossGeneration,
+        maxFrames: Int,
+        isCancelled: () -> Boolean,
+        onFrame: (IntArray) -> Unit = {},
+    ): Boolean {
         val cfg = manifest.ttsConfig
         val rowWidth = cfg.nVq + 1
         val cappedMaxFrames = maxFrames.coerceAtMost(manifest.generationDefaults.maxNewFrames)
@@ -175,6 +209,7 @@ internal class TalosMossRuntime private constructor(
                 generation.previousTokenSets[quantizer].add(token)
             }
             generation.audioTokens += frameResult.frame
+            onFrame(frameResult.frame)
 
             OnnxTensor.createTensor(env, IntBuffer.wrap(audioRow), longArrayOf(1, 1, rowWidth.toLong())).use { inputTensor ->
                 OnnxTensor.createTensor(env, IntBuffer.wrap(intArrayOf(generation.pastValidLengths)), longArrayOf(1)).use { pastTensor ->
@@ -294,6 +329,7 @@ internal class TalosMossRuntime private constructor(
             val decodeSession = openSession(File(ttsDir, ttsMeta.decodeStepFile))
             val localFixedFrameSession = openSession(File(ttsDir, ttsMeta.localFixedSampledFrameFile))
             val codecDecodeSession = openSession(File(codecDir, codecMeta.decodeFullFile))
+            val codecDecodeStepSession = openSession(File(codecDir, codecMeta.decodeStepFile))
 
             return TalosMossRuntime(
                 env = env,
@@ -302,8 +338,10 @@ internal class TalosMossRuntime private constructor(
                 decodeSession = decodeSession,
                 localFixedFrameSession = localFixedFrameSession,
                 codecDecodeSession = codecDecodeSession,
+                codecDecodeStepSession = codecDecodeStepSession,
                 manifest = manifest,
                 ttsMeta = ttsMeta,
+                codecMeta = codecMeta,
                 sampleRate = codecMeta.sampleRate,
             )
         }

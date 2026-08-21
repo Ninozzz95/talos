@@ -116,11 +116,52 @@ class TalosMossManifestTest {
 
         val codecMeta = TalosMossCodecMeta.fromJson(
             JSONObject(
-                """{"files": {"decode_full": "moss_audio_tokenizer_decode_full.onnx"}, "codec_config": {"sample_rate": 48000}}""",
+                """
+                {
+                  "files": {"decode_full": "moss_audio_tokenizer_decode_full.onnx", "decode_step": "moss_audio_tokenizer_decode_step.onnx"},
+                  "codec_config": {"sample_rate": 48000, "channels": 2, "num_quantizers": 16},
+                  "streaming_decode": {
+                    "transformer_offsets": [
+                      {"index": 0, "input_name": "transformer_offset_0", "output_name": "transformer_offset_out_0", "shape": [1]}
+                    ],
+                    "attention_caches": [
+                      {"index": 0, "context": 500, "num_heads": 4, "head_dim": 64,
+                       "offset_input_name": "attn_offset_0", "offset_output_name": "attn_offset_out_0",
+                       "cached_keys_input_name": "attn_cached_keys_0", "cached_keys_output_name": "attn_cached_keys_out_0",
+                       "cached_values_input_name": "attn_cached_values_0", "cached_values_output_name": "attn_cached_values_out_0",
+                       "cached_positions_input_name": "attn_cached_positions_0", "cached_positions_output_name": "attn_cached_positions_out_0",
+                       "offset_shape": [1], "cache_shape": [1, 4, 500, 64], "positions_shape": [1, 500]}
+                    ]
+                  }
+                }
+                """.trimIndent(),
             ),
         )
         assertEquals("moss_audio_tokenizer_decode_full.onnx", codecMeta.decodeFullFile)
+        assertEquals("moss_audio_tokenizer_decode_step.onnx", codecMeta.decodeStepFile)
         assertEquals(48000, codecMeta.sampleRate)
+        assertEquals(2, codecMeta.channels)
+        assertEquals(16, codecMeta.numQuantizers)
+        assertEquals(1, codecMeta.streamingTransformerOffsets.size)
+        assertEquals("transformer_offset_0", codecMeta.streamingTransformerOffsets[0].inputName)
+        assertEquals(1, codecMeta.streamingAttentionCaches.size)
+        val attn = codecMeta.streamingAttentionCaches[0]
+        assertEquals("attn_cached_keys_0", attn.cachedKeysInputName)
+        assertEquals(listOf(1, 4, 500, 64), attn.cacheShape.toList())
+        assertEquals(listOf(1, 500), attn.positionsShape.toList())
+    }
+
+    @Test
+    fun codecMetaWithoutStreamingDecodeParsesToEmptyLists() {
+        // The contrary case: a manifest with no streaming_decode section (or
+        // an older format) must not throw - just carry no streaming spec.
+        val codecMeta = TalosMossCodecMeta.fromJson(
+            JSONObject(
+                """{"files": {"decode_full": "a.onnx", "decode_step": "b.onnx"}, "codec_config": {"sample_rate": 48000, "channels": 1, "num_quantizers": 8}}""",
+            ),
+        )
+        assertTrue(codecMeta.streamingTransformerOffsets.isEmpty())
+        assertTrue(codecMeta.streamingAttentionCaches.isEmpty())
     }
 
     @Test
