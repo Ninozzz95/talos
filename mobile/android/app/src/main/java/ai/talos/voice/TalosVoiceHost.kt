@@ -1,5 +1,6 @@
 package ai.talos.voice
 
+import android.content.Context
 import java.io.Closeable
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -120,6 +121,49 @@ internal class TalosVoiceHost(
     }
 
     /**
+     * Fase 4's door for the plugin: same streaming path as
+     * [submitSpeakStreaming], with an enrolled personal profile's
+     * `promptAudioCodes` (§15.1's `generateAudioTokensWithReference`)
+     * standing in for a builtin voice name. The caller (the plugin) owns
+     * loading the profile from disk - this class stays unaware of
+     * [TalosVoiceProfileStore]/`Context`, same separation of concerns
+     * [TalosMossRuntime.generateAudioTokensWithReference] already keeps one
+     * level down: audio codes in, no knowledge of where they came from.
+     */
+    fun submitSpeakStreamingWithReference(
+        text: String,
+        promptAudioCodes: List<IntArray>,
+        maxFrames: Int? = null,
+        seed: Long? = null,
+        onComplete: (Result<TalosVoiceStreamResult>) -> Unit = {},
+    ): Long {
+        val id = generationCounter.incrementAndGet()
+        activeGeneration = id
+        owner.execute {
+            val result = runCatching { runSpeakStreamingWithReference(id, text, promptAudioCodes, maxFrames, seed) }
+            onComplete(result)
+        }
+        return id
+    }
+
+    /** Convenience for tests, same shape as [speakStreamingBlocking]. */
+    fun speakStreamingWithReferenceBlocking(
+        text: String,
+        promptAudioCodes: List<IntArray>,
+        maxFrames: Int? = null,
+        seed: Long? = null,
+    ): TalosVoiceStreamResult {
+        val latch = CountDownLatch(1)
+        var outcome: Result<TalosVoiceStreamResult>? = null
+        submitSpeakStreamingWithReference(text, promptAudioCodes, maxFrames, seed) { result ->
+            outcome = result
+            latch.countDown()
+        }
+        latch.await()
+        return outcome!!.getOrThrow()
+    }
+
+    /**
      * Invalidates whatever generation is active AND silences whatever is
      * playing right now (§23.2 `flush`) - a cancel that only stopped future
      * TTS frames but let already-decoded audio keep playing out would not be
@@ -170,15 +214,6 @@ internal class TalosVoiceHost(
         )
     }
 
-    /**
-     * §16.1's loop, driven by [TalosMossRuntime.generateAudioTokens]'s
-     * `onFrame` hook: every generated TTS frame is queued, then handed to
-     * [TalosMossCodecStream] in the batch size §16.2's backpressure policy
-     * currently allows, and the decoded PCM is written to [TalosPcmPlayer]
-     * immediately. Batch size jumps from 1 (first chunk only, for TTFA) to a
-     * measured-safe floor of 8 for everything after ([resolveFrameBudget] -
-     * see its doc for why, and for why this is not upstream's 1→2→4→8).
-     */
     private fun runSpeakStreaming(id: Long, text: String, voice: String, maxFrames: Int?, seed: Long?): TalosVoiceStreamResult {
         val activeTokenizer = tokenizer ?: openTokenizer().also { tokenizer = it }
         val activeRuntime = runtime ?: TalosMossRuntime.open(modelRoot, cpuThreads).also { runtime = it }
@@ -186,6 +221,59 @@ internal class TalosVoiceHost(
         val textTokenIds = activeTokenizer.encode(text)
         require(textTokenIds.isNotEmpty()) { "tokenizer produced no ids for non-empty text: \"$text\"" }
 
+        return driveStreamingSynthesis(id, activeRuntime, activePlayer) { onFrame ->
+            activeRuntime.generateAudioTokens(
+                textTokenIds = textTokenIds,
+                voice = voice,
+                maxFrames = maxFrames ?: DEFAULT_MAX_FRAMES,
+                seed = seed ?: System.nanoTime(),
+                isCancelled = { activeGeneration != id },
+                onFrame = onFrame,
+            )
+        }
+    }
+
+    /** Same as [runSpeakStreaming], an enrolled profile's reference codes instead of a builtin voice name - see [submitSpeakStreamingWithReference]. */
+    private fun runSpeakStreamingWithReference(id: Long, text: String, promptAudioCodes: List<IntArray>, maxFrames: Int?, seed: Long?): TalosVoiceStreamResult {
+        val activeTokenizer = tokenizer ?: openTokenizer().also { tokenizer = it }
+        val activeRuntime = runtime ?: TalosMossRuntime.open(modelRoot, cpuThreads).also { runtime = it }
+        val activePlayer = player ?: TalosPcmPlayer(activeRuntime.sampleRate, activeRuntime.channels).also { player = it }
+        val textTokenIds = activeTokenizer.encode(text)
+        require(textTokenIds.isNotEmpty()) { "tokenizer produced no ids for non-empty text: \"$text\"" }
+
+        return driveStreamingSynthesis(id, activeRuntime, activePlayer) { onFrame ->
+            activeRuntime.generateAudioTokensWithReference(
+                textTokenIds = textTokenIds,
+                promptAudioCodes = promptAudioCodes,
+                maxFrames = maxFrames ?: DEFAULT_MAX_FRAMES,
+                seed = seed ?: System.nanoTime(),
+                isCancelled = { activeGeneration != id },
+                onFrame = onFrame,
+            )
+        }
+    }
+
+    /**
+     * §16.1's loop, factored out of [runSpeakStreaming] so
+     * [runSpeakStreamingWithReference] runs through the exact same decode/
+     * backpressure/underrun-accounting code - not a second copy that could
+     * quietly drift from the measured-safe one. `generate` is the one thing
+     * that legitimately differs between a builtin voice and a personal
+     * profile: which `TalosMossRuntime` generation method gets called, and
+     * with what reference. Everything after "a frame arrived" is identical:
+     * every generated TTS frame is queued, then handed to
+     * [TalosMossCodecStream] in the batch size §16.2's backpressure policy
+     * currently allows, and the decoded PCM is written to [TalosPcmPlayer]
+     * immediately. Batch size jumps from 1 (first chunk only, for TTFA) to a
+     * measured-safe floor of 8 for everything after ([resolveFrameBudget] -
+     * see its doc for why, and for why this is not upstream's 1→2→4→8).
+     */
+    private fun driveStreamingSynthesis(
+        id: Long,
+        activeRuntime: TalosMossRuntime,
+        activePlayer: TalosPcmPlayer,
+        generate: (onFrame: (IntArray) -> Unit) -> Pair<List<IntArray>, Boolean>,
+    ): TalosVoiceStreamResult {
         val codecStream = activeRuntime.openCodecStream()
         val startedAtNanos = System.nanoTime()
         val underrunCountBefore = activePlayer.underrunCount()
@@ -214,17 +302,10 @@ internal class TalosVoiceHost(
 
         val cancelled: Boolean
         try {
-            val (_, wasCancelled) = activeRuntime.generateAudioTokens(
-                textTokenIds = textTokenIds,
-                voice = voice,
-                maxFrames = maxFrames ?: DEFAULT_MAX_FRAMES,
-                seed = seed ?: System.nanoTime(),
-                isCancelled = { activeGeneration != id },
-                onFrame = { frame ->
-                    pending.add(frame)
-                    decodePending(force = false)
-                },
-            )
+            val (_, wasCancelled) = generate { frame ->
+                pending.add(frame)
+                decodePending(force = false)
+            }
             decodePending(force = true)
             cancelled = wasCancelled || activeGeneration != id
         } finally {
@@ -270,6 +351,38 @@ internal class TalosVoiceHost(
     companion object {
         private const val DEFAULT_MAX_FRAMES = 375
         private const val DRAIN_TIMEOUT_MS = 10_000L
+
+        @Volatile private var instance: TalosVoiceHost? = null
+
+        /**
+         * Blueprint §41's `TalosVoiceHost.get(context.applicationContext)` -
+         * one host per process, not one per [android.app.Activity] or per
+         * Capacitor `Plugin` instance. Matters concretely: a WebView reload
+         * destroys and recreates the plugin, but §41's own skeleton warns
+         * against treating that as a reason to close model sessions
+         * ("Client/UI destruction is not equivalent to destroying the
+         * process-scoped voice runtime") - a second [TalosVoiceHost] on the
+         * same [modelRoot] would mean two owner threads racing to open the
+         * same ONNX sessions, which §14's whole design exists to rule out.
+         */
+        fun get(context: Context): TalosVoiceHost {
+            instance?.let { return it }
+            synchronized(this) {
+                instance?.let { return it }
+                val modelRoot = TalosVoiceModelManager.modelRoot(context.applicationContext.getExternalFilesDir(null)!!)
+                val created = TalosVoiceHost(modelRoot)
+                instance = created
+                return created
+            }
+        }
+
+        /** Test-only: lets an instrumented test start from a clean singleton instead of leaking state across test classes. */
+        internal fun resetForTests() {
+            synchronized(this) {
+                instance?.close()
+                instance = null
+            }
+        }
     }
 }
 
