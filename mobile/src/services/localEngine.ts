@@ -803,6 +803,22 @@ export interface TalosLocalEngineTimings {
     newTokens: number
     producedTokens: number
     reusedContext: boolean
+    /**
+     * ⭐⭐⭐ Il motore ha RIFIUTATO il taglio parziale della KV.
+     *
+     * ⛔⛔ Distingue due casi che «zero riusati» confonde in uno:
+     *   - il prefisso e' cambiato    ⇒ difetto NOSTRO, curabile
+     *   - la memoria non sa tagliare ⇒ architettura, non curabile
+     *
+     * `llama_memory_seq_rm` puo' fallire per costruzione. ⇒ Le architetture
+     * con KV condivisa fra gli ultimi strati - la famiglia Gemma - sono quel
+     * caso: `ggml-org/llama.cpp#21468` documenta che li' il riuso della cache
+     * **non e' supportato**, nemmeno con flash attention e SWA piena.
+     *
+     * ⛔ Facoltativo: un ponte nativo piu' vecchio non lo manda, e allora e'
+     * IGNOTO - non «non e' successo».
+     */
+    partialTrimRefused?: boolean
 }
 
 /**

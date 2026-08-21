@@ -49,6 +49,7 @@ import {
     talosSenzaProtocolloDeiTool,
 } from '@/lib/chat/localToolCalls'
 import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/thinkStream'
+import { talosTrattieniLeChiamate } from '@/lib/chat/trattieniLeChiamate'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import {
     talosLocalToolTransportOf,
@@ -981,11 +982,28 @@ async function run(
          * era l'unico che non lo faceva.
          */
         const separatore = talosCreateThinkSplitter()
+        /*
+         * ⭐⭐⭐ E il JSON di una chiamata non deve SCORRERE a schermo.
+         *
+         * ⛔⛔ Il testo finale era gia' filtrato, e ogni verifica guardava
+         * quello. L'owner ha fotografato il Pad **mentre elaborava**, il
+         * 2026-08-21, e sotto la sua parola "Ciao" c'era:
+         *
+         *   {"name":"device_status","arguments":{"manufacturer":"OnePlus",…
+         *
+         * ⇒ Una risposta ha due vite: quella che scorre e quella che resta.
+         * Un difetto che dura otto secondi e sparisce e' comunque un difetto che
+         * la persona vede - ed e' invisibile a chi controlla dopo.
+         */
+        const trattieni = talosTrattieniLeChiamate()
         generation = await talosLocalEngineGenerate(
             plan.prompt,
             (delta) => {
                 const fetta = separatore.push(delta)
-                if (fetta.text) onChunk?.(fetta.text)
+                if (fetta.text) {
+                    const visibile = trattieni.push(fetta.text)
+                    if (visibile) onChunk?.(visibile)
+                }
                 if (fetta.reasoning) onReasoning?.(fetta.reasoning)
             },
             { maxTokens: MAX_TOKENS, stopAtEndOfGeneration: true },
@@ -993,7 +1011,14 @@ async function run(
         // La coda trattenuta va rilasciata: se la risposta finisce con un
         // carattere che POTEVA iniziare un tag, quel carattere è testo.
         const ultima = separatore.flush()
-        if (ultima.text) onChunk?.(ultima.text)
+        if (ultima.text) {
+            const visibile = trattieni.push(ultima.text)
+            if (visibile) onChunk?.(visibile)
+        }
+        /* ⛔ Cio' che resta trattenuto a fine risposta e' TESTO: mangiarlo
+         * sarebbe peggio del difetto che si sta curando. */
+        const coda = trattieni.flush()
+        if (coda) onChunk?.(coda)
         if (ultima.reasoning) onReasoning?.(ultima.reasoning)
     } catch (error) {
         if (error instanceof TalosLocalEngineGenerationError) {
