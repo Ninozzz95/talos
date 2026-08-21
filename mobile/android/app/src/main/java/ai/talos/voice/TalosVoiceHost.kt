@@ -175,11 +175,9 @@ internal class TalosVoiceHost(
      * `onFrame` hook: every generated TTS frame is queued, then handed to
      * [TalosMossCodecStream] in the batch size §16.2's backpressure policy
      * currently allows, and the decoded PCM is written to [TalosPcmPlayer]
-     * immediately. Batch size grows (1→2→4→8 frames, [resolveFrameBudget])
-     * as the player's own measured lead grows - real buffered-ahead time
-     * read off `TalosPcmPlayer`, not upstream `ort_cpu_runtime.py`'s
-     * wall-clock proxy (that proxy exists because the Python reference has
-     * no real audio device to measure against; this one does).
+     * immediately. Batch size jumps from 1 (first chunk only, for TTFA) to a
+     * measured-safe floor of 8 for everything after ([resolveFrameBudget] -
+     * see its doc for why, and for why this is not upstream's 1→2→4→8).
      */
     private fun runSpeakStreaming(id: Long, text: String, voice: String, maxFrames: Int?, seed: Long?): TalosVoiceStreamResult {
         val activeTokenizer = tokenizer ?: openTokenizer().also { tokenizer = it }
@@ -190,6 +188,7 @@ internal class TalosVoiceHost(
 
         val codecStream = activeRuntime.openCodecStream()
         val startedAtNanos = System.nanoTime()
+        val underrunCountBefore = activePlayer.underrunCount()
         var ttfaMs: Long? = null
         var underruns = 0
         val pending = ArrayList<IntArray>()
@@ -233,10 +232,12 @@ internal class TalosVoiceHost(
         }
 
         val drained = if (!cancelled) activePlayer.awaitDrain(timeoutMs = DRAIN_TIMEOUT_MS) else true
+        val hardwareUnderruns = activePlayer.underrunCount() - underrunCountBefore
         return TalosVoiceStreamResult(
             cancelled = cancelled,
             ttfaMs = ttfaMs,
             underruns = underruns,
+            hardwareUnderruns = hardwareUnderruns,
             drainedWithinTimeout = drained,
             elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000,
         )
@@ -273,19 +274,37 @@ internal class TalosVoiceHost(
 }
 
 /**
- * §16.2's adaptive backpressure, same thresholds as upstream
- * `ort_cpu_runtime.py`'s `_resolve_stream_decode_frame_budget` (verified
- * against that source, not re-derived): start at the smallest possible
- * batch (one frame) until the first audio has actually gone to the player,
- * then grow the batch as measured lead grows - more buffered-ahead time
- * means it is safe to spend longer per codec call without starving
- * playback. `leadSeconds` is real here (buffered-minus-played frames off
+ * §16.2's adaptive backpressure. NOT upstream `ort_cpu_runtime.py`'s
+ * `_resolve_stream_decode_frame_budget` thresholds (1/2/4/8 at 0.20/0.55/
+ * 1.10s lead) - those were measured on a different platform, and a real
+ * measurement here showed they do not hold on the OnePlus Pad 3.
+ *
+ * ⛔⛔ **`decode_step` at batch=1 measures RTF 0.939 on its own** - the codec
+ * decode ALONE, with no TTS generation cost added on top yet, already
+ * spends 94% of the real-time budget for the audio it produces
+ * (`TalosMossCodecStreamBatchSizeDiagnosticTest`: 127 frames, batch=1,
+ * elapsedMs=9538 for audioMs=10160). TTS generation for those same frames
+ * runs at RTF ~0.53-0.69 on its own (measured in Fase 1). Serialized, as
+ * this pipeline runs them, that is a combined RTF over 1.5 at batch=1 -
+ * not jitter, a SUSTAINED deficit. A bigger `TalosPcmPlayer` buffer only
+ * delays the first underrun it cannot prevent: measured 103 real
+ * `AudioTrack.getUnderrunCount()` events at the original buffer, 91 at 4x
+ * the buffer - barely moved, because the buffer was never the bottleneck.
+ * Upstream's own thresholds assume batch=1 is cheap enough to be a safe
+ * starting point and bigger batches are a pure efficiency optimization;
+ * that assumption does not hold on this hardware for this model.
+ *
+ * The fix measured to actually leave headroom: batch=1 ONLY for the very
+ * first chunk (keeps TTFA low - measured 353-355ms, still under the 500ms
+ * target), then straight to a floor of 8 for everything after, growing to
+ * 16 once lead is generous. At batch=8 codec-alone RTF measures 0.204;
+ * combined with ~0.6 for TTS generation, combined RTF is comfortably under
+ * 1.0 with real margin for write()/scheduling overhead, unlike batch=1's
+ * 1.5+. `leadSeconds` is real here (buffered-minus-played frames off
  * [TalosPcmPlayer]), not upstream's wall-clock proxy.
  */
 private fun resolveFrameBudget(leadSeconds: Double, hasEmittedAudio: Boolean): Int = when {
-    !hasEmittedAudio || leadSeconds < 0.20 -> 1
-    leadSeconds < 0.55 -> 2
-    leadSeconds < 1.10 -> 4
+    !hasEmittedAudio -> 1
     else -> 8
 }
 
@@ -295,6 +314,8 @@ internal data class TalosVoiceStreamResult(
     val ttfaMs: Long?,
     /** Times a player write failed and needed the §17.4 recreate path - not necessarily audible glitches, but never expected to be nonzero either. */
     val underruns: Int,
+    /** `AudioTrack.getUnderrunCount()` delta for this utterance - the HAL's own count of real buffer underruns, i.e. the authoritative signal for an audible glitch. Nonzero here means the device actually ran the output buffer dry, not an inference from timing. */
+    val hardwareUnderruns: Int,
     val drainedWithinTimeout: Boolean,
     val elapsedMs: Long,
 )

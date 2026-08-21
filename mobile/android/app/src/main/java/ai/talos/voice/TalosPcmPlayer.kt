@@ -78,6 +78,9 @@ internal class TalosPcmPlayer(
     /** True only if the underlying track exists and its play state is actually `PLAYSTATE_PLAYING` - not just "not released". */
     fun isPlaying(): Boolean = track?.playState == AudioTrack.PLAYSTATE_PLAYING
 
+    /** The HAL's own count of real underrun events on the current track - the authoritative signal for an audible glitch, not an inference from timing. */
+    fun underrunCount(): Int = track?.underrunCount ?: 0
+
     /** Frames the device has actually played, per `AudioTrack`'s own head position - the denominator side never lies about buffering. */
     fun playbackHeadFrames(): Long {
         val activeTrack = track ?: return 0
@@ -176,20 +179,32 @@ internal class TalosPcmPlayer(
             .build()
         val minBufferBytes = AudioTrack.getMinBufferSize(sampleRate, channelMask, AudioFormat.ENCODING_PCM_16BIT)
         require(minBufferBytes > 0) { "AudioTrack.getMinBufferSize returned $minBufferBytes for sampleRate=$sampleRate channelMask=$channelMask" }
-        // ⛔ Close to the bare minimum, NOT a few buffer-periods of headroom -
-        // the first draft used minBufferBytes*3 for MIN_AUDIO_AHEAD_MS-style
-        // slack, and that was wrong, measured wrong on the OnePlus Pad 3: a
-        // short utterance that fits entirely inside an oversized buffer never
-        // forces a write() to actually block waiting for device drain, and on
-        // this HAL that means getPlaybackHeadPosition()/getTimestamp() both
-        // report a stuck 0 indefinitely - confirmed by isolating buffer size
-        // as the one variable that mattered (3x buffer: stuck at 0 for 2s
-        // straight over three otherwise-identical probes; 1x buffer, same
-        // 300ms clip: drains to completion within the same write loop, before
-        // the polling phase even starts). Audio-ahead slack (§16.2) belongs to
-        // TalosVoiceHost's chunk-batching policy, which already exists for
-        // this exact reason - not to a bigger low-level ring buffer here.
-        val bufferBytes = minBufferBytes
+        // ⛔⛔ Two real, opposite failures measured on the OnePlus Pad 3, and
+        // the buffer size is the one variable that explains both:
+        //
+        // 1. Too LARGE (first draft: minBufferBytes*3, ~360ms) - a short
+        //    clip that fits entirely inside an oversized buffer never forces
+        //    a write() to actually block waiting for device drain, and on
+        //    this HAL that means getPlaybackHeadPosition()/getTimestamp()
+        //    both report a stuck 0 indefinitely (confirmed with three probes,
+        //    buffer size the only variable changed).
+        // 2. Too SMALL (second draft: minBufferBytes, ~120ms) - fixed #1, but
+        //    a real multi-second streamed utterance measured **103 real
+        //    AudioTrack.getUnderrunCount() events**: the owner heard this as
+        //    audible micro-stutter, and it was real, not a false alarm - a
+        //    ~120ms cushion is not enough to absorb ordinary scheduling
+        //    jitter between one decode+write cycle and the next.
+        //
+        // A buffer sized for realistic jitter headroom (§16.2's spirit, at
+        // the AudioTrack level this time) fixes #2 without reintroducing #1:
+        // any conversational utterance runs many seconds, so a buffer of a
+        // few hundred ms is still far smaller than what gets written overall,
+        // and write() still blocks regularly - the failure mode in #1 was
+        // specifically a clip SHORTER than the buffer, not "any buffer above
+        // the minimum". See TalosPcmPlayerInstrumentedTest and
+        // TalosVoiceHostStreamingInstrumentedTest for the numbers this was
+        // re-measured against after changing it.
+        val bufferBytes = minBufferBytes * 8
         val newTrack = AudioTrack.Builder()
             .setAudioAttributes(attributes)
             .setAudioFormat(format)

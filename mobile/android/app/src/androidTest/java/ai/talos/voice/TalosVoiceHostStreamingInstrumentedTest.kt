@@ -34,18 +34,26 @@ class TalosVoiceHostStreamingInstrumentedTest {
         val host = TalosVoiceHost(root, cpuThreads = 4)
         try {
             val result = host.speakStreamingBlocking(
-                text = "Ciao, questo e' un test dello streaming da capo a fondo.",
+                text = "Ciao, questo e' un test dello streaming da capo a fondo, con una frase abbastanza lunga da " +
+                    "attraversare diversi secondi di riproduzione reale e dare al dispositivo il tempo di mostrare " +
+                    "un vero problema di sincronizzazione, se ce n'e' uno.",
                 voice = "Junhao",
-                maxFrames = 96,
+                maxFrames = 200,
             )
             assertTrue("streaming synthesis must not report cancelled", !result.cancelled)
             assertTrue("must have produced at least one audio batch (ttfaMs=null means nothing was ever decoded)", result.ttfaMs != null)
             assertEquals("no write should have needed the dead-track recovery path", 0, result.underruns)
             assertTrue("playback must fully drain within the bound", result.drainedWithinTimeout)
+            assertEquals(
+                "AudioTrack itself must report zero real underruns - this is the direct, authoritative signal for an audible glitch",
+                0,
+                result.hardwareUnderruns,
+            )
 
             android.util.Log.i(
                 "TalosVoiceHostStreaming",
-                "OK ttfaMs=${result.ttfaMs} elapsedMs=${result.elapsedMs} underruns=${result.underruns} drained=${result.drainedWithinTimeout}",
+                "OK ttfaMs=${result.ttfaMs} elapsedMs=${result.elapsedMs} underruns=${result.underruns} " +
+                    "hardwareUnderruns=${result.hardwareUnderruns} drained=${result.drainedWithinTimeout}",
             )
         } finally {
             host.close()
