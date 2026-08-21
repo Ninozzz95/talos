@@ -230,12 +230,12 @@ public class TalosLlamaEngineDeviceTest {
             assertTrue("servono almeno tre finestre perché l'harness possa giudicare",
                     run.samples.length >= 3);
 
-            TalosBenchmarkHarness.Result result =
-                    TalosBenchmarkHarness.judge(run.samples, TalosLlamaProbe.referenceIsUsable(run.text));
+            TalosBenchmarkHarness.Result result = TalosBenchmarkHarness.judge(
+                    run.samples, TalosLlamaProbe.referenceIsUsable(run.text), run.ttftMs);
             TalosBackendChoice.Evidence evidence =
                     TalosLlamaProbe.evidenceOf(TalosBackendChoice.CPU, "cpu", result);
             Log.i(TAG, "verdetto: " + result.verdict + "  ritmo: " + result.tokensPerSecond + " t/s"
-                    + "  esito: " + evidence.outcome);
+                    + "  TTFT: " + result.ttftMs + " ms  esito: " + evidence.outcome);
 
             // Il verdetto NON è asserito: su un telefono che scalda,
             // THERMAL_DRIFT è una risposta corretta dell'harness, non un guasto

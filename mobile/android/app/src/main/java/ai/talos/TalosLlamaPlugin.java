@@ -250,7 +250,29 @@ public class TalosLlamaPlugin extends Plugin {
 
         final int threads = call.getInt("threads", 4);
         final int contextTokens = call.getInt("contextTokens", 4096);
-        final int gpuLayers = call.getInt("gpuLayers", 0);
+        /*
+         * ⛔⛔ FASE 7(c) — il campo che era SEMPRE zero, mai passato da nessun
+         * chiamante in `src/`. Ora: se chi chiama lo chiede esplicitamente,
+         * vince la sua richiesta — invariato. Se non lo chiede, la richiesta
+         * la fa {@link TalosBackendChoice}, sull'evidenza registrata per
+         * questo driver ({@link TalosBackendEvidenceStore}).
+         *
+         * ⛔ Quello che questo NON fa: nessun sondaggio parte da qui. Se
+         * nessuno ha mai registrato un'evidenza per il driver di oggi
+         * (`Build.FINGERPRINT` — cambia a ogni aggiornamento di sistema, più
+         * prudente che preciso: un aggiornamento che non tocca il driver GPU
+         * fa comunque ripartire la prova, mai il contrario), `choose()`
+         * torna "unproven" e il comportamento è quello di sempre: CPU, zero
+         * strati. Decidere QUANDO far girare una prova reale — costa una
+         * generazione vera, tempo e batteria — è una scelta di prodotto che
+         * questa consegna non include.
+         */
+        final int gpuLayers = call.getData().has("gpuLayers")
+                ? call.getInt("gpuLayers", 0)
+                : TalosBackendChoice.gpuLayers(TalosBackendChoice.choose(
+                        android.os.Build.FINGERPRINT,
+                        TalosThermal.read(getContext()),
+                        TalosBackendEvidenceStore.load(getContext())));
         // Zero significa «come prima»: stesso numero di thread per prefill e
         // generazione, microbatch implicito. Chi ha letto la forma della CPU
         // manda due numeri veri; il banco di prova continua a non mandarli,

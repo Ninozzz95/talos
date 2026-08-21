@@ -108,10 +108,19 @@ public final class TalosLlamaEngine implements AutoCloseable {
     public static final class Run {
         public final String text;
         public final TalosBenchmarkHarness.Sample[] samples;
+        /**
+         * Dalla chiamata al PRIMO token, in millisecondi — quello che una
+         * persona aspetta prima della prima parola. È già misurato qui sotto
+         * per aprire la prima finestra di decodifica al momento giusto; questo
+         * campo lo fa uscire, perché {@link TalosBackendChoice} decide su
+         * questo, non sulla velocità di decodifica.
+         */
+        public final long ttftMs;
 
-        Run(String text, TalosBenchmarkHarness.Sample[] samples) {
+        Run(String text, TalosBenchmarkHarness.Sample[] samples, long ttftMs) {
             this.text = text;
             this.samples = samples;
+            this.ttftMs = ttftMs;
         }
     }
 
@@ -644,7 +653,12 @@ public final class TalosLlamaEngine implements AutoCloseable {
         samples.add(new TalosBenchmarkHarness.Sample(
                 System.currentTimeMillis(), TalosLlamaNative.nativeTokensProduced(handle), thermal.now()));
 
-        return new Run(text, samples.toArray(new TalosBenchmarkHarness.Sample[0]));
+        // Zero, mai negativo: se il timeout ha chiuso la corsa prima che un
+        // token arrivasse, `firstTokenAt` è rimasto 0 e non c'è un TTFT da
+        // riportare — e comunque `judge` respinge questa corsa per pochi token,
+        // quindi il numero non arriva mai a decidere niente.
+        long ttftMs = firstTokenAt > 0 ? firstTokenAt - startedAt : 0;
+        return new Run(text, samples.toArray(new TalosBenchmarkHarness.Sample[0]), ttftMs);
     }
 
     @Override

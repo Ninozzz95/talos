@@ -72,10 +72,18 @@ public final class TalosBenchmarkHarness {
         public final Verdict verdict;
         /** Only meaningful when VALID; zero otherwise, never a partial number. */
         public final double tokensPerSecond;
+        /**
+         * Time to first token, in milliseconds — what {@link TalosBackendChoice}
+         * actually decides on. Only meaningful when VALID, for the same reason
+         * {@code tokensPerSecond} is: a rejected run proved nothing, and
+         * reporting a number for it would look like a measurement.
+         */
+        public final long ttftMs;
 
-        Result(Verdict verdict, double tokensPerSecond) {
+        Result(Verdict verdict, double tokensPerSecond, long ttftMs) {
             this.verdict = verdict;
             this.tokensPerSecond = tokensPerSecond;
+            this.ttftMs = ttftMs;
         }
     }
 
@@ -94,10 +102,16 @@ public final class TalosBenchmarkHarness {
      *     asked for. Checked FIRST and on its own: a backend that is quick and
      *     wrong is not a quick backend, and no amount of stable timing redeems
      *     it. This is what earns a backend the right to be offered at all.
+     * @param ttftMs time to first token, measured by the caller (it is the one
+     *     with the clock running before the first sample exists). Passed
+     *     through unchanged when the run is VALID, zero otherwise — this
+     *     method does not compute it, only carries it past the same gates that
+     *     protect the decode rate, so a run good enough to trust for one is
+     *     good enough to trust for the other.
      */
-    public static Result judge(Sample[] samples, boolean answerCorrect) {
-        if (!answerCorrect) return new Result(Verdict.WRONG_ANSWER, 0);
-        if (samples.length < 3) return new Result(Verdict.TOO_SHORT, 0);
+    public static Result judge(Sample[] samples, boolean answerCorrect, long ttftMs) {
+        if (!answerCorrect) return new Result(Verdict.WRONG_ANSWER, 0, 0);
+        if (samples.length < 3) return new Result(Verdict.TOO_SHORT, 0, 0);
 
         Sample first = samples[0];
         Sample last = samples[samples.length - 1];
@@ -105,22 +119,22 @@ public final class TalosBenchmarkHarness {
         long duration = last.atMs - first.atMs;
         int tokens = last.tokens - first.tokens;
         if (duration < MIN_DURATION_MS || tokens < MIN_TOKENS) {
-            return new Result(Verdict.TOO_SHORT, 0);
+            return new Result(Verdict.TOO_SHORT, 0, 0);
         }
 
         // The phone that ends hotter than it started was measured while it was
         // changing. Reporting that as its speed would promise a rate it can
         // hold for exactly as long as the benchmark ran.
         if (heat(last.thermal) > heat(first.thermal)) {
-            return new Result(Verdict.THERMAL_DRIFT, 0);
+            return new Result(Verdict.THERMAL_DRIFT, 0, 0);
         }
 
         double[] rates = new double[samples.length - 1];
         for (int index = 1; index < samples.length; index += 1) {
             long window = samples[index].atMs - samples[index - 1].atMs;
-            if (window <= 0 || window > MAX_GAP_MS) return new Result(Verdict.INTERRUPTED, 0);
+            if (window <= 0 || window > MAX_GAP_MS) return new Result(Verdict.INTERRUPTED, 0, 0);
             int produced = samples[index].tokens - samples[index - 1].tokens;
-            if (produced < 0) return new Result(Verdict.INTERRUPTED, 0);
+            if (produced < 0) return new Result(Verdict.INTERRUPTED, 0, 0);
             rates[index - 1] = produced * 1000.0 / window;
         }
 
@@ -129,14 +143,14 @@ public final class TalosBenchmarkHarness {
         double median = sorted.length % 2 == 1
                 ? sorted[sorted.length / 2]
                 : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
-        if (median <= 0) return new Result(Verdict.TOO_SHORT, 0);
+        if (median <= 0) return new Result(Verdict.TOO_SHORT, 0, 0);
 
         // Spread against the MEDIAN, not the mean: one stolen window should not
         // be able to widen the very figure used to decide whether it counts.
         double spread = (sorted[sorted.length - 1] - sorted[0]) / median;
-        if (spread > MAX_RELATIVE_SPREAD) return new Result(Verdict.UNSTABLE, 0);
+        if (spread > MAX_RELATIVE_SPREAD) return new Result(Verdict.UNSTABLE, 0, 0);
 
-        return new Result(Verdict.VALID, median);
+        return new Result(Verdict.VALID, median, ttftMs);
     }
 
     /** A rejected run is a rejected backend — never a slow one. */
