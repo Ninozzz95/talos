@@ -2,3 +2,11 @@
 	path = mobile/third_party/llama.cpp
 	url = https://github.com/ggml-org/llama.cpp
 	shallow = true
+[submodule "mobile/third_party/opencl-headers"]
+	path = mobile/third_party/opencl-headers
+	url = https://github.com/KhronosGroup/OpenCL-Headers.git
+	shallow = true
+[submodule "mobile/third_party/opencl-icd-loader"]
+	path = mobile/third_party/opencl-icd-loader
+	url = https://github.com/KhronosGroup/OpenCL-ICD-Loader.git
+	shallow = true
