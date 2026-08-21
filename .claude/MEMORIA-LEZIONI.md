@@ -26,3 +26,15 @@
 - ⛔⭐⭐⭐ **Ponte, prestazioni, diagnosi:** [153 MB in fila](centocinquanta-mb-in-fila.md) — si sonda il ponte, non `window.fetch` · [Il ponte si riaggancia DA SOLO](ponte-si-riaggancia-da-solo.md) — il collo è **accorgersi** della caduta · [Il girello da 10 s era il PONTE](campiona-la-pila-non-indovinare-inquilino.md) — campionare la pila del thread fermo · [Il pilota non partiva tranne che sul mio](freno-senza-shell-e-freno-zombie.md) · [SGRASSARE il grafo d'avvio](sgrassare-il-grafo-davvio.md) — si chiede a Rollup, non alla sourcemap · [L'ascolto anticipato di un LANCIO](ascolto-anticipato-di-un-lancio-di-activity.md) — 344→200 ms · [L'APERTURA A GRADI](apertura-a-gradi-degli-attrezzi.md) — 11.483→505 token
 - ⛔⭐⭐⭐ **Chat e dati:** [Una CHIAMATA ORFANA avvelena la chat per sempre](chiamata-orfana-avvelena-la-chat.md) — un `tool_use` senza `tool_result` · [Ventiquattro chat tutte «Nuova chat»](parola-tradotta-nel-database.md) — il titolo si salvava tradotto · [La riga per il MODELLO sullo schermo](righe-per-il-modello-sullo-schermo.md) — il test puro attraversa il chiamante · [LA CI È VERDE — e 16 s erano una DIAGNOSI](quattro-errori-non-gestiti-nella-suite.md) — moriva prima di partire
 - ✅⭐⭐⭐ [IL PAREGGIO DEL 14 AGOSTO — ed è un SORPASSO](pareggio-gemini-14-agosto.md) — «cerca Telegram sul Play Store»: Gemini **rifiuta**
+
+## 🔧 La CATENA fino al telefono — spostate qui il 2026-08-21
+
+> ⛔ Non sono state buttate: `MEMORY.md` aveva superato i **19,9 KB** e la
+> regola dice di spostare un BLOCCO INTERO invece di accorciare le glosse.
+> Queste quattro riguardano tutte la stessa cosa — il tratto fra «ho
+> compilato» e «sta girando sul Pad» — e restano vincolanti come prima.
+
+- ⛔⛔⭐⭐⭐ [Una cartella creata da ADB e' INVISIBILE all'app](una-cartella-creata-da-adb-e-invisibile-allapp.md) — il GGUF c'e', l'impronta e' giusta, e l'app non lo vede: cartelle di `shell` 0770
+- ⛔⛔⛔⭐⭐⭐ [connectedAndroidTest DISINSTALLA e porta via i modelli](connectedandroidtest-disinstalla-e-porta-via-i-modelli.md) — 20/8: BUILD SUCCESSFUL, e sul Pad non c'era piu' ne' l'app ne' un solo GGUF
+- ⛔⛔⭐⭐⭐ [Il build NON arriva al telefono](il-build-non-arriva-al-telefono.md) — senza `npx cap copy android` ogni sonda misura il build PRECEDENTE, con numeri plausibili e **nessun errore**
+- ⛔⛔⭐⭐ [I test verdi in NODE non parlano del telefono](i-test-verdi-in-node-non-parlano-del-telefono.md) — Node ha ripieghi che il browser non ha
