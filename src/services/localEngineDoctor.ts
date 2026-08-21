@@ -27,7 +27,7 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
     if (!Capacitor.isNativePlatform()) return []
 
     const [{ talosLocalEngineStatus, talosLocalEngineTimings, talosLocalInstalledModels,
-        talosPrefixCacheUsage },
+        talosPrefixCacheUsage, talosLocalEngineTemplateCapabilities },
         { talosMeasureDevice },
         { talosMaxContextFor }] = await Promise.all([
         import('@/services/localEngine'),
@@ -90,7 +90,46 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
         })
         : null
 
-    return talosEngineDiagnosticRows({
+    /*
+     * ⭐⭐⭐ PUO' USARE GLI ATTREZZI? - e finora nessuna schermata lo diceva.
+     *
+     * ⛔⛔ Misurato il 2026-08-20: con **Gemma 3 4B** il motore risponde
+     * `supportsTools: false`, e non e' un difetto nostro - il chat template di
+     * Gemma **non contiene affatto** le strutture per gli attrezzi.
+     *
+     * ⇒ Chi sceglie quel modello perde l'assistente e tiene solo la chat:
+     * niente messaggi, niente sveglie, niente promemoria. E non e' il difetto
+     * gia' noto «gli attrezzi ce l'hanno e non li chiamano» - qui non gli
+     * vengono nemmeno **offerti**.
+     *
+     * ⛔ La funzione `talosLocalEngineTemplateCapabilities` esisteva gia',
+     * esportata e con i suoi controlli, e **nessuno la chiamava**. Non mancava
+     * la risposta: mancava la domanda.
+     *
+     * ⛔ Tre stati, non due. `null` vuol dire che il ponte nativo non ha saputo
+     * rispondere - e IGNOTO non e' NO: dire «non puo» di un modello capace
+     * spingerebbe la persona a cambiarlo per niente.
+     */
+    const percorsoCaricato = stato?.loadedPath ?? null
+    const capacita = percorsoCaricato
+        ? await talosLocalEngineTemplateCapabilities(percorsoCaricato).catch(() => null)
+        : null
+    const righeAttrezzi: TalosEngineDiagnosticRow[] = percorsoCaricato
+        ? [{
+            id: 'engine-tools',
+            labelKey: 'doctor.engineTools',
+            value: capacita === null
+                ? '?'
+                : (capacita.supportsTools ? 'ok' : 'no'),
+            /*
+             * ⛔ Rossa quando la risposta e' NO, perche' e' azionabile: si cambia
+             * modello. Quando e' IGNOTA non si accusa nessuno.
+             */
+            ok: capacita === null || capacita.supportsTools,
+        }]
+        : []
+
+    return [...righeAttrezzi, ...talosEngineDiagnosticRows({
         available: stato?.available ?? false,
         backends: stato?.backends ?? '',
         loadedPath: stato?.loadedPath ?? null,
@@ -112,7 +151,7 @@ export async function talosLocalEngineDoctorRows(): Promise<TalosEngineDiagnosti
         cpuCapacities: device?.cpuCapacities ?? [],
         installedTotal: installati.length,
         installedConversational: installati.filter((file) => file.conversational !== false).length,
-    })
+    })]
 }
 
 /**

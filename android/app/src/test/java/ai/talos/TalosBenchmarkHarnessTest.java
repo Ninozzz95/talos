@@ -32,10 +32,14 @@ public class TalosBenchmarkHarnessTest {
 
     @Test
     public void acceptsASteadyRunAndReportsWhatItSaw() {
-        TalosBenchmarkHarness.Result result = TalosBenchmarkHarness.judge(steady(), true);
+        TalosBenchmarkHarness.Result result = TalosBenchmarkHarness.judge(steady(), true, 1500L);
 
         assertEquals(TalosBenchmarkHarness.Verdict.VALID, result.verdict);
         assertEquals(12.0, result.tokensPerSecond, 0.01);
+        // A VALID run carries the TTFT the caller measured, unchanged — this is
+        // the only place that number can come from, since judge() has no clock
+        // of its own before the first sample.
+        assertEquals(1500L, result.ttftMs);
     }
 
     /**
@@ -47,10 +51,14 @@ public class TalosBenchmarkHarnessTest {
      */
     @Test
     public void refusesAFastWrongAnswerBeforeItLooksAtTheTiming() {
-        TalosBenchmarkHarness.Result result = TalosBenchmarkHarness.judge(steady(), false);
+        // A fast, wrong TTFT would look identical to a fast, correct one — the
+        // 1500L here has to be discarded, not reported, or a broken backend
+        // could still win on the axis that matters most.
+        TalosBenchmarkHarness.Result result = TalosBenchmarkHarness.judge(steady(), false, 1500L);
 
         assertEquals(TalosBenchmarkHarness.Verdict.WRONG_ANSWER, result.verdict);
         assertEquals(0.0, result.tokensPerSecond, 0.0001);
+        assertEquals(0L, result.ttftMs);
     }
 
     /** Too few tokens, or too little time, is noise wearing a rate as a costume. */
@@ -63,11 +71,11 @@ public class TalosBenchmarkHarnessTest {
         };
 
         assertEquals(TalosBenchmarkHarness.Verdict.TOO_SHORT,
-                TalosBenchmarkHarness.judge(brief, true).verdict);
+                TalosBenchmarkHarness.judge(brief, true, 1500L).verdict);
         assertEquals(TalosBenchmarkHarness.Verdict.TOO_SHORT,
                 TalosBenchmarkHarness.judge(new TalosBenchmarkHarness.Sample[] {
                     new TalosBenchmarkHarness.Sample(0, 0, "none"),
-                }, true).verdict);
+                }, true, 1500L).verdict);
     }
 
     /**
@@ -81,7 +89,7 @@ public class TalosBenchmarkHarnessTest {
         warming[warming.length - 1] = new TalosBenchmarkHarness.Sample(5000, 60, "severe");
 
         assertEquals(TalosBenchmarkHarness.Verdict.THERMAL_DRIFT,
-                TalosBenchmarkHarness.judge(warming, true).verdict);
+                TalosBenchmarkHarness.judge(warming, true, 1500L).verdict);
     }
 
     /** Cooling down during a run is not a reason to throw it away. */
@@ -91,7 +99,7 @@ public class TalosBenchmarkHarnessTest {
         cooling[0] = new TalosBenchmarkHarness.Sample(0, 0, "moderate");
 
         assertEquals(TalosBenchmarkHarness.Verdict.VALID,
-                TalosBenchmarkHarness.judge(cooling, true).verdict);
+                TalosBenchmarkHarness.judge(cooling, true, 1500L).verdict);
     }
 
     /** A silence in the middle is something else having the machine. */
@@ -106,7 +114,7 @@ public class TalosBenchmarkHarnessTest {
         };
 
         assertEquals(TalosBenchmarkHarness.Verdict.INTERRUPTED,
-                TalosBenchmarkHarness.judge(stolen, true).verdict);
+                TalosBenchmarkHarness.judge(stolen, true, 1500L).verdict);
     }
 
     /** Tokens do not un-produce themselves; a counter going backwards is a bug. */
@@ -116,7 +124,7 @@ public class TalosBenchmarkHarnessTest {
         impossible[3] = new TalosBenchmarkHarness.Sample(3000, 10, "none");
 
         assertEquals(TalosBenchmarkHarness.Verdict.INTERRUPTED,
-                TalosBenchmarkHarness.judge(impossible, true).verdict);
+                TalosBenchmarkHarness.judge(impossible, true, 1500L).verdict);
     }
 
     /**
@@ -134,7 +142,7 @@ public class TalosBenchmarkHarnessTest {
         };
 
         assertEquals(TalosBenchmarkHarness.Verdict.UNSTABLE,
-                TalosBenchmarkHarness.judge(erratic, true).verdict);
+                TalosBenchmarkHarness.judge(erratic, true, 1500L).verdict);
     }
 
     /**
@@ -151,7 +159,7 @@ public class TalosBenchmarkHarnessTest {
             new TalosBenchmarkHarness.Sample(4000, 46, "none"),
         };
 
-        TalosBenchmarkHarness.Result result = TalosBenchmarkHarness.judge(wobbly, true);
+        TalosBenchmarkHarness.Result result = TalosBenchmarkHarness.judge(wobbly, true, 1500L);
 
         assertEquals(TalosBenchmarkHarness.Verdict.VALID, result.verdict);
         assertTrue("expected about 11-12 t/s, got " + result.tokensPerSecond,
@@ -166,8 +174,8 @@ public class TalosBenchmarkHarnessTest {
     @Test
     public void turnsEveryRejectionIntoARefusedBackend() {
         assertEquals(TalosBackendChoice.Outcome.CORRECT, TalosBenchmarkHarness.outcomeOf(
-                TalosBenchmarkHarness.judge(steady(), true)));
+                TalosBenchmarkHarness.judge(steady(), true, 1500L)));
         assertEquals(TalosBackendChoice.Outcome.FAILED, TalosBenchmarkHarness.outcomeOf(
-                TalosBenchmarkHarness.judge(steady(), false)));
+                TalosBenchmarkHarness.judge(steady(), false, 1500L)));
     }
 }

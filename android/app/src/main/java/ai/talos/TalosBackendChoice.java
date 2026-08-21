@@ -28,14 +28,27 @@ public final class TalosBackendChoice {
     public static final String OPENCL = "opencl";
 
     /**
-     * How much faster a GPU has to be before it is worth the risk.
+     * How much faster a GPU's time to first token has to be before it is worth
+     * the risk.
      *
-     * Not a performance tuning number — a risk one. The same driver that gives
-     * a 5% gain is the driver that gives the load failures and the wrong
-     * answers, and the CPU path always works. Speed only counts as a reason
-     * when it is a real one.
+     * ⛔⛔ Not decode tokens/second — that was the wrong quantity, measured wrong
+     * on 2026-08-20 and corrected here on 2026-08-21 (Fase 7(b),
+     * `DECISIONE-0.1.17.md`). TALOS's own abort cure made OpenCL decode
+     * indistinguishable from CPU (16.43 -> 16.43 tok/s on this device, no
+     * change), and after a long prompt GPU decode measured SLOWER than CPU
+     * (8.07 vs 8.51). Decode was never the axis where GPU earned anything.
+     *
+     * The axis that moved is prefill latency — what a person actually waits
+     * through before the first word appears. Measured same-day, same device: a
+     * 2048-token prompt on the CPU floor, cold, takes 43.2s; the same prompt on
+     * OpenCL with the abort cure takes 11.0s even in its WORST thermal state —
+     * right after ten minutes of sustained load, no cooldown. That is roughly
+     * 4x, not the single-digit percent decode throughput ever showed. This
+     * margin asks for half of that: a real, generous margin of safety, because
+     * the same driver that gives a fast prefill is the driver that gives the
+     * load failures and the wrong answers, and the CPU path always works.
      */
-    static final double WORTHWHILE_MARGIN = 1.25;
+    static final double WORTHWHILE_MARGIN = 2.0;
 
     private TalosBackendChoice() {}
 
@@ -58,13 +71,18 @@ public final class TalosBackendChoice {
          */
         public final String driver;
         public final Outcome outcome;
-        public final double tokensPerSecond;
+        /**
+         * Time to first token, in milliseconds, on a representative long
+         * prompt. Lower is better — the opposite direction from the decode
+         * throughput this field replaced.
+         */
+        public final long ttftMs;
 
-        public Evidence(String backend, String driver, Outcome outcome, double tokensPerSecond) {
+        public Evidence(String backend, String driver, Outcome outcome, long ttftMs) {
             this.backend = backend;
             this.driver = driver;
             this.outcome = outcome;
-            this.tokensPerSecond = tokensPerSecond;
+            this.ttftMs = ttftMs;
         }
     }
 
@@ -108,22 +126,25 @@ public final class TalosBackendChoice {
         if (struggling(thermal)) return new Decision(CPU, "hot");
 
         Evidence reference = find(evidence, CPU, driver);
-        double baseline = reference != null && reference.outcome == Outcome.CORRECT
-                ? reference.tokensPerSecond
+        long baseline = reference != null && reference.outcome == Outcome.CORRECT
+                ? reference.ttftMs
                 : 0;
 
+        // Fastest TTFT wins among the proven candidates — lower is better here.
         Evidence best = null;
         for (String backend : new String[] { VULKAN, OPENCL }) {
             Evidence candidate = find(evidence, backend, driver);
             if (candidate == null || candidate.outcome != Outcome.CORRECT) continue;
-            if (best == null || candidate.tokensPerSecond > best.tokensPerSecond) best = candidate;
+            if (best == null || candidate.ttftMs < best.ttftMs) best = candidate;
         }
 
         if (best == null) return new Decision(CPU, "unproven");
         // With no measured reference there is nothing to be faster THAN, so the
         // margin cannot be judged and the floor wins.
         if (baseline <= 0) return new Decision(CPU, "unproven");
-        if (best.tokensPerSecond < baseline * WORTHWHILE_MARGIN) return new Decision(CPU, "margin");
+        // The candidate's TTFT must beat the reference's by the full margin —
+        // e.g. at 2.0x it must be at most half the reference's time.
+        if ((double) baseline < (double) best.ttftMs * WORTHWHILE_MARGIN) return new Decision(CPU, "margin");
         return new Decision(best.backend, "faster");
     }
 
@@ -146,5 +167,19 @@ public final class TalosBackendChoice {
      */
     public static boolean shouldProbeNow(String thermal) {
         return !struggling(thermal);
+    }
+
+    /**
+     * How many layers a decision means for the native engine.
+     *
+     * ⛔ Fase 7(c): {@code -1} moves every layer (the same value the research
+     * harness already uses for "all of it"); the CPU decision is {@code 0},
+     * which is what `nativeOpen` has always defaulted to. This is the one
+     * place a {@link Decision} becomes the number the JNI boundary actually
+     * reads — extracted so the wiring in the plugin is a one-line call, not
+     * logic duplicated where it cannot be unit-tested without a device.
+     */
+    public static int gpuLayers(Decision decision) {
+        return CPU.equals(decision.backend) ? 0 : -1;
     }
 }

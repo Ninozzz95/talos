@@ -44,6 +44,21 @@ if(NOT EXISTS ${LLAMA_SRC}/CMakeLists.txt)
         "esegui `git submodule update --init --depth 1` dalla radice del repository")
 endif()
 
+# ⛔⛔ F-02 — 16 KB di allineamento, o l'app si rompe all'avvio sui telefoni con
+# pagine di memoria da 16 KB (requisito Google da novembre 2025, Android
+# Developers / Support 16 KB page sizes). L'NDK r27 — che il pin fissa apposta —
+# allinea i segmenti a 4 KB se non glielo si dice, mentre l'r28+ lo farebbe di
+# suo. La cura è nata su `lane/sicurezza-review` (F-02, 2026-08-21) e non è
+# stata fusa qui per ordine dell'owner — questo ramo l'aveva perduta.
+# RIVERIFICATO qui il 2026-08-21, sull'APK di rilascio con la libreria OpenCL di
+# Fase 7: senza queste opzioni ogni `.so` di llama.cpp/ggml, compresa
+# `libggml-opencl.so` appena aggiunta, esce a 4 KB. `add_link_options` PRIMA dei
+# target vale anche per i target di llama.cpp aggiunti da `add_subdirectory` qui
+# sotto.
+#
+# ⛔ Aggiornare l'NDK NON chiude il rilievo: lo chiude un artefatto verificato.
+add_link_options(-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384)
+
 # `LLAMA_BUILD_COMMON` vale `${LLAMA_STANDALONE}`, che è FALSO quando llama.cpp
 # entra come sottocartella di un altro progetto — cioè sempre, da noi. Senza
 # questa riga il target `llama-common` non esiste e il linker lo cerca come

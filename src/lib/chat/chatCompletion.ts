@@ -188,6 +188,13 @@ export function buildChatCompletion(
             reasoning: result.reasoning,
             toolCalls: result.toolCalls,
             /*
+             * ⛔ Copiato QUI, dove il commento sotto avverte che il typecheck non
+             * se ne accorgerebbe. Il segnale dice che il modello ha nominato uno
+             * strumento inesistente; senza, il testo resta vuoto e la persona
+             * vede una risposta bianca senza sapere perche'.
+             */
+            toolCallMissed: result.toolCallMissed,
+            /*
              * ⛔ Copiato A MANO, e il typecheck NON poteva accorgersene.
              *
              * Questo è un oggetto costruito campo per campo: un campo

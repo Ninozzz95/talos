@@ -15,6 +15,14 @@
 # ⛔ E vale SOLO con la variante compilata col sanitizer (`-PtalosHwasan`).
 # Senza, questo file c'e e non fa danno: LD_HWASAN su un binario non
 # strumentato viene semplicemente ignorato.
+#
+# ⭐ E' anche l'UNICO posto da cui si possono dare variabili d'ambiente a
+# un'applicazione Android. Il 20/8 e' servito per una sonda temporanea —
+# `GGML_OPENCL_OPFILTER=RMS_NORM`, che manda un'operazione sulla CPU — e ha
+# dimostrato che l'abort su GPU scatta SOLO dove esiste uno spezzone CPU: lo
+# Stop e' passato da 1.443 ms a 7-22 ms. ⛔ La sonda e' stata TOLTA subito dopo
+# la misura, perche' costava un terzo della decodifica e avrebbe falsato ogni
+# corsa successiva. Chi la rimette, la tolga.
 LD_HWASAN=1
 export LD_HWASAN
 exec "$@"

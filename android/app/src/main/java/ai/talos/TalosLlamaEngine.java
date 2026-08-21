@@ -108,10 +108,19 @@ public final class TalosLlamaEngine implements AutoCloseable {
     public static final class Run {
         public final String text;
         public final TalosBenchmarkHarness.Sample[] samples;
+        /**
+         * Dalla chiamata al PRIMO token, in millisecondi — quello che una
+         * persona aspetta prima della prima parola. È già misurato qui sotto
+         * per aprire la prima finestra di decodifica al momento giusto; questo
+         * campo lo fa uscire, perché {@link TalosBackendChoice} decide su
+         * questo, non sulla velocità di decodifica.
+         */
+        public final long ttftMs;
 
-        Run(String text, TalosBenchmarkHarness.Sample[] samples) {
+        Run(String text, TalosBenchmarkHarness.Sample[] samples, long ttftMs) {
             this.text = text;
             this.samples = samples;
+            this.ttftMs = ttftMs;
         }
     }
 
@@ -639,12 +648,49 @@ public final class TalosLlamaEngine implements AutoCloseable {
         String text = produced.get();
         if (text == null) return null;
 
-        // Una finestra di chiusura col conteggio finale: senza, l'ultimo tratto
-        // di generazione non è misurato da nessuna finestra.
-        samples.add(new TalosBenchmarkHarness.Sample(
-                System.currentTimeMillis(), TalosLlamaNative.nativeTokensProduced(handle), thermal.now()));
+        /*
+         * ⛔⛔ MISURATO il 21/8 in DUE giri di verifica sul Pad, non uno solo.
+         * Primo giro, quattro corse su quattro: con una cancellazione rapida
+         * (lo Stop di questa stessa release) il worker si ferma 0-7 ms dopo
+         * `nativeCancel` — prima che sarebbe dovuto scattare il campione
+         * successivo — e questa finestra di chiusura arrivava con LO STESSO
+         * conteggio di token dell'ultima del ciclo: un tasso zero fasullo che,
+         * essendo l'ULTIMA voce dell'array, {@link TalosBenchmarkHarness#judge}
+         * legge come un dato vero. Prima cura: non aggiungere la finestra di
+         * chiusura se il conteggio non è cambiato. Rimessa alla prova con tre
+         * corse pulite, quella cura ha retto due corse su tre — la terza ha
+         * mostrato un SECONDO caso, diverso dal primo: `join()` e la lettura
+         * del conteggio finale sono arrivati nello STESSO millisecondo del-
+         * l'ultimo campione del ciclo, ma con un token IN PIÙ (non lo stesso
+         * conteggio) — `[…624821,148][…624821,149]`, divario di tempo ZERO
+         * con un token vero in mezzo. `judge` (riga 135) respinge QUALSIASI
+         * divario ≤ 0 come INTERRUPTED, indipendentemente dal conteggio: un
+         * controllo sul solo conteggio non lo intercetta. È l'artefatto noto
+         * di un orologio a bassa risoluzione — quando l'intervallo reale è più
+         * corto del tick, la differenza letta è spesso zero — e la cura
+         * canonica è scartare le finestre a durata zero, non fidarsene: stessa
+         * regola con cui vLLM misura la latenza inter-token.
+         *
+         * ⇒ La finestra di chiusura si aggiunge SOLO se entrambe le condizioni
+         * che `judge` userà per accettarla sono vere qui: l'orologio è
+         * avanzato rispetto all'ultimo campione (divario > 0) E il conteggio
+         * è diverso. Una delle due sole non basta, come appena misurato.
+         */
+        long closingAt = System.currentTimeMillis();
+        int finalTokens = TalosLlamaNative.nativeTokensProduced(handle);
+        TalosBenchmarkHarness.Sample lastRecorded = samples.isEmpty() ? null : samples.get(samples.size() - 1);
+        boolean closingWindowIsReal = lastRecorded == null
+                || (closingAt > lastRecorded.atMs && finalTokens != lastRecorded.tokens);
+        if (closingWindowIsReal) {
+            samples.add(new TalosBenchmarkHarness.Sample(closingAt, finalTokens, thermal.now()));
+        }
 
-        return new Run(text, samples.toArray(new TalosBenchmarkHarness.Sample[0]));
+        // Zero, mai negativo: se il timeout ha chiuso la corsa prima che un
+        // token arrivasse, `firstTokenAt` è rimasto 0 e non c'è un TTFT da
+        // riportare — e comunque `judge` respinge questa corsa per pochi token,
+        // quindi il numero non arriva mai a decidere niente.
+        long ttftMs = firstTokenAt > 0 ? firstTokenAt - startedAt : 0;
+        return new Run(text, samples.toArray(new TalosBenchmarkHarness.Sample[0]), ttftMs);
     }
 
     @Override

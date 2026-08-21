@@ -400,7 +400,43 @@ import { resolve } from 'node:path'
  * e vale anche quando il tetto lo sto alzando io. Il tetto è un contenitore:
  * non si azzoppa una funzione per farcela stare dentro.
  */
-const DEFAULT_MAXIMUM_BYTES = 609_000
+/*
+ * ⛔ 609.000 → 610.000, il 2026-08-21, per §1-bis: l'innesco del sondaggio
+ * GPU della 0.1.17 dentro `selectModel`, la modale automatica e il suo
+ * gancio nella barra. Senza questo la GPU spedita dalla 0.1.17 non si
+ * accende su NESSUN telefono — non è una funzione facoltativa.
+ *
+ * ⛔ Il peso è stato inseguito davvero, in TRE forme misurate, nell'ordine
+ * scritto qui sopra (1. togliere peso vero, 2. spostare nel pigro, 3. mai
+ * accorciare un contratto) prima di toccare questo numero:
+ *
+ *     comando manuale ESPOSTO sul controller     609.464   ⛔ +464
+ *     spostato in lib/localEngineProbeRun.ts,
+ *       pura e chiamata dallo schermo già pigro   609.032   ⛔ +32
+ *     gancio nella barra per riferimento diretto
+ *       invece di una lambda che lo avvolge       609.032   ⛔ +32  (invariato)
+ *
+ * Il comando manuale — «sempre», per chi ha detto no o ha cambiato idea —
+ * viveva sul controller ed era per questo esposto nel grafo d'avvio anche se
+ * l'avvio non lo chiama mai: spostarlo in un modulo puro, chiamato solo dallo
+ * schermo delle impostazioni (già dietro `TALOS_ROUTE_NOT_LAZY`), ha reso 432
+ * dei 464 byte. Il tentativo sulla barra (riferimento diretto al metodo
+ * invece di un wrapper) non ha mosso il numero: il compilatore di Vue genera
+ * codice equivalente per le due forme, misurato e non solo dedotto.
+ *
+ * ⛔ I 32 byte rimasti sono il pavimento: un `Ref` reattivo e la funzione che
+ * lo chiude, entrambi con nomi che la barra deve poter leggere per intero —
+ * accorciarli SOLO per questi due, mentre ogni altra proprietà del
+ * controller (`pendingToolAuthorizations`, `decideToolAuthorization`, …)
+ * resta per esteso, sarebbe la stessa cosa vietata più in alto: azzoppare un
+ * contratto — qui di leggibilità, non di sicurezza — per far quadrare un
+ * numero.
+ *
+ * ⇒ 610.000 e non 609.100: trentadue byte di margine sono la stessa trappola
+ * descritta sopra per «quattro byte» e «cento byte». Mille lascia margine
+ * vero per la prossima funzione, che qualcuno misurerà prima di chiedere.
+ */
+const DEFAULT_MAXIMUM_BYTES = 610_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {

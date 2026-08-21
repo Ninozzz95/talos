@@ -83,14 +83,38 @@ describe('da dove partire, prima di aver misurato', () => {
     })
 
     /**
-     * ⛔ Il microbatch è anche l'attesa massima dello Stop: raddoppiarlo
-     * raddoppia il tempo fra il dito e il silenzio, e il picco dei buffer di
-     * calcolo su un telefono con pochi gigabyte liberi.
+     * ⭐⭐⭐ Il microbatch è l'attesa massima dello Stop, e la SOGLIA è misurata.
+     *
+     * Prompt da 2.048 token, Stop premuto dopo 200 ms, su Adreno 830:
+     *
+     * ```
+     *   512   1.443 ms   si ferma a 512/2048 - completa il pezzo intero
+     *   256   1.446 ms   idem
+     *   192    ~460 ms   morde a meta'
+     * ```
+     *
+     * ⇒ Il salto sta **fra 256 e 192**, e vale un fattore tre. ⛔ Questa prova
+     * non difende il numero 192: difende che si resti **sotto la soglia**. Chi
+     * un domani vorra' alzarlo dovra' prima spostare la soglia con una misura.
      */
-    it('il microbatch resta contenuto anche su chip grandi', () => {
-        expect(talosEngineTuning(PAD3).microBatch).toBe(512)
-        expect(talosEngineTuning({ cores: 4, capacities: [] }).microBatch).toBe(256)
-        expect(talosEngineTuning({ cores: 32, capacities: [] }).microBatch).toBe(512)
+    it('il microbatch resta sotto la soglia dove lo Stop smette di mordere', () => {
+        const SOGLIA = 192
+        for (const chip of [PAD3, { cores: 4, capacities: [] }, { cores: 32, capacities: [] }]) {
+            expect(talosEngineTuning(chip).microBatch).toBeLessThanOrEqual(SOGLIA)
+        }
+    })
+
+    /**
+     * ⛔⛔ E NON scende sotto: il cancello G4 si passerebbe con 64, al prezzo
+     * del **28% di prefill**, per misurare una cosa che la cura vera dell'abort
+     * porta a millisecondi senza pagare niente.
+     *
+     * ⇒ Sarebbe ottimizzare il cancello invece della persona. Se qualcuno
+     * abbassa il microbatch per far diventare verde un numero, questa prova
+     * glielo dice.
+     */
+    it('e non scende sotto, per far tornare un cancello', () => {
+        expect(talosEngineTuning(PAD3).microBatch).toBeGreaterThanOrEqual(192)
     })
 
     it('i candidati da misurare sono pochi, ordinati e senza doppioni', () => {

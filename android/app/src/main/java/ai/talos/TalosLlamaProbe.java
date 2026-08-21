@@ -93,6 +93,6 @@ public final class TalosLlamaProbe {
         return new TalosBackendChoice.Evidence(
                 backend, driver,
                 TalosBenchmarkHarness.outcomeOf(result),
-                result.tokensPerSecond);
+                result.ttftMs);
     }
 }

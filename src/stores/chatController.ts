@@ -721,6 +721,8 @@ export interface ChatControllerDeps {
                 readonly author: string | null
                 readonly judge: string | null
             }
+            /** §1-bis: il consenso al sondaggio GPU della 0.1.17. Vedi `localEngineProbeConsent.ts`. */
+            readonly local_engine_probe: { readonly consent: 'unset' | 'granted' | 'declined' }
         }
         hydrate(): Promise<void>
         setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
@@ -728,6 +730,7 @@ export interface ChatControllerDeps {
         setTone(preset: TalosToneId): Promise<void>
         /** Scrive una preferenza della shell — usata dal consenso sulle immagini. */
         setShell?(patch: Record<string, unknown>): Promise<void>
+        setLocalEngineProbeConsent(patch: { consent: 'unset' | 'granted' | 'declined' }): Promise<void>
         setLibraryContextPolicy(
             patch: import('@/lib/chat/libraryPolicy').TalosLibraryContextPolicyPatch,
             expectedRevision: number,
@@ -889,6 +892,32 @@ export interface ChatController {
     removeManualModel(id: string): Promise<void>
     setProviderTimeout(provider: TalosMobileProviderId, seconds: number): Promise<void>
     selectModel(id: string): Promise<void>
+    /**
+     * §1-bis della consegna 0.1.18: la modale del sondaggio GPU, quando c'è.
+     *
+     * Il percorso automatico — la PRIMA volta che una persona sceglie
+     * esplicitamente un modello locale col consenso ancora `unset` — mette
+     * qui il percorso del GGUF scelto; `null` quando non c'è niente da
+     * chiedere. `selectModel` è l'UNICA porta che la valorizza: vedi
+     * `il-difetto-e-che-non-li-chiamano` — una guardia scritta e mai
+     * collegata al suo innesco vale come non scritta.
+     */
+    readonly pendingLocalEngineProbeConsent: Readonly<Ref<{ path: string } | null>>
+    /**
+     * Chiude la modale automatica con uno dei tre esiti reali:
+     *   - `'granted'`    — scrive il consenso, fa partire il sondaggio in
+     *                      background, SENZA attendere: la chat non deve
+     *                      fermarsi per una misura che nessuno ha chiesto di
+     *                      aspettare.
+     *   - `'declined'`   — «non mostrare più»: scrive il consenso, NON fa
+     *                      partire niente. Per sempre finché non si tocca il
+     *                      comando manuale — mai un «no» mascherato, vedi
+     *                      `spegnere-non-e-dimenticare`.
+     *   - `'dismissed'`  — «non ora»: NON scrive niente. Il consenso resta
+     *                      `unset` e la modale tornerà alla prossima scelta
+     *                      esplicita di un modello locale.
+     */
+    decideLocalEngineProbeConsent(decision: 'granted' | 'declined' | 'dismissed'): Promise<void>
     selectEffort(level: TalosMobileEffortLevel): Promise<void>
     setThinking(enabled: boolean): Promise<void>
     setBrowseMode(enabled: boolean): Promise<void>
@@ -1204,6 +1233,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     const toolAuthorizationRecoveries = ref<TalosToolAuthorizationRecoveryView[]>([])
     const toolAuthorizationPromptVisible = ref(false)
     const recoveringToolAuthorizations = new Set<string>()
+    /** §1-bis: null quando non c'è niente da chiedere. Vedi `selectModel`. */
+    const pendingLocalEngineProbeConsent = ref<{ path: string } | null>(null)
     const libraryPolicyTurnStates = new Map<string, TalosLibraryContextPolicySnapshot>()
     let authorizationCoordinator: ReturnType<typeof createTalosToolAuthorizationCoordinator>
 
@@ -4733,13 +4764,26 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     attachments: completion.messageAttachments,
                 }
             }
-            // Il perché sta tutto in `rispostaVuota.ts`, accanto alla misura
-            // che l'ha reso necessario.
-            const raw = talosRispostaVuotaDopoStrumenti(completion.text, completion.executed.length)
-                ? deps.translate('chat.emptyAnswerAfterTools', {
-                    count: talosStrumentiPartiti(completion.executed),
-                })
-                : completion.text
+            /*
+             * ⭐⭐⭐ E se il modello ha nominato uno strumento che NON ESISTE.
+             *
+             * ⛔⛔ Misurato sul Pad il 2026-08-21 con Gemma 3 4B: alla parola
+             * "Ciao" la persona ha letto `{"name":"library_list"}` in chat, come
+             * se fosse la risposta. L'adattatore adesso lascia il testo vuoto e
+             * alza il segnale; ⇒ qui si dice cosa e' successo, in parole.
+             *
+             * ⛔ PRIMA della risposta vuota dopo gli strumenti: quella parla di
+             * strumenti ESEGUITI, questa di uno che non c'era. Sono due esiti
+             * diversi, e dirne uno per l'altro manderebbe la persona a cercare
+             * un guasto dove non c'e'.
+             */
+            const raw = completion.toolCallMissed
+                ? deps.translate('chat.toolCallMissed')
+                : talosRispostaVuotaDopoStrumenti(completion.text, completion.executed.length)
+                    ? deps.translate('chat.emptyAnswerAfterTools', {
+                        count: talosStrumentiPartiti(completion.executed),
+                    })
+                    : completion.text
             // F3-T4: a final-line tone suggestion is stripped from the durable
             // reply and surfaced as a toast — the user decides, never auto-applied.
             const { text, suggestion } = extractToneSuggestion(
@@ -5612,9 +5656,57 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // idea mentre il catalogo era irraggiungibile, riprendersi il modello
         // di prima sarebbe disfarle la scelta sotto le mani.
         modelloInAttesa = null
+        // §1-bis della consegna 0.1.18 — l'INNESCO, qui e non dentro
+        // `applyModelSelection`: quella copre anche il ripristino automatico
+        // all'apertura, e offrire la modale lì vorrebbe dire chiederlo a chi
+        // non ha scelto niente in questa sessione. Guardia scritta e non
+        // collegata vale come non scritta — vedi `il-difetto-e-che-non-li-chiamano`.
+        const profiloScelto = profiles.value.find((candidate) => candidate.id === id)
+        if (
+            profiloScelto?.provider === 'local'
+            && deps.settings.state.local_engine_probe.consent === 'unset'
+        ) {
+            pendingLocalEngineProbeConsent.value = { path: profiloScelto.model }
+        }
         const operations: Promise<unknown>[] = [persistComposerDefaults()]
         if (chat.activeSession.value) operations.push(chat.setActiveModelProfile(id))
         await Promise.all(operations)
+    }
+
+    /**
+     * Chiude la modale automatica con uno dei tre esiti reali:
+     *   - `'granted'`    — scrive il consenso, fa partire il sondaggio in
+     *                      background, SENZA attendere: la chat non deve
+     *                      fermarsi per una misura che nessuno ha chiesto di
+     *                      aspettare.
+     *   - `'declined'`   — «non mostrare più»: scrive il consenso, NON fa
+     *                      partire niente. Per sempre finché non si tocca il
+     *                      comando manuale — mai un «no» mascherato, vedi
+     *                      `spegnere-non-e-dimenticare`.
+     *   - `'dismissed'`  — «non ora»: NON scrive niente. Il consenso resta
+     *                      `unset` e la modale tornerà alla prossima scelta
+     *                      esplicita di un modello locale.
+     *
+     * ⛔ Il comando MANUALE — «sempre», per chi ha detto no o ha cambiato
+     * idea — non vive qui: è `talosRunLocalEngineProbeAndEnsureGranted` in
+     * `lib/localEngineProbeRun.ts`, chiamato direttamente dallo schermo (già
+     * pigro) delle impostazioni. Esporlo anche da qui costava un nome in più
+     * nel grafo d'avvio per una funzione che l'avvio non usa mai.
+     */
+    async function decideLocalEngineProbeConsent(
+        decision: 'granted' | 'declined' | 'dismissed',
+    ): Promise<void> {
+        const pending = pendingLocalEngineProbeConsent.value
+        pendingLocalEngineProbeConsent.value = null
+        if (decision === 'dismissed') return
+        await deps.settings.setLocalEngineProbeConsent({ consent: decision })
+        if (decision === 'granted' && pending) {
+            // ⛔ SENZA await — §1-bis: «non blocca la chat». Il primo
+            // messaggio parte come sempre, il sondaggio corre per conto suo.
+            void import('@/services/localEngine').then(
+                ({ talosQualifyLocalBackend }) => talosQualifyLocalBackend(pending.path),
+            )
+        }
     }
 
     async function selectEffort(level: TalosMobileEffortLevel): Promise<void> {
@@ -7043,6 +7135,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         pendingToolAuthorizations,
         toolAuthorizationRecoveries,
         toolAuthorizationPromptVisible,
+        pendingLocalEngineProbeConsent,
+        decideLocalEngineProbeConsent,
         decideToolAuthorization,
         dismissToolAuthorization,
         showToolAuthorization,

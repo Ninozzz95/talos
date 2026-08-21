@@ -58,6 +58,10 @@ const localEngine = vi.hoisted(() => ({
     talosLocalEngineGenerate: vi.fn(async () => ({ text: 'ciao', tokens: 2 })),
     talosLocalEngineCancel: vi.fn(async () => undefined),
     talosLocalEngineClose: vi.fn(async () => undefined),
+    talosQualifyLocalBackend: vi.fn(async () => ({
+        ran: true, reason: null, probedCpu: true, cpuInconclusive: false,
+        probedGpu: false, gpuInconclusive: false, decisionBackend: 'cpu', decisionReason: 'unproven',
+    })),
 }))
 vi.mock('@/services/localEngine', () => localEngine)
 
@@ -231,6 +235,7 @@ function makeDeps() {
             library_context_policy_update: false,
         },
         tool_authorizations: TALOS_EMPTY_TOOL_AUTHORIZATIONS,
+        local_engine_probe: { consent: 'unset' as 'unset' | 'granted' | 'declined' },
     })
     const settings = {
         state: settingsState,
@@ -248,6 +253,9 @@ function makeDeps() {
          */
         setShell: vi.fn(async (patch: Partial<typeof settingsState.shell>) => {
             Object.assign(settingsState.shell, patch)
+        }),
+        setLocalEngineProbeConsent: vi.fn(async (patch: { consent: 'unset' | 'granted' | 'declined' }) => {
+            settingsState.local_engine_probe = { ...patch }
         }),
         setModelLabPreferences: vi.fn(async (value: TalosMobileModelLabPreferences) => {
             settingsState.model_lab = structuredClone(value)
@@ -4894,4 +4902,95 @@ describe('riprova e rinvia, con quello che c’era attaccato', () => {
             expect(sistema).not.toContain('TALOS_WEB_SEARCH_NOT_CONFIGURED')
         })
     })
+})
+
+/**
+ * §1-bis della consegna 0.1.18 — «serve il test che fallisce se qualcuno lo
+ * scollega». Non basta che `qualifyBackend` esista sul lato nativo: se
+ * `selectModel` smettesse di chiamare `offrireSondaggioSeLocale`, o se la
+ * guardia sul consenso si rompesse, questi test lo dicono — non un grep sul
+ * sorgente, la CHIAMATA vera attraverso `selectModel`.
+ */
+describe('il sondaggio GPU della 0.1.17, agganciato alla PRIMA scelta locale', () => {
+    async function withLocalModelDiscovered() {
+        const { deps } = makeDeps()
+        const controller = createChatController(deps)
+        localEngine.talosLocalInstalledModels.mockResolvedValueOnce({
+            models: [
+                { path: '/models/local-test/smollm2-135m.gguf', name: 'smollm2-135m.gguf', bytes: 270_885_952 },
+            ],
+            unreadable: [],
+        })
+        await controller.init()
+        return { deps, controller }
+    }
+
+    it('offre la modale alla prima scelta esplicita, col percorso vero del GGUF', async () => {
+        const { controller } = await withLocalModelDiscovered()
+        expect(controller.pendingLocalEngineProbeConsent.value).toBeNull()
+
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+
+        expect(controller.pendingLocalEngineProbeConsent.value)
+            .toEqual({ path: '/models/local-test/smollm2-135m.gguf' })
+    })
+
+    it('non la offre una seconda volta: il consenso non è più `unset` dopo la prima', async () => {
+        const { deps, controller } = await withLocalModelDiscovered()
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+        await controller.decideLocalEngineProbeConsent('dismissed')
+        // `dismissed` non scrive: il consenso resta `unset` di proposito.
+        expect(deps.settings.state.local_engine_probe.consent).toBe('unset')
+
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+
+        expect(controller.pendingLocalEngineProbeConsent.value)
+            .toEqual({ path: '/models/local-test/smollm2-135m.gguf' })
+    })
+
+    it('non la offre affatto per un modello remoto', async () => {
+        const { deps, controller } = await withLocalModelDiscovered()
+        await deps.setKey('anthropic', 'sk-ant')
+        await controller.refreshProvider('anthropic')
+
+        await controller.selectModel('anthropic:claude-live')
+
+        expect(controller.pendingLocalEngineProbeConsent.value).toBeNull()
+    })
+
+    it("'granted' scrive il consenso e fa partire il sondaggio, senza farlo attendere", async () => {
+        const { deps, controller } = await withLocalModelDiscovered()
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+
+        const decisione = controller.decideLocalEngineProbeConsent('granted')
+
+        // ⛔ La chiusura della modale è SINCRONA rispetto al sondaggio: non si
+        // aspetta il suo esito per richiudersi. È esattamente «non blocca la
+        // chat» del §1-bis, verificato sull'ordine reale delle promesse.
+        expect(controller.pendingLocalEngineProbeConsent.value).toBeNull()
+        await decisione
+        expect(deps.settings.state.local_engine_probe.consent).toBe('granted')
+        // Il sondaggio parte da un `import()` dinamico — un giro di microtask
+        // oltre `decisione`, non nello stesso tick — quindi si attende il suo
+        // avvio invece di assumerlo già avvenuto.
+        await vi.waitFor(() => expect(localEngine.talosQualifyLocalBackend)
+            .toHaveBeenCalledWith('/models/local-test/smollm2-135m.gguf'))
+    })
+
+    it("'declined' scrive il consenso e NON fa partire niente", async () => {
+        const { deps, controller } = await withLocalModelDiscovered()
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+        localEngine.talosQualifyLocalBackend.mockClear()
+
+        await controller.decideLocalEngineProbeConsent('declined')
+
+        expect(deps.settings.state.local_engine_probe.consent).toBe('declined')
+        expect(localEngine.talosQualifyLocalBackend).not.toHaveBeenCalled()
+    })
+
+    // Il comando MANUALE — «sempre», compreso il caso in cui riaccende il
+    // consenso da `declined` — non vive più sul controller: è
+    // `talosRunLocalEngineProbeAndEnsureGranted`, provato per conto suo in
+    // `tests/unit/lib/localEngineProbeRun.test.ts`. Vedi il commento su
+    // `decideLocalEngineProbeConsent` in `chatController.ts`.
 })

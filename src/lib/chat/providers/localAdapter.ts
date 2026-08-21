@@ -49,6 +49,7 @@ import {
     talosSenzaProtocolloDeiTool,
 } from '@/lib/chat/localToolCalls'
 import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/thinkStream'
+import { talosTrattieniLeChiamate } from '@/lib/chat/trattieniLeChiamate'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import {
     talosLocalToolTransportOf,
@@ -435,6 +436,45 @@ async function identitaFileDi(path: string): Promise<{ bytes: number, modifiedAt
  * preflight by file identity and app build, so the small vocab-only read is
  * paid once per installed GGUF rather than once per turn.
  */
+/**
+ * ⭐⭐⭐ QUESTO TESTO E' UNA CHIAMATA MANCATA, non una risposta.
+ *
+ * ⛔⛔ Misurato sul Pad il 2026-08-21 con Gemma 3 4B. Alla parola "Ciao" la
+ * persona ha visto in chat, come se fosse la risposta:
+ *
+ *     {"name":"library_list"}
+ *
+ * Il recupero (qui sopra) prende le chiamate ai nomi VERI. Resta il caso in cui
+ * il modello inventa un nome, o ne storpia uno: allora il JSON non e' una
+ * chiamata, non e' una risposta, ed e' l'unica cosa che la persona legge.
+ *
+ * ⇒ Non e' un difetto del modello da nascondere: e' un esito, e va detto in
+ * parole. ⛔ Ma mostrarlo come **testo dell'assistente** e' una bugia per
+ * omissione, perche' fa credere che quella sia la risposta.
+ *
+ * ⛔ Riconosce SOLO il caso stretto: il testo, ripulito, e' un oggetto JSON
+ * con `name` e al massimo gli argomenti. Un discorso che cita un JSON ha
+ * discorso intorno e non passa di qui - resta prosa, come deve.
+ */
+export function talosTestoEUnaChiamataMancata(testo: string): boolean {
+    const pulito = testo.trim()
+    if (!pulito.startsWith('{') || !pulito.endsWith('}')) return false
+    let oggetto: unknown
+    try { oggetto = JSON.parse(pulito) }
+    catch { return false }
+    if (!oggetto || typeof oggetto !== 'object' || Array.isArray(oggetto)) return false
+    const campi = oggetto as Record<string, unknown>
+    const chiavi = Object.keys(campi)
+    if (chiavi.length === 0 || chiavi.length > 3) return false
+    if (typeof campi.name !== 'string' || campi.name.trim() === '') return false
+    /*
+     * ⛔ Le altre chiavi devono essere quelle di una chiamata. Un oggetto dati
+     * che per caso ha un campo `name` - una persona, un file - non e' una
+     * chiamata mancata, ed e' una risposta legittima.
+     */
+    return chiavi.every((k) => k === 'name' || k === 'arguments' || k === 'parameters' || k === 'id')
+}
+
 async function trasportoToolDi(path: string): Promise<TalosTemplateTransportDecision> {
     const identita = await identitaFileDi(path)
     const chiave = [
@@ -942,11 +982,28 @@ async function run(
          * era l'unico che non lo faceva.
          */
         const separatore = talosCreateThinkSplitter()
+        /*
+         * ⭐⭐⭐ E il JSON di una chiamata non deve SCORRERE a schermo.
+         *
+         * ⛔⛔ Il testo finale era gia' filtrato, e ogni verifica guardava
+         * quello. L'owner ha fotografato il Pad **mentre elaborava**, il
+         * 2026-08-21, e sotto la sua parola "Ciao" c'era:
+         *
+         *   {"name":"device_status","arguments":{"manufacturer":"OnePlus",…
+         *
+         * ⇒ Una risposta ha due vite: quella che scorre e quella che resta.
+         * Un difetto che dura otto secondi e sparisce e' comunque un difetto che
+         * la persona vede - ed e' invisibile a chi controlla dopo.
+         */
+        const trattieni = talosTrattieniLeChiamate()
         generation = await talosLocalEngineGenerate(
             plan.prompt,
             (delta) => {
                 const fetta = separatore.push(delta)
-                if (fetta.text) onChunk?.(fetta.text)
+                if (fetta.text) {
+                    const visibile = trattieni.push(fetta.text)
+                    if (visibile) onChunk?.(visibile)
+                }
                 if (fetta.reasoning) onReasoning?.(fetta.reasoning)
             },
             { maxTokens: MAX_TOKENS, stopAtEndOfGeneration: true },
@@ -954,7 +1011,14 @@ async function run(
         // La coda trattenuta va rilasciata: se la risposta finisce con un
         // carattere che POTEVA iniziare un tag, quel carattere è testo.
         const ultima = separatore.flush()
-        if (ultima.text) onChunk?.(ultima.text)
+        if (ultima.text) {
+            const visibile = trattieni.push(ultima.text)
+            if (visibile) onChunk?.(visibile)
+        }
+        /* ⛔ Cio' che resta trattenuto a fine risposta e' TESTO: mangiarlo
+         * sarebbe peggio del difetto che si sta curando. */
+        const coda = trattieni.flush()
+        if (coda) onChunk?.(coda)
         if (ultima.reasoning) onReasoning?.(ultima.reasoning)
     } catch (error) {
         if (error instanceof TalosLocalEngineGenerationError) {
@@ -1013,12 +1077,86 @@ async function run(
     ])
     let chiamateGrezze = generation.toolCalls
     let testoGrezzo = generation.text
-    if (!chiamateGrezze?.length && nomiOfferti.size > 0) {
+    /**
+     * ⭐⭐⭐ IL RECUPERO SCATTA SEMPRE - e prima no.
+     *
+     * ⛔⛔ Misurato sul Pad il 2026-08-21, Gemma 3 4B, alla parola "Ciao":
+     *
+     * ```
+     *   Esplorazione della Libreria...     37s     <- chiamata RICONOSCIUTA
+     *   {"name":"library_list"}                    <- la seconda, caduta in PROSA
+     * ```
+     *
+     * La condizione era `!chiamateGrezze?.length`: il recupero partiva **solo
+     * se il parser nativo non aveva trovato niente**. ⇒ Nel turno in cui una
+     * chiamata veniva riconosciuta, una seconda scritta nel testo restava prosa
+     * e finiva **in chat**, come JSON grezzo davanti alla persona.
+     *
+     * ⛔ La ragione della vecchia condizione era buona e va conservata: *quando
+     * il formato e' stato letto bene, un oggetto JSON nella prosa e' prosa* - un
+     * modello che MOSTRA un esempio di chiamata non la sta chiamando.
+     *
+     * ⇒ Si tiene la ragione e si cambia la regola: quando il parser aveva gia'
+     * trovato qualcosa, il recupero vale solo se il testo era **quasi tutto**
+     * quel JSON. Un esempio dentro un discorso lascia discorso intorno; una
+     * chiamata scritta a mano no.
+     */
+    if (nomiOfferti.size > 0) {
         const recuperate = talosRecuperaChiamateNude(generation.text, nomiOfferti)
-        if (recuperate.calls.length > 0) {
-            chiamateGrezze = recuperate.calls.map((call) => ({ ...call, id: '' }))
-            testoGrezzo = recuperate.text
+        const gia = chiamateGrezze?.length ?? 0
+        const restaProsa = recuperate.text.trim().length
+        /*
+         * ⛔ `> 40` non e' un numero magico: e' la soglia sotto la quale cio' che
+         * resta non e' un discorso ma un residuo - spazi, una virgola, un a capo.
+         * Sopra, il modello stava parlando E ha citato un JSON: e' prosa.
+         */
+        const eraTuttoLaChiamata = restaProsa <= 40
+        if (recuperate.calls.length > 0 && (gia === 0 || eraTuttoLaChiamata)) {
+            const viste = new Set((chiamateGrezze ?? []).map((c) => c.name))
+            const nuove = recuperate.calls
+                .filter((call) => !viste.has(call.name))
+                .map((call) => ({ ...call, id: '' }))
+            if (nuove.length > 0 || gia === 0) {
+                chiamateGrezze = [...(chiamateGrezze ?? []), ...nuove]
+                testoGrezzo = recuperate.text
+            }
         }
+    }
+    let chiamataMancata = false
+    /*
+     * ⛔⛔ E se cio' che resta e' una chiamata MANCATA, non la si mostra.
+     *
+     * Il recupero qui sopra ha gia' preso le chiamate ai nomi veri. Se dopo
+     * quello il testo e' ANCORA solo un oggetto con forma di chiamata, il
+     * modello ha nominato qualcosa che non esiste - e quel JSON e' l'unica cosa
+     * che la persona leggerebbe.
+     *
+     * ⇒ Si sostituisce con una frase che dice cosa e' successo. ⛔ Non si
+     * cancella e basta: una risposta vuota fa credere che l'assistente sia
+     * rotto, e non spiega che il modello scelto non sa chiamare gli strumenti.
+     *
+     * ⭐ La riga del Doctor - «Strumenti dell'assistente con questo modello» -
+     * dice la stessa cosa da un'altra parte, per chi vuole capire perche'.
+     */
+    if (chiamateGrezze?.length ? false : talosTestoEUnaChiamataMancata(testoGrezzo)) {
+        chiamataMancata = true
+        /*
+         * ⛔⛔ E il testo NON si svuota qui, per quanto sia allettante.
+         *
+         * La prima versione faceva `testoGrezzo = ''`. Misurato sul Pad il
+         * 2026-08-21, il motore ha risposto:
+         *
+         *     Jinja Exception: Conversation roles must alternate
+         *     user/assistant/user/assistant/...
+         *
+         * ⇒ Il template di Gemma pretende che i ruoli si ALTERNINO, e un turno
+         * assistente vuoto lo spezza al giro dopo: `TALOS_LLAMA_NO_CHAT_TEMPLATE`,
+         * e la chat non parte affatto. Curando la cosa da mostrare avevo rotto
+         * la cosa da dire.
+         *
+         * ⭐ Il segnale basta: `chatController` sostituisce il testo quando lo
+         * mostra, cioe' FUORI dal ciclo, dove nessun template lo rileggera'.
+         */
     }
     const normalised = talosNormaliseLocalToolCalls(chiamateGrezze)
     /*
@@ -1054,6 +1192,11 @@ async function run(
         // prevede un identificativo, e senza quello due chiamate nello stesso
         // turno non si sanno riappaiare ai loro risultati.
         toolCalls: normalised.length ? [...normalised] : undefined,
+        /*
+         * ⛔ Il segnale sale con l'esito, non travestito da testo: chi mostra
+         * ha le traduzioni, questo adattatore no.
+         */
+        ...(chiamataMancata ? { toolCallMissed: true } : {}),
         // Only what was actually counted. A local run has no billing and no
         // prompt-token figure to report, and inventing one would put a number
         // in the receipt that means nothing.

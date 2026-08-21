@@ -81,6 +81,23 @@ export interface TalosMobileCompletionResult {
     usage?: Record<string, number> | null
     /** Defect #5: the model's own reasoning, when the provider streams it. */
     reasoning?: string
+    /**
+     * ⭐⭐⭐ Il modello ha nominato uno strumento che non esiste.
+     *
+     * ⛔⛔ Misurato sul Pad il 2026-08-21 con Gemma 3 4B: alla parola "Ciao" la
+     * persona ha letto in chat `{"name":"library_list"}` come se fosse la
+     * risposta. Il JSON non era una chiamata valida e non era una risposta:
+     * era l'unica cosa che si vedeva.
+     *
+     * ⇒ L'adattatore lo SEGNALA e lascia il testo vuoto; chi mostra decide
+     * cosa dire, con le sue traduzioni. ⛔ Un adattatore non scrive frasi per
+     * le persone: parla ai modelli, e non ha - giustamente - un traduttore.
+     *
+     * ⛔ Sta nel CONTRATTO per la stessa ragione del campo qui sotto: uno spread
+     * passa il typecheck anche su un campo non dichiarato, e il valore muore in
+     * silenzio al ponte dopo.
+     */
+    toolCallMissed?: boolean
     /** Tools the model asked to run, in the shared representation. */
     toolCalls?: TalosToolCall[]
     /**

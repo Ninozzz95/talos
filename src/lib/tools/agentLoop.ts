@@ -45,6 +45,14 @@ export interface TalosAgentCompletion {
     reasoning?: string
     toolCalls?: TalosToolCall[]
     /**
+     * ⛔ Il modello ha nominato uno strumento che non esiste.
+     *
+     * Attraversa il ciclo perche' l'ultimo giro e' quello che parla alla
+     * persona: se si fermasse all'adattatore, chi mostra vedrebbe solo un testo
+     * vuoto. ⇒ Misurato sul Pad il 2026-08-21 con Gemma 3 4B.
+     */
+    toolCallMissed?: boolean
+    /**
      * ⭐⭐⭐ I blocchi che il fornitore pretende indietro immutati.
      *
      * Oggi: `server_tool_use` e `tool_search_tool_result` della ricerca attrezzi
