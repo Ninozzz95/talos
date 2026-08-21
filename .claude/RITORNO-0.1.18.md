@@ -634,23 +634,95 @@ originale): **2/2 verde**, il refactor non l'ha toccato.
 
 - Router TS (`personalVoiceRouter.ts`, blueprint §37.1 "Router") — non
   scritto.
-- L'interfaccia vera in `TalosMobileVoiceSettings.vue` — il mockup approvato
-  non è ancora diventato componenti Vue.
 - `useTalosSpeech.ts` non instrada ancora verso il motore personale — il
   cancello di uscita di Fase 4 ("ogni interazione vocale attuale funziona
   ancora con `engine: 'system'`") non è stato ancora verificato perché
   non c'è ancora nulla da rompere.
-- Localizzazione (stringhe it/en per la UI nuova) — non toccata.
 - §37.5 (smoke R8 in release, "metodi Capacitor visibili") — non fatto:
   nessun plugin Capacitor in questo codebase ha oggi un test a livello di
   bridge; questo nuovo segue lo stesso standard, non uno più basso.
+- Il controllo microfono (mic-check) resta solo istruttivo: non esiste una
+  chiamata nativa "sbircia il livello senza catturare una frase intera", e
+  animare un misuratore con numeri non reali sarebbe la stessa disonestà che
+  il cancello di qualità esiste per impedire dal lato audio.
+- Registro del consenso persistito (§7.4) — la schermata di consenso chiede
+  un sì esplicito su tre voci prima di continuare, ma nessuna riga di quel
+  sì viene ancora scritta su disco con data/versione.
+
+### 12.4 Blocco 4 — la UI Vue vera, sul mockup approvato
+
+`TalosMobilePersonalVoiceEnrollment.vue`: la stessa forma a schermo intero
+di `TalosMobileSetupIntro.vue` (`fixed inset-0`, passi con barra di
+progresso, footer indietro/avanti), sei schermate — consenso, controllo
+microfono, allenamento guidato (12 frasi × 3 volumi, `pointerdown`/
+`pointerup` su un **unico** bottone persistente, mai due bottoni scambiati
+a metà gesto — vedi sotto), verifica d'insieme (nome chiesto **qui**, non
+sull'ultima schermata come nel mockup: `buildEnrollmentProfile` lo richiede
+prima di codificare, non dopo — deviazione dichiarata dal mockup, non un
+errore), elaborazione, anteprima+salva. `TalosMobileVoiceSettings.vue`
+guadagna la sezione "Voce personale" (stato vuoto/pieno, CRUD con conferma
+di eliminazione che spiega la cancellazione crittografica vera), nascosta
+onestamente quando `talosPersonalVoiceStatus().supported` è falso — mai
+un bottone "Crea la tua voce" che porterebbe a un arruolamento destinato a
+fallire su un dispositivo senza i file del modello.
+
+⛔ **Un bottone vero, non uno scambiato — trovato dal test stesso**: la
+prima bozza usava DUE `<Button>` diversi (uno per "premi per registrare",
+uno per "ferma") scambiati con `v-if`/`v-else` su `recording`. Il test del
+componente ha fallito su questo esatto punto: Vue sostituisce il nodo DOM
+nell'istante in cui `recording` diventa vero, **prima** che il `pointerup`
+del browser possa scattare sull'elemento che il dito sta ancora toccando —
+esattamente il tipo di scambio di elemento a metà gesto che su un vero
+touchscreen può far perdere silenziosamente l'evento di rilascio. Un solo
+bottone persistente, che cambia solo etichetta/stile, tiene intatta la
+cattura del puntatore per tutto il gesto.
+
+⛔ **Una frase rifiutata offriva "Continua" comunque — altro difetto trovato
+dal test**: il ramo `v-else` mostrava Riprova E Continua insieme, a
+prescindere da `lastVerdict.accepted`. Corretto: "Continua" appare solo su
+verdetto accettato.
+
+⭐ Test: 5 casi in `TalosMobilePersonalVoiceEnrollment.test.ts` (sessione
+avviata/scartata, il consenso blocca finché non sono spuntate tutte e tre
+le caselle, il verdetto vero governa riprova/continua, le 12 frasi portano
+a `buildEnrollmentProfile` col nome digitato, il salvataggio commette e
+chiude). Un cattura-capacitor con promessa **differita** apposta, non
+istantanea: un mock che risolve subito fa completare l'intero giro dentro
+il solo `pointerdown`, prima che `pointerup` scatti — un artefatto di
+tempistica del test, non un difetto del componente, ma ci è voluto un
+secondo giro per vederlo. Tipecheck pulito, 5919/5919 vitest (15 nuovi in
+questo blocco, 0 rotti). `npm run build` verde, tetto del chunk iniziale
+rispettato (609.653/610.000 byte — il componente pesante è pigro via
+`defineAsyncComponent`, stesso schema del pannello provider nell'intro).
+
+⭐ **Verificato visivamente, app reale**: `vite preview` + Playwright (stesso
+motore di `capture-ui.mjs`), schermata Impostazioni→Voce in tema chiaro E
+scuro, e la schermata di consenso + la prima frase del wizard — tutto
+renderizzato coi token REALI del tema attivo (`calm`, non un'approssimazione),
+la sezione si inserisce esattamente dove il mockup approvato la mostrava.
+Un errore di console reale trovato durante questa prova ("plugin non
+implementato su web", atteso in anteprima web) ha rivelato un buco vero:
+`onMounted` non aveva un `try/catch` — chiuso nello stesso turno.
+
+### 12.5 Cosa resta aperto in Fase 4
+
+- Router non ancora collegato a `useTalosSpeech.ts` — costruito e provato
+  (§12.3) ma non ancora chiamato da nessuno.
+- Nessuna prova su dispositivo reale dell'arruolamento end-to-end con voce
+  umana vera (cattura→qualità→codifica→commit attraverso la UI) — i test
+  del componente usano un ponte finto; i test nativi di Fase 3/Blocco 2
+  provano il motore con audio decodificato, mai con un parlato vero.
+- Mic-check istruttivo soltanto (sopra); registro del consenso non
+  persistito (sopra).
 
 ---
 
 ## 13. Prossimo passo
 
-Fase 2 e Fase 3 chiuse per intero (vedi sopra). Fase 4 a due blocchi su
-almeno quattro: contratti/schema e plugin/host fatti e provati sul
-dispositivo; restano il router, la UI vera, e il collegamento a
-`useTalosSpeech.ts`. Poi, come sempre: cancelli, prova sul dispositivo,
-commit, e si chiede il push solo alla fine.
+Fase 2 e Fase 3 chiuse per intero (vedi sopra). Fase 4 a tre blocchi su
+quattro: contratti/schema, plugin/host, e la UI Vue vera sono fatti e
+provati (dispositivo per il nativo, tipecheck+vitest+build+verifica visiva
+per il resto). Resta il collegamento a `useTalosSpeech.ts` — l'ultimo
+pezzo perché il motore personale parli davvero da un messaggio di chat,
+non solo dall'anteprima del wizard. Poi, come sempre: cancelli, prova sul
+dispositivo, commit, e si chiede il push solo alla fine.

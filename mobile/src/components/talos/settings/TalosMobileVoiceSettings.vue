@@ -1,13 +1,27 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Volume2 } from '@lucide/vue'
+import { Pencil, Trash2, User, Volume2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosSpeechService, type TalosSpeechVoice } from '@/services/speech'
 import { TALOS_LINGUA_AUTOMATICA, parseTalosDictationLanguageMode } from '@/lib/dictationPolicy'
 import { talosVociOfferte, type TalosVoceDispositivo } from '@/lib/voice/sceltaVoce'
+import {
+    talosDeletePersonalVoiceProfile,
+    talosPersonalVoiceProfiles,
+    talosPersonalVoiceStatus,
+    talosRenamePersonalVoiceProfile,
+} from '@/services/personalVoice'
+import type { TalosPersonalVoiceProfileSummary } from '@/lib/voice/personalVoiceContracts'
+
+// ⛔ Pigro come il pannello dei provider nell'intro (stesso motivo): il
+// motore ONNX di ai.talos.voice non deve pesare sul grafo d'avvio di chi
+// non arruola mai una voce personale.
+const TalosMobilePersonalVoiceEnrollment = defineAsyncComponent(
+    () => import('@/components/talos/settings/voice/TalosMobilePersonalVoiceEnrollment.vue'),
+)
 
 /**
  * Owner 2026-07-24 — Voice (text-to-speech) settings: pick the device voice
@@ -212,6 +226,53 @@ function preview(): void {
  * — si sceglie a caso e si tiene la prima.
  */
 watch(selectedVoice, () => { anteprimaFraPoco() })
+
+// --- Voce personale (Fase 4, blueprint §11.1) ---------------------------
+
+const personalProfiles = ref<TalosPersonalVoiceProfileSummary[]>([])
+const personalProfilesLoaded = ref(false)
+const showEnrollment = ref(false)
+const renamingProfileId = ref<string | null>(null)
+const renameDraft = ref('')
+const confirmingDeleteId = ref<string | null>(null)
+/**
+ * ⛔ Honestly hidden when unsupported - the same rule `supported` already
+ * applies to the read-aloud section below, for the same reason: a device
+ * without the arm64-v8a model files (`TalosVoiceModelManager.isPresent`)
+ * must never offer "Create your voice" only to have every real call inside
+ * the wizard fail one screen later.
+ */
+const personalVoiceSupported = ref(false)
+
+async function refreshPersonalProfiles(): Promise<void> {
+    personalProfiles.value = await talosPersonalVoiceProfiles()
+    personalProfilesLoaded.value = true
+}
+onMounted(() => {
+    void talosPersonalVoiceStatus().then((status) => { personalVoiceSupported.value = status.supported })
+    void refreshPersonalProfiles()
+})
+
+function beginRename(profile: TalosPersonalVoiceProfileSummary): void {
+    renamingProfileId.value = profile.id
+    renameDraft.value = profile.name
+}
+async function confirmRename(): Promise<void> {
+    const profileId = renamingProfileId.value
+    const name = renameDraft.value.trim()
+    if (!profileId || !name) { renamingProfileId.value = null; return }
+    await talosRenamePersonalVoiceProfile(profileId, name)
+    renamingProfileId.value = null
+    await refreshPersonalProfiles()
+}
+async function confirmDelete(profileId: string): Promise<void> {
+    await talosDeletePersonalVoiceProfile(profileId)
+    confirmingDeleteId.value = null
+    await refreshPersonalProfiles()
+}
+function onEnrollmentCommitted(): void {
+    void refreshPersonalProfiles()
+}
 </script>
 
 <template>
@@ -235,6 +296,98 @@ watch(selectedVoice, () => { anteprimaFraPoco() })
                 :aria-label="t('voice.dictationTitle')"
             />
         </div>
+
+        <div v-if="personalVoiceSupported" data-testid="talos-personal-voice" class="mt-4 border-t border-[var(--talos-border)] pt-3">
+            <h5 class="flex items-center gap-2 text-xs font-semibold text-[var(--talos-text)]">
+                <User class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('personalVoice.title') }}
+            </h5>
+            <p class="mt-0.5 text-xs leading-5 text-[var(--talos-muted)]">{{ t('personalVoice.body') }}</p>
+
+            <div v-if="personalProfilesLoaded && personalProfiles.length === 0" class="mt-3">
+                <Button
+                    type="button"
+                    variant="outline"
+                    data-testid="talos-personal-voice-create"
+                    class="talos-pressable min-h-touch w-full gap-2 rounded-xl"
+                    @click="showEnrollment = true"
+                >{{ t('personalVoice.create') }}</Button>
+            </div>
+
+            <div v-else-if="personalProfiles.length > 0" class="mt-3 flex flex-col gap-2">
+                <div
+                    v-for="profile in personalProfiles"
+                    :key="profile.id"
+                    data-testid="talos-personal-voice-profile"
+                    class="rounded-xl border border-[var(--talos-border)] p-3"
+                >
+                    <div v-if="renamingProfileId === profile.id" class="flex items-center gap-2">
+                        <input
+                            v-model="renameDraft"
+                            type="text"
+                            maxlength="60"
+                            class="min-h-10 flex-1 rounded-lg border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-2 text-sm outline-none focus:border-[var(--talos-accent)]"
+                            @keydown.enter.prevent="confirmRename"
+                        >
+                        <Button type="button" size="sm" class="talos-pressable rounded-lg" @click="confirmRename">{{ t('common.continue') }}</Button>
+                        <Button type="button" size="sm" variant="outline" class="talos-pressable rounded-lg" @click="renamingProfileId = null">{{ t('personalVoice.cancel') }}</Button>
+                    </div>
+                    <template v-else>
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-sm font-semibold">{{ profile.name }}</span>
+                            <span
+                                class="rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide"
+                                :class="profile.compatible
+                                    ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-accent)]'
+                                    : 'border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]'"
+                            >{{ profile.compatible ? t('personalVoice.active') : t('personalVoice.incompatible') }}</span>
+                        </div>
+                        <p v-if="!profile.compatible" class="mt-1 text-xs leading-5 text-[var(--talos-danger)]">{{ t('personalVoice.incompatibleBody') }}</p>
+                        <div class="mt-2 flex gap-2">
+                            <Button type="button" size="sm" variant="outline" class="talos-pressable gap-1.5 rounded-lg" @click="beginRename(profile)">
+                                <Pencil class="size-3.5" aria-hidden="true" />{{ t('personalVoice.rename') }}
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                data-testid="talos-personal-voice-delete"
+                                class="talos-pressable gap-1.5 rounded-lg border-[var(--talos-danger-border)] text-[var(--talos-danger)]"
+                                @click="confirmingDeleteId = profile.id"
+                            >
+                                <Trash2 class="size-3.5" aria-hidden="true" />{{ t('personalVoice.delete') }}
+                            </Button>
+                        </div>
+                        <div v-if="confirmingDeleteId === profile.id" class="mt-2 rounded-lg border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-2 text-xs leading-5">
+                            <p>{{ t('personalVoice.deleteConfirmBody') }}</p>
+                            <div class="mt-2 flex gap-2">
+                                <Button type="button" size="sm" variant="outline" class="talos-pressable rounded-lg" @click="confirmingDeleteId = null">{{ t('personalVoice.cancel') }}</Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    data-testid="talos-personal-voice-delete-confirm"
+                                    class="talos-pressable rounded-lg bg-[var(--talos-danger)] text-white"
+                                    @click="confirmDelete(profile.id)"
+                                >{{ t('personalVoice.deleteForever') }}</Button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <Button
+                    type="button"
+                    variant="outline"
+                    data-testid="talos-personal-voice-add-another"
+                    class="talos-pressable min-h-touch w-full gap-2 rounded-xl"
+                    @click="showEnrollment = true"
+                >{{ t('personalVoice.addAnother') }}</Button>
+            </div>
+        </div>
+
+        <TalosMobilePersonalVoiceEnrollment
+            v-if="showEnrollment"
+            :existing-profile-count="personalProfiles.length"
+            @close="showEnrollment = false"
+            @committed="onEnrollmentCommitted"
+        />
 
         <div v-if="supported" data-testid="talos-tts-controls" class="mt-4 border-t border-[var(--talos-border)] pt-3">
             <h5 class="text-xs font-semibold text-[var(--talos-text)]">{{ t('voice.readAloudTitle') }}</h5>
