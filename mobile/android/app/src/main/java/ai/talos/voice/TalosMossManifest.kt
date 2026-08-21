@@ -168,6 +168,8 @@ internal data class TalosMossTtsMeta(
 internal data class TalosMossCodecMeta(
     val decodeFullFile: String,
     val decodeStepFile: String,
+    /** Enrollment only (blueprint §15.1: "codecEncodeSession — enrollment only") - turns a captured reference waveform into `prompt_audio_codes`. */
+    val encodeFile: String,
     val sampleRate: Int,
     val channels: Int,
     val numQuantizers: Int,
@@ -200,6 +202,7 @@ internal data class TalosMossCodecMeta(
             return TalosMossCodecMeta(
                 decodeFullFile = files.getString("decode_full"),
                 decodeStepFile = files.getString("decode_step"),
+                encodeFile = files.getString("encode"),
                 sampleRate = codecConfig.getInt("sample_rate"),
                 channels = codecConfig.getInt("channels"),
                 numQuantizers = codecConfig.getInt("num_quantizers"),

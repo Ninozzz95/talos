@@ -397,11 +397,94 @@ guardie di regressione con un'asserzione, non solo come misura una tantum.
 
 ---
 
-## 9. Prossimo passo
+## 10. Fase 3 — arruolamento personale (in corso)
 
-Fase 2 è chiusa: nucleo (§8.1-8.2), cablaggio (§8.4) e qualità audio (§8.5)
-tutti provati sul dispositivo, capo a fondo, zero underrun reali. Resta la
-Fase 3 (arruolamento personale) — l'owner ha già dato il via il 21/8. Prima
-del Blocco 4, un mockup esaustivo dell'interfaccia (owner 21/8, vedi la
-memoria `blocco4-mockup-ui-voce-personale`). Poi, come sempre: cancelli,
+Blueprint §11-12: cattura del microfono con fedeltà, non con il
+preprocessing del wake-word; cancello di qualità prima di codificare
+qualunque cosa; §15.1 `codecEncodeSession`, solo per l'arruolamento.
+
+### 10.1 `TalosVoiceRecorder` — il microfono, con l'arbitraggio obbligatorio
+
+`talosVoiceEnrollmentAudioSource` (§11.3: `UNPROCESSED` solo se il
+dispositivo lo dichiara davvero, mai per assunzione) + `AudioRecord.Builder`
+con `setPrivacySensitive(true)` da API 30 (§11.4) + rilevamento di
+`isClientSilenced()` da API 29 (§11.6, non da 26: **guardia di livello API
+vera**, trovata da lint, non dimenticata — sotto 29 restano i cancelli di
+§12.2 a valle, più tardi ma non assenti).
+
+⭐⭐⭐ **Il cancello a zero tolleranza**: `TalosParola.cedi()`/`riprendi()`
+avvolgono **l'intera** cattura in un `try/finally` — ogni percorso d'uscita,
+compreso un errore di permesso scoperto **da lint** (`AudioRecord.Builder.build()`
+senza controllo esplicito del permesso — corretto aggiungendo
+`checkSelfPermission` prima, non sopprimendo l'avviso), restituisce il
+microfono.
+
+⭐ **Provato sul dispositivo reale**: `TalosVoiceRecorderInstrumentedTest` —
+**3/3 verdi**. Campioni veri catturati dal microfono vero (non silenzio),
+frequenza di campionamento verificata a runtime (§11.7, non assunta), e la
+prova che conta per l'invariante: una cattura **annullata** si ferma entro
+3 secondi **e lascia il microfono utilizzabile subito dopo** — non solo
+`cancelled=true` una volta, il microfono davvero restituito.
+
+### 10.2 `TalosVoiceQuality` — il cancello, matematica pura
+
+I 12 parametri di §12.1 (durata, rapporto di parlato, picco, RMS in dBFS,
+rapporto di clipping, offset DC, pavimento di rumore, SNR stimato, silenzio
+più lungo, rapporto di frame a zero, letture perse, silenziamento
+osservato) più i rigetti non negoziabili di §12.2 — silenziamento del
+client, cattura vuota, durata sotto il minimo, segnale quasi-zero,
+clipping grossolano, offset DC severo, silenzio eccessivo, conteggio di
+frame corrotto.
+
+⛔ **NON VERIFICATO, dichiarato per nome**: SNR e pavimento di rumore sono
+**calcolati e restituiti**, ma **non** cancellano nulla — il blueprint
+§12.2 stesso: «non inventare una soglia dB universale e spedirla senza
+misura». Servono registrazioni vere per calibrarle.
+
+⭐ **Provato — matematica pura, nessun dispositivo necessario**:
+`TalosVoiceQualityTest` — **10/10 verdi** in JVM. Ogni rigetto provato nei
+due versi: il segnale che deve farlo scattare, e un segnale altrettanto
+imperfetto (letture perse ma con audio vero) che **non** deve farlo
+scattare — la prova al contrario che il cancello non sia troppo aggressivo.
+
+### 10.3 `TalosMossRuntime.encodeReferenceAudio` — il codec al contrario
+
+Apre la sessione `codec_encode` (aggiunta a `TalosMossCodecMeta`/`open()`).
+Conversione mono→stereo per **duplicazione**, non media (§11.8) — letta dal
+riferimento reale (`ort_cpu_runtime.py`'s `_load_reference_audio`), stesso
+schema (1, canali, campioni) della decodifica. `buildInputRows` non cerca
+più una voce incorporata per nome soltanto: `generateAudioTokensWithReference`
+accetta `prompt_audio_codes` **diretti**, la stessa forma che una voce
+incorporata già usa — la porta che un profilo arruolato userà, già pronta.
+
+⭐ **Provato sul dispositivo reale, capo a fondo**:
+`TalosMossRuntimeEncodeReferenceInstrumentedTest` — **1/1 verde**. Decodifica
+i codici di una voce incorporata in PCM vero (attraverso lo stream
+incrementale già provato in Fase 2), li ri-codifica, e usa il risultato per
+sintetizzare una frase nuova — **98 frame ri-codificati contro 98 originali**,
+sintesi riuscita. Non prova la somiglianza vocale (serve un orecchio umano
+e una voce vera), ma prova che il percorso non produce codici spazzatura.
+
+### 10.4 Cosa resta aperto in Fase 3
+
+- Nessun profilo — `TalosVoiceProfileV1`, la cifratura (blueprint §6-7), e
+  lo storage non sono ancora scritti. Il percorso cattura→qualità→codifica
+  esiste ed è provato a pezzi separati, ma non ancora orchestrato in un
+  arruolamento vero da capo a fondo.
+- SNR/pavimento di rumore non calibrati (§10.2).
+- Nessuna prova con una voce umana reale — tutte le prove usano rumore
+  ambientale o audio sintetico/decodificato, mai parlato vero.
+- Anteprima prima di confermare, elimina/rinomina: non toccati.
+
+---
+
+## 11. Prossimo passo
+
+Fase 2 chiusa per intero (nucleo, cablaggio, qualità audio — zero underrun
+reali). Fase 3 a metà: cattura, cancello di qualità, e codifica del
+riferimento tutti provati sul dispositivo/in JVM, separatamente. Resta
+`TalosVoiceProfileV1` — struttura, cifratura, storage — e l'orchestrazione
+che li lega in un arruolamento vero. Prima del Blocco 4, un mockup
+esaustivo dell'interfaccia (owner 21/8, vedi la memoria
+`blocco4-mockup-ui-voce-personale`). Poi, come sempre: cancelli,
 prova sul dispositivo, commit, e si chiede il push solo alla fine.
