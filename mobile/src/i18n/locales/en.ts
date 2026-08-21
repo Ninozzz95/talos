@@ -543,6 +543,41 @@ export const TALOS_EN_MESSAGES = {
                 purpose: 'A model downloaded onto this phone answers without the network. What you write to it never leaves the device — not to us, not to anyone — and it keeps working with the phone in flight mode.',
             },
         },
+        /**
+         * Not an Android permission — TALOS asking to spend something it
+         * already has (battery, heat) on a real generation, to find out
+         * whether this phone's GPU is worth using for local models. Its own
+         * three states, deliberately not reusing `states.*`: "declined" here
+         * is a reversible choice with an explanation, not a blocked system
+         * dialog.
+         */
+        localEngineProbe: {
+            title: 'On-device GPU check',
+            purpose: 'A short, real generation on CPU and GPU, to find out whether this phone speeds up local models on its GPU. Costs battery and a bit of heat, runs once and remembers the answer, and never starts on its own.',
+            states: {
+                unset: 'Not asked yet',
+                granted: 'Allowed',
+                declined: 'Turned off — you can run it from here whenever you want',
+            },
+            runNow: 'Run it now',
+            running: 'Running…',
+            resultRan: {
+                cpu: 'Done. CPU: {outcome}.',
+                cpuAndGpu: 'Done. CPU: {cpuOutcome}, GPU: {gpuOutcome}.',
+            },
+            resultNotRun: {
+                hot: 'Skipped — the phone is too warm right now. Try again once it has cooled down.',
+                alreadyProven: 'Nothing to check — already measured on this phone.',
+            },
+            modal: {
+                title: 'Check this phone’s GPU?',
+                body: 'TALOS can run a short, real generation on CPU and GPU to see whether this phone answers local models faster on its GPU. It costs battery and a bit of heat, and only happens once — the answer is kept. It never runs on its own after this.',
+                yes: 'Yes, check now',
+                no: 'Not now',
+                dontAskAgain: 'Don’t ask again',
+                dontAskAgainHint: 'You can still run it any time from Settings → Privacy and permissions.',
+            },
+        },
     },
     chat: {
         plan: {

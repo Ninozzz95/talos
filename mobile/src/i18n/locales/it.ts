@@ -547,6 +547,33 @@ export const TALOS_IT_MESSAGES = {
                 purpose: 'Un modello scaricato su questo telefono risponde senza rete. Quello che gli scrivi non lascia mai il dispositivo — non a noi, non a nessuno — e continua a funzionare col telefono in modalità aereo.',
             },
         },
+        localEngineProbe: {
+            title: 'Verifica GPU sul telefono',
+            purpose: 'Una breve generazione vera, su CPU e su GPU, per scoprire se questo telefono va più veloce sulla GPU coi modelli locali. Costa batteria e un po\' di calore, gira una volta sola e ricorda la risposta, e non parte mai da sola.',
+            states: {
+                unset: 'Non ancora chiesto',
+                granted: 'Consentito',
+                declined: 'Disattivato — puoi farlo girare da qui quando vuoi',
+            },
+            runNow: 'Fallo girare ora',
+            running: 'In corso…',
+            resultRan: {
+                cpu: 'Fatto. CPU: {outcome}.',
+                cpuAndGpu: 'Fatto. CPU: {cpuOutcome}, GPU: {gpuOutcome}.',
+            },
+            resultNotRun: {
+                hot: 'Saltato — il telefono è troppo caldo adesso. Riprova quando si è raffreddato.',
+                alreadyProven: 'Niente da verificare — già misurato su questo telefono.',
+            },
+            modal: {
+                title: 'Verificare la GPU di questo telefono?',
+                body: 'TALOS può far girare una breve generazione vera su CPU e su GPU per vedere se questo telefono risponde più veloce ai modelli locali sulla GPU. Costa batteria e un po\' di calore, e succede una volta sola — la risposta resta. Da qui in poi non parte mai più da sola.',
+                yes: 'Sì, verifica ora',
+                no: 'Non ora',
+                dontAskAgain: 'Non chiedermelo più',
+                dontAskAgainHint: 'Puoi comunque farlo girare quando vuoi da Impostazioni → Privacy e permessi.',
+            },
+        },
     },
     chat: {
         plan: {
