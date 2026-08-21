@@ -131,15 +131,6 @@ const TalosMobileSourcesChip = defineAsyncComponent(
 const SchedaConsenso = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileToolConsentSheet.vue'))
 
-/**
- * ⛔ PIGRA per lo stesso motivo di `SchedaConsenso`: compare al massimo una
- * volta per telefono — appena il consenso smette di essere `unset` — e
- * caricarla per chi non sceglie mai un modello locale sarebbe un costo pagato
- * da tutti per una schermata che quasi nessuno vede.
- */
-const SchedaSondaggioGpu = defineAsyncComponent(
-    () => import('@/components/shell/TalosLocalEngineProbeConsentSheet.vue'))
-
 const bozza = ref('')
 const errore = ref<string | null>(null)
 const copiato = ref(false)
@@ -2260,12 +2251,6 @@ onMounted(async () => {
         @always-allow="void controller.decideToolAuthorization(consenso.request_id, 'always_allow')"
         @deny="void controller.decideToolAuthorization(consenso.request_id, 'deny')"
         @later="controller.dismissToolAuthorization()"
-    />
-
-    <!-- §1-bis: la modale del sondaggio GPU, alla prima scelta locale. -->
-    <SchedaSondaggioGpu
-        v-if="controller.pendingLocalEngineProbeConsent.value"
-        @decide="controller.decideLocalEngineProbeConsent"
     />
 </template>
 

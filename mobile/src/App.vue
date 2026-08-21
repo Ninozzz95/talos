@@ -422,6 +422,20 @@ const TalosMobileToolConsentSheet = defineAsyncComponent(
 const TalosMobileToolAuthorizationRecoveryCard = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileToolAuthorizationRecoveryCard.vue'),
 )
+/**
+ * ⛔⛔ MISURATO sul Pad il 21/8: montata invece dentro `TalosBarraRoot.vue`
+ * (il ruolo assistente separato, avviato da `lib/barra/avvia.ts` — non
+ * questa app), `pendingLocalEngineProbeConsent` si valorizzava per davvero
+ * ma NESSUN componente la leggeva mai, perché quell'albero Vue non è mai
+ * montato durante l'uso normale della chat. `composer_model` cambiava,
+ * `local_engine_probe.consent` restava `unset` per sempre, e la modale non
+ * compariva in nessuna schermata reale. La sede giusta è qui — la stessa di
+ * `TalosMobileToolConsentSheet`, l'altra modale di consenso che l'app
+ * mostra davvero durante la chat.
+ */
+const TalosLocalEngineProbeConsentSheet = defineAsyncComponent(
+    () => import('@/components/shell/TalosLocalEngineProbeConsentSheet.vue'),
+)
 const activeToolAuthorization = computed(() =>
     chatController.pendingToolAuthorizations.value[0] ?? null)
 const activeToolAuthorizationRecovery = computed(() =>
@@ -1157,6 +1171,15 @@ onBeforeUnmount(async () => {
                 @always-allow="void chatController.decideToolAuthorization(activeToolAuthorization.request_id, 'always_allow')"
                 @deny="void chatController.decideToolAuthorization(activeToolAuthorization.request_id, 'deny')"
                 @later="chatController.dismissToolAuthorization()"
+            />
+
+            <!-- §1-bis: la modale del sondaggio GPU, alla prima scelta esplicita
+                 di un modello locale. Indipendente dalla catena qui sopra, come
+                 il consenso sulle immagini — due domande diverse non condividono
+                 una coda. -->
+            <TalosLocalEngineProbeConsentSheet
+                v-if="chatController.pendingLocalEngineProbeConsent.value"
+                @decide="chatController.decideLocalEngineProbeConsent"
             />
             <!--
                 ⛔⭐⭐ Questo pulsante è l'UNICA via verso un permesso in
