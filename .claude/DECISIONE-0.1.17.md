@@ -580,10 +580,63 @@ paga niente.
 davvero in uso, 29/29 strati) rilanciata su questa build finale — nessuna
 parola cambiata dalla cura.
 
-⛔ **Non ancora fatto**: rimisurare la matrice C0 completa in questa
-configurazione (§9 del documento lo chiede), lo stress OpenCL a due sessioni
-concorrenti, e la proposta a monte (PR su `ggml-org/llama.cpp`) resta
-dell'owner.
+⛔ **Non ancora fatto**: lo stress OpenCL a due sessioni concorrenti, e la
+proposta a monte (PR su `ggml-org/llama.cpp`) resta dell'owner.
+
+---
+
+## ✅ RIMISURA CHIUSA — 2026-08-21, §9 soddisfatto
+
+> Owner, dopo aver visto la prima rimisura (parzialmente contaminata da una
+> corsa in gara con se stessa — vedi sotto): **niente giro a freddo**. Le due
+> misure che decidono il microbatch sono già robuste al termico (PP512 e lo
+> Stop non si spostano da caldo a freddo), e confrontare la matrice C0 contro
+> un giro a freddo preso con FA accesa e microbatch 192/256 sarebbe lo stesso
+> errore già trovato stamattina — comprare confrontabilità con una
+> configurazione che non spedisce. **I numeri a caldo sono i più onesti**: è
+> quello che una persona aspetta davvero, dopo un uso vero del telefono.
+
+⛔ **Un incidente vero, non nascosto.** Il primo tentativo di rimisura ha
+fatto correre **due istanze dello stesso script una contro l'altra** per
+~30 secondi (un `mv` di pulizia fallito in silenzio), facendo crashare l'app
+due volte. Sette test contaminati sono stati rifatti da soli, senza
+contesa — confermato con `ps` sul dispositivo e con l'albero dei processi
+sull'host prima di ogni rilancio.
+
+### Tabella A — a freddo, subito dopo la cura, prima della campagna
+
+| | valore |
+|---|---:|
+| Stop nel prefill (9 giri) | p50 32 · p95 36 · max 36 · min 18 ms |
+| decodifica dopo 2048 token | 16,43 tok/s |
+| decodifica (prompt corto) | 19,59 tok/s |
+| prefill 512 | 290,67 tok/s |
+| prefill 2048 | 249,48 tok/s |
+| golden suite | 7/7, GPU in uso (29/29 strati) |
+
+### Tabella B — a caldo, subito dopo G5 (10 minuti sotto carico), senza raffreddamento
+
+| | valore | note |
+|---|---:|---|
+| **G5, tenuta su 10,13 minuti** | mediana 19,75 tok/s | **oscilla** 19,84 ↔ 14,17 tok/s, **10 salti**, **34,6%** del tempo nello stato basso |
+| Stop nel prefill (9 giri) | p50 32 · p95 36 · max 38 ms | **identico** alla Tabella A — il meccanismo non degrada col calore |
+| Stop in decodifica (9 giri) | p50 42 · p95 50 · max 50 · min 34 ms | nessun riferimento a freddo con 9 giri per confrontare |
+| prefill 512 (9 giri) | 291,33 tok/s | **identico** alla Tabella A |
+| prefill 2048 (9 giri) | 185,71 tok/s · TTFT 11.031 ms | ⛔ dispersione ±15-19%, telefono ancora in salita termica dentro l'insieme |
+| **prefill 8192** | **111,62 tok/s · TTFT 73.398 ms (73,4 s)** | ⭐ **scoperta**, non rumore: **+40%** contro i 52,6 s citati altrove per un'altra config — il secondo prompt lungo di una sessione costa di più |
+| TG256 (14 giri) | dispersione ±38-39% | il blocco è entrato ed uscito da stati termici diversi, non un solo numero |
+
+⇒ **PP512 e lo Stop sono gli assi che contano per la decisione presa**, e
+sono robusti al caldo. PP2048/PP8192/TG256 a caldo restano **veri** ma non
+sono la stessa cosa di una matrice C0 a freddo — non li fondo con la
+Tabella A, e non ripeto la Tabella A in questa configurazione: costerebbe
+altri 20-30 minuti di dispositivo per un fantasma, la stessa famiglia di
+errore del confronto contro `off/512 senza cura`.
+
+**Il protocollo per la prossima volta**: ogni numero porta la sua banda
+termica (`.claude/strumenti/termica.mjs` accanto alla corsa, 8 zone
+`gpuss-*`), così «freddo» e «caldo» sono due colonne dichiarate, non una
+scelta fatta dopo.
 
 ---
 
