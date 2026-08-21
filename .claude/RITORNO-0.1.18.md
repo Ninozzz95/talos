@@ -1,8 +1,10 @@
 # RITORNO — 0.1.18: la voce personale
 
 > Scritto da questa sessione, aggiornato a fine di ogni blocco. **Fase 1
-> chiusa** (§1-7 sotto). **Fase 2 in corso** (§8) — l'owner ha dato il via
-> esplicito il 21/8 dopo la chiusura della Fase 1. Fase 3-4 restano roadmap.
+> chiusa** (§1-7 sotto). **Fase 2 chiusa** (§8, zero underrun reali).
+> **Fase 3 chiusa** (§10 — cattura, qualità, codifica, profilo cifrato,
+> orchestrazione, cancello di uscita provato sul dispositivo). Fase 4 (UI,
+> con mockup esaustivo da owner-approvare prima) resta roadmap.
 
 ---
 
@@ -465,26 +467,123 @@ sintetizzare una frase nuova — **98 frame ri-codificati contro 98 originali**,
 sintesi riuscita. Non prova la somiglianza vocale (serve un orecchio umano
 e una voce vera), ma prova che il percorso non produce codici spazzatura.
 
-### 10.4 Cosa resta aperto in Fase 3
+### 10.4 `TalosVoiceProfileV1` — il profilo cifrato, storage compreso
 
-- Nessun profilo — `TalosVoiceProfileV1`, la cifratura (blueprint §6-7), e
-  lo storage non sono ancora scritti. Il percorso cattura→qualità→codifica
-  esiste ed è provato a pezzi separati, ma non ancora orchestrato in un
-  arruolamento vero da capo a fondo.
+`TalosVoiceProfileV1(header, qualityMetrics, promptAudioCodes)`, JSON dentro
+la busta AEAD — non il layout binario a offset del diagramma del blueprint
+§6.1: questo codice legge/scrive già ogni altra struttura come JSON, e il
+diagramma nomina i campi, non i byte. `TalosVoiceProfileCipher` è una chiave
+AES-256-GCM per profilo dentro Android Keystore (alias
+`talos.voice.profile.v1.<uuid>`, nonce 96 bit casuale per scrittura via
+`cipher.iv`) — esattamente il disegno di §7.2. `TalosVoiceProfileCompatibility`
+implementa per davvero la "regola critica di compatibilità" di §6.1:
+l'impronta è agganciata al **codec** (JSON dei metadati + i tre grafi ONNX
+reali, con hash in streaming — i grafi del codec pesano da decine a
+centinaia di MB) più il conteggio dei quantizzatori più una versione dello
+schema-prompt che questo codice possiede — **mai** alla versione del
+modello TTS. `TalosVoiceProfileStore` è
+`filesDir/voice/profiles/<uuid>.tvp` — storage interno, già fuori dalla
+superficie di `allowBackup=false`. Il salvataggio scrive un file
+temporaneo, fa `fsync`, poi rinomina atomicamente sul percorso reale (§6.4):
+un crash fra scrittura e rinomina non può mai lasciare un file a metà nel
+punto che un caricamento successivo leggerebbe.
+
+⭐ **Provato sul dispositivo reale**: `TalosVoiceProfileStoreInstrumentedTest`,
+**7/7 verdi** — round-trip esatto di ogni campo; **cancellare SOLO la chiave
+Keystore** (file lasciato intatto) rende il profilo permanentemente
+illeggibile — la proprietà di sicurezza vera che §7.2 chiede, isolata da "il
+file è sparito"; la cancellazione piena rimuove entrambi; due profili
+portano chiavi indipendenti, cancellarne uno lascia l'altro intatto;
+rinominare cambia solo `displayName`; l'elenco riflette salvataggio e
+cancellazione; l'impronta del codec è deterministica su calcoli ripetuti
+reali contro i file del codec reali sul dispositivo (64 caratteri esadecimali
+SHA-256, confermato). Il round-trip JSON da solo non serve un dispositivo —
+`TalosVoiceProfileTest`, 3/3 nella JVM.
+
+### 10.5 `TalosVoiceEnrollment` — l'orchestrazione, e il cancello di uscita di Fase 3
+
+Lega cattura→qualità→codifica→profilo in un arruolamento vero:
+`captureOnePhrase` (microfono reale + cancello di qualità, per una frase
+guidata alla volta — la decisione di riprovare/tenere/scartare resta al
+chiamante, cioè al mockup del Blocco 4); `buildProfile` unisce le frasi
+accettate, verifica che condividano una sola frequenza di campionamento,
+ricontrolla il cancello di qualità **anche sull'unione** (difesa in
+profondità — §12: "non codificare ogni registrazione solo perché
+`AudioRecord` ha restituito byte" vale anche per il riferimento assemblato,
+non solo per ogni singola frase), codifica una sola volta attraverso il
+codec reale, e produce un profilo **in memoria**, non ancora salvato: il
+chiamante fa l'anteprima con
+`generateAudioTokensWithReference(profile.promptAudioCodes)` prima di
+chiedere un sì vero (§11.1); `commit` salva solo dopo.
+
+⛔ **Il passo "cancella il PCM temporaneo" di §6.4/§7.1 non esiste qui, di
+proposito, non per dimenticanza.** Ricerca prima di scrivere il file:
+`File.delete()` su Android non cancella in modo sicuro (recuperabile da
+un'immagine fisica finché non viene sovrascritto), e sovrascrivere-prima-di-
+cancellare consuma flash e batteria per una garanzia che comunque non può
+dare su NAND a wear-leveling — lo stesso §7.2 dice di non dichiarare una
+cancellazione fisica garantita. `TalosVoiceRecorder.capture()` restituisce
+già il PCM in memoria (`ShortArray`), e `encodeReferenceAudio` prende la
+memoria direttamente: l'intera pipeline cattura→codici non ha mai bisogno
+di un file `cacheDir/voice-enrollment/…pcm.tmp` come quello che §7.1
+descrive come posizione, perché niente qui serializza mai l'audio grezzo su
+disco. Audio mai scritto è una proprietà più forte di audio scritto e poi
+ripulito col meglio possibile.
+
+⭐⭐⭐ **Provato sul dispositivo reale, il cancello di uscita del blueprint
+per intero**: *"ad app riavviata da fredda parla col profilo cifrato in
+cache, senza il WAV grezzo"* — `TalosVoiceEnrollmentInstrumentedTest`,
+**3/3 verdi**. Il test grosso (`committedProfileSurvivesACloseAndFresh...`)
+costruisce un profilo da due "frasi" (due metà del riferimento di una voce
+incorporata, decodificate — nessuna voce umana dal vivo disponibile in un
+test automatico, stessa limitazione già dichiarata in 10.3), lo salva,
+**chiude tutto il runtime**, ne riapre uno **nuovo** ("freddo", il più
+vicino a un riavvio reale che uno strumentato ottiene senza uccidere il
+processo), carica **solo** il file `.tvp` cifrato da disco, e sintetizza con
+quello — 8 frame prodotti, non cancellato. Confrontato uno snapshot di
+`filesDir` prima/dopo: **l'unico file nuovo è `voice/profiles/<uuid>.tvp`**,
+niente altro — la prova diretta che nessun WAV/PCM grezzo tocca mai il
+disco. (Misurato anche: `cacheDir` non è utilizzabile per questo confronto
+— è la stessa cartella dove la WebView dell'app tiene la sua cache HTTP e
+il crash reporter, che scrivono per conto loro; la prova resta scoperta su
+`filesDir`, l'unica cartella che questa classe o il blueprint propongono
+mai di usare.) Le altre due prove: il cancello dei guardrail (lista vuota di
+frasi, frequenze di campionamento diverse — entrambe rifiutate **prima** di
+toccare il runtime ONNX) e il cablaggio cattura→qualità sul microfono vero.
+
+⛔ Corsa di regressione sull'intero pacchetto `ai.talos.voice` (30 test): 1
+fallimento isolato in `TalosVoiceHostStreamingInstrumentedTest` (underrun
+hardware 2 invece di 0) — **non** nei file toccati oggi, e verde 2/2 quando
+rieseguito da solo subito dopo. Coerente con l'aperto già noto
+`sotto-carico-non-cala-oscilla` (memoria), non una regressione di questo
+turno; non richiude quell'aperto.
+
+### 10.6 Cosa resta aperto in Fase 3
+
 - SNR/pavimento di rumore non calibrati (§10.2).
 - Nessuna prova con una voce umana reale — tutte le prove usano rumore
   ambientale o audio sintetico/decodificato, mai parlato vero.
-- Anteprima prima di confermare, elimina/rinomina: non toccati.
+- Anteprima-prima-di-confermare come **flusso UI**: il backend la rende
+  possibile (`buildProfile` non salva da solo), ma non esiste ancora
+  un'interfaccia che la guidi — è il Blocco 4.
+- Registro del consenso (§7.4): non toccato.
+- `frameRateMilliHz`/`codebookSize` nell'header restano sentinella `-1`:
+  `TalosMossCodecMeta` non porta ancora quei campi (verificato, non
+  presunto) — un'estensione futura dovrebbe aggiungerli lì, non farli
+  indovinare da questa classe.
 
 ---
 
 ## 11. Prossimo passo
 
 Fase 2 chiusa per intero (nucleo, cablaggio, qualità audio — zero underrun
-reali). Fase 3 a metà: cattura, cancello di qualità, e codifica del
-riferimento tutti provati sul dispositivo/in JVM, separatamente. Resta
-`TalosVoiceProfileV1` — struttura, cifratura, storage — e l'orchestrazione
-che li lega in un arruolamento vero. Prima del Blocco 4, un mockup
-esaustivo dell'interfaccia (owner 21/8, vedi la memoria
-`blocco4-mockup-ui-voce-personale`). Poi, come sempre: cancelli,
-prova sul dispositivo, commit, e si chiede il push solo alla fine.
+reali). **Fase 3 chiusa per intero**: cattura, cancello di qualità, codifica
+del riferimento, profilo cifrato con storage, e l'orchestrazione che li lega
+in un arruolamento vero — cancello di uscita del blueprint provato sul
+dispositivo (riavvio a freddo, zero file grezzi su disco). Prima del Blocco
+4, un mockup esaustivo dell'interfaccia (owner 21/8, vedi la memoria
+`blocco4-mockup-ui-voce-personale`) — l'orchestrazione di oggi è pensata
+apposta come la porta che quel mockup chiamerà (`captureOnePhrase` per
+frase guidata, `buildProfile` per l'anteprima, `commit` solo dopo il sì).
+Poi, come sempre: cancelli, prova sul dispositivo, commit, e si chiede il
+push solo alla fine.
