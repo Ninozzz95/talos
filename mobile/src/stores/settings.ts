@@ -13,6 +13,7 @@ import {
     isTalosPromptEnhancerDepth,
     type TalosPromptEnhancerDepth,
 } from '@/lib/chat/promptEnhancerDepth'
+import type { TalosSpeechEngine } from '@/lib/voice/personalVoiceContracts'
 import { Preferences } from '@capacitor/preferences'
 import type { TalosSearchSourceId } from '@/lib/search/searchSources'
 import type { TalosLibrarySort } from '@/lib/libraryGrouping'
@@ -655,11 +656,31 @@ function parseTonePreferences(value: unknown): TalosMobileTonePreferences {
 
 // Owner 2026-07-24 — voice (text-to-speech) for assistant replies: the device
 // voice ("model") + rate/pitch ("tone").
+//
+// ⛔ Blueprint §39 Phase 4, "additive settings schema": `engine`/`personal_*`
+// below are new fields on an existing interface, not a new one - old settings
+// JSON with none of them must parse identically to today (§37.1's own test
+// list says so explicitly), and `parseVoicePreferences` below is what makes
+// that true: every new field has a safe, backward-reading fallback.
 export interface TalosMobileVoicePreferences {
     voice_uri: string | null
     rate: number
     pitch: number
     dictation_language: TalosDictationLanguageMode
+    /** Which engine reads assistant replies aloud. Unknown/missing -> `'system'`, never `'personal'` - a stale or corrupted value must never silently switch someone onto an engine they never chose. */
+    engine: TalosSpeechEngine
+    /** The `TalosVoiceProfileV1` id to speak with when `engine === 'personal'`. Null (never enrolled, or the enrolled profile was deleted) is a valid, common state - the router's job, not this store's, to fall back when it is. */
+    personal_profile_id: string | null
+    /**
+     * ⛔ NOT `rate`/`pitch` above, on purpose. Those default to 1.2x/1.0
+     * because the owner tuned them against the SYSTEM voice (2026-08-10,
+     * `DEFAULT_VOICE_PREFERENCES`'s own comment) - applying that same 1.2x
+     * to a freshly enrolled neural voice would distort it against a speed it
+     * was never judged at. Personal gets its own pair, both neutral (1.0),
+     * until someone actually tunes them by ear the same way.
+     */
+    personal_rate: number
+    personal_pitch: number
 }
 
 /**
@@ -680,6 +701,15 @@ const DEFAULT_VOICE_PREFERENCES: TalosMobileVoicePreferences = {
     rate: 1.2,
     pitch: 1,
     dictation_language: 'system',
+    engine: 'system',
+    personal_profile_id: null,
+    personal_rate: 1,
+    personal_pitch: 1,
+}
+
+/** §37.1's own rule: a saved profile id is always a `TalosVoiceProfileV1` UUID (`UUID.randomUUID().toString()` on the native side) - anything else is malformed and parses to `null`, the same "never enrolled" state a fresh install starts in. */
+function isPlausibleTalosVoiceProfileId(value: unknown): value is string {
+    return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 }
 
 function parseVoicePreferences(value: unknown): TalosMobileVoicePreferences {
@@ -691,6 +721,11 @@ function parseVoicePreferences(value: unknown): TalosMobileVoicePreferences {
         rate: num(record.rate, DEFAULT_VOICE_PREFERENCES.rate, 0.5, 2),
         pitch: num(record.pitch, DEFAULT_VOICE_PREFERENCES.pitch, 0, 2),
         dictation_language: parseTalosDictationLanguageMode(record.dictation_language),
+        // Unknown/missing/corrupted -> 'system', never 'personal' - §37.1: "unknown `engine` -> `system`".
+        engine: record.engine === 'personal' ? 'personal' : 'system',
+        personal_profile_id: isPlausibleTalosVoiceProfileId(record.personal_profile_id) ? record.personal_profile_id : null,
+        personal_rate: num(record.personal_rate, DEFAULT_VOICE_PREFERENCES.personal_rate, 0.5, 2),
+        personal_pitch: num(record.personal_pitch, DEFAULT_VOICE_PREFERENCES.personal_pitch, 0, 2),
     }
 }
 export interface TalosMobileSettingsState {

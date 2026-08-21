@@ -171,6 +171,53 @@ describe('parseTalosMobileSettings', () => {
             voice: { dictation_language: 'de-DE' },
         })).voice.dictation_language).toBe('de-DE')
     })
+
+    // Blueprint §37.1 "Settings" - the additive personal-voice schema (Fase 4).
+    it('PVOICE-SETTINGS-01 settings written before the personal engine existed parse identically to today', () => {
+        const legacy = JSON.stringify({
+            voice: { voice_uri: 'it-IT-language', rate: 1.3, pitch: 0.9, dictation_language: 'it-IT' },
+        })
+        const parsed = parseTalosMobileSettings(legacy).voice
+        expect(parsed.voice_uri).toBe('it-IT-language')
+        expect(parsed.rate).toBe(1.3)
+        expect(parsed.pitch).toBe(0.9)
+        expect(parsed.dictation_language).toBe('it-IT')
+        // None of these fields existed in that JSON - a fresh install's defaults, not a crash and not `undefined`.
+        expect(parsed.engine).toBe('system')
+        expect(parsed.personal_profile_id).toBeNull()
+        expect(parsed.personal_rate).toBe(1)
+        expect(parsed.personal_pitch).toBe(1)
+    })
+
+    it('PVOICE-SETTINGS-02 an unknown or corrupted engine value falls back to system, never personal', () => {
+        expect(parseTalosMobileSettings(null).voice.engine).toBe('system')
+        expect(parseTalosMobileSettings(JSON.stringify({ voice: { engine: 'quantum' } })).voice.engine).toBe('system')
+        expect(parseTalosMobileSettings(JSON.stringify({ voice: { engine: 42 } })).voice.engine).toBe('system')
+        expect(parseTalosMobileSettings(JSON.stringify({ voice: { engine: 'personal' } })).voice.engine).toBe('personal')
+    })
+
+    it('PVOICE-SETTINGS-03 a malformed profile id parses to null, a real UUID survives', () => {
+        expect(parseTalosMobileSettings(JSON.stringify({
+            voice: { personal_profile_id: 'DROP TABLE profiles' },
+        })).voice.personal_profile_id).toBeNull()
+        expect(parseTalosMobileSettings(JSON.stringify({
+            voice: { personal_profile_id: 42 },
+        })).voice.personal_profile_id).toBeNull()
+        const uuid = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
+        expect(parseTalosMobileSettings(JSON.stringify({
+            voice: { personal_profile_id: uuid },
+        })).voice.personal_profile_id).toBe(uuid)
+    })
+
+    it('PVOICE-SETTINGS-04 personal rate/pitch are clamped, system rate/pitch are untouched by the same write', () => {
+        const parsed = parseTalosMobileSettings(JSON.stringify({
+            voice: { rate: 1.2, pitch: 1, personal_rate: 9, personal_pitch: -3 },
+        })).voice
+        expect(parsed.rate).toBe(1.2)
+        expect(parsed.pitch).toBe(1)
+        expect(parsed.personal_rate).toBe(2) // clamp ceiling, same 0.5..2 range `rate` already uses
+        expect(parsed.personal_pitch).toBe(0) // clamp floor, same 0..2 range `pitch` already uses
+    })
 })
 describe('useSettingsStore', () => {
 
