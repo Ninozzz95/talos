@@ -80,6 +80,10 @@ import {
     type TalosMobileModelLabPreferences,
 } from '@/lib/modelLabContracts'
 import {
+    parseTalosLocalEngineProbePreferences,
+    type TalosLocalEngineProbePreferences,
+} from '@/lib/localEngineProbeConsent'
+import {
     TALOS_DEFAULT_MOBILE_BROWSER_PREFERENCES,
     parseTalosMobileBrowserPreferences,
     type TalosMobileBrowserPreferences,
@@ -712,6 +716,8 @@ export interface TalosMobileSettingsState {
     shell: TalosMobileShellPreferences
     onboarding: TalosMobileOnboardingState
     security: TalosMobileSecurityPreferences
+    /** §1-bis, 0.1.18 handoff: consent to run the local-engine GPU-backend probe. */
+    local_engine_probe: TalosLocalEngineProbePreferences
     tone: TalosMobileTonePreferences
     chat_layout: TalosChatLayoutPreferences
     ai_defaults: TalosAiDefaults
@@ -947,6 +953,7 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         shell: shellParsed,
         onboarding: parseOnboarding(value.onboarding),
         security: parseSecurityPreferences(value.security),
+        local_engine_probe: parseTalosLocalEngineProbePreferences(value.local_engine_probe),
         tools: parseToolPermissions(value.tools),
         tools_chosen: parseTalosChosenToolActions(value.tools_chosen),
         agent_tools: parseTalosAgentToolEnabled(value.agent_tools),
@@ -983,6 +990,7 @@ export interface SettingsStore {
     ): Promise<TalosLibraryContextPolicyV1>
     setOnboarding(patch: Partial<TalosMobileOnboardingState>): Promise<void>
     setSecurity(patch: Partial<TalosMobileSecurityPreferences>): Promise<void>
+    setLocalEngineProbeConsent(patch: Partial<TalosLocalEngineProbePreferences>): Promise<void>
     /** Owner 2026-07-25: what the model may do without asking. */
     setToolPermissions(patch: Partial<TalosToolPermissions>): Promise<void>
     setAgentToolEnabled(tool: TalosAgentToolId, enabled: boolean): Promise<void>
@@ -1036,6 +1044,7 @@ export function useSettingsStore(): SettingsStore {
                 shell: next.shell,
                 onboarding: next.onboarding,
                 security: next.security,
+                local_engine_probe: next.local_engine_probe,
                 tools: next.tools,
                 tools_chosen: next.tools_chosen,
                 agent_tools: next.agent_tools,
@@ -1152,6 +1161,7 @@ export function useSettingsStore(): SettingsStore {
             state.shell = parsed.shell
             state.onboarding = parsed.onboarding
             state.security = parsed.security
+            state.local_engine_probe = parsed.local_engine_probe
             // SF-MAJOR: this line was missing, so every tool-permission choice
             // was discarded on the next launch and the gate silently reverted
             // to its defaults. A user who set "never read my things" got
@@ -1216,6 +1226,16 @@ export function useSettingsStore(): SettingsStore {
         setSecurity(patch) {
             return commit(() => ({
                 overrides: { security: parseSecurityPreferences({ ...state.security, ...patch }) },
+            }))
+        },
+        setLocalEngineProbeConsent(patch) {
+            return commit(() => ({
+                overrides: {
+                    local_engine_probe: parseTalosLocalEngineProbePreferences({
+                        ...state.local_engine_probe,
+                        ...patch,
+                    }),
+                },
             }))
         },
         setToolPermissions(patch) {
