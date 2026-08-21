@@ -315,7 +315,65 @@ interrompere ancora. Corretto scaldando il host con un'frase corta PRIMA di
 misurare la cancellazione, esattamente come «TTFA a caldo» non include il
 caricamento del modello. Il numero vero, a caldo, è 49-60 ms.
 
-### 8.5 Cosa resta aperto in Fase 2
+### 8.5 Il micro-stutter — segnalato dall'owner, misurato, chiuso a zero
+
+Dopo aver sentito la sintesi in streaming sul dispositivo vero, l'owner ha
+segnalato micro-interruzioni udibili e ha chiesto una ricerca web su come si
+ottimizza la qualità dell'audio in streaming prima di toccare altro.
+
+**Ricerca**: la causa tipica in letteratura è una discontinuità PCM al
+bordo dei blocchi (il decodificatore rende l'audio più silenzioso o
+aggiunge silenzio ai bordi di ogni chiamata) — si cura con un crossfade
+Hann. **Misurato prima di curare quello**: ho decodificato la stessa
+sintesi a un frame alla volta e confrontato il salto campione-a-campione
+**al bordo di ogni blocco** contro il salto **dentro** un blocco — rapporto
+**0,82** (il bordo è più liscio, non più ruvido). Il PCM stesso è pulito,
+niente click da bordo di blocco (`TalosMossCodecStreamStutterDiagnosticTest`).
+
+**La causa vera, trovata con `AudioTrack.getUnderrunCount()`** (il segnale
+diretto dell'hardware, non un'inferenza): **103 underrun reali** su
+un'utterance di pochi secondi. Non un problema del dato audio: un deficit
+di tempo reale **sostenuto**. Misurato con `TalosMossCodecStreamBatchSizeDiagnosticTest`:
+il solo `decode_step` a un frame alla volta ha **RTF 0,939** — quasi tutto
+il budget di tempo reale **prima** di sommare il costo della generazione
+TTS (RTF ~0,53-0,69, misurato in Fase 1) che deve avvenire per ogni frame.
+Sommati in serie, RTF combinato oltre 1,5: non jitter, un deficit che si
+accumula per tutta la durata della frase. Un buffer più grande da solo non
+basta — rimanda il primo underrun, non lo previene (103→91 underrun con un
+buffer 4× più grande, quasi invariato).
+
+**La cura, misurata a ogni passo**: la politica di scorta di
+`resolveFrameBudget` non cresce più 1→2→4→8 secondo il ritardo misurato
+(quella crescita non partiva mai, perché il ritardo non si accumulava mai
+con un motore più lento del tempo reale) — resta a **1 frame solo per il
+primo blocco** (per il TTFA), poi salta dritto a un **pavimento di 8**,
+scelto perché a quella dimensione `decode_step` misura RTF 0,204, lasciando
+margine reale sopra il costo della generazione TTS. Il buffer di
+`TalosPcmPlayer` è salito da 1× a **8×** il minimo (~960 ms) per assorbire
+il vuoto reale fra una consegna di 8 frame e la successiva — un pavimento
+di 16 è stato provato e **peggiorava** (91→12 con buffer 4×; il blocco più
+grande allarga il vuoto fra le scritture più di quanto un buffer moderato
+riesca a coprire).
+
+```
+underrun reali (AudioTrack.getUnderrunCount), prima della cura     103, poi 91 con buffer 4×
+underrun reali, batch=16 pavimento (buffer 4×)                      12  (PEGGIO — batch grande, vuoto grande)
+underrun reali, batch=8 pavimento + buffer 8×                       0   (tre corse di seguito)
+TTFA dopo la cura                                                   453-460 ms  (< 500 ms, margine reale)
+cancel a metà streaming dopo la cura                                41 ms
+```
+
+Owner, dopo la cura: «adesso è migliorato molto» — confermato a orecchio,
+non solo dalla misura.
+
+⭐ **Provato sul dispositivo reale, capo a fondo, con la cura**:
+`TalosVoiceHostStreamingInstrumentedTest` — **2/2 verdi**, tre corse
+consecutive a zero underrun reali. I due test diagnostici
+(`TalosMossCodecStreamBatchSizeDiagnosticTest`,
+`TalosMossCodecStreamStutterDiagnosticTest`) sono rimasti nel repo come
+guardie di regressione con un'asserzione, non solo come misura una tantum.
+
+### 8.6 Cosa resta aperto in Fase 2
 
 - §17.4 (recupero da traccia morta) implementato e cablato, ma **mai
   esercitato da un guasto vero** — solo dalla lettura del codice e da un
@@ -325,24 +383,25 @@ caricamento del modello. Il numero vero, a caldo, è 49-60 ms.
 - Nessuna misura di TTFA sul **primo** utterance di un processo (a freddo,
   con caricamento sessioni incluso) — solo quello a caldo, per costruzione
   del blueprint §38.2.
-- La politica di scorta (1→2→4→8) non ha mai raggiunto un livello sopra 1
-  frame nelle prove fatte: il buffer minimo di `TalosPcmPlayer` (necessario
-  per il difetto 2 di §8.2) tiene il ritardo reale sempre sotto 0,20 s.
-  Non verificato con un buffer diverso se la crescita a 2/4/8 frame
-  funziona davvero — il codice è lo stesso identico algoritmo del
-  riferimento, ma il ramo non è stato **osservato** eseguire.
+- Il pavimento di 8 frame e il buffer 8× sono calibrati su **questo**
+  dispositivo e su **questo** modello (MOSS-TTS-Nano-100M, pin corrente).
+  Un modello diverso o un dispositivo più lento/più veloce potrebbe avere
+  bisogno di numeri diversi — i due test diagnostici restano apposta per
+  ricalibrare, non solo per confermare.
 - `TalosMossRuntime`/`TalosVoiceHost` non riusano lo stesso `codecStream`
   fra utterance successive nello stesso host — ne aprono uno nuovo ogni
   volta (corretto per correttezza, dato che lo stato del codec è per-utterance,
   ma non misurato per il costo di apertura ripetuta).
+- Zero underrun provato su un'utterance di pochi secondi, non sui dieci
+  minuti che il blueprint §38.2 chiede — quel cancello resta aperto.
 
 ---
 
 ## 9. Prossimo passo
 
-Fase 2 è chiusa: nucleo (§8.1-8.2) e cablaggio (§8.4) entrambi provati sul
-dispositivo, capo a fondo. Resta la Fase 3 (arruolamento personale) quando
-l'owner darà il via — e prima di quella, per il Blocco 4, un mockup
-esaustivo dell'interfaccia (owner 21/8, vedi la memoria
-`blocco4-mockup-ui-voce-personale`). Poi, come sempre: cancelli, prova sul
-dispositivo, commit, e si chiede il push solo alla fine.
+Fase 2 è chiusa: nucleo (§8.1-8.2), cablaggio (§8.4) e qualità audio (§8.5)
+tutti provati sul dispositivo, capo a fondo, zero underrun reali. Resta la
+Fase 3 (arruolamento personale) — l'owner ha già dato il via il 21/8. Prima
+del Blocco 4, un mockup esaustivo dell'interfaccia (owner 21/8, vedi la
+memoria `blocco4-mockup-ui-voce-personale`). Poi, come sempre: cancelli,
+prova sul dispositivo, commit, e si chiede il push solo alla fine.
