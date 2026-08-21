@@ -20,16 +20,21 @@ import org.junit.Test;
  * produced a correct answer ON THIS DEVICE, under this driver. CPU is the floor
  * and needs no proof, because it is the reference everything else is compared
  * against.
+ *
+ * ⛔ Fase 7(b), 2026-08-21: the axis is time to first token, not decode
+ * throughput — lower is better here, the opposite direction from the field
+ * this replaced. Values below are in milliseconds and shaped like real
+ * measurements (a CPU floor in the tens of seconds, a GPU candidate a few
+ * times faster), not like the old tokens/second fixtures.
  */
 public class TalosBackendChoiceTest {
 
     private static final String DRIVER = "Adreno (TM) 740/512.744.0";
     private static final String OTHER_DRIVER = "Adreno (TM) 740/512.801.0";
 
-    private static TalosBackendChoice.Evidence proven(
-            String backend, String driver, double tokensPerSecond) {
+    private static TalosBackendChoice.Evidence proven(String backend, String driver, long ttftMs) {
         return new TalosBackendChoice.Evidence(
-                backend, driver, TalosBackendChoice.Outcome.CORRECT, tokensPerSecond);
+                backend, driver, TalosBackendChoice.Outcome.CORRECT, ttftMs);
     }
 
     private static TalosBackendChoice.Evidence failed(String backend, String driver) {
@@ -55,8 +60,8 @@ public class TalosBackendChoiceTest {
     public void choosesAGpuThatHasProvedItselfHere() {
         TalosBackendChoice.Decision decision = TalosBackendChoice.choose(DRIVER, "none",
                 new TalosBackendChoice.Evidence[] {
-                    proven(TalosBackendChoice.CPU, DRIVER, 8.0),
-                    proven(TalosBackendChoice.VULKAN, DRIVER, 22.0),
+                    proven(TalosBackendChoice.CPU, DRIVER, 43_200),
+                    proven(TalosBackendChoice.VULKAN, DRIVER, 11_000),
                 });
 
         assertEquals(TalosBackendChoice.VULKAN, decision.backend);
@@ -64,17 +69,18 @@ public class TalosBackendChoiceTest {
     }
 
     /**
-     * THE rule the research produced. A GPU backend that is barely ahead is not
-     * worth taking: on Android the same driver that gives 5% also gives the load
-     * failures and the wrong answers, and CPU is the path that always works.
-     * Speed is only a reason when it is a real one.
+     * THE rule the research produced. A GPU backend whose first token arrives
+     * only a little sooner is not worth taking: on Android the same driver
+     * that shaves a few percent off TTFT also gives the load failures and the
+     * wrong answers, and CPU is the path that always works. Speed is only a
+     * reason when it is a real one.
      */
     @Test
     public void refusesAGpuThatIsOnlyMarginallyFaster() {
         TalosBackendChoice.Decision decision = TalosBackendChoice.choose(DRIVER, "none",
                 new TalosBackendChoice.Evidence[] {
-                    proven(TalosBackendChoice.CPU, DRIVER, 10.0),
-                    proven(TalosBackendChoice.VULKAN, DRIVER, 11.0),
+                    proven(TalosBackendChoice.CPU, DRIVER, 10_000),
+                    proven(TalosBackendChoice.VULKAN, DRIVER, 9_000),
                 });
 
         assertEquals(TalosBackendChoice.CPU, decision.backend);
@@ -89,7 +95,7 @@ public class TalosBackendChoiceTest {
     public void neverRetriesABackendThatFailedOnThisDevice() {
         TalosBackendChoice.Decision decision = TalosBackendChoice.choose(DRIVER, "none",
                 new TalosBackendChoice.Evidence[] {
-                    proven(TalosBackendChoice.CPU, DRIVER, 8.0),
+                    proven(TalosBackendChoice.CPU, DRIVER, 43_200),
                     failed(TalosBackendChoice.VULKAN, DRIVER),
                 });
 
@@ -112,8 +118,8 @@ public class TalosBackendChoiceTest {
     @Test
     public void treatsADriverUpdateAsANewMachine() {
         TalosBackendChoice.Evidence[] old = {
-            proven(TalosBackendChoice.CPU, DRIVER, 8.0),
-            proven(TalosBackendChoice.VULKAN, DRIVER, 22.0),
+            proven(TalosBackendChoice.CPU, DRIVER, 43_200),
+            proven(TalosBackendChoice.VULKAN, DRIVER, 11_000),
         };
 
         TalosBackendChoice.Decision decision = TalosBackendChoice.choose(OTHER_DRIVER, "none", old);
@@ -134,8 +140,8 @@ public class TalosBackendChoiceTest {
     @Test
     public void retreatsToTheReferenceWhenThePhoneIsInTrouble() {
         TalosBackendChoice.Evidence[] evidence = {
-            proven(TalosBackendChoice.CPU, DRIVER, 8.0),
-            proven(TalosBackendChoice.VULKAN, DRIVER, 22.0),
+            proven(TalosBackendChoice.CPU, DRIVER, 43_200),
+            proven(TalosBackendChoice.VULKAN, DRIVER, 11_000),
         };
 
         assertEquals(TalosBackendChoice.VULKAN,
@@ -166,16 +172,56 @@ public class TalosBackendChoiceTest {
         assertEquals(TalosBackendChoice.CPU, decision.backend);
     }
 
-    /** Of two proven GPU backends, the faster — OpenCL is the Adreno answer. */
+    /** Of two proven GPU backends, the one whose first token arrives soonest. */
     @Test
     public void picksTheFastestAmongProvenBackends() {
         TalosBackendChoice.Decision decision = TalosBackendChoice.choose(DRIVER, "none",
                 new TalosBackendChoice.Evidence[] {
-                    proven(TalosBackendChoice.CPU, DRIVER, 8.0),
-                    proven(TalosBackendChoice.VULKAN, DRIVER, 14.0),
-                    proven(TalosBackendChoice.OPENCL, DRIVER, 26.0),
+                    proven(TalosBackendChoice.CPU, DRIVER, 43_200),
+                    proven(TalosBackendChoice.VULKAN, DRIVER, 15_000),
+                    proven(TalosBackendChoice.OPENCL, DRIVER, 11_000),
                 });
 
         assertEquals(TalosBackendChoice.OPENCL, decision.backend);
+    }
+
+    /**
+     * The exact number this rewrite is built on, so a future change to the
+     * margin has to look this measurement in the eye: CPU floor cold (43.2s)
+     * against OpenCL with the abort cure in its WORST thermal state, right
+     * after ten minutes of sustained load (11.0s) — roughly 4x. The margin
+     * asks for 2x, so this passes with real headroom, not by a hair.
+     */
+    @Test
+    public void theMeasurementThisMarginWasCalibratedAgainst() {
+        TalosBackendChoice.Decision decision = TalosBackendChoice.choose(DRIVER, "moderate",
+                new TalosBackendChoice.Evidence[] {
+                    proven(TalosBackendChoice.CPU, DRIVER, 43_200),
+                    proven(TalosBackendChoice.OPENCL, DRIVER, 11_000),
+                });
+
+        assertEquals(TalosBackendChoice.OPENCL, decision.backend);
+        assertEquals("faster", decision.reason);
+    }
+
+    /**
+     * Fase 7(c): the one place a Decision becomes the number the JNI boundary
+     * reads. A GPU decision moves every layer; CPU moves none — the same
+     * default `nativeOpen` has always had.
+     */
+    @Test
+    public void translatesADecisionIntoTheLayerCountTheEngineReads() {
+        TalosBackendChoice.Decision cpu = TalosBackendChoice.choose(
+                DRIVER, "none", new TalosBackendChoice.Evidence[0]);
+        assertEquals("unproven means CPU means zero, exactly today's default",
+                0, TalosBackendChoice.gpuLayers(cpu));
+
+        TalosBackendChoice.Decision gpu = TalosBackendChoice.choose(DRIVER, "none",
+                new TalosBackendChoice.Evidence[] {
+                    proven(TalosBackendChoice.CPU, DRIVER, 43_200),
+                    proven(TalosBackendChoice.OPENCL, DRIVER, 11_000),
+                });
+        assertEquals("a proven GPU moves every layer, not a partial offload",
+                -1, TalosBackendChoice.gpuLayers(gpu));
     }
 }
