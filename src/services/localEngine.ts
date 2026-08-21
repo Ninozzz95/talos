@@ -134,6 +134,28 @@ interface TalosLlamaPlugin {
         engineBuild?: string
     }>
     deleteInstalled(options: { path: string }): Promise<{ deleted: boolean }>
+    /**
+     * Fa girare, se e quanto serve, il sondaggio che riempie
+     * `TalosBackendEvidenceStore` — una generazione VERA su CPU e, quando
+     * questa build ha davvero compilato OpenCL, sulla GPU, per decidere se
+     * conviene offrirla su QUESTO telefono.
+     *
+     * ⛔ Costa batteria e calore, non una chiamata di rete: per questo non
+     * parte mai da sola. Chi chiama deve già avere il consenso — automatico
+     * al primo modello locale scelto, o dal comando manuale nelle
+     * impostazioni — vedi `localEngineProbeConsent.ts`.
+     */
+    qualifyBackend(options: { path: string }): Promise<{
+        ran: boolean
+        /** Presente solo quando `ran` è falso: perché non ha girato. */
+        reason?: string
+        probedCpu?: boolean
+        cpuInconclusive?: boolean
+        probedGpu?: boolean
+        gpuInconclusive?: boolean
+        decisionBackend?: string
+        decisionReason?: string
+    }>
     open(options: {
         path: string
         threads?: number
@@ -456,6 +478,51 @@ export async function talosLocalEngineStatus(): Promise<TalosLocalEngineStatus> 
             available: false, backends: '', loadedPath: null,
             shape: null, kvCacheType: null, engineBuild: null,
         }
+    }
+}
+
+/** Cosa ha fatto un sondaggio: mai un «fatto» muto — la scheda ha bisogno di sapere se ha girato, e su cosa. */
+export interface TalosLocalBackendQualification {
+    ran: boolean
+    /** `'hot'` (il telefono era troppo caldo) o `'already-proven'` (nessun backend aveva bisogno del sondaggio). Null se `ran`. */
+    reason: string | null
+    probedCpu: boolean
+    cpuInconclusive: boolean
+    probedGpu: boolean
+    gpuInconclusive: boolean
+    decisionBackend: string | null
+    decisionReason: string | null
+}
+
+const TALOS_LOCAL_BACKEND_QUALIFICATION_UNAVAILABLE: TalosLocalBackendQualification = Object.freeze({
+    ran: false, reason: null, probedCpu: false, cpuInconclusive: false,
+    probedGpu: false, gpuInconclusive: false, decisionBackend: null, decisionReason: null,
+})
+
+/**
+ * Fa girare il sondaggio del backend, se e quanto serve. Chi chiama deve già
+ * avere il consenso — questa funzione non lo chiede e non lo controlla.
+ *
+ * ⛔ Non lancia mai: un ponte assente, una build web, o un native più vecchio
+ * senza questo metodo tornano tutti "non ha girato", mai un'eccezione che
+ * romperebbe una chiamata pensata per essere fatta in background, senza
+ * bloccare niente.
+ */
+export async function talosQualifyLocalBackend(path: string): Promise<TalosLocalBackendQualification> {
+    try {
+        const result = await plugin.qualifyBackend({ path })
+        return {
+            ran: result.ran === true,
+            reason: typeof result.reason === 'string' ? result.reason : null,
+            probedCpu: result.probedCpu === true,
+            cpuInconclusive: result.cpuInconclusive === true,
+            probedGpu: result.probedGpu === true,
+            gpuInconclusive: result.gpuInconclusive === true,
+            decisionBackend: typeof result.decisionBackend === 'string' ? result.decisionBackend : null,
+            decisionReason: typeof result.decisionReason === 'string' ? result.decisionReason : null,
+        }
+    } catch {
+        return TALOS_LOCAL_BACKEND_QUALIFICATION_UNAVAILABLE
     }
 }
 
@@ -803,6 +870,22 @@ export interface TalosLocalEngineTimings {
     newTokens: number
     producedTokens: number
     reusedContext: boolean
+    /**
+     * ⭐⭐⭐ Il motore ha RIFIUTATO il taglio parziale della KV.
+     *
+     * ⛔⛔ Distingue due casi che «zero riusati» confonde in uno:
+     *   - il prefisso e' cambiato    ⇒ difetto NOSTRO, curabile
+     *   - la memoria non sa tagliare ⇒ architettura, non curabile
+     *
+     * `llama_memory_seq_rm` puo' fallire per costruzione. ⇒ Le architetture
+     * con KV condivisa fra gli ultimi strati - la famiglia Gemma - sono quel
+     * caso: `ggml-org/llama.cpp#21468` documenta che li' il riuso della cache
+     * **non e' supportato**, nemmeno con flash attention e SWA piena.
+     *
+     * ⛔ Facoltativo: un ponte nativo piu' vecchio non lo manda, e allora e'
+     * IGNOTO - non «non e' successo».
+     */
+    partialTrimRefused?: boolean
 }
 
 /**

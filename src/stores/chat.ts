@@ -194,6 +194,15 @@ export interface ChatCompletionResult {
     metadata?: Readonly<Record<string, unknown>>
     finishReason?: string | null
     /**
+     * ⛔ Il modello ha nominato uno strumento che non esiste.
+     *
+     * Nasce nell'adattatore locale, che lascia il testo VUOTO invece di
+     * mostrare il JSON grezzo alla persona - misurato sul Pad il 2026-08-21 con
+     * Gemma 3 4B. ⇒ Chi mostra lo traduce in una frase; senza questo campo
+     * resterebbe una risposta bianca senza spiegazione.
+     */
+    toolCallMissed?: boolean
+    /**
      * Token accounting exactly as the provider reported it.
      *
      * Every adapter already produced this and nothing consumed it. The Doctor

@@ -199,6 +199,57 @@ describe('le righe che devono diventare rosse', () => {
         expect(riga(primoTurno, 'engine-reuse')?.ok).toBe(true)
     })
 
+    /**
+     * ⭐⭐⭐ PRIMA DI ACCUSARE, si chiede al motore SE POTEVA.
+     *
+     * ⛔⛔ `partialTrimRefused` dice che `llama_memory_seq_rm` ha rifiutato il
+     * taglio parziale della KV. Succede per costruzione sulle architetture con
+     * KV condivisa fra gli ultimi strati - la famiglia Gemma - e
+     * `ggml-org/llama.cpp#21468` documenta che li' il riuso della cache **non
+     * e' supportato**, nemmeno con flash attention e SWA piena.
+     *
+     * ⇒ Visto sul Pad il 2026-08-21: `0 / 3167 riusati` con Gemma 3 4B, riga
+     * ROSSA. Ma nessuno puo' farla diventare verde: e' l'architettura. Un
+     * allarme cosi' viene spento al terzo squillo, e con lui quello vero.
+     */
+    it('⛔⛔ zero riusati NON e rosso quando il motore non SAPEVA tagliare', () => {
+        const gemma = {
+            ...SANO,
+            timings: {
+                ...SANO.timings!, reusedTokens: 0, newTokens: 3_167, promptTokens: 3_167,
+                partialTrimRefused: true,
+            },
+        }
+        expect(riga(gemma, 'engine-reuse')?.ok).toBe(true)
+        // ⛔ E lo DICE: una riga verde che tace insegna che il riuso funzionava.
+        expect(riga(gemma, 'engine-reuse')?.value).toContain('non sa riusare la cache')
+    })
+
+    /*
+     * ⛔ IL VERSO CONTRARIO, ed e la meta che conta: senza il rifiuto, zero
+     * riusati resta il difetto che era. Se questo test cadesse, la scusa
+     * coprirebbe anche il caso curabile.
+     */
+    it('⛔ ma senza rifiuto resta rosso, e il difetto vero non si nasconde', () => {
+        const nostroDifetto = {
+            ...SANO,
+            timings: {
+                ...SANO.timings!, reusedTokens: 0, newTokens: 3_167, promptTokens: 3_167,
+                partialTrimRefused: false,
+            },
+        }
+        expect(riga(nostroDifetto, 'engine-reuse')?.ok).toBe(false)
+    })
+
+    it('⛔ e un ponte vecchio che non lo manda e IGNOTO, non una scusa', () => {
+        const ponteVecchio = {
+            ...SANO,
+            timings: {
+                ...SANO.timings!, reusedTokens: 0, newTokens: 3_167, promptTokens: 3_167,
+            },
+        }
+        expect(riga(ponteVecchio, 'engine-reuse')?.ok).toBe(false)
+    })
     it('e in modalità banco di prova, dove si azzera apposta, nemmeno', () => {
         const banco = {
             ...SANO,

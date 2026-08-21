@@ -29,11 +29,19 @@ const state = vi.hoisted(() => ({
     memoryNames: [] as string[],
     memoryFailure: false,
     memoryExisting: false,
+    // §1-bis: TalosMobileSettingsPrivacyPanel legge questo campo sempre, non
+    // solo quando qualcuno tocca la sua riga — mancava qui e faceva cadere
+    // OGNI test di questo file che monta quella pagina.
+    localEngineProbe: { consent: 'unset' as 'unset' | 'granted' | 'declined' },
 }))
 
 vi.mock('@/stores/settings', () => ({
     useSettingsStore: () => ({
-        state: reactive({ security: state.security, tools_chosen: state.toolsChosen }),
+        state: reactive({
+            security: state.security,
+            tools_chosen: state.toolsChosen,
+            local_engine_probe: state.localEngineProbe,
+        }),
         setSecurity: vi.fn(async () => {}),
         setToolPermissions: vi.fn(async (patch: Record<string, string>) => {
             state.toolPermissions.push(patch)
@@ -45,12 +53,20 @@ vi.mock('@/stores/settings', () => ({
         setShell: vi.fn(async (patch: Record<string, unknown>) => {
             state.shell.push(patch)
         }),
+        setLocalEngineProbeConsent: vi.fn(async (patch: { consent: 'unset' | 'granted' | 'declined' }) => {
+            state.localEngineProbe = { ...patch }
+        }),
     }),
 }))
 
 vi.mock('@/stores/chatController', () => ({
     useChatController: () => ({
         secrets: state.secrets,
+        // §1-bis: la scheda «Verifica GPU sul telefono» dentro
+        // TalosMobileSettingsPrivacyPanel lo legge sempre, per trovare il
+        // modello da sondare col comando manuale — il resto di quel comando
+        // vive fuori dal controller, in `lib/localEngineProbeRun.ts`.
+        selectedProfile: ref(null),
         memories: {
             list: async () => state.memoryExisting
                 ? [{

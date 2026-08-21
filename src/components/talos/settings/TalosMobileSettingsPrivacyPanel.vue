@@ -21,6 +21,9 @@ import {
     requestTalosRuntimePermission,
     type TalosDeviceState,
 } from '@/services/devicePermissions'
+import { useChatController } from '@/stores/chatController'
+import { useSettingsStore } from '@/stores/settings'
+import type { TalosLocalBackendQualification } from '@/services/localEngine'
 
 /**
  * What TALOS can ask this device for, why, and where it stands.
@@ -200,6 +203,62 @@ onMounted(() => {
     document.addEventListener('visibilitychange', onVisible)
 })
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible))
+
+/**
+ * §1-bis: il comando manuale — «sempre», per chi ha detto no o ha cambiato
+ * idea. Non è una riga di `TalosPermissionRow`: quel tipo descrive i
+ * permessi Android, e questo è un consenso app-side su una risorsa che
+ * TALOS possiede già (batteria, calore), con un suo proprio stato a tre.
+ */
+const controller = useChatController()
+const settings = useSettingsStore()
+// `?? 'unset'`: uno store finto in un test che non conosce ancora questo
+// campo non deve far cadere l'intera pagina — la riga tace col suo stato di
+// partenza vero, non con un errore.
+const localEngineProbeConsent = computed(() => settings.state.local_engine_probe?.consent ?? 'unset')
+const localEngineProbeRunning = ref(false)
+const localEngineProbeResult = ref<TalosLocalBackendQualification | null>(null)
+/** Vero solo dopo un tentativo reale che non ha trovato NESSUN modello sul disco. */
+const localEngineProbeNoModel = ref(false)
+const BACKEND_LABEL: Record<string, string> = { cpu: 'CPU', opencl: 'GPU' }
+
+/**
+ * Il percorso da sondare: il modello locale scelto ADESSO se c'è, altrimenti
+ * il primo che il telefono ha davvero sul disco — mai un percorso scritto a
+ * mano, vedi `nothing-hardcoded-must-adapt`.
+ */
+async function resolveLocalEngineProbePath(): Promise<string | null> {
+    const active = controller.selectedProfile.value
+    if (active?.provider === 'local') return active.model
+    const { talosLocalInstalledModels } = await import('@/services/localEngine')
+    const listing = await talosLocalInstalledModels()
+    return listing.models[0]?.path ?? null
+}
+
+async function runLocalEngineProbeFromSettings(): Promise<void> {
+    if (localEngineProbeRunning.value) return
+    localEngineProbeRunning.value = true
+    localEngineProbeResult.value = null
+    try {
+        const path = await resolveLocalEngineProbePath()
+        if (!path) {
+            localEngineProbeNoModel.value = true
+            return
+        }
+        localEngineProbeNoModel.value = false
+        const [{ talosQualifyLocalBackend }, { talosRunLocalEngineProbeAndEnsureGranted }] = await Promise.all([
+            import('@/services/localEngine'),
+            import('@/lib/localEngineProbeRun'),
+        ])
+        localEngineProbeResult.value = await talosRunLocalEngineProbeAndEnsureGranted(path, {
+            qualify: talosQualifyLocalBackend,
+            getConsent: () => localEngineProbeConsent.value,
+            setConsent: (consent) => settings.setLocalEngineProbeConsent({ consent }),
+        })
+    } finally {
+        localEngineProbeRunning.value = false
+    }
+}
 </script>
 
 <template>
@@ -296,6 +355,83 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
                     </li>
                 </ol>
             </template>
+        </div>
+
+        <!--
+            §1-bis: il sondaggio GPU della 0.1.17.
+
+            NON è una riga della macchina a stati sopra — niente scheda
+            android, un suo consenso a tre. Stessa lingua visiva delle altre
+            righe apposta: chi guarda questa pagina deve leggerla come «una
+            in più», non come un elemento estraneo infilato in fondo.
+        -->
+        <div
+            data-permission-row="local-engine-probe"
+            class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3"
+            role="group"
+            :aria-label="`${t('privacyPermissions.localEngineProbe.title')}, ${t(`privacyPermissions.localEngineProbe.states.${localEngineProbeConsent}`)}`"
+        >
+            <div class="flex items-center gap-2">
+                <CircleCheck
+                    v-if="localEngineProbeConsent === 'granted'"
+                    class="size-4 shrink-0 text-[var(--talos-success,#3f9d6b)]"
+                    aria-hidden="true"
+                />
+                <CircleDashed v-else class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                <span class="text-sm font-semibold text-[var(--talos-text)]">{{ t('privacyPermissions.localEngineProbe.title') }}</span>
+                <span
+                    class="ml-auto text-2xs uppercase tracking-wide text-[var(--talos-muted)]"
+                    aria-live="polite"
+                >{{ t(`privacyPermissions.localEngineProbe.states.${localEngineProbeConsent}`) }}</span>
+            </div>
+
+            <p class="mt-1.5 text-xs leading-5 text-[var(--talos-muted)]">{{ t('privacyPermissions.localEngineProbe.purpose') }}</p>
+            <!-- §1-bis: «non mostrare più» non è un no mascherato, e lo dice
+                 QUI — non nel badge di stato, che a larghezza telefono andava
+                 a capo sopra il titolo (misurato sul Pad il 21/8). -->
+            <p
+                v-if="localEngineProbeConsent === 'declined'"
+                class="mt-1 text-xs leading-5 text-[var(--talos-muted)]"
+            >{{ t('privacyPermissions.localEngineProbe.declinedNote') }}</p>
+
+            <!-- L'esito dell'ULTIMA corsa in questa sessione — mai «fatto» e
+                 basta, vedi §1-bis: «la scheda deve mostrare stato e comando». -->
+            <p
+                v-if="localEngineProbeNoModel"
+                data-testid="talos-local-engine-probe-no-model"
+                class="mt-2 text-2xs leading-4 text-[var(--talos-muted)]"
+            >{{ t('privacyPermissions.localEngineProbe.noModel') }}</p>
+            <template v-else-if="localEngineProbeResult">
+                <p
+                    v-if="!localEngineProbeResult.ran"
+                    data-testid="talos-local-engine-probe-result"
+                    class="mt-2 text-2xs leading-4 text-[var(--talos-muted)]"
+                >{{ t(`privacyPermissions.localEngineProbe.resultNotRun.${
+                    localEngineProbeResult.reason === 'hot' ? 'hot' : 'alreadyProven'}`) }}</p>
+                <template v-else>
+                    <p
+                        data-testid="talos-local-engine-probe-result"
+                        class="mt-2 text-2xs leading-4 text-[var(--talos-muted)]"
+                    >{{ t('privacyPermissions.localEngineProbe.resultRan', {
+                        backend: BACKEND_LABEL[localEngineProbeResult.decisionBackend ?? ''] ?? localEngineProbeResult.decisionBackend,
+                    }) }}</p>
+                    <p
+                        v-if="localEngineProbeResult.cpuInconclusive || localEngineProbeResult.gpuInconclusive"
+                        class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]"
+                    >{{ t('privacyPermissions.localEngineProbe.resultInconclusive') }}</p>
+                </template>
+            </template>
+
+            <Button
+                type="button"
+                variant="outline"
+                data-testid="talos-local-engine-probe-run"
+                class="mt-2 min-h-touch w-full rounded-xl text-sm"
+                :disabled="localEngineProbeRunning"
+                @click="runLocalEngineProbeFromSettings"
+            >{{ localEngineProbeRunning
+                ? t('privacyPermissions.localEngineProbe.running')
+                : t('privacyPermissions.localEngineProbe.runNow') }}</Button>
         </div>
     </section>
 </template>

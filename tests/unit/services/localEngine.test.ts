@@ -6,6 +6,7 @@ const bridge = vi.hoisted(() => ({
     templateCapabilities: vi.fn(),
     generate: vi.fn(),
     addListener: vi.fn(),
+    qualifyBackend: vi.fn(),
 }))
 
 vi.mock('@capacitor/core', () => ({
@@ -20,6 +21,7 @@ const {
     talosLocalEngineGenerate,
     talosLocalEngineOpen,
     talosLocalEngineOpenWithFallback,
+    talosQualifyLocalBackend,
 } = await import('@/services/localEngine')
 
 function nativeFailure(stage: string, code = 'TALOS_LLAMA_OPEN_FAILED'): Error {
@@ -34,6 +36,7 @@ describe('LOCAL-OPEN-FALLBACK-02 bounded native open fallback', () => {
         bridge.generate.mockReset()
         bridge.addListener.mockReset()
         bridge.addListener.mockResolvedValue({ remove: vi.fn().mockResolvedValue(undefined) })
+        bridge.qualifyBackend.mockReset()
     })
 
     it('retries a context allocation failure exactly once at 2048', async () => {
@@ -137,6 +140,72 @@ describe('LOCAL-OPEN-FALLBACK-02 bounded native open fallback', () => {
             promptTokens: 5779,
             contextTokens: 4096,
             requiredContextTokens: 6804,
+        })
+    })
+})
+
+describe('talosQualifyLocalBackend', () => {
+    beforeEach(() => {
+        bridge.qualifyBackend.mockReset()
+    })
+
+    it('passes the path through and normalizes a real result', async () => {
+        bridge.qualifyBackend.mockResolvedValue({
+            ran: true,
+            probedCpu: true,
+            cpuInconclusive: false,
+            probedGpu: false,
+            gpuInconclusive: false,
+            decisionBackend: 'cpu',
+            decisionReason: 'unproven',
+        })
+
+        await expect(talosQualifyLocalBackend('/models/qwen.gguf')).resolves.toEqual({
+            ran: true,
+            reason: null,
+            probedCpu: true,
+            cpuInconclusive: false,
+            probedGpu: false,
+            gpuInconclusive: false,
+            decisionBackend: 'cpu',
+            decisionReason: 'unproven',
+        })
+        expect(bridge.qualifyBackend).toHaveBeenCalledWith({ path: '/models/qwen.gguf' })
+    })
+
+    it('carries the reason through when the probe did not run', async () => {
+        bridge.qualifyBackend.mockResolvedValue({ ran: false, reason: 'already-proven' })
+
+        await expect(talosQualifyLocalBackend('/models/qwen.gguf')).resolves.toEqual({
+            ran: false,
+            reason: 'already-proven',
+            probedCpu: false,
+            cpuInconclusive: false,
+            probedGpu: false,
+            gpuInconclusive: false,
+            decisionBackend: null,
+            decisionReason: null,
+        })
+    })
+
+    /**
+     * ⛔ Il verso contrario: nessun ponte nativo (build web, o un native più
+     * vecchio senza questo metodo) deve tornare "non ha girato", MAI
+     * un'eccezione — questa chiamata è pensata per girare in background senza
+     * bloccare niente, e un rigetto qui romperebbe proprio quella promessa.
+     */
+    it('never throws — a missing bridge resolves to the unavailable shape', async () => {
+        bridge.qualifyBackend.mockRejectedValue(new Error('TALOS_LLAMA_UNAVAILABLE'))
+
+        await expect(talosQualifyLocalBackend('/models/qwen.gguf')).resolves.toEqual({
+            ran: false,
+            reason: null,
+            probedCpu: false,
+            cpuInconclusive: false,
+            probedGpu: false,
+            gpuInconclusive: false,
+            decisionBackend: null,
+            decisionReason: null,
         })
     })
 })

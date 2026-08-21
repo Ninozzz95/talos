@@ -58,6 +58,43 @@ final class TalosLlamaNative {
     static native String nativeBackends();
 
     /**
+     * L'inventario dei backend e dei loro DISPOSITIVI, in JSON.
+     *
+     * ⛔ Non è una versione più bella di {@link #nativeBackends()}: risponde a
+     * un'altra domanda. Quella dice quali registry si sono registrati; questa
+     * dice quali dispositivi ciascuno espone, con il NOME CANONICO che serve a
+     * chiederne uno per nome — e senza il nome canonico, «usa la GPU» lo decide
+     * l'ordine di caricamento delle librerie, non noi.
+     *
+     * Forma: {@code {"registries":[{"name":"...","devices":[{"name":"...",
+     * "description":"...","type":"CPU|GPU|IGPU|ACCEL|META","deviceId":null,
+     * "memoryFree":0,"memoryTotal":0,"caps":{...}}]}]}}
+     *
+     * Diagnostico: non apre niente e non alloca niente. Si può chiamare prima
+     * che un modello esista.
+     */
+    static native String nativeBackendInventory();
+
+    /**
+     * ⛔ SOLO RICERCA — PERCHE' un backend manca dall'inventario.
+     *
+     * MISURATO il 2026-08-20: con {@code libggml-opencl.so} da 3.198.104 byte
+     * presente nella cartella nativa, il registro ne conteneva **uno solo**, e
+     * nessuna riga diceva perche'. La causa sta nella sorgente che spediamo:
+     * {@code ggml_backend_load_all_from_path} usa {@code silent = true} quando
+     * {@code NDEBUG} e' definito — e la nostra build e' Release. ⇒ Ogni
+     * fallimento di caricamento e' muto per costruzione.
+     *
+     * Questa sonda ripercorre la stessa cartella con la strada NON muta e dice,
+     * libreria per libreria, se e' entrata. Il motivo lo stampa ggml accanto,
+     * su logcat.
+     *
+     * ⛔ Non e' un doppione di {@link #nativeBackendInventory()}: quello dice
+     * CHI c'e', questa perche' qualcuno MANCA.
+     */
+    static native String nativeProbeBackendLoad(String libraryDir);
+
+    /**
      * La build di llama.cpp, tipo {@code "b10218-<commit>"}.
      *
      * ⛔ Serve all'impronta dei prefissi congelati: cio' che invalida uno stato
@@ -97,8 +134,68 @@ final class TalosLlamaNative {
                                   boolean deterministic, int threadsBatch, int microBatch,
                                   String kvType);
 
+    /**
+     * ⛔ SOLO RICERCA — l'apertura che dice DOVE, non solo quanto.
+     *
+     * {@code gpuLayers} dice quanti strati spostare, non su quale acceleratore.
+     * Con OpenCL e Vulkan caricati insieme «la GPU» sarebbe quella che il
+     * registry elenca per prima, cioè quella scelta dall'ordine di caricamento
+     * delle librerie: un benchmark nato così misura un backend che nessuno ha
+     * scelto.
+     *
+     * ⛔ Non esiste «prendi la prima GPU». O si nomina il dispositivo, o si
+     * nomina un registry che ne espone **uno solo**; un registry con due
+     * dispositivi e nessun nome fallisce ELENCANDOLI.
+     *
+     * ⛔ Non la chiama la produzione, e non deve: {@link #nativeOpen} resta la
+     * strada dell'app e passa richieste vuote.
+     *
+     * @param backendName vuoto = come oggi · {@code "none"}/{@code "cpu"} =
+     *     nessun offload, detto esplicitamente · altrimenti il nome di un
+     *     registry, per esempio {@code "OpenCL"}. I nomi li elenca
+     *     {@link #nativeBackendInventory()}.
+     * @param deviceName il nome canonico ESATTO del dispositivo, oppure vuoto.
+     * @param flashAttentionMode {@code "default"}, {@code "off"},
+     *     {@code "auto"} oppure {@code "on"}. ⛔ Una richiesta esplicita vince
+     *     sulla {@code AUTO} che la cache q8_0 imposterebbe: è l'unico modo di
+     *     misurare i tre casi separati, e upstream dice a chiare lettere che la
+     *     Flash Attention non migliora sempre OpenCL.
+     * @return l'handle, o 0. In caso di 0, {@link #nativeLastOpenError()} vale
+     *     {@code "backend-target"} se il bersaglio non si è risolto e
+     *     {@code "flash-attn-mode"} se la parola non era una delle quattro.
+     */
+    static native long nativeOpenTargeted(String modelPath, int threads, int contextTokens,
+                                          int gpuLayers, boolean deterministic, int threadsBatch,
+                                          int microBatch, String kvType, String backendName,
+                                          String deviceName, String flashAttentionMode);
+
     /** La cache creata DAVVERO: {@code "q8_0"} oppure {@code "f16"}. */
     static native String nativeKvCacheType(long handle);
+
+    /**
+     * ⛔ SOLO RICERCA — la grammatica dell'ultimo template applicato, in JSON.
+     *
+     * ⛔⛔ Perché esiste: i due difetti aperti della grammatica vivevano solo
+     * in logcat. La GBNF da 55.871 byte rifiutata dal parser, e la grammatica
+     * **pigra con un innesco solo** che non si accende mai — «Grammar still
+     * awaiting trigger» per tutta la generazione. Un numero leggibile solo
+     * mentre succede non è una misura: non entra in un artifact, non si
+     * confronta con quello di ieri, e non può diventare il rosso di una cura.
+     *
+     * Forma: {@code {"grammarBytes":0,"grammarEmpty":true,"grammarLazy":false,
+     * "triggers":[{"type":0,"value":"…"}],"triggerCount":0,
+     * "preservedTokensRequested":0,"preservedTokensAtomic":0,
+     * "preservedTokensDropped":[],"compiles":true,"compileError":null,
+     * "grammarHead":"…"}}
+     *
+     * ⛔ {@code compiles} è PROVATO, non previsto: costruisce un campionatore di
+     * prova e lo libera subito. La sessione non viene toccata — una domanda che
+     * cambia la risposta non è una diagnosi.
+     *
+     * @return {@code null} se nessun template è ancora stato applicato: la
+     *     grammatica nasce lì, e prima non c'è una domanda da fare.
+     */
+    static native String nativeGrammarDiagnostics(long handle);
 
     /**
      * Quante volte un modello e' stato aperto da quando il processo e' partito.

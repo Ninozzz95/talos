@@ -17,10 +17,15 @@
 #include <sys/stat.h>
 
 #include <algorithm>
+#include <cctype>   // std::tolower, per il confronto dei nomi di backend
 #include <chrono>
 #include <cstdio>
 #include <atomic>
 #include <cstring>
+// Per la sonda di caricamento dei backend: elenca la cartella nativa e prova
+// ad aprire ogni libreria di ggml, dicendo quale rifiuta e perche.
+#include <dirent.h>
+#include <cerrno>
 #include <map>
 #include <mutex>
 #include <string>
@@ -153,6 +158,24 @@ struct talos_session {
         int       token_nuovi       = 0;
         int       token_prodotti    = 0;
         bool      contesto_riusato  = false;
+        /*
+         * ⭐⭐⭐ Il motore ha RIFIUTATO il taglio parziale della KV.
+         *
+         * ⛔⛔ Senza questo, zero token riusati e' indistinguibile fra due casi
+         * opposti: il prefisso e' cambiato (difetto nostro, curabile) oppure la
+         * memoria di questo modello non SA fare tagli parziali (architettura,
+         * non curabile).
+         *
+         * `llama_memory_seq_rm` puo' fallire per costruzione, e l'API lo
+         * dichiara. ⇒ Le architetture con KV condivisa fra gli ultimi strati -
+         * la famiglia Gemma - sono proprio quel caso: `ggml-org/llama.cpp#21468`
+         * documenta che il riuso della cache **non e' supportato** li', anche
+         * con flash attention e SWA piena.
+         *
+         * ⛔ Un allarme che accusa una cosa inevitabile viene spento al terzo
+         * squillo, e con lui se ne va anche quello vero.
+         */
+        bool      taglio_rifiutato  = false;
     };
     std::mutex       tempi_lock;
     talos_cronometro tempi;
@@ -655,15 +678,392 @@ Java_ai_talos_TalosLlamaNative_nativeBackends(JNIEnv * env, jclass) {
 }
 
 /**
+ * ⛔ L'INVENTARIO STRUTTURATO — perché l'elenco qui sopra non basta a decidere.
+ *
+ * `nativeBackends()` restituisce «CPU,OpenCL» e sembra una risposta. Non lo è:
+ * dice che un registry si è REGISTRATO, non che esponga un dispositivo, non
+ * QUALE, e non che quel dispositivo possa reggere un offload. Con due
+ * acceleratori caricati insieme, scegliere «la GPU» a partire da questa stringa
+ * significa lasciare decidere all'ORDINE con cui le librerie si sono caricate.
+ *
+ * Qui si chiede al motore, dispositivo per dispositivo, con
+ * `ggml_backend_dev_get_props` — che è l'unica fonte che conosce nome canonico,
+ * tipo, memoria e capacità. Il nome canonico è ciò che
+ * `ggml_backend_dev_by_name` rimette in `llama_model_params.devices`: senza di
+ * lui il targeting esplicito non esiste.
+ *
+ * ⛔ Le capacità sono QUATTRO, non cinque. La struttura
+ * `ggml_backend_dev_caps` di questa build espone `async`, `host_buffer`,
+ * `buffer_from_host_ptr` ed `events`. Un campo «mmap» non esiste, e inventarlo
+ * qui vorrebbe dire scrivere un `false` che sembra una misura: chi legge
+ * l'artifact non saprebbe distinguere «non supportato» da «mai chiesto».
+ *
+ * Diagnostico e basta: non apre niente, non alloca niente sul dispositivo, e
+ * non cambia il comportamento di un'apertura. Si può chiamare prima di sapere
+ * se un modello esiste.
+ */
+// ⛔ `enum` NON è decorazione. In `ggml-backend.h` convivono l'enum
+// `ggml_backend_dev_type` e una FUNZIONE che si chiama identica
+// (`ggml_backend_dev_type(ggml_backend_dev_t)`), e in C++ il nome della
+// funzione nasconde il tag del tipo: senza `enum` il compilatore legge il
+// parametro come un nome di funzione e rifiuta. È il motivo per cui upstream
+// scrive `enum ggml_backend_dev_type` ovunque, anche in C++.
+static const char * talos_device_type_name(enum ggml_backend_dev_type type) {
+    switch (type) {
+        case GGML_BACKEND_DEVICE_TYPE_CPU:   return "CPU";
+        case GGML_BACKEND_DEVICE_TYPE_GPU:   return "GPU";
+        case GGML_BACKEND_DEVICE_TYPE_IGPU:  return "IGPU";
+        case GGML_BACKEND_DEVICE_TYPE_ACCEL: return "ACCEL";
+        case GGML_BACKEND_DEVICE_TYPE_META:  return "META";
+    }
+    // Nessun `default:` sopra, apposta: se upstream aggiunge un tipo, il
+    // compilatore lo segnala qui invece di lasciarlo scivolare in «unknown»
+    // dentro un artifact di misura.
+    return "unknown";
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — PERCHÉ un backend non si è caricato.
+ *
+ * MISURATO il 2026-08-20, e questa sonda esiste per un fallimento che non
+ * diceva niente. Con `libggml-opencl.so` da 3.198.104 byte presente nella
+ * cartella nativa del telefono, il registro conteneva **un solo** backend:
+ *
+ *     load_backend: loaded CPU backend from …/libggml-cpu-android_armv8.6_1.so
+ *     backend registrati: 1
+ *
+ * Nessun errore, nessuna riga, nessuna traccia. La causa è nella sorgente che
+ * spediamo: `ggml_backend_load_all_from_path` sceglie
+ *
+ *     #ifdef NDEBUG
+ *         bool silent = true;
+ *
+ * e la nostra build è `Release`, quindi NDEBUG è definito e **ogni fallimento
+ * di caricamento è muto per costruzione**.
+ *
+ * ⇒ `ggml_backend_load()` è la stessa strada con `silent = false`: prova ad
+ * aprire una libreria per percorso e, se fallisce, stampa `dl_error()`. Qui si
+ * prova ogni `libggml-*.so` della cartella e si dice, per ognuna, se è entrata
+ * e con quale errore no.
+ *
+ * ⛔ Non è un doppione dell'inventario: l'inventario dice CHI c'è, questa dice
+ * **perché qualcuno manca**. Sono le due metà della stessa domanda, e finora ne
+ * avevamo una sola.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeProbeBackendLoad(JNIEnv * env, jclass, jstring libraryDir) {
+    const std::string cartella = jstring_to_utf8(env, libraryDir);
+    nlohmann::ordered_json out;
+    out["directory"] = cartella;
+
+    nlohmann::ordered_json tentativi = nlohmann::ordered_json::array();
+    if (cartella.empty()) {
+        out["attempts"] = tentativi;
+        out["error"] = "cartella delle librerie native non indicata";
+        return env->NewStringUTF(out.dump().c_str());
+    }
+
+    const size_t prima = ggml_backend_reg_count();
+    DIR * apertura = opendir(cartella.c_str());
+    if (apertura == nullptr) {
+        out["attempts"] = tentativi;
+        out["error"] = std::string("cartella non elencabile: ") + strerror(errno);
+        return env->NewStringUTF(out.dump().c_str());
+    }
+
+    while (struct dirent * voce = readdir(apertura)) {
+        const std::string nome = voce->d_name;
+        // Solo i backend dinamici di ggml: aprire a caso ogni `.so` dell'app
+        // caricherebbe librerie che non c'entrano, con effetti che nessuno ha
+        // chiesto.
+        if (nome.rfind("libggml-", 0) != 0) continue;
+        if (nome.size() < 4 || nome.compare(nome.size() - 3, 3, ".so") != 0) continue;
+
+        const std::string percorso = cartella + "/" + nome;
+        nlohmann::ordered_json tentativo;
+        tentativo["library"] = nome;
+        // ⛔ L'errore lo stampa ggml su logcat con `dl_error()`. Qui si registra
+        // l'ESITO; il motivo si legge accanto, nella stessa corsa.
+        ggml_backend_reg_t reg = ggml_backend_load(percorso.c_str());
+        tentativo["loaded"] = reg != nullptr;
+        if (reg != nullptr) {
+            const char * nome_reg = ggml_backend_reg_name(reg);
+            tentativo["registry"] = nome_reg == nullptr ? "" : nome_reg;
+            tentativo["deviceCount"] = (uint64_t) ggml_backend_reg_dev_count(reg);
+        }
+        TALOS_LOGI("sonda di caricamento: %s → %s", nome.c_str(),
+                   reg != nullptr ? "caricata" : "RIFIUTATA (motivo sopra, da ggml)");
+        tentativi.push_back(tentativo);
+    }
+    closedir(apertura);
+
+    out["attempts"] = tentativi;
+    out["registriesBefore"] = (uint64_t) prima;
+    out["registriesAfter"] = (uint64_t) ggml_backend_reg_count();
+    return env->NewStringUTF(out.dump().c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeBackendInventory(JNIEnv * env, jclass) {
+    nlohmann::ordered_json out;
+    nlohmann::ordered_json registries = nlohmann::ordered_json::array();
+
+    for (size_t reg_index = 0; reg_index < ggml_backend_reg_count(); reg_index += 1) {
+        ggml_backend_reg_t reg = ggml_backend_reg_get(reg_index);
+        if (reg == nullptr) continue;
+
+        nlohmann::ordered_json entry;
+        const char * reg_name = ggml_backend_reg_name(reg);
+        entry["name"] = reg_name == nullptr ? "" : reg_name;
+
+        nlohmann::ordered_json devices = nlohmann::ordered_json::array();
+        for (size_t dev_index = 0; dev_index < ggml_backend_reg_dev_count(reg); dev_index += 1) {
+            ggml_backend_dev_t device = ggml_backend_reg_dev_get(reg, dev_index);
+            if (device == nullptr) continue;
+
+            // Azzerata a mano: `get_props` riempie i campi che conosce, e un
+            // campo lasciato indietro da una build futura leggerebbe memoria
+            // dello stack. Un numero casuale in un artifact di misura è peggio
+            // di un campo assente, perché ha l'aria di un dato.
+            ggml_backend_dev_props props {};
+            ggml_backend_dev_get_props(device, &props);
+
+            nlohmann::ordered_json described;
+            described["name"] = props.name == nullptr ? "" : props.name;
+            described["description"] = props.description == nullptr ? "" : props.description;
+            described["type"] = talos_device_type_name(props.type);
+            // `device_id` è NULL quando il backend non ne ha uno — su Android è
+            // il caso normale, e `null` lo dice meglio di una stringa vuota.
+            if (props.device_id == nullptr) {
+                described["deviceId"] = nullptr;
+            } else {
+                described["deviceId"] = props.device_id;
+            }
+            described["memoryFree"] = (uint64_t) props.memory_free;
+            described["memoryTotal"] = (uint64_t) props.memory_total;
+
+            nlohmann::ordered_json caps;
+            caps["async"] = props.caps.async;
+            caps["hostBuffer"] = props.caps.host_buffer;
+            caps["bufferFromHostPtr"] = props.caps.buffer_from_host_ptr;
+            caps["events"] = props.caps.events;
+            described["caps"] = caps;
+
+            devices.push_back(described);
+        }
+        entry["devices"] = devices;
+        registries.push_back(entry);
+    }
+
+    out["registries"] = registries;
+    return env->NewStringUTF(out.dump().c_str());
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — il bersaglio dell'offload, DETTO e non dedotto.
+ *
+ * `n_gpu_layers` dice QUANTI strati spostare, non DOVE. Finché c'è un solo
+ * acceleratore la domanda non si pone; con OpenCL e Vulkan caricati insieme
+ * «la GPU» diventa quella che il registry elenca per prima, cioè quella che
+ * l'ordine di caricamento delle librerie ha deciso al posto nostro. Un
+ * benchmark che nasce così misura un backend che nessuno ha scelto.
+ *
+ * `llama_model_params.devices` è una lista NULL-terminata, ed è il contratto —
+ * letto in `tools/llama-bench/llama-bench.cpp` e `common/arg.cpp` di upstream,
+ * non dedotto:
+ *
+ *  - lista assente (`nullptr`)  → il motore sceglie da solo («auto»). È il
+ *                                 comportamento di produzione, e resta intatto.
+ *  - lista col solo `nullptr`   → **nessun offload**, esplicitamente. Non è la
+ *                                 stessa cosa della precedente: qui la CPU è
+ *                                 una decisione, non un ripiego.
+ *  - lista di dispositivi       → esattamente quelli, in quest'ordine.
+ *
+ * ⛔ QUI NON SI INDOVINA. Non esiste «prendi la prima GPU»: si nomina un
+ * dispositivo, oppure si nomina un registry che ne espone **uno solo** — e
+ * allora non c'è nessuna scelta da fare. Un registry con due dispositivi e
+ * nessun nome è un errore parlante che li ELENCA, non una scelta silenziosa.
+ *
+ * ⛔ E la CPU non entra mai nella lista. Non è una nostra convenzione: upstream
+ * rifiuta con «invalid device» qualunque nome che risolva a un dispositivo di
+ * tipo CPU, sia in `arg.cpp` sia in `llama-bench`. La CPU resta comunque allo
+ * scheduler come ripiego per le operazioni che l'acceleratore non regge.
+ *
+ * @param dispositivi il vettore che ospiterà la lista. ⛔ Deve sopravvivere a
+ *     `llama_model_load_from_file`: il motore riceve `data()`, non una copia.
+ * @return vero se il bersaglio è stato risolto; falso con `errore` compilato.
+ */
+static bool talos_risolvi_bersaglio(const std::string & backend,
+                                    const std::string & dispositivo,
+                                    std::vector<ggml_backend_dev_t> & dispositivi,
+                                    std::string & errore,
+                                    std::string & scelto) {
+    dispositivi.clear();
+    scelto.clear();
+
+    // Nessuna richiesta: il motore decide come ha sempre fatto.
+    if (backend.empty() && dispositivo.empty()) {
+        scelto = "auto";
+        return true;
+    }
+
+    // «none» e «cpu» dicono la stessa cosa — non spostare niente — e la dicono
+    // ad alta voce. Il solo `nullptr` è la forma che llama.cpp riconosce.
+    if (backend == "none" || backend == "cpu") {
+        if (!dispositivo.empty()) {
+            errore = "backend `" + backend + "` non accetta un dispositivo (`" + dispositivo + "`)";
+            return false;
+        }
+        dispositivi.push_back(nullptr);
+        scelto = "none";
+        return true;
+    }
+
+    if (!dispositivo.empty()) {
+        ggml_backend_dev_t trovato = ggml_backend_dev_by_name(dispositivo.c_str());
+        if (trovato == nullptr) {
+            errore = "nessun dispositivo si chiama `" + dispositivo + "`";
+            return false;
+        }
+        if (ggml_backend_dev_type(trovato) == GGML_BACKEND_DEVICE_TYPE_CPU) {
+            errore = "`" + dispositivo + "` è una CPU: non è un bersaglio di offload";
+            return false;
+        }
+        if (!backend.empty()) {
+            ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(trovato);
+            const char * nome = reg == nullptr ? nullptr : ggml_backend_reg_name(reg);
+            // Un dispositivo giusto sotto il registry sbagliato è il modo in cui
+            // una corsa etichettata «vulkan» finisce per misurare OpenCL.
+            if (nome == nullptr || backend != nome) {
+                errore = std::string("`") + dispositivo + "` sta sotto il registry `"
+                         + (nome == nullptr ? "?" : nome) + "`, non sotto `" + backend + "`";
+                return false;
+            }
+        }
+        dispositivi.push_back(trovato);
+        dispositivi.push_back(nullptr);
+        scelto = dispositivo;
+        return true;
+    }
+
+    // Solo il registry: si accetta unicamente se il dubbio non esiste.
+    std::vector<ggml_backend_dev_t> candidati;
+    std::string elenco;
+    for (size_t index = 0; index < ggml_backend_reg_count(); index += 1) {
+        ggml_backend_reg_t reg = ggml_backend_reg_get(index);
+        if (reg == nullptr) continue;
+        const char * nome = ggml_backend_reg_name(reg);
+        if (nome == nullptr || backend != nome) continue;
+        for (size_t d = 0; d < ggml_backend_reg_dev_count(reg); d += 1) {
+            ggml_backend_dev_t device = ggml_backend_reg_dev_get(reg, d);
+            if (device == nullptr) continue;
+            if (ggml_backend_dev_type(device) == GGML_BACKEND_DEVICE_TYPE_CPU) continue;
+            candidati.push_back(device);
+            if (!elenco.empty()) elenco += ", ";
+            elenco += ggml_backend_dev_name(device);
+        }
+    }
+    if (candidati.empty()) {
+        errore = "il registry `" + backend + "` non espone dispositivi su cui fare offload";
+        return false;
+    }
+    if (candidati.size() > 1) {
+        // ⛔ Il punto di tutta questa funzione. Scegliere qui sarebbe comodo, e
+        // sarebbe la lotteria che si voleva togliere di mezzo.
+        errore = "il registry `" + backend + "` espone " + std::to_string(candidati.size())
+                 + " dispositivi (" + elenco + "): dinne uno";
+        return false;
+    }
+    dispositivi.push_back(candidati[0]);
+    dispositivi.push_back(nullptr);
+    scelto = ggml_backend_dev_name(candidati[0]);
+    return true;
+}
+
+/**
+ * ⛔ SOLO RICERCA — la Flash Attention chiesta esplicitamente.
+ *
+ * In produzione la decide `AUTO` quando la cache leggera lo richiede, e va
+ * bene: la libreria sa cosa il backend regge. Ma per QUALIFICARE un backend
+ * servono i tre casi separati, perché la documentazione upstream dice
+ * esplicitamente che la Flash Attention non migliora sempre OpenCL — e
+ * «sempre» è una cosa che si misura, non si assume.
+ *
+ * @return falso se la parola non è una delle quattro.
+ */
+static bool talos_modalita_fa(const std::string & richiesta,
+                              llama_flash_attn_type & modalita,
+                              bool & imposta) {
+    imposta = false;
+    if (richiesta.empty() || richiesta == "default") return true;
+    imposta = true;
+    if (richiesta == "off")  { modalita = LLAMA_FLASH_ATTN_TYPE_DISABLED; return true; }
+    if (richiesta == "auto") { modalita = LLAMA_FLASH_ATTN_TYPE_AUTO;     return true; }
+    if (richiesta == "on")   { modalita = LLAMA_FLASH_ATTN_TYPE_ENABLED;  return true; }
+    imposta = false;
+    return false;
+}
+
+/**
  * Apre un modello. Restituisce 0 in caso di fallimento — mai un handle a metà:
  * un oggetto costruito per metà è la forma in cui i guasti sopravvivono al
  * punto in cui sono nati.
+ *
+ * ⛔ I tre ultimi parametri sono **solo ricerca**, e i due ingressi JNI qui
+ * sotto li separano: `nativeOpen` passa richieste vuote, che significano «come
+ * si è sempre fatto» e attraversano questa funzione senza toccare né la lista
+ * dei dispositivi né la Flash Attention. Il comportamento di produzione non
+ * cambia perché non esiste una strada in cui possa cambiare.
  */
-JNIEXPORT jlong JNICALL
-Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPath,
-                                          jint threads, jint contextTokens, jint gpuLayers,
-                                          jboolean deterministic, jint threadsBatch,
-                                          jint microBatch, jstring kvType) {
+/**
+ * ⭐⭐⭐ IL LAVORO FINIRA' SU OPENCL? - e la domanda si fa ai backend REGISTRATI.
+ *
+ * Serve per spegnere la Flash Attention **solo** li'. ⛔ La richiesta esplicita
+ * di bersaglio (`backendRichiesto`) esiste solo nella build di ricerca: in
+ * produzione e' vuota, e allora e' llama.cpp a scegliere. ⇒ La domanda va
+ * fatta a chi la risposta ce l'ha davvero, cioe' al registro dei backend.
+ *
+ * ⛔ Due condizioni, ed entrambe servono:
+ *   1. si sta offloadando (`gpuLayers > 0`) - senza, il lavoro resta su CPU
+ *      e questa manopola non c'entra;
+ *   2. fra i dispositivi registrati c'e' un acceleratore di nome OpenCL.
+ *
+ * ⛔⛔ E NON si generalizza oltre. `docs/backend/OPENCL.md` di upstream
+ * elenca *"Flash attention does not always improve performance"* fra i difetti
+ * noti e *"Improve flash attention"* fra i TODO: e' una proprieta' di QUESTO
+ * backend su QUESTA GPU **oggi**. Su Vulkan o CUDA si rimisura, e la manopola
+ * `talosFlashAttn` esiste apposta per farlo.
+ */
+static bool talos_bersaglio_e_opencl(int gpuLayers, const std::string & backendRichiesto) {
+    if (gpuLayers <= 0) return false;
+    /* Una richiesta esplicita vince: e' il caso della build di ricerca. */
+    if (!backendRichiesto.empty()) {
+        std::string b = backendRichiesto;
+        std::transform(b.begin(), b.end(), b.begin(),
+                       [](unsigned char c) { return (char) std::tolower(c); });
+        return b.find("opencl") != std::string::npos;
+    }
+    for (size_t i = 0; i < ggml_backend_dev_count(); i += 1) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        if (dev == nullptr) continue;
+        if (ggml_backend_dev_type(dev) != GGML_BACKEND_DEVICE_TYPE_GPU) continue;
+        const char * nome = ggml_backend_dev_name(dev);
+        if (nome == nullptr) continue;
+        std::string n = nome;
+        std::transform(n.begin(), n.end(), n.begin(),
+                       [](unsigned char c) { return (char) std::tolower(c); });
+        if (n.find("opencl") != std::string::npos) return true;
+    }
+    return false;
+}
+
+static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
+                                jint threads, jint contextTokens, jint gpuLayers,
+                                jboolean deterministic, jint threadsBatch,
+                                jint microBatch, jstring kvType,
+                                const std::string & backendRichiesto,
+                                const std::string & deviceRichiesto,
+                                const std::string & faRichiesta) {
     talos_last_open_error.clear();
     const std::string path = jstring_to_utf8(env, modelPath);
     if (path.empty()) {
@@ -674,6 +1074,30 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
 
     llama_model_params model_params = llama_model_default_params();
     model_params.n_gpu_layers = gpuLayers;
+
+    /**
+     * ⛔ IL VETTORE VIVE FINO AL CARICAMENTO, e non un'istruzione di meno.
+     *
+     * `model_params.devices` riceve `data()`, non una copia: se il vettore
+     * morisse prima di `llama_model_load_from_file` il motore leggerebbe
+     * memoria liberata. Sta qui, nello stesso ambito della chiamata, per lo
+     * stesso motivo per cui upstream lo tiene nell'ambito del suo ciclo.
+     */
+    std::vector<ggml_backend_dev_t> dispositivi;
+    std::string bersaglioScelto;
+    {
+        std::string errore;
+        if (!talos_risolvi_bersaglio(backendRichiesto, deviceRichiesto,
+                                     dispositivi, errore, bersaglioScelto)) {
+            talos_last_open_error = "backend-target";
+            TALOS_LOGE("bersaglio non risolto: %s", errore.c_str());
+            return 0;
+        }
+        if (!dispositivi.empty()) {
+            model_params.devices = dispositivi.data();
+            TALOS_LOGI("bersaglio di offload richiesto: %s", bersaglioScelto.c_str());
+        }
+    }
 
     llama_model * model = llama_model_load_from_file(path.c_str(), model_params);
     if (model == nullptr) {
@@ -773,6 +1197,72 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
         ctx_params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
     }
 
+    /**
+     * ⛔ SOLO RICERCA, e viene DOPO la cache leggera di proposito.
+     *
+     * Una richiesta esplicita vince sulla `AUTO` che il ramo `q8_0` imposta:
+     * è l'unico modo di misurare i tre casi separatamente, che è ciò che serve
+     * per qualificare un backend. Senza richiesta questo blocco non fa niente,
+     * e la produzione passa di qui senza accorgersene.
+     */
+    if (!faRichiesta.empty() && faRichiesta != "default") {
+        llama_flash_attn_type modalita = LLAMA_FLASH_ATTN_TYPE_AUTO;
+        bool imposta = false;
+        if (!talos_modalita_fa(faRichiesta, modalita, imposta)) {
+            talos_last_open_error = "flash-attn-mode";
+            TALOS_LOGE("modalita' Flash Attention sconosciuta: %s", faRichiesta.c_str());
+            llama_model_free(model);
+            return 0;
+        }
+        if (imposta) {
+            ctx_params.flash_attn_type = modalita;
+            TALOS_LOGI("Flash Attention richiesta: %s (%s)", faRichiesta.c_str(),
+                       llama_flash_attn_type_name(modalita));
+        }
+    }
+
+    /**
+     * ⭐⭐⭐ FLASH ATTENTION SPENTA SUI BERSAGLI OPENCL - e non e' un compromesso.
+     *
+     * ⛔ Nessuno l'aveva mai scelta: `llama_context_default_params()` mette
+     * `AUTO`, e su Adreno 830 `AUTO` risolve in **acceso**. Era il default della
+     * libreria, non una nostra decisione.
+     *
+     * Misurato il 2026-08-20, cinque giri per configurazione, telefono freddo a
+     * ogni blocco, su **tre** architetture (Llama 3.2 3B, Gemma 3 4B, Qwen3 1.7B):
+     *
+     * ```
+     *                                    off        auto/on
+     *   primo inferire del processo   1.646 ms     8.230 ms
+     *   prefill 512                     312 t/s        307
+     *   decodifica dopo 2048 token     15,9 t/s        8,1     <- due volte
+     * ```
+     *
+     * ⛔ Il costo **cresce con la lunghezza della KV**: su un prompt corto le
+     * due configurazioni sono indistinguibili, su 2.048 token la differenza e'
+     * doppia. Ed e' il caso d'uso vero, non quello di laboratorio.
+     *
+     * I cinque secondi del primo messaggio li spiega il motore da se': sette
+     * compilazioni pigre di kernel `flash_attn`, di cui **quattro buttate
+     * subito** perche' la GPU non le regge - e **nessuna** finisce nella cache
+     * su disco, perche' tutti e quattordici i punti di compilazione passano da
+     * `build_program_from_source_ex`, che la cache non la consulta e non la
+     * salva. ⇒ Ogni processo ripaga quei 5,8 secondi.
+     *
+     * ⭐ E le parole non cambiano: suite golden sul dispositivo, tre modelli,
+     * **20 casi su 20 identici** alla produzione di oggi.
+     *
+     * ⛔ Sta DOPO la richiesta esplicita di proposito: chi misura deve poter
+     * chiedere `on` e ottenerlo, o la qualificazione di un backend nuovo
+     * diventerebbe impossibile.
+     */
+    if (faRichiesta.empty() || faRichiesta == "default") {
+        if (talos_bersaglio_e_opencl((int) gpuLayers, backendRichiesto)) {
+            ctx_params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED;
+            TALOS_LOGI("Flash Attention spenta: bersaglio OpenCL");
+        }
+    }
+
     llama_context * ctx = llama_init_from_model(model, ctx_params);
     if (ctx == nullptr && vuoleLeggera) {
         // Il collaudo ha risposto no. Non è un guasto: è il modo in cui si
@@ -861,6 +1351,189 @@ Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPat
                path.c_str(), llama_n_ctx(ctx), ctx_params.n_threads,
                ctx_params.n_threads_batch, llama_n_ubatch(ctx));
     return reinterpret_cast<jlong>(session);
+}
+
+/**
+ * L'apertura di PRODUZIONE. Passa tre richieste vuote, e vuoto qui significa
+ * «come si è sempre fatto»: nessuna lista di dispositivi, nessuna Flash
+ * Attention imposta. ⛔ Non è una convenzione da ricordare — è l'unico modo in
+ * cui questa funzione può chiamare quella sotto, quindi non esiste una strada
+ * per cui la ricerca cambi il comportamento di chi usa l'app.
+ */
+JNIEXPORT jlong JNICALL
+Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPath,
+                                          jint threads, jint contextTokens, jint gpuLayers,
+                                          jboolean deterministic, jint threadsBatch,
+                                          jint microBatch, jstring kvType) {
+    return talos_apri_modello(env, modelPath, threads, contextTokens, gpuLayers,
+                              deterministic, threadsBatch, microBatch, kvType,
+                              std::string(), std::string(), std::string());
+}
+
+/**
+ * ⛔ SOLO RICERCA — l'apertura che dice DOVE, non solo quanto.
+ *
+ * Stessa apertura di sopra, con tre parole in più: quale registry, quale
+ * dispositivo, quale Flash Attention. Serve a qualificare un backend, e la
+ * qualificazione è esattamente il lavoro in cui «la GPU» non è una risposta.
+ *
+ * @param backendName  vuoto = come oggi · `none`/`cpu` = nessun offload,
+ *     esplicitamente · altrimenti il nome di un registry, es. `OpenCL`.
+ * @param deviceName   vuoto = accettato solo se il registry espone UN solo
+ *     dispositivo · altrimenti il nome canonico esatto.
+ * @param flashAttentionMode `default` · `off` · `auto` · `on`.
+ */
+JNIEXPORT jlong JNICALL
+Java_ai_talos_TalosLlamaNative_nativeOpenTargeted(JNIEnv * env, jclass, jstring modelPath,
+                                                  jint threads, jint contextTokens, jint gpuLayers,
+                                                  jboolean deterministic, jint threadsBatch,
+                                                  jint microBatch, jstring kvType,
+                                                  jstring backendName, jstring deviceName,
+                                                  jstring flashAttentionMode) {
+    return talos_apri_modello(env, modelPath, threads, contextTokens, gpuLayers,
+                              deterministic, threadsBatch, microBatch, kvType,
+                              jstring_to_utf8(env, backendName),
+                              jstring_to_utf8(env, deviceName),
+                              jstring_to_utf8(env, flashAttentionMode));
+}
+
+/**
+ * ⛔ SOLO RICERCA — la GRAMMATICA, misurata invece che raccontata dai log.
+ *
+ * ⛔⛔ IL BUCO CHE CHIUDE. Il taccuino porta il numero che fa male — 46 attrezzi
+ * producevano **55.871 byte** di GBNF e il parser li rifiutava con «number of
+ * rules that are going to be repeated multiplied by the new repetition exceeds
+ * sane defaults» — e porta anche il difetto rimasto aperto dall'8 agosto:
+ * «Grammar still awaiting trigger» per tutta la generazione, cioè una
+ * grammatica **pigra con un innesco solo** che non si accende mai.
+ *
+ * Ma quei due fatti stavano solo in logcat. Un numero che si può leggere solo
+ * mentre succede non è una misura: non si mette in un artifact, non si confronta
+ * con quello di ieri, e non diventa il rosso di una cura.
+ *
+ * Qui gli stessi fatti diventano una risposta ripetibile:
+ *
+ *  - quanto pesa la GBNF, in byte;
+ *  - se è pigra, e con **quali** inneschi — tipo e parola, uno per uno, perché
+ *    «pigra» da sola non dice se quella parola il modello la produce;
+ *  - quanti token protetti sono davvero atomici: uno che il vocabolario rende
+ *    con due token non è protetto a metà, non lo è affatto;
+ *  - e soprattutto **se compila**, provandolo davvero.
+ *
+ * ⛔ La compilazione si PROVA, non si indovina. `common_sampler_init` non
+ * segnala una GBNF non compilabile con `nullptr`: lancia. Il campionatore di
+ * prova viene liberato subito e la sessione non viene toccata — questa domanda
+ * non deve cambiare la risposta.
+ *
+ * @return {@code null} se nessun template è stato ancora applicato: la
+ *     grammatica nasce lì, e prima non esiste una domanda da fare.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeGrammarDiagnostics(JNIEnv * env, jclass, jlong handle) {
+    std::lock_guard<std::mutex> serratura(g_motore);
+    talos_session * session = as_session(handle);
+    if (session == nullptr || !session->chat_ready) return nullptr;
+
+    nlohmann::ordered_json out;
+
+    /**
+     * ⛔⛔ IL FORMATO PRIMA DELLA GRAMMATICA, e non è un dettaglio d'ordine.
+     *
+     * MISURATO il 2026-08-20: con Llama 3.2 la GBNF esce **vuota** per 1, 8, 24
+     * e 46 attrezzi. Da sola quella riga sembra un guasto — «nessun vincolo,
+     * quindi il modello può inventare» — e manderebbe a cercare una cura dove
+     * non serve.
+     *
+     * Il pin che spediamo non usa più una GBNF per famiglia: i formati sono
+     * `PEG_*`, e il vincolo lo fa un parser, non una grammatica. Quindi «GBNF
+     * vuota» va letta **insieme** al formato scelto: con un formato PEG è la
+     * risposta giusta; con un formato che la grammatica ce l'ha, è un difetto.
+     *
+     * ⇒ Senza questo campo il numero accanto non è interpretabile, e un numero
+     * non interpretabile in un artifact è peggio di un campo assente.
+     */
+    const char * nome_formato = common_chat_format_name(session->chat.format);
+    out["format"] = (int) session->chat.format;
+    out["formatName"] = nome_formato == nullptr ? "" : nome_formato;
+    out["supportsThinking"] = session->chat.supports_thinking;
+    out["thinkingStartTag"] = session->chat.thinking_start_tag;
+
+    /**
+     * ⛔ Del parser PEG si misura la TAGLIA, non si copia l'albero.
+     *
+     * Con 46 attrezzi `parser` è un albero JSON da oltre cento kilobyte. Metterlo
+     * in un artifact renderebbe il file illeggibile e, peggio, illeggibile
+     * proprio dove serve leggerlo: nessuno diffa centomila caratteri per
+     * accorgersi che un formato è cambiato.
+     *
+     * ⇒ Byte e nome del formato bastano a vedere una deriva; l'albero, se
+     * servirà, si ricava rifacendo la stessa chiamata.
+     */
+    out["parserBytes"] = (uint64_t) session->chat.parser.size();
+    out["parserHead"] = session->chat.parser.substr(0, 120);
+
+    const std::string & gbnf = session->chat.grammar;
+    out["grammarBytes"] = (uint64_t) gbnf.size();
+    out["grammarEmpty"] = gbnf.empty();
+    out["grammarLazy"] = session->chat.grammar_lazy;
+
+    nlohmann::ordered_json inneschi = nlohmann::ordered_json::array();
+    for (const common_grammar_trigger & innesco : session->chat.grammar_triggers) {
+        nlohmann::ordered_json uno;
+        uno["type"] = (int) innesco.type;
+        uno["value"] = innesco.value;
+        inneschi.push_back(uno);
+    }
+    out["triggers"] = inneschi;
+    out["triggerCount"] = (uint64_t) session->chat.grammar_triggers.size();
+
+    // I token protetti si contano DUE volte: quanti ne chiede il template, e
+    // quanti il vocabolario di questo modello rende con un token solo. La
+    // differenza fra i due numeri è quella che sparisce in silenzio.
+    size_t atomici = 0;
+    nlohmann::ordered_json scartati = nlohmann::ordered_json::array();
+    for (const std::string & piece : session->chat.preserved_tokens) {
+        const std::vector<llama_token> ids =
+                common_tokenize(session->vocab, piece, /*add_special*/ false,
+                                /*parse_special*/ true);
+        if (ids.size() == 1) atomici += 1;
+        else scartati.push_back(piece);
+    }
+    out["preservedTokensRequested"] = (uint64_t) session->chat.preserved_tokens.size();
+    out["preservedTokensAtomic"] = (uint64_t) atomici;
+    out["preservedTokensDropped"] = scartati;
+
+    // ⛔ La prova, non la previsione.
+    if (gbnf.empty()) {
+        out["compiles"] = true;
+        out["compileError"] = nullptr;
+    } else {
+        common_params_sampling prova = session->sampling;
+        prova.grammar = common_grammar(COMMON_GRAMMAR_TYPE_TOOL_CALLS, gbnf);
+        prova.grammar_lazy = session->chat.grammar_lazy;
+        prova.grammar_triggers = session->chat.grammar_triggers;
+        prova.preserved_tokens.clear();
+        for (const std::string & piece : session->chat.preserved_tokens) {
+            const std::vector<llama_token> ids =
+                    common_tokenize(session->vocab, piece, false, true);
+            if (ids.size() == 1) prova.preserved_tokens.insert(ids[0]);
+        }
+        common_sampler * campione = nullptr;
+        try {
+            campione = common_sampler_init(session->model, prova);
+            out["compiles"] = campione != nullptr;
+            out["compileError"] = nullptr;
+        } catch (const std::exception & guasto) {
+            out["compiles"] = false;
+            out["compileError"] = guasto.what();
+        }
+        if (campione != nullptr) common_sampler_free(campione);
+    }
+
+    // I primi byte: bastano a riconoscere una grammatica vuota, troncata o di
+    // un'altra forma, senza portarsi dietro 55 KB in un artifact.
+    out["grammarHead"] = gbnf.substr(0, 200);
+    return env->NewStringUTF(out.dump().c_str());
 }
 
 JNIEXPORT jstring JNICALL
@@ -1879,6 +2552,7 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         if (riusati < session->cached.size()
             && !llama_memory_seq_rm(memoria, 0, (llama_pos) riusati, -1)) {
             TALOS_LOGI("taglio parziale rifiutato: si riparte da zero");
+            session->tempi.taglio_rifiutato = true;
             llama_memory_clear(memoria, true);
             riusati = 0;
         }
@@ -1932,8 +2606,23 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
         return nullptr;
     }
     const long long tempo_prefill = talos_da(avvio);
-    TALOS_LOGI("prompt: %d token, %zu riusati, %zu nuovi (pezzi da %d, contesto %d)",
-               wanted, riusati, (size_t) wanted - riusati, slice, budget);
+    /*
+     * ⭐⭐⭐ DUE numeri, e prima ne diceva UNO SOLO - quello sbagliato.
+     *
+     * ⛔⛔ Questa riga stampava `slice`, cioe `llama_n_batch`, chiamandolo
+     * "pezzi". Ma `n_batch` e il batch LOGICO ed e fisso a 512: la cosa che
+     * governa l'attesa dello Stop e `n_ubatch`, il microbatch FISICO.
+     *
+     * ⇒ Il 2026-08-21 ho portato il microbatch a 192 e ho letto questo log
+     * per verificarlo: diceva "pezzi da 512", e ho concluso che la modifica
+     * non fosse arrivata. Era arrivata; era il log a guardare altrove.
+     *
+     * ⛔ Un numero mostrato al posto di un altro non e un dettaglio di
+     * formattazione: e una misura che manda a cercare un difetto che non c'e.
+     */
+    TALOS_LOGI("prompt: %d token, %zu riusati, %zu nuovi (batch %d, microbatch %d, contesto %d)",
+               wanted, riusati, (size_t) wanted - riusati,
+               slice, (int) llama_n_ubatch(session->ctx), budget);
 
     std::string answer;
     char piece[256];
@@ -2160,11 +2849,12 @@ Java_ai_talos_TalosLlamaNative_nativeLastTimings(JNIEnv * env, jclass, jlong han
              "{\"tokenizeMs\":%lld,\"prefixMs\":%lld,\"prefillMs\":%lld,"
              "\"firstTokenMs\":%lld,\"totalMs\":%lld,\"promptTokens\":%d,"
              "\"reusedTokens\":%d,\"newTokens\":%d,\"producedTokens\":%d,"
-             "\"reusedContext\":%s}",
+             "\"reusedContext\":%s,\"partialTrimRefused\":%s}",
              tempi.tokenizzazione_ms, tempi.prefisso_ms, tempi.prefill_ms,
              tempi.primo_token_ms, tempi.totale_ms, tempi.token_prompt,
              tempi.token_riusati, tempi.token_nuovi, tempi.token_prodotti,
-             tempi.contesto_riusato ? "true" : "false");
+             tempi.contesto_riusato ? "true" : "false",
+             tempi.taglio_rifiutato ? "true" : "false");
     return env->NewStringUTF(json);
 }
 

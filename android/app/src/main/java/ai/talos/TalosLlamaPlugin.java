@@ -250,7 +250,29 @@ public class TalosLlamaPlugin extends Plugin {
 
         final int threads = call.getInt("threads", 4);
         final int contextTokens = call.getInt("contextTokens", 4096);
-        final int gpuLayers = call.getInt("gpuLayers", 0);
+        /*
+         * ⛔⛔ FASE 7(c) — il campo che era SEMPRE zero, mai passato da nessun
+         * chiamante in `src/`. Ora: se chi chiama lo chiede esplicitamente,
+         * vince la sua richiesta — invariato. Se non lo chiede, la richiesta
+         * la fa {@link TalosBackendChoice}, sull'evidenza registrata per
+         * questo driver ({@link TalosBackendEvidenceStore}).
+         *
+         * ⛔ Quello che questo NON fa: nessun sondaggio parte da qui. Se
+         * nessuno ha mai registrato un'evidenza per il driver di oggi
+         * (`Build.FINGERPRINT` — cambia a ogni aggiornamento di sistema, più
+         * prudente che preciso: un aggiornamento che non tocca il driver GPU
+         * fa comunque ripartire la prova, mai il contrario), `choose()`
+         * torna "unproven" e il comportamento è quello di sempre: CPU, zero
+         * strati. Decidere QUANDO far girare una prova reale — costa una
+         * generazione vera, tempo e batteria — è una scelta di prodotto che
+         * questa consegna non include.
+         */
+        final int gpuLayers = call.getData().has("gpuLayers")
+                ? call.getInt("gpuLayers", 0)
+                : TalosBackendChoice.gpuLayers(TalosBackendChoice.choose(
+                        android.os.Build.FINGERPRINT,
+                        TalosThermal.read(getContext()),
+                        TalosBackendEvidenceStore.load(getContext())));
         // Zero significa «come prima»: stesso numero di thread per prefill e
         // generazione, microbatch implicito. Chi ha letto la forma della CPU
         // manda due numeri veri; il banco di prova continua a non mandarli,
@@ -1090,4 +1112,222 @@ public class TalosLlamaPlugin extends Plugin {
      */
     private static final int TRIM_MEMORY_RUNNING_LOW = 10;
     private static final int TRIM_MEMORY_UI_HIDDEN = 20;
+
+    /**
+     * ⛔⛔ FASE 0.1.17, §1-bis della consegna 0.1.18 — l'ULTIMO pezzo, quello
+     * che l'agente aveva dichiarato mancante da sé: nessun codice decideva
+     * QUANDO far girare il sondaggio che riempie
+     * {@link TalosBackendEvidenceStore}. Prima di questo metodo, la GPU
+     * spedita nella build di rilascio non si accendeva su nessun telefono —
+     * `choose()` tornava sempre "unproven" perché lo store era sempre vuoto.
+     *
+     * ⛔ Esecutore SEPARATO da {@link #worker}: il sondaggio apre due motori
+     * indipendenti (CPU e, se compilata, OpenCL) e può costare decine di
+     * secondi. Se girasse sulla stessa coda di {@link #open}/{@link #run},
+     * una persona che ha appena detto sì al sondaggio vedrebbe il primo
+     * messaggio della chat aspettare la sua fine — esattamente quello che
+     * §1-bis vieta: «non blocca la chat».
+     */
+    private final ExecutorService qualificationWorker = Executors.newSingleThreadExecutor();
+
+    /**
+     * Misurato il 21/8: la prima corsa sulla CPU fredda di questo Pad usciva
+     * `UNSTABLE` tre volte di fila — il governor di frequenza rampa dentro la
+     * finestra di misura. Ogni tentativo scalda il chip un po' di più, quindi
+     * pochi tentativi bastano; non è un numero a caso, è quanti ne sono
+     * serviti a convergere qui.
+     */
+    private static final int MAX_PROBE_ATTEMPTS = 4;
+
+    /**
+     * Fa girare il sondaggio, se e quanto serve davvero, e restituisce cosa
+     * ha fatto — mai un «fatto» muto: la scheda ha bisogno di sapere se ha
+     * girato, e su cosa.
+     */
+    @PluginMethod
+    public void qualifyBackend(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null || path.isEmpty() || !new File(path).isFile()) {
+            call.reject("TALOS_LLAMA_PATH_REQUIRED");
+            return;
+        }
+        if (!TalosLlamaNative.AVAILABLE) {
+            call.reject("TALOS_LLAMA_UNAVAILABLE");
+            return;
+        }
+        qualificationWorker.execute(() -> call.resolve(runQualification(path)));
+    }
+
+    private JSObject runQualification(String path) {
+        android.content.Context context = getContext();
+        String driver = android.os.Build.FINGERPRINT;
+        String thermal = TalosThermal.read(context);
+        JSObject result = new JSObject().put("ran", false);
+
+        if (!TalosBackendChoice.shouldProbeNow(thermal)) {
+            return result.put("reason", "hot");
+        }
+
+        TalosLlamaNative.ensureReady(context);
+        TalosBackendChoice.Evidence[] existing = TalosBackendEvidenceStore.load(context);
+        boolean cpuNeeded = TalosBackendChoice.shouldProbe(TalosBackendChoice.CPU, driver, existing);
+        boolean openclCompiled = deviceOffersOpenCl();
+        boolean gpuWanted = openclCompiled
+                && TalosBackendChoice.shouldProbe(TalosBackendChoice.OPENCL, driver, existing);
+
+        if (!cpuNeeded && !gpuWanted) {
+            return result.put("reason", "already-proven");
+        }
+
+        // Il riferimento per giudicare la GPU è il testo della CPU di QUESTA
+        // stessa chiamata, non uno vecchio: due corse a distanza di giorni
+        // potrebbero cadere su prompt diversi se mai lo diventasse.
+        //
+        // ⛔⛔ MISURATO il 21/8: la CPU di questo Pad parte FREDDA — governor
+        // di frequenza non ancora salito — e le prime corse escono `UNSTABLE`
+        // per davvero, non per un difetto qui: TTFT costante (~500 ms) ma lo
+        // spread delle finestre di decodifica supera il 60% mentre la
+        // frequenza rampa DENTRO la finestra di misura. Tre corse di fila
+        // instabili sullo stesso telefono, stesso giorno. ⇒ pochi tentativi
+        // interni, non uno solo: ogni corsa scalda il chip un po' di più.
+        ProbeRun cpuRun = null;
+        String cpuText = null;
+        boolean cpuRecorded = false;
+        boolean cpuInconclusive = false;
+        for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !cpuRecorded; attempt += 1) {
+            cpuRun = runOne(path, 0);
+            if (cpuRun == null) break;
+            cpuText = cpuRun.text;
+            boolean cpuOk = TalosLlamaProbe.referenceIsUsable(cpuText);
+            cpuRecorded = recordIfConclusive(context, TalosBackendChoice.CPU, driver, cpuRun, cpuOk);
+            cpuInconclusive = !cpuRecorded;
+        }
+        result.put("probedCpu", cpuRecorded);
+        result.put("cpuInconclusive", cpuInconclusive);
+
+        boolean gpuRecorded = false;
+        boolean gpuInconclusive = false;
+        if (gpuWanted && cpuRecorded && TalosLlamaProbe.referenceIsUsable(cpuText)) {
+            for (int attempt = 0; attempt < MAX_PROBE_ATTEMPTS && !gpuRecorded; attempt += 1) {
+                ProbeRun gpuRun = runOne(path, -1);
+                if (gpuRun == null) break;
+                boolean gpuOk = TalosLlamaProbe.agreesWithReference(cpuText, gpuRun.text);
+                gpuRecorded = recordIfConclusive(context, TalosBackendChoice.OPENCL, driver, gpuRun, gpuOk);
+                gpuInconclusive = !gpuRecorded;
+            }
+        }
+        result.put("probedGpu", gpuRecorded);
+        result.put("gpuInconclusive", gpuInconclusive);
+
+        TalosBackendChoice.Decision decision = TalosBackendChoice.choose(
+                driver, thermal, TalosBackendEvidenceStore.load(context));
+        return result.put("ran", true)
+                .put("decisionBackend", decision.backend)
+                .put("decisionReason", decision.reason);
+    }
+
+    /** Vero solo se QUESTA build ha davvero un dispositivo GPU registrato — mai dedotto dal nome del pacchetto. */
+    private boolean deviceOffersOpenCl() {
+        try {
+            String json = TalosLlamaNative.nativeBackendInventory();
+            for (ai.talos.research.TalosBackendInventory.Device device
+                    : ai.talos.research.TalosBackendInventory.parse(json).devices()) {
+                if (device.canOffload()) return true;
+            }
+        } catch (RuntimeException malformedOrMissing) {
+            // Un inventario illeggibile non è un "no" silenzioso: è "non lo so",
+            // e la regola su un dubbio è non offrire — mai inventare un sì.
+        }
+        return false;
+    }
+
+    /**
+     * ⛔⛔ MISURATO il 21/8: la prima corsa a freddo sulla CPU di questo Pad è
+     * uscita `UNSTABLE` — dieci finestre, spread oltre il 60% che
+     * {@link TalosBenchmarkHarness#MAX_RELATIVE_SPREAD} rifiuta — non
+     * `WRONG_ANSWER`. Il testo era corretto, l'harness ha solo detto «questa
+     * misura non è abbastanza stabile per fidarcene», che è esattamente il suo
+     * lavoro.
+     *
+     * ⛔ Ma registrarla comunque come evidenza sarebbe stato un difetto SERIO
+     * per una ragione che non è ovvia: {@link TalosBackendChoice#shouldProbe}
+     * non riprova un'evidenza già scritta, quindi un `FAILED` da una CORSA
+     * RUMOROSA diventerebbe permanente — e {@link TalosBackendChoice#choose}
+     * ha bisogno esattamente di una CPU `CORRECT` per calcolare una base di
+     * confronto: senza, resta "unproven" per SEMPRE su questo driver, anche
+     * se la GPU funziona benissimo.
+     *
+     * ⇒ Solo {@code VALID} e {@code WRONG_ANSWER} sono giudizi DURATURI su
+     * questo backend — il secondo è correttezza, la prima è una misura
+     * fidata. I tre rifiuti restanti ({@code TOO_SHORT}, {@code
+     * THERMAL_DRIFT}, {@code UNSTABLE}, {@code INTERRUPTED}) dicono «questa
+     * corsa non conta», non «questo backend è rotto»: non si registra niente,
+     * cosi' un prossimo sondaggio — automatico o dal comando manuale — parte
+     * libero di riprovare.
+     *
+     * @return vero se un verdetto duraturo è stato scritto.
+     */
+    private boolean recordIfConclusive(
+            android.content.Context context, String backend, String driver,
+            ProbeRun run, boolean answerCorrect) {
+        TalosBenchmarkHarness.Result measured =
+                TalosBenchmarkHarness.judge(run.samples, answerCorrect, run.ttftMs);
+        boolean conclusive = measured.verdict == TalosBenchmarkHarness.Verdict.VALID
+                || measured.verdict == TalosBenchmarkHarness.Verdict.WRONG_ANSWER;
+        // ⛔ Il dump di OGNI campione va in logcat SOLO quando il verdetto non
+        // è duraturo: è la corsa strumentata il 21/8 che ha trovato il divario
+        // di tempo zero in TalosLlamaEngine — sul percorso felice (VALID sul
+        // primo tentativo, com'è ora) la riga sola basta, e sul telefono di
+        // ogni persona non serve stampare un array a ogni sondaggio riuscito.
+        String samplesDump = conclusive ? "" : dumpSamples(run.samples);
+        android.util.Log.i("TalosQualify", backend + ": verdetto=" + measured.verdict
+                + " tps=" + measured.tokensPerSecond + " ttft=" + run.ttftMs
+                + " registrato=" + conclusive
+                + (conclusive ? "" : " campioni=" + samplesDump));
+        if (!conclusive) return false;
+        TalosBackendEvidenceStore.record(context, TalosLlamaProbe.evidenceOf(backend, driver, measured));
+        return true;
+    }
+
+    /** Un campione per riga, per leggere a occhio dove il divario di tempo o di token si è rotto. */
+    private static String dumpSamples(TalosBenchmarkHarness.Sample[] samples) {
+        StringBuilder dump = new StringBuilder();
+        for (TalosBenchmarkHarness.Sample sample : samples) {
+            dump.append('[').append(sample.atMs).append(',').append(sample.tokens)
+                    .append(',').append(sample.thermal).append(']');
+        }
+        return dump.toString();
+    }
+
+    /** Una corsa del sondaggio: il testo prodotto e le finestre con cui misurarlo. Null se il motore non si è aperto. */
+    private ProbeRun runOne(String path, int gpuLayers) {
+        TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
+                getContext(), path, 4, 4096, gpuLayers, true);
+        TalosLlamaEngine engine = attempt.engine();
+        if (engine == null) return null;
+        try {
+            TalosLlamaEngine.Run run = engine.run(
+                    TalosLlamaProbe.PROMPT, TalosLlamaProbe.TOKENS,
+                    () -> TalosThermal.read(getContext()), TalosLlamaEngine.Mode.BENCHMARK);
+            if (run == null) return null;
+            return new ProbeRun(run.text, run.samples, run.ttftMs);
+        } catch (InterruptedException interrotta) {
+            Thread.currentThread().interrupt();
+            return null;
+        } finally {
+            engine.close();
+        }
+    }
+
+    private static final class ProbeRun {
+        final String text;
+        final TalosBenchmarkHarness.Sample[] samples;
+        final long ttftMs;
+
+        ProbeRun(String text, TalosBenchmarkHarness.Sample[] samples, long ttftMs) {
+            this.text = text;
+            this.samples = samples;
+            this.ttftMs = ttftMs;
+        }
+    }
 }

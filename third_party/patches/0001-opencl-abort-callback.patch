@@ -1,0 +1,102 @@
+diff --git a/ggml/include/ggml-opencl.h b/ggml/include/ggml-opencl.h
+index 6b61771..9dc1746 100644
+--- a/ggml/include/ggml-opencl.h
++++ b/ggml/include/ggml-opencl.h
+@@ -13,6 +13,7 @@ extern "C" {
+ //
+ GGML_BACKEND_API ggml_backend_t ggml_backend_opencl_init(void);
+ GGML_BACKEND_API bool ggml_backend_is_opencl(ggml_backend_t backend);
++GGML_BACKEND_API void ggml_backend_opencl_set_abort_callback(ggml_backend_t backend, ggml_abort_callback abort_callback, void * user_data);
+ 
+ GGML_BACKEND_API ggml_backend_buffer_type_t ggml_backend_opencl_buffer_type(void);
+ GGML_BACKEND_API ggml_backend_buffer_type_t ggml_backend_opencl_host_buffer_type(void);
+diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
+index 733fab1..1711443 100644
+--- a/ggml/src/ggml-opencl/ggml-opencl.cpp
++++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
+@@ -553,6 +553,11 @@ struct ggml_backend_opencl_context {
+     // rest of the kernels are currently always loaded in alloc_buffer.
+     bool kernels_loaded = false;
+ 
++    // checked between graph nodes so a caller can stop a run in progress,
++    // mirroring what the Metal backend already does between command buffers.
++    ggml_abort_callback abort_callback = nullptr;
++    void *              abort_callback_data = nullptr;
++
+     std::string driver_version;
+ 
+     GPU_FAMILY gpu_family;
+@@ -6962,10 +6967,36 @@ static void ggml_opencl_op_rms_norm_fused(ggml_backend_t backend, ggml_tensor *
+ static void ggml_opencl_op_norm_fused(ggml_backend_t backend, ggml_tensor * norm_tensor, ggml_tensor * mul_tensor, ggml_tensor * add_tensor);
+ static void ggml_opencl_op_group_norm_fused(ggml_backend_t backend, ggml_tensor * gn_tensor, ggml_tensor * mul_tensor, ggml_tensor * add_tensor);
+ 
++// Abort checkpoints drain the queue early on purpose (see the comment at the
++// call site below), and that drain is not free, so it is only taken out for
++// graphs where it is worth something. A decode step (one new token) and a
++// prefill microbatch (hundreds of tokens) build the identical graph shape --
++// same layers, same op count, same node count -- so node count cannot tell
++// them apart. What differs is how many tokens node 0 actually carries.
++// Measured on this device (RMS_NORM, the first node): 1 for every decode
++// step, the microbatch size (512, 511, ...) for every prefill chunk. Only
++// the multi-token case gets periodic checks: a single decode step is already
++// interruptible between tokens by the existing check in the JNI layer
++// (talos_llama_jni.cpp) at effectively zero cost, and an earlier version of
++// this cure that checked on every graph regardless of shape measured a ~45%
++// cut to decode throughput here for no latency benefit a person could feel.
++#define TALOS_OPENCL_ABORT_CHECK_STRIDE 16
++
+ static ggml_status ggml_backend_opencl_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph) {
+     ggml_backend_opencl_context *backend_ctx = (ggml_backend_opencl_context *)backend->context;
+ 
++    const bool worth_abort_checks = backend_ctx->abort_callback != nullptr
++        && cgraph->n_nodes > 0
++        && cgraph->nodes[0]->ne[1] > 1;
++
+     for (int i = 0; i < cgraph->n_nodes; i++) {
++        if (worth_abort_checks && i % TALOS_OPENCL_ABORT_CHECK_STRIDE == 0) {
++            CL_CHECK(clFinish(backend_ctx->queue));
++            if (backend_ctx->abort_callback(backend_ctx->abort_callback_data)) {
++                return GGML_STATUS_ABORTED;
++            }
++        }
++
+         ggml_tensor * node = cgraph->nodes[i];
+ 
+         // NOTE: this may oversynchronize by synchronizing with
+@@ -7558,6 +7589,14 @@ bool ggml_backend_is_opencl(ggml_backend_t backend) {
+     return backend && backend->iface.get_name == ggml_backend_opencl_name;
+ }
+ 
++void ggml_backend_opencl_set_abort_callback(ggml_backend_t backend, ggml_abort_callback abort_callback, void * user_data) {
++    GGML_ASSERT(ggml_backend_is_opencl(backend));
++
++    ggml_backend_opencl_context * ctx = (ggml_backend_opencl_context *)backend->context;
++    ctx->abort_callback = abort_callback;
++    ctx->abort_callback_data = user_data;
++}
++
+ //
+ // buffer
+ //
+@@ -10921,11 +10960,20 @@ static ggml_backend_dev_t ggml_backend_opencl_reg_device_get(ggml_backend_reg_t
+     GGML_UNUSED(index);
+ }
+ 
++static void * ggml_backend_opencl_get_proc_address(ggml_backend_reg_t reg, const char * name) {
++    if (strcmp(name, "ggml_backend_set_abort_callback") == 0) {
++        return (void *)ggml_backend_opencl_set_abort_callback;
++    }
++    return NULL;
++
++    GGML_UNUSED(reg);
++}
++
+ static struct ggml_backend_reg_i ggml_backend_opencl_reg_i = {
+     /* .get_name         = */ ggml_backend_opencl_reg_get_name,
+     /* .device_count     = */ ggml_backend_opencl_reg_device_count,
+     /* .device_get       = */ ggml_backend_opencl_reg_device_get,
+-    /* .get_proc_address = */ NULL,
++    /* .get_proc_address = */ ggml_backend_opencl_get_proc_address,
+ };
+ 
+ ggml_backend_reg_t ggml_backend_opencl_reg(void) {

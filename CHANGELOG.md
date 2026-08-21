@@ -6,6 +6,72 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.17
+
+The local engine can use the GPU. Everything here was measured on the owner's
+OnePlus Pad 3 — an Adreno 830 on Android 16 — and none of it is estimated.
+
+### Stop now stops
+
+Pressing stop during a long prompt used to wait out the whole prefill. It was
+not slow; it did not work at all. The engine kept going and quit when it would
+have quit anyway: press at 1,500 ms and stop "took" 155; press at 200 ms and it
+took 1,458. The sum was 1,655 against 1,658 — three milliseconds apart across
+two opposite experiments, which is the signature of a stop that never happened.
+
+The cause was a callback llama.cpp's own header describes as CPU-only. Metal
+implements it, the OpenCL backend did not, and the generic per-backend lookup
+was quietly finding nothing.
+
+**1,425–1,440 ms → 32 ms**, with a p95 of 36 and a worst case of 36 across nine
+runs. That p95 matches the CPU floor's own 36 ms exactly: on this axis the GPU
+is no longer distinguishable from the processor. Stopping mid-answer costs
+**42 ms at the median, 50 at p95**.
+
+Generation pays nothing for it: 16.43 tokens per second before, 16.43 after.
+Prompt processing pays 6–7%.
+
+### The first message stops costing five seconds
+
+Flash Attention was on because nothing had ever chosen it — the setting defaulted
+to automatic and nobody had measured what it did on this chip. Compiling its
+kernels cost **4.7 to 6.6 seconds on the first message of every session**, and
+that cost was invisible because it was being discarded as a warm-up.
+
+With it off on OpenCL targets the first message lands in 1.7 seconds instead of
+6.2, and generation after a long prompt runs roughly **twice as fast**. The same
+sign held on three different model families. Nothing the model says changes: the
+semantic suite reads identically, 7 of 7.
+
+### The GPU is asked to prove itself, once
+
+The engine ships an OpenCL backend now, with Adreno kernels compiled from
+source. But shipping it is not the same as using it, and a GPU is not
+automatically faster than the processor on a phone.
+
+So the app runs one short qualification the first time you pick a local model —
+and it **asks first**, with a plain yes or no and an option never to ask again.
+Saying no is remembered and is not the end of it: there is a command in settings
+to run it later, or to change your mind. Saying no leaves the app exactly as it
+was.
+
+The result is evidence, not an opinion. A backend is chosen only if it beats the
+processor's time-to-first-token by a factor of two — a margin taken from the
+worst case actually measured, 43.2 seconds against 11.0. Without evidence, or
+when the device is running hot, the processor wins by default.
+
+### Under the hood
+
+Every native library in the release build is aligned to 16 KB pages — 75 of 75,
+checked with `llvm-readobj` rather than trusted. The abort fix is carried as a
+patch file rather than a commit in the vendored engine, so a fresh clone still
+builds.
+
+### What this does not do yet
+
+The qualification runs once and records what it saw. It does not re-run when the
+phone gets hotter or colder, and it does not yet compare a third backend.
+
 ## v0.1.16
 
 The Deep Research rework, drawn from the approved mockup and measured on the

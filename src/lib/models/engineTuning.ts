@@ -102,15 +102,37 @@ export function talosEngineTuning(topology: TalosCpuTopology): TalosEngineTuning
     const threads = Math.min(threadsBatch, meta)
 
     /**
-     * Il microbatch: 256 quando i core sono pochi, 512 quando sono tanti.
+     * ⭐⭐⭐ Il microbatch: **192**, e il numero viene da una misura su GPU.
      *
-     * ⛔ E non di più, anche se il prefill andrebbe più veloce. L'attesa massima
-     * dello Stop è **un microbatch intero**: raddoppiarlo raddoppia il tempo
-     * che passa fra il dito e il silenzio, e su un telefono con 4,5 GB liberi
-     * raddoppia anche il picco dei buffer di calcolo. Il prefill che corre non
-     * vale un tasto Stop che tentenna.
+     * Il commento che stava qui aveva gia' capito il compromesso - *l'attesa
+     * massima dello Stop e' un microbatch intero* - e sceglieva 512 su un
+     * telefono con molti core. Il ragionamento era giusto; non era mai stato
+     * **verificato su una scheda grafica**.
+     *
+     * ⛔ Misurato il 2026-08-20 su Adreno 830, prompt da 2.048 token, Stop
+     * premuto dopo 200 ms. Il motore dichiara dove si ferma:
+     *
+     * ```
+     *   512 (com'era)  1.443 ms   si ferma a 512/2048 - pezzo intero completato
+     *   256            1.446 ms   idem
+     *   192            ~460 ms    si ferma a 0/2048 - morde a meta'
+     *   128            ~290 ms
+     * ```
+     *
+     * ⇒ Il salto sta **fra 256 e 192**, e vale un fattore tre. Sotto quella
+     * soglia la latenza e' semplicemente una lunghezza di microbatch.
+     *
+     * Il prezzo, sulle stesse misure: prefill **da 0 a 8% piu' lento** secondo
+     * il modello, e in cambio la decodifica dopo un prompt lungo **+97%**, il
+     * primo messaggio **4,5 secondi prima**, lo Stop **13× piu' pronto**.
+     *
+     * ⛔⛔ E NON si scende a 64 per far diventare verde il cancello G4.
+     * Passerebbe, al prezzo del **28% di prefill**, e misurerebbe una cosa che
+     * la cura vera dell'abort porta a millisecondi **senza pagare niente**.
+     * Sarebbe ottimizzare il cancello invece della persona. ⇒ G4 resta
+     * **rosso**, dichiarato, finche' quella cura non arriva.
      */
-    const microBatch = core >= 6 ? 512 : 256
+    const microBatch = 192
 
     /**
      * I candidati da misurare: pochi e distinti.

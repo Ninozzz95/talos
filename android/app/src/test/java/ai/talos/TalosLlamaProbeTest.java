@@ -80,30 +80,30 @@ public class TalosLlamaProbeTest {
     @Test
     public void aRejectedMeasurementBecomesFailedEvidence() {
         TalosBenchmarkHarness.Result rejected = TalosBenchmarkHarness.judge(
-                new TalosBenchmarkHarness.Sample[0], false);
+                new TalosBenchmarkHarness.Sample[0], false, 900L);
         TalosBackendChoice.Evidence evidence =
                 TalosLlamaProbe.evidenceOf(TalosBackendChoice.VULKAN, "mali-g715/32.1", rejected);
 
         assertEquals(TalosBackendChoice.Outcome.FAILED, evidence.outcome);
-        assertEquals(0.0, evidence.tokensPerSecond, 0.0001);
+        assertEquals(0L, evidence.ttftMs);
         assertEquals("mali-g715/32.1", evidence.driver);
     }
 
-    /** E una accettata porta il ritmo mediano, non quello di punta. */
+    /** E una accettata porta il TTFT misurato, non il ritmo di decodifica. */
     @Test
-    public void anAcceptedMeasurementCarriesItsRate() {
+    public void anAcceptedMeasurementCarriesItsTtft() {
         TalosBenchmarkHarness.Sample[] samples = {
                 new TalosBenchmarkHarness.Sample(0, 0, "none"),
                 new TalosBenchmarkHarness.Sample(1000, 20, "none"),
                 new TalosBenchmarkHarness.Sample(2000, 40, "none"),
                 new TalosBenchmarkHarness.Sample(3000, 60, "none"),
         };
-        TalosBenchmarkHarness.Result accepted = TalosBenchmarkHarness.judge(samples, true);
+        TalosBenchmarkHarness.Result accepted = TalosBenchmarkHarness.judge(samples, true, 1800L);
         assertEquals(TalosBenchmarkHarness.Verdict.VALID, accepted.verdict);
 
         TalosBackendChoice.Evidence evidence =
                 TalosLlamaProbe.evidenceOf(TalosBackendChoice.CPU, "cpu", accepted);
         assertEquals(TalosBackendChoice.Outcome.CORRECT, evidence.outcome);
-        assertEquals(20.0, evidence.tokensPerSecond, 0.0001);
+        assertEquals(1800L, evidence.ttftMs);
     }
 }

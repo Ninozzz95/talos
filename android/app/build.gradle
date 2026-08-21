@@ -124,6 +124,221 @@ android {
                         '-DGGML_CPU_ALL_VARIANTS=ON',
                         '-DGGML_LLAMAFILE=OFF'
                 /*
+                 * ⛔⛔ SOLO RICERCA: `-PtalosResearchBackend=cpu|opencl|vulkan`.
+                 *
+                 * Senza la proprietà non cambia una virgola: la build che
+                 * spediamo resta quella qui sopra. Questa manopola serve a
+                 * QUALIFICARE un acceleratore, e la qualificazione è il lavoro
+                 * in cui «la GPU» non è ancora una risposta.
+                 *
+                 * ⛔ UN BACKEND ALLA VOLTA, e non è pigrizia. Con due
+                 * acceleratori compilati insieme il registro ne elenca due e
+                 * l'ordine di caricamento delle librerie sceglierebbe per noi;
+                 * separarli dà fallimenti isolabili, un artefatto nativo più
+                 * piccolo e un inventario dei dispositivi deterministico. Si
+                 * combinano soltanto DOPO che il targeting esplicito funziona.
+                 *
+                 * ⛔ E i prerequisiti si dicono per NOME. Un `FATAL_ERROR` di
+                 * CMake su un compilatore host mancante manda a cercare il
+                 * guasto dentro llama.cpp, che è il posto sbagliato: manca un
+                 * pezzo di questa macchina, non del progetto.
+                 */
+                if (project.hasProperty('talosResearchBackend')) {
+                    def scelto = project.property('talosResearchBackend').toString().toLowerCase()
+                    def ndkHome = android.ndkDirectory
+                    if (scelto == 'cpu') {
+                        // Esplicito: è già il predefinito, ma dirlo rende
+                        // l'artifact della corsa CPU indistinguibile a occhio da
+                        // quello di un acceleratore spento a mano.
+                        arguments '-DGGML_OPENCL=OFF', '-DGGML_VULKAN=OFF'
+                    } else if (scelto == 'opencl') {
+                        /*
+                         * ⛔ Header OpenCL e ICD loader NON stanno nell'NDK.
+                         * MISURATO il 2026-08-20: `sysroot/usr/include/CL/` non
+                         * esiste. Si passano dall'esterno con
+                         * `-PtalosOpenclRoot=<cartella con CL/ e libOpenCL.so>`.
+                         *
+                         * ⛔ `GGML_OPENCL_PROFILING` resta SPENTA: upstream dice
+                         * che aumenta il costo sulla CPU, e una misura di
+                         * prestazioni presa con la sonda accesa non è quella
+                         * misura.
+                         *
+                         * ⛔ `GGML_OPENCL_USE_ADRENO_BIN_KERNELS` resta SPENTA:
+                         * il pacchetto binario upstream mira alle Adreno X2, e
+                         * questo telefono ha una 830.
+                         */
+                        if (!project.hasProperty('talosOpenclRoot')) {
+                            throw new GradleException(
+                                    "⛔ `-PtalosResearchBackend=opencl` richiede anche " +
+                                    "`-PtalosOpenclRoot=<cartella>`.\n" +
+                                    "   Dentro servono `CL/` (header Khronos) e " +
+                                    "`libOpenCL.so` per arm64.\n" +
+                                    "   L'NDK non li porta: verificato che " +
+                                    "`sysroot/usr/include/CL/` non esiste.")
+                        }
+                        def openclRoot = project.property('talosOpenclRoot').toString()
+                        arguments '-DGGML_OPENCL=ON',
+                                '-DGGML_VULKAN=OFF',
+                                '-DGGML_OPENCL_EMBED_KERNELS=ON',
+                                '-DGGML_OPENCL_USE_ADRENO_KERNELS=ON',
+                                '-DGGML_OPENCL_TARGET_VERSION=300',
+                                "-DOpenCL_INCLUDE_DIR=${openclRoot}/include".toString(),
+                                "-DOpenCL_LIBRARY=${openclRoot}/lib/libOpenCL.so".toString()
+                    } else if (scelto == 'vulkan') {
+                        /*
+                         * ⛔⛔ IL COMPILATORE È DUE, e confonderli è un errore di
+                         * sistema di build, non un guasto di Vulkan a runtime.
+                         *
+                         * `vulkan-shaders-gen` gira su QUESTO computer e genera
+                         * gli shader; `ggml-vulkan` viene compilato per il
+                         * telefono. Il CMake di upstream cerca il compilatore
+                         * host con `find_program(NAMES cl gcc clang)` e, se non
+                         * lo trova, si ferma con «Host compiler not found».
+                         *
+                         * MISURATO il 2026-08-20 su questa macchina: cl, gcc,
+                         * clang e g++ sono TUTTI assenti, e la cartella di
+                         * Visual Studio 18 è vuota. ⇒ La corsia Vulkan è
+                         * bloccata da un prerequisito della macchina, non dal
+                         * progetto — e il messaggio lo deve dire.
+                         *
+                         * ⛔ `glslc` invece c'è, dentro l'NDK, e va indicato: il
+                         * `find_package(Vulkan COMPONENTS glslc REQUIRED)` di
+                         * upstream non guarda in `shader-tools/`.
+                         */
+                        def finestre = org.gradle.internal.os.OperatingSystem.current().isWindows()
+                        def glslc = new File(ndkHome,
+                                "shader-tools/${finestre ? 'windows-x86_64/glslc.exe'
+                                        : 'linux-x86_64/glslc'}")
+
+                        /*
+                         * ⛔⛔ I PREREQUISITI SI CONTANO TUTTI IN UNA VOLTA.
+                         *
+                         * MISURATO il 2026-08-20: senza questo blocco la corsa
+                         * moriva su SPIRV-Headers dentro venti righe di CMake,
+                         * e il compilatore host — che manca ANCHE lui — si
+                         * sarebbe scoperto solo al giro dopo. Scoprire un
+                         * prerequisito per volta costa una compilazione a testa,
+                         * e ognuna finisce con un errore che parla di un'altra
+                         * cosa.
+                         */
+                        def mancanti = []
+                        if (!glslc.exists()) {
+                            mancanti << "glslc — atteso in ${glslc}, di norma arriva con l'NDK"
+                        }
+                        if (!project.hasProperty('talosSpirvHeaders')) {
+                            mancanti << "SPIRV-Headers — `-PtalosSpirvHeaders=<cartella con " +
+                                    "SPIRV-HeadersConfig.cmake>`. ⛔ Il clone non basta: " +
+                                    "quel file nasce dall'installazione " +
+                                    "(`cmake --install`), e `find_package` cerca lui"
+                        }
+                        /*
+                         * ⛔ `vulkan.hpp` NON è nell'NDK, e `vulkan.h` sì.
+                         *
+                         * MISURATO il 2026-08-20: con SPIRV-Headers e il
+                         * compilatore host a posto, la compilazione arrivava
+                         * fino a
+                         *
+                         *   ggml-vulkan.cpp:22:10: fatal error:
+                         *     'vulkan/vulkan.hpp' file not found
+                         *
+                         * L'NDK porta l'intestazione C e la `libvulkan.so`, ma i
+                         * binding C++ di Khronos stanno in un repository a
+                         * parte. ⛔ La versione va fatta combaciare con quella
+                         * del loader — qui 1.3.275, come dice `find_package`.
+                         */
+                        if (!project.hasProperty('talosVulkanHeaders')) {
+                            mancanti << "Vulkan-Hpp — `-PtalosVulkanHeaders=<cartella include>` " +
+                                    "da github.com/KhronosGroup/Vulkan-Headers, al tag che " +
+                                    "combacia col loader dell'NDK. L'NDK porta `vulkan.h`, " +
+                                    "non `vulkan.hpp`"
+                        }
+                        /*
+                         * ⛔ IL COMPILATORE È DUE, e confonderli è un errore di
+                         * sistema di build, non un guasto di Vulkan a runtime.
+                         *
+                         * `vulkan-shaders-gen` gira su QUESTO computer e genera
+                         * gli shader; `ggml-vulkan` viene compilato per il
+                         * telefono. Upstream cerca l'host con
+                         * `find_program(NAMES cl gcc clang)` e si ferma con
+                         * «Host compiler not found».
+                         */
+                        if (!project.hasProperty('talosVulkanHostToolchain')) {
+                            def trovato = ['cl', 'gcc', 'clang', 'g++', 'clang++'].find { nome ->
+                                System.getenv('PATH')?.split(File.pathSeparator)?.any { cartella ->
+                                    new File(cartella, finestre ? "${nome}.exe" : nome).exists()
+                                }
+                            }
+                            if (trovato == null) {
+                                mancanti << "un compilatore C++ per QUESTA macchina (cl, gcc o " +
+                                        "clang sul PATH) — serve a costruire `vulkan-shaders-gen`, " +
+                                        "che gira qui e non sul telefono. In alternativa " +
+                                        "`-PtalosVulkanHostToolchain=<file toolchain CMake>`"
+                            }
+                        }
+                        if (!mancanti.isEmpty()) {
+                            throw new GradleException(
+                                    "⛔ La corsia Vulkan è BLOCCATA da prerequisiti di questa " +
+                                    "macchina, non dal progetto.\n   Mancano:\n" +
+                                    mancanti.collect { "     · ${it}" }.join('\n'))
+                        }
+
+                        arguments '-DGGML_VULKAN=ON',
+                                '-DGGML_OPENCL=OFF',
+                                "-DVulkan_GLSLC_EXECUTABLE=${glslc.absolutePath.replace('\\', '/')}".toString(),
+                                "-DSPIRV-Headers_DIR=" +
+                                        project.property('talosSpirvHeaders').toString()
+                                                .replace('\\', '/'),
+                                // ⛔ Solo gli header: la `libvulkan.so` resta
+                                // quella dell'NDK, che è la stessa che il
+                                // telefono ha. Sostituire anche quella
+                                // significherebbe linkare contro una libreria
+                                // che sul dispositivo non c'è.
+                                "-DVulkan_INCLUDE_DIR=" +
+                                        project.property('talosVulkanHeaders').toString()
+                                                .replace('\\', '/'),
+                                /*
+                                 * ⛔⛔ LO STUB DELL'API 28, NON QUELLO DI minSdk.
+                                 *
+                                 * MISURATO il 2026-08-20: con lo stub del
+                                 * livello 26 — che è il nostro minSdk — il
+                                 * collegamento moriva con
+                                 *
+                                 *   ld.lld: error: undefined symbol:
+                                 *     vkGetPhysicalDeviceFeatures2
+                                 *
+                                 * `vkGetPhysicalDeviceFeatures2` è Vulkan 1.1, e
+                                 * l'NDK lo espone a partire dall'API 28.
+                                 * Verificato livello per livello con
+                                 * `llvm-readelf --dyn-syms`: 26 → no, 27 → no,
+                                 * 28 → sì.
+                                 *
+                                 * ⛔ E QUESTO È IL MOTIVO PER CUI LA CORSIA
+                                 * VULKAN NON SI PUÒ PROMUOVERE COSÌ COM'È: una
+                                 * `libggml-vulkan.so` legata a quei simboli non
+                                 * si carica su Android 8 e 8.1, che il nostro
+                                 * `minSdk 26` ammette. Per la ricerca va bene —
+                                 * il Pad è Android 16 — ma una promozione
+                                 * richiederebbe o alzare minSdk, o il carico
+                                 * dinamico dei simboli, e sono due decisioni di
+                                 * prodotto, non di build.
+                                 */
+                                "-DVulkan_LIBRARY=" + new File(ndkHome,
+                                        "toolchains/llvm/prebuilt/" +
+                                        (finestre ? "windows-x86_64" : "linux-x86_64") +
+                                        "/sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so")
+                                        .absolutePath.replace('\\', '/')
+                        if (project.hasProperty('talosVulkanHostToolchain')) {
+                            arguments "-DGGML_VULKAN_SHADERS_GEN_TOOLCHAIN=" +
+                                    project.property('talosVulkanHostToolchain').toString()
+                        }
+                    } else {
+                        throw new GradleException(
+                                "⛔ `-PtalosResearchBackend=${scelto}` non è una scelta valida.\n" +
+                                "   Le tre sono: cpu, opencl, vulkan — una alla volta.")
+                    }
+                    println "⛔ BUILD DI RICERCA: backend `${scelto}`. Non è la build che si spedisce."
+                }
+                /*
                  * ⛔⛔⛔ HWASAN, SOLO A RICHIESTA: `-PtalosHwasan`.
                  *
                  * I test in Java provano che nessuno PUÒ arrivare al codice
@@ -307,6 +522,38 @@ android {
             if (firmaDisponibile) {
                 signingConfig signingConfigs.rilascio
             }
+            /*
+             * ⛔⛔ FASE 7(a) — qui, non nel `defaultConfig` sopra: solo la
+             * build di RILASCIO porta GGML_OPENCL. Il debug resta come prima
+             * — CPU, a meno che una persona non chieda un backend con
+             * `-PtalosResearchBackend` per qualificarlo — perché quella
+             * manopola serve a isolare i fallimenti UN backend alla volta, e
+             * un default che l'accende ovunque la spegnerebbe.
+             *
+             * Se qualcuno passa `-PtalosResearchBackend` insieme a
+             * `assembleRelease` vince la sua richiesta esplicita, non questo
+             * default: altrimenti "un backend alla volta" varrebbe per il
+             * debug e non per il rilascio, che è il posto dove conta di più.
+             */
+            if (!project.hasProperty('talosResearchBackend')) {
+                def headerOpencl = file('../../third_party/opencl-headers')
+                def libreriaOpencl = file("${buildDir}/opencl-icd-loader/libOpenCL.so")
+                externalNativeBuild {
+                    cmake {
+                        arguments '-DGGML_OPENCL=ON',
+                                '-DGGML_VULKAN=OFF',
+                                // Stesse impostazioni già qualificate nel ramo di
+                                // ricerca (§DECISIONE-0.1.17.md): profiling e i
+                                // kernel binari Adreno restano spenti per la
+                                // stessa ragione misurata lì.
+                                '-DGGML_OPENCL_EMBED_KERNELS=ON',
+                                '-DGGML_OPENCL_USE_ADRENO_KERNELS=ON',
+                                '-DGGML_OPENCL_TARGET_VERSION=300',
+                                "-DOpenCL_INCLUDE_DIR=${headerOpencl.path}",
+                                "-DOpenCL_LIBRARY=${libreriaOpencl.path}"
+                    }
+                }
+            }
         }
     }
     externalNativeBuild {
@@ -348,6 +595,45 @@ android {
             // che fa girare l'app anche sui telefoni vecchi che minSdk 26
             // ammette.
             useLegacyPackaging = true
+
+            /*
+             * ⛔⛔ LA `libOpenCL.so` DEL TELEFONO NON SI SPEDISCE — e non è una
+             * questione di licenza soltanto: non funzionerebbe.
+             *
+             * MISURATO il 2026-08-20 sul Pad, ed è costato un giro intero.
+             * Compilando con `-PtalosResearchBackend=opencl`, CMake copia nella
+             * cartella di uscita la libreria contro cui ha linkato, e AGP la
+             * impacchetta. Sul telefono l'esito era:
+             *
+             *   libggml-opencl.so  3.198.104 B  presente nella cartella nativa
+             *   backend registrati: 1                        ← solo la CPU
+             *
+             * Cioè: la libreria c'era e non si apriva, senza un errore che lo
+             * dicesse. La causa sta nelle sue dipendenze —
+             *
+             *   libOpenCL.so (vendor) NEEDED → liblog, libcutils, libc++, ...
+             *
+             * — e `libcutils.so` e `libc++.so` un'applicazione NON può
+             * caricarle: vivono nello spazio dei nomi del vendor. La copia
+             * dentro l'app OSCURA quella di sistema, fallisce l'apertura, e con
+             * lei fallisce silenziosamente `libggml-opencl.so`.
+             *
+             * ⇒ Non serve spedirla. Questo Android dichiara `libOpenCL.so` fra
+             * le VENDOR PUBLIC LIBRARIES — letto in logcat:
+             *
+             *   InitVendorPublicLibraries: … libfastcvopt.so:libOpenCL.so:…
+             *
+             * quindi l'app può caricare quella di sistema, che risolve le
+             * proprie dipendenze dove esse vivono. Si linka contro una copia in
+             * fase di build, e a runtime si usa la sua.
+             *
+             * ⛔ Non vale più solo per la build di ricerca. Da Fase 7(a) la
+             * build di RILASCIO linka anche lei contro uno stub (l'ICD loader
+             * compilato da `costruisciOpenclIcdLoader`, non un binario di
+             * ricerca) — la stessa ragione vale identica: si linka a build
+             * time, si usa quella di sistema a runtime, mai la propria.
+             */
+            excludes += '**/libOpenCL.so'
         }
     }
 }
@@ -457,6 +743,103 @@ import java.security.MessageDigest
 
 static String improntaDi(byte[] dati) {
     return MessageDigest.getInstance('SHA-256').digest(dati).encodeHex().toString()
+}
+
+/**
+ * ⛔⛔ FASE 7(a) — la libreria GPU nella build di RILASCIO, non solo nella
+ * ricerca.
+ *
+ * Fino a qui `-PtalosResearchBackend=opencl` andava accoppiato a
+ * `-PtalosOpenclRoot=<cartella>`, e quella cartella la costruiva una persona
+ * a mano: header Khronos e un `libOpenCL.so` pescati da qualche parte —
+ * misurato il 21/8, dal vendor di UN telefono. Buono per qualificare un
+ * backend su UN dispositivo, sbagliato per una build che milioni di
+ * telefoni diversi installeranno: legare l'artefatto a un binario di un
+ * chip preciso non è quello che serve, perché il driver VERO si carica a
+ * runtime sul telefono della persona, non a build time sul runner.
+ *
+ * ⇒ Questo task compila lo stesso stub che ogni sistema Linux con OpenCL usa
+ * per il *linking* — l'ICD loader di Khronos, la stessa ABI che `libOpenCL.so`
+ * espone ovunque — da un submodule vendorizzato
+ * (`third_party/opencl-icd-loader`, pin `v2024.10.24`) contro gli header
+ * vendorizzati (`third_party/opencl-headers`, pin `v2026.05.29`). Nessun
+ * binario committato: si compila da sorgente ad ogni corsa, con lo stesso NDK
+ * che compila llama.cpp — coerente con F-01/F-02, niente di non verificabile
+ * nella catena di rilascio.
+ */
+tasks.register('costruisciOpenclIcdLoader') {
+    description = 'Compila l\'ICD loader OpenCL dai submodule vendorizzati, per la build di rilascio'
+
+    def sorgente = file('../../third_party/opencl-icd-loader')
+    def header = file('../../third_party/opencl-headers')
+    def cartellaBuild = file("${buildDir}/opencl-icd-loader")
+    def libreria = file("${cartellaBuild}/libOpenCL.so")
+
+    inputs.dir sorgente
+    inputs.dir header
+    outputs.file libreria
+
+    doLast {
+        if (!file("${sorgente}/CMakeLists.txt").exists()) {
+            throw new GradleException(
+                    "Manca ${sorgente}/CMakeLists.txt: il submodule opencl-icd-loader non e' " +
+                            "inizializzato.\n   git submodule update --init mobile/third_party/opencl-icd-loader")
+        }
+        if (!file("${header}/CL/cl.h").exists()) {
+            throw new GradleException(
+                    "Manca ${header}/CL/cl.h: il submodule opencl-headers non e' inizializzato.\n" +
+                            "   git submodule update --init mobile/third_party/opencl-headers")
+        }
+
+        // ⛔ Stessa regola di "il gestore si cerca, non si assume" già scritta
+        // per l'NDK nel workflow di rilascio: il pacchetto cmake dell'SDK vive
+        // sotto una cartella con la VERSIONE nel nome, e quella versione non è
+        // la stessa su ogni macchina. Si prende la più recente installata.
+        def radiceCmake = new File(android.sdkDirectory, 'cmake')
+        def versioni = radiceCmake.exists() ? radiceCmake.listFiles({ f -> f.isDirectory() } as FileFilter) : null
+        def cartellaCmake = versioni ? versioni.sort { it.name }.last() : null
+        if (cartellaCmake == null) {
+            throw new GradleException(
+                    "Nessun pacchetto cmake sotto ${radiceCmake}: 'sdkmanager \"cmake;<versione>\"' prima " +
+                            "di questo task.")
+        }
+        def binCmake = new File(cartellaCmake, 'bin')
+        def eseguibileCmake = new File(binCmake, 'cmake.exe').exists() ? new File(binCmake, 'cmake.exe') : new File(binCmake, 'cmake')
+        def eseguibileNinja = new File(binCmake, 'ninja.exe').exists() ? new File(binCmake, 'ninja.exe') : new File(binCmake, 'ninja')
+        if (!eseguibileCmake.exists() || !eseguibileNinja.exists()) {
+            throw new GradleException("cmake o ninja non trovati sotto ${binCmake}.")
+        }
+
+        def toolchain = new File(android.ndkDirectory, 'build/cmake/android.toolchain.cmake')
+        if (!toolchain.exists()) {
+            throw new GradleException("Toolchain NDK non trovata: ${toolchain}")
+        }
+
+        exec {
+            commandLine eseguibileCmake.path, '-G', 'Ninja', '-B', cartellaBuild.path, '-S', sorgente.path,
+                    "-DCMAKE_MAKE_PROGRAM=${eseguibileNinja.path}",
+                    "-DCMAKE_TOOLCHAIN_FILE=${toolchain.path}",
+                    '-DANDROID_ABI=arm64-v8a',
+                    '-DANDROID_PLATFORM=android-26',
+                    "-DOPENCL_ICD_LOADER_HEADERS_DIR=${header.path}",
+                    '-DOPENCL_ICD_LOADER_BUILD_SHARED_LIBS=ON',
+                    '-DOPENCL_ICD_LOADER_BUILD_TESTING=OFF',
+                    '-DCMAKE_BUILD_TYPE=Release'
+        }
+        exec {
+            commandLine eseguibileCmake.path, '--build', cartellaBuild.path, '--target', 'OpenCL'
+        }
+
+        if (!libreria.exists()) {
+            throw new GradleException("La build dell'ICD loader non ha prodotto ${libreria}.")
+        }
+    }
+}
+
+// Deve finire PRIMA che CMake configuri la release: gli argomenti qui sotto
+// le puntano dritto all'artefatto di questo task.
+tasks.matching { it.name.startsWith('configureCMakeRelease') }.configureEach {
+    dependsOn 'costruisciOpenclIcdLoader'
 }
 
 tasks.register('preparaPonteAdb') {

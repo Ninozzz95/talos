@@ -543,6 +543,51 @@ export const TALOS_EN_MESSAGES = {
                 purpose: 'A model downloaded onto this phone answers without the network. What you write to it never leaves the device — not to us, not to anyone — and it keeps working with the phone in flight mode.',
             },
         },
+        /**
+         * Not an Android permission — TALOS asking to spend something it
+         * already has (battery, heat) on a real generation, to find out
+         * whether this phone's GPU is worth using for local models. Its own
+         * three states, deliberately not reusing `states.*`: "declined" here
+         * is a reversible choice with an explanation, not a blocked system
+         * dialog.
+         */
+        localEngineProbe: {
+            title: 'On-device GPU check',
+            purpose: 'A short, real generation on CPU and GPU, to find out whether this phone speeds up local models on its GPU. Costs battery and a bit of heat, runs once and remembers the answer, and never starts on its own.',
+            /**
+             * ⛔⛔ MISURATO sul Pad il 21/8, a larghezza telefono (1080px):
+             * `declined` era una frase intera ficcata nel badge di stato —
+             * l'unica riga di questa pagina a farlo, contro `Allowed` /
+             * `Blocked` / `Not requested` di ogni riga sorella — e andava a
+             * capo su due righe scontrandosi col titolo. Corto qui, come le
+             * altre; la rassicurazione vive nel corpo, in `declinedNote`.
+             */
+            states: {
+                unset: 'Not asked yet',
+                granted: 'Allowed',
+                declined: 'Turned off',
+            },
+            /** Sotto il testo dello scopo, SOLO quando `declined` — vedi `states` qui sopra. */
+            declinedNote: 'You can still run it from here whenever you want.',
+            runNow: 'Run it now',
+            running: 'Running…',
+            noModel: 'Download a local model first — there is nothing to check yet.',
+            /** `{backend}` is already the human word ('CPU' or 'GPU'), decided by `talosBackendLabel`. */
+            resultRan: 'Done. This phone answers local models fastest on the {backend}.',
+            resultInconclusive: 'That run was not steady enough to trust — you can try again.',
+            resultNotRun: {
+                hot: 'Skipped — the phone is too warm right now. Try again once it has cooled down.',
+                alreadyProven: 'Nothing to check — already measured on this phone.',
+            },
+            modal: {
+                title: 'Check this phone’s GPU?',
+                body: 'TALOS can run a short, real generation on CPU and GPU to see whether this phone answers local models faster on its GPU. It costs battery and a bit of heat, and only happens once — the answer is kept. It never runs on its own after this.',
+                yes: 'Yes, check now',
+                no: 'Not now',
+                dontAskAgain: 'Don’t ask again',
+                dontAskAgainHint: 'You can still run it any time from Settings → Privacy and permissions.',
+            },
+        },
     },
     chat: {
         plan: {
@@ -941,6 +986,7 @@ export const TALOS_EN_MESSAGES = {
         toolAuthorizationPendingMany: '{count} tool authorization requests are waiting. You can keep chatting.',
         toolAuthorizationSettled: 'That authorization request has been handled.',
         emptyAnswerAfterTools: 'The tools ran ({count}), but the model wrote no answer. Try asking again, or with a different model.',
+        toolCallMissed: 'The model asked for a tool that does not exist here, so nothing was done. This model may not be able to call tools at all: Doctor says which ones can.',
         libraryAnswerGuardAbstention: 'I could not produce a reliable answer that stayed on the current conversation topic. Please rephrase the question or name the source to use.',
         composerPreferencesSaveFailed: 'TALOS could not save composer preferences. {detail}',
         selectModelBeforeSending: 'Select a model before sending.',
@@ -2731,6 +2777,7 @@ export const TALOS_EN_MESSAGES = {
         engineReuse: 'Prefix reused',
         engineCpu: 'CPU',
         engineInstalled: 'Models on device',
+        engineTools: 'Assistant tools with this model',
         nativePlatform: 'native ({platform})',
         webPreview: 'web preview',
         storageNative: 'SQLCipher native',

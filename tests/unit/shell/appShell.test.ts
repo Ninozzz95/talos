@@ -90,6 +90,9 @@ function makeController() {
         pendingToolAuthorizations: ref([]),
         toolAuthorizationRecoveries: ref([]),
         toolAuthorizationPromptVisible: ref(false),
+        // §1-bis: null vuol dire «niente da chiedere», lo stato normale.
+        pendingLocalEngineProbeConsent: ref(null),
+        decideLocalEngineProbeConsent: vi.fn(),
         // B2 — il piano: assente vuol dire «nessun piano in attesa», ed è lo
         // stato normale. La scheda ha la precedenza su quella del singolo
         // tool, quindi senza questa riga la finta si comporta come se ce ne
