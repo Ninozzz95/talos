@@ -43,6 +43,129 @@
 
 ---
 
+## ✅ SECONDA RISPOSTA — il microbatch, 2026-08-21
+
+> Tu chiedi: **192 o 512**, prima di spendere ore a rifare le misure.
+> **512.** Ma non per la ragione che hai dato — quella non regge, e va detta.
+
+### ⛔ Il confronto era contro una build che non spedisce
+
+Hai scritto: *«a microbatch 512 il prefill va meglio (298→291-312 tok/s a
+seconda del confronto)»*. Ho messo in fila i numeri dei tuoi due documenti:
+
+| configurazione | prefill 512 | prefill 2048 | Stop | da dove |
+|---|---:|---:|---:|---|
+| `on / 512` — la produzione di **ieri** | 314,3 | 259,6 | 5.926 ms | dec. 2 |
+| `off / 192` — la produzione di **oggi**, senza cura | **298,1** | 257,6 | ~460 ms | dec. 2 |
+| `off / 512` **senza cura** — ⛔ non spedirà mai | 311,8 | 265,4 | 1.425-1.440 | dec. 3 |
+| `off / 512` **con la cura** — candidata | **290,7** | **249,5** | **32/36/36** | dec. 3 |
+| `off / 192` **con la cura** — l'altra candidata | ⛔ **mai misurata** | ⛔ | ⛔ | — |
+
+Il **312** è la riga «senza cura»: è il riferimento giusto per misurare **il
+prezzo della cura**, e lì l'hai usato bene. ⛔ Ma nel confronto fra microbatch
+diventa un fantasma: quella build non esce. Le candidate vere sono le ultime
+due, e fra loro **512 sta a 290,7 contro i 298,1 di 192**.
+
+⇒ **Sui numeri che hai, 192 è più veloce di 512, non più lento.** E la riga che
+deciderebbe — `off / 192` **con la cura** — non l'ha mai misurata nessuno.
+
+### ⭐ Perché la risposta resta 512, per una ragione più forte
+
+Il costo della cura è **per grafo**, non per token: il drain scatta ogni 16
+nodi, e ogni microbatch è **un grafo**. ⇒ Dimezzare il microbatch **moltiplica**
+il prezzo della cura, perché moltiplica i grafi.
+
+Il numero si ricava dai tuoi stessi dati, **e torna due volte**:
+
+| prompt | grafi a 512 | tempo senza cura | tempo con cura | costo **per grafo** |
+|---:|---:|---:|---:|---:|
+| 512 token | 1 | 1,642 s | 1,762 s | **0,1193 s** |
+| 2.048 token | 4 | 7,716 s | 8,209 s | **0,1233 s** |
+
+⭐ Ricavato da due prompt diversi, lo stesso numero al **3%**. Il modello «costa
+per grafo» non è un'ipotesi: i tuoi dati lo confermano da soli.
+
+⇒ **Previsione falsificabile** per `off / 192` con la cura:
+
+| | 192 + cura (previsto) | 512 + cura (misurato) |
+|---|---:|---:|
+| prefill 512 (3 grafi invece di 1) | **≈ 247 tok/s** | 290,7 |
+| prefill 2048 (11 grafi invece di 4) | **≈ 220 tok/s** | 249,5 |
+
+⇒ 512 vince del **17%** e del **13%**. ⛔ Ma è **una previsione, non una
+misura**: la regola di casa dice che si strumenta sempre.
+
+### ⇒ COSA FARE, nell'ordine
+
+**1 · Misura `192 + cura`. UNA configurazione, ~20 minuti.** Non ore.
+Se il prefill cade verso 247/220, 512 è deciso **da una misura** e non da un
+argomento. Se invece resta sopra 290, la mia previsione è sbagliata, il modello
+«per grafo» va buttato, e ne riparliamo con i numeri in mano.
+⛔ È il passo che va **prima** della rimisura completa: rifare la matrice C0
+nella configurazione sbagliata è precisamente l'errore che il tuo §9 voleva
+evitare.
+
+**2 · Poi la rimisura completa**, nella vincitrice.
+
+### ⛔ Le due ragioni per tenere 192 non reggono
+
+**«TTFT».** TTFT è prefill intero + primo token. Un microbatch più piccolo non
+accorcia il prefill — con la cura lo **allunga**. I **−4,5 s sul primo
+messaggio** della decisione 2 sono della **Flash Attention spenta**, non del
+microbatch: misurati da soli, valgono −4,7…−6,6 s, e restano in tutti e due i
+casi. ⇒ Su TTFT, 192 **peggiora**.
+
+**«Lo Stop».** Era l'unica ragione per cui 192 esisteva, e la tua decisione 3
+l'ha risolta a 512: **32/36/36 ms**, identico al pavimento CPU. Un'eccezione
+comprata per un problema che adesso ha una cura migliore **si restituisce**.
+
+### ⭐ E una ragione in più, che nessuno ha citato
+
+`const microBatch = 192` è **una costante scritta a mano**. Quello che ha
+sostituito, `core >= 6 ? 512 : 256`, **si adattava al telefono** — e i telefoni
+deboli prendevano 256, non 512. Il 192 piatto li ha peggiorati tutti insieme.
+⇒ Tornare alla formula non è «tornare indietro»: è tornare a qualcosa che
+**misura il dispositivo** invece di indovinarlo. La regola di casa è
+`nothing-hardcoded-must-adapt`.
+
+⛔ L'unico asse su cui 192 potrebbe vincere davvero è la **memoria**: il
+microbatch dimensiona il compute buffer. Si legge **gratis** dal log di
+caricamento del modello, due volte. Se a 512 il buffer stringe i telefoni
+piccoli, la formula lo gestisce già da sé — e la risposta resta la formula, non
+il 192 piatto.
+
+---
+
+## ⛔⛔ E il metro che manca alla rimisura — prima di spendere le ore
+
+La tua forbice **291-312** non è rumore di misura: è **il chip che oscilla**.
+È già in memoria, misurato: *«Sotto carico non CALA: OSCILLA — 19,3 ↔ 13,6
+tok/s, 9 salti in 10 minuti, 55,7% in basso. Né `thermal` né la batteria lo
+vedono.»* Un'escursione del ±17% sulla decodifica: una forbice del 3,5% sul
+prefill ci sta **dentro tutta**.
+
+⇒ Se rifai la matrice C0 senza registrare lo stato termico, i numeri diranno
+**quando** hai misurato, non **cosa**. E sono ore.
+
+**Il segnale c'è, ed è leggibile.** Misurato oggi sul Pad: **121 zone termiche**,
+di cui **otto per la GPU** (`gpuss-0…7`) e i cluster CPU (`cpuss-*`). A riposo
+la GPU sta a **37,4 °C**, piatta.
+
+⭐ **Lo strumento è già scritto e provato**, host-side, orologio monotono, uscita
+TSV da incollare accanto ai tok/s:
+
+```
+.claude/strumenti/termica.mjs   node .claude/strumenti/termica.mjs [secondi] [passo-ms]
+ms   gpu_max  gpu_med  cpu_max   + una colonna per zona
+```
+
+⛔ Un fatto misurato che va saputo: **ogni campione costa ~2,3 s** di andata e
+ritorno `adb`, non il passo richiesto. Per nove salti in dieci minuti basta e
+avanza; per finestre più fini no.
+
+⇒ Fallo girare **accanto** alla rimisura e stratifica per banda. Ore che
+producono numeri difendibili, invece di ore che producono una media.
+
 ## ⛔⛔ AVVISO — le decisioni 1 e 2 RISULTANO GIÀ APPLICATE nel ramo
 
 Scritto il **2026-08-21 alle 00:05**, dopo aver consegnato questo documento.
