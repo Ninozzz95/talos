@@ -24,10 +24,16 @@ const { t } = useTalosI18n()
 </script>
 
 <template>
+    <!-- ⛔ MISURATO sul Pad il 21/8: `TalosMobileConfirmDialog` disegna dentro
+         un `<Teleport>`, e Vue non fa passare gli attributi di ricaduta
+         attraverso una radice `<Teleport>` — un `data-testid` passato qui non
+         arriva MAI a schermo. Lo stesso vale già per `TalosMobileDeleteChatDialog`,
+         che infatti non lo passa: il testid condiviso `talos-confirm-dialog`
+         (fisso dentro il componente) più i testid propri di ogni pulsante
+         sono l'unica via reale per trovare questa scheda da un test. -->
     <TalosMobileConfirmDialog
         :title="t('privacyPermissions.localEngineProbe.modal.title')"
         :description="t('privacyPermissions.localEngineProbe.modal.body')"
-        data-testid="talos-local-engine-probe-consent"
         @close="emit('decide', 'dismissed')"
     >
         <button

@@ -553,8 +553,9 @@ export const TALOS_IT_MESSAGES = {
             states: {
                 unset: 'Non ancora chiesto',
                 granted: 'Consentito',
-                declined: 'Disattivato — puoi farlo girare da qui quando vuoi',
+                declined: 'Disattivato',
             },
+            declinedNote: 'Puoi comunque farlo girare da qui quando vuoi.',
             runNow: 'Fallo girare ora',
             running: 'In corso…',
             noModel: 'Scarica prima un modello locale — non c\'è ancora niente da verificare.',

@@ -386,6 +386,13 @@ async function runLocalEngineProbeFromSettings(): Promise<void> {
             </div>
 
             <p class="mt-1.5 text-xs leading-5 text-[var(--talos-muted)]">{{ t('privacyPermissions.localEngineProbe.purpose') }}</p>
+            <!-- §1-bis: «non mostrare più» non è un no mascherato, e lo dice
+                 QUI — non nel badge di stato, che a larghezza telefono andava
+                 a capo sopra il titolo (misurato sul Pad il 21/8). -->
+            <p
+                v-if="localEngineProbeConsent === 'declined'"
+                class="mt-1 text-xs leading-5 text-[var(--talos-muted)]"
+            >{{ t('privacyPermissions.localEngineProbe.declinedNote') }}</p>
 
             <!-- L'esito dell'ULTIMA corsa in questa sessione — mai «fatto» e
                  basta, vedi §1-bis: «la scheda deve mostrare stato e comando». -->

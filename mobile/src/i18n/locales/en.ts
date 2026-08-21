@@ -554,11 +554,21 @@ export const TALOS_EN_MESSAGES = {
         localEngineProbe: {
             title: 'On-device GPU check',
             purpose: 'A short, real generation on CPU and GPU, to find out whether this phone speeds up local models on its GPU. Costs battery and a bit of heat, runs once and remembers the answer, and never starts on its own.',
+            /**
+             * ⛔⛔ MISURATO sul Pad il 21/8, a larghezza telefono (1080px):
+             * `declined` era una frase intera ficcata nel badge di stato —
+             * l'unica riga di questa pagina a farlo, contro `Allowed` /
+             * `Blocked` / `Not requested` di ogni riga sorella — e andava a
+             * capo su due righe scontrandosi col titolo. Corto qui, come le
+             * altre; la rassicurazione vive nel corpo, in `declinedNote`.
+             */
             states: {
                 unset: 'Not asked yet',
                 granted: 'Allowed',
-                declined: 'Turned off — you can run it from here whenever you want',
+                declined: 'Turned off',
             },
+            /** Sotto il testo dello scopo, SOLO quando `declined` — vedi `states` qui sopra. */
+            declinedNote: 'You can still run it from here whenever you want.',
             runNow: 'Run it now',
             running: 'Running…',
             noModel: 'Download a local model first — there is nothing to check yet.',
