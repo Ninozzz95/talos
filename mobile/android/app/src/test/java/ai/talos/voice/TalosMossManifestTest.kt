@@ -118,7 +118,7 @@ class TalosMossManifestTest {
             JSONObject(
                 """
                 {
-                  "files": {"decode_full": "moss_audio_tokenizer_decode_full.onnx", "decode_step": "moss_audio_tokenizer_decode_step.onnx"},
+                  "files": {"decode_full": "moss_audio_tokenizer_decode_full.onnx", "decode_step": "moss_audio_tokenizer_decode_step.onnx", "encode": "moss_audio_tokenizer_encode.onnx"},
                   "codec_config": {"sample_rate": 48000, "channels": 2, "num_quantizers": 16},
                   "streaming_decode": {
                     "transformer_offsets": [
@@ -139,6 +139,7 @@ class TalosMossManifestTest {
         )
         assertEquals("moss_audio_tokenizer_decode_full.onnx", codecMeta.decodeFullFile)
         assertEquals("moss_audio_tokenizer_decode_step.onnx", codecMeta.decodeStepFile)
+        assertEquals("moss_audio_tokenizer_encode.onnx", codecMeta.encodeFile)
         assertEquals(48000, codecMeta.sampleRate)
         assertEquals(2, codecMeta.channels)
         assertEquals(16, codecMeta.numQuantizers)
@@ -157,7 +158,7 @@ class TalosMossManifestTest {
         // an older format) must not throw - just carry no streaming spec.
         val codecMeta = TalosMossCodecMeta.fromJson(
             JSONObject(
-                """{"files": {"decode_full": "a.onnx", "decode_step": "b.onnx"}, "codec_config": {"sample_rate": 48000, "channels": 1, "num_quantizers": 8}}""",
+                """{"files": {"decode_full": "a.onnx", "decode_step": "b.onnx", "encode": "c.onnx"}, "codec_config": {"sample_rate": 48000, "channels": 1, "num_quantizers": 8}}""",
             ),
         )
         assertTrue(codecMeta.streamingTransformerOffsets.isEmpty())

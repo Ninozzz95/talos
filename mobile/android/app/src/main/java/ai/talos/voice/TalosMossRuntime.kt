@@ -47,6 +47,7 @@ internal class TalosMossRuntime private constructor(
     private val localFixedFrameSession: OrtSession,
     private val codecDecodeSession: OrtSession,
     private val codecDecodeStepSession: OrtSession,
+    private val codecEncodeSession: OrtSession,
     private val manifest: TalosMossManifest,
     private val ttsMeta: TalosMossTtsMeta,
     private val codecMeta: TalosMossCodecMeta,
@@ -102,9 +103,27 @@ internal class TalosMossRuntime private constructor(
         seed: Long = System.nanoTime(),
         isCancelled: () -> Boolean = { false },
         onFrame: (IntArray) -> Unit = {},
+    ): Pair<List<IntArray>, Boolean> = generateAudioTokensWithReference(
+        textTokenIds, selectBuiltinVoicePromptAudioCodes(voice), maxFrames, seed, isCancelled, onFrame,
+    )
+
+    /**
+     * Same as [generateAudioTokens], for an enrolled personal voice instead
+     * of a builtin one - `promptAudioCodes` is exactly the shape
+     * [TalosMossManifest.BuiltinVoice.promptAudioCodes] already has,
+     * produced by [encodeReferenceAudio] instead of read from the manifest.
+     */
+    fun generateAudioTokensWithReference(
+        textTokenIds: IntArray,
+        promptAudioCodes: List<IntArray>,
+        maxFrames: Int = manifest.generationDefaults.maxNewFrames,
+        seed: Long = System.nanoTime(),
+        isCancelled: () -> Boolean = { false },
+        onFrame: (IntArray) -> Unit = {},
     ): Pair<List<IntArray>, Boolean> {
         require(textTokenIds.isNotEmpty()) { "textTokenIds must not be empty" }
-        val inputRows = buildInputRows(textTokenIds, voice)
+        require(promptAudioCodes.isNotEmpty()) { "promptAudioCodes must not be empty" }
+        val inputRows = buildInputRows(textTokenIds, promptAudioCodes)
         val generation = TalosMossGeneration(random = java.util.Random(seed), nVq = manifest.ttsConfig.nVq)
         try {
             runPrefill(inputRows, generation)
@@ -115,7 +134,50 @@ internal class TalosMossRuntime private constructor(
         }
     }
 
+    /**
+     * Blueprint §15.1: `codecEncodeSession`, enrollment only. Turns a
+     * captured reference recording into `prompt_audio_codes` - the same
+     * shape [TalosMossManifest.BuiltinVoice.promptAudioCodes] already has,
+     * so the result plugs directly into [generateAudioTokensWithReference].
+     *
+     * §11.8: mono is duplicated into every codec channel (not averaged, not
+     * left mono) - the exact conversion `ort_cpu_runtime.py`'s own
+     * `_load_reference_audio` does for a mono source against a stereo
+     * codec, read from that source rather than guessed.
+     */
+    fun encodeReferenceAudio(monoPcm: FloatArray, capturedSampleRate: Int): List<IntArray> {
+        require(monoPcm.isNotEmpty()) { "monoPcm must not be empty" }
+        require(capturedSampleRate == sampleRate) {
+            "encodeReferenceAudio expects audio already at the codec's sample rate ($sampleRate), got $capturedSampleRate - resample before calling this"
+        }
+        val channels = codecMeta.channels
+        // "waveform" is (1, channels, samples) - channel-major, matching decode's own audio tensor layout.
+        val channelMajor = FloatArray(channels * monoPcm.size)
+        for (c in 0 until channels) {
+            for (i in monoPcm.indices) channelMajor[c * monoPcm.size + i] = monoPcm[i]
+        }
+
+        OnnxTensor.createTensor(env, FloatBuffer.wrap(channelMajor), longArrayOf(1, channels.toLong(), monoPcm.size.toLong()))
+            .use { waveformTensor ->
+                OnnxTensor.createTensor(env, IntBuffer.wrap(intArrayOf(monoPcm.size)), longArrayOf(1)).use { lengthTensor ->
+                    codecEncodeSession.run(
+                        mapOf("waveform" to waveformTensor, "input_lengths" to lengthTensor),
+                    ).use { outputs ->
+                        val codeLength = outputs.requiredTensor("audio_code_lengths").scalarInt()
+                        val numQuantizers = codecMeta.numQuantizers
+                        val codesBuffer = outputs.requiredTensor("audio_codes").intBuffer.duplicate().also { it.rewind() }
+                        val flat = IntArray(codesBuffer.remaining())
+                        codesBuffer.get(flat)
+                        return List(codeLength) { frameIndex ->
+                            IntArray(numQuantizers) { q -> flat[frameIndex * numQuantizers + q] }
+                        }
+                    }
+                }
+            }
+    }
+
     override fun close() {
+        codecEncodeSession.close()
         codecDecodeStepSession.close()
         codecDecodeSession.close()
         localFixedFrameSession.close()
@@ -124,10 +186,9 @@ internal class TalosMossRuntime private constructor(
         sessionOptions.close()
     }
 
-    private fun buildInputRows(textTokenIds: IntArray, voice: String): InputRows {
+    private fun buildInputRows(textTokenIds: IntArray, promptAudioCodes: List<IntArray>): InputRows {
         val cfg = manifest.ttsConfig
         val rowWidth = cfg.nVq + 1
-        val promptAudioCodes = selectBuiltinVoicePromptAudioCodes(voice)
         val prefixTokens = manifest.promptTemplates.userPromptPrefixTokenIds + cfg.audioStartTokenId
         val suffixTokens = intArrayOf(cfg.audioEndTokenId) +
             manifest.promptTemplates.userPromptAfterReferenceTokenIds +
@@ -333,6 +394,7 @@ internal class TalosMossRuntime private constructor(
             val localFixedFrameSession = openSession(File(ttsDir, ttsMeta.localFixedSampledFrameFile))
             val codecDecodeSession = openSession(File(codecDir, codecMeta.decodeFullFile))
             val codecDecodeStepSession = openSession(File(codecDir, codecMeta.decodeStepFile))
+            val codecEncodeSession = openSession(File(codecDir, codecMeta.encodeFile))
 
             return TalosMossRuntime(
                 env = env,
@@ -342,6 +404,7 @@ internal class TalosMossRuntime private constructor(
                 localFixedFrameSession = localFixedFrameSession,
                 codecDecodeSession = codecDecodeSession,
                 codecDecodeStepSession = codecDecodeStepSession,
+                codecEncodeSession = codecEncodeSession,
                 manifest = manifest,
                 ttsMeta = ttsMeta,
                 codecMeta = codecMeta,
