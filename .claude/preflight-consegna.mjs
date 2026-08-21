@@ -149,6 +149,47 @@ if (existsSync(consegna)) {
     rotto('la consegna', 'NON ESISTE: ' + consegna)
 }
 
+/*
+ * ⛔⛔⛔ LA CONSEGNA DELLA SICUREZZA, e la sua CUSTODIA.
+ *
+ * Owner, 2026-08-21: prima la sicurezza, poi si torna alla 0.1.17.
+ *
+ * ⛔ Il documento della revisione descrive falle **non ancora chiuse di un
+ * repository pubblico**. Se un giorno finisse dentro l'albero di git, la mappa
+ * uscirebbe prima della toppa — e non se ne accorgerebbe nessuno, perché un
+ * file in piu in una cartella non fa rumore.
+ *
+ * ⇒ Il pre-volo controlla DUE cose opposte, ed entrambe fermano il lavoro:
+ * che il documento **ci sia** dov'e custodito, e che **non ci sia** nel repo.
+ */
+const sicurezza = path.join(RADICE, '.claude', 'CONSEGNA-REVIEW-SICUREZZA.md')
+if (existsSync(sicurezza)) ok('la consegna sicurezza', readFileSync(sicurezza, 'utf8').split('\n').length + ' righe')
+else rotto('la consegna sicurezza', 'NON ESISTE: ' + sicurezza)
+
+const REVIEW = 'C:/Users/Antonino/Desktop/projects/TALOS-RICERCHE/2026-08-21-code-review-indipendente-f77d9f2.md'
+if (!existsSync(REVIEW)) {
+    rotto('la review custodita', 'NON ESISTE: ' + REVIEW)
+} else {
+    const n = readFileSync(REVIEW, 'utf8').split('\n').length
+    if (n < 3000) rotto('la review custodita', 'troppo corta: ' + n + ' righe, ne servivano almeno 3.000')
+    else ok('la review custodita', n + ' righe, fuori dall albero di git')
+}
+
+/*
+ * ⛔ Il verso contrario, ed e quello che protegge davvero: la revisione NON
+ * deve essere entrata nel repo, ne come copia ne sotto un altro nome. Si
+ * chiede a `git ls-files`, non a un elenco scritto a mano.
+ */
+try {
+    const tracciati = execSync('git ls-files', { cwd: RADICE, encoding: 'utf8' })
+        .split('\n')
+        .filter((r) => /code-review|CODE_REVIEW/i.test(r))
+    if (tracciati.length) rotto('la review NON e nel repo', 'TRACCIATA: ' + tracciati.join(', '))
+    else ok('la review NON e nel repo', 'nessun file tracciato la contiene')
+} catch (e) {
+    forse('la review NON e nel repo', 'git ls-files non ha risposto: ' + (e?.message ?? e))
+}
+
 const RICERCHE = 'C:/Users/Antonino/Desktop/projects/TALOS-RICERCHE'
 const BRIEF = [
     ['2026-08-19-talos-llama-implementation-research-kickoff.md', 1500, '0.1.17 — motore su GPU'],
@@ -322,9 +363,24 @@ if (avvisi.length > 0) {
 
 console.log('  ✓ TUTTO A POSTO. Si può partire da soli.')
 console.log('')
+/*
+ * ⛔ L'ORDINE È CAMBIATO IL 2026-08-21, per decisione dell'owner: prima la
+ * sicurezza, e solo quando è stabile si torna alla 0.1.17 — che va chiusa
+ * il prima possibile.
+ *
+ * ⛔ Questa riga sta QUI e non nella mia memoria: è l'ultima cosa che si legge
+ * prima di cominciare, ed è il posto dove un ordine non si perde.
+ */
+console.log('  ⛔ PRIMA LA SICUREZZA. Ordine dell\'owner del 2026-08-21.')
+console.log('')
 console.log('  Il prossimo passo, e in questo ordine:')
-console.log('    1. apri .claude/CONSEGNA-0.1.17-0.1.18.md, per intero')
-console.log('    2. apri il brief della 0.1.17, per intero')
-console.log('    3. solo allora crea il ramo lane/motore-gpu')
+console.log('    1. apri .claude/CONSEGNA-REVIEW-SICUREZZA.md, per intero')
+console.log('    2. verifica la custodia:  sha256sum -c IMPRONTE.txt  in TALOS-RICERCHE')
+console.log('    3. leggi la review custodita — TUTTA, non solo l\'indice dei rilievi')
+console.log('    4. crea il ramo lane/sicurezza-review da lane/talos-mobile')
+console.log('')
+console.log('  Quando i rilievi critici sono chiusi e i cancelli sono verdi:')
+console.log('    5. scrivi .claude/RITORNO-REVIEW-SICUREZZA.md e FERMATI')
+console.log('    6. poi si riprende la 0.1.17 da .claude/CONSEGNA-0.1.17-0.1.18.md')
 console.log('')
 process.exit(0)

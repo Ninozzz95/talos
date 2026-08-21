@@ -92,6 +92,51 @@ pubblico  Ninozzz95/talos                     ← qui è stata fatta la revision
 
 ---
 
+## 2-bis. ⛔⛔ L'ORDINE DECISO DALL'OWNER — 2026-08-21
+
+> «approvo prima la sicurezza, l'altro agente sistema i findings critici della
+> review **fino a renderla stabile**, poi continua con quello che stava
+> facendo, dobbiamo finire la 0.1.17 **il prima possibile**».
+
+Quindi il lavoro ha **due tempi**, e il secondo non è facoltativo:
+
+```
+1.  i SEI SBARRAMENTI, fino a «stabile»        ← adesso
+2.  si torna alla 0.1.17, e si chiude          ← subito dopo
+3.  il resto della review                       ← dopo la 0.1.17
+```
+
+### ⛔ Cosa vuol dire «stabile», in numeri e non in aggettivi
+
+Non è un'impressione. Sono **quattro cose insieme**, e mancandone una non lo è:
+
+1. **I sei sbarramenti chiusi** — `F-13`, `F-01`, `F-03`, `F-16`, `F-18`, `F-02`.
+2. **Ognuno con i due test** — quello positivo *e* quello di bypass (§5).
+3. **I sei scenari di prova** dell'elenco in §6 passano.
+4. **I cancelli verdi**, dispositivo compreso dove la superficie è visibile.
+
+⛔ **`F-14` non è nei sei.** È importante e sta nella seconda onda: la trifecta
+proiettata è una proprietà di completezza, non un confine aperto. Se avanza
+tempo prima che l'owner richiami la 0.1.17, si fa; altrimenti aspetta.
+
+⛔ **E qui ci si ferma davvero.** Chiusi i sei, si scrive il ritorno (§7) e si
+riprende la 0.1.17 dal punto in cui era. Non si prosegue con la seconda onda
+«già che ci siamo»: l'owner ha detto *il prima possibile*, e la 0.1.17 è ferma
+da quando questa è cominciata.
+
+### ⭐ Una cosa che le due metà hanno in comune, e conviene disegnarla una volta
+
+`F-15` — lo Stop che ferma l'attesa ma non la richiesta — è **la stessa promessa
+di prodotto** del `Stop/cancel` che il brief della 0.1.17 chiama P0 sul motore
+locale. Sono due percorsi diversi (rete del fornitore contro motore in casa) ma
+una promessa sola: *quando la persona preme Stop, la cosa si ferma davvero*.
+
+⇒ Quando arrivi alla 0.1.17, guarda i due insieme: la macchina a stati della
+cancellazione (`richiesta` / `consegnata al trasporto` / `finita prima` /
+`ignota`) conviene che sia **una**, non due che si somigliano.
+
+---
+
 ## 3. L'ordine dei lavori — e non è quello dei numeri
 
 La revisione stessa propone l'ordine, e va seguito perché rispetta le
