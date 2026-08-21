@@ -1,7 +1,12 @@
-# RITORNO — 0.1.18, Fase 1 (Blocco B1): il nucleo di runtime, zero UI
+# RITORNO — 0.1.18: la voce personale
 
-> Scritto da questa sessione al termine del blocco. Copre **solo** la Fase 1
-> del blueprint (§39). Le Fasi 2-4 restano roadmap — vedi §4.
+> Scritto da questa sessione, aggiornato a fine di ogni blocco. **Fase 1
+> chiusa** (§1-7 sotto). **Fase 2 in corso** (§8) — l'owner ha dato il via
+> esplicito il 21/8 dopo la chiusura della Fase 1. Fase 3-4 restano roadmap.
+
+---
+
+## Fase 1 — il nucleo di runtime, zero UI
 
 ---
 
@@ -182,17 +187,114 @@ cd android && ./gradlew :app:lintDebug   → nessun rilievo nuovo (19 errori/98 
 
 ---
 
-## 6. Decisioni che restano all'owner
+## 6. Decisioni che restano all'owner (Fase 1)
 
-Nessuna decisione bloccante da prendere ora. Tutte le scelte tecniche di
-questo blocco (§2 sopra) sono ricadute su di me e sono documentate qui. La
-prima decisione vera del prossimo blocco è implicita nel blueprint: **si
-comincia la Fase 2** (streaming vero) quando l'owner dà il via — non prima,
-per `one-step-at-a-time`.
+Nessuna decisione bloccante. Tutte le scelte tecniche di questo blocco (§2)
+sono ricadute su di me e sono documentate qui.
 
 ---
 
-## 7. Prossimo passo
+## 7. Chiusura Fase 1
 
-Commit (non ancora fatto), poi si chiede il push. Questa sessione si ferma
-lì.
+Due commit fatti su `lane/voce-personale` (non pushati): il nucleo, poi la
+chiusura dei due punti del piano rimasti indietro. L'owner ha dato il via
+alla Fase 2 il 21/8, con una domanda esplicita (procedere o fermarsi) —
+risposta: procedere.
+
+---
+
+## 8. Fase 2 — streaming vero (in corso)
+
+Blueprint §39 Fase 2: decodificatore incrementale, `TalosPcmPlayer`, evento
+di drain completo di `AudioTrack`, semantica cancel/flush/add, **nessun PCM
+attraverso JS**.
+
+### 8.1 `TalosMossCodecStream` — il decodificatore incrementale del codec
+
+Porta `CodecStreamingDecodeSession` (upstream `ort_cpu_runtime.py`) in
+Kotlin — **non indovinato dai nomi del grafo ONNX**, letto dal sorgente vero
+dopo che un maintainer (`alpacaking`, issue #53 di
+`OpenMOSS/MOSS-TTS-Nano`) ha indicato `app_onnx.py` come l'unico streaming
+reale: la modalità "streaming" di default di `onnx_tts_runtime.py` **non è
+streaming vero**, l'ha detto lui stesso.
+
+Tre dettagli che una lettura delle sole forme dei tensori non avrebbe dato:
+- `cached_positions` si inizializza a **-1**, non a zero;
+- lo stato si aggiorna **per nome**, dagli output `_out_` ai prossimi input;
+- la politica di quanti frame raggruppare per chiamata è **adattiva sul
+  ritardo di riproduzione** (1→2→4→8 frame), non fissa.
+
+⭐ **Provato sul dispositivo reale**: stessi token audio, stesso seme, decodifica
+completa (`decode_full`, Fase 1) contro decodifica incrementale a un frame
+alla volta (`decode_step`, questa). **rms 1,8×10⁻⁵, differenza massima
+5,5×10⁻⁵ su 245.760 campioni** — sotto un singolo passo di quantizzazione
+PCM16 (3,05×10⁻⁵). Stesso numero esatto di campioni su entrambi i lati: zero
+deriva di lunghezza. `TalosMossCodecStreamInstrumentedTest` — **1/1 verde**,
+soglia dell'asserzione presa dalla misura reale, non inventata prima.
+
+### 8.2 `TalosPcmPlayer` — `AudioTrack` di produzione, e DUE difetti veri trovati prima del telefono di qualcuno
+
+Attributi audio identici a `TalosSpeechPlugin` (`USAGE_ASSISTANCE_ACCESSIBILITY`
++ `CONTENT_TYPE_SPEECH`) per lo stesso motivo dell'owner: si sente anche col
+telefono silenzioso.
+
+**Difetto 1 — `flush()` lasciava la traccia MUTA per sempre.** La prima
+stesura chiudeva un `flush()` con `pause()+flush()+stop()`, seguendo
+`stop()` un passo oltre quello che la sua stessa documentazione AOSP
+raccomanda ("For an immediate stop, use pause(), followed by flush()" — SENZA
+`stop()`). Dopo `stop()`, riprendere richiede un nuovo `play()` esplicito, e
+`write()` da solo non lo fa: la prossima frase sarebbe stata scritta nel
+buffer e mai suonata, in silenzio, per sempre, senza nessun errore da nessuna
+parte. Trovato leggendo il sorgente AOSP di `AudioTrack.java` **prima** che
+girasse su un telefono, non dopo un rapporto di un utente.
+
+**Difetto 2 — un buffer troppo grande impediva alla posizione di riproduzione
+di aggiornarsi, su QUESTO dispositivo.** Misurato: un buffer a `minBufferBytes
+× 3` lascia un'utterance corta (300 ms) stare tutta dentro senza mai forzare
+una `write()` a bloccarsi in attesa di spazio — e su questo HAL,
+`getPlaybackHeadPosition()` **e** `getTimestamp()` restano bloccati a zero
+per sempre se quel blocco non avviene mai. Isolato con tre sonde a
+confronto (stesso clip, buffer 3× vs 1×): col buffer al minimo la stessa
+utterance drena fino in fondo (`14400/14400`) prima ancora della fase di
+polling. Corretto: `bufferBytes = minBufferBytes`, non `×3` — coerente anche
+col blueprint §16.2 (la scorta va gestita a livello di applicazione, non
+con un cuscinetto grande a basso livello).
+
+⭐ **Provato sul dispositivo reale**, tre test, tutti scrivono a piccoli
+blocchi (come farà sempre lo streaming reale, non come le prime sonde a
+scrittura unica che hanno innescato il difetto 2):
+`TalosPcmPlayerInstrumentedTest` — **3/3 verdi**: scrittura e drenaggio
+completo; `flush()` a metà riproduzione lascia la traccia pronta e la prova
+suonando davvero la frase successiva (non solo "nessuna eccezione"); `close()`
+rilascia per davvero.
+
+### 8.3 Cancelli, dopo Fase 2 fin qui
+
+```
+./gradlew :app:testDebugUnitTest   → tutto verde (manifest 7/7 — 2 nuovi casi per streaming_decode; tokenizer sintetico 6/6)
+./gradlew :app:lintDebug           → nessun rilievo nuovo
+npx vitest run                     → 5.900/5.900 verdi, 10 saltati (invariato)
+```
+
+### 8.4 Cosa NON è ancora fatto in Fase 2
+
+- `TalosVoiceHost` non chiama ancora `TalosMossCodecStream`/`TalosPcmPlayer`
+  end-to-end — i due componenti sono provati **separatamente**, non ancora
+  cablati in un unico percorso di sintesi in streaming.
+- La politica di scorta adattiva (§16.2, 1→2→4→8 frame secondo il ritardo)
+  è portata nel codec stream come capacità ma non ancora guidata da una vera
+  misura del ritardo di riproduzione (serve `TalosPcmPlayer` collegato).
+- Nessuna misura di TTFA reale (tempo al primo audio UDIBILE, non al primo
+  campione decodificato).
+- `flush()`/`cancel()` non ancora collegati da `TalosVoiceHost` fino a
+  `TalosPcmPlayer` — oggi il cancel di Fase 1 ferma solo la generazione TTS,
+  non un player che sta già suonando.
+- §17.4 (recupero da traccia morta) implementato ma **mai esercitato da un
+  guasto vero** — solo dalla lettura del codice.
+
+---
+
+## 9. Prossimo passo
+
+Continuare il cablaggio di Fase 2 (§8.4). Poi, come sempre: cancelli, prova
+sul dispositivo, commit, e si chiede il push solo alla fine.

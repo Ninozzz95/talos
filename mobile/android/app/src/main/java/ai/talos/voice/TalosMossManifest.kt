@@ -156,17 +156,82 @@ internal data class TalosMossTtsMeta(
     }
 }
 
-/** `codec_browser_onnx_meta.json`: which file decodes audio codes into PCM, and at what sample rate. */
+/**
+ * `codec_browser_onnx_meta.json`: which files decode audio codes into PCM
+ * (`decode_full`, the whole-utterance graph Fase 1 uses; `decode_step`, the
+ * incremental one Fase 2 uses), and the `streaming_decode` state shapes
+ * `TalosMossCodecStream` needs to drive `decode_step` - read from the file,
+ * not hardcoded: the real metadata already lists every attention layer's
+ * exact tensor names, shapes and dtypes (12 layers on the pinned MOSS-Audio-
+ * Tokenizer-Nano revision, but nothing here assumes that count).
+ */
 internal data class TalosMossCodecMeta(
     val decodeFullFile: String,
+    val decodeStepFile: String,
     val sampleRate: Int,
+    val channels: Int,
+    val numQuantizers: Int,
+    val streamingTransformerOffsets: List<StreamingOffsetSpec>,
+    val streamingAttentionCaches: List<StreamingAttentionSpec>,
 ) {
+    /** One of the codec's own scalar position counters - not per-layer, shared across a handful of decoder blocks. */
+    data class StreamingOffsetSpec(val inputName: String, val outputName: String, val shape: IntArray)
+
+    /** One attention layer's KV cache: offset (how many positions are valid), keys, values, and their positions. */
+    data class StreamingAttentionSpec(
+        val offsetInputName: String,
+        val offsetOutputName: String,
+        val offsetShape: IntArray,
+        val cachedKeysInputName: String,
+        val cachedKeysOutputName: String,
+        val cachedValuesInputName: String,
+        val cachedValuesOutputName: String,
+        val cachedPositionsInputName: String,
+        val cachedPositionsOutputName: String,
+        val cacheShape: IntArray,
+        val positionsShape: IntArray,
+    )
+
     companion object {
         fun fromJson(json: JSONObject): TalosMossCodecMeta {
+            val files = json.getJSONObject("files")
+            val codecConfig = json.getJSONObject("codec_config")
+            val streaming = json.optJSONObject("streaming_decode")
             return TalosMossCodecMeta(
-                decodeFullFile = json.getJSONObject("files").getString("decode_full"),
-                sampleRate = json.getJSONObject("codec_config").getInt("sample_rate"),
+                decodeFullFile = files.getString("decode_full"),
+                decodeStepFile = files.getString("decode_step"),
+                sampleRate = codecConfig.getInt("sample_rate"),
+                channels = codecConfig.getInt("channels"),
+                numQuantizers = codecConfig.getInt("num_quantizers"),
+                streamingTransformerOffsets = streaming?.optJSONArray("transformer_offsets")?.let { array ->
+                    List(array.length()) { index -> offsetSpecFromJson(array.getJSONObject(index)) }
+                } ?: emptyList(),
+                streamingAttentionCaches = streaming?.optJSONArray("attention_caches")?.let { array ->
+                    List(array.length()) { index -> attentionSpecFromJson(array.getJSONObject(index)) }
+                } ?: emptyList(),
             )
         }
+
+        private fun offsetSpecFromJson(json: JSONObject) = StreamingOffsetSpec(
+            inputName = json.getString("input_name"),
+            outputName = json.getString("output_name"),
+            shape = json.getJSONArray("shape").toIntArrayCompat(),
+        )
+
+        private fun attentionSpecFromJson(json: JSONObject) = StreamingAttentionSpec(
+            offsetInputName = json.getString("offset_input_name"),
+            offsetOutputName = json.getString("offset_output_name"),
+            offsetShape = json.getJSONArray("offset_shape").toIntArrayCompat(),
+            cachedKeysInputName = json.getString("cached_keys_input_name"),
+            cachedKeysOutputName = json.getString("cached_keys_output_name"),
+            cachedValuesInputName = json.getString("cached_values_input_name"),
+            cachedValuesOutputName = json.getString("cached_values_output_name"),
+            cachedPositionsInputName = json.getString("cached_positions_input_name"),
+            cachedPositionsOutputName = json.getString("cached_positions_output_name"),
+            cacheShape = json.getJSONArray("cache_shape").toIntArrayCompat(),
+            positionsShape = json.getJSONArray("positions_shape").toIntArrayCompat(),
+        )
+
+        private fun JSONArray.toIntArrayCompat(): IntArray = IntArray(length()) { getInt(it) }
     }
 }
