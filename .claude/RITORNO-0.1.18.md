@@ -276,25 +276,73 @@ rilascia per davvero.
 npx vitest run                     → 5.900/5.900 verdi, 10 saltati (invariato)
 ```
 
-### 8.4 Cosa NON è ancora fatto in Fase 2
+### 8.4 Il cablaggio — `TalosVoiceHost.submitSpeakStreaming`
 
-- `TalosVoiceHost` non chiama ancora `TalosMossCodecStream`/`TalosPcmPlayer`
-  end-to-end — i due componenti sono provati **separatamente**, non ancora
-  cablati in un unico percorso di sintesi in streaming.
-- La politica di scorta adattiva (§16.2, 1→2→4→8 frame secondo il ritardo)
-  è portata nel codec stream come capacità ma non ancora guidata da una vera
-  misura del ritardo di riproduzione (serve `TalosPcmPlayer` collegato).
-- Nessuna misura di TTFA reale (tempo al primo audio UDIBILE, non al primo
-  campione decodificato).
-- `flush()`/`cancel()` non ancora collegati da `TalosVoiceHost` fino a
-  `TalosPcmPlayer` — oggi il cancel di Fase 1 ferma solo la generazione TTS,
-  non un player che sta già suonando.
-- §17.4 (recupero da traccia morta) implementato ma **mai esercitato da un
-  guasto vero** — solo dalla lettura del codice.
+§16.1 end to end: `TalosMossRuntime.generateAudioTokens` (il ciclo TTS, con
+un `onFrame` per ogni frame generato) alimenta un accumulatore, che
+`TalosMossCodecStream` decodifica a blocchi secondo §16.2 (1→2→4→8 frame),
+e ogni blocco decodificato va subito a `TalosPcmPlayer.write()`. La scorta
+è misurata **davvero** — frame scritti meno frame suonati, letti da
+`TalosPcmPlayer`, non il surrogato a orologio di `ort_cpu_runtime.py` (quel
+surrogato esiste solo perché il riferimento Python non ha un dispositivo
+audio vero; qui c'è).
+
+`cancel()` ora fa due cose: invalida la generazione (come in Fase 1) **e**
+silenzia quello che sta suonando ORA (§23.2), chiamando `player.flush()`
+**dal thread chiamante**, non in coda sulla corsia del proprietario — la
+corsia è occupata proprio dalla generazione lunga, e mettere in coda lì
+lascerebbe il flush aspettare la frase intera. `AudioTrack.pause/flush/play`
+sono documentati come sicuri da un thread diverso da quello che sta scrivendo.
+
+⭐ **Provato sul dispositivo reale, capo a fondo**:
+`TalosVoiceHostStreamingInstrumentedTest` — **2/2 verdi**.
+
+```
+TTFA (a caldo, dopo l'apertura delle sessioni)   353-355 ms   (< 500 ms del blueprint §38.2)
+cancel a metà streaming, a caldo                 49-60 ms     (< 150 ms p95 del blueprint §23.4)
+underrun                                          0
+drenaggio finale                                  completo entro il limite
+```
+
+⛔ **Un allarme falso, preso e chiuso nello stesso turno**: il primo giro di
+`cancelMidStreamStopsPlaybackNotJustGeneration` misurava **6.574 ms** per
+annullare — sembrava un difetto grave nella cancellazione. Il log a
+orologio di parete ha mostrato che non lo era: quella era la PRIMA chiamata
+di un `TalosVoiceHost` nuovo, e la corsia del proprietario era ancora dentro
+`TalosMossRuntime.open()` (cinque sessioni ONNX da disco, **6-7 secondi a
+freddo** su questo dispositivo) per tutta la finestra — nessun ciclo da
+interrompere ancora. Corretto scaldando il host con un'frase corta PRIMA di
+misurare la cancellazione, esattamente come «TTFA a caldo» non include il
+caricamento del modello. Il numero vero, a caldo, è 49-60 ms.
+
+### 8.5 Cosa resta aperto in Fase 2
+
+- §17.4 (recupero da traccia morta) implementato e cablato, ma **mai
+  esercitato da un guasto vero** — solo dalla lettura del codice e da un
+  test che forza il ramo d'errore in isolamento (`TalosPcmPlayerInstrumentedTest`
+  non copre ancora il ramo "seconda scrittura fallisce anche dopo il
+  ricreare" — solo la prima).
+- Nessuna misura di TTFA sul **primo** utterance di un processo (a freddo,
+  con caricamento sessioni incluso) — solo quello a caldo, per costruzione
+  del blueprint §38.2.
+- La politica di scorta (1→2→4→8) non ha mai raggiunto un livello sopra 1
+  frame nelle prove fatte: il buffer minimo di `TalosPcmPlayer` (necessario
+  per il difetto 2 di §8.2) tiene il ritardo reale sempre sotto 0,20 s.
+  Non verificato con un buffer diverso se la crescita a 2/4/8 frame
+  funziona davvero — il codice è lo stesso identico algoritmo del
+  riferimento, ma il ramo non è stato **osservato** eseguire.
+- `TalosMossRuntime`/`TalosVoiceHost` non riusano lo stesso `codecStream`
+  fra utterance successive nello stesso host — ne aprono uno nuovo ogni
+  volta (corretto per correttezza, dato che lo stato del codec è per-utterance,
+  ma non misurato per il costo di apertura ripetuta).
 
 ---
 
 ## 9. Prossimo passo
 
-Continuare il cablaggio di Fase 2 (§8.4). Poi, come sempre: cancelli, prova
-sul dispositivo, commit, e si chiede il push solo alla fine.
+Fase 2 è chiusa: nucleo (§8.1-8.2) e cablaggio (§8.4) entrambi provati sul
+dispositivo, capo a fondo. Resta la Fase 3 (arruolamento personale) quando
+l'owner darà il via — e prima di quella, per il Blocco 4, un mockup
+esaustivo dell'interfaccia (owner 21/8, vedi la memoria
+`blocco4-mockup-ui-voce-personale`). Poi, come sempre: cancelli, prova sul
+dispositivo, commit, e si chiede il push solo alla fine.

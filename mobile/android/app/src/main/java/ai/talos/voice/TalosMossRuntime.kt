@@ -53,6 +53,9 @@ internal class TalosMossRuntime private constructor(
     val sampleRate: Int,
 ) : Closeable {
 
+    /** How many channels [openCodecStream] and [decodeAudioTokens] both produce - from the codec metadata, not assumed. */
+    val channels: Int get() = codecMeta.channels
+
     /**
      * A fresh incremental codec decoder for one utterance (Fase 2 streaming
      * playback). The caller owns it: reset it between utterances that reuse
