@@ -12,13 +12,6 @@ import type {
     TalosMobileModelProfileView,
     TalosMobileProviderId,
 } from '@/components/chat/mobileChatTypes'
-/**
- * ⛔ Solo il TIPO: `talosQualifyLocalBackend` si carica a richiesta più sotto,
- * come `@/services/localEngine` fa già altrove in questo file — importarlo
- * qui in cima lo tirerebbe dentro il primo pezzo del pacchetto, per una
- * funzione che gira una volta ogni tanto su un telefono su cento.
- */
-import type { TalosLocalBackendQualification } from '@/services/localEngine'
 import { buildChatCompletion } from '@/lib/chat/chatCompletion'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import {
@@ -925,12 +918,6 @@ export interface ChatController {
      *                      esplicita di un modello locale.
      */
     decideLocalEngineProbeConsent(decision: 'granted' | 'declined' | 'dismissed'): Promise<void>
-    /**
-     * Il comando manuale — «sempre», per chi ha detto no o ha cambiato idea.
-     * Segna il consenso `granted`: chi lo preme sta acconsentendo nel modo
-     * più esplicito che esista, più esplicito del «sì» della modale stessa.
-     */
-    runLocalEngineProbeNow(path: string): Promise<TalosLocalBackendQualification>
     selectEffort(level: TalosMobileEffortLevel): Promise<void>
     setThinking(enabled: boolean): Promise<void>
     setBrowseMode(enabled: boolean): Promise<void>
@@ -5669,28 +5656,43 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // idea mentre il catalogo era irraggiungibile, riprendersi il modello
         // di prima sarebbe disfarle la scelta sotto le mani.
         modelloInAttesa = null
-        offrireSondaggioSeLocale(id)
+        // §1-bis della consegna 0.1.18 — l'INNESCO, qui e non dentro
+        // `applyModelSelection`: quella copre anche il ripristino automatico
+        // all'apertura, e offrire la modale lì vorrebbe dire chiederlo a chi
+        // non ha scelto niente in questa sessione. Guardia scritta e non
+        // collegata vale come non scritta — vedi `il-difetto-e-che-non-li-chiamano`.
+        const profiloScelto = profiles.value.find((candidate) => candidate.id === id)
+        if (
+            profiloScelto?.provider === 'local'
+            && deps.settings.state.local_engine_probe.consent === 'unset'
+        ) {
+            pendingLocalEngineProbeConsent.value = { path: profiloScelto.model }
+        }
         const operations: Promise<unknown>[] = [persistComposerDefaults()]
         if (chat.activeSession.value) operations.push(chat.setActiveModelProfile(id))
         await Promise.all(operations)
     }
 
     /**
-     * §1-bis della consegna 0.1.18 — l'INNESCO. Sola chiamante: `selectModel`,
-     * mai `applyModelSelection` da sola, perché quella copre anche il
-     * ripristino automatico all'apertura — offrire la modale lì vorrebbe dire
-     * chiederlo a chi non ha scelto niente in questa sessione.
+     * Chiude la modale automatica con uno dei tre esiti reali:
+     *   - `'granted'`    — scrive il consenso, fa partire il sondaggio in
+     *                      background, SENZA attendere: la chat non deve
+     *                      fermarsi per una misura che nessuno ha chiesto di
+     *                      aspettare.
+     *   - `'declined'`   — «non mostrare più»: scrive il consenso, NON fa
+     *                      partire niente. Per sempre finché non si tocca il
+     *                      comando manuale — mai un «no» mascherato, vedi
+     *                      `spegnere-non-e-dimenticare`.
+     *   - `'dismissed'`  — «non ora»: NON scrive niente. Il consenso resta
+     *                      `unset` e la modale tornerà alla prossima scelta
+     *                      esplicita di un modello locale.
      *
-     * ⛔ Guardia scritta e non collegata vale come non scritta — vedi
-     * `il-difetto-e-che-non-li-chiamano` — e questa È la riga che la collega.
+     * ⛔ Il comando MANUALE — «sempre», per chi ha detto no o ha cambiato
+     * idea — non vive qui: è `talosRunLocalEngineProbeAndEnsureGranted` in
+     * `lib/localEngineProbeRun.ts`, chiamato direttamente dallo schermo (già
+     * pigro) delle impostazioni. Esporlo anche da qui costava un nome in più
+     * nel grafo d'avvio per una funzione che l'avvio non usa mai.
      */
-    function offrireSondaggioSeLocale(id: string): void {
-        const profile = profiles.value.find((candidate) => candidate.id === id)
-        if (!profile || profile.provider !== 'local') return
-        if (deps.settings.state.local_engine_probe.consent !== 'unset') return
-        pendingLocalEngineProbeConsent.value = { path: profile.model }
-    }
-
     async function decideLocalEngineProbeConsent(
         decision: 'granted' | 'declined' | 'dismissed',
     ): Promise<void> {
@@ -5701,21 +5703,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         if (decision === 'granted' && pending) {
             // ⛔ SENZA await — §1-bis: «non blocca la chat». Il primo
             // messaggio parte come sempre, il sondaggio corre per conto suo.
-            void runLocalEngineProbeNow(pending.path)
+            void import('@/services/localEngine').then(
+                ({ talosQualifyLocalBackend }) => talosQualifyLocalBackend(pending.path),
+            )
         }
-    }
-
-    async function runLocalEngineProbeNow(path: string): Promise<TalosLocalBackendQualification> {
-        const { talosQualifyLocalBackend } = await import('@/services/localEngine')
-        const result = await talosQualifyLocalBackend(path)
-        // Chi preme il comando manuale sta acconsentendo nel modo più
-        // esplicito che esista — più esplicito del «sì» della modale stessa.
-        // Se il consenso era `declined`, questo lo riaccende: la persona ha
-        // appena cambiato idea premendo il pulsante, non c'è altro da capire.
-        if (result.ran && deps.settings.state.local_engine_probe.consent !== 'granted') {
-            await deps.settings.setLocalEngineProbeConsent({ consent: 'granted' })
-        }
-        return result
     }
 
     async function selectEffort(level: TalosMobileEffortLevel): Promise<void> {
@@ -7146,7 +7137,6 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         toolAuthorizationPromptVisible,
         pendingLocalEngineProbeConsent,
         decideLocalEngineProbeConsent,
-        runLocalEngineProbeNow,
         decideToolAuthorization,
         dismissToolAuthorization,
         showToolAuthorization,

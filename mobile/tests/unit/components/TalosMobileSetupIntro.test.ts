@@ -63,13 +63,10 @@ vi.mock('@/stores/chatController', () => ({
     useChatController: () => ({
         secrets: state.secrets,
         // §1-bis: la scheda «Verifica GPU sul telefono» dentro
-        // TalosMobileSettingsPrivacyPanel li legge sempre, non solo se
-        // qualcuno preme il comando manuale.
+        // TalosMobileSettingsPrivacyPanel lo legge sempre, per trovare il
+        // modello da sondare col comando manuale — il resto di quel comando
+        // vive fuori dal controller, in `lib/localEngineProbeRun.ts`.
         selectedProfile: ref(null),
-        runLocalEngineProbeNow: vi.fn(async () => ({
-            ran: false, reason: 'already-proven', probedCpu: false, cpuInconclusive: false,
-            probedGpu: false, gpuInconclusive: false, decisionBackend: null, decisionReason: null,
-        })),
         memories: {
             list: async () => state.memoryExisting
                 ? [{

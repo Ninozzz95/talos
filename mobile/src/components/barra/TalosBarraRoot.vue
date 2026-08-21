@@ -2265,7 +2265,7 @@ onMounted(async () => {
     <!-- §1-bis: la modale del sondaggio GPU, alla prima scelta locale. -->
     <SchedaSondaggioGpu
         v-if="controller.pendingLocalEngineProbeConsent.value"
-        @decide="(decision) => void controller.decideLocalEngineProbeConsent(decision)"
+        @decide="controller.decideLocalEngineProbeConsent"
     />
 </template>
 

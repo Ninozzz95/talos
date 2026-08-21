@@ -4988,18 +4988,9 @@ describe('il sondaggio GPU della 0.1.17, agganciato alla PRIMA scelta locale', (
         expect(localEngine.talosQualifyLocalBackend).not.toHaveBeenCalled()
     })
 
-    /**
-     * ⛔ Il verso contrario di «declined»: non è per sempre nel senso di
-     * irraggiungibile. Vedi `spegnere-non-e-dimenticare` — il comando
-     * manuale resta, e riaccende da solo il consenso.
-     */
-    it('il comando manuale gira anche da `declined`, e lo riaccende', async () => {
-        const { deps, controller } = await withLocalModelDiscovered()
-        deps.settings.state.local_engine_probe.consent = 'declined'
-
-        const result = await controller.runLocalEngineProbeNow('/models/local-test/smollm2-135m.gguf')
-
-        expect(result.ran).toBe(true)
-        expect(deps.settings.state.local_engine_probe.consent).toBe('granted')
-    })
+    // Il comando MANUALE — «sempre», compreso il caso in cui riaccende il
+    // consenso da `declined` — non vive più sul controller: è
+    // `talosRunLocalEngineProbeAndEnsureGranted`, provato per conto suo in
+    // `tests/unit/lib/localEngineProbeRun.test.ts`. Vedi il commento su
+    // `decideLocalEngineProbeConsent` in `chatController.ts`.
 })
