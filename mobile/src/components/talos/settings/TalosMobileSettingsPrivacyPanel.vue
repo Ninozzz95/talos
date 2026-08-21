@@ -246,7 +246,15 @@ async function runLocalEngineProbeFromSettings(): Promise<void> {
             return
         }
         localEngineProbeNoModel.value = false
-        localEngineProbeResult.value = await controller.runLocalEngineProbeNow(path)
+        const [{ talosQualifyLocalBackend }, { talosRunLocalEngineProbeAndEnsureGranted }] = await Promise.all([
+            import('@/services/localEngine'),
+            import('@/lib/localEngineProbeRun'),
+        ])
+        localEngineProbeResult.value = await talosRunLocalEngineProbeAndEnsureGranted(path, {
+            qualify: talosQualifyLocalBackend,
+            getConsent: () => localEngineProbeConsent.value,
+            setConsent: (consent) => settings.setLocalEngineProbeConsent({ consent }),
+        })
     } finally {
         localEngineProbeRunning.value = false
     }
