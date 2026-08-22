@@ -839,10 +839,48 @@ async function pianoDiApertura(
         : { contextTokens: TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS, kvCacheType: 'q8_0' }
 }
 
+/**
+ * B1 — il confine di cancellazione, separato dal corpo di `run()` invece di
+ * avvolgerlo tutto in un try/finally: `runBody` sotto è già 250+ righe, e
+ * reindentarle tutte per un try/finally era il modo più facile di introdurre
+ * un difetto vero in un file che nessun typecheck avrebbe potuto vedere
+ * (rientri sbagliati non sono un errore di sintassi).
+ *
+ * ⛔ `cancel_requested`/`cancel_effective` con lo STESSO id di `runBody`, non
+ * due eventi anonimi. Prima di questo blocco l'annullamento viveva del tutto
+ * fuori da `run()` (dentro `streamComplete`, sotto), dove nessun `traceId`
+ * esisteva ancora - lo stesso genere di distanza per cui
+ * `talosLocalEngineCancel` fu trovata senza chiamante il 6/8: un pezzo
+ * separato dal resto della generazione è un pezzo che si dimentica di
+ * collegare.
+ */
 async function run(
     input: TalosMobileCompletionInput,
     onChunk?: (text: string) => void,
     onReasoning?: (text: string) => void,
+    signal?: AbortSignal,
+): Promise<TalosMobileCompletionResult> {
+    const traceId = talosNewLocalTraceId()
+    if (signal?.aborted) throw new Error('TALOS_LOCAL_ABORTED')
+    const fermaIlMotore = (): void => {
+        talosLocalTrace(traceId, 'cancel_requested')
+        void Promise.resolve(talosLocalEngineCancel())
+            .then(() => talosLocalTrace(traceId, 'cancel_effective'))
+            .catch(() => talosLocalTrace(traceId, 'cancel_effective error'))
+    }
+    signal?.addEventListener('abort', fermaIlMotore, { once: true })
+    try {
+        return await runBody(input, onChunk, onReasoning, traceId)
+    } finally {
+        signal?.removeEventListener('abort', fermaIlMotore)
+    }
+}
+
+async function runBody(
+    input: TalosMobileCompletionInput,
+    onChunk: ((text: string) => void) | undefined,
+    onReasoning: ((text: string) => void) | undefined,
+    traceId: string,
 ): Promise<TalosMobileCompletionResult> {
     /**
      * B1 — un id che lega tutti gli eventi di QUESTA generazione, dal primo
@@ -853,7 +891,6 @@ async function run(
      * (dalla battitura al submit) appartiene a `chatController`, non
      * ancora tracciato: dichiarato, non nascosto.
      */
-    const traceId = talosNewLocalTraceId()
     talosLocalTrace(traceId, 'adapter_start')
 
     /**
@@ -868,6 +905,7 @@ async function run(
      * Il filtro sulle capacità del modello resta al suo posto: è lì che si
      * decide se questo modello può chiamare qualcosa, e non qui.
      */
+    talosLocalTrace(traceId, 'template_project_start')
     const offered = talosModelSupportsToolCalling(input.model) ? input.tools : undefined
     const wireTools = offered?.length ? talosToolsForLocalEngine(offered) : undefined
     const template = await trasportoToolDi(input.model.id)
@@ -878,6 +916,7 @@ async function run(
         tools: wireTools,
         locale: input.locale,
     })
+    talosLocalTrace(traceId, 'template_project_done')
     const turns = projection.turns
     const tools = projection.templateTools
 
@@ -1354,23 +1393,11 @@ export const localAdapter: TalosMobileProviderAdapter = {
          * L'annullamento resta per la GENERAZIONE e non per il caricamento:
          * interrompere un caricamento a metà lascia gigabyte mappati a metà, e
          * quella è davvero la parte che non conviene toccare.
+         *
+         * B1: il collegamento fra segnale e `talosLocalEngineCancel` vive
+         * ora dentro `run()`, dove esiste il `traceId` da tracciare insieme
+         * a `cancel_requested`/`cancel_effective` - qui resta solo passarlo.
          */
-        if (handlers.signal?.aborted) throw new Error('TALOS_LOCAL_ABORTED')
-        const fermaIlMotore = () => {
-            // Un annullamento che fallisce non deve rovesciare la risposta già
-            // ricevuta: il peggio che può capitare è che il motore finisca da
-            // solo, cioè esattamente com'era prima di questa correzione.
-            // `Promise.resolve` attorno: il ponte nativo può restituire
-            // `undefined` invece di una promessa, e un annullamento che va in
-            // eccezione mentre si sta annullando è il modo più stupido di
-            // perdere una risposta già ricevuta.
-            void Promise.resolve(talosLocalEngineCancel()).catch(() => {})
-        }
-        handlers.signal?.addEventListener('abort', fermaIlMotore, { once: true })
-        try {
-            return await run(input, handlers.onChunk, handlers.onReasoning)
-        } finally {
-            handlers.signal?.removeEventListener('abort', fermaIlMotore)
-        }
+        return run(input, handlers.onChunk, handlers.onReasoning, handlers.signal)
     },
 }
