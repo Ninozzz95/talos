@@ -646,31 +646,63 @@ public final class TalosTransferSession {
         report.finished(null);
     }
 
+    /**
+     * The Hub does not always redirect straight to the signed CDN address: it
+     * can answer with a same-origin, RELATIVE Location first (seen live as
+     * "/api/resolve-cache/models/..."), a hop huggingface_hub's own client
+     * follows by hand (`_httpx_follow_relative_redirects_with_backoff`) rather
+     * than treating as the final URL. `new URL(base, location)` resolves a
+     * relative Location the same way; only a Location that leaves the Hub's
+     * host ends the chain, since that is the actual CDN address.
+     */
+    private static final int MAX_RESOLVE_HOPS = 5;
+
     private static TalosTransferRunner.Resolved resolveOn(
             Context context, Network network, Request request, String path) throws IOException {
         String address = "https://huggingface.co/" + request.repo + "/resolve/"
                 + encode(request.revision) + "/" + encodePath(path);
-        URL url = new URL(address);
-        HttpURLConnection connection = (HttpURLConnection) (network == null
-                ? url.openConnection()
-                : network.openConnection(url));
-        try {
-            connection.setInstanceFollowRedirects(false);
-            connection.setConnectTimeout(15_000);
-            connection.setReadTimeout(15_000);
-            connection.setRequestMethod("HEAD");
-            String token = TalosSecretReader.providerKey(context, "huggingface");
-            if (token != null) connection.setRequestProperty("Authorization", "Bearer " + token);
+        URL origin = new URL(address);
+        String token = TalosSecretReader.providerKey(context, "huggingface");
 
-            int status = connection.getResponseCode();
-            String location = connection.getHeaderField("Location");
-            String signed = (status >= 300 && status < 400 && location != null)
-                    ? location
-                    : address;
-            return new TalosTransferRunner.Resolved(signed, deadlineOf(connection, signed));
-        } finally {
-            connection.disconnect();
+        URL current = origin;
+        for (int hop = 0; hop < MAX_RESOLVE_HOPS; hop++) {
+            HttpURLConnection connection = (HttpURLConnection) (network == null
+                    ? current.openConnection()
+                    : network.openConnection(current));
+            try {
+                connection.setInstanceFollowRedirects(false);
+                connection.setConnectTimeout(15_000);
+                connection.setReadTimeout(15_000);
+                connection.setRequestMethod("HEAD");
+                // The token is for the Hub itself; a CDN host must never see it.
+                if (token != null && sameHost(current, origin)) {
+                    connection.setRequestProperty("Authorization", "Bearer " + token);
+                }
+
+                int status = connection.getResponseCode();
+                String location = connection.getHeaderField("Location");
+                if (status < 300 || status >= 400 || location == null) {
+                    String signed = current.toString();
+                    return new TalosTransferRunner.Resolved(signed, deadlineOf(connection, signed));
+                }
+
+                URL target = new URL(current, location);
+                if (!sameHost(target, origin)) {
+                    String signed = target.toString();
+                    return new TalosTransferRunner.Resolved(signed, deadlineOf(connection, signed));
+                }
+                current = target;
+            } finally {
+                connection.disconnect();
+            }
         }
+        throw new IOException("too many redirects resolving " + address);
+    }
+
+    private static boolean sameHost(URL a, URL b) {
+        return a.getProtocol().equals(b.getProtocol())
+                && a.getHost().equalsIgnoreCase(b.getHost())
+                && a.getPort() == b.getPort();
     }
 
     private static long deadlineOf(HttpURLConnection connection, String signed) {

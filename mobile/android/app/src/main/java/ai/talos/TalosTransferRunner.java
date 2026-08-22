@@ -2,6 +2,7 @@ package ai.talos;
 
 import android.net.Network;
 import android.os.SystemClock;
+import android.util.Log;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,6 +27,8 @@ import java.net.URL;
  * for.
  */
 public final class TalosTransferRunner {
+
+    private static final String TAG = "TalosTransfer";
 
     /** What the loop cannot decide for itself, supplied by whoever hosts it. */
     public interface Host {
@@ -132,6 +135,8 @@ public final class TalosTransferRunner {
                     try {
                         resolved = host.resolve();
                     } catch (IOException unreachable) {
+                        Log.w(TAG, "resolve failed: "
+                                + unreachable.getClass().getSimpleName() + ": " + unreachable.getMessage());
                         resolved = null;
                     }
                     if (resolved == null) {
@@ -237,6 +242,8 @@ public final class TalosTransferRunner {
             if (arrived == 0) return pause(TalosModelDownloadPolicy.applyError(state));
             return true;
         } catch (IOException dropped) {
+            Log.w(TAG, "transfer failed: "
+                    + dropped.getClass().getSimpleName() + ": " + dropped.getMessage());
             return pause(TalosModelDownloadPolicy.applyError(state));
         } finally {
             connection.disconnect();
@@ -298,6 +305,8 @@ public final class TalosTransferRunner {
             connection.setRequestProperty("Accept-Encoding", "identity");
             return connection;
         } catch (IOException | RuntimeException refused) {
+            Log.w(TAG, "open failed: "
+                    + refused.getClass().getSimpleName() + ": " + refused.getMessage());
             return null;
         }
     }
