@@ -304,7 +304,20 @@ public class TalosLocalBaselineDeviceTest {
         return argomentoIntero("talosMicroBatch", 0);
     }
 
+    /**
+     * P0-1, SOLO RICERCA — `talosCacheDebug=1` accende il trace HIT/MISS/SAVE
+     * della cache dei binari OpenCL. Assente di default: un log per kernel
+     * (181 su Qwen3-1.7B, misurato) è rumore fuori da una campagna dedicata a
+     * misurare esattamente quello.
+     */
+    private static boolean cacheDebugRichiesto() {
+        return "1".equals(InstrumentationRegistry.getArguments().getString("talosCacheDebug", ""));
+    }
+
     private static long apriCpu(File model, int contesto, int thread) {
+        if (cacheDebugRichiesto()) {
+            TalosLlamaNative.nativeEnableOpenClCacheDebugTraceForResearch();
+        }
         /*
          * ⛔ Prima si CHIEDE ALLA POLITICA, e non è cerimonia.
          *

@@ -20,6 +20,7 @@
 #include <cctype>   // std::tolower, per il confronto dei nomi di backend
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>  // setenv — P0-1, la cache dei binari OpenCL
 #include <atomic>
 #include <cstring>
 // Per la sonda di caricamento dei backend: elenca la cartella nativa e prova
@@ -393,8 +394,8 @@ void portaStderrNelLog() {
 }
 
 
-void talos_init_once(const std::string & library_dir) {
-    std::call_once(g_init_once, [&library_dir]() {
+void talos_init_once(const std::string & library_dir, const std::string & opencl_cache_dir) {
+    std::call_once(g_init_once, [&library_dir, &opencl_cache_dir]() {
         llama_log_set(talos_log_bridge, nullptr);
         // Con GGML_BACKEND_DL i backend sono .so caricati a runtime, e ggml li
         // cerca ELENCANDO una cartella (`fs::directory_iterator` in
@@ -404,6 +405,33 @@ void talos_init_once(const std::string & library_dir) {
         // Quindi il percorso glielo diciamo noi, ed è quello che Android
         // riserva alle librerie di QUESTA applicazione.
         portaStderrNelLog();
+        /**
+         * P0-1 — la cache dei binari OpenCL compilati (`cl-program-cache.cpp`,
+         * upstream, invariata da settimane) è completa e gratis, MA su Android
+         * il suo percorso di default legge `std::filesystem::temp_directory_
+         * path()`, che a sua volta cerca `TMPDIR` — mai impostata in un
+         * contesto app Android (verificato leggendo `default_cache_dir()`: il
+         * commento stesso del sorgente upstream lo dice esplicitamente). Senza
+         * questa riga la cache si autodisabilita in silenzio ad ogni processo,
+         * ed è quasi certamente la causa dei 4,7-6,6 s di ricompilazione
+         * misurati al primo messaggio (vedi design.md).
+         *
+         * ⛔ DEVE avvenire prima di qualunque possibile allocazione di un
+         * buffer OpenCL — `cl_program_cache_init()` viene chiamato da
+         * `ggml_backend_opencl_buffer_type_alloc_buffer()` (verificato nel
+         * sorgente vendored), che è ben più tardi nel flusso (alla prima
+         * apertura di un modello con offload). Qui, in `talos_init_once`,
+         * arriva con ampio margine — e una volta sola per processo, come
+         * `call_once` garantisce per tutto il resto di questa funzione.
+         *
+         * ⛔ `setenv`, non un parametro nascosto: `GGML_OPENCL_KERNEL_CACHE_DIR`
+         * è l'unico varco che il codice vendored legge (`std::getenv`) — non
+         * esiste un parametro C++ equivalente da passare più in basso senza
+         * toccare il submodule, che il piano sorgente vieta esplicitamente.
+         */
+        if (!opencl_cache_dir.empty()) {
+            setenv("GGML_OPENCL_KERNEL_CACHE_DIR", opencl_cache_dir.c_str(), 1);
+        }
         if (!library_dir.empty()) {
             ggml_backend_load_all_from_path(library_dir.c_str());
         } else {
@@ -693,10 +721,40 @@ extern "C" {
 /**
  * Registra i backend, una volta sola, dalla cartella delle librerie dell'app.
  * Va chiamata prima di ogni altra cosa; chiamarla due volte non fa niente.
+ *
+ * @param openClCacheDir P0-1 — una cartella scrivibile e persistente fra
+ *     processi per i binari OpenCL compilati, oppure vuota per lasciare la
+ *     cache al suo destino di sempre (disabilitata su Android, vedi
+ *     talos_init_once). Il chiamante Java la calcola da
+ *     {@code Context.getCodeCacheDir()}: qui non esiste un Context da cui
+ *     dedurla.
  */
 JNIEXPORT void JNICALL
-Java_ai_talos_TalosLlamaNative_nativeInit(JNIEnv * env, jclass, jstring libraryDir) {
-    talos_init_once(jstring_to_utf8(env, libraryDir));
+Java_ai_talos_TalosLlamaNative_nativeInit(JNIEnv * env, jclass, jstring libraryDir,
+                                          jstring openClCacheDir) {
+    talos_init_once(jstring_to_utf8(env, libraryDir), jstring_to_utf8(env, openClCacheDir));
+}
+
+/**
+ * ⛔ SOLO RICERCA — il trace HIT/MISS/SAVE della cache di P0-1, a richiesta.
+ *
+ * `GGML_OPENCL_KERNEL_CACHE_DEBUG=1` fa scrivere a `cl-program-cache.cpp` una
+ * riga per kernel su stderr, con un contatore che vive quanto il processo —
+ * `portaStderrNelLog()` la porta a logcat, tag TalosLlama (verificato: NON
+ * "TALOS" — il primo tentativo di leggerla ha cercato il tag sbagliato).
+ * Non è nella produzione:
+ * un log per kernel (qui, 181 su un modello da 1,7B) sarebbe rumore per
+ * chiunque non stia misurando esattamente questo.
+ *
+ * ⛔ Va chiamata DOPO `nativeInit` (che ha già impostato la env var della
+ * cartella) e PRIMA della prima apertura di un modello con offload — la
+ * stessa finestra di `talos_esiste_dispositivo_offload`, perché
+ * `cl_program_cache_init()` legge `getenv` una volta sola, alla prima
+ * `alloc_buffer` del backend OpenCL.
+ */
+JNIEXPORT void JNICALL
+Java_ai_talos_TalosLlamaNative_nativeEnableOpenClCacheDebugTraceForResearch(JNIEnv *, jclass) {
+    setenv("GGML_OPENCL_KERNEL_CACHE_DEBUG", "1", 1);
 }
 
 /** La build di llama.cpp, per l'impronta dei prefissi congelati. */
