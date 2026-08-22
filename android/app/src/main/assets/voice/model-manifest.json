@@ -1,0 +1,52 @@
+{
+  "_comment": "PINNED voice-engine model manifest — blueprint §47.1/§47.2. This file ships inside the APK (android/app/src/main/assets/voice/) and is the ONLY source TalosVoiceModelInstaller trusts for what to download and which hash to require: never a mutable remote JSON. Editing this file is a promotion event, not a routine change — see the promotion workflow note below before touching a revision or a hash.",
+  "schemaVersion": 1,
+  "engineBuild": "moss-nano-2026-08-22",
+  "pinnedAt": "2026-08-22T00:00:00Z",
+  "promotion": {
+    "_comment": "Blueprint §47.1 promotion workflow: candidate upstream SHA -> source diff review -> artifact hash inventory -> Android golden parity -> device benchmark -> speaker-quality regression -> release smoke -> promote exact SHA. Never 'revision: main'.",
+    "candidateSource": "the exact commit already resident on the OnePlus Pad 3 reference device since Fase 0 (2026-08-21), used for every Fase 0-4 test and demo this session — Android golden parity, device benchmark, and speaker-quality regression are the accumulated Fase 0-4 record itself, not a separate step redone here.",
+    "hashInventoryVerifiedAgainst": "live HuggingFace tree API (recursive), 2026-08-22 — cross-checked against the .cache/huggingface download metadata already present in the device's model directory (independent second source, same values), and against a fresh direct fetch+hash of browser_poc_manifest.json from the HF resolve endpoint (third independent source, same sha256).",
+    "releaseSmoke": "PENDING — required before this manifest is used to drive a real install/update on a non-reference device."
+  },
+  "license": {
+    "identifier": "apache-2.0",
+    "upstreamRepository": "https://github.com/OpenMOSS/MOSS-TTSD",
+    "attribution": "OpenMOSS-Team — MOSS-TTS-Nano-100M-ONNX and MOSS-Audio-Tokenizer-Nano-ONNX",
+    "redistributionConditions": "Apache-2.0, both model repos public and non-gated — verified via the HuggingFace API at pin time.",
+    "builtInReferenceVoiceLicense": "none — TALOS ships no third-party voice; builtin_voices in browser_poc_manifest.json are prompt codes for the base model's own voice, not a redistributed personal voice."
+  },
+  "installRoot": "moss",
+  "artifacts": [
+    {
+      "repo": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX",
+      "revision": "f52645cb467506d8e18e746ddd59482685b74e58",
+      "targetDir": "MOSS-TTS-Nano-100M-ONNX",
+      "files": [
+        { "path": "browser_poc_manifest.json", "size": 503354, "sha256": "097d80e993dc29f0bae427590b4f77084a161cb578b50d82c29f455d5faa9eee" },
+        { "path": "tts_browser_onnx_meta.json", "size": 4487, "sha256": "3edf25232dcd0af3d061c837e9a968a39e2f8592e06777d740503c4f2244f95c" },
+        { "path": "tokenizer.model", "size": 470897, "sha256": "c353ee1479b536bf414c1b247f5542b6607fb8ae91320e5af1781fee200fddff" },
+        { "path": "moss_tts_prefill.onnx", "size": 283305, "sha256": "d56126dcd0574c2f15d98fc6b35eda68d0386b5bd9c5e38e28548d6f2ea8f3db" },
+        { "path": "moss_tts_decode_step.onnx", "size": 291483, "sha256": "698cbc2fc1c2feca16e5895614ed52bbb32ded10f236c076f477b2e69abf32d8" },
+        { "path": "moss_tts_local_decoder.onnx", "size": 49231, "sha256": "51aa754301b38550a5f9adda0ad93bd3dc95819afb511e6dcabf4a90b345a454" },
+        { "path": "moss_tts_local_cached_step.onnx", "size": 53685, "sha256": "aa9035fefc1c138a951a8bcfc0374fb03a25f1ece67f7f7f53bce349b84a1dd5" },
+        { "path": "moss_tts_local_fixed_sampled_frame.onnx", "size": 471262, "sha256": "40cdb00efc171c450cf91468e01429caa41b0252222cd308e978f58fe354afa8" },
+        { "path": "moss_tts_global_shared.data", "size": 440813568, "sha256": "bce8312c3df6a44545302cae229b61054fe0672e0b252ba59cba47adeed831dc" },
+        { "path": "moss_tts_local_shared.data", "size": 229678080, "sha256": "bae7782032c0fb12490ab42afe009f87ae6c75a0f0596fc7b5c08e4d5ee93916" }
+      ]
+    },
+    {
+      "repo": "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX",
+      "revision": "ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae",
+      "targetDir": "MOSS-Audio-Tokenizer-Nano-ONNX",
+      "files": [
+        { "path": "codec_browser_onnx_meta.json", "size": 17036, "sha256": "3e291c883bb7d11ff2fe8e964e3e495519760358859f35c951254c7741592731" },
+        { "path": "moss_audio_tokenizer_encode.onnx", "size": 815775, "sha256": "eadea4a645abdcf98714c7aead122ee2ce7da6e080f9f80b977cd1ca8e19473a" },
+        { "path": "moss_audio_tokenizer_decode_step.onnx", "size": 351400, "sha256": "9527c86a29e1837edec1f74db57d5eeaadb3a715af3382703566460afed25855" },
+        { "path": "moss_audio_tokenizer_decode_full.onnx", "size": 681902, "sha256": "0fbbafe3fd4afa2a019af5c5ced204af6e2d1db044fa40f021525d2aee95b4ac" },
+        { "path": "moss_audio_tokenizer_encode.data", "size": 44507136, "sha256": "aa751265b2bab2887eac224484546b194875aa7494b607115439b3dc6b228a2c" },
+        { "path": "moss_audio_tokenizer_decode_shared.data", "size": 44198912, "sha256": "e69d52e0f4e84ca27850557ee54face46632d3a5a16c89bd246c7c408466dcad" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,176 @@
+{
+  "cases": [
+    {
+      "name": "no settings uses defaults",
+      "input": {},
+      "expected": {
+        "success": true,
+        "value": {
+          "schema_version": 1,
+          "mode": "off",
+          "background_enabled": true,
+          "interface_enabled": true,
+          "scene_override": null,
+          "speed": 100,
+          "intensity": 65,
+          "glow_intensity": 0,
+          "density": 100,
+          "depth": 50,
+          "trails": 35,
+          "contrast": 60,
+          "parallax": 20,
+          "quality": "adaptive",
+          "fps_cap": 30,
+          "dpr_cap": 1.25,
+          "pause_when_hidden": true,
+          "respect_data_saver": true,
+          "interface": {
+            "profile": "preset",
+            "duration_scale": 50,
+            "intensity": 65,
+            "easing": "precise",
+            "stagger": 40,
+            "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true }
+          }
+        },
+        "source": "default",
+        "shouldPersist": false
+      }
+    },
+    {
+      "name": "background disabled wins every collision",
+      "input": { "theme_background_disabled": true, "theme_motion": "cinematic", "theme_motion_disabled": true, "theme_simple_animation": false },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "off", "background_enabled": false, "interface_enabled": true, "scene_override": null, "speed": 140, "intensity": 85, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "motion off retains background",
+      "input": { "theme_motion": "off" },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "static", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "motion disabled retains background",
+      "input": { "theme_motion_disabled": true },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "static", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "simple false selects complex",
+      "input": { "theme_simple_animation": false },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "complex", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "explicit simple true selects simple",
+      "input": { "theme_simple_animation": true },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "simple", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "valid false motion flags remain legacy simple",
+      "input": { "theme_motion_disabled": false, "theme_simple_animation": true, "theme_background_disabled": false },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "simple", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "valid motion key selects simple",
+      "input": { "theme_motion": "normal" },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "simple", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "invalid legacy value alone falls back to defaults",
+      "input": { "theme_motion": "unsupported" },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "adaptive", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "all speed profiles are deterministic",
+      "input": { "theme_motion": "subtle" },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "simple", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 75, "intensity": 40, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "system speed profile uses canonical defaults",
+      "input": { "theme_motion": "system" },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "simple", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "cinematic profile maps speed and intensity",
+      "input": { "theme_motion": "cinematic" },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "simple", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 140, "intensity": 85, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "ui off disables interface motion",
+      "input": { "ui_animation_profile": "off" },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "adaptive", "background_enabled": true, "interface_enabled": false, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "off", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "all UI profiles are accepted",
+      "input": { "ui_animation_profile": "preset" },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "adaptive", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "minimal UI profile is preserved",
+      "input": { "ui_animation_profile": "minimal" },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "adaptive", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "minimal", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "expressive UI profile is preserved",
+      "input": { "ui_animation_profile": "expressive" },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "adaptive", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "expressive", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "valid UI customization migrates representable fields",
+      "input": { "ui_animation_profile": "custom", "ui_animation_customization": { "duration_scale": 125.0, "intensity": 20.0, "easing": "cinematic", "stagger": 80.0, "open_close": "depth", "surface_transition": "fade", "feedback": "trace", "hover": "node-glow" } },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "adaptive", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "custom", "duration_scale": 125, "intensity": 20, "easing": "cinematic", "stagger": 80, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "partial UI customization keeps defaults",
+      "input": { "ui_animation_customization": { "duration_scale": 75, "intensity": "bad", "easing": "soft", "stagger": 121 } },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "adaptive", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 75, "intensity": 65, "easing": "soft", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "unrepresentable UI options are ignored",
+      "input": { "ui_animation_customization": { "open_close": "terminal-snap", "surface_transition": "axis-shift", "feedback": "trace", "hover": "node-glow" } },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "adaptive", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "legacy", "shouldPersist": false }
+    },
+    {
+      "name": "valid V6 wins over conflicting legacy and preserves unrelated preferences",
+      "input": { "theme_motion_v6": { "schema_version": 1, "mode": "complex", "background_enabled": true, "interface_enabled": false, "scene_override": "forge", "speed": 140, "intensity": 85, "glow_intensity": 0, "density": 120, "depth": 70, "trails": 80, "contrast": 90, "parallax": 60, "quality": "high", "fps_cap": 60, "dpr_cap": 2, "pause_when_hidden": false, "respect_data_saver": false, "interface": { "profile": "expressive", "duration_scale": 120, "intensity": 88, "easing": "cinematic", "stagger": 68, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "theme_background_disabled": true, "theme_motion": "off", "theme_simple_animation": false, "theme_customization": { "accent": "#123456" } },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "complex", "background_enabled": true, "interface_enabled": false, "scene_override": "forge", "speed": 140, "intensity": 85, "glow_intensity": 0, "density": 120, "depth": 70, "trails": 80, "contrast": 90, "parallax": 60, "quality": "high", "fps_cap": 60, "dpr_cap": 2, "pause_when_hidden": false, "respect_data_saver": false, "interface": { "profile": "expressive", "duration_scale": 120, "intensity": 88, "easing": "cinematic", "stagger": 68, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "v6", "shouldPersist": false }
+    },
+    {
+      "name": "invalid V6 missing keys does not fall back",
+      "input": { "theme_motion_v6": {} },
+      "expectedIssues": [{ "path": "theme_motion_v6.schema_version", "code": "missing_key" }, { "path": "theme_motion_v6.mode", "code": "missing_key" }, { "path": "theme_motion_v6.background_enabled", "code": "missing_key" }, { "path": "theme_motion_v6.interface_enabled", "code": "missing_key" }, { "path": "theme_motion_v6.scene_override", "code": "missing_key" }, { "path": "theme_motion_v6.speed", "code": "missing_key" }, { "path": "theme_motion_v6.intensity", "code": "missing_key" }, { "path": "theme_motion_v6.density", "code": "missing_key" }, { "path": "theme_motion_v6.depth", "code": "missing_key" }, { "path": "theme_motion_v6.trails", "code": "missing_key" }, { "path": "theme_motion_v6.contrast", "code": "missing_key" }, { "path": "theme_motion_v6.parallax", "code": "missing_key" }, { "path": "theme_motion_v6.quality", "code": "missing_key" }, { "path": "theme_motion_v6.fps_cap", "code": "missing_key" }, { "path": "theme_motion_v6.dpr_cap", "code": "missing_key" }, { "path": "theme_motion_v6.pause_when_hidden", "code": "missing_key" }, { "path": "theme_motion_v6.respect_data_saver", "code": "missing_key" }, { "path": "theme_motion_v6.interface", "code": "missing_key" }]
+    },
+    {
+      "name": "invalid V6 unknown key does not fall back",
+      "input": { "theme_motion_v6": { "unexpected": true } },
+      "expectedIssues": [{ "path": "theme_motion_v6.schema_version", "code": "missing_key" }, { "path": "theme_motion_v6.mode", "code": "missing_key" }, { "path": "theme_motion_v6.background_enabled", "code": "missing_key" }, { "path": "theme_motion_v6.interface_enabled", "code": "missing_key" }, { "path": "theme_motion_v6.scene_override", "code": "missing_key" }, { "path": "theme_motion_v6.speed", "code": "missing_key" }, { "path": "theme_motion_v6.intensity", "code": "missing_key" }, { "path": "theme_motion_v6.density", "code": "missing_key" }, { "path": "theme_motion_v6.depth", "code": "missing_key" }, { "path": "theme_motion_v6.trails", "code": "missing_key" }, { "path": "theme_motion_v6.contrast", "code": "missing_key" }, { "path": "theme_motion_v6.parallax", "code": "missing_key" }, { "path": "theme_motion_v6.quality", "code": "missing_key" }, { "path": "theme_motion_v6.fps_cap", "code": "missing_key" }, { "path": "theme_motion_v6.dpr_cap", "code": "missing_key" }, { "path": "theme_motion_v6.pause_when_hidden", "code": "missing_key" }, { "path": "theme_motion_v6.respect_data_saver", "code": "missing_key" }, { "path": "theme_motion_v6.interface", "code": "missing_key" }, { "path": "theme_motion_v6.unexpected", "code": "unknown_key" }]
+    },
+    {
+      "name": "invalid V6 range does not fall back",
+      "input": { "theme_motion_v6": { "schema_version": 1, "mode": "adaptive", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 24, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "theme_motion": "cinematic" },
+      "expectedIssues": [{ "path": "theme_motion_v6.speed", "code": "out_of_range" }]
+    },
+    {
+      "name": "nested V6 invalid type does not fall back",
+      "input": { "theme_motion_v6": { "schema_version": 1, "mode": "adaptive", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": [], "theme_motion": "off" } },
+      "expectedIssues": [{ "path": "theme_motion_v6.theme_motion", "code": "unknown_key" }, { "path": "theme_motion_v6.interface", "code": "invalid_type" }]
+    },
+    {
+      "name": "nested V6 categories invalid type does not fall back",
+      "input": { "theme_motion_v6": { "schema_version": 1, "mode": "adaptive", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": [] } } },
+      "expectedIssues": [{ "path": "theme_motion_v6.interface.categories", "code": "invalid_type" }]
+    },
+    {
+      "name": "root scalar fails closed",
+      "input": "legacy",
+      "expectedIssues": [{ "path": "$", "code": "invalid_type" }]
+    },
+    {
+      "name": "root list fails closed",
+      "input": [null],
+      "expectedIssues": [{ "path": "$", "code": "invalid_type" }]
+    },
+    {
+      "name": "unknown preferences are ignored",
+      "input": { "theme_color": "blue", "theme_customization": { "accent": "#123456" } },
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "off", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "default", "shouldPersist": false }
+    }
+  ]
+}

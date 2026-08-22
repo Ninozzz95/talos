@@ -1,0 +1,63 @@
+# Build output
+dist/
+
+# Test artifacts
+test-results/
+playwright-report/
+coverage/
+
+# Dependencies (also covered by the repo root ignore)
+node_modules/
+
+# Local env
+.env
+.env.local
+.env.*.local
+tests/e2e/.auth/
+
+# Gli scatti del telecomando: prove, non sorgenti.
+*.png
+
+# ⛔⛔ TRANNE le viste del README, che sono un SORGENTE.
+#
+# MISURATO 2026-08-15, un passo prima di pubblicare: la copia pubblicabile
+# non conteneva nessuna delle quattro immagini citate dal README — su GitHub
+# sarebbero stati quattro riquadri rotti, la prima cosa che una persona vede.
+#
+# La regola `*.png` qui sopra è giusta e resta: gli scatti di lavoro sono
+# prove, non sorgenti, e non devono finire nella cronologia. Ma le viste del
+# README sono l'opposto — sono il contenuto del documento, e senza di esse il
+# documento non esiste.
+#
+# ⇒ E la quarantena resta esclusa: si pubblica solo ciò che l'owner ha firmato.
+!docs/immagini/*.png
+docs/immagini/DA-APPROVARE/
+
+# ⛔ E il registro delle approvazioni resta INTERNO: e' un documento di lavoro,
+# in italiano, che spiega perche' ogni vista e' stata accettata e nomina
+# l'owner. Serve a noi e al cancello di pubblicazione, non a chi apre il repo.
+# MISURATO: era finito nel primo push, fra le immagini.
+docs/immagini/APPROVATE.txt
+
+# ⛔⛔⛔ MATERIALE CRITTOGRAFICO — ovunque nell'albero, non solo in android/.
+#
+# La regola esisteva solo in `mobile/android/.gitignore`, quindi una chiave
+# lasciata in QUALUNQUE altra cartella sarebbe entrata in git. MISURATO il
+# 2026-08-16: `mobile/talos-release.jks`, `talos-release.jks` e
+# `mobile/scripts/talos-release.jks` sarebbero tutte finite dentro.
+#
+# ⇒ E una chiave nella storia di un repository pubblico e' pubblica PER SEMPRE:
+# cancellarla dopo non serve, perche' chi ha gia' clonato ce l'ha, e chi ce l'ha
+# puo' firmare aggiornamenti che i telefoni accettano come nostri.
+#
+# La chiave di TALOS vive FUORI dal repository — vedi
+# `mobile/scripts/crea-la-chiave-di-rilascio.ps1`, che la scrive sul Desktop.
+# Queste righe sono la rete sotto, per il giorno che qualcuno la sposta.
+*.jks
+*.keystore
+*.p12
+*.pfx
+keystore.properties
+
+# ⛔ I modelli sono gigabyte: un file grande in git e un file grande PER SEMPRE.
+.modelli/

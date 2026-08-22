@@ -1,0 +1,157 @@
+{
+    "schema_version": 2,
+    "description": "Frozen upstream hashes for 24 shadcn-vue 2.8.0 generated files plus a closed list of reviewed TALOS-owned source adaptations. Original generator hashes remain immutable; accepted hashes keep intentional local variants drift-gated.",
+    "generator": {
+        "name": "shadcn-vue",
+        "version": "2.8.0",
+        "integrity": "sha512-iCRrUYGJ52rJkivBpk+O2ZW+2u30UOvA4sMTu8kw24r2UPkpO57NwLBMegPeC/ifPESSiOOrtMjvYTV5lpCf9w=="
+    },
+    "source_evidence": "generated-checksums.txt (55 file, Codex-verified 55/55)",
+    "extraction_rule": "rows matching ^probe-app/src/(components/ui/(button|dialog|drawer)/|lib/utils.ts); destination = s|^probe-app/src/|mobile/src/|",
+    "file_count": 24,
+    "adaptations": [
+        {
+            "destination": "mobile/src/components/ui/dialog/DialogContent.vue",
+            "upstream_sha256": "162aa1e930f9e2ee2f02b7214d923993511d4facd6cc1fe1b978642af2fcdd7d",
+            "accepted_sha256": "13333af03d3333b89b172e84425eb86359c0609605287962af8c4026ddba5ddf",
+            "reason": "TALOS localizes the assistive close label through the complete app locale catalog.",
+            "research": "mobile/docs/superpowers/research/2026-07-29-p0-localization-conformance-closure-research.md"
+        },
+        {
+            "destination": "mobile/src/components/ui/dialog/DialogFooter.vue",
+            "upstream_sha256": "40a892cf52426684fdcf05a9c987db69c5097a620273166f2ceccd435c51d91a",
+            "accepted_sha256": "6b744a5ea95c4bef141d45be01138261de35f574fe466c71ba094e43c064d613",
+            "reason": "TALOS localizes the optional visible close action through the complete app locale catalog.",
+            "research": "mobile/docs/superpowers/research/2026-07-29-p0-localization-conformance-closure-research.md"
+        },
+        {
+            "destination": "mobile/src/components/ui/dialog/DialogScrollContent.vue",
+            "upstream_sha256": "44aca8ded817ca375d1338bc8a66dbee1709a4d38d66dc64ec6af70cb99ff449",
+            "accepted_sha256": "ace8dea99d3606f7a55679ba2f9f6642086757b681b1ef9b0062643d1241437e",
+            "reason": "TALOS localizes the scroll-dialog assistive close label through the complete app locale catalog.",
+            "research": "mobile/docs/superpowers/research/2026-07-29-p0-localization-conformance-closure-research.md"
+        }
+    ],
+    "files": [
+        {
+            "sha256": "eb0d050c8d191da6d03e5fb542a1f37ebca6ce8d4328f22c062b582d1fe49c8e",
+            "source_probe_path": "probe-app/src/components/ui/button/Button.vue",
+            "destination": "mobile/src/components/ui/button/Button.vue"
+        },
+        {
+            "sha256": "22802c293ea7e558307703f0db450bbdee3d2adb4b2bf48ebff287fed1a3f265",
+            "source_probe_path": "probe-app/src/components/ui/button/index.ts",
+            "destination": "mobile/src/components/ui/button/index.ts"
+        },
+        {
+            "sha256": "59ef326fed4fef60691b867c56b089c7a5abf388e6e2eb615dd7d4e7a8dfb60a",
+            "source_probe_path": "probe-app/src/components/ui/dialog/Dialog.vue",
+            "destination": "mobile/src/components/ui/dialog/Dialog.vue"
+        },
+        {
+            "sha256": "700eba3b6a116712879437ea0bba89db3bf223caad860470c682ea097ab143ed",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogClose.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogClose.vue"
+        },
+        {
+            "sha256": "162aa1e930f9e2ee2f02b7214d923993511d4facd6cc1fe1b978642af2fcdd7d",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogContent.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogContent.vue"
+        },
+        {
+            "sha256": "0fa90ada57ce2c174e8d3db9652199ee44b684ec008f8a14e7a74a19a402ca96",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogDescription.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogDescription.vue"
+        },
+        {
+            "sha256": "40a892cf52426684fdcf05a9c987db69c5097a620273166f2ceccd435c51d91a",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogFooter.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogFooter.vue"
+        },
+        {
+            "sha256": "e7fe6a49cabe61d5ef205dc289e930764436d4bdb41fbe7b21d5dbcd4dc84701",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogHeader.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogHeader.vue"
+        },
+        {
+            "sha256": "0c649cdc19720a85a52bccec50b32c29372c48710225381c05ccd89fdf4b5222",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogOverlay.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogOverlay.vue"
+        },
+        {
+            "sha256": "44aca8ded817ca375d1338bc8a66dbee1709a4d38d66dc64ec6af70cb99ff449",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogScrollContent.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogScrollContent.vue"
+        },
+        {
+            "sha256": "08b72c1a0c0c83022fab22c771a69ff7109696ea5a8c78642fb2e2c88dde14c6",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogTitle.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogTitle.vue"
+        },
+        {
+            "sha256": "72ee8fd4b82cb7d5eea9a7896e64323511e0e782554d3931a357221bc89b2f8d",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogTrigger.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogTrigger.vue"
+        },
+        {
+            "sha256": "8a51c81fc89c7b71908f9192875632720d8fa58e3f7fbe9b8e9a6e3a308bdc46",
+            "source_probe_path": "probe-app/src/components/ui/dialog/index.ts",
+            "destination": "mobile/src/components/ui/dialog/index.ts"
+        },
+        {
+            "sha256": "47924e096bb2afc9bbadd748ed3d028d66697269833277acccb65cca38f24275",
+            "source_probe_path": "probe-app/src/components/ui/drawer/Drawer.vue",
+            "destination": "mobile/src/components/ui/drawer/Drawer.vue"
+        },
+        {
+            "sha256": "54f98a70cd7e7810ad72bbdcaabd3641deb97092fc1eaba8b1297818c6c3d418",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerClose.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerClose.vue"
+        },
+        {
+            "sha256": "4b6261a328f0eca2171c61b382c6241b54996c2c5366f24bf4c1502f8834c531",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerContent.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerContent.vue"
+        },
+        {
+            "sha256": "c1abf5bbb1159e39bb36568e95f00dffecef1655ee01ff8c411d2abbdc795e20",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerDescription.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerDescription.vue"
+        },
+        {
+            "sha256": "3e89ed1ca4898c67ad820fda578ed37acdbfc19bfac2941c9d56dd7ae4e0a276",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerFooter.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerFooter.vue"
+        },
+        {
+            "sha256": "d013135e4222536f6bd203c686596e338bfccdfc149cd4d788a2f21d32845a59",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerHeader.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerHeader.vue"
+        },
+        {
+            "sha256": "56fc99cc42b61cf0565218be7c361d96b04f41fa996ceac36cf289e7cd35f607",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerOverlay.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerOverlay.vue"
+        },
+        {
+            "sha256": "f64efef1eb1e8c9b46da779ca5ae241d523bf19ef50448547e62c4af9c82e146",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerTitle.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerTitle.vue"
+        },
+        {
+            "sha256": "4ac447152e8ad23f9ad9bc3dc2bf35c37f6a00e5ff00a9aae8babef59ca36793",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerTrigger.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerTrigger.vue"
+        },
+        {
+            "sha256": "5d5fa109964c267f6618479f6e1bee490fc9c464c08790183a667d6ed1dda0ba",
+            "source_probe_path": "probe-app/src/components/ui/drawer/index.ts",
+            "destination": "mobile/src/components/ui/drawer/index.ts"
+        },
+        {
+            "sha256": "ce4d9a828c0312cf66d0196934e9efd50491887f601dcb12ccda8683118520e9",
+            "source_probe_path": "probe-app/src/lib/utils.ts",
+            "destination": "mobile/src/lib/utils.ts"
+        }
+    ]
+}
