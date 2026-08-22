@@ -1869,6 +1869,7 @@ export const TALOS_EN_MESSAGES = {
         pdfNonSiApre: 'TALOS could not open this PDF.',
         pdfPrecedente: 'Previous page',
         pdfSuccessiva: 'Next page',
+        mdNonSiApre: 'TALOS could not open this file.',
         /* A row that will not open is a file the person believes they have. */
         fileMissing: 'This file is no longer on this device',
         title: 'Library',

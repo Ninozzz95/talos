@@ -1930,6 +1930,7 @@ export const TALOS_IT_MESSAGES = {
         pdfNonSiApre: 'Non sono riuscito ad aprire questo PDF.',
         pdfPrecedente: 'Pagina precedente',
         pdfSuccessiva: 'Pagina successiva',
+        mdNonSiApre: 'Non sono riuscito ad aprire questo file.',
         /* ⛔ Una riga che non si apre è un file che la persona crede di avere. */
         fileMissing: 'Il file non c’è più su questo dispositivo',
         title: 'Libreria',

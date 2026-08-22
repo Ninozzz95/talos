@@ -404,6 +404,17 @@ const VisualizzatorePdf = defineAsyncComponent(
     () => import('@/components/talos/library/TalosMobilePdfViewer.vue'),
 )
 
+/**
+ * ⭐⭐⭐ IL MARKDOWN CHE SI APRE — rilievo owner 22/8, stessa famiglia del PDF
+ * qui sopra: «non è possibile cliccare sul file MD appena creato dalla
+ * scheda chat». Vedi il commento su `mdFileId` in `tracciaAzione.ts` per la
+ * causa. Pigro per lo stesso motivo del PDF.
+ */
+const mdAperto = ref<{ fileId: string, nome: string } | null>(null)
+const VisualizzatoreMarkdown = defineAsyncComponent(
+    () => import('@/components/talos/library/TalosMobileMarkdownViewer.vue'),
+)
+
 /*
  * ⛔ Le parole sono quelle dell'INVIO, non quelle dell'apertura: qui il tocco
  * manda un file a una persona vera. «Non si e' aperta» direbbe una cosa su una
@@ -534,15 +545,17 @@ const parolaStato = (acceso: boolean): string => (acceso
                 altre schede — cambiare tema le cambia tutte insieme.
             -->
             <component
-                :is="eCreato(s) && (s.dove || s.pdf) ? 'button' : 'div'"
+                :is="eCreato(s) && (s.dove || s.pdf || s.mdFileId) ? 'button' : 'div'"
                 v-if="eCreato(s)"
-                :type="s.dove || s.pdf ? 'button' : undefined"
+                :type="s.dove || s.pdf || s.mdFileId ? 'button' : undefined"
                 class="talos-controllo flex w-full items-center gap-2 border border-border bg-muted text-left"
-                :class="s.dove || s.pdf ? 'talos-pressable' : ''"
+                :class="s.dove || s.pdf || s.mdFileId ? 'talos-pressable' : ''"
                 data-testid="talos-scheda-creato"
                 @click="s.pdf
                     ? (pdfAperto = { percorso: s.pdf, nome: s.titolo })
-                    : (s.dove ? apri(s.dove) : undefined)"
+                    : (s.mdFileId
+                        ? (mdAperto = { fileId: s.mdFileId, nome: s.titolo })
+                        : (s.dove ? apri(s.dove) : undefined))"
             >
                 <span class="talos-nome min-w-0 flex-1">
                     <span class="block truncate">{{ s.titolo }}</span>
@@ -550,7 +563,7 @@ const parolaStato = (acceso: boolean): string => (acceso
                         {{ s.genere }}<template v-if="s.dettaglio"> · {{ s.dettaglio }}</template>
                     </span>
                 </span>
-                <span v-if="s.dove || s.pdf" class="talos-freccia flex-none" aria-hidden="true">›</span>
+                <span v-if="s.dove || s.pdf || s.mdFileId" class="talos-freccia flex-none" aria-hidden="true">›</span>
             </component>
 
             <!--
@@ -825,6 +838,17 @@ const parolaStato = (acceso: boolean): string => (acceso
             :percorso="pdfAperto.percorso"
             :nome="pdfAperto.nome"
             @chiudi="pdfAperto = null"
+        />
+        <!--
+            Rilievo owner 22/8, stessa famiglia del PDF: «non è possibile
+            cliccare sul file MD appena creato dalla scheda chat».
+        -->
+        <component
+            :is="VisualizzatoreMarkdown"
+            v-if="mdAperto"
+            :file-id="mdAperto.fileId"
+            :nome="mdAperto.nome"
+            @chiudi="mdAperto = null"
         />
     </div>
 </template>

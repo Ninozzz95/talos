@@ -338,6 +338,22 @@ export type TalosScheda =
          * chat per guardare una pagina.
          */
         readonly pdf?: string
+        /**
+         * ⭐⭐ L'id in Libreria di un file Markdown, che si APRE FORMATTATO
+         * invece di navigare — stessa famiglia di `pdf`, non di `dove`.
+         *
+         * Rilievo owner 22/8: «non è possibile cliccare sul file MD appena
+         * creato dalla scheda chat» — la scheda mostrava nome e peso, il
+         * tocco non succedeva niente, per lo stesso motivo del PDF prima
+         * della cura: nessun `dove` esiste per un singolo file, e senza
+         * questo campo `eCreato(s) && (s.dove || s.pdf)` restava falso.
+         *
+         * ⛔ Un ID di Libreria, non un percorso di file: il visualizzatore
+         * legge il testo con `hydrateText(id)`, la stessa via già in uso
+         * per gli allegati già attaccati — non un secondo modo di leggere
+         * un file.
+         */
+        readonly mdFileId?: string
     }
     | {
         readonly tipo: 'quale-app'
