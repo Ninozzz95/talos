@@ -439,6 +439,13 @@ export const TALOS_IT_MESSAGES = {
     personalVoice: {
         title: 'Voce personale',
         body: 'Registra 12 frasi guidate — circa 3 minuti — e TALOS potrà leggere con la tua voce, sempre sul dispositivo.',
+        // ⭐⭐⭐ Fase 5, Blocco 3c — il download del motore, non più adb push a mano.
+        installBody: 'Prima di registrare la tua voce, TALOS deve scaricare il motore che la userà — circa 730 MB, una volta sola.',
+        install: 'Scarica il motore voce',
+        installing: 'Sto scaricando…',
+        installProgress: '{percent}% scaricato',
+        installActivating: 'Ultimo passo: installazione…',
+        installFailed: 'Il download non è riuscito. Riprova quando vuoi.',
         create: 'Crea la tua voce',
         addAnother: 'Aggiungi un’altra voce',
         manage: 'Gestisci',

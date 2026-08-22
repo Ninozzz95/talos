@@ -31,6 +31,35 @@ vi.mock('@/stores/settings', () => ({
     useSettingsStore: () => settings,
 }))
 
+/*
+ * ⛔ Prima di Fase 5 Blocco 3c questo file non mockava
+ * `@/services/personalVoice` per niente: il modulo VERO gira in jsdom,
+ * `registerPlugin` non trova un ponte nativo, e il `try/catch` già dentro
+ * `talosPersonalVoiceStatus` torna `supported:false` da solo — motivo per
+ * cui ogni test qui ha sempre visto la sezione "non supportata" (ora:
+ * "installa") senza che nessuno l'avesse deciso apposta. Il mock esplicito
+ * rende ENTRAMBI gli stati controllabili invece di uno solo per caso.
+ */
+const personalVoice = vi.hoisted(() => ({
+    status: vi.fn(async () => ({ supported: false, installed: false, ready: false, active: false })),
+    profiles: vi.fn(async () => []),
+    renameProfile: vi.fn(async () => undefined),
+    deleteProfile: vi.fn(async () => undefined),
+}))
+vi.mock('@/services/personalVoice', () => ({
+    talosPersonalVoiceStatus: personalVoice.status,
+    talosPersonalVoiceProfiles: personalVoice.profiles,
+    talosRenamePersonalVoiceProfile: personalVoice.renameProfile,
+    talosDeletePersonalVoiceProfile: personalVoice.deleteProfile,
+}))
+
+const voiceModelInstall = vi.hoisted(() => ({
+    install: vi.fn(),
+}))
+vi.mock('@/services/voiceModelInstall', () => ({
+    talosInstallPersonalVoiceModel: voiceModelInstall.install,
+}))
+
 import TalosMobileVoiceSettings from '@/components/talos/settings/TalosMobileVoiceSettings.vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 
@@ -38,6 +67,9 @@ beforeEach(() => {
     service.supported.mockReturnValue(true)
     settings.state.voice.dictation_language = 'system'
     settings.setVoicePreferences.mockClear()
+    personalVoice.status.mockClear().mockResolvedValue({ supported: false, installed: false, ready: false, active: false })
+    personalVoice.profiles.mockClear().mockResolvedValue([])
+    voiceModelInstall.install.mockReset()
 })
 
 describe('TalosMobileVoiceSettings', () => {
@@ -127,5 +159,117 @@ describe('TalosMobileVoiceSettings', () => {
         const voci = wrapper.get('[data-testid="talos-tts-controls"]')
             .findComponent(TalosThemedSelect).props('items') as { value: string }[]
         expect(voci.some((v) => v.value === 'it-it-x-itb-network')).toBe(true)
+    })
+})
+
+/**
+ * ⭐⭐⭐ FASE 5, BLOCCO 3c — il bottone che scarica il motore.
+ *
+ * Prima di questo blocco la sezione spariva del tutto quando
+ * `personalVoiceSupported` era falso (nessun installer esisteva). Ora offre
+ * di scaricarlo — questi test provano che lo fa davvero, segue
+ * l'avanzamento, e non finge un successo che l'attivazione nativa ha
+ * rifiutato.
+ */
+describe('TalosMobileVoiceSettings — installare il motore voce (Fase 5)', () => {
+    it('shows the install button, not the create-voice button, when the model is not present', async () => {
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-personal-voice-install"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-personal-voice-install-start"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-personal-voice-create"]').exists()).toBe(false)
+    })
+
+    it('shows the create-voice button, not the install button, once the model IS present', async () => {
+        personalVoice.status.mockResolvedValue({ supported: true, installed: true, ready: true, active: false })
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-personal-voice-install"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-personal-voice-create"]').exists()).toBe(true)
+    })
+
+    it('tapping install calls the real orchestrator, and follows its progress', async () => {
+        let onProgress: ((p: unknown) => void) | undefined
+        voiceModelInstall.install.mockImplementation(async (cb: (p: unknown) => void) => {
+            onProgress = cb
+            return new Promise(() => {}) // resta in corso per il resto del test
+        })
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-personal-voice-install-start"]').trigger('click')
+        await flushPromises()
+        expect(voiceModelInstall.install).toHaveBeenCalledTimes(1)
+
+        onProgress?.({ phase: 'downloading', haveBytes: 300, totalBytes: 1_000 })
+        await flushPromises()
+        expect(wrapper.get('[data-testid="talos-personal-voice-install-progress"]').text()).toContain('30')
+
+        // ⛔ Il bottone deve dire «sto scaricando», e non essere ripremibile
+        // - un secondo tocco avvierebbe un secondo download dello stesso
+        // motore mentre il primo è ancora in corso.
+        const button = wrapper.get('[data-testid="talos-personal-voice-install-start"]')
+        expect((button.element as HTMLButtonElement).disabled).toBe(true)
+        await button.trigger('click')
+        expect(voiceModelInstall.install).toHaveBeenCalledTimes(1)
+    })
+
+    it('shows the activation message once the download itself is done', async () => {
+        let onProgress: ((p: unknown) => void) | undefined
+        voiceModelInstall.install.mockImplementation(async (cb: (p: unknown) => void) => {
+            onProgress = cb
+            return new Promise(() => {})
+        })
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-personal-voice-install-start"]').trigger('click')
+        // ⛔ `trigger('click')` aspetta solo il primo giro di reattività
+        // dell'handler, non l'intera catena `await import()` +
+        // `talosInstallPersonalVoiceModel(...)` che assegna `onProgress` —
+        // un `flushPromises()` qui manca, `onProgress` è ancora `undefined`
+        // al punto in cui il test lo chiamerebbe, e la chiamata sparisce in
+        // silenzio dietro `?.()`. Trovato da questo stesso test in rosso.
+        await flushPromises()
+        onProgress?.({ phase: 'activating' })
+        await flushPromises()
+        // ⛔ Il locale di default in questa suite è l'inglese (vedi le altre
+        // asserzioni testuali del file, es. "Device default" sopra) — non
+        // l'italiano dei commenti.
+        expect(wrapper.find('[data-testid="talos-personal-voice-install"]').text()).toContain('Last step')
+    })
+
+    /**
+     * ⛔⛔ AL CONTRARIO — la sezione che conta di più: un download che
+     * SPARISCE dalla lista dei trasferimenti senza che l'attivazione nativa
+     * abbia davvero confermato i file non deve mai passare per un successo.
+     */
+    it('on failure keeps showing install (not create), with the error and a retry available', async () => {
+        voiceModelInstall.install.mockResolvedValueOnce({ ok: false, reason: 'not-activated' })
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-personal-voice-install-start"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.find('[data-testid="talos-personal-voice-install-error"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-personal-voice-create"]').exists()).toBe(false)
+        const button = wrapper.get('[data-testid="talos-personal-voice-install-start"]')
+        expect((button.element as HTMLButtonElement).disabled).toBe(false)
+
+        // Riprovare chiama di nuovo l'orchestratore vero, non un tocco morto.
+        voiceModelInstall.install.mockResolvedValueOnce({ ok: true })
+        await button.trigger('click')
+        await flushPromises()
+        expect(voiceModelInstall.install).toHaveBeenCalledTimes(2)
+        expect(wrapper.find('[data-testid="talos-personal-voice-install"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-personal-voice-create"]').exists()).toBe(true)
+    })
+
+    it('a native/web plugin failure (a thrown rejection) shows the SAME honest error, not a crash', async () => {
+        voiceModelInstall.install.mockRejectedValueOnce(new Error('plugin not implemented'))
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-personal-voice-install-start"]').trigger('click')
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-personal-voice-install-error"]').exists()).toBe(true)
     })
 })
