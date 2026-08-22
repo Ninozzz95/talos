@@ -84,6 +84,40 @@ codice — un'ipotesi mia contro una misura, e vince la misura.
 | **H02** | registro attrezzi | `lib/tools/registry.ts`, `toolset.ts` | `executor.ts` | **61 attrezzi** |
 | **H03** | apertura a gradi | `lib/tools/aperturaProgressiva.ts` | `chat/providers/anthropicAdapter.ts`, `improntaDelProfilo.ts` | 63 attrezzi = **11.500 token/messaggio** senza (13/8) |
 | **H03b** | catalogo compatto | `lib/tools/catalogoCompatto.ts` | `stores/chatController.ts:3660` (import **dinamico**) | 61 schemi **10.375 → 1.375 token, −87%** (9/8) |
+
+#### ⭐ Correzione del 2026-08-22, aggiunta poche ore dopo il censimento
+
+La prima stesura lasciava aperta una domanda e stava per rispondere male.
+`aperturaProgressiva` è importata **solo** da `anthropicAdapter.ts`; gli altri
+quattro adattatori — `gemini`, `local`, `ollama`, `openAiCompatible` — non la
+nominano. La lettura ovvia era: *«l'apertura a gradi non copre il modello
+locale, che è dove il contesto è più scarso»*. ⛔ **Falsa.**
+
+La riduzione non sta nell'adattatore: sta nel **controller**, una riga sopra.
+
+```js
+// stores/chatController.ts:3652
+const catalogoAttivo = profile?.provider !== 'anthropic' && offeredTools.length > 0
+```
+
+⇒ **Due meccanismi, scelti per provider, e insieme coprono tutte e cinque le
+famiglie:**
+
+```
+anthropic              aperturaProgressiva      (ricerca attrezzi nativa)
+tutti gli altri        catalogoCompatto         (indice + `tool_details` a richiesta)
+   di cui il locale    + localToolCalls.ts      (il protocollo testuale)
+```
+
+⭐ Quindi H03 è **più forte** di come l'avevo scritta: la copertura è completa,
+non parziale. E il percorso locale ha in più la sua misura, in
+`localAdapter.ts:399` — *«sono i trentotto schemi dei tool. Centocinquanta
+secondi, l'88% dell'attesa»*.
+
+⛔ È il **quinto** difetto del metodo nella stessa giornata, e la stessa forma
+delle altre quattro: ho guardato lo strato in cui il meccanismo **non c'è** e ho
+concluso che non ci fosse. ⇒ Quando una capacità sembra mancare in un modulo,
+si risale al chiamante **prima** di scriverlo.
 | **H04** | permessi e approvazione | `permissionTypes.ts`, `toolAuthorizations.ts`, `securityCatalog.ts`, `consentQueue.ts` | `executor.ts`, `toolset.ts` | 17 file |
 | **H05** | postcondizioni | 10 file | `executor.ts` | ⛔ `precondizioni` e `effettoIgnoto`: **1 file** — vedi PARZIALE |
 | **H20** | automazioni / promemoria | 58 file | sì | — |
