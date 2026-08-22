@@ -327,8 +327,31 @@ il nucleo da solo resta ≥ 1,2 dopo B2
     → nessuna pipeline lo salva: B5 + B6, oppure B9
 ```
 
-⛔ **Cinque strade, mutuamente esclusive.** Sceglierne una prima di B0 significa
-scommettere giorni su un lancio di dado.
+⛔⛔ **CORREZIONE del 2026-08-22, sollevata da Codex e accolta.** Qui c'era
+scritto «cinque strade, mutuamente esclusive», ed **era falso**: l'albero qui
+sopra prescrive lui stesso delle combinazioni (`B2 → B7`, `B5 + B6`), le
+condizioni possono verificarsi **insieme**, e B9 è dichiarato spedibile
+comunque. Tre punti che si annullavano a vicenda.
+
+⇒ **Cosa dice davvero l'albero.** I rami **non** sono alternative che si
+escludono: nominano **quale blocco va PER PRIMO**, perché è l'ordine che B0
+decide, non l'insieme. Il budget per frame che B0 misura si spartisce fra le
+fasi, e quella spartizione ordina i blocchi per **quanti millisecondi possiede
+ciascuno**.
+
+```
+B0 NON produce un vincitore.
+B0 produce un ELENCO ORDINATO di blocchi, ognuno col suo falsificatore,
+   più quelli che si possono chiudere subito perché non possiedono niente.
+```
+
+⭐ **E B9 sta fuori dall'ordinamento**: non compete con gli altri, dichiara il
+limite che resta *qualunque* leva vinca. Si spedisce comunque.
+
+⛔ Resta vero l'unico punto per cui questa sezione esiste: **aprire un blocco
+prima di B0 significa scommettere giorni sull'ordine sbagliato.** Non perché gli
+altri siano preclusi, ma perché il primo costa il tempo che gli altri aspettano.
+
 
 ---
 
