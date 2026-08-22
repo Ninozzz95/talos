@@ -1,4 +1,4 @@
-# ═══════════════════════════════════════════════════════════════════════════
+﻿# ═══════════════════════════════════════════════════════════════════════════
 #  PREPARARE LA PUBBLICAZIONE — senza toccare NIENTE di quello che abbiamo
 # ═══════════════════════════════════════════════════════════════════════════
 #
@@ -305,10 +305,65 @@ if (-not (Test-Path $tar)) { Male "git archive non ha prodotto niente"; exit 1 }
 Bene "archivio: $([math]::Round((Get-Item $tar).Length / 1MB, 1)) MB"
 
 New-Item -ItemType Directory -Force $Destinazione | Out-Null
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  ⛔⛔⛔ QUALE `tar`, E PERCHÉ LA DOMANDA NON È PEDANTERIA — 2026-08-22
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Su questa macchina `tar` risolve a `C:\Program Files\Git\usr\bin\tar.exe`, il
+# tar di Git Bash. Quello legge un percorso `C:\...` come **HOST REMOTO** e
+# prova ad aprire una connessione: «Cannot connect to C: resolve failed».
+#
+# Estrae ZERO file, ed esce senza che PowerShell lo consideri un errore.
+#
+# ⇒ Il 2026-08-16 questo ha svuotato la copia pubblica e ci ha committato
+# dentro la cancellazione di 1.612 file. La cura fu trovata quel giorno —
+# «System32 in testa al PATH» — ma restò nella memoria di chi pubblicava,
+# **non nello script**. Il 2026-08-22 è successo di nuovo, identico: cartella
+# svuotata, un commit con 4 file, e lo script che stampava `FATTO`.
+#
+# ⇒ Una cura che vive nella memoria di qualcuno non è una cura. Adesso è qui:
+# lo script si sceglie il tar giusto da solo, e se non lo trova si ferma
+# invece di estrarre niente in silenzio.
+$tarDiWindows = Join-Path $env:SystemRoot 'System32\tar.exe'
+if (Test-Path $tarDiWindows) {
+    Bene "tar: $tarDiWindows (quello di Windows, capisce i percorsi C:\)"
+}
+else {
+    Male "manca $tarDiWindows — il tar di Git Bash NON sa estrarre in C:\ e svuoterebbe la copia"
+    exit 1
+}
+
 Passo "scompatto in $Destinazione"
-tar -xf $tar -C $Destinazione
-tar -xf $tarRadice -C $Destinazione
+& $tarDiWindows -xf $tar -C $Destinazione
+& $tarDiWindows -xf $tarRadice -C $Destinazione
 Remove-Item $tar, $tarRadice -Force
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  ⛔⛔⛔ SI CONTROLLA L'ESTRAZIONE, NON L'ARCHIVIO — 2026-08-22
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Sopra c'era già `if (-not (Test-Path $tar)) { Male "git archive non ha
+# prodotto niente" }`. Quel controllo passava: `git archive` **funzionava**, e
+# l'archivio era di 26,3 MB. A fallire era il passo dopo.
+#
+# ⇒ Il difetto non era il controllo mancante: era il controllo sulla cosa
+# SBAGLIATA. Guardava l'ingresso di un passo e dichiarava buono il suo esito —
+# ed è la stessa famiglia di «un titolo che dichiara zero per costruzione»: un
+# numero c'è, sembra una verifica, e non guarda ciò che deve.
+#
+# ⇒ Qui si conta cosa è ATTERRATO. Una copia con dieci file non è una copia
+# riuscita più piccola: è una copia fallita che sta per essere committata.
+$attesiAlmeno = 500
+$estratti = @(Get-ChildItem $Destinazione -Recurse -File -Force -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -notlike "*\.git\*" })
+if ($estratti.Count -lt $attesiAlmeno) {
+    Male "estratti solo $($estratti.Count) file (attesi almeno $attesiAlmeno)"
+    "     L'archivio c'era ($([math]::Round((Get-Item $tar -ErrorAction SilentlyContinue).Length / 1MB, 1)) MB) ma l'estrazione non ha prodotto niente."
+    "     ⛔ NON committare e NON pubblicare questa cartella: e' vuota."
+    exit 1
+}
+Bene "estratti $($estratti.Count) file - l'estrazione ha davvero prodotto qualcosa"
 
 # ⛔ Il README parlava da dentro `mobile/`, quindi puntava a `../LICENSE`.
 # Adesso e' la radice: i rimandi vanno corretti, se no il primo link che una
