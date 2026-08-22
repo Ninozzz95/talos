@@ -1141,3 +1141,191 @@ Corsa sul dispositivo con `moss/` prima cancellato (backup verificato
 in `moss-backup-22ago/`, ancora lì) e ora ripopolato dal download vero:
 lo stato attuale del Pad È l'installazione riuscita, non serve
 ripristinare il backup.
+
+---
+
+## 16. Verifica sul dispositivo della Fase 4 — un crash reale chiuso, due difetti trovati ispezionando (22/8, sera)
+
+Owner: prova passo passo sul Pad ogni schermo del wizard contro il mockup
+approvato, screenshot a ogni passo, ispezione autonoma. Il telefono non era
+fisicamente disponibile per buona parte del giro: dove serviva una voce
+vera, le casse del PC (SAPI, `Microsoft Elsa Desktop`) hanno fatto da
+sorgente microfono; dove il crash andava riprodotto senza registrare di
+nuovo, le 12 frasi già cifrate su disco sono bastate.
+
+### 16.1 Il crash OOM in codifica — riprodotto due volte, causa vera trovata la seconda
+
+Prima prova end-to-end con le 12 frasi vere: l'app muore allo spinner
+("Sto elaborando la tua voce"), `lowmemorykiller` con motivo
+**"process memory is leaking"** — non "critical pressure" generico.
+Prima misura: **~5,8 GB RSS + ~5,3 GB swap**.
+
+Primo tentativo di cura — `OrtSession.SessionOptions.setCPUArenaAllocator(false)`
+(disattiva l'arena di memoria ONNX, raccomandazione ufficiale per modelli
+piccoli) — **insufficiente**: riprodotto di nuovo, stessa classificazione
+LMK, RSS più basso ma ancora letale (**~3,5 GB RSS + ~5,96 GB swap**).
+Dichiarato onestamente insufficiente, non spacciato per fix.
+
+Causa vera, dopo ricerca: l'auto-attenzione di un codec neurale a base
+transformer ha costo di memoria **quadratico** nella lunghezza della
+sequenza — coerente con la crescita **continua** di RSS osservata durante
+`codecEncodeSession.run()`, non un picco al caricamento. Concatenare tutte
+e 12 le frasi (20-40+ secondi reali) sfondava il limite. La documentazione
+ufficiale di MOSS-TTS lo conferma anche sul piano della qualità, non solo
+della memoria: *"optimal reference clip length is 3-10 seconds… clips
+longer than ~15 seconds may introduce noise artifacts or degrade quality"*.
+
+Cura, due livelli:
+- `TalosNeuralVoicePlugin.buildEnrollmentProfile()` preferisce ora **solo le
+  4 frasi del livello "normale"** (slot 4-7) quando sono tutte presenti,
+  invece delle 12 concatenate.
+- `TalosVoiceEnrollment.buildProfile()` porta comunque un **tetto duro
+  indipendente di 12 secondi** (`MAX_REFERENCE_SECONDS`) come difesa in
+  profondità, per qualunque insieme più grande arrivasse lì in futuro.
+
+Log diagnostico permanente aggiunto in `TalosMossRuntime` (non una sonda
+usa-e-getta), misura reale sul terzo rebuild:
+
+```
+14:52:52.604 open(): inizio apertura sessioni ONNX
+14:53:00.082 open(): codecEncodeSession aperta, tutte e sei pronte      (7,48 s)
+14:53:00.101 encodeReferenceAudio(): inizio, 576000 campioni (12.0s)
+14:53:00.113 encodeReferenceAudio(): tensori pronti, chiamo .run()
+14:53:05.517 encodeReferenceAudio(): run() tornata                     (5,42 s)
+```
+
+Conferma: il tetto dei 12 s è esatto (576.000/48.000), e `run()` completa
+senza crash. **Costo noto, non chiuso**: aprire le 6 sessioni ONNX costa
+~7,5 s anche quando il percorso di sola codifica ne usa una — non toccato
+in questo turno.
+
+Verificato end-to-end sul Pad con dati reali: encode → preview → salva →
+rinomina → elimina, tutti riusciti. Commit `266ad41e` (il fix vero),
+preceduto da `22a9c69c` (arena disattivata, insufficiente da sola ma
+tenuta comunque per la sua raccomandazione ufficiale).
+
+### 16.2 Ripresa cifrata per frase — decisione owner, implementata e provata due volte
+
+Owner, decisione esplicita (`AskUserQuestion`): "Cifrato per frase,
+ripristinabile" contro "solo il progresso, non l'audio" — scelta la prima.
+`TalosVoiceEnrollmentSessionStore.kt` (nuovo): AES-256-GCM via Keystore,
+stesso schema di `TalosVoiceProfileStore`/`TalosVoiceProfileCipher`
+(fsync-poi-rename atomico, un solo alias, cancellazione crittografica al
+termine). `startEnrollmentSession()` ora **rehydrata** invece di
+cancellare, e risponde con `resumedSlotIndexes`; il wizard Vue salta dritto
+alla prima frase mancante (o a "review" se tutte e 12 sono già lì) —
+consenso e controllo microfono non si rifanno, perché una frase vera già
+cifrata su disco È la prova che erano già stati dati.
+
+Verificato sul dispositivo **due volte**: un force-stop simulato a metà
+wizard, e un crash reale (durante l'indagine del §16.1) — in entrambi i
+casi il rilancio salta correttamente alla frase giusta senza far
+riregistrare quelle accettate.
+
+### 16.3 Waveform reale, anche sullo schermo di controllo microfono
+
+Owner, dopo aver visto una prima versione: "assicurati che la waveform
+reagisca (si muove) e venga animata al cambio del volume e al parlato
+della persona" — non bastava che il codice esistesse, serviva la prova.
+Dimostrato campionando il DOM via CDP: 46 campioni di altezza barra
+temporizzati su 7 secondi, correlati con l'arrivo di audio reale dagli
+altoparlanti del PC.
+
+Owner poi, da screenshot: la waveform mancava sulla schermata "Trova un
+posto silenzioso" (il controllo microfono prima di entrare nel wizard). Il
+mockup approvato non prevedeva un livello reale lì (solo istruzioni);
+aggiunta una nuova capacità nativa, `TalosVoiceRecorder.peekLevel()`
+(stesso `AudioRecord`, scarta i campioni invece di accumularli), esposta
+come `startMicLevelPeek`/`stopMicLevelPeek`, accesa **solo** mentre lo
+stage è `'check'` e spenta appena se ne esce (mai accesa durante il
+wizard, dove il livello arriva già dalla cattura vera).
+
+### 16.4 Difetto trovato ispezionando: "Select an option" con una voce di ripiego valida
+
+Non nel mockup, non richiesto — trovato controllando il selettore voce
+delle Impostazioni durante questo giro di QA. Causa: `voiceItems`
+(l'elenco mostrato) usa `rete: navigator.onLine !== false`, mentre
+`voceDiRipiego`/`selectedVoice` (il default o la scelta esplicita) usa
+`rete: false` fisso — decisione dell'8/10, voluta, per non cambiare
+timbro a metà lettura. Online, con **tre o più** voci nominate nella
+lingua, l'ordinamento di rete porta in testa solo voci di rete e la
+"prima e ultima delle prime tre" (`talosVociOfferte`) può escludere del
+tutto la voce locale scelta — che resta comunque `selectedVoice`, quindi
+`TalosThemedSelect` mostra onestamente il placeholder perché il suo
+`modelValue` non è fra le `items` (comportamento CORRETTO del componente,
+confermato contro Radix upstream — il difetto era nel chiamante).
+
+Fix: `voiceItems` ripesca la voce selezionata mancante in coda
+all'elenco, stesso pattern già in uso per `dictationLanguageItems`.
+Diverso dal Rilievo 3 (§14.2, già chiuso l'8/10): quello univa i TRE
+calcoli del default; questo copre il caso in cui una scelta **esplicita**
+(non solo il ripiego) viene esclusa dall'elenco mostrato.
+
+Test nuovo `PVOICE-SELECT-01`. Verificato sul Pad con voci reali: 3 voci
+nominate `it-IT`, l'ordinamento di rete ne mostrava 2, il ripescaggio ha
+riportato la terza (`itb (it-IT)`, la voce di ripiego reale) e il
+trigger la mostra — mai il placeholder.
+
+### 16.5 Difetto trovato ispezionando: il dialog del wizard intrappolato nel pannello tablet
+
+Verificando il footer pinnato (richiesta owner, sotto) sul Pad **senza
+forzare `wm size`** — cioè sul vero layout tablet a due pannelli
+("Centro impostazioni", lista categorie + dettaglio) — il dialog
+dell'arruolamento non copriva più tutto lo schermo: la sidebar delle
+categorie restava visibile, e il footer finiva a metà pagina invece che
+in fondo.
+
+Causa misurata via CDP (`getBoundingClientRect`/`getComputedStyle`), non
+ipotizzata: `TalosMobileSettingsCenter.vue` anima il pannello dettaglio
+con `.talos-motion-tab-panel[data-state="active"]`
+(`talos-interaction-motion-v6.css`), la cui `animation` risolve sempre a
+una `transform` — anche l'identità, a riposo. Per specifica CSS
+(confermato con ricerca web: mtsknn.fi/blog/breaking-css-position-fixed,
+documentazione Vue Teleport), un antenato con `transform` non-`none`
+diventa il containing block di ogni discendente `position: fixed`:
+`fixed inset-0` smette di significare "tutto lo schermo".
+
+Fix: `<Teleport to="body">` attorno al dialog — stesso pattern già in
+uso per lo stesso motivo in `TalosLauncherIconDialog.vue` (anch'esso
+montato dentro un pannello `talos-motion-tab-panel`). Verificato via CDP:
+prima, il rettangolo del dialog era 562×778 dentro un pannello di
+594×1179; dopo, `0,0`/`914×1292`, figlio diretto di `<body>`, identico a
+`window.innerWidth/innerHeight`. Controllato **in entrambi gli
+orientamenti** (portrait e landscape, ruotato via `adb shell settings put
+system user_rotation`).
+
+Il fix ha rotto 2 test esistenti — non un difetto del componente, un
+quirk reale e noto di Vue Test Utils: il suo stub `teleport: true`
+richiama `slots.default()` a ogni resa, e un riferimento a un
+elemento/componente catturato prima di una mutazione reattiva diventa
+stantio. Diagnosticato con un test di debug usa-e-getta (misurato
+`SAME ELEMENT? false` prima di correggere), corretto ri-interrogando il
+DOM a ogni controllo — lo stesso stile già in uso in
+`TalosLauncherIconDialog.test.ts`.
+
+### 16.6 Footer avanti/indietro pinnato in fondo
+
+Owner: "fai in modo anche che i pulsanti avanti e indietro del wizard
+siano pinnati in fondo come footer". Il footer era già `flex-1` +
+`overflow-y-auto` sul contenuto sopra di lui per costruzione; aggiunto
+`shrink-0` esplicito come difesa in profondità contro un caso limite di
+flex-basis, con commento che spiega perché non è ridondante. Il §16.5 ne
+ha reso la verifica visiva sul tablet finalmente affidabile — prima il
+dialog intrappolato rendeva la domanda "il footer è in fondo a COSA"
+priva di senso.
+
+### 16.7 Stato a fine turno
+
+| commit | cosa | prova |
+|---|---|---|
+| `22a9c69c` | ripresa cifrata, waveform reale, arena ONNX disattivata | 2× resume su device, 46 campioni DOM correlati ad audio reale |
+| `266ad41e` | causa vera dell'OOM, tetto 12s + solo frasi normali | log diagnostico, encode→preview→salva→CRUD riusciti su device |
+| `9876d2a2` | select backfill, Teleport, footer `shrink-0` | CDP rect prima/dopo, portrait+landscape, `PVOICE-SELECT-01` |
+
+Suite intera 5957 verdi/10 skip, typecheck pulito dopo ognuno dei tre
+commit, non solo alla fine. Nessun push (regola: si chiede sempre).
+
+⛔ Non chiuso in questo turno, per nome: apertura delle 6 sessioni ONNX
+anche sul percorso di sola codifica (~7,5 s, §16.1); Rilievo 1 di §14.5
+(censimento tool/ricerca web per modello); il test JVM con server HTTP
+locale per `resolveOn()` che §15.6 segnala ancora mancante.
