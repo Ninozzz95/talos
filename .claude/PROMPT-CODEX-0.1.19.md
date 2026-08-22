@@ -42,7 +42,8 @@ serve un **albero tuo**.
 ### Passo 0 — da fare per primo, una volta sola
 
 ```bash
-# il ramo esiste già: lane/voce-fluida, staccato da lane/voce-personale @ b386197c
+# il ramo esiste già: lane/voce-fluida, staccato da lane/voce-personale @ e9140bfb
+# (contiene questo documento e la consegna: sono commit di questo repo, non allegati)
 git -C C:/Users/Antonino/Desktop/projects/AVM worktree add \
     C:/Users/Antonino/Desktop/projects/AVM-voce lane/voce-fluida
 
