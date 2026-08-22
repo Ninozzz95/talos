@@ -1190,6 +1190,18 @@ public class TalosLlamaPlugin extends Plugin {
             return result.put("reason", "already-proven");
         }
 
+        // P0-2: UNA sola lettura del file per l'intera qualificazione — CPU e
+        // GPU condividono lo stesso modello, e ricalcolare l'hash due volte
+        // sarebbe leggere lo stesso gigabyte due volte per lo stesso numero.
+        // Null propaga silenziosamente a entrambe le chiamate sotto: la
+        // qualificazione classica (TalosBackendEvidenceStore) non dipende da
+        // questo e continua comunque.
+        TalosLocalProfileIdentity identitaCorrente = null;
+        String modelSha256 = sha256Del(path);
+        if (modelSha256 != null) {
+            identitaCorrente = TalosLocalProfileIdentity.current(modelSha256, new File(path).length());
+        }
+
         // Il riferimento per giudicare la GPU è il testo della CPU di QUESTA
         // stessa chiamata, non uno vecchio: due corse a distanza di giorni
         // potrebbero cadere su prompt diversi se mai lo diventasse.
@@ -1210,7 +1222,8 @@ public class TalosLlamaPlugin extends Plugin {
             if (cpuRun == null) break;
             cpuText = cpuRun.text;
             boolean cpuOk = TalosLlamaProbe.referenceIsUsable(cpuText);
-            cpuRecorded = recordIfConclusive(context, TalosBackendChoice.CPU, driver, cpuRun, cpuOk);
+            cpuRecorded = recordIfConclusive(
+                    context, TalosBackendChoice.CPU, driver, cpuRun, cpuOk, identitaCorrente);
             cpuInconclusive = !cpuRecorded;
         }
         result.put("probedCpu", cpuRecorded);
@@ -1223,7 +1236,8 @@ public class TalosLlamaPlugin extends Plugin {
                 ProbeRun gpuRun = runOne(path, -1);
                 if (gpuRun == null) break;
                 boolean gpuOk = TalosLlamaProbe.agreesWithReference(cpuText, gpuRun.text);
-                gpuRecorded = recordIfConclusive(context, TalosBackendChoice.OPENCL, driver, gpuRun, gpuOk);
+                gpuRecorded = recordIfConclusive(
+                        context, TalosBackendChoice.OPENCL, driver, gpuRun, gpuOk, identitaCorrente);
                 gpuInconclusive = !gpuRecorded;
             }
         }
@@ -1280,7 +1294,7 @@ public class TalosLlamaPlugin extends Plugin {
      */
     private boolean recordIfConclusive(
             android.content.Context context, String backend, String driver,
-            ProbeRun run, boolean answerCorrect) {
+            ProbeRun run, boolean answerCorrect, TalosLocalProfileIdentity identitaCorrente) {
         TalosBenchmarkHarness.Result measured =
                 TalosBenchmarkHarness.judge(run.samples, answerCorrect, run.ttftMs);
         boolean conclusive = measured.verdict == TalosBenchmarkHarness.Verdict.VALID
@@ -1297,7 +1311,44 @@ public class TalosLlamaPlugin extends Plugin {
                 + (conclusive ? "" : " campioni=" + samplesDump));
         if (!conclusive) return false;
         TalosBackendEvidenceStore.record(context, TalosLlamaProbe.evidenceOf(backend, driver, measured));
+        // P0-2: layer PARALLELO, non un sostituto — TalosBackendChoice.choose
+        // continua a leggere solo lo store sopra, invariato. Null quando
+        // l'hash del modello non si è calcolato (vedi sha256Del): un profilo
+        // scritto con un'identità che non si può fidare sarebbe peggio di
+        // nessun profilo.
+        if (identitaCorrente != null) {
+            TalosLocalProfileStore.record(context, new TalosLocalProfile(
+                    identitaCorrente, backend, run.backendDevice,
+                    TalosBenchmarkHarness.outcomeOf(measured), run.ttftMs,
+                    System.currentTimeMillis()));
+        }
         return true;
+    }
+
+    /**
+     * P0-2 — l'hash che dà a un modello un'identità che non è il suo nome
+     * file. Null se il file non si legge: un profilo con un'identità
+     * indovinata sarebbe peggio di nessun profilo, e la qualificazione
+     * classica ({@link TalosBackendEvidenceStore}) continua comunque — solo
+     * il layer nuovo resta senza questa riga.
+     *
+     * ⛔ Riusa {@link TalosResumableSha256}, non un secondo hash: è già
+     * l'implementazione con cui questo repo verifica un GGUF scaricato, e
+     * l'esadecimale minuscolo che produce è la stessa forma con cui
+     * HuggingFace pubblica `lfs.oid`.
+     */
+    private static String sha256Del(String path) {
+        TalosResumableSha256 digest = new TalosResumableSha256();
+        byte[] buffer = new byte[64 * 1024];
+        try (java.io.FileInputStream in = new java.io.FileInputStream(path)) {
+            int letti;
+            while ((letti = in.read(buffer)) >= 0) {
+                if (letti > 0) digest.update(buffer, 0, letti);
+            }
+            return digest.hex();
+        } catch (java.io.IOException illeggibile) {
+            return null;
+        }
     }
 
     /** Un campione per riga, per leggere a occhio dove il divario di tempo o di token si è rotto. */
@@ -1321,7 +1372,10 @@ public class TalosLlamaPlugin extends Plugin {
                     TalosLlamaProbe.PROMPT, TalosLlamaProbe.TOKENS,
                     () -> TalosThermal.read(getContext()), TalosLlamaEngine.Mode.BENCHMARK);
             if (run == null) return null;
-            return new ProbeRun(run.text, run.samples, run.ttftMs);
+            // P0-2: va letto ORA — l'handle nativo muore nel finally qui
+            // sotto, e uno snapshot chiesto dopo troverebbe solo un motore
+            // già chiuso.
+            return new ProbeRun(run.text, run.samples, run.ttftMs, backendDeviceDi(engine));
         } catch (InterruptedException interrotta) {
             Thread.currentThread().interrupt();
             return null;
@@ -1330,15 +1384,36 @@ public class TalosLlamaPlugin extends Plugin {
         }
     }
 
+    /**
+     * P0-2 — quale dispositivo di offload il motore ha DAVVERO usato in
+     * questa corsa, dalla snapshot unificata di B1. Non lo stesso dato che
+     * {@link #deviceOffersOpenCl} guarda: quello dice se un acceleratore
+     * ESISTE su questa build, questo dice se QUESTA apertura lo ha usato.
+     * Null se il motore è CPU pura o se la snapshot non si legge — "non lo
+     * so" resta null, mai una stringa inventata.
+     */
+    private static String backendDeviceDi(TalosLlamaEngine engine) {
+        try {
+            String snapshot = engine.runtimeSnapshot();
+            if (snapshot == null) return null;
+            JSONObject o = new JSONObject(snapshot);
+            return o.isNull("backendDevice") ? null : o.getString("backendDevice");
+        } catch (JSONException snapshotMalformata) {
+            return null;
+        }
+    }
+
     private static final class ProbeRun {
         final String text;
         final TalosBenchmarkHarness.Sample[] samples;
         final long ttftMs;
+        final String backendDevice;
 
-        ProbeRun(String text, TalosBenchmarkHarness.Sample[] samples, long ttftMs) {
+        ProbeRun(String text, TalosBenchmarkHarness.Sample[] samples, long ttftMs, String backendDevice) {
             this.text = text;
             this.samples = samples;
             this.ttftMs = ttftMs;
+            this.backendDevice = backendDevice;
         }
     }
 }
