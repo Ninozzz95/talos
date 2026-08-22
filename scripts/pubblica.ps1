@@ -1,4 +1,4 @@
-# ⭐ PUBBLICA — un comando solo, e il via resta tuo.
+﻿# ⭐ PUBBLICA — un comando solo, e il via resta tuo.
 #
 # Rigenera la cartella pubblicabile, la controlla, e mostra ESATTAMENTE il
 # comando per spingere. Non spinge da sé: il push si CHIEDE, ogni volta.
