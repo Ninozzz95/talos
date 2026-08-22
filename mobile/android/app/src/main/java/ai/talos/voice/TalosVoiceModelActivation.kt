@@ -161,6 +161,59 @@ internal object TalosVoiceModelActivation {
     }
 
     /**
+     * ⛔⛔ TROVATO 22/8, owner: gli ONNX del motore voce comparivano
+     * PERMANENTEMENTE nell'elenco dei modelli locali della CHAT — lo stesso
+     * selettore dei GGUF nel composer.
+     *
+     * Causa: [stage] COPIA (mai sposta) dalla cache generica di
+     * `TalosModelStore` — deliberato, "la cache resta il testimone finché la
+     * promozione intera non è passata" (commento sopra). Ma nessuno
+     * ripuliva quella cache DOPO che la promozione era davvero passata, e
+     * `TalosModelStore.finished()` — che `installed()` lato Kotlin usa per
+     * il picker dei modelli LLM — non distingue un artifact voce da un
+     * GGUF vero: "finito" è definito per esclusione (né `.part` né
+     * `.talosdl` né `.prefix`), e un file voce copiato con successo è
+     * esattamente questo. ⇒ ~763 MB duplicati per sempre (cache generica +
+     * `moss/` attivo), e visibili dove non dovrebbero esserlo.
+     *
+     * Chiamata solo DOPO che la promozione è certa (mai da [stage], mai a
+     * metà) — cancellare la cache prima significherebbe perdere l'unica
+     * copia se [promote] fallisse a metà. Idempotente: cancellare un file
+     * già assente è un no-op silenzioso, sicuro da richiamare a ogni
+     * [recover] — importante per chi ha installato il motore voce PRIMA di
+     * questa cura: la cache vecchia si ripulisce da sola al prossimo avvio.
+     *
+     * Pattern di pulizia confermato con ricerca web (javathinking.com,
+     * mkyong.com, baeldung.com): risalire dal file cancellato eliminando
+     * solo cartelle rimaste vuote, fermandosi alla prima non vuota.
+     */
+    fun cleanupSourceCache(externalFilesDir: File, artifact: TalosVoiceModelManifest.Artifact) {
+        val store = TalosModelStore(externalFilesDir)
+        val modelsRoot = File(externalFilesDir, "models")
+        for (file in artifact.files) {
+            val slot = store.slot(artifact.repo, artifact.revision, file.path)
+            slot.finished.delete()
+            pruneEmptyAncestors(slot.finished.parentFile, modelsRoot)
+        }
+    }
+
+    /**
+     * Risale cancellando cartelle rimaste vuote dopo un file cancellato,
+     * fermandosi a (senza mai cancellare) [stopAt] — che è sempre
+     * `externalFilesDir/models`, la radice condivisa con i GGUF veri: non
+     * va toccata nemmeno se momentaneamente vuota.
+     */
+    private fun pruneEmptyAncestors(start: File?, stopAt: File) {
+        var dir = start
+        while (dir != null && dir != stopAt && dir.isDirectory) {
+            val children = dir.listFiles() ?: break
+            if (children.isNotEmpty()) break
+            if (!dir.delete()) break
+            dir = dir.parentFile
+        }
+    }
+
+    /**
      * ⛔⛔ RIPRESA DOPO UN PROCESSO MORTO A META - lo scenario che il
      * cancello di uscita del blueprint nomina esplicitamente
      * ("model-update scenarios pass"). Tre stati possibili al riavvio per
@@ -175,16 +228,25 @@ internal object TalosVoiceModelActivation {
      *   es. l'app è morta prima di [cleanupPrevious]) → lo ripulisce qui,
      *   non aspetta un altro giro di [TalosVoiceHost].
      */
-    fun recover(externalFilesDir: File, targetDir: String): Outcome {
+    fun recover(externalFilesDir: File, artifact: TalosVoiceModelManifest.Artifact): Outcome {
+        val targetDir = artifact.targetDir
         val mossRoot = File(externalFilesDir, "moss")
         val staging = File(mossRoot, targetDir + STAGING_SUFFIX)
         if (staging.isDirectory) {
             val outcome = promote(externalFilesDir, targetDir)
             cleanupPrevious(externalFilesDir, targetDir)
+            if (outcome is Outcome.Activated) cleanupSourceCache(externalFilesDir, artifact)
             return outcome
         }
         cleanupPrevious(externalFilesDir, targetDir)
         val active = File(mossRoot, targetDir)
+        // ⛔ Anche nel ramo quieto (niente da promuovere): un processo può
+        // essere morto DOPO promote() ma PRIMA della pulizia della cache
+        // generica di una corsa precedente, o l'attivazione può essere
+        // riuscita in una build senza questa cura - senza questa riga la
+        // cache resterebbe piena per sempre. cleanupSourceCache è
+        // idempotente.
+        if (active.isDirectory) cleanupSourceCache(externalFilesDir, artifact)
         return if (active.isDirectory) Outcome.Activated(active) else Outcome.Failed("not-installed")
     }
 

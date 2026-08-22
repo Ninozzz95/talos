@@ -74,7 +74,7 @@ class TalosNeuralVoicePlugin : Plugin() {
                 val manifest = readManifest()
                 val externalFilesDir = context.applicationContext.getExternalFilesDir(null) ?: return@runCatching
                 for (artifact in manifest.artifacts) {
-                    TalosVoiceModelActivation.recover(externalFilesDir, artifact.targetDir)
+                    TalosVoiceModelActivation.recover(externalFilesDir, artifact)
                 }
             }
             // ⛔ Silenzioso di proposito: se il manifesto manca o è
@@ -224,6 +224,13 @@ class TalosNeuralVoicePlugin : Plugin() {
         // promossi la pulizia della versione vecchia è onesta - prima
         // sarebbe stata pulizia di un rollback che potrebbe ancora servire.
         for (targetDir in staged) TalosVoiceModelActivation.cleanupPrevious(externalFilesDir, targetDir)
+        // ⛔⛔ Trovato 22/8, owner: senza questa riga i file voce restavano
+        // per sempre nella cache generica di `TalosModelStore` - la STESSA
+        // che `installed()` sotto legge per il picker dei modelli LLM del
+        // composer. Solo qui, mai prima: la promozione di ENTRAMBI gli
+        // artifact è certa a questo punto. Vedi il commento su
+        // `cleanupSourceCache` per la causa intera.
+        for (artifact in manifest.artifacts) TalosVoiceModelActivation.cleanupSourceCache(externalFilesDir, artifact)
 
         call.resolve(JSObject().put("activated", true).put("supported", TalosVoiceModelManager.isPresent(modelRoot())))
     }
@@ -251,7 +258,7 @@ class TalosNeuralVoicePlugin : Plugin() {
             return
         }
         for (artifact in manifest.artifacts) {
-            TalosVoiceModelActivation.recover(externalFilesDir, artifact.targetDir)
+            TalosVoiceModelActivation.recover(externalFilesDir, artifact)
         }
         call.resolve(JSObject().put("supported", TalosVoiceModelManager.isPresent(modelRoot())))
     }
