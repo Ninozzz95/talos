@@ -110,6 +110,50 @@ devono condividere si importa, non si riscrive.
 
 ---
 
+## ⭐⭐⭐ La prima riga del censimento, misurata sul Pad
+
+I tre modelli installati, coi loro `tokenizer.chat_template` letti **dai GGUF
+veri** (offset trovato sul dispositivo, finestra di 128 KB tirata giù: nessun
+gigabyte trasferito, nessuna chiamata al modello, costo zero).
+
+```
+modello                       tpl   tools  tool_call  python_tag  ipython  function
+Llama-3.2-3B-Instruct-Q4_K_M  3827    16       7          -          4        8
+Qwen3-1.7B-Q4_K_M             4116     6      16          -          -        7
+gemma-3-4b-it-Q4_K_M          1532     -       -          -          -        -
+```
+
+⛔⛔ **`gemma-3-4b-it` non ha gli strumenti NEL TEMPLATE.** Non «non li chiama»:
+non gli vengono **offerti**. Il suo template è di 1.532 byte contro i ~4.000
+degli altri due — meno della metà, e senza una sola occorrenza di `tools`.
+
+⇒ Su Gemma, «la ricerca web non funziona» **non è un difetto di TALOS**: è il
+limite intrinseco che l'owner ha esplicitamente escluso dal rilievo. ⭐ Ma
+diventa un difetto **nostro** nel momento in cui l'interfaccia dice «la ricerca
+web è attiva, riprova» invece di dire *«questo modello non può usare
+strumenti»*. La capacità manca al modello; la **dichiarazione onesta** manca a noi.
+
+### E una distinzione che il template da solo non dà
+
+`python_tag` non compare in **nessuno** dei tre template — nemmeno in quello di
+Llama, che pure gli strumenti li ha (16 `tools`, 8 `function`, 4 `ipython`).
+
+⇒ **Il template dice cosa al modello viene DETTO; non dice cosa il modello
+PRODUCE.** `<|python_tag|>` è un token che Llama emette al momento della
+generazione, e non si legge da nessuna parte nei metadati. ⛔ Quindi una
+campagna che si fermasse a leggere i template concluderebbe «Llama ha gli
+strumenti, tutto a posto» — e sbaglierebbe esattamente sul caso che l'owner ha
+fotografato.
+
+⇒ Le due domande sono separate e vanno misurate separatamente:
+
+```
+il template OFFRE gli strumenti?     si legge dal GGUF, a costo zero  ✅ fatto
+in quale dialetto li EMETTE?         si legge solo facendolo parlare  ⛔ da fare
+```
+
+---
+
 ## Cosa misurare, e in che forma
 
 La campagna che l'owner chiede — **ogni strumento × ogni modello**, con verifica
