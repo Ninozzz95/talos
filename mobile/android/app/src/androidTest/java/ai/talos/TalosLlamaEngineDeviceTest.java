@@ -154,6 +154,62 @@ public class TalosLlamaEngineDeviceTest {
     }
 
     /**
+     * P1-1 — la topologia CPU letta dal processo nativo combacia coi fatti
+     * che Android stesso conosce di sé, non solo col proprio JSON.
+     *
+     * ⛔⛔ AL CONTRARIO, non solo "il JSON si legge": il numero di core
+     * `online` che questa funzione conta deve combaciare con
+     * {@link Runtime#availableProcessors()} — due fonti INDIPENDENTI (un
+     * file per core sotto `/sys` contro una API Java che la JVM calcola per
+     * conto suo) che devono dire la stessa cosa su un device reale, o una
+     * delle due sta mentendo.
+     */
+    @Test
+    public void cpuTopologyCombaciaConCioCheAndroidStessoDichiara() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        TalosLlamaNative.ensureReady(context);
+        String raw = TalosLlamaNative.nativeCpuTopology();
+        assertNotNull("nativeCpuTopology è tornata null", raw);
+        JSONObject topologia = new JSONObject(raw);
+        Log.i(TAG, "topologia CPU: " + raw);
+
+        org.json.JSONArray cores = topologia.getJSONArray("cores");
+        assertTrue("nessun core letto", cores.length() > 0);
+
+        int online = 0;
+        for (int indice = 0; indice < cores.length(); indice += 1) {
+            JSONObject core = cores.getJSONObject(indice);
+            assertEquals("gli indici devono essere in ordine, come i file /sys che li producono",
+                    indice, core.getInt("index"));
+            if (core.getBoolean("online")) online += 1;
+            // capacity può essere -1 (kernel che non la espone) ma deve
+            // esserci: un campo assente sarebbe un dato mai scritto, non
+            // "questo kernel non lo dice".
+            assertTrue("capacity manca per il core " + indice, core.has("capacity"));
+            assertTrue("allowed manca per il core " + indice, core.has("allowed"));
+        }
+
+        int dichiaratiDallaJvm = Runtime.getRuntime().availableProcessors();
+        assertEquals("il conteggio online di /sys deve combaciare con ciò che la JVM vede",
+                dichiaratiDallaJvm, online);
+
+        if (topologia.getBoolean("affinityReadable")) {
+            // Questo stesso test gira su un core del set consentito — se
+            // sched_getaffinity funziona, ALMENO un core deve risultare
+            // allowed=true, o il processo non sarebbe in esecuzione affatto.
+            boolean almenoUnoConsentito = false;
+            for (int indice = 0; indice < cores.length(); indice += 1) {
+                if (cores.getJSONObject(indice).optBoolean("allowed", false)) {
+                    almenoUnoConsentito = true;
+                    break;
+                }
+            }
+            assertTrue("sched_getaffinity leggibile ma NESSUN core consentito — "
+                    + "questo processo non potrebbe essere in esecuzione", almenoUnoConsentito);
+        }
+    }
+
+    /**
      * Un prompt più lungo della batch, che è la crepa che ha ucciso l'app.
      *
      * `n_ctx` e `n_batch` sono due tetti diversi: il contesto qui è 2048, la
