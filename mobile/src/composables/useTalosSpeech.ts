@@ -81,6 +81,16 @@ const quantoDetto = new Map<string, number>()
  */
 const voceDellaLettura = new Map<string, string>()
 
+/**
+ * Quale motore sta leggendo QUESTA lettura - `'personal'` se `toggle` ha
+ * instradato lì (blueprint §37.1 "engine/profile snapshot fixed for one
+ * reading": deciso una volta in `toggle`, mai richiesto di nuovo a metà).
+ * Assente = sistema, lo stesso comportamento di sempre - così ogni lettura
+ * che non passa mai da qui (tutte quelle di ieri, e `seguiIlTesto` anche
+ * oggi, vedi la sua nota) resta esattamente quello che era.
+ */
+const motoreDellaLettura = new Map<string, 'personal'>()
+
 export function useTalosSpeech() {
     const settings = useSettingsStore()
     const toasts = useTalosMobileToasts()
@@ -134,7 +144,14 @@ export function useTalosSpeech() {
      */
     async function stop(motivo = 'non dichiarato'): Promise<void> {
         talosDettaturaAnnota(`voce: STOP (${motivo}) mentre leggeva=${speakingId.value ?? '-'}`)
+        const stavaLeggendo = speakingId.value
         speakingId.value = null
+        if (stavaLeggendo && motoreDellaLettura.get(stavaLeggendo) === 'personal') {
+            motoreDellaLettura.delete(stavaLeggendo)
+            const { talosStopPersonalVoice } = await import('@/services/personalVoice')
+            await talosStopPersonalVoice()
+            return
+        }
         const { useTalosSpeechService } = await import('@/services/speech')
         useTalosSpeechService().stop()
     }
@@ -177,6 +194,9 @@ export function useTalosSpeech() {
         const voce = voceDellaLettura.get(da)
         if (voce) voceDellaLettura.set(a, voce)
         voceDellaLettura.delete(da)
+        const motore = motoreDellaLettura.get(da)
+        if (motore) motoreDellaLettura.set(a, motore)
+        motoreDellaLettura.delete(da)
         speakingId.value = a
     }
 
@@ -191,9 +211,20 @@ export function useTalosSpeech() {
         quantoDetto.delete(id)
         // Lettura nuova = voce da risolvere di nuovo: l'id del turno si riusa.
         voceDellaLettura.delete(id)
+        // ⛔ Voce-iniziata = SEMPRE sistema (vedi la nota su `seguiIlTesto`) -
+        // pulito comunque, per lo stesso motivo difensivo delle due righe sopra.
+        motoreDellaLettura.delete(id)
         return true
     }
 
+    /**
+     * Blueprint §37.1 "Router": chi legge questa risposta si decide QUI, una
+     * volta, prima di dire una sola parola - mai richiesto di nuovo mentre
+     * `speak()` è in volo. `engine === 'system'` prende la scorciatoia che
+     * esisteva già ieri (non chiama mai il plugin personale, la prima delle
+     * cinque regole del router); solo `'personal'` con uno stato pronto
+     * paga il giro in più.
+     */
     async function toggle(id: string, text: string): Promise<void> {
         if (speakingId.value === id) {
             await stop('la persona ha premuto Interrompi')
@@ -203,17 +234,34 @@ export function useTalosSpeech() {
         // ⛔ Si segna PRIMA di parlare, non a fine lettura: il segnalino deve
         // comparire quando la persona chiede, non quando il motore finisce.
         lette.value = new Set([...lette.value, id])
+
+        const onend = (): void => { if (speakingId.value === id) speakingId.value = null }
+        const onerror = (reason?: string): void => {
+            if (speakingId.value === id) speakingId.value = null
+            toasts.push({ message: t(frasePerIlMotivo(reason)) })
+        }
+
+        // Fallback silenzioso al sistema quando `talosSpeakForReading` torna
+        // falso (§37.1: "fallback does not rewrite user choice") - la
+        // preferenza salvata resta 'personal', solo QUESTA lettura usa il
+        // sistema.
+        if (settings.state.voice.engine === 'personal') {
+            const v = settings.state.voice
+            const { talosSpeakForReading } = await import('@/services/personalVoice')
+            if (await talosSpeakForReading(v.engine, v.personal_profile_id, text, { rate: v.personal_rate, pitch: v.personal_pitch, onend, onerror })) {
+                motoreDellaLettura.set(id, 'personal')
+                return
+            }
+        }
+
         const voce = await voceFissa(id)
         const { useTalosSpeechService } = await import('@/services/speech')
         await useTalosSpeechService().speak(text, {
             voiceURI: voce,
             rate: settings.state.voice.rate,
             pitch: settings.state.voice.pitch,
-            onend: () => { if (speakingId.value === id) speakingId.value = null },
-            onerror: (reason) => {
-                if (speakingId.value === id) speakingId.value = null
-                toasts.push({ message: t(frasePerIlMotivo(reason)) })
-            },
+            onend,
+            onerror,
         })
     }
 
@@ -228,6 +276,16 @@ export function useTalosSpeech() {
      *
      * ⛔ Non fa niente se quella risposta non e' stata chiesta ad alta voce: la
      * lettura resta una cosa che si chiede, non una che parte da sola.
+     *
+     * ⛔ SEMPRE voce di sistema, anche con `engine: 'personal'` scelto -
+     * deliberato, non dimenticato. `queue: 'add'` qui sotto conta su una
+     * VERA coda: la frase 2 aspetta che la 1 finisca di suonare.
+     * `TalosVoiceHost.submitSpeakStreamingWithReference` non ha una coda,
+     * ha UNA generazione mutabile che la successiva invalida (§14) - una
+     * frase 2 instradata lì interromperebbe la 1 a metà, non la seguirebbe.
+     * `talosPersonalVoiceSpeechAdapter` lo dichiara nella sua stessa
+     * documentazione. Restare sul sistema qui è la scelta onesta finché la
+     * coda nativa non esiste davvero, non un'approssimazione silenziosa.
      */
     async function seguiIlTesto(id: string, testo: string, finito: boolean): Promise<void> {
         if (speakingId.value !== id) return

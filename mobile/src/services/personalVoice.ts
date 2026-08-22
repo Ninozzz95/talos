@@ -1,8 +1,11 @@
 import { registerPlugin } from '@capacitor/core'
+import { planTalosVoiceReading } from '@/lib/voice/personalVoiceRouter'
 import type {
     TalosPersonalVoiceProfileSummary,
     TalosPersonalVoiceStatus,
+    TalosSpeechEngine,
 } from '@/lib/voice/personalVoiceContracts'
+import type { TalosSpeakOptions, TalosSpeechService } from '@/services/speech'
 
 /**
  * The bridge to `ai.talos.voice.TalosNeuralVoicePlugin` (Fase 4 block 2),
@@ -186,4 +189,109 @@ export async function talosCommitVoiceEnrollmentProfile(): Promise<TalosPersonal
 
 export async function talosDiscardVoiceEnrollmentSession(): Promise<void> {
     await plugin.discardEnrollmentSession()
+}
+
+// --- Reading adapter (Fase 4 block 5) ------------------------------------
+
+/**
+ * Every reading pending a native completion event, keyed by the readingId
+ * that request went out under. One shared registry, not one per adapter
+ * instance: `talosOnPersonalVoiceDone`/`Error` are armed once, the first
+ * time any reading needs them - registering a fresh native listener per
+ * `speak()` call would leak one every time `useTalosSpeech.ts` builds a new
+ * adapter for a reading (§37.1's "stale completion events" class of bug,
+ * the one `useTalosSpeech.ts`'s own `speakingId` guard already exists to
+ * rule out on the system side).
+ */
+const pendingPersonalVoiceReadings = new Map<string, { onend?: () => void, onerror?: (reason?: string) => void }>()
+let personalVoiceListenersArmed: Promise<void> | null = null
+
+function armPersonalVoiceListeners(): Promise<void> {
+    if (!personalVoiceListenersArmed) {
+        personalVoiceListenersArmed = Promise.all([
+            talosOnPersonalVoiceDone((readingId) => {
+                pendingPersonalVoiceReadings.get(readingId)?.onend?.()
+                pendingPersonalVoiceReadings.delete(readingId)
+            }),
+            talosOnPersonalVoiceError((readingId, error) => {
+                pendingPersonalVoiceReadings.get(readingId)?.onerror?.(error)
+                pendingPersonalVoiceReadings.delete(readingId)
+            }),
+        ]).then(() => undefined)
+    }
+    return personalVoiceListenersArmed
+}
+
+/**
+ * Shaped exactly like `TalosSpeechService` (`services/speech.ts`) so
+ * `useTalosSpeech.ts` can hold either behind the same variable and call
+ * `.speak()`/`.stop()` without knowing which engine it got - the router
+ * (`personalVoiceRouter.ts`) is what decided that, once, before this
+ * function was ever called.
+ *
+ * ⛔ `queue: 'add'` is accepted for contract parity but not yet honored:
+ * `TalosVoiceHost.submitSpeakStreamingWithReference` invalidates whatever
+ * generation is active the moment a new one starts (§14's single mutable
+ * generation, not a FIFO) - there is no "play after the current one
+ * finishes" mode on the native side today. A caller that truly needs
+ * sentence-by-sentence queuing (`useTalosSpeech.ts`'s `seguiIlTesto`) must
+ * not route through this adapter yet; `toggle`'s single-utterance read is
+ * the door this closes today, documented, not silently pretended away.
+ */
+export function talosPersonalVoiceSpeechAdapter(profileId: string): TalosSpeechService {
+    return {
+        supported: () => true,
+        voices: () => [],
+        async speak(text: string, options: TalosSpeakOptions = {}): Promise<void> {
+            await armPersonalVoiceListeners()
+            const readingId = `personal-${Date.now()}-${Math.random().toString(36).slice(2)}`
+            if (options.onend || options.onerror) {
+                pendingPersonalVoiceReadings.set(readingId, { onend: options.onend, onerror: options.onerror })
+            }
+            const result = await talosSpeakWithPersonalVoice({
+                text,
+                profileId,
+                readingId,
+                rate: options.rate ?? 1,
+                pitch: options.pitch ?? 1,
+                queue: options.queue,
+            })
+            if (!result.accepted) {
+                pendingPersonalVoiceReadings.delete(readingId)
+                options.onerror?.(result.reason)
+            }
+        },
+        stop(): void {
+            void talosStopPersonalVoice()
+        },
+    }
+}
+
+/**
+ * The whole routing decision AND the personal-voice call, in one place -
+ * moved here (rather than living inline in `useTalosSpeech.ts`) purely to
+ * keep that composable's own bundled size out of the chat screen's eager
+ * initial-load chunk: `useTalosSpeech.ts` sits in the chunk-size gate's
+ * budget, this module does not (`talosSpeakWithPersonalVoice`'s door is
+ * already reached only through a dynamic `import()`). Behavior is
+ * identical either way - blueprint §37.1's Router rules stay in
+ * `personalVoiceRouter.ts`, called from here, not reimplemented.
+ *
+ * Returns `true` when the personal engine took the reading (the caller
+ * speaks nothing else); `false` means the caller must fall back to the
+ * system voice - `engine !== 'personal'`, no profile chosen, or the
+ * personal engine reported unready, all read the same way to a caller
+ * that only needs to know "did this happen or not".
+ */
+export async function talosSpeakForReading(
+    engine: TalosSpeechEngine,
+    personalProfileId: string | null,
+    text: string,
+    options: { rate: number, pitch: number, onend?: () => void, onerror?: (reason?: string) => void },
+): Promise<boolean> {
+    if (engine !== 'personal') return false
+    const route = await planTalosVoiceReading(engine, personalProfileId, talosPersonalVoiceStatus)
+    if (route.engine !== 'personal' || !route.profileId) return false
+    await talosPersonalVoiceSpeechAdapter(route.profileId).speak(text, options)
+    return true
 }
