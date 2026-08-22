@@ -50,6 +50,17 @@ git -C C:/Users/Antonino/Desktop/projects/AVM worktree add \
 cd C:/Users/Antonino/Desktop/projects/AVM-voce
 git submodule update --init --recursive     # ⛔ mobile/third_party/llama.cpp
 cd mobile && npm ci
+
+# ⛔⛔ E POI I DUE PACCHETTI ANNIDATI, o la suite parte ROSSA.
+#    Correzione del 2026-08-22: la prima stesura di questo passo si fermava
+#    al `npm ci` qui sopra, e Codex ha misurato **31 rossi** su un albero
+#    appena creato — 30 in androidAssetsConformance (TOOLING_MISSING) e 1 in
+#    gitBashLauncherConformance (node-pty assente). Non erano un difetto del
+#    prodotto: `mobile/tools/*` sono pacchetti CON UN LORO package.json, e
+#    l'installazione di `mobile/` non li tocca. Verificato: l'albero
+#    principale li ha installati, il worktree nuovo no.
+cd tools/android-assets     && npm ci && cd ../..
+cd tools/git-bash-launcher  && npm ci && cd ../..
 ```
 
 ⛔ **Da qui in poi il tuo percorso è `C:\Users\Antonino\Desktop\projects\AVM-voce`.**
