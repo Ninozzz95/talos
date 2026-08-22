@@ -74,6 +74,15 @@ final class TalosLlamaNative {
      */
     static native void nativeEnableOpenClCacheDebugTraceForResearch();
 
+    /**
+     * ⛔ SOLO RICERCA — il CONTROLLO dell'esperimento cache: spegne
+     * esplicitamente {@code GGML_OPENCL_KERNEL_CACHE_DIR} per QUESTO
+     * processo, sovrascrivendo quanto {@link #ensureReady} ha già impostato.
+     * Ogni kernel ricompila sempre, senza eccezioni — la controprova che i
+     * guadagni misurati a cache accesa vengono davvero da lei.
+     */
+    static native void nativeDisableOpenClCacheForResearch();
+
     /** I backend ggml registrati, separati da virgola. Vuoto se nessuno. */
     static native String nativeBackends();
 

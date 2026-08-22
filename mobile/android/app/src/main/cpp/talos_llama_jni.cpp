@@ -757,6 +757,24 @@ Java_ai_talos_TalosLlamaNative_nativeEnableOpenClCacheDebugTraceForResearch(JNIE
     setenv("GGML_OPENCL_KERNEL_CACHE_DEBUG", "1", 1);
 }
 
+/**
+ * ⛔ SOLO RICERCA — il CONTROLLO dell'esperimento A/B/C del piano sorgente
+ * (§6.5): con la cache esplicitamente spenta, ogni kernel deve ricompilare
+ * SEMPRE, ad ogni processo, senza eccezioni — è la riprova che i guadagni
+ * misurati con la cache accesa vengono davvero da lei, non da qualcos'altro
+ * (un binario del modello già caldo, un driver che cachea per conto suo).
+ *
+ * ⛔ SOVRASCRIVE quanto impostato da `nativeInit` per QUESTO processo:
+ * `talos_init_once` gira una volta sola (`call_once`), quindi va chiamata
+ * DOPO `ensureReady` per avere l'ultima parola — stessa finestra di
+ * `nativeEnableOpenClCacheDebugTraceForResearch`, prima della prima apertura
+ * con offload.
+ */
+JNIEXPORT void JNICALL
+Java_ai_talos_TalosLlamaNative_nativeDisableOpenClCacheForResearch(JNIEnv *, jclass) {
+    setenv("GGML_OPENCL_KERNEL_CACHE_DIR", "off", 1);
+}
+
 /** La build di llama.cpp, per l'impronta dei prefissi congelati. */
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeEngineBuild(JNIEnv * env, jclass) {
