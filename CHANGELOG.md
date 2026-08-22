@@ -62,7 +62,39 @@ redo the consent screen or the microphone check. Verified twice: once with a
 forced stop, and once with a genuine crash that happened while chasing the bug
 above.
 
+### A personal voice can now actually be chosen — and it works
+
+Recording a voice, and reading with it, used to be two separate stories. The
+voice showed up in "Voice personale" with rename and delete, and that was the
+end of it: nothing let you pick it as the voice that reads replies, and there
+was no way to hear it again once the wizard closed.
+
+Both are fixed. A recorded voice now appears at the top of the same picker
+that lists the device's own voices — pick it and it becomes the one that
+reads, exactly like picking any other voice. Every profile also gets its own
+"Listen" button, independent of which voice is currently active, and the one
+actually in use is marked so on its card. Verified on the owner's Pad with a
+real recorded voice, not a mock: selecting it writes to the real settings
+store, pressing "Listen" and pressing the speaker icon on a real chat reply
+both measurably load and run the neural engine (a resident-memory jump from
+about 560 MB to about 1.9 GB, the same jump either way) — the whole chain
+now runs end to end, not just its separate pieces.
+
+A voice you record is now also tagged with the phone's actual system
+language rather than whatever language the app's interface happened to be
+set to at the time — those can differ, and only the system one is what
+should be on the label.
+
 ### Fixes
+
+**The voice engine's files were showing up as chat models.** After
+installing the voice engine, its two files sat forever in the same on-device
+folder the chat's own model downloader uses, so both the settings' "Local
+models" list and the model picker in the chat composer offered them
+alongside real language models — selecting one there could not have worked.
+They are cleaned up now, immediately, including on a phone that installed
+the voice engine before this fix (~800 MB reclaimed on the owner's Pad,
+automatically, at the next launch, no reinstall needed).
 
 **The voice wizard filled only half a tablet screen.** On a real tablet the
 setup dialog stayed trapped inside the settings panel, with the category list
@@ -86,11 +118,10 @@ the same thing.
 
 ### What this release does not do yet
 
-The personal voice has not been through a full end-to-end run with a human
-voice on a device — the pieces are each verified, the whole chain is not. Read-
-aloud does not yet stream ahead of the text it is reading. The stock system
-voice remains the fallback and is unchanged: if you never set up a personal
-voice, nothing about the app sounds different.
+Read-aloud does not yet stream ahead of the text it is reading with a personal
+voice — it waits for the whole reply, where the stock voice can start mid-
+stream. The stock system voice remains the fallback and is unchanged: if you
+never set up a personal voice, nothing about the app sounds different.
 
 ## v0.1.17
 
