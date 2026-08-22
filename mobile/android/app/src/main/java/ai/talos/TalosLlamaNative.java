@@ -173,6 +173,28 @@ final class TalosLlamaNative {
     static native String nativeKvCacheType(long handle);
 
     /**
+     * B1 — un'unica snapshot versionata di ciò che il motore ha DAVVERO
+     * applicato, invece di un metodo nativo per ogni campo (il piano
+     * sorgente del programma MAX PERFORMANCE lo chiede esplicitamente).
+     *
+     * Forma: {@code {"schema":1,"backendDevice":string|null,
+     * "gpuLayersEffective":int,"flashAttnEffective":string,
+     * "kvCacheType":string,"contextTokens":int,"threads":int,
+     * "threadsBatch":int,"microBatch":int}}.
+     *
+     * ⛔ {@code gpuLayersEffective} NON è un conteggio per-strato reale
+     * dell'offload (quello richiede instrumentation del graph placement di
+     * ggml, non ancora scritta) - è la richiesta, ma SOLO se un
+     * dispositivo acceleratore è stato davvero risolto all'apertura. Zero
+     * altrimenti, anche con un {@code gpuLayers} richiesto diverso da
+     * zero: il caso che oggi il codice nasconde in silenzio.
+     *
+     * @return {@code null} se l'handle non è valido o il contesto non è
+     *     (più) aperto.
+     */
+    static native String nativeRuntimeSnapshot(long handle);
+
+    /**
      * ⛔ SOLO RICERCA — la grammatica dell'ultimo template applicato, in JSON.
      *
      * ⛔⛔ Perché esiste: i due difetti aperti della grammatica vivevano solo
