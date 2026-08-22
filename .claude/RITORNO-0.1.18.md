@@ -1030,3 +1030,43 @@ tutto il resto), e ora è fatto e provato. Non ancora scritto:
 ⛔ Non chiuso senza dispositivo reale: il cancello di questa fase
 ("scenari corrotto/parziale/aggiornamento passano") è per definizione
 un cancello di dispositivo, non di JVM.
+
+### 15.4 Blocco 2 — dal manifesto ai `Request`, il motore capisce già il resto
+
+Letto `TalosTransferSession`/`TalosModelStore`/`TalosTransferRunner` fino
+in fondo prima di scrivere: `resolveOn()` costruisce l'indirizzo come
+`https://huggingface.co/{repo}/resolve/{revision}/{path}` — ESATTAMENTE
+la forma già verificata a mano nel Blocco 1 con `curl`. Zero modifiche
+necessarie al motore: il pin che c'è già gli basta.
+
+⛔ Scoperta che cambia la forma dell'attivazione: `TalosModelStore.slot()`
+scarica in `root/models/{repo}/{revision}/{path}` — una cache GENERICA,
+diversa dal `moss/MOSS-TTS-Nano-100M-ONNX/…` che `TalosVoiceModelManager`
+e `TalosMossManifest` già leggono e che tutta la Fase 0-4 di questa
+sessione ha provato. ⇒ L'attivazione atomica (Blocco 3) non è "segna
+come attivo": è spostare i file finiti dalla cache generica dentro
+`moss/{targetDir}` con un rename di cartella — atomico sullo stesso
+volume, e il verbo giusto per "atomic version activation" del blueprint.
+Il campo `targetDir` nel manifesto (Blocco 1) esisteva già per questo.
+
+Nuovo `TalosVoiceModelManifest.kt`: parsing puro del `.json` in `Request`
+per artifact — DUE `Request`, uno per repository, mai unito in uno solo
+(un `Request.repo` è una stringa: unirli farebbe sparire in silenzio il
+secondo repo). `TalosVoiceModelManifestTest.kt`, 7 test JVM: la forma su
+un manifesto sintetico, e la fedeltà sul manifesto VERO pinnato nel
+Blocco 1 — la somma byte ricalcolata da un percorso di codice diverso
+(parser + `Request`, non la somma diretta sul JSON) torna identica:
+**763.191.513**, la stessa cifra del Blocco 1 da due strade indipendenti.
+Suite JVM intera verde, `npm run typecheck` + `npx vitest run` (tocca il
+nativo, si lancia comunque) verdi.
+
+### 15.5 Blocco 3 — non ancora iniziato
+
+L'attivazione atomica (rename di cartella dalla cache al layout `moss/`
+che il runtime già legge), la pulizia della versione vecchia dopo il
+rilascio del lease, il plugin Capacitor che lo espone, il
+bottone/avanzamento lato TS nelle impostazioni voce, e la prova sul
+dispositivo reale di corrotto/parziale/aggiornamento — il cancello
+d'uscita del blueprint per questa fase. Blocco a sé, per lo stesso
+motivo del Blocco 1 e del Blocco 2: tocca dati veri dell'utente
+(i file del motore voce), e va scritto e provato senza fretta.
