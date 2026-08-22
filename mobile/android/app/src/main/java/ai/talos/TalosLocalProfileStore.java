@@ -114,10 +114,26 @@ final class TalosLocalProfileStore {
                             ? TalosBackendChoice.Outcome.CORRECT
                             : TalosBackendChoice.Outcome.FAILED,
                     riga.getLong("ttftMs"),
-                    riga.getLong("measuredAtMs"));
+                    riga.getLong("measuredAtMs"),
+                    // ⛔ optString, non getString: P0-3 ha aggiunto questo
+                    // campo DOPO che P0-2 aveva già scritto righe vere sul
+                    // Pad (verificato: un profilo reale con backendRegistry
+                    // "cpu" esisteva prima di questo blocco). Q1 era l'UNICO
+                    // livello che scriveva allora — il default onesto per
+                    // una riga vecchia, non un'invenzione.
+                    livelloDaTesto(riga.optString("qualificationLevel", "Q1")));
         } catch (JSONException rigaMalformata) {
             // Una riga sola corrotta non deve buttare via tutte le altre.
             return null;
+        }
+    }
+
+    /** Un nome che questa versione non riconosce torna Q1 — stessa politica di leggiRiga(). */
+    private static TalosLocalProfile.Level livelloDaTesto(String testo) {
+        try {
+            return TalosLocalProfile.Level.valueOf(testo);
+        } catch (IllegalArgumentException nomeSconosciuto) {
+            return TalosLocalProfile.Level.Q1;
         }
     }
 
@@ -134,6 +150,7 @@ final class TalosLocalProfileStore {
             o.put("outcome", riga.outcome == TalosBackendChoice.Outcome.CORRECT ? "CORRECT" : "FAILED");
             o.put("ttftMs", riga.ttftMs);
             o.put("measuredAtMs", riga.measuredAtMs);
+            o.put("qualificationLevel", riga.qualificationLevel.name());
         } catch (JSONException nonPuoAccadereConChiaviCostanti) {
             return null;
         }
