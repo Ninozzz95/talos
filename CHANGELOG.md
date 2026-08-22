@@ -90,6 +90,26 @@ should be on the label.
 
 ### Fixes
 
+**Talking to it used the stock voice even with a personal voice chosen.**
+When a reply is read aloud automatically because you spoke to it — the
+"you talk, it answers back in voice" path — the app always used the stock
+system voice, even with a personal voice selected. Deliberate at the time:
+that path speaks sentence by sentence as the reply streams in, queuing each
+one behind the last, and the personal engine had no real queue to speak
+into — a second sentence sent there would have cut the first one off
+instead of following it. It now waits for the reply to finish streaming
+and reads the whole thing in one call to the personal engine, the same way
+pressing the speaker icon on a finished message already did. You lose the
+word-by-word start; you gain that the voice you actually chose is the one
+you hear, which matters more.
+
+**A file name or code term with an underscore was read as
+"underscore".** `documento_complesso` came out as "documento underscore
+complesso" — a known symptom of handing a TTS engine raw text straight from
+a markdown-formatted reply. Underscores, `**bold**`, `*italics*`, and
+`` `inline code` `` markers are stripped before anything reaches either
+voice engine now; the words themselves are never touched.
+
 **A voice that had been renamed since you picked it read nothing.** If
 the personal voice your settings pointed at no longer matched a saved
 profile — renamed, or replaced by a new recording — pressing the
@@ -146,6 +166,16 @@ Read-aloud does not yet stream ahead of the text it is reading with a personal
 voice — it waits for the whole reply, where the stock voice can start mid-
 stream. The stock system voice remains the fallback and is unchanged: if you
 never set up a personal voice, nothing about the app sounds different.
+
+On a long reply the personal voice can still stutter — measured, not a
+guess: on the owner's Pad, a roughly two-hundred-word reply produced
+audible glitches once every one to two seconds for its whole length, on a
+device that was not thermally throttled at the time. Isolated to the
+generation step itself running behind real time, not to the playback
+buffer, batch size, or CPU thread count — all three were measured and
+ruled out one at a time. A short reply is unaffected. Fixing the
+generation step itself is bigger work than this release; it is not
+started yet.
 
 ## v0.1.17
 

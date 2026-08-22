@@ -172,4 +172,63 @@ describe('useTalosSpeech', () => {
             expect(speech.speakingId.value).toBeNull()
         })
     })
+
+    /**
+     * ⛔⛔⛔ 22/8, owner, sentito dal vivo: «quando parlo nella chat e
+     * nell'assistente si usa la voce sintetica ma non quella selezionata».
+     * `seguiIlTesto` è esattamente `useTalosRispostaAVoce.ts` - "hai
+     * parlato ⇒ ti risponde a voce" - e prima di questo fix ignorava
+     * `engine:'personal'` di proposito, sempre. Zero copertura esisteva
+     * su questa funzione prima di oggi.
+     */
+    describe('seguiIlTesto() con motore personale', () => {
+        it('SEGUI-01 an in-progress chunk (finito=false) never calls talosSpeakForReading while personal is selected - it waits for the end', async () => {
+            voiceState.engine = 'personal'
+            voiceState.personal_profile_id = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
+            const speech = useTalosSpeech()
+            expect(speech.apriLetturaDiVoce('turno')).toBe(true)
+            await speech.seguiIlTesto('turno', 'Sto scrivendo', false)
+            expect(personal.speakForReading).not.toHaveBeenCalled()
+            expect(svc.speak).not.toHaveBeenCalled()
+        })
+
+        it('SEGUI-02 the final chunk (finito=true) speaks the WHOLE text once through the personal engine, never phrase by phrase', async () => {
+            voiceState.engine = 'personal'
+            voiceState.personal_profile_id = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
+            personal.speakForReading.mockImplementationOnce(async (_engine, _profileId, _text, opts) => {
+                personal._onend = opts?.onend
+                return true
+            })
+            const speech = useTalosSpeech()
+            expect(speech.apriLetturaDiVoce('turno')).toBe(true)
+            await speech.seguiIlTesto('turno', 'Prima frase. Seconda frase.', false)
+            await speech.seguiIlTesto('turno', 'Prima frase. Seconda frase.', true)
+            expect(personal.speakForReading).toHaveBeenCalledTimes(1)
+            expect(personal.speakForReading).toHaveBeenCalledWith(
+                'personal', 'a1b2c3d4-e5f6-4789-a012-3456789abcde', 'Prima frase. Seconda frase.',
+                expect.anything(),
+            )
+            expect(svc.speak).not.toHaveBeenCalled()
+        })
+
+        it('AL CONTRARIO: if talosSpeakForReading refuses on the final chunk, it falls back to the system voice on the whole text', async () => {
+            voiceState.engine = 'personal'
+            voiceState.personal_profile_id = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
+            // Default mock already resolves false.
+            const speech = useTalosSpeech()
+            expect(speech.apriLetturaDiVoce('turno')).toBe(true)
+            await speech.seguiIlTesto('turno', 'Unica frase.', true)
+            expect(personal.speakForReading).toHaveBeenCalledOnce()
+            expect(svc.speak).toHaveBeenCalledWith('Unica frase.', expect.anything())
+        })
+
+        it('a system-engine reading is unaffected - still speaks phrase by phrase as chunks arrive, exactly as before this fix', async () => {
+            voiceState.engine = 'system'
+            const speech = useTalosSpeech()
+            expect(speech.apriLetturaDiVoce('turno')).toBe(true)
+            await speech.seguiIlTesto('turno', 'Prima frase completa. Ancora ', false)
+            expect(personal.speakForReading).not.toHaveBeenCalled()
+            expect(svc.speak).toHaveBeenCalledWith('Prima frase completa.', expect.anything())
+        })
+    })
 })

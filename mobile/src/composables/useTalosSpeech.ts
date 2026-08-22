@@ -241,6 +241,11 @@ export function useTalosSpeech() {
             toasts.push({ message: t(frasePerIlMotivo(reason)) })
         }
 
+        // ⭐⭐⭐ Owner 22/8: «documento_complesso» detto con l'underscore -
+        // il testo per il motore non è mai il markdown grezzo del messaggio.
+        const { talosTestoPerVoce } = await import('@/lib/voice/testoPerVoce')
+        const daDire = talosTestoPerVoce(text)
+
         // Fallback silenzioso al sistema quando `talosSpeakForReading` torna
         // falso (§37.1: "fallback does not rewrite user choice") - la
         // preferenza salvata resta 'personal', solo QUESTA lettura usa il
@@ -248,7 +253,7 @@ export function useTalosSpeech() {
         if (settings.state.voice.engine === 'personal') {
             const v = settings.state.voice
             const { talosSpeakForReading } = await import('@/services/personalVoice')
-            if (await talosSpeakForReading(v.engine, v.personal_profile_id, text, { rate: v.personal_rate, pitch: v.personal_pitch, onend, onerror })) {
+            if (await talosSpeakForReading(v.engine, v.personal_profile_id, daDire, { rate: v.personal_rate, pitch: v.personal_pitch, onend, onerror })) {
                 motoreDellaLettura.set(id, 'personal')
                 return
             }
@@ -256,7 +261,7 @@ export function useTalosSpeech() {
 
         const voce = await voceFissa(id)
         const { useTalosSpeechService } = await import('@/services/speech')
-        await useTalosSpeechService().speak(text, {
+        await useTalosSpeechService().speak(daDire, {
             voiceURI: voce,
             rate: settings.state.voice.rate,
             pitch: settings.state.voice.pitch,
@@ -277,18 +282,47 @@ export function useTalosSpeech() {
      * ⛔ Non fa niente se quella risposta non e' stata chiesta ad alta voce: la
      * lettura resta una cosa che si chiede, non una che parte da sola.
      *
-     * ⛔ SEMPRE voce di sistema, anche con `engine: 'personal'` scelto -
-     * deliberato, non dimenticato. `queue: 'add'` qui sotto conta su una
-     * VERA coda: la frase 2 aspetta che la 1 finisca di suonare.
-     * `TalosVoiceHost.submitSpeakStreamingWithReference` non ha una coda,
-     * ha UNA generazione mutabile che la successiva invalida (§14) - una
-     * frase 2 instradata lì interromperebbe la 1 a metà, non la seguirebbe.
-     * `talosPersonalVoiceSpeechAdapter` lo dichiara nella sua stessa
-     * documentazione. Restare sul sistema qui è la scelta onesta finché la
-     * coda nativa non esiste davvero, non un'approssimazione silenziosa.
+     * ⭐⭐⭐ Owner 22/8: «quando parlo nella chat e nell'assistente si usa la
+     * voce sintetica ma non quella selezionata» - vero, e fino ad oggi
+     * VOLUTO: questa funzione era SEMPRE sistema, anche con
+     * `engine: 'personal'` scelto, perché `queue: 'add'` qui sotto conta su
+     * una VERA coda (la frase 2 aspetta che la 1 finisca di suonare) e
+     * `TalosVoiceHost.submitSpeakStreamingWithReference` non ne ha una - ha
+     * UNA generazione mutabile che la successiva invalida (§14): una frase 2
+     * instradata lì interromperebbe la 1 a metà, non la seguirebbe. Ma
+     * l'owner ha già chiesto, prima di questo turno, che la voce codificata
+     * sia usata "per la chat E per l'assistente" senza eccezioni - e questa
+     * funzione è esattamente il percorso «hai parlato ⇒ ti risponde a voce»
+     * (`useTalosRispostaAVoce.ts`), non un caso raro. La cura che non
+     * richiede una coda nativa: quando l'motore è 'personal', non si segue
+     * più il testo frase per frase - si aspetta la fine dello streaming
+     * (`finito`) e si legge il testo COMPLETO in una sola chiamata, lo
+     * stesso percorso che `toggle()` usa già per «Leggi il messaggio». Si
+     * perde la lettura parola-per-parola mentre arriva; si guadagna che la
+     * voce sia DAVVERO quella scelta - il requisito più forte dei due. Se
+     * `talosSpeakForReading` rifiuta (profilo sparito, motore non pronto),
+     * si ripiega sul sistema esattamente come sempre, sul testo intero.
      */
     async function seguiIlTesto(id: string, testo: string, finito: boolean): Promise<void> {
         if (speakingId.value !== id) return
+        const { talosTestoPerVoce } = await import('@/lib/voice/testoPerVoce')
+
+        if (settings.state.voice.engine === 'personal') {
+            if (!finito) return
+            const onend = (): void => { if (speakingId.value === id) speakingId.value = null }
+            const onerror = (reason?: string): void => {
+                if (speakingId.value === id) speakingId.value = null
+                toasts.push({ message: t(frasePerIlMotivo(reason)) })
+            }
+            const v = settings.state.voice
+            const { talosSpeakForReading } = await import('@/services/personalVoice')
+            if (await talosSpeakForReading(v.engine, v.personal_profile_id, talosTestoPerVoce(testo), { rate: v.personal_rate, pitch: v.personal_pitch, onend, onerror })) {
+                motoreDellaLettura.set(id, 'personal')
+                return
+            }
+            // Ripiego silenzioso al sistema, sotto - stessa preferenza di `toggle()`.
+        }
+
         const detto = quantoDetto.get(id) ?? 0
         const { talosFrasiDaLeggere } = await import('@/lib/voice/frasiDaLeggere')
         const { pronte, resto } = talosFrasiDaLeggere(testo, detto, finito)
@@ -303,7 +337,11 @@ export function useTalosSpeech() {
         for (const frase of pronte) {
             const numero = pronte.indexOf(frase) + 1
             talosDettaturaAnnota(`voce: accodo ${numero}/${pronte.length} «${frase.slice(0, 28)}»`)
-            await servizio.speak(frase, {
+            // ⛔ La normalizzazione è SOLO per il motore: `frase` (grezza,
+            // con la sua punteggiatura markdown intatta) resta quella che
+            // decide i confini di frase sopra e quella tracciata nei log -
+            // solo `talosTestoPerVoce(frase)` sotto cambia cosa si sente.
+            await servizio.speak(talosTestoPerVoce(frase), {
                 voiceURI: voce,
                 rate: settings.state.voice.rate,
                 pitch: settings.state.voice.pitch,
