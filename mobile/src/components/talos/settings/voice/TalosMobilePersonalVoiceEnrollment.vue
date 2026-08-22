@@ -302,6 +302,27 @@ const tierLabel = computed(() => {
 </script>
 
 <template>
+    <!--
+        ⭐⭐⭐ Owner 22/8, ispezionato sul Pad reale (non forzando `wm size`):
+        senza questo Teleport il dialog restava confinato dentro il pannello
+        destro del "Centro impostazioni" tablet - sidebar delle categorie
+        ancora visibile a sinistra, e un vuoto sotto il footer invece del
+        fondo vero dello schermo. Causa MISURATA via CDP
+        (`getComputedStyle`): `TalosMobileSettingsCenter.vue` anima il
+        pannello con `.talos-motion-tab-panel[data-state="active"]`
+        (`talos-interaction-motion-v6.css`), la cui `animation` risolve
+        sempre a una `transform` (anche l'identità, a riposo) - e per la
+        spec CSS un antenato con `transform` non-`none` diventa il
+        containing block di ogni discendente `position: fixed`. `fixed
+        inset-0` smette di significare "tutto lo schermo" e torna a
+        significare "tutto il pannello". Confermato con una ricerca web
+        (mtsknn.fi/blog/breaking-css-position-fixed, Vue.js Teleport docs):
+        stesso identico pattern già in uso per lo stesso motivo in
+        `TalosLauncherIconDialog.vue` (anch'esso montato dentro un pannello
+        `talos-motion-tab-panel`, `TalosMobileSettingsAppearancePanel.vue`)
+        - non un'invenzione nuova.
+    -->
+    <Teleport to="body">
     <div
         data-testid="talos-personal-voice-enrollment"
         role="dialog"
@@ -545,4 +566,5 @@ const tierLabel = computed(() => {
             </template>
         </footer>
     </div>
+    </Teleport>
 </template>

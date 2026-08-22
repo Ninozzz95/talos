@@ -66,6 +66,10 @@ import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 beforeEach(() => {
     service.supported.mockReturnValue(true)
     settings.state.voice.dictation_language = 'system'
+    // ⛔ PVOICE-SELECT-01 lo valorizza per simulare una scelta esplicita: se
+    // un test fallisse PRIMA della sua riga di reset in fondo, il valore
+    // resterebbe sporco per ogni test dopo di lui nello stesso file.
+    settings.state.voice.voice_uri = null
     settings.setVoicePreferences.mockClear()
     personalVoice.status.mockClear().mockResolvedValue({ supported: false, installed: false, ready: false, active: false })
     personalVoice.profiles.mockClear().mockResolvedValue([])
@@ -159,6 +163,51 @@ describe('TalosMobileVoiceSettings', () => {
         const voci = wrapper.get('[data-testid="talos-tts-controls"]')
             .findComponent(TalosThemedSelect).props('items') as { value: string }[]
         expect(voci.some((v) => v.value === 'it-it-x-itb-network')).toBe(true)
+    })
+
+    /**
+     * ⛔⛔ Rilievo 3 (seguito), owner 2026-08-22, ispezionato sullo schermo
+     * reale: il trigger mostrava «Select an option» — non il placeholder per
+     * mancanza di scelta, ma perché la voce SCELTA (esplicita, non il
+     * ripiego) era stata esclusa dall'elenco offerto online. Diverso da
+     * `PVOICE-DEFAULT-01` sopra: lì nessuno aveva ancora scelto, qui una
+     * persona ha selezionato una voce locale a mano (`settings.state.voice.voice_uri`
+     * valorizzato) e poi la rete si è accesa - `voiceItems` (rete-dipendente)
+     * l'ha fatta cadere fuori dalle "prima e ultima delle prime tre".
+     * `TalosThemedSelect` mostra onestamente il placeholder quando il suo
+     * `modelValue` non è fra le `items` — il difetto stava nel non
+     * ricostituire quella voce nell'elenco, non nel selettore.
+     */
+    it('PVOICE-SELECT-01 backfills an explicitly-chosen voice that online network-ordering pushed out of the offered list, instead of falling back to the placeholder', async () => {
+        expect(navigator.onLine).not.toBe(false) // jsdom: online di default, come sul telefono con dati
+        service.voices.mockReturnValueOnce([
+            // Tre nominate di rete: con la rete accettata vincono tutte e tre
+            // l'ordinamento (regola 2 di `talosVociOrdinate`), e
+            // `talosVociOfferte` tiene solo prima e ultima delle prime tre -
+            // la locale sotto resta fuori da ENTRAMBE.
+            { voiceURI: 'it-it-x-itb-network', name: 'Itb · rete', lang: 'it-IT' },
+            { voiceURI: 'it-it-x-itc-network', name: 'Itc · rete', lang: 'it-IT' },
+            { voiceURI: 'it-it-x-itd-network', name: 'Itd · rete', lang: 'it-IT' },
+            // La voce scelta ESPLICITAMENTE dalla persona, locale.
+            { voiceURI: 'it-it-x-ite-local', name: 'Ite', lang: 'it-IT' },
+        ])
+        document.documentElement.lang = 'it-IT'
+        settings.state.voice.voice_uri = 'it-it-x-ite-local'
+
+        const wrapper = mount(TalosMobileVoiceSettings)
+        await flushPromises()
+
+        const trigger = wrapper.get(
+            '[data-testid="talos-tts-controls"] [data-testid="talos-themed-select-trigger"]',
+        )
+        expect(trigger.text()).toContain('Ite')
+        expect(trigger.text()).not.toContain('Select an option')
+
+        const voci = wrapper.get('[data-testid="talos-tts-controls"]')
+            .findComponent(TalosThemedSelect).props('items') as { value: string }[]
+        expect(voci.some((v) => v.value === 'it-it-x-ite-local')).toBe(true)
+
+        settings.state.voice.voice_uri = null
     })
 })
 

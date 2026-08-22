@@ -215,7 +215,28 @@ const voiceItems = computed(() => {
         const originale = voices.value.find((o) => o.voiceURI === v.name)
         return `${originale?.name ?? v.name} (${v.locale})`
     }
-    return [...miaLingua, ...restanti].map((v) => ({ value: v.name, label: etichetta(v) }))
+    const elenco = [...miaLingua, ...restanti]
+    /*
+     * ⛔⛔ "Select an option" con una voce di ripiego valida - trovato il
+     * 22/8, ispezionando lo schermo reale, non il codice a memoria.
+     *
+     * `voceDiRipiego` (sotto) è calcolata con `rete: false` FISSO — sempre
+     * una voce LOCALE, deliberato dall'8/10 per non cambiare timbro a metà
+     * lettura. Ma questo elenco usa `rete: navigator.onLine !== false` — con
+     * rete online, `talosVociOrdinate` mette le voci NEURALI in testa
+     * (regola 2), e `talosVociOfferte` tiene solo le prime/ultime di quella
+     * classifica — quasi sempre TUTTE di rete quando la rete è accesa. La
+     * voce locale scelta come ripiego finiva quindi FUORI da un elenco
+     * fatto solo di voci di rete: `TalosThemedSelect` mostra onestamente il
+     * placeholder quando il valore selezionato non è fra le sue `items`
+     * (comportamento suo corretto, confermato contro Radix upstream) — il
+     * difetto era qui, non lì. Stesso pattern già in uso sotto per
+     * `dictationLanguageItems`, non un'invenzione nuova.
+     */
+    const mancante = selectedVoice.value && !elenco.some((v) => v.name === selectedVoice.value)
+        ? dispositivo.value.find((v) => v.name === selectedVoice.value)
+        : undefined
+    return [...elenco, ...(mancante ? [mancante] : [])].map((v) => ({ value: v.name, label: etichetta(v) }))
 })
 /**
  * ⭐⭐ SI SENTE SUBITO — owner 2026-08-10: «quando cambio un parametro della
