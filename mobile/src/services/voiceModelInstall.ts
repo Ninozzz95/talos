@@ -4,6 +4,8 @@ import {
     talosBeginModelTransfer,
     talosKeepWatchingTransfers,
     talosModelTransfers,
+    talosRefreshModelTransfer,
+    talosResumeManagedModelTransfer,
     talosRetainModelTransferObserver,
 } from '@/stores/modelTransfers'
 
@@ -59,6 +61,26 @@ export async function talosInstallPersonalVoiceModel(
         if (!started.ok) {
             onProgress?.({ phase: 'failed', reason: started.reason })
             return { ok: false, reason: started.reason }
+        }
+    }
+    // ⛔⛔ TROVATO SUL DISPOSITIVO, non ipotizzato: `talosBeginModelTransfer`
+    // chiama il nativo `start()`, e per un id GIA' ESISTENTE in stato
+    // terminale (`failed`/`paused`) quello non riparte da solo — restituisce
+    // lo stesso record fermo, `ok: true` incluso. Un secondo tocco su
+    // "Scarica il motore voce" dopo un fallimento tornava quindi a fallire
+    // ISTANTANEAMENTE con la stessa ragione vecchia, senza aver ritentato
+    // nulla: `resume()` e' la chiamata che rimette davvero in coda il job
+    // (misurato 2026-08-22 — stesso `createdAtMs` su ogni "retry" finche' non
+    // si e' chiamato `resume()` a mano).
+    await talosRefreshModelTransfer()
+    for (const artifact of manifest.artifacts) {
+        const item = talosModelTransfers.items.find((candidate) => candidate.modelName === artifact.modelName)
+        if (!item || !item.resumable) continue
+        if (item.phase !== 'failed' && item.phase !== 'paused') continue
+        const resumed = await talosResumeManagedModelTransfer(item.id)
+        if (!resumed.ok) {
+            onProgress?.({ phase: 'failed', reason: resumed.reason })
+            return { ok: false, reason: resumed.reason }
         }
     }
     // ⛔⛔ Senza questo l'orologio del poller può non partire mai: se chi

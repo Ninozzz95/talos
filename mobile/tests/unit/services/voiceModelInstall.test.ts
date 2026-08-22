@@ -14,6 +14,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 const bridge = vi.hoisted(() => ({
     start: vi.fn(),
+    resume: vi.fn(async () => ({
+        ok: true, started: { id: 'resumed', phase: 'queued', runner: 'USER_INITIATED_JOB', networkBound: true },
+    })),
     status: vi.fn(),
     acknowledge: vi.fn(async () => undefined),
 }))
@@ -21,7 +24,7 @@ vi.mock('@/services/modelTransfer', () => ({
     talosAcknowledgeArrivals: bridge.acknowledge,
     talosStartModelTransfer: bridge.start,
     talosPauseModelTransfer: vi.fn(async () => ({ ok: true })),
-    talosResumeModelTransfer: vi.fn(async () => ({ ok: true })),
+    talosResumeModelTransfer: bridge.resume,
     talosCancelModelTransfer: vi.fn(async () => ({ ok: true })),
     talosModelTransferStatus: bridge.status,
 }))
@@ -72,6 +75,7 @@ beforeEach(() => {
     vi.useRealTimers()
     vi.resetModules()
     bridge.start.mockReset()
+    bridge.resume.mockClear()
     bridge.status.mockReset()
     bridge.acknowledge.mockClear()
     plugin.installManifest.mockReset().mockResolvedValue(MANIFEST)
@@ -116,13 +120,16 @@ describe('talosInstallPersonalVoiceModel', () => {
             ok: true, started: { id: 'x2', phase: 'queued', runner: 'USER_INITIATED_JOB', networkBound: true },
         })
         // ⛔ Una coda esplicita, non `mockResolvedValueOnce` incatenati:
-        // `talosBeginModelTransfer` chiama `talosRefreshModelTransfer` da
-        // SOLO (una volta per artifact, quindi due volte qui) PRIMA che
-        // l'orchestratore inizi a osservare — una catena di "once" contati a
-        // mano si sarebbe disallineata proprio su quel dettaglio, ed è
-        // infatti il bug che il primo giro di questo test ha trovato.
+        // TRE chiamate a `status()` avvengono PRIMA che l'orchestratore inizi
+        // a osservare — due da `talosBeginModelTransfer` (una per artifact) e
+        // una dal controllo "serve un resume?" aggiunto il 2026-08-22 (trovato
+        // sul dispositivo: un secondo `start()` su un id già `failed` non
+        // riparte da solo) — una catena di "once" contati a mano si sarebbe
+        // disallineata proprio su quel dettaglio, ed è infatti il bug che il
+        // primo giro di questo test ha trovato.
         const queue = [
             statusResponse([transferItem('moss-nano-test/TTS-Dir', 5, 100), transferItem('moss-nano-test/Tok-Dir', 10, 200)]),
+            statusResponse([transferItem('moss-nano-test/TTS-Dir', 10, 100), transferItem('moss-nano-test/Tok-Dir', 20, 200)]),
             statusResponse([transferItem('moss-nano-test/TTS-Dir', 10, 100), transferItem('moss-nano-test/Tok-Dir', 20, 200)]),
             statusResponse([transferItem('moss-nano-test/TTS-Dir', 90, 100), transferItem('moss-nano-test/Tok-Dir', 150, 200)]),
             statusResponse([]),
@@ -191,6 +198,44 @@ describe('talosInstallPersonalVoiceModel', () => {
         const { talosInstallPersonalVoiceModel } = await import('@/services/voiceModelInstall')
         const result = await talosInstallPersonalVoiceModel()
         expect(result).toEqual({ ok: false, reason: 'not-activated' })
+    })
+
+    /**
+     * ⛔⛔ TROVATO SUL DISPOSITIVO, non ipotizzato — 2026-08-22: un `start()`
+     * su un id già `failed` non lo rimette in coda, restituisce lo stesso
+     * record fermo (`ok:true` incluso). Un tocco su "Scarica il motore voce"
+     * dopo un fallimento tornava quindi a fallire ISTANTANEAMENTE con la
+     * stessa vecchia ragione, senza aver ritentato nulla — misurato
+     * confrontando `createdAtMs` di due tentativi reali, identico.
+     */
+    it('resumes an artifact that already exists in a FAILED state instead of leaving it stuck', async () => {
+        // Timer finti: `talosKeepWatchingTransfers()` accende un
+        // `setInterval` VERO se non altro dichiarato — qui non serve nemmeno
+        // avanzarli, perché lo `watch(..., {immediate:true})` vede subito lo
+        // stesso `x1` ancora fallito (la risposta è costante apposta) e
+        // chiude da solo, ma senza timer finti quell'intervallo resterebbe
+        // acceso in background dopo la fine del test.
+        vi.useFakeTimers()
+        bridge.start.mockResolvedValueOnce({
+            ok: true, started: { id: 'x1', phase: 'failed', runner: 'USER_INITIATED_JOB', networkBound: true },
+        }).mockResolvedValueOnce({
+            ok: true, started: { id: 'x2', phase: 'queued', runner: 'USER_INITIATED_JOB', networkBound: true },
+        })
+        // Costante apposta: prova solo che il resume-check parte con l'id
+        // giusto, PRIMA che il poller esista — la coda dei tick multipli è
+        // già coperta dal test sopra.
+        bridge.status.mockResolvedValue(statusResponse([
+            transferItem('moss-nano-test/TTS-Dir', 0, 100, { id: 'x1', phase: 'failed', failure: 'unreachable' }),
+            transferItem('moss-nano-test/Tok-Dir', 20, 200, { id: 'x2', phase: 'queued', failure: null }),
+        ]))
+
+        const { talosInstallPersonalVoiceModel } = await import('@/services/voiceModelInstall')
+        const result = await talosInstallPersonalVoiceModel()
+
+        expect(bridge.resume).toHaveBeenCalledTimes(1)
+        expect(bridge.resume).toHaveBeenCalledWith('x1')
+        // x2 era già `queued` (non terminale): nessun resume per lui.
+        expect(result).toEqual({ ok: false, reason: 'unreachable' })
     })
 
     it('stops before starting any transfer when the manifest itself is empty', async () => {
