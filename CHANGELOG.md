@@ -6,6 +6,92 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.18
+
+The app can speak in your own voice. You record a set of phrases once, the
+device learns from them, and from then on a message can be read back in that
+voice instead of the stock one. Everything below was measured on the owner's
+OnePlus Pad 3, on a real tablet layout, and none of it is estimated.
+
+### Teaching it your voice
+
+The wizard walks you through twelve phrases in three styles, shows a real
+waveform that moves with your voice while you speak, and checks the recording
+quality before accepting it. The quiet-room screen before the wizard now shows
+a live microphone level too, so you can tell whether the room is actually quiet
+before you start. The level meter is on only on that screen and switches off
+the moment you leave it.
+
+Your recordings never leave the device. They are encrypted with a key held in
+the phone's hardware keystore, and once the voice profile is built the raw
+audio is destroyed.
+
+### It no longer dies while learning
+
+The first real run with twelve phrases killed the app. Not "ran slowly" —
+Android's low-memory killer terminated it, and said "process memory is
+leaking": about 5.8 GB resident and 5.3 GB of swap.
+
+The first attempt at a fix — turning off ONNX's memory arena, which is the
+official recommendation for small models — brought it down to 3.5 GB and still
+died. That was reported as insufficient rather than shipped as a fix.
+
+The real cause is that the encoder's attention costs memory in proportion to
+the *square* of how much audio you hand it, which matches the memory climbing
+steadily throughout the encode rather than spiking at load. Twelve phrases
+concatenated is twenty to forty seconds of audio, and that is past what the
+model is built for: its own documentation puts the sweet spot at three to ten
+seconds and warns that clips beyond about fifteen "may introduce noise
+artifacts or degrade quality".
+
+So the reference is now built from the four normal-voice phrases rather than
+all twelve, with a hard twelve-second ceiling behind it that holds no matter
+what reaches it. A shorter reference is not a compromise for the sake of
+memory — it is the better recording. Measured after the change: the encode
+finishes in 5.4 seconds and the app survives.
+
+The quality gate still runs on all twelve phrases. Only the audio that reaches
+the encoder changed.
+
+### If it crashes, you do not start over
+
+Each accepted phrase is written to disk encrypted as you go. If the app is
+killed halfway through — or crashes — reopening the wizard picks up at the next
+missing phrase instead of asking for all twelve again, and it does not make you
+redo the consent screen or the microphone check. Verified twice: once with a
+forced stop, and once with a genuine crash that happened while chasing the bug
+above.
+
+### Fixes
+
+**The voice wizard filled only half a tablet screen.** On a real tablet the
+setup dialog stayed trapped inside the settings panel, with the category list
+still showing beside it and an empty strip below the footer. It looked correct
+on a phone, and on a tablet shrunk to phone size, which is why it survived this
+long.
+
+**The voice picker showed "Select an option" while a voice was selected.**
+When network voices were available they crowded the list, and the local voice
+the app had actually chosen was not in it. The setting was right; the label was
+wrong.
+
+**Markdown documents are readable again.** Files shared into a chat now render
+formatted instead of as raw text, and their card opens the document.
+
+**The voice you hear when you press play is the voice in your settings.** The
+two could disagree; now they cannot.
+
+**The selection icon in the chat sidebar is gone.** Press and hold already did
+the same thing.
+
+### What this release does not do yet
+
+The personal voice has not been through a full end-to-end run with a human
+voice on a device — the pieces are each verified, the whole chain is not. Read-
+aloud does not yet stream ahead of the text it is reading. The stock system
+voice remains the fallback and is unchanged: if you never set up a personal
+voice, nothing about the app sounds different.
+
 ## v0.1.17
 
 The local engine can use the GPU. Everything here was measured on the owner's
