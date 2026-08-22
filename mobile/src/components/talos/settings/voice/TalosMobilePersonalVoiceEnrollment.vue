@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { ArrowLeft, Check, Mic, Pause, RefreshCw, Volume1, Volume2, VolumeX } from '@lucide/vue'
+import { ArrowLeft, Check, Mic, Pause, Play, RefreshCw, Volume1, Volume2, VolumeX } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
+import TalosMicWaveform from '@/components/brand/TalosMicWaveform.vue'
 import {
     talosBuildVoiceEnrollmentProfile,
     talosCaptureVoiceEnrollmentPhrase,
@@ -10,8 +11,12 @@ import {
     talosDiscardVoiceEnrollmentSession,
     talosOnPersonalVoiceDone,
     talosOnPersonalVoiceError,
+    talosOnVoiceEnrollmentLevel,
+    talosPlayCapturedEnrollmentPhrase,
     talosPreviewVoiceEnrollmentProfile,
+    talosStartMicLevelPeek,
     talosStartVoiceEnrollment,
+    talosStopMicLevelPeek,
     talosStopVoiceEnrollmentCapture,
     type TalosVoiceEnrollmentPhraseVerdict,
 } from '@/services/personalVoice'
@@ -74,6 +79,10 @@ const phraseIndex = ref(0)
 const currentPhrase = computed(() => PHRASES[phraseIndex.value]!)
 const recording = ref(false)
 const lastVerdict = ref<TalosVoiceEnrollmentPhraseVerdict | null>(null)
+const playingBack = ref(false)
+const playbackError = ref(false)
+/** ⭐⭐⭐ Owner 22/8: il livello VERO del blocco PCM appena letto durante una cattura - vedi `talosOnVoiceEnrollmentLevel`. */
+const micLevel = ref(0)
 
 const displayName = ref('')
 const buildError = ref<string | null>(null)
@@ -84,17 +93,56 @@ const savedSummary = ref<TalosPersonalVoiceProfileSummary | null>(null)
 
 let doneSubscription: { remove(): Promise<void> } | null = null
 let errorSubscription: { remove(): Promise<void> } | null = null
+let levelSubscription: { remove(): Promise<void> } | null = null
 let previewReadingId: string | null = null
+
+/**
+ * ⭐⭐⭐ Owner 22/8, live sul Pad: «la waveform si deve vedere anche nella
+ * prima schermata, quella del controllo microfono». Nessuna frase si
+ * cattura lì - `talosStartMicLevelPeek`/`Stop` accendono e spengono SOLO il
+ * misuratore, sullo stesso canale evento (`talosOnVoiceEnrollmentLevel`)
+ * già armato per il wizard. Un `watch`, non un `onMounted` in più: la
+ * schermata 'check' si entra e si esce più volte nella stessa sessione
+ * (freccia indietro dal wizard), e il microfono non deve restare ceduto
+ * oltre quella finestra.
+ */
+watch(stage, (next, previous) => {
+    if (next === 'check') void talosStartMicLevelPeek()
+    else if (previous === 'check') void talosStopMicLevelPeek()
+})
 
 onMounted(async () => {
     try {
-        await talosStartVoiceEnrollment()
+        const { resumedSlotIndexes } = await talosStartVoiceEnrollment()
+        // ⭐⭐⭐ Owner 22/8: "riprendere da dove si lascia" - ogni indice qui
+        // è già cifrato su disco lato nativo, non solo un numero. Si salta
+        // dritti al wizard sulla prima frase MANCANTE (consenso e controllo
+        // microfono non si rifanno: una frase vera già registrata in questa
+        // sessione È la prova che erano già stati dati). Se le 12 sono
+        // già tutte lì, si salta anche il wizard - si va alla verifica.
+        if (resumedSlotIndexes.length > 0) {
+            const resumed = new Set(resumedSlotIndexes)
+            let resumeIndex = 0
+            while (resumed.has(resumeIndex) && resumeIndex < PHRASES.length) resumeIndex += 1
+            if (resumeIndex >= PHRASES.length) {
+                stage.value = 'review'
+            } else {
+                stage.value = 'wizard'
+                phraseIndex.value = resumeIndex
+            }
+        }
         doneSubscription = await talosOnPersonalVoiceDone((readingId) => {
             if (readingId === previewReadingId) previewing.value = false
         })
         errorSubscription = await talosOnPersonalVoiceError((readingId) => {
             if (readingId === previewReadingId) previewing.value = false
         })
+        // ⛔ Un solo ascolto per tutta la sessione, non uno per frase: il
+        // nativo emette SOLO durante una cattura in corso (per costruzione,
+        // dentro il ciclo di lettura di TalosVoiceRecorder), quindi non
+        // serve armare/disarmare a ogni pointerdown/pointerup - un evento
+        // che arrivasse fuori da una cattura non potrebbe comunque esistere.
+        levelSubscription = await talosOnVoiceEnrollmentLevel((level) => { micLevel.value = level })
     } catch (cause) {
         // The settings screen already hides the entry point to this wizard
         // when the plugin reports unsupported - reaching here regardless
@@ -108,6 +156,11 @@ onMounted(async () => {
 onBeforeUnmount(() => {
     void doneSubscription?.remove()
     void errorSubscription?.remove()
+    void levelSubscription?.remove()
+    // ⛔ Se il dialog si chiude (Annulla) mentre si è ancora su 'check', il
+    // `watch` sopra non vede più un `previous` da confrontare - senza
+    // questo il peek resterebbe acceso oltre la vita del componente.
+    if (stage.value === 'check') void talosStopMicLevelPeek()
 })
 
 async function discardAndClose(): Promise<void> {
@@ -134,6 +187,10 @@ async function startRecording(): Promise<void> {
         lastVerdict.value = verdict
     } finally {
         recording.value = false
+        // Il nativo smette di emettere non appena la cattura finisce - la
+        // barra deve tornare a riposo con lei, non restare ferma sull'ultimo
+        // blocco letto.
+        micLevel.value = 0
     }
 }
 
@@ -144,14 +201,36 @@ async function stopRecording(): Promise<void> {
 
 function retryPhrase(): void {
     lastVerdict.value = null
+    playbackError.value = false
 }
 
 function nextPhrase(): void {
     lastVerdict.value = null
+    playbackError.value = false
     if (phraseIndex.value < PHRASES.length - 1) {
         phraseIndex.value += 1
     } else {
         stage.value = 'review'
+    }
+}
+
+/**
+ * ⭐⭐⭐ Owner 22/8, live sul Pad, mentre provava la registrazione vera:
+ * riascoltare la frase appena accettata prima ancora di arrivare
+ * all'anteprima finale (che esiste già, ma solo dopo TUTTE e 12 le frasi e
+ * la codifica). Il PCM è già in memoria nativa (`enrollmentSlots`) - questo
+ * non richiama `captureVoiceEnrollmentPhrase`, solo la riproduzione.
+ */
+async function playBackCapture(): Promise<void> {
+    if (playingBack.value) return
+    playingBack.value = true
+    playbackError.value = false
+    try {
+        await talosPlayCapturedEnrollmentPhrase(phraseIndex.value)
+    } catch {
+        playbackError.value = true
+    } finally {
+        playingBack.value = false
     }
 }
 
@@ -271,6 +350,10 @@ const tierLabel = computed(() => {
             <template v-else-if="stage === 'check'">
                 <h1 class="talos-title text-2xl font-semibold leading-tight">{{ t('personalVoice.checkTitle') }}</h1>
                 <p class="mt-3 text-md leading-7 text-[var(--talos-muted)]">{{ t('personalVoice.checkBody') }}</p>
+                <!-- ⭐⭐⭐ Owner 22/8: livello VERO da `talosStartMicLevelPeek`, non un finto respiro - stesso componente e stesso `micLevel` del wizard. -->
+                <div class="mt-6 rounded-xl border border-[var(--talos-border)] px-4 py-3">
+                    <TalosMicWaveform :level="micLevel" />
+                </div>
             </template>
 
             <template v-else-if="stage === 'wizard'">
@@ -285,12 +368,37 @@ const tierLabel = computed(() => {
                 <p class="mt-8 text-center text-2xl font-medium leading-snug" data-testid="talos-personal-voice-phrase">
                     &ldquo;{{ currentPhrase.text }}&rdquo;
                 </p>
+                <!--
+                    ⭐⭐⭐ Owner 22/8, live sul Pad: «la waveform è assente nel
+                    Wizard, ne abbiamo già una». `TalosMicWaveform` esiste già
+                    (barra assistente + dettatura) - qui riceve `micLevel`,
+                    che arriva DAVVERO dal blocco PCM che `TalosVoiceRecorder`
+                    sta leggendo in questo momento, non un numero finto:
+                    a riposo (fuori da una cattura) resta a 0 e la barra
+                    mostra il filo minimo di 3px del componente, onesto sul
+                    fatto che non sta ancora sentendo niente.
+                -->
+                <div class="mt-6 rounded-xl border border-[var(--talos-border)] px-4 py-3">
+                    <TalosMicWaveform :level="micLevel" />
+                </div>
                 <div v-if="lastVerdict" class="mt-8 flex items-center gap-2 rounded-xl border px-4 py-3 text-sm"
                     :class="lastVerdict.accepted ? 'border-[var(--talos-success-border)] bg-[var(--talos-success-soft)] text-[var(--talos-success)]' : 'border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] text-[var(--talos-warning)]'"
                 >
                     <Check v-if="lastVerdict.accepted" class="size-4 shrink-0" aria-hidden="true" />
                     <span>{{ lastVerdict.accepted ? t('personalVoice.wizardGoodLevel') : rejectionMessage(lastVerdict) }}</span>
                 </div>
+                <button
+                    v-if="lastVerdict?.accepted"
+                    type="button"
+                    data-testid="talos-personal-voice-playback"
+                    :disabled="playingBack"
+                    class="talos-pressable mt-3 flex min-h-touch w-full items-center justify-center gap-2 rounded-full border border-[var(--talos-border)] text-sm font-medium disabled:opacity-60"
+                    @click="playBackCapture"
+                >
+                    <Play class="size-4" aria-hidden="true" />
+                    {{ playingBack ? t('personalVoice.wizardPlaybackPlaying') : t('personalVoice.wizardPlayback') }}
+                </button>
+                <p v-if="playbackError" role="alert" class="mt-2 text-center text-sm text-[var(--talos-danger)]">{{ t('personalVoice.wizardPlaybackFailed') }}</p>
             </template>
 
             <template v-else-if="stage === 'review'">

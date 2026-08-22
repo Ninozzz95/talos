@@ -51,8 +51,11 @@ class TalosNeuralVoicePlugin : Plugin() {
     }
 
     private val captureCancelled = AtomicBoolean(false)
+    private val micLevelPeekActive = AtomicBoolean(false)
     private val enrollmentSlots = ConcurrentHashMap<Int, TalosVoiceCaptureResult>()
     @Volatile private var pendingProfile: TalosVoiceProfileV1? = null
+    private val sessionStore: TalosVoiceEnrollmentSessionStore
+        get() = TalosVoiceEnrollmentSessionStore(context.applicationContext)
 
     /**
      * ⛔⛔ `load()` gira sul thread CONDIVISO dei plugin — stessa nota di
@@ -352,18 +355,84 @@ class TalosNeuralVoicePlugin : Plugin() {
     // Enrollment - §11.1's guided flow, §42's recorder.
     // ---------------------------------------------------------------
 
+    /**
+     * ⭐⭐⭐ Owner 22/8: NON pulisce più per costruzione - riprende. Un
+     * crash reale durante `buildEnrollmentProfile` (misurato: pressione di
+     * memoria di sistema) portava via tutte e 12 le frasi appena accettate,
+     * mai scritte da nessuna parte. Ora ogni frase accettata è già su disco
+     * cifrato ([TalosVoiceEnrollmentSessionStore]) nel momento in cui viene
+     * accettata - questa chiamata le rilegge in [enrollmentSlots] invece di
+     * ripartire da zero, e dice al chiamante quali indici sono già fatti.
+     */
     @PluginMethod
     fun startEnrollmentSession(call: PluginCall) {
         enrollmentSlots.clear()
         pendingProfile = null
         captureCancelled.set(false)
-        call.resolve()
+        enrollmentLane.execute {
+            runCatching { sessionStore.loadPersistedSlots() }.getOrDefault(emptyMap()).forEach { (index, capture) ->
+                enrollmentSlots[index] = capture
+            }
+            val resumed = JSArray()
+            enrollmentSlots.keys.sorted().forEach { resumed.put(it) }
+            call.resolve(JSObject().put("resumedSlotIndexes", resumed))
+        }
     }
 
     /** Cancels whatever `captureEnrollmentPhrase` call is in flight right now - checked by [TalosVoiceRecorder] on every read loop iteration, same mechanism [TalosVoiceHost.cancel] already relies on for generation. */
     @PluginMethod
     fun stopEnrollmentCapture(call: PluginCall) {
         captureCancelled.set(true)
+        call.resolve()
+    }
+
+    /**
+     * ⭐⭐⭐ Owner 22/8: la schermata «trova un posto silenzioso» non
+     * cattura nessuna frase - qui il livello è tutto quello che serve, e
+     * [TalosVoiceRecorder.peekLevel] esiste apposta per questo (nessun
+     * campione tenuto, nessun cancello di qualità). Idempotente: un secondo
+     * `startMicLevelPeek` mentre uno è già attivo non apre un secondo
+     * `AudioRecord` sopra al primo.
+     */
+    @PluginMethod
+    fun startMicLevelPeek(call: PluginCall) {
+        if (getPermissionState("microfono") != PermissionState.GRANTED) {
+            requestPermissionForAlias("microfono", call, "afterMicPermissionForPeek")
+            return
+        }
+        runStartMicLevelPeek(call)
+    }
+
+    @PermissionCallback
+    private fun afterMicPermissionForPeek(call: PluginCall) {
+        if (getPermissionState("microfono") != PermissionState.GRANTED) {
+            call.reject("RECORD_AUDIO permission denied")
+            return
+        }
+        runStartMicLevelPeek(call)
+    }
+
+    private fun runStartMicLevelPeek(call: PluginCall) {
+        if (micLevelPeekActive.getAndSet(true)) {
+            call.resolve()
+            return
+        }
+        enrollmentLane.execute {
+            runCatching {
+                TalosVoiceRecorder(context.applicationContext).peekLevel(
+                    { micLevelPeekActive.get() },
+                    { level -> notifyListeners("talosVoiceEnrollmentLevel", JSObject().put("level", level.toDouble())) },
+                )
+            }
+            micLevelPeekActive.set(false)
+        }
+        call.resolve()
+    }
+
+    /** ⛔ Ferma il ciclo cooperativamente (`shouldContinue` torna false al prossimo giro) - non c'è nient'altro da cancellare, il peek non tiene stato oltre il flag. */
+    @PluginMethod
+    fun stopMicLevelPeek(call: PluginCall) {
+        micLevelPeekActive.set(false)
         call.resolve()
     }
 
@@ -395,12 +464,70 @@ class TalosNeuralVoicePlugin : Plugin() {
         captureCancelled.set(false)
         enrollmentLane.execute {
             runCatching {
-                val phrase = enrollment().captureOnePhrase(maxDurationMs) { captureCancelled.get() }
-                if (phrase.verdict.accepted) enrollmentSlots[slotIndex] = phrase.capture
+                val phrase = enrollment().captureOnePhrase(
+                    maxDurationMs,
+                    { captureCancelled.get() },
+                    { level -> notifyListeners("talosVoiceEnrollmentLevel", JSObject().put("level", level.toDouble())) },
+                )
+                if (phrase.verdict.accepted) {
+                    enrollmentSlots[slotIndex] = phrase.capture
+                    // ⭐⭐⭐ Owner 22/8: scritta SUBITO, non solo tenuta in
+                    // memoria - è esattamente il dato che un crash a metà
+                    // sessione (misurato: pressione di memoria di sistema
+                    // durante l'encode) portava via.
+                    runCatching { sessionStore.saveSlot(slotIndex, phrase.capture) }
+                }
                 phrase
             }.fold(
                 onSuccess = { phrase -> call.resolve(phraseVerdictJson(phrase)) },
                 onFailure = { e -> call.reject(e.message ?: "capture failed", e as? Exception) },
+            )
+        }
+    }
+
+    /**
+     * ⭐⭐⭐ Owner 22/8, live durante la prova sul Pad: "dopo ogni frase
+     * voglio un pulsante che riproduca quello che ho appena registrato".
+     *
+     * Non serve una nuova sintesi: [enrollmentSlots] tiene già il PCM grezzo
+     * ACCETTATO di ogni slot in memoria (mai su disco, stesso motivo della
+     * classe di `TalosVoiceEnrollment`). Qui si riproduce quello, con
+     * [TalosPcmPlayer] a piccoli blocchi (mai in un colpo solo — confermato
+     * da ricerca: la modalità STREAM è pensata per blocchi ripetuti, e la
+     * sua stessa nota misurata sul Pad lo impone), bloccando finché non
+     * finisce: una ripetizione di ~1-3 s non ha bisogno del pattern
+     * evento-di-completamento che usa `speak`/`previewEnrollmentProfile`.
+     */
+    @PluginMethod
+    fun playCapturedPhrase(call: PluginCall) {
+        val slotIndex = call.getInt("slotIndex")
+        if (slotIndex == null) {
+            call.reject("slotIndex is required")
+            return
+        }
+        val capture = enrollmentSlots[slotIndex]
+        if (capture == null) {
+            call.reject("no accepted capture for slot $slotIndex")
+            return
+        }
+        enrollmentLane.execute {
+            runCatching {
+                val player = TalosPcmPlayer(capture.sampleRate, 1)
+                try {
+                    val floatPcm = FloatArray(capture.pcm16Mono.size) { i -> capture.pcm16Mono[i] / 32768f }
+                    var offset = 0
+                    while (offset < floatPcm.size) {
+                        val end = (offset + PLAYBACK_CHUNK_SAMPLES).coerceAtMost(floatPcm.size)
+                        if (!player.write(floatPcm.copyOfRange(offset, end))) break
+                        offset = end
+                    }
+                    player.awaitDrain(PLAYBACK_DRAIN_TIMEOUT_MS)
+                } finally {
+                    player.close()
+                }
+            }.fold(
+                onSuccess = { call.resolve() },
+                onFailure = { e -> call.reject(e.message ?: "playback failed", e as? Exception) },
             )
         }
     }
@@ -481,6 +608,10 @@ class TalosNeuralVoicePlugin : Plugin() {
                 enrollment.commit(profile)
                 enrollmentSlots.clear()
                 pendingProfile = null
+                // Il profilo vero e cifrato esiste ora - la copia di
+                // servizio per la ripresa non serve più, stessa erasure
+                // crittografica di TalosVoiceProfileStore.delete().
+                runCatching { sessionStore.clearSession() }
                 profileSummaryJson(enrollment, profile.header)
             }.fold(
                 onSuccess = { summary -> call.resolve(JSObject().put("profile", summary)) },
@@ -494,7 +625,11 @@ class TalosNeuralVoicePlugin : Plugin() {
         enrollmentSlots.clear()
         pendingProfile = null
         captureCancelled.set(false)
-        call.resolve()
+        micLevelPeekActive.set(false)
+        enrollmentLane.execute {
+            runCatching { sessionStore.clearSession() }
+            call.resolve()
+        }
     }
 
     private fun profileSummaryJson(enrollment: TalosVoiceEnrollment, header: TalosVoiceProfileHeaderV1): JSObject =
@@ -533,5 +668,11 @@ class TalosNeuralVoicePlugin : Plugin() {
 
     companion object {
         private const val DEFAULT_PHRASE_MAX_DURATION_MS = 8_000
+        // ⛔ Non lo stesso buffer di TalosPcmPlayer (quello è dimensionato per
+        // l'HAL in uscita) - questo è quanto float PCM si converte e scrive
+        // per iterazione: piccolo apposta, per la stessa ragione documentata
+        // su TalosPcmPlayer.write() (mai l'intera clip in un colpo solo).
+        private const val PLAYBACK_CHUNK_SAMPLES = 4_096
+        private const val PLAYBACK_DRAIN_TIMEOUT_MS = 8_000L
     }
 }
