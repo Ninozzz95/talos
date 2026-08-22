@@ -3,6 +3,7 @@ package ai.talos;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -487,6 +488,49 @@ public class TalosLlamaEngineDeviceTest {
                     fa.equals("auto") || fa.equals("disabled") || fa.equals("enabled"));
         } finally {
             engine.close();
+        }
+    }
+
+    /**
+     * B2, AL CONTRARIO — il ramo che il test sopra NON copriva. `open()`
+     * lascia `backend`/`device` vuoti, e questo esercita solo il sentinella
+     * "auto" di {@code talos_risolvi_bersaglio()}. Il banco di prova
+     * (`TalosLocalBaselineDeviceTest`) traduce invece la richiesta vuota in
+     * "none" ESPLICITO prima di scendere — un SECONDO sentinella — e una riga
+     * vera scritta da quel banco sul Pad portava {@code backendDevice:"none"}
+     * (stringa!) invece di null. Qui si chiama `nativeOpenTargeted`
+     * direttamente, come fa il banco, per riprodurre esattamente quel
+     * percorso e non lasciare che la correzione sia provata solo sull'altro.
+     */
+    @Test
+    public void runtimeSnapshotSaysNoneExplicitlyRequestedIsStillNoBackend() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File file = model(context);
+        Assume.assumeTrue(
+                "modello di prova assente: spingilo in " + (file == null ? "?" : file.getAbsolutePath()),
+                file != null && file.isFile());
+
+        TalosLlamaNative.ensureReady(context);
+        long handle = TalosLlamaNative.nativeOpenTargeted(
+                file.getAbsolutePath(), 4, 4096, 0, true, 4, 0, "f16",
+                "none", "", "default");
+        assertNotEquals("apertura CPU esplicita (\"none\") fallita: "
+                + TalosLlamaNative.nativeLastOpenError(), 0L, handle);
+
+        try {
+            String raw = TalosLlamaNative.nativeRuntimeSnapshot(handle);
+            assertNotNull("runtimeSnapshot è tornata null su un handle aperto", raw);
+            JSONObject snapshot = new JSONObject(raw);
+            Log.i(TAG, "runtimeSnapshot (backend=none esplicito): " + raw);
+
+            assertEquals("gpuLayersEffective deve essere 0 su backend=\"none\" esplicito",
+                    0, snapshot.getInt("gpuLayersEffective"));
+            assertTrue("backendDevice deve essere assente o null anche quando \"none\" è stato "
+                    + "chiesto ESPLICITAMENTE, non solo quando non si chiede nulla — il campo "
+                    + "dice \"c'è offload?\", non \"la richiesta era vuota?\"",
+                    snapshot.isNull("backendDevice") || !snapshot.has("backendDevice"));
+        } finally {
+            TalosLlamaNative.nativeClose(handle);
         }
     }
 

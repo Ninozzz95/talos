@@ -650,6 +650,11 @@ public class TalosLocalBaselineDeviceTest {
         riga.put("deviceBefore", prima);
         riga.put("deviceAfter", statoDispositivo());
 
+        // B2: il valore di riserva. Una riga senza tempi nativi leggibili non
+        // ha nemmeno i campi che la renderebbero VALID - "non lo so" e' onesto,
+        // "va tutto bene" non lo sarebbe.
+        riga.put("validity", "UNKNOWN");
+
         String tempi = TalosLlamaNative.nativeLastTimings(handle);
         if (tempi != null && !tempi.isEmpty()) {
             JSONObject dettaglio = new JSONObject(tempi);
@@ -670,7 +675,55 @@ public class TalosLocalBaselineDeviceTest {
             riga.put("ttftMs", primo);
             // ⛔ La prova che il prefisso non ha aiutato. Se un giorno non fosse
             // zero, ogni confronto costruito su queste righe sarebbe falso.
-            riga.put("reusedTokens", dettaglio.optInt("reusedTokens", -1));
+            int riusati = dettaglio.optInt("reusedTokens", -1);
+            riga.put("reusedTokens", riusati);
+
+            /*
+             * B2 — lo stato cache VERO, non piu' la stringa costante "cold"
+             * (mai calcolata, trovata cosi' da una ricerca dedicata prima di
+             * questo blocco). Le quattro classi del piano sorgente (§5.3)
+             * intrecciano DUE segnali: se il processo e' stato appena
+             * aperto (nativeOpensSinceStart) e se il prefisso e' stato
+             * riusato (reusedTokens). Il TERZO segnale del piano - la cache
+             * dei binari OpenCL - non esiste ancora (arriva con P0-1): su
+             * QUESTO file, che misura solo il pavimento CPU
+             * (backendRichiesto()=="none"), quel terzo asse e' comunque
+             * privo di senso - non c'e' nessuna compilazione OpenCL da
+             * mettere in cache. C0 e C1 collassano nello stesso valore qui,
+             * onestamente, non per pigrizia: la distinzione a cui servono
+             * non si applica a un giro CPU.
+             */
+            boolean processoFreddo = TalosLlamaNative.nativeOpensSinceStart() <= 1;
+            String statoCache = processoFreddo
+                ? (riusati > 0 ? "C1" : "C0")
+                : (riusati > 0 ? "C3" : "C2");
+            riga.put("cacheState", statoCache);
+
+            /*
+             * B2 — la stessa domanda che B1 ha reso possibile rispondere:
+             * la GPU che avevamo chiesto e' quella che il motore ha usato
+             * DAVVERO? Letta dalla snapshot unificata (nativeRuntimeSnapshot,
+             * B1) invece di un metodo nativo in piu' - lo stesso motivo per
+             * cui esiste. `configMismatch` e' il caso che il piano sorgente
+             * chiama CONFIG_MISMATCH (CR-01): un `gpuLayers` richiesto
+             * diverso da zero che l'effettivo dice essere rimasto a zero -
+             * la riga esatta che non deve MAI entrare in una mediana.
+             */
+            String snapshotJson = TalosLlamaNative.nativeRuntimeSnapshot(handle);
+            if (snapshotJson != null) {
+                JSONObject effettivo = new JSONObject(snapshotJson);
+                riga.put("effectiveConfig", effettivo);
+                int gpuLayersRichiesti = stratiSuGpu();
+                int gpuLayersEffettivi = effettivo.optInt("gpuLayersEffective", 0);
+                boolean discorda = gpuLayersRichiesti != 0 && gpuLayersEffettivi == 0;
+                riga.put("configMismatch", discorda);
+                riga.put("validity", discorda ? "CONFIG_MISMATCH" : "VALID");
+            } else {
+                // ⛔ Nessuna snapshot leggibile non e' "va tutto bene": e'
+                // "non lo so", e la regola su un dubbio e' non promuovere
+                // mai una riga che non si puo' verificare a VALID.
+                riga.put("validity", "UNKNOWN");
+            }
         }
         registra(riga);
     }
@@ -699,7 +752,6 @@ public class TalosLocalBaselineDeviceTest {
         riga.put("threads", thread);
         riga.put("contextTokensRequested", contesto);
         riga.put("kvRequested", "f16");
-        riga.put("prefixState", "cold");
         riga.put("atMs", System.currentTimeMillis());
         return riga;
     }
