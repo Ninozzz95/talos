@@ -125,5 +125,43 @@ describe('personalVoice service', () => {
             const [firstCall, secondCall] = bridge.speak.mock.calls
             expect(firstCall[0].readingId).not.toBe(secondCall[0].readingId)
         })
+
+        /**
+         * ⛔⛔⛔ 22/8, owner, riprodotto live: la preferenza salvata puntava a
+         * un profilo che nel frattempo era stato rinominato/ricreato con un
+         * id diverso. `status.ready` era comunque `true` (UN ALTRO profilo
+         * compatibile esisteva), quindi il router sceglieva `'personal'` e
+         * la chiamata al bridge arrivava con l'id VECCHIO - che il plugin
+         * nativo rifiuta subito, sincrono (`accepted:false,
+         * reason:"profileNotFound"`). Prima di questo test/fix, quel
+         * rifiuto veniva trattato come "gestito" (tornava `true`), lasciando
+         * SOLO il toast generico "La lettura non è partita" su una lettura
+         * che aveva ancora un ripiego di sistema onesto disponibile.
+         */
+        it('PVOICE-SPEAK-01 a synchronous bridge rejection (stale/missing profile id) falls back, never calls onerror itself', async () => {
+            bridge.status.mockResolvedValue({ supported: true, installed: true })
+            bridge.profiles.mockResolvedValue(READY_PROFILES) // il router vede ALMENO un profilo pronto...
+            bridge.speak.mockResolvedValue({ accepted: false, reason: 'profileNotFound' }) // ...ma QUESTO id specifico no
+            const onerror = vi.fn()
+            const spoken = await talosSpeakForReading(
+                'personal',
+                'ghost-0000-0000-0000-000000000000', // stantio: non è PROFILE_ID, il plugin lo rifiuta
+                'Ciao',
+                { rate: 1, pitch: 1, onerror },
+            )
+            expect(spoken).toBe(false) // ⛔ AL CONTRARIO del vecchio comportamento: false, non true
+            expect(onerror).not.toHaveBeenCalled() // il chiamante ripiega da solo - nessun errore mostrato qui
+        })
+
+        it('AL CONTRARIO: a failure that arrives AFTER acceptance still reports true and reaches onerror via the completion event, not a fallback', async () => {
+            bridge.status.mockResolvedValue({ supported: true, installed: true })
+            bridge.profiles.mockResolvedValue(READY_PROFILES)
+            bridge.speak.mockResolvedValue({ accepted: true }) // accettato SUBITO - la lettura è partita
+            const onend = vi.fn()
+            const onerror = vi.fn()
+            const spoken = await talosSpeakForReading('personal', PROFILE_ID, 'Ciao', { rate: 1, pitch: 1, onend, onerror })
+            expect(spoken).toBe(true) // gestito: nessun ripiego a metà lettura
+            expect(bridge.addListener).toHaveBeenCalled() // il canale di completamento è armato per quando arriverà l'esito vero
+        })
     })
 })

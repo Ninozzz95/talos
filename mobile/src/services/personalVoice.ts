@@ -377,6 +377,50 @@ export async function talosSpeakForReading(
     if (engine !== 'personal') return false
     const route = await planTalosVoiceReading(engine, personalProfileId, talosPersonalVoiceStatus)
     if (route.engine !== 'personal' || !route.profileId) return false
-    await talosPersonalVoiceSpeechAdapter(route.profileId).speak(text, options)
+    /**
+     * ⛔⛔⛔ 22/8, owner, riprodotto live: la preferenza salvata puntava a un
+     * profilo che nel frattempo NON ESISTE PIÙ (rinominato/ricreato da
+     * un'altra sessione - misurato: `plugin.profiles()` non conteneva più
+     * quell'id, `status.ready` era comunque `true` perché UN ALTRO profilo
+     * compatibile esisteva). Il router sopra controlla solo "esiste ALMENO
+     * un profilo pronto da qualche parte", mai il profilo SPECIFICO scelto
+     * - la stessa lacuna già chiusa lato UI in `selectedVoice` di
+     * `TalosMobileVoiceSettings.vue`, qui ancora aperta.
+     *
+     * Prima di questa riga: `talosPersonalVoiceSpeechAdapter(...).speak()`
+     * chiamava `onerror` per un rifiuto SINCRONO (`accepted:false,
+     * reason:"profileNotFound"`) e questa funzione tornava comunque `true`
+     * - "gestito", niente ripiego - lasciando SOLO il toast generico
+     * "La lettura non è partita" su una lettura che aveva ancora un
+     * ripiego onesto disponibile (`toggle()` in `useTalosSpeech.ts` salta
+     * il sistema quando questa funzione torna `true`).
+     *
+     * ⇒ Confermato con ricerca web (pattern di resilienza standard - un
+     * rifiuto "risorsa non trovata" è concettualmente un 404: non si
+     * ritenta, si reindirizza subito a un percorso alternativo, mai dopo
+     * che l'operazione è già a metà con effetti collaterali in corso): non
+     * si passa più dall'adapter condiviso qui (quello resta corretto per
+     * chi lo chiama sapendo di non avere un ripiego, come il pulsante
+     * "Ascolta" di ogni profilo) - si chiama `talosSpeakWithPersonalVoice`
+     * direttamente, si legge `accepted` PRIMA di decidere, e un rifiuto
+     * immediato torna `false` - il chiamante ripiega DAVVERO sul sistema,
+     * silenziosamente, come già promette la doc sopra ("false means the
+     * caller must fall back"). Un fallimento che arriva DOPO
+     * l'accettazione (a metà generazione) resta un errore mostrato: a
+     * quel punto non c'è più un ripiego pulito da offrire.
+     */
+    const readingId = `personal-reading-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    await armPersonalVoiceListeners()
+    const result = await talosSpeakWithPersonalVoice({
+        text,
+        profileId: route.profileId,
+        readingId,
+        rate: options.rate,
+        pitch: options.pitch,
+    })
+    if (!result.accepted) return false
+    if (options.onend || options.onerror) {
+        pendingPersonalVoiceReadings.set(readingId, { onend: options.onend, onerror: options.onerror })
+    }
     return true
 }
