@@ -314,9 +314,22 @@ public class TalosLocalBaselineDeviceTest {
         return "1".equals(InstrumentationRegistry.getArguments().getString("talosCacheDebug", ""));
     }
 
+    /**
+     * P0-1, SOLO RICERCA — `talosCacheOff=1` è il CONTROLLO dell'esperimento:
+     * spegne la cache per questo processo, così ogni kernel ricompila sempre.
+     * Serve a provare che il guadagno misurato con la cache accesa viene
+     * davvero da lei.
+     */
+    private static boolean cacheOffRichiesto() {
+        return "1".equals(InstrumentationRegistry.getArguments().getString("talosCacheOff", ""));
+    }
+
     private static long apriCpu(File model, int contesto, int thread) {
         if (cacheDebugRichiesto()) {
             TalosLlamaNative.nativeEnableOpenClCacheDebugTraceForResearch();
+        }
+        if (cacheOffRichiesto()) {
+            TalosLlamaNative.nativeDisableOpenClCacheForResearch();
         }
         /*
          * ⛔ Prima si CHIEDE ALLA POLITICA, e non è cerimonia.
