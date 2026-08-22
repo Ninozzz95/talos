@@ -14,6 +14,7 @@
 
 #include <jni.h>
 #include <android/log.h>
+#include <sched.h>  // sched_getaffinity — P1-1, la topologia CPU
 #include <sys/stat.h>
 
 #include <algorithm>
@@ -971,6 +972,89 @@ Java_ai_talos_TalosLlamaNative_nativeBackendInventory(JNIEnv * env, jclass) {
     }
 
     out["registries"] = registries;
+    return env->NewStringUTF(out.dump().c_str());
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — P1-1, la topologia CPU VERA, non un nome di chip scritto
+ * a mano.
+ *
+ * Piano sorgente, §9.4/10.1: "Do not hardcode 'cores 6 and 7 are big'. Read
+ * capacity/online/allowed masks every time the device fingerprint changes."
+ * Tre fatti diversi, tre fonti diverse:
+ *
+ *  - `online`: `/sys/.../cpuN/online` — assente è "sempre online" (il caso
+ *    normale per `cpu0` su molti kernel, che non espone il file perché non è
+ *    hot-pluggabile), non un errore da propagare.
+ *  - `capacity`: `/sys/.../cpuN/cpu_capacity`, 1024 = il core più forte —
+ *    stessa fonte già letta lato Java in `TalosDeviceCapacityPlugin`, qui
+ *    duplicata perché il thread pool nativo (P1-1, non ancora costruito) la
+ *    userà nel momento in cui crea il pool, non con un giro di andata e
+ *    ritorno verso JS che potrebbe leggere uno stato non più attuale.
+ *  - `allowed`: `sched_getaffinity` sul processo CORRENTE — quali core il
+ *    cgroup/cpuset del sistema concede DAVVERO a questo processo, un fatto
+ *    che `cpu_capacity` da solo non dice (un core può essere forte E fuori
+ *    dal cpuset consentito).
+ *
+ * Fail-closed per ogni core singolarmente, non per l'intera lettura: un file
+ * illeggibile per UN core diventa `capacity: -1` per quel core soltanto — la
+ * stessa disciplina di `nativeBackendInventory`, dove un campo mancante è un
+ * campo assente, mai un numero indovinato.
+ *
+ * Diagnostico puro: non alloca niente, non crea nessun thread pool. Il
+ * lifecycle rischioso (CR-07 del piano sorgente: use-after-free/deadlock su
+ * pool nativi) resta un blocco separato, costruito DOPO che questa lettura è
+ * verificata sul dispositivo vero.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeCpuTopology(JNIEnv * env, jclass) {
+    nlohmann::ordered_json out;
+    long configurati = sysconf(_SC_NPROCESSORS_CONF);
+    if (configurati < 0) configurati = 0;
+
+    cpu_set_t consentiti;
+    CPU_ZERO(&consentiti);
+    bool affinitaLeggibile = sched_getaffinity(0, sizeof(consentiti), &consentiti) == 0;
+
+    nlohmann::ordered_json cores = nlohmann::ordered_json::array();
+    for (long indice = 0; indice < configurati; indice += 1) {
+        nlohmann::ordered_json core;
+        core["index"] = (int) indice;
+
+        std::string percorsoOnline =
+            "/sys/devices/system/cpu/cpu" + std::to_string(indice) + "/online";
+        bool online = true;  // assente = sempre online, non un errore.
+        FILE * fileOnline = fopen(percorsoOnline.c_str(), "r");
+        if (fileOnline != nullptr) {
+            char riga[8] = {0};
+            if (fgets(riga, sizeof(riga), fileOnline) != nullptr) {
+                online = riga[0] == '1';
+            }
+            fclose(fileOnline);
+        }
+        core["online"] = online;
+
+        std::string percorsoCapacity =
+            "/sys/devices/system/cpu/cpu" + std::to_string(indice) + "/cpu_capacity";
+        int capacita = -1;
+        FILE * fileCapacity = fopen(percorsoCapacity.c_str(), "r");
+        if (fileCapacity != nullptr) {
+            if (fscanf(fileCapacity, "%d", &capacita) != 1) capacita = -1;
+            fclose(fileCapacity);
+        }
+        core["capacity"] = capacita;
+
+        if (affinitaLeggibile) {
+            core["allowed"] = (bool) CPU_ISSET(indice, &consentiti);
+        } else {
+            core["allowed"] = nullptr;
+        }
+
+        cores.push_back(core);
+    }
+
+    out["cores"] = cores;
+    out["affinityReadable"] = affinitaLeggibile;
     return env->NewStringUTF(out.dump().c_str());
 }
 

@@ -105,6 +105,25 @@ final class TalosLlamaNative {
     static native String nativeBackendInventory();
 
     /**
+     * P1-1 — la topologia CPU VERA, letta dal processo nativo, non un nome
+     * di chip scritto a mano (piano sorgente, §9.4: "Do not hardcode 'cores
+     * 6 and 7 are big'").
+     *
+     * Forma: {@code {"cores":[{"index":0,"online":true,"capacity":446,
+     * "allowed":true},...],"affinityReadable":true}}.
+     *
+     * ⛔ {@code capacity=-1} è "questo kernel non lo espone", non zero core.
+     * {@code allowed=null} (non {@code false}) è "sched_getaffinity non ha
+     * risposto per il processo intero", diverso da "questo core specifico è
+     * escluso" — non confondere le due assenze.
+     *
+     * Diagnostico puro: non crea nessun thread pool, non tocca nessuna
+     * sessione. Il lifecycle dei pool nativi (CR-07 del piano sorgente:
+     * rischio reale di use-after-free/deadlock) resta un blocco separato.
+     */
+    static native String nativeCpuTopology();
+
+    /**
      * ⛔ SOLO RICERCA — PERCHE' un backend manca dall'inventario.
      *
      * MISURATO il 2026-08-20: con {@code libggml-opencl.so} da 3.198.104 byte
