@@ -10,7 +10,7 @@ import { computed, nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import { useTalosI18n } from '@/i18n'
-import { Check, CheckSquare, ChevronDown, LoaderCircle, MessageSquarePlus, Search, Trash2, X } from '@lucide/vue'
+import { Check, ChevronDown, LoaderCircle, MessageSquarePlus, Search, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
@@ -476,22 +476,12 @@ function act(
                     class="min-h-touch w-full rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 >
             </div>
-            <!-- Owner 2026-07-27, asked twice: entering selection only by
-                 holding a row meant nobody found it. Top right of the header,
-                 where a select control is looked for, and hidden while the mode
-                 is on because the bar below already owns the exit. -->
-            <Button
-                v-if="!bulk.active.value && (filtered.length || archived.length)"
-                type="button"
-                size="icon"
-                variant="ghost"
-                data-testid="talos-chats-select-header"
-                :aria-label="t('chats.selectChats')"
-                class="min-h-touch min-w-touch shrink-0 rounded-xl"
-                @click="bulk.enter()"
-            >
-                <CheckSquare class="size-5" aria-hidden="true" />
-            </Button>
+            <!-- Owner 2026-07-27 added a header button here because holding a
+                 row to select went unnoticed. Owner 2026-08-22, reversing that:
+                 the icon costs too much header space and hold-to-select (the
+                 long-press timer below, plus the row context-menu's "select"
+                 action) is enough on its own - removed, not hidden, so a later
+                 pass does not read this as an oversight and bring it back. -->
 
             <!-- Embedded (tablet panel): compact inline New keeps the narrow
                  panel tidy. Full-page uses the floating FAB (owner Claude-style). -->

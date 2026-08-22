@@ -2516,7 +2516,6 @@ export const TALOS_IT_MESSAGES = {
     },
     chats: {
         search: 'Cerca chat',
-        selectChats: 'Seleziona chat',
         newShort: 'Nuova',
         cancelSelection: 'Annulla selezione',
         selectedOne: '1 chat selezionata',
