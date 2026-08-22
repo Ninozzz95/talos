@@ -15,6 +15,7 @@ import {
     talosRenamePersonalVoiceProfile,
 } from '@/services/personalVoice'
 import type { TalosPersonalVoiceProfileSummary } from '@/lib/voice/personalVoiceContracts'
+import type { TalosVoiceModelInstallProgress } from '@/services/voiceModelInstall'
 
 // ⛔ Pigro come il pannello dei provider nell'intro (stesso motivo): il
 // motore ONNX di ai.talos.voice non deve pesare sul grafo d'avvio di chi
@@ -282,6 +283,53 @@ const confirmingDeleteId = ref<string | null>(null)
  */
 const personalVoiceSupported = ref(false)
 
+/**
+ * ⭐⭐⭐ FASE 5, BLOCCO 3c — il bottone che scarica il motore, invece di
+ * `adb push` a mano.
+ *
+ * ⛔ `import()` pigro apposta: `services/voiceModelInstall.ts` porta con sé
+ * l'intero `stores/modelTransfers.ts` (poller, notifiche, toast) — un
+ * grafo più pesante del semplice wrapper di `personalVoice.ts` già
+ * importato sopra, e chi non tocca mai «Installa» non deve pagarne un
+ * byte nel grafo di questo pannello.
+ */
+const installProgress = ref<TalosVoiceModelInstallProgress | null>(null)
+const installing = computed(() => {
+    const phase = installProgress.value?.phase
+    return phase !== undefined && phase !== 'done' && phase !== 'failed'
+})
+const installPercent = computed(() => {
+    const progress = installProgress.value
+    if (!progress || progress.phase !== 'downloading' || progress.totalBytes === 0) return 0
+    return Math.round((progress.haveBytes / progress.totalBytes) * 100)
+})
+
+async function beginModelInstall(): Promise<void> {
+    if (installing.value) return
+    installProgress.value = { phase: 'starting' }
+    try {
+        const { talosInstallPersonalVoiceModel } = await import('@/services/voiceModelInstall')
+        const result = await talosInstallPersonalVoiceModel((progress) => { installProgress.value = progress })
+        if (result.ok) {
+            personalVoiceSupported.value = true
+            installProgress.value = null
+        } else {
+            // ⛔ Non ci si fida che l'ultimo avviso di `onProgress` avesse già
+            // scritto `{phase:'failed'}` prima che la promessa si risolvesse:
+            // è vero per l'orchestratore reale, ma legarsi a un invariante
+            // implicito di un altro modulo — invece di garantirlo qui — è
+            // fragile, ed è esattamente il tipo di accoppiamento che un test
+            // con un mock più semplice del vero avrebbe smascherato tardi,
+            // sul dispositivo, invece che ora.
+            installProgress.value = { phase: 'failed', reason: result.reason }
+        }
+    } catch (error) {
+        // ⛔ Copre anche la piattaforma senza il plugin nativo (web): un
+        // fallimento onesto, non un rifiuto di promessa che nessuno cattura.
+        installProgress.value = { phase: 'failed', reason: error instanceof Error ? error.message : 'unavailable' }
+    }
+}
+
 async function refreshPersonalProfiles(): Promise<void> {
     personalProfiles.value = await talosPersonalVoiceProfiles()
     personalProfilesLoaded.value = true
@@ -418,6 +466,42 @@ function onEnrollmentCommitted(): void {
                     @click="showEnrollment = true"
                 >{{ t('personalVoice.addAnother') }}</Button>
             </div>
+        </div>
+
+        <!--
+            ⭐⭐⭐ Fase 5, Blocco 3c — prima questa sezione spariva e basta
+            quando il modello non c'era (Blocco 4, quando non esisteva un
+            installer). Ora offre di scaricarlo davvero.
+        -->
+        <div v-else data-testid="talos-personal-voice-install" class="mt-4 border-t border-[var(--talos-border)] pt-3">
+            <h5 class="flex items-center gap-2 text-xs font-semibold text-[var(--talos-text)]">
+                <User class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('personalVoice.title') }}
+            </h5>
+            <p class="mt-0.5 text-xs leading-5 text-[var(--talos-muted)]">{{ t('personalVoice.installBody') }}</p>
+
+            <Button
+                type="button"
+                variant="outline"
+                data-testid="talos-personal-voice-install-start"
+                class="talos-pressable mt-3 min-h-touch w-full gap-2 rounded-xl"
+                :disabled="installing"
+                @click="beginModelInstall"
+            >{{ installing ? t('personalVoice.installing') : t('personalVoice.install') }}</Button>
+
+            <p
+                v-if="installProgress?.phase === 'downloading'"
+                data-testid="talos-personal-voice-install-progress"
+                class="mt-2 text-xs text-[var(--talos-muted)]"
+            >{{ t('personalVoice.installProgress', { percent: installPercent }) }}</p>
+            <p
+                v-else-if="installProgress?.phase === 'activating'"
+                class="mt-2 text-xs text-[var(--talos-muted)]"
+            >{{ t('personalVoice.installActivating') }}</p>
+            <p
+                v-else-if="installProgress?.phase === 'failed'"
+                data-testid="talos-personal-voice-install-error"
+                class="mt-2 text-xs text-[var(--talos-danger)]"
+            >{{ t('personalVoice.installFailed') }}</p>
         </div>
 
         <TalosMobilePersonalVoiceEnrollment
