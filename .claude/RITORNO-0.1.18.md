@@ -706,8 +706,6 @@ implementato su web", atteso in anteprima web) ha rivelato un buco vero:
 
 ### 12.5 Cosa resta aperto in Fase 4
 
-- Router non ancora collegato a `useTalosSpeech.ts` — costruito e provato
-  (§12.3) ma non ancora chiamato da nessuno.
 - Nessuna prova su dispositivo reale dell'arruolamento end-to-end con voce
   umana vera (cattura→qualità→codifica→commit attraverso la UI) — i test
   del componente usano un ponte finto; i test nativi di Fase 3/Blocco 2
@@ -715,14 +713,100 @@ implementato su web", atteso in anteprima web) ha rivelato un buco vero:
 - Mic-check istruttivo soltanto (sopra); registro del consenso non
   persistito (sopra).
 
+### 12.6 Blocco 5 — `useTalosSpeech.ts` collegato al router, Fase 4 chiusa
+
+`toggle()` (il pulsante altoparlante su un messaggio) decide sistema o
+personale UNA volta per lettura, prima di dire una parola — esattamente
+§37.1's "engine/profile snapshot fixed for one reading". `engine ===
+'system'` prende la stessa scorciatoia che il codice aveva già ieri, senza
+nemmeno importare il modulo della voce personale — la garanzia "il sistema
+non chiama mai il plugin personale" è vera per costruzione, non per
+convenzione. `stop()` guadagna un piccolo libro contabile
+(`motoreDellaLettura`, per-lettura) per fermare il motore giusto quando una
+lettura era personale, migrato correttamente da `rinominaLettura` per lo
+stesso motivo delle altre due mappe che già lo fanno.
+
+⛔ **`seguiIlTesto` (la lettura che insegue il testo mentre si scrive)
+resta SEMPRE sul sistema, dichiarato non dimenticato**: mette in coda una
+frase alla volta con `queue: 'add'`, e conta su una VERA coda — la frase 2
+aspetta che la 1 finisca. `TalosVoiceHost.submitSpeakStreamingWithReference`
+non ha una coda: ha una generazione mutabile che la successiva invalida
+(§14), quindi instradare lì la frase 2 la interromperebbe a metà invece di
+seguirla. Restare sul sistema per questo percorso è la scelta onesta finché
+la coda nativa non esiste davvero.
+
+⛔⛔ **Il gate del peso d'avvio è saltato, e il tetto si è alzato — mai
+azzoppata la funzione per farci stare dentro.** La prima stesura del
+router inline in `toggle()` costava 610.498 byte contro un tetto di
+610.000 (il margine era già di soli 347 byte PRIMA di questo blocco).
+Tolto il grasso vero prima di alzare nulla: l'intera decisione del router
+si è spostata da `useTalosSpeech.ts` a `talosSpeakForReading` dentro
+`services/personalVoice.ts` (già dietro un `import()` pigro, come il resto
+del file) — 610.352. Il resto (il controllo `engine === 'personal'`,
+l'`import()` stesso, le tre righe di libro contabile) è il costo
+irriducibile della funzione, non grasso da togliere. Tetto alzato
+610.000 → **611.000** in `scripts/verify-initial-chunk.mjs`, con lo stesso
+formato di cronologia già in uso lì (cosa ha comprato l'aumento, cosa è
+stato tolto prima, perché mille byte e non meno).
+
+⛔ **Un difetto reale trovato nel primo test, non nel codice**: mockare
+`talosPersonalVoiceStatus`/`talosPersonalVoiceSpeechAdapter` per
+riscrivere `talosSpeakForReading` (definita nello STESSO modulo) via
+`importActual` + spread non funziona — i binding ES a un modulo vengono
+riscritti sull'oggetto d'esportazione, non dentro le chiamate già legate a
+funzioni locali dello stesso file. Corretto spostando il confine del test:
+`useTalosSpeech.test.ts` mocka `talosSpeakForReading` direttamente (la sua
+sola responsabilità: chiamarla, ramificare sul booleano); il collegamento
+vero router→adattatore→ponte ha 5 test nuovi in
+`services/personalVoice.test.ts`, che mocka solo il ponte Capacitor.
+
+⭐ Test: 5 nuovi in `useTalosSpeech.test.ts` (system mai chiama il modulo
+personale; personale pronto parla per l'adattatore con `personal_rate`/
+`personal_pitch`, non `rate`/`pitch`; ripiego silenzioso su indisponibile
+senza riscrivere la preferenza salvata; `stop()` instrada al motore giusto;
+l'evento nativo di completamento chiude `speakingId`), 5 in
+`personalVoice.test.ts` (system/nessun profilo/non pronto non toccano mai
+il ponte; pronto chiama `bridge.speak` coi parametri giusti; due letture
+consecutive non condividono mai un `readingId`). Tipecheck pulito,
+5929/5929 vitest, build verde col tetto nuovo.
+
+⛔ Nessuna prova end-to-end sul dispositivo di "tocca l'altoparlante su un
+messaggio → si sente la voce arruolata": la catena nativa (plugin→host) è
+già provata sul Pad dal Blocco 2, il collegamento TS è provato con un
+ponte finto — la prova che le due estremità combaciano davvero, con una
+voce umana vera, resta aperta.
+
+### 12.7 Cosa resta aperto in Fase 4 (e nel 0.1.18 più largo)
+
+- Coda vera per `seguiIlTesto` (sopra) — richiederebbe una coda FIFO reale
+  in `TalosVoiceHost`, non la singola generazione mutabile di oggi.
+- §37.5 (smoke R8 in release) — non fatto, stesso standard degli altri
+  plugin di questo repo.
+- Mic-check istruttivo soltanto; registro del consenso non persistito.
+- Prova end-to-end sul dispositivo con voce umana vera, dalla UI al parlato
+  reale — mai fatta in questa fase.
+- I sei rilievi del 22/8 e i due documenti MAX PERFORMANCE del motore
+  locale — entrambi custoditi in memoria, esplicitamente DOPO questa fase.
+
 ---
 
-## 13. Prossimo passo
+## 13. Fase 4 chiusa — tutti e cinque i blocchi
 
-Fase 2 e Fase 3 chiuse per intero (vedi sopra). Fase 4 a tre blocchi su
-quattro: contratti/schema, plugin/host, e la UI Vue vera sono fatti e
-provati (dispositivo per il nativo, tipecheck+vitest+build+verifica visiva
-per il resto). Resta il collegamento a `useTalosSpeech.ts` — l'ultimo
-pezzo perché il motore personale parli davvero da un messaggio di chat,
-non solo dall'anteprima del wizard. Poi, come sempre: cancelli, prova sul
-dispositivo, commit, e si chiede il push solo alla fine.
+Fase 2, Fase 3 e Fase 4 chiuse per intero. La voce personale è cablata da
+capo a fondo: arruolamento (cattura→qualità→codifica→profilo cifrato),
+plugin nativo, router, UI Vue sul mockup approvato, e adesso il
+collegamento reale a `useTalosSpeech.ts` — un messaggio di chat può
+davvero parlare con una voce arruolata, non solo l'anteprima del wizard.
+Il cancello di uscita del blueprint per la Fase 4 ("ogni interazione
+vocale attuale funziona ancora con `engine: 'system'`") è provato: la
+suite intera di `useTalosSpeech.test.ts` di ieri passa immutata, più un
+test nuovo che dichiara esplicitamente che il motore personale non viene
+nemmeno chiamato quando l'engine è di sistema.
+
+Resta aperto, per nome: la prova end-to-end sul dispositivo con voce umana
+vera; la coda reale per la lettura che insegue il testo; il registro del
+consenso persistito; il mic-check con un livello vero. Nessuno di questi
+blocca 0.1.18 — sono dichiarati, non nascosti.
+
+Poi, come sempre: cancelli, prova sul dispositivo dove serve, commit, e si
+chiede il push solo alla fine.

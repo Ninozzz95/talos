@@ -436,7 +436,39 @@ import { resolve } from 'node:path'
  * descritta sopra per «quattro byte» e «cento byte». Mille lascia margine
  * vero per la prossima funzione, che qualcuno misurerà prima di chiedere.
  */
-const DEFAULT_MAXIMUM_BYTES = 610_000
+/*
+ * ⛔ 610.000 → 611.000, il 2026-08-22, per la Fase 4 della voce personale
+ * (blueprint §39): il router in `useTalosSpeech.ts` che decide sistema o
+ * personale per OGNI lettura, prima di dire una sola parola - senza questo
+ * `toggle()` non può mai parlare con una voce arruolata, solo con quella di
+ * sistema.
+ *
+ * ⛔ Il peso è stato tolto per davvero prima di alzare il tetto, nelle due
+ * forme già scritte più in alto in questo file (1. spostare nel pigro,
+ * 2. mai accorciare un contratto):
+ *
+ *     l'intera decisione del router inline in toggle()   610.498   ⛔ +498
+ *     spostata in services/personalVoice.ts (già dietro
+ *       un import() pigro, come il resto del file) in
+ *       talosSpeakForReading - toggle() resta con una
+ *       sola chiamata più il libro contabile di 3 righe    610.352   ⛔ +352
+ *     distruttura piu' corta (niente rinomina, un
+ *       accesso diretto a settings.state.voice)             610.356   ⛔ +356 (invariato, rumore di hashing)
+ *
+ * Il resto - il controllo `engine === 'personal'`, l'`import()` pigro
+ * stesso, e le tre righe di libro contabile (`motoreDellaLettura`) che
+ * fanno funzionare `stop()` sulla lettura giusta - è il costo irriducibile
+ * di rendere `toggle()` consapevole del motore personale mantenendo intatta
+ * la garanzia "il sistema non chiama mai il plugin personale": accorciarlo
+ * oltre vorrebbe dire azzoppare quella garanzia stessa, non il grasso
+ * intorno.
+ *
+ * ⇒ 611.000 e non 610.400: misurato dopo, il pezzo sta a 610.356, e a
+ * 610.400 resterebbero 44 byte - la stessa trappola descritta più in alto
+ * in questo file per «quattro byte» e «cento byte». Mille lascia margine
+ * vero per la prossima funzione, che qualcuno misurerà prima di chiedere.
+ */
+const DEFAULT_MAXIMUM_BYTES = 611_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {
