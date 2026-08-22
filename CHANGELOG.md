@@ -375,7 +375,7 @@ OnePlus Pad running Android 16.
 - Android debug/native instrumentation on the owner's device: `OK (9 tests)`
   with only fixture-dependent assumptions skipped.
 - Real Gemma and Qwen prompts, reload persistence, portrait layout and final
-  logcat were exercised on serial `2ea6573c`.
+  logcat were exercised on the reference tablet.
 
 ## v0.1.13
 

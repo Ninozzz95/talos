@@ -1,5 +1,5 @@
 {
-  "tokenizer_model_source": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX tokenizer.model, pulled from device 2ea6573c under externalFilesDir/moss/",
+  "tokenizer_model_source": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX tokenizer.model, as installed on device under externalFilesDir/moss/",
   "tokenizer_model_sha256": "c353ee1479b536bf414c1b247f5542b6607fb8ae91320e5af1781fee200fddff",
   "generated_with": "python sentencepiece 0.2.2",
   "case_count": 194,
