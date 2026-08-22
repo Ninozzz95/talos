@@ -5,6 +5,7 @@ import ai.onnxruntime.OnnxTensorLike
 import ai.onnxruntime.OnnxValue
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import android.util.Log
 import java.io.Closeable
 import java.io.File
 import java.nio.ByteBuffer
@@ -150,6 +151,7 @@ internal class TalosMossRuntime private constructor(
         require(capturedSampleRate == sampleRate) {
             "encodeReferenceAudio expects audio already at the codec's sample rate ($sampleRate), got $capturedSampleRate - resample before calling this"
         }
+        Log.i("TalosMossRuntime", "encodeReferenceAudio(): inizio, ${monoPcm.size} campioni (${monoPcm.size.toDouble() / capturedSampleRate}s)")
         val channels = codecMeta.channels
         // "waveform" is (1, channels, samples) - channel-major, matching decode's own audio tensor layout.
         val channelMajor = FloatArray(channels * monoPcm.size)
@@ -160,9 +162,11 @@ internal class TalosMossRuntime private constructor(
         OnnxTensor.createTensor(env, FloatBuffer.wrap(channelMajor), longArrayOf(1, channels.toLong(), monoPcm.size.toLong()))
             .use { waveformTensor ->
                 OnnxTensor.createTensor(env, IntBuffer.wrap(intArrayOf(monoPcm.size)), longArrayOf(1)).use { lengthTensor ->
+                    Log.i("TalosMossRuntime", "encodeReferenceAudio(): tensori pronti, chiamo codecEncodeSession.run()")
                     codecEncodeSession.run(
                         mapOf("waveform" to waveformTensor, "input_lengths" to lengthTensor),
                     ).use { outputs ->
+                        Log.i("TalosMossRuntime", "encodeReferenceAudio(): run() tornata")
                         val codeLength = outputs.requiredTensor("audio_code_lengths").scalarInt()
                         val numQuantizers = codecMeta.numQuantizers
                         val codesBuffer = outputs.requiredTensor("audio_codes").intBuffer.duplicate().also { it.rewind() }
@@ -408,12 +412,25 @@ internal class TalosMossRuntime private constructor(
                 require(file.isFile) { "Missing ONNX file: ${file.absolutePath}" }
                 return env.createSession(file.absolutePath, sessionOptions)
             }
+            // ⭐⭐⭐ Owner 22/8: log temporanei ma non usa-e-getta - il crash
+            // OOM riprodotto due volte non ha detto DA SOLO se la crescita
+            // sta nell'apertura di queste sei sessioni o nella Run() di
+            // encodeReferenceAudio() più sotto. Restano nel codice: la
+            // prossima volta che qualcosa si gonfia qui, questi timestamp
+            // sono la prima cosa da guardare, non un'ipotesi.
+            Log.i("TalosMossRuntime", "open(): inizio apertura sessioni ONNX")
             val prefillSession = openSession(File(ttsDir, ttsMeta.prefillFile))
+            Log.i("TalosMossRuntime", "open(): prefillSession aperta")
             val decodeSession = openSession(File(ttsDir, ttsMeta.decodeStepFile))
+            Log.i("TalosMossRuntime", "open(): decodeSession aperta")
             val localFixedFrameSession = openSession(File(ttsDir, ttsMeta.localFixedSampledFrameFile))
+            Log.i("TalosMossRuntime", "open(): localFixedFrameSession aperta")
             val codecDecodeSession = openSession(File(codecDir, codecMeta.decodeFullFile))
+            Log.i("TalosMossRuntime", "open(): codecDecodeSession aperta")
             val codecDecodeStepSession = openSession(File(codecDir, codecMeta.decodeStepFile))
+            Log.i("TalosMossRuntime", "open(): codecDecodeStepSession aperta")
             val codecEncodeSession = openSession(File(codecDir, codecMeta.encodeFile))
+            Log.i("TalosMossRuntime", "open(): codecEncodeSession aperta, tutte e sei pronte")
 
             return TalosMossRuntime(
                 env = env,

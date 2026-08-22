@@ -90,7 +90,27 @@ internal class TalosVoiceEnrollment(
         // confirmed against the asymmetric Int16 range) - not the /32767 write-side clamp TalosPcmPlayer/TalosMossRuntime use going the other way.
         val mergedMono = FloatArray(mergedPcm16.size) { i -> mergedPcm16[i] / 32768f }
 
-        val promptAudioCodes = runtime.encodeReferenceAudio(mergedMono, sampleRate)
+        // ⭐⭐⭐ Owner 22/8, riprodotto due volte sul Pad con dati reali:
+        // lowmemorykiller uccide ai.talos con "process memory is leaking"
+        // durante encodeReferenceAudio() - crescita continua per tutta la
+        // Run(), non un picco al caricamento, il segno di un costo che
+        // scala con la lunghezza della sequenza (self-attention di un
+        // codec a base transformer è quadratica lì). Il chiamante ora
+        // preferisce già solo le frasi 'normale' (§ TalosNeuralVoicePlugin),
+        // ma questo è il tetto di sicurezza che vale SEMPRE, anche se
+        // arrivasse qui un insieme più grande: la documentazione ufficiale
+        // di MOSS-TTS dice "optimal reference clip length is 3-10
+        // seconds... clips longer than ~15 seconds may introduce noise
+        // artifacts or degrade quality" - un riferimento più corto non è
+        // un compromesso sulla qualità, è la scelta giusta anche a
+        // memoria infinita.
+        val cappedMono = if (mergedMono.size > maxReferenceSamples(sampleRate)) {
+            mergedMono.copyOfRange(0, maxReferenceSamples(sampleRate))
+        } else {
+            mergedMono
+        }
+
+        val promptAudioCodes = runtime.encodeReferenceAudio(cappedMono, sampleRate)
         require(promptAudioCodes.isNotEmpty()) { "codec encode produced zero reference frames from ${mergedMono.size} samples" }
 
         val header = TalosVoiceProfileHeaderV1(
@@ -138,6 +158,14 @@ internal class TalosVoiceEnrollment(
         // rather than have this class reach past it or guess a number.
         private const val UNKNOWN_FRAME_RATE_MILLIHZ = -1
         private const val CODEBOOK_SIZE_UNKNOWN = -1
+
+        // MOSS-TTS's own model card: "optimal reference clip length is
+        // 3-10 seconds... clips longer than ~15 seconds may introduce
+        // noise artifacts or degrade quality" - 12s sits inside that
+        // window with headroom under the degradation line, not chosen for
+        // being a round number.
+        private const val MAX_REFERENCE_SECONDS = 12
+        private fun maxReferenceSamples(sampleRate: Int): Int = MAX_REFERENCE_SECONDS * sampleRate
     }
 }
 

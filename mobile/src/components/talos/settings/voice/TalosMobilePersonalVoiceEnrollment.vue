@@ -446,7 +446,13 @@ const tierLabel = computed(() => {
             </template>
         </section>
 
-        <footer class="flex items-center gap-2 px-5 pt-4">
+        <!-- ⭐⭐⭐ Owner 22/8: `shrink-0` esplicito - il fratello di un
+             `flex-1 overflow-y-auto` non ne avrebbe bisogno in teoria (la
+             sezione assorbe già tutto lo scroll), ma un footer senza
+             questa riga potrebbe comunque comprimersi in un caso limite
+             (contenuto molto alto + `min-h-0` genitore), e verificarlo a
+             occhio su ogni schermo è più lento che scriverlo. -->
+        <footer class="flex shrink-0 items-center gap-2 px-5 pt-4">
             <template v-if="stage === 'consent'">
                 <Button
                     type="button"
