@@ -116,23 +116,42 @@ Bene "sezione '## $tag' presente, $($righeSez.Count) righe"
 #    release. Si cerca su TUTTO cio che git conosce, non su un percorso solo:
 #    la prima versione di questo controllo ne aveva trovato uno su cinque.
 Titolo '4 · dati personali fra i file tracciati'
-$spie = @(
+# ⛔⛔ E NON TUTTO CIO' CHE NOMINA UNA PERSONA E' UNA FUGA.
+#
+# La prima versione bloccava anche sul NOME dell'owner, e ha trovato 16
+# occorrenze — tutte legittime. `PROVENIENZA-PAROLA.md` dice «dentro un APK
+# firmato da Antonino Rizzo»: e' **attribuzione della firma**, pubblica per
+# costruzione, e toglierla renderebbe l'APK meno verificabile, non piu' sicuro.
+# Le altre sono esempi dentro i commenti («un messaggio WhatsApp ad Antonino
+# Rizzo che dice ciao»).
+#
+# ⇒ Un cancello che blocca ogni release viene spento al terzo falso allarme, e
+# con lui se ne va la garanzia vera. Cio' che BLOCCA sono le cose che non hanno
+# nessuna ragione di uscire: il serial di un dispositivo, un percorso del disco
+# di una persona, un'email. Il nome si CONTA e si dice, senza fermare.
+$bloccanti = @(
     @{ nome = 'serial di un dispositivo'; regex = '\b2ea6573c\b' },
-    @{ nome = 'percorso della persona';   regex = 'C:\\+Users\\+Antonino' },
-    @{ nome = 'nome della persona';       regex = '\bAntonino\s+Rizzo\b' },
-    @{ nome = 'indirizzo email';          regex = 'ninozz\d*@' }
+    @{ nome = 'percorso sul disco';       regex = 'C:\\+Users\\+[A-Za-z]' },
+    @{ nome = 'indirizzo email';          regex = '[A-Za-z0-9._%+-]+@(gmail|outlook|hotmail)\.' }
 )
+$dove = @('mobile/src', 'mobile/tests', 'mobile/android/app/src', 'CHANGELOG.md', 'README.md')
 $trovate = @()
-foreach ($s in $spie) {
-    $hit = @(git -C $Repo grep -n -I -E $s.regex -- 'mobile/src' 'mobile/tests' 'mobile/android/app/src' 'CHANGELOG.md' 'README.md' 2>$null)
+foreach ($s in $bloccanti) {
+    $hit = @(git -C $Repo grep -n -I -E $s.regex -- @dove 2>$null)
     if ($hit.Count -gt 0) {
         Male "$($s.nome): $($hit.Count) occorrenze"
-        $hit | Select-Object -First 3 | ForEach-Object { "     $_" }
+        $hit | Select-Object -First 5 | ForEach-Object { "     $_" }
         $trovate += $hit
     }
 }
 if ($trovate.Count -gt 0) { Fermo "$($trovate.Count) riferimenti personali nei file che verrebbero pubblicati" }
-Bene "$($spie.Count) spie cercate, nessuna trovata"
+Bene "$($bloccanti.Count) spie bloccanti cercate in $($dove.Count) percorsi, nessuna trovata"
+
+# Il nome si conta e si dichiara: chi rilascia deve saperlo, non essere fermato.
+$nomi = @(git -C $Repo grep -c -I -E '\bAntonino\s+Rizzo\b' -- @dove 2>$null)
+if ($nomi.Count -gt 0) {
+    Passo "il nome dell'owner compare in $($nomi.Count) file (attribuzione della firma ed esempi: non blocca)"
+}
 
 # ── 5 · costruisci la copia, e PROVA che sia piena ───────────────────────────
 Titolo '5 · costruisco la copia pubblicabile'
