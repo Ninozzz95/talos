@@ -438,6 +438,58 @@ public class TalosLlamaEngineDeviceTest {
         }
     }
 
+    /**
+     * B1 — la snapshot unica concorda con i vecchi metodi separati che
+     * sostituisce (kvCacheType/contextTokens/runtimeConfig), e i due campi
+     * nuovi (gpuLayersEffective/flashAttnEffective/backendDevice) esistono
+     * davvero - non variabili C++ scartate, come erano fino a questo blocco.
+     */
+    @Test
+    public void runtimeSnapshotAgreesWithTheSeparateGettersItReplaces() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File file = model(context);
+        Assume.assumeTrue(
+                "modello di prova assente: spingilo in " + (file == null ? "?" : file.getAbsolutePath()),
+                file != null && file.isFile());
+
+        TalosLlamaEngine engine = TalosLlamaEngine.open(context, file.getAbsolutePath(), 4, 4096, 0, true);
+        assertNotNull("il modello non si è aperto — guarda logcat, tag TalosLlama", engine);
+
+        try {
+            String raw = engine.runtimeSnapshot();
+            assertNotNull("runtimeSnapshot è tornata null su un contesto aperto", raw);
+            JSONObject snapshot = new JSONObject(raw);
+            Log.i(TAG, "runtimeSnapshot: " + raw);
+
+            assertEquals(1, snapshot.getInt("schema"));
+            assertEquals("i due varchi devono concordare su kvCacheType",
+                    engine.kvCacheType(), snapshot.getString("kvCacheType"));
+            assertEquals("i due varchi devono concordare su contextTokens",
+                    engine.contextTokens(), snapshot.getInt("contextTokens"));
+            long[] oldRuntime = engine.runtimeConfig();
+            assertNotNull("runtimeConfig() tornava null: non c'è più niente da confrontare", oldRuntime);
+            assertEquals("threads", oldRuntime[0], snapshot.getInt("threads"));
+            assertEquals("threadsBatch", oldRuntime[1], snapshot.getInt("threadsBatch"));
+            assertEquals("microBatch", oldRuntime[2], snapshot.getInt("microBatch"));
+
+            // ⛔⛔⛔ AL CONTRARIO — questa build (assembleDebug, nessun
+            // -PtalosResearchBackend) non porta libggml-opencl.so: chiesto
+            // gpuLayers=0 qui sopra, nessun bersaglio acceleratore può
+            // essersi risolto. La snapshot deve dirlo onestamente, non
+            // ripetere silenziosamente la richiesta.
+            assertEquals("gpuLayersEffective deve essere 0 su un'apertura CPU pura",
+                    0, snapshot.getInt("gpuLayersEffective"));
+            assertTrue("backendDevice deve essere assente o null senza un bersaglio risolto",
+                    snapshot.isNull("backendDevice") || !snapshot.has("backendDevice"));
+            assertTrue("flashAttnEffective mancante dalla snapshot", snapshot.has("flashAttnEffective"));
+            String fa = snapshot.getString("flashAttnEffective");
+            assertTrue("flashAttnEffective ha un valore inatteso: " + fa,
+                    fa.equals("auto") || fa.equals("disabled") || fa.equals("enabled"));
+        } finally {
+            engine.close();
+        }
+    }
+
     @Test
     public void cleansCompatibilityCampaignFiles() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();

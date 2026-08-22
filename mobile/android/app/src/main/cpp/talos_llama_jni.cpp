@@ -114,6 +114,45 @@ struct talos_session {
     std::string kv_type = "f16";
 
     /**
+     * ⭐⭐⭐ B1 — «gpuLayersEffective»/«flashAttnEffective» esistevano solo
+     * come variabili locali dentro `talos_apri_modello`, scartate al ritorno
+     * della funzione: in NESSUNA API, a nessun livello, chi apriva un
+     * modello poteva rileggere quanti strati fossero DAVVERO su un
+     * acceleratore invece che sulla CPU (verificato con una ricerca
+     * dedicata prima di scrivere questi campi - CR-01 del piano sorgente:
+     * "due percorsi di apertura possono far ricomparire il bug misurato-ma-
+     * non-usato").
+     *
+     * ⛔ `gpu_layers_effective` NON è un conteggio per-strato reale (quello
+     * richiede instrumentation del graph placement di ggml, fuori scope
+     * finché non arriva P2-4 "partial offload frontier" - il piano
+     * sorgente lo dice esplicitamente, CR-03): l'header pubblico di
+     * llama.cpp non espone un contatore, solo una riga di log
+     * ("llm_load_tensors: offloaded X/Y layers"), confermato cercando prima
+     * di scrivere questo campo. Quello che l'header GARANTISCE, però:
+     * `llama_model_load_from_file` con un `n_gpu_layers` che non ci sta in
+     * memoria FALLISCE al caricamento (nessun ripiego parziale silenzioso)
+     * - quindi "il modello si è aperto, richiesto un acceleratore, un
+     * dispositivo è stato risolto" implica che la richiesta è stata
+     * onorata per intero, non un'approssimazione ottimistica. Zero se
+     * nessun dispositivo è stato risolto, anche con `gpuLayers` diverso da
+     * zero richiesto - il caso che oggi il codice nasconde in silenzio.
+     */
+    int gpu_layers_effective = 0;
+
+    /** Il bersaglio di offload DAVVERO risolto - vuoto se nessuno (CPU pura). */
+    std::string backend_target_effective;
+
+    /**
+     * Flash Attention, la modalità con cui il contesto è stato DAVVERO
+     * creato - letta da `ctx_params.flash_attn_type` dopo che
+     * `llama_init_from_model` è tornato, non dedotta dai rami che l'hanno
+     * impostata. Cambia a ogni ricostruzione del contesto
+     * (`nativeReopenContext`), quindi si aggiorna anche lì.
+     */
+    std::string flash_attn_effective = "auto";
+
+    /**
      * Il testo prodotto finora, e il lucchetto che lo rende leggibile da fuori.
      *
      * Una chat deve mostrare le parole mentre arrivano, non alla fine. Il
@@ -893,6 +932,36 @@ Java_ai_talos_TalosLlamaNative_nativeBackendInventory(JNIEnv * env, jclass) {
  *     `llama_model_load_from_file`: il motore riceve `data()`, non una copia.
  * @return vero se il bersaglio è stato risolto; falso con `errore` compilato.
  */
+
+/**
+ * ⭐⭐⭐ B1 — la domanda che conta per `gpuLayersEffective` NON è "è stato
+ * chiesto un bersaglio esplicito" - `talos_risolvi_bersaglio` torna
+ * `scelto="auto"` (non vuoto!) anche nel percorso di produzione, quello che
+ * NON chiede niente e lascia decidere a `llama.cpp` da sé
+ * (`model_params.devices = nullptr`, vedi il commento sopra). Un test
+ * strumentato REALE l'ha scoperto (`runtimeSnapshotAgreesWithTheSeparate
+ * GettersItReplaces`, fallito la prima volta con `bersaglioScelto="auto"`
+ * su un'apertura CPU pura) - non dedotto rileggendo il codice.
+ *
+ * La domanda giusta: esiste ALMENO UN dispositivo non-CPU registrato in
+ * QUESTA build? Se la risposta è no (questa build di debug, senza
+ * `-PtalosResearchBackend=opencl`, non ha `libggml-opencl.so`), nessun
+ * `gpuLayers` richiesto - esplicito o «auto» - può aver spostato niente:
+ * non c'è nessun posto dove spostarlo.
+ */
+static bool talos_esiste_dispositivo_offload() {
+    for (size_t reg_index = 0; reg_index < ggml_backend_reg_count(); reg_index += 1) {
+        ggml_backend_reg_t reg = ggml_backend_reg_get(reg_index);
+        if (reg == nullptr) continue;
+        for (size_t dev_index = 0; dev_index < ggml_backend_reg_dev_count(reg); dev_index += 1) {
+            ggml_backend_dev_t device = ggml_backend_reg_dev_get(reg, dev_index);
+            if (device == nullptr) continue;
+            if (ggml_backend_dev_type(device) != GGML_BACKEND_DEVICE_TYPE_CPU) return true;
+        }
+    }
+    return false;
+}
+
 static bool talos_risolvi_bersaglio(const std::string & backend,
                                     const std::string & dispositivo,
                                     std::vector<ggml_backend_dev_t> & dispositivi,
@@ -1330,6 +1399,19 @@ static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
     // contesto ci sta deve sapere quanto pesa un token davvero, e dopo un
     // ripiego silenzioso i due numeri sarebbero diversi.
     session->kv_type = ctx_params.type_k == GGML_TYPE_Q8_0 ? "q8_0" : "f16";
+    // B1: il modello e il contesto sono aperti a questo punto - se
+    // gpuLayers!=0 era richiesto e un vero acceleratore e' registrato in
+    // questa build, llama_model_load_from_file sarebbe FALLITO invece di
+    // ripiegare in silenzio su meno strati (verificato prima di scrivere
+    // questo campo). ⛔ NON si controlla `bersaglioScelto.empty()`: un test
+    // strumentato REALE ha scoperto che vale "auto" (non vuoto!) anche sul
+    // percorso di produzione che non chiede nulla di esplicito - la domanda
+    // giusta e' se un acceleratore esiste DAVVERO in questa build, vedi
+    // talos_esiste_dispositivo_offload().
+    session->gpu_layers_effective =
+        (gpuLayers != 0 && talos_esiste_dispositivo_offload()) ? (int) gpuLayers : 0;
+    session->backend_target_effective = bersaglioScelto == "auto" ? "" : bersaglioScelto;
+    session->flash_attn_effective = llama_flash_attn_type_name(ctx_params.flash_attn_type);
 
     // Armata QUI e non nei parametri del contesto: la callback ha bisogno
     // dell'indirizzo della sessione, che un istante fa non esisteva ancora.
@@ -2276,6 +2358,10 @@ Java_ai_talos_TalosLlamaNative_nativeReopenContext(JNIEnv * env, jclass, jlong h
     session->sampler = campionatore;
     session->sampling = sampling;
     session->kv_type = ctx_params.type_k == GGML_TYPE_Q8_0 ? "q8_0" : "f16";
+    // B1: gpuLayers/backend NON cambiano qui - session->model non viene
+    // ricaricato, solo il contesto. Flash Attention invece si ricalcola a
+    // ogni ricostruzione, come kv_type sulla riga sopra.
+    session->flash_attn_effective = llama_flash_attn_type_name(ctx_params.flash_attn_type);
     // ⛔ La cache e' nuova, quindi VUOTA. Non azzerare qui vorrebbe dire che il
     // turno successivo calcola il prefisso comune su token che non esistono piu'.
     session->cached.clear();
@@ -2331,6 +2417,37 @@ Java_ai_talos_TalosLlamaNative_nativeKvCacheType(JNIEnv * env, jclass, jlong han
     talos_session * session = as_session(handle);
     if (session == nullptr) return nullptr;
     return env->NewStringUTF(session->kv_type.c_str());
+}
+
+/**
+ * B1 — un'unica snapshot versionata, invece di un JNI method per ogni knob
+ * (il piano sorgente lo chiede esplicitamente, §4.5: "creare un'unica
+ * snapshot versionata, invece di aggiungere un JNI method per ogni knob").
+ *
+ * Ogni campo qui è ciò che il motore ha DAVVERO applicato, letto dalla
+ * sessione o dal contesto vivo - mai ciò che qualcuno gli aveva chiesto.
+ * `schema` esiste perché un domani un campo nuovo non deve essere confuso
+ * con `false`/`0`: un lettore vecchio vede solo `schema:1` e sa di non
+ * aspettarsi i campi di uno schema successivo.
+ */
+JNIEXPORT jstring JNICALL
+Java_ai_talos_TalosLlamaNative_nativeRuntimeSnapshot(JNIEnv * env, jclass, jlong handle) {
+    std::lock_guard<std::mutex> serratura(g_motore);
+    talos_session * session = as_session(handle);
+    if (session == nullptr || session->ctx == nullptr) return nullptr;
+
+    nlohmann::ordered_json out;
+    out["schema"] = 1;
+    out["backendDevice"] = session->backend_target_effective.empty()
+        ? nullptr : nlohmann::ordered_json(session->backend_target_effective);
+    out["gpuLayersEffective"] = session->gpu_layers_effective;
+    out["flashAttnEffective"] = session->flash_attn_effective;
+    out["kvCacheType"] = session->kv_type;
+    out["contextTokens"] = (uint32_t) llama_n_ctx(session->ctx);
+    out["threads"] = llama_n_threads(session->ctx);
+    out["threadsBatch"] = llama_n_threads_batch(session->ctx);
+    out["microBatch"] = (uint32_t) llama_n_ubatch(session->ctx);
+    return env->NewStringUTF(out.dump().c_str());
 }
 
 /**

@@ -150,10 +150,6 @@ public class TalosLlamaPlugin extends Plugin {
         TalosLlamaEngine aperto = openEngine.get();
         JSObject shape = shapeOf(aperto);
         if (shape != null) result.put("shape", shape);
-        // Il tipo di cache viaggia con lo stato per la stessa ragione della
-        // forma: chi calcola quanto contesto ci sta lo chiede insieme al resto,
-        // e deve leggere quello CREATO, non quello chiesto.
-        if (aperto != null) result.put("kvCacheType", aperto.kvCacheType());
         // Quante aperture da quando il processo e' partito: due in un invio solo
         // vogliono dire che si stanno ricaricando pesi gia' in memoria.
         if (TalosLlamaNative.AVAILABLE) {
@@ -175,21 +171,36 @@ public class TalosLlamaPlugin extends Plugin {
             result.put("lastOpenReusedWeights", lastOpenReusedWeights);
         }
         /*
-         * I numeri con cui il modello sta girando DAVVERO.
+         * B1 — la snapshot unica, letta con UNA chiamata nativa invece di
+         * tre separate (kvCacheType/contextTokens/runtimeConfig prima).
+         * Ogni campo qui è ciò che il motore ha DAVVERO applicato, non ciò
+         * che qualcuno gli aveva chiesto — stessa disciplina di prima, un
+         * varco nativo solo invece di tre.
          *
-         * Chiesti al contesto e non ripetuti da ciò che era stato chiesto: fra
-         * la richiesta e la realtà c'è un ripiego possibile — un contesto che non
-         * si alloca, una cache che il modello non regge — e una diagnostica che
-         * mostra la richiesta invece del risultato racconta la stessa bugia che
-         * esiste per scoprire.
+         * ⛔ Un JSON malformato/mancante non è un "no" silenzioso qui
+         * nemmeno lui: `available` resta vero, gli altri campi restano
+         * quelli che si sono già scritti sopra, e nessuno di questi campi
+         * compare — la stessa regola di `deviceOffersOpenCl()`, "un dubbio
+         * non offre, non inventa".
          */
         if (aperto != null) {
-            result.put("contextTokens", aperto.contextTokens());
-            long[] runtime = aperto.runtimeConfig();
-            if (runtime != null && runtime.length >= 3) {
-                result.put("threads", runtime[0]);
-                result.put("threadsBatch", runtime[1]);
-                result.put("microBatch", runtime[2]);
+            String snapshotJson = aperto.runtimeSnapshot();
+            if (snapshotJson != null) {
+                try {
+                    JSONObject snapshot = new JSONObject(snapshotJson);
+                    result.put("kvCacheType", snapshot.getString("kvCacheType"));
+                    result.put("contextTokens", snapshot.getInt("contextTokens"));
+                    result.put("threads", snapshot.getInt("threads"));
+                    result.put("threadsBatch", snapshot.getInt("threadsBatch"));
+                    result.put("microBatch", snapshot.getInt("microBatch"));
+                    result.put("gpuLayersEffective", snapshot.getInt("gpuLayersEffective"));
+                    result.put("flashAttnEffective", snapshot.getString("flashAttnEffective"));
+                    if (!snapshot.isNull("backendDevice")) {
+                        result.put("backendDevice", snapshot.getString("backendDevice"));
+                    }
+                } catch (JSONException malformed) {
+                    android.util.Log.w("TalosLlama", "runtimeSnapshot malformata", malformed);
+                }
             }
         }
         call.resolve(result);
