@@ -873,13 +873,38 @@ numeri di 14.1, stesso giro), build + gate del tetto d'avvio invariato
 (610.352/611.000 — il componente resta pigro, non nel grafo d'avvio).
 Commit `53a3d3b3`.
 
-### 14.3 Ancora aperti
+### 14.3 Rilievo 4 — NON è un difetto TALOS (CHIUSO, indagine sul Pad)
+
+Riprodotto sul Pad lo scenario esatto: prompt che genera testo, si ferma su
+un consenso-strumento, riprende dopo l'approvazione. Una fascia di sfondo
+chiara è comparsa DAVVERO dietro una delle due frasi finali. Prima di
+chiudere come "non nostro" ho instrumentato tre prove indipendenti, non
+un'ipotesi:
+
+1. **Chrome DevTools Protocol** sulla WebView reale del processo `ai.talos`
+   (porta `webview_devtools_remote_*`, `adb forward` + websocket nativo di
+   Node): l'intera catena di antenati del paragrafo, e una scansione
+   dell'intero `document.querySelectorAll('*')`, non trova NESSUN elemento
+   con sfondo non trasparente nella zona — zero CSS/DOM nostro coinvolto.
+2. **CDP screenshot vs `adb screencap` nello stesso istante**: la fascia
+   compare SOLO nello screencap (compositor intero), MAI nello screenshot
+   CDP (solo livello web) — prova diretta che è un overlay nativo Android
+   disegnato SOPRA la WebView, non dentro.
+3. **`am force-stop` + rilancio pulito**: sullo STESSO messaggio già
+   persistito, la fascia sparisce dopo il riavvio — non sopravvive, quindi
+   non è nemmeno uno stato che l'app scrive da qualche parte.
+
+`TalosOcchio.kt` (il nostro servizio di accessibilità, verificato attivo su
+`ai.talos` in questo momento) non chiama mai `ACTION_ACCESSIBILITY_FOCUS`;
+il suo unico `ACTION_FOCUS` è sotto l'azione `"scrivi"`, mai invocata in
+questa prova. Nessun codice `mobile/src` o nativo da toccare. Dettaglio
+completo in memoria: `findings-owner-22-agosto.md`.
+
+### 14.4 Ancora aperti
 
 - Rilievo 1 — censimento tool/ricerca web × modello, scettico e completo,
   autorizzato a scaricare altri modelli. Il più grande dei sei, non
   ancora iniziato: probabile blocco a sé.
-- Rilievo 4 — l'effetto di rendering del prompt entra in mezzo alle frasi
-  quando il ragionamento si ferma per un tool.
 - Rilievo 5 — i file MD non sono formattati in chat.
 - Rilievo 6 — un file MD appena creato non si apre dalla scheda chat.
 
