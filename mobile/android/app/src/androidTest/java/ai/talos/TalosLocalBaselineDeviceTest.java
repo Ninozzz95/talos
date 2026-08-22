@@ -273,6 +273,23 @@ public class TalosLocalBaselineDeviceTest {
         return scelto == null ? "" : scelto;
     }
 
+    /**
+     * P1-4 — il tipo di cache KV, oggi cablato su `"f16"` in ogni apertura di
+     * questo banco: la matrice FA×KV del piano sorgente (O7/O12) non era
+     * misurabile senza questa manopola.
+     *
+     * ⛔ Solo `f16`/`q8_0`: verificato nel sorgente nativo
+     * (`talos_llama_jni.cpp`) che `q4_0` non esiste come ramo — qualunque
+     * stringa diversa da `"q8_0"` cade silenziosamente su `f16`. Aggiungere
+     * `q4_0` è lavoro nativo nuovo (§12.4 del piano: alcuni compilatori
+     * Adreno A7x più vecchi vanno in crash su varianti FA q4/q8 miste), non
+     * questo blocco.
+     */
+    private static String kvRichiesto() {
+        String scelto = InstrumentationRegistry.getArguments().getString("talosKvType", "");
+        return "q8_0".equals(scelto) ? "q8_0" : "f16";
+    }
+
     /** Quanti strati spostare. ⛔ Su CPU deve restare 0. */
     private static int stratiSuGpu() {
         return "none".equals(backendRichiesto()) ? 0 : argomentoIntero("talosGpuLayers", -1);
@@ -351,14 +368,15 @@ public class TalosLocalBaselineDeviceTest {
                 decisa.ok());
 
         long handle = TalosLlamaNative.nativeOpenTargeted(
-                model.getAbsolutePath(), thread, contesto, stratiSuGpu(), true, thread, microBatch(), "f16",
-                backendRichiesto(), deviceRichiesto(), modalitaFa());
+                model.getAbsolutePath(), thread, contesto, stratiSuGpu(), true, thread, microBatch(),
+                kvRichiesto(), backendRichiesto(), deviceRichiesto(), modalitaFa());
         assertNotEquals("apertura fallita su `" + backendRichiesto() + "/" + deviceRichiesto()
                         + "`: " + TalosLlamaNative.nativeLastOpenError(), 0L, handle);
         Log.i(TAG, "aperto su " + backendRichiesto()
                 + (deviceRichiesto().isEmpty() ? "" : "/" + deviceRichiesto())
                 + " · strati su GPU " + stratiSuGpu()
                 + " · microbatch " + (microBatch() == 0 ? "(predefinito)" : microBatch())
+                + " · kv " + kvRichiesto()
                 + " · flash-attn " + modalitaFa());
         return handle;
     }
@@ -734,6 +752,13 @@ public class TalosLocalBaselineDeviceTest {
              * chiama CONFIG_MISMATCH (CR-01): un `gpuLayers` richiesto
              * diverso da zero che l'effettivo dice essere rimasto a zero -
              * la riga esatta che non deve MAI entrare in una mediana.
+             *
+             * ⛔ P1-4: lo stesso controllo, esteso al KV — trovato mancante
+             * proprio mentre si costruiva la matrice FA×KV: un `q8_0`
+             * richiesto che il motore avesse ripiegato su `f16` in silenzio
+             * (il modello non lo regge, per esempio) sarebbe finito
+             * indistinguibile da un vero `q8_0` nella stessa mediana. Stessa
+             * classe di errore di CR-01, un campo diverso.
              */
             String snapshotJson = TalosLlamaNative.nativeRuntimeSnapshot(handle);
             if (snapshotJson != null) {
@@ -741,7 +766,9 @@ public class TalosLocalBaselineDeviceTest {
                 riga.put("effectiveConfig", effettivo);
                 int gpuLayersRichiesti = stratiSuGpu();
                 int gpuLayersEffettivi = effettivo.optInt("gpuLayersEffective", 0);
-                boolean discorda = gpuLayersRichiesti != 0 && gpuLayersEffettivi == 0;
+                String kvEffettivo = effettivo.optString("kvCacheType", "f16");
+                boolean discorda = (gpuLayersRichiesti != 0 && gpuLayersEffettivi == 0)
+                        || !kvRichiesto().equals(kvEffettivo);
                 riga.put("configMismatch", discorda);
                 riga.put("validity", discorda ? "CONFIG_MISMATCH" : "VALID");
             } else {
@@ -777,7 +804,10 @@ public class TalosLocalBaselineDeviceTest {
         riga.put("modelBytes", model.length());
         riga.put("threads", thread);
         riga.put("contextTokensRequested", contesto);
-        riga.put("kvRequested", "f16");
+        // ⛔ P1-4: era hardcoded "f16" anche qui, indipendentemente da cosa
+        // il motore avesse davvero aperto — la stessa bugia per costruzione
+        // già corretta altrove (B2) per gpuLayers/backendDevice.
+        riga.put("kvRequested", kvRichiesto());
         riga.put("atMs", System.currentTimeMillis());
         return riga;
     }

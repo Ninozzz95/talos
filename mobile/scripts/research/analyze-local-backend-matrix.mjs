@@ -172,8 +172,18 @@ for (const riga of giri) {
      * uguale a prima per loro, backward-compatible di proposito.
      */
     const cache = riga.cacheState ? `/${riga.cacheState}` : ''
+    /*
+     * P1-4 — stessa ragione di microbatch/FA: la matrice FA×KV chiede di
+     * confrontare f16 e q8_0 SEPARATAMENTE, non in un'unica mediana che
+     * mescola due configurazioni diverse per costruzione. `kvRequested`
+     * esiste da prima (B2 lo scrive già in ogni riga), ma fino a qui era
+     * sempre "f16" — quindi omesso dalla chiave non cambiava niente.
+     * Compare solo quando NON è il predefinito, stessa disciplina delle
+     * altre manopole.
+     */
+    const kv = riga.kvRequested && riga.kvRequested !== 'f16' ? `/kv-${riga.kvRequested}` : ''
     const chiave = `${riga.candidate ?? '?'}/${riga.backendRequested ?? '?'}/`
-        + `${riga.config ?? '?'}${fase}${ub}${fa}${cache}`
+        + `${riga.config ?? '?'}${fase}${ub}${fa}${kv}${cache}`
     if (!gruppi.has(chiave)) gruppi.set(chiave, [])
     gruppi.get(chiave).push(riga)
 }
