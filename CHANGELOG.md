@@ -75,10 +75,13 @@ reads, exactly like picking any other voice. Every profile also gets its own
 "Listen" button, independent of which voice is currently active, and the one
 actually in use is marked so on its card. Verified on the owner's Pad with a
 real recorded voice, not a mock: selecting it writes to the real settings
-store, pressing "Listen" and pressing the speaker icon on a real chat reply
-both measurably load and run the neural engine (a resident-memory jump from
-about 560 MB to about 1.9 GB, the same jump either way) — the whole chain
-now runs end to end, not just its separate pieces.
+store, and pressing "Listen" or the speaker icon on a real chat reply both
+measurably load and run the neural engine (a resident-memory jump from about
+560 MB to about 1.9 GB, the same jump either way). That memory jump alone
+turned out to prove only that synthesis had started, not that it finished —
+two of the fixes below were found this same way, by listening to what the
+device actually said rather than trusting the jump as success. With those
+closed, the chain now runs end to end for real.
 
 A voice you record is now also tagged with the phone's actual system
 language rather than whatever language the app's interface happened to be
@@ -86,6 +89,27 @@ set to at the time — those can differ, and only the system one is what
 should be on the label.
 
 ### Fixes
+
+**A voice that had been renamed since you picked it read nothing.** If
+the personal voice your settings pointed at no longer matched a saved
+profile — renamed, or replaced by a new recording — pressing the
+speaker icon produced only a generic error instead of reading the
+reply. It now falls back to the stock voice silently, the same way it
+already did when no personal voice had ever been chosen.
+
+**The device voice you actually heard could be a different one than the
+one you chose.** Applying a chosen voice to the system engine can be
+refused — most often a network voice when the network is not reachable
+at that instant — and that refusal was never checked: reading went
+ahead anyway, on whichever voice the engine happened to have already. A
+refusal now retries once against a voice that does not depend on the
+network. Separately, the very first reading of a fresh app launch could
+run before the device's own voice list had finished loading, silently
+skipping the choice altogether — reading always landed correctly from
+the second attempt in the same session, never the first. Both were
+real, found by listening to the device rather than trusting a memory
+measurement that had only confirmed the engine started, not that it
+finished successfully.
 
 **The voice engine's files were showing up as chat models.** After
 installing the voice engine, its two files sat forever in the same on-device
