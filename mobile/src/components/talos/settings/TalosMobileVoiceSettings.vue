@@ -7,7 +7,7 @@ import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosSpeechService, type TalosSpeechVoice } from '@/services/speech'
 import { TALOS_LINGUA_AUTOMATICA, parseTalosDictationLanguageMode } from '@/lib/dictationPolicy'
-import { talosVociOfferte, type TalosVoceDispositivo } from '@/lib/voice/sceltaVoce'
+import { talosVoceDaUsare, talosVociOfferte, type TalosVoceDispositivo } from '@/lib/voice/sceltaVoce'
 import {
     talosDeletePersonalVoiceProfile,
     talosPersonalVoiceProfiles,
@@ -54,18 +54,32 @@ onMounted(() => {
 const tutteLeLingue = ref(false)
 
 /**
- * ⛔⛔ SENZA «Automatica», il menù deve mostrare LA VOCE CHE PARLA.
+ * ⛔⛔ SENZA «Automatica», il menù deve mostrare LA VOCE CHE PARLA — DAVVERO.
  *
  * Owner 2026-08-11: «togli la voce predefinita». Tolta la riga, chi non ha mai
  * scelto si ritroverebbe un menù **vuoto** — e non perché manchi una voce, ma
  * perché la preferenza salvata è `null`.
  *
- * ⇒ Si mostra la prima delle offerte, che NON è un'invenzione: è esattamente
- * quella che `talosVoceDaUsare` sceglie quando nessuno ha scelto («la migliore
- * disponibile»). Il menù dice il vero anche prima del primo tocco.
+ * ⛔⛔ Owner 2026-08-22 (Rilievo 3): «parte di default una voce predefinita
+ * che non è nella lista voci nel impostazioni». MISURATO nel codice, non
+ * dedotto: qui si mostrava `voiceItems.value[0]`, calcolato con `rete:
+ * navigator.onLine !== false` (online, la neurale batte la locale — regola 2
+ * di `talosVociOrdinate`). `voceFissa()` in `useTalosSpeech.ts`, che è quella
+ * che DAVVERO parla quando si preme play su un messaggio, chiama la STESSA
+ * `talosVoceDaUsare` ma con `rete: false` fisso — deliberato dall'8/10, per
+ * non cambiare timbro a metà lettura se la rete esita. Online, con voci
+ * nominate sia locali che di rete, le due chiamate potevano disaccordarsi: il
+ * menù mostrava una voce di rete come «la prima», e il pulsante play ne
+ * usava un'altra, spesso fuori dall'elenco offerto (`talosVociOfferte` è
+ * anch'essa calcolata con `rete` online-dipendente).
+ *
+ * ⇒ Un solo ripiego, calcolato con la STESSA preferenza di `voceFissa()`
+ * (`voceDiRipiego` sotto): il menù ora mostra esattamente la voce che il
+ * motore userebbe da solo, non una voce di rete che il pulsante play non
+ * sceglierebbe mai.
  */
 const selectedVoice = computed({
-    get: () => settings.state.voice.voice_uri ?? voiceItems.value[0]?.value ?? '',
+    get: () => settings.state.voice.voice_uri ?? voceDiRipiego.value ?? '',
     set: (value: string) => { void settings.setVoicePreferences({ voice_uri: value || null }) },
 })
 const dictationLanguage = computed({
@@ -145,18 +159,38 @@ const dictationLanguageItems = computed(() => [
  * interruttore, perché chi è bilingue esiste — ma non le paga chi non lo è.
  */
 const linguaInterfaccia = computed(() => document.documentElement.lang || navigator.language || 'it')
+/**
+ * Le voci del dispositivo nel formato che `sceltaVoce.ts` capisce — estratto
+ * a parte perché sia `voiceItems` (l'elenco selezionabile, rete-consapevole)
+ * sia `voceDiRipiego` (il default quando nessuno ha scelto, rete:false come
+ * `voceFissa()`) devono partire dagli STESSI dati grezzi.
+ */
+const dispositivo = computed<TalosVoceDispositivo[]>(() => voices.value.map((v) => ({
+    name: v.voiceURI,
+    locale: v.lang,
+    // Il servizio non porta questi campi: l'ordinamento userà i criteri che
+    // restano — nominata contro generica, e la rete — che sono quelli che
+    // distinguono davvero (sul Pad la qualità è 400 per tutte).
+    quality: 400,
+    latency: 200,
+    network: / · rete$/.test(v.name),
+    notInstalled: false,
+})))
+/**
+ * ⛔⛔ LA VOCE CHE PARLA DAVVERO QUANDO NESSUNO HA SCELTO — Rilievo 3,
+ * 2026-08-22. Stessa `preferenza` di `voceFissa()` in `useTalosSpeech.ts`
+ * (`rete: false`, `scelta: null`): un solo posto decide «qual è la prima»,
+ * non due calcoli che possono disaccordarsi. Vedi il commento su
+ * `selectedVoice` per la storia del difetto.
+ */
+const voceDiRipiego = computed(() => (
+    talosVoceDaUsare(dispositivo.value, {
+        lingua: linguaInterfaccia.value,
+        rete: false,
+        scelta: null,
+    }).voce?.name
+))
 const voiceItems = computed(() => {
-    const dispositivo: TalosVoceDispositivo[] = voices.value.map((v) => ({
-        name: v.voiceURI,
-        locale: v.lang,
-        // Il servizio non porta questi campi: l'ordinamento userà i criteri che
-        // restano — nominata contro generica, e la rete — che sono quelli che
-        // distinguono davvero (sul Pad la qualità è 400 per tutte).
-        quality: 400,
-        latency: 200,
-        network: / · rete$/.test(v.name),
-        notInstalled: false,
-    }))
     /*
      * ⛔ DUE VOCI, e la regola sta in `talosVociOfferte` — qui si applica, non
      * si decide.
@@ -169,12 +203,12 @@ const voiceItems = computed(() => {
      * chiesto esplicitamente l'archivio, e nascondergliene i due terzi sarebbe
      * rispondere a una domanda diversa da quella che ha fatto.
      */
-    const miaLingua = talosVociOfferte(dispositivo, {
+    const miaLingua = talosVociOfferte(dispositivo.value, {
         lingua: linguaInterfaccia.value,
         rete: navigator.onLine !== false,
     })
     const restanti = tutteLeLingue.value
-        ? dispositivo.filter((v) => !miaLingua.some((m) => m.name === v.name))
+        ? dispositivo.value.filter((v) => !miaLingua.some((m) => m.name === v.name))
         : []
     const etichetta = (v: TalosVoceDispositivo) => {
         const originale = voices.value.find((o) => o.voiceURI === v.name)
@@ -213,8 +247,12 @@ function setPitch(event: Event): void {
     anteprimaFraPoco()
 }
 function preview(): void {
+    // ⛔ Rilievo 3, 2026-08-22: qui c'era `?? undefined` — un TERZO calcolo del
+    // «default», che lasciava decidere al motore nativo la sua predefinita
+    // (che può essere la generica, o una voce diversa sia dal menù sia da
+    // quella che leggerebbe un messaggio). Stesso ripiego di `selectedVoice`.
     void service.speak(t('voice.previewPhrase'), {
-        voiceURI: settings.state.voice.voice_uri ?? undefined,
+        voiceURI: settings.state.voice.voice_uri ?? voceDiRipiego.value,
         rate: settings.state.voice.rate,
         pitch: settings.state.voice.pitch,
     })
