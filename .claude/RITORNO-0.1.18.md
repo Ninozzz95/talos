@@ -810,3 +810,80 @@ blocca 0.1.18 — sono dichiarati, non nascosti.
 
 Poi, come sempre: cancelli, prova sul dispositivo dove serve, commit, e si
 chiede il push solo alla fine.
+
+---
+
+## 14. I sei rilievi del 22/8 — post-Fase-4, prima della Fase 5
+
+Owner 2026-08-22, sei screenshot reali dopo la chiusura della Fase 4.
+Salvati verbatim in memoria (`findings-owner-22-agosto.md`) prima di
+toccare codice, per non perderli a metà indagine. Si chiudono uno alla
+volta, ognuno con la sua prova.
+
+### 14.1 Rilievo 2 — l'icona di selezione nella sidebar chat (CHIUSO)
+
+«quella icona nella sidebar per selezionare SE NE DEVE ANDARE VIA, occupa
+troppo spazio, abbiamo già hold to select, basta quello.»
+
+MISURATO nel codice prima di toccarlo: due percorsi indipendenti in
+`ChatsScreen.vue` arrivavano già a `bulk.enter()` senza quel pulsante —
+il timer di pressione lunga (righe ~367-405) e la voce "seleziona" del
+menu contestuale (~457). Il pulsante d'intestazione (icona `CheckSquare`,
+`data-testid="talos-chats-select-header"`) era un terzo percorso
+ridondante, che ribaltava la decisione del 2026-07-27.
+
+Rimosso il pulsante e il suo import `CheckSquare`; rimossa la chiave i18n
+`selectChats`, orfana, da `en.ts`/`it.ts` (confermato con grep: nessun
+altro riferimento). Typecheck pulito, `chatsScreen.test.ts` +
+`routeWiring.test.ts` 16/16, suite intera 650/653 file · 5930/5940 test
+(3+10 skip preesistenti, non di questo cambio). Commit `7ce79b63`.
+
+### 14.2 Rilievo 3 — la voce di play non era quella delle impostazioni (CHIUSO)
+
+«quando premo play su un messaggio di risposta parte di default una voce
+predefinita che non è nella lista voci nel impostazioni della voce
+relative. La voce TTS deve essere esattamente quella scelta dalle
+impostazioni oppure di default la prima.»
+
+Causa trovata nel codice, non per ispezione: `TalosMobileVoiceSettings.vue`
+mostrava come default `voiceItems[0]`, calcolato con
+`rete: navigator.onLine !== false` (online, la neurale batte la locale —
+regola 2 di `talosVociOrdinate`). `voceFissa()` in `useTalosSpeech.ts` —
+quella che parla DAVVERO al tocco di play — fissa `rete: false` di
+proposito (decisione dell'8/10: una voce di rete cambia timbro a metà
+lettura quando scivola sul ripiego locale). Online, con una voce nominata
+di rete e una locale entrambe disponibili, le due chiamate a
+`talosVoceDaUsare` potevano disaccordarsi: il menu mostrava la voce di
+rete come «la prima», il pulsante play ne diceva un'altra — talvolta
+nemmeno nell'elenco offerto (anche `talosVociOfferte` è rete-dipendente).
+Anche l'anteprima di Impostazioni aveva un TERZO calcolo (`?? undefined`,
+decideva il motore nativo) — stessa famiglia di difetto, stessa cura.
+
+Fix: un solo `voceDiRipiego` computed, stessa `preferenza` di `voceFissa()`
+(`rete: false`, `scelta: null`). Il default mostrato, l'anteprima e il
+pulsante play ora concordano sempre; l'elenco selezionabile (`voiceItems`)
+resta rete-consapevole, quindi una scelta esplicita può ancora prendere
+una voce di rete.
+
+Test nuovo `PVOICE-DEFAULT-01`: due voci nominate (una `· rete`, una
+locale) online, dimostra che il menu, l'anteprima e l'elenco selezionabile
+concordano — la prova che PRIMA del fix avrebbe fallito (il menu mostrava
+`Itb · rete`, non `Itc`). Typecheck pulito, suite intera verde (stessi
+numeri di 14.1, stesso giro), build + gate del tetto d'avvio invariato
+(610.352/611.000 — il componente resta pigro, non nel grafo d'avvio).
+Commit `53a3d3b3`.
+
+### 14.3 Ancora aperti
+
+- Rilievo 1 — censimento tool/ricerca web × modello, scettico e completo,
+  autorizzato a scaricare altri modelli. Il più grande dei sei, non
+  ancora iniziato: probabile blocco a sé.
+- Rilievo 4 — l'effetto di rendering del prompt entra in mezzo alle frasi
+  quando il ragionamento si ferma per un tool.
+- Rilievo 5 — i file MD non sono formattati in chat.
+- Rilievo 6 — un file MD appena creato non si apre dalla scheda chat.
+
+Owner 2026-08-22: chiusi tutti e sei, poi Fase 5 (chiude il blocco voce
+personale per intero), poi le ottimizzazioni di performance del motore
+locale LLM (i due documenti MAX PERFORMANCE già custoditi in
+TALOS-RICERCHE).
