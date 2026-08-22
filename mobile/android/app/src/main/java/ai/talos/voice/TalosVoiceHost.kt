@@ -1,5 +1,6 @@
 package ai.talos.voice
 
+import ai.talos.TalosThermal
 import android.content.Context
 import android.util.Log
 import java.io.Closeable
@@ -23,7 +24,25 @@ import java.util.concurrent.atomic.AtomicLong
  */
 internal class TalosVoiceHost(
     private val modelRoot: File,
-    private val cpuThreads: Int = 2,
+    // ⭐⭐⭐ Owner 22/8, «stutter molto pesanti» confermato dal vivo: la
+    // serie temporale in driveStreamingSynthesis() misura `leadSeconds`
+    // fisso a 0.000 per QUASI OGNI batch su un testo lungo, con un
+    // hardwareUnderrun quasi a ogni singolo giro - un deficit SOSTENUTO,
+    // non jitter (§16 doc sotto). ⛔ `TalosMossRuntime.open()` passa questo
+    // stesso valore a `setIntraOpNumThreads` (TalosMossRuntime.kt): il
+    // "batch=8 → 0 underrun" storico è stato misurato SOLO con
+    // `cpuThreads = 4` - ogni test strumentato in questo repo che apre un
+    // `TalosVoiceHost` lo passa esplicitamente, e `TalosNeuralVoicePlugin`
+    // usa lo stesso 4 per l'arruolamento. La produzione (TalosVoiceHost.get)
+    // non lo passava mai: girava a 2, la metà del parallelismo intra-op
+    // realmente validato. Il Pad 3 ha 8 core (adb cpuinfo) - 4 lascia
+    // margine reale per thread audio/UI/decodifica, non li satura.
+    private val cpuThreads: Int = 4,
+    // ⛔ Solo per la diagnosi termica (§16 sotto) - nullo nei test
+    // strumentati esistenti, che non lo passano: `TalosThermal.read(null)`
+    // torna `UNKNOWN` invece di inventare uno stato, esattamente il
+    // contratto che quella classe già dichiara.
+    private val appContext: Context? = null,
 ) : Closeable {
     private val owner = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "talos-voice-owner").apply { priority = Thread.NORM_PRIORITY }
@@ -268,6 +287,29 @@ internal class TalosVoiceHost(
      * immediately. Batch size jumps from 1 (first chunk only, for TTFA) to a
      * measured-safe floor of 8 for everything after ([resolveFrameBudget] -
      * see its doc for why, and for why this is not upstream's 1→2→4→8).
+     *
+     * ⭐⭐⭐ Owner 22/8, «stutter molto pesanti» confermato dal vivo e
+     * misurato: la generazione autoregressiva da sola non sta al passo del
+     * tempo reale su questo dispositivo (RTF sostenuto ~1,5 su una lettura
+     * lunga, non jitter - `decodeMs`/`cpuThreads` esclusi come causa, vedi i
+     * commenti dentro `decodePending`). Un buffer o un batch più grandi non
+     * curano un deficit SOSTENUTO: rimandano il primo underrun, non lo
+     * evitano - la serie temporale misurata mostra `leadSeconds` fisso a
+     * 0,000 dal primo batch in poi.
+     *
+     * ⛔ PROVATO E RESO INDIETRO, stessa sera: spezzare per frase (una
+     * generazione indipendente a testo, sperando che la frase N+1 generasse
+     * mentre la N suonava) è stato MISURATO peggiore, non migliore - 74
+     * hardwareUnderruns invece di 37, 87s invece di 60s sullo stesso testo,
+     * e il dispositivo è arrivato a `thermal=light` a metà lettura (mai
+     * prima, nella stessa misura senza spezzare). Il prefill in più per
+     * ogni frase è un costo reale che si somma a un pipeline già senza
+     * margine, e il tempo totale più lungo produce più calore, che rallenta
+     * ancora - un ciclo che si aggrava da solo. L'owner l'ha sentito dal
+     * vivo: «meno stutter all'inizio, molti di più verso la metà». Non si
+     * cura un deficit di RTF sostenuto spostando dove cade il costo fisso -
+     * serve una generazione più veloce in sé, che è il piano già aperto e
+     * sospeso ("Motore locale MAX PERFORMANCE", owner 22/8).
      */
     private fun driveStreamingSynthesis(
         id: Long,
@@ -292,13 +334,42 @@ internal class TalosVoiceHost(
             val batch = ArrayList(pending.subList(0, take))
             repeat(take) { pending.removeAt(0) }
 
+            // ⭐⭐⭐ Owner 22/8: separa il costo della decodifica del codec da
+            // quello della generazione autoregressiva - `cpuThreads` 2→4 non
+            // ha spostato di un underrun la lettura lunga (37→36 su 60 s),
+            // quindi non è lì il collo. Il gap fra un `decodePending()` e il
+            // successivo include ANCHE il tempo di generare gli 8 frame
+            // successivi (il callback `onFrame` chiama questa funzione da
+            // dentro `generate`), un costo sequenziale che questo timer da
+            // solo non isola - ma un `decodeNanos` piccolo qui esclude il
+            // codec come sospetto, lasciando solo la generazione.
+            val decodeStartNanos = System.nanoTime()
             val decoded = codecStream.runFrames(batch) ?: return
+            val decodeMs = (System.nanoTime() - decodeStartNanos) / 1_000_000
             if (ttfaMs == null) {
                 ttfaMs = (System.nanoTime() - startedAtNanos) / 1_000_000
             }
+            val writeStartNanos = System.nanoTime()
             if (!activePlayer.write(decoded.interleavedPcm)) {
                 underruns++
             }
+            val writeMs = (System.nanoTime() - writeStartNanos) / 1_000_000
+            // ⭐⭐⭐ Owner 22/8, seconda escalation: «stutter molto pesanti»,
+            // confermato dal vivo su un testo lungo. Il riassunto finale
+            // (sotto) dice QUANTI underrun ci sono stati ma non QUANDO -
+            // senza una serie temporale non si distingue un deficit
+            // strutturale (presente dal primo frame) da un collasso termico
+            // (peggiora solo verso la fine di una lettura lunga, mentre il
+            // SoC scalda). `TalosThermal.read` è lo stesso vocabolario già
+            // letto da TalosBenchmarkHarness/TalosBackendChoice - leggerlo
+            // qui non ne crea un secondo.
+            val hardwareUnderrunsSoFar = activePlayer.underrunCount() - underrunCountBefore
+            Log.i(
+                "TalosVoiceHost",
+                "decodePending(): elapsedMs=${(System.nanoTime() - startedAtNanos) / 1_000_000} " +
+                    "batch=$take leadSeconds=${"%.3f".format(leadSeconds)} decodeMs=$decodeMs writeMs=$writeMs " +
+                    "hardwareUnderrunsSoFar=$hardwareUnderrunsSoFar thermal=${TalosThermal.read(appContext)}",
+            )
         }
 
         val cancelled: Boolean
@@ -384,7 +455,7 @@ internal class TalosVoiceHost(
             synchronized(this) {
                 instance?.let { return it }
                 val modelRoot = TalosVoiceModelManager.modelRoot(context.applicationContext.getExternalFilesDir(null)!!)
-                val created = TalosVoiceHost(modelRoot)
+                val created = TalosVoiceHost(modelRoot, appContext = context.applicationContext)
                 instance = created
                 return created
             }
