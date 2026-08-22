@@ -27,20 +27,27 @@ public class TalosLocalProfileStoreDeviceTest {
             "b419-dc72703", "d854adc23e311c53", 1_282_439_264L, 36, "fingerprint/1");
 
     private Context context;
+    private String prima_profili;
+    private String prima_evidenza;
 
+    /**
+     * ⛔⛔⛔ SALVA, non solo pulisce — MISURATO su questo stesso device: la
+     * prima versione di questo file cancellava `talos_backend_evidence`
+     * incondizionatamente in `@Before`/`@After`, e la prima volta che
+     * questa classe è girata dopo che P0-2 aveva scritto un profilo VERO
+     * (premuto per davvero, non un dato di test) quel profilo è sparito —
+     * cancellato dal mio stesso `@After`. Un test che pulisce per isolarsi
+     * NON deve distruggere ciò che c'era prima su un device che non è
+     * effimero: si LEGGE lo stato, si pulisce per il test, e si RIPRISTINA
+     * esattamente quello che c'era — vuoto o pieno che fosse.
+     */
     @Before
     public void pulisci() {
         context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        // Stessa regola di TalosBackendEvidenceStoreDeviceTest: un test che
-        // eredita lo stato del precedente prova l'ordine, non la classe.
-        //
-        // ⛔⛔ ANCHE talos_backend_evidence, non solo il nostro — MISURATO:
-        // nonCondivideSpazioConTalosBackendEvidenceStore() scrive lì un
-        // driver fittizio ("fingerprint/1") per provare che questo store non
-        // lo legga, e senza questa riga quella scrittura sopravviveva OLTRE
-        // il test, sull'app installata per davvero sul device — non un
-        // dettaglio isolato del test, un residuo nello store che
-        // TalosBackendChoice.choose() legge in produzione.
+        prima_profili = context.getSharedPreferences("talos_local_profile", Context.MODE_PRIVATE)
+                .getString("profiles_v1", null);
+        prima_evidenza = context.getSharedPreferences("talos_backend_evidence", Context.MODE_PRIVATE)
+                .getString("evidence_v1", null);
         context.getSharedPreferences("talos_local_profile", Context.MODE_PRIVATE)
                 .edit().clear().commit();
         context.getSharedPreferences("talos_backend_evidence", Context.MODE_PRIVATE)
@@ -51,25 +58,26 @@ public class TalosLocalProfileStoreDeviceTest {
      * ⛔⛔ Non basta il {@code @Before}: l'ordine con cui JUnit esegue i
      * metodi di questa classe non è quello di dichiarazione, ed è l'ULTIMO
      * test — qualunque sia — a decidere cosa resta sul disco quando la
-     * classe finisce. Se fosse
-     * {@link #nonCondivideSpazioConTalosBackendEvidenceStore}, il driver
-     * fittizio scritto lì sopravviverebbe alla classe stessa, sull'app
-     * installata per davvero. Ripulire anche qui rende la garanzia vera
-     * indipendentemente dall'ordine, non solo quando capita di essere
-     * fortunati.
+     * classe finisce. Ripristinare qui, non solo pulire, rende la garanzia
+     * vera indipendentemente dall'ordine: quello che c'era su questo device
+     * PRIMA di questa classe c'è ANCHE dopo.
      */
     @After
-    public void ripulisciDopo() {
-        context.getSharedPreferences("talos_local_profile", Context.MODE_PRIVATE)
-                .edit().clear().commit();
-        context.getSharedPreferences("talos_backend_evidence", Context.MODE_PRIVATE)
-                .edit().clear().commit();
+    public void ripristina() {
+        android.content.SharedPreferences.Editor profili = context
+                .getSharedPreferences("talos_local_profile", Context.MODE_PRIVATE).edit().clear();
+        if (prima_profili != null) profili.putString("profiles_v1", prima_profili);
+        profili.commit();
+        android.content.SharedPreferences.Editor evidenza = context
+                .getSharedPreferences("talos_backend_evidence", Context.MODE_PRIVATE).edit().clear();
+        if (prima_evidenza != null) evidenza.putString("evidence_v1", prima_evidenza);
+        evidenza.commit();
     }
 
     private static TalosLocalProfile profilo(String backend, String device, long ttftMs) {
         return new TalosLocalProfile(
                 IDENTITA, backend, device, TalosBackendChoice.Outcome.CORRECT, ttftMs,
-                123_456_789L);
+                123_456_789L, TalosLocalProfile.Level.Q1);
     }
 
     @Test
@@ -162,5 +170,32 @@ public class TalosLocalProfileStoreDeviceTest {
 
         assertEquals("il nuovo store non deve leggere ciò che il vecchio ha scritto",
                 0, TalosLocalProfileStore.load(context).length);
+    }
+
+    /**
+     * P0-3, AL CONTRARIO — non un caso di laboratorio: una riga ESATTAMENTE
+     * così esisteva già su questo Pad prima di questo blocco (verificato con
+     * la qualificazione reale eseguita in P0-2, che non scriveva
+     * `qualificationLevel` perché il campo non esisteva ancora). Se questo
+     * test si rompesse, ogni profilo scritto prima di oggi diventerebbe
+     * illeggibile — la riga singola corrotta che leggiRiga() scarta in
+     * silenzio.
+     */
+    @Test
+    public void unaRigaScrittaPrimaDiQuestoBloccoSiLeggeComeQ1() {
+        String rigaSenzaLivello = "[{\"engineBuild\":\"" + IDENTITA.engineBuild
+                + "\",\"modelSha256\":\"" + IDENTITA.modelSha256
+                + "\",\"modelBytes\":" + IDENTITA.modelBytes
+                + ",\"androidSdk\":" + IDENTITA.androidSdk
+                + ",\"buildFingerprint\":\"" + IDENTITA.buildFingerprint
+                + "\",\"backendRegistry\":\"cpu\",\"backendDevice\":null"
+                + ",\"outcome\":\"CORRECT\",\"ttftMs\":501,\"measuredAtMs\":1000}]";
+        context.getSharedPreferences("talos_local_profile", Context.MODE_PRIVATE)
+                .edit().putString("profiles_v1", rigaSenzaLivello).commit();
+
+        TalosLocalProfile[] letti = TalosLocalProfileStore.load(context);
+        assertEquals("la riga vecchia non deve sparire", 1, letti.length);
+        assertEquals("senza il campo, il default onesto è Q1 — l'unico livello che scriveva allora",
+                TalosLocalProfile.Level.Q1, letti[0].qualificationLevel);
     }
 }

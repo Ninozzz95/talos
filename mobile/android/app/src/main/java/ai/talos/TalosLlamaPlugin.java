@@ -17,6 +17,7 @@ import java.io.File;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -1147,8 +1148,15 @@ public class TalosLlamaPlugin extends Plugin {
      * finestra di misura. Ogni tentativo scalda il chip un po' di più, quindi
      * pochi tentativi bastano; non è un numero a caso, è quanti ne sono
      * serviti a convergere qui.
+     *
+     * ⛔ Package-private, non `private`: P0-3/CR-06 vieta esplicitamente "un
+     * 9-run/sustained sweep automatico al primo 'ciao'" — questa è la riga
+     * che lo rispetta o lo rompe, e {@link TalosLlamaPluginQualificationBudgetTest}
+     * deve poterla leggere per accorgersi se qualcuno la alza verso la
+     * soglia da laboratorio (9, il numero di Q2) senza passare da un
+     * cancello esplicito.
      */
-    private static final int MAX_PROBE_ATTEMPTS = 4;
+    static final int MAX_PROBE_ATTEMPTS = 4;
 
     /**
      * Fa girare il sondaggio, se e quanto serve davvero, e restituisce cosa
@@ -1167,6 +1175,143 @@ public class TalosLlamaPlugin extends Plugin {
             return;
         }
         qualificationWorker.execute(() -> call.resolve(runQualification(path)));
+    }
+
+    /**
+     * P0-3 — Q0: "il motore si apre e risponde", senza il costo di
+     * {@link #qualifyBackend}. Nessuno store viene toccato — vedi
+     * {@link TalosLocalSmokeCheck}, che spiega perché: un verdetto PASSED
+     * qui non è una qualificazione, è l'assenza di un guasto grossolano.
+     */
+    @PluginMethod
+    public void smokeCheckLocalBackend(PluginCall call) {
+        String path = call.getString("path");
+        if (path == null || path.isEmpty() || !new File(path).isFile()) {
+            call.reject("TALOS_LLAMA_PATH_REQUIRED");
+            return;
+        }
+        if (!TalosLlamaNative.AVAILABLE) {
+            call.reject("TALOS_LLAMA_UNAVAILABLE");
+            return;
+        }
+        qualificationWorker.execute(() -> call.resolve(runSmokeCheck(path)));
+    }
+
+    /**
+     * L'orchestrazione di Q0: apre col backend che la chat userebbe DAVVERO
+     * in questo momento (stessa {@link TalosBackendChoice#choose} del
+     * percorso `open()` normale, non un nuovo criterio inventato qui), poi
+     * DUE giri sullo stesso motore — il golden completo, mai troncato, e lo
+     * Stop, in un secondo giro dedicato — e lascia a
+     * {@link TalosLocalSmokeCheck#judge} l'intera decisione.
+     *
+     * ⛔⛔⛔ MISURATO sul Pad, due volte, non dedotto:
+     *
+     * 1. Il primo tentativo creava un thread apposito per chiamare
+     *    {@code engine.run(...)}, con l'idea che il thread di questo metodo
+     *    restasse libero di chiamare {@code engine.cancel()} dopo un delay.
+     *    È esploso al primo giro reale — `TALOS_LLAMA_FUORI_DALL_ATTORE`,
+     *    `TalosLlamaEngine` impone che OGNI chiamata (tranne le vedette
+     *    elencate al campo {@code attore}: cancel, tokensProduced,
+     *    textSoFar, lastTimings) avvenga sul thread che ha aperto il
+     *    motore. La cura: {@code run()} resta sul thread CORRENTE; il
+     *    thread nuovo fa SOLO il delay e chiama {@code cancel()}.
+     * 2. Il secondo tentativo faceva golden e Stop nello STESSO giro —
+     *    genera, e a metà chiede il cancel. Un giro reale con questo prompt
+     *    di otto token ha prodotto GOLDEN_MISMATCH: il cancel non era
+     *    caduto durante il prefill come con il prompt più lungo di Q1, ma
+     *    DOPO che qualche token era già uscito — il verdetto sembrava dire
+     *    "il modello ha sbagliato" quando la verità era "l'ho interrotto
+     *    prima che finisse". La cura: due giri separati, vedi
+     *    {@link #misuraLatenzaStop}.
+     */
+    private JSObject runSmokeCheck(String path) {
+        android.content.Context context = getContext();
+        int gpuLayers = TalosBackendChoice.gpuLayers(TalosBackendChoice.choose(
+                android.os.Build.FINGERPRINT, TalosThermal.read(context),
+                TalosBackendEvidenceStore.load(context)));
+
+        TalosLlamaEngine.OpenAttempt attempt = TalosLlamaEngine.tryOpen(
+                context, path, 4, 4096, gpuLayers, true);
+        TalosLlamaEngine engine = attempt.engine();
+        if (engine == null) {
+            return esitoSmoke(TalosLocalSmokeCheck.Verdict.OPEN_FAILED, 0, null);
+        }
+        try {
+            // Fase 1 — il golden: un giro COMPLETO, mai troncato dal cancel.
+            TalosLlamaEngine.Run golden;
+            try {
+                golden = engine.run(
+                        TalosLocalSmokeCheck.PROMPT, TalosLocalSmokeCheck.MAX_TOKENS,
+                        () -> TalosThermal.read(context), TalosLlamaEngine.Mode.BENCHMARK);
+            } catch (InterruptedException interrottaDurantelaGenerazione) {
+                Thread.currentThread().interrupt();
+                golden = null;
+            }
+            String testo = golden == null ? null : golden.text;
+
+            // Fase 2 — lo Stop: un secondo giro, dedicato. Cosa produce non
+            // conta qui, solo quanto ci mette il motore a tornare.
+            long latenzaStopMs = misuraLatenzaStop(engine, context);
+
+            return esitoSmoke(TalosLocalSmokeCheck.judge(testo, latenzaStopMs), latenzaStopMs, testo);
+        } finally {
+            engine.close();
+        }
+    }
+
+    /**
+     * Chiede lo Stop a metà di un secondo giro e misura quanto ci mette il
+     * motore a tornare. {@code STOP_BUDGET_MS + 1} — sopra soglia per
+     * costruzione — se il cancellatore stesso non è mai tornato: un guasto
+     * diverso da "lento", ma {@link TalosLocalSmokeCheck#judge} lo vede
+     * comunque come "non ce l'ha fatta", non come un falso PASSED silenzioso.
+     */
+    private static long misuraLatenzaStop(TalosLlamaEngine engine, android.content.Context context) {
+        AtomicLong chiestoA = new AtomicLong(0);
+        Thread cancellatore = new Thread(() -> {
+            try {
+                Thread.sleep(TalosLocalSmokeCheck.STOP_DELAY_MS);
+            } catch (InterruptedException interrottoPrimaDelDelay) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            chiestoA.set(System.currentTimeMillis());
+            engine.cancel();
+        }, "talos-smoke-stop");
+        cancellatore.start();
+        try {
+            // Sul thread CORRENTE — stesso motivo della fase 1.
+            engine.run(TalosLocalSmokeCheck.PROMPT, TalosLocalSmokeCheck.MAX_TOKENS,
+                    () -> TalosThermal.read(context), TalosLlamaEngine.Mode.BENCHMARK);
+        } catch (InterruptedException interrottaDurantelaGenerazione) {
+            Thread.currentThread().interrupt();
+        }
+        try {
+            cancellatore.join(TalosLocalSmokeCheck.STOP_BUDGET_MS + 5_000);
+        } catch (InterruptedException interrottaDurantelAttesa) {
+            Thread.currentThread().interrupt();
+        }
+        if (cancellatore.isAlive() || chiestoA.get() == 0) {
+            return TalosLocalSmokeCheck.STOP_BUDGET_MS + 1;
+        }
+        return System.currentTimeMillis() - chiestoA.get();
+    }
+
+    private static JSObject esitoSmoke(
+            TalosLocalSmokeCheck.Verdict verdetto, long stopLatencyMs, String golden) {
+        return new JSObject()
+                .put("verdict", verdetto.name())
+                .put("passed", verdetto == TalosLocalSmokeCheck.Verdict.PASSED)
+                .put("stopLatencyMs", stopLatencyMs)
+                // ⛔ Diagnostico, non decorativo: un GOLDEN_MISMATCH senza
+                // dire COSA ha risposto il modello lascia a chi legge la
+                // scheda solo un "no" senza il perché — misurato qui
+                // stesso, dove senza questo campo ho dovuto rileggere il
+                // logcat a mano per scoprire che il primo PROMPT (non il
+                // motore) era il problema: vedi il commento su
+                // TalosLocalSmokeCheck.PROMPT.
+                .put("goldenText", golden == null ? JSONObject.NULL : golden);
     }
 
     private JSObject runQualification(String path) {
@@ -1317,10 +1462,14 @@ public class TalosLlamaPlugin extends Plugin {
         // scritto con un'identità che non si può fidare sarebbe peggio di
         // nessun profilo.
         if (identitaCorrente != null) {
+            // Q1: questo È runQualification, il probe bounded dietro
+            // consenso — vedi TalosLlamaPluginQualificationBudgetTest per
+            // il cancello che tiene MAX_PROBE_ATTEMPTS lontano dai nove
+            // giri di Q2.
             TalosLocalProfileStore.record(context, new TalosLocalProfile(
                     identitaCorrente, backend, run.backendDevice,
                     TalosBenchmarkHarness.outcomeOf(measured), run.ttftMs,
-                    System.currentTimeMillis()));
+                    System.currentTimeMillis(), TalosLocalProfile.Level.Q1));
         }
         return true;
     }

@@ -17,11 +17,34 @@ package ai.talos;
  * un'{@link TalosLocalProfileIdentity} molto più ricca. Allargare il
  * payload resta il passo successivo esplicito, non questo.
  *
+ * ⛔ P0-3 aggiunge {@link #qualificationLevel}: non un allargamento del
+ * payload di misura, un'etichetta su CHI ha misurato — la distinzione
+ * Q0/Q1/Q2 che CR-06 rende obbligatoria.
+ *
  * Immutabile per costruzione: ogni campo è final, nessun setter. Un profilo
  * non si aggiorna — se ne scrive uno nuovo, e {@link TalosLocalProfileStore}
  * decide se sostituisce quello vecchio (stessa identità, stesso backend).
  */
 public final class TalosLocalProfile {
+
+    /**
+     * P0-3 — QUALE livello ha misurato questo profilo, non solo COSA dice.
+     * Il piano sorgente (CR-06) rende Q0/Q1/Q2 una distinzione obbligatoria
+     * proprio perché confondere i livelli è l'anti-pattern che vieta: un
+     * profilo Q0 (uno smoke da sedici token, mai un tetto di misura reale)
+     * letto come se fosse un Q1 qualificato produrrebbe una decisione di
+     * backend su una prova che non era pensata per reggerla.
+     *
+     * ⛔ Solo {@code Q1} scrive qui oggi — {@link TalosLocalSmokeCheck} (Q0)
+     * non produce un profilo per progetto («non produce "massimo profilo" se
+     * la campagna è troppo corta», piano sorgente §8.3), e Q2 (il banco di
+     * ricerca) resta un androidTest, irraggiungibile da un APK di
+     * produzione. Il campo esiste comunque adesso, non quando arriverà un
+     * secondo scrittore: uno schema che aggiunge silenziosamente un
+     * discriminante dopo che i dati esistono già è uno schema che rompe la
+     * lettura di ciò che c'era prima.
+     */
+    public enum Level { Q0, Q1, Q2 }
 
     public final TalosLocalProfileIdentity identity;
     public final String backendRegistry;
@@ -30,16 +53,18 @@ public final class TalosLocalProfile {
     public final TalosBackendChoice.Outcome outcome;
     public final long ttftMs;
     public final long measuredAtMs;
+    public final Level qualificationLevel;
 
     public TalosLocalProfile(TalosLocalProfileIdentity identity, String backendRegistry,
                               String backendDevice, TalosBackendChoice.Outcome outcome,
-                              long ttftMs, long measuredAtMs) {
+                              long ttftMs, long measuredAtMs, Level qualificationLevel) {
         this.identity = identity;
         this.backendRegistry = backendRegistry == null ? "" : backendRegistry;
         this.backendDevice = backendDevice;
         this.outcome = outcome;
         this.ttftMs = ttftMs;
         this.measuredAtMs = measuredAtMs;
+        this.qualificationLevel = qualificationLevel == null ? Level.Q1 : qualificationLevel;
     }
 
     /** Stessa identità, stesso backend, stesso dispositivo — la stessa prova, misurata di nuovo. */

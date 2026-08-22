@@ -8,6 +8,7 @@ import android.content.Context;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -26,14 +27,35 @@ public class TalosBackendEvidenceStoreDeviceTest {
     private static final String DRIVER = "test-driver/1.0";
 
     private Context context;
+    private String prima;
 
+    /**
+     * ⛔⛔⛔ P0-3, MISURATO su questo stesso device: la versione precedente di
+     * questo `@Before` puliva `talos_backend_evidence` senza salvarlo prima
+     * né ripristinarlo dopo — e un profilo scritto per davvero da
+     * {@link TalosLlamaPlugin#qualifyBackend} è sparito, cancellato da una
+     * corsa di QUESTA classe eseguita più tardi. Un test che pulisce per
+     * isolarsi non deve distruggere ciò che c'era prima su un device che
+     * non è effimero: si legge, si pulisce, e {@link #ripristina} riporta
+     * esattamente quello che c'era.
+     */
     @Before
     public void pulisci() {
         context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        prima = context.getSharedPreferences("talos_backend_evidence", Context.MODE_PRIVATE)
+                .getString("evidence_v1", null);
         // Riparte da vuoto ogni volta: un test che eredita lo stato del
         // precedente non sta provando questa classe, sta provando l'ordine.
         context.getSharedPreferences("talos_backend_evidence", Context.MODE_PRIVATE)
                 .edit().clear().commit();
+    }
+
+    @After
+    public void ripristina() {
+        android.content.SharedPreferences.Editor editor = context
+                .getSharedPreferences("talos_backend_evidence", Context.MODE_PRIVATE).edit().clear();
+        if (prima != null) editor.putString("evidence_v1", prima);
+        editor.commit();
     }
 
     @Test
