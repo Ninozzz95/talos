@@ -44,15 +44,35 @@ final class TalosLlamaNative {
      * su Android sono `/system/bin` e `/`. Senza questa chiamata il registro
      * resta vuoto e ogni modello «non si apre», con un messaggio che manda a
      * cercare la causa altrove.
+     *
+     * ⛔ P0-1 — passa giù ANCHE una cartella per la cache dei binari OpenCL
+     * compilati. `getCodeCacheDir()`, non `getCacheDir()`: la documentazione
+     * Android la descrive esplicitamente per "codice compilato/ottimizzato
+     * generato a runtime" — esattamente cosa sono questi `.clbin` — e viene
+     * ripulita da sola ad ogni aggiornamento di app o piattaforma, il momento
+     * in cui un pin diverso di llama.cpp potrebbe cambiare i kernel sorgente e
+     * lasciare orfani i vecchi binari. Il nativo la crea se manca
+     * (`cl-program-cache.cpp`, upstream); qui basta il percorso.
      */
     static synchronized void ensureReady(android.content.Context context) {
         if (prepared || !AVAILABLE) return;
         String directory = context == null ? "" : context.getApplicationInfo().nativeLibraryDir;
-        nativeInit(directory == null ? "" : directory);
+        String openClCacheDir = context == null ? ""
+                : new java.io.File(context.getCodeCacheDir(), "ggml-opencl-cache").getAbsolutePath();
+        nativeInit(directory == null ? "" : directory, openClCacheDir);
         prepared = true;
     }
 
-    private static native void nativeInit(String nativeLibraryDir);
+    private static native void nativeInit(String nativeLibraryDir, String openClCacheDir);
+
+    /**
+     * ⛔ SOLO RICERCA — accende il trace HIT/MISS/SAVE della cache P0-1 su
+     * logcat (tag TalosLlama, verificato: NON "TALOS"). Un log per kernel
+     * compilato non è per la produzione. Va chiamata dopo {@link #ensureReady}
+     * e prima di aprire un modello con offload: la cache legge la variabile
+     * una volta sola, alla prima allocazione sul backend OpenCL.
+     */
+    static native void nativeEnableOpenClCacheDebugTraceForResearch();
 
     /** I backend ggml registrati, separati da virgola. Vuoto se nessuno. */
     static native String nativeBackends();
