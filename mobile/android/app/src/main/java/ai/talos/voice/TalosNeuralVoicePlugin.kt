@@ -542,7 +542,34 @@ class TalosNeuralVoicePlugin : Plugin() {
             call.reject("displayName, language and consentVersion are required")
             return
         }
-        val accepted = enrollmentSlots.values.toList()
+        // ⭐⭐⭐ Owner 22/8, riprodotto sul Pad due volte con dati reali:
+        // `lowmemorykiller` uccide ai.talos con "process memory is leaking"
+        // durante l'encode, RSS in crescita CONTINUA per tutta la durata
+        // della chiamata - non un picco al caricamento. Ricerca: l'encoder
+        // di un codec neurale a base transformer ha un costo quadratico
+        // nella lunghezza della sequenza (self-attention) - concatenare
+        // TUTTE e 12 le frasi (whisper+normale+forte, anche 20-40s veri) in
+        // un'unica encodeReferenceAudio() è esattamente il caso che
+        // esplode. La documentazione UFFICIALE di MOSS-TTS lo conferma da
+        // un'altra direzione, indipendente dalla memoria: "optimal
+        // reference clip length is 3-10 seconds... clips longer than ~15
+        // seconds may introduce noise artifacts or degrade quality" - un
+        // riferimento più corto non è un compromesso, è quello giusto.
+        // ⇒ Le frasi 'normale' (indici 4-7 nel wizard, mai sussurrate né
+        // gridate - le più rappresentative di una voce di conversazione
+        // vera) bastano da sole, ~4 frasi invece di 12: il cancello di
+        // qualità resta invariato su TUTTE e 12 (misura la registrazione,
+        // non la scelta del riferimento), solo l'audio che finisce
+        // davvero nel codec cambia.
+        val normalTierSlots = (NORMAL_TIER_FIRST_SLOT..NORMAL_TIER_LAST_SLOT).mapNotNull { enrollmentSlots[it] }
+        val accepted = if (normalTierSlots.size == (NORMAL_TIER_LAST_SLOT - NORMAL_TIER_FIRST_SLOT + 1)) {
+            normalTierSlots
+        } else {
+            // Sessione anomala (mai osservata dal wizard reale, ma non si
+            // assume): meglio l'insieme intero - buildProfile() applica
+            // comunque il proprio tetto di durata più sotto.
+            enrollmentSlots.values.toList()
+        }
         if (accepted.isEmpty()) {
             call.reject("no accepted phrases in this session")
             return
@@ -668,6 +695,12 @@ class TalosNeuralVoicePlugin : Plugin() {
 
     companion object {
         private const val DEFAULT_PHRASE_MAX_DURATION_MS = 8_000
+        // Stesso ordine hardcoded lato JS (PHRASES in
+        // TalosMobilePersonalVoiceEnrollment.vue): whisper 0-3, normale
+        // 4-7, forte 8-11. Un accoppiamento implicito già esistente
+        // altrove (12 frasi, lo stesso limite di durata) - non nuovo qui.
+        private const val NORMAL_TIER_FIRST_SLOT = 4
+        private const val NORMAL_TIER_LAST_SLOT = 7
         // ⛔ Non lo stesso buffer di TalosPcmPlayer (quello è dimensionato per
         // l'HAL in uscita) - questo è quanto float PCM si converte e scrive
         // per iterazione: piccolo apposta, per la stessa ragione documentata
