@@ -34,9 +34,18 @@ PLAIN_TOOL_DETAILS   riga nuda      tool_details: nome1, nome2
 TOOL_CODE_*          blocco         TOOL_CODE / tool: / args:
 ```
 
-⇒ **Nessuna delle due grammatiche combacia con il formato di Llama 3.2.** La
-chiamata non viene riconosciuta, non diventa un `tool_call`, e cade nel testo
-visibile — che è esattamente ciò che si vede nella foto.
+⇒ La lettura di allora: *«nessuna delle due grammatiche combacia col formato di
+Llama 3.2, quindi la chiamata non viene riconosciuta e cade nel testo visibile»*.
+
+⛔⛔ **SMENTITA dalla misura, poche ore dopo** — vedi «RIPRODOTTO» più sotto: il
+ripiego **riconosce tutti e tre i dialetti**, prefisso compreso. La chiamata
+viene estratta con nome e argomenti giusti. ⇒ La causa del blob a schermo è
+un'altra, ed è stata riprodotta: lo strumento chiesto **non era fra quelli
+offerti**, e in quel caso la riga resta intatta per costruzione.
+
+⭐ Il paragrafo qui sopra resta scritto perché era la prima ipotesi ragionevole,
+e perché la distanza fra «ragionevole» e «vero» è tutto il valore di questo
+documento.
 
 ### ⛔⛔ CORREZIONE: quelle due grammatiche sono il RIPIEGO, non il percorso
 
@@ -217,6 +226,58 @@ lo strumento ha PRODOTTO l'effetto?     (verificato, non dedotto dal testo)
 memoria dice già che «gli attrezzi ce l'hanno: non li CHIAMANO — e quando non
 chiamano, INVENTANO». Un modello che risponde bene **senza** aver chiamato
 niente è un fallimento travestito da successo.
+
+---
+
+## ⭐⭐⭐ RIPRODOTTO — e i difetti sono DUE, non uno
+
+Misurato il 2026-08-23 dando al ripiego (`talosRecuperaChiamateNude`) i due
+dialetti **veri**, quelli estratti dai template dei GGUF installati. Nessun
+dispositivo, nessun modello acceso, nessun costo.
+
+```
+caso                      chiamata estratta   testo che resta a schermo
+Llama, JSON nudo                 SI            ""                          pulito
+Llama, con <|python_tag|>        SI            "<|python_tag|>"            guscio
+Qwen, <tool_call>...</tool_call> SI            "<tool_call>
+
+</tool_call>"  guscio
+strumento NON offerto            no            IL BLOB INTERO              <-- lo screenshot
+nessuno strumento offerto        no            IL BLOB INTERO              <-- lo screenshot
+```
+
+### ⛔⛔ A — il blob intero: lo strumento chiesto non era offerto
+
+`localToolCalls.ts:221` fa, per costruzione:
+
+```js
+if (!nomi || !offerti.has('tool_details') || nomi.some((n) => !offerti.has(n))) {
+    return riga        // <-- la riga resta com'e', JSON compreso
+}
+```
+
+L'intento e' **giusto**: non promuovere una chiamata a uno strumento che non e'
+autorizzato in questa chat. ⛔ Ma il fallimento e' **silenzioso e visibile**:
+invece di dire *«il modello ha chiesto `web_search`, che qui non e' offerto»*,
+mostra il JSON grezzo alla persona.
+
+⭐ E lega i due sintomi dello screenshot in **uno solo**: il modello chiedeva
+`tool_details` **per `web_search`**, e il messaggio letto era «La ricerca web e'
+attiva, riprova». Se `web_search` non era fra gli offerti di quel turno, il blob
+e la frase hanno la **stessa causa**.
+
+### ⛔ B — il guscio residuo, quando la chiamata INVECE viene riconosciuta
+
+Il ripiego toglie il JSON e lascia il contenitore: `<|python_tag|>` per Llama,
+`<tool_call></tool_call>` vuoti per Qwen. Piu' piccolo del primo, ma e' testo
+che la persona legge e che non vuol dire niente.
+
+### ⭐ Cosa NON e' rotto, e va detto
+
+Il **riconoscimento funziona su tutti e tre i dialetti**: nudo, con prefisso, e
+delimitato. La chiamata viene estratta con nome e argomenti giusti in ogni caso
+in cui lo strumento e' offerto. ⇒ Il rilievo 1 non e' «il parser non capisce i
+modelli»: e' **come si comporta quando decide di non promuovere**.
 
 ---
 
