@@ -30,6 +30,19 @@
 - ⛔⭐⭐⭐ **Chat e dati:** [Una CHIAMATA ORFANA avvelena la chat per sempre](chiamata-orfana-avvelena-la-chat.md) — un `tool_use` senza `tool_result` · [Ventiquattro chat tutte «Nuova chat»](parola-tradotta-nel-database.md) — il titolo si salvava tradotto · [La riga per il MODELLO sullo schermo](righe-per-il-modello-sullo-schermo.md) — il test puro attraversa il chiamante · [LA CI È VERDE — e 16 s erano una DIAGNOSI](quattro-errori-non-gestiti-nella-suite.md) — moriva prima di partire
 - ✅⭐⭐⭐ [IL PAREGGIO DEL 14 AGOSTO — ed è un SORPASSO](pareggio-gemini-14-agosto.md) — «cerca Telegram sul Play Store»: Gemini **rifiuta**
 
+## ✅ Le CHIUSE del 20-21/8 — spostate qui il 2026-08-22
+
+> ⛔ `MEMORY.md` era a **19.664 byte** contro un tetto di allarme di 19.900,
+> e oltre i 25 KB compilati il contenuto si taglia **in silenzio**. Queste
+> cinque voci erano già marcate ✅ e stavano ancora nell'indice degli APERTI:
+> sono lezioni chiuse, e il loro posto è qui. Blocco intero, non accorciato.
+
+- ✅⭐⭐⭐ [«Scatta foto» NON crasha: la fotocamera non c'è](assistente-crasha-su-scatta-foto.md) — fra i 15 attrezzi **nessuno scatta**
+- ✅⭐⭐ [Due misure che non tornavano](le-due-misure-che-non-tornano.md) — chiuso: lo strumento è fedele a **0,0005**
+- ✅⛔⛔⭐⭐⭐ **0.1.16 — la UI Ricerca approfondita: FATTA** (20/8): contesa aperta sul rapporto, tenuta nel tempo, BibTeX/RIS, fonti+token in testata. ⛔ La contesa NON POTEVA esistere — [funzione coi test e nessun chiamante](funzione-con-i-test-e-nessun-chiamante.md). Resta fuori: «estendi con una linea» → [ledger](ricerche-custodite-fuori-dal-repo.md)
+- ✅⛔⭐⭐⭐ [Lo STOP sotto GPU — CHIUSO il 21/8](stop-sotto-gpu-non-interrompe.md) — la cura in `ggml-opencl` porta 1.430 → **32/36/36 ms** al microbatch PIENO **512**: il 192 non serve piu. ⛔ Il costo della cura e **per GRAFO**, non per token ⇒ un riferimento «senza cura» dentro un confronto fra configurazioni e un **fantasma**
+- ✅⭐⭐⭐ [L'ABORT su GPU e' una FUNZIONE MANCANTE — **implementata il 21/8**, non una legge](labort-su-gpu-e-una-funzione-mancante.md) — la implementano solo CPU e **Metal**; `ggml-opencl` ha `get_proc_address = NULL`. Cura ~30 righe a **costo zero**, e upstream #10509 e' **stale**
+
 ## Regole di ingegneria — spostate qui il 2026-08-22
 
 > ⛔ Stesso motivo delle altre migrazioni: `MEMORY.md` si riavvicinava al
