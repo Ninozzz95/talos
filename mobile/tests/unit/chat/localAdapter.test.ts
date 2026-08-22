@@ -46,6 +46,11 @@ const localEngine = vi.hoisted(() => {
         talosLocalEngineGenerate: vi.fn(),
         talosLocalEngineCancel: vi.fn(),
         talosLocalEngineClose: vi.fn(),
+        // B1: chiamata dopo ogni generazione riuscita per tracciare i tempi
+        // nativi. `null` e' l'esito onesto gia' definito dalla funzione vera
+        // quando non c'e' niente da riportare - non un valore inventato per
+        // il test.
+        talosLocalEngineTimings: vi.fn(async () => null),
     }
 })
 vi.mock('@/services/localEngine', () => localEngine)

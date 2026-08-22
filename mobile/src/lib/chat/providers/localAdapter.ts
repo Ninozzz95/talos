@@ -19,6 +19,7 @@ import {
     talosLocalEngineOpen,
     talosLocalEngineOpenWithFallback,
     talosLocalEngineStatus,
+    talosLocalEngineTimings,
     talosLocalInstalledModels,
     talosFreezePrefix,
     talosThawPrefix,
@@ -26,6 +27,7 @@ import {
     type TalosLocalTemplateCapabilities,
     type TalosLocalToolTransport,
 } from '@/services/localEngine'
+import { talosLocalTrace, talosNewLocalTraceId } from '@/lib/chat/providers/localTrace'
 import {
     talosPrefixCacheFileName,
     talosShouldFreezePrefix,
@@ -843,6 +845,18 @@ async function run(
     onReasoning?: (text: string) => void,
 ): Promise<TalosMobileCompletionResult> {
     /**
+     * B1 — un id che lega tutti gli eventi di QUESTA generazione, dal primo
+     * istante in cui l'adattatore la prende in carico. Prima di questo
+     * blocco: zero id di correlazione in tutto il repo (grep esaustivo).
+     * `adapter_start` è l'evento più vicino a "la persona ha premuto
+     * invio" che questo file può misurare da sé - il tempo PRIMA di qui
+     * (dalla battitura al submit) appartiene a `chatController`, non
+     * ancora tracciato: dichiarato, non nascosto.
+     */
+    const traceId = talosNewLocalTraceId()
+    talosLocalTrace(traceId, 'adapter_start')
+
+    /**
      * I tool, nella STESSA forma che ricevono i provider di rete.
      *
      * Owner 2026-08-03: «i locali devono avere le stesse possibilità dei key».
@@ -891,7 +905,13 @@ async function run(
      */
     const pensa = input.thinking !== false
     const anticipo = await talosLocalEnginePlanPrompt(input.model.id, turns, tools, pensa)
+    talosLocalTrace(traceId, 'native_open_start')
     const status = await ensureLoaded(input.model.id, await pianoDiApertura(anticipo))
+    // ⛔ Un evento onesto, non un tempo di ricarica garantito: `ensureLoaded`
+    // può non fare nulla se il modello era già aperto - e allora la durata
+    // fra i due eventi è quella che DICE che non ha ricaricato niente,
+    // invece di lasciarlo indovinare a chi legge il log.
+    talosLocalTrace(traceId, 'native_open_done')
     const ceiling = await localContextCeiling(status.shape)
     let plan = await talosLocalEngineChatPlan(turns, tools, pensa)
     const targetContext = talosLocalEscalatedContextTokens(
@@ -996,13 +1016,25 @@ async function run(
          * la persona vede - ed e' invisibile a chi controlla dopo.
          */
         const trattieni = talosTrattieniLeChiamate()
+        // ⛔ Un flag locale, non un evento per fetta: `first_visible_token`
+        // conta una volta sola, la prima, altrimenti la riga di log
+        // annegherebbe fra decine di eventi per una risposta lunga - la
+        // stessa disciplina di `talosTrattieniLeChiamate` un livello sopra.
+        let primoTokenVisibileTracciato = false
+        talosLocalTrace(traceId, 'generate_start')
         generation = await talosLocalEngineGenerate(
             plan.prompt,
             (delta) => {
                 const fetta = separatore.push(delta)
                 if (fetta.text) {
                     const visibile = trattieni.push(fetta.text)
-                    if (visibile) onChunk?.(visibile)
+                    if (visibile) {
+                        if (!primoTokenVisibileTracciato) {
+                            primoTokenVisibileTracciato = true
+                            talosLocalTrace(traceId, 'first_visible_token')
+                        }
+                        onChunk?.(visibile)
+                    }
                 }
                 if (fetta.reasoning) onReasoning?.(fetta.reasoning)
             },
@@ -1020,7 +1052,20 @@ async function run(
         const coda = trattieni.flush()
         if (coda) onChunk?.(coda)
         if (ultima.reasoning) onReasoning?.(ultima.reasoning)
+        talosLocalTrace(traceId, 'complete')
+        /**
+         * ⛔⛔⛔ B1 — questi numeri esistevano già (il cronometro nativo,
+         * `talos_cronometro` in talos_llama_jni.cpp), ma non finivano MAI
+         * in un posto leggibile: l'unico riferimento a `lastTimings` in
+         * tutto `mobile/src` era questa stessa funzione che non la
+         * chiamava. Un blob misurato e mai letto è la stessa forma di
+         * `funzione-con-i-test-e-nessun-chiamante` - stavolta sui dati,
+         * non sul codice.
+         */
+        const tempi = await talosLocalEngineTimings()
+        if (tempi) talosLocalTrace(traceId, `native_timings ${JSON.stringify(tempi)}`)
     } catch (error) {
+        talosLocalTrace(traceId, `error ${error instanceof Error ? error.message : String(error)}`)
         if (error instanceof TalosLocalEngineGenerationError) {
             throw actionableGenerationFailure(error)
         }
