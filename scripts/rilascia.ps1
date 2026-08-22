@@ -132,7 +132,12 @@ Titolo '4 · dati personali fra i file tracciati'
 $bloccanti = @(
     @{ nome = 'serial di un dispositivo'; regex = '\b2ea6573c\b' },
     @{ nome = 'percorso sul disco';       regex = 'C:\\+Users\\+[A-Za-z]' },
-    @{ nome = 'indirizzo email';          regex = '[A-Za-z0-9._%+-]+@(gmail|outlook|hotmail)\.' }
+    # ⛔ L'email DELL'OWNER, non «un'email». Il pattern generico
+    #    `...@(gmail|outlook)\.` ha trovato otto occorrenze, tutte fixture di
+    #    test — `casa@gmail.com`, `lavoro@gmail.com`. Un cancello cerca la cosa
+    #    che non deve uscire, non la forma di quella cosa: cercare la forma
+    #    prende le finte insieme alle vere, e chi legge impara a ignorarlo.
+    @{ nome = 'email dell owner';         regex = 'ninozz[0-9]*@' }
 )
 $dove = @('mobile/src', 'mobile/tests', 'mobile/android/app/src', 'CHANGELOG.md', 'README.md')
 $trovate = @()
