@@ -1,0 +1,39 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.2'
+        classpath 'com.google.gms:google-services:4.4.4'
+        // La versione sta in variables.gradle, che pero' viene applicato DOPO
+        // questo blocco: qui va letta a mano dal file, o Gradle non la vede.
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.21"
+
+        // ⛔ Servono al compito «preparaPonteAdb»: un .deb e' un archivio `ar`
+        // con dentro un `tar.xz`, e questi due sanno leggerli. Stanno QUI e non
+        // fra le dipendenze dell'app perche' servono a Gradle mentre costruisce,
+        // non al telefono mentre esegue.
+        classpath 'org.apache.commons:commons-compress:1.27.1'
+        classpath 'org.tukaani:xz:1.10'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

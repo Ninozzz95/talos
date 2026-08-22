@@ -1,0 +1,559 @@
+/*
+ * TALOS Mobile base stylesheet (hand-authored, offline-first).
+ * - No remote font or CSS imports: fonts are self-hosted via @fontsource
+ *   imports in main.ts.
+ * - The reka-nova shadcn variables hold raw color values; the runtime adapter
+ *   (applyDesignTokens.ts) overrides them from the validated Telemetry
+ *   identity. The :root / .dark blocks below are the fail-closed defaults used
+ *   when the identity cannot be applied.
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    /*
+     * Il bersaglio tattile minimo, con un NOME.
+     *
+     * Android e Material chiedono 48dp con 8dp di spaziatura; WCAG 2.2 si
+     * accontenta di 24 (AA) o 44 (AAA). Su un'app Android vince la piattaforma,
+     * quindi 48.
+     *
+     * Ma il motivo per cui e' un token e non un numero e' un altro. Prima
+     * c'erano DUE grammatiche: il Model Lab a `min-h-[48px]` e chat e shell a
+     * `min-h-11` — cioe' 44px — per 191 occorrenze in 49 file. Nessuno l'aveva
+     * deciso: `min-h-11` non dice cosa sta promettendo, quindi nessuno si e'
+     * accorto che prometteva un'altra cosa.
+     *
+     * `min-h-touch` lo dice. Ed e' verificato da
+     * `tests/unit/theme/touchTargetContract.test.ts`, che diventa rosso se il
+     * 44 rientra da una porta laterale.
+     *
+     * ## Punta alla variabile che ESISTEVA GIA'
+     *
+     * `--talos-touch-target: 3rem` era gia' in questo foglio, e valeva gia' 48.
+     * Scrivere `48px` qui avrebbe aggiunto una QUARTA grammatica accanto alle
+     * tre che c'erano — cioe' esattamente il difetto che questo token doveva
+     * chiudere. Il valore ha una sola casa; questo e' il nome con cui Tailwind
+     * lo serve.
+     */
+    --spacing-touch: var(--talos-touch-target);
+
+    --font-sans: var(--talos-font-ui);
+    --font-display: var(--talos-font-display);
+    --font-mono: var(--talos-font-mono);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-talos-info: var(--talos-info);
+    --color-talos-warning: var(--talos-warning);
+    --color-talos-success: var(--talos-success);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    /* Owner 2026-07-24: UNIFORM corner radius — every rounded-corner element at
+       one value (~12px, "arrotondati ma non troppo"); circles/pills keep
+       rounded-full. sm stays a touch tighter for tiny chips. */
+    --radius-sm: 0.625rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 0.75rem;
+    --radius-2xl: 0.75rem;
+    --radius-3xl: 0.75rem;
+
+    /* Owner 2026-07-25: "il font size DEVE impattare anche il font dei menù e
+       di tutto il sistema, non solo la chat". Tailwind v4 emits every text
+       utility as `font-size: var(--text-*)`, so redefining the scale HERE is
+       the one lever that reaches menus, settings, header, toasts, sheets and
+       chat at once — no per-component plumbing, nothing left behind.
+       `--talos-ui-scale` is written on <html> at runtime from the setting;
+       Tailwind keeps line heights as unitless ratios, so they follow along.
+       3xs/2xs/xsm/md exist so the hand-written 10/11/13/15px sizes scale too. */
+    --text-3xs: calc(0.625rem * var(--talos-ui-scale, 1));
+    --text-2xs: calc(0.6875rem * var(--talos-ui-scale, 1));
+    --text-xs: calc(0.75rem * var(--talos-ui-scale, 1));
+    --text-xsm: calc(0.8125rem * var(--talos-ui-scale, 1));
+    --text-sm: calc(0.875rem * var(--talos-ui-scale, 1));
+    --text-md: calc(0.9375rem * var(--talos-ui-scale, 1));
+    --text-base: calc(1rem * var(--talos-ui-scale, 1));
+    --text-lg: calc(1.125rem * var(--talos-ui-scale, 1));
+    --text-xl: calc(1.25rem * var(--talos-ui-scale, 1));
+    --text-2xl: calc(1.5rem * var(--talos-ui-scale, 1));
+    --text-3xl: calc(1.875rem * var(--talos-ui-scale, 1));
+    --text-4xl: calc(2.25rem * var(--talos-ui-scale, 1));
+    --text-5xl: calc(3rem * var(--talos-ui-scale, 1));
+    --text-6xl: calc(3.75rem * var(--talos-ui-scale, 1));
+    --text-7xl: calc(4.5rem * var(--talos-ui-scale, 1));
+    --text-8xl: calc(6rem * var(--talos-ui-scale, 1));
+    --text-9xl: calc(8rem * var(--talos-ui-scale, 1));
+}
+
+/* The vendored shadcn button (provenance-pinned by
+   upstream/shadcn-vue-2.8.0-manifest.json — it must stay byte-identical) sizes
+   its `sm` variant with an arbitrary `text-[0.8rem]` utility, which would
+   ignore the global font scale. Editing a hashed upstream file to fix that is
+   the wrong trade; redefining the emitted class is not. Unlayered rules beat
+   Tailwind's @layer utilities, so this wins without !important. */
+.text-\[0\.8rem\] { font-size: calc(0.8rem * var(--talos-ui-scale, 1)); }
+
+:root {
+    --talos-ui-scale: 1;
+    --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
+    --talos-density-scale: 1;
+    --radius: 0rem;
+    /* Model Lab and future compact mobile surfaces consume only these semantic
+       layout values. Runtime identities replace them before first interaction. */
+    --talos-space-page: 1rem;
+    --talos-space-section: 1rem;
+    --talos-space-card: 0.75rem;
+    --talos-space-control: 0.75rem;
+    --talos-space-inline: 0.5rem;
+    --talos-icon-size: 1rem;
+    --talos-touch-target: 3rem;
+    --talos-radius-card: 0rem;
+    --talos-radius-control: 0rem;
+
+    --background: #f1f8fa;
+    --foreground: #111827;
+    --card: #f2f9fa;
+    --card-foreground: #111827;
+    --popover: #f2f9fa;
+    --popover-foreground: #111827;
+    --primary: #6ad4d4;
+    --primary-foreground: #111827;
+    --secondary: #e6fded;
+    --secondary-foreground: #111827;
+    --muted: #f4fafb;
+    --muted-foreground: #59606b;
+    --accent: #6ad4d4;
+    --accent-foreground: #111827;
+    --destructive: #7f1d1d;
+    --border: #536269;
+    --input: #30424a;
+    --ring: #000000;
+    --talos-success: #14532d;
+    --talos-warning: #713f12;
+    --talos-info: #1e3a8a;
+    --sidebar: #f3f9fb;
+    --sidebar-foreground: #111827;
+    --sidebar-primary: #6ad4d4;
+    --sidebar-primary-foreground: #111827;
+    --sidebar-accent: #6ad4d4;
+    --sidebar-accent-foreground: #111827;
+    --sidebar-border: #536269;
+    --sidebar-ring: #000000;
+}
+
+.dark {
+    --background: #0b0f11;
+    --foreground: #edf2f7;
+    --card: #0c1114;
+    --card-foreground: #edf2f7;
+    --popover: #0c1114;
+    --popover-foreground: #edf2f7;
+    --primary: #6ad4d4;
+    --primary-foreground: #111827;
+    --secondary: #193325;
+    --secondary-foreground: #edf2f7;
+    --muted: #0a0e11;
+    --muted-foreground: #a5a9ad;
+    --accent: #6ad4d4;
+    --accent-foreground: #111827;
+    --destructive: #fee2e2;
+    --border: #1b2b34;
+    --input: #41535a;
+    --ring: #6ad4d4;
+    --talos-success: #dcfce7;
+    --talos-warning: #fef3c7;
+    --talos-info: #dbeafe;
+    --sidebar: #0c1013;
+    --sidebar-foreground: #edf2f7;
+    --sidebar-primary: #6ad4d4;
+    --sidebar-primary-foreground: #111827;
+    --sidebar-accent: #6ad4d4;
+    --sidebar-accent-foreground: #111827;
+    --sidebar-border: #1b2b34;
+    --sidebar-ring: #6ad4d4;
+}
+
+/*
+ * Desktop parity token vocabulary. These `--talos-*` variables let ported desktop
+ * components (`bg-[var(--talos-panel)]`, `text-[var(--talos-muted)]`, …) render
+ * byte-for-byte identical to desktop. Values vendored VERBATIM from the desktop
+ * telemetry preset — provenance: control-plane/resources/css/app.css:1945-1987
+ * (theme id "telemetry"). `applyDesignTokens` stamps `talos-shell` +
+ * `data-theme-preset`/`data-theme-mode` on the root so this block is in scope.
+ */
+.talos-shell[data-theme-preset="telemetry"] {
+    --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: "JetBrains Mono", ui-monospace, monospace;
+    --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
+    --talos-accent: #6ad4d4;
+    --talos-accent-border: #4aa8a8;
+    --talos-accent-hover: #8ae0e0;
+    --talos-accent-soft: #0e2226;
+    --talos-accent-text: #04171a;
+    --talos-active: #0e2226;
+    --talos-background: #0b0f11;
+    --talos-border: #1f3238;
+    --talos-border-strong: #345056;
+    --talos-card: #10171a;
+    --talos-danger: #ef8589;
+    --talos-danger-border: #6f3035;
+    --talos-danger-soft: #2b1418;
+    --talos-header: #0c1214;
+    --talos-input: #2e474c;
+    --talos-muted: #7f9aa1;
+    --talos-panel: #121a1e;
+    --talos-panel-soft: #0d1416;
+    --talos-ring: #6ad4d4;
+    --talos-ring-soft: rgba(106, 212, 212, 0.20);
+    --talos-secondary: #142124;
+    --talos-sidebar: #0a0e10;
+    --talos-success: #63f08e;
+    --talos-success-border: #2d7042;
+    --talos-success-soft: #0d2a18;
+    --talos-text: #dcefef;
+    --talos-track: #1c2c31;
+    --talos-user: #d9f3f3;
+    --talos-user-text: #04171a;
+    --talos-warning: #e3b85c;
+    --talos-warning-border: #6c5124;
+    --talos-warning-soft: #2b2112;
+    --talos-surface-1: #10171a;
+    /* surface_elevated: not in the telemetry preset override; the desktop derives
+       it at runtime. Alias to the elevated card surface so ported components that
+       use --talos-window-bg (e.g. the tool-sheet) resolve. */
+    --talos-window-bg: var(--talos-card);
+}
+
+/*
+ * TALOS brand mark + wordmark. Vendored verbatim from the desktop —
+ * provenance: control-plane/resources/css/app.css:209-243. The logo mask asset
+ * is served locally at /talos/brand/logo-short.svg (mobile/public/...), a copy of
+ * control-plane/resources/images/logo-short.svg.
+ */
+.talos-orbitron-brand {
+    font-family: Orbitron, var(--talos-font-display), var(--talos-font-ui), ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0;
+    line-height: 1;
+}
+
+.talos-short-logo {
+    display: inline-flex;
+    width: 3rem;
+    height: 3rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    color: var(--talos-accent);
+    overflow: hidden;
+}
+
+.talos-short-logo-mark {
+    display: block;
+    width: 92%;
+    height: 92%;
+    background: currentColor;
+    mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
+    -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
+}
+
+/*
+ * ⛔ Il marchio della schermata nuova CRESCE col viewport — owner 2026-08-11:
+ * «è un logo troppo piccolo su tablet».
+ *
+ * Due cause, e questa è la seconda: la prima era la safe zone di Android
+ * rimasta dentro l'SVG (50px per lato, tolti nel generatore); questa è una
+ * misura fissa di 4,5rem, che su un telefono da 411 px di larghezza riempie e
+ * su un tablet da 914 sembra un francobollo accanto a un titolo enorme.
+ *
+ * `clamp` invece di una media query perché il salto non serve: sotto i ~655 px
+ * di viewport vince il minimo (il telefono resta identico a prima, 4,5rem), poi
+ * cresce, e a 8rem si ferma per non mangiarsi la domanda di benvenuto.
+ */
+.talos-short-logo-hero {
+    width: clamp(4.5rem, 11vw, 8rem);
+    height: clamp(4.5rem, 11vw, 8rem);
+}
+
+.talos-welcome-title {
+    margin-top: 1.5rem;
+    color: var(--talos-text);
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    line-height: var(--text-2xl--line-height);
+}
+
+[data-composer-expanded="true"] > .talos-welcome-title {
+    margin-top: 0.75rem;
+    font-size: var(--text-lg);
+    line-height: var(--text-lg--line-height);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+    body {
+        @apply bg-background text-foreground font-sans;
+        min-height: 100dvh;
+    }
+    :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+    }
+    /* Owner 2026-07-25: text selection uses the ACTIVE theme's accent (tinted so
+       the selected text stays readable on every preset). */
+    ::selection {
+        background: color-mix(in srgb, var(--talos-accent, #c08b3c) 32%, transparent);
+        color: var(--talos-text, inherit);
+    }
+    ::-moz-selection {
+        background: color-mix(in srgb, var(--talos-accent, #c08b3c) 32%, transparent);
+        color: var(--talos-text, inherit);
+    }
+}
+
+/* Una riga che si tiene premuta per SELEZIONARLA non deve anche selezionare il
+   proprio testo.
+   Visto sul OnePlus Pad 3 (2026-08-04): il tieni-premuto sulla stazione Ricerca
+   accendeva il modo selezione E le maniglie azzurre della selezione di testo
+   della WebView, con la barra Copia/Condividi sopra la nostra. Due selezioni
+   diverse, dallo stesso dito, nello stesso istante.
+   `-webkit-touch-callout` toglie anche il menu lungo-tocco dei link e delle
+   immagini, che sulla stessa riga sarebbe la terza. */
+.talos-holdable {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
+/* ⛔ LA LEVETTA STA QUI PERCHÉ ORA LA USANO IN DUE.
+
+   Nasceva scoped dentro TalosMobileSchedaAzione.vue, che è il posto giusto
+   finché un componente è l'unico a disegnarla. Il 2026-08-16 l'owner ha chiesto
+   una levetta anche per «Mantieni acceso», in Controllo del telefono — e uno
+   stile `scoped` non attraversa i componenti: la classe si sarebbe applicata da
+   una parte sola, con l'altra a mostrare un bottone nudo.
+
+   ⇒ Un comando che compare in due schermate non è un dettaglio di un
+   componente: è un pezzo del linguaggio dell'app, e vive con gli altri. I
+   colori restano quelli del theme engine — `--primary`, `--muted`, `--border` —
+   così cambiando tema cambia anche lei. */
+.talos-levetta {
+    inline-size: 2.9rem;
+    block-size: 1.7rem;
+    flex: none;
+    position: relative;
+    padding: 0;
+    border-radius: 99px;
+    background: var(--primary);
+    border: 1px solid var(--primary);
+    cursor: pointer;
+    transition: background .18s ease, border-color .18s ease;
+}
+.talos-levetta::after {
+    content: "";
+    position: absolute;
+    inset-block-start: 2px;
+    inset-inline-end: 2px;
+    inline-size: 1.25rem;
+    block-size: 1.25rem;
+    border-radius: 50%;
+    background: var(--primary-foreground);
+}
+.talos-levetta[aria-checked="false"] { background: var(--muted); border-color: var(--border); }
+.talos-levetta[aria-checked="false"]::after {
+    inset-inline-end: auto;
+    inset-inline-start: 2px;
+    background: var(--muted-foreground);
+}
+
+/* F1-T4 animation mandate: every interactive element gets a simple, engine-tuned
+   micro-interaction. Durations/easings come from the motion-v6 interaction CSS
+   vars published on the shell root (talosInteractionMotionStyleV6); the engine
+   zeroes them under prefers-reduced-motion. */
+.talos-pressable {
+    transition:
+        transform var(--talos-motion-duration-control, 160ms) var(--talos-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
+        background-color var(--talos-motion-duration-control, 160ms) var(--talos-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
+        opacity var(--talos-motion-duration-control, 160ms) var(--talos-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1));
+}
+.talos-pressable:active {
+    transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+    .talos-pressable,
+    .talos-pressable:active {
+        transition: none;
+        transform: none;
+    }
+}
+
+/* Owner 2026-07-24 (Claude-style): editorial serif for surface titles. System
+   serif stack — zero bundle cost, renders like Claude's "Chat"/"Impostazioni". */
+/* Owner 2026-07-25: "il font dei titoli dell'header più piccolo e coerente col
+   resto dei font size e family". Chrome titles (header, screen, tool sheet,
+   settings detail) now use the SAME family as the rest of the interface and a
+   size token from the same scale, so they grow and shrink with Font size
+   instead of standing apart in a serif at a fixed step above everything else.
+   `.talos-serif` stays for the branded onboarding wizard only. */
+.talos-title {
+    font-family: var(--talos-font-ui, ui-sans-serif, system-ui, sans-serif);
+    letter-spacing: 0.005em;
+}
+
+.talos-serif {
+    font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+    letter-spacing: 0.01em;
+}
+
+/* F2-T2: streaming reveal, engine-calm and reduced-motion safe.
+   Owner 2026-07-25: the three bouncing dots are gone while text is printing;
+   the caret is the typewriter activity indicator. Only freshly revealed inline
+   fragments animate, so settled text is never re-laid-out or re-animated. */
+.talos-trace-live {
+    /* The trace row's own liveness hint. Deliberately NOT `.talos-typing-pulse`:
+       that rule sets width/height/border-radius/background, and being unlayered
+       it overrides Tailwind utilities on whatever element carries it. Animating
+       opacity alone cannot reshape its host. */
+    animation: talosPulse 1.1s ease-in-out infinite;
+}
+.talos-typing-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--talos-accent, #c08b3c);
+    animation: talosPulse 1.1s ease-in-out infinite;
+}
+@keyframes talosPulse {
+    0%, 100% { opacity: 0.25; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1); }
+}
+
+.talos-stream-tail { white-space: pre-wrap; }
+.talos-stream-char {
+    display: inline;
+    animation: talosStreamInk var(--talos-motion-duration-control, 160ms)
+        var(--talos-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+@keyframes talosStreamInk {
+    /* Opacity is compositor-friendly. Animated blur repainted adjacent glyphs
+       and produced the owner's visible halo/overlap on Android WebView. */
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+/* This modifier deliberately follows the equal-specificity base rule. Fade
+   mode must win the cascade instead of accidentally replaying the ink effect. */
+.talos-stream-char--fade {
+    animation: talosStreamFade calc(var(--talos-motion-duration-control, 160ms) * 2.5) ease-out both;
+}
+@keyframes talosStreamFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+/* The retro-futuristic prompt: a solid accent block with a faint bloom. */
+.talos-stream-caret {
+    display: inline-block;
+    width: 0.52em;
+    height: 1.02em;
+    margin-left: 0.08em;
+    vertical-align: -0.16em;
+    border-radius: 1px;
+    background: var(--talos-accent, #c08b3c);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--talos-accent, #c08b3c) 55%, transparent);
+    animation: talosCaretBlink calc(var(--talos-motion-duration-control, 160ms) * 6.6) steps(1, end) infinite;
+}
+@keyframes talosCaretBlink {
+    0%, 55% { opacity: 1; }
+    56%, 100% { opacity: 0.12; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .talos-stream-char,
+    .talos-stream-char--fade {
+        animation: none;
+        opacity: 1;
+    }
+    .talos-trace-live,
+    .talos-typing-pulse {
+        animation: none;
+    }
+    .talos-typing-pulse { opacity: 0.7; }
+    .talos-stream-caret { animation: none; opacity: 0.85; }
+}
+
+/* F4-#24 (owner): loading-answer bubble — boot-logo styled line loader. The
+   faint track echoes the first-frame hexagon (stroke-opacity .18); the sweep
+   draws left→right and each node fills exactly when the line reaches it. */
+.talos-line-loader { display: block; }
+.talos-line-loader-track {
+    stroke: var(--talos-accent, #c08b3c);
+    stroke-opacity: 0.18;
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+.talos-line-loader-sweep {
+    stroke: var(--talos-accent, #c08b3c);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-dasharray: 88;
+    stroke-dashoffset: 88;
+    animation: talosLineSweep 1.6s ease-in-out infinite;
+}
+.talos-line-loader-node {
+    fill: transparent;
+    stroke: var(--talos-accent, #c08b3c);
+    stroke-width: 2;
+    animation: talosLineNodeFill 1.6s ease-in-out infinite;
+}
+/* Node fill timing matches the sweep reaching x=16/48/80 over the 88px run. */
+.talos-line-loader-node:nth-of-type(1) { animation-delay: 0s; }
+.talos-line-loader-node:nth-of-type(2) { animation-delay: 0.36s; }
+.talos-line-loader-node:nth-of-type(3) { animation-delay: 0.73s; }
+@keyframes talosLineSweep {
+    0% { stroke-dashoffset: 88; }
+    70%, 100% { stroke-dashoffset: 0; }
+}
+@keyframes talosLineNodeFill {
+    0%, 12% { fill: transparent; }
+    22%, 82% { fill: var(--talos-accent, #c08b3c); }
+    100% { fill: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .talos-line-loader-sweep { animation: none; stroke-dashoffset: 0; }
+    .talos-line-loader-node { animation: none; fill: var(--talos-accent, #c08b3c); opacity: 0.7; }
+}

@@ -1,0 +1,356 @@
+# La release: un APK firmato, con la prova di dove è nato.
+#
+# Si accende su un tag `v*`. Non su ogni push: una release è un atto, e gli atti
+# si chiedono esplicitamente.
+#
+#     git tag v0.1.0 && git push origin v0.1.0
+#
+# ## ⛔ Cosa serve PRIMA, e non lo può fare un workflow
+#
+# La **keystore**. La genera l'owner, si perde una volta sola, e senza quella
+# chiave nessun aggiornamento futuro può installarsi sopra: l'unica via sarebbe
+# disinstallare, cioè cancellare a una persona le sue chat e la sua libreria.
+#
+# Va nei GitHub Secrets del repository, mai nel repo:
+#
+#     TALOS_KEYSTORE_BASE64   la keystore, in base64
+#     TALOS_KEYSTORE_PASSWORD la password del contenitore
+#     TALOS_KEY_ALIAS         il nome della chiave dentro
+#     TALOS_KEY_PASSWORD      la password della chiave
+#
+# ⛔ Se mancano, il workflow **si ferma subito e lo dice**. Non produce un APK
+# non firmato: un artefatto non firmato dentro una release ha l'aria di essere
+# installabile, e non lo è — o peggio, lo è una volta sola e poi blocca ogni
+# aggiornamento.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+# ⛔ `attestations: write` è ciò che permette la firma di provenienza; `contents:
+# write` serve a creare la release. Nient'altro: un token che può più di quanto
+# serve è un token che un giorno farà più di quanto doveva.
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+  # ⛔ `artifact-metadata` e' un ambito NUOVO, generalmente disponibile dal
+  # 13 gennaio 2026, e `actions/attest` lo richiede. Verificato che sia una
+  # chiave valida PRIMA di scriverla: un permesso non riconosciuto non fa
+  # fallire un passo, rende invalido l'INTERO workflow — non parte niente, e
+  # l'errore parla di sintassi, non di permessi.
+  artifact-metadata: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      # ⛔ `submodules: recursive` — senza, `third_party/llama.cpp` arriva come
+      # cartella VUOTA e il build nativo muore in configurazione CMake. Il
+      # motore locale non e' dentro questo repository: e' un puntatore a un
+      # commit di ggml-org/llama.cpp, e un checkout non lo porta se non glielo
+      # chiedi.
+      #
+      # MISURATO il 2026-08-16: la seconda corsa di release e' morta cosi', al
+      # passo 16 su 19. `gates` non l'aveva mai scoperto perche' non compila il
+      # nativo — un cancello che non esegue una cosa non la sta provando.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: recursive
+
+      # ⛔ Il primo passo è il controllo che evita l'artefatto inutile. Se la
+      # chiave non c'è, meglio saperlo in dieci secondi che dopo otto minuti di
+      # build — e con un messaggio che dice COSA manca, non «signing failed».
+      - name: la chiave c'è?
+        env:
+          KEYSTORE: ${{ secrets.TALOS_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE" ]; then
+            echo "::error::manca il secret TALOS_KEYSTORE_BASE64. Senza keystore non si pubblica: un APK non firmato sembra installabile e blocca ogni aggiornamento futuro."
+            exit 1
+          fi
+          echo "keystore presente"
+
+      # La versione viene dal tag e da nient'altro: `v0.1.0` -> `0.1.0`.
+      # Il `versionCode` è il numero della corsa, che cresce in modo monotono
+      # per costruzione — è l'unica proprietà che Android chiede davvero.
+      - id: versione
+        name: la versione la decide il tag
+        run: |
+          nome="${GITHUB_REF_NAME#v}"
+          echo "nome=$nome" >> "$GITHUB_OUTPUT"
+          echo "codice=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "release $nome (versionCode ${GITHUB_RUN_NUMBER})"
+
+      - id: dove
+        name: dove sta l'app
+        run: |
+          if [ -f mobile/package.json ]; then dir=mobile; else dir=.; fi
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+      # ⛔⛔ IL CANCELLO SUL CHANGELOG — regola dell'owner, 2026-08-16.
+      #
+      #   «ad ogni release mi raccomando non creare del testo statico, o meglio
+      #    assieme al testo statico metti anche il changelog breve delle fix e
+      #    delle implementazioni nuove, regola da ora in poi»
+      #
+      # La v0.1.0 e' uscita con SOLE istruzioni: come si installa, come si
+      # verifica l'impronta, su quali due dispositivi. Tutto vero, tutto
+      # IDENTICO a ogni release futura, e non diceva a nessuno cosa fosse
+      # cambiato. L'unico riferimento al contenuto era il «Full Changelog»
+      # automatico, che manda a una lista di commit grezzi: e' il materiale da
+      # cui si scrive un changelog, non un changelog.
+      #
+      # ⛔ Il cancello sta QUI e non in una lista di cose da ricordare, perche'
+      # una regola che vive in una testa salta al primo turno lungo — stessa
+      # ragione del cancello sugli screenshot.
+      #
+      # ⛔⛔ E sta in TESTA, non accanto alla pubblicazione. Nella prima
+      # stesura l'avevo messo dopo il build: sarebbe fallito dopo ~12 minuti di
+      # NDK, gradle e firma, cioe' col tag gia' speso. Un cancello che costa
+      # dodici minuti per dire «manca una sezione» non e' un cancello, e' una
+      # punizione. Qui costa 2 secondi, e il tag si cancella e si rifa'.
+      - id: changelog
+        name: il changelog di questa versione, o non si parte nemmeno
+        run: |
+          if [ ! -f CHANGELOG.md ]; then
+            echo "::error::CHANGELOG.md non esiste: questa release non potrebbe dire cosa e' cambiato"
+            exit 1
+          fi
+          # La sezione va da `## <tag>` fino al `## ` successivo.
+          sezione=$(awk -v cercata="## ${GITHUB_REF_NAME}" '
+            $0 == cercata { dentro = 1; next }
+            dentro && /^## / { exit }
+            dentro { print }
+          ' CHANGELOG.md)
+          if [ -z "$(printf '%s' "$sezione" | tr -d '[:space:]')" ]; then
+            echo "::error::CHANGELOG.md non ha una sezione '## ${GITHUB_REF_NAME}'. Scrivila prima di taggare: cosa e' nuovo, cosa e' stato corretto."
+            exit 1
+          fi
+          {
+            echo "testo<<FINE_DEL_CHANGELOG"
+            printf '%s\n' "$sezione"
+            echo "FINE_DEL_CHANGELOG"
+          } >> "$GITHUB_OUTPUT"
+          echo "changelog di ${GITHUB_REF_NAME}: $(printf '%s' "$sezione" | wc -l) righe"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24.18.0'
+          cache: npm
+          cache-dependency-path: ${{ steps.dove.outputs.dir }}/package-lock.json
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+
+      # ⛔⛔ L'NDK ESATTO, INSTALLATO A MANO — e non è pedanteria.
+      #
+      # `app/build.gradle` fissa `ndkVersion = "27.0.12077973"` e dice perché:
+      # «il motore locale è compilato da questo NDK e una versione diversa è un
+      # compilatore diverso». Quel pin non si tocca per far contento un runner.
+      #
+      # MISURATO il 2026-08-16 leggendo il manifesto dell'immagine
+      # `ubuntu-latest`: ha 27.3.13750724, 28.2.13676358 e 29.0.14206865. La
+      # nostra NON c'è. ⇒ Senza questo passo il primo tag sarebbe morto dentro
+      # il build nativo, lasciando un tag pubblicato e nessuna release — e un
+      # tag, con le release immutabili accese, non si sposta.
+      #
+      # ⭐ Trovato PRIMA di taggare, guardando cosa ha davvero il runner invece
+      # di dare per scontato che «l'Android SDK c'è».
+      - name: l'NDK che il motore locale pretende
+        run: |
+          set -euo pipefail
+          atteso=$(grep -oE 'ndkVersion = "[^"]+"' \
+            "${{ steps.dove.outputs.dir }}/android/app/build.gradle" | cut -d'"' -f2)
+          echo "il build pretende NDK $atteso"
+          if [ -d "$ANDROID_HOME/ndk/$atteso" ]; then
+            echo "gia' presente"
+          else
+            # ⛔ `sdkmanager` NON si assume in `cmdline-tools/latest/`: il
+            # manifesto dell'immagine dichiara la VERSIONE dei command line
+            # tools, non la disposizione delle cartelle. Si cerca — e' la
+            # stessa regola per cui il cancello chiede al checkout dove sta
+            # l'app invece di scriverlo.
+            gestore=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -1)
+            if [ -z "$gestore" ]; then
+              echo "::error::sdkmanager non trovato sotto $ANDROID_HOME/cmdline-tools"
+              exit 1
+            fi
+            echo "sdkmanager: $gestore"
+            yes | "$gestore" --licenses > /dev/null 2>&1 || true
+            "$gestore" "ndk;$atteso"
+          fi
+          test -d "$ANDROID_HOME/ndk/$atteso" \
+            || { echo "::error::NDK $atteso non installabile su questo runner"; exit 1; }
+          echo "NDK $atteso pronto"
+
+      - run: npm ci
+        working-directory: ${{ steps.dove.outputs.dir }}
+
+      # ⛔ I cancelli girano ANCHE qui, e non è una ripetizione della CI: la CI
+      # prova il ramo, questo prova il commit che diventa un artefatto firmato
+      # e immutabile. Ciò che esce da qui non si corregge — si pubblica una
+      # versione nuova.
+      - name: typecheck
+        run: npm run typecheck
+        working-directory: ${{ steps.dove.outputs.dir }}
+
+      - name: test
+        run: npx vitest run
+        working-directory: ${{ steps.dove.outputs.dir }}
+
+      - name: build web
+        run: npm run build
+        working-directory: ${{ steps.dove.outputs.dir }}
+
+      - name: sync android
+        run: npx cap sync android
+        working-directory: ${{ steps.dove.outputs.dir }}
+
+      # La chiave esiste solo dentro il runner, e solo per il tempo del build.
+      # `keystore.properties` è già ciò che il build.gradle si aspetta.
+      - name: monta la chiave
+        working-directory: ${{ steps.dove.outputs.dir }}/android
+        env:
+          KEYSTORE: ${{ secrets.TALOS_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.TALOS_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.TALOS_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.TALOS_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "$KEYSTORE" | base64 -d > talos-release.jks
+          # ⛔⛔ IL PERCORSO DEVE ESSERE ASSOLUTO, e l'ho misurato.
+          #
+          # `app/build.gradle` fa `file(proprietaFirma['storeFile'])`, e dentro
+          # quel file `file()` risolve rispetto al MODULO `app/`, non alla
+          # cartella `android/` dove scriviamo la chiave. Con
+          # `storeFile=talos-release.jks` Gradle cerca in
+          # `android/app/talos-release.jks`, non lo trova, e `firmaDisponibile`
+          # resta FALSO.
+          #
+          # ⇒ Il build riesce lo stesso — «BUILD SUCCESSFUL» — e produce
+          # `app-release-UNSIGNED.apk`. Riprodotto in locale il 2026-08-16
+          # copiando esattamente questo layout: 48 secondi di build, esito
+          # verde, e nessun APK firmato.
+          #
+          # ⛔ E la lezione sta in come l'ho quasi mancato: la mia prova locale
+          # usava un percorso ASSOLUTO, quindi passava. Provare una cosa in una
+          # forma diversa da quella che andra' in produzione non la prova —
+          # dice solo che esiste una forma che funziona.
+          {
+            echo "storeFile=$PWD/talos-release.jks"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > keystore.properties
+
+      - name: costruisci l'APK firmato
+        working-directory: ${{ steps.dove.outputs.dir }}/android
+        run: |
+          ./gradlew assembleRelease --console=plain \
+            -PtalosVersionName=${{ steps.versione.outputs.nome }} \
+            -PtalosVersionCode=${{ steps.versione.outputs.codice }}
+
+      # ⛔ «Success» non basta: si guarda DENTRO l'APK. Un build che riesce con
+      # la firma disattivata produce un artefatto che sembra buono e non lo è —
+      # e lo si scopre sul telefono di qualcun altro.
+      - id: apk
+        name: ⛔ è davvero firmato, e con la versione giusta?
+        working-directory: ${{ steps.dove.outputs.dir }}/android
+        run: |
+          set -euo pipefail
+          # ⛔ `$GITHUB_WORKSPACE`, NON `../..`.
+          #
+          # Questo passo gira in `<dir>/android`. Con l'app in `mobile/` quel
+          # `../..` arrivava alla radice del checkout; con l'app ALLA RADICE —
+          # cioe' nel repository pubblicato, cioe' proprio dove la release si fa
+          # — `./android/../..` finisce FUORI dal workspace. L'APK sarebbe
+          # atterrato in un posto che l'attestazione e la pubblicazione non
+          # guardano nemmeno.
+          #
+          # ⇒ Lo stesso difetto del `cd` prima di `git push`: un percorso
+          # relativo che dipende da dove sei e' un percorso che un giorno
+          # cambia sotto i piedi. Si nomina la destinazione.
+          origine=app/build/outputs/apk/release/app-release.apk
+          nome="TALOS-${{ steps.versione.outputs.nome }}.apk"
+          cp "$origine" "$GITHUB_WORKSPACE/$nome"
+          cd "$GITHUB_WORKSPACE"
+
+          strumenti=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$strumenti/apksigner" verify --print-certs "$nome"
+
+          impronta=$(sha256sum "$nome" | cut -d' ' -f1)
+          echo "sha256=$impronta" >> "$GITHUB_OUTPUT"
+          echo "nome=$nome" >> "$GITHUB_OUTPUT"
+          echo "peso=$(du -m "$nome" | cut -f1) MB" >> "$GITHUB_OUTPUT"
+          echo "sha256: $impronta"
+
+      # La provenienza SLSA: lega l'artefatto al workflow, al commit e al
+      # repository, con un certificato effimero su un registro di trasparenza.
+      # La provenienza SLSA: lega l'artefatto al workflow, al commit e al
+      # repository, con un certificato effimero su un registro di trasparenza.
+      #
+      # ⛔ `actions/attest` e NON `attest-build-provenance`: quest'ultimo, dal
+      # v4, e' «simply a wrapper on top of actions/attest», e la sua stessa
+      # documentazione dice che «new implementations should use actions/attest
+      # instead». La nostra e' nuova.
+      #
+      # ⛔ E si e' scoperto solo CERCANDO. Il workflow di questa release e'
+      # stato scritto a memoria, ed e' costato cinque corse fallite su difetti
+      # che stavano tutti nel primo risultato di una query sola. Questa riga e'
+      # l'unica scritta dopo aver letto — e infatti ha portato con se' un
+      # permesso in piu' che nessuno avrebbe indovinato.
+      #
+      # Senza `predicate-type` genera provenienza SLSA, che e' cio' che serve.
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ steps.apk.outputs.nome }}
+
+      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
+        with:
+          files: ${{ steps.apk.outputs.nome }}
+          generate_release_notes: true
+          # ⛔ La riga che fa la differenza fra una firma e un ornamento: il
+          # comando per verificarla sta NELLA release, non in una pagina di
+          # documentazione che nessuno apre.
+          # ⛔ Il testo delle note è in INGLESE, come tutto ciò che si pubblica.
+          # La v0.1.0 era uscita in italiano: l'ho corretta a mano, ma la
+          # SORGENTE era rimasta italiana, quindi la release dopo sarebbe
+          # tornata italiana da sola. Correggere il sintomo e lasciare la causa
+          # è come non aver corretto niente.
+          body: |
+            ## What changed
+
+            ${{ steps.changelog.outputs.testo }}
+
+            ## Install
+
+            This APK does not come from the Play Store, so Android treats it as
+            an app from an unknown source and will ask you to confirm. That is
+            expected.
+
+            **arm64-v8a only, Android 8.0 or later.**
+
+            ## Check you got the right file
+
+            ```bash
+            sha256sum ${{ steps.apk.outputs.nome }}
+            # ${{ steps.apk.outputs.sha256 }}
+            ```
+
+            And that it really came from this source, built here:
+
+            ```bash
+            gh attestation verify ${{ steps.apk.outputs.nome }} --repo ${{ github.repository }}
+            ```
+
+            ## What it was tested on
+
+            Two devices: a OnePlus 13 and a OnePlus Pad 3. Two devices are a
+            small sample, and Android ROMs diverge a good deal on
+            accessibility, background execution and lock screen behaviour.

@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "description": "V7 explicit deletion allowlist: legacy template orphans that promotion may remove from the live tree",
+  "count": 0,
+  "paths": []
+}

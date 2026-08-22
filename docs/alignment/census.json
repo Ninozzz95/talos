@@ -1,0 +1,1664 @@
+{
+  "schema": "talos.alignment.census/1",
+  "generated_from": {
+    "desktop_ref": "origin/main",
+    "desktop_head": "dafb945",
+    "desktop_last_commit": "2026-07-30",
+    "mobile_head": "dc6fed4",
+    "common_base": "6270de3",
+    "desktop_commits_since_base": 50,
+    "mobile_commits_since_base": 354
+  },
+  "desktop": {
+    "api_routes": 180,
+    "areas": [
+      {
+        "area": "browser",
+        "endpoints": 24
+      },
+      {
+        "area": "runs",
+        "endpoints": 15
+      },
+      {
+        "area": "cookbook",
+        "endpoints": 10
+      },
+      {
+        "area": "sessions",
+        "endpoints": 10
+      },
+      {
+        "area": "model-profiles",
+        "endpoints": 9
+      },
+      {
+        "area": "google",
+        "endpoints": 7
+      },
+      {
+        "area": "skills",
+        "endpoints": 7
+      },
+      {
+        "area": "email",
+        "endpoints": 7
+      },
+      {
+        "area": "admin",
+        "endpoints": 7
+      },
+      {
+        "area": "tools",
+        "endpoints": 6
+      },
+      {
+        "area": "memories",
+        "endpoints": 6
+      },
+      {
+        "area": "model-routing-profiles",
+        "endpoints": 5
+      },
+      {
+        "area": "connectors",
+        "endpoints": 5
+      },
+      {
+        "area": "research-reports",
+        "endpoints": 5
+      },
+      {
+        "area": "research-jobs",
+        "endpoints": 5
+      },
+      {
+        "area": "capability-policies",
+        "endpoints": 4
+      },
+      {
+        "area": "model-comparisons",
+        "endpoints": 4
+      },
+      {
+        "area": "files",
+        "endpoints": 4
+      },
+      {
+        "area": "documents",
+        "endpoints": 4
+      },
+      {
+        "area": "artifacts",
+        "endpoints": 4
+      },
+      {
+        "area": "notes",
+        "endpoints": 4
+      },
+      {
+        "area": "file-authority",
+        "endpoints": 3
+      },
+      {
+        "area": "context-sets",
+        "endpoints": 3
+      },
+      {
+        "area": "benchmark-groups",
+        "endpoints": 3
+      },
+      {
+        "area": "calendar-drafts",
+        "endpoints": 3
+      },
+      {
+        "area": "web",
+        "endpoints": 2
+      },
+      {
+        "area": "settings",
+        "endpoints": 2
+      },
+      {
+        "area": "library",
+        "endpoints": 2
+      },
+      {
+        "area": "tasks",
+        "endpoints": 2
+      },
+      {
+        "area": "talos",
+        "endpoints": 2
+      },
+      {
+        "area": "agent-turns",
+        "endpoints": 1
+      },
+      {
+        "area": "prompts",
+        "endpoints": 1
+      },
+      {
+        "area": "capabilities",
+        "endpoints": 1
+      },
+      {
+        "area": "benchmarks",
+        "endpoints": 1
+      },
+      {
+        "area": "faults",
+        "endpoints": 1
+      },
+      {
+        "area": "traces",
+        "endpoints": 1
+      }
+    ],
+    "ui_groups": [
+      {
+        "group": "chat",
+        "components": 27
+      },
+      {
+        "group": "window",
+        "components": 25
+      },
+      {
+        "group": "ui",
+        "components": 20
+      },
+      {
+        "group": "settings",
+        "components": 18
+      },
+      {
+        "group": "workspace",
+        "components": 16
+      },
+      {
+        "group": "alert-dialog",
+        "components": 9
+      },
+      {
+        "group": "combobox",
+        "components": 9
+      },
+      {
+        "group": "dialog",
+        "components": 9
+      },
+      {
+        "group": "productivity",
+        "components": 8
+      },
+      {
+        "group": "drawer",
+        "components": 7
+      },
+      {
+        "group": "dropdown-menu",
+        "components": 7
+      },
+      {
+        "group": "models",
+        "components": 6
+      },
+      {
+        "group": "research",
+        "components": 6
+      },
+      {
+        "group": "admin",
+        "components": 5
+      },
+      {
+        "group": "cookbook",
+        "components": 5
+      },
+      {
+        "group": "runs",
+        "components": 5
+      },
+      {
+        "group": "benchmarks",
+        "components": 4
+      },
+      {
+        "group": "context",
+        "components": 4
+      },
+      {
+        "group": "library",
+        "components": 4
+      },
+      {
+        "group": "tooltip",
+        "components": 4
+      },
+      {
+        "group": "compare",
+        "components": 3
+      },
+      {
+        "group": "documents",
+        "components": 3
+      },
+      {
+        "group": "memory",
+        "components": 3
+      },
+      {
+        "group": "tools",
+        "components": 3
+      },
+      {
+        "group": "collapsible",
+        "components": 3
+      },
+      {
+        "group": "popover",
+        "components": 3
+      },
+      {
+        "group": "email",
+        "components": 2
+      },
+      {
+        "group": "sonner",
+        "components": 2
+      },
+      {
+        "group": "TalosChatPage.vue",
+        "components": 1
+      },
+      {
+        "group": "TalosShell.vue",
+        "components": 1
+      },
+      {
+        "group": "guide",
+        "components": 1
+      },
+      {
+        "group": "integrations",
+        "components": 1
+      },
+      {
+        "group": "motion",
+        "components": 1
+      },
+      {
+        "group": "shell",
+        "components": 1
+      },
+      {
+        "group": "button",
+        "components": 1
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/capability-policies",
+        "controller": "TalosCapabilityPolicyController",
+        "action": "index",
+        "area": "capability-policies"
+      },
+      {
+        "method": "PUT",
+        "path": "/capability-policies/{capability}",
+        "controller": "TalosCapabilityPolicyController",
+        "action": "update",
+        "area": "capability-policies"
+      },
+      {
+        "method": "POST",
+        "path": "/capability-policies/master-enable",
+        "controller": "TalosCapabilityPolicyController",
+        "action": "masterEnable",
+        "area": "capability-policies"
+      },
+      {
+        "method": "POST",
+        "path": "/capability-policies/revoke-all",
+        "controller": "TalosCapabilityPolicyController",
+        "action": "revokeAll",
+        "area": "capability-policies"
+      },
+      {
+        "method": "GET",
+        "path": "/browser/sessions",
+        "controller": "TalosBrowserController",
+        "action": "index",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/sessions",
+        "controller": "TalosBrowserController",
+        "action": "store",
+        "area": "browser"
+      },
+      {
+        "method": "GET",
+        "path": "/browser/sessions/{browserSession}",
+        "controller": "TalosBrowserController",
+        "action": "show",
+        "area": "browser"
+      },
+      {
+        "method": "DELETE",
+        "path": "/browser/sessions/{browserSession}",
+        "controller": "TalosBrowserController",
+        "action": "destroy",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/sessions/{browserSession}/navigate",
+        "controller": "TalosBrowserController",
+        "action": "navigate",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/sessions/{browserSession}/screenshot",
+        "controller": "TalosBrowserController",
+        "action": "screenshot",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/sessions/{browserSession}/snapshot",
+        "controller": "TalosBrowserController",
+        "action": "snapshot",
+        "area": "browser"
+      },
+      {
+        "method": "GET",
+        "path": "/browser/sessions/{browserSession}/interaction-targets",
+        "controller": "TalosBrowserHmiController",
+        "action": "targets",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/sessions/{browserSession}/interactions/pointer",
+        "controller": "TalosBrowserHmiController",
+        "action": "pointer",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/sessions/{browserSession}/interactions/ref",
+        "controller": "TalosBrowserHmiController",
+        "action": "ref",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/sessions/{browserSession}/interactions/scroll",
+        "controller": "TalosBrowserHmiController",
+        "action": "scroll",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/interactions/{browserHmiApproval}/confirm",
+        "controller": "TalosBrowserHmiController",
+        "action": "confirm",
+        "area": "browser"
+      },
+      {
+        "method": "GET",
+        "path": "/browser/sessions/{browserSession}/events",
+        "controller": "TalosBrowserController",
+        "action": "events",
+        "area": "browser"
+      },
+      {
+        "method": "GET",
+        "path": "/browser/artifacts/{browserArtifact}",
+        "controller": "TalosBrowserController",
+        "action": "artifact",
+        "area": "browser"
+      },
+      {
+        "method": "GET",
+        "path": "/browser/artifacts/{browserArtifact}/preview",
+        "controller": "TalosBrowserController",
+        "action": "preview",
+        "area": "browser"
+      },
+      {
+        "method": "GET",
+        "path": "/browser/tasks",
+        "controller": "TalosBrowserTaskController",
+        "action": "index",
+        "area": "browser"
+      },
+      {
+        "method": "GET",
+        "path": "/browser/tasks/{browserTask}",
+        "controller": "TalosBrowserTaskController",
+        "action": "show",
+        "area": "browser"
+      },
+      {
+        "method": "GET",
+        "path": "/browser/tasks/{browserTask}/events",
+        "controller": "TalosBrowserTaskController",
+        "action": "events",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/tasks/{browserTask}/takeover",
+        "controller": "TalosBrowserTaskController",
+        "action": "takeover",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/tasks/{browserTask}/takeover/renew",
+        "controller": "TalosBrowserTaskController",
+        "action": "renew",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/tasks/{browserTask}/takeover/return",
+        "controller": "TalosBrowserTaskController",
+        "action": "returnControl",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/tasks/{browserTask}/cancel",
+        "controller": "TalosBrowserTaskController",
+        "action": "cancel",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/tasks/{browserTask}/recover",
+        "controller": "TalosBrowserTaskController",
+        "action": "recover",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/browser/tasks/{browserTask}/fork",
+        "controller": "TalosBrowserTaskController",
+        "action": "fork",
+        "area": "browser"
+      },
+      {
+        "method": "POST",
+        "path": "/agent-turns/{toolTurn}/approvals/{toolCall}",
+        "controller": "TalosChatController",
+        "action": "decideToolApproval",
+        "area": "agent-turns"
+      },
+      {
+        "method": "POST",
+        "path": "/web/search",
+        "controller": "TalosWebToolController",
+        "action": "search",
+        "area": "web"
+      },
+      {
+        "method": "POST",
+        "path": "/web/fetch",
+        "controller": "TalosWebToolController",
+        "action": "fetch",
+        "area": "web"
+      },
+      {
+        "method": "GET",
+        "path": "/model-profiles",
+        "controller": "TalosModelProfileController",
+        "action": "index",
+        "area": "model-profiles"
+      },
+      {
+        "method": "POST",
+        "path": "/model-profiles",
+        "controller": "TalosModelProfileController",
+        "action": "store",
+        "area": "model-profiles"
+      },
+      {
+        "method": "POST",
+        "path": "/model-profiles/probe-draft",
+        "controller": "TalosModelProfileController",
+        "action": "probeDraft",
+        "area": "model-profiles"
+      },
+      {
+        "method": "POST",
+        "path": "/model-profiles/discover-draft",
+        "controller": "TalosModelProfileController",
+        "action": "discoverDraft",
+        "area": "model-profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/model-profiles/{profile}/models",
+        "controller": "TalosModelProfileController",
+        "action": "catalog",
+        "area": "model-profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/model-profiles/{profile}",
+        "controller": "TalosModelProfileController",
+        "action": "show",
+        "area": "model-profiles"
+      },
+      {
+        "method": "PATCH",
+        "path": "/model-profiles/{profile}",
+        "controller": "TalosModelProfileController",
+        "action": "update",
+        "area": "model-profiles"
+      },
+      {
+        "method": "DELETE",
+        "path": "/model-profiles/{profile}",
+        "controller": "TalosModelProfileController",
+        "action": "destroy",
+        "area": "model-profiles"
+      },
+      {
+        "method": "POST",
+        "path": "/model-profiles/{profile}/probe",
+        "controller": "TalosModelProfileController",
+        "action": "probe",
+        "area": "model-profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/model-routing-profiles",
+        "controller": "TalosModelRoutingProfileController",
+        "action": "index",
+        "area": "model-routing-profiles"
+      },
+      {
+        "method": "POST",
+        "path": "/model-routing-profiles",
+        "controller": "TalosModelRoutingProfileController",
+        "action": "store",
+        "area": "model-routing-profiles"
+      },
+      {
+        "method": "GET",
+        "path": "/model-routing-profiles/{routingProfile}",
+        "controller": "TalosModelRoutingProfileController",
+        "action": "show",
+        "area": "model-routing-profiles"
+      },
+      {
+        "method": "PATCH",
+        "path": "/model-routing-profiles/{routingProfile}",
+        "controller": "TalosModelRoutingProfileController",
+        "action": "update",
+        "area": "model-routing-profiles"
+      },
+      {
+        "method": "DELETE",
+        "path": "/model-routing-profiles/{routingProfile}",
+        "controller": "TalosModelRoutingProfileController",
+        "action": "destroy",
+        "area": "model-routing-profiles"
+      },
+      {
+        "method": "POST",
+        "path": "/model-comparisons",
+        "controller": "TalosModelComparisonController",
+        "action": "store",
+        "area": "model-comparisons"
+      },
+      {
+        "method": "GET",
+        "path": "/model-comparisons/{comparison}",
+        "controller": "TalosModelComparisonController",
+        "action": "show",
+        "area": "model-comparisons"
+      },
+      {
+        "method": "POST",
+        "path": "/model-comparisons/{comparison}/vote",
+        "controller": "TalosModelComparisonController",
+        "action": "vote",
+        "area": "model-comparisons"
+      },
+      {
+        "method": "POST",
+        "path": "/model-comparisons/{comparison}/benchmark",
+        "controller": "TalosModelComparisonController",
+        "action": "benchmark",
+        "area": "model-comparisons"
+      },
+      {
+        "method": "GET",
+        "path": "/settings",
+        "controller": "TalosSettingsController",
+        "action": "show",
+        "area": "settings"
+      },
+      {
+        "method": "PATCH",
+        "path": "/settings",
+        "controller": "TalosSettingsController",
+        "action": "update",
+        "area": "settings"
+      },
+      {
+        "method": "GET",
+        "path": "/cookbook/overview",
+        "controller": "TalosCookbookController",
+        "action": "overview",
+        "area": "cookbook"
+      },
+      {
+        "method": "POST",
+        "path": "/cookbook/hardware-scan",
+        "controller": "TalosCookbookController",
+        "action": "scan",
+        "area": "cookbook"
+      },
+      {
+        "method": "GET",
+        "path": "/cookbook/models",
+        "controller": "TalosCookbookController",
+        "action": "models",
+        "area": "cookbook"
+      },
+      {
+        "method": "POST",
+        "path": "/cookbook/models",
+        "controller": "TalosCookbookController",
+        "action": "storeModel",
+        "area": "cookbook"
+      },
+      {
+        "method": "POST",
+        "path": "/cookbook/download-preview",
+        "controller": "TalosCookbookController",
+        "action": "downloadPreview",
+        "area": "cookbook"
+      },
+      {
+        "method": "POST",
+        "path": "/cookbook/serve-preview",
+        "controller": "TalosCookbookController",
+        "action": "servePreview",
+        "area": "cookbook"
+      },
+      {
+        "method": "GET",
+        "path": "/cookbook/planning-context",
+        "controller": "TalosCookbookController",
+        "action": "planningContext",
+        "area": "cookbook"
+      },
+      {
+        "method": "GET",
+        "path": "/cookbook/dependencies",
+        "controller": "TalosCookbookController",
+        "action": "dependencies",
+        "area": "cookbook"
+      },
+      {
+        "method": "POST",
+        "path": "/cookbook/dependencies/preview",
+        "controller": "TalosCookbookController",
+        "action": "dependencyPreview",
+        "area": "cookbook"
+      },
+      {
+        "method": "GET",
+        "path": "/cookbook/policy",
+        "controller": "TalosCookbookController",
+        "action": "policy",
+        "area": "cookbook"
+      },
+      {
+        "method": "GET",
+        "path": "/google/accounts",
+        "controller": "TalosGoogleOAuthController",
+        "action": "accounts",
+        "area": "google"
+      },
+      {
+        "method": "POST",
+        "path": "/google/disconnect",
+        "controller": "TalosGoogleOAuthController",
+        "action": "disconnect",
+        "area": "google"
+      },
+      {
+        "method": "GET",
+        "path": "/google/drive/files",
+        "controller": "TalosGoogleDriveController",
+        "action": "files",
+        "area": "google"
+      },
+      {
+        "method": "POST",
+        "path": "/google/drive/import",
+        "controller": "TalosGoogleDriveController",
+        "action": "import",
+        "area": "google"
+      },
+      {
+        "method": "GET",
+        "path": "/google/calendar/calendars",
+        "controller": "TalosGoogleCalendarController",
+        "action": "calendars",
+        "area": "google"
+      },
+      {
+        "method": "POST",
+        "path": "/google/calendar/sync",
+        "controller": "TalosGoogleCalendarController",
+        "action": "sync",
+        "area": "google"
+      },
+      {
+        "method": "POST",
+        "path": "/google/calendar/drafts/{calendarDraft}/publish",
+        "controller": "TalosGoogleCalendarController",
+        "action": "publish",
+        "area": "google"
+      },
+      {
+        "method": "POST",
+        "path": "/prompts/enhance",
+        "controller": "TalosPromptEnhancementController",
+        "action": "store",
+        "area": "prompts"
+      },
+      {
+        "method": "GET",
+        "path": "/sessions",
+        "controller": "TalosSessionController",
+        "action": "index",
+        "area": "sessions"
+      },
+      {
+        "method": "POST",
+        "path": "/sessions",
+        "controller": "TalosSessionController",
+        "action": "store",
+        "area": "sessions"
+      },
+      {
+        "method": "GET",
+        "path": "/sessions/{session}",
+        "controller": "TalosSessionController",
+        "action": "show",
+        "area": "sessions"
+      },
+      {
+        "method": "PATCH",
+        "path": "/sessions/{session}",
+        "controller": "TalosSessionController",
+        "action": "update",
+        "area": "sessions"
+      },
+      {
+        "method": "DELETE",
+        "path": "/sessions/{session}",
+        "controller": "TalosSessionController",
+        "action": "destroy",
+        "area": "sessions"
+      },
+      {
+        "method": "GET",
+        "path": "/sessions/{session}/messages",
+        "controller": "TalosMessageController",
+        "action": "index",
+        "area": "sessions"
+      },
+      {
+        "method": "POST",
+        "path": "/sessions/{session}/messages",
+        "controller": "TalosMessageController",
+        "action": "store",
+        "area": "sessions"
+      },
+      {
+        "method": "GET",
+        "path": "/sessions/{session}/pending-tool-approvals",
+        "controller": "TalosChatController",
+        "action": "pendingToolApprovals",
+        "area": "sessions"
+      },
+      {
+        "method": "GET",
+        "path": "/files",
+        "controller": "TalosFileController",
+        "action": "index",
+        "area": "files"
+      },
+      {
+        "method": "GET",
+        "path": "/library",
+        "controller": "TalosLibraryController",
+        "action": "index",
+        "area": "library"
+      },
+      {
+        "method": "DELETE",
+        "path": "/library",
+        "controller": "TalosLibraryController",
+        "action": "destroyMany",
+        "area": "library"
+      },
+      {
+        "method": "GET",
+        "path": "/files/{file}",
+        "controller": "TalosFileController",
+        "action": "show",
+        "area": "files"
+      },
+      {
+        "method": "GET",
+        "path": "/file-authority/grants",
+        "controller": "TalosFileAuthorityController",
+        "action": "index",
+        "area": "file-authority"
+      },
+      {
+        "method": "POST",
+        "path": "/file-authority/grants",
+        "controller": "TalosFileAuthorityController",
+        "action": "store",
+        "area": "file-authority"
+      },
+      {
+        "method": "DELETE",
+        "path": "/file-authority/grants/{grant}",
+        "controller": "TalosFileAuthorityController",
+        "action": "destroy",
+        "area": "file-authority"
+      },
+      {
+        "method": "GET",
+        "path": "/context-sets",
+        "controller": "TalosContextSetController",
+        "action": "index",
+        "area": "context-sets"
+      },
+      {
+        "method": "POST",
+        "path": "/context-sets",
+        "controller": "TalosContextSetController",
+        "action": "store",
+        "area": "context-sets"
+      },
+      {
+        "method": "GET",
+        "path": "/context-sets/{contextSet}",
+        "controller": "TalosContextSetController",
+        "action": "show",
+        "area": "context-sets"
+      },
+      {
+        "method": "GET",
+        "path": "/runs",
+        "controller": "TalosRunController",
+        "action": "index",
+        "area": "runs"
+      },
+      {
+        "method": "POST",
+        "path": "/runs",
+        "controller": "TalosRunController",
+        "action": "store",
+        "area": "runs"
+      },
+      {
+        "method": "GET",
+        "path": "/runs/{run}",
+        "controller": "TalosRunController",
+        "action": "show",
+        "area": "runs"
+      },
+      {
+        "method": "PATCH",
+        "path": "/runs/{run}",
+        "controller": "TalosRunController",
+        "action": "update",
+        "area": "runs"
+      },
+      {
+        "method": "GET",
+        "path": "/runs/{run}/events",
+        "controller": "TalosRunController",
+        "action": "events",
+        "area": "runs"
+      },
+      {
+        "method": "POST",
+        "path": "/runs/{run}/events",
+        "controller": "TalosRunController",
+        "action": "storeEvents",
+        "area": "runs"
+      },
+      {
+        "method": "GET",
+        "path": "/runs/{run}/artifacts",
+        "controller": "TalosRunController",
+        "action": "artifacts",
+        "area": "runs"
+      },
+      {
+        "method": "POST",
+        "path": "/runs/{run}/artifacts",
+        "controller": "TalosRunController",
+        "action": "storeArtifact",
+        "area": "runs"
+      },
+      {
+        "method": "POST",
+        "path": "/runs/{run}/generated-artifacts",
+        "controller": "TalosGeneratedArtifactController",
+        "action": "store",
+        "area": "runs"
+      },
+      {
+        "method": "GET",
+        "path": "/runs/{run}/generated-artifacts/{generation}",
+        "controller": "TalosGeneratedArtifactController",
+        "action": "show",
+        "area": "runs"
+      },
+      {
+        "method": "POST",
+        "path": "/runs/{run}/generated-artifacts/{generation}/cancel",
+        "controller": "TalosGeneratedArtifactController",
+        "action": "cancel",
+        "area": "runs"
+      },
+      {
+        "method": "GET",
+        "path": "/runs/{run}/replay",
+        "controller": "TalosRunController",
+        "action": "replay",
+        "area": "runs"
+      },
+      {
+        "method": "GET",
+        "path": "/benchmark-groups",
+        "controller": "TalosBenchmarkGroupController",
+        "action": "index",
+        "area": "benchmark-groups"
+      },
+      {
+        "method": "GET",
+        "path": "/benchmark-groups/{benchmarkGroup}/export",
+        "controller": "TalosBenchmarkGroupController",
+        "action": "export",
+        "area": "benchmark-groups"
+      },
+      {
+        "method": "GET",
+        "path": "/benchmark-groups/{benchmarkGroup}",
+        "controller": "TalosBenchmarkGroupController",
+        "action": "show",
+        "area": "benchmark-groups"
+      },
+      {
+        "method": "GET",
+        "path": "/connectors",
+        "controller": "TalosConnectorController",
+        "action": "index",
+        "area": "connectors"
+      },
+      {
+        "method": "POST",
+        "path": "/connectors",
+        "controller": "TalosConnectorController",
+        "action": "store",
+        "area": "connectors"
+      },
+      {
+        "method": "GET",
+        "path": "/connectors/{connector}",
+        "controller": "TalosConnectorController",
+        "action": "show",
+        "area": "connectors"
+      },
+      {
+        "method": "PATCH",
+        "path": "/connectors/{connector}",
+        "controller": "TalosConnectorController",
+        "action": "update",
+        "area": "connectors"
+      },
+      {
+        "method": "DELETE",
+        "path": "/connectors/{connector}",
+        "controller": "TalosConnectorController",
+        "action": "destroy",
+        "area": "connectors"
+      },
+      {
+        "method": "GET",
+        "path": "/tools",
+        "controller": "TalosToolController",
+        "action": "index",
+        "area": "tools"
+      },
+      {
+        "method": "POST",
+        "path": "/tools",
+        "controller": "TalosToolController",
+        "action": "store",
+        "area": "tools"
+      },
+      {
+        "method": "GET",
+        "path": "/tools/planning-context",
+        "controller": "TalosToolController",
+        "action": "planningContext",
+        "area": "tools"
+      },
+      {
+        "method": "GET",
+        "path": "/tools/{tool}",
+        "controller": "TalosToolController",
+        "action": "show",
+        "area": "tools"
+      },
+      {
+        "method": "PATCH",
+        "path": "/tools/{tool}",
+        "controller": "TalosToolController",
+        "action": "update",
+        "area": "tools"
+      },
+      {
+        "method": "DELETE",
+        "path": "/tools/{tool}",
+        "controller": "TalosToolController",
+        "action": "destroy",
+        "area": "tools"
+      },
+      {
+        "method": "GET",
+        "path": "/memories",
+        "controller": "TalosMemoryController",
+        "action": "index",
+        "area": "memories"
+      },
+      {
+        "method": "POST",
+        "path": "/memories",
+        "controller": "TalosMemoryController",
+        "action": "store",
+        "area": "memories"
+      },
+      {
+        "method": "GET",
+        "path": "/memories/retrieval-context",
+        "controller": "TalosMemoryController",
+        "action": "retrievalContext",
+        "area": "memories"
+      },
+      {
+        "method": "GET",
+        "path": "/memories/{memory}",
+        "controller": "TalosMemoryController",
+        "action": "show",
+        "area": "memories"
+      },
+      {
+        "method": "PATCH",
+        "path": "/memories/{memory}",
+        "controller": "TalosMemoryController",
+        "action": "update",
+        "area": "memories"
+      },
+      {
+        "method": "DELETE",
+        "path": "/memories/{memory}",
+        "controller": "TalosMemoryController",
+        "action": "destroy",
+        "area": "memories"
+      },
+      {
+        "method": "GET",
+        "path": "/skills",
+        "controller": "TalosSkillController",
+        "action": "index",
+        "area": "skills"
+      },
+      {
+        "method": "POST",
+        "path": "/skills",
+        "controller": "TalosSkillController",
+        "action": "store",
+        "area": "skills"
+      },
+      {
+        "method": "GET",
+        "path": "/skills/planning-context",
+        "controller": "TalosSkillController",
+        "action": "planningContext",
+        "area": "skills"
+      },
+      {
+        "method": "GET",
+        "path": "/skills/{skill}",
+        "controller": "TalosSkillController",
+        "action": "show",
+        "area": "skills"
+      },
+      {
+        "method": "PATCH",
+        "path": "/skills/{skill}",
+        "controller": "TalosSkillController",
+        "action": "update",
+        "area": "skills"
+      },
+      {
+        "method": "DELETE",
+        "path": "/skills/{skill}",
+        "controller": "TalosSkillController",
+        "action": "destroy",
+        "area": "skills"
+      },
+      {
+        "method": "POST",
+        "path": "/skills/{skill}/evaluation",
+        "controller": "TalosSkillController",
+        "action": "evaluation",
+        "area": "skills"
+      },
+      {
+        "method": "GET",
+        "path": "/research-reports",
+        "controller": "TalosResearchReportController",
+        "action": "index",
+        "area": "research-reports"
+      },
+      {
+        "method": "POST",
+        "path": "/research-reports",
+        "controller": "TalosResearchReportController",
+        "action": "store",
+        "area": "research-reports"
+      },
+      {
+        "method": "GET",
+        "path": "/research-reports/{researchReport}/export",
+        "controller": "TalosResearchReportController",
+        "action": "export",
+        "area": "research-reports"
+      },
+      {
+        "method": "POST",
+        "path": "/research-reports/{researchReport}/follow-up-session",
+        "controller": "TalosResearchReportController",
+        "action": "followUpSession",
+        "area": "research-reports"
+      },
+      {
+        "method": "GET",
+        "path": "/research-reports/{researchReport}",
+        "controller": "TalosResearchReportController",
+        "action": "show",
+        "area": "research-reports"
+      },
+      {
+        "method": "POST",
+        "path": "/research-jobs",
+        "controller": "TalosResearchJobController",
+        "action": "store",
+        "area": "research-jobs"
+      },
+      {
+        "method": "GET",
+        "path": "/research-jobs/capability",
+        "controller": "TalosResearchJobController",
+        "action": "capability",
+        "area": "research-jobs"
+      },
+      {
+        "method": "GET",
+        "path": "/research-jobs/{job}",
+        "controller": "TalosResearchJobController",
+        "action": "show",
+        "area": "research-jobs"
+      },
+      {
+        "method": "POST",
+        "path": "/research-jobs/{job}/cancel",
+        "controller": "TalosResearchJobController",
+        "action": "cancel",
+        "area": "research-jobs"
+      },
+      {
+        "method": "POST",
+        "path": "/research-jobs/{job}/fixtures",
+        "controller": "TalosResearchJobController",
+        "action": "fixtures",
+        "area": "research-jobs"
+      },
+      {
+        "method": "GET",
+        "path": "/documents",
+        "controller": "TalosDocumentController",
+        "action": "index",
+        "area": "documents"
+      },
+      {
+        "method": "POST",
+        "path": "/documents",
+        "controller": "TalosDocumentController",
+        "action": "store",
+        "area": "documents"
+      },
+      {
+        "method": "GET",
+        "path": "/documents/{document}/export",
+        "controller": "TalosDocumentController",
+        "action": "export",
+        "area": "documents"
+      },
+      {
+        "method": "GET",
+        "path": "/documents/{document}",
+        "controller": "TalosDocumentController",
+        "action": "show",
+        "area": "documents"
+      },
+      {
+        "method": "GET",
+        "path": "/artifacts",
+        "controller": "TalosArtifactController",
+        "action": "index",
+        "area": "artifacts"
+      },
+      {
+        "method": "GET",
+        "path": "/artifacts/{artifact}/download",
+        "controller": "TalosArtifactController",
+        "action": "download",
+        "area": "artifacts"
+      },
+      {
+        "method": "GET",
+        "path": "/artifacts/{artifact}/preview",
+        "controller": "TalosArtifactController",
+        "action": "preview",
+        "area": "artifacts"
+      },
+      {
+        "method": "GET",
+        "path": "/artifacts/{artifact}",
+        "controller": "TalosArtifactController",
+        "action": "show",
+        "area": "artifacts"
+      },
+      {
+        "method": "GET",
+        "path": "/notes",
+        "controller": "TalosNoteController",
+        "action": "index",
+        "area": "notes"
+      },
+      {
+        "method": "POST",
+        "path": "/notes",
+        "controller": "TalosNoteController",
+        "action": "store",
+        "area": "notes"
+      },
+      {
+        "method": "GET",
+        "path": "/notes/retrieval-context",
+        "controller": "TalosNoteController",
+        "action": "retrievalContext",
+        "area": "notes"
+      },
+      {
+        "method": "GET",
+        "path": "/notes/{note}",
+        "controller": "TalosNoteController",
+        "action": "show",
+        "area": "notes"
+      },
+      {
+        "method": "GET",
+        "path": "/tasks",
+        "controller": "TalosTaskController",
+        "action": "index",
+        "area": "tasks"
+      },
+      {
+        "method": "POST",
+        "path": "/tasks",
+        "controller": "TalosTaskController",
+        "action": "store",
+        "area": "tasks"
+      },
+      {
+        "method": "GET",
+        "path": "/calendar-drafts",
+        "controller": "TalosCalendarDraftController",
+        "action": "index",
+        "area": "calendar-drafts"
+      },
+      {
+        "method": "POST",
+        "path": "/calendar-drafts",
+        "controller": "TalosCalendarDraftController",
+        "action": "store",
+        "area": "calendar-drafts"
+      },
+      {
+        "method": "POST",
+        "path": "/calendar-drafts/{calendarDraft}/confirm",
+        "controller": "TalosCalendarDraftController",
+        "action": "confirm",
+        "area": "calendar-drafts"
+      },
+      {
+        "method": "GET",
+        "path": "/email/connector-status",
+        "controller": "TalosEmailController",
+        "action": "connectorStatus",
+        "area": "email"
+      },
+      {
+        "method": "GET",
+        "path": "/email/messages",
+        "controller": "TalosEmailController",
+        "action": "messages",
+        "area": "email"
+      },
+      {
+        "method": "POST",
+        "path": "/email/messages",
+        "controller": "TalosEmailController",
+        "action": "storeMessage",
+        "area": "email"
+      },
+      {
+        "method": "GET",
+        "path": "/email/messages/context",
+        "controller": "TalosEmailController",
+        "action": "messageContext",
+        "area": "email"
+      },
+      {
+        "method": "GET",
+        "path": "/email/drafts",
+        "controller": "TalosEmailController",
+        "action": "drafts",
+        "area": "email"
+      },
+      {
+        "method": "POST",
+        "path": "/email/drafts",
+        "controller": "TalosEmailController",
+        "action": "storeDraft",
+        "area": "email"
+      },
+      {
+        "method": "POST",
+        "path": "/email/drafts/{emailDraft}/send",
+        "controller": "TalosEmailController",
+        "action": "send",
+        "area": "email"
+      },
+      {
+        "method": "POST",
+        "path": "/admin/shell/preview",
+        "controller": "TalosAdminShellController",
+        "action": "preview",
+        "area": "admin"
+      },
+      {
+        "method": "POST",
+        "path": "/admin/shell/execute",
+        "controller": "TalosAdminShellController",
+        "action": "execute",
+        "area": "admin"
+      },
+      {
+        "method": "GET",
+        "path": "/admin/audit-events",
+        "controller": "TalosAdminAuditEventController",
+        "action": "index",
+        "area": "admin"
+      },
+      {
+        "method": "GET",
+        "path": "/admin/backup/manifest",
+        "controller": "TalosAdminBackupController",
+        "action": "manifest",
+        "area": "admin"
+      },
+      {
+        "method": "POST",
+        "path": "/admin/backup/validate-restore",
+        "controller": "TalosAdminBackupController",
+        "action": "validateRestore",
+        "area": "admin"
+      },
+      {
+        "method": "POST",
+        "path": "/talos/chat",
+        "controller": "TalosChatController",
+        "action": "__invoke",
+        "area": "talos"
+      },
+      {
+        "method": "POST",
+        "path": "/talos/chat/stream",
+        "controller": "TalosChatStreamController",
+        "action": "__invoke",
+        "area": "talos"
+      },
+      {
+        "method": "GET",
+        "path": "/capabilities",
+        "controller": "TalosCapabilityController",
+        "action": "__invoke",
+        "area": "capabilities"
+      },
+      {
+        "method": "GET",
+        "path": "/sessions/{session}/export",
+        "controller": "TalosSessionExportController",
+        "action": "__invoke",
+        "area": "sessions"
+      },
+      {
+        "method": "GET",
+        "path": "/sessions/{session}/media",
+        "controller": "TalosSessionMediaController",
+        "action": "__invoke",
+        "area": "sessions"
+      },
+      {
+        "method": "GET",
+        "path": "/files/{file}/content",
+        "controller": "TalosFileContentController",
+        "action": "__invoke",
+        "area": "files"
+      },
+      {
+        "method": "POST",
+        "path": "/runs/{run}/recover",
+        "controller": "TalosRecoveryController",
+        "action": "__invoke",
+        "area": "runs"
+      },
+      {
+        "method": "POST",
+        "path": "/runs/{run}/cancel",
+        "controller": "TalosChatCancelController",
+        "action": "__invoke",
+        "area": "runs"
+      },
+      {
+        "method": "POST",
+        "path": "/runs/{run}/benchmark",
+        "controller": "TalosRunBenchmarkController",
+        "action": "__invoke",
+        "area": "runs"
+      },
+      {
+        "method": "GET",
+        "path": "/admin/doctor",
+        "controller": "TalosAdminDoctorController",
+        "action": "__invoke",
+        "area": "admin"
+      },
+      {
+        "method": "GET",
+        "path": "/admin/policy",
+        "controller": "TalosAdminPolicyController",
+        "action": "__invoke",
+        "area": "admin"
+      },
+      {
+        "method": "POST",
+        "path": "/files/ingest",
+        "controller": "FileIngestionController",
+        "action": "__invoke",
+        "area": "files"
+      },
+      {
+        "method": "POST",
+        "path": "/benchmarks/compare",
+        "controller": "BenchmarkComparisonController",
+        "action": "__invoke",
+        "area": "benchmarks"
+      },
+      {
+        "method": "POST",
+        "path": "/faults/explain",
+        "controller": "FaultExplainerController",
+        "action": "__invoke",
+        "area": "faults"
+      },
+      {
+        "method": "POST",
+        "path": "/traces/replay",
+        "controller": "TraceReplayController",
+        "action": "__invoke",
+        "area": "traces"
+      }
+    ]
+  },
+  "mobile": {
+    "stations": [
+      {
+        "name": "chat",
+        "path": "/",
+        "parent": null
+      },
+      {
+        "name": "chats",
+        "path": "/chats",
+        "parent": null
+      },
+      {
+        "name": "memory",
+        "path": "/memory",
+        "parent": null
+      },
+      {
+        "name": "tasks",
+        "path": "/tasks",
+        "parent": null
+      },
+      {
+        "name": "notes",
+        "path": "/notes",
+        "parent": null
+      },
+      {
+        "name": "doctor",
+        "path": "/doctor",
+        "parent": null
+      },
+      {
+        "name": "research",
+        "path": "/research",
+        "parent": null
+      },
+      {
+        "name": "research-new",
+        "path": "/research/new",
+        "parent": "research"
+      },
+      {
+        "name": "research-report",
+        "path": "/research/:id",
+        "parent": "research"
+      },
+      {
+        "name": "research-claim",
+        "path": "/research/:id/claim/:index",
+        "parent": "research-report"
+      },
+      {
+        "name": "research-source",
+        "path": "/research/:id/source/:index",
+        "parent": "research-report"
+      },
+      {
+        "name": "runs",
+        "path": "/runs",
+        "parent": null
+      },
+      {
+        "name": "context",
+        "path": "/context",
+        "parent": null
+      },
+      {
+        "name": "settings",
+        "path": "/settings",
+        "parent": null
+      }
+    ],
+    "tools": [
+      "document_create",
+      "generate_image",
+      "library_context_policy_update",
+      "library_export",
+      "library_file_origin",
+      "library_list",
+      "library_read",
+      "library_search",
+      "local_model_download",
+      "local_model_inspect",
+      "local_models_search",
+      "local_models_status",
+      "memory_search",
+      "memory_write",
+      "notes_list",
+      "research_list",
+      "tasks_list",
+      "time_now",
+      "web_read",
+      "web_search"
+    ],
+    "components": 123,
+    "screens": 14,
+    "stores": 9
+  }
+}

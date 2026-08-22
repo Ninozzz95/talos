@@ -1,0 +1,164 @@
+{
+  "schema": "talos.welcome/1",
+  "locale": "en",
+  "dayPeriods": {
+    "morning": {
+      "condition": { "from": "00:00", "before": "12:00" },
+      "titles": [
+        "Good morning. What shall we build?",
+        "Morning. What deserves a closer look?",
+        "Ready to turn an idea into a plan?",
+        "What should we make progress on today?",
+        "Where would you like to begin?",
+        "What can TALOS help you clarify this morning?",
+        "Which outcome should we work toward?",
+        "What question should we investigate first?",
+        "Ready to shape today's next step?",
+        "What would make this morning productive?"
+      ]
+    },
+    "afternoon": {
+      "condition": { "from": "12:00", "before": "18:00" },
+      "titles": [
+        "Good afternoon. What shall we tackle next?",
+        "What needs your attention this afternoon?",
+        "Ready to move an idea forward?",
+        "Which problem should we unpack together?",
+        "What result are we aiming for now?",
+        "Where can we create the most momentum?",
+        "What should we compare, test, or improve?",
+        "Which decision needs stronger evidence?",
+        "What would you like to finish today?",
+        "How can TALOS help with the next step?"
+      ]
+    },
+    "evening": {
+      "condition": { "from": "18:00", "before": "21:00" },
+      "titles": [
+        "Good evening. What shall we work through?",
+        "What would you like to resolve this evening?",
+        "Ready to bring today's ideas together?",
+        "Which loose end should we close?",
+        "What deserves one more thoughtful pass?",
+        "Where should we focus before the day ends?",
+        "What can we simplify or strengthen?",
+        "Which plan should we refine together?",
+        "What insight are we looking for tonight?",
+        "Ready to make the next move clear?"
+      ]
+    },
+    "night": {
+      "condition": { "from": "21:00", "before": "24:00" },
+      "titles": [
+        "Working late? What can I help you finish?",
+        "What should we make clearer tonight?",
+        "Ready for a focused late-night session?",
+        "Which idea is worth exploring now?",
+        "What can we quietly move forward?",
+        "Where do you need a second perspective?",
+        "What should we solve before signing off?",
+        "Which detail needs a closer look?",
+        "What would make tonight's work count?",
+        "Ready to turn this thought into action?"
+      ]
+    }
+  },
+  "specialDates": {
+    "new_year_day": {
+      "condition": { "month": 1, "day": 1 },
+      "titles": [
+        "Happy New Year. What shall we begin?",
+        "A new year, a clear first step. What is it?",
+        "What will we build first this year?",
+        "Ready to turn a fresh start into progress?",
+        "Which goal deserves the opening move?",
+        "What idea should lead the year?",
+        "Where should this new chapter begin?",
+        "What would make this year start well?",
+        "Ready to set the first plan in motion?",
+        "What possibility should we explore first?"
+      ],
+      "easterEgg": "party-popper"
+    },
+    "valentines_day": {
+      "condition": { "month": 2, "day": 14 },
+      "titles": [
+        "A thoughtful day for a thoughtful idea. What is yours?",
+        "What would you like to create with care?",
+        "Which idea deserves a little extra attention?",
+        "Ready to give a good plan some heart?",
+        "What connection should we strengthen today?",
+        "What can we make more useful for someone?",
+        "Which message should we shape with care?",
+        "What meaningful thing shall we work on?",
+        "Where can a thoughtful detail make a difference?",
+        "What would you love to make progress on?"
+      ],
+      "easterEgg": "heart"
+    },
+    "halloween": {
+      "condition": { "month": 10, "day": 31 },
+      "titles": [
+        "A curious night for a curious problem. What is it?",
+        "What mystery should we investigate?",
+        "Ready to unmask a tricky problem?",
+        "Which strange result needs an explanation?",
+        "What should we bring out of the shadows?",
+        "Which bug is haunting the plan?",
+        "Ready to test what is hiding in the details?",
+        "What puzzle should we untangle tonight?",
+        "Which assumption deserves a friendly scare?",
+        "What should we make less mysterious?"
+      ],
+      "easterEgg": "ghost"
+    },
+    "christmas_eve": {
+      "condition": { "month": 12, "day": 24 },
+      "titles": [
+        "Christmas Eve is here. What shall we wrap up?",
+        "What would make tonight feel complete?",
+        "Ready to finish one thoughtful thing?",
+        "Which loose end should we tie with care?",
+        "What can we prepare for tomorrow?",
+        "What idea deserves a quiet final pass?",
+        "Which plan should we put in good order?",
+        "What can we make a little brighter tonight?",
+        "Ready to bring this task safely home?",
+        "What would you like to complete before the pause?"
+      ],
+      "easterEgg": "snowflake"
+    },
+    "christmas_day": {
+      "condition": { "month": 12, "day": 25 },
+      "titles": [
+        "Merry Christmas. What would you like to create?",
+        "What thoughtful idea shall we unwrap?",
+        "Ready to make something useful today?",
+        "Which project could use a little warmth?",
+        "What would you like to share or shape?",
+        "What meaningful task shall we take on?",
+        "Where can we add a thoughtful finishing touch?",
+        "What idea deserves time today?",
+        "Ready to turn a spark into something real?",
+        "What would make today's work worthwhile?"
+      ],
+      "easterEgg": "gift"
+    },
+    "new_year_eve": {
+      "condition": { "month": 12, "day": 31 },
+      "titles": [
+        "One last idea before midnight. What is it?",
+        "What should we finish before the year turns?",
+        "Ready to close the year with a clear result?",
+        "Which plan deserves a final pass?",
+        "What should we carry confidently into next year?",
+        "Which lesson should become the next move?",
+        "What can we wrap up before the countdown?",
+        "Ready to turn reflection into direction?",
+        "What deserves one final thoughtful look?",
+        "What first step should tomorrow inherit?"
+      ],
+      "easterEgg": "clock"
+    }
+  }
+}

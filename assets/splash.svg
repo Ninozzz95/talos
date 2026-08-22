@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2732" height="2732" viewBox="0 0 2732 2732">
+    <defs>
+        <linearGradient id="talos-splash-bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#0b1020"/>
+            <stop offset="1" stop-color="#141a2e"/>
+        </linearGradient>
+    </defs>
+    <rect width="2732" height="2732" fill="url(#talos-splash-bg)"/>
+    <g fill="none" stroke="#7dd3fc" stroke-width="56" stroke-linecap="round">
+        <path d="M 1086 1166 H 1646"/>
+        <path d="M 1366 1166 V 1626"/>
+        <path d="M 1170 1626 H 1562"/>
+    </g>
+    <circle cx="1366" cy="1366" r="470" fill="none" stroke="#38bdf8" stroke-width="40"/>
+</svg>

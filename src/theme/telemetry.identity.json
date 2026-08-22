@@ -1,0 +1,100 @@
+{
+    "schema_version": 1,
+    "id": "telemetry",
+    "semantic_palette": {
+        "light": {
+            "background": "#f1f8fa",
+            "surface": "#f2f9fa",
+            "surface_muted": "#f4fafb",
+            "surface_elevated": "#f3f9fb",
+            "text": "#111827",
+            "text_muted": "#59606b",
+            "border": "#536269",
+            "border_strong": "#30424a",
+            "accent": "#6ad4d4",
+            "accent_text": "#111827",
+            "secondary": "#e6fded",
+            "success": "#14532d",
+            "warning": "#713f12",
+            "danger": "#7f1d1d",
+            "info": "#1e3a8a",
+            "focus": "#000000"
+        },
+        "dark": {
+            "background": "#0b0f11",
+            "surface": "#0c1114",
+            "surface_muted": "#0a0e11",
+            "surface_elevated": "#0c1013",
+            "text": "#edf2f7",
+            "text_muted": "#a5a9ad",
+            "border": "#1b2b34",
+            "border_strong": "#41535a",
+            "accent": "#6ad4d4",
+            "accent_text": "#111827",
+            "secondary": "#193325",
+            "success": "#dcfce7",
+            "warning": "#fef3c7",
+            "danger": "#fee2e2",
+            "info": "#dbeafe",
+            "focus": "#6ad4d4"
+        }
+    },
+    "typography": {
+        "ui": {
+            "family": "Instrument Sans",
+            "fallback_families": [
+                "ui-sans-serif",
+                "system-ui",
+                "sans-serif"
+            ],
+            "provenance": "local"
+        },
+        "display": {
+            "family": "Instrument Sans",
+            "fallback_families": [
+                "ui-sans-serif",
+                "system-ui",
+                "sans-serif"
+            ],
+            "provenance": "local"
+        },
+        "mono": {
+            "family": "JetBrains Mono",
+            "fallback_families": [
+                "ui-monospace",
+                "monospace"
+            ],
+            "provenance": "local"
+        },
+        "fallback_metadata": {
+            "strategy": "ordered",
+            "system_ui": "ui-sans-serif, system-ui, sans-serif",
+            "system_mono": "ui-monospace, monospace"
+        }
+    },
+    "density": "comfortable",
+    "radius": "sharp",
+    "assets": {
+        "poster": {
+            "id": "telemetry-poster",
+            "path": "/talos/backgrounds/telemetry-poster.webp",
+            "provenance": "local"
+        }
+    },
+    "motion_intents": {
+        "ambient": "telemetry.ambient",
+        "surface_enter": "telemetry.surface-enter",
+        "surface_exit": "telemetry.surface-exit",
+        "attention": "telemetry.attention",
+        "confirmation": "telemetry.confirmation"
+    },
+    "accessibility": {
+        "defaults": {
+            "reduced_motion": "respect",
+            "min_text_contrast_ratio": 4.5,
+            "min_non_text_contrast_ratio": 3,
+            "focus_indicator": "visible",
+            "status_communication": "text-and-color"
+        }
+    }
+}

@@ -1,0 +1,114 @@
+[data-talos-motion-intent] {
+    backface-visibility: hidden;
+    transform-origin: var(--talos-v6-motion-origin, center);
+    will-change: transform, opacity;
+}
+
+@keyframes talos-composer-layout-expand {
+    from {
+        transform: translate3d(0, var(--talos-composer-layout-shift, 0px), 0);
+    }
+    to {
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes talos-composer-layout-collapse {
+    from {
+        transform: translate3d(0, var(--talos-composer-layout-shift, 0px), 0);
+    }
+    to {
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+/*
+ * A tab arrives from the side it came from.
+ *
+ * `--talos-tab-direction` is 1 going forward through the sections and -1 going
+ * back, set by the shared strip. Without it, swiping left and swiping right
+ * animated identically — which reads as no direction at all once the movement
+ * is big enough to notice. The distance is still the engine's, so the interface
+ * motion preferences and reduced-motion keep their say.
+ */
+@keyframes talos-settings-tab-change {
+    from {
+        opacity: var(--talos-motion-tab-change-opacity, 1);
+        transform: translate3d(
+            calc(var(--talos-motion-tab-change-x, 0px) * var(--talos-tab-direction, 1)),
+            0,
+            0
+        );
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+/**
+ * Le voci di un ventaglio SALGONO, non compaiono.
+ *
+ * L'intento `menu-open` era dichiarato dal motore da sempre e non aveva ancora
+ * un movimento: la prima superficie che lo usa e' il FAB a ventaglio della
+ * sidebar. La distanza e' piccola di proposito — una colonna che arriva da
+ * lontano si legge come un pannello, una che si stacca di poco si legge come un
+ * gesto.
+ *
+ * Durata e curva restano quelle del motore (`surface-enter`), quindi le
+ * preferenze di movimento dell'utente continuano ad avere l'ultima parola, e
+ * `prefers-reduced-motion` e' gia' gestito una volta sola in fondo a questo
+ * file: non va riscritto da nessun componente.
+ */
+@keyframes talos-surface-rise {
+    from {
+        opacity: 0;
+        transform: translate3d(0, var(--talos-motion-surface-rise, 8px), 0) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+}
+
+[data-talos-motion-intent="menu-open"] {
+    animation: talos-surface-rise
+        var(--talos-motion-duration-surface-enter, 0ms)
+        /* Il motore chiama COSI' la curva di `menu-open`: verificato in
+           `interaction/style.ts`. Col nome sbagliato sarebbe sempre caduta
+           su `linear`, e il movimento non avrebbe seguito le preferenze. */
+        var(--talos-motion-ease, linear)
+        both;
+}
+
+[data-talos-motion-intent="composer-expand"] {
+    animation: talos-composer-layout-expand
+        var(--talos-motion-duration-composer-expand, 0ms)
+        var(--talos-motion-ease-composer-expand, linear)
+        both;
+}
+
+[data-talos-motion-intent="composer-collapse"] {
+    animation: talos-composer-layout-collapse
+        var(--talos-motion-duration-composer-collapse, 0ms)
+        var(--talos-motion-ease-composer-collapse, linear)
+        both;
+}
+
+[data-talos-motion-intent="tab-change"],
+.talos-motion-tab-panel[data-state="active"] {
+    animation: talos-settings-tab-change
+        var(--talos-motion-duration-tab-change, 0ms)
+        var(--talos-motion-ease-tab-change, linear)
+        both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-talos-motion-intent],
+    .talos-motion-tab-panel[data-state="active"] {
+        animation: none !important;
+        transition: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+    }
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "type": "file",
+    "path": "Qwen2.5-32B-Instruct-Q4_K_M.gguf",
+    "size": 19851336576,
+    "lfs": {
+      "oid": "2e5f6daea180dbc59f65a40641e94d3973b5dbaa32b3c0acf54647fa874e519e",
+      "size": 19851336576
+    },
+    "securityFileStatus": { "status": "safe" }
+  }
+]

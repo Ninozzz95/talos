@@ -1,0 +1,19 @@
+{
+    "schema_version": 1,
+    "first_release": {
+        "no_previous_release": true,
+        "track": "internal",
+        "emergency_path": "forward_fix_higher_version_code"
+    },
+    "staged_update": {
+        "rollout": "staged",
+        "halt_on_failed_health_gate": true,
+        "updated_users": "require_forward_fix"
+    },
+    "full_release_halt": {
+        "requires_eligible_previous_release": true
+    },
+    "local_debug_restore": {
+        "production": false
+    }
+}

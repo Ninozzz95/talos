@@ -1,0 +1,13 @@
+{
+    "name": "@talos-mobile/design-tokens",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "TALOS Mobile shared theme identity tokens. Platform-neutral contract only; desktop Canvas/DOM renderer fields are rejected. Zero runtime dependencies.",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "test": "node --test tests/design-tokens.test.ts"
+    }
+}

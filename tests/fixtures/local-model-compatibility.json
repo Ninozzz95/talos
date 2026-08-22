@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "maxConcurrency": 1,
+  "target": {
+    "packageId": "ai.talos.dev",
+    "nativeRelativePath": "talos-compat/talos-compat.gguf",
+    "uiRelativeRoot": "models/__talos_compat__"
+  },
+  "cases": [
+    {
+      "id": "C1",
+      "repository": "unsloth/SmolLM2-360M-Instruct-GGUF",
+      "revision": "391ed11137586e383b1be0fab9acf01d282c2e11",
+      "file": "SmolLM2-360M-Instruct-Q5_K_M.gguf",
+      "bytes": 289944160,
+      "sha256": "0d3040f47b83cd279fc653877059829cbd6e17f972f82a03f686f7d5f3834440",
+      "family": "llama",
+      "license": "Apache-2.0",
+      "gated": false,
+      "prompt": "Compatibility test C1. Reply with one short English sentence containing TALOS. Do not repeat context labels or memory entries."
+    },
+    {
+      "id": "C2",
+      "repository": "Qwen/Qwen3-0.6B-GGUF",
+      "revision": "23749fefcc72300e3a2ad315e1317431b06b590a",
+      "file": "Qwen3-0.6B-Q8_0.gguf",
+      "bytes": 639446688,
+      "sha256": "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
+      "family": "qwen3",
+      "license": "Apache-2.0",
+      "gated": false,
+      "prompt": "Test compatibilità C2. Rispondi con una frase breve in italiano che contenga TALOS."
+    },
+    {
+      "id": "C3",
+      "repository": "LiquidAI/LFM2-350M-GGUF",
+      "revision": "8fdc9d526b7ed346b19257551b05816c7912ecc2",
+      "file": "LFM2-350M-Q4_K_M.gguf",
+      "bytes": 229309376,
+      "sha256": "a4d000c7064bd3b2e42c6845836286a899a4e79cf1791da1a6797b58d575957d",
+      "family": "lfm2",
+      "license": "LFM1.0",
+      "gated": false,
+      "prompt": "Compatibility test C3. Reply with exactly: TALOS is ready."
+    },
+    {
+      "id": "C4",
+      "repository": "ibm-granite/granite-4.0-350m-GGUF",
+      "revision": "b8208a86a58427e1739265318028eb5895b74bf2",
+      "file": "granite-4.0-350m-Q4_K_M.gguf",
+      "bytes": 236985760,
+      "sha256": "771c588a49607f274a2bba3185733607ebe6f74b996ab90e2d6bee0d98bcec52",
+      "family": "granitehybrid",
+      "license": "Apache-2.0",
+      "gated": false,
+      "prompt": "Test compatibilità C4. Rispondi con una frase breve in italiano che contenga TALOS."
+    },
+    {
+      "id": "C5",
+      "repository": "microsoft/Phi-3-mini-4k-instruct-gguf",
+      "revision": "a64113399c2f6b8ad3e11c394733a2ddadaa7f33",
+      "file": "Phi-3-mini-4k-instruct-q4.gguf",
+      "bytes": 2393231072,
+      "sha256": "8a83c7fb9049a9b2e92266fa7ad04933bb53aa1e85136b7b30f1b8000ff2edef",
+      "family": "phi3",
+      "license": "MIT",
+      "gated": false,
+      "prompt": "Compatibility test C5. Reply with exactly: TALOS is ready."
+    },
+    {
+      "id": "C6",
+      "repository": "bartowski/Llama-3.2-1B-Instruct-GGUF",
+      "revision": "067b946cf014b7c697f3654f621d577a3e3afd1c",
+      "file": "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+      "bytes": 807694464,
+      "sha256": "6f85a640a97cf2bf5b8e764087b1e83da0fdb51d7c9fab7d0fece9385611df83",
+      "family": "llama",
+      "license": "Llama-3.2",
+      "gated": false,
+      "prompt": "Test compatibilità C6. Rispondi con una frase breve in italiano che contenga TALOS."
+    },
+    {
+      "id": "C7",
+      "repository": "google/gemma-3-1b-it-qat-q4_0-gguf",
+      "revision": "d1be121d36172a4b0b964657e2ee859d61138593",
+      "file": "gemma-3-1b-it-q4_0.gguf",
+      "bytes": 1003541152,
+      "sha256": "95e5b8d891cd6a794f66c2a6fb59a41e9562b4660560b854274eceffb628b22a",
+      "family": "gemma3",
+      "license": "Gemma",
+      "gated": true,
+      "prompt": "Test compatibilità C7. Rispondi con una frase breve in italiano che contenga TALOS."
+    }
+  ]
+}
