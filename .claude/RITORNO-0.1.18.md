@@ -1060,13 +1060,84 @@ Blocco 1 — la somma byte ricalcolata da un percorso di codice diverso
 Suite JVM intera verde, `npm run typecheck` + `npx vitest run` (tocca il
 nativo, si lancia comunque) verdi.
 
-### 15.5 Blocco 3 — non ancora iniziato
+### 15.5 Blocco 3 — fatto (3a attivazione, 3b orchestratore TS, 3c UI)
 
-L'attivazione atomica (rename di cartella dalla cache al layout `moss/`
-che il runtime già legge), la pulizia della versione vecchia dopo il
-rilascio del lease, il plugin Capacitor che lo espone, il
-bottone/avanzamento lato TS nelle impostazioni voce, e la prova sul
-dispositivo reale di corrotto/parziale/aggiornamento — il cancello
-d'uscita del blueprint per questa fase. Blocco a sé, per lo stesso
-motivo del Blocco 1 e del Blocco 2: tocca dati veri dell'utente
-(i file del motore voce), e va scritto e provato senza fretta.
+`TalosVoiceModelActivation.kt` (stage/promote/cleanup/recover, rename
+atomico + fsync sulla cartella genitore), `TalosNeuralVoicePlugin`
+esteso con `installManifest`/`activateModel`/`recoverModelInstall` +
+`load()` che recupera un'attivazione a metà senza bloccare il thread
+condiviso dei plugin, `voiceModelInstall.ts` (orchestratore che osserva
+`talosModelTransfers.items` invece del canale one-shot già occupato) e
+il bottone/avanzamento in `TalosMobileVoiceSettings.vue`. Commit
+`248ef84d`, `94ad4331`, `8efda3fc`.
+
+### 15.6 Il bug vero del primo giro sul dispositivo — 22/8, trovato e chiuso
+
+La prima prova end-to-end reale (Pad, `moss/` cancellato con backup
+verificato, download vero) si è bloccata: la UI restava su «0%
+scaricato» per ~2 minuti, poi (scoperto solo interrogando il DOM via
+CDP, lo screenshot era stantio) risultava `hasError:true`. Lo stato
+nativo (`TalosModelTransfer.status()`, non lo store reattivo) diceva
+`failure:"unreachable"`, `haveBytes:0` — zero byte reali, nonostante i
+`.part` fossero già alla dimensione dichiarata (la RISERVA di
+`TalosModelStore.Slot.prepare()`, non un download finito: l'ambiguità
+già segnata a fine sessione precedente).
+
+⛔⛔ **Causa reale**, non ipotizzata — le tre `catch (IOException)` di
+`TalosTransferRunner` non loggavano NULLA, in tutto il motore di
+trasferimento. Aggiunto `Log.w` ai tre punti (permanente, non una sonda
+usa-e-getta) e rilanciato: `MalformedURLException: no protocol:
+/api/resolve-cache/models/...`. `huggingface.co` risponde all'HEAD di
+resolve con una Location **relativa, stesso host** (non la CDN
+assoluta) — `resolveOn()` la prendeva alla lettera come URL finale.
+Verificato che è comportamento noto e documentato lato Hub:
+`huggingface_hub` (il client ufficiale Python) la segue a mano via
+`_httpx_follow_relative_redirects_with_backoff`, fermandosi solo
+quando la Location esce dal host della Hub (la vera CDN firmata).
+Cura in `TalosTransferSession.resolveOn()`: loop che segue gli hop
+relativi ricostruendo l'URL assoluto con `new URL(base, location)`,
+si ferma al primo hop cross-host, toglie l'header Authorization non
+appena si lascia l'host della Hub (stessa cautela del client ufficiale
+— il token della Hub non deve arrivare alla CDN). Tetto di 5 hop contro
+un host che rispondesse male all'infinito.
+
+⛔ **Secondo difetto, trovato mentre si isolava il primo**: un secondo
+tocco su "Scarica il motore voce" dopo un fallimento non ritentava
+NULLA — `talosBeginModelTransfer` chiama il nativo `start()`, che per
+un id già esistente in stato terminale restituisce lo stesso record
+fermo (`createdAtMs` identico su ogni tentativo, misurato). `resume()`
+è la chiamata che rimette davvero in coda il job. `voiceModelInstall.ts`
+ora controlla, dopo l'avvio, se un artifact è già `failed`/`paused` e
+lo riprende esplicitamente.
+
+**Prova sul dispositivo reale (OnePlus Pad 3), dopo la cura**: rilancio
+dell'app → recupero automatico (`load()`) rimette in coda il job
+fermo → byte reali in movimento (`haveBytes` misurato in crescita,
+262MB→594MB→672MB sull'artefatto TTS) → entrambi gli artifact spariscono
+da `items` (finiti) → attivazione reale confermata sul filesystem:
+`externalFilesDir/moss/MOSS-TTS-Nano-100M-ONNX/` e
+`.../MOSS-Audio-Tokenizer-Nano-ONNX/` popolate con tutti i file, stesso
+layout che il runtime di Fase 1 legge già. `npm run typecheck` pulito,
+`npx vitest run` verde (incluso un test nuovo che prova il resume),
+`gradlew testDebugUnitTest` verde (nessuna regressione sui test JVM
+esistenti). ⛔ Non ancora scritto un test JVM con server HTTP locale per
+`resolveOn()` — nessuna infrastruttura di mock HTTP esiste già lato
+Gradle in questo repo; la prova che c'è oggi è quella vera, sul
+dispositivo, contro il vero `huggingface.co`.
+
+**Riusabilità della progress bar chiesta dall'owner**: `TalosMobileDownloadCenterTrigger.vue`
+(già in `components/shell/`, montato in header/sidebar/tablet-sidebar)
+è già completamente generico — legge solo `talosModelTransfers.items`,
+lo stesso store che `voiceModelInstall.ts` popola con `talosBeginModelTransfer`.
+Pausa/riprendi/annulla con conferma, barra di avanzamento, stato di
+errore: già tutto lì, zero lavoro di integrazione — i download del
+motore voce ci compaiono automaticamente, senza che nessun file di
+Fase 5 lo sappia. Non è stata creata una progress bar minima duplicata
+apposta: quella in `TalosMobileVoiceSettings.vue` resta solo il bottone
+d'avvio + percentuale sintetica; il controllo completo passa dal
+centro download esistente.
+
+Corsa sul dispositivo con `moss/` prima cancellato (backup verificato
+in `moss-backup-22ago/`, ancora lì) e ora ripopolato dal download vero:
+lo stato attuale del Pad È l'installazione riuscita, non serve
+ripristinare il backup.
