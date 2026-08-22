@@ -1,6 +1,7 @@
 package ai.talos.voice
 
 import android.content.Context
+import android.util.Log
 import java.io.Closeable
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -314,6 +315,19 @@ internal class TalosVoiceHost(
 
         val drained = if (!cancelled) activePlayer.awaitDrain(timeoutMs = DRAIN_TIMEOUT_MS) else true
         val hardwareUnderruns = activePlayer.underrunCount() - underrunCountBefore
+        // ⭐⭐⭐ Owner 22/8: «molto stuttering, molto delay» - questi numeri
+        // esistevano già (calcolati per ogni lettura, §16 dello stesso file)
+        // ma non finivano MAI in un posto leggibile: la riga JS che li
+        // riceve (`talosOnPersonalVoiceDone`) scarta tutto tranne
+        // `readingId`. Log permanente, non una sonda usa-e-getta - la
+        // stessa disciplina di `TalosMossRuntime`: `hardwareUnderruns` è il
+        // conteggio VERO dell'HAL (mai un'inferenza dal tempismo),
+        // `ttfaMs` è il tempo dalla richiesta al primo `AudioTrack.write()`.
+        Log.i(
+            "TalosVoiceHost",
+            "driveStreamingSynthesis(): ttfaMs=$ttfaMs underruns=$underruns hardwareUnderruns=$hardwareUnderruns " +
+                "drainedWithinTimeout=$drained cancelled=$cancelled elapsedMs=${(System.nanoTime() - startedAtNanos) / 1_000_000}",
+        )
         return TalosVoiceStreamResult(
             cancelled = cancelled,
             ttfaMs = ttfaMs,
