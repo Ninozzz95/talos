@@ -38,12 +38,52 @@ TOOL_CODE_*          blocco         TOOL_CODE / tool: / args:
 chiamata non viene riconosciuta, non diventa un `tool_call`, e cade nel testo
 visibile — che è esattamente ciò che si vede nella foto.
 
-⛔ E il difetto non è «manca una regex»: è che i formati riconosciuti sono **due,
-scelti a mano**, mentre i modelli locali ne parlano almeno **tre** (riga nuda,
-blocco `TOOL_CODE`, e il tag di Llama). Aggiungerne una terza a mano lascerebbe
-il quarto modello fuori nello stesso modo. ⇒ Il censimento che l'owner chiede —
-**per strumento × per modello** — è la forma giusta proprio perché nessuno sa
-quanti dialetti ci sono finché non li si guarda tutti.
+### ⛔⛔ CORREZIONE: quelle due grammatiche sono il RIPIEGO, non il percorso
+
+La prima stesura si fermava qui e diceva «i formati riconosciuti sono due,
+scelti a mano». **Falso, e per la stessa ragione delle altre correzioni di
+questo documento: avevo guardato lo strato che avevo trovato per primo.**
+
+Il percorso vero, verificato dal Java alla TypeScript:
+
+```
+IN    TalosLlamaNative.nativeApplyChatTemplate(messaggi, tools)
+      ⇒ llama.cpp costruisce il prompt NEL DIALETTO DEL MODELLO
+
+OUT   TalosLlamaNative.nativeParseReply(raw)      ← ⭐ ESISTE, ed e' CHIAMATO
+      TalosLlamaPlugin.java:622, in produzione
+
+poi   localToolCalls.ts (le due grammatiche) come RIPIEGO
+```
+
+E il meccanismo del sintomo sta in `TalosLlamaPlugin.java:617-630`:
+
+```java
+result.put("text", raw);                       // il GREZZO, come punto di partenza
+JSONObject split = new JSONObject(engine.parseReply(raw));
+final String content = split.optString("content", "");
+JSONArray calls = split.optJSONArray("toolCalls");
+final boolean called = calls != null && calls.length() > 0;
+if (!content.isEmpty() || called) result.put("text", content);   // sostituito SOLO se separa
+…
+catch (JSONException malformed) {
+    android.util.Log.w("TalosLlama", "risposta non separabile", malformed);
+}                                              // ⇒ e il GREZZO resta
+```
+
+⇒ **Se `parseReply` non riconosce il dialetto, il testo grezzo resta e va a
+schermo.** Non è una perdita né un buco: è la degradazione **progettata**, e
+lascia **una sola traccia** — `risposta non separabile` in logcat.
+
+⭐⭐ Questo rende la misura decisiva del censimento **precisa e a costo quasi
+zero**: per ogni modello, si chiede uno strumento e si guarda se in logcat
+compare quella riga. Non serve un'ispezione visiva per stabilire il fatto — la
+verifica visiva resta per il resto del rilievo, non per questo.
+
+⛔ **E il buco vero, trovato per strada:** `parseReply` — il componente che
+traduce il dialetto di un modello in chiamate strutturate — **non ha un solo
+test**, né unitario né strumentato. È l'unico anello fra ciò che il modello dice
+e ciò che TALOS capisce, e nessuna prova lo sorveglia.
 
 ---
 
