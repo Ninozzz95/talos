@@ -356,6 +356,37 @@ describe('per-chat media panel', () => {
         expect(wrapper.find('[data-testid="talos-chat-media-viewer"]').exists()).toBe(false)
     })
 
+    /**
+     * ⭐⭐ Rilievo owner 22/8: «i file MD non sono formattati» — arrivavano
+     * qui come testo grezzo nel `<pre>` di sotto. `.txt` resta grezzo a
+     * ragione (`elsewhere`, sotto): formattarlo come prosa mentirebbe sulla
+     * sua forma.
+     */
+    it('opens a text/markdown file FORMATTED, and a plain .txt still raw', async () => {
+        const mdFile = file('md-1', { origin: 'generated', origin_session_id: 's1' }, 'Riassunto.md', 'text/markdown')
+        const txtFile = file('txt-1', { origin: 'generated', origin_session_id: 's1' }, 'Note.txt', 'text/plain')
+        const readText = vi.fn(async (id: string) => (
+            id === 'md-1' ? '## Il prezzo del gas\n\n- punto uno' : 'testo grezzo qualunque'
+        ))
+        const { wrapper } = mountPanel({ files: [here, mdFile, txtFile], readText })
+
+        await wrapper.get('[data-testid="talos-chat-media-open-md-1"]').trigger('click')
+        await flushPromises()
+        const md = wrapper.get('[data-testid="talos-chat-media-viewer"]')
+        expect(md.get('[data-testid="talos-mobile-message-content"]').find('h2').text())
+            .toBe('Il prezzo del gas')
+        expect(md.findAll('li')).toHaveLength(1)
+        expect(md.text()).not.toContain('##')
+        expect(md.find('pre').exists()).toBe(false)
+        await wrapper.get('[data-testid="talos-chat-media-viewer-close"]').trigger('click')
+
+        await wrapper.get('[data-testid="talos-chat-media-open-txt-1"]').trigger('click')
+        await flushPromises()
+        const plain = wrapper.get('[data-testid="talos-chat-media-viewer"]')
+        expect(plain.get('pre').text()).toBe('testo grezzo qualunque')
+        expect(plain.find('[data-testid="talos-mobile-message-content"]').exists()).toBe(false)
+    })
+
     it('opens the same document from its More menu', async () => {
         const { wrapper } = mountPanel()
         mediaActionMenu(wrapper, 'a').vm.$emit('select', 'open')

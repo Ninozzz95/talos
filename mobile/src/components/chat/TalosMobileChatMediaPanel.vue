@@ -7,6 +7,7 @@ import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
 import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLibraryFileRow.vue'
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
 import TalosMobileImageViewer from '@/components/talos/library/TalosMobileImageViewer.vue'
+import TalosMobileMessageContent from '@/components/chat/TalosMobileMessageContent.vue'
 import { useTalosFileOrigin } from '@/composables/useTalosFileOrigin'
 import { talosDaIntitolare } from '@/stores/chat'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
@@ -833,6 +834,25 @@ const mediaScope = computed(() => {
                         @save="saveFileToDevice(opened)"
                         @delete="requestDeleteOpened"
                         @close="closeFile"
+                    />
+                    <!--
+                        Rilievo owner 22/8: «i file MD non sono formattati» —
+                        arrivavano qui come testo grezzo nel `<pre>` sotto,
+                        insieme a `.txt`/`.json` che restano grezzi a ragione
+                        (un JSON formattato come prosa mentirebbe sulla sua
+                        forma). Stesso motore di ogni messaggio di chat: un
+                        `##` è un titolo ovunque appaia in TALOS.
+                    -->
+                    <!--
+                        ⛔ Nessun `data-testid` qui: il componente porta già
+                        il proprio (`talos-mobile-message-content`) sulla
+                        radice, e Vue lo preferisce a un attributo passato
+                        dall'esterno con lo stesso nome — un secondo tag
+                        sarebbe stato silenziosamente ignorato.
+                    -->
+                    <TalosMobileMessageContent
+                        v-else-if="openedText !== null && opened?.media_type === 'text/markdown'"
+                        :content="openedText"
                     />
                     <pre
                         v-else-if="openedText !== null"

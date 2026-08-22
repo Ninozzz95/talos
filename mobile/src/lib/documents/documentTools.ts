@@ -262,6 +262,19 @@ export function createTalosDocumentTools(
                     ...(document.mediaType === 'application/pdf' && saved.percorso
                         ? { pdf: saved.percorso }
                         : {}),
+                    /*
+                     * ⛔⛔ Rilievo owner 22/8: la stessa scheda muta, ma su un
+                     * MD invece di un PDF — «non è possibile cliccare sul
+                     * file MD appena creato». Stessa cura, stesso motivo:
+                     * niente `dove` per un singolo file, quindi il tocco
+                     * porta un visualizzatore invece di navigare. Qui
+                     * `saved.id` (non `saved.percorso`) perché il
+                     * visualizzatore Markdown legge il testo dalla Libreria
+                     * con `hydrateText(id)`, non un file grezzo dal disco.
+                     */
+                    ...(document.mediaType === 'text/markdown'
+                        ? { mdFileId: saved.id }
+                        : {}),
                 },
                 content: [
                     `Created "${document.fileName}" (${size} KB) and saved it to the Library.`,

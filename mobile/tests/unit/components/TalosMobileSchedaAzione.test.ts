@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 /*
  * ⛔ L'i18n si finge, e la finzione RENDE LA CHIAVE: così un test che passa
@@ -79,6 +79,16 @@ vi.mock('@/lib/tools/schedaComandi', () => ({
         comandi.fileMandati.push([id, dove])
         return comandi.mandaFile(id, dove)
     },
+}))
+
+/*
+ * ⛔ Serve solo per la scheda MD (Rilievo 6, 22/8): il visualizzatore legge
+ * il testo con `hydrateText`, la stessa via che il pannello media della
+ * chat già usa per gli allegati.
+ */
+const hydrateText = vi.hoisted(() => vi.fn())
+vi.mock('@/stores/chatController', () => ({
+    useChatController: () => ({ attachments: { hydrateText } }),
 }))
 
 import TalosMobileSchedaAzione from '@/components/chat/TalosMobileSchedaAzione.vue'
@@ -770,5 +780,65 @@ describe('⭐⭐⭐ la scheda di un PDF si apre', () => {
 
     it('⛔ il visualizzatore NON c e finche nessuno tocca', () => {
         expect(conPdf().find('[data-testid="talos-pdf-viewer"]').exists()).toBe(false)
+    })
+})
+
+/**
+ * ⭐⭐⭐ IL MARKDOWN SI APRE FORMATTATO — rilievo owner 22/8, stessa famiglia
+ * del PDF qui sopra: «non è possibile cliccare sul file MD appena creato
+ * dalla scheda chat». Vedi `documentTools.ts` per dove `mdFileId` nasce.
+ */
+describe('⭐⭐⭐ la scheda di un MD si apre, formattata', () => {
+    beforeEach(() => { hydrateText.mockReset() })
+
+    const conMd = (extra: Record<string, unknown> = {}) => mount(TalosMobileSchedaAzione, {
+        props: {
+            metadata: {
+                cards: [{
+                    tipo: 'creato',
+                    titolo: 'appunti.md',
+                    genere: 'Documento',
+                    dettaglio: '3 KB',
+                    mdFileId: 'file-123',
+                    ...extra,
+                }],
+            },
+        },
+    })
+    const riga = (w: ReturnType<typeof mount>) => w.get('[data-testid="talos-scheda-creato"]')
+
+    it('⛔⛔ col mdFileId la riga e un BOTTONE, non un riquadro muto', () => {
+        expect(riga(conMd()).element.tagName).toBe('BUTTON')
+        expect(riga(conMd()).text()).toContain('›')
+    })
+
+    it('⛔ il visualizzatore NON c e finche nessuno tocca', () => {
+        expect(conMd().find('[data-testid="talos-markdown-viewer"]').exists()).toBe(false)
+    })
+
+    /*
+     * ⛔⛔ IL TOCCO VERO: non basta che sia un bottone, deve aprire il testo
+     * FORMATTATO — è la stessa distinzione fra Rilievo 5 e Rilievo 6, ed
+     * entrambi si chiudono in un solo tocco o nessuno dei due è chiuso
+     * davvero.
+     */
+    it('⛔⛔ il tocco apre il visualizzatore col testo FORMATTATO, letto per id', async () => {
+        hydrateText.mockResolvedValue('## Appunti\n\n- uno\n- due')
+        const w = conMd()
+        await riga(w).trigger('click')
+        // `defineAsyncComponent` risolve il proprio `import()` su un giro
+        // di microtask che `flushPromises()` da solo non copre sempre —
+        // stesso `vi.waitFor` già in uso altrove in questa suite per la
+        // stessa classe di componente pigro.
+        await vi.waitFor(() => {
+            expect(w.find('[data-testid="talos-markdown-viewer"]').exists()).toBe(true)
+        })
+        await flushPromises()
+        expect(hydrateText).toHaveBeenCalledWith('file-123')
+        const visualizzatore = w.get('[data-testid="talos-markdown-viewer"]')
+        await vi.waitFor(() => {
+            expect(visualizzatore.find('h2').exists()).toBe(true)
+        })
+        expect(visualizzatore.text()).not.toContain('##')
     })
 })
