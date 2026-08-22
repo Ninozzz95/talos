@@ -14,6 +14,7 @@ import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import org.json.JSONObject
 
 /**
  * Blueprint §41's `TalosNeuralVoicePlugin` skeleton, grown to the real
@@ -53,6 +54,34 @@ class TalosNeuralVoicePlugin : Plugin() {
     private val enrollmentSlots = ConcurrentHashMap<Int, TalosVoiceCaptureResult>()
     @Volatile private var pendingProfile: TalosVoiceProfileV1? = null
 
+    /**
+     * ⛔⛔ `load()` gira sul thread CONDIVISO dei plugin — stessa nota di
+     * `TalosSpeechPlugin.load()`: quello che ferma TUTTI gli altri se lo si
+     * blocca. `TalosVoiceModelActivation.recover()` fa I/O di file veri
+     * (rename, `deleteRecursively` su un `.previous` orfano che potrebbe
+     * portare centinaia di MB) — mai chiamato inline qui dentro. Girato su
+     * questa lane invece, cosi `load()` torna subito e gli altri plugin non
+     * aspettano un file system che nel caso comune non ha niente da fare,
+     * ma nel caso raro (una promozione interrotta) potrebbe metterci un
+     * momento.
+     */
+    override fun load() {
+        enrollmentLane.execute {
+            runCatching {
+                val manifest = readManifest()
+                val externalFilesDir = context.applicationContext.getExternalFilesDir(null) ?: return@runCatching
+                for (artifact in manifest.artifacts) {
+                    TalosVoiceModelActivation.recover(externalFilesDir, artifact.targetDir)
+                }
+            }
+            // ⛔ Silenzioso di proposito: se il manifesto manca o è
+            // malformato, `installManifest`/`activateModel` lo diranno
+            // chiaramente quando qualcuno li chiama davvero. `load()` non è
+            // il posto per un errore che nessuno vede — è avvio dell'app,
+            // non un'azione della persona.
+        }
+    }
+
     private val host: TalosVoiceHost
         get() = TalosVoiceHost.get(context.applicationContext)
 
@@ -82,6 +111,146 @@ class TalosNeuralVoicePlugin : Plugin() {
             .put("installed", supported)
         if (!supported) payload.put("failure", TalosVoiceModelManager.describeMissing(root))
         call.resolve(payload)
+    }
+
+    // ---------------------------------------------------------------
+    // ⭐⭐⭐ Fase 5, Blocco 3b — installazione durevole del modello.
+    //
+    // ⛔ Il download vero passa dal plugin GENERICO già esistente,
+    // `TalosModelTransferPlugin` (`start`/`status`/`cancel`...): un
+    // `Request` è un `Request`, il motore non sa né gli importa se i byte
+    // sono un GGUF di chat o il motore voce. `requestFrom()` là dentro
+    // legge esattamente `{repo, revision, modelName, files:[{path, bytes,
+    // sha256}]}` - la stessa forma che [installManifest] restituisce qui
+    // sotto, campo per campo. Nessun secondo motore di trasferimento.
+    // ---------------------------------------------------------------
+
+    private fun readManifest(): TalosVoiceModelManifest {
+        val json = context.assets.open("voice/model-manifest.json").bufferedReader().use { it.readText() }
+        return TalosVoiceModelManifest.fromJson(JSONObject(json))
+    }
+
+    /**
+     * Il manifesto pinnato (Blocco 1), tradotto nella forma che
+     * `TalosModelTransferPlugin.start` capisce già - un oggetto per
+     * artifact, cosi il lato TS chiama `start` due volte (una per
+     * repository) e poi `status`/`activateModel` per seguirli.
+     */
+    @PluginMethod
+    fun installManifest(call: PluginCall) {
+        val manifest = try {
+            readManifest()
+        } catch (broken: Exception) {
+            call.reject("model-manifest.json missing or malformed", broken)
+            return
+        }
+        val artifacts = JSArray()
+        for (artifact in manifest.artifacts) {
+            val files = JSArray()
+            for (file in artifact.files) {
+                files.put(JSObject().put("path", file.path).put("bytes", file.size).put("sha256", file.sha256))
+            }
+            artifacts.put(
+                JSObject()
+                    .put("repo", artifact.repo)
+                    .put("revision", artifact.revision)
+                    .put("modelName", "${manifest.engineBuild}/${artifact.targetDir}")
+                    .put("targetDir", artifact.targetDir)
+                    .put("files", files),
+            )
+        }
+        call.resolve(JSObject().put("engineBuild", manifest.engineBuild).put("artifacts", artifacts))
+    }
+
+    /**
+     * ⭐⭐ L'ATTIVAZIONE ATOMICA — chiamato dal lato TS solo dopo che
+     * `TalosModelTransferPlugin.status` conferma finiti TUTTI gli artifact
+     * di [installManifest]. Mette in staging OGNI artifact prima di
+     * promuoverne anche solo uno: un download riuscito a metà (mancasse un
+     * file di UN artifact) non tocca `moss/` per niente, non solo per
+     * quell'artifact.
+     *
+     * ⛔ Onestà sul residuo: una volta iniziata la promozione, i due
+     * `promote()` restano due operazioni separate — se la seconda fallisse
+     * (un I/O raro, a valle di un download già interamente verificato) la
+     * voce resterebbe con un artifact nuovo e uno vecchio finché non si
+     * ritenta. Non è il caso di questa prima attivazione sul dispositivo di
+     * riferimento (i file "vecchi" sul Pad sono BYTE PER BYTE gli stessi
+     * pinnati nel Blocco 1 — non c'è disallineamento possibile), e per un
+     * vero aggiornamento futuro `TalosVoiceModelManager.isPresent()`
+     * continuerebbe comunque a rispondere in base ai file REALI su disco,
+     * mai a un flag che potrebbe mentire.
+     */
+    @PluginMethod
+    fun activateModel(call: PluginCall) {
+        val manifest = try {
+            readManifest()
+        } catch (broken: Exception) {
+            call.reject("model-manifest.json missing or malformed", broken)
+            return
+        }
+        val externalFilesDir = context.applicationContext.getExternalFilesDir(null)
+        if (externalFilesDir == null) {
+            call.reject("no-external-storage")
+            return
+        }
+
+        val staged = mutableListOf<String>()
+        for (artifact in manifest.artifacts) {
+            when (val outcome = TalosVoiceModelActivation.stage(externalFilesDir, artifact)) {
+                is TalosVoiceModelActivation.Outcome.Activated -> staged.add(artifact.targetDir)
+                is TalosVoiceModelActivation.Outcome.Incomplete -> {
+                    call.reject("not-downloaded:${artifact.targetDir}:${outcome.missingPath}")
+                    return
+                }
+                is TalosVoiceModelActivation.Outcome.Failed -> {
+                    call.reject("stage-failed:${artifact.targetDir}:${outcome.reason}")
+                    return
+                }
+            }
+        }
+
+        for (targetDir in staged) {
+            val outcome = TalosVoiceModelActivation.promote(externalFilesDir, targetDir)
+            if (outcome !is TalosVoiceModelActivation.Outcome.Activated) {
+                call.reject("promote-failed:$targetDir")
+                return
+            }
+        }
+        // ⛔ Non prima di qui: solo dopo che ENTRAMBI gli artifact sono
+        // promossi la pulizia della versione vecchia è onesta - prima
+        // sarebbe stata pulizia di un rollback che potrebbe ancora servire.
+        for (targetDir in staged) TalosVoiceModelActivation.cleanupPrevious(externalFilesDir, targetDir)
+
+        call.resolve(JSObject().put("activated", true).put("supported", TalosVoiceModelManager.isPresent(modelRoot())))
+    }
+
+    /**
+     * ⛔⛔ [load] già chiama [ai.talos.voice.TalosVoiceModelActivation.recover]
+     * da sola a ogni avvio, in background — se il processo è morto fra
+     * `stage` e `promote` in una sessione precedente, l'app si autoripara
+     * senza che nessuno lo chieda. Questo metodo esiste per il lato TS che
+     * vuole sapere CON CERTEZZA che la ripresa è finita (dopo un tentativo
+     * di installazione che sembrava interrotto, prima di riprovare) invece
+     * di fidarsi del passaggio silenzioso di `load()`.
+     */
+    @PluginMethod
+    fun recoverModelInstall(call: PluginCall) {
+        val manifest = try {
+            readManifest()
+        } catch (broken: Exception) {
+            call.reject("model-manifest.json missing or malformed", broken)
+            return
+        }
+        val externalFilesDir = context.applicationContext.getExternalFilesDir(null)
+        if (externalFilesDir == null) {
+            call.reject("no-external-storage")
+            return
+        }
+        for (artifact in manifest.artifacts) {
+            TalosVoiceModelActivation.recover(externalFilesDir, artifact.targetDir)
+        }
+        call.resolve(JSObject().put("supported", TalosVoiceModelManager.isPresent(modelRoot())))
     }
 
     @PluginMethod

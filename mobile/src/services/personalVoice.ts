@@ -20,6 +20,19 @@ import type { TalosSpeakOptions, TalosSpeechService } from '@/services/speech'
 
 interface TalosNeuralVoicePlugin {
     status(): Promise<{ supported: boolean, installed: boolean, failure?: string }>
+    // ⭐⭐⭐ Fase 5, Blocco 3b — installazione durevole del modello.
+    installManifest(): Promise<{
+        engineBuild: string
+        artifacts: Array<{
+            repo: string
+            revision: string
+            modelName: string
+            targetDir: string
+            files: Array<{ path: string, bytes: number, sha256: string }>
+        }>
+    }>
+    activateModel(): Promise<{ activated: boolean, supported: boolean }>
+    recoverModelInstall(): Promise<{ supported: boolean }>
     profiles(): Promise<{ profiles: TalosPersonalVoiceProfileSummary[] }>
     renameProfile(options: { profileId: string, name: string }): Promise<void>
     deleteProfile(options: { profileId: string }): Promise<void>
@@ -97,6 +110,25 @@ export async function talosPersonalVoiceStatus(): Promise<TalosPersonalVoiceStat
     } catch {
         return { supported: false, installed: false, ready: false, active: false }
     }
+}
+
+/**
+ * Il manifesto pinnato (Fase 5 Blocco 1), già nella forma che
+ * `talosBeginModelTransfer` di `stores/modelTransfers.ts` capisce — un
+ * oggetto per artifact, `files` con `bytes`/`sha256` invece di `size`.
+ */
+export async function talosVoiceModelInstallManifest(): ReturnType<TalosNeuralVoicePlugin['installManifest']> {
+    return plugin.installManifest()
+}
+
+/**
+ * L'attivazione atomica — chiamare solo dopo che ENTRAMBI gli artifact del
+ * manifesto sono finiti di scaricare (mai uno prima dell'altro: vedi la
+ * nota su `activateModel` lato Kotlin). Chi chiama in anticipo riceve un
+ * rifiuto chiaro (`not-downloaded:...`), non un'attivazione a metà.
+ */
+export async function talosActivateVoiceModel(): Promise<{ activated: boolean, supported: boolean }> {
+    return plugin.activateModel()
 }
 
 export async function talosPersonalVoiceProfiles(): Promise<TalosPersonalVoiceProfileSummary[]> {
