@@ -384,6 +384,25 @@ internal class TalosMossRuntime private constructor(
                 setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
                 setIntraOpNumThreads(cpuThreads.coerceAtLeast(1))
                 setInterOpNumThreads(1)
+                // ⭐⭐⭐ Owner 22/8: misurato sul Pad, non ipotizzato -
+                // `lowmemorykiller` ha classificato ai.talos con
+                // "process memory is leaking" a ~5,8 GB RSS durante
+                // buildEnrollmentProfile(). SEI sessioni ONNX aperte insieme
+                // (una sola, codecEncodeSession, serve davvero per quel
+                // percorso), ciascuna col proprio arena allocator - un
+                // arena CRESCE e in pratica non restituisce mai la memoria
+                // al sistema operativo fra una Run() e l'altra, il pattern
+                // esatto che un classificatore di leak per crescita
+                // continua scambierebbe per una perdita vera. La doc
+                // ufficiale ONNX Runtime lo conferma esplicitamente: per
+                // modelli piccoli come questi, disattivare l'arena "dà un
+                // risparmio di memoria significativo" - a un costo di
+                // latenza che qui non è la variabile che conta.
+                // ⛔ NON RISOLVE da sola lo spreco delle cinque sessioni
+                // inutili per l'encode-only - quella è un tetto più grande
+                // (i pesi dei modelli restano residenti comunque), lasciato
+                // per un prossimo passo, non dimenticato.
+                setCPUArenaAllocator(false)
             }
             fun openSession(file: File): OrtSession {
                 require(file.isFile) { "Missing ONNX file: ${file.absolutePath}" }

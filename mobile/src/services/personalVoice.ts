@@ -46,8 +46,10 @@ interface TalosNeuralVoicePlugin {
     }): Promise<{ accepted: boolean, reason?: string }>
     stop(): Promise<void>
 
-    startEnrollmentSession(): Promise<void>
+    startEnrollmentSession(): Promise<{ resumedSlotIndexes: number[] }>
     stopEnrollmentCapture(): Promise<void>
+    startMicLevelPeek(): Promise<void>
+    stopMicLevelPeek(): Promise<void>
     captureEnrollmentPhrase(options: { slotIndex: number, maxDurationMs?: number }): Promise<{
         accepted: boolean
         rejectionReasons: string[]
@@ -58,6 +60,7 @@ interface TalosNeuralVoicePlugin {
         zeroFrameRatio: number
         clientSilencedObserved: boolean
     }>
+    playCapturedPhrase(options: { slotIndex: number }): Promise<void>
     buildEnrollmentProfile(options: {
         displayName: string
         language: string
@@ -71,6 +74,10 @@ interface TalosNeuralVoicePlugin {
     addListener(
         eventName: 'talosNeuralVoiceDone' | 'talosNeuralVoiceError',
         listenerFunc: (event: { readingId: string, cancelled?: boolean, error?: string }) => void,
+    ): Promise<{ remove(): Promise<void> }>
+    addListener(
+        eventName: 'talosVoiceEnrollmentLevel',
+        listenerFunc: (event: { level: number }) => void,
     ): Promise<{ remove(): Promise<void> }>
 }
 
@@ -176,12 +183,33 @@ export async function talosOnPersonalVoiceError(
 
 // --- Enrollment (Blocco 4 UI) --------------------------------------------
 
-export async function talosStartVoiceEnrollment(): Promise<void> {
-    await plugin.startEnrollmentSession()
+/**
+ * Owner 22/8: "riprendere da dove si lascia" dopo un crash - ogni indice qui
+ * dentro è una frase già accettata e cifrata su disco
+ * (`TalosVoiceEnrollmentSessionStore`), non una da far ri-registrare. Vuoto
+ * la prima volta che qualcuno arruola una voce, o dopo un commit/annullamento
+ * riuscito (la sessione si cancella allora, non prima).
+ */
+export async function talosStartVoiceEnrollment(): Promise<{ resumedSlotIndexes: number[] }> {
+    return plugin.startEnrollmentSession()
 }
 
 export async function talosStopVoiceEnrollmentCapture(): Promise<void> {
     await plugin.stopEnrollmentCapture()
+}
+
+/**
+ * Owner 22/8: la waveform anche sulla schermata «trova un posto silenzioso»
+ * - nessuna frase catturata qui, solo il livello vero
+ * (`TalosVoiceRecorder.peekLevel`). Idempotente lato nativo: chiamarlo due
+ * volte di fila non apre un secondo microfono.
+ */
+export async function talosStartMicLevelPeek(): Promise<void> {
+    await plugin.startMicLevelPeek()
+}
+
+export async function talosStopMicLevelPeek(): Promise<void> {
+    await plugin.stopMicLevelPeek()
 }
 
 export interface TalosVoiceEnrollmentPhraseVerdict {
@@ -195,11 +223,36 @@ export interface TalosVoiceEnrollmentPhraseVerdict {
     clientSilencedObserved: boolean
 }
 
+/**
+ * Owner 22/8, live sul Pad: «la waveform è assente nel Wizard, ne abbiamo
+ * già una nel progetto» (`TalosMicWaveform.vue`). Il livello arriva davvero
+ * dal ciclo di lettura di `TalosVoiceRecorder` - un evento per blocco PCM
+ * letto durante una cattura in corso, non un numero simulato lato TS. Attivo
+ * SOLO durante `talosCaptureVoiceEnrollmentPhrase` - nessun evento fuori da
+ * una cattura, per costruzione lato nativo.
+ */
+export async function talosOnVoiceEnrollmentLevel(
+    listener: (level: number) => void,
+): Promise<{ remove(): Promise<void> }> {
+    return plugin.addListener('talosVoiceEnrollmentLevel', (event) => listener(event.level))
+}
+
 export async function talosCaptureVoiceEnrollmentPhrase(
     slotIndex: number,
     maxDurationMs?: number,
 ): Promise<TalosVoiceEnrollmentPhraseVerdict> {
     return plugin.captureEnrollmentPhrase({ slotIndex, maxDurationMs })
+}
+
+/**
+ * Owner 22/8, live sul Pad: riascoltare la frase appena registrata, prima
+ * ancora della codifica finale — il PCM grezzo accettato dello slot, non una
+ * sintesi. `slotIndex` deve essere uno che `talosCaptureVoiceEnrollmentPhrase`
+ * ha già accettato in QUESTA sessione (`enrollmentSlots` lato nativo si
+ * svuota a `talosStartVoiceEnrollment`); rifiuta onestamente altrimenti.
+ */
+export async function talosPlayCapturedEnrollmentPhrase(slotIndex: number): Promise<void> {
+    await plugin.playCapturedPhrase({ slotIndex })
 }
 
 export async function talosBuildVoiceEnrollmentProfile(options: {

@@ -32,8 +32,12 @@ internal class TalosVoiceEnrollment(
     private val store = TalosVoiceProfileStore(context)
 
     /** Captures one guided phrase and evaluates it - never persisted, never committed. The caller (Fase 4's wizard) decides retry/keep/discard. */
-    fun captureOnePhrase(maxDurationMs: Int, isCancelled: () -> Boolean = { false }): TalosVoicePhraseCapture {
-        val capture = recorder.capture(maxDurationMs, isCancelled)
+    fun captureOnePhrase(
+        maxDurationMs: Int,
+        isCancelled: () -> Boolean = { false },
+        onLevel: ((Float) -> Unit)? = null,
+    ): TalosVoicePhraseCapture {
+        val capture = recorder.capture(maxDurationMs, isCancelled, onLevel)
         val verdict = TalosVoiceQuality.evaluate(capture)
         return TalosVoicePhraseCapture(capture, verdict)
     }
