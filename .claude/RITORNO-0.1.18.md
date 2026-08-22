@@ -900,15 +900,39 @@ il suo unico `ACTION_FOCUS` è sotto l'azione `"scrivi"`, mai invocata in
 questa prova. Nessun codice `mobile/src` o nativo da toccare. Dettaglio
 completo in memoria: `findings-owner-22-agosto.md`.
 
-### 14.4 Ancora aperti
+### 14.4 Rilievo 5 + Rilievo 6 — CHIUSI insieme, stessa causa
+
+«I file MD non sono formattati» e «non è possibile cliccare sul file MD
+appena creato dalla scheda chat»: stesso buco, misurato leggendo il
+codice — in TUTTO l'app esisteva un visualizzatore per il PDF
+(2026-08-17) e NESSUNO per il testo/Markdown. Ovunque un file di testo si
+apriva, cadeva su un `<pre>` grezzo; la scheda «creato» aveva solo `dove`
+(una rotta che la Libreria non ha per singolo file) e `pdf` — niente per
+un MD, quindi niente bottone.
+
+Cura: `TalosMobileMarkdownViewer.vue`, stessa forma del visualizzatore
+PDF, monta la VERA `TalosMobileMessageContent` (lo stesso motore che
+formatta ogni messaggio di chat) invece di duplicare un parser. Due punti
+di ingresso corretti: la scheda «creato» (nuovo campo `mdFileId`,
+speculare a `pdf`, valorizzato da `documentTools.ts` per
+`mediaType: 'text/markdown'`) e il pannello media della chat (un
+allegato `text/markdown` ora passa per lo stesso componente invece del
+`<pre>` — `.txt`/JSON restano grezzi, giustamente).
+
+Provato end-to-end sul Pad (build fresca, `cap copy`, `assembleDebug`,
+`install -r`, non `connectedAndroidTest`): chiesto a TALOS di creare
+`prova.md`, consentito lo strumento, toccata la scheda — si apre un
+titolo vero e un elenco puntato vero, non `# `/`- ` grezzi. Suite intera
+verde (651/654 file, 5938/5948 test, 8 nuovi), typecheck pulito, tetto
+d'avvio invariato (610.358/611.000).
+
+### 14.5 Ancora aperto
 
 - Rilievo 1 — censimento tool/ricerca web × modello, scettico e completo,
   autorizzato a scaricare altri modelli. Il più grande dei sei, non
   ancora iniziato: probabile blocco a sé.
-- Rilievo 5 — i file MD non sono formattati in chat.
-- Rilievo 6 — un file MD appena creato non si apre dalla scheda chat.
 
-Owner 2026-08-22: chiusi tutti e sei, poi Fase 5 (chiude il blocco voce
+Owner 2026-08-22: chiusi cinque su sei. Poi Fase 5 (chiude il blocco voce
 personale per intero), poi le ottimizzazioni di performance del motore
 locale LLM (i due documenti MAX PERFORMANCE già custoditi in
 TALOS-RICERCHE).
