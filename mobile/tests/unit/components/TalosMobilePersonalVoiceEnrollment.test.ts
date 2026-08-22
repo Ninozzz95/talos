@@ -37,6 +37,29 @@ vi.mock('@/services/personalVoice', () => ({
     talosStopMicLevelPeek: bridge.stopPeek,
 }))
 
+/**
+ * ⛔⛔ 22/8, owner: «la voce codificata deve seguire la lingua di SISTEMA».
+ * Mock PARZIALE (`importOriginal`, stesso pattern di
+ * `tests/unit/theme/mobileBackground.test.ts`): `useTalosI18n` resta VERO
+ * (il plugin globale installato da `jsdomShims.ts` prima di questo file -
+ * le frasi del wizard devono continuare a leggersi davvero), solo
+ * `useTalosLocalization` è sostituito con un valore INEQUIVOCABILE
+ * (`'xx'`, che l'app reale non risolverebbe mai: supporta solo `it`/`en`).
+ * Se `encodeVoice()` legge la lingua da lì, il `language` catturato è
+ * `'xx'`; se leggesse ancora `useTalosI18n().locale` (il difetto),
+ * sarebbe `'en'` o `'it'` - mai `'xx'`.
+ */
+vi.mock('@/i18n', async (importOriginal) => {
+    const original = await importOriginal<typeof import('@/i18n')>()
+    return {
+        ...original,
+        useTalosLocalization: () => ({
+            state: { ...original.useTalosLocalization().state, systemLocale: 'xx' },
+            setMode: original.useTalosLocalization().setMode,
+        }),
+    }
+})
+
 const { default: TalosMobilePersonalVoiceEnrollment } = await import(
     '@/components/talos/settings/voice/TalosMobilePersonalVoiceEnrollment.vue'
 )
@@ -387,9 +410,25 @@ describe('TalosMobilePersonalVoiceEnrollment', () => {
         await wrapper.get('[data-testid="talos-personal-voice-encode"]').trigger('click')
         await flushPromises()
         expect(bridge.buildVoiceEnrollmentProfile).toHaveBeenCalledWith(
-            expect.objectContaining({ displayName: 'Antonino', style: 'neutral', consentVersion: 1 }),
+            // ⛔⛔ `language: 'xx'` prova che arriva da `useTalosLocalization()
+            // .state.systemLocale` (mockato sopra) e non da
+            // `useTalosI18n().locale` (la lingua dell'INTERFACCIA, che
+            // l'app reale risolverebbe a 'it' o 'en' - mai 'xx').
+            expect.objectContaining({ displayName: 'Antonino', language: 'xx', style: 'neutral', consentVersion: 1 }),
         )
         expect(wrapper.find('[data-testid="talos-personal-voice-play-preview"]').exists()).toBe(true)
+
+        // ⛔⛔ 22/8, trovato PROVANDO l'anteprima sul dispositivo:
+        // `personalVoice.previewPhrase` non esiste in NESSUN locale - senza
+        // questa prova, `t()` tornava la CHIAVE STESSA come stringa e il
+        // motore la sintetizzava alla lettera. Deve essere la frase VERA
+        // (`voice.previewPhrase`), mai il nome della chiave rotta.
+        await wrapper.get('[data-testid="talos-personal-voice-play-preview"]').trigger('click')
+        await flushPromises()
+        expect(bridge.previewVoiceEnrollmentProfile).toHaveBeenCalledWith(
+            'This is how TALOS will read replies aloud.',
+            expect.any(String),
+        )
     })
 
     it('PVOICE-UI-05 saving commits the profile and closes, emitting the saved summary', async () => {

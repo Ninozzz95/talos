@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Pencil, Trash2, User, Volume2 } from '@lucide/vue'
+import { Check, Pencil, Play, Trash2, User, Volume2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useSettingsStore } from '@/stores/settings'
+import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosSpeechService, type TalosSpeechVoice } from '@/services/speech'
 import { TALOS_LINGUA_AUTOMATICA, parseTalosDictationLanguageMode } from '@/lib/dictationPolicy'
 import { talosVoceDaUsare, talosVociOfferte, type TalosVoceDispositivo } from '@/lib/voice/sceltaVoce'
 import {
     talosDeletePersonalVoiceProfile,
     talosPersonalVoiceProfiles,
+    talosPersonalVoiceSpeechAdapter,
     talosPersonalVoiceStatus,
     talosRenamePersonalVoiceProfile,
 } from '@/services/personalVoice'
@@ -30,6 +32,7 @@ const TalosMobilePersonalVoiceEnrollment = defineAsyncComponent(
  * device synthesizer, no backend. Honestly hidden when unsupported.
  */
 const settings = useSettingsStore()
+const toasts = useTalosMobileToasts()
 const { t } = useTalosI18n()
 const service = useTalosSpeechService()
 const supported = service.supported()
@@ -79,9 +82,56 @@ const tutteLeLingue = ref(false)
  * motore userebbe da solo, non una voce di rete che il pulsante play non
  * sceglierebbe mai.
  */
+/**
+ * ⛔⛔⛔ 22/8, owner: «non c'è modo di selezionare la voce appena registrata
+ * nel selettore delle altre voci predefinite». MISURATO nel codice, non
+ * dedotto: `engine`/`personal_profile_id` esistono già nello schema delle
+ * preferenze (`stores/settings.ts`, additiva dalla Fase 4) e la CATENA
+ * fino al motore nativo esiste già intera (`talosSpeakForReading` in
+ * `useTalosSpeech.ts` la usa per leggere le risposte) — ma NESSUN punto
+ * dell'interfaccia le scriveva mai. Una voce personale poteva essere
+ * registrata, salvata, rinominata, eliminata: MAI scelta come quella che
+ * legge davvero.
+ *
+ * Un solo selettore, non due: il valore sintetico `personal:<id>` distingue
+ * un profilo personale da una voce del dispositivo nello STESSO menù —
+ * scegliendolo scrive `engine:'personal'`, scegliere una voce del
+ * dispositivo torna a `engine:'system'`. `personal_profile_id` non si
+ * cancella mai tornando al sistema: è la stessa disciplina di
+ * "il fallback non riscrive la scelta" già in `personalVoiceRouter.ts`.
+ */
+// ⛔⛔ MOSSO qui apposta, PRIMA di `selectedVoice`/`voiceItems`: entrambi lo
+// leggono, e `watch(selectedVoice, ...)` più sotto valuta `selectedVoice`
+// SUBITO durante `setup()` per fissare il valore di partenza (comportamento
+// di Vue, non solo di questo file) - dichiararlo dopo produceva un vero
+// `ReferenceError: Cannot access 'personalProfiles' before initialization`,
+// misurato lanciando i test, non ipotizzato.
+const personalProfiles = ref<TalosPersonalVoiceProfileSummary[]>([])
+const PERSONAL_VOICE_PREFIX = 'personal:'
 const selectedVoice = computed({
-    get: () => settings.state.voice.voice_uri ?? voceDiRipiego.value ?? '',
-    set: (value: string) => { void settings.setVoicePreferences({ voice_uri: value || null }) },
+    get: () => {
+        const profileId = settings.state.voice.personal_profile_id
+        if (settings.state.voice.engine === 'personal' && profileId) {
+            // ⛔ Onesto come il router (`personalVoiceRouter.ts`): un profilo
+            // scelto che è sparito o è diventato incompatibile (build del
+            // motore cambiata) non deve restare "selezionato" su un valore
+            // che il menù non offre più — si scivola sulla stessa voce di
+            // ripiego di sistema, non su un vuoto.
+            const ancoraValido = personalProfiles.value.some((p) => p.id === profileId && p.compatible)
+            if (ancoraValido) return `${PERSONAL_VOICE_PREFIX}${profileId}`
+        }
+        return settings.state.voice.voice_uri ?? voceDiRipiego.value ?? ''
+    },
+    set: (value: string) => {
+        if (value.startsWith(PERSONAL_VOICE_PREFIX)) {
+            void settings.setVoicePreferences({
+                engine: 'personal',
+                personal_profile_id: value.slice(PERSONAL_VOICE_PREFIX.length),
+            })
+        } else {
+            void settings.setVoicePreferences({ engine: 'system', voice_uri: value || null })
+        }
+    },
 })
 const dictationLanguage = computed({
     get: () => settings.state.voice.dictation_language,
@@ -233,10 +283,28 @@ const voiceItems = computed(() => {
      * difetto era qui, non lì. Stesso pattern già in uso sotto per
      * `dictationLanguageItems`, non un'invenzione nuova.
      */
-    const mancante = selectedVoice.value && !elenco.some((v) => v.name === selectedVoice.value)
+    const mancante = selectedVoice.value
+        && !selectedVoice.value.startsWith(PERSONAL_VOICE_PREFIX)
+        && !elenco.some((v) => v.name === selectedVoice.value)
         ? dispositivo.value.find((v) => v.name === selectedVoice.value)
         : undefined
-    return [...elenco, ...(mancante ? [mancante] : [])].map((v) => ({ value: v.name, label: etichetta(v) }))
+    const vociDispositivo = [...elenco, ...(mancante ? [mancante] : [])].map((v) => ({ value: v.name, label: etichetta(v) }))
+
+    /*
+     * ⛔⛔ LE VOCI PERSONALI NEL MENÙ — non filtrate per lingua come quelle
+     * del dispositivo: sono l'identità di UNA persona, non un catalogo. Chi
+     * cambia la lingua dell'interfaccia non deve vedersi sparire la propria
+     * voce dal selettore. Solo `compatible`: un profilo che il motore non
+     * userebbe più (build cambiata) non va offerto come scelta — lo stesso
+     * criterio che decide `ready` nel router (`personalVoiceRouter.ts`).
+     * In testa, non in coda: è la voce che questa persona ha registrato
+     * apposta, non "un'altra opzione fra 473".
+     */
+    const vociPersonali = personalProfiles.value
+        .filter((p) => p.compatible)
+        .map((p) => ({ value: `${PERSONAL_VOICE_PREFIX}${p.id}`, label: `${p.name} (${p.language})` }))
+
+    return [...vociPersonali, ...vociDispositivo]
 })
 /**
  * ⭐⭐ SI SENTE SUBITO — owner 2026-08-10: «quando cambio un parametro della
@@ -268,7 +336,25 @@ function setPitch(event: Event): void {
     void settings.setVoicePreferences({ pitch: Number((event.target as HTMLInputElement).value) })
     anteprimaFraPoco()
 }
-function preview(): void {
+/**
+ * ⛔⛔ 22/8, owner: «non c'è modo di avere un'anteprima» per la voce appena
+ * codificata. Il pulsante «Anteprima voce» esisteva già, ma parlava SOLO
+ * col motore di sistema (`service.speak`) — una voce personale selezionata
+ * nel menù sopra non veniva mai letta qui. Stessa frase di
+ * `voice.previewPhrase` usata anche dal pulsante di anteprima per-profilo
+ * sotto e dall'anteprima dentro il wizard: una sola verità, non tre.
+ */
+async function preview(): Promise<void> {
+    const scelta = selectedVoice.value
+    if (scelta.startsWith(PERSONAL_VOICE_PREFIX)) {
+        const profileId = scelta.slice(PERSONAL_VOICE_PREFIX.length)
+        await talosPersonalVoiceSpeechAdapter(profileId).speak(t('voice.previewPhrase'), {
+            rate: settings.state.voice.personal_rate,
+            pitch: settings.state.voice.personal_pitch,
+            onerror: () => { toasts.push({ message: t('personalVoice.previewFailed') }) },
+        })
+        return
+    }
     // ⛔ Rilievo 3, 2026-08-22: qui c'era `?? undefined` — un TERZO calcolo del
     // «default», che lasciava decidere al motore nativo la sua predefinita
     // (che può essere la generica, o una voce diversa sia dal menù sia da
@@ -289,7 +375,6 @@ watch(selectedVoice, () => { anteprimaFraPoco() })
 
 // --- Voce personale (Fase 4, blueprint §11.1) ---------------------------
 
-const personalProfiles = ref<TalosPersonalVoiceProfileSummary[]>([])
 const personalProfilesLoaded = ref(false)
 const showEnrollment = ref(false)
 const renamingProfileId = ref<string | null>(null)
@@ -359,6 +444,28 @@ onMounted(() => {
     void talosPersonalVoiceStatus().then((status) => { personalVoiceSupported.value = status.supported })
     void refreshPersonalProfiles()
 })
+
+/**
+ * ⛔⛔ 22/8, owner: anteprima per-profilo, indipendente dalla selezione nel
+ * menù sopra — ascoltare come suona una voce non deve costringere a
+ * renderla quella attiva prima ancora di averla sentita. Riusa
+ * `talosPersonalVoiceSpeechAdapter` (già esistente per `talosSpeakForReading`
+ * in `useTalosSpeech.ts`): stesso canale di completamento nativo
+ * (`talosNeuralVoiceDone`/`Error`), non un secondo giro di prenotazione
+ * scritto a mano qui.
+ */
+const previewingProfileId = ref<string | null>(null)
+async function previewPersonalProfile(profile: TalosPersonalVoiceProfileSummary): Promise<void> {
+    if (previewingProfileId.value) return
+    previewingProfileId.value = profile.id
+    const fine = (): void => { if (previewingProfileId.value === profile.id) previewingProfileId.value = null }
+    await talosPersonalVoiceSpeechAdapter(profile.id).speak(t('voice.previewPhrase'), {
+        rate: settings.state.voice.personal_rate,
+        pitch: settings.state.voice.personal_pitch,
+        onend: fine,
+        onerror: () => { fine(); toasts.push({ message: t('personalVoice.previewFailed') }) },
+    })
+}
 
 function beginRename(profile: TalosPersonalVoiceProfileSummary): void {
     renamingProfileId.value = profile.id
@@ -440,7 +547,24 @@ function onEnrollmentCommitted(): void {
                     </div>
                     <template v-else>
                         <div class="flex items-center justify-between gap-2">
-                            <span class="text-sm font-semibold">{{ profile.name }}</span>
+                            <span class="flex items-center gap-1.5 text-sm font-semibold">
+                                {{ profile.name }}
+                                <!--
+                                    ⛔⛔ 22/8, owner: si deve poter dire QUALE
+                                    profilo legge davvero le risposte - il
+                                    menù «Voce di lettura» sta in una sezione
+                                    diversa dello schermo, e senza questo
+                                    segnalino chi ha più di una voce non
+                                    saprebbe quale è attiva senza aprirlo.
+                                -->
+                                <span
+                                    v-if="settings.state.voice.engine === 'personal' && settings.state.voice.personal_profile_id === profile.id"
+                                    data-testid="talos-personal-voice-in-use"
+                                    class="flex items-center gap-0.5 rounded-full border border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] px-1.5 py-0.5 text-3xs font-semibold text-[var(--talos-accent)]"
+                                >
+                                    <Check class="size-3" aria-hidden="true" />{{ t('personalVoice.inUse') }}
+                                </span>
+                            </span>
                             <span
                                 class="rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide"
                                 :class="profile.compatible
@@ -450,6 +574,25 @@ function onEnrollmentCommitted(): void {
                         </div>
                         <p v-if="!profile.compatible" class="mt-1 text-xs leading-5 text-[var(--talos-danger)]">{{ t('personalVoice.incompatibleBody') }}</p>
                         <div class="mt-2 flex gap-2">
+                            <!--
+                                ⛔⛔ 22/8, owner: «non c'è modo di avere
+                                un'anteprima» - questo pulsante non esisteva
+                                affatto. Solo su un profilo compatibile: uno
+                                incompatibile è esattamente quello che il
+                                motore rifiuterebbe di leggere.
+                            -->
+                            <Button
+                                v-if="profile.compatible"
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                data-testid="talos-personal-voice-preview"
+                                :disabled="previewingProfileId === profile.id"
+                                class="talos-pressable gap-1.5 rounded-lg"
+                                @click="previewPersonalProfile(profile)"
+                            >
+                                <Play class="size-3.5" aria-hidden="true" />{{ previewingProfileId === profile.id ? t('personalVoice.previewing') : t('personalVoice.preview') }}
+                            </Button>
                             <Button type="button" size="sm" variant="outline" class="talos-pressable gap-1.5 rounded-lg" @click="beginRename(profile)">
                                 <Pencil class="size-3.5" aria-hidden="true" />{{ t('personalVoice.rename') }}
                             </Button>
