@@ -1410,7 +1410,24 @@ static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
     // talos_esiste_dispositivo_offload().
     session->gpu_layers_effective =
         (gpuLayers != 0 && talos_esiste_dispositivo_offload()) ? (int) gpuLayers : 0;
-    session->backend_target_effective = bersaglioScelto == "auto" ? "" : bersaglioScelto;
+    // ⛔⛔ B2, scoperto da una riga VERA scritta dal banco di prova, non da
+    // rilettura: `bersaglioScelto == "auto"` non basta. `talos_risolvi_
+    // bersaglio()` ha un SECONDO valore sentinella - "none" - quando il
+    // chiamante chiede esplicitamente backend="none"/"cpu" (e' la strada
+    // presa da OGNI riga del banco: TalosLocalBaselineDeviceTest.
+    // backendRichiesto() traduce la richiesta vuota in "none" prima di
+    // scendere). Una riga reale sul Pad portava backendDevice:"none"
+    // (stringa) invece di null su un'apertura CPU pura - lo stesso difetto
+    // di "auto", una seconda volta, con un nome diverso. Cercata online
+    // un'API upstream che dica direttamente "nessun device reale in questo
+    // llama_model_params" (nessuna, nell'header pubblico): la cura resta
+    // locale. Non e' aggiungere una seconda stringa da confrontare: e'
+    // smettere di confrontare stringhe. La domanda vera e' se `dispositivi`
+    // porta un device reale - vuoto (auto) e [nullptr] (none/cpu) dicono
+    // entrambi "nessuno"; ogni ramo che risolve un bersaglio vero lo mette
+    // SEMPRE per primo (tre volte, sopra in questo file).
+    bool haBersaglioEffettivo = !dispositivi.empty() && dispositivi.front() != nullptr;
+    session->backend_target_effective = haBersaglioEffettivo ? bersaglioScelto : "";
     session->flash_attn_effective = llama_flash_attn_type_name(ctx_params.flash_attn_type);
 
     // Armata QUI e non nei parametri del contesto: la callback ha bisogno
