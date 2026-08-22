@@ -936,3 +936,97 @@ Owner 2026-08-22: chiusi cinque su sei. Poi Fase 5 (chiude il blocco voce
 personale per intero), poi le ottimizzazioni di performance del motore
 locale LLM (i due documenti MAX PERFORMANCE già custoditi in
 TALOS-RICERCHE).
+
+---
+
+## 15. Fase 5 — installazione durevole del modello, RIAPERTA il 22/8
+
+`.claude/CONSEGNA-0.1.18-VOCE.md` §4 (21/8) rimandava esplicitamente questa
+fase a dopo — «non blocca la voce». Owner 2026-08-22, dopo la domanda
+esplicita («intendi riaprire quella decisione?»): sì, aprila. Blueprint
+§39 Fase 5: *generic artifact transfer core, pinned voice manifest, exact
+hashes/bytes, partial/resume, atomic version activation, cleanup old
+version after lease release.*
+
+### 15.1 Il motore di trasferimento NON si scrive da capo
+
+Cercato prima di scrivere, come sempre: `TalosTransferSession.java` (764
+righe) + `TalosTransferPlan.java` + `TalosTransferJournal.java` sono già in
+produzione per i GGUF — coda durevole fra riavvii del processo, ripresa,
+scelta del runner per livello API (Android 15: `USER_INITIATED_JOB` senza
+tetto giornaliero; 26-33: `FOREGROUND_SERVICE`; app non visibile:
+`DEFERRED_JOB`), riserva di spazio disco calcolata UNA volta all'inizio
+(`STORAGE_RESERVE_BYTES`, la stessa costante di `fit.ts` — già una guardia
+contro la stessa divergenza che per poco è successa due volte). ⇒ Fase 5
+generalizza questo motore per un `Request` voce, non ne duplica uno — è
+esattamente ciò che il blueprint stesso dice al §4 della CONSEGNA.
+
+### 15.2 Il pin — la parte più a rischio, fatta e provata per prima
+
+Blueprint §47.1: *«Never configure production as: repo = OpenMOSS/...
+revision = main»* — serve un promotion workflow: SHA candidata → hash
+inventory → parità → benchmark → promozione. Trovato sul Pad, non
+inventato: le due cartelle modello di Fase 0 (`adb push` a mano) portano
+ancora la cache `huggingface_hub` di chi le ha scaricate — commit esatto e
+hash LFS per ogni file, mai puliti.
+
+**Fonte candidata, verificata in TRE modi indipendenti** (cache del
+device, API HuggingFace dal vivo, fetch diretto + hash ricalcolato a
+mano — stesso sha256 in tutti e tre):
+
+| repo | revision (commit esatto, mai `main`) |
+|---|---|
+| `OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX` | `f52645cb467506d8e18e746ddd59482685b74e58` |
+| `OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX` | `ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae` |
+
+Entrambi pubblici, non gated, Apache-2.0 — verificato via API, non
+assunto dal nome della cartella. 16 file, 763.191.513 byte (~763 MB),
+ognuno col suo sha256 vero: per i 3 file non-LFS (i tre JSON di
+configurazione) l'API HF restituisce solo un blob-sha1 git, quindi lo
+sha256 vero è stato ricalcolato a mano sui byte tirati dal device — e
+`browser_poc_manifest.json` è stato riscaricato una seconda volta
+dall'endpoint HF diretto per la controprova indipendente.
+
+⇒ **`android/app/src/main/assets/voice/model-manifest.json`** — il
+manifesto firmato nel sorgente che il blueprint §47.2 richiede («the app
+trusts the source-controlled TALOS manifest, not a mutable remote
+JSON»). Provato in ENTRAMBI i versi con
+`TalosVoiceModelManifestPinTest.kt` (7 test JVM, `./gradlew
+testDebugUnitTest`): forma del pin (mai `main`), 64-hex reale su ogni
+hash, somma byte ricalcolata a mano (non una costante duplicata), zero
+percorsi doppi, le cartelle combaciano con quelle che
+`TalosVoiceModelManager`/`TalosMossManifest` già cercano sul
+dispositivo, e — la prova al contrario — uno sha256 troncato di un
+carattere fa fallire il test giusto (verificato spegnendolo e
+riaccendendolo davvero, non per ipotesi). `releaseSmoke` resta
+`PENDING` nel manifesto stesso finché il downloader vero non ha girato
+su un dispositivo non di riferimento.
+
+### 15.3 Cosa resta, per nome — il downloader vero non esiste ancora
+
+Il pin era la parte più a rischio (una fonte sbagliata qui comprometterebbe
+tutto il resto), e ora è fatto e provato. Non ancora scritto:
+
+- Un `TalosVoiceModelInstaller.kt` (o simile) che legge
+  `model-manifest.json` e costruisce un `TalosTransferSession.Request`
+  per ciascuno dei due `artifacts` — il ponte fra il manifesto e il
+  motore che già esiste.
+- Verifica hash **dopo** il download, prima di considerare un file
+  installato — non fidarsi della sola dimensione.
+- **Attivazione atomica**: la nuova versione diventa quella attiva solo a
+  tutti i file verificati, mai a metà.
+- **Pulizia della versione vecchia dopo il rilascio del lease** — stesso
+  concetto di "generazione" già usato in `TalosVoiceHost` (§14 del
+  blueprint), non un meccanismo nuovo.
+- Scenari corrotto/parziale/aggiornamento-modello che passano (cancello
+  di uscita del blueprint per questa fase) — provati sul dispositivo
+  reale, non solo sulla JVM.
+- Lato TS: un pulsante/avanzamento nelle impostazioni voce che avvia
+  l'installazione quando `TalosVoiceModelManager.isPresent()` è falso,
+  al posto del silenzio attuale (oggi la sezione voce personale resta
+  nascosta se il modello manca — vedi `personalVoiceSupported` in
+  `TalosMobileVoiceSettings.vue`, Blocco 4).
+
+⛔ Non chiuso senza dispositivo reale: il cancello di questa fase
+("scenari corrotto/parziale/aggiornamento passano") è per definizione
+un cancello di dispositivo, non di JVM.
