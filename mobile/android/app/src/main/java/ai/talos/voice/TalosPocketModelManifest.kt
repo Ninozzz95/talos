@@ -51,6 +51,33 @@ internal data class TalosPocketModelManifest(
         return this
     }
 
+    /**
+     * Adapts the pinned upstream bundle to TALOS' existing generic transfer
+     * contract. The downloader must request the repository's real
+     * `onnx/italian/<file>` paths, while activation deliberately flattens those
+     * files into the self-contained runtime root `pocket/italian`.
+     */
+    fun toVoiceModelManifest(): TalosVoiceModelManifest = TalosVoiceModelManifest(
+        schemaVersion = schemaVersion,
+        engineBuild = "$engine@$revision",
+        installRoot = installRoot,
+        artifacts = listOf(
+            TalosVoiceModelManifest.Artifact(
+                repo = repository,
+                revision = revision,
+                targetDir = language,
+                files = files.map { file ->
+                    TalosVoiceModelManifest.Artifact.File(
+                        path = "onnx/$language/${file.path}",
+                        size = file.size,
+                        sha256 = file.sha256,
+                        targetPath = file.path,
+                    )
+                },
+            ),
+        ),
+    )
+
     companion object {
         const val ENGINE = "pocket-v2"
         const val LANGUAGE = "italian"

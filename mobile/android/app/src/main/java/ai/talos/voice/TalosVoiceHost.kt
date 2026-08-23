@@ -86,7 +86,7 @@ internal class TalosVoiceHost(
     private var tokenizer: TalosVoiceTokenizer? = null
     private var pocketRuntime: TalosPocketHostRuntimeContract? = null
     private var pocketRuntimeRoot: File? = null
-    private var pocketModelStatus: TalosPocketModelStatus? = null
+    private var pocketModelStatusSnapshot: TalosPocketModelStatusSnapshot? = null
     private var mossCodecFingerprint: String? = null
     @Volatile private var player: TalosPcmPlayer? = null
     private var playerSampleRate: Int? = null
@@ -429,11 +429,25 @@ internal class TalosVoiceHost(
      */
     fun refreshPocketModel() {
         owner.execute {
-            pocketRuntime?.close()
-            pocketRuntime = null
-            pocketRuntimeRoot = null
-            pocketModelStatus = null
+            closePocketEngineState()
+            pocketModelStatusSnapshot = null
         }
+    }
+
+    /**
+     * Hash-verifies Pocket on the same owner lane that opens and closes its
+     * ORT sessions. A cached answer carries the original measurement rather
+     * than pretending that a lookup was another disk verification.
+     */
+    fun pocketModelStatusBlocking(refresh: Boolean = false): TalosPocketModelStatusSnapshot {
+        val completed = CountDownLatch(1)
+        var outcome: Result<TalosPocketModelStatusSnapshot>? = null
+        owner.execute {
+            outcome = runCatching { currentPocketModelStatusSnapshot(refresh) }
+            completed.countDown()
+        }
+        completed.await()
+        return outcome!!.getOrThrow()
     }
 
     /**
@@ -803,7 +817,7 @@ internal class TalosVoiceHost(
         }
 
         ensureActive()
-        val statusWasCached = pocketModelStatus != null
+        val statusWasCached = pocketModelStatusSnapshot != null
         val pocketStatus = measuredEnrollmentStage(
             stage = if (statusWasCached) "pocket_model_status_cache" else "pocket_model_verify",
             metrics = lifecycleMetrics,
@@ -1713,8 +1727,13 @@ internal class TalosVoiceHost(
         active?.close()
     }
 
-    private fun currentPocketModelStatus(): TalosPocketModelStatus {
-        pocketModelStatus?.let { return it }
+    private fun currentPocketModelStatus(): TalosPocketModelStatus =
+        currentPocketModelStatusSnapshot().status
+
+    private fun currentPocketModelStatusSnapshot(refresh: Boolean = false): TalosPocketModelStatusSnapshot {
+        if (!refresh) pocketModelStatusSnapshot?.let { return it.copy(cacheHit = true) }
+        val startedAtNs = System.nanoTime()
+        val verificationThreadName = Thread.currentThread().name
         val status = try {
             pocketModelStatusProvider?.invoke()
                 ?: TalosPocketModelStatus.Missing("pocket-model-status-provider")
@@ -1724,8 +1743,18 @@ internal class TalosVoiceHost(
                 reason = error.javaClass.simpleName.takeIf { it.isNotBlank() } ?: "Throwable",
             )
         }
-        pocketModelStatus = status
-        return status
+        val snapshot = TalosPocketModelStatusSnapshot(
+            status = status,
+            cacheHit = false,
+            verificationStartedAtNs = startedAtNs,
+            verificationDurationNs = (System.nanoTime() - startedAtNs).coerceAtLeast(0L),
+            verificationThreadName = verificationThreadName,
+        )
+        pocketModelStatusSnapshot = snapshot
+        if (status !is TalosPocketModelStatus.Ready || status.verifiedFiles <= 0) {
+            closePocketEngineState()
+        }
+        return snapshot
     }
 
     private fun isMossCompatible(profile: TalosVoiceProfileV2): Boolean {
@@ -1851,7 +1880,7 @@ internal class TalosVoiceHost(
             runtime = null
             pocketRuntime = null
             pocketRuntimeRoot = null
-            pocketModelStatus = null
+            pocketModelStatusSnapshot = null
             tokenizer = null
             player = null
             playerSampleRate = null

@@ -32,6 +32,20 @@ class TalosPocketModelManifestTest {
     }
 
     @Test
+    fun `POCKET-INSTALL-01 real manifest becomes one pinned downloader artifact without leaking remote directories into active root`() {
+        val source = realManifest()
+        val plan = source.toVoiceModelManifest()
+        val artifact = plan.artifacts.single()
+
+        assertEquals("pocket-v2@${source.revision}", plan.engineBuild)
+        assertEquals("pocket", plan.installRoot)
+        assertEquals("italian", artifact.targetDir)
+        assertEquals(source.files.map { "onnx/italian/${it.path}" }, artifact.files.map { it.path })
+        assertEquals(source.files.map { it.path }, artifact.files.map { it.targetPath })
+        assertEquals(165_233_143L, plan.toTransferRequests().single().totalBytes)
+    }
+
+    @Test
     fun `real manifest records the exact runtime and semantic bundle contract`() {
         val manifest = realManifest()
         assertEquals("1.29.0", manifest.onnxRuntimeVersion)

@@ -30,6 +30,34 @@ export interface TalosVoiceEnrollmentBuildResult {
     stages: TalosVoiceEnrollmentStageMetric[]
 }
 
+export interface TalosPocketModelEvidence {
+    supported: boolean
+    installed: boolean
+    failure?: string
+    backend?: 'pocket-v2'
+    engineBuild?: string
+    modelState?: 'ready' | 'missing' | 'corrupt' | 'unverified'
+    verifiedFiles?: number
+    cacheHit?: boolean
+    verificationDurationMs?: number
+}
+
+export interface TalosPocketInstallStageMetric {
+    stage: string
+    startedAtNs: number
+    durationNs: number
+    threadName: string
+    outcome: string
+    inputFiles?: number
+    outputFiles?: number
+    detail?: string
+}
+
+export interface TalosPocketModelOperationResult extends TalosPocketModelEvidence {
+    activated: boolean
+    stages: TalosPocketInstallStageMetric[]
+}
+
 /**
  * The bridge to `ai.talos.voice.TalosNeuralVoicePlugin` (Fase 4 block 2),
  * from JavaScript's side - as thin as `localEngine.ts` already is for the
@@ -42,7 +70,7 @@ export interface TalosVoiceEnrollmentBuildResult {
  */
 
 interface TalosNeuralVoicePlugin {
-    status(): Promise<{ supported: boolean, installed: boolean, failure?: string }>
+    status(): Promise<TalosPocketModelEvidence>
     // ⭐⭐⭐ Fase 5, Blocco 3b — installazione durevole del modello.
     installManifest(): Promise<{
         engineBuild: string
@@ -54,8 +82,8 @@ interface TalosNeuralVoicePlugin {
             files: Array<{ path: string, bytes: number, sha256: string }>
         }>
     }>
-    activateModel(): Promise<{ activated: boolean, supported: boolean }>
-    recoverModelInstall(): Promise<{ supported: boolean }>
+    activateModel(): Promise<TalosPocketModelOperationResult>
+    recoverModelInstall(): Promise<TalosPocketModelOperationResult>
     profiles(): Promise<{ profiles: TalosPersonalVoiceProfileSummary[] }>
     renameProfile(options: { profileId: string, name: string }): Promise<void>
     deleteProfile(options: { profileId: string }): Promise<void>
@@ -130,8 +158,25 @@ const plugin = registerPlugin<TalosNeuralVoicePlugin>('TalosNeuralVoice')
 export async function talosPersonalVoiceStatus(): Promise<TalosPersonalVoiceStatus> {
     try {
         const status = await plugin.status()
+        const pocketEvidence = {
+            ...(status.backend !== undefined ? { backend: status.backend } : {}),
+            ...(status.engineBuild !== undefined ? { engineBuild: status.engineBuild } : {}),
+            ...(status.modelState !== undefined ? { modelState: status.modelState } : {}),
+            ...(status.verifiedFiles !== undefined ? { verifiedFiles: status.verifiedFiles } : {}),
+            ...(status.cacheHit !== undefined ? { cacheHit: status.cacheHit } : {}),
+            ...(status.verificationDurationMs !== undefined
+                ? { verificationDurationMs: status.verificationDurationMs }
+                : {}),
+        }
         if (!status.installed) {
-            return { supported: status.supported, installed: false, ready: false, active: false, failure: status.failure }
+            return {
+                supported: status.supported,
+                installed: false,
+                ready: false,
+                active: false,
+                failure: status.failure,
+                ...pocketEvidence,
+            }
         }
         const profiles = await talosPersonalVoiceProfiles()
         return {
@@ -140,6 +185,7 @@ export async function talosPersonalVoiceStatus(): Promise<TalosPersonalVoiceStat
             ready: profiles.some((profile) => profile.compatible),
             active: false,
             failure: status.failure,
+            ...pocketEvidence,
         }
     } catch {
         return { supported: false, installed: false, ready: false, active: false }
@@ -149,19 +195,18 @@ export async function talosPersonalVoiceStatus(): Promise<TalosPersonalVoiceStat
 /**
  * Il manifesto pinnato (Fase 5 Blocco 1), già nella forma che
  * `talosBeginModelTransfer` di `stores/modelTransfers.ts` capisce — un
- * oggetto per artifact, `files` con `bytes`/`sha256` invece di `size`.
+ * un artifact Pocket, `files` con `bytes`/`sha256` invece di `size`.
  */
 export async function talosVoiceModelInstallManifest(): ReturnType<TalosNeuralVoicePlugin['installManifest']> {
     return plugin.installManifest()
 }
 
 /**
- * L'attivazione atomica — chiamare solo dopo che ENTRAMBI gli artifact del
- * manifesto sono finiti di scaricare (mai uno prima dell'altro: vedi la
- * nota su `activateModel` lato Kotlin). Chi chiama in anticipo riceve un
- * rifiuto chiaro (`not-downloaded:...`), non un'attivazione a metà.
+ * L'attivazione atomica — chiamare solo dopo che l'artifact Pocket è finito
+ * di scaricare. Il nativo ricontrolla dimensione e SHA-256 sia in staging
+ * sia dopo la promozione prima di rimuovere cache e rollback.
  */
-export async function talosActivateVoiceModel(): Promise<{ activated: boolean, supported: boolean }> {
+export async function talosActivateVoiceModel(): Promise<TalosPocketModelOperationResult> {
     return plugin.activateModel()
 }
 

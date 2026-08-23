@@ -74,6 +74,34 @@ describe('personalVoice service', () => {
         expect(status).toEqual({ supported: false, installed: false, ready: false, active: false })
     })
 
+    it('PVOICE-STATUS-05 preserves every native Pocket verification field', async () => {
+        bridge.status.mockResolvedValue({
+            supported: true,
+            installed: true,
+            backend: 'pocket-v2',
+            engineBuild: '58a6d00cf13d239b6748cb0769f35c580a8f606c',
+            modelState: 'ready',
+            verifiedFiles: 8,
+            cacheHit: false,
+            verificationDurationMs: 321.5,
+        })
+        bridge.profiles.mockResolvedValue(READY_PROFILES)
+
+        await expect(talosPersonalVoiceStatus()).resolves.toEqual({
+            supported: true,
+            installed: true,
+            ready: true,
+            active: false,
+            failure: undefined,
+            backend: 'pocket-v2',
+            engineBuild: '58a6d00cf13d239b6748cb0769f35c580a8f606c',
+            modelState: 'ready',
+            verifiedFiles: 8,
+            cacheHit: false,
+            verificationDurationMs: 321.5,
+        })
+    })
+
     it('PVOICE-PROFILES-01 a thrown bridge error reads as an empty list, not a crash', async () => {
         bridge.profiles.mockRejectedValue(new Error('bridge unavailable'))
         await expect(talosPersonalVoiceProfiles()).resolves.toEqual([])
