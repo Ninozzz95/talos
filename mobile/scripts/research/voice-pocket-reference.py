@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import time
 from pathlib import Path
@@ -76,13 +77,27 @@ def select_fixture(document, fixture_id):
     return selected
 
 
-def execute_oracle(engine, fixture_id, source, public_voice_path, seed, max_frames):
+def execute_oracle(
+    engine,
+    fixture_id,
+    source,
+    public_voice_path,
+    seed,
+    max_frames,
+    temperature,
+):
     if not isinstance(source, str) or not source.strip():
         raise ValueError("source must be non-empty")
     if not isinstance(max_frames, int) or not 1 <= max_frames <= MAX_ORACLE_FRAMES:
         raise ValueError(f"maxFrames must be in [1, {MAX_ORACLE_FRAMES}]")
     if not isinstance(seed, int) or seed < 0:
         raise ValueError("seed must be a non-negative integer")
+    if (
+        not isinstance(temperature, (int, float))
+        or not math.isfinite(temperature)
+        or not 0.0 <= temperature <= 2.0
+    ):
+        raise ValueError("temperature must be finite and in [0, 2]")
 
     np.random.seed(seed)
     started = time.perf_counter_ns()
@@ -110,6 +125,7 @@ def execute_oracle(engine, fixture_id, source, public_voice_path, seed, max_fram
         "schemaVersion": 1,
         "fixtureId": fixture_id,
         "seed": seed,
+        "temperature": float(temperature),
         "maxFrames": max_frames,
         "frameCount": frame_count,
         "sampleCount": sample_count,
@@ -126,7 +142,31 @@ def execute_oracle(engine, fixture_id, source, public_voice_path, seed, max_fram
     return result, {"latents": latents, "pcm": pcm}
 
 
-def load_upstream_engine(source_root):
+def export_public_conditioning(engine, public_voice_path):
+    conditioning = np.ascontiguousarray(
+        engine.encode_voice(public_voice_path),
+        dtype=np.dtype("<f4"),
+    )
+    if (
+        conditioning.ndim != 3
+        or conditioning.shape[0] != 1
+        or not 1 <= conditioning.shape[1] <= 256
+        or conditioning.shape[2] != 1024
+    ):
+        raise ValueError(f"unexpected conditioning shape: {conditioning.shape}")
+    if not np.isfinite(conditioning).all():
+        raise ValueError("conditioning contains non-finite values")
+    payload = conditioning.tobytes(order="C")
+    return conditioning, {
+        "shape": [int(value) for value in conditioning.shape],
+        "byteLength": len(payload),
+        "sha256": sha256_bytes(payload),
+    }
+
+
+def load_upstream_engine(source_root, temperature):
+    if not math.isfinite(temperature) or not 0.0 <= temperature <= 2.0:
+        raise ValueError("temperature must be finite and in [0, 2]")
     root = Path(source_root)
     verified = verify_upstream_sources(root)
     script = root / "pocket_tts_onnx.py"
@@ -138,7 +178,7 @@ def load_upstream_engine(source_root):
         language="italian",
         precision="int8",
         device="cpu",
-        temperature=0.7,
+        temperature=temperature,
         lsd_steps=1,
     )
     return engine, verified
@@ -169,14 +209,32 @@ def write_arrays_atomic(path, arrays):
         temporary.unlink(missing_ok=True)
 
 
+def write_float32_atomic(path, values):
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
+    try:
+        payload = np.ascontiguousarray(values, dtype=np.dtype("<f4")).tobytes(order="C")
+        with temporary.open("wb") as target:
+            target.write(payload)
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Run the exact pinned public Pocket ONNX oracle.")
     parser.add_argument("--source-root", required=True, type=Path)
     parser.add_argument("--fixtures", required=True, type=Path)
     parser.add_argument("--case", required=True)
     parser.add_argument("--seed", type=int, default=19)
+    parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--arrays-output", required=True, type=Path)
+    parser.add_argument("--conditioning-output", type=Path)
+    parser.add_argument("--pcm-output", type=Path)
     return parser.parse_args()
 
 
@@ -184,7 +242,7 @@ def main():
     arguments = parse_arguments()
     fixture_document = json.loads(arguments.fixtures.read_text(encoding="utf-8"))
     selected = select_fixture(fixture_document, arguments.case)
-    engine, verified_sources = load_upstream_engine(arguments.source_root)
+    engine, verified_sources = load_upstream_engine(arguments.source_root, arguments.temperature)
     result, arrays = execute_oracle(
         engine=engine,
         fixture_id=selected["id"],
@@ -192,6 +250,7 @@ def main():
         public_voice_path=arguments.source_root / "reference_sample.wav",
         seed=arguments.seed,
         max_frames=selected["maxFrames"],
+        temperature=arguments.temperature,
     )
     result["upstream"] = {
         "repository": "KevinAHM/pocket-tts-onnx",
@@ -199,8 +258,21 @@ def main():
         "wrapperSha256": verified_sources["pocket_tts_onnx.py"],
         "publicFixtureSha256": verified_sources["reference_sample.wav"],
     }
+    if arguments.conditioning_output is not None:
+        conditioning, contract = export_public_conditioning(
+            engine,
+            arguments.source_root / "reference_sample.wav",
+        )
+        write_float32_atomic(arguments.conditioning_output, conditioning)
+        if sha256_file(arguments.conditioning_output) != contract["sha256"]:
+            raise ValueError("conditioning output changed while writing")
+        result["conditioning"] = contract
     write_arrays_atomic(arguments.arrays_output, arrays)
     result["arraysSha256"] = sha256_file(arguments.arrays_output)
+    if arguments.pcm_output is not None:
+        write_float32_atomic(arguments.pcm_output, arrays["pcm"])
+        if sha256_file(arguments.pcm_output) != result["pcmSha256"]:
+            raise ValueError("PCM output changed while writing")
     write_json_atomic(arguments.output, result)
     print(arguments.output)
 

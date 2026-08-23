@@ -1,12 +1,55 @@
 package ai.talos.voice.pocket
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 
 class TalosPocketFramePipelineTest {
+    @Test
+    fun `first decodable batch is a handoff barrier until PCM is consumed`() {
+        val decodeEntered = CountDownLatch(1)
+        val releaseDecode = CountDownLatch(1)
+        val firstEmitReturned = CountDownLatch(1)
+        val returnedBeforeDecode = AtomicBoolean(false)
+        val coordinator = thread(start = true, isDaemon = true) {
+            check(decodeEntered.await(1, TimeUnit.SECONDS))
+            returnedBeforeDecode.set(firstEmitReturned.await(200, TimeUnit.MILLISECONDS))
+            releaseDecode.countDown()
+        }
+        val pipeline = TalosPocketFramePipeline(
+            capacityFrames = 4,
+            firstDecodeFrames = 1,
+            regularDecodeFrames = 4,
+            cancellation = TalosPocketCancellation(),
+        )
+
+        val metrics = pipeline.run(
+            produce = { emit ->
+                emit(floatArrayOf(1f))
+                firstEmitReturned.countDown()
+                emit(floatArrayOf(2f))
+            },
+            decode = { batch ->
+                decodeEntered.countDown()
+                check(releaseDecode.await(1, TimeUnit.SECONDS))
+                batch.flatMap(FloatArray::toList).toFloatArray()
+            },
+            consume = { true },
+        )
+        coordinator.join()
+
+        assertFalse("producer crossed first-batch handoff before PCM consumption", returnedBeforeDecode.get())
+        assertEquals(2, metrics.producedFrames)
+        assertTrue(metrics.producerBlockedNs > 0L)
+    }
+
     @Test
     fun `a fast producer remains bounded and every frame is decoded once`() {
         val cancellation = TalosPocketCancellation()

@@ -3,3 +3,6 @@
 -keepclasseswithmembernames,includedescriptorclasses class ai.talos.voice.pocket.TalosPocketTokenizerJni {
     native <methods>;
 }
+-keepclasseswithmembernames,includedescriptorclasses class ai.talos.voice.pocket.TalosPocketResamplerJni {
+    native <methods>;
+}

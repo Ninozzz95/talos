@@ -21,6 +21,13 @@ wire/model-specific behavior inside this Android library.
   upstream CMake file; the adjacent idempotent patch driver makes repeated
   Gradle configuration fail closed if the source is neither pristine nor the
   expected patched form. Tokenizer source and behavior are not modified.
+- `libsndfile/libsamplerate` v0.2.2, commit
+  `c96f5e3de9c4488f4e6c97f59f5245f22fda22f7`, BSD-2-Clause. CMake fetches
+  this exact commit and statically links its supported `samplerate` target.
+  TALOS exposes only mono whole-buffer conversion through JNI and selects
+  upstream `SRC_SINC_BEST_QUALITY` for the bounded (maximum 20 second) voice
+  reference path. The converter source and filter implementation are not
+  modified.
 - `VolgaGerm/PocketTTS.cpp`, commit
   `e801e7d6c2692121a39e80ae525cb5265174a495`, MIT, was inspected as a mature
   streaming reference. Its binary/runtime is deliberately not linked: it does
