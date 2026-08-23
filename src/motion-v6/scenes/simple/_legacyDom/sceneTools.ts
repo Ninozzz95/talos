@@ -1,6 +1,6 @@
-import type { SceneInput } from '../../sceneRegistry'
-import type { SimpleSceneDefinition, SimpleSceneLayer } from '../../renderers/simpleRenderer'
-import type { TalosMotionSceneId } from '../../contracts'
+import type { SceneInput } from '../../../sceneRegistry'
+import type { SimpleSceneDefinition, SimpleSceneLayer } from '../../../renderers/simpleRenderer'
+import type { TalosMotionSceneId } from '../../../contracts'
 
 export type SimpleGlyph = Readonly<{
     role: string

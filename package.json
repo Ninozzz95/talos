@@ -32,7 +32,8 @@
     "test:e2e": "playwright test",
     "test:local-models:device": "node scripts/run-local-model-compatibility.mjs",
     "verify:android:permission-metadata": "node scripts/verify-release-permission-metadata.mjs",
-    "test:scripts": "node --test scripts/verify-parity-ledger.test.mjs",
+    "verify:android:backend-artifact": "node scripts/verify-local-backend-artifact.mjs",
+    "test:scripts": "node --test scripts/verify-parity-ledger.test.mjs scripts/verify-local-backend-artifact.test.mjs",
     "verify:parity": "npm run test:scripts && node scripts/verify-parity-ledger.mjs docs/feature-parity.json",
     "typecheck": "vue-tsc -b --force",
     "build:probe": "vite build --config vite.probe.config.ts && node -e \"require('node:fs').readdirSync('dist/probe/assets').filter(f=>f.endsWith('.wasm')).forEach(f=>require('node:fs').rmSync(`dist/probe/assets/${f}`))\""

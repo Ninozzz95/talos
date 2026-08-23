@@ -769,13 +769,13 @@ export type TalosMotionPreferencePatch = Partial<Omit<TalosMotionV6Preferences, 
     }
 }
 
-// F3-T1 (owner #7): the MOBILE default ships with background intensity at the
-// range minimum (scenes stay visible — opacity factor floors at 0.5x — but
-// maximally quiet). The engine contract default stays desktop-identical; only
-// the mobile out-of-box preference differs. Persisted user values win as usual.
+// F3-T1 (owner #7) intensity=0 divergence retired 2026-08-23: the owner tuned
+// the whole Movimento section live on device and asked for those numbers as
+// THE default, mobile included — TALOS_MOTION_V6_DEFAULTS.intensity now
+// carries that value directly, so mobile and the engine contract read the
+// same number again. Persisted user values still win as usual.
 function createMobileDefaultMotionPreferences(): TalosMotionV6Preferences {
     const defaults = createDefaultTalosMotionV6Preferences()
-    defaults.intensity = 0
     // Owner #15: the complex renderer ships ON by default.
     defaults.mode = 'complex'
     return defaults

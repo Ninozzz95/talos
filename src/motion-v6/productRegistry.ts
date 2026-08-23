@@ -14,7 +14,13 @@ export type TalosProductSceneRegistryOptions = Readonly<{
 export function createTalosProductSceneRegistry(options: TalosProductSceneRegistryOptions): SceneRegistry {
     return createSceneRegistry([
         ...createTalosComplexSceneRegistrations(options.complexPlatform, options.complexOptions),
-        ...createTalosSimpleSceneRegistrations(options.simplePlatform),
+        /*
+         * ⛔ 'simple' ora gira sul motore complex (canvas), non su quello DOM —
+         * vedi la doc in scenes/simple/index.ts. Le serve quindi la piattaforma
+         * complex, non quella semplice: `options.simplePlatform` resta usata
+         * solo da 'static', il vero ripiego leggero.
+         */
+        ...createTalosSimpleSceneRegistrations(options.complexPlatform, options.complexOptions),
         ...createTalosStaticSceneRegistrations(options.simplePlatform),
     ])
 }

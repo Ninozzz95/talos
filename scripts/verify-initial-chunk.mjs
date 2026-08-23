@@ -468,7 +468,31 @@ import { resolve } from 'node:path'
  * in questo file per «quattro byte» e «cento byte». Mille lascia margine
  * vero per la prossima funzione, che qualcuno misurerà prima di chiedere.
  */
-const DEFAULT_MAXIMUM_BYTES = 611_000
+/*
+ * ⛔ 611.000 → 612.000, stesso giorno, la funzione che il commento sopra
+ * aveva già previsto: «hai parlato ⇒ ti risponde a voce»
+ * (`useTalosRispostaAVoce.ts` → `seguiIlTesto` in `useTalosSpeech.ts`)
+ * ignorava `engine:'personal'` di proposito — owner, sentito dal vivo:
+ * «quando parlo nella chat e nell'assistente si usa la voce sintetica ma
+ * non quella selezionata». `toggle()` sapeva già chiamare il motore
+ * personale; `seguiIlTesto()` no, ed è esattamente il percorso della
+ * dettatura.
+ *
+ * ⛔ Il pigro c'era già (`talosSpeakForReading`/`talosTestoPerVoce` restano
+ * dietro un `import()`, un solo punto per funzione dopo aver accorpato i
+ * due che si ripetevano) - il peso che resta è lo stesso irriducibile di
+ * prima, raddoppiato: una seconda funzione che diventa consapevole del
+ * motore personale mantenendo intatta la stessa garanzia ("il sistema non
+ * chiama mai il plugin personale"), più la normalizzazione del testo per
+ * la voce (`talosTestoPerVoce` - un `_` letto "underscore" è lo stesso
+ * difetto di famiglia, misurato lo stesso giorno).
+ *
+ * ⇒ 612.000 e non 611.300: misurato dopo il taglio (un `import()` invece di
+ * due per `talosTestoPerVoce` dentro `seguiIlTesto`), il pezzo sta a
+ * 611.270 - a 611.300 resterebbero 30 byte, la stessa trappola di sempre.
+ * Mille lascia di nuovo margine vero.
+ */
+const DEFAULT_MAXIMUM_BYTES = 612_000
 const DEFAULT_MAXIMUM_CSS_BYTES = 220_000
 const DYNAMIC_BOUNDARIES = [
     {

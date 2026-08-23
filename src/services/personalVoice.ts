@@ -4,8 +4,59 @@ import type {
     TalosPersonalVoiceProfileSummary,
     TalosPersonalVoiceStatus,
     TalosSpeechEngine,
+    TalosVoiceReadingSource,
 } from '@/lib/voice/personalVoiceContracts'
 import type { TalosSpeakOptions, TalosSpeechService } from '@/services/speech'
+
+export interface TalosVoiceEnrollmentStageMetric {
+    stage: string
+    startedAtNs: number
+    durationNs: number
+    threadName: string
+    inputFrames?: number
+    outputSamples?: number
+}
+
+export interface TalosVoiceEnrollmentBuildResult {
+    backend: 'pocket-v2'
+    profileSchemaVersion: 2
+    sourceSampleRate: number
+    sourceSamples: number
+    referenceSamples: number
+    referenceDurationMs: number
+    conditioningFrames: number
+    conditioningDimension: number
+    enrollmentDurationMs: number
+    stages: TalosVoiceEnrollmentStageMetric[]
+}
+
+export interface TalosPocketModelEvidence {
+    supported: boolean
+    installed: boolean
+    failure?: string
+    backend?: 'pocket-v2'
+    engineBuild?: string
+    modelState?: 'ready' | 'missing' | 'corrupt' | 'unverified'
+    verifiedFiles?: number
+    cacheHit?: boolean
+    verificationDurationMs?: number
+}
+
+export interface TalosPocketInstallStageMetric {
+    stage: string
+    startedAtNs: number
+    durationNs: number
+    threadName: string
+    outcome: string
+    inputFiles?: number
+    outputFiles?: number
+    detail?: string
+}
+
+export interface TalosPocketModelOperationResult extends TalosPocketModelEvidence {
+    activated: boolean
+    stages: TalosPocketInstallStageMetric[]
+}
 
 /**
  * The bridge to `ai.talos.voice.TalosNeuralVoicePlugin` (Fase 4 block 2),
@@ -19,7 +70,7 @@ import type { TalosSpeakOptions, TalosSpeechService } from '@/services/speech'
  */
 
 interface TalosNeuralVoicePlugin {
-    status(): Promise<{ supported: boolean, installed: boolean, failure?: string }>
+    status(): Promise<TalosPocketModelEvidence>
     // ⭐⭐⭐ Fase 5, Blocco 3b — installazione durevole del modello.
     installManifest(): Promise<{
         engineBuild: string
@@ -31,8 +82,8 @@ interface TalosNeuralVoicePlugin {
             files: Array<{ path: string, bytes: number, sha256: string }>
         }>
     }>
-    activateModel(): Promise<{ activated: boolean, supported: boolean }>
-    recoverModelInstall(): Promise<{ supported: boolean }>
+    activateModel(): Promise<TalosPocketModelOperationResult>
+    recoverModelInstall(): Promise<TalosPocketModelOperationResult>
     profiles(): Promise<{ profiles: TalosPersonalVoiceProfileSummary[] }>
     renameProfile(options: { profileId: string, name: string }): Promise<void>
     deleteProfile(options: { profileId: string }): Promise<void>
@@ -40,9 +91,13 @@ interface TalosNeuralVoicePlugin {
         text: string
         profileId: string
         readingId: string
+        utteranceId?: string
         rate: number
         pitch: number
         queue?: 'flush' | 'add'
+        traceId?: string
+        source?: TalosVoiceReadingSource
+        locale?: string
     }): Promise<{ accepted: boolean, reason?: string }>
     stop(): Promise<void>
 
@@ -66,7 +121,7 @@ interface TalosNeuralVoicePlugin {
         language: string
         style: string
         consentVersion: number
-    }): Promise<{ frameCount: number, quantizerCount: number, enrollmentDurationMs: number }>
+    }): Promise<TalosVoiceEnrollmentBuildResult>
     previewEnrollmentProfile(options: { text: string, readingId: string }): Promise<{ accepted: boolean }>
     commitEnrollmentProfile(): Promise<{ profile: TalosPersonalVoiceProfileSummary }>
     discardEnrollmentSession(): Promise<void>
@@ -103,8 +158,25 @@ const plugin = registerPlugin<TalosNeuralVoicePlugin>('TalosNeuralVoice')
 export async function talosPersonalVoiceStatus(): Promise<TalosPersonalVoiceStatus> {
     try {
         const status = await plugin.status()
+        const pocketEvidence = {
+            ...(status.backend !== undefined ? { backend: status.backend } : {}),
+            ...(status.engineBuild !== undefined ? { engineBuild: status.engineBuild } : {}),
+            ...(status.modelState !== undefined ? { modelState: status.modelState } : {}),
+            ...(status.verifiedFiles !== undefined ? { verifiedFiles: status.verifiedFiles } : {}),
+            ...(status.cacheHit !== undefined ? { cacheHit: status.cacheHit } : {}),
+            ...(status.verificationDurationMs !== undefined
+                ? { verificationDurationMs: status.verificationDurationMs }
+                : {}),
+        }
         if (!status.installed) {
-            return { supported: status.supported, installed: false, ready: false, active: false, failure: status.failure }
+            return {
+                supported: status.supported,
+                installed: false,
+                ready: false,
+                active: false,
+                failure: status.failure,
+                ...pocketEvidence,
+            }
         }
         const profiles = await talosPersonalVoiceProfiles()
         return {
@@ -113,6 +185,7 @@ export async function talosPersonalVoiceStatus(): Promise<TalosPersonalVoiceStat
             ready: profiles.some((profile) => profile.compatible),
             active: false,
             failure: status.failure,
+            ...pocketEvidence,
         }
     } catch {
         return { supported: false, installed: false, ready: false, active: false }
@@ -122,19 +195,18 @@ export async function talosPersonalVoiceStatus(): Promise<TalosPersonalVoiceStat
 /**
  * Il manifesto pinnato (Fase 5 Blocco 1), già nella forma che
  * `talosBeginModelTransfer` di `stores/modelTransfers.ts` capisce — un
- * oggetto per artifact, `files` con `bytes`/`sha256` invece di `size`.
+ * un artifact Pocket, `files` con `bytes`/`sha256` invece di `size`.
  */
 export async function talosVoiceModelInstallManifest(): ReturnType<TalosNeuralVoicePlugin['installManifest']> {
     return plugin.installManifest()
 }
 
 /**
- * L'attivazione atomica — chiamare solo dopo che ENTRAMBI gli artifact del
- * manifesto sono finiti di scaricare (mai uno prima dell'altro: vedi la
- * nota su `activateModel` lato Kotlin). Chi chiama in anticipo riceve un
- * rifiuto chiaro (`not-downloaded:...`), non un'attivazione a metà.
+ * L'attivazione atomica — chiamare solo dopo che l'artifact Pocket è finito
+ * di scaricare. Il nativo ricontrolla dimensione e SHA-256 sia in staging
+ * sia dopo la promozione prima di rimuovere cache e rollback.
  */
-export async function talosActivateVoiceModel(): Promise<{ activated: boolean, supported: boolean }> {
+export async function talosActivateVoiceModel(): Promise<TalosPocketModelOperationResult> {
     return plugin.activateModel()
 }
 
@@ -158,9 +230,13 @@ export async function talosSpeakWithPersonalVoice(options: {
     text: string
     profileId: string
     readingId: string
+    utteranceId?: string
     rate: number
     pitch: number
     queue?: 'flush' | 'add'
+    traceId?: string
+    source?: TalosVoiceReadingSource
+    locale?: string
 }): Promise<{ accepted: boolean, reason?: string }> {
     return plugin.speak(options)
 }
@@ -260,7 +336,7 @@ export async function talosBuildVoiceEnrollmentProfile(options: {
     language: string
     style: string
     consentVersion: number
-}): Promise<{ frameCount: number, quantizerCount: number, enrollmentDurationMs: number }> {
+}): Promise<TalosVoiceEnrollmentBuildResult> {
     return plugin.buildEnrollmentProfile(options)
 }
 
@@ -372,11 +448,81 @@ export async function talosSpeakForReading(
     engine: TalosSpeechEngine,
     personalProfileId: string | null,
     text: string,
-    options: { rate: number, pitch: number, onend?: () => void, onerror?: (reason?: string) => void },
+    options: {
+        rate: number
+        pitch: number
+        onend?: () => void
+        onerror?: (reason?: string) => void
+        readingId?: string
+        queue?: 'flush' | 'add'
+        traceId?: string
+        source?: TalosVoiceReadingSource
+        locale?: string
+    },
 ): Promise<boolean> {
     if (engine !== 'personal') return false
     const route = await planTalosVoiceReading(engine, personalProfileId, talosPersonalVoiceStatus)
     if (route.engine !== 'personal' || !route.profileId) return false
-    await talosPersonalVoiceSpeechAdapter(route.profileId).speak(text, options)
+    /**
+     * ⛔⛔⛔ 22/8, owner, riprodotto live: la preferenza salvata puntava a un
+     * profilo che nel frattempo NON ESISTE PIÙ (rinominato/ricreato da
+     * un'altra sessione - misurato: `plugin.profiles()` non conteneva più
+     * quell'id, `status.ready` era comunque `true` perché UN ALTRO profilo
+     * compatibile esisteva). Il router sopra controlla solo "esiste ALMENO
+     * un profilo pronto da qualche parte", mai il profilo SPECIFICO scelto
+     * - la stessa lacuna già chiusa lato UI in `selectedVoice` di
+     * `TalosMobileVoiceSettings.vue`, qui ancora aperta.
+     *
+     * Prima di questa riga: `talosPersonalVoiceSpeechAdapter(...).speak()`
+     * chiamava `onerror` per un rifiuto SINCRONO (`accepted:false,
+     * reason:"profileNotFound"`) e questa funzione tornava comunque `true`
+     * - "gestito", niente ripiego - lasciando SOLO il toast generico
+     * "La lettura non è partita" su una lettura che aveva ancora un
+     * ripiego onesto disponibile (`toggle()` in `useTalosSpeech.ts` salta
+     * il sistema quando questa funzione torna `true`).
+     *
+     * ⇒ Confermato con ricerca web (pattern di resilienza standard - un
+     * rifiuto "risorsa non trovata" è concettualmente un 404: non si
+     * ritenta, si reindirizza subito a un percorso alternativo, mai dopo
+     * che l'operazione è già a metà con effetti collaterali in corso): non
+     * si passa più dall'adapter condiviso qui (quello resta corretto per
+     * chi lo chiama sapendo di non avere un ripiego, come il pulsante
+     * "Ascolta" di ogni profilo) - si chiama `talosSpeakWithPersonalVoice`
+     * direttamente, si legge `accepted` PRIMA di decidere, e un rifiuto
+     * immediato torna `false` - il chiamante ripiega DAVVERO sul sistema,
+     * silenziosamente, come già promette la doc sopra ("false means the
+     * caller must fall back"). Un fallimento che arriva DOPO
+     * l'accettazione (a metà generazione) resta un errore mostrato: a
+     * quel punto non c'è più un ripiego pulito da offrire.
+     */
+    const readingId = options.readingId ?? `personal-reading-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const utteranceId = `${readingId}-u-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    await armPersonalVoiceListeners()
+    if (options.onend || options.onerror) {
+        // Arm before crossing the bridge: a very short native utterance may
+        // complete before the accepted promise returns to JavaScript.
+        pendingPersonalVoiceReadings.set(utteranceId, { onend: options.onend, onerror: options.onerror })
+    }
+    try {
+        const result = await talosSpeakWithPersonalVoice({
+            text,
+            profileId: route.profileId,
+            readingId,
+            utteranceId,
+            rate: options.rate,
+            pitch: options.pitch,
+            queue: options.queue,
+            traceId: options.traceId,
+            source: options.source,
+            locale: options.locale,
+        })
+        if (!result.accepted) {
+            pendingPersonalVoiceReadings.delete(utteranceId)
+            return false
+        }
+    } catch {
+        pendingPersonalVoiceReadings.delete(utteranceId)
+        return false
+    }
     return true
 }

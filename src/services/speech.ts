@@ -289,7 +289,26 @@ export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
     const aggiorna = () => plugin.voices()
         .then((r) => { if (r?.available && Array.isArray(r.voices)) elenco = r.voices })
         .catch(() => { /* il pannello mostrerà l'elenco vuoto, che è la verità */ })
-    void aggiorna()
+    /**
+     * ⛔⛔⛔ 22/8, owner, sentito dal vivo: «la voce di default si sente solo
+     * subito dopo aver riaperto l'app; se resta aperta cambia al secondo
+     * tentativo». MISURATO: prima questa chiamata partiva e basta
+     * (`void aggiorna()`), e NESSUNO aspettava il suo esito - `speak()`
+     * calcolava `scelta` subito, sincrono, contro `elenco` qualunque cosa
+     * fosse in quell'istante. La primissima lettura di ogni avvio (quella
+     * più probabile di tutte, non un caso limite) arrivava spesso PRIMA
+     * che il nativo rispondesse: `elenco` ancora `[]`, `talosVoceDaUsare([])`
+     * torna `{voce:null}`, il blocco che applica la voce si salta per
+     * intero, e il motore resta sulla generica che aveva di default.
+     *
+     * ⇒ Confermato con ricerca web (guida Android `TextToSpeech`): il
+     * pattern corretto è aspettare l'inizializzazione (`onInit`) prima di
+     * chiamare `getVoices()`/`speak()` - qui non c'è un callback nativo di
+     * "pronto" separato, ma la stessa promise di `aggiorna()` tenuta (non
+     * solo lanciata): `speak()` sotto la aspetta se l'elenco è ancora
+     * vuoto, prima di scegliere.
+     */
+    const primoCaricamento = aggiorna()
 
     /*
      * ⛔ UNA sola frase alla volta, e il richiamo è quello dell'ULTIMA.
@@ -333,13 +352,7 @@ export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
              * preferenza applicata una volta sola è una preferenza che un giorno
              * sparisce senza che nessuno se ne accorga.
              */
-            const scelta = talosVoceDaUsare(elenco, {
-                // La lingua dell'interfaccia: è quella in cui TALOS sta
-                // parlando, e può divergere da quella del telefono.
-                lingua: document.documentElement.lang || navigator.language || 'it',
-                rete: navigator.onLine !== false,
-                scelta: utterance.voiceURI ?? null,
-            })
+            const lingua = document.documentElement.lang || navigator.language || 'it'
             /*
              * ⛔⛔ SI ASPETTA CHE LA VOCE SIA APPLICATA — e prima non si
              * aspettava. Owner 2026-08-11: «quando TALOS parla, per i primi
@@ -362,7 +375,53 @@ export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
              */
             catena = catena
                 .then(async () => {
-                    if (scelta.voce) await plugin.setVoice({ name: scelta.voce.name })
+                    // ⛔ Se il primo caricamento non è ancora arrivato, si
+                    // aspetta QUI - dentro la coda, non prima: due `speak()`
+                    // ravvicinati all'avvio aspettano lo stesso caricamento
+                    // una volta sola, in ordine, invece di lanciarlo due volte.
+                    if (elenco.length === 0) await primoCaricamento
+                    const scelta = talosVoceDaUsare(elenco, {
+                        // La lingua dell'interfaccia: è quella in cui TALOS
+                        // sta parlando, e può divergere da quella del telefono.
+                        lingua,
+                        rete: navigator.onLine !== false,
+                        scelta: utterance.voiceURI ?? null,
+                    })
+                    if (scelta.voce) {
+                        const cambio = await plugin.setVoice({ name: scelta.voce.name })
+                        /**
+                         * ⛔⛔⛔ 22/8, owner, sentito dal vivo: «ho sentito una
+                         * voce di default, non quella selezionata» — non era
+                         * una voce eliminata rimasta appesa, era il cambio
+                         * voce che non avveniva mai. MISURATO subito dopo:
+                         * `plugin.voices().current` era `"it-IT-language"`
+                         * (la generica) mentre la preferenza salvata era una
+                         * voce di rete nominata - `setVoice` per una voce di
+                         * rete può rifiutare (rete non raggiungibile in
+                         * quell'istante, voce non ancora pronta lato motore)
+                         * e l'esito veniva scartato qui senza essere letto:
+                         * `speak()` procedeva comunque, sul motore rimasto
+                         * qualunque voce fosse impostata PRIMA. Silenzioso,
+                         * nessun log, nessun errore mostrato.
+                         *
+                         * ⇒ Confermato con ricerca web (guida Android
+                         * TextToSpeech): «fall back to a local voice if the
+                         * network voice is unavailable» - un solo ripiego,
+                         * verso la stessa preferenza rete:false già usata
+                         * altrove in questo file per lo stesso motivo (non
+                         * dipende dalla rete, quindi ha davvero più
+                         * probabilità di riuscire). Se anche questo fallisce
+                         * si procede comunque: il motore userà quel che ha,
+                         * ma almeno si è provato il ripiego onesto invece di
+                         * accettare in silenzio la voce di prima.
+                         */
+                        if (!cambio?.done) {
+                            const ripiego = talosVoceDaUsare(elenco, { lingua, rete: false, scelta: null })
+                            if (ripiego.voce && ripiego.voce.name !== scelta.voce.name) {
+                                await plugin.setVoice({ name: ripiego.voce.name }).catch(() => undefined)
+                            }
+                        }
+                    }
                     const esito = await plugin.speak({
                         text: utterance.text,
                         rate: utterance.rate,

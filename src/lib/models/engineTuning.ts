@@ -102,15 +102,17 @@ export function talosEngineTuning(topology: TalosCpuTopology): TalosEngineTuning
     const threads = Math.min(threadsBatch, meta)
 
     /**
-     * ⭐⭐⭐ Il microbatch: **192**, e il numero viene da una misura su GPU.
+     * ⭐⭐⭐ Il microbatch: **512**, e il numero viene da due misure separate
+     * da tredici giorni - la seconda dopo che una cura ha cambiato la fisica
+     * del problema.
      *
-     * Il commento che stava qui aveva gia' capito il compromesso - *l'attesa
-     * massima dello Stop e' un microbatch intero* - e sceglieva 512 su un
-     * telefono con molti core. Il ragionamento era giusto; non era mai stato
-     * **verificato su una scheda grafica**.
+     * Il commento che stava qui in origine aveva gia' capito il compromesso -
+     * *l'attesa massima dello Stop e' un microbatch intero* - e sceglieva 512
+     * su un telefono con molti core. Il ragionamento era giusto; non era mai
+     * stato **verificato su una scheda grafica**.
      *
-     * ⛔ Misurato il 2026-08-20 su Adreno 830, prompt da 2.048 token, Stop
-     * premuto dopo 200 ms. Il motore dichiara dove si ferma:
+     * Misurato il 2026-08-20 su Adreno 830, prompt da 2.048 token, Stop
+     * premuto dopo 200 ms. Il motore dichiarava dove si fermava:
      *
      * ```
      *   512 (com'era)  1.443 ms   si ferma a 512/2048 - pezzo intero completato
@@ -119,20 +121,48 @@ export function talosEngineTuning(topology: TalosCpuTopology): TalosEngineTuning
      *   128            ~290 ms
      * ```
      *
-     * ⇒ Il salto sta **fra 256 e 192**, e vale un fattore tre. Sotto quella
-     * soglia la latenza e' semplicemente una lunghezza di microbatch.
+     * Il salto stava **fra 256 e 192**, un fattore tre - e quella misura aveva
+     * scelto 192, dichiarando G4 rosso finche' la cura vera dell'abort (che
+     * allora non esisteva ancora) non fosse arrivata.
      *
-     * Il prezzo, sulle stesse misure: prefill **da 0 a 8% piu' lento** secondo
-     * il modello, e in cambio la decodifica dopo un prompt lungo **+97%**, il
-     * primo messaggio **4,5 secondi prima**, lo Stop **13× piu' pronto**.
+     * ⛔⛔ La cura e' arrivata il 21/8 (`ggml-opencl`,
+     * `TALOS_OPENCL_ABORT_CHECK_STRIDE=16`: il motore ora guarda se deve
+     * fermarsi ogni 16 righe DENTRO il batch, non solo a fine batch) - e il
+     * 23/8 la stessa misura, ripetuta su un modello diverso (Qwen3-1.7B, non
+     * una ripetizione: conferma indipendente), dice che il fenomeno che
+     * giustificava 192 e' sparito:
      *
-     * ⛔⛔ E NON si scende a 64 per far diventare verde il cancello G4.
-     * Passerebbe, al prezzo del **28% di prefill**, e misurerebbe una cosa che
-     * la cura vera dell'abort porta a millisecondi **senza pagare niente**.
-     * Sarebbe ottimizzare il cancello invece della persona. ⇒ G4 resta
-     * **rosso**, dichiarato, finche' quella cura non arriva.
+     * ```
+     * ubatch | PP2048 tok/s | Stop-durante-prefill (mediana, prompt 2048)
+     * -------+--------------+---------------------------------------------
+     *  128   |    343       |   1 ms
+     *  192   |    361       |   2 ms
+     *  256   |    377       |   5 ms
+     *  512   |    410       |   7 ms
+     * ```
+     *
+     * Non c'e' piu' un salto: a QUALSIASI valore provato lo Stop resta a
+     * singole cifre di millisecondi, ben sotto qualunque soglia di
+     * percezione umana. La cura ha spostato il collo di bottiglia da «quanto
+     * e' grande il pezzo» a «quanto spesso si controlla dentro il pezzo» - e
+     * il secondo si e' gia' risolto.
+     *
+     * ⭐ Ricerca 23/8: **512 e' anche il default upstream** di llama.cpp per
+     * `-ub` (non un numero TALOS-specifico), col «ginocchio» della curva
+     * throughput/dimensione riportato fra 1024 e 2048 su prompt molto lunghi
+     * - territorio che questa campagna non ha misurato sul Pad, quindi non
+     * si sale oltre 512 senza una nuova misura. 256 resta il ripiego noto se
+     * un device piu' povero andasse in pressione di memoria.
+     *
+     * ⇒ 512 domina 192 su ENTRAMBI gli assi: +13,7% di throughput di
+     * prefill, e uno Stop che non e' piu' un compromesso. G4 non e' piu'
+     * rosso per questo motivo.
+     *
+     * ⛔⛔ Lo stesso principio vale ora AL CONTRARIO: non si scende sotto 512
+     * senza una nuova misura che lo giustifichi - questa tabella e' la
+     * soglia, non un punto di partenza da cui negoziare per comodita'.
      */
-    const microBatch = 192
+    const microBatch = 512
 
     /**
      * I candidati da misurare: pochi e distinti.

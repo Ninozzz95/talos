@@ -1,0 +1,20 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 5f4a6a2..722337c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -194,10 +194,11 @@ if (SPM_ABSL_PROVIDER STREQUAL "module")
+         GIT_TAG 20260526.0)
+   add_subdirectory(third_party/abseil-cpp)
+   if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/absl)
+-    file(CREATE_LINK
+-         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/abseil-cpp/absl
+-         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/absl
+-         SYMBOLIC)
++    # Android builds are often configured on Windows without symlink
++    # privileges. A physical source copy has identical include semantics and
++    # keeps configuration unprivileged and reproducible.
++    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/third_party/abseil-cpp/absl
++         DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+   endif()
+ elseif (SPM_ABSL_PROVIDER STREQUAL "package")
+   find_package(absl REQUIRED)

@@ -46,6 +46,11 @@ const localEngine = vi.hoisted(() => {
         talosLocalEngineGenerate: vi.fn(),
         talosLocalEngineCancel: vi.fn(),
         talosLocalEngineClose: vi.fn(),
+        // B1: chiamata dopo ogni generazione riuscita per tracciare i tempi
+        // nativi. `null` e' l'esito onesto gia' definito dalla funzione vera
+        // quando non c'e' niente da riportare - non un valore inventato per
+        // il test.
+        talosLocalEngineTimings: vi.fn(async () => null),
     }
 })
 vi.mock('@/services/localEngine', () => localEngine)
@@ -76,7 +81,8 @@ const SMALL_PHONE = {
     abiSupported: true,
 }
 
-const { localAdapter } = await import('@/lib/chat/providers/localAdapter')
+const { localAdapter, prefissoResoDiProiettato } = await import('@/lib/chat/providers/localAdapter')
+const { talosProjectLocalToolConversation } = await import('@/lib/chat/localToolPromptProtocol')
 
 /**
  * The difference between "you have no models" and "I could not look".
@@ -1090,5 +1096,193 @@ describe('LOCAL-PARITY-TOOL-RESULT-02 round-trip del risultato locale', () => {
         const second = (localEngine.talosLocalEngineChatPlan.mock.calls.at(-1)?.[0]) as Array<{ role: string }> | undefined
         expect(second?.map((turn) => turn.role)).toEqual(['user'])
         expect(localEngine.talosLocalEngineTemplateCapabilities).toHaveBeenCalledTimes(1)
+    })
+})
+
+/**
+ * P1-3 — il prefisso AOT per `prompt-json-v1`, dove prima non si congelava
+ * mai niente (la guardia tornava sempre `null` per questo trasporto).
+ *
+ * ⛔⛔ CR-09 è l'invariante che questi test provano, non solo la funzione:
+ * il testo che si congela deve essere ESATTAMENTE quello che la generazione
+ * vera manda al motore, mai una seconda versione ricostruita a parte. Un
+ * bug qui non darebbe un errore — darebbe una risposta sbagliata dopo il
+ * thaw, il modo peggiore di fallire (vedi `prefixCache.ts`).
+ */
+describe('P1-3 prefissoResoDiProiettato — il prefisso AOT per prompt-json-v1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    const CAPABILITIES_PROMPT_JSON = {
+        supportsTools: false,
+        supportsToolCalls: false,
+        supportsSystemRole: true,
+    }
+
+    const TOOLS = [{
+        name: 'talos_diagnostic_echo',
+        description: 'Return one diagnostic value.',
+        parameters: { type: 'object', properties: { value: { type: 'string' } } },
+    }]
+
+    it('produce un prefisso non nullo — prima di questo blocco era SEMPRE null per questo trasporto', async () => {
+        const SYSTEM_NON_NULLO = 'Sei TALOS. [test: non-nullo]'
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'testo-reso-dal-motore', promptTokens: 900, contextTokens: 4096,
+        })
+
+        const testo = await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_NON_NULLO, TOOLS, 'it', true,
+        )
+
+        expect(testo).toBe('testo-reso-dal-motore')
+        expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(1)
+    })
+
+    it('⛔⛔ CR-09 — MAI passa i tool al motore: sono già dentro il testo proiettato', async () => {
+        const SYSTEM_CR09 = 'Sei TALOS. [test: CR-09]'
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'x', promptTokens: 1, contextTokens: 4096,
+        })
+
+        await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_CR09, TOOLS, 'it', true,
+        )
+
+        // Se la memoizzazione avesse trovato un altro test invece di
+        // chiamare il motore, questa asserzione lo direbbe chiaramente —
+        // invece di lasciar passare il test sotto per il motivo sbagliato.
+        expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(1)
+        const chiamata = localEngine.talosLocalEngineChatPlan.mock.calls.at(-1)
+        // Il secondo argomento di talosLocalEngineChatPlan è `tools`: se
+        // qualcuno lo passasse di nuovo qui, il motore applicherebbe il
+        // catalogo una seconda volta al template Jinja, sopra un testo che
+        // già lo contiene come JSON — un prompt diverso da quello vero,
+        // sotto la stessa identità di cache.
+        expect(chiamata?.[1]).toBeUndefined()
+    })
+
+    /**
+     * ⛔⛔⛔ VERIFICATO SUL PAD, 23/8 — questo test è nato ROTTO in un modo
+     * grave: un turno di sistema da solo passato al motore vero produceva
+     * SOLO `<start_of_turn>model` (4 token, il contenuto SPARITO), perché
+     * Gemma non ha un ruolo system separato (ai.google.dev/gemma/docs/
+     * core/prompt-structure). Il mock di questo test — che concatenava
+     * `turns[0]?.content` — non poteva vederlo: era fedele a un'idea SBAGLIATA
+     * di cosa il motore fa con un turno solitario, non al motore vero.
+     *
+     * ⇒ La cura (un turno utente SEGNAPOSTO dopo il sistema) rende il test
+     * "bit-per-bit" concettualmente sbagliato: il testo congelato ora include
+     * anche il rendering del segnaposto, quindi non può più essere uguale al
+     * SOLO turno di sistema. L'invariante vero, quello che conta per CR-09,
+     * è che i due testi condividano un prefisso comune LUNGO (system +
+     * catalogo), divergendo solo in coda — dove il segnaposto finisce e un
+     * messaggio vero comincia.
+     */
+    it('⭐ condivide un lungo prefisso comune col rendering della generazione VERA (diverge solo dove il messaggio vero comincia)', async () => {
+        // Mock realistico: concatena i turni come farebbe un vero renderer di
+        // template, non solo il primo — un mock che ignora il secondo turno
+        // è esattamente il tipo di simulazione che ha nascosto il bug vero.
+        localEngine.talosLocalEngineChatPlan.mockImplementation(async (turns: Array<{ content?: string }>) => ({
+            prompt: turns.map((t) => t.content ?? '').join('|TURN|'),
+            promptTokens: 1,
+            contextTokens: 4096,
+        }))
+
+        const SYSTEM_PREFISSO_COMUNE = 'Sei TALOS. [test: prefisso-comune]'
+
+        const testoCongelato = await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_PREFISSO_COMUNE, TOOLS, 'it', true,
+        )
+        expect(testoCongelato).toBeTruthy()
+
+        // La generazione vera (localAdapter.ts riga ~912) proietta l'INTERA
+        // conversazione — qui simulata con lo STESSO system/tools/locale ma
+        // un messaggio utente VERO, diverso dal segnaposto.
+        const projectionConversazioneVera = talosProjectLocalToolConversation({
+            transport: 'prompt-json-v1',
+            capabilities: CAPABILITIES_PROMPT_JSON,
+            turns: [
+                { role: 'system', content: SYSTEM_PREFISSO_COMUNE },
+                { role: 'user', content: 'Un messaggio vero, diverso dal segnaposto.' },
+            ],
+            tools: TOOLS,
+            locale: 'it',
+        })
+        const renderConversazioneVera = projectionConversazioneVera.turns
+            .map((t) => t.content ?? '').join('|TURN|')
+
+        let prefissoComune = 0
+        while (
+            prefissoComune < testoCongelato!.length
+            && prefissoComune < renderConversazioneVera.length
+            && testoCongelato![prefissoComune] === renderConversazioneVera[prefissoComune]
+        ) prefissoComune += 1
+
+        // Il prefisso comune deve coprire l'intero system + catalogo tool
+        // (centinaia di caratteri), non fermarsi a pochi caratteri come
+        // farebbe se il segnaposto non funzionasse.
+        expect(prefissoComune).toBeGreaterThan(300)
+        // E deve fermarsi PRIMA della fine di entrambi i testi: sono
+        // volutamente diversi in coda, non identici.
+        expect(prefissoComune).toBeLessThan(testoCongelato!.length)
+        expect(prefissoComune).toBeLessThan(renderConversazioneVera.length)
+    })
+
+    it('⛔⛔ AL CONTRARIO — un segnaposto VUOTO farebbe ricomparire il bug (provato sul motore vero)', async () => {
+        // `projectPromptJson` scarta un turno utente con `content` falsy
+        // (`if (turn.content) …`): un segnaposto vuoto sparirebbe prima di
+        // raggiungere il motore, e si tornerebbe al turno-di-sistema-solo
+        // che produce `<start_of_turn>model` senza contenuto.
+        const projectionConSegnaposteVuoto = talosProjectLocalToolConversation({
+            transport: 'prompt-json-v1',
+            capabilities: CAPABILITIES_PROMPT_JSON,
+            turns: [
+                { role: 'system', content: 'Sei TALOS. [test: segnaposto-vuoto]' },
+                { role: 'user', content: '' },
+            ],
+            tools: TOOLS,
+            locale: 'it',
+        })
+        expect(projectionConSegnaposteVuoto.turns).toHaveLength(1)
+        expect(projectionConSegnaposteVuoto.turns[0]?.role).toBe('system')
+    })
+
+    it('nessun system → null, come il percorso nativo esistente', async () => {
+        const testo = await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, undefined, TOOLS, 'it', true,
+        )
+        expect(testo).toBeNull()
+        expect(localEngine.talosLocalEngineChatPlan).not.toHaveBeenCalled()
+    })
+
+    it('memoizza: due chiamate identiche interrogano il motore una volta sola', async () => {
+        const SYSTEM_MEMO = 'Sei TALOS. [test: memoizza]'
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'memo', promptTokens: 1, contextTokens: 4096,
+        })
+
+        await prefissoResoDiProiettato('prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_MEMO, TOOLS, 'it', true)
+        await prefissoResoDiProiettato('prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_MEMO, TOOLS, 'it', true)
+
+        expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(1)
+    })
+
+    it('AL CONTRARIO — cambiare i tool cambia la chiave: non è la stessa cache', async () => {
+        const SYSTEM_AL_CONTRARIO = 'Sei TALOS. [test: al-contrario]'
+        localEngine.talosLocalEngineChatPlan
+            .mockResolvedValueOnce({ prompt: 'con-un-tool', promptTokens: 1, contextTokens: 4096 })
+            .mockResolvedValueOnce({ prompt: 'con-due-tool', promptTokens: 1, contextTokens: 4096 })
+
+        const primo = await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_AL_CONTRARIO, TOOLS, 'it', true,
+        )
+        const secondo = await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_AL_CONTRARIO, [...TOOLS, TOOLS[0]!], 'it', true,
+        )
+
+        expect(primo).not.toBe(secondo)
+        expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(2)
     })
 })

@@ -290,6 +290,22 @@ jobs:
           echo "peso=$(du -m "$nome" | cut -f1) MB" >> "$GITHUB_OUTPUT"
           echo "sha256: $impronta"
 
+      # Motore locale MAX PERFORMANCE, Fase 0 — «backend dichiarato ==
+      # backend spedito» smette di essere una prova fatta a mano una volta
+      # (Fase 7(a), 2026-08-21: `aapt list` + `llvm-readobj` sul Pad) e
+      # diventa un cancello permanente. Il rilascio, senza
+      # `-PtalosResearchBackend`, spedisce CPU+OpenCL per costruzione
+      # (`app/build.gradle`, Fase 7(a)) — se un giorno smettesse di farlo,
+      # o spedisse un acceleratore che nessuno ha dichiarato, questo passo
+      # lo blocca prima della firma di provenienza, non dopo che qualcuno
+      # lo scopre sul telefono.
+      - name: ⛔ il backend nell'APK è quello che ci si aspetta
+        working-directory: ${{ steps.dove.outputs.dir }}
+        run: |
+          node scripts/verify-local-backend-artifact.mjs \
+            "$GITHUB_WORKSPACE/${{ steps.apk.outputs.nome }}" \
+            cpu,opencl
+
       # La provenienza SLSA: lega l'artefatto al workflow, al commit e al
       # repository, con un certificato effimero su un registro di trasparenza.
       # La provenienza SLSA: lega l'artefatto al workflow, al commit e al

@@ -63,6 +63,34 @@ class TalosVoiceModelActivationTest {
     }
 
     @Test
+    fun `install root and target path are explicit while cache lookup keeps the remote source path`() {
+        val pocketArtifact = TalosVoiceModelManifest.Artifact(
+            repo = "Org/Pocket",
+            revision = "rev-pocket",
+            targetDir = "italian",
+            files = listOf(
+                TalosVoiceModelManifest.Artifact.File(
+                    path = "onnx/italian/model.onnx",
+                    size = 3,
+                    sha256 = "a".repeat(64),
+                    targetPath = "model.onnx",
+                ),
+            ),
+        )
+        val slot = store.slot("Org/Pocket", "rev-pocket", "onnx/italian/model.onnx")
+        slot.finished.parentFile?.mkdirs()
+        slot.finished.writeBytes(byteArrayOf(7, 8, 9))
+
+        val outcome = TalosVoiceModelActivation.stage(externalFilesDir, "pocket", pocketArtifact)
+
+        assertTrue(outcome is TalosVoiceModelActivation.Outcome.Activated)
+        val staging = (outcome as TalosVoiceModelActivation.Outcome.Activated).targetDir
+        assertEquals(File(externalFilesDir, "pocket/italian.staging").canonicalFile, staging.canonicalFile)
+        assertArrayEquals(byteArrayOf(7, 8, 9), File(staging, "model.onnx").readBytes())
+        assertFalse(File(staging, "onnx/italian/model.onnx").exists())
+    }
+
+    @Test
     fun `refuses to stage when a cache file is entirely missing`() {
         placeFinishedInCache()
         // Solo un file "arrivato": l'altro manca del tutto dalla cache.
@@ -186,7 +214,7 @@ class TalosVoiceModelActivationTest {
         val active = File(File(externalFilesDir, "moss"), "Repo-Dir")
         assertFalse("precondition: not yet active", active.exists())
 
-        val outcome = TalosVoiceModelActivation.recover(externalFilesDir, "Repo-Dir")
+        val outcome = TalosVoiceModelActivation.recover(externalFilesDir, artifact)
         assertTrue(outcome is TalosVoiceModelActivation.Outcome.Activated)
         assertArrayEquals(byteArrayOf(1, 2, 3, 4, 5), File(active, "a.onnx").readBytes())
     }
@@ -197,13 +225,13 @@ class TalosVoiceModelActivationTest {
         TalosVoiceModelActivation.stage(externalFilesDir, artifact)
         TalosVoiceModelActivation.promote(externalFilesDir, "Repo-Dir")
 
-        val outcome = TalosVoiceModelActivation.recover(externalFilesDir, "Repo-Dir")
+        val outcome = TalosVoiceModelActivation.recover(externalFilesDir, artifact)
         assertTrue(outcome is TalosVoiceModelActivation.Outcome.Activated)
     }
 
     @Test
     fun `recover with nothing installed at all reports Failed, not a false Activated`() {
-        val outcome = TalosVoiceModelActivation.recover(externalFilesDir, "Repo-Dir")
+        val outcome = TalosVoiceModelActivation.recover(externalFilesDir, artifact)
         assertEquals(TalosVoiceModelActivation.Outcome.Failed("not-installed"), outcome)
     }
 
@@ -217,7 +245,104 @@ class TalosVoiceModelActivationTest {
         val orphan = File(mossRoot, "Repo-Dir.previous").apply { mkdirs() }
         File(orphan, "leftover").writeText("x")
 
-        TalosVoiceModelActivation.recover(externalFilesDir, "Repo-Dir")
+        TalosVoiceModelActivation.recover(externalFilesDir, artifact)
         assertFalse("recover() must sweep an orphaned .previous, not just leave it forever", orphan.exists())
+    }
+
+    // ---- cleanupSourceCache() — trovato 22/8: gli ONNX comparivano nel
+    // picker dei modelli LLM del composer, perché stage() COPIA (mai
+    // sposta) e nessuno ripuliva la cache generica dopo. ------------------
+
+    @Test
+    fun `cleanupSourceCache removes every cache file of the artifact, once promotion is certain`() {
+        placeFinishedInCache()
+        TalosVoiceModelActivation.stage(externalFilesDir, artifact)
+        TalosVoiceModelActivation.promote(externalFilesDir, "Repo-Dir")
+        val slotA = store.slot(artifact.repo, artifact.revision, "a.onnx")
+        val slotB = store.slot(artifact.repo, artifact.revision, "sub/b.json")
+        assertTrue("precondition: stage() copies, the cache still has both files", slotA.finished.isFile && slotB.finished.isFile)
+
+        TalosVoiceModelActivation.cleanupSourceCache(externalFilesDir, artifact)
+
+        assertFalse("the voice engine's cache copy must be gone once it is safely active in moss/", slotA.finished.exists())
+        assertFalse(slotB.finished.exists())
+        // La cartella dell'artivo attivo non deve muoversi: la pulizia tocca SOLO la cache generica.
+        val active = File(File(externalFilesDir, "moss"), "Repo-Dir")
+        assertArrayEquals(byteArrayOf(1, 2, 3, 4, 5), File(active, "a.onnx").readBytes())
+    }
+
+    @Test
+    fun `cleanupSourceCache prunes the now-empty repo-revision directories, but never touches models-root itself`() {
+        placeFinishedInCache()
+        TalosVoiceModelActivation.stage(externalFilesDir, artifact)
+        TalosVoiceModelActivation.promote(externalFilesDir, "Repo-Dir")
+        val modelsRoot = File(externalFilesDir, "models")
+        assertTrue("precondition: the cache tree exists before cleanup", modelsRoot.isDirectory)
+
+        TalosVoiceModelActivation.cleanupSourceCache(externalFilesDir, artifact)
+
+        val repoDir = File(modelsRoot, "Org/Repo")
+        assertFalse("an empty repo/revision directory tree left behind is exactly the leftover this cure exists to remove", repoDir.exists())
+        assertTrue("models/ itself is the root shared with real GGUFs - it must survive even empty", modelsRoot.isDirectory)
+    }
+
+    @Test
+    fun `cleanupSourceCache never touches a sibling repo's real GGUF sharing the same models root`() {
+        placeFinishedInCache()
+        TalosVoiceModelActivation.stage(externalFilesDir, artifact)
+        TalosVoiceModelActivation.promote(externalFilesDir, "Repo-Dir")
+        // Un GGUF vero, di un tutto altro repository, nella stessa cache generica.
+        val llmSlot = store.slot("ggml-org/Other-Model", "revX", "model.gguf")
+        llmSlot.finished.parentFile?.mkdirs()
+        llmSlot.finished.writeBytes(byteArrayOf(1))
+
+        TalosVoiceModelActivation.cleanupSourceCache(externalFilesDir, artifact)
+
+        assertTrue("cleaning the voice artifact's cache must never remove an unrelated model", llmSlot.finished.isFile)
+    }
+
+    @Test
+    fun `cleanupSourceCache is idempotent - calling it twice is a harmless no-op the second time`() {
+        placeFinishedInCache()
+        TalosVoiceModelActivation.stage(externalFilesDir, artifact)
+        TalosVoiceModelActivation.promote(externalFilesDir, "Repo-Dir")
+        TalosVoiceModelActivation.cleanupSourceCache(externalFilesDir, artifact)
+        // La seconda chiamata non deve lanciare, ne' su un file gia' assente ne' su cartelle gia' sparite.
+        TalosVoiceModelActivation.cleanupSourceCache(externalFilesDir, artifact)
+        assertFalse(store.slot(artifact.repo, artifact.revision, "a.onnx").finished.exists())
+    }
+
+    @Test
+    fun `recover also sweeps the generic cache when it finishes an interrupted promotion`() {
+        placeFinishedInCache()
+        TalosVoiceModelActivation.stage(externalFilesDir, artifact)
+        // Processo morto fra staging e promote, come nell'altro test di questa forma.
+        val slotA = store.slot(artifact.repo, artifact.revision, "a.onnx")
+        assertTrue("precondition: cache still holds the file before recover", slotA.finished.isFile)
+
+        TalosVoiceModelActivation.recover(externalFilesDir, artifact)
+
+        assertFalse("recover() completing a promotion must also free the cache it copied from", slotA.finished.exists())
+    }
+
+    /**
+     * ⛔⛔ Il caso che conta di più per chi ha GIA' installato il motore
+     * voce PRIMA di questa cura: `recover()` gira a ogni avvio anche
+     * quando non c'è niente da promuovere (il ramo "quieto"), ed è
+     * l'UNICA occasione per ripulire una cache vecchia lasciata da una
+     * build precedente - nessun altro percorso la tocca mai più.
+     */
+    @Test
+    fun `recover sweeps a stale generic cache left by an activation that predates this cure, even when already quiet`() {
+        placeFinishedInCache()
+        TalosVoiceModelActivation.stage(externalFilesDir, artifact)
+        TalosVoiceModelActivation.promote(externalFilesDir, "Repo-Dir")
+        // Simula una build vecchia: attivo già promosso, cache generica MAI ripulita.
+        val slotA = store.slot(artifact.repo, artifact.revision, "a.onnx")
+        assertTrue("precondition: this mirrors an install made before the cure existed", slotA.finished.isFile)
+
+        TalosVoiceModelActivation.recover(externalFilesDir, artifact)
+
+        assertFalse("a device with a pre-cure install must self-heal at the next launch, not stay leaking forever", slotA.finished.exists())
     }
 }

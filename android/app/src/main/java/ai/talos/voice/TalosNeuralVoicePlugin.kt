@@ -1,6 +1,11 @@
 package ai.talos.voice
 
 import android.Manifest
+import ai.talos.BuildConfig
+import ai.talos.voice.research.TalosVoiceDiagnosticConfig
+import ai.talos.voice.research.TalosVoiceDiagnosticProbe
+import ai.talos.voice.research.TalosVoiceDiagnosticRoute
+import ai.talos.voice.research.TalosVoiceDiagnosticSession
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -11,9 +16,12 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
 import java.io.File
+import java.io.FileInputStream
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import org.json.JSONObject
 
 /**
@@ -53,14 +61,16 @@ class TalosNeuralVoicePlugin : Plugin() {
     private val captureCancelled = AtomicBoolean(false)
     private val micLevelPeekActive = AtomicBoolean(false)
     private val enrollmentSlots = ConcurrentHashMap<Int, TalosVoiceCaptureResult>()
-    @Volatile private var pendingProfile: TalosVoiceProfileV1? = null
+    private val diagnosticSessions = ConcurrentHashMap<String, TalosVoiceDiagnosticSession>()
+    @Volatile private var pendingProfile: TalosVoiceProfileV2? = null
+    private val enrollmentGeneration = AtomicLong(0L)
     private val sessionStore: TalosVoiceEnrollmentSessionStore
         get() = TalosVoiceEnrollmentSessionStore(context.applicationContext)
 
     /**
      * ⛔⛔ `load()` gira sul thread CONDIVISO dei plugin — stessa nota di
      * `TalosSpeechPlugin.load()`: quello che ferma TUTTI gli altri se lo si
-     * blocca. `TalosVoiceModelActivation.recover()` fa I/O di file veri
+     * blocca. Le recovery MOSS legacy e Pocket fanno I/O di file veri
      * (rename, `deleteRecursively` su un `.previous` orfano che potrebbe
      * portare centinaia di MB) — mai chiamato inline qui dentro. Girato su
      * questa lane invece, cosi `load()` torna subito e gli altri plugin non
@@ -70,14 +80,17 @@ class TalosNeuralVoicePlugin : Plugin() {
      */
     override fun load() {
         enrollmentLane.execute {
+            val externalFilesDir = context.applicationContext.getExternalFilesDir(null) ?: return@execute
             runCatching {
-                val manifest = readManifest()
-                val externalFilesDir = context.applicationContext.getExternalFilesDir(null) ?: return@runCatching
+                val manifest = readMossManifest()
                 for (artifact in manifest.artifacts) {
-                    TalosVoiceModelActivation.recover(externalFilesDir, artifact.targetDir)
+                    TalosVoiceModelActivation.recover(externalFilesDir, artifact)
                 }
             }
-            // ⛔ Silenzioso di proposito: se il manifesto manca o è
+            runCatching {
+                TalosPocketModelInstaller(externalFilesDir, readPocketManifest()).recover()
+            }
+            // ⛔ Silenzioso di proposito: se un manifesto manca o è
             // malformato, `installManifest`/`activateModel` lo diranno
             // chiaramente quando qualcuno li chiama davvero. `load()` non è
             // il posto per un errore che nessuno vede — è avvio dell'app,
@@ -91,11 +104,204 @@ class TalosNeuralVoicePlugin : Plugin() {
     private fun modelRoot(): File =
         TalosVoiceModelManager.modelRoot(context.applicationContext.getExternalFilesDir(null)!!)
 
-    private fun enrollment(): TalosVoiceEnrollment = TalosVoiceEnrollment(context.applicationContext, modelRoot())
+    private fun enrollment(): TalosVoiceEnrollment = TalosVoiceEnrollment(context.applicationContext)
 
     // ---------------------------------------------------------------
     // Status / profiles / playback - §41's shape.
     // ---------------------------------------------------------------
+
+    /**
+     * Opt-in and fail-closed. The host campaign supplies Git/APK/USB
+     * provenance; this method recomputes the installed APK hash before it
+     * arms the one-shot production probe. Normal speech never creates a
+     * session and therefore pays no diagnostic work.
+     */
+    @PluginMethod
+    fun beginDiagnostics(call: PluginCall) {
+        val traceId = call.getString("traceId")
+        val readingId = call.getString("readingId")
+        val source = call.getString("source")
+        val requestedLocale = call.getString("requestedLocale")
+        val requestedEngine = call.getString("requestedEngine")
+        val requestedProfileId = call.getString("requestedProfileId")
+        val appCommit = call.getString("appCommit")
+        val expectedApkSha256 = call.getString("expectedApkSha256")
+        val usbTransportProof = call.getString("usbTransportProof")
+        if (
+            traceId.isNullOrBlank() || readingId.isNullOrBlank() || source.isNullOrBlank() ||
+            requestedLocale.isNullOrBlank() || requestedEngine.isNullOrBlank() ||
+            appCommit.isNullOrBlank() || expectedApkSha256.isNullOrBlank() || usbTransportProof.isNullOrBlank()
+        ) {
+            call.reject("diagnostic route and provenance are required")
+            return
+        }
+
+        enrollmentLane.execute {
+            runCatching {
+                val route = TalosVoiceDiagnosticRoute(
+                    traceId = traceId,
+                    readingId = readingId,
+                    source = source,
+                    requestedLocale = requestedLocale,
+                    requestedEngine = requestedEngine,
+                    requestedProfileId = requestedProfileId,
+                )
+                val apk = File(context.applicationInfo.sourceDir)
+                val actualApkSha256 = sha256(apk)
+                require(actualApkSha256 == expectedApkSha256) {
+                    "APK SHA-256 mismatch: expected=$expectedApkSha256 actual=$actualApkSha256"
+                }
+                val manifest = readPocketManifest().toVoiceModelManifest()
+                val external = context.applicationContext.getExternalFilesDir(null)
+                    ?: error("no-external-storage")
+                val session = TalosVoiceDiagnosticSession(
+                    TalosVoiceDiagnosticConfig(
+                        outputDirectory = File(external, "research/voice"),
+                        route = route,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        appCommit = appCommit,
+                        apkSha256 = actualApkSha256,
+                        modelRevision = manifest.engineBuild,
+                        modelSha256 = modelManifestSha256(manifest),
+                        deviceFingerprint = android.os.Build.FINGERPRINT,
+                        usbTransportProof = usbTransportProof,
+                    ),
+                )
+                check(diagnosticSessions.putIfAbsent(traceId, session) == null) {
+                    "diagnostic trace already exists: $traceId"
+                }
+                try {
+                    TalosVoiceDiagnosticProbe.armNextProductionRun(session)
+                } catch (error: Throwable) {
+                    diagnosticSessions.remove(traceId, session)
+                    throw error
+                }
+                actualApkSha256
+            }.fold(
+                onSuccess = { actualApkSha256 ->
+                    call.resolve(
+                        JSObject()
+                            .put("armed", true)
+                            .put("actualApkSha256", actualApkSha256),
+                    )
+                },
+                onFailure = { error -> call.reject(error.message ?: "begin diagnostics failed", error as? Exception) },
+            )
+        }
+    }
+
+    @PluginMethod
+    fun endDiagnostics(call: PluginCall) {
+        resolveFinishedDiagnostic(call, includeEventCount = true)
+    }
+
+    @PluginMethod
+    fun exportDiagnostics(call: PluginCall) {
+        resolveFinishedDiagnostic(call, includeEventCount = false)
+    }
+
+    private fun resolveFinishedDiagnostic(call: PluginCall, includeEventCount: Boolean) {
+        val traceId = call.getString("traceId")
+        if (traceId.isNullOrBlank()) {
+            call.reject("traceId is required")
+            return
+        }
+        val session = diagnosticSessions[traceId]
+        if (session == null) {
+            call.reject("diagnostic trace not found: $traceId")
+            return
+        }
+        val artifact = session.artifactFileOrNull()
+        if (artifact == null || !artifact.isFile) {
+            call.reject("diagnostic trace is not finished: $traceId")
+            return
+        }
+        val payload = JSObject()
+            .put("traceId", traceId)
+            .put("artifactPath", artifact.absolutePath)
+        if (includeEventCount) payload.put("eventCount", session.eventCount())
+        call.resolve(payload)
+    }
+
+    private fun modelManifestSha256(manifest: TalosVoiceModelManifest): String {
+        val canonical = buildString {
+            append(manifest.schemaVersion).append('|').append(manifest.engineBuild).append('|')
+            append(manifest.installRoot).append('|')
+            manifest.artifacts.sortedBy { it.targetDir }.forEach { artifact ->
+                append(artifact.repo).append('@').append(artifact.revision).append('/').append(artifact.targetDir).append('|')
+                artifact.files.sortedBy { it.path }.forEach { file ->
+                    append(file.path).append('>').append(file.targetPath).append(':')
+                        .append(file.size).append(':').append(file.sha256).append('|')
+                }
+            }
+        }
+        return sha256(canonical.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun sha256(file: File): String {
+        require(file.isFile) { "file does not exist for SHA-256: ${file.absolutePath}" }
+        val digest = MessageDigest.getInstance("SHA-256")
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(1024 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                if (read > 0) digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+        .digest(bytes)
+        .joinToString("") { "%02x".format(it) }
+
+    private fun modelAvailabilityJson(availability: TalosVoiceModelAvailability): JSObject =
+        JSObject()
+            .put("supported", availability.supported)
+            .put("installed", availability.installed)
+            .put("backend", availability.backend)
+            .put("engineBuild", availability.engineBuild)
+            .put("modelState", availability.modelState)
+            .put("verifiedFiles", availability.verifiedFiles)
+            .put("cacheHit", availability.cacheHit)
+            .put("verificationDurationMs", availability.verificationDurationNs / 1_000_000.0)
+            .apply { availability.failure?.let { put("failure", it) } }
+
+    private fun pocketInstallResultJson(result: TalosPocketInstallResult): JSObject {
+        val measurement = result.stageMetrics.lastOrNull { it.stage.endsWith("_verify") }
+            ?: result.stageMetrics.lastOrNull()
+        val snapshot = TalosPocketModelStatusSnapshot(
+            status = result.status,
+            cacheHit = false,
+            verificationStartedAtNs = measurement?.startedAtNs ?: System.nanoTime(),
+            verificationDurationNs = measurement?.durationNs ?: 0L,
+            verificationThreadName = measurement?.threadName ?: Thread.currentThread().name,
+        )
+        return modelAvailabilityJson(TalosVoiceAvailabilityResolver.forModel(snapshot))
+            .put("activated", result.activated)
+            .put("stages", pocketInstallStagesJson(result.stageMetrics))
+    }
+
+    private fun pocketInstallStagesJson(metrics: List<TalosPocketInstallStageMetric>): JSArray {
+        val stages = JSArray()
+        for (metric in metrics) {
+            stages.put(
+                JSObject()
+                    .put("stage", metric.stage)
+                    .put("startedAtNs", metric.startedAtNs)
+                    .put("durationNs", metric.durationNs)
+                    .put("threadName", metric.threadName)
+                    .put("outcome", metric.outcome)
+                    .apply {
+                        metric.inputFiles?.let { put("inputFiles", it) }
+                        metric.outputFiles?.let { put("outputFiles", it) }
+                        metric.detail?.let { put("detail", it) }
+                    },
+            )
+        }
+        return stages
+    }
 
     /**
      * `active` is deliberately absent here: this class has no knowledge of
@@ -107,13 +313,14 @@ class TalosNeuralVoicePlugin : Plugin() {
      */
     @PluginMethod
     fun status(call: PluginCall) {
-        val root = modelRoot()
-        val supported = TalosVoiceModelManager.isPresent(root)
-        val payload = JSObject()
-            .put("supported", supported)
-            .put("installed", supported)
-        if (!supported) payload.put("failure", TalosVoiceModelManager.describeMissing(root))
-        call.resolve(payload)
+        enrollmentLane.execute {
+            runCatching {
+                TalosVoiceAvailabilityResolver.forModel(host.pocketModelStatusBlocking(refresh = true))
+            }.fold(
+                onSuccess = { availability -> call.resolve(modelAvailabilityJson(availability)) },
+                onFailure = { error -> call.reject(error.message ?: "Pocket status failed", error as? Exception) },
+            )
+        }
     }
 
     // ---------------------------------------------------------------
@@ -128,23 +335,28 @@ class TalosNeuralVoicePlugin : Plugin() {
     // sotto, campo per campo. Nessun secondo motore di trasferimento.
     // ---------------------------------------------------------------
 
-    private fun readManifest(): TalosVoiceModelManifest {
+    private fun readMossManifest(): TalosVoiceModelManifest {
         val json = context.assets.open("voice/model-manifest.json").bufferedReader().use { it.readText() }
         return TalosVoiceModelManifest.fromJson(JSONObject(json))
     }
 
+    private fun readPocketManifest(): TalosPocketModelManifest {
+        val json = context.assets.open("voice/pocket-model-manifest.json").bufferedReader().use { it.readText() }
+        return TalosPocketModelManifest.fromJson(JSONObject(json)).requirePinnedBundle()
+    }
+
     /**
      * Il manifesto pinnato (Blocco 1), tradotto nella forma che
-     * `TalosModelTransferPlugin.start` capisce già - un oggetto per
-     * artifact, cosi il lato TS chiama `start` due volte (una per
-     * repository) e poi `status`/`activateModel` per seguirli.
+     * `TalosModelTransferPlugin.start` capisce già. Pocket pubblica il
+     * bundle italiano in un solo repository: il lato TS avvia una richiesta
+     * e poi chiama `status`/`activateModel`.
      */
     @PluginMethod
     fun installManifest(call: PluginCall) {
         val manifest = try {
-            readManifest()
+            readPocketManifest().toVoiceModelManifest()
         } catch (broken: Exception) {
-            call.reject("model-manifest.json missing or malformed", broken)
+            call.reject("pocket-model-manifest.json missing or malformed", broken)
             return
         }
         val artifacts = JSArray()
@@ -167,65 +379,43 @@ class TalosNeuralVoicePlugin : Plugin() {
 
     /**
      * ⭐⭐ L'ATTIVAZIONE ATOMICA — chiamato dal lato TS solo dopo che
-     * `TalosModelTransferPlugin.status` conferma finiti TUTTI gli artifact
-     * di [installManifest]. Mette in staging OGNI artifact prima di
-     * promuoverne anche solo uno: un download riuscito a metà (mancasse un
-     * file di UN artifact) non tocca `moss/` per niente, non solo per
-     * quell'artifact.
-     *
-     * ⛔ Onestà sul residuo: una volta iniziata la promozione, i due
-     * `promote()` restano due operazioni separate — se la seconda fallisse
-     * (un I/O raro, a valle di un download già interamente verificato) la
-     * voce resterebbe con un artifact nuovo e uno vecchio finché non si
-     * ritenta. Non è il caso di questa prima attivazione sul dispositivo di
-     * riferimento (i file "vecchi" sul Pad sono BYTE PER BYTE gli stessi
-     * pinnati nel Blocco 1 — non c'è disallineamento possibile), e per un
-     * vero aggiornamento futuro `TalosVoiceModelManager.isPresent()`
-     * continuerebbe comunque a rispondere in base ai file REALI su disco,
-     * mai a un flag che potrebbe mentire.
+     * `TalosModelTransferPlugin.status` conferma finito l'unico artifact di
+     * [installManifest]. L'installer verifica il bundle Pocket nello staging,
+     * lo promuove con rename atomico, lo verifica di nuovo nella posizione
+     * attiva e soltanto allora elimina rollback e cache sorgente. Ogni fase
+     * torna al chiamante con tempo, thread, conteggi ed esito.
      */
     @PluginMethod
     fun activateModel(call: PluginCall) {
-        val manifest = try {
-            readManifest()
-        } catch (broken: Exception) {
-            call.reject("model-manifest.json missing or malformed", broken)
-            return
-        }
-        val externalFilesDir = context.applicationContext.getExternalFilesDir(null)
-        if (externalFilesDir == null) {
-            call.reject("no-external-storage")
-            return
-        }
-
-        val staged = mutableListOf<String>()
-        for (artifact in manifest.artifacts) {
-            when (val outcome = TalosVoiceModelActivation.stage(externalFilesDir, artifact)) {
-                is TalosVoiceModelActivation.Outcome.Activated -> staged.add(artifact.targetDir)
-                is TalosVoiceModelActivation.Outcome.Incomplete -> {
-                    call.reject("not-downloaded:${artifact.targetDir}:${outcome.missingPath}")
-                    return
+        enrollmentLane.execute {
+            runCatching {
+                val externalFilesDir = context.applicationContext.getExternalFilesDir(null)
+                    ?: error("no-external-storage")
+                val result = TalosPocketModelInstaller(externalFilesDir, readPocketManifest()).activateFromCache()
+                val evidence = pocketInstallResultJson(result)
+                if (!result.activated || result.status !is TalosPocketModelStatus.Ready || result.status.verifiedFiles <= 0) {
+                    call.reject("Pocket activation did not produce a verified bundle", evidence)
+                    return@execute
                 }
-                is TalosVoiceModelActivation.Outcome.Failed -> {
-                    call.reject("stage-failed:${artifact.targetDir}:${outcome.reason}")
-                    return
+                // The active directory may have changed below an already-open
+                // ORT session. FIFO owner-lane refresh closes that state before
+                // the following hash verification can report success.
+                host.refreshPocketModel()
+                val availability = TalosVoiceAvailabilityResolver.forModel(
+                    host.pocketModelStatusBlocking(refresh = true),
+                )
+                val payload = modelAvailabilityJson(availability)
+                    .put("activated", availability.installed)
+                    .put("stages", pocketInstallStagesJson(result.stageMetrics))
+                if (!availability.installed) {
+                    call.reject("Pocket activation failed post-promotion verification", payload)
+                    return@execute
                 }
+                call.resolve(payload)
+            }.onFailure { error ->
+                call.reject(error.message ?: "Pocket activation failed", error as? Exception)
             }
         }
-
-        for (targetDir in staged) {
-            val outcome = TalosVoiceModelActivation.promote(externalFilesDir, targetDir)
-            if (outcome !is TalosVoiceModelActivation.Outcome.Activated) {
-                call.reject("promote-failed:$targetDir")
-                return
-            }
-        }
-        // ⛔ Non prima di qui: solo dopo che ENTRAMBI gli artifact sono
-        // promossi la pulizia della versione vecchia è onesta - prima
-        // sarebbe stata pulizia di un rollback che potrebbe ancora servire.
-        for (targetDir in staged) TalosVoiceModelActivation.cleanupPrevious(externalFilesDir, targetDir)
-
-        call.resolve(JSObject().put("activated", true).put("supported", TalosVoiceModelManager.isPresent(modelRoot())))
     }
 
     /**
@@ -239,33 +429,69 @@ class TalosNeuralVoicePlugin : Plugin() {
      */
     @PluginMethod
     fun recoverModelInstall(call: PluginCall) {
-        val manifest = try {
-            readManifest()
-        } catch (broken: Exception) {
-            call.reject("model-manifest.json missing or malformed", broken)
-            return
+        enrollmentLane.execute {
+            runCatching {
+                val externalFilesDir = context.applicationContext.getExternalFilesDir(null)
+                    ?: error("no-external-storage")
+                val result = TalosPocketModelInstaller(externalFilesDir, readPocketManifest()).recover()
+                host.refreshPocketModel()
+                val availability = TalosVoiceAvailabilityResolver.forModel(
+                    host.pocketModelStatusBlocking(refresh = true),
+                )
+                modelAvailabilityJson(availability)
+                    .put("activated", result.activated)
+                    .put("stages", pocketInstallStagesJson(result.stageMetrics))
+            }.fold(
+                onSuccess = call::resolve,
+                onFailure = { error -> call.reject(error.message ?: "Pocket recovery failed", error as? Exception) },
+            )
         }
-        val externalFilesDir = context.applicationContext.getExternalFilesDir(null)
-        if (externalFilesDir == null) {
-            call.reject("no-external-storage")
-            return
-        }
-        for (artifact in manifest.artifacts) {
-            TalosVoiceModelActivation.recover(externalFilesDir, artifact.targetDir)
-        }
-        call.resolve(JSObject().put("supported", TalosVoiceModelManager.isPresent(modelRoot())))
     }
 
     @PluginMethod
     fun profiles(call: PluginCall) {
-        val enrollment = enrollment()
-        val array = JSArray()
-        for (id in enrollment.listProfileIds()) {
-            runCatching { enrollment.loadProfile(id) }.getOrNull()?.let { profile ->
-                array.put(profileSummaryJson(enrollment, profile.header))
-            }
+        enrollmentLane.execute {
+            runCatching {
+                val enrollment = enrollment()
+                val store = TalosVoiceProfileStore(context.applicationContext)
+                val storedProfiles = enrollment.listProfileIds().mapNotNull { id ->
+                    runCatching { store.loadAny(id) }.getOrNull()
+                }
+                val pocketStatus = if (storedProfiles.isEmpty()) {
+                    null
+                } else {
+                    host.pocketModelStatusBlocking().status
+                }
+                val needsMossFingerprint = storedProfiles.any { stored ->
+                    stored is TalosStoredVoiceProfile.Legacy ||
+                        (stored is TalosStoredVoiceProfile.Current &&
+                            stored.profile.backendPayloads.any { it is TalosMossPromptPayload })
+                }
+                val mossFingerprints = if (needsMossFingerprint) activeMossFingerprints() else null
+                val array = JSArray()
+                for (stored in storedProfiles) {
+                    when (stored) {
+                        is TalosStoredVoiceProfile.Legacy -> {
+                            val compatible = isMossCompatible(stored.profile.header, mossFingerprints)
+                            array.put(profileSummaryJson(stored.profile.header, compatible))
+                        }
+                        is TalosStoredVoiceProfile.Current -> {
+                            val compatibleMoss = isMossCompatible(stored.profile, mossFingerprints)
+                            val availability = TalosVoiceAvailabilityResolver.forProfile(
+                                profile = stored.profile,
+                                pocketStatus = requireNotNull(pocketStatus),
+                                mossCompatible = compatibleMoss,
+                            )
+                            array.put(profileSummaryJson(stored.profile, availability))
+                        }
+                    }
+                }
+                JSObject().put("profiles", array)
+            }.fold(
+                onSuccess = { payload -> call.resolve(payload) },
+                onFailure = { error -> call.reject(error.message ?: "profile status failed", error as? Exception) },
+            )
         }
-        call.resolve(JSObject().put("profiles", array))
     }
 
     @PluginMethod
@@ -308,16 +534,59 @@ class TalosNeuralVoicePlugin : Plugin() {
         val text = call.getString("text")?.trim().orEmpty()
         val profileId = call.getString("profileId")
         val readingId = call.getString("readingId")
-        if (text.isEmpty() || profileId.isNullOrBlank() || readingId.isNullOrBlank()) {
-            call.reject("text, profileId and readingId are required")
+        val utteranceId = call.getString("utteranceId") ?: readingId
+        val locale = call.getString("locale")?.trim()
+        if (
+            text.isEmpty() || profileId.isNullOrBlank() || readingId.isNullOrBlank() ||
+            utteranceId.isNullOrBlank() || locale.isNullOrBlank()
+        ) {
+            call.reject("text, profileId, readingId and locale are required")
+            return
+        }
+        if (!VOICE_LOCALE.matches(locale)) {
+            call.reject("locale is not a valid BCP-47 language tag")
             return
         }
         val rate = call.getFloat("rate") ?: 1f
         val pitch = call.getFloat("pitch") ?: 1f
+        val queueMode = try {
+            TalosVoiceQueueMode.fromWire(call.getString("queue"))
+        } catch (error: IllegalArgumentException) {
+            call.reject(error.message ?: "invalid queue mode", error)
+            return
+        }
+        val traceId = call.getString("traceId")
+        val diagnosticRoute = if (traceId != null) {
+            val source = call.getString("source")
+            if (source.isNullOrBlank()) {
+                call.reject("source is required when traceId is present")
+                return
+            }
+            try {
+                TalosVoiceDiagnosticRoute(
+                    traceId = traceId,
+                    readingId = readingId,
+                    source = source,
+                    requestedLocale = locale,
+                    requestedEngine = "personal",
+                    requestedProfileId = profileId,
+                )
+            } catch (error: IllegalArgumentException) {
+                call.reject(error.message ?: "invalid diagnostic route", error)
+                return
+            }
+        } else {
+            null
+        }
 
-        val profile = runCatching { enrollment().loadProfile(profileId) }.getOrNull()
-        if (profile == null) {
-            call.resolve(JSObject().put("accepted", false).put("reason", "profileNotFound"))
+        val profileStore = TalosVoiceProfileStore(context.applicationContext)
+        val storedProfile = runCatching { profileStore.loadAny(profileId) }.getOrElse {
+            val reason = if (runCatching { profileStore.exists(profileId) }.getOrDefault(false)) {
+                "profileUnreadable"
+            } else {
+                "profileNotFound"
+            }
+            call.resolve(JSObject().put("accepted", false).put("reason", reason))
             return
         }
 
@@ -327,21 +596,37 @@ class TalosNeuralVoicePlugin : Plugin() {
         // silently ignoring the caller's values.
         val ratePitchApplied = rate == 1f && pitch == 1f
 
-        host.submitSpeakStreamingWithReference(text, profile.promptAudioCodes) { result ->
+        val completion: (Result<TalosVoiceStreamResult>) -> Unit = { result ->
             val payload = result.fold(
                 onSuccess = { r ->
-                    JSObject()
-                        .put("readingId", readingId)
+                    val completed = JSObject()
+                        .put("readingId", utteranceId)
                         .put("cancelled", r.cancelled)
                         .put("hardwareUnderruns", r.hardwareUnderruns)
                         .put("elapsedMs", r.elapsedMs)
+                        .put("resolvedEngine", r.resolvedEngine ?: TalosMossPromptPayload.BACKEND)
+                        .put("resolvedLocale", r.resolvedLocale ?: "und")
+                        .put("resolvedProfileId", r.resolvedProfileId ?: profileId)
+                        .put("resolvedProfileSchemaVersion", r.resolvedProfileSchemaVersion)
+                        .put("profileMigrationCommitted", r.profileMigrationCommitted)
+                    r.fallbackReason?.let { completed.put("fallbackReason", it) }
+                    completed
                 },
                 onFailure = { e ->
-                    JSObject().put("readingId", readingId).put("error", e.message ?: "synthesis failed")
+                    JSObject().put("readingId", utteranceId).put("error", e.message ?: "synthesis failed")
                 },
             )
             notifyListeners(if (result.isSuccess) "talosNeuralVoiceDone" else "talosNeuralVoiceError", payload)
         }
+        host.submitSpeakStreamingWithStoredProfile(
+            text = text,
+            locale = locale,
+            storedProfile = storedProfile,
+            migrationCommitter = TalosVoiceProfileStoreMigrationCommitter(profileStore),
+            diagnosticRoute = diagnosticRoute,
+            queueMode = queueMode,
+            onComplete = completion,
+        )
         call.resolve(JSObject().put("accepted", true).put("ratePitchApplied", ratePitchApplied))
     }
 
@@ -366,6 +651,8 @@ class TalosNeuralVoicePlugin : Plugin() {
      */
     @PluginMethod
     fun startEnrollmentSession(call: PluginCall) {
+        enrollmentGeneration.incrementAndGet()
+        host.cancel()
         enrollmentSlots.clear()
         pendingProfile = null
         captureCancelled.set(false)
@@ -542,58 +829,40 @@ class TalosNeuralVoicePlugin : Plugin() {
             call.reject("displayName, language and consentVersion are required")
             return
         }
-        // ⭐⭐⭐ Owner 22/8, riprodotto sul Pad due volte con dati reali:
-        // `lowmemorykiller` uccide ai.talos con "process memory is leaking"
-        // durante l'encode, RSS in crescita CONTINUA per tutta la durata
-        // della chiamata - non un picco al caricamento. Ricerca: l'encoder
-        // di un codec neurale a base transformer ha un costo quadratico
-        // nella lunghezza della sequenza (self-attention) - concatenare
-        // TUTTE e 12 le frasi (whisper+normale+forte, anche 20-40s veri) in
-        // un'unica encodeReferenceAudio() è esattamente il caso che
-        // esplode. La documentazione UFFICIALE di MOSS-TTS lo conferma da
-        // un'altra direzione, indipendente dalla memoria: "optimal
-        // reference clip length is 3-10 seconds... clips longer than ~15
-        // seconds may introduce noise artifacts or degrade quality" - un
-        // riferimento più corto non è un compromesso, è quello giusto.
-        // ⇒ Le frasi 'normale' (indici 4-7 nel wizard, mai sussurrate né
-        // gridate - le più rappresentative di una voce di conversazione
-        // vera) bastano da sole, ~4 frasi invece di 12: il cancello di
-        // qualità resta invariato su TUTTE e 12 (misura la registrazione,
-        // non la scelta del riferimento), solo l'audio che finisce
-        // davvero nel codec cambia.
+        // Le frasi normali (4..7) sono la reference conversazionale. Il
+        // builder Host applica comunque il cap misurato e riporta sia i
+        // campioni sorgente sia quelli realmente passati a Mimi.
         val normalTierSlots = (NORMAL_TIER_FIRST_SLOT..NORMAL_TIER_LAST_SLOT).mapNotNull { enrollmentSlots[it] }
         val accepted = if (normalTierSlots.size == (NORMAL_TIER_LAST_SLOT - NORMAL_TIER_FIRST_SLOT + 1)) {
             normalTierSlots
         } else {
-            // Sessione anomala (mai osservata dal wizard reale, ma non si
-            // assume): meglio l'insieme intero - buildProfile() applica
-            // comunque il proprio tetto di durata più sotto.
-            enrollmentSlots.values.toList()
+            enrollmentSlots.toSortedMap().values.toList()
         }
         if (accepted.isEmpty()) {
             call.reject("no accepted phrases in this session")
             return
         }
-        enrollmentLane.execute {
-            val outcome = runCatching {
-                val runtime = TalosMossRuntime.open(modelRoot(), cpuThreads = 4)
-                try {
-                    enrollment().buildProfile(accepted, displayName, language, style, consentVersion, runtime)
-                } finally {
-                    runtime.close()
-                }
+        pendingProfile = null
+        val buildGeneration = enrollmentGeneration.incrementAndGet()
+        host.submitBuildPocketEnrollmentProfile(
+            acceptedPhrases = accepted,
+            displayName = displayName,
+            language = language,
+            style = style,
+            consentVersion = consentVersion,
+        ) { outcome ->
+            if (enrollmentGeneration.get() != buildGeneration) {
+                call.reject("enrollment build superseded")
+                return@submitBuildPocketEnrollmentProfile
             }
             outcome.fold(
-                onSuccess = { profile ->
-                    pendingProfile = profile
-                    call.resolve(
-                        JSObject()
-                            .put("frameCount", profile.header.frameCount)
-                            .put("quantizerCount", profile.header.quantizerCount)
-                            .put("enrollmentDurationMs", profile.header.enrollmentDurationMs),
-                    )
+                onSuccess = { result ->
+                    pendingProfile = result.profile
+                    call.resolve(enrollmentBuildJson(result))
                 },
-                onFailure = { e -> call.reject(e.message ?: "build failed", e as? Exception) },
+                onFailure = { error ->
+                    call.reject(error.message ?: "build failed", error as? Exception)
+                },
             )
         }
     }
@@ -612,10 +881,43 @@ class TalosNeuralVoicePlugin : Plugin() {
             call.reject("no built profile to preview - call buildEnrollmentProfile first")
             return
         }
-        host.submitSpeakStreamingWithReference(text, profile.promptAudioCodes) { result ->
+        val previewGeneration = enrollmentGeneration.get()
+        host.submitSpeakStreamingWithProfile(text, profile.header.language, profile) { rawResult ->
+            val result = rawResult.mapCatching { observed ->
+                check(observed.cancelled || observed.resolvedEngine == TalosPocketConditioningPayload.BACKEND) {
+                    "enrollment preview did not use Pocket"
+                }
+                check(observed.cancelled || observed.resolvedLocale == profile.header.language) {
+                    "enrollment preview changed the selected locale"
+                }
+                check(observed.cancelled || observed.resolvedProfileId == profile.header.profileId) {
+                    "enrollment preview changed the pending profile"
+                }
+                check(observed.cancelled || observed.resolvedProfileSchemaVersion == TalosVoiceProfileHeaderV2.SCHEMA_VERSION) {
+                    "enrollment preview did not use schema V2"
+                }
+                check(observed.cancelled || observed.fallbackReason == null) {
+                    "enrollment preview used a fallback"
+                }
+                observed
+            }
+            if (enrollmentGeneration.get() != previewGeneration) return@submitSpeakStreamingWithProfile
             val payload = result.fold(
-                onSuccess = { r -> JSObject().put("readingId", readingId).put("cancelled", r.cancelled) },
-                onFailure = { e -> JSObject().put("readingId", readingId).put("error", e.message ?: "preview failed") },
+                onSuccess = { observed ->
+                    JSObject()
+                        .put("readingId", readingId)
+                        .put("cancelled", observed.cancelled)
+                        .put("hardwareUnderruns", observed.hardwareUnderruns)
+                        .put("elapsedMs", observed.elapsedMs)
+                        .put("generatedFrames", observed.generatedFrames)
+                        .put("resolvedEngine", observed.resolvedEngine)
+                        .put("resolvedLocale", observed.resolvedLocale)
+                        .put("resolvedProfileId", observed.resolvedProfileId)
+                        .put("resolvedProfileSchemaVersion", observed.resolvedProfileSchemaVersion)
+                },
+                onFailure = { error ->
+                    JSObject().put("readingId", readingId).put("error", error.message ?: "preview failed")
+                },
             )
             notifyListeners(if (result.isSuccess) "talosNeuralVoiceDone" else "talosNeuralVoiceError", payload)
         }
@@ -629,17 +931,33 @@ class TalosNeuralVoicePlugin : Plugin() {
             call.reject("no built profile to commit - call buildEnrollmentProfile first")
             return
         }
+        val commitGeneration = enrollmentGeneration.get()
         enrollmentLane.execute {
             runCatching {
+                check(enrollmentGeneration.get() == commitGeneration && pendingProfile?.header?.profileId == profile.header.profileId) {
+                    "pending enrollment profile changed before commit"
+                }
                 val enrollment = enrollment()
                 enrollment.commit(profile)
                 enrollmentSlots.clear()
                 pendingProfile = null
+                enrollmentGeneration.incrementAndGet()
                 // Il profilo vero e cifrato esiste ora - la copia di
                 // servizio per la ripresa non serve più, stessa erasure
                 // crittografica di TalosVoiceProfileStore.delete().
                 runCatching { sessionStore.clearSession() }
-                profileSummaryJson(enrollment, profile.header)
+                val pocketStatus = host.pocketModelStatusBlocking(refresh = true).status
+                val mossFingerprints = if (profile.backendPayloads.any { it is TalosMossPromptPayload }) {
+                    activeMossFingerprints()
+                } else {
+                    null
+                }
+                val availability = TalosVoiceAvailabilityResolver.forProfile(
+                    profile = profile,
+                    pocketStatus = pocketStatus,
+                    mossCompatible = isMossCompatible(profile, mossFingerprints),
+                )
+                profileSummaryJson(profile, availability)
             }.fold(
                 onSuccess = { summary -> call.resolve(JSObject().put("profile", summary)) },
                 onFailure = { e -> call.reject(e.message ?: "commit failed", e as? Exception) },
@@ -649,6 +967,8 @@ class TalosNeuralVoicePlugin : Plugin() {
 
     @PluginMethod
     fun discardEnrollmentSession(call: PluginCall) {
+        enrollmentGeneration.incrementAndGet()
+        host.cancel()
         enrollmentSlots.clear()
         pendingProfile = null
         captureCancelled.set(false)
@@ -659,16 +979,93 @@ class TalosNeuralVoicePlugin : Plugin() {
         }
     }
 
-    private fun profileSummaryJson(enrollment: TalosVoiceEnrollment, header: TalosVoiceProfileHeaderV1): JSObject =
+    private fun profileSummaryJson(header: TalosVoiceProfileHeaderV1, compatible: Boolean): JSObject =
         JSObject()
             .put("id", header.profileId)
             .put("name", header.displayName)
             .put("language", header.language)
             .put("style", header.style)
             .put("engineBuild", header.codecFingerprint)
-            .put("compatible", runCatching { enrollment.isProfileStillCompatible(header.profileId) }.getOrDefault(false))
+            .put("compatible", compatible)
+            .apply {
+                if (compatible) {
+                    put("resolvedBackend", TalosMossPromptPayload.BACKEND)
+                } else {
+                    put("incompatibilityReason", "active MOSS codec does not match this legacy profile")
+                }
+            }
             .put("createdAtEpochMs", header.createdAtEpochMs)
             .put("enrollmentDurationMs", header.enrollmentDurationMs)
+
+    private fun profileSummaryJson(
+        profile: TalosVoiceProfileV2,
+        availability: TalosVoiceProfileAvailability,
+    ): JSObject = JSObject()
+            .put("id", profile.header.profileId)
+            .put("name", profile.header.displayName)
+            .put("language", profile.header.language)
+            .put("style", profile.header.style)
+            .put(
+                "engineBuild",
+                profile.backendPayloads.filterIsInstance<TalosPocketConditioningPayload>().singleOrNull()?.revision
+                    ?: profile.backendPayloads.filterIsInstance<TalosMossPromptPayload>().single().codecFingerprint,
+            )
+            .put("compatible", availability.compatible)
+            .apply {
+                availability.resolvedBackend?.let { put("resolvedBackend", it) }
+                availability.fallbackReason?.let { put("fallbackReason", it) }
+                availability.incompatibilityReason?.let { put("incompatibilityReason", it) }
+            }
+            .put("createdAtEpochMs", profile.header.createdAtEpochMs)
+            .put("enrollmentDurationMs", profile.header.enrollmentDurationMs)
+
+    private fun activeMossFingerprints(): Pair<String, String>? = runCatching {
+        TalosVoiceProfileCompatibility.codecFingerprint(modelRoot()) to
+            TalosVoiceProfileCompatibility.promptSchemaFingerprint()
+    }.getOrNull()
+
+    private fun isMossCompatible(
+        header: TalosVoiceProfileHeaderV1,
+        active: Pair<String, String>?,
+    ): Boolean = active != null &&
+        header.codecFingerprint == active.first &&
+        header.promptSchemaFingerprint == active.second
+
+    private fun isMossCompatible(
+        profile: TalosVoiceProfileV2,
+        active: Pair<String, String>?,
+    ): Boolean {
+        val payload = profile.backendPayloads.filterIsInstance<TalosMossPromptPayload>().singleOrNull()
+            ?: return false
+        return active != null &&
+            payload.codecFingerprint == active.first &&
+            payload.promptSchemaFingerprint == active.second
+    }
+
+    private fun enrollmentBuildJson(result: TalosVoiceEnrollmentBuildResult): JSObject {
+        val stages = JSArray()
+        result.stageMetrics.forEach { metric ->
+            val encoded = JSObject()
+                .put("stage", metric.stage)
+                .put("startedAtNs", metric.startedAtNs)
+                .put("durationNs", metric.durationNs)
+                .put("threadName", metric.threadName)
+            metric.inputFrames?.let { encoded.put("inputFrames", it) }
+            metric.outputSamples?.let { encoded.put("outputSamples", it) }
+            stages.put(encoded)
+        }
+        return JSObject()
+            .put("backend", result.profile.header.preferredBackend)
+            .put("profileSchemaVersion", result.profile.header.schemaVersion)
+            .put("sourceSampleRate", result.sourceSampleRate)
+            .put("sourceSamples", result.sourceSamples)
+            .put("referenceSamples", result.referenceSamples)
+            .put("referenceDurationMs", result.referenceDurationMs)
+            .put("conditioningFrames", result.conditioningFrames)
+            .put("conditioningDimension", result.conditioningDimension)
+            .put("enrollmentDurationMs", result.profile.header.enrollmentDurationMs)
+            .put("stages", stages)
+    }
 
     private fun phraseVerdictJson(phrase: TalosVoicePhraseCapture): JSObject {
         val reasons = JSArray()
@@ -694,6 +1091,7 @@ class TalosNeuralVoicePlugin : Plugin() {
     }
 
     companion object {
+        private val VOICE_LOCALE = Regex("^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
         private const val DEFAULT_PHRASE_MAX_DURATION_MS = 8_000
         // Stesso ordine hardcoded lato JS (PHRASES in
         // TalosMobilePersonalVoiceEnrollment.vue): whisper 0-3, normale

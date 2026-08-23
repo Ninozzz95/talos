@@ -680,6 +680,10 @@ dependencies {
      * una sola architettura.
      */
     implementation "com.microsoft.onnxruntime:onnxruntime-android:1.29.0"
+    // Pocket v2 stays behind its own model/runtime adapter. The module uses
+    // this same pinned ORT dependency, so Gradle packages one runtime rather
+    // than a second native inference stack.
+    implementation project(':pocket-tts-runtime')
     /*
      * ⛔⛔ SHIZUKU E' USCITO — 2026-08-09.
      *

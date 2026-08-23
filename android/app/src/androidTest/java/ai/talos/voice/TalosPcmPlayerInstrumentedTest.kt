@@ -84,6 +84,31 @@ class TalosPcmPlayerInstrumentedTest {
         }
     }
 
+    @Test
+    fun terminalStreamStopDrainsExactAcceptedAudioWithoutAPostEosUnderrun() {
+        val sampleRate = 48000
+        val player = TalosPcmPlayer(sampleRate, channels = 2)
+        try {
+            val tone = sineToneStereo(sampleRate, seconds = 2.5, hz = 440.0, amplitude = 0.2f)
+            val underrunsBefore = player.underrunCount()
+            assertTrue(writeInChunks(player, tone))
+
+            val boundary = player.sealTerminalBoundary()
+            val drained = boundary.awaitDrain(timeoutMs = 3000)
+
+            assertTrue("AudioTrack streaming stop did not drain its exact accepted tail", drained.reached)
+            assertTrue("terminal boundary changed the accepted frame count", boundary.boundaryFrames == (tone.size / 2).toLong())
+            assertTrue("terminal boundary observed an impossible negative tail", boundary.remainingFramesAtSeal >= 0L)
+            assertTrue(
+                "terminal stream stop produced a hardware underrun after EOS",
+                drained.underrunCount == underrunsBefore,
+            )
+            assertTrue("sealed AudioTrack must no longer report PLAYSTATE_PLAYING", !player.isPlaying())
+        } finally {
+            player.close()
+        }
+    }
+
     /**
      * The contrary case that caught the `flush()` bug: after `flush()`, the
      * player must still be in `PLAYSTATE_PLAYING` and must actually advance
@@ -110,11 +135,12 @@ class TalosPcmPlayerInstrumentedTest {
             assertTrue("playback must have actually started before this test flushes it", player.playbackHeadFrames() > 0)
 
             player.flush()
-            assertTrue("flush() must leave the track in PLAYSTATE_PLAYING, ready for the next utterance", player.isPlaying())
+            assertTrue("flush() must leave an empty track paused for the next preroll", !player.isPlaying())
             assertTrue("flush() must reset framesWritten to zero for the new utterance", player.framesWritten() == 0L)
 
             val secondTone = sineToneStereo(sampleRate, seconds = 1.5, hz = 880.0, amplitude = 0.2f)
             assertTrue(writeInChunks(player, secondTone))
+            assertTrue("the first complete block after flush must restart playback", player.isPlaying())
             assertTrue(
                 "audio written after flush() must actually drain, not sit silently buffered on a stopped track",
                 player.awaitDrain(timeoutMs = 2000),

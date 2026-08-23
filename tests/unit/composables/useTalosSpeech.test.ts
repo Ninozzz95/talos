@@ -25,6 +25,11 @@ vi.mock('@/stores/settings', () => ({
     useSettingsStore: () => ({ state: { voice: voiceState } }),
 }))
 
+const i18nState = vi.hoisted(() => ({ locale: { value: 'it-IT' } }))
+vi.mock('@/i18n', () => ({
+    useTalosI18n: () => ({ t: (key: string) => key, locale: i18nState.locale }),
+}))
+
 /**
  * Fase 4 block 5: `toggle`'s only remaining personal-voice responsibility
  * after the chunk-budget refactor is "call `talosSpeakForReading`, branch
@@ -41,7 +46,12 @@ vi.mock('@/stores/settings', () => ({
  * measured here first, the wrong way round, before landing on this one.
  */
 const personal = vi.hoisted(() => ({
-    speakForReading: vi.fn(async (_engine: string, _profileId: string | null, _text: string, opts?: { onend?: () => void }) => {
+    speakForReading: vi.fn(async (_engine: string, _profileId: string | null, _text: string, opts?: {
+        onend?: () => void
+        queue?: 'flush' | 'add'
+        locale?: string
+        source?: 'chat' | 'assistant' | 'manual' | 'preview' | 'instrumentation'
+    }) => {
         personal._onend = opts?.onend
         return false
     }),
@@ -61,6 +71,9 @@ beforeEach(() => {
     personal.speakForReading.mockClear(); personal.stop.mockClear(); personal._onend = undefined
     voiceState.engine = 'system'
     voiceState.personal_profile_id = null
+    voiceState.personal_rate = 1
+    voiceState.personal_pitch = 1
+    i18nState.locale.value = 'it-IT'
 })
 
 describe('useTalosSpeech', () => {
@@ -122,7 +135,7 @@ describe('useTalosSpeech', () => {
             await speech.toggle('m1', 'Ciao')
             expect(personal.speakForReading).toHaveBeenCalledWith(
                 'personal', 'a1b2c3d4-e5f6-4789-a012-3456789abcde', 'Ciao',
-                expect.objectContaining({ rate: 1, pitch: 1 }),
+                expect.objectContaining({ rate: 1, pitch: 1, locale: 'it-IT', source: 'manual' }),
             )
             expect(svc.speak).not.toHaveBeenCalled()
             expect(speech.speakingId.value).toBe('m1')
@@ -170,6 +183,89 @@ describe('useTalosSpeech', () => {
             expect(speech.speakingId.value).toBe('m1')
             personal._onend?.()
             expect(speech.speakingId.value).toBeNull()
+        })
+    })
+
+    /**
+     * ⛔⛔⛔ 22/8, owner, sentito dal vivo: «quando parlo nella chat e
+     * nell'assistente si usa la voce sintetica ma non quella selezionata».
+     * `seguiIlTesto` è esattamente `useTalosRispostaAVoce.ts` - "hai
+     * parlato ⇒ ti risponde a voce" - e prima di questo fix ignorava
+     * `engine:'personal'` di proposito, sempre. Zero copertura esisteva
+     * su questa funzione prima di oggi.
+     */
+    describe('seguiIlTesto() con motore personale', () => {
+        it('SEGUI-01 an in-progress chunk emits each complete sentence through the selected personal profile immediately', async () => {
+            voiceState.engine = 'personal'
+            voiceState.personal_profile_id = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
+            personal.speakForReading.mockResolvedValueOnce(true)
+            const speech = useTalosSpeech()
+            expect(speech.apriLetturaDiVoce('turno', 'chat')).toBe(true)
+            await speech.seguiIlTesto('turno', 'Prima frase completa. Sto scrivendo', false)
+            expect(personal.speakForReading).toHaveBeenCalledWith(
+                'personal', 'a1b2c3d4-e5f6-4789-a012-3456789abcde', 'Prima frase completa.',
+                expect.objectContaining({ queue: 'flush', locale: 'it-IT', source: 'chat' }),
+            )
+            expect(svc.speak).not.toHaveBeenCalled()
+        })
+
+        it('SEGUI-02 later personal sentences are bounded and appended to the same native FIFO instead of replacing the first', async () => {
+            voiceState.engine = 'personal'
+            voiceState.personal_profile_id = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
+            personal.speakForReading.mockResolvedValueOnce(true).mockResolvedValueOnce(true)
+            const speech = useTalosSpeech()
+            expect(speech.apriLetturaDiVoce('turno', 'assistant')).toBe(true)
+            await speech.seguiIlTesto('turno', 'Prima frase. Seconda', false)
+            await speech.seguiIlTesto('turno', 'Prima frase. Seconda frase.', true)
+            expect(personal.speakForReading).toHaveBeenCalledTimes(2)
+            expect(personal.speakForReading.mock.calls[0]?.[2]).toBe('Prima frase.')
+            expect(personal.speakForReading.mock.calls[0]?.[3]).toEqual(expect.objectContaining({ queue: 'flush' }))
+            expect(personal.speakForReading.mock.calls[1]?.[2]).toBe('Seconda frase.')
+            expect(personal.speakForReading.mock.calls[1]?.[3]).toEqual(expect.objectContaining({ queue: 'add', locale: 'it-IT', source: 'assistant' }))
+            expect(svc.speak).not.toHaveBeenCalled()
+        })
+
+        it('SEGUI-03 profile, locale, rate and pitch are immutable after the reading opens', async () => {
+            const originalProfile = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
+            voiceState.engine = 'personal'
+            voiceState.personal_profile_id = originalProfile
+            voiceState.personal_rate = 0.95
+            voiceState.personal_pitch = 1.05
+            i18nState.locale.value = 'it-IT'
+            personal.speakForReading.mockResolvedValueOnce(true)
+            const speech = useTalosSpeech()
+            expect(speech.apriLetturaDiVoce('turno', 'chat')).toBe(true)
+
+            voiceState.personal_profile_id = 'ffffffff-ffff-4fff-afff-ffffffffffff'
+            voiceState.personal_rate = 1.4
+            voiceState.personal_pitch = 0.7
+            i18nState.locale.value = 'en-US'
+
+            await speech.seguiIlTesto('turno', 'La rotta resta italiana.', true)
+            expect(personal.speakForReading).toHaveBeenCalledWith(
+                'personal', originalProfile, 'La rotta resta italiana.',
+                expect.objectContaining({ rate: 0.95, pitch: 1.05, locale: 'it-IT', source: 'chat' }),
+            )
+        })
+
+        it('AL CONTRARIO: if talosSpeakForReading refuses on the final chunk, it falls back to the system voice on the whole text', async () => {
+            voiceState.engine = 'personal'
+            voiceState.personal_profile_id = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
+            // Default mock already resolves false.
+            const speech = useTalosSpeech()
+            expect(speech.apriLetturaDiVoce('turno', 'chat')).toBe(true)
+            await speech.seguiIlTesto('turno', 'Unica frase.', true)
+            expect(personal.speakForReading).toHaveBeenCalledOnce()
+            expect(svc.speak).toHaveBeenCalledWith('Unica frase.', expect.anything())
+        })
+
+        it('a system-engine reading is unaffected - still speaks phrase by phrase as chunks arrive, exactly as before this fix', async () => {
+            voiceState.engine = 'system'
+            const speech = useTalosSpeech()
+            expect(speech.apriLetturaDiVoce('turno', 'chat')).toBe(true)
+            await speech.seguiIlTesto('turno', 'Prima frase completa. Ancora ', false)
+            expect(personal.speakForReading).not.toHaveBeenCalled()
+            expect(svc.speak).toHaveBeenCalledWith('Prima frase completa.', expect.anything())
         })
     })
 })

@@ -3,6 +3,7 @@ import { talosDettaturaAnnota } from '@/services/dictation'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosI18n } from '@/i18n'
+import type { TalosVoiceReadingSource, VoiceReadingRoute } from '@/lib/voice/personalVoiceContracts'
 
 /**
  * Owner 2026-07-24 — la lettura ad alta voce di UNA risposta alla volta. Il
@@ -44,13 +45,20 @@ const speakingId = ref<string | null>(null)
  */
 const lette = ref<ReadonlySet<string>>(new Set())
 
-/**
- * Quanti caratteri di ogni risposta sono gia' stati mandati al motore.
- *
- * ⛔ Senza questo, a ogni pezzo che arriva si rileggerebbe tutto dall'inizio —
- * la voce ricomincerebbe da capo a ogni parola.
- */
-const quantoDetto = new Map<string, number>()
+interface VoiceReadingState {
+    id: string
+    readonly route: Readonly<VoiceReadingRoute>
+    spokenCharacters: number
+    fixedSystemVoice?: string
+    personalJobs: number
+    pendingJobs: number
+    inputFinished: boolean
+    personalAccepted: boolean
+    fallbackToSystem: boolean
+}
+
+/** One state object per logical reading; rename moves the object, never the route snapshot. */
+const lettureInCorso = new Map<string, VoiceReadingState>()
 
 /**
  * ⛔⛔ LA VOCE CAMBIAVA TONO A META' LETTURA.
@@ -79,18 +87,6 @@ const quantoDetto = new Map<string, number>()
  * pochissimo (le `seanet` incorporate sono neurali) e in cambio il timbro non
  * cambia mai — nemmeno in ascensore.
  */
-const voceDellaLettura = new Map<string, string>()
-
-/**
- * Quale motore sta leggendo QUESTA lettura - `'personal'` se `toggle` ha
- * instradato lì (blueprint §37.1 "engine/profile snapshot fixed for one
- * reading": deciso una volta in `toggle`, mai richiesto di nuovo a metà).
- * Assente = sistema, lo stesso comportamento di sempre - così ogni lettura
- * che non passa mai da qui (tutte quelle di ieri, e `seguiIlTesto` anche
- * oggi, vedi la sua nota) resta esattamente quello che era.
- */
-const motoreDellaLettura = new Map<string, 'personal'>()
-
 export function useTalosSpeech() {
     const settings = useSettingsStore()
     const toasts = useTalosMobileToasts()
@@ -102,10 +98,10 @@ export function useTalosSpeech() {
      * ⛔ Si risolve una volta sola e si ricorda: risolverla a ogni frase e' il
      * difetto, non la cura.
      */
-    async function voceFissa(id: string): Promise<string | undefined> {
-        const scelta = settings.state.voice.voice_uri
+    async function voceFissa(reading: VoiceReadingState): Promise<string | undefined> {
+        const scelta = reading.route.voiceUri
         if (scelta) return scelta
-        const gia = voceDellaLettura.get(id)
+        const gia = reading.fixedSystemVoice
         if (gia) return gia
         try {
             const [{ useTalosSpeechService }, { talosVoceDaUsare }] = await Promise.all([
@@ -114,19 +110,59 @@ export function useTalosSpeech() {
             ])
             const voci = await useTalosSpeechService().voices()
             const { voce } = talosVoceDaUsare(voci as never, {
-                lingua: locale.value,
+                lingua: reading.route.locale,
                 // ⛔ `rete: false` — non e' avarizia di dati: e' l'unica scelta
                 // che garantisce lo STESSO timbro dall'inizio alla fine.
                 rete: false,
                 scelta: null,
             })
-            if (voce) voceDellaLettura.set(id, voce.name)
+            if (voce) reading.fixedSystemVoice = voce.name
             return voce?.name
         } catch {
             // Se non si riesce a scegliere, si lascia decidere al motore: e' il
             // comportamento di prima, non un guasto nuovo.
             return undefined
         }
+    }
+
+    function snapshotRoute(id: string, source: TalosVoiceReadingSource): Readonly<VoiceReadingRoute> {
+        const voice = settings.state.voice
+        return Object.freeze({
+            readingId: id,
+            engine: voice.engine,
+            personalProfileId: voice.personal_profile_id,
+            locale: locale.value,
+            source,
+            voiceUri: voice.voice_uri,
+            systemRate: voice.rate,
+            systemPitch: voice.pitch,
+            personalRate: voice.personal_rate,
+            personalPitch: voice.personal_pitch,
+        })
+    }
+
+    function nuovaLettura(id: string, source: TalosVoiceReadingSource): VoiceReadingState {
+        return {
+            id,
+            route: snapshotRoute(id, source),
+            spokenCharacters: 0,
+            personalJobs: 0,
+            pendingJobs: 0,
+            inputFinished: false,
+            personalAccepted: false,
+            fallbackToSystem: false,
+        }
+    }
+
+    function terminaLettura(reading: VoiceReadingState): void {
+        if (lettureInCorso.get(reading.id) !== reading) return
+        lettureInCorso.delete(reading.id)
+        if (speakingId.value === reading.id) speakingId.value = null
+    }
+
+    function completaJob(reading: VoiceReadingState): void {
+        reading.pendingJobs = Math.max(0, reading.pendingJobs - 1)
+        if (reading.inputFinished && reading.pendingJobs === 0) terminaLettura(reading)
     }
 
     /**
@@ -145,9 +181,10 @@ export function useTalosSpeech() {
     async function stop(motivo = 'non dichiarato'): Promise<void> {
         talosDettaturaAnnota(`voce: STOP (${motivo}) mentre leggeva=${speakingId.value ?? '-'}`)
         const stavaLeggendo = speakingId.value
+        const reading = stavaLeggendo ? lettureInCorso.get(stavaLeggendo) : undefined
         speakingId.value = null
-        if (stavaLeggendo && motoreDellaLettura.get(stavaLeggendo) === 'personal') {
-            motoreDellaLettura.delete(stavaLeggendo)
+        if (stavaLeggendo) lettureInCorso.delete(stavaLeggendo)
+        if (reading?.route.engine === 'personal' && !reading.fallbackToSystem) {
             const { talosStopPersonalVoice } = await import('@/services/personalVoice')
             await talosStopPersonalVoice()
             return
@@ -188,15 +225,12 @@ export function useTalosSpeech() {
      */
     function rinominaLettura(da: string, a: string): void {
         if (speakingId.value !== da) return
-        const quanto = quantoDetto.get(da)
-        if (quanto !== undefined) quantoDetto.set(a, quanto)
-        quantoDetto.delete(da)
-        const voce = voceDellaLettura.get(da)
-        if (voce) voceDellaLettura.set(a, voce)
-        voceDellaLettura.delete(da)
-        const motore = motoreDellaLettura.get(da)
-        if (motore) motoreDellaLettura.set(a, motore)
-        motoreDellaLettura.delete(da)
+        const reading = lettureInCorso.get(da)
+        if (reading) {
+            lettureInCorso.delete(da)
+            reading.id = a
+            lettureInCorso.set(a, reading)
+        }
         speakingId.value = a
     }
 
@@ -204,16 +238,11 @@ export function useTalosSpeech() {
         lette.value = new Set([...lette.value, id])
     }
 
-    function apriLetturaDiVoce(id: string): boolean {
+    function apriLetturaDiVoce(id: string, source: TalosVoiceReadingSource = 'assistant'): boolean {
         if (speakingId.value !== null) return false
         speakingId.value = id
         lette.value = new Set([...lette.value, id])
-        quantoDetto.delete(id)
-        // Lettura nuova = voce da risolvere di nuovo: l'id del turno si riusa.
-        voceDellaLettura.delete(id)
-        // ⛔ Voce-iniziata = SEMPRE sistema (vedi la nota su `seguiIlTesto`) -
-        // pulito comunque, per lo stesso motivo difensivo delle due righe sopra.
-        motoreDellaLettura.delete(id)
+        lettureInCorso.set(id, nuovaLettura(id, source))
         return true
     }
 
@@ -230,36 +259,54 @@ export function useTalosSpeech() {
             await stop('la persona ha premuto Interrompi')
             return
         }
+        const precedente = speakingId.value
+        if (precedente) lettureInCorso.delete(precedente)
         speakingId.value = id
+        const reading = nuovaLettura(id, 'manual')
+        lettureInCorso.set(id, reading)
         // ⛔ Si segna PRIMA di parlare, non a fine lettura: il segnalino deve
         // comparire quando la persona chiede, non quando il motore finisce.
         lette.value = new Set([...lette.value, id])
 
-        const onend = (): void => { if (speakingId.value === id) speakingId.value = null }
+        const onend = (): void => terminaLettura(reading)
         const onerror = (reason?: string): void => {
-            if (speakingId.value === id) speakingId.value = null
+            terminaLettura(reading)
             toasts.push({ message: t(frasePerIlMotivo(reason)) })
         }
+
+        // ⭐⭐⭐ Owner 22/8: «documento_complesso» detto con l'underscore -
+        // il testo per il motore non è mai il markdown grezzo del messaggio.
+        const { talosTestoPerVoce } = await import('@/lib/voice/testoPerVoce')
+        const daDire = talosTestoPerVoce(text)
 
         // Fallback silenzioso al sistema quando `talosSpeakForReading` torna
         // falso (§37.1: "fallback does not rewrite user choice") - la
         // preferenza salvata resta 'personal', solo QUESTA lettura usa il
         // sistema.
-        if (settings.state.voice.engine === 'personal') {
-            const v = settings.state.voice
+        if (reading.route.engine === 'personal') {
             const { talosSpeakForReading } = await import('@/services/personalVoice')
-            if (await talosSpeakForReading(v.engine, v.personal_profile_id, text, { rate: v.personal_rate, pitch: v.personal_pitch, onend, onerror })) {
-                motoreDellaLettura.set(id, 'personal')
+            if (await talosSpeakForReading(reading.route.engine, reading.route.personalProfileId, daDire, {
+                rate: reading.route.personalRate,
+                pitch: reading.route.personalPitch,
+                readingId: reading.route.readingId,
+                queue: 'flush',
+                locale: reading.route.locale,
+                source: reading.route.source,
+                onend,
+                onerror,
+            })) {
+                reading.personalAccepted = true
                 return
             }
+            reading.fallbackToSystem = true
         }
 
-        const voce = await voceFissa(id)
+        const voce = await voceFissa(reading)
         const { useTalosSpeechService } = await import('@/services/speech')
-        await useTalosSpeechService().speak(text, {
+        await useTalosSpeechService().speak(daDire, {
             voiceURI: voce,
-            rate: settings.state.voice.rate,
-            pitch: settings.state.voice.pitch,
+            rate: reading.route.systemRate,
+            pitch: reading.route.systemPitch,
             onend,
             onerror,
         })
@@ -277,50 +324,122 @@ export function useTalosSpeech() {
      * ⛔ Non fa niente se quella risposta non e' stata chiesta ad alta voce: la
      * lettura resta una cosa che si chiede, non una che parte da sola.
      *
-     * ⛔ SEMPRE voce di sistema, anche con `engine: 'personal'` scelto -
-     * deliberato, non dimenticato. `queue: 'add'` qui sotto conta su una
-     * VERA coda: la frase 2 aspetta che la 1 finisca di suonare.
-     * `TalosVoiceHost.submitSpeakStreamingWithReference` non ha una coda,
-     * ha UNA generazione mutabile che la successiva invalida (§14) - una
-     * frase 2 instradata lì interromperebbe la 1 a metà, non la seguirebbe.
-     * `talosPersonalVoiceSpeechAdapter` lo dichiara nella sua stessa
-     * documentazione. Restare sul sistema qui è la scelta onesta finché la
-     * coda nativa non esiste davvero, non un'approssimazione silenziosa.
+     * La rotta (engine, profilo, locale, rate/pitch e origine) è lo snapshot
+     * creato da `apriLetturaDiVoce`: non viene più riletta dallo store a ogni
+     * chunk. Ogni frase completa è un job bounded; la prima usa `flush`, le
+     * successive `add`, che il gate atomico nativo fa partire in FIFO senza
+     * invalidare la generazione già udibile.
      */
     async function seguiIlTesto(id: string, testo: string, finito: boolean): Promise<void> {
         if (speakingId.value !== id) return
-        const detto = quantoDetto.get(id) ?? 0
-        const { talosFrasiDaLeggere } = await import('@/lib/voice/frasiDaLeggere')
+        const reading = lettureInCorso.get(id)
+        if (!reading) return
+        const [{ talosTestoPerVoce }, { talosFrasiDaLeggere }] = await Promise.all([
+            import('@/lib/voice/testoPerVoce'),
+            import('@/lib/voice/frasiDaLeggere'),
+        ])
+        const detto = reading.spokenCharacters
         const { pronte, resto } = talosFrasiDaLeggere(testo, detto, finito)
-        if (!pronte.length) return
-        quantoDetto.set(id, testo.length - resto.length)
-        const voce = await voceFissa(id)
-        const { useTalosSpeechService } = await import('@/services/speech')
-        const servizio = useTalosSpeechService()
+        reading.inputFinished = reading.inputFinished || finito
+        if (!pronte.length) {
+            if (reading.inputFinished && reading.pendingJobs === 0) terminaLettura(reading)
+            return
+        }
+        reading.spokenCharacters = testo.length - resto.length
         talosDettaturaAnnota(
             `voce: ${pronte.length} frasi da dire, finito=${finito}, testo=${testo.length} car, detto=${detto}, resto=${resto.length}`,
         )
-        for (const frase of pronte) {
-            const numero = pronte.indexOf(frase) + 1
-            talosDettaturaAnnota(`voce: accodo ${numero}/${pronte.length} «${frase.slice(0, 28)}»`)
-            await servizio.speak(frase, {
-                voiceURI: voce,
-                rate: settings.state.voice.rate,
-                pitch: settings.state.voice.pitch,
-                // ⛔ In coda: se no ogni frase ammazza la precedente a meta'.
-                queue: 'add',
-                // ⛔ L'ultima frase di un testo FINITO chiude la lettura senza
-                // controllare l'id: fra l'accodamento e la fine la lettura puo'
-                // aver cambiato nome (il messaggio vero e' nato), e un
-                // confronto col nome vecchio lascerebbe il pulsante su «ferma»
-                // per sempre — su una stanza silenziosa.
-                onend: () => {
+
+        if (reading.route.engine === 'personal' && !reading.fallbackToSystem) {
+            const { talosSpeakForReading, talosStopPersonalVoice } = await import('@/services/personalVoice')
+            for (let index = 0; index < pronte.length; index += 1) {
+                const frase = pronte[index]!
+                const numero = index + 1
+                reading.pendingJobs += 1
+                let settled = false
+                const onend = (): void => {
+                    if (settled) return
+                    settled = true
                     talosDettaturaAnnota(`voce: detta ${numero}/${pronte.length}`)
-                    // ⛔ Solo l'ULTIMA frase di un testo FINITO chiude la
-                    // lettura — le altre passano solo per lasciare la riga.
-                    if (finito && frase === pronte[pronte.length - 1]) speakingId.value = null
-                },
-            })
+                    completaJob(reading)
+                }
+                const onerror = (reason?: string): void => {
+                    if (!settled) {
+                        settled = true
+                        reading.pendingJobs = Math.max(0, reading.pendingJobs - 1)
+                    }
+                    terminaLettura(reading)
+                    toasts.push({ message: t(frasePerIlMotivo(reason)) })
+                    void talosStopPersonalVoice()
+                }
+                const accepted = await talosSpeakForReading(
+                    reading.route.engine,
+                    reading.route.personalProfileId,
+                    talosTestoPerVoce(frase),
+                    {
+                        rate: reading.route.personalRate,
+                        pitch: reading.route.personalPitch,
+                        readingId: reading.route.readingId,
+                        queue: reading.personalJobs === 0 ? 'flush' : 'add',
+                        locale: reading.route.locale,
+                        source: reading.route.source,
+                        onend,
+                        onerror,
+                    },
+                )
+                if (!accepted) {
+                    if (!settled) {
+                        settled = true
+                        reading.pendingJobs = Math.max(0, reading.pendingJobs - 1)
+                    }
+                    if (reading.personalAccepted) {
+                        onerror('unavailable')
+                        return
+                    }
+                    reading.fallbackToSystem = true
+                    break
+                }
+                reading.personalAccepted = true
+                reading.personalJobs += 1
+            }
+            if (!reading.fallbackToSystem) return
+        }
+
+        const voce = await voceFissa(reading)
+        if (lettureInCorso.get(reading.id) !== reading) return
+        const { useTalosSpeechService } = await import('@/services/speech')
+        const servizio = useTalosSpeechService()
+        for (let index = 0; index < pronte.length; index += 1) {
+            const frase = pronte[index]!
+            const numero = index + 1
+            talosDettaturaAnnota(`voce: accodo ${numero}/${pronte.length} «${frase.slice(0, 28)}»`)
+            reading.pendingJobs += 1
+            let settled = false
+            const settle = (): void => {
+                if (settled) return
+                settled = true
+                talosDettaturaAnnota(`voce: detta ${numero}/${pronte.length}`)
+                completaJob(reading)
+            }
+            try {
+                await servizio.speak(talosTestoPerVoce(frase), {
+                    voiceURI: voce,
+                    rate: reading.route.systemRate,
+                    pitch: reading.route.systemPitch,
+                    queue: 'add',
+                    onend: settle,
+                    onerror: (reason?: string) => {
+                        settle()
+                        terminaLettura(reading)
+                        toasts.push({ message: t(frasePerIlMotivo(reason)) })
+                    },
+                })
+            } catch {
+                settle()
+                terminaLettura(reading)
+                toasts.push({ message: t(frasePerIlMotivo(undefined)) })
+                return
+            }
         }
     }
 
@@ -356,4 +475,5 @@ function frasePerIlMotivo(reason: string | undefined): string {
 
 export function __resetTalosSpeechForTests(): void {
     speakingId.value = null
+    lettureInCorso.clear()
 }

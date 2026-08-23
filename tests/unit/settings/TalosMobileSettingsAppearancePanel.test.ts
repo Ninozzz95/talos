@@ -61,9 +61,10 @@ beforeEach(() => {
     stores.settings.state.motion_v6.mode = 'off'
     stores.settings.state.motion_v6.background_enabled = true
     // The panel remembers the section you left, and jsdom keeps one localStorage
-    // for the whole file — so without this, the first test's trip through Voice
+    // for the whole file — so without this, one test's trip through Motion
     // decides where every later test opens. Worth knowing rather than papering
-    // over: it is exactly the behaviour the last test in this file asserts.
+    // over: it is exactly the behaviour the "opens again on the section you
+    // left" test below asserts.
     localStorage.clear()
 })
 
@@ -79,7 +80,7 @@ async function activateTab(wrapper: VueWrapper, label: string): Promise<void> {
 }
 
 describe('TalosMobileSettingsAppearancePanel', () => {
-    it('MOTION-SETTINGS-02 gives every Design/Motion/Voice panel the shared active-motion contract', async () => {
+    it('MOTION-SETTINGS-02 gives every Design/Motion panel the shared active-motion contract', async () => {
         const wrapper = mount(TalosMobileSettingsAppearancePanel, {
             attachTo: document.body,
             global: {
@@ -90,7 +91,7 @@ describe('TalosMobileSettingsAppearancePanel', () => {
             },
         })
 
-        for (const label of ['Design', 'Motion', 'Voice']) {
+        for (const label of ['Design', 'Motion']) {
             await activateTab(wrapper, label)
             const panel = wrapper.get(`[data-appearance-section="${label.toLowerCase()}"]`)
             expect(panel.classes()).toContain('talos-motion-tab-panel')
