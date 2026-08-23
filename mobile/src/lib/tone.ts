@@ -264,7 +264,7 @@ function localSystemPrompt(
     identity: TalosModelIdentity,
     locale?: string | null,
 ): string {
-    const languageLine = locale ? rigaDellaLingua(locale, true) : linguaDelLocale(locale)
+    const languageLine = linguaDelLocale(locale)
     return `You are TALOS, the local-first assistant in AVM, created by Antonio Rizzo (Ninozz95). `
         + `This session uses the local model "${identity.model}". `
         /*
@@ -341,13 +341,11 @@ export function nomeDellaLingua(locale: string | null | undefined): string | nul
     }
 }
 
-function rigaDellaLingua(locale: string | null | undefined, localOnly: boolean = false): string {
+function rigaDellaLingua(locale: string | null | undefined): string {
     const nome = nomeDellaLingua(locale)
     if (nome) {
-        const evenWhen = localOnly
-            ? 'even when tool output are in another language. '
-            : 'even when documents, search results, memory or tool output are in another language. '
-        return `Write your reply and your reasoning in ${nome}, ${evenWhen}`
+        return `Write your reply and your reasoning in ${nome}, even when documents, search results, `
+            + 'memory or tool output are in another language. '
     }
     return ''
 }
