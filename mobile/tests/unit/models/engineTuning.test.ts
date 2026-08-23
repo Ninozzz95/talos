@@ -83,38 +83,50 @@ describe('da dove partire, prima di aver misurato', () => {
     })
 
     /**
-     * ⭐⭐⭐ Il microbatch è l'attesa massima dello Stop, e la SOGLIA è misurata.
+     * ⭐⭐⭐ Il microbatch è l'attesa massima dello Stop, e la SOGLIA è misurata -
+     * due volte, prima e dopo la cura dell'abort del 21/8.
      *
-     * Prompt da 2.048 token, Stop premuto dopo 200 ms, su Adreno 830:
+     * Prompt da 2.048 token, Stop premuto dopo 200 ms:
      *
      * ```
+     * PRIMA della cura (20/8, Adreno 830)
      *   512   1.443 ms   si ferma a 512/2048 - completa il pezzo intero
      *   256   1.446 ms   idem
      *   192    ~460 ms   morde a meta'
+     *
+     * DOPO la cura (23/8, Qwen3-1.7B/OpenCL) - la mediana, non un singolo giro
+     *   512      7 ms
+     *   256      5 ms
+     *   192      2 ms
+     *   128      1 ms
      * ```
      *
-     * ⇒ Il salto sta **fra 256 e 192**, e vale un fattore tre. ⛔ Questa prova
-     * non difende il numero 192: difende che si resti **sotto la soglia**. Chi
-     * un domani vorra' alzarlo dovra' prima spostare la soglia con una misura.
+     * ⇒ Il salto che stava **fra 256 e 192** è sparito: la cura ha portato
+     * OGNI valore provato a singole cifre di millisecondi. ⛔ Questa prova non
+     * difende il numero 512: difende che si resti **al livello che una misura
+     * vera ha già raggiunto** - 512, non un valore mai provato sul Pad. Chi un
+     * domani vorrà alzarlo oltre dovrà prima spostare la soglia con una nuova
+     * misura, non con una supposizione.
      */
-    it('il microbatch resta sotto la soglia dove lo Stop smette di mordere', () => {
-        const SOGLIA = 192
+    it('il microbatch resta al livello misurato, dove lo Stop non morde più', () => {
+        const SOGLIA = 512
         for (const chip of [PAD3, { cores: 4, capacities: [] }, { cores: 32, capacities: [] }]) {
             expect(talosEngineTuning(chip).microBatch).toBeLessThanOrEqual(SOGLIA)
         }
     })
 
     /**
-     * ⛔⛔ E NON scende sotto: il cancello G4 si passerebbe con 64, al prezzo
-     * del **28% di prefill**, per misurare una cosa che la cura vera dell'abort
-     * porta a millisecondi senza pagare niente.
+     * ⛔⛔ E NON scende sotto 512 per inseguire un cancello: quel numero è
+     * ORA il livello misurato, non un timore da placare. Scendere a 192 o
+     * sotto tornerebbe a pagare fino al 28% di prefill per una latenza di
+     * Stop che la cura vera dell'abort porta comunque a millisecondi, senza
+     * pagare niente.
      *
      * ⇒ Sarebbe ottimizzare il cancello invece della persona. Se qualcuno
-     * abbassa il microbatch per far diventare verde un numero, questa prova
-     * glielo dice.
+     * abbassa il microbatch senza una nuova misura, questa prova glielo dice.
      */
-    it('e non scende sotto, per far tornare un cancello', () => {
-        expect(talosEngineTuning(PAD3).microBatch).toBeGreaterThanOrEqual(192)
+    it('e non scende sotto il livello misurato, per far tornare un cancello', () => {
+        expect(talosEngineTuning(PAD3).microBatch).toBeGreaterThanOrEqual(512)
     })
 
     it('i candidati da misurare sono pochi, ordinati e senza doppioni', () => {
