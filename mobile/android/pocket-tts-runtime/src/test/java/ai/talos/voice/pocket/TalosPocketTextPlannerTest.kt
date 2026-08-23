@@ -68,4 +68,32 @@ class TalosPocketTextPlannerTest {
         }
         assertTrue(error.message.orEmpty().contains("token", ignoreCase = true))
     }
+
+    @Test
+    fun `shared SentencePiece prefix is never mistaken for punctuation`() {
+        val sentencePieceLike = object : TalosPocketTokenizerContract {
+            override val vocabSize = 4_000
+            override fun encode(source: String): IntArray {
+                if (source.isNotEmpty() && source.all { it in ".!?,;:" }) {
+                    return intArrayOf(260, 900 + source.length)
+                }
+                val ids = mutableListOf(260)
+                source.trim().split(Regex("\\s+")).filter(String::isNotEmpty).forEach { word ->
+                    ids += when (word.last()) {
+                        '.' -> listOf(100 + word.length, 263)
+                        ',' -> listOf(100 + word.length, 261)
+                        else -> listOf(100 + word.length)
+                    }
+                }
+                return ids.toIntArray()
+            }
+
+            override fun decode(ids: IntArray): String = if (ids.size == 1) "A." else "Due tre quattro cinque."
+        }
+
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            TalosPocketTextPlanner(sentencePieceLike, maxTokens = 6)
+                .plan("Uno due tre quattro cinque.")
+        }
+    }
 }

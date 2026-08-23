@@ -76,9 +76,26 @@ class TalosPocketTextPlanner(
         }
     }
 
-    private fun punctuationTokens(vararg values: String): Set<Int> = values
-        .flatMap { tokenizer.encode(it).toList() }
-        .toSet()
+    private fun punctuationTokens(vararg values: String): Set<Int> {
+        val separatelyEncoded = values.map(tokenizer::encode)
+        val sharedPrefix = separatelyEncoded
+            .takeIf { encoded -> encoded.all { it.size > 1 } }
+            ?.map { it.first() }
+            ?.distinct()
+            ?.singleOrNull()
+        if (sharedPrefix == null) return separatelyEncoded.flatMap(IntArray::toList).toSet()
+
+        // SentencePiece emits its standalone whitespace marker before every
+        // punctuation probe (260 in the pinned Italian tokenizer). Upstream
+        // deliberately drops that prefix; treating it as punctuation creates
+        // false boundaries at ordinary word starts. Encoding the combined
+        // probe also preserves multi-character pieces such as an ellipsis.
+        val combined = tokenizer.encode(values.joinToString(""))
+        require(combined.size > 1 && combined.first() == sharedPrefix) {
+            "Pocket tokenizer punctuation prefix is inconsistent"
+        }
+        return combined.drop(1).toSet()
+    }
 
     private fun splitAfterBoundaries(tokens: IntArray, boundaryTokens: Set<Int>): List<IntArray> {
         if (tokens.isEmpty()) return emptyList()

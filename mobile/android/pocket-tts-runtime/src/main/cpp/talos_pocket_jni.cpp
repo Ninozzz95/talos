@@ -1,11 +1,14 @@
 #include <jni.h>
 
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
+#include <samplerate.h>
 #include <sentencepiece_processor.h>
 
 namespace {
@@ -160,4 +163,80 @@ Java_ai_talos_voice_pocket_TalosPocketTokenizerJni_close(
     jobject,
     jlong raw_handle) {
     delete reinterpret_cast<TokenizerHandle*>(static_cast<intptr_t>(raw_handle));
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_ai_talos_voice_pocket_TalosPocketResamplerJni_resampleMono(
+    JNIEnv* env,
+    jobject,
+    jfloatArray source,
+    jint input_rate,
+    jint output_rate) {
+    constexpr jint kMinSampleRate = 8000;
+    constexpr jint kMaxSampleRate = 192000;
+    constexpr jint kMaxReferenceSeconds = 20;
+    if (source == nullptr) {
+        throw_java(env, "java/lang/IllegalArgumentException", "Pocket reference PCM is null");
+        return nullptr;
+    }
+    if (input_rate < kMinSampleRate || input_rate > kMaxSampleRate ||
+        output_rate < kMinSampleRate || output_rate > kMaxSampleRate) {
+        throw_java(env, "java/lang/IllegalArgumentException", "Pocket sample rate is out of range");
+        return nullptr;
+    }
+
+    const jsize input_frames = env->GetArrayLength(source);
+    if (input_frames <= 0 || input_frames > input_rate * kMaxReferenceSeconds) {
+        throw_java(env, "java/lang/IllegalArgumentException", "Pocket reference duration is invalid");
+        return nullptr;
+    }
+    std::vector<float> input(static_cast<size_t>(input_frames));
+    env->GetFloatArrayRegion(source, 0, input_frames, input.data());
+    if (env->ExceptionCheck()) return nullptr;
+    for (const float sample : input) {
+        if (!std::isfinite(sample)) {
+            throw_java(env, "java/lang/IllegalArgumentException", "Pocket reference PCM is non-finite");
+            return nullptr;
+        }
+    }
+
+    const double ratio = static_cast<double>(output_rate) / static_cast<double>(input_rate);
+    if (src_is_valid_ratio(ratio) == 0) {
+        throw_java(env, "java/lang/IllegalArgumentException", "libsamplerate rejected the conversion ratio");
+        return nullptr;
+    }
+    const double estimated_frames = std::ceil(static_cast<double>(input_frames) * ratio) + 512.0;
+    if (estimated_frames > static_cast<double>(std::numeric_limits<jsize>::max())) {
+        throw_java(env, "java/lang/IllegalArgumentException", "Resampled PCM is too large");
+        return nullptr;
+    }
+    std::vector<float> output(static_cast<size_t>(estimated_frames));
+    SRC_DATA data{};
+    data.data_in = input.data();
+    data.data_out = output.data();
+    data.input_frames = input_frames;
+    data.output_frames = static_cast<long>(output.size());
+    data.src_ratio = ratio;
+    data.end_of_input = 1;
+
+    const int result = src_simple(&data, SRC_SINC_BEST_QUALITY, 1);
+    if (result != 0) {
+        throw_java(
+            env,
+            "java/lang/IllegalStateException",
+            std::string("libsamplerate failed: ") + src_strerror(result));
+        return nullptr;
+    }
+    if (data.input_frames_used != input_frames || data.output_frames_gen <= 0 ||
+        data.output_frames_gen > data.output_frames) {
+        throw_java(env, "java/lang/IllegalStateException", "libsamplerate returned an incomplete conversion");
+        return nullptr;
+    }
+
+    const jsize generated_frames = static_cast<jsize>(data.output_frames_gen);
+    jfloatArray converted = env->NewFloatArray(generated_frames);
+    if (converted == nullptr) return nullptr;
+    env->SetFloatArrayRegion(converted, 0, generated_frames, output.data());
+    if (env->ExceptionCheck()) return nullptr;
+    return converted;
 }

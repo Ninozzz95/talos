@@ -30,6 +30,10 @@ class FakePocketEngine:
         del chunk_size
         return latents.reshape(-1).astype(np.float32)
 
+    def encode_voice(self, public_voice_path):
+        del public_voice_path
+        return np.arange(2 * 1024, dtype=np.float32).reshape(1, 2, 1024)
+
 
 class VoicePocketReferenceTest(unittest.TestCase):
     def setUp(self):
@@ -60,6 +64,7 @@ class VoicePocketReferenceTest(unittest.TestCase):
             public_voice_path=Path("public.wav"),
             seed=19,
             max_frames=4,
+            temperature=0.0,
         )
         second, second_arrays = self.reference.execute_oracle(
             engine=FakePocketEngine(),
@@ -68,6 +73,7 @@ class VoicePocketReferenceTest(unittest.TestCase):
             public_voice_path=Path("public.wav"),
             seed=19,
             max_frames=4,
+            temperature=0.0,
         )
 
         self.assertEqual(first["latentSha256"], second["latentSha256"])
@@ -76,6 +82,7 @@ class VoicePocketReferenceTest(unittest.TestCase):
         np.testing.assert_array_equal(first_arrays["pcm"], second_arrays["pcm"])
         self.assertEqual(4, first["frameCount"])
         self.assertEqual(24_000, first["sampleRate"])
+        self.assertEqual(0.0, first["temperature"])
 
         encoded = json.dumps(first).lower()
         self.assertNotIn("a sentence kept", encoded)
@@ -98,6 +105,29 @@ class VoicePocketReferenceTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unique"):
             self.reference.select_fixture(duplicate, "one")
 
+    def test_public_conditioning_export_is_shape_and_digest_bound_without_json_values(self):
+        conditioning, contract = self.reference.export_public_conditioning(
+            FakePocketEngine(), Path("public.wav")
+        )
+
+        self.assertEqual((1, 2, 1024), conditioning.shape)
+        self.assertEqual([1, 2, 1024], contract["shape"])
+        self.assertEqual(conditioning.nbytes, contract["byteLength"])
+        self.assertEqual(hashlib.sha256(conditioning.tobytes(order="C")).hexdigest(), contract["sha256"])
+        encoded = json.dumps(contract).lower()
+        self.assertNotIn("values", encoded)
+        self.assertNotIn("public.wav", encoded)
+
+    def test_float32_export_is_exact_little_endian_and_atomic(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "oracle.f32le"
+            values = np.array([1.0, -0.5, 0.25], dtype=np.float32)
+
+            self.reference.write_float32_atomic(output, values)
+
+            self.assertEqual(values.astype("<f4").tobytes(order="C"), output.read_bytes())
+            self.assertEqual([], list(output.parent.glob(".oracle.f32le.*.tmp")))
+
     def test_invalid_frame_bound_never_reaches_the_runtime(self):
         for invalid in (0, -1, 721):
             with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "maxFrames"):
@@ -108,6 +138,20 @@ class VoicePocketReferenceTest(unittest.TestCase):
                     public_voice_path=Path("public.wav"),
                     seed=19,
                     max_frames=invalid,
+                    temperature=0.0,
+                )
+
+    def test_invalid_temperature_never_reaches_the_runtime(self):
+        for invalid in (-0.1, float("nan"), float("inf"), 2.01):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "temperature"):
+                self.reference.execute_oracle(
+                    engine=FakePocketEngine(),
+                    fixture_id="fixture-a",
+                    source="Ciao.",
+                    public_voice_path=Path("public.wav"),
+                    seed=19,
+                    max_frames=4,
+                    temperature=invalid,
                 )
 
 

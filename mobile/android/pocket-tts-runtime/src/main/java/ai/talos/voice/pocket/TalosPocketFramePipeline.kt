@@ -1,6 +1,7 @@
 package ai.talos.voice.pocket
 
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -58,6 +59,7 @@ class TalosPocketFramePipeline(
         val blockedNs = AtomicLong(0)
         val decodeNs = AtomicLong(0)
         val failure = AtomicReference<Throwable?>()
+        val firstPcmConsumed = CountDownLatch(1)
 
         val decoder = thread(start = true, name = "talos-pocket-decoder", isDaemon = true) {
             val batch = ArrayList<FloatArray>(regularDecodeFrames)
@@ -79,13 +81,19 @@ class TalosPocketFramePipeline(
                         target = regularDecodeFrames
                         if (!cancellation.isCancelled()) {
                             emitted.incrementAndGet()
-                            if (!consume(pcm)) cancellation.cancel()
+                            val accepted = consume(pcm)
+                            firstPcmConsumed.countDown()
+                            if (!accepted) cancellation.cancel()
                         }
                     }
                 }
             } catch (error: Throwable) {
                 failure.compareAndSet(null, error)
                 cancellation.cancel()
+            } finally {
+                // Release a producer waiting at the first-batch handoff on
+                // cancellation or decoder failure as well as normal success.
+                firstPcmConsumed.countDown()
             }
         }
 
@@ -99,10 +107,21 @@ class TalosPocketFramePipeline(
                     blockedNs.addAndGet(System.nanoTime() - started)
                 }
                 if (accepted) {
-                    produced.incrementAndGet()
+                    val producedCount = produced.incrementAndGet()
                     highWatermark.accumulateAndGet(queue.size, ::maxOf)
+                    if (producedCount == firstDecodeFrames) {
+                        while (
+                            firstPcmConsumed.count > 0L &&
+                            !cancellation.isCancelled() &&
+                            failure.get() == null
+                        ) {
+                            val started = System.nanoTime()
+                            firstPcmConsumed.await(50, TimeUnit.MILLISECONDS)
+                            blockedNs.addAndGet(System.nanoTime() - started)
+                        }
+                    }
                 }
-                accepted
+                accepted && !cancellation.isCancelled() && failure.get() == null
             }
         } catch (error: Throwable) {
             failure.compareAndSet(null, error)

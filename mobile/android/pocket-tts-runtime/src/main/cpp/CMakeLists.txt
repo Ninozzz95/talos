@@ -9,6 +9,22 @@ include(FetchContent)
 set(FETCHCONTENT_QUIET OFF)
 find_package(Git REQUIRED)
 
+# libsamplerate is the supported high-quality sample-rate conversion boundary
+# for Pocket reference audio. Keep the exact upstream commit: enrollment and
+# V1-to-V2 migration must not silently change their conditioning input.
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(LIBSAMPLERATE_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LIBSAMPLERATE_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    libsamplerate
+    GIT_REPOSITORY https://github.com/libsndfile/libsamplerate.git
+    GIT_TAG c96f5e3de9c4488f4e6c97f59f5245f22fda22f7
+    GIT_SHALLOW FALSE
+    GIT_PROGRESS TRUE
+)
+FetchContent_MakeAvailable(libsamplerate)
+
 # Direct upstream integration. Never replace this commit with a tag or branch:
 # the tokenizer IDs are part of the model's tensor contract.
 set(SPM_ENABLE_SHARED OFF CACHE BOOL "" FORCE)
@@ -57,5 +73,5 @@ target_include_directories(
     ${sentencepiece_SOURCE_DIR}/src
     ${sentencepiece_BINARY_DIR}
 )
-target_link_libraries(talos_pocket_sentencepiece PRIVATE sentencepiece-static log)
+target_link_libraries(talos_pocket_sentencepiece PRIVATE sentencepiece-static samplerate log)
 target_compile_options(talos_pocket_sentencepiece PRIVATE -Wall -Wextra -Werror)
