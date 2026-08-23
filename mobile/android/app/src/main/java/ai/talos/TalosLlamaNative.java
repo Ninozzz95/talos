@@ -124,6 +124,20 @@ final class TalosLlamaNative {
     static native String nativeCpuTopology();
 
     /**
+     * ⛔⛔ SOLO RICERCA — la famiglia di affinity CPU per la PROSSIMA apertura
+     * o ricostruzione di contesto. Valori: {@code 0} DEFAULT (nessuna
+     * maschera, il comportamento di produzione), {@code 1} tutti i core
+     * consentiti, {@code 2} solo i core forti, {@code 3} solo i deboli,
+     * {@code 4} tutti tranne il più debole — tradotti in una cpumask vera
+     * dalla topologia letta ADESSO, mai una lista scritta a mano.
+     *
+     * ⛔ Non tocca un contesto già aperto: serve rifarlo (stesso vincolo di
+     * {@code microBatch}). Zero effetto su un'apertura normale che non
+     * chiama mai questo metodo.
+     */
+    static native void nativeSetAffinityFamilyForResearch(int famigliaDecode, int famigliaPrefill);
+
+    /**
      * ⛔ SOLO RICERCA — PERCHE' un backend manca dall'inventario.
      *
      * MISURATO il 2026-08-20: con {@code libggml-opencl.so} da 3.198.104 byte

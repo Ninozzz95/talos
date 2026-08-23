@@ -989,6 +989,21 @@ public class TalosLlamaPlugin extends Plugin {
         });
     }
 
+    /**
+     * ⛔⛔ SOLO RICERCA — imposta la famiglia di affinity CPU per il PROSSIMO
+     * open/reopen. Bypassa `TalosLlamaEngine`: chiama il nativo direttamente,
+     * lo stesso pattern degli altri export "SOLO RICERCA" (cache OpenCL, FA
+     * override) — non fa parte del percorso di produzione, esiste solo per
+     * la campagna di misura di P1-1.
+     */
+    @PluginMethod
+    public void setAffinityFamilyForResearch(PluginCall call) {
+        final int famigliaDecode = call.getInt("familyDecode", 0);
+        final int famigliaPrefill = call.getInt("familyPrefill", 0);
+        TalosLlamaNative.nativeSetAffinityFamilyForResearch(famigliaDecode, famigliaPrefill);
+        call.resolve();
+    }
+
     /** Stops the current generation. What was produced so far still stands. */
     @PluginMethod
     public void cancel(PluginCall call) {

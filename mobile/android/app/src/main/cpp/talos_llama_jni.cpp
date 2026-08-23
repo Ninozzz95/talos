@@ -304,17 +304,209 @@ bool talos_deve_fermarsi(void * opaco) noexcept {
 }
 
 /**
- * P1-1 blocco 2 — avvia un thread pool ESTERNO e lo aggancia al contesto.
+ * Un core, con i tre fatti che contano — MAI un nome di chip scritto a
+ * mano. Piano sorgente, §9.4/10.1: "Do not hardcode 'cores 6 and 7 are
+ * big'. Read capacity/online/allowed masks every time the device
+ * fingerprint changes."
+ *
+ *  - `online`: `/sys/.../cpuN/online` — assente è "sempre online" (il caso
+ *    normale per `cpu0` su molti kernel, che non espone il file perché non
+ *    è hot-pluggabile), non un errore da propagare.
+ *  - `capacity`: `/sys/.../cpuN/cpu_capacity`, 1024 = il core più forte —
+ *    stessa fonte già letta lato Java in `TalosDeviceCapacityPlugin`, qui
+ *    duplicata perché il thread pool nativo la usa nel momento in cui crea
+ *    il pool, non con un giro di andata e ritorno verso JS che potrebbe
+ *    leggere uno stato non più attuale.
+ *  - `allowed`: `sched_getaffinity` sul processo CORRENTE — quali core il
+ *    cgroup/cpuset del sistema concede DAVVERO a questo processo, un fatto
+ *    che `cpu_capacity` da solo non dice (un core può essere forte E fuori
+ *    dal cpuset consentito).
+ */
+struct talos_core_cpu {
+    int  index    = -1;
+    bool online   = true;
+    int  capacity = -1;   // -1 = illeggibile, mai indovinato
+    bool allowed  = false;
+};
+
+/**
+ * Legge UN core dalle tre fonti — fail-closed per campo, non per l'intera
+ * lettura: un file illeggibile per questo core diventa `capacity: -1` per
+ * lui soltanto, la stessa disciplina di `nativeBackendInventory` dove un
+ * campo mancante è un campo assente, mai un numero indovinato.
+ */
+talos_core_cpu talos_leggi_core_cpu(long indice, const cpu_set_t & consentiti, bool affinitaLeggibile) {
+    talos_core_cpu core;
+    core.index = (int) indice;
+
+    std::string percorsoOnline = "/sys/devices/system/cpu/cpu" + std::to_string(indice) + "/online";
+    FILE * fileOnline = fopen(percorsoOnline.c_str(), "r");
+    if (fileOnline != nullptr) {
+        char riga[8] = {0};
+        if (fgets(riga, sizeof(riga), fileOnline) != nullptr) core.online = riga[0] == '1';
+        fclose(fileOnline);
+    }
+
+    std::string percorsoCapacity = "/sys/devices/system/cpu/cpu" + std::to_string(indice) + "/cpu_capacity";
+    FILE * fileCapacity = fopen(percorsoCapacity.c_str(), "r");
+    if (fileCapacity != nullptr) {
+        if (fscanf(fileCapacity, "%d", &core.capacity) != 1) core.capacity = -1;
+        fclose(fileCapacity);
+    }
+
+    core.allowed = affinitaLeggibile && CPU_ISSET(indice, &consentiti);
+    return core;
+}
+
+/**
+ * La topologia intera — la fonte comune per la diagnostica
+ * (`nativeCpuTopology`) e per le famiglie di affinity qui sotto, cosi' le
+ * due non possono raccontare due storie diverse dello stesso dispositivo.
+ */
+std::vector<talos_core_cpu> talos_leggi_topologia_cpu(bool * affinitaLeggibileOut = nullptr) {
+    std::vector<talos_core_cpu> cores;
+    long configurati = sysconf(_SC_NPROCESSORS_CONF);
+    if (configurati < 0) configurati = 0;
+
+    cpu_set_t consentiti;
+    CPU_ZERO(&consentiti);
+    bool affinitaLeggibile = sched_getaffinity(0, sizeof(consentiti), &consentiti) == 0;
+    if (affinitaLeggibileOut != nullptr) *affinitaLeggibileOut = affinitaLeggibile;
+
+    cores.reserve((size_t) configurati);
+    for (long indice = 0; indice < configurati; indice += 1) {
+        cores.push_back(talos_leggi_core_cpu(indice, consentiti, affinitaLeggibile));
+    }
+    return cores;
+}
+
+/**
+ * P1-1 blocco 3 — le famiglie di affinity, tradotte da un NUMERO a una
+ * cpumask VERA solo quando serve, mai scritte a mano una volta per tutte.
+ *
+ * `DEFAULT` è il comportamento del blocco 2 (nessuna maschera esplicita) —
+ * resta il default di produzione finché non esiste una campagna di misura
+ * che dica quale altra famiglia vince (P1-1 blocco 5, non questo).
+ */
+enum talos_affinity_famiglia {
+    TALOS_AFFINITY_DEFAULT          = 0,
+    TALOS_AFFINITY_TUTTI_CONSENTITI = 1,
+    TALOS_AFFINITY_SOLO_FORTI       = 2,
+    TALOS_AFFINITY_SOLO_DEBOLI      = 3,
+    TALOS_AFFINITY_TUTTI_MENO_UNO   = 4,
+};
+
+/**
+ * Riempie `parametri.cpumask` per la famiglia richiesta, leggendo la
+ * topologia di QUESTO dispositivo ADESSO — mai una lista di indici scritta
+ * a mano una volta e poi riusata. "Forte"/"debole" è relativo al massimo
+ * CONSENTITO misurato in questo giro, con la stessa soglia del 90% già in
+ * uso lato TS (`talosStrongCores`, `engineTuning.ts`): due letture dello
+ * stesso fatto che userebbero soglie diverse sarebbero un difetto silenzioso
+ * più tardi, non un dettaglio.
+ *
+ * @return false se la famiglia produce un insieme VUOTO (chip omogeneo
+ *     senza core "deboli", affinity non leggibile, o `DEFAULT` stesso) — il
+ *     chiamante deve allora ricadere sul comportamento di default, mai
+ *     costruire un pool con zero core consentiti.
+ */
+bool talos_applica_famiglia_affinity(int famiglia, ggml_threadpool_params & parametri) {
+    if (famiglia == TALOS_AFFINITY_DEFAULT) return false;
+
+    bool affinitaLeggibile = false;
+    std::vector<talos_core_cpu> topologia = talos_leggi_topologia_cpu(&affinitaLeggibile);
+    if (!affinitaLeggibile) return false;
+
+    int massimoCapacity = -1;
+    bool haConsentiti = false;
+    for (const auto & core : topologia) {
+        if (!core.online || !core.allowed) continue;
+        haConsentiti = true;
+        if (core.capacity > massimoCapacity) massimoCapacity = core.capacity;
+    }
+    if (!haConsentiti) return false;
+
+    std::vector<int> scelti;
+    switch (famiglia) {
+        case TALOS_AFFINITY_TUTTI_CONSENTITI:
+            for (const auto & core : topologia) {
+                if (core.online && core.allowed) scelti.push_back(core.index);
+            }
+            break;
+        case TALOS_AFFINITY_SOLO_FORTI:
+            for (const auto & core : topologia) {
+                if (core.online && core.allowed && massimoCapacity > 0
+                    && core.capacity >= massimoCapacity * 0.9) {
+                    scelti.push_back(core.index);
+                }
+            }
+            break;
+        case TALOS_AFFINITY_SOLO_DEBOLI:
+            for (const auto & core : topologia) {
+                if (core.online && core.allowed && massimoCapacity > 0
+                    && core.capacity < massimoCapacity * 0.9) {
+                    scelti.push_back(core.index);
+                }
+            }
+            break;
+        case TALOS_AFFINITY_TUTTI_MENO_UNO: {
+            // Esclude il core con la capacity PIU' BASSA fra i consentiti -
+            // quello che oggi lo scheduler e' libero di scegliere da solo,
+            // qui lo si rende esplicito.
+            int debolIndice = -1;
+            int debolCapacity = INT32_MAX;
+            for (const auto & core : topologia) {
+                if (!core.online || !core.allowed) continue;
+                scelti.push_back(core.index);
+                int capacitaConosciuta = core.capacity >= 0 ? core.capacity : 0;
+                if (capacitaConosciuta <= debolCapacity) {
+                    debolCapacity = capacitaConosciuta;
+                    debolIndice   = core.index;
+                }
+            }
+            if (scelti.size() > 1 && debolIndice >= 0) {
+                scelti.erase(std::remove(scelti.begin(), scelti.end(), debolIndice), scelti.end());
+            }
+            break;
+        }
+        default:
+            return false;
+    }
+    if (scelti.empty()) return false;
+
+    for (int i = 0; i < GGML_MAX_N_THREADS; i += 1) parametri.cpumask[i] = false;
+    for (int indice : scelti) {
+        if (indice >= 0 && indice < GGML_MAX_N_THREADS) parametri.cpumask[indice] = true;
+    }
+    return true;
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — la famiglia di affinity da usare per generazione e
+ * prefill, DETTA e non dedotta — stesso pattern del bersaglio di offload
+ * (`talos_backend_target_ricerca` più sotto) e della cache OpenCL: zero
+ * effetto sulla produzione finché nessuno chiama l'export che le imposta.
+ *
+ * Due variabili, non una: il piano prevede famiglie DIVERSE per i due
+ * carichi (D0-D3 per decode, P0-P3 per prefill) perché sono carichi
+ * opposti, la stessa ragione per cui `n_threads`/`n_threads_batch` sono
+ * già due numeri e non uno.
+ */
+std::atomic<int> g_famiglia_affinity_decode{TALOS_AFFINITY_DEFAULT};
+std::atomic<int> g_famiglia_affinity_prefill{TALOS_AFFINITY_DEFAULT};
+
+/**
+ * P1-1 — avvia un thread pool ESTERNO e lo aggancia al contesto.
  *
  * Oggi llama.cpp usa solo il pool INTERNO di default: nessuna affinity,
  * nessun controllo di poll o priorità. Questo è il meccanismo per
- * sostituirlo con uno gestito da noi — precondizione per l'affinity CPU
- * vera, che è un blocco successivo. QUESTO blocco non sceglie ancora quali
- * core: `ggml_threadpool_params_init` con una maschera tutta a zero è la
- * stessa "nessuna affinity esplicita" di oggi. L'obiettivo qui è dimostrare
- * che il MECCANISMO di attach/detach è sicuro, non ancora quale cpumask
- * sia la scelta giusta — quella arriva quando la topologia di
- * `nativeCpuTopology()` (blocco 1) diventa candidati reali da misurare.
+ * sostituirlo con uno gestito da noi. Blocco 2: il MECCANISMO di
+ * attach/detach, senza scegliere ancora i core — verificato sicuro con 30
+ * cicli reali sul Pad prima di questo blocco. Blocco 3 (qui): la cpumask
+ * VERA, ma SOLO quando `g_famiglia_affinity_*` la chiede esplicitamente —
+ * `TALOS_AFFINITY_DEFAULT` (il valore di riposo, zero effetto finché
+ * nessuno chiama l'export di ricerca) produce la STESSA maschera vuota del
+ * blocco 2, non un comportamento nuovo per la produzione.
  *
  * Segue la sequenza verificata nel sorgente vendored (`common/common.cpp`,
  * `common_threadpools::init`): i pool si creano DOPO che il contesto
@@ -356,6 +548,14 @@ void talos_avvia_threadpool(talos_session * session, llama_context * ctx,
     ggml_threadpool_params parametri;
     ggml_threadpool_params_init(&parametri, nt);
 
+    // ⛔⛔ SOLO RICERCA: a riposo (DEFAULT) non fa niente, la maschera resta
+    // quella vuota di sempre. Le due famiglie sono indipendenti — prefill e
+    // decode possono chiedere affinity diverse, ed E' quello il punto.
+    const bool affinitaPrefillApplicata = talos_applica_famiglia_affinity(
+        g_famiglia_affinity_prefill.load(std::memory_order_relaxed), parametri_batch);
+    const bool affinitaDecodeApplicata = talos_applica_famiglia_affinity(
+        g_famiglia_affinity_decode.load(std::memory_order_relaxed), parametri);
+
     ggml_threadpool * pool       = nullptr;
     ggml_threadpool * pool_batch = nullptr;
 
@@ -384,8 +584,10 @@ void talos_avvia_threadpool(talos_session * session, llama_context * ctx,
     session->threadpool         = pool;
     session->threadpool_batch   = pool_batch != nullptr ? pool_batch : pool;
     session->threadpool_free_fn = libera_fn;
-    TALOS_LOGI("thread pool esterno agganciato: %d gen / %d prefill%s",
-               nt, nt_batch, pool_batch != nullptr ? "" : " (condiviso)");
+    TALOS_LOGI("thread pool esterno agganciato: %d gen / %d prefill%s, affinity gen=%s prefill=%s",
+               nt, nt_batch, pool_batch != nullptr ? "" : " (condiviso)",
+               affinitaDecodeApplicata ? "esplicita" : "default",
+               affinitaPrefillApplicata ? "esplicita" : "default");
 }
 
 /**
@@ -1117,28 +1319,6 @@ Java_ai_talos_TalosLlamaNative_nativeBackendInventory(JNIEnv * env, jclass) {
  * ⛔⛔ SOLO RICERCA — P1-1, la topologia CPU VERA, non un nome di chip scritto
  * a mano.
  *
- * Piano sorgente, §9.4/10.1: "Do not hardcode 'cores 6 and 7 are big'. Read
- * capacity/online/allowed masks every time the device fingerprint changes."
- * Tre fatti diversi, tre fonti diverse:
- *
- *  - `online`: `/sys/.../cpuN/online` — assente è "sempre online" (il caso
- *    normale per `cpu0` su molti kernel, che non espone il file perché non è
- *    hot-pluggabile), non un errore da propagare.
- *  - `capacity`: `/sys/.../cpuN/cpu_capacity`, 1024 = il core più forte —
- *    stessa fonte già letta lato Java in `TalosDeviceCapacityPlugin`, qui
- *    duplicata perché il thread pool nativo (P1-1, non ancora costruito) la
- *    userà nel momento in cui crea il pool, non con un giro di andata e
- *    ritorno verso JS che potrebbe leggere uno stato non più attuale.
- *  - `allowed`: `sched_getaffinity` sul processo CORRENTE — quali core il
- *    cgroup/cpuset del sistema concede DAVVERO a questo processo, un fatto
- *    che `cpu_capacity` da solo non dice (un core può essere forte E fuori
- *    dal cpuset consentito).
- *
- * Fail-closed per ogni core singolarmente, non per l'intera lettura: un file
- * illeggibile per UN core diventa `capacity: -1` per quel core soltanto — la
- * stessa disciplina di `nativeBackendInventory`, dove un campo mancante è un
- * campo assente, mai un numero indovinato.
- *
  * Diagnostico puro: non alloca niente, non crea nessun thread pool. Il
  * lifecycle rischioso (CR-07 del piano sorgente: use-after-free/deadlock su
  * pool nativi) resta un blocco separato, costruito DOPO che questa lettura è
@@ -1146,54 +1326,47 @@ Java_ai_talos_TalosLlamaNative_nativeBackendInventory(JNIEnv * env, jclass) {
  */
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeCpuTopology(JNIEnv * env, jclass) {
+    bool affinitaLeggibile = false;
+    std::vector<talos_core_cpu> topologia = talos_leggi_topologia_cpu(&affinitaLeggibile);
+
     nlohmann::ordered_json out;
-    long configurati = sysconf(_SC_NPROCESSORS_CONF);
-    if (configurati < 0) configurati = 0;
-
-    cpu_set_t consentiti;
-    CPU_ZERO(&consentiti);
-    bool affinitaLeggibile = sched_getaffinity(0, sizeof(consentiti), &consentiti) == 0;
-
     nlohmann::ordered_json cores = nlohmann::ordered_json::array();
-    for (long indice = 0; indice < configurati; indice += 1) {
-        nlohmann::ordered_json core;
-        core["index"] = (int) indice;
-
-        std::string percorsoOnline =
-            "/sys/devices/system/cpu/cpu" + std::to_string(indice) + "/online";
-        bool online = true;  // assente = sempre online, non un errore.
-        FILE * fileOnline = fopen(percorsoOnline.c_str(), "r");
-        if (fileOnline != nullptr) {
-            char riga[8] = {0};
-            if (fgets(riga, sizeof(riga), fileOnline) != nullptr) {
-                online = riga[0] == '1';
-            }
-            fclose(fileOnline);
-        }
-        core["online"] = online;
-
-        std::string percorsoCapacity =
-            "/sys/devices/system/cpu/cpu" + std::to_string(indice) + "/cpu_capacity";
-        int capacita = -1;
-        FILE * fileCapacity = fopen(percorsoCapacity.c_str(), "r");
-        if (fileCapacity != nullptr) {
-            if (fscanf(fileCapacity, "%d", &capacita) != 1) capacita = -1;
-            fclose(fileCapacity);
-        }
-        core["capacity"] = capacita;
-
-        if (affinitaLeggibile) {
-            core["allowed"] = (bool) CPU_ISSET(indice, &consentiti);
-        } else {
-            core["allowed"] = nullptr;
-        }
-
-        cores.push_back(core);
+    for (const auto & core : topologia) {
+        nlohmann::ordered_json riga;
+        riga["index"]    = core.index;
+        riga["online"]   = core.online;
+        riga["capacity"] = core.capacity;
+        // `allowed` resta `null` quando l'affinity non si legge affatto -
+        // `false` direbbe "vietato", `null` dice "non lo sappiamo", e sono
+        // due fatti diversi.
+        riga["allowed"] = affinitaLeggibile ? nlohmann::ordered_json(core.allowed) : nlohmann::ordered_json(nullptr);
+        cores.push_back(riga);
     }
 
     out["cores"] = cores;
     out["affinityReadable"] = affinitaLeggibile;
     return env->NewStringUTF(out.dump().c_str());
+}
+
+/**
+ * ⛔⛔ SOLO RICERCA — impone la famiglia di affinity da usare alla PROSSIMA
+ * apertura (o ricostruzione) di contesto. Vale per i valori dell'enum
+ * `talos_affinity_famiglia` — `0` (DEFAULT) torna al comportamento di
+ * produzione, nessuna maschera esplicita.
+ *
+ * ⛔ Non tocca un contesto già aperto: il pool si crea/ricrea solo
+ * dentro `talos_avvia_threadpool`, chiamata da `talos_apri_modello` e
+ * `nativeReopenContext`. Per cambiare l'affinity di un motore già in
+ * piedi, chi chiama deve rifare il contesto — lo stesso vincolo che vale
+ * già per `microBatch`.
+ */
+JNIEXPORT void JNICALL
+Java_ai_talos_TalosLlamaNative_nativeSetAffinityFamilyForResearch(
+        JNIEnv *, jclass, jint famigliaDecode, jint famigliaPrefill) {
+    g_famiglia_affinity_decode.store((int) famigliaDecode, std::memory_order_relaxed);
+    g_famiglia_affinity_prefill.store((int) famigliaPrefill, std::memory_order_relaxed);
+    TALOS_LOGI("famiglia affinity di ricerca impostata: decode=%d prefill=%d",
+               (int) famigliaDecode, (int) famigliaPrefill);
 }
 
 /**
