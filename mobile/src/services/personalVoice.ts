@@ -43,6 +43,9 @@ interface TalosNeuralVoicePlugin {
         rate: number
         pitch: number
         queue?: 'flush' | 'add'
+        traceId?: string
+        source?: 'chat' | 'assistant' | 'manual' | 'preview' | 'instrumentation'
+        locale?: string
     }): Promise<{ accepted: boolean, reason?: string }>
     stop(): Promise<void>
 
@@ -161,6 +164,9 @@ export async function talosSpeakWithPersonalVoice(options: {
     rate: number
     pitch: number
     queue?: 'flush' | 'add'
+    traceId?: string
+    source?: 'chat' | 'assistant' | 'manual' | 'preview' | 'instrumentation'
+    locale?: string
 }): Promise<{ accepted: boolean, reason?: string }> {
     return plugin.speak(options)
 }
@@ -372,7 +378,15 @@ export async function talosSpeakForReading(
     engine: TalosSpeechEngine,
     personalProfileId: string | null,
     text: string,
-    options: { rate: number, pitch: number, onend?: () => void, onerror?: (reason?: string) => void },
+    options: {
+        rate: number
+        pitch: number
+        onend?: () => void
+        onerror?: (reason?: string) => void
+        traceId?: string
+        source?: 'chat' | 'assistant' | 'manual' | 'preview' | 'instrumentation'
+        locale?: string
+    },
 ): Promise<boolean> {
     if (engine !== 'personal') return false
     const route = await planTalosVoiceReading(engine, personalProfileId, talosPersonalVoiceStatus)
@@ -417,6 +431,9 @@ export async function talosSpeakForReading(
         readingId,
         rate: options.rate,
         pitch: options.pitch,
+        traceId: options.traceId,
+        source: options.source,
+        locale: options.locale,
     })
     if (!result.accepted) return false
     if (options.onend || options.onerror) {

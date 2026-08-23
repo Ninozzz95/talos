@@ -116,6 +116,28 @@ describe('personalVoice service', () => {
             }))
         })
 
+        it('PVOICE-DIAG-01 preserves the immutable diagnostic route at the native production door', async () => {
+            bridge.status.mockResolvedValue({ supported: true, installed: true })
+            bridge.profiles.mockResolvedValue(READY_PROFILES)
+            bridge.speak.mockResolvedValue({ accepted: true })
+
+            const spoken = await talosSpeakForReading('personal', PROFILE_ID, 'Ciao', {
+                rate: 1,
+                pitch: 1,
+                traceId: 'trace-0123456789abcdef',
+                source: 'chat',
+                locale: 'it-IT',
+            })
+
+            expect(spoken).toBe(true)
+            expect(bridge.speak).toHaveBeenCalledWith(expect.objectContaining({
+                profileId: PROFILE_ID,
+                traceId: 'trace-0123456789abcdef',
+                source: 'chat',
+                locale: 'it-IT',
+            }))
+        })
+
         it('the reading id passed to the bridge is unique per call, so two readings never share a completion event', async () => {
             bridge.status.mockResolvedValue({ supported: true, installed: true })
             bridge.profiles.mockResolvedValue(READY_PROFILES)
