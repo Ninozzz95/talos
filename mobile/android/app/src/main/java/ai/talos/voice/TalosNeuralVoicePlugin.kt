@@ -545,6 +545,8 @@ class TalosNeuralVoicePlugin : Plugin() {
                         .put("resolvedEngine", r.resolvedEngine ?: TalosMossPromptPayload.BACKEND)
                         .put("resolvedLocale", r.resolvedLocale ?: "und")
                         .put("resolvedProfileId", r.resolvedProfileId ?: profileId)
+                        .put("resolvedProfileSchemaVersion", r.resolvedProfileSchemaVersion)
+                        .put("profileMigrationCommitted", r.profileMigrationCommitted)
                     r.fallbackReason?.let { completed.put("fallbackReason", it) }
                     completed
                 },
@@ -554,23 +556,15 @@ class TalosNeuralVoicePlugin : Plugin() {
             )
             notifyListeners(if (result.isSuccess) "talosNeuralVoiceDone" else "talosNeuralVoiceError", payload)
         }
-        when (storedProfile) {
-            is TalosStoredVoiceProfile.Legacy -> host.submitSpeakStreamingWithReference(
-                text = text,
-                promptAudioCodes = storedProfile.profile.promptAudioCodes,
-                diagnosticRoute = diagnosticRoute,
-                queueMode = queueMode,
-                onComplete = completion,
-            )
-            is TalosStoredVoiceProfile.Current -> host.submitSpeakStreamingWithProfile(
-                text = text,
-                locale = locale,
-                profile = storedProfile.profile,
-                diagnosticRoute = diagnosticRoute,
-                queueMode = queueMode,
-                onComplete = completion,
-            )
-        }
+        host.submitSpeakStreamingWithStoredProfile(
+            text = text,
+            locale = locale,
+            storedProfile = storedProfile,
+            migrationCommitter = TalosVoiceProfileStoreMigrationCommitter(profileStore),
+            diagnosticRoute = diagnosticRoute,
+            queueMode = queueMode,
+            onComplete = completion,
+        )
         call.resolve(JSObject().put("accepted", true).put("ratePitchApplied", ratePitchApplied))
     }
 

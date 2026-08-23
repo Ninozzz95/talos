@@ -1,7 +1,10 @@
 package ai.talos.voice
 
 import ai.talos.TalosThermal
+import ai.talos.voice.pocket.TalosPocketCallback
+import ai.talos.voice.pocket.TalosPocketFrame
 import ai.talos.voice.pocket.TalosPocketOrtRuntime
+import ai.talos.voice.pocket.TalosPocketStageMetric
 import ai.talos.voice.research.TalosVoiceB0Probe
 import ai.talos.voice.research.TalosVoiceB0Session
 import ai.talos.voice.research.TalosVoiceDiagnosticAnswers
@@ -278,6 +281,85 @@ internal class TalosVoiceHost(
         val latch = CountDownLatch(1)
         var outcome: Result<TalosVoiceStreamResult>? = null
         submitSpeakStreamingWithProfile(text, locale, profile, maxFrames, seed, diagnosticRoute) { result ->
+            outcome = result
+            latch.countDown()
+        }
+        latch.await()
+        return outcome!!.getOrThrow()
+    }
+
+    /**
+     * Sole production door for a profile loaded from encrypted storage.
+     * Current profiles take the ordinary V2 route. Legacy profiles are
+     * converted on this same owner lane and remain V1 until the requested
+     * utterance has completed through Pocket without fallback.
+     */
+    fun submitSpeakStreamingWithStoredProfile(
+        text: String,
+        locale: String,
+        storedProfile: TalosStoredVoiceProfile,
+        migrationCommitter: TalosVoiceProfileMigrationCommitter,
+        maxFrames: Int? = null,
+        seed: Long? = null,
+        diagnosticRoute: TalosVoiceDiagnosticRoute? = null,
+        queueMode: TalosVoiceQueueMode = TalosVoiceQueueMode.FLUSH,
+        onComplete: (Result<TalosVoiceStreamResult>) -> Unit = {},
+    ): Long {
+        val ticket = queueGate.submit(queueMode)
+        val id = ticket.id
+        owner.execute {
+            val result = if (queueMode == TalosVoiceQueueMode.ADD && !queueGate.claim(ticket)) {
+                Result.success(cancelledBeforeStart())
+            } else {
+                runCatching {
+                    when (storedProfile) {
+                        is TalosStoredVoiceProfile.Current -> runSpeakStreamingWithProfile(
+                            id = id,
+                            text = text,
+                            locale = locale,
+                            profile = storedProfile.profile,
+                            maxFrames = maxFrames,
+                            seed = seed,
+                            diagnosticRoute = diagnosticRoute,
+                        )
+                        is TalosStoredVoiceProfile.Legacy -> runSpeakStreamingWithLegacyProfile(
+                            id = id,
+                            text = text,
+                            locale = locale,
+                            legacy = storedProfile.profile,
+                            migrationCommitter = migrationCommitter,
+                            maxFrames = maxFrames,
+                            seed = seed,
+                            diagnosticRoute = diagnosticRoute,
+                        )
+                    }
+                }
+            }
+            onComplete(result)
+        }
+        return id
+    }
+
+    internal fun speakStreamingWithStoredProfileBlocking(
+        text: String,
+        locale: String,
+        storedProfile: TalosStoredVoiceProfile,
+        migrationCommitter: TalosVoiceProfileMigrationCommitter,
+        maxFrames: Int? = null,
+        seed: Long? = null,
+        diagnosticRoute: TalosVoiceDiagnosticRoute? = null,
+    ): TalosVoiceStreamResult {
+        val latch = CountDownLatch(1)
+        var outcome: Result<TalosVoiceStreamResult>? = null
+        submitSpeakStreamingWithStoredProfile(
+            text = text,
+            locale = locale,
+            storedProfile = storedProfile,
+            migrationCommitter = migrationCommitter,
+            maxFrames = maxFrames,
+            seed = seed,
+            diagnosticRoute = diagnosticRoute,
+        ) { result ->
             outcome = result
             latch.countDown()
         }
@@ -650,6 +732,181 @@ internal class TalosVoiceHost(
         }
     }
 
+    private fun runSpeakStreamingWithLegacyProfile(
+        id: Long,
+        text: String,
+        locale: String,
+        legacy: TalosVoiceProfileV1,
+        migrationCommitter: TalosVoiceProfileMigrationCommitter,
+        maxFrames: Int?,
+        seed: Long?,
+        diagnosticRoute: TalosVoiceDiagnosticRoute?,
+    ): TalosVoiceStreamResult {
+        val diagnosticSession = diagnosticRoute?.let(TalosVoiceDiagnosticProbe::claimProductionRun)
+        activeDiagnosticSession = diagnosticSession
+        var previewResult: TalosVoiceStreamResult? = null
+
+        fun finish(result: TalosVoiceStreamResult): TalosVoiceStreamResult {
+            finishSuccessfulDiagnostic(
+                session = diagnosticSession,
+                result = result,
+                generatedFrameCount = result.generatedFrames,
+                profileApplied = true,
+                resolvedEngine = result.resolvedEngine ?: "unresolved",
+                resolvedLocale = result.resolvedLocale ?: "und",
+                fallbackReason = result.fallbackReason,
+            )
+            return result
+        }
+
+        try {
+            val routingProfile = legacyRoutingProfile(legacy)
+            check(isMossCompatible(routingProfile)) {
+                "legacy voice profile is incompatible with the active MOSS codec"
+            }
+            val pocketStatus = currentPocketModelStatus()
+            val unavailableReason = legacyMigrationUnavailableReason(locale, legacy, pocketStatus)
+            if (unavailableReason != null) {
+                val fallback = runSpeakStreamingWithProfile(
+                    id = id,
+                    text = text,
+                    locale = locale,
+                    profile = routingProfile,
+                    maxFrames = maxFrames,
+                    seed = seed,
+                    diagnosticRoute = diagnosticRoute,
+                    diagnosticSessionOverride = diagnosticSession,
+                    finishDiagnosticWhenComplete = false,
+                    manageDiagnosticLifecycle = false,
+                ).copy(
+                    fallbackReason = unavailableReason,
+                    resolvedProfileSchemaVersion = 1,
+                    profileMigrationCommitted = false,
+                )
+                return finish(fallback)
+            }
+
+            val ready = pocketStatus as TalosPocketModelStatus.Ready
+            val migrator = TalosVoiceProfileMigrator(
+                decoder = TalosLegacyReferenceDecoder { promptAudioCodes ->
+                    closePocketEngineState()
+                    val activeRuntime = runtime ?: TalosMossRuntime.open(modelRoot, cpuThreads).also {
+                        runtime = it
+                    }
+                    activeRuntime.decodeReferenceAudio(promptAudioCodes)
+                },
+                encoder = TalosPocketReferenceEncoder { pcmFloatMono, sampleRate ->
+                    closeMossEngineState()
+                    val root = ready.root.canonicalFile
+                    if (pocketRuntimeRoot != root) closePocketEngineState()
+                    pocketRuntimeRoot = root
+                    val activeRuntime = pocketRuntime ?: pocketRuntimeFactory(root, cpuThreads).also {
+                        pocketRuntime = it
+                    }
+                    val conditioning = activeRuntime.encodeReference(
+                        pcmFloatMono = pcmFloatMono,
+                        sampleRate = sampleRate,
+                        callback = object : TalosPocketCallback {
+                            override fun onStage(metric: TalosPocketStageMetric) {
+                                diagnosticSession?.record(metric.toMigrationDiagnosticEvent())
+                            }
+
+                            override fun onPcm(frame: TalosPocketFrame): Boolean = false
+                        },
+                    )
+                    TalosPocketConditioningPayload(
+                        repository = TalosPocketConditioningPayload.REPOSITORY,
+                        revision = TalosPocketConditioningPayload.REVISION,
+                        sampleRate = TalosPocketConditioningPayload.SAMPLE_RATE,
+                        shape = conditioning.shape,
+                        values = conditioning.valuesCopy(),
+                    )
+                },
+            )
+            migrator.migrate(
+                legacy = legacy,
+                requestedLocale = locale,
+                cancellation = TalosVoiceProfileMigrationCancellation { !queueGate.isActive(id) },
+                preview = { candidate ->
+                    val observed = runSpeakStreamingWithProfile(
+                        id = id,
+                        text = text,
+                        locale = locale,
+                        profile = candidate,
+                        maxFrames = maxFrames,
+                        seed = seed,
+                        diagnosticRoute = diagnosticRoute,
+                        diagnosticSessionOverride = diagnosticSession,
+                        finishDiagnosticWhenComplete = false,
+                        manageDiagnosticLifecycle = false,
+                    )
+                    previewResult = observed
+                    TalosVoiceProfilePreview(
+                        cancelled = observed.cancelled,
+                        resolvedEngine = observed.resolvedEngine,
+                        resolvedLocale = observed.resolvedLocale,
+                        resolvedProfileId = observed.resolvedProfileId,
+                        fallbackReason = observed.fallbackReason,
+                    )
+                },
+                commit = migrationCommitter,
+                onMetric = { metric ->
+                    diagnosticSession?.record(
+                        TalosVoiceDiagnosticEvent(
+                            kind = TalosVoiceDiagnosticEventKind.ENGINE_STAGE,
+                            stage = metric.stage,
+                            durationNs = metric.durationNs,
+                        ),
+                    )
+                },
+            )
+            val migrated = requireNotNull(previewResult) {
+                "voice profile migration committed without a production preview"
+            }.copy(
+                resolvedProfileSchemaVersion = TalosVoiceProfileHeaderV2.SCHEMA_VERSION,
+                profileMigrationCommitted = true,
+            )
+            return finish(migrated)
+        } catch (cancelled: TalosVoiceProfileMigrationCancelledException) {
+            val result = (previewResult ?: cancelledBeforeStart().copy(
+                resolvedProfileId = legacy.header.profileId,
+            )).copy(
+                cancelled = true,
+                resolvedProfileSchemaVersion = 1,
+                profileMigrationCommitted = false,
+            )
+            return finish(result)
+        } catch (error: Throwable) {
+            val explicitFallback = previewResult?.takeIf { result ->
+                result.resolvedEngine == TalosMossPromptPayload.BACKEND && result.fallbackReason != null
+            }
+            if (explicitFallback != null) {
+                return finish(
+                    explicitFallback.copy(
+                        resolvedProfileSchemaVersion = 1,
+                        profileMigrationCommitted = false,
+                    ),
+                )
+            }
+            player?.flush()
+            runCatching { closePocketEngineState() }.onFailure(error::addSuppressed)
+            runCatching { closeMossEngineState() }.onFailure(error::addSuppressed)
+            finishFailedDiagnostic(
+                session = diagnosticSession,
+                error = error,
+                resolvedEngine = previewResult?.resolvedEngine ?: "unresolved",
+                resolvedLocale = previewResult?.resolvedLocale ?: "und",
+                resolvedProfileId = legacy.header.profileId,
+                fallbackReason = previewResult?.fallbackReason,
+                resolvedProfileSchemaVersion = 1,
+                profileMigrationCommitted = false,
+            )
+            throw error
+        } finally {
+            if (activeDiagnosticSession === diagnosticSession) activeDiagnosticSession = null
+        }
+    }
+
     private fun runSpeakStreamingWithProfile(
         id: Long,
         text: String,
@@ -658,9 +915,13 @@ internal class TalosVoiceHost(
         maxFrames: Int?,
         seed: Long?,
         diagnosticRoute: TalosVoiceDiagnosticRoute?,
+        diagnosticSessionOverride: TalosVoiceDiagnosticSession? = null,
+        finishDiagnosticWhenComplete: Boolean = true,
+        manageDiagnosticLifecycle: Boolean = true,
     ): TalosVoiceStreamResult {
-        val diagnosticSession = diagnosticRoute?.let(TalosVoiceDiagnosticProbe::claimProductionRun)
-        activeDiagnosticSession = diagnosticSession
+        val diagnosticSession = diagnosticSessionOverride
+            ?: diagnosticRoute?.let(TalosVoiceDiagnosticProbe::claimProductionRun)
+        if (manageDiagnosticLifecycle) activeDiagnosticSession = diagnosticSession
         val startedAtNanos = System.nanoTime()
         var resolvedRoute: TalosVoiceEngineRoute? = null
         var runPlayer: TalosPcmPlayer? = null
@@ -803,16 +1064,21 @@ internal class TalosVoiceHost(
                 resolvedLocale = outcome.synthesis.locale,
                 resolvedProfileId = profile.header.profileId,
                 fallbackReason = route.fallbackReason,
+                generatedFrames = outcome.synthesis.generatedFrames,
+                resolvedProfileSchemaVersion = TalosVoiceProfileHeaderV2.SCHEMA_VERSION,
+                profileMigrationCommitted = false,
             )
-            finishSuccessfulDiagnostic(
-                session = diagnosticSession,
-                result = result,
-                generatedFrameCount = outcome.synthesis.generatedFrames,
-                profileApplied = true,
-                resolvedEngine = route.backend,
-                resolvedLocale = outcome.synthesis.locale,
-                fallbackReason = route.fallbackReason,
-            )
+            if (finishDiagnosticWhenComplete) {
+                finishSuccessfulDiagnostic(
+                    session = diagnosticSession,
+                    result = result,
+                    generatedFrameCount = outcome.synthesis.generatedFrames,
+                    profileApplied = true,
+                    resolvedEngine = route.backend,
+                    resolvedLocale = outcome.synthesis.locale,
+                    fallbackReason = route.fallbackReason,
+                )
+            }
             return result
         } catch (error: Throwable) {
             player?.flush()
@@ -824,17 +1090,23 @@ internal class TalosVoiceHost(
                 pocketRuntime = null
                 pocketRuntimeRoot = null
             }
-            finishFailedDiagnostic(
-                session = diagnosticSession,
-                error = error,
-                resolvedEngine = resolvedRoute?.backend ?: "unresolved",
-                resolvedLocale = if (resolvedRoute?.backend == TalosPocketConditioningPayload.BACKEND) locale else "und",
-                resolvedProfileId = profile.header.profileId,
-                fallbackReason = resolvedRoute?.fallbackReason,
-            )
+            if (finishDiagnosticWhenComplete) {
+                finishFailedDiagnostic(
+                    session = diagnosticSession,
+                    error = error,
+                    resolvedEngine = resolvedRoute?.backend ?: "unresolved",
+                    resolvedLocale = if (resolvedRoute?.backend == TalosPocketConditioningPayload.BACKEND) locale else "und",
+                    resolvedProfileId = profile.header.profileId,
+                    fallbackReason = resolvedRoute?.fallbackReason,
+                    resolvedProfileSchemaVersion = TalosVoiceProfileHeaderV2.SCHEMA_VERSION,
+                    profileMigrationCommitted = false,
+                )
+            }
             throw error
         } finally {
-            if (activeDiagnosticSession === diagnosticSession) activeDiagnosticSession = null
+            if (manageDiagnosticLifecycle && activeDiagnosticSession === diagnosticSession) {
+                activeDiagnosticSession = null
+            }
         }
     }
 
@@ -1121,6 +1393,7 @@ internal class TalosVoiceHost(
             hardwareUnderruns = hardwareUnderruns,
             drainedWithinTimeout = drained,
             elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000,
+            generatedFrames = generatedFrames.size,
         )
         finishSuccessfulDiagnostic(
             session = diagnosticSession,
@@ -1159,6 +1432,8 @@ internal class TalosVoiceHost(
                 resolvedProfileId = actualProfileId,
                 fallbackReason = fallbackReason,
                 eventCount = session.eventCount(),
+                resolvedProfileSchemaVersion = result.resolvedProfileSchemaVersion,
+                profileMigrationCommitted = result.profileMigrationCommitted,
                 answers = TalosVoiceDiagnosticAnswers(
                     dominantGraph = "UNKNOWN_NOT_B0_CAMPAIGN",
                     decodeCacheSlope = "UNKNOWN_NOT_B0_CAMPAIGN",
@@ -1182,6 +1457,8 @@ internal class TalosVoiceHost(
         resolvedLocale: String = "und",
         resolvedProfileId: String? = null,
         fallbackReason: String? = null,
+        resolvedProfileSchemaVersion: Int? = null,
+        profileMigrationCommitted: Boolean? = null,
     ) {
         if (session == null || session.artifactFileOrNull() != null) return
         session.record(
@@ -1198,6 +1475,8 @@ internal class TalosVoiceHost(
                 resolvedProfileId = resolvedProfileId,
                 fallbackReason = fallbackReason,
                 eventCount = session.eventCount(),
+                resolvedProfileSchemaVersion = resolvedProfileSchemaVersion,
+                profileMigrationCommitted = profileMigrationCommitted,
                 answers = TalosVoiceDiagnosticAnswers(
                     dominantGraph = "UNKNOWN_RUN_FAILED",
                     decodeCacheSlope = "UNKNOWN_RUN_FAILED",
@@ -1222,6 +1501,73 @@ internal class TalosVoiceHost(
         drainedWithinTimeout = true,
         elapsedMs = 0L,
     )
+
+    private fun legacyRoutingProfile(legacy: TalosVoiceProfileV1): TalosVoiceProfileV2 {
+        val source = legacy.header
+        check(source.schemaVersion == 1) { "legacy voice profile schema is not V1" }
+        check(source.backend == TalosMossPromptPayload.BACKEND) { "legacy voice profile backend is unsupported" }
+        check(source.frameCount == legacy.promptAudioCodes.size) { "legacy voice profile frame count differs" }
+        val moss = TalosMossPromptPayload(
+            codecFingerprint = source.codecFingerprint,
+            promptSchemaFingerprint = source.promptSchemaFingerprint,
+            frameRateMilliHz = source.frameRateMilliHz,
+            quantizerCount = source.quantizerCount,
+            codebookSize = source.codebookSize,
+            promptAudioCodes = legacy.promptAudioCodes,
+        )
+        return TalosVoiceProfileV2(
+            header = TalosVoiceProfileHeaderV2(
+                schemaVersion = TalosVoiceProfileHeaderV2.SCHEMA_VERSION,
+                profileId = source.profileId,
+                displayName = source.displayName,
+                language = source.language,
+                style = source.style,
+                preferredBackend = TalosMossPromptPayload.BACKEND,
+                createdAtEpochMs = source.createdAtEpochMs,
+                enrollmentDurationMs = source.enrollmentDurationMs,
+                consentVersion = source.consentVersion,
+                migratedFromSchemaVersion = source.schemaVersion,
+            ),
+            qualityMetrics = legacy.qualityMetrics,
+            backendPayloads = listOf(moss),
+        )
+    }
+
+    private fun legacyMigrationUnavailableReason(
+        locale: String,
+        legacy: TalosVoiceProfileV1,
+        pocketStatus: TalosPocketModelStatus,
+    ): String? = when {
+        !isItalianLocale(locale) -> "pocketLocaleUnsupported:$locale"
+        !isItalianLocale(legacy.header.language) ->
+            "pocketProfileLanguageUnsupported:${legacy.header.language}"
+        pocketStatus is TalosPocketModelStatus.Missing -> "pocketModelMissing:${pocketStatus.path}"
+        pocketStatus is TalosPocketModelStatus.Corrupt ->
+            "pocketModelCorrupt:${pocketStatus.path}:${pocketStatus.reason}"
+        pocketStatus is TalosPocketModelStatus.Ready && pocketStatus.verifiedFiles <= 0 -> "pocketModelUnverified"
+        else -> null
+    }
+
+    private fun isItalianLocale(locale: String): Boolean =
+        locale.substringBefore('-').equals("it", ignoreCase = true)
+
+    private fun closeMossEngineState() {
+        var failure: Throwable? = null
+        runCatching { runtime?.close() }.onFailure { failure = it }
+        runtime = null
+        runCatching { tokenizer?.close() }.onFailure { closeFailure ->
+            failure?.addSuppressed(closeFailure) ?: run { failure = closeFailure }
+        }
+        tokenizer = null
+        failure?.let { throw it }
+    }
+
+    private fun closePocketEngineState() {
+        val active = pocketRuntime
+        pocketRuntime = null
+        pocketRuntimeRoot = null
+        active?.close()
+    }
 
     private fun currentPocketModelStatus(): TalosPocketModelStatus {
         pocketModelStatus?.let { return it }
@@ -1252,16 +1598,17 @@ internal class TalosVoiceHost(
 
     private fun resolveEngine(route: TalosVoiceEngineRoute): TalosNeuralVoiceEngine = when (route.backend) {
         TalosPocketConditioningPayload.BACKEND -> {
+            closeMossEngineState()
             val root = requireNotNull(route.pocketModelRoot).canonicalFile
             if (pocketRuntimeRoot != root) {
-                pocketRuntime?.close()
-                pocketRuntime = null
+                closePocketEngineState()
                 pocketRuntimeRoot = root
             }
             val activeRuntime = pocketRuntime ?: pocketRuntimeFactory(root, cpuThreads).also { pocketRuntime = it }
             TalosPocketVoiceEngine(TalosPocketOrtRuntimeAdapter(activeRuntime))
         }
         TalosMossPromptPayload.BACKEND -> {
+            closePocketEngineState()
             val activeTokenizer = tokenizer ?: openTokenizer().also { tokenizer = it }
             val activeRuntime = runtime ?: TalosMossRuntime.open(modelRoot, cpuThreads).also { runtime = it }
             TalosMossVoiceEngine(TalosMossRuntimeAdapter(activeRuntime), activeTokenizer)
@@ -1296,6 +1643,16 @@ internal class TalosVoiceHost(
                 "mimi_decoder", "moss_codec_decode" -> TalosVoiceDiagnosticEventKind.CODEC_DECODE
                 else -> TalosVoiceDiagnosticEventKind.ENGINE_STAGE
             },
+            stage = stage,
+            durationNs = durationNs,
+            sentenceIndex = sentenceIndex,
+            frameIndex = frameIndex,
+            requestedFrames = inputFrames,
+        )
+
+    private fun TalosPocketStageMetric.toMigrationDiagnosticEvent(): TalosVoiceDiagnosticEvent =
+        TalosVoiceDiagnosticEvent(
+            kind = TalosVoiceDiagnosticEventKind.ENGINE_STAGE,
             stage = stage,
             durationNs = durationNs,
             sentenceIndex = sentenceIndex,
@@ -1436,4 +1793,7 @@ internal data class TalosVoiceStreamResult(
     val resolvedLocale: String? = null,
     val resolvedProfileId: String? = null,
     val fallbackReason: String? = null,
+    val generatedFrames: Int = 0,
+    val resolvedProfileSchemaVersion: Int? = null,
+    val profileMigrationCommitted: Boolean = false,
 )

@@ -69,6 +69,8 @@ class TalosVoiceDiagnosticArtifactInstrumentedTest {
                 resolvedLocale = "it-IT",
                 resolvedProfileId = rawProfileId,
                 fallbackReason = null,
+                resolvedProfileSchemaVersion = 2,
+                profileMigrationCommitted = true,
                 eventCount = session.eventCount(),
                 answers = TalosVoiceDiagnosticAnswers(
                     dominantGraph = "UNKNOWN_NOT_PROFILED",
@@ -94,6 +96,8 @@ class TalosVoiceDiagnosticArtifactInstrumentedTest {
         assertEquals(64, root.getJSONObject("route").getString("requestedProfileIdSha256").length)
         assertTrue(root.getJSONObject("route").has("fallbackReason"))
         assertTrue(root.getJSONObject("route").isNull("fallbackReason"))
+        assertEquals(2, root.getJSONObject("route").getInt("resolvedProfileSchemaVersion"))
+        assertTrue(root.getJSONObject("route").getBoolean("profileMigrationCommitted"))
         val answers = root.getJSONObject("answers")
         listOf(
             "dominant_graph",
