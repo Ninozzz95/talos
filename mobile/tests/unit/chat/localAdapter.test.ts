@@ -81,7 +81,8 @@ const SMALL_PHONE = {
     abiSupported: true,
 }
 
-const { localAdapter } = await import('@/lib/chat/providers/localAdapter')
+const { localAdapter, prefissoResoDiProiettato } = await import('@/lib/chat/providers/localAdapter')
+const { talosProjectLocalToolConversation } = await import('@/lib/chat/localToolPromptProtocol')
 
 /**
  * The difference between "you have no models" and "I could not look".
@@ -1095,5 +1096,141 @@ describe('LOCAL-PARITY-TOOL-RESULT-02 round-trip del risultato locale', () => {
         const second = (localEngine.talosLocalEngineChatPlan.mock.calls.at(-1)?.[0]) as Array<{ role: string }> | undefined
         expect(second?.map((turn) => turn.role)).toEqual(['user'])
         expect(localEngine.talosLocalEngineTemplateCapabilities).toHaveBeenCalledTimes(1)
+    })
+})
+
+/**
+ * P1-3 — il prefisso AOT per `prompt-json-v1`, dove prima non si congelava
+ * mai niente (la guardia tornava sempre `null` per questo trasporto).
+ *
+ * ⛔⛔ CR-09 è l'invariante che questi test provano, non solo la funzione:
+ * il testo che si congela deve essere ESATTAMENTE quello che la generazione
+ * vera manda al motore, mai una seconda versione ricostruita a parte. Un
+ * bug qui non darebbe un errore — darebbe una risposta sbagliata dopo il
+ * thaw, il modo peggiore di fallire (vedi `prefixCache.ts`).
+ */
+describe('P1-3 prefissoResoDiProiettato — il prefisso AOT per prompt-json-v1', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    const CAPABILITIES_PROMPT_JSON = {
+        supportsTools: false,
+        supportsToolCalls: false,
+        supportsSystemRole: true,
+    }
+
+    const TOOLS = [{
+        name: 'talos_diagnostic_echo',
+        description: 'Return one diagnostic value.',
+        parameters: { type: 'object', properties: { value: { type: 'string' } } },
+    }]
+
+    it('produce un prefisso non nullo — prima di questo blocco era SEMPRE null per questo trasporto', async () => {
+        const SYSTEM_NON_NULLO = 'Sei TALOS. [test: non-nullo]'
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'testo-reso-dal-motore', promptTokens: 900, contextTokens: 4096,
+        })
+
+        const testo = await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_NON_NULLO, TOOLS, 'it', true,
+        )
+
+        expect(testo).toBe('testo-reso-dal-motore')
+        expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(1)
+    })
+
+    it('⛔⛔ CR-09 — MAI passa i tool al motore: sono già dentro il testo proiettato', async () => {
+        const SYSTEM_CR09 = 'Sei TALOS. [test: CR-09]'
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'x', promptTokens: 1, contextTokens: 4096,
+        })
+
+        await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_CR09, TOOLS, 'it', true,
+        )
+
+        // Se la memoizzazione avesse trovato un altro test invece di
+        // chiamare il motore, questa asserzione lo direbbe chiaramente —
+        // invece di lasciar passare il test sotto per il motivo sbagliato.
+        expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(1)
+        const chiamata = localEngine.talosLocalEngineChatPlan.mock.calls.at(-1)
+        // Il secondo argomento di talosLocalEngineChatPlan è `tools`: se
+        // qualcuno lo passasse di nuovo qui, il motore applicherebbe il
+        // catalogo una seconda volta al template Jinja, sopra un testo che
+        // già lo contiene come JSON — un prompt diverso da quello vero,
+        // sotto la stessa identità di cache.
+        expect(chiamata?.[1]).toBeUndefined()
+    })
+
+    it('⭐ il testo combacia bit-per-bit con quello che la generazione VERA produce per il turno di sistema', async () => {
+        localEngine.talosLocalEngineChatPlan.mockImplementation(async (turns: Array<{ content?: string }>) => ({
+            prompt: turns[0]?.content ?? '', promptTokens: 1, contextTokens: 4096,
+        }))
+
+        // La generazione vera (localAdapter.ts riga ~912) proietta l'INTERA
+        // conversazione. Qui si simula lo stesso projector con una
+        // conversazione che ha lo stesso system/tools/locale.
+        //
+        // ⛔ `system` è UNICO per questo test: `PREFISSO_RESO_PROIETTATO` è
+        // una cache a livello di modulo che sopravvive fra i test dello
+        // stesso file — una chiave riusata da un altro test troverebbe il
+        // suo memo invece di richiamare il mock configurato qui.
+        const SYSTEM_BIT_PER_BIT = 'Sei TALOS. [test: bit-per-bit]'
+        const projectionConversazioneVera = talosProjectLocalToolConversation({
+            transport: 'prompt-json-v1',
+            capabilities: CAPABILITIES_PROMPT_JSON,
+            turns: [
+                { role: 'system', content: SYSTEM_BIT_PER_BIT },
+                { role: 'user', content: 'Una domanda qualsiasi, irrilevante per il prefisso.' },
+            ],
+            tools: TOOLS,
+            locale: 'it',
+        })
+        const turnoSistemaDellaGenerazioneVera = projectionConversazioneVera.turns[0]?.content
+
+        const testoCongelato = await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_BIT_PER_BIT, TOOLS, 'it', true,
+        )
+
+        expect(testoCongelato).toBeTruthy()
+        expect(testoCongelato).toBe(turnoSistemaDellaGenerazioneVera)
+    })
+
+    it('nessun system → null, come il percorso nativo esistente', async () => {
+        const testo = await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, undefined, TOOLS, 'it', true,
+        )
+        expect(testo).toBeNull()
+        expect(localEngine.talosLocalEngineChatPlan).not.toHaveBeenCalled()
+    })
+
+    it('memoizza: due chiamate identiche interrogano il motore una volta sola', async () => {
+        const SYSTEM_MEMO = 'Sei TALOS. [test: memoizza]'
+        localEngine.talosLocalEngineChatPlan.mockResolvedValue({
+            prompt: 'memo', promptTokens: 1, contextTokens: 4096,
+        })
+
+        await prefissoResoDiProiettato('prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_MEMO, TOOLS, 'it', true)
+        await prefissoResoDiProiettato('prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_MEMO, TOOLS, 'it', true)
+
+        expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(1)
+    })
+
+    it('AL CONTRARIO — cambiare i tool cambia la chiave: non è la stessa cache', async () => {
+        const SYSTEM_AL_CONTRARIO = 'Sei TALOS. [test: al-contrario]'
+        localEngine.talosLocalEngineChatPlan
+            .mockResolvedValueOnce({ prompt: 'con-un-tool', promptTokens: 1, contextTokens: 4096 })
+            .mockResolvedValueOnce({ prompt: 'con-due-tool', promptTokens: 1, contextTokens: 4096 })
+
+        const primo = await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_AL_CONTRARIO, TOOLS, 'it', true,
+        )
+        const secondo = await prefissoResoDiProiettato(
+            'prompt-json-v1', CAPABILITIES_PROMPT_JSON, SYSTEM_AL_CONTRARIO, [...TOOLS, TOOLS[0]!], 'it', true,
+        )
+
+        expect(primo).not.toBe(secondo)
+        expect(localEngine.talosLocalEngineChatPlan).toHaveBeenCalledTimes(2)
     })
 })

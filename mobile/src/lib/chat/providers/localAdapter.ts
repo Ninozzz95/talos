@@ -411,6 +411,8 @@ async function talosTuningKeyFor(
  */
 const IDENTITA_FILE = new Map<string, { bytes: number, modifiedAt: number }>()
 const PREFISSO_RESO = new Map<string, string>()
+/** Come `PREFISSO_RESO`, ma per il testo GIA' proiettato — vedi `prefissoResoDiProiettato`. */
+const PREFISSO_RESO_PROIETTATO = new Map<string, string>()
 interface TalosTemplateTransportDecision {
     transport: TalosLocalToolTransport
     capabilities: TalosLocalTemplateCapabilities | null
@@ -532,6 +534,54 @@ async function prefissoResoDi(
     }
 }
 
+/**
+ * P1-3 — come `prefissoResoDi`, ma per il trasporto che NON passa i tool al
+ * template nativo: `prompt-json-v1` inietta il catalogo dentro il testo del
+ * turno di sistema, e finora questo era il motivo per cui quel prefisso non
+ * si congelava mai (vedi il commento sulla guardia, più sotto).
+ *
+ * ⛔⛔ CR-09 — NON è una seconda versione del projector, ne usa lo STESSO
+ * usato dalla generazione vera (`talosProjectLocalToolConversation`,
+ * chiamata identica a quella di riga ~912): qui con un solo turno di
+ * sistema come input, così il risultato è esattamente e SOLO il prefisso
+ * immutabile, senza inventare una proiezione parallela che potrebbe
+ * divergere da quella reale col tempo.
+ *
+ * ⛔ `tools` NON va MAI passato di nuovo a `talosLocalEngineChatPlan`: per
+ * questo trasporto sono già dentro `projection.turns` come testo. Passarli
+ * anche come parametro nativo li farebbe applicare una seconda volta, al
+ * template Jinja, producendo un prompt DIVERSO da quello che la
+ * generazione vera manda — esattamente il prompt-diverso-sotto-la-stessa-
+ * identità che la guardia esiste per evitare.
+ */
+// Esportata SOLO per il test diretto di CR-09 (il testo deve combaciare
+// bit-per-bit con quello che il projector produce per la generazione vera):
+// non è pensata per essere chiamata da fuori questo modulo in produzione.
+export async function prefissoResoDiProiettato(
+    transport: TalosLocalToolTransport,
+    capabilities: TalosLocalTemplateCapabilities | null | undefined,
+    system: string | undefined,
+    tools: readonly unknown[] | undefined,
+    locale: string | null | undefined,
+    pensa: boolean,
+): Promise<string | null> {
+    if (!system) return null
+    const chiave = `${transport}\0${system}\0${JSON.stringify(tools ?? [])}\0${locale ?? ''}\0${pensa}`
+    const memo = PREFISSO_RESO_PROIETTATO.get(chiave)
+    if (memo !== undefined) return memo
+    try {
+        const projection = talosProjectLocalToolConversation({
+            transport, capabilities, turns: [{ role: 'system', content: system }], tools, locale,
+        })
+        if (!projection.turns.length) return null
+        const piano = await talosLocalEngineChatPlan(projection.turns, undefined, pensa)
+        PREFISSO_RESO_PROIETTATO.set(chiave, piano.prompt)
+        return piano.prompt
+    } catch {
+        return null
+    }
+}
+
 /** Dove vive il file: accanto al modello, con l'impronta per nome. */
 function accantoAlModello(modelPath: string, nomeFile: string): string {
     const taglio = modelPath.lastIndexOf('/')
@@ -585,6 +635,47 @@ async function prefissoCongelatoDi(
          * non sa dichiararla: lì si resta prudenti, cioè si invalida troppo
          * invece che troppo poco.
          */
+        engineBuild: status.engineBuild ?? TALOS_APP_BUILD,
+        prefixText: prompt,
+    }
+    return {
+        percorso: accantoAlModello(modelPath, talosPrefixCacheFileName(identita)),
+        prompt,
+        identita,
+    }
+}
+
+/**
+ * P1-3 — come `prefissoCongelatoDi`, ma per il testo GIA' proiettato.
+ *
+ * L'identità resta lo stesso `TalosPrefixIdentity` di sempre: la protezione
+ * "l'impronta è il testo" (`prefixCache.ts`) non ha bisogno di sapere quale
+ * dei due percorsi ha prodotto `prefixText` — un testo diverso produce già
+ * un nome di file diverso, per costruzione. Cambia solo COME si ottiene il
+ * testo, non come lo si custodisce.
+ */
+async function prefissoCongelatoDiProiettato(
+    modelPath: string,
+    transport: TalosLocalToolTransport,
+    capabilities: TalosLocalTemplateCapabilities | null | undefined,
+    system: string | undefined,
+    tools: readonly unknown[] | undefined,
+    locale: string | null | undefined,
+    status: TalosLocalEngineStatus,
+    contextTokens: number,
+    pensa: boolean,
+): Promise<TalosPrefissoCongelato | null> {
+    const [file, prompt] = await Promise.all([
+        identitaFileDi(modelPath),
+        prefissoResoDiProiettato(transport, capabilities, system, tools, locale, pensa),
+    ])
+    if (!file || !prompt) return null
+    const identita: TalosPrefixIdentity = {
+        modelPath,
+        modelBytes: file.bytes,
+        modelModifiedAt: file.modifiedAt,
+        contextTokens,
+        kvCacheType: status.kvCacheType ?? 'f16',
         engineBuild: status.engineBuild ?? TALOS_APP_BUILD,
         prefixText: prompt,
     }
@@ -1012,15 +1103,22 @@ async function runBody(
      * volta e dopo ogni cambio di modello, di contesto o di testo. Si calcola,
      * che è ciò che si faceva prima di tutto questo.
      */
-    // `prompt-json-v1` injects its catalog into the projected system turn; the
-    // native prefix freezer only knows the original input.system. Until that
-    // profile has its own verified prefix identity, do not freeze a different
-    // prompt and risk thawing it into another conversation.
+    // P1-3: `prompt-json-v1` injects its catalog into the projected system
+    // turn. Freezing used to refuse this transport outright — the native
+    // freezer only knew the original `input.system`, and caching THAT under
+    // the same identity as the projected prompt would have been a different
+    // prompt behind the same name. The guard is not weaker now: it still
+    // never freezes `input.system` for this transport. It freezes the exact
+    // projected text instead, built by the SAME projector the generation
+    // below calls (CR-09) — never a second version of it.
     const congelato = template.transport === 'native-template' || !wireTools?.length
         ? await prefissoCongelatoDi(
             input.model.id, input.system, tools, status, plan.contextTokens, pensa,
         )
-        : null
+        : await prefissoCongelatoDiProiettato(
+            input.model.id, template.transport, template.capabilities,
+            input.system, wireTools, input.locale, status, plan.contextTokens, pensa,
+        )
     if (congelato) await talosThawPrefix(congelato.percorso)
 
     let generation
