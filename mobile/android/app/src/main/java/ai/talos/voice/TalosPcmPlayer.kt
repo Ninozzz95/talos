@@ -5,6 +5,67 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import java.io.Closeable
 
+internal interface TalosAudioTrackFacade {
+    val playState: Int
+    val underrunCount: Int
+    val playbackHeadPosition: Int
+
+    fun write(pcm16: ShortArray, offset: Int, size: Int): Int
+    fun play()
+    fun pause()
+    fun flush()
+    fun stop()
+    fun release()
+}
+
+internal fun interface TalosAudioTrackFactory {
+    fun create(sampleRate: Int, channels: Int): TalosAudioTrackFacade
+}
+
+private class TalosAndroidAudioTrackFacade(
+    private val track: AudioTrack,
+) : TalosAudioTrackFacade {
+    override val playState: Int get() = track.playState
+    override val underrunCount: Int get() = track.underrunCount
+    override val playbackHeadPosition: Int get() = track.playbackHeadPosition
+
+    override fun write(pcm16: ShortArray, offset: Int, size: Int): Int =
+        track.write(pcm16, offset, size, AudioTrack.WRITE_BLOCKING)
+
+    override fun play() = track.play()
+    override fun pause() = track.pause()
+    override fun flush() = track.flush()
+    override fun stop() = track.stop()
+    override fun release() = track.release()
+}
+
+private object TalosAndroidAudioTrackFactory : TalosAudioTrackFactory {
+    override fun create(sampleRate: Int, channels: Int): TalosAudioTrackFacade {
+        val channelMask = if (channels == 2) AudioFormat.CHANNEL_OUT_STEREO else AudioFormat.CHANNEL_OUT_MONO
+        val format = AudioFormat.Builder()
+            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+            .setSampleRate(sampleRate)
+            .setChannelMask(channelMask)
+            .build()
+        val attributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+        val minBufferBytes = AudioTrack.getMinBufferSize(sampleRate, channelMask, AudioFormat.ENCODING_PCM_16BIT)
+        require(minBufferBytes > 0) {
+            "AudioTrack.getMinBufferSize returned $minBufferBytes for sampleRate=$sampleRate channelMask=$channelMask"
+        }
+        val newTrack = AudioTrack.Builder()
+            .setAudioAttributes(attributes)
+            .setAudioFormat(format)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .setBufferSizeInBytes(minBufferBytes * 8)
+            .build()
+        newTrack.play()
+        return TalosAndroidAudioTrackFacade(newTrack)
+    }
+}
+
 /**
  * Production `AudioTrack` (blueprint §17). No PCM crosses the Capacitor
  * bridge - this class is the only thing that touches `AudioTrack`, and
@@ -24,14 +85,14 @@ import java.io.Closeable
 internal class TalosPcmPlayer(
     private val sampleRate: Int,
     private val channels: Int,
+    private val trackFactory: TalosAudioTrackFactory = TalosAndroidAudioTrackFactory,
 ) : Closeable {
     init {
         require(channels == 1 || channels == 2) { "TalosPcmPlayer supports mono or stereo only, got $channels channels" }
     }
 
-    private val channelMask = if (channels == 2) AudioFormat.CHANNEL_OUT_STEREO else AudioFormat.CHANNEL_OUT_MONO
-    private var track: AudioTrack? = null
-    private var framesWritten: Long = 0
+    @Volatile private var track: TalosAudioTrackFacade? = null
+    private var samplesWritten: Long = 0
     private var recreateAttempted = false
 
     /** True once a write failed twice in a row (recreate already attempted and also failed) - caller must fall back to system TTS. */
@@ -57,23 +118,25 @@ internal class TalosPcmPlayer(
      * production shape - [TalosMossCodecStream] hands over one decoded batch
      * at a time - not a workaround bolted on for a device quirk.
      */
-    fun write(interleavedPcm: FloatArray): Boolean {
+    fun write(
+        interleavedPcm: FloatArray,
+        isCancelled: () -> Boolean = { false },
+    ): Boolean {
         if (interleavedPcm.isEmpty()) return true
         if (isDead) return false
+        if (isCancelled()) return false
         val pcm16 = ShortArray(interleavedPcm.size) { index ->
             (interleavedPcm[index].coerceIn(-1f, 1f) * 32767f).toInt().toShort()
         }
-        val activeTrack = track ?: createTrack().also { track = it }
-        val written = activeTrack.write(pcm16, 0, pcm16.size, AudioTrack.WRITE_BLOCKING)
-        if (written < 0) {
-            return recoverFromWriteError(pcm16)
+        val activeTrack = runCatching { track ?: createTrack().also { track = it } }.getOrElse {
+            isDead = true
+            return false
         }
-        framesWritten += (written / channels)
-        return true
+        return writeFully(activeTrack, pcm16, 0, isCancelled)
     }
 
     /** Number of frames (per-channel samples) actually written so far - the numerator for drain progress. */
-    fun framesWritten(): Long = framesWritten
+    fun framesWritten(): Long = samplesWritten / channels
 
     /** True only if the underlying track exists and its play state is actually `PLAYSTATE_PLAYING` - not just "not released". */
     fun isPlaying(): Boolean = track?.playState == AudioTrack.PLAYSTATE_PLAYING
@@ -88,7 +151,7 @@ internal class TalosPcmPlayer(
         // very long playback; treat a negative read (post-wrap, reinterpreted
         // as signed) as "caught up" rather than as a nonsensical deficit.
         val head = activeTrack.playbackHeadPosition
-        return if (head < 0) framesWritten else head.toLong()
+        return if (head < 0) framesWritten() else head.toLong()
     }
 
     /**
@@ -100,7 +163,7 @@ internal class TalosPcmPlayer(
      */
     fun awaitDrain(timeoutMs: Long, pollIntervalMs: Long = 20): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
-        while (playbackHeadFrames() < framesWritten) {
+        while (playbackHeadFrames() < framesWritten()) {
             if (System.currentTimeMillis() >= deadline) return false
             Thread.sleep(pollIntervalMs.coerceAtLeast(1))
         }
@@ -129,7 +192,7 @@ internal class TalosPcmPlayer(
             runCatching { it.flush() }
             runCatching { it.play() }
         }
-        framesWritten = 0
+        samplesWritten = 0
     }
 
     override fun close() {
@@ -138,11 +201,41 @@ internal class TalosPcmPlayer(
             runCatching { it.release() }
         }
         track = null
-        framesWritten = 0
+        samplesWritten = 0
     }
 
     /** §17.4: one recreate attempt, then give up - never loop forever on a broken output path. */
-    private fun recoverFromWriteError(pendingPcm16: ShortArray): Boolean {
+    private fun writeFully(
+        activeTrack: TalosAudioTrackFacade,
+        pcm16: ShortArray,
+        initialOffset: Int,
+        isCancelled: () -> Boolean,
+    ): Boolean {
+        var offset = initialOffset
+        while (offset < pcm16.size) {
+            if (isCancelled()) return false
+            val remaining = pcm16.size - offset
+            val written = runCatching { activeTrack.write(pcm16, offset, remaining) }.getOrElse { -1 }
+            when {
+                written < 0 -> return recoverFromWriteError(pcm16, offset, isCancelled)
+                written == 0 || written > remaining -> {
+                    isDead = true
+                    return false
+                }
+                else -> {
+                    offset += written
+                    samplesWritten += written
+                }
+            }
+        }
+        return true
+    }
+
+    private fun recoverFromWriteError(
+        pendingPcm16: ShortArray,
+        offset: Int,
+        isCancelled: () -> Boolean,
+    ): Boolean {
         track?.let { runCatching { it.release() } }
         track = null
         if (recreateAttempted) {
@@ -150,35 +243,18 @@ internal class TalosPcmPlayer(
             return false
         }
         recreateAttempted = true
+        if (isCancelled()) return false
         return try {
             val recreated = createTrack()
             track = recreated
-            val written = recreated.write(pendingPcm16, 0, pendingPcm16.size, AudioTrack.WRITE_BLOCKING)
-            if (written < 0) {
-                isDead = true
-                false
-            } else {
-                framesWritten += (written / channels)
-                true
-            }
+            writeFully(recreated, pendingPcm16, offset, isCancelled)
         } catch (error: Exception) {
             isDead = true
             false
         }
     }
 
-    private fun createTrack(): AudioTrack {
-        val format = AudioFormat.Builder()
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .setSampleRate(sampleRate)
-            .setChannelMask(channelMask)
-            .build()
-        val attributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-            .build()
-        val minBufferBytes = AudioTrack.getMinBufferSize(sampleRate, channelMask, AudioFormat.ENCODING_PCM_16BIT)
-        require(minBufferBytes > 0) { "AudioTrack.getMinBufferSize returned $minBufferBytes for sampleRate=$sampleRate channelMask=$channelMask" }
+    private fun createTrack(): TalosAudioTrackFacade {
         // ⛔⛔ Two real, opposite failures measured on the OnePlus Pad 3, and
         // the buffer size is the one variable that explains both:
         //
@@ -204,14 +280,6 @@ internal class TalosPcmPlayer(
         // the minimum". See TalosPcmPlayerInstrumentedTest and
         // TalosVoiceHostStreamingInstrumentedTest for the numbers this was
         // re-measured against after changing it.
-        val bufferBytes = minBufferBytes * 8
-        val newTrack = AudioTrack.Builder()
-            .setAudioAttributes(attributes)
-            .setAudioFormat(format)
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .setBufferSizeInBytes(bufferBytes)
-            .build()
-        newTrack.play()
-        return newTrack
+        return trackFactory.create(sampleRate, channels)
     }
 }
